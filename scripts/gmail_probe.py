@@ -50,17 +50,32 @@ def parse_list_line(line: bytes) -> dict:
     return {"flags": m.group("flags").decode().split(), "name": name}
 
 
-def examine_count(imap: imaplib.IMAP4_SSL, folder: str) -> int | None:
+class ProbeFailed(Exception):
+    """A command the probe depends on was refused: nothing it would report can be trusted."""
+
+
+def check(typ: str, data, what: str) -> None:
+    if typ != "OK":
+        raise ProbeFailed(f"{what} returned {typ}: {data!r:.300}")
+
+
+def examine_count(imap: imaplib.IMAP4_SSL, folder: str) -> int:
     typ, data = imap.select(f'"{folder}"', readonly=True)  # EXAMINE
-    return int(data[0]) if typ == "OK" else None
+    check(typ, data, f"EXAMINE {folder}")
+    return int(data[0])
 
 
 def fetch_inbox(imap: imaplib.IMAP4_SSL) -> list[dict]:
+    """Every message in the folder last examined. A refused SEARCH or FETCH, or a FETCH that
+    returns fewer messages than SEARCH found, fails the probe rather than passing for an
+    emptier inbox."""
     typ, data = imap.uid("SEARCH", None, "ALL")
-    uids = data[0].split() if typ == "OK" and data and data[0] else []
+    check(typ, data, "UID SEARCH ALL")
+    uids = data[0].split() if data and data[0] else []
     if not uids:
         return []
     typ, data = imap.uid("FETCH", b",".join(uids).decode(), FETCH_ITEMS)
+    check(typ, data, "UID FETCH")
     messages = []
     for part in data:
         if not isinstance(part, tuple):
@@ -84,6 +99,8 @@ def fetch_inbox(imap: imaplib.IMAP4_SSL) -> list[dict]:
             "subject": str(headers.get("Subject", "")),
             "date": str(headers.get("Date", "")),
         })
+    if len(messages) != len(uids):
+        raise ProbeFailed(f"UID FETCH returned {len(messages)} of the {len(uids)} messages SEARCH found")
     return messages
 
 
@@ -110,21 +127,27 @@ def main() -> None:
     print("Capabilities:", " ".join(capabilities))
     print("Gmail extensions (X-GM-EXT-1):", "X-GM-EXT-1" in capabilities)
 
-    typ, data = imap.list()
-    folders = [parse_list_line(line) for line in data if isinstance(line, bytes)]
-    print(f"\n{len(folders)} folder(s):")
-    for f in folders:
-        print("-", f.get("name", f.get("raw")), f.get("flags", ""))
+    try:
+        typ, data = imap.list()
+        check(typ, data, "LIST")
+        folders = [parse_list_line(line) for line in data if isinstance(line, bytes)]
+        print(f"\n{len(folders)} folder(s):")
+        for f in folders:
+            print("-", f.get("name", f.get("raw")), f.get("flags", ""))
 
-    snooze_counts = {}
-    for f in folders:
-        name = f.get("name", "")
-        if "snooze" in name.lower():
-            snooze_counts[name] = examine_count(imap, name)
-    print("\nSnooze-like folders:", snooze_counts or "none visible over IMAP")
+        snooze_counts = {}
+        for f in folders:
+            name = f.get("name", "")
+            if "snooze" in name.lower():
+                snooze_counts[name] = examine_count(imap, name)
+        print("\nSnooze-like folders:", snooze_counts or "none visible over IMAP")
 
-    inbox_count = examine_count(imap, "INBOX")
-    messages = fetch_inbox(imap)
+        inbox_count = examine_count(imap, "INBOX")
+        messages = fetch_inbox(imap)
+    except ProbeFailed as e:
+        print("\nNot proven:", e)
+        imap.logout()
+        sys.exit(2)
     print(f"\nINBOX: {inbox_count} message(s)")
     for msg in messages:
         print(f"- {msg['internalDate']} | labels=({msg['labels']}) | {msg['from']} | {msg['subject']}")

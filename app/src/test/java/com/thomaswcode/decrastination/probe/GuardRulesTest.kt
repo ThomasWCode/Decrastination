@@ -71,10 +71,19 @@ class GuardRulesTest {
 
     @Test
     fun `an uninstall prompt naming this app is left`() {
+        // Captured on the phone (One UI, 8 Oct).
         assertEquals(
             Verdict.Back("an uninstall prompt for this app"),
-            decide("com.google.android.packageinstaller", "Decrastination", "Do you want to uninstall this app?", "Cancel", "OK"),
+            decide("com.google.android.packageinstaller", "Uninstall this app?", "Decrastination", "Cancel", "Uninstall"),
         )
+        assertIs<Verdict.Back>(decide("com.android.packageinstaller", "Decrastination", "Do you want to uninstall this app?", "Cancel", "OK"))
+    }
+
+    @Test
+    fun `the installer's other prompts for this app stay usable`() {
+        // Codex review: installing or updating it goes through the same installer.
+        assertEquals(Verdict.Leave, decide("com.google.android.packageinstaller", "Decrastination", "Do you want to update this app?", "Cancel", "Update"))
+        assertEquals(Verdict.Leave, decide("com.google.android.packageinstaller", "Allow Decrastination to access existing notes, cards…", "Allow", "Don't allow"))
     }
 
     @Test

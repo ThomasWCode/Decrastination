@@ -31,6 +31,7 @@ class FocusProbeService : AccessibilityService() {
     private var lastBackAt = Long.MIN_VALUE / 2
     private var lookPending: String? = null
     private var emptyLooks = 0
+    private var lastBlockAt = Long.MIN_VALUE / 2
 
     override fun onServiceConnected() {
         super.onServiceConnected()
@@ -44,13 +45,21 @@ class FocusProbeService : AccessibilityService() {
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
+        if (event.eventType == AccessibilityEvent.TYPE_WINDOWS_CHANGED) {
+            // The windows on screen changed: a blocked app may have come forward without a
+            // window-state event of its own, or before one arrives (they can be 0.6 s late).
+            val front = frontPackage() ?: return
+            val now = SystemClock.uptimeMillis()
+            if (front in BLOCKED && now - lastBlockAt > WINDOWS_BLOCK_GAP_MS) block(front, event.eventTime)
+            return
+        }
         val pkg = event.packageName?.toString() ?: return
         if (pkg == packageName) return
         if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
             val lag = SystemClock.uptimeMillis() - event.eventTime
             ProbeLog.add("Front: $pkg ${event.className} \"${event.text.joinToString(" | ")}\" (+$lag ms)")
             when {
-                pkg in BLOCKED -> block(pkg, event.eventTime)
+                pkg in BLOCKED -> blockIfInFront(pkg, event.eventTime)
                 GuardRules.watches(pkg) -> guard(pkg, firstLook = true)
             }
         } else if (event.eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED && GuardRules.watches(pkg)) {
@@ -58,6 +67,25 @@ class FocusProbeService : AccessibilityService() {
             guard(pkg, firstLook = false)
         }
     }
+
+    /**
+     * Blocks [pkg] unless another app is plainly in front by now. A blocked app's events can
+     * arrive after it has gone, its own screen replacing its splash behind the block screen, or
+     * after the user has gone home, and covering Home would be wrong. When what's in front can't
+     * be told, it blocks.
+     */
+    private fun blockIfInFront(pkg: String, eventTime: Long) {
+        val front = frontPackage()
+        if (front != null && front != pkg) {
+            ProbeLog.add("  $pkg isn't in front any more ($front is): left alone")
+            return
+        }
+        block(pkg, eventTime)
+    }
+
+    /** The package of the window the user is using (its active window), or null if there's none to read. */
+    private fun frontPackage(): String? =
+        (windows.firstOrNull { it.isActive }?.root ?: rootInActiveWindow)?.packageName?.toString()
 
     override fun onInterrupt() = Unit
 
@@ -70,6 +98,7 @@ class FocusProbeService : AccessibilityService() {
     }
 
     private fun block(pkg: String, eventTime: Long) {
+        lastBlockAt = SystemClock.uptimeMillis()
         ProbeLog.add("Blocking $pkg")
         startActivity(
             Intent(this, BlockedProbeActivity::class.java)
@@ -149,6 +178,9 @@ class FocusProbeService : AccessibilityService() {
 
         /** How many times in a row an empty window is looked at again: a second's worth. */
         private const val MAX_EMPTY_LOOKS = 4
+
+        /** Window changes come in bursts while the block screen opens; one block per burst. */
+        private const val WINDOWS_BLOCK_GAP_MS = 500L
         private const val MAX_NODES = 400
         private const val LOGGED_TEXTS = 40
 
