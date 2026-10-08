@@ -1,0 +1,116 @@
+# Planner, block policy, anti-tamper, and learning
+
+All four are pure Kotlin with an injected `Clock`, no Android types, unit-tested against `fixtures/`. Revised 7 Oct 2026 after your answers: strict blocking while anything is due today or tomorrow, earned free time otherwise, large tasks split into day-sized chunks, no bypass, and calibration from your own history.
+
+## 1. Inputs
+
+- `tasks`: open tasks with `availableFrom <= now`. Each has `dueAt?`, `effortMin`, `progress`, `kind`, `class`, and optionally an ordered list of **sub-steps** (from the LLM: "Q1–8 ~25 min", "Q9–16 ~25 min", "mark answers ~10 min") whose estimates sum to `effortMin`.
+- `availability`: weekly template, your answer of 7 Oct: **Mon–Fri 16:45–22:00, Sat–Sun 08:30–22:30** (commute already inside the 16:45 start), minus calendar busy blocks (Phase 5), minus the part of today already gone.
+- `calibration`: per-(kind, class) effort multipliers and safety margins learned from history (§5), defaults 1.0 and 1 day.
+- `now`.
+
+## 2. Effort
+
+`remainingMin = effortMin × multiplier(kind, class) × (1 − progress)`, floored at 5. Effort comes from, in order: your override, the LLM estimate, a per-kind default (Homework 40, Admin 15, Event 0, Anki from card counts: reviews × 8 s, new × 25 s).
+
+## 3. Day-bucket allocation
+
+The planner builds one bucket per study day from today to the furthest deadline, each with its capacity in minutes, then places every task's remaining work into buckets. **What lands in today's and tomorrow's buckets is, by definition, "due today or tomorrow"**, which is what the block policy reads.
+
+Placement, tasks taken in deadline order (earliest first; overdue and no-deadline tasks handled below):
+
+1. The last usable day is `dueDay − margin` (margin **1 day** by default, longer for kinds you tend to leave late, §5). If `dueAt` is in the morning (before 12:00) the due day itself is never usable.
+2. The task is cut into chunks: its sub-steps if it has them, otherwise boxes of `boxMin` (**ASSUMED 45**, Q6), last one shorter.
+3. Chunks are placed **backwards from the last usable day**, filling each day up to its remaining capacity, one chunk per day where possible so a task is spread rather than dumped on one evening. A chunk that cannot fit anywhere before the deadline is placed in today's bucket and flagged `behind`.
+4. Overdue tasks and tasks due today go straight into today's bucket, oldest deadline first; they are placed before step 3 runs so they consume today's capacity first.
+5. The **daily Anki quota** (all due reviews + 20 new from the lowest unfinished deck + any deck named by German homework) is a fixed chunk in today's bucket, deadline 21:00 (**ASSUMED**; could be 22:00 given the weekday window). Homework-linked deck tasks are ordinary tasks with the assignment's deadline.
+6. Tasks with no deadline (self-sent emails, Power Planner items with no date) get a soft deadline of `firstSeenAt + 7 days` and are placed last, so they fill free capacity rather than displace homework.
+
+Why backwards from the deadline rather than "everything as early as possible": placing early would put every open task into today's bucket and the block would never lift, which turns the app into a wall you learn to ignore. Backward placement means today's bucket contains exactly the work that must happen today for every deadline to be met, given the days left and their capacity. The margin and the per-kind calibration are what stop this from being a last-minute planner: a kind you habitually leave late gets a bigger margin, which pulls its chunks earlier.
+
+Why spread one chunk per day: a 90-minute physics prep due Monday becomes Thu/Fri/Sat chunks instead of one Sunday-night block, which is both easier to start and makes "due tomorrow" chunks appear a few days ahead, exactly as you asked.
+
+**Within a bucket**, order is: overdue → due today → `behind` chunks → ascending deadline → kind weight (Homework > Revision > Admin > Event prep) → shorter first. Ties broken by title so the widget never flickers.
+
+Worked example from tonight's data (22:00, Tue 7 Oct, capacity left tonight 0, tomorrow 16:45–22:00 = 315 min):
+
+| Bucket | Contents |
+|---|---|
+| Today (overdue/due today) | Ch17 mixed practice (due 23:59), Binomial Expansion, Statics Prep, three German items, Power Planner "Pg 60&61" |
+| Tomorrow (Wed) | Dr Frost F=ma (due 08:30, so really tonight), Prep and Assessment preparation (due 09:00), Gefahren im Internet chunk (due Fri 08:30 → last usable day Wed), Anki quota |
+| Thu–Sun | Young's modulus test revision chunks (test Mon 12 11:00, 3 chunks Thu/Fri/Sat), PREP 2 chunks (due Mon 13 08:00, 2 chunks Fri/Sat/Sun) |
+
+Today's bucket is hopelessly over capacity, so everything in it is `behind` and the block is strict until it clears. That is the honest picture.
+
+## 4. Block policy
+
+```
+dueSoon  = today's bucket ∪ tomorrow's bucket (chunks, not whole tasks)
+pressure = dueSoon is non-empty
+quiet    = now in [22:30, 07:00)        ──your sleep window (7 Oct)
+
+shouldBlock(now) = !quiet && ( pressure || credit <= 0 )
+```
+
+- **While `pressure`:** strict. No credit can be spent, none is earned beyond being banked. Blocked apps show the block screen with the top chunk of today's bucket.
+- **When `pressure` is empty:** earned free time. Each verified completion banks `min(30, max(10, remainingMin / 2))` minutes (whole task) or `boxMin / 3` (one chunk). Credit is spent only while a blocked app is in the foreground. Unspent credit expires at the end of the study day. With no credit, the block screen shows the next chunk from the nearest future bucket as the thing to do to earn time.
+- **Quiet hours** are the only unconditional release, and shortening them is a "loosening" change subject to the 24-hour delay (§6).
+- **No bypass button.** Removed at your request. The only override is the parent-held code (§6).
+
+**Chunk completion.** The final state of a task is always source-verified (hand in, tick, archive, deck count). A *chunk* of a bigger task cannot be verified at the source, so a chunk completes in one of two ways:
+
+1. **Focus session.** Tapping **Start** on the block screen runs a timer for the chunk's minutes; blocked apps stay blocked throughout; the chunk is marked done when the timer completes. Idling through a timer is possible, but the deadline and the source check still bite at the end, and the learning layer (§5) notices when timed chunks never translate into finished tasks.
+2. **Photo check** (Phase 5, optional). For written work you photograph the pages; the LLM (vision) answers "does this show completed answers for Ch17 questions 1–8?" with a yes/no and a confidence; yes marks the chunk done. Costs cents per check, well inside your credit.
+
+## 5. Learning and calibration
+
+Everything the app learns is a number you can see in Settings, and every parameter has bounds. The record per task: estimate, actual minutes (sum of sessions until verified done), kind, class, hour each session started, blocks triggered before the first session ("resistance"), whether the deadline was met, how many days before the deadline it was finished.
+
+1. **Effort multipliers**, per (kind, class): exponentially weighted mean of `actual / estimate`, clamp 0.5–3.0. Applied in §2. Physics preps taking 1.6× the LLM's guess is the kind of thing this catches in a week.
+2. **Safety margin**, per kind: starts at 1 day; rises by 1 (max 3) when two tasks of that kind in a row finished within an hour of the deadline or missed it; falls back when five in a row finished early. Pulls chunks earlier for the kinds you leave late.
+3. **Box length**, per kind: an experiment over {25, 45, 60} minutes, epsilon-greedy with reward "session completed and the task's verified completion came within its deadline"; locks in after 20 samples, re-opens if completion rate drops.
+4. **Capacity reality check.** If today's bucket is completed in full on fewer than 40 % of days over two weeks, the template capacity is overstated; the app proposes lowering it (you confirm) because the alternative is a plan that is always `behind`.
+5. **Quick self-assessment after each verified completion** (your choice, 7 Oct): one tap, *harder / as expected / easier*, plus an optional one-line note. Feeds item 1 directly (a "harder" vote nudges the multiplier up even before the actual-minutes signal settles) and is included verbatim in the weekly review.
+6. **Weekly check-in questionnaire** (your choice): five fixed questions on Sunday evening before the review runs, each a 1–5 scale or one line: how the week felt, what you avoided and why, what got in the way, what you'd change about the plan, energy by time of day. Answers are stored with the week's log.
+7. **Weekly review (LLM, Opus 5.5, high effort).** Sunday evening: the week's log, the self-assessments, the questionnaire answers and the current calibration go to the model, which returns proposed parameter changes within the bounds above and a five-line note ("You start German fastest around 17:00 and never after 20:30; moved its chunks earlier."). Changes that loosen blocking still go through the 24-hour delay. The model cannot change the floor settings.
+
+Practice-test scheduling before assessments was offered and not chosen; it stays out.
+
+## 6. Anti-tamper
+
+Nothing on an un-rooted personal phone is unbypassable: adb from a PC, booting to safe mode, a factory reset, or a second user profile all get round any app. What the layers below do is remove every *impulsive* route, so defeating the block takes a deliberate, slow, visible act.
+
+| Layer | Mechanism | Stops |
+|---|---|---|
+| 1. No bypass | No override button; quiet hours are the only release | The "just this once" tap |
+| 2. Settings guard | The accessibility service watches `com.android.settings`, Samsung Device Care (`com.samsung.android.lool`) and the package installer. When a screen in those apps shows the app's own accessibility toggle, its App info page (Force stop / Uninstall / Clear data), the device-admin deactivation screen, or "Reset accessibility settings" / "Reset all settings", it presses Back (and Home if Back fails) | Turning the service off, force-stopping, uninstalling, clearing data, resetting settings |
+| 3. Device admin | A `DeviceAdminReceiver` with no policies; Android refuses to uninstall an active admin until it is deactivated, and the deactivation screen is behind layer 2 | Uninstall from the launcher or Play Store |
+| 4. Delayed loosening | Any change that reduces blocking (shorter quiet hours, removing a blocklist entry, lower quota, bigger box, disabling a layer) takes effect **24 hours** after you request it and is shown as pending; tightening is immediate; the delay itself can only be lengthened immediately. The parent-held code below is the one way to skip the wait | Rewriting the rules in a weak moment |
+| 5. Watchdog | A periodic job and a boot receiver check the service is enabled and the admin active; if not: a persistent notification, the widget shows "PROTECTION OFF" in red, and the event is logged with its time | Quietly leaving it off |
+| 6. Parent-held override (your choice, 7 Oct) | Every pending loosening request, and any "protection off" state lasting over an hour, is emailed to **richard.white@lshtm.ac.uk**. The email carries a one-time code; typing it into the app applies that one pending change immediately (or, for a protection-off alert, simply tells him). Design below | Leaving it off for days; being stuck when a change is genuinely needed |
+
+**Parent-held override, how the code works.**
+
+- A request (say "remove Instagram from the blocklist") gets a random `requestId`. The code is `HMAC-SHA256(secret, requestId)` truncated to 8 digits; the `secret` is generated at setup, lives only in EncryptedSharedPreferences, and is never shown. One code opens exactly one request; it expires when the 24-hour delay would have elapsed anyway; three wrong entries lock code entry for an hour.
+- An "unblock for 60 minutes" request is also allowed through this path, so a genuine emergency has a route that involves another person rather than a button.
+- **Delivery must not pass through a mailbox you can read.** If the app sent the code from your own Gmail, it would sit in your Sent folder and the override would be yours, not his. So the sender is a **dedicated mailbox whose credentials your dad enters at setup** (a free Gmail address created for the app; its app password goes into the app's encrypted storage through a setup screen he completes, and the password is never displayed afterwards). The app sends over SMTP (`smtp.gmail.com:465`). Alternative if he would rather not run a mailbox: an authenticator app on *his* phone holding a TOTP secret the app shows once as a QR code at setup; the email then just says "Thomas requested X; if you approve, read him the current code"; no secret ever travels by email. Both are implementable; the dedicated mailbox matches what you asked for and is the **default**.
+- The weekly note going to him as well is a toggle, **default off**, since you did not ask for it.
+- Nothing else is ever emailed to anyone.
+
+Residual holes stated plainly: adb (`settings put secure enabled_accessibility_services`), safe mode, factory reset, a new user profile, and an Android update that changes the Settings screens layer 2 recognises (same class of fragility as the Teams scraper; the guard matches on the app's own name, which is stable, and the setup screen has a "test the guard" button). The override's strength rests on the sender mailbox staying his.
+
+Layer 2 needs care so it never traps you out of Settings entirely: it acts only on screens that name this app or the reset pages, never on Settings as a whole, and it is disabled automatically while the setup checklist is incomplete.
+
+## 7. Edge cases the tests must cover
+
+- Teams sync fails or is stale: tasks keep their last state; the widget shows "Teams synced 06:42".
+- A deadline passes while the widget is on screen: redraw at the deadline (alarm).
+- A split-screen or pop-up window holding a blocked app: the service checks every window, not only the active one.
+- A blocked app in picture-in-picture: detected via the window list; the block screen explains and the session timer will not start until the PiP window is gone (**verify** what can close it; YouTube PiP needs Premium so this may be moot).
+- A task that disappears from its source without you acting: `Done` with reason `GoneFromSource`, shown separately in stats and excluded from calibration.
+- The daily quota at 23:30 unmet: it is overdue; whether that blocks at that hour is quiet hours' decision.
+- Clock and time-zone changes: planner re-runs on the system broadcasts.
+- A pending loosening change crossing midnight, a reboot, or a reinstall: pending changes are persisted with their apply-at time.
+- The settings guard must not fire on another app that happens to contain the word "Decrastination" in its text (match on the Settings package *and* the app's own component or package name in the node tree).
+- Override codes: a code for request A must not open request B; a code must stop working once the delay has elapsed on its own; the lockout after three wrong entries must survive a restart; a request raised while offline queues the email and still starts the 24-hour clock.
+- The dedicated sender mailbox being unreachable (password revoked, no network) must degrade to "the request waits its 24 hours" with a visible notice, never to "the change applies".
