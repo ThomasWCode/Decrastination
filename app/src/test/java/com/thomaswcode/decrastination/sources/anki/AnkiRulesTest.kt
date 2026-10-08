@@ -130,10 +130,11 @@ class AnkiRulesTest {
         val tasks = AnkiRules.homeworkDecks(decks, 1, homework) { if (it.id == 12L) 45 else 10 }
         assertEquals(listOf("deck:12", "deck:22"), tasks.map { it.sourceId })
         val deck12 = tasks.first()
-        assertEquals("Learn Anki deck 1.2 (45 new)", deck12.title)
+        assertEquals("Learn Anki deck 1.2", deck12.title)
+        assertEquals(1, deck12.stepsPerDay)
         assertEquals(Fixtures.at("2026-10-01T08:30"), deck12.dueAt)
         assertEquals(listOf("20 new cards", "20 new cards", "5 new cards"), deck12.subSteps!!.map { it.title })
-        assertEquals("For: Familie und Ehe; Gefahren", deck12.detail)
+        assertEquals("45 cards never studied. For: Familie und Ehe; Gefahren", deck12.detail)
         assertTrue(deck12.derived)
     }
 

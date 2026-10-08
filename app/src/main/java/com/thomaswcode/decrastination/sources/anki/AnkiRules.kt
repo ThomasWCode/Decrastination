@@ -186,15 +186,16 @@ object AnkiRules {
             val section = deck.name.substringAfterLast(Deck.SEPARATOR)
             Fetched(
                 sourceId = DECK_PREFIX + deck.id,
-                title = "Learn Anki deck $section ($left new)",
+                title = "Learn Anki deck $section",
                 kind = Kind.Homework,
-                detail = "For: " + linked.joinToString("; ") { it.title },
+                detail = "$left cards never studied. For: " + linked.joinToString("; ") { it.title },
                 className = first.className,
                 dueAt = first.dueAt,
                 sourceEffortMin = effortMin(due, left).coerceAtLeast(1),
                 done = left == 0 && due == 0,
                 derived = true,
                 subSteps = newCardSteps(left),
+                stepsPerDay = 1,
                 extra = mapOf(EXTRA_DECK_ID to deck.id.toString(), EXTRA_DECK_NAME to deck.name, EXTRA_FOR to linked.joinToString(",") { it.id }),
             )
         }
