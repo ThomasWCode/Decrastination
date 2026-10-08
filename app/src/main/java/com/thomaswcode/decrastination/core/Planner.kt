@@ -1,0 +1,237 @@
+package com.thomaswcode.decrastination.core
+
+import com.thomaswcode.decrastination.data.Settings
+import java.time.DayOfWeek
+import java.time.Instant
+import java.time.LocalDate
+import java.time.LocalTime
+import java.time.ZoneId
+import kotlin.math.ceil
+import kotlin.math.roundToInt
+
+/**
+ * Places every open task's remaining work into day buckets, backwards from its deadline
+ * (docs/scheduler.md §3). Pure: everything it depends on comes in through [Input].
+ *
+ * 1. Each study day from today has a capacity: your hours that day (Settings), less what's
+ *    already gone today and what the calendar takes.
+ * 2. A task is cut into chunks: its sub-steps, or its remaining time in even boxes of about
+ *    `boxMin`. Remaining time is the estimate × your calibration multiplier × (1 − progress), less
+ *    the minutes already worked, and never under 5 ("finish and hand in").
+ * 3. Overdue work and work due today go straight into today, oldest deadline first.
+ * 4. Everything else, in deadline order, is placed backwards from its last usable day (the
+ *    deadline's day less the safety margin; a morning deadline's day is never usable), one chunk
+ *    per day while days allow, so a big task spreads over several evenings. A chunk that fits
+ *    nowhere before its deadline goes into today, flagged behind.
+ * 5. Undated work gets a soft deadline a week after it was first seen, and is placed after
+ *    everything with a real deadline, so it fills spare time rather than displacing homework; at
+ *    most `softMinPerDay` of it a day, so the whole inbox, first seen at once, spreads over the week.
+ * 6. A task that can only go so far a day ([TaskItem.stepsPerDay]: an Anki deck, which releases
+ *    20 new cards a day) never has more steps than that on one day, overdue or not.
+ *
+ * Placing backwards means today's bucket holds exactly what must happen today for every deadline
+ * to be met; placing everything early would put every task in today and the block would never lift.
+ */
+object Planner {
+
+    data class Input(
+        val tasks: List<TaskItem>,
+        val now: Long,
+        val zone: ZoneId,
+        val settings: Settings,
+        val calibration: Calibration = Calibration(),
+        val busy: List<Busy> = emptyList(),
+        /** Minutes of a day taken by something with no set time (an all-day van hire's few hours). */
+        val dayLoads: Map<LocalDate, Int> = emptyMap(),
+    )
+
+    private const val DAY_MS = 24 * 3_600_000L
+    private const val MIN_CHUNK = 5
+    private const val MIN_HORIZON_DAYS = 14L
+    private const val MAX_HORIZON_DAYS = 90L
+    private val NOON: LocalTime = LocalTime.NOON
+
+    private class Item(val task: TaskItem, val deadline: Long, val soft: Boolean, val chunks: List<Piece>) {
+        val minutes = chunks.sumOf { it.minutes }
+    }
+
+    private class Piece(val step: String?, val minutes: Int)
+
+    fun plan(input: Input): Plan {
+        val zone = input.zone
+        val today = date(input.now, zone)
+        val (events, work) = input.tasks
+            .filter { it.isOpen && it.isAvailable(input.now) }
+            .partition { it.kind == Kind.Event }
+        val items = work.map { task ->
+            val soft = task.dueAt == null
+            val deadline = task.dueAt ?: (task.firstSeenAt + input.settings.softDeadlineDays * DAY_MS)
+            Item(task, deadline, soft, pieces(task, input))
+        }.filter { it.chunks.isNotEmpty() }
+
+        val lastDeadline = items.maxOfOrNull { date(it.deadline, zone) } ?: today
+        val horizon = minOf(maxOf(lastDeadline, today.plusDays(MIN_HORIZON_DAYS)), today.plusDays(MAX_HORIZON_DAYS))
+        val days = generateSequence(today) { it.plusDays(1) }.takeWhile { it <= horizon }.toList()
+        val capacity = days.associateWith { capacity(it, input) }
+        val free = capacity.toMutableMap()
+        val placed = days.associateWith { mutableListOf<Chunk>() }
+
+        fun chunk(item: Item, index: Int, behind: Boolean): Chunk {
+            val piece = item.chunks[index]
+            val overdue = item.deadline < input.now
+            return Chunk(
+                taskId = item.task.id,
+                source = item.task.source,
+                kind = item.task.kind,
+                title = item.task.title,
+                step = piece.step,
+                minutes = piece.minutes,
+                dueAt = item.task.dueAt,
+                deadline = item.deadline,
+                soft = item.soft,
+                overdue = overdue,
+                dueToday = !overdue && date(item.deadline, zone) == today,
+                behind = behind && !overdue,
+                part = index + 1,
+                parts = item.chunks.size,
+                taskMinutes = item.minutes,
+            )
+        }
+
+        // Undated work has its own daily allowance, so a batch seen together spreads out.
+        val softUsed = HashMap<LocalDate, Int>()
+        fun room(item: Item, day: LocalDate): Int {
+            val left = free.getValue(day)
+            return if (item.soft) minOf(left, input.settings.softMinPerDay - (softUsed[day] ?: 0)) else left
+        }
+        fun take(item: Item, day: LocalDate, minutes: Int) {
+            free[day] = free.getValue(day) - minutes
+            if (item.soft) softUsed[day] = (softUsed[day] ?: 0) + minutes
+        }
+
+        val (urgent, later) = items.partition { date(it.deadline, zone) <= today }
+        for (item in urgent.sortedWith(compareBy({ it.soft }, { it.deadline }))) {
+            item.chunks.indices.forEach { i ->
+                // A task that can only go so far a day (an Anki deck) carries on over the next days.
+                val day = item.task.stepsPerDay?.let { today.plusDays((i / it).toLong()) }?.coerceAtMost(horizon) ?: today
+                take(item, day, item.chunks[i].minutes)
+                placed.getValue(day) += chunk(item, i, behind = false)
+            }
+        }
+
+        for (item in later.sortedWith(compareBy({ it.soft }, { it.deadline }))) {
+            val lastUsable = maxOf(today, minOf(horizon, lastUsableDay(item, input)))
+            val perDay = item.task.stepsPerDay
+            val assigned = arrayOfNulls<LocalDate>(item.chunks.size)
+            val behind = BooleanArray(item.chunks.size)
+            fun fits(day: LocalDate, i: Int) =
+                room(item, day) >= item.chunks[i].minutes && (perDay == null || assigned.count { it == day } < perDay)
+            fun latest(from: LocalDate, i: Int): LocalDate? =
+                generateSequence(from) { it.minusDays(1) }.takeWhile { it >= today }.firstOrNull { fits(it, i) }
+
+            // Backwards, one chunk per day while there are days with room.
+            var cursor = lastUsable
+            for (i in item.chunks.indices.reversed()) {
+                val day = latest(cursor, i) ?: break
+                assigned[i] = day
+                take(item, day, item.chunks[i].minutes)
+                cursor = day.minusDays(1)
+            }
+            // Then sharing days, still in order. What fits nowhere before the deadline is today's,
+            // and behind; or, for a task limited per day, the first day after with a step free.
+            for (i in item.chunks.indices.reversed()) {
+                if (assigned[i] != null) continue
+                val day = latest(assigned.getOrNull(i + 1) ?: lastUsable, i)
+                val chosen = day ?: if (perDay == null) {
+                    today
+                } else {
+                    generateSequence(today) { it.plusDays(1) }.first { d -> assigned.count { it == d } < perDay }.coerceAtMost(horizon)
+                }
+                assigned[i] = chosen
+                behind[i] = day == null
+                take(item, chosen, item.chunks[i].minutes)
+            }
+            if (perDay != null) {
+                // Its steps are alike (20 new cards each), so they're done in the order of their days.
+                item.chunks.indices.map { assigned[it]!! to behind[it] }.sortedBy { it.first }.forEachIndexed { i, (day, late) ->
+                    assigned[i] = day
+                    behind[i] = late
+                }
+            }
+            item.chunks.indices.forEach { i -> placed.getValue(assigned[i]!!) += chunk(item, i, behind[i]) }
+        }
+
+        val buckets = days.map { DayBucket(it, capacity.getValue(it), placed.getValue(it).sortedWith(ORDER)) }
+        return Plan(input.now, today, buckets, events.sortedWith(compareBy(nullsLast()) { it.dueAt }))
+    }
+
+    /**
+     * Within a day: work with a real deadline before undated work; then overdue, due today,
+     * behind, the rest; then the earliest deadline, homework before revision before admin, the
+     * shorter task, and the title, so the order never flickers. A task's parts stay together, in order.
+     */
+    val ORDER: Comparator<Chunk> = compareBy<Chunk>(
+        { it.soft },
+        {
+            when {
+                it.overdue -> 0
+                it.dueToday -> 1
+                it.behind -> 2
+                else -> 3
+            }
+        },
+        { it.deadline },
+        { it.kind.ordinal },
+        { it.taskMinutes },
+        { it.title },
+        { it.taskId },
+        { it.part },
+    )
+
+    /** The deadline's day less the margin; with no margin, a morning deadline's day is never usable. */
+    private fun lastUsableDay(item: Item, input: Input): LocalDate {
+        val due = Instant.ofEpochMilli(item.deadline).atZone(input.zone)
+        val margin = input.calibration.marginDays[item.task.kind] ?: input.settings.marginDays
+        val last = due.toLocalDate().minusDays(margin.toLong())
+        return if (margin == 0 && due.toLocalTime() < NOON) last.minusDays(1) else last
+    }
+
+    /** The task's remaining work as ordered pieces. */
+    private fun pieces(task: TaskItem, input: Input): List<Piece> {
+        val multiplier = input.calibration.multiplier(task.kind, task.className)
+        if (task.subSteps.isNotEmpty()) {
+            val left = task.subSteps.filterNot { it.done }
+            if (left.isEmpty()) return listOf(Piece("finish and hand in", MIN_CHUNK))
+            return left.map { Piece(it.title, (it.minutes * multiplier).roundToInt().coerceAtLeast(1)) }
+        }
+        if (task.effortMin <= 0) return emptyList()
+        val estimate = task.effortMin * multiplier * (1 - task.sourceProgress.coerceIn(0.0, 1.0))
+        val remaining = (estimate.roundToInt() - task.workedMin).coerceAtLeast(minOf(MIN_CHUNK, task.effortMin))
+        val box = (input.calibration.boxMin[task.kind] ?: input.settings.boxMin).coerceAtLeast(MIN_CHUNK)
+        val count = ceil(remaining / box.toDouble()).toInt().coerceAtLeast(1)
+        return (0 until count).map { i ->
+            // Even boxes: 100 minutes is 34, 33 and 33, not 45, 45 and a stray 10.
+            val minutes = remaining / count + if (i < remaining % count) 1 else 0
+            Piece(if (count > 1) "part ${i + 1} of $count" else null, minutes)
+        }
+    }
+
+    /** Your hours that day, less what's gone (today) and what the calendar takes. */
+    fun capacity(day: LocalDate, input: Input): Int {
+        val window = if (day.dayOfWeek == DayOfWeek.SATURDAY || day.dayOfWeek == DayOfWeek.SUNDAY) input.settings.weekendHours else input.settings.weekdayHours
+        val dayStart = day.atStartOfDay(input.zone).toInstant().toEpochMilli()
+        var start = dayStart + window.startMin * 60_000L
+        val end = dayStart + window.endMin * 60_000L
+        start = maxOf(start, minOf(end, input.now))
+        if (end <= start) return 0
+        val taken = input.busy.sumOf { busy ->
+            val from = maxOf(start, busy.start)
+            val to = minOf(end, busy.end)
+            if (to > from) to - from else 0L
+        }
+        val minutes = ((end - start - taken) / 60_000L).toInt() - (input.dayLoads[day] ?: 0)
+        return minutes.coerceAtLeast(0)
+    }
+
+    fun date(time: Long, zone: ZoneId): LocalDate = Instant.ofEpochMilli(time).atZone(zone).toLocalDate()
+}
