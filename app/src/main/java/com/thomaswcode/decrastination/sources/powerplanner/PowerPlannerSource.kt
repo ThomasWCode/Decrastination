@@ -21,7 +21,8 @@ import java.time.temporal.ChronoUnit
 class PowerPlannerSource(private val api: PowerPlannerApi, private val secrets: SecretStore) : TaskSource {
     override val source = Source.PowerPlanner
 
-    private data class Semester(val id: String, val timetable: Timetable, val readAt: Long)
+    /** The selected semester and its timetable, as one account read them. */
+    private data class Semester(val accountId: Long, val id: String, val timetable: Timetable, val readAt: Long)
 
     @Volatile
     private var semester: Semester? = null
@@ -32,7 +33,9 @@ class PowerPlannerSource(private val api: PowerPlannerApi, private val secrets: 
             try {
                 readWith(saved, context)
             } catch (_: PowerPlannerApi.ApiError) {
-                // Most likely the session expired: log in again, once.
+                // Most likely the session expired: log in again, once, and read the semester
+                // afresh too, in case it's the semester that changed.
+                semester = null
                 readWith(freshLogin(), context)
             }
         } else {
@@ -42,8 +45,9 @@ class PowerPlannerSource(private val api: PowerPlannerApi, private val secrets: 
     }
 
     private fun readWith(login: PowerPlannerApi.Login, context: ReadContext) = run {
-        val current = semester?.takeIf { context.now - it.readAt < TIMETABLE_MAX_AGE_MS }
-            ?: api.selectedSemester(login).let { id -> Semester(id, api.classes(login, id), context.now) }.also { semester = it }
+        // A login typed into Setup may be another account's: its semester isn't this one's.
+        val current = semester?.takeIf { it.accountId == login.accountId && context.now - it.readAt < TIMETABLE_MAX_AGE_MS }
+            ?: api.selectedSemester(login).let { id -> Semester(login.accountId, id, api.classes(login, id), context.now) }.also { semester = it }
         val now = Instant.ofEpochMilli(context.now).truncatedTo(ChronoUnit.SECONDS).toString()
         api.agenda(login, current.id, now).mapNotNull { PowerPlannerItems.fetched(it, current.id, current.timetable, context.zone) }
     }

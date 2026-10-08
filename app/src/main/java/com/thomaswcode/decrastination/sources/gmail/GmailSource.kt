@@ -10,6 +10,8 @@ import com.thomaswcode.decrastination.sources.SourceRead
 import com.thomaswcode.decrastination.sources.SourceUnavailable
 import com.thomaswcode.decrastination.sources.TaskSource
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.IOException
 import java.net.InetSocketAddress
@@ -49,6 +51,9 @@ object GmailThreads {
     const val EXTRA_NEXT_STEP = "nextStep"
     const val EXTRA_MESSAGES = "messages"
 
+    /** Its text isn't fetched yet (a read fetches at most so many): fetch it next time. */
+    const val EXTRA_TEXT_PENDING = "textPending"
+
     /** Each conversation's newest message, newest conversation first. */
     fun latest(messages: List<InboxMessage>): List<InboxMessage> =
         messages.groupBy { it.threadId }
@@ -58,15 +63,15 @@ object GmailThreads {
     fun fetched(messages: List<InboxMessage>, bodies: Map<String, String>, now: Long, zone: ZoneId): List<Fetched> {
         val counts = messages.groupingBy { it.threadId }.eachCount()
         return latest(messages).map { message ->
-            val body = bodies[message.messageId].orEmpty()
+            val body = bodies[message.messageId]
             val subject = message.subject.ifBlank { "(no subject)" }
-            val triage = EmailRules.triage(EmailRules.Email(message.fromName, message.fromAddress, subject, body, message.sent), now, zone)
+            val triage = EmailRules.triage(EmailRules.Email(message.fromName, message.fromAddress, subject, body.orEmpty(), message.sent), now, zone)
             val from = listOfNotNull(message.fromName, message.fromAddress?.let { "<$it>" }).joinToString(" ")
             Fetched(
                 sourceId = message.threadId,
                 title = subject,
                 kind = triage.kind,
-                detail = body,
+                detail = body.orEmpty(),
                 dueAt = triage.dueAt,
                 availableFrom = triage.availableFrom,
                 sourceEffortMin = triage.effortMin,
@@ -75,6 +80,7 @@ object GmailThreads {
                     put(EXTRA_NEXT_STEP, triage.nextStep)
                     put(EXTRA_MESSAGES, counts[message.threadId].toString())
                     if (from.isNotEmpty()) put(EXTRA_FROM, from)
+                    if (body == null) put(EXTRA_TEXT_PENDING, "true")
                 },
             )
         }
@@ -82,7 +88,7 @@ object GmailThreads {
 
     /** The text already stored for each conversation, by its newest message's id: read again only when that changes. */
     fun knownBodies(known: List<TaskItem>): Map<String, String> =
-        known.filter { it.source == Source.Gmail }
+        known.filter { it.source == Source.Gmail && EXTRA_TEXT_PENDING !in it.extra }
             .mapNotNull { task -> task.extra[EXTRA_MESSAGE_ID]?.let { it to task.detail } }
             .toMap()
 
@@ -118,8 +124,10 @@ object GmailThreads {
 
 /**
  * Gmail over IMAP with an app password (docs/data-sources.md §4), read-only: see [ImapClient].
- * A read lists the inbox's envelopes and fetches the text of only those conversations whose
- * newest message is new since the last read.
+ * A read lists every inbox message's envelope, in batches, since a read that left some out would
+ * take their conversations as archived. It fetches the text of only those conversations whose
+ * newest message is new since the last read, at most [MAX_BODIES] a read; the rest are fetched on
+ * the reads after.
  */
 class GmailSource(private val secrets: SecretStore) : TaskSource {
     override val source = Source.Gmail
@@ -130,20 +138,37 @@ class GmailSource(private val secrets: SecretStore) : TaskSource {
         if (address.isNullOrBlank() || password.isNullOrBlank()) throw SourceUnavailable("No Gmail address and app password saved")
         val known = GmailThreads.knownBodies(context.known)
         val socket = connect()
-        socket.use {
-            val imap = ImapClient(socket.inputStream, socket.outputStream)
-            imap.greeting()
-            imap.login(address, password)
-            val count = imap.examine("INBOX")
-            val uids = if (count == 0) emptyList() else imap.uidSearch("ALL").sorted().takeLast(MAX_MESSAGES)
-            val messages = imap.uidFetch(uids, "UID INTERNALDATE X-GM-MSGID X-GM-THRID X-GM-LABELS ENVELOPE").mapNotNull(GmailThreads::message)
-            if (messages.size < uids.size) throw IOException("Gmail listed ${uids.size} messages but described ${messages.size}")
-            val bodies = HashMap<String, String>()
-            for (message in GmailThreads.latest(messages)) {
-                bodies[message.messageId] = known[message.messageId] ?: text(imap, message.uid)
+        // A read the sync has given up on mustn't hold the connection open: closing the socket,
+        // from another thread, ends whichever blocking read is under way.
+        val closer = launch {
+            try {
+                awaitCancellation()
+            } finally {
+                runCatching { socket.close() }
             }
-            imap.logout()
-            SourceRead(GmailThreads.fetched(messages, bodies, context.now, context.zone))
+        }
+        try {
+            socket.use {
+                val imap = ImapClient(socket.inputStream, socket.outputStream)
+                imap.greeting()
+                imap.login(address, password)
+                val count = imap.examine("INBOX")
+                val uids = if (count == 0) emptyList() else imap.uidSearch("ALL").sorted()
+                val messages = uids.chunked(FETCH_BATCH).flatMap { batch ->
+                    imap.uidFetch(batch, "UID INTERNALDATE X-GM-MSGID X-GM-THRID X-GM-LABELS ENVELOPE").mapNotNull(GmailThreads::message)
+                }
+                if (messages.size < uids.size) throw IOException("Gmail listed ${uids.size} messages but described ${messages.size}")
+                val bodies = HashMap<String, String>()
+                var fetched = 0
+                for (message in GmailThreads.latest(messages)) {
+                    val body = known[message.messageId] ?: if (fetched < MAX_BODIES) text(imap, message.uid).also { fetched++ } else null
+                    body?.let { bodies[message.messageId] = it }
+                }
+                imap.logout()
+                SourceRead(GmailThreads.fetched(messages, bodies, context.now, context.zone))
+            }
+        } finally {
+            closer.cancel()
         }
     }
 
@@ -180,7 +205,8 @@ class GmailSource(private val secrets: SecretStore) : TaskSource {
         const val HOST = "imap.gmail.com"
         const val PORT = 993
         const val TIMEOUT_MS = 30_000
-        const val MAX_MESSAGES = 300
+        const val FETCH_BATCH = 200
+        const val MAX_BODIES = 60
         const val MAX_TEXT_BYTES = 32_000
         const val MAX_HTML_BYTES = 200_000
         const val MAX_BODY_CHARS = 4_000

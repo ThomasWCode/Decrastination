@@ -70,6 +70,11 @@ class MimeTest {
     }
 
     @Test
+    fun `a numeric entity that names no character is left as written`() {
+        assertEquals("a &#1114112; b &#x110000; c", Mime.htmlToText("a &#1114112; b &#x110000; c"))
+    }
+
+    @Test
     fun `a style block cut off by a partial fetch is dropped, not read as text`() {
         assertEquals("Hi", Mime.tidy(Mime.htmlToText("<p>Hi</p><style>td > h1 { font-size: 2rem; }\n@media screen {"), 100))
     }

@@ -42,7 +42,6 @@ object EmailRules {
         val dueAt: Long? = null,
     )
 
-    private const val DAY_MS = 24 * 3_600_000L
     private const val PAST_WINDOW_DAYS = 120L
 
     private val SHARED_DOCUMENT = Regex("""drive-shares|docs\.google\.com|shared with you""", RegexOption.IGNORE_CASE)
@@ -62,13 +61,13 @@ object EmailRules {
         if (EVENT_WORDS.containsMatchIn(text)) {
             val today = Instant.ofEpochMilli(now).atZone(zone).toLocalDate()
             futureDates(text, today).firstOrNull()?.let { day ->
-                val start = day.atStartOfDay(zone).toInstant().toEpochMilli()
+                // Calendar days, not 24-hour steps: the clocks change in October and March.
                 return Triage(
                     kind = Kind.Event,
                     effortMin = Kind.Event.defaultEffortMin,
                     nextStep = "Keep for ${day.dayOfMonth} ${day.month.getDisplayName(TextStyle.SHORT, Locale.UK)}, then archive",
-                    availableFrom = start - DAY_MS,
-                    dueAt = start + 2 * DAY_MS,
+                    availableFrom = day.minusDays(1).atStartOfDay(zone).toInstant().toEpochMilli(),
+                    dueAt = day.plusDays(2).atStartOfDay(zone).toInstant().toEpochMilli(),
                 )
             }
         }

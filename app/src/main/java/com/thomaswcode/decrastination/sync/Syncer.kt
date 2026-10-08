@@ -11,9 +11,15 @@ import com.thomaswcode.decrastination.data.TaskState
 import com.thomaswcode.decrastination.sources.ReadContext
 import com.thomaswcode.decrastination.sources.TaskSource
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.async
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeout
+import kotlin.coroutines.CoroutineContext
 
 /** What one sync found, for the log, the credit and the self-assessment prompts. */
 data class SyncReport(
@@ -37,6 +43,11 @@ data class SyncReport(
  * Sources are isolated: one that fails keeps its tasks as they were and records why, and the rest
  * carry on. Anki is read last, since the decks it tracks are the ones the other sources' homework
  * names. One sync runs at a time.
+ *
+ * Sources read with blocking calls (a socket, an HTTP connection, another app's provider), which
+ * a coroutine timeout can't interrupt. So each read runs on its own, outside the sync, which waits
+ * for it no longer than [timeoutMs]: a read that overruns is cancelled and left to wind down (Gmail
+ * closes its socket when cancelled), and its answer, if it ever comes, is ignored.
  */
 class Syncer(
     private val tasks: JsonStore<TaskState>,
@@ -46,8 +57,10 @@ class Syncer(
     private val timeoutMs: Long = 90_000,
     /** Hears each source's failure in full, for the log; the store keeps only its message. */
     private val onFailure: (Source, Throwable) -> Unit = { _, _ -> },
+    readContext: CoroutineContext = Dispatchers.IO,
 ) {
     private val sources = sources.sortedBy { it.source == Source.Anki }
+    private val readers = CoroutineScope(SupervisorJob() + readContext)
     private val lock = Mutex()
     private val listeners = mutableListOf<suspend (SyncReport) -> Unit>()
 
@@ -72,13 +85,17 @@ class Syncer(
         val startedAt = clock.now()
         val state = tasks.value
         val context = ReadContext(startedAt, clock.zone(), settings.value, state.tasks, state.ankiDay)
+        val reading = readers.async { source.read(context) }
         val read = try {
-            withTimeout(timeoutMs) { source.read(context) }
-        } catch (e: CancellationException) {
-            // A timeout is a failure of this source; the caller being cancelled is not.
-            if (e !is kotlinx.coroutines.TimeoutCancellationException) throw e
+            withTimeout(timeoutMs) { reading.await() }
+        } catch (e: TimeoutCancellationException) {
+            reading.cancel()
             onFailure(source.source, e)
             return failed(source.source, startedAt, "No answer in ${timeoutMs / 1000} s")
+        } catch (e: CancellationException) {
+            // The sync itself was cancelled: so is the read, and that's no failure of the source.
+            reading.cancel()
+            throw e
         } catch (e: Exception) {
             onFailure(source.source, e)
             return failed(source.source, startedAt, e.message ?: e.javaClass.simpleName)

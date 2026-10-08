@@ -145,6 +145,28 @@ class AnkiRulesTest {
     }
 
     @Test
+    fun `a deck whose assignment closes gets a last look, done if finished and otherwise left to be missed`() {
+        val tracked = { deckId: Long ->
+            TaskItem(
+                id = TaskItem.id(Source.Anki, "deck:$deckId"),
+                source = Source.Anki,
+                sourceId = "deck:$deckId",
+                title = "Learn Anki deck",
+                kind = Kind.Homework,
+                derived = true,
+                firstSeenAt = 0,
+                lastSeenAt = 0,
+                extra = mapOf(AnkiRules.EXTRA_DECK_ID to deckId.toString()),
+            )
+        }
+        val handedIn = assignment("Familie und Ehe", "Learn vocabulary column 1.2 and 1.3", null, open = false)
+        val finished = decks.map { if (it.id == 12L) it.copy(new = 0, review = 0) else it }
+        val tasks = AnkiRules.homeworkDecks(finished, 1, listOf(handedIn, tracked(12), tracked(13))) { if (it.id == 12L) 0 else 30 }
+        assertEquals(listOf("deck:12"), tasks.map { it.sourceId })
+        assertTrue(tasks.single().done)
+    }
+
+    @Test
     fun `deck counts parse`() {
         assertEquals(listOf(0, 3, 20), AnkiProvider.parseCounts("[0, 3, 20]")?.toList())
         assertNull(AnkiProvider.parseCounts("[0, 3]"))

@@ -121,12 +121,15 @@ object Mime {
         return ENTITY.replace(text) { match ->
             val name = match.groupValues[1]
             when {
-                name.startsWith("#x") -> name.substring(2).toIntOrNull(16)?.let { String(Character.toChars(it)) }
-                name.startsWith("#") -> name.substring(1).toIntOrNull()?.let { String(Character.toChars(it)) }
+                name.startsWith("#x") -> codePoint(name.substring(2).toIntOrNull(16))
+                name.startsWith("#") -> codePoint(name.substring(1).toIntOrNull())
                 else -> NAMED[name.lowercase()]
             } ?: match.value
         }
     }
+
+    /** A numeric entity's character, or null for one that names no character (`&#1114112;`): left as written. */
+    private fun codePoint(value: Int?): String? = value?.takeIf { Character.isValidCodePoint(it) }?.let { String(Character.toChars(it)) }
 
     private val SPACES = Regex("""[ \t\x{00A0}]+""")
     private val BLANK_LINES = Regex("""\n\s*\n(\s*\n)+""")
