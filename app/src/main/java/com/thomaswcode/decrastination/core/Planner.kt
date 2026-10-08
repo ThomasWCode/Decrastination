@@ -55,7 +55,8 @@ object Planner {
         val minutes = chunks.sumOf { it.minutes }
     }
 
-    private class Piece(val step: String?, val minutes: Int)
+    /** A sub-step, or (with [step] null and [boxed]) a box of time, labelled by its place in the day order. */
+    private class Piece(val step: String?, val minutes: Int, val boxed: Boolean = false)
 
     fun plan(input: Input): Plan {
         val zone = input.zone
@@ -83,7 +84,8 @@ object Planner {
         val free = capacity.toMutableMap()
         val placed = days.associateWith { mutableListOf<Chunk>() }
 
-        fun chunk(item: Item, index: Int, behind: Boolean): Chunk {
+        /** Piece [index] of [item], done [part]th in day order. */
+        fun chunk(item: Item, index: Int, behind: Boolean, part: Int = index + 1): Chunk {
             val piece = item.chunks[index]
             val overdue = item.deadline < input.now
             return Chunk(
@@ -91,7 +93,7 @@ object Planner {
                 source = item.task.source,
                 kind = item.task.kind,
                 title = item.task.title,
-                step = piece.step,
+                step = if (piece.boxed) "part $part of ${item.chunks.size}" else piece.step,
                 minutes = piece.minutes,
                 dueAt = item.task.dueAt,
                 deadline = item.deadline,
@@ -99,7 +101,7 @@ object Planner {
                 overdue = overdue,
                 dueToday = !overdue && date(item.deadline, zone) == today,
                 behind = behind && !overdue,
-                part = index + 1,
+                part = part,
                 parts = item.chunks.size,
                 taskMinutes = item.minutes,
             )
@@ -145,7 +147,9 @@ object Planner {
             }
         }
 
-        for (item in later.sortedWith(compareBy({ it.soft }, { it.deadline }))) {
+        // Earliest last usable day first, so the most constrained work reserves its days first (a
+        // later deadline with a bigger safety margin can be the more urgent).
+        for (item in later.sortedWith(compareBy({ it.soft }, { lastUsableDay(it, input) }, { it.deadline }))) {
             val earliest = firstDay(item)
             val lastUsable = maxOf(earliest, minOf(horizon, lastUsableDay(item, input)))
             val perDay = item.task.stepsPerDay
@@ -181,16 +185,11 @@ object Planner {
                 behind[i] = day == null
                 take(item, chosen, item.chunks[i].minutes)
             }
-            if (perDay != null || item.soft) {
-                // Steps that ran past the deadline go last: the days are put back in order.
-                item.chunks.indices.filter { assigned[it] != null }.map { assigned[it]!! to behind[it] }.sortedBy { it.first }
-                    .also { item.chunks.indices.forEach { i -> assigned[i] = null } }
-                    .forEachIndexed { i, (day, late) ->
-                        assigned[i] = day
-                        behind[i] = late
-                    }
+            // Steps that ran past the deadline come last: each piece keeps its own day (and so the
+            // time it took from that day), and the parts are numbered in day order.
+            item.chunks.indices.filter { assigned[it] != null }.sortedBy { assigned[it] }.forEachIndexed { order, i ->
+                placed.getValue(assigned[i]!!) += chunk(item, i, behind[i], part = order + 1)
             }
-            item.chunks.indices.forEach { i -> assigned[i]?.let { placed.getValue(it) += chunk(item, i, behind[i]) } }
         }
 
         val buckets = days.map { DayBucket(it, capacity.getValue(it), placed.getValue(it).sortedWith(ORDER)) }
@@ -244,7 +243,7 @@ object Planner {
         return (0 until count).map { i ->
             // Even boxes: 100 minutes is 34, 33 and 33, not 45, 45 and a stray 10.
             val minutes = remaining / count + if (i < remaining % count) 1 else 0
-            Piece(if (count > 1) "part ${i + 1} of $count" else null, minutes)
+            Piece(null, minutes, boxed = count > 1)
         }
     }
 

@@ -246,6 +246,31 @@ class PlannerTest {
     }
 
     @Test
+    fun `steps that run past the deadline keep their own sizes on their own days`() {
+        // Due Saturday 09:00, so Friday is the last usable day; Thursday and Friday have room for
+        // one step each (a step a day), and the third runs on to Saturday.
+        val steps = listOf(SubStep("20 new cards", 9), SubStep("20 new cards", 9), SubStep("5 new cards", 3))
+        val deck = task("deck", Fixtures.at("2026-10-10T09:00"), steps = steps).copy(stepsPerDay = 1)
+        val plan = plan(listOf(deck), "2026-10-08T17:00")
+        val byDay = plan.buckets.filter { it.chunks.isNotEmpty() }.map { it.date.toString() to it.chunks.single().minutes }
+        assertEquals(listOf("2026-10-08" to 9, "2026-10-09" to 3, "2026-10-10" to 9), byDay)
+        assertEquals(listOf(1, 2, 3), plan.chunksOf("teams:deck").map { it.part })
+    }
+
+    @Test
+    fun `work whose last usable day comes first is placed first`() {
+        // The essay is due later but has a three-day margin, so its last usable day (Wednesday)
+        // comes before the other's (Friday): it gets Wednesday, its own last usable day.
+        val margins = Calibration(marginDays = mapOf(Kind.Admin to 0, Kind.Homework to 3))
+        val admin = task("form", Fixtures.at("2026-10-16T23:00"), kind = Kind.Admin, steps = listOf(SubStep("a", 310), SubStep("b", 310), SubStep("c", 310)))
+        val essay = task("essay", Fixtures.at("2026-10-17T09:00"), steps = listOf(SubStep("all", 310)))
+        val input = Planner.Input(listOf(admin, essay), Fixtures.at("2026-10-13T16:45"), LONDON, settings, calibration = margins)
+        val plan = Planner.plan(input)
+        assertEquals(listOf(LocalDate.parse("2026-10-14")), plan.dayOf("essay"))
+        assertTrue(plan.ordered.none { it.behind })
+    }
+
+    @Test
     fun `hours mean wall-clock times on the days the clocks change`() {
         // The clocks go back at 02:00 on Sunday 25 Oct 2026: 08:30-22:30 is still 14 hours.
         val sunday = LocalDate.parse("2026-10-25")
