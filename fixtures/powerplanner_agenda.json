@@ -1,0 +1,82 @@
+{
+ "_about": "Power Planner web API responses captured on 8 Oct 2026 by scripts/powerplanner_probe.py --save, redacted for a public repo: real field names, types, ids and dates; the personal task renamed; of the 18 classes only German, with its four timetable slots and no rooms. See docs/phase0-findings.md section 2.",
+ "selectedSemester": {
+  "SelectedSemesterId": "5e905d29-0cdc-46ac-99a5-e0779faa1af1",
+  "Error": null
+ },
+ "agenda": {
+  "Items": [
+   {
+    "PercentComplete": 0.0,
+    "Identifier": "931443cd-0dc9-44e4-b4ce-176db4b24f91",
+    "DateCreated": "2026-09-23T09:46:46.98",
+    "Name": "Pg 60&61",
+    "ShortDetails": "",
+    "Date": "2026-09-25T00:00:01",
+    "ClassIdentifier": "abe7b155-7eb6-4a65-bba8-00ebeff16f56",
+    "ItemType": 5
+   },
+   {
+    "PercentComplete": 0.0,
+    "Identifier": "bbf338f6-881c-4536-81ba-bc068821f867",
+    "DateCreated": "2026-09-28T21:22:55.64",
+    "Name": "Call with a friend after school.",
+    "ShortDetails": "",
+    "Date": "2026-10-14T16:00:04",
+    "ClassIdentifier": "5e905d29-0cdc-46ac-99a5-e0779faa1af1",
+    "ItemType": 5
+   }
+  ],
+  "Classes": null,
+  "Error": null
+ },
+ "classesAndSchedules": {
+  "WeekOneStartsOn": "2026-08-24T00:00:00",
+  "Error": null,
+  "Classes": [
+   {
+    "Identifier": "abe7b155-7eb6-4a65-bba8-00ebeff16f56",
+    "Name": "German",
+    "Color": "#F09609",
+    "Schedules": [
+     {
+      "Identifier": "3f19c152-abed-419a-9b51-17ee240eb90f",
+      "UpperIdentifier": "abe7b155-7eb6-4a65-bba8-00ebeff16f56",
+      "Room": "",
+      "StartTime": "2026-09-05T09:50:00",
+      "EndTime": "2026-09-05T10:45:00",
+      "DayOfWeek": 3,
+      "ScheduleWeek": 1
+     },
+     {
+      "Identifier": "f7434c7a-ca5e-4beb-9973-295a80af4eed",
+      "UpperIdentifier": "abe7b155-7eb6-4a65-bba8-00ebeff16f56",
+      "Room": "",
+      "StartTime": "2026-09-05T12:20:00",
+      "EndTime": "2026-09-05T13:15:00",
+      "DayOfWeek": 5,
+      "ScheduleWeek": 1
+     },
+     {
+      "Identifier": "e73c9681-e964-452e-8a85-a86997512e8a",
+      "UpperIdentifier": "abe7b155-7eb6-4a65-bba8-00ebeff16f56",
+      "Room": "",
+      "StartTime": "2026-09-05T12:20:00",
+      "EndTime": "2026-09-05T13:15:00",
+      "DayOfWeek": 1,
+      "ScheduleWeek": 2
+     },
+     {
+      "Identifier": "bbe2bc32-f92e-485e-b360-a9c11fb49b0f",
+      "UpperIdentifier": "abe7b155-7eb6-4a65-bba8-00ebeff16f56",
+      "Room": "",
+      "StartTime": "2026-09-05T08:50:00",
+      "EndTime": "2026-09-05T09:45:00",
+      "DayOfWeek": 5,
+      "ScheduleWeek": 2
+     }
+    ]
+   }
+  ]
+ }
+}
