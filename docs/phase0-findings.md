@@ -68,6 +68,13 @@ The focus service was switched on over adb (`settings put secure enabled_accessi
 2. **`uiautomator` and other UiAutomation tools** run over adb pause every accessibility service while they run (the focus service disconnected and reconnected around each screen dump). adb already defeats the blocker, so this changes nothing, but it explains gaps in logs taken while debugging.
 3. **A second user profile exists** (user 150, which `pm` couldn't access: most likely Secure Folder). Apps installed there are outside the blocker, as PLAN.md §7 already accepts.
 
+**Found: covering YouTube sent its video into picture-in-picture.** In one of these tests YouTube had resumed a Short, and the block screen went over it while it played. Android took the launch as you leaving YouTube, so YouTube moved the video into a floating picture-in-picture window (`mWindowingMode=pinned`): over the block screen, and after **Go to the home screen** over everything else, still playing, for 20 minutes until you spotted it. What came of it:
+
+- **The block screen is started with `FLAG_ACTIVITY_NO_USER_ACTION`**, which tells Android this isn't the user leaving the covered app: it gets no `onUserLeaveHint` and doesn't enter picture-in-picture automatically. Retested: a Short covered while playing, then **Go to the home screen**, left no floating window.
+- **A blocked app already in picture-in-picture** (sent there before blocking began) is caught too. The floating window is never the window in use, so the service looks through every window for one. On One UI its root is the app's own view, offering no dismiss action, so the service relaunches the app to full screen, as tapping its icon does, and the block screen covers it: 0.18 s on the phone, with nothing left floating.
+- **The Teams widget can't work under a floating window.** With that video still floating, a row tap opened Teams on Assignments underneath, but the widget reads the window in use, the video's, and stopped after 20 s with *Couldn't open Teams Assignments*. It could read Teams' own window instead; until then, the block screen's **Refresh Teams** should say so when it fails.
+- **Every test that opens a blocked app now ends** by force-stopping it and checking that no window is left in picture-in-picture.
+
 **For Phase 3 (Q19, decided 8 Oct):** grant Decrastination `WRITE_SECURE_SETTINGS` once over adb (`adb shell pm grant com.thomaswcode.decrastination android.permission.WRITE_SECURE_SETTINGS`). With it, the watchdog can switch the focus service straight back on and remove it from any shortcut, instead of only emailing about it. It survives reboots and updates, and is lost only by uninstalling, which the guard and the device admin resist.
 
 ## 6. What this changes
@@ -78,3 +85,4 @@ The focus service was switched on over adb (`settings put secure enabled_accessi
 - **AnkiDroid:** map section numbers to `Textbook N::x.y` using a current-textbook setting, starting at Textbook 1 (Q18, decided).
 - **Gmail:** use `X-GM-MSGID` as the task id; `\Sent` marks your own notes; a message leaving and later re-entering INBOX is a deferral, not two tasks.
 - **Anti-tamper:** add the shortcut route to the guard and the watchdog; the watchdog gets `WRITE_SECURE_SETTINGS`, granted over adb at setup, to undo it (Q19, decided).
+- **Blocker:** start the block screen with `FLAG_ACTIVITY_NO_USER_ACTION`, and check every window, picture-in-picture included, not only the one in use.
