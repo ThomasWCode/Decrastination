@@ -32,8 +32,12 @@ object TaskOpener {
             val deckId = task.extra[AnkiRules.EXTRA_DECK_ID]?.toLongOrNull()
             // A homework deck opens on studying it; the quota spans every deck, so the deck list.
             val study = task.sourceId.startsWith(AnkiRules.DECK_PREFIX)
-            val opened = withContext(Dispatchers.IO) { AnkiProvider.open(context, deckId, study) }
-            if (opened) null else "AnkiDroid isn't installed"
+            when (withContext(Dispatchers.IO) { AnkiProvider.open(context, deckId, study) }) {
+                AnkiProvider.Opened.Studying -> null
+                // Couldn't select the deck (the permission revoked?): say which to choose.
+                AnkiProvider.Opened.DeckList -> if (study) task.extra[AnkiRules.EXTRA_DECK_NAME]?.let { "In AnkiDroid: choose $it" } else null
+                AnkiProvider.Opened.NotInstalled -> "AnkiDroid isn't installed"
+            }
         }
         Source.Gmail -> openGmail(context, task)
         Source.PowerPlanner -> if (launch(context, POWER_PLANNER)) null else "Power Planner isn't installed"

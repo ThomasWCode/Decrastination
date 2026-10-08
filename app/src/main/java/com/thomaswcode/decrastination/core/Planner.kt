@@ -70,7 +70,14 @@ object Planner {
         }.filter { it.chunks.isNotEmpty() }
 
         val lastDeadline = items.maxOfOrNull { date(it.deadline, zone) } ?: today
-        val horizon = minOf(maxOf(lastDeadline, today.plusDays(MIN_HORIZON_DAYS)), today.plusDays(MAX_HORIZON_DAYS))
+        // Far enough for the latest deadline, and for every step of a task limited per day to
+        // have its own day (a deck of 300 unseen cards is 15 days of 20).
+        val stepDays = items.maxOfOrNull { item ->
+            val perDay = item.task.stepsPerDay ?: return@maxOfOrNull 0L
+            val start = item.task.notBefore?.takeIf { it > input.now }?.let { java.time.temporal.ChronoUnit.DAYS.between(today, date(it, zone)) } ?: 0L
+            start + (item.chunks.size + perDay - 1) / perDay
+        } ?: 0L
+        val horizon = minOf(maxOf(lastDeadline, today.plusDays(MIN_HORIZON_DAYS), today.plusDays(stepDays)), today.plusDays(MAX_HORIZON_DAYS))
         val days = generateSequence(today) { it.plusDays(1) }.takeWhile { it <= horizon }.toList()
         val capacity = days.associateWith { capacity(it, input) }
         val free = capacity.toMutableMap()
@@ -121,7 +128,7 @@ object Planner {
             val perDay = item.task.stepsPerDay
             val assigned = arrayOfNulls<LocalDate>(item.chunks.size)
             var day = firstDay(item)
-            item.chunks.indices.forEach { i ->
+            for (i in item.chunks.indices) {
                 // Past its deadline it's due now, but a task that can only go so far a day carries
                 // on over the next days, and undated work keeps to its daily allowance.
                 while (day < horizon && ((perDay != null && countOn(assigned, day) >= perDay) ||
@@ -129,6 +136,9 @@ object Planner {
                 ) {
                     day = day.plusDays(1)
                 }
+                // Beyond the horizon (90 days), the rest of a per-day task goes unplanned rather
+                // than breaking its limit.
+                if (perDay != null && countOn(assigned, day) >= perDay) break
                 assigned[i] = day
                 take(item, day, item.chunks[i].minutes)
                 placed.getValue(day) += chunk(item, i, behind = false)
@@ -160,23 +170,27 @@ object Planner {
             for (i in item.chunks.indices.reversed()) {
                 if (assigned[i] != null) continue
                 val day = latest(assigned.getOrNull(i + 1) ?: lastUsable, i)
-                val chosen = day ?: if (perDay == null && !item.soft) {
-                    earliest
-                } else {
-                    generateSequence(lastUsable.plusDays(1)) { it.plusDays(1) }.takeWhile { it <= horizon }.firstOrNull { fits(it, i) } ?: horizon
+                val chosen = day ?: when {
+                    perDay == null && !item.soft -> earliest
+                    perDay != null -> generateSequence(earliest) { it.plusDays(1) }.takeWhile { it <= horizon }.firstOrNull { countOn(assigned, it) < perDay }
+                    else -> generateSequence(lastUsable.plusDays(1)) { it.plusDays(1) }.takeWhile { it <= horizon }.firstOrNull { fits(it, i) } ?: horizon
                 }
+                // A per-day task with no day left within the horizon: the rest goes unplanned.
+                chosen ?: continue
                 assigned[i] = chosen
                 behind[i] = day == null
                 take(item, chosen, item.chunks[i].minutes)
             }
             if (perDay != null || item.soft) {
                 // Steps that ran past the deadline go last: the days are put back in order.
-                item.chunks.indices.map { assigned[it]!! to behind[it] }.sortedBy { it.first }.forEachIndexed { i, (day, late) ->
-                    assigned[i] = day
-                    behind[i] = late
-                }
+                item.chunks.indices.filter { assigned[it] != null }.map { assigned[it]!! to behind[it] }.sortedBy { it.first }
+                    .also { item.chunks.indices.forEach { i -> assigned[i] = null } }
+                    .forEachIndexed { i, (day, late) ->
+                        assigned[i] = day
+                        behind[i] = late
+                    }
             }
-            item.chunks.indices.forEach { i -> placed.getValue(assigned[i]!!) += chunk(item, i, behind[i]) }
+            item.chunks.indices.forEach { i -> assigned[i]?.let { placed.getValue(it) += chunk(item, i, behind[i]) } }
         }
 
         val buckets = days.map { DayBucket(it, capacity.getValue(it), placed.getValue(it).sortedWith(ORDER)) }
