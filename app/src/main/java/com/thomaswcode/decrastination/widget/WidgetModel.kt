@@ -29,7 +29,7 @@ data class WidgetModel(
     /** The task a tap opens, if any. */
     val taskId: String?,
 ) {
-    data class Line(val text: String, val minutes: String, val urgent: Boolean)
+    data class Line(val text: String, val minutes: String, val urgent: Boolean, val taskId: String)
 
     companion object {
         /** Teams data older than this is worth a warning: the widget syncs only when asked. */
@@ -57,7 +57,7 @@ data class WidgetModel(
                 },
                 // After the next and the one after it, which have lines of their own.
                 list = shown.filterNot { it === next || it === plan.then }.take(LIST_MAX)
-                    .map { Line(it.label, Format.minutes(it.minutes), it.overdue || it.behind) },
+                    .map { Line(it.label, Format.minutes(it.minutes), it.overdue || it.behind, it.taskId) },
                 warning = warning(state, now),
                 taskId = next?.taskId,
             )

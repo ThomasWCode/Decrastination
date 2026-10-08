@@ -53,6 +53,8 @@ class WidgetModelTest {
         assertEquals("3 today · 1 tomorrow", model.summary)
         // The list goes on from there: neither the next nor the one after it again.
         assertEquals(listOf("Chapter 17"), model.list.map { it.text })
+        // Each row opens its own task.
+        assertEquals(listOf("teams:Chapter 17"), model.list.map { it.taskId })
         assertEquals("teams:Statics", model.taskId)
     }
 
@@ -109,5 +111,32 @@ class WidgetLayoutTest {
         assertTrue(layout.summary && layout.warning)
         assertTrue(layout.listLines >= 12)
         assertFalse(layout.centred)
+    }
+}
+
+class WidgetRedrawTest {
+    private val settings = Settings()
+
+    private fun planAt(at: String, tasks: List<TaskItem> = emptyList()) =
+        Planner.plan(Planner.Input(tasks, Fixtures.at(at), LONDON, settings))
+
+    @Test
+    fun `during the evening's hours it redraws every 15 minutes`() {
+        assertEquals(Fixtures.at("2026-10-09T18:15"), WidgetUpdater.nextRedrawAt(planAt("2026-10-09T18:00"), LONDON, settings))
+    }
+
+    @Test
+    fun `before them it redraws when they start, and after them at midnight`() {
+        assertEquals(Fixtures.at("2026-10-09T16:45"), WidgetUpdater.nextRedrawAt(planAt("2026-10-09T12:00"), LONDON, settings))
+        assertEquals(Fixtures.at("2026-10-10T00:00"), WidgetUpdater.nextRedrawAt(planAt("2026-10-09T22:10"), LONDON, settings))
+    }
+
+    @Test
+    fun `a deadline before then comes first`() {
+        val task = TaskItem(
+            id = "teams:t", source = Source.Teams, sourceId = "t", title = "t", dueAt = Fixtures.at("2026-10-09T23:00"),
+            kind = Kind.Homework, sourceEffortMin = 30, firstSeenAt = 0, lastSeenAt = 0,
+        )
+        assertEquals(Fixtures.at("2026-10-09T23:00"), WidgetUpdater.nextRedrawAt(planAt("2026-10-09T22:10", listOf(task)), LONDON, settings))
     }
 }

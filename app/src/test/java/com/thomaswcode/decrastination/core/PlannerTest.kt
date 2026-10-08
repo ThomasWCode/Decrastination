@@ -211,6 +211,52 @@ class PlannerTest {
     }
 
     @Test
+    fun `undated work past its allowance moves on, not into today`() {
+        // Ten 10-minute emails whose soft deadline is today: an hour today, the rest tomorrow.
+        val emails = (1..10).map { task("email$it", null, effort = 10, kind = Kind.Admin, firstSeen = Fixtures.at("2026-10-01T23:00")) }
+        val plan = plan(emails, "2026-10-08T17:00")
+        assertEquals(60, plan.todayBucket!!.plannedMin)
+        assertEquals(40, plan.tomorrowBucket!!.plannedMin)
+    }
+
+    @Test
+    fun `an undated chunk bigger than the allowance still finds a day`() {
+        val big = task("big", null, effort = 90, kind = Kind.Admin, steps = listOf(SubStep("all of it", 90)))
+        val plan = plan(listOf(big), "2026-10-08T17:00")
+        assertEquals(1, plan.ordered.size)
+        assertFalse(plan.ordered.single().behind)
+    }
+
+    @Test
+    fun `work that can't start yet is placed from when it can`() {
+        val steps = listOf(SubStep("20 new cards", 9), SubStep("5 new cards", 3))
+        val deck = task("deck", Fixtures.at("2026-10-01T08:30"), steps = steps).copy(stepsPerDay = 1, notBefore = Fixtures.at("2026-10-09T04:00"))
+        val plan = plan(listOf(deck), "2026-10-08T17:00")
+        assertEquals(listOf("2026-10-09", "2026-10-10").map(LocalDate::parse), plan.dayOf("deck"))
+    }
+
+    @Test
+    fun `hours mean wall-clock times on the days the clocks change`() {
+        // The clocks go back at 02:00 on Sunday 25 Oct 2026: 08:30-22:30 is still 14 hours.
+        val sunday = LocalDate.parse("2026-10-25")
+        val input = Planner.Input(emptyList(), Fixtures.at("2026-10-24T12:00"), LONDON, settings)
+        assertEquals(14 * 60, Planner.capacity(sunday, input))
+        // And on the day itself, at 09:30, an hour of it has gone.
+        assertEquals(13 * 60, Planner.capacity(sunday, input.copy(now = Fixtures.at("2026-10-25T09:30"))))
+    }
+
+    @Test
+    fun `overlapping calendar blocks are taken off once`() {
+        val thursday = LocalDate.parse("2026-10-08")
+        val busy = listOf(
+            Busy(Fixtures.at("2026-10-08T18:00"), Fixtures.at("2026-10-08T19:00")),
+            Busy(Fixtures.at("2026-10-08T18:30"), Fixtures.at("2026-10-08T19:30")),
+        )
+        val input = Planner.Input(emptyList(), Fixtures.at("2026-10-08T08:00"), LONDON, settings, busy = busy)
+        assertEquals(315 - 90, Planner.capacity(thursday, input))
+    }
+
+    @Test
     fun `events and hidden tasks aren't placed`() {
         val event = task("open day", Fixtures.at("2026-10-10T09:00"), effort = 0, kind = Kind.Event)
         val hidden = task("later", Fixtures.at("2026-10-20T09:00"), available = Fixtures.at("2026-10-15T00:00"))
