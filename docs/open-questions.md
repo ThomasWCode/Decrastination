@@ -13,6 +13,13 @@
 | Q14 | Anti-tamper | **24-hour delay on loosening changes.** Override: each pending change emails a one-time code to **richard.white@lshtm.ac.uk**; typing it applies that one change immediately. Protection-off alert after an hour goes to the same address. Sender is a dedicated mailbox your dad sets up (so the code never passes through your own Gmail); the authenticator-app variant is documented as an alternative. Weekly note to him: toggle, default off. |
 | Q15 | Learning | **Measure and calibrate + one-tap self-assessment after each task + Sunday five-question check-in.** Practice-test scheduling not chosen. |
 
+## Settled by Phase 0, 8 Oct 2026
+
+| # | Question | Outcome |
+|---|---|---|
+| Q10 | Where the Teams provider change goes | In the widget, as planned: TeamsAssignmentsWidget #13 (0.3.0) adds the permission, the provider, change notifications and the two calls. Widget behaviour unchanged. |
+| Q11 | Package name and location | `com.thomaswcode.decrastination`, in `C:\Users\thoma\Documents\Decrastination`, repository `ThomasWCode/Decrastination` (public, so `private/` keeps real inbox and agenda data out of git), signed with a copy of the widget's committed `app/debug.keystore`. |
+
 ## Still open: going with these defaults unless you say otherwise
 
 ### Q7. Google Calendar as busy time
@@ -23,12 +30,6 @@
 
 ### Q9. The sideloaded "Digital Wellbeing" app (`com.screentime` 1.6, installed 7 Sep)
 It holds usage-access permission. If it is a blocker you already tried, what went wrong is useful; otherwise I leave it alone. Also `app.humanforest`, if relevant.
-
-### Q10. Where the Teams provider change goes
-**Default:** a small commit on `TeamsAssignmentsWidget` (provider, permission, `notifyChange`, `call("requestSync")`, `call("open")`). Widget behaviour unchanged.
-
-### Q11. Package name and location
-**Default:** `com.thomaswcode.decrastination`, project in `C:\Users\thoma\Documents\Decrastination`, git-initialised at Phase 1, signed with a copy of the Teams widget's committed `app/debug.keystore`.
 
 ### Q12. The work-experience email from your dad
 It contains a calendar of 2027 deadlines (STEM Potential opens 30 Oct 2026, NPL/Diamond in December, RAL in January). **Default:** one task per email; extracting dated items into separate wait-until-date tasks is a Phase 5 option the model can do.
@@ -41,3 +42,9 @@ It contains a calendar of 2027 deadlines (STEM Potential opens 30 Oct 2026, NPL/
 
 ### Q17. Override delivery
 **Default:** dedicated sender mailbox set up by your dad (Q14). Alternative: TOTP secret in an authenticator app on his phone, email carries no secret. Tell me if he would prefer the second.
+
+### Q18. Which textbook a German section number means (from Phase 0)
+AnkiDroid has `Textbook 1::1.1` to `6.3` and `Textbook 2::1.1` to `6.3`, so "Learn vocabulary column 1.2" matches two decks. **Default:** a "current textbook" setting, starting at Textbook 1 for Year 12, and the LLM may override it when an assignment names the book or a topic only one of them has. The daily quota's "lowest-numbered deck with new cards left" walks the current textbook first.
+
+### Q19. Letting the watchdog switch protection back on (from Phase 0)
+Phase 0 found the focus service can be put on an accessibility key shortcut without opening its guarded page, after which a key press turns it off. Android lets a sideloaded app change secure settings only if `WRITE_SECURE_SETTINGS` is granted once over adb (`adb shell pm grant com.thomaswcode.decrastination android.permission.WRITE_SECURE_SETTINGS`). **Default:** yes, granted at setup; the watchdog then switches the service straight back on and removes it from any shortcut, instead of only showing PROTECTION OFF and emailing. It survives reboots and updates, and goes only if the app is uninstalled.
