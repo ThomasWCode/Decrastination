@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Events from every app: which app is in front is the whole point. Window-state changes say an app
+  or screen has come to the front; content changes are only looked at in Settings and the package
+  installer, whose pages can fill in after they open (see probe/GuardRules.kt).
+-->
+<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:accessibilityEventTypes="typeWindowStateChanged|typeWindowContentChanged|typeWindowsChanged"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:accessibilityFlags="flagReportViewIds|flagRetrieveInteractiveWindows|flagIncludeNotImportantViews"
+    android:canRetrieveWindowContent="true"
+    android:description="@string/focus_service_description"
+    android:notificationTimeout="100"
+    android:settingsActivity="com.thomaswcode.decrastination.probe.ProbeActivity"
+    android:summary="@string/focus_service_summary" />
