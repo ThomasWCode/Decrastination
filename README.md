@@ -39,4 +39,4 @@ adb shell am start -n com.thomaswcode.decrastination/.probe.ProbeCommand --es pr
 
 `ProbeCommand` is an alias of the probe screen that only the adb shell can start (it needs `android.permission.DUMP`), so no other app can make this one sync or open Teams; a probe sent to the launcher's entry is ignored.
 
-The focus service, a spike of the blocker, blocks YouTube whenever it's switched on, so it's off except while testing. Power Planner and Gmail are checked from the PC, with `scripts/powerplanner_probe.py` and `scripts/gmail_probe.py`; their `--save` output goes to the git-ignored `private/`.
+The focus service, a spike of the blocker, blocks YouTube whenever it's switched on, so it's off except while testing. A test that opens YouTube ends with `adb shell am force-stop com.google.android.youtube`, and with `adb shell dumpsys window windows | grep -c "mWindowingMode=pinned"` printing 0: nothing may be left playing in a picture-in-picture window. Power Planner and Gmail are checked from the PC, with `scripts/powerplanner_probe.py` and `scripts/gmail_probe.py`; their `--save` output goes to the git-ignored `private/`.

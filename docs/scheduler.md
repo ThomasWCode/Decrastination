@@ -106,7 +106,7 @@ Layer 2 needs care so it never traps you out of Settings entirely: it acts only 
 - Teams sync fails or is stale: tasks keep their last state; the widget shows "Teams synced 06:42".
 - A deadline passes while the widget is on screen: redraw at the deadline (alarm).
 - A split-screen or pop-up window holding a blocked app: the service checks every window, not only the active one.
-- A blocked app in picture-in-picture: detected via the window list; the block screen explains and the session timer will not start until the PiP window is gone (**verify** what can close it; YouTube PiP needs Premium so this may be moot).
+- A blocked app in picture-in-picture: the block screen is started with `FLAG_ACTIVITY_NO_USER_ACTION`, so covering an app never sends it there; one already there is found through the window list (a pinned window is never the one in use, so the active-window check alone misses it), relaunched to full screen (One UI's floating window offers no dismiss action) and covered. Proved in Phase 0 after a blocking test left a YouTube Short floating for 20 minutes (`docs/phase0-findings.md` §5).
 - A task that disappears from its source without you acting: `Done` with reason `GoneFromSource`, shown separately in stats and excluded from calibration.
 - The daily quota at 23:30 unmet: it is overdue; whether that blocks at that hour is quiet hours' decision.
 - Clock and time-zone changes: planner re-runs on the system broadcasts.

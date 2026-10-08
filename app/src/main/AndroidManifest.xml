@@ -14,10 +14,12 @@
     <!-- AnkiDroid's provider (docs/data-sources.md §3): a runtime permission, granted once. -->
     <uses-permission android:name="com.ichi2.anki.permission.READ_WRITE_DATABASE" />
 
-    <!-- Package visibility (Android 11+): the apps whose providers this reads. -->
+    <!-- Package visibility (Android 11+): the apps whose providers this reads, and the blocked
+         apps, which the focus service relaunches out of picture-in-picture to cover them. -->
     <queries>
         <package android:name="com.teamsassignments.widget" />
         <package android:name="com.ichi2.anki" />
+        <package android:name="com.google.android.youtube" />
     </queries>
 
     <application
