@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- "Next": a play-style arrow with a bar, centred in the 72 dp safe zone of a 108 dp icon. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M38,36 L64,54 L38,72 Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M66,36 L72,36 L72,72 L66,72 Z" />
+</vector>
