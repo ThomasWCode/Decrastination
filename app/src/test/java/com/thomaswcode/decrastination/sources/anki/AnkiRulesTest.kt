@@ -174,6 +174,10 @@ class AnkiRulesTest {
         val (task, day) = AnkiRules.quota(decks, 1, null, NOW, LONDON, 21 * 60 + 30, homework = setOf(12L)) { if (it.id == 11L) 0 else 30 }
         assertEquals(13L, day.deckId)
         assertEquals("Anki: 10 reviews + 20 new (1.3)", task!!.title)
+        // Delegated to homework with nothing due: no quota at all, so it can come back if the
+        // homework goes before the cards are studied.
+        val (none, _) = AnkiRules.quota(decks.map { it.copy(review = 0, learn = 0) }, 1, AnkiDay("2026-10-08", 12, "Textbook 1::1.2"), NOW, LONDON, 21 * 60 + 30, homework = setOf(12L)) { 30 }
+        assertNull(none)
         // Chosen this morning, named by homework since: counted there only.
         val (later, _) = AnkiRules.quota(decks, 1, AnkiDay("2026-10-08", 12, "Textbook 1::1.2"), NOW, LONDON, 21 * 60 + 30, homework = setOf(12L)) { 30 }
         assertEquals("Anki: 10 reviews", later!!.title)

@@ -116,6 +116,9 @@ object AnkiRules {
         // A deck chosen this morning that homework has named since is counted there, not twice.
         val newLeft = today.deckId?.takeIf { it !in homework }?.let { id -> decks.firstOrNull { it.id == id }?.new } ?: 0
         if (today.deckId == null && reviews == 0) return null to today
+        // Its deck is homework's for now and nothing is due: no quota today, rather than one done.
+        // A quota marked done would stay done if the homework went before its cards were studied.
+        if (today.deckId != null && today.deckId in homework && reviews == 0) return null to today
         val shortName = today.deckName?.substringAfterLast(Deck.SEPARATOR)
         val parts = buildList {
             if (reviews > 0) add("$reviews review${if (reviews == 1) "" else "s"}")
