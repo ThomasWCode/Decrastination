@@ -121,7 +121,7 @@ class NextWidget : GlanceAppWidget() {
             if (layout.listLines > 0 && model.list.isNotEmpty()) {
                 LazyColumn(GlanceModifier.fillMaxWidth().defaultWeight().padding(top = 6.dp)) {
                     items(model.list) { line ->
-                        Row(GlanceModifier.fillMaxWidth().padding(vertical = 1.dp).clickable(open)) {
+                        Row(GlanceModifier.fillMaxWidth().padding(vertical = 1.dp).clickable(actionStartActivity(OpenTaskActivity.intent(context, line.taskId)))) {
                             Text(
                                 line.text,
                                 maxLines = 1,

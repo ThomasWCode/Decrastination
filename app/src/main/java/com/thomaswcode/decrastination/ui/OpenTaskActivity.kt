@@ -2,6 +2,7 @@ package com.thomaswcode.decrastination.ui
 
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -33,8 +34,13 @@ class OpenTaskActivity : ComponentActivity() {
     companion object {
         const val EXTRA_TASK_ID = "taskId"
 
+        /**
+         * Each task's intent has its own data URI: pending intents that differ only in their
+         * extras are the same pending intent, and every widget row would open the last one's task.
+         */
         fun intent(context: Context, taskId: String?): Intent =
             Intent(context, OpenTaskActivity::class.java)
+                .setData(Uri.Builder().scheme("decrastination").authority("task").appendPath(taskId.orEmpty()).build())
                 .putExtra(EXTRA_TASK_ID, taskId)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_ANIMATION)
     }

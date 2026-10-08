@@ -11,9 +11,11 @@ import androidx.glance.appwidget.GlanceAppWidgetReceiver
 import androidx.glance.appwidget.updateAll
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.core.Plan
+import com.thomaswcode.decrastination.data.Settings
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import java.time.DayOfWeek
 import java.time.ZoneId
 
 /** Redraws every placed widget, and schedules the next redraw for when the plan turns over by itself. */
@@ -40,14 +42,28 @@ object WidgetUpdater {
             alarms.cancel(redrawIntent(context))
             return
         }
-        alarms.setWindow(AlarmManager.RTC, nextRedrawAt(graph.plan(), graph.clock.zone()), REDRAW_WINDOW_MS, redrawIntent(context))
+        alarms.setWindow(AlarmManager.RTC, nextRedrawAt(graph.plan(), graph.clock.zone(), graph.settings.value), REDRAW_WINDOW_MS, redrawIntent(context))
     }
 
-    /** The next midnight, or the next deadline of a planned chunk if that comes first; a minute away at the soonest. */
-    fun nextRedrawAt(plan: Plan, zone: ZoneId): Long {
+    /** While the evening's hours run out, the plan shifts as they do: a chunk stops fitting today. */
+    private const val WORKING_REDRAW_MS = 15 * 60_000L
+
+    /**
+     * The next moment the plan can change with no new data: midnight, the next deadline (a chunk
+     * turns overdue), the start or end of today's working hours, and, while they last, every 15
+     * minutes, since the time left today shrinks with every minute. A minute away at the soonest.
+     */
+    fun nextRedrawAt(plan: Plan, zone: ZoneId, settings: Settings): Long {
+        val now = plan.now
         val midnight = plan.today.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
-        val deadline = plan.ordered.map { it.deadline }.filter { it > plan.now }.minOrNull() ?: Long.MAX_VALUE
-        return maxOf(minOf(midnight, deadline), plan.now + 60_000L)
+        val deadline = plan.ordered.map { it.deadline }.filter { it > now }.minOrNull() ?: Long.MAX_VALUE
+        val weekend = plan.today.dayOfWeek == DayOfWeek.SATURDAY || plan.today.dayOfWeek == DayOfWeek.SUNDAY
+        val hours = if (weekend) settings.weekendHours else settings.weekdayHours
+        val start = plan.today.atStartOfDay().plusMinutes(hours.startMin.toLong()).atZone(zone).toInstant().toEpochMilli()
+        val end = plan.today.atStartOfDay().plusMinutes(hours.endMin.toLong()).atZone(zone).toInstant().toEpochMilli()
+        val working = if (now in start until end) now + WORKING_REDRAW_MS else Long.MAX_VALUE
+        val boundary = listOf(start, end).filter { it > now }.minOrNull() ?: Long.MAX_VALUE
+        return maxOf(minOf(midnight, deadline, working, boundary), now + 60_000L)
     }
 
     fun cancelRedraw(context: Context) {
