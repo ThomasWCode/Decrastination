@@ -7,6 +7,7 @@ import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.data.Secret
 import com.thomaswcode.decrastination.sync.SyncWorker
+import com.thomaswcode.decrastination.ui.OpenTaskActivity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -23,6 +24,7 @@ import java.io.File
  *   environment without printing them.
  * - `sync`, optionally `--es sources teams,gmail`: reads the sources now, as a job (see SyncWorker).
  * - `state`: logs each source's status and the open tasks' titles (`adb logcat -s Decrastination`).
+ * - `open --es task <id>`: opens that task where it lives, as the widget's tap does.
  *
  * The manifest guards the alias with DUMP, which the adb shell holds and no ordinary app can, so
  * nothing else on the phone can reach these. The activity itself isn't exported.
@@ -33,6 +35,8 @@ class CommandActivity : Activity() {
         super.onCreate(savedInstanceState)
         val viaAlias = intent.component?.className == ALIAS
         val command = intent.getStringExtra("cmd")
+        // Starting another app's screen has to happen while this one is in front.
+        if (viaAlias && command == "open") startActivity(OpenTaskActivity.intent(this, intent.getStringExtra("task")))
         finish()
         if (!viaAlias || command == null) return
         val graph = AppGraph.get(this)

@@ -57,9 +57,17 @@ object AnkiProvider {
     fun hasPermission(context: Context): Boolean =
         context.checkSelfPermission(PERMISSION) == PackageManager.PERMISSION_GRANTED
 
-    /** Opens AnkiDroid on [deckId], or on its deck list. */
-    fun open(context: Context, deckId: Long?): Boolean {
+    /**
+     * Opens AnkiDroid with [deckId] selected: studying it, with [study] (its reviewer is exported
+     * and opens on the selected deck, tried on the phone on 9 Oct), or on the deck list, where the
+     * selected deck is highlighted. Falls back to the deck list.
+     */
+    fun open(context: Context, deckId: Long?, study: Boolean): Boolean {
         if (deckId != null) selectDeck(context.contentResolver, deckId)
+        if (deckId != null && study) {
+            val reviewer = Intent().setClassName(PACKAGE, "$PACKAGE.Reviewer").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            if (runCatching { context.startActivity(reviewer) }.isSuccess) return true
+        }
         val launch = context.packageManager.getLaunchIntentForPackage(PACKAGE) ?: return false
         context.startActivity(launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         return true

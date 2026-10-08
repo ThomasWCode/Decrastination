@@ -24,6 +24,7 @@
         <package android:name="com.ichi2.anki" />
         <package android:name="com.barebonesdev.powerplanner" />
         <package android:name="com.google.android.gm" />
+        <package android:name="com.microsoft.teams" />
         <package android:name="com.google.android.youtube" />
     </queries>
 
@@ -46,6 +47,32 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Opens one task where it lives, for the widget and notifications. -->
+        <activity
+            android:name=".ui.OpenTaskActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
+        <receiver
+            android:name=".widget.NextWidgetReceiver"
+            android:exported="false"
+            android:label="@string/widget_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <!-- Redraw when the day boundaries move. Both are allowed for manifest receivers. -->
+            <intent-filter>
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+                <action android:name="android.intent.action.TIME_SET" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/next_widget_info" />
+        </receiver>
 
         <!-- Phase 0's probes, kept as a debug screen (Setup → Phase 0 probes). -->
         <activity

@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Decrastination</string>
+    <string name="widget_label">Next task</string>
+    <string name="widget_description">The single next thing to do, and what comes after it</string>
 
     <string name="read_assignments_permission_label">read your Teams assignments</string>
     <string name="read_assignments_permission_description">Lets the app read the Teams assignments you haven\'t handed in, and ask Teams Assignments to sync or to open one in Teams.</string>
