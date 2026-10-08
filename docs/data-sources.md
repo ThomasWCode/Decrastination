@@ -50,6 +50,8 @@ Decrastination's manifest: `<uses-permission>` for it, the same `<permission>` d
 
 **Completion test.** Assignment key absent from `/assignments` (and present in `handedIn` memory, or simply gone). Decrastination treats "gone" as done, matching the widget's own semantics.
 
+**Built in Phase 1** (`sources/teams/TeamsSource.kt`): each row becomes a Homework task keyed `teams:<key>`; the state row's `last_success_at` is shown as when Teams itself was last read, and a failed or running widget sync, or its service being off, as a note under the source.
+
 **Opening an assignment.** `call("open", key)`: the widget's service navigates Teams to the card by its id, as a widget row tap does, so Decrastination's **Open** lands on the exact assignment.
 
 **Freshness.** Manual sync only (plus read-along while Teams is open). Decrastination calls `requestSync` from the block screen's **Refresh Teams** button and once in the morning routine, never silently in the background, because a sync takes over the screen. On 8 Oct both calls started but the widget's own sync and navigation then failed, because Teams now pages a Past due list of seven or more behind a "load more" placeholder; widget 0.3.1 (TeamsAssignmentsWidget #14) brings the placeholder into view, and its syncs work again (`docs/phase0-findings.md` §1).
@@ -82,6 +84,8 @@ Live check on 7 Oct: `POST /LoginWeb` with a nonsense username returned HTTP 200
 
 **Completion test.** `PercentComplete >= 1.0`, or the identifier no longer in the agenda. Events (exams/"Call with Jags") are `Event` kind: they are not tasks to do but reduce available time and may carry prep.
 
+**Built in Phase 1** (`sources/powerplanner/`): the session is kept in the encrypted store and reused until a call fails, then one fresh login is tried; the semester and timetable are read at most every 6 hours, so a sync is usually one `GetAgenda` call. A task with a class is Homework, one without Admin. An all-day task is due at 23:59; Power Planner's "no due date" (31 Dec 1999) means no deadline; a class-relative time on a day without that class falls back to all day. Note: *Call with Jags after school* is a task in Power Planner, not an event, so it's planned as 15 minutes of admin.
+
 **Opening an item.** No documented deep link into the Android app; **Open** launches the app's main activity. If a `powerplanner://` scheme turns up in the manifest (`adb shell dumpsys package com.barebonesdev.powerplanner | grep -A3 "Scheme"`), use it.
 
 **Fallback if there is no online account:** accessibility read of the Agenda screen, same technique as the Teams widget, or the Agenda widget's `RemoteViews` tree via the launcher window. Both fragile; both documented here only as last resort.
@@ -113,6 +117,12 @@ Querying from `adb shell` fails with `Permission not granted for: CardContentPro
 
 **Opening a deck.** `update(selected_deck, deck_id)` then start `com.ichi2.anki/.Reviewer` (exported, `VIEW` filter; **verify** it opens the selected deck, otherwise start the deck picker and let the tap happen).
 
+**Built in Phase 1** (`sources/anki/`), with three refinements found on the phone:
+
+- **The quota's deck is fixed at the Anki day's first read** (Anki's day starts at 04:00) and kept for the day, so finishing it doesn't move the quota on to the next deck. A deck showing no new cards may still have unseen ones, held back by its daily limit of 20 if you studied before that read; the choice asks Anki (`deck:"…" is:new`) rather than trusting today's count. It's done once nothing is due anywhere and that deck has no new cards left today.
+- **"Cards still new" counts notes** (`content://…/notes` with Anki's own search, `deck:"Textbook 1::1.2" is:new`): the provider has no card count. A deck learnt "both ways" has two cards per note, so its estimate is low until calibration catches up. On 8 Oct: 1.2 had 72 unseen notes, 2.2 61, 2.3 36.
+- **A homework deck task lasts while its assignment is open**, in steps of 20 new cards (the daily limit). If the assignment is handed in first, the deck task is dropped as missed, not counted as done: only Anki's counts say a deck is done.
+
 ## 4. Gmail (`thomasawhite321@gmail.com`)
 
 **Access method: IMAP with a Google app password** (requires 2-Step Verification on the account). Host `imap.gmail.com:993`, TLS. Verified on 8 Oct with your app password (`scripts/gmail_probe.py`, read-only): capabilities include `X-GM-EXT-1` and `IDLE`; there is no Snoozed folder or label over IMAP, so a snoozed message just leaves INBOX until it wakes; your own notes carry the `\Sent` label. `docs/phase0-findings.md` §4.
@@ -129,6 +139,12 @@ Operations the app needs:
 Library: `jakarta.mail` works on Android with the `android-mail`/`android-activation` artifacts (`com.sun.mail:android-mail:1.6.7`), or a 200-line hand-rolled IMAP client over `SSLSocket` since only `SELECT`, `UID SEARCH`, `UID FETCH` are needed. The hand-rolled one has no dependency risk and is my recommendation.
 
 **Inbox tonight (24 messages, headers only):** self-sent notes ("Zip card", "Use Jev for thinking mod.", "Imperial Physics Talk", "Quizlet vocab lists", "german books/radio/tv", "Grandparents 999", "Shoot a new profile picture"), a Warwick Open Day ticket for 10 Oct (needed on the day, no action before), LinkedIn notifications, Sportograf photo links, two Drive share notifications, a bank-switch report, and a parent's email with a calendar of 2027 work-experience deadlines (30 Oct 2026 Imperial STEM Potential opens; December NPL/Diamond; January RAL).
+
+**Built in Phase 1** (`sources/gmail/`): a 300-line IMAP client (`Imap.kt`) that only ever sends `LOGIN`, `EXAMINE`, `UID SEARCH`, `UID FETCH` with `BODY.PEEK`, and `LOGOUT`, so it can't change the mailbox. What changed from the plan above:
+
+- **One task per conversation** (`X-GM-THRID`), not per message: the inbox shows and archives conversations, so three messages in one thread are one thing to deal with. Its title is the newest message's subject; it's done once no message of it is in INBOX.
+- **A message's text** comes from its first plain part, else its HTML, found from `BODYSTRUCTURE`; HTML is fetched whole (up to 200 KB), since Warwick's Open Day email had 50 KB of styles before its first sentence, and invisible padding (`&zwnj;` and zero-width characters, 4 000 of them in one plain part) is dropped before the text is cut to 4 000 characters. Text is fetched once per conversation, again only when a new message arrives in it.
+- **Android 15+ cuts an app's network a few seconds after it leaves the screen**, mid-connection ("Software caused connection abort", on the phone on 8 Oct). Every sync not started from a screen in use therefore runs as a WorkManager job, which keeps its network.
 
 **Triage rules (always on, LLM optional on top):**
 - From yourself → `Admin`, actionable now, effort 15 min unless the LLM says otherwise.
