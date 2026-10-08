@@ -6,7 +6,9 @@ A personal, sideloaded app for one phone (a Samsung Galaxy S24 on Android 16).
 
 ## Status
 
-**Phase 0, proving each data path, is done** (8 Oct 2026): all four sources can be read, a blocklisted app can be covered, and the app's own Settings pages can be guarded. What it found is in [`docs/phase0-findings.md`](docs/phase0-findings.md). The app in `app/` is so far only the Phase 0 probes; Phase 1 (sources, storage, sync) builds on it. [`PLAN.md`](PLAN.md) has the whole plan.
+**Phase 0, proving each data path, is done** (8 Oct 2026): all four sources can be read, a blocklisted app can be covered, and the app's own Settings pages can be guarded. What it found is in [`docs/phase0-findings.md`](docs/phase0-findings.md).
+
+**Phase 1, sources, storage and sync** (8–9 Oct): the app reads all four sources into one task list every 15 minutes, and shows every task and how each source's last read went, with a setup checklist. [`PLAN.md`](PLAN.md) has the whole plan; [`docs/needs-you.md`](docs/needs-you.md) lists what's waiting for you.
 
 ## Documents
 
@@ -17,6 +19,7 @@ A personal, sideloaded app for one phone (a Samsung Galaxy S24 on Android 16).
 | [`docs/scheduler.md`](docs/scheduler.md) | Day buckets, the block policy, anti-tamper, learning |
 | [`docs/phase0-findings.md`](docs/phase0-findings.md) | What proving each path found |
 | [`docs/open-questions.md`](docs/open-questions.md) | Decisions made, and the defaults still open |
+| [`docs/needs-you.md`](docs/needs-you.md) | What the unattended v1 build left for you to decide or do |
 
 ## Build and install
 
@@ -29,9 +32,24 @@ Same toolchain as the [Teams Assignments widget](https://github.com/ThomasWCode/
 
 Debug builds are signed with a copy of the widget's committed `app/debug.keystore`. Sharing its key is what grants this app the widget's signature-level permission to read the assignments, so don't change it.
 
+## Credentials and commands from a PC
+
+The Power Planner login and the Gmail app password can be typed into Setup, or loaded from this PC's user environment (`DECRASTINATION_PP_USERNAME`, `DECRASTINATION_PP_PASSWORD`, `DECRASTINATION_GMAIL_APP_PASSWORD`) without being shown:
+
+```bash
+python scripts/load_credentials.py --gmail-address you@gmail.com
+```
+
+It pipes them into the app's private storage with `adb exec-in run-as` (debug builds only), and the app moves them into its encrypted store and deletes the file. Other commands, also adb-only, log to `adb logcat -s Decrastination`:
+
+```bash
+adb shell am start -n com.thomaswcode.decrastination/.debug.Command --es cmd sync     # optionally --es sources gmail,anki
+adb shell am start -n com.thomaswcode.decrastination/.debug.Command --es cmd state    # each source's status, every task
+```
+
 ## The Phase 0 probes
 
-The app opens on a probe screen; each probe also runs from a PC, logging to `adb logcat -s Decrastination`:
+Setup → *Phase 0 probes* opens them; each probe also runs from a PC, logging to `adb logcat -s Decrastination`:
 
 ```bash
 adb shell am start -n com.thomaswcode.decrastination/.probe.ProbeCommand --es probe teams   # or anki, sync, open, status
