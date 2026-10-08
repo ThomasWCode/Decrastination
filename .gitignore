@@ -1,0 +1,22 @@
+# Gradle / build output
+.gradle/
+.kotlin/
+build/
+/captures/
+*.apk
+*.aab
+!/app/debug.keystore
+
+# Local configuration
+local.properties
+.idea/
+*.iml
+.DS_Store
+.externalNativeBuild/
+.cxx/
+__pycache__/
+
+# Probe output and screen dumps: real inbox, agenda and screen contents stay on this PC.
+# Fixtures that go into git are redacted copies (see fixtures/README.md).
+/private/
+/dumps/

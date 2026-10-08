@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Decrastination</string>
+
+    <string name="read_assignments_permission_label">read your Teams assignments</string>
+    <string name="read_assignments_permission_description">Lets the app read the Teams assignments you haven\'t handed in, and ask Teams Assignments to sync or to open one in Teams.</string>
+
+    <string name="focus_service_label">Decrastination focus</string>
+    <string name="focus_service_summary">Shows your next task in place of apps you\'ve chosen to block while work is due</string>
+    <string name="focus_service_description">Decrastination watches which app is in front. While homework or other work is due today or tomorrow, opening an app you\'ve chosen to block (YouTube, say) shows your next task instead. It also stops this setting being switched off from the phone.\n\nIt only notes which app is on screen, and reads Settings screens to recognise its own. Nothing leaves your phone.\n\nPhase 0 probe: blocks YouTube only, and logs what it sees to logcat.</string>
+</resources>

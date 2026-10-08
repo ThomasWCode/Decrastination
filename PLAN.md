@@ -19,7 +19,7 @@ The four sources, and what "done" means for each:
 
 **Read the Teams widget's data directly, not the widget.** Yes. The widget is a Glance rendering of `files/widget_state.json`, which holds strictly more than the widget shows: the Teams GUID key, full instructions (up to 2 000 chars), the due time as epoch millis, and the handed-in memory. The file is app-private, so a second app cannot read it. Fix: add a ~80-line read-only `ContentProvider` to the Teams widget app, protected by a `signature`-level permission. The Teams widget signs every debug build (CI included) with a keystore committed in its repo, and the installed APK carries that certificate; Decrastination signs with a copy of the same keystore, so the permission is granted silently and the widget is never reinstalled. Details in `docs/data-sources.md` §1. (Merging the two apps was rejected: the Teams widget is finished and tested, and coupling would make both harder to change.)
 
-**Power Planner: its web API** (confirmed). The Android app is a Xamarin build with nothing readable, but Power Planner is open source and its web app talks to `https://web.api.powerplanner.net/api/` with plain JSON: `LoginWeb` returns a session, `GetAgenda` returns every open item with name, due date, class and percent complete. Verified live tonight. Your username and password are stored encrypted on the phone. `docs/data-sources.md` §2 and `scripts/powerplanner_probe.py`.
+**Power Planner: its web API** (confirmed). The Android app is a Xamarin build with nothing readable, but Power Planner is open source and its web app talks to `https://web.api.powerplanner.net/api/` with plain JSON: `LoginWeb` returns a session, `GetAgenda` returns every open item with name, due date, class id and percent complete, and `GetClassesAndSchedules` the class names and timetable. Verified with your account on 8 Oct. Your username and password are stored encrypted on the phone. `docs/data-sources.md` §2 and `scripts/powerplanner_probe.py`.
 
 **AnkiDroid: its official content-provider API.** `content://com.ichi2.anki.flashcards/decks` gives every deck with its learn/review/new counts behind a one-time runtime permission. Your decks are named after textbook sections (`1.1`, `1.2`, `2.2`…) and your German homework says "Learn vocabulary column 1.2" and "p46-47/ 2.2/2.3", so a regex links assignment to deck and Anki's own counts track the vocab part of homework.
 
@@ -104,18 +104,22 @@ The four sources, and what "done" means for each:
 
 ## 5. Phases
 
-### Phase 0: Prove each data path (before any app code)
+### Phase 0: Prove each data path (done 8 Oct 2026)
 
-1. **Teams provider.** In `TeamsAssignmentsWidget`: declare `com.teamsassignments.widget.permission.READ_ASSIGNMENTS` (`signature`), add `AssignmentsProvider` exposing `assignments` and `state` cursors from `AssignmentStore.state`, call `notifyChange` from `AssignmentStore.update`, support `call("requestSync")` (what ↻ does) and `call("open", key)`. Unit test the cursor mapping. Decrastination copies `app/debug.keystore` and the same `signingConfigs.debug` block.
-2. **Power Planner.** Run `python scripts/powerplanner_probe.py`; it prompts for credentials, prints the agenda and the raw first item (the field names the Kotlin model needs). Stores nothing.
-3. **AnkiDroid.** In the Phase 1 skeleton, request the permission, query `/decks`, confirm the order of the `deck_count` array against the deck picker.
-4. **Gmail.** Create an app password (Google Account → Security → 2-Step Verification → App passwords).
-5. **Blocking and guard.** A throwaway service that logs foreground changes, blocks YouTube with a blank activity, and presses Back when Settings shows its own accessibility page. Confirms both behaviours on Android 16 / One UI.
+Every path works; the results, measurements and what they change are in `docs/phase0-findings.md`.
+
+1. **Teams provider.** Built in the widget (0.3.0, TeamsAssignmentsWidget #13): the `signature` permission `READ_ASSIGNMENTS`, `AssignmentsProvider` with `assignments` and `state` cursors and change notifications, and `call("requestSync")` / `call("open", key)`, unit-tested. Read from the probe app on the phone; `adb shell` refused. Found on the way: the widget's sync and open failed once Teams started paging a Past due list of seven cards; widget 0.3.1 (#14) fixes that.
+2. **Power Planner.** `scripts/powerplanner_probe.py` logged in with your account and read both items and all 18 classes. Class names and the two-week timetable come from `GetClassesAndSchedules`; an item's time option is in its date's seconds.
+3. **AnkiDroid.** The probe app asked for the permission and read all 57 decks; `deck_count` is `[learn, review, new]`. Section numbers repeat across Textbook 1 and 2, so a current-textbook setting picks one, starting at Textbook 1 (Q18).
+4. **Gmail.** App password created; `scripts/gmail_probe.py` read the inbox read-only over IMAP. Snoozed mail isn't visible over IMAP; your own notes carry `\Sent`.
+5. **Blocking and guard.** The probe's service covered YouTube in 0.21 s and backed out of its own accessibility page, its App info and its uninstall prompt. Found: it can be put on an accessibility key shortcut without visiting its page, so Phase 3 guards that too, and the watchdog gets `WRITE_SECURE_SETTINGS` (granted over adb at setup) to switch it back on (Q19).
+
+Phase 0 also built what Phase 1 would have scaffolded: the Gradle setup, the shared signing key, CI, and readers for both providers (`app/`, package `probe`).
 
 ### Phase 1: Skeleton, sources, storage, sync
 
-- Scaffold from the Teams widget's Gradle setup.
-- `sources/`: `TeamsSource`, `PowerPlannerSource`, `AnkiSource`, `GmailSource`, each with `fetch()` and `isDone(sourceId)`.
+- Build on Phase 0's skeleton (Gradle, signing, CI and the provider readers are in place); keep the probe screen as a debug view until Phase 3 replaces the spike.
+- `sources/`: `TeamsSource`, `PowerPlannerSource` (with `GetClassesAndSchedules` and the time-option rules), `AnkiSource`, `GmailSource`, each with `fetch()` and `isDone(sourceId)`.
 - Room: `TaskItem`, `SubStep`, `Enrichment` (keyed by content hash), `Session`, `Completion`, `PendingChange`, `Settings`.
 - `SyncWorker` (periodic 15 min + expedited on demand); sources isolated so one failure never blocks the rest.
 - Plain Compose list of every open task with source badge and raw detail (stays as the debug view).
@@ -178,9 +182,12 @@ Decrastination/
   PLAN.md                       this file
   docs/data-sources.md          per-source access methods, endpoints, columns, verified facts
   docs/scheduler.md             buckets, block policy, anti-tamper, learning
+  docs/phase0-findings.md       what proving each data path found on 8 Oct 2026
   docs/open-questions.md        decisions: answered so far, and what is still open
-  fixtures/                     real snapshots from 7 Oct 2026 for unit tests
-  scripts/powerplanner_probe.py Phase 0 check of the Power Planner web API (prompts, stores nothing)
+  fixtures/                     real snapshots from 7–8 Oct 2026 for unit tests (redacted where personal)
+  scripts/powerplanner_probe.py Power Planner web API check (credentials from the environment or asked for)
+  scripts/gmail_probe.py        read-only Gmail IMAP check (app password from the environment or asked for)
   scripts/pull_teams_state.ps1  refresh fixtures/teams_widget_state.json and check the signing key
-  app/                          (Phase 1) the Android app
+  app/                          the Android app; Phase 0's probes in package probe
+  private/                      git-ignored probe output (real inbox and agenda)
 ```

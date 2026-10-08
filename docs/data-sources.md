@@ -31,41 +31,28 @@ Everything here was verified on the phone or in the upstream source on 7 October
 }
 ```
 
-**Access method: a read-only ContentProvider added to the Teams widget app.**
+**Access method: a read-only ContentProvider in the Teams widget app** (built in widget 0.3.0, TeamsAssignmentsWidget #13; checked on the phone 8 Oct, `docs/phase0-findings.md` §1). The contract is the widget's `provider/AssignmentsContract.kt`.
 
-Manifest additions in the Teams widget:
+Manifest in the Teams widget: a `signature` permission `com.teamsassignments.widget.permission.READ_ASSIGNMENTS`, and `.provider.AssignmentsProvider` at authority `com.teamsassignments.widget.assignments`, exported, with `android:permission` set to it (queries; `call()` checks it in code, since Android checks no permission on calls).
 
-```xml
-<permission
-    android:name="com.teamsassignments.widget.permission.READ_ASSIGNMENTS"
-    android:protectionLevel="signature" />
-
-<provider
-    android:name=".data.AssignmentsProvider"
-    android:authorities="com.teamsassignments.widget.assignments"
-    android:exported="true"
-    android:readPermission="com.teamsassignments.widget.permission.READ_ASSIGNMENTS" />
-```
-
-Paths:
-
-| URI | Returns |
+| URI or call | Returns |
 |---|---|
-| `content://com.teamsassignments.widget.assignments/assignments` | One row per open assignment: `key, title, class_name, description, due_text, due_at, tab, detail_read_at, last_synced_at` |
-| `content://com.teamsassignments.widget.assignments/state` | One row: `last_success_at, status_type, status_reason, status_at` |
-| `call("requestSync")` | Starts a sync exactly as the ↻ button does (returns immediately; the state row shows progress) |
+| `content://com.teamsassignments.widget.assignments/assignments` | One row per assignment not handed in, in the widget's order (due time, undated last, then title): `key, title, class_name, description, due_text, due_at, tab, detail_read_at, last_synced_at` |
+| `content://com.teamsassignments.widget.assignments/state` | One row: `last_success_at, status` (`idle`/`running`/`failed`/`stopped`), `status_message, status_at, assignment_count, sync_service_enabled` |
+| `call(root, "requestSync", null, null)` | Starts a sync as ↻ does. Result: `started`, and `reason` (`service_off`, `busy`) when not |
+| `call(root, "open", key, null)` | Opens that assignment in Teams as a row tap does. One more `reason`: `unknown_key` |
 
-`AssignmentStore.update` gains one line: `context.contentResolver.notifyChange(AUTHORITY_URI, null)`, so Decrastination can register a `ContentObserver` and react to hand-ins seen by the read-along observer without polling.
+The provider collects the store's `StateFlow` and calls `notifyChange` on the root for every change, so a `ContentObserver` on the root (or either path) hears of hand-ins seen while Teams is open. Notifications to an app in the background arrived 10 s late on the phone, so they're a prompt to re-read, not a clock.
 
-Decrastination's manifest: `<uses-permission android:name="com.teamsassignments.widget.permission.READ_ASSIGNMENTS"/>` and a `<queries><package android:name="com.teamsassignments.widget"/></queries>` entry (package visibility on API 30+).
+Decrastination's manifest: `<uses-permission>` for it, the same `<permission>` declared identically (so install order doesn't matter), and `<queries><package android:name="com.teamsassignments.widget"/></queries>` (package visibility on API 30+). Queries and calls block while the widget's process starts, so they run off the main thread.
 
 **Signature caveat, resolved.** A `signature` permission is granted only when both APKs are signed by the same key. The Teams widget repo commits its own debug key (`TeamsAssignmentsWidget/app/debug.keystore`, alias `androiddebugkey`, password `android`, SHA-256 `9A:48:B9:F9:…:7B:F6`) and signs every debug build with it, CI included; the APK installed on the phone carries that exact certificate (checked with `apksigner` tonight). This PC's default `~/.android/debug.keystore` is a *different* key (`35:17:80:81:…`). So Decrastination copies the committed keystore into its own `app/` and declares the same `signingConfigs.debug` block; then both apps share a signer, the permission is granted silently, and the Teams widget never needs reinstalling. `scripts/pull_teams_state.ps1` compares the installed certificate with that keystore.
 
 **Completion test.** Assignment key absent from `/assignments` (and present in `handedIn` memory, or simply gone). Decrastination treats "gone" as done, matching the widget's own semantics.
 
-**Opening an assignment.** The Teams widget already has `OpenAssignmentActivity` (a trampoline that navigates Teams to the card by key). Export it behind the same signature permission, or add `call("open", key)` to the provider. Either way Decrastination's "Open" button lands on the exact assignment.
+**Opening an assignment.** `call("open", key)`: the widget's service navigates Teams to the card by its id, as a widget row tap does, so Decrastination's **Open** lands on the exact assignment.
 
-**Freshness.** Manual sync only (plus read-along while Teams is open). Decrastination calls `requestSync` from the block screen's **Refresh Teams** button and once in the morning routine, never silently in the background, because a sync takes over the screen.
+**Freshness.** Manual sync only (plus read-along while Teams is open). Decrastination calls `requestSync` from the block screen's **Refresh Teams** button and once in the morning routine, never silently in the background, because a sync takes over the screen. On 8 Oct both calls started but the widget's own sync and navigation then failed, because Teams now pages a Past due list of seven or more behind a "load more" placeholder; widget 0.3.1 (TeamsAssignmentsWidget #14) brings the placeholder into view, and its syncs work again (`docs/phase0-findings.md` §1).
 
 ## 2. Power Planner (`com.barebonesdev.powerplanner` 2609.30.191.0)
 
@@ -80,15 +67,16 @@ Base URL `https://web.api.powerplanner.net/api`. Every request is `POST` with `C
 | `/LoginWeb` | `{"Username", "Password"}` | `{"AccountId": long, "Session": string, "Error": string?}` |
 | `/GetSelectedSemesterId` | `{"Login": L}` | selected semester GUID |
 | `/GetYearsAndSemesters` | `{"Login": L}` | years → semesters → classes |
-| `/GetAgenda` | `{"Login": L, "SemesterIdentifier": guid, "CurrentTime": iso}` | `{"Items": [ListItem…], "Classes": [{Identifier, Name, Color, Schedules}]}` |
+| `/GetAgenda` | `{"Login": L, "SemesterIdentifier": guid, "CurrentTime": iso}` | `{"Items": [ListItem…], "Classes": null, "Error"}` (`Classes` came back null on 8 Oct) |
+| `/GetClassesAndSchedules` | `{"Login": L, "SemesterIdentifier": guid}` | `{"WeekOneStartsOn", "Classes": [{Identifier, Name, Color, Schedules: [{StartTime, EndTime, DayOfWeek, ScheduleWeek, Room, …}]}]}` |
 | `/GetItemsForRange` | `{"Login": L, "SemesterIdentifier", "StartDate", "EndDate"}` | same item shape |
 | `/GetHomework` / `/GetExam` | `{"Login": L, "Identifier": guid}` | full `Details`, `PercentComplete`, `ClassName`, `ClassColor` |
 
 where `L = {"AccountId": accountId, "Username": username, "Password": session}` (the session token goes in the `Password` field; that is how the web app does it).
 
-List item fields: `Identifier, DateCreated, Name, ShortDetails, Date, ClassIdentifier, PercentComplete` plus a homework/exam type discriminator (**verify** the exact field name from the first real response; the probe script prints raw JSON).
+List item fields (verified with your account on 8 Oct, `fixtures/powerplanner_agenda.json`): `PercentComplete, Identifier, DateCreated, Name, ShortDetails, Date, ClassIdentifier, ItemType`. `ItemType` 5 is a task (Homework in the API), 6 an event (Exam). `Date` is local time with no zone, and its seconds carry the time option: for a task with a class, `:00` start of class, `:01` before class, `:02` during, `:03` end of class, `:04` a set time, else all day; for one with no class, `:04` a set time, else all day. A task with no class has the semester's id as its `ClassIdentifier`. Class-relative options resolve against the two-week timetable from `GetClassesAndSchedules` (`ScheduleWeek` 1, 2 or 3 for both, counted from `WeekOneStartsOn`; `DayOfWeek` 0 is Sunday): *Pg 60&61*, `:01` in German on Friday 25 Sep (week 1), was due at 12:20. `docs/phase0-findings.md` §2.
 
-Live check tonight: `POST /LoginWeb` with a nonsense username returned HTTP 200 `{"AccountId":0,"Session":null,"Error":"No account under that username exists. Check your username."}`.
+Live check on 7 Oct: `POST /LoginWeb` with a nonsense username returned HTTP 200 `{"AccountId":0,"Session":null,"Error":"No account under that username exists. Check your username."}`. On 8 Oct the probe logged in with your account and read both items and all 18 classes.
 
 **Credentials.** Username and password in EncryptedSharedPreferences; session token cached and refreshed on an `Error` response. The mobile apps' richer sync API (`data.powerplanner.net/api/Sync`) needs a device registration flow that lives in a closed NuGet (`PowerPlannerAppAuthLibrary`), so the web API is the practical choice.
 
@@ -104,18 +92,18 @@ Live check tonight: `POST /LoginWeb` with a nonsense username returned HTTP 200 
 
 | URI | Use |
 |---|---|
-| `content://com.ichi2.anki.flashcards/decks` | columns `deck_name, deck_id, deck_count, options, deck_dyn, deck_desc`. `deck_count` is a JSON array of today's counts; **verify** the order (expected `[learn, review, new]`) against the deck picker |
+| `content://com.ichi2.anki.flashcards/decks` | columns `deck_name, deck_id, deck_count, options, deck_dyn, deck_desc`. `deck_count` is a JSON array of today's counts, `[learn, review, new]` (AnkiDroid's `CardContentProvider.kt` builds it from `lrnCount, revCount, newCount`; every deck read `[0,0,20]` on 8 Oct). Names are full paths: `Textbook 1::1.2` |
 | `content://…/decks/<id>` | one deck |
 | `content://…/selected_deck` | `update` with `deck_id` selects the deck AnkiDroid opens next |
 | `content://…/schedule` | the next due cards (`note_id, ord, button_count, next_review_times`), optional `deckID` and `limit` query params |
 | `content://…/notes` with `selection` in Anki search syntax | e.g. `deck:1.2 is:new` to count untouched cards per deck |
 | intent `com.ichi2.anki.DO_SYNC` | AnkiWeb sync, at most once per 5 min |
 
-Querying from `adb shell` fails with `Permission not granted for: CardContentProvider.query /decks (com.android.shell)`, as expected; it works from an app holding the permission.
+Querying from `adb shell` fails with `Permission not granted for: CardContentProvider.query /decks (com.android.shell)`, as expected. From the probe app, after **Allow** on the runtime prompt, it returned all 57 decks (8 Oct, `docs/phase0-findings.md` §3).
 
 **What the deck picker showed tonight** (`fixtures/anki_decks.json`): Extras, GCSE Vocab, Textbook 1, 1.1, 1.2, 1.3, 2.1, 2.2, 2.3, 3.1, 3.2, 3.3, 4.1, 4.2, 4.3, 5.1 (and more below the fold); every row 20 new / 0 learn / 0 review; header "100 cards due"; "Studied 0 cards … today".
 
-**Linking homework to decks.** German instructions seen tonight: "Learn vocabulary column 1.2 Familie und Ehe", "Learn vocabulary p46-47/ 2.2/2.3", "Learn vocabulary - verschiedene Familienformen". Regex `\b([1-9]\.[1-9])\b` over the instructions maps to deck names directly. The LLM enrichment can add a deck guess for the wordier ones (e.g. "verschiedene Familienformen" → 1.2) but the regex result always wins when present.
+**Linking homework to decks.** German instructions seen on 7 Oct: "Learn vocabulary column 1.2 Familie und Ehe", "Learn vocabulary p46-47/ 2.2/2.3", "Learn vocabulary - verschiedene Familienformen". Regex `\b([1-9]\.[1-9])\b` over the instructions finds the section, but sections repeat across `Textbook 1` and `Textbook 2`, so it maps to `Textbook N::x.y` for the current textbook, a setting that starts at Textbook 1 (Q18, decided 8 Oct). The LLM enrichment can add a deck guess for the wordier ones (e.g. "verschiedene Familienformen" → 1.2) but the regex result always wins when present.
 
 **Task derivation.**
 - *Daily quota task* (every day): "Anki: N reviews due + M new" with deadline 21:00. Effort ≈ reviews × 8 s + new × 25 s. Quota (your answer, 7 Oct): all due reviews plus 20 new cards from the lowest-numbered deck that still has new cards, plus any deck a German assignment names.
@@ -127,7 +115,7 @@ Querying from `adb shell` fails with `Permission not granted for: CardContentPro
 
 ## 4. Gmail (`thomasawhite321@gmail.com`)
 
-**Access method: IMAP with a Google app password** (requires 2-Step Verification on the account). Host `imap.gmail.com:993`, TLS. The `mail` connector on this PC already reads this mailbox over IMAP, so the account accepts it.
+**Access method: IMAP with a Google app password** (requires 2-Step Verification on the account). Host `imap.gmail.com:993`, TLS. Verified on 8 Oct with your app password (`scripts/gmail_probe.py`, read-only): capabilities include `X-GM-EXT-1` and `IDLE`; there is no Snoozed folder or label over IMAP, so a snoozed message just leaves INBOX until it wakes; your own notes carry the `\Sent` label. `docs/phase0-findings.md` §4.
 
 Operations the app needs:
 
@@ -135,7 +123,7 @@ Operations the app needs:
 |---|---|
 | List inbox | `SELECT INBOX`, `UID SEARCH ALL` (or `SINCE` for incremental), `UID FETCH … (UID FLAGS ENVELOPE BODYSTRUCTURE)` |
 | Body for triage | `UID FETCH … BODY.PEEK[TEXT]` or the first `text/plain` part; strip HTML, cap at ~4 000 chars before sending to the LLM |
-| Completion test | `UID SEARCH HEADER Message-ID <id>` in INBOX; absent = archived/snoozed/deleted = done |
+| Completion test | `UID SEARCH X-GM-MSGID <id>` in INBOX; absent = archived/snoozed/deleted = done for now; back in INBOX later (a snooze waking) = the same task, reopened |
 | Open the message | Gmail deep link: `https://mail.google.com/mail/u/0/#inbox/<thread-or-msg hex id>` is not derivable from IMAP; instead launch Gmail with `ACTION_VIEW` on `googlegmail://` is unreliable. Practical: open the Gmail app (main activity) and show the subject on the block screen; or use `X-GM-MSGID` from Gmail's IMAP extension (`FETCH (X-GM-MSGID)`) which **does** form `https://mail.google.com/mail/#all/<hex of X-GM-MSGID>`. **Verify** on device. |
 
 Library: `jakarta.mail` works on Android with the `android-mail`/`android-activation` artifacts (`com.sun.mail:android-mail:1.6.7`), or a 200-line hand-rolled IMAP client over `SSLSocket` since only `SELECT`, `UID SEARCH`, `UID FETCH` are needed. The hand-rolled one has no dependency risk and is my recommendation.
@@ -175,6 +163,7 @@ Cost at list price ($4 / $20 per million tokens in/out): an email with a 4 000-c
 - `BlockedActivity`: `excludeFromRecents`, `launchMode="singleInstance"`, Back → `performGlobalAction(GLOBAL_ACTION_HOME)` via the service (the activity itself cannot). Shows `NextAction`, **Open**, **Check it's done**, **Refresh Teams**, **Why am I blocked?** (lists the pressure tasks), and the bypass control.
 - Chrome: read `com.android.chrome:id/url_bar` text on window-content events (only when Chrome is foreground and the policy is active) and block on hostname match. Costs a little battery; optional (Q8).
 - Blocklist stored as package names; the settings screen lists installed launchable apps with toggles.
+- Proved in Phase 0 (`probe/FocusProbeService.kt`): on window-state events alone the block screen covered YouTube 0.62–0.66 s after it opened, because Android delivers an app's first window-state event about 0.6 s late; also acting on `typeWindowsChanged` and checking which app owns the active window cut that to 0.21 s. The same check skips a blocked app's late events once something else is in front (YouTube's bedtime snackbar would otherwise have covered Home). `BlockedProbeActivity` uses `singleTask` with its own `taskAffinity`, and Back sends it home itself.
 - The service must survive One UI: request `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`, and the setup screen walks through "Never sleeping apps", exactly as the Teams widget's README does.
 
 ## 7. Optional: device calendar
