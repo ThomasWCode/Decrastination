@@ -158,7 +158,28 @@ object AnkiRules {
                 wanted.getOrPut(deck) { mutableListOf() } += task
             }
         }
-        return wanted.map { (deck, linked) ->
+        // A deck task whose assignment has just closed gets one last look: if the deck is
+        // finished it's done, as a finished deck is; otherwise it's dropped, and missed.
+        val finishing = assignments
+            .filter { it.isOpen && it.source == Source.Anki && it.sourceId.startsWith(DECK_PREFIX) }
+            .mapNotNull { task ->
+                val deck = decks.firstOrNull { it.id.toString() == task.extra[EXTRA_DECK_ID] } ?: return@mapNotNull null
+                if (deck in wanted || unseen(deck) > 0 || deck.learn + deck.review > 0) return@mapNotNull null
+                Fetched(
+                    sourceId = task.sourceId,
+                    title = task.title,
+                    kind = task.kind,
+                    detail = task.detail,
+                    className = task.className,
+                    dueAt = task.dueAt,
+                    sourceEffortMin = task.sourceEffortMin,
+                    done = true,
+                    derived = true,
+                    subSteps = emptyList(),
+                    extra = task.extra,
+                )
+            }
+        return finishing + wanted.map { (deck, linked) ->
             val first = linked.minWith(compareBy(nullsLast()) { it.dueAt })
             val left = unseen(deck)
             val due = deck.learn + deck.review

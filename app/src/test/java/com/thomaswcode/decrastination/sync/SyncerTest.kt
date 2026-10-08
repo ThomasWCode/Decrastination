@@ -13,6 +13,8 @@ import com.thomaswcode.decrastination.sources.SourceRead
 import com.thomaswcode.decrastination.sources.TaskSource
 import com.thomaswcode.decrastination.sources.anki.AnkiDay
 import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
 import java.io.File
 import java.nio.file.Files
@@ -37,11 +39,15 @@ class SyncerTest {
 
     private fun items(vararg ids: String) = SourceRead(ids.map { Fetched(it, it, Kind.Homework) })
 
+    /** Reads run on the test's own scheduler, so its virtual clock is the one that times them out. */
+    private fun TestScope.syncer(sources: List<TaskSource>, timeoutMs: Long = 90_000) =
+        Syncer(tasks, settings, sources, clock, timeoutMs, readContext = StandardTestDispatcher(testScheduler))
+
     @Test
     fun `one source failing leaves the others' tasks merged and its own as they were`() = runTest {
         val teams = FakeSource(Source.Teams) { items("a", "b") }
         val gmail = FakeSource(Source.Gmail) { items("m") }
-        val syncer = Syncer(tasks, settings, listOf(teams, gmail), clock)
+        val syncer = syncer(listOf(teams, gmail))
         syncer.sync()
 
         gmail.answer = { throw java.io.IOException("No network") }
@@ -57,9 +63,25 @@ class SyncerTest {
     }
 
     @Test
+    fun `a read that blocks is abandoned at the timeout, not waited for`() = runTest {
+        // A blocking call ignores cancellation: the sync must give up on it anyway.
+        val release = java.util.concurrent.CountDownLatch(1)
+        val stuck = FakeSource(Source.Gmail) {
+            release.await()
+            items("late")
+        }
+        val syncer = Syncer(tasks, settings, listOf(stuck), FixedClock(clock.time), timeoutMs = 200)
+        val started = System.nanoTime()
+        val report = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { syncer.sync() }
+        release.countDown()
+        assertTrue((System.nanoTime() - started) / 1_000_000 < 5_000)
+        assertEquals("No answer in 0 s", report.failures[Source.Gmail])
+    }
+
+    @Test
     fun `a source that hangs times out as a failure`() = runTest {
         val slow = FakeSource(Source.PowerPlanner) { awaitCancellation() }
-        val report = Syncer(tasks, settings, listOf(slow), clock, timeoutMs = 1_000).sync()
+        val report = syncer(listOf(slow), timeoutMs = 1_000).sync()
         assertEquals("No answer in 1 s", report.failures[Source.PowerPlanner])
     }
 
@@ -67,7 +89,7 @@ class SyncerTest {
     fun `Anki is read last, and sees what the others just found`() = runTest {
         val anki = FakeSource(Source.Anki) { SourceRead(emptyList(), ankiDay = AnkiDay("2026-10-08", 12, "Textbook 1::1.2")) }
         val teams = FakeSource(Source.Teams) { items("vocab") }
-        Syncer(tasks, settings, listOf(anki, teams), clock).sync()
+        syncer(listOf(anki, teams)).sync()
         assertEquals(listOf("teams:vocab"), anki.seen.single().known.map { it.id })
         assertEquals(12L, tasks.value.ankiDay?.deckId)
     }
@@ -76,7 +98,7 @@ class SyncerTest {
     fun `only the asked-for sources are read, and listeners hear of changes`() = runTest {
         val teams = FakeSource(Source.Teams) { items("a") }
         val gmail = FakeSource(Source.Gmail) { items("m") }
-        val syncer = Syncer(tasks, settings, listOf(teams, gmail), clock)
+        val syncer = syncer(listOf(teams, gmail))
         var heard = 0
         syncer.addListener { heard += it.added.size }
         syncer.sync(setOf(Source.Gmail))

@@ -46,6 +46,18 @@ class GmailTest {
     }
 
     @Test
+    fun `an event's days are calendar days across the clocks going back`() {
+        // British Summer Time ends at 02:00 on Sunday 25 Oct 2026.
+        val triage = EmailRules.triage(
+            EmailRules.Email("Venue", "tickets@venue.example", "Your tickets", "See you on 25 October", false),
+            Fixtures.at("2026-10-20T12:00"),
+            LONDON,
+        )
+        assertEquals(Fixtures.at("2026-10-24T00:00"), triage.availableFrom)
+        assertEquals(Fixtures.at("2026-10-27T00:00"), triage.dueAt)
+    }
+
+    @Test
     fun `a booking with no date ahead is an ordinary email`() {
         assertEquals(Kind.Admin, email("Your booking", body = "Thanks for booking on 1 October.").kind)
     }
@@ -111,6 +123,13 @@ class GmailTest {
     fun `stored text is reused while a conversation's newest message is the same`() {
         val tasks = Merge.apply(emptyList(), Source.Gmail, GmailThreads.fetched(listOf(InboxMessage(1, "m1", "t1", 1, "Hi", null, "a@b.c", false)), mapOf("m1" to "Body"), now, LONDON), now).tasks
         assertEquals(mapOf("m1" to "Body"), GmailThreads.knownBodies(tasks))
+    }
+
+    @Test
+    fun `a conversation whose text wasn't fetched yet is fetched next time`() {
+        val tasks = Merge.apply(emptyList(), Source.Gmail, GmailThreads.fetched(listOf(InboxMessage(1, "m1", "t1", 1, "Hi", null, "a@b.c", false)), emptyMap(), now, LONDON), now).tasks
+        assertEquals("true", tasks.single().extra[GmailThreads.EXTRA_TEXT_PENDING])
+        assertEquals(emptyMap(), GmailThreads.knownBodies(tasks))
     }
 
     @Test
