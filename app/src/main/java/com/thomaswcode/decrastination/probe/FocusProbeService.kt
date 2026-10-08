@@ -4,6 +4,8 @@ import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.AccessibilityServiceInfo
 import android.content.Context
 import android.content.Intent
+import android.os.Handler
+import android.os.Looper
 import android.os.SystemClock
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityManager
@@ -22,8 +24,13 @@ import kotlinx.coroutines.flow.asStateFlow
 class FocusProbeService : AccessibilityService() {
 
     private lateinit var labels: GuardRules.Labels
+
+    /** Events arrive on the main thread; deferred looks run there too. */
+    private val handler = Handler(Looper.getMainLooper())
     private var lastGuardAt = 0L
-    private var lastBackAt = 0L
+    private var lastBackAt = Long.MIN_VALUE / 2
+    private var lookPending: String? = null
+    private var emptyLooks = 0
 
     override fun onServiceConnected() {
         super.onServiceConnected()
@@ -55,6 +62,8 @@ class FocusProbeService : AccessibilityService() {
     override fun onInterrupt() = Unit
 
     override fun onUnbind(intent: Intent?): Boolean {
+        handler.removeCallbacks(deferredLook)
+        lookPending = null
         _connected.value = false
         ProbeLog.add("Focus service disconnected")
         return super.onUnbind(intent)
@@ -70,21 +79,47 @@ class FocusProbeService : AccessibilityService() {
         )
     }
 
+    /**
+     * Looks at [pkg]'s window and presses Back if it's one of this app's pages. Content changes
+     * come in bursts, so it looks at most once per [GUARD_INTERVAL_MS], and never within
+     * [BACK_COOLDOWN_MS] of pressing Back; a change that arrives meanwhile is looked at once the
+     * wait is over rather than dropped, since the last change of a burst is often the one that
+     * fills the page in. A window that shows nothing yet is looked at again shortly.
+     */
     private fun guard(pkg: String, firstLook: Boolean) {
         if (!guardEnabled) return
         val now = SystemClock.uptimeMillis()
-        // Content changes come in bursts; one look per interval is plenty.
-        if (!firstLook && now - lastGuardAt < GUARD_INTERVAL_MS) return
-        if (now - lastBackAt < BACK_COOLDOWN_MS) return
+        val wait = maxOf(
+            if (firstLook) 0L else GUARD_INTERVAL_MS - (now - lastGuardAt),
+            BACK_COOLDOWN_MS - (now - lastBackAt),
+        )
+        if (wait > 0) return lookLater(pkg, wait)
         lastGuardAt = now
         val texts = screenTexts(pkg)
         if (firstLook) ProbeLog.add("  $pkg shows: ${texts.take(LOGGED_TEXTS).joinToString(" | ")}")
+        if (texts.isEmpty()) {
+            if (emptyLooks++ < MAX_EMPTY_LOOKS) lookLater(pkg, GUARD_INTERVAL_MS)
+            return
+        }
+        emptyLooks = 0
         val verdict = GuardRules.decide(pkg, texts, labels)
         if (verdict is GuardRules.Verdict.Back) {
             lastBackAt = now
             ProbeLog.add("Guard: Back, from ${verdict.reason}")
             performGlobalAction(GLOBAL_ACTION_BACK)
         }
+    }
+
+    /** One deferred look at the latest window to need it; further requests meanwhile join it. */
+    private fun lookLater(pkg: String, delayMs: Long) {
+        if (lookPending == null) handler.postDelayed(deferredLook, delayMs)
+        lookPending = pkg
+    }
+
+    private val deferredLook = Runnable {
+        val pkg = lookPending ?: return@Runnable
+        lookPending = null
+        guard(pkg, firstLook = false)
     }
 
     /** The texts and descriptions in [pkg]'s window, breadth first, at most [MAX_NODES] nodes. */
@@ -111,6 +146,9 @@ class FocusProbeService : AccessibilityService() {
 
         private const val GUARD_INTERVAL_MS = 250L
         private const val BACK_COOLDOWN_MS = 1_000L
+
+        /** How many times in a row an empty window is looked at again: a second's worth. */
+        private const val MAX_EMPTY_LOOKS = 4
         private const val MAX_NODES = 400
         private const val LOGGED_TEXTS = 40
 

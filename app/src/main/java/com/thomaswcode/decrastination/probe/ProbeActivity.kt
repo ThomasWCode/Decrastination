@@ -51,8 +51,10 @@ import java.time.format.DateTimeFormatter
 /**
  * Phase 0: proves each data path on the phone (PLAN.md §5). Every probe can also be started from
  * a PC, which is how they were run:
- * `adb shell am start -n com.thomaswcode.decrastination/.probe.ProbeActivity --es probe teams`
+ * `adb shell am start -n com.thomaswcode.decrastination/.probe.ProbeCommand --es probe teams`
  * with `teams`, `anki`, `sync`, `open` or `status`; results go to `adb logcat -s Decrastination`.
+ * Only intents through that alias run a probe: it needs a permission the adb shell has and no
+ * ordinary app can get, whereas this activity is exported to the launcher for anyone to start.
  */
 class ProbeActivity : ComponentActivity() {
 
@@ -86,13 +88,19 @@ class ProbeActivity : ComponentActivity() {
     }
 
     private fun run(intent: Intent?) {
-        when (intent?.getStringExtra(EXTRA_PROBE) ?: return) {
+        val probe = intent?.getStringExtra(EXTRA_PROBE) ?: return
+        if (intent.component?.className != COMMAND_ALIAS) {
+            ProbeLog.add("Ignored probe=$probe: probes only run through ${COMMAND_ALIAS.substringAfterLast('.')}")
+            intent.removeExtra(EXTRA_PROBE)
+            return
+        }
+        when (probe) {
             "teams" -> readTeams()
             "anki" -> readAnki()
             "sync" -> callTeams(TeamsProvider.METHOD_REQUEST_SYNC)
             "open" -> openFirstAssignment()
             "status" -> logStatus()
-            else -> ProbeLog.add("Unknown probe ${intent.getStringExtra(EXTRA_PROBE)}")
+            else -> ProbeLog.add("Unknown probe $probe")
         }
         intent.removeExtra(EXTRA_PROBE)
     }
@@ -197,6 +205,9 @@ class ProbeActivity : ComponentActivity() {
 
     companion object {
         const val EXTRA_PROBE = "probe"
+
+        /** The manifest's adb-only alias for this activity (see the class comment). */
+        private const val COMMAND_ALIAS = "com.thomaswcode.decrastination.probe.ProbeCommand"
         private val timeFormat = DateTimeFormatter.ofPattern("EEE d MMM HH:mm")
 
         private fun formatTime(millis: Long): String = Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault()).format(timeFormat)

@@ -34,7 +34,9 @@ Debug builds are signed with a copy of the widget's committed `app/debug.keystor
 The app opens on a probe screen; each probe also runs from a PC, logging to `adb logcat -s Decrastination`:
 
 ```bash
-adb shell am start -n com.thomaswcode.decrastination/.probe.ProbeActivity --es probe teams   # or anki, sync, open, status
+adb shell am start -n com.thomaswcode.decrastination/.probe.ProbeCommand --es probe teams   # or anki, sync, open, status
 ```
+
+`ProbeCommand` is an alias of the probe screen that only the adb shell can start (it needs `android.permission.DUMP`), so no other app can make this one sync or open Teams; a probe sent to the launcher's entry is ignored.
 
 The focus service, a spike of the blocker, blocks YouTube whenever it's switched on, so it's off except while testing. Power Planner and Gmail are checked from the PC, with `scripts/powerplanner_probe.py` and `scripts/gmail_probe.py`; their `--save` output goes to the git-ignored `private/`.
