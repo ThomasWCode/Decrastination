@@ -236,6 +236,16 @@ class PlannerTest {
     }
 
     @Test
+    fun `a deck needing more days than the horizon still gets a step a day`() {
+        // 400 unseen cards: 20 days of 20, overdue.
+        val steps = (1..20).map { SubStep("20 new cards", 9) }
+        val deck = task("deck", Fixtures.at("2026-10-01T08:30"), steps = steps).copy(stepsPerDay = 1)
+        val days = plan(listOf(deck), "2026-10-08T17:00").dayOf("deck")
+        assertEquals(20, days.size)
+        assertEquals(LocalDate.parse("2026-10-27"), days.last())
+    }
+
+    @Test
     fun `hours mean wall-clock times on the days the clocks change`() {
         // The clocks go back at 02:00 on Sunday 25 Oct 2026: 08:30-22:30 is still 14 hours.
         val sunday = LocalDate.parse("2026-10-25")

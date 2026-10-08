@@ -38,7 +38,8 @@ data class AnkiDay(
  *   21:30. Done once nothing is due and that deck has no new cards left today.
  * - **A deck homework names**: "Learn vocabulary column 1.2" in an open German assignment makes
  *   `Textbook 1::1.2` a task with the assignment's deadline, in 20-card steps (the decks' daily
- *   limit). Done once every card in it has been seen; dropped, unfinished, if the assignment goes.
+ *   limit). Done once every card in it has been seen (its reviews are the quota's); dropped,
+ *   unfinished, if the assignment goes.
  */
 object AnkiRules {
 
@@ -170,7 +171,7 @@ object AnkiRules {
             .filter { it.isOpen && it.source == Source.Anki && it.sourceId.startsWith(DECK_PREFIX) }
             .mapNotNull { task ->
                 val deck = decks.firstOrNull { it.id.toString() == task.extra[EXTRA_DECK_ID] } ?: return@mapNotNull null
-                if (deck in wanted || unseen(deck) > 0 || deck.learn + deck.review > 0) return@mapNotNull null
+                if (deck in wanted || unseen(deck) > 0) return@mapNotNull null
                 Fetched(
                     sourceId = task.sourceId,
                     title = task.title,
@@ -188,9 +189,9 @@ object AnkiRules {
         return finishing + wanted.map { (deck, linked) ->
             val first = linked.minWith(compareBy(nullsLast()) { it.dueAt })
             val left = unseen(deck)
-            val due = deck.learn + deck.review
-            // Today's new cards for this deck are studied: the rest wait for Anki's next day.
-            val waits = deck.new == 0 && left > 0 && due == 0
+            // Today's new cards for this deck are studied: the rest wait for Anki's next day,
+            // whatever reviews it has (those are the daily quota's).
+            val waits = deck.new == 0 && left > 0
             val section = deck.name.substringAfterLast(Deck.SEPARATOR)
             Fetched(
                 sourceId = DECK_PREFIX + deck.id,
@@ -199,8 +200,8 @@ object AnkiRules {
                 detail = "$left cards never studied. For: " + linked.joinToString("; ") { it.title },
                 className = first.className,
                 dueAt = first.dueAt,
-                sourceEffortMin = effortMin(due, left).coerceAtLeast(1),
-                done = left == 0 && due == 0,
+                sourceEffortMin = effortMin(0, left).coerceAtLeast(1),
+                done = left == 0,
                 derived = true,
                 subSteps = newCardSteps(left),
                 stepsPerDay = 1,

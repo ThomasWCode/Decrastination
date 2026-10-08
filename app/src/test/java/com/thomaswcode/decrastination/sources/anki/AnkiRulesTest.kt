@@ -140,9 +140,9 @@ class AnkiRulesTest {
     }
 
     @Test
-    fun `a homework deck is done when every card has been seen and nothing is due`() {
+    fun `a homework deck is done when every card has been seen, reviews or not`() {
         val homework = listOf(assignment("Familie und Ehe", "Learn vocabulary column 1.3", null))
-        val studied = decks.map { if (it.id == 13L) it.copy(new = 0) else it }
+        val studied = decks.map { if (it.id == 13L) it.copy(new = 0, review = 4) else it }
         assertTrue(AnkiRules.homeworkDecks(studied, 1, homework, unseen = { 0 }, now = NOW, zone = LONDON).single().done)
     }
 
@@ -182,7 +182,8 @@ class AnkiRulesTest {
     @Test
     fun `a homework deck whose new cards for today are studied waits for Anki's next day`() {
         val homework = listOf(assignment("Familie und Ehe", "Learn vocabulary column 1.2", Fixtures.at("2026-10-02T09:00")))
-        val studied = decks.map { if (it.id == 12L) it.copy(new = 0, review = 0) else it }
+        // Reviews still due in it (deck 1.2 has 5) don't release more new cards today.
+        val studied = decks.map { if (it.id == 12L) it.copy(new = 0) else it }
         val deck = AnkiRules.homeworkDecks(studied, 1, homework, unseen = { 25 }, now = NOW, zone = LONDON).single()
         assertEquals(Fixtures.at("2026-10-09T04:00"), deck.notBefore)
         val fresh = AnkiRules.homeworkDecks(decks, 1, homework, unseen = { 25 }, now = NOW, zone = LONDON).single()
