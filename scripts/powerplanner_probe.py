@@ -52,16 +52,20 @@ def post(path: str, body: dict) -> dict:
         sys.exit(1)
 
 
-def time_option(item: dict) -> str:
+def time_option(item: dict, semester_id: str) -> str:
     """Power Planner keeps a task's time option in the seconds of its local date
-    (viewItems.ts, timeOption): for homework (ItemType 5) 0 start of class, 1 before class,
-    2 during class, 3 end of class, 4 a custom time, anything else all day; for other tasks,
-    4 a custom time, anything else all day. Events (ItemType 6) use their end time instead."""
+    (viewItems.ts, timeOption). A task (ItemType 5) with a class: 0 start of class, 1 before
+    class, 2 during class, 3 end of class, 4 a custom time, anything else all day. A task with no
+    class, whose ClassIdentifier is the semester's id: 4 a custom time, anything else all day.
+    Events (ItemType 6) use their end time instead."""
     date = item.get("Date") or ""
     if item.get("ItemType") != 5 or len(date) < 19:
         return "see EndTime" if item.get("ItemType") == 6 else "?"
+    second = int(date[17:19])
+    if item.get("ClassIdentifier") == semester_id:
+        return "custom time" if second == 4 else "all day"
     return {0: "start of class", 1: "before class", 2: "during class", 3: "end of class", 4: "custom time"}.get(
-        int(date[17:19]), "all day"
+        second, "all day"
     )
 
 
@@ -101,9 +105,13 @@ def main() -> None:
 
     agenda = None
     timetable = None
+    failed = not semester_id
     if semester_id:
         # GetAgenda leaves Classes null: names and timetables come from GetClassesAndSchedules.
         timetable = post("/GetClassesAndSchedules", {"Login": creds, "SemesterIdentifier": semester_id})
+        if timetable.get("Error"):
+            print("GetClassesAndSchedules error:", timetable["Error"])
+            failed = True
         class_list = timetable.get("Classes") or []
         print(f"GetClassesAndSchedules: {len(class_list)} class(es)")
         for c in class_list:
@@ -117,6 +125,7 @@ def main() -> None:
         agenda = post("/GetAgenda", {"Login": creds, "SemesterIdentifier": semester_id, "CurrentTime": now})
         if agenda.get("Error"):
             print("GetAgenda error:", agenda["Error"])
+            failed = True
         else:
             # Keys can be present with a null value, so `or []` rather than a .get default.
             print("GetAgenda response:", {k: type(v).__name__ + (f"[{len(v)}]" if isinstance(v, list) else "") for k, v in agenda.items()})
@@ -126,7 +135,7 @@ def main() -> None:
             for it in items:
                 print(
                     f"- {it.get('Name')!r} | type={it.get('ItemType')} | class={classes.get(it.get('ClassIdentifier'), '?')} "
-                    f"| date={it.get('Date')} ({time_option(it)}) | complete={it.get('PercentComplete')}"
+                    f"| date={it.get('Date')} ({time_option(it, semester_id)}) | complete={it.get('PercentComplete')}"
                 )
             print("\nRaw first item (for the field names the Kotlin model needs):")
             print(json.dumps(items[0] if items else {}, indent=1))
@@ -144,7 +153,8 @@ def main() -> None:
         SAVE_PATH.write_text(json.dumps(payload, indent=1, ensure_ascii=False), encoding="utf-8")
         print(f"\nSaved to {SAVE_PATH} (git-ignored).")
 
-    if not semester_id or agenda is None or agenda.get("Error"):
+    if failed:
+        print("\nNot proven: see the error above.")
         sys.exit(2)
 
 

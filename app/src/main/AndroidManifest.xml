@@ -39,6 +39,16 @@
             </intent-filter>
         </activity>
 
+        <!-- The probes' adb entry point: am start of .probe.ProbeCommand with a "probe" extra (see
+             ProbeActivity). DUMP is held by the adb shell and the system, never granted to an
+             ordinary app, so no other app can make this one sync or open Teams with its signature
+             permission. -->
+        <activity-alias
+            android:name=".probe.ProbeCommand"
+            android:exported="true"
+            android:permission="android.permission.DUMP"
+            android:targetActivity=".probe.ProbeActivity" />
+
         <!-- Shown over a blocked app. Its own task, so Back and Recents can't reveal the app behind. -->
         <activity
             android:name=".probe.BlockedProbeActivity"
