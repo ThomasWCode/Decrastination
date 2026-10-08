@@ -108,11 +108,11 @@ The four sources, and what "done" means for each:
 
 Every path works; the results, measurements and what they change are in `docs/phase0-findings.md`.
 
-1. **Teams provider.** Built in the widget (0.3.0, TeamsAssignmentsWidget #13): the `signature` permission `READ_ASSIGNMENTS`, `AssignmentsProvider` with `assignments` and `state` cursors and change notifications, and `call("requestSync")` / `call("open", key)`, unit-tested. Read from the probe app on the phone; `adb shell` refused. Found on the way: the widget's sync and open fail once Teams' Past due list holds seven or more cards, which the widget fixes separately.
+1. **Teams provider.** Built in the widget (0.3.0, TeamsAssignmentsWidget #13): the `signature` permission `READ_ASSIGNMENTS`, `AssignmentsProvider` with `assignments` and `state` cursors and change notifications, and `call("requestSync")` / `call("open", key)`, unit-tested. Read from the probe app on the phone; `adb shell` refused. Found on the way: the widget's sync and open failed once Teams started paging a Past due list of seven cards; widget 0.3.1 (#14) fixes that.
 2. **Power Planner.** `scripts/powerplanner_probe.py` logged in with your account and read both items and all 18 classes. Class names and the two-week timetable come from `GetClassesAndSchedules`; an item's time option is in its date's seconds.
-3. **AnkiDroid.** The probe app asked for the permission and read all 57 decks; `deck_count` is `[learn, review, new]`. Section numbers repeat across Textbook 1 and 2 (Q18).
+3. **AnkiDroid.** The probe app asked for the permission and read all 57 decks; `deck_count` is `[learn, review, new]`. Section numbers repeat across Textbook 1 and 2, so a current-textbook setting picks one, starting at Textbook 1 (Q18).
 4. **Gmail.** App password created; `scripts/gmail_probe.py` read the inbox read-only over IMAP. Snoozed mail isn't visible over IMAP; your own notes carry `\Sent`.
-5. **Blocking and guard.** The probe's service covered YouTube in 0.21 s and backed out of its own accessibility page, its App info and its uninstall prompt. Found: it can be put on an accessibility key shortcut without visiting its page, so Phase 3 guards that too (and Q19).
+5. **Blocking and guard.** The probe's service covered YouTube in 0.21 s and backed out of its own accessibility page, its App info and its uninstall prompt. Found: it can be put on an accessibility key shortcut without visiting its page, so Phase 3 guards that too, and the watchdog gets `WRITE_SECURE_SETTINGS` (granted over adb at setup) to switch it back on (Q19).
 
 Phase 0 also built what Phase 1 would have scaffolded: the Gradle setup, the shared signing key, CI, and readers for both providers (`app/`, package `probe`).
 

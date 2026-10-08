@@ -17,6 +17,8 @@
 
 | # | Question | Outcome |
 |---|---|---|
+| Q18 | Which textbook a German section number means | **A "current textbook" setting, starting at Textbook 1** (your answer, 8 Oct). "Learn vocabulary column 1.2" maps to `Textbook 1::1.2`; you switch the setting when the class moves on, and the LLM may override it when an assignment names the book or a topic only one has. The daily quota's "lowest-numbered deck with new cards left" walks the current textbook first. |
+| Q19 | Letting the watchdog switch protection back on | **Yes: `WRITE_SECURE_SETTINGS` granted once over adb at setup** (your answer, 8 Oct; `adb shell pm grant com.thomaswcode.decrastination android.permission.WRITE_SECURE_SETTINGS`). The watchdog switches the focus service straight back on and removes it from any accessibility shortcut, as well as showing PROTECTION OFF and, after an hour, emailing your dad. |
 | Q10 | Where the Teams provider change goes | In the widget, as planned: TeamsAssignmentsWidget #13 (0.3.0) adds the permission, the provider, change notifications and the two calls. Widget behaviour unchanged. |
 | Q11 | Package name and location | `com.thomaswcode.decrastination`, in `C:\Users\thoma\Documents\Decrastination`, repository `ThomasWCode/Decrastination` (public, so `private/` keeps real inbox and agenda data out of git), signed with a copy of the widget's committed `app/debug.keystore`. |
 
@@ -42,9 +44,3 @@ It contains a calendar of 2027 deadlines (STEM Potential opens 30 Oct 2026, NPL/
 
 ### Q17. Override delivery
 **Default:** dedicated sender mailbox set up by your dad (Q14). Alternative: TOTP secret in an authenticator app on his phone, email carries no secret. Tell me if he would prefer the second.
-
-### Q18. Which textbook a German section number means (from Phase 0)
-AnkiDroid has `Textbook 1::1.1` to `6.3` and `Textbook 2::1.1` to `6.3`, so "Learn vocabulary column 1.2" matches two decks. **Default:** a "current textbook" setting, starting at Textbook 1 for Year 12, and the LLM may override it when an assignment names the book or a topic only one of them has. The daily quota's "lowest-numbered deck with new cards left" walks the current textbook first.
-
-### Q19. Letting the watchdog switch protection back on (from Phase 0)
-Phase 0 found the focus service can be put on an accessibility key shortcut without opening its guarded page, after which a key press turns it off. Android lets a sideloaded app change secure settings only if `WRITE_SECURE_SETTINGS` is granted once over adb (`adb shell pm grant com.thomaswcode.decrastination android.permission.WRITE_SECURE_SETTINGS`). **Default:** yes, granted at setup; the watchdog then switches the service straight back on and removes it from any shortcut, instead of only showing PROTECTION OFF and emailing. It survives reboots and updates, and goes only if the app is uninstalled.

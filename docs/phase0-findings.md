@@ -23,7 +23,7 @@ On the phone:
 - The probe's observer heard the sync start at once (55 ms) and its end 10 s late: by then the probe was in the background, and Android held the notification back. Decrastination can't rely on observers for timing; they're a hint to re-read soon.
 - Decrastination's manifest declares the same permission, identically, so the order the two apps are installed in doesn't matter.
 
-**Found: the widget's sync and open fail once Past due holds seven or more cards.** Teams now puts a zero-height "load more" `ProgressBar` (`SHIMMER_GROUP`, bounds `[45,2298][1035,2298]`) under the Past due list, as it always has under Completed. The widget treats any `ProgressBar` on Forthcoming or Past due as "still loading", so the sync gave up with *Couldn't read the Past due list* (captured in the widget as `failure-20261008-210646.xml`), and opening an overdue assignment waited 17 s on Past due and then couldn't find it. This morning's sync worked because two of today's items were still Forthcoming. The fix belongs in the widget (next PR there). Until it lands, Teams data is only as fresh as the last successful sync, plus what the widget reads while you browse Teams.
+**Found: the widget's sync and open fail once Past due holds seven or more cards.** Teams now puts a zero-height "load more" `ProgressBar` (`SHIMMER_GROUP`, bounds `[45,2298][1035,2298]`) under the Past due list, as it always has under Completed. The widget treats any `ProgressBar` on Forthcoming or Past due as "still loading", so the sync gave up with *Couldn't read the Past due list* (captured in the widget as `failure-20261008-210646.xml`), and opening an overdue assignment waited 17 s on Past due and then couldn't find it. This morning's sync worked because two of today's items were still Forthcoming. Scrolled to by hand, the placeholder gave way to the list's footer, with the same seven cards: it's a lazy "load more", which Teams only fetches once it's on screen. **Fixed in the widget (TeamsAssignmentsWidget #14, 0.3.1)**: an off-screen placeholder no longer counts as loading, but does mean the list isn't known whole, and the sync brings it into view (`ACTION_SHOW_ON_SCREEN` works on Teams' WebView). On the phone Teams answered within 2.6 s, and the sync read all seven and saved all 11 assignments.
 
 ## 2. Power Planner: the web API
 
@@ -68,13 +68,13 @@ The focus service was switched on over adb (`settings put secure enabled_accessi
 2. **`uiautomator` and other UiAutomation tools** run over adb pause every accessibility service while they run (the focus service disconnected and reconnected around each screen dump). adb already defeats the blocker, so this changes nothing, but it explains gaps in logs taken while debugging.
 3. **A second user profile exists** (user 150, which `pm` couldn't access: most likely Secure Folder). Apps installed there are outside the blocker, as PLAN.md §7 already accepts.
 
-**Proposed for Phase 3 (Q19):** grant Decrastination `WRITE_SECURE_SETTINGS` once over adb (`adb shell pm grant com.thomaswcode.decrastination android.permission.WRITE_SECURE_SETTINGS`). With it, the watchdog can switch the focus service straight back on and remove it from any shortcut, instead of only emailing about it. It survives reboots and updates, and is lost only by uninstalling, which the guard and the device admin resist.
+**For Phase 3 (Q19, decided 8 Oct):** grant Decrastination `WRITE_SECURE_SETTINGS` once over adb (`adb shell pm grant com.thomaswcode.decrastination android.permission.WRITE_SECURE_SETTINGS`). With it, the watchdog can switch the focus service straight back on and remove it from any shortcut, instead of only emailing about it. It survives reboots and updates, and is lost only by uninstalling, which the guard and the device admin resist.
 
 ## 6. What this changes
 
 - **Phase 1** starts from this app: the Gradle setup, the shared signing key, CI and the provider readers exist. The probe package stays as the debug screen until Phase 3 replaces the spike.
-- **Teams:** fix the Past due placeholder in the widget before relying on syncs (separate PR there).
+- **Teams:** syncs work again with a paged Past due list (widget 0.3.1).
 - **Power Planner:** read class names and timetables from `GetClassesAndSchedules`, resolve each item's time option against the two-week timetable, and treat the semester id as "no class".
-- **AnkiDroid:** map section numbers to `Textbook N::x.y` using the current textbook (Q18).
+- **AnkiDroid:** map section numbers to `Textbook N::x.y` using a current-textbook setting, starting at Textbook 1 (Q18, decided).
 - **Gmail:** use `X-GM-MSGID` as the task id; `\Sent` marks your own notes; a message leaving and later re-entering INBOX is a deferral, not two tasks.
-- **Anti-tamper:** add the shortcut route to the guard and the watchdog; decide on `WRITE_SECURE_SETTINGS` (Q19).
+- **Anti-tamper:** add the shortcut route to the guard and the watchdog; the watchdog gets `WRITE_SECURE_SETTINGS`, granted over adb at setup, to undo it (Q19, decided).

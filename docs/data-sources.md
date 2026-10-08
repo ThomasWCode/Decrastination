@@ -52,7 +52,7 @@ Decrastination's manifest: `<uses-permission>` for it, the same `<permission>` d
 
 **Opening an assignment.** `call("open", key)`: the widget's service navigates Teams to the card by its id, as a widget row tap does, so Decrastination's **Open** lands on the exact assignment.
 
-**Freshness.** Manual sync only (plus read-along while Teams is open). Decrastination calls `requestSync` from the block screen's **Refresh Teams** button and once in the morning routine, never silently in the background, because a sync takes over the screen. On 8 Oct both calls started but the widget's own sync and navigation then failed, because Teams now shows a "load more" placeholder under a Past due list of seven or more; that fix is in the widget (`docs/phase0-findings.md` §1).
+**Freshness.** Manual sync only (plus read-along while Teams is open). Decrastination calls `requestSync` from the block screen's **Refresh Teams** button and once in the morning routine, never silently in the background, because a sync takes over the screen. On 8 Oct both calls started but the widget's own sync and navigation then failed, because Teams now pages a Past due list of seven or more behind a "load more" placeholder; widget 0.3.1 (TeamsAssignmentsWidget #14) brings the placeholder into view, and its syncs work again (`docs/phase0-findings.md` §1).
 
 ## 2. Power Planner (`com.barebonesdev.powerplanner` 2609.30.191.0)
 
@@ -103,7 +103,7 @@ Querying from `adb shell` fails with `Permission not granted for: CardContentPro
 
 **What the deck picker showed tonight** (`fixtures/anki_decks.json`): Extras, GCSE Vocab, Textbook 1, 1.1, 1.2, 1.3, 2.1, 2.2, 2.3, 3.1, 3.2, 3.3, 4.1, 4.2, 4.3, 5.1 (and more below the fold); every row 20 new / 0 learn / 0 review; header "100 cards due"; "Studied 0 cards … today".
 
-**Linking homework to decks.** German instructions seen on 7 Oct: "Learn vocabulary column 1.2 Familie und Ehe", "Learn vocabulary p46-47/ 2.2/2.3", "Learn vocabulary - verschiedene Familienformen". Regex `\b([1-9]\.[1-9])\b` over the instructions finds the section, but sections repeat across `Textbook 1` and `Textbook 2`, so it maps to `Textbook N::x.y` for the current textbook (Q18). The LLM enrichment can add a deck guess for the wordier ones (e.g. "verschiedene Familienformen" → 1.2) but the regex result always wins when present.
+**Linking homework to decks.** German instructions seen on 7 Oct: "Learn vocabulary column 1.2 Familie und Ehe", "Learn vocabulary p46-47/ 2.2/2.3", "Learn vocabulary - verschiedene Familienformen". Regex `\b([1-9]\.[1-9])\b` over the instructions finds the section, but sections repeat across `Textbook 1` and `Textbook 2`, so it maps to `Textbook N::x.y` for the current textbook, a setting that starts at Textbook 1 (Q18, decided 8 Oct). The LLM enrichment can add a deck guess for the wordier ones (e.g. "verschiedene Familienformen" → 1.2) but the regex result always wins when present.
 
 **Task derivation.**
 - *Daily quota task* (every day): "Anki: N reviews due + M new" with deadline 21:00. Effort ≈ reviews × 8 s + new × 25 s. Quota (your answer, 7 Oct): all due reviews plus 20 new cards from the lowest-numbered deck that still has new cards, plus any deck a German assignment names.

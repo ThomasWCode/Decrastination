@@ -47,10 +47,14 @@ class FocusProbeService : AccessibilityService() {
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
         if (event.eventType == AccessibilityEvent.TYPE_WINDOWS_CHANGED) {
             // The windows on screen changed: a blocked app may have come forward without a
-            // window-state event of its own, or before one arrives (they can be 0.6 s late).
+            // window-state event of its own, or before one arrives (they can be 0.6 s late), and
+            // a Settings window beside another app may just have become the one in use.
             val front = frontPackage() ?: return
             val now = SystemClock.uptimeMillis()
-            if (front in BLOCKED && now - lastBlockAt > WINDOWS_BLOCK_GAP_MS) block(front, event.eventTime)
+            when {
+                front in BLOCKED -> if (now - lastBlockAt > WINDOWS_BLOCK_GAP_MS) block(front, event.eventTime)
+                GuardRules.watches(front) -> guard(front, firstLook = false)
+            }
             return
         }
         val pkg = event.packageName?.toString() ?: return
@@ -117,6 +121,8 @@ class FocusProbeService : AccessibilityService() {
      */
     private fun guard(pkg: String, firstLook: Boolean) {
         if (!guardEnabled) return
+        // A new window starts a new run of looks, with its own retries if it shows nothing yet.
+        if (firstLook) emptyLooks = 0
         val now = SystemClock.uptimeMillis()
         val wait = maxOf(
             if (firstLook) 0L else GUARD_INTERVAL_MS - (now - lastGuardAt),
@@ -133,6 +139,14 @@ class FocusProbeService : AccessibilityService() {
         emptyLooks = 0
         val verdict = GuardRules.decide(pkg, texts, labels)
         if (verdict is GuardRules.Verdict.Back) {
+            // Back goes to the window in use. With Settings beside another app (split screen, a
+            // pop-up), pressing it now would hit that app; once Settings is in use, its window
+            // change brings another look.
+            val front = frontPackage()
+            if (front != null && front != pkg) {
+                ProbeLog.add("Guard: ${verdict.reason} is showing, but $front is in use: not pressing Back")
+                return
+            }
             lastBackAt = now
             ProbeLog.add("Guard: Back, from ${verdict.reason}")
             performGlobalAction(GLOBAL_ACTION_BACK)
