@@ -32,6 +32,7 @@ class FocusProbeService : AccessibilityService() {
     private var lookPending: String? = null
     private var emptyLooks = 0
     private var lastBlockAt = Long.MIN_VALUE / 2
+    private var lastPipRelaunchAt = Long.MIN_VALUE / 2
 
     override fun onServiceConnected() {
         super.onServiceConnected()
@@ -42,6 +43,7 @@ class FocusProbeService : AccessibilityService() {
         )
         _connected.value = true
         ProbeLog.add("Focus service connected; blocking ${BLOCKED.joinToString()}")
+        closeBlockedPictureInPicture()
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
@@ -49,6 +51,7 @@ class FocusProbeService : AccessibilityService() {
             // The windows on screen changed: a blocked app may have come forward without a
             // window-state event of its own, or before one arrives (they can be 0.6 s late), and
             // a Settings window beside another app may just have become the one in use.
+            closeBlockedPictureInPicture()
             val front = frontPackage() ?: return
             val now = SystemClock.uptimeMillis()
             when {
@@ -101,15 +104,48 @@ class FocusProbeService : AccessibilityService() {
         return super.onUnbind(intent)
     }
 
+    /**
+     * Covers [pkg] with the block screen. NO_USER_ACTION tells Android this isn't the user
+     * leaving [pkg], so it gets no onUserLeaveHint and doesn't enter picture-in-picture
+     * automatically. Without it, a YouTube video playing when it was covered carried on in a
+     * floating window, over the block screen and then over everything else (8 Oct).
+     */
     private fun block(pkg: String, eventTime: Long) {
         lastBlockAt = SystemClock.uptimeMillis()
         ProbeLog.add("Blocking $pkg")
         startActivity(
             Intent(this, BlockedProbeActivity::class.java)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NO_USER_ACTION)
                 .putExtra(BlockedProbeActivity.EXTRA_PACKAGE, pkg)
                 .putExtra(BlockedProbeActivity.EXTRA_EVENT_TIME, eventTime),
         )
+    }
+
+    /**
+     * Ends a blocked app's picture-in-picture, should it have one anyway (say it was playing in
+     * one before blocking began). The floating window sits over everything, the block screen
+     * included, and is never the window in use, so the active-window check alone misses it.
+     * On One UI it offers no way to close it (its root is the app's own view: select, focus,
+     * show on screen; no dismiss), so the app is brought back to full screen, as tapping its
+     * icon does, where the next window change finds it in front and the block screen covers it.
+     * Covered, it stops, and with the block screen's NO_USER_ACTION it doesn't float again.
+     */
+    private fun closeBlockedPictureInPicture() {
+        for (window in windows) {
+            if (!window.isInPictureInPictureMode) continue
+            val root = window.root ?: continue
+            val pkg = root.packageName?.toString() ?: continue
+            if (pkg !in BLOCKED) continue
+            // Window changes come in bursts while it expands; one relaunch per burst.
+            val now = SystemClock.uptimeMillis()
+            if (now - lastPipRelaunchAt < PIP_RELAUNCH_GAP_MS) continue
+            lastPipRelaunchAt = now
+            ProbeLog.add("Picture-in-picture: \"${window.title}\" ($pkg); bringing it back to full screen")
+            val dismiss = AccessibilityNodeInfo.AccessibilityAction.ACTION_DISMISS
+            if (dismiss in root.actionList && root.performAction(dismiss.id)) continue
+            val launch = packageManager.getLaunchIntentForPackage(pkg) ?: continue
+            startActivity(launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        }
     }
 
     /**
@@ -184,7 +220,11 @@ class FocusProbeService : AccessibilityService() {
     }
 
     companion object {
-        /** Phase 0 blocks one app, always; Phase 3 takes the blocklist and the policy from the planner. */
+        /**
+         * Phase 0 blocks one app, always; Phase 3 takes the blocklist and the policy from the
+         * planner. Each must also be listed under the manifest's queries, to be relaunched out of
+         * picture-in-picture.
+         */
         val BLOCKED = setOf("com.google.android.youtube")
 
         private const val GUARD_INTERVAL_MS = 250L
@@ -195,6 +235,9 @@ class FocusProbeService : AccessibilityService() {
 
         /** Window changes come in bursts while the block screen opens; one block per burst. */
         private const val WINDOWS_BLOCK_GAP_MS = 500L
+
+        /** The same for relaunching an app out of picture-in-picture. */
+        private const val PIP_RELAUNCH_GAP_MS = 2_000L
         private const val MAX_NODES = 400
         private const val LOGGED_TEXTS = 40
 
