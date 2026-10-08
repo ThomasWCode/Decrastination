@@ -8,7 +8,7 @@
 | Power Planner | Web API from the PC probe, with your account | Works: login, semester, agenda (2 items), 18 classes with a two-week timetable |
 | AnkiDroid | Official provider, after the runtime permission | Works: 57 decks with counts |
 | Gmail | IMAP with an app password, from the PC probe | Works: 24 inbox messages, Gmail's ids and labels |
-| Blocking | Accessibility-service spike | YouTube covered 0.62–0.66 s after it opens; Back goes home |
+| Blocking | Accessibility-service spike | YouTube covered 0.21 s after it opens; Back goes home |
 | Settings guard | Same spike | Backs out of the service's own page, this app's App info and its uninstall prompt; leaves everything else alone |
 
 ## 1. Teams: the provider
@@ -56,10 +56,11 @@ Worked through: *Pg 60&61* is `2026-09-25T00:00:01` in German PETERS, so "before
 
 The focus service was switched on over adb (`settings put secure enabled_accessibility_services …`, appended to your four), tried, and switched off again afterwards: the spike blocks YouTube whenever it's on, whatever is due.
 
-- **Blocking.** Opening YouTube put the block screen up **0.62–0.66 s** after YouTube came to the front, so YouTube's splash shows for about half a second. Nearly all of that is Android delivering the window event late: 0.6 s for an app's first window (Settings showed the same), 0.1 s for screens changing within an app. When YouTube's own UI replaced its splash behind the block screen 1.4 s later, it was blocked again. Back on the block screen went to the home screen, not to YouTube.
+- **Blocking.** Acting on window-state events alone, the block screen went up **0.62–0.66 s** after YouTube came to the front, so YouTube's splash showed for about half a second. Nearly all of that is Android delivering an app's first window-state event late (0.6 s, Settings the same; 0.1 s for screens changing within an app). Also acting on *windows-changed* events, and blocking whatever owns the active window, brought that down to **0.21 s**. Back on the block screen went to the home screen, not to YouTube.
+- **Late events.** A blocked app keeps sending events after it's covered or left: YouTube's own UI replacing its splash behind the block screen, and, after **Go to the home screen**, its bedtime-reminder snackbar 1.5 s later. The service only blocks an app that still owns the active window, so that snackbar was left alone instead of covering Home.
 - **Guard, the service's page.** One UI shows: the title, an **On** switch bar (`sesl_switchbar_switch`), a **Decrastination focus shortcut** toggle, *Settings*, *App info*, and the description. Opening it from *Installed apps* was answered with Back about 0.2 s later, on the first content change, and Settings was back on the list.
 - **Guard, App info.** This app's *App info* (Open, Uninstall, Force stop) was left within 0.6 s; YouTube's (Open, Disable, Force stop) was left alone, as was the *Installed apps* list, which names every service.
-- **Guard, uninstall.** The uninstall prompt for this app (`ACTION_DELETE`) was dismissed at once; the app stayed installed.
+- **Guard, uninstall.** The uninstall prompt for this app (`ACTION_DELETE`; One UI shows *Uninstall this app?*, the app's name, **Cancel** and **Uninstall**) was dismissed at once; the app stayed installed. The rule needs both the app's name and "uninstall", so the installer's install and update prompts stay usable.
 
 **Found: three ways around the guard.**
 
