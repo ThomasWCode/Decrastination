@@ -82,7 +82,7 @@ The four sources, and what "done" means for each:
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
-**Package:** `com.thomaswcode.decrastination`. **Stack:** Kotlin, AGP 9.0.1, Gradle 9.3.1, `minSdk 26`, `targetSdk 36`, Jetpack Compose + Material 3, Glance 1.2, Room, WorkManager, OkHttp + kotlinx.serialization, EncryptedSharedPreferences, the Anthropic Java SDK. Distribution: `./gradlew installDebug`, debug APK signed with the Teams widget's committed debug key.
+**Package:** `com.thomaswcode.decrastination`. **Stack:** Kotlin, AGP 9.0.1, Gradle 9.3.1, `minSdk 26`, `targetSdk 36`, Jetpack Compose + Material 3, Glance 1.2, WorkManager, kotlinx.serialization. *As built (Phase 1):* state lives in JSON files written atomically (`data/JsonStore.kt`, the Teams widget's pattern) rather than Room: it's tens of tasks and a few thousand log rows a year, all of it fits in memory, and the planner's inputs stay plain data classes the tests build directly. Secrets are one file encrypted with AES-GCM under an Android Keystore key (`data/SecretStore.kt`) rather than the now-deprecated EncryptedSharedPreferences, and HTTP and IMAP use the platform (`HttpURLConnection`, a small IMAP client) rather than OkHttp, JavaMail or an SDK. Distribution: `./gradlew installDebug`, debug APK signed with the Teams widget's committed debug key.
 
 **Unified task model** (`TaskItem`):
 
@@ -117,6 +117,9 @@ Every path works; the results, measurements and what they change are in `docs/ph
 Phase 0 also built what Phase 1 would have scaffolded: the Gradle setup, the shared signing key, CI, and readers for both providers (`app/`, package `probe`).
 
 ### Phase 1: Skeleton, sources, storage, sync
+
+*Done 8–9 Oct 2026: all four sources read on the phone; see `docs/data-sources.md` ("Built in Phase 1" under each source).*
+
 
 - Build on Phase 0's skeleton (Gradle, signing, CI and the provider readers are in place); keep the probe screen as a debug view until Phase 3 replaces the spike.
 - `sources/`: `TeamsSource`, `PowerPlannerSource` (with `GetClassesAndSchedules` and the time-option rules), `AnkiSource`, `GmailSource`, each with `fetch()` and `isDone(sourceId)`.

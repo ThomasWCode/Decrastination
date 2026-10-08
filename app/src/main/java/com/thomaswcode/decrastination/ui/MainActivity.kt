@@ -1,0 +1,79 @@
+package com.thomaswcode.decrastination.ui
+
+import android.os.Bundle
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.PrimaryTabRow
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Tab
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.painterResource
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.work.WorkManager
+import com.thomaswcode.decrastination.AppGraph
+import com.thomaswcode.decrastination.R
+import com.thomaswcode.decrastination.sync.SyncWorker
+
+/** The app's screens: the tasks every source lists, and the setup checklist. */
+class MainActivity : ComponentActivity() {
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        enableEdgeToEdge()
+        super.onCreate(savedInstanceState)
+        val graph = AppGraph.get(this)
+        setContent { AppTheme { Main(graph) } }
+    }
+
+    @OptIn(ExperimentalMaterial3Api::class)
+    @Composable
+    private fun Main(graph: AppGraph) {
+        var tab by rememberSaveable { mutableIntStateOf(0) }
+        val syncs by remember { WorkManager.getInstance(this).getWorkInfosForUniqueWorkFlow(SyncWorker.NOW) }
+            .collectAsStateWithLifecycle(emptyList())
+        val syncing = syncs.any { !it.state.isFinished }
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = { Text("Decrastination") },
+                    actions = {
+                        IconButton(enabled = !syncing, onClick = { SyncWorker.syncNow(this@MainActivity) }) {
+                            Icon(painterResource(R.drawable.ic_refresh), contentDescription = "Sync now")
+                        }
+                    },
+                )
+            },
+        ) { padding ->
+            Column(Modifier.padding(padding).fillMaxSize()) {
+                if (syncing) LinearProgressIndicator(Modifier.fillMaxWidth())
+                PrimaryTabRow(selectedTabIndex = tab) {
+                    TABS.forEachIndexed { i, name -> Tab(selected = tab == i, onClick = { tab = i }, text = { Text(name) }) }
+                }
+                when (tab) {
+                    0 -> TasksScreen(graph)
+                    else -> SetupScreen(graph, this@MainActivity)
+                }
+            }
+        }
+    }
+
+    private companion object {
+        val TABS = listOf("Tasks", "Setup")
+    }
+}
