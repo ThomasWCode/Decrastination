@@ -109,8 +109,9 @@ object Enrichments {
     /** What [task] needs, or null: done, derived (the Anki quota and decks), or an event. */
     fun jobFor(task: TaskItem): Job? = when {
         !task.isOpen || task.derived -> null
-        // Its text not read yet (more new emails than one read takes): asked about once it is.
-        task.source == Source.Gmail && GmailThreads.EXTRA_TEXT_PENDING in task.extra -> null
+        // Its text not read yet (more new emails than one read takes), or not as far as reads now
+        // go (cut by an older, lower limit): asked about once it is (GmailThreads.textRead).
+        task.source == Source.Gmail && !GmailThreads.textRead(task) -> null
         task.source == Source.Gmail -> Job.Email
         task.source == Source.Teams -> Job.Assignment
         task.source == Source.PowerPlanner && task.kind != Kind.Event -> Job.Effort

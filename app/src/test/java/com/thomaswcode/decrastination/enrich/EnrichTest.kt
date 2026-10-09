@@ -284,7 +284,9 @@ class AnswersTest {
 
     @Test
     fun `blocks with a total out of range, or starting after their task is due, aren't trusted`() {
-        val wild = parse(Enrichments.Job.Effort, """{"effortMin":999,"blocks":[{"title":"A","minutes":30,"from":null,"due":null}]}""")!!
+        // Past twenty hours, adding up or not.
+        val blocks = (1..25).joinToString(",") { """{"title":"B$it","minutes":50,"from":null,"due":null}""" }
+        val wild = parse(Enrichments.Job.Effort, """{"effortMin":1250,"blocks":[$blocks]}""")!!
         assertNull(wild.subSteps)
         assertNull(wild.effortMin)
         // The email due on the 15th; a block opening on the 20th can't be done by then.
@@ -307,10 +309,28 @@ class AnswersTest {
     }
 
     @Test
-    fun `twenty blocks are counted as given, before a long one is cut into parts`() {
-        val blocks = (listOf("""{"title":"Long","minutes":181,"from":null,"due":null}""") + (1..19).map { """{"title":"B$it","minutes":10,"from":null,"due":null}""" }).joinToString(",")
-        val e = parse(Enrichments.Job.Effort, """{"effortMin":371,"blocks":[$blocks]}""")!!
-        assertEquals(21, e.subSteps!!.size)
+    fun `blocks are counted as given, before a long one is cut into parts`() {
+        fun given(count: Int) = (listOf("""{"title":"Long","minutes":181,"from":null,"due":null}""") + (2..count).map { """{"title":"B$it","minutes":10,"from":null,"due":null}""" }).joinToString(",")
+        val total = 181 + (Prompts.MAX_BLOCKS - 1) * 10
+        val e = parse(Enrichments.Job.Effort, """{"effortMin":$total,"blocks":[${given(Prompts.MAX_BLOCKS)}]}""")!!
+        assertEquals(Prompts.MAX_BLOCKS + 1, e.subSteps!!.size)
+        // One more than that isn't trusted.
+        assertNull(parse(Enrichments.Job.Effort, """{"effortMin":${total + 10},"blocks":[${given(Prompts.MAX_BLOCKS + 1)}]}""")!!.subSteps)
+    }
+
+    @Test
+    fun `an email holding months of applications can come to more than one task's ten hours`() {
+        // Thirteen hours over five months, in order, as a calendar of work-experience deadlines came to.
+        val months = listOf("2026-11", "2026-12", "2027-01", "2027-02", "2027-03")
+        val blocks = (0 until 13).joinToString(",") { i -> """{"title":"Application ${i + 1}","minutes":60,"from":"${months[i * months.size / 13]}-01","due":"${months[i * months.size / 13]}-28"}""" }
+        val e = parse(
+            Enrichments.Job.Email,
+            """{"kind":"Admin","actionableFrom":null,"deadline":"2027-03-31","effortMin":780,"nextStep":"Note the dates","blocks":[$blocks]}""",
+        )!!
+        assertEquals(13, e.subSteps!!.size)
+        assertEquals(780, e.effortMin)
+        // Without blocks, an email's own estimate past ten hours still isn't taken.
+        assertNull(parse(Enrichments.Job.Email, """{"kind":"Admin","actionableFrom":null,"deadline":null,"effortMin":780,"nextStep":"Do it","blocks":[]}""")!!.effortMin)
     }
 
     @Test
@@ -380,6 +400,15 @@ class AiUsageTest {
         assertTrue(AiUsage("2026-10", spentUsd = 10.0).allows(capGbp = 200, usdToGbp = 0.79))
         // £200 at 0.79 is $253.16: $252.80 spent leaves no room for a call at its dearest.
         assertEquals(false, AiUsage("2026-10", spentUsd = 252.80).allows(capGbp = 200, usdToGbp = 0.79))
+    }
+
+    @Test
+    fun `a call's dearest case covers the longest text the model reads`() {
+        // Every character three tokens, a long subject's worth more, and all the output, at the
+        // dearer rates of a fallback's older Opus.
+        val longest = Pricing.costUsd("claude-opus-4-8", input = 3L * Prompts.MAX_TEXT + 2_000, output = ClaudeEnricher.MAX_TOKENS)
+        assertTrue(longest <= Pricing.WORST_CALL_USD, "$longest > ${Pricing.WORST_CALL_USD}")
+        assertEquals(0.66, Pricing.WORST_CALL_USD, 1e-9)
     }
 
     @Test

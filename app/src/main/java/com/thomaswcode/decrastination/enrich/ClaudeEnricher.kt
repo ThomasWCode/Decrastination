@@ -85,8 +85,19 @@ object Pricing {
     private val OPUS_5_5 = Rates(input = 4.0, output = 20.0, cacheRead = 0.20, cacheWrite = 5.0)
     private val OLDER_OPUS = Rates(input = 5.0, output = 25.0, cacheRead = 0.50, cacheWrite = 6.25)
 
-    /** The most one call can cost: a long email in, and all of [ClaudeEnricher.MAX_TOKENS] out, at the dearer rates. */
-    const val WORST_CALL_USD = 0.45
+    /** A token is at least a byte, and a character at most three bytes of UTF-8 (a four-byte one is two characters). */
+    private const val TOKENS_PER_CHAR = 3
+
+    /** The instructions, the schema, and the message's other lines (a long subject among them). */
+    private const val PROMPT_TOKENS = 4_000
+
+    /**
+     * The most one call can cost, at the dearer rates: the longest text the model reads in
+     * ([Prompts.MAX_TEXT] characters at [TOKENS_PER_CHAR] tokens each, and [PROMPT_TOKENS] more),
+     * and all of [ClaudeEnricher.MAX_TOKENS] out. $0.66.
+     */
+    val WORST_CALL_USD: Double =
+        ((Prompts.MAX_TEXT.toLong() * TOKENS_PER_CHAR + PROMPT_TOKENS) * OLDER_OPUS.input + ClaudeEnricher.MAX_TOKENS * OLDER_OPUS.output) / 1_000_000.0
 
     fun rates(model: String): Rates = if (model.startsWith(ClaudeEnricher.MODEL)) OPUS_5_5 else OLDER_OPUS
 
