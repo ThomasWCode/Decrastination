@@ -86,6 +86,18 @@ object ReviewInput {
         if (calibration.multipliers.isNotEmpty()) appendLine("Learned time multipliers: " + calibration.multipliers.entries.joinToString { (k, v) -> "$k ×%.2f".format(Locale.UK, v) })
     }.trimEnd()
 
+    /** Whether [change] is to a setting the review may change, and within its bounds. */
+    fun allowed(change: Change): Boolean = BOUNDS[change.setting]?.let { change.value in it } == true
+
+    /** [setting]'s value in [settings], for those the review may change. */
+    fun valueOf(settings: Settings, setting: String): Int? = when (setting) {
+        "boxMin" -> settings.boxMin
+        "marginDays" -> settings.marginDays
+        "softMinPerDay" -> settings.softMinPerDay
+        "workMinPerFreeMin" -> settings.workMinPerFreeMin
+        else -> null
+    }
+
     /** [settings] with [changes] applied, where they're to a setting the review may change and within its bounds. */
     fun apply(settings: Settings, changes: List<Change>): Settings = changes.fold(settings) { s, change ->
         val range = BOUNDS[change.setting] ?: return@fold s

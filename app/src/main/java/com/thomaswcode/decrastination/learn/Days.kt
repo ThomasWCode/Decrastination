@@ -55,7 +55,8 @@ object Days {
         val date = LocalDate.parse(day.date)
         val end = date.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
         val start = date.atStartOfDay(zone).toInstant().toEpochMilli()
-        val done = log.completions.filter { it.doneAt < end }.map { it.taskId }.toSet()
+        // Confirmed that day: an older completion of a task since reopened doesn't count.
+        val done = log.completions.filter { it.doneAt in start until end }.map { it.taskId }.toSet()
         val worked = log.sessions.filter { it.startedAt in start until end }.groupBy { it.taskId }.mapValues { (_, s) -> s.sumOf { it.workedMin } }
         var doneMin = 0
         for ((taskId, chunks) in day.chunks.groupBy { it.taskId }) {

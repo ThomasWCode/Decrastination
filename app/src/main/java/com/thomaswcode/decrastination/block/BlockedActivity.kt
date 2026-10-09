@@ -172,8 +172,9 @@ class BlockedActivity : ComponentActivity() {
                                 scope.launch { message = graph.requestTeamsSync() ?: "The Teams widget is syncing Teams" }
                             }) { Text("Refresh Teams") }
                         }
-                        // Written work: a photo instead of the timer, once Claude is on (Q16).
-                        if (photoChecker != null) {
+                        // Written work: a photo instead of the timer, once Claude is on (Q16). Not
+                        // during a session: the two would count the same piece twice.
+                        if (photoChecker != null && session == null) {
                             OutlinedButton(onClick = {
                                 photoFor = next
                                 takePhoto.launch(photoUri)
