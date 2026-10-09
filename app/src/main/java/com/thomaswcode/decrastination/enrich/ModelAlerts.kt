@@ -32,7 +32,7 @@ object ModelAlerts {
                 .setContentTitle("Claude has stopped working")
                 .setContentText(problem.says)
                 .setStyle(NotificationCompat.BigTextStyle().bigText("${problem.says}. ${problem.fix}. The rules stand in meanwhile."))
-                .setContentIntent(open(context, KEY_ID, MainActivity.TAB_SETUP))
+                .setContentIntent(open(context, KEY_ID, MainActivity.OPEN_SETUP))
                 .setAutoCancel(true)
                 .build(),
         )
