@@ -251,9 +251,9 @@ class AnswersTest {
             assignment("Questions 1-13, vocabulary 2.3"),
         )!!
         val steps = e.subSteps!!
-        // Its own step, with its section, so the deck that holds it still does.
+        // Its own step, with its section, so the deck that holds it still does; nothing moved.
         assertEquals(listOf("2.3"), steps.single { it.title == "Learn vocabulary 2.3" }.ankiSections)
-        assertEquals("The rest: Question 12; Question 13", steps.last().title)
+        assertEquals(listOf("Question 12", "Learn vocabulary 2.3", "Question 13"), steps.takeLast(3).map { it.title })
         assertEquals(150, steps.sumOf { it.minutes })
     }
 
@@ -305,6 +305,24 @@ class AnswersTest {
         val off = parse(Enrichments.Job.Effort, """{"effortMin":200,"blocks":[{"title":"A","minutes":30,"from":null,"due":null}]}""")!!
         assertNull(off.subSteps)
         assertEquals(200, off.effortMin)
+    }
+
+    @Test
+    fun `a long split folds its plain steps in their places`() {
+        val first = (1..11).joinToString(",") { """{"title":"Part $it","minutes":10,"ankiSections":[],"from":null,"due":null}""" }
+        val tail = """{"title":"Research","minutes":10,"ankiSections":[],"from":null,"due":null},{"title":"Notes","minutes":10,"ankiSections":[],"from":null,"due":null},{"title":"Submit draft","minutes":10,"ankiSections":[],"from":null,"due":"2026-10-12"},{"title":"Proofread","minutes":10,"ankiSections":[],"from":null,"due":null}"""
+        val e = parse(Enrichments.Job.Assignment, """{"subSteps":[$first,$tail],"effortMin":150,"ankiSections":[],"testDate":null}""", assignment("Essay"))!!
+        assertEquals(listOf("The rest: Research; Notes", "Submit draft", "Proofread"), e.subSteps!!.takeLast(3).map { it.title })
+    }
+
+    @Test
+    fun `a step can't start after the test that's its task's deadline`() {
+        val e = parse(
+            Enrichments.Job.Assignment,
+            """{"subSteps":[{"title":"Revise","minutes":60,"ankiSections":[],"from":"2026-10-13","due":null}],"effortMin":60,"ankiSections":[],"testDate":"2026-10-12"}""",
+            assignment("Revise for the test"),
+        )!!
+        assertNull(e.subSteps)
     }
 
     @Test

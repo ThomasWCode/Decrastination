@@ -66,6 +66,8 @@ object Planner {
         /** Its first piece's place among all its task's, and how many those are: parts are numbered task-wide. */
         val offset: Int = 0,
         val taskParts: Int = chunks.size,
+        /** The whole task's minutes left, all its runs': shorter tasks go first among equals. */
+        val taskMinutes: Int = chunks.sumOf { it.minutes },
     ) {
         val minutes = chunks.sumOf { it.minutes }
     }
@@ -113,6 +115,7 @@ object Planner {
                 run = index,
                 offset = offset,
                 taskParts = pieces.size,
+                taskMinutes = pieces.sumOf { it.minutes },
             ).also {
                 offset += run.size
                 previous = it
@@ -171,7 +174,7 @@ object Planner {
                 behind = behind && !overdue,
                 part = part,
                 parts = item.taskParts,
-                taskMinutes = item.minutes,
+                taskMinutes = item.taskMinutes,
                 availableAt = item.notBefore?.takeIf { it > input.now },
                 box = piece.box,
             )
@@ -283,8 +286,11 @@ object Planner {
                     assigned[i] = null
                 }
                 var from = earliest
+                // Not past a run of its task after it, where that's placed: what fits nowhere before
+                // then goes unplanned, rather than out of order.
+                val until = minOf(horizon, ceilingOf(item) ?: horizon)
                 for (i in item.chunks.indices) {
-                    val day = generateSequence(from) { it.plusDays(1) }.takeWhile { it <= horizon }.firstOrNull { fits(it, i) } ?: break
+                    val day = generateSequence(from) { it.plusDays(1) }.takeWhile { it <= until }.firstOrNull { fits(it, i) } ?: break
                     assigned[i] = day
                     take(item, day, item.chunks[i].minutes)
                     from = day
@@ -360,7 +366,8 @@ object Planner {
             if (left.isEmpty()) return if (task.source == Source.Gmail) emptyList() else listOf(Piece("finish and hand in", MIN_CHUNK))
             // Minutes worked beyond the steps ticked off (a session stopped early) come off the
             // next steps in order, each kept to at least a last few minutes, as it isn't done.
-            var spare = (task.workedMin + task.photoMin - task.subSteps.filter { it.done }.sumOf { it.minutes * multiplier }).roundToInt().coerceAtLeast(0)
+            // Steps ticked by hand gave no minutes, so they take none back from what was worked.
+            var spare = (task.workedMin + task.photoMin - task.subSteps.filter { it.done && !it.byHand }.sumOf { it.minutes * multiplier }).roundToInt().coerceAtLeast(0)
             return left.map { step ->
                 val full = (step.minutes * multiplier).roundToInt().coerceAtLeast(1)
                 val off = minOf(spare, (full - MIN_CHUNK).coerceAtLeast(0))

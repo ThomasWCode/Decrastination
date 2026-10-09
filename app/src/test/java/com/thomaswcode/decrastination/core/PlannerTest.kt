@@ -191,6 +191,21 @@ class PlannerTest {
     }
 
     @Test
+    fun `a step ticked by hand takes nothing back from minutes worked on the next`() {
+        // The first ticked by hand; 20 minutes timed on the second.
+        val steps = listOf(SubStep("A", 30, done = true, byHand = true), SubStep("B", 30))
+        val plan = plan(listOf(task("t", Fixtures.at("2026-10-20T09:00"), steps = steps, worked = 20)), "2026-10-08T17:00")
+        assertEquals(listOf(10), plan.chunksOf("teams:t").map { it.minutes })
+    }
+
+    @Test
+    fun `a task's runs all carry its whole length, for the shorter-first order`() {
+        val steps = listOf(SubStep("A", 60, dueAt = Fixtures.at("2026-10-12T23:59")), SubStep("B", 60, from = Fixtures.at("2026-10-10T00:00"), dueAt = Fixtures.at("2026-10-14T23:59")))
+        val plan = plan(listOf(task("e", dueAt = null, steps = steps)), "2026-10-08T17:00")
+        assertEquals(setOf(120), plan.chunksOf("teams:e").map { it.taskMinutes }.toSet())
+    }
+
+    @Test
     fun `a block opening past the plan's reach isn't planned yet`() {
         val steps = listOf(SubStep("Apply in spring", 60, from = Fixtures.at("2027-03-01T00:00"), dueAt = Fixtures.at("2027-03-20T23:59")))
         val plan = plan(listOf(task("e", dueAt = null, steps = steps)), "2026-10-08T17:00")
