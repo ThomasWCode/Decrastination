@@ -146,10 +146,11 @@ object SettingsChanges {
     /**
      * How much uptime to count towards [pending] now, from [mark] to [uptime]; null when it can
      * wait (little time, nothing due). A gap that can't be measured (a restart) counts nothing but
-     * is never left waiting: the count starts again from now, so it can't freeze.
+     * is never left waiting: the count starts again from now, so it can't freeze. Where restarts
+     * can't be told apart, what's sure to have passed is counted, never more.
      */
     fun counting(pending: List<PendingChange>, mark: Uptime?, uptime: Uptime?, force: Boolean): Long? {
-        val since = uptime?.since(mark)
+        val since = uptime?.atLeastSince(mark)
         val elapsed = since ?: 0L
         val due = pending.any { it.waitedMs + elapsed >= it.waitMs }
         if (!force && !due && since != null && since < COUNT_EVERY_MS) return null

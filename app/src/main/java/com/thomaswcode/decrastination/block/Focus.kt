@@ -15,7 +15,11 @@ import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.data.TaskState
 import java.time.Instant
 import java.time.LocalDate
+import java.util.concurrent.atomic.AtomicLong
 import kotlin.math.roundToInt
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 
 /**
  * The blocker's state and decisions, apart from Android: what a blocked app or site meets now
@@ -67,7 +71,7 @@ class Focus(
                 zone = clock.zone(),
                 settings = settings.value,
                 pressure = plan(now).pressure,
-                creditLeftMs = state.credit.on(today(now)).leftMs,
+                creditLeftMs = creditLeftMs(now),
                 session = state.session,
                 overrideUntil = state.overrideUntil,
                 forceActiveUntil = state.forceActiveUntil,
@@ -94,12 +98,33 @@ class Focus(
         return Blocklist.blockedSite(address, settings.value.blockedSites)?.let { Target.Site(it, browser) }
     }
 
-    fun creditLeftMs(now: Long = clock.now()): Long = runtime.value.credit.on(today(now)).leftMs
+    /** Spent but not yet saved ([spendSoon]). */
+    private val unsavedMs = AtomicLong()
 
-    suspend fun spend(ms: Long) {
+    /** Today's free time left, less what was spent a moment ago and is still being saved. */
+    fun creditLeftMs(now: Long = clock.now()): Long = (runtime.value.credit.on(today(now)).leftMs - unsavedMs.get()).coerceAtLeast(0)
+
+    suspend fun spend(ms: Long, day: LocalDate = today()) {
         if (ms <= 0) return
-        val today = today()
-        runtime.update { it.copy(credit = it.credit.spend(today, ms)) }
+        runtime.update { it.copy(credit = it.credit.spend(day, ms)) }
+    }
+
+    /**
+     * Takes [ms] off today's free time, saved on [scope] (the app's, which outlives the save).
+     * What's left says so at once: a check made before the save lands (moving straight from one
+     * blocked app to another) mustn't be given the time again.
+     */
+    fun spendSoon(ms: Long, scope: CoroutineScope): Job? {
+        if (ms <= 0) return null
+        val day = today()
+        unsavedMs.addAndGet(ms)
+        return scope.launch {
+            try {
+                spend(ms, day)
+            } finally {
+                unsavedMs.addAndGet(-ms)
+            }
+        }
     }
 
     suspend fun recordBlock(target: Target, reason: BlockPolicy.Reason) {

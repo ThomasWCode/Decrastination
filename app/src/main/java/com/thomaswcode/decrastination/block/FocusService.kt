@@ -144,6 +144,7 @@ class FocusService : AccessibilityService() {
         _connected.value = true
         Log.i(TAG, "Focus service connected")
         closeBlockedPictureInPicture()
+        coverBlockedSideWindows()
         frontPackage()?.let { onFront(it, firstLook = true) }
         handler.post(ticker)
     }
@@ -177,16 +178,15 @@ class FocusService : AccessibilityService() {
     /** [pkg] owns the window in use: block it, let it spend free time, or leave it. */
     private fun onFront(pkg: String, firstLook: Boolean) {
         if (pkg == packageName) {
-            // Time in this app isn't time on the blocked one.
-            stopSpending()
+            // Time in this app isn't time on the blocked one, unless that's still on screen.
+            stopSpendingUnlessAside()
             return
         }
         val target = graph.focus.target(pkg)
         when {
             target != null -> act(target)
             graph.focus.isCheckedBrowser(pkg) -> checkAddress(pkg)
-            // Free time keeps running while what spends it plays in picture-in-picture.
-            else -> if (spending?.first?.let(::inPictureInPicture) != true) stopSpending()
+            else -> stopSpendingUnlessAside()
         }
         if (GuardRules.watches(pkg)) guard(pkg, firstLook)
     }
@@ -238,44 +238,43 @@ class FocusService : AccessibilityService() {
         handler.removeCallbacks(creditCheck)
     }
 
-    /** Takes the time spent so far off the credit. */
+    /**
+     * Something not blocked is in use: free time stops, unless what's spending it is still on
+     * screen in picture-in-picture or beside this app, where it keeps running.
+     */
+    private fun stopSpendingUnlessAside() {
+        if (spending?.first?.let(::aside) != true) stopSpending()
+    }
+
+    /** Takes the time spent so far off the credit (at once, though it's saved a moment later). */
     private fun commitSpending() {
         val (target, since) = spending ?: return
         val now = SystemClock.elapsedRealtime()
         spending = target to now
         // The app's scope: this connection's may be ending.
-        graph.scope.launch { graph.focus.spend(now - since) }
+        graph.focus.spendSoon(now - since, graph.scope)
     }
 
     /**
-     * While free time is being spent: gone from the front, it stops; out of time, or with work
-     * now due, it's blocked; otherwise it looks again later. The time left is worked out here,
-     * since the stored credit catches up a moment after each [commitSpending].
+     * While free time is being spent: gone from the screen, it stops; out of time, or with work
+     * now due, whatever's blocked on screen is covered; otherwise it looks again later. The time
+     * left counts what's been spent since the last [commitSpending].
      */
     private val creditCheck: Runnable = Runnable {
         val (target, since) = spending ?: return@Runnable
-        val front = frontPackage()
-        val stillThere = when (target) {
-            is Focus.Target.Site -> front == target.browser
-            else -> front == target.name
-        } || inPictureInPicture(target)
-        if (!stillThere) return@Runnable stopSpending()
+        if (frontPackage() != packageOf(target) && !aside(target)) return@Runnable stopSpending()
         val left = graph.focus.creditLeftMs() - (SystemClock.elapsedRealtime() - since)
         val verdict = graph.focus.verdict()
         // Allowed outright now (quiet hours, a parent's unblock): free time isn't spent, nor is
         // anything covered when it would have run out.
         if (verdict is BlockPolicy.Verdict.Allow) return@Runnable stopSpending()
-        when {
-            left <= 0 -> {
-                stopSpending()
-                // Out of time while playing in the corner: brought back to full screen and covered.
-                if (inPictureInPicture(target)) closeBlockedPictureInPicture() else block(target, BlockPolicy.Reason.NoFreeTime)
-            }
-            verdict is BlockPolicy.Verdict.Block -> {
-                stopSpending()
-                block(target, verdict.reason)
-            }
-            else -> handler.postDelayed(creditCheck, left.coerceIn(1_000L, SPEND_TICK_MS))
+        if (left > 0 && verdict !is BlockPolicy.Verdict.Block) {
+            handler.postDelayed(creditCheck, left.coerceIn(1_000L, SPEND_TICK_MS))
+        } else {
+            // Spent first, so the policy now says blocked: each is covered where it is (in front,
+            // in the corner, beside another app).
+            stopSpending()
+            lookAtScreen()
         }
     }
 
@@ -299,7 +298,7 @@ class FocusService : AccessibilityService() {
             ?: return
         val text = root.findAccessibilityNodeInfosByViewId(Blocklist.urlBarId(browser)).firstOrNull()?.text?.toString()
         val site = graph.focus.siteTarget(browser, text)
-        if (site != null) act(site) else if (spending?.first is Focus.Target.Site) stopSpending()
+        if (site != null) act(site) else stopSpendingUnlessAside()
     }
 
     // --- Windows other than the one in use ---
@@ -341,14 +340,16 @@ class FocusService : AccessibilityService() {
 
     /**
      * A blocked app, or a blocked site in Chrome or Brave, beside another app (split screen, a
-     * pop-up window): leave both, and cover it.
+     * pop-up window). On free time it spends it, as it would in front; blocked, both are left and
+     * it's covered.
      */
     private fun coverBlockedSideWindows() {
         val appWindows = windows.filter { it.type == AccessibilityWindowInfo.TYPE_APPLICATION && !it.isInPictureInPictureMode }
         if (appWindows.size < 2) return
         val verdict = graph.focus.verdict()
-        if (verdict !is BlockPolicy.Verdict.Block) return
+        if (verdict is BlockPolicy.Verdict.Allow) return
         val target = appWindows.filter { !it.isActive }.firstNotNullOfOrNull { windowTarget(it) } ?: return
+        if (verdict !is BlockPolicy.Verdict.Block) return startSpending(target)
         Log.i(TAG, "${target.name} is on screen beside another app: leaving both")
         performGlobalAction(GLOBAL_ACTION_HOME)
         handler.postDelayed({ block(target, verdict.reason) }, 300)
@@ -366,11 +367,33 @@ class FocusService : AccessibilityService() {
 
     /** Whether [target] is playing in a picture-in-picture window. */
     private fun inPictureInPicture(target: Focus.Target): Boolean {
-        val pkg = when (target) {
-            is Focus.Target.Site -> target.browser
-            else -> target.name
-        }
+        val pkg = packageOf(target)
         return windows.any { it.isInPictureInPictureMode && it.root?.packageName?.toString() == pkg }
+    }
+
+    /** Whether [target] is on screen outside the window in use: in picture-in-picture, or beside another app. */
+    private fun aside(target: Focus.Target): Boolean = inPictureInPicture(target) || windows.any {
+        it.type == AccessibilityWindowInfo.TYPE_APPLICATION && !it.isActive && !it.isInPictureInPictureMode && windowTarget(it) == target
+    }
+
+    private fun packageOf(target: Focus.Target): String = when (target) {
+        is Focus.Target.Site -> target.browser
+        else -> target.name
+    }
+
+    /**
+     * Everything on screen judged afresh: what's in picture-in-picture, beside another app, and in
+     * front. For when the policy changes with no window change to say so.
+     */
+    private fun lookAtScreen() {
+        closeBlockedPictureInPicture()
+        coverBlockedSideWindows()
+        frontPackage()?.takeIf { it != packageName }?.let { front ->
+            when {
+                graph.focus.target(front) != null -> onFront(front, firstLook = false)
+                graph.focus.isCheckedBrowser(front) -> checkAddress(front)
+            }
+        }
     }
 
     /** The package of the window the user is using (its active window), or null if there's none to read. */
@@ -476,15 +499,11 @@ class FocusService : AccessibilityService() {
             disconnect("its connection is gone")
             return
         }
-        // An app already in front when blocking begins (16:45, the end of free time, new work due)
-        // sends no event of its own, nor does a blocked site already open in Chrome or Brave: look
-        // at whatever is in front now. (While free time is being spent, its own check does this.)
-        frontPackage()?.takeIf { it != packageName && spending == null }?.let { front ->
-            when {
-                graph.focus.target(front) != null -> onFront(front, firstLook = false)
-                graph.focus.isCheckedBrowser(front) -> checkAddress(front)
-            }
-        }
+        // An app already on screen when blocking or free time begins (16:45, new work due) sends no
+        // event of its own, nor does a blocked site already open in Chrome or Brave, nor one in
+        // picture-in-picture or beside another app: look at the screen now. (While free time is
+        // being spent, its own check does this.)
+        if (spending == null) lookAtScreen()
         scope.launch {
             // A session that has run its time.
             graph.focus.session?.takeIf { it.isDue(graph.clock.now(), graph.clock.uptime()) }?.let { Sessions.end(this@FocusService, early = false) }

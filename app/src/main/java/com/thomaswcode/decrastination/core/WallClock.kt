@@ -11,9 +11,24 @@ import java.time.ZonedDateTime
  */
 @Serializable
 data class Uptime(val boot: Int, val elapsedMs: Long) {
-    /** How long since [earlier] by this clock, or null where it can't say (across a restart). */
+    /**
+     * How long since [earlier] by this clock, or null where it can't say: across a restart, or
+     * where restarts can't be told apart (the restart count unread, [UNKNOWN_BOOT]).
+     */
     fun since(earlier: Uptime?): Long? =
-        if (earlier != null && earlier.boot == boot && elapsedMs >= earlier.elapsedMs) elapsedMs - earlier.elapsedMs else null
+        if (earlier != null && boot != UNKNOWN_BOOT && earlier.boot == boot && elapsedMs >= earlier.elapsedMs) elapsedMs - earlier.elapsedMs else null
+
+    /**
+     * At least how long since [earlier]: [since] where it can say. Where restarts can't be told
+     * apart, the clock's rise since then, which a restart in between can only have made smaller.
+     */
+    fun atLeastSince(earlier: Uptime?): Long? = since(earlier)
+        ?: earlier?.takeIf { boot == UNKNOWN_BOOT && it.boot == UNKNOWN_BOOT && elapsedMs >= it.elapsedMs }?.let { elapsedMs - it.elapsedMs }
+
+    companion object {
+        /** The restart count couldn't be read. */
+        const val UNKNOWN_BOOT = -1
+    }
 }
 
 /** The time and the time zone, injected so the planner, the policy and the tests agree on "now". */

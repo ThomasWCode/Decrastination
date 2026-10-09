@@ -9,22 +9,27 @@ import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Status
 import com.thomaswcode.decrastination.core.SubStep
 import com.thomaswcode.decrastination.core.TaskItem
+import com.thomaswcode.decrastination.core.Uptime
 import com.thomaswcode.decrastination.data.ActivityLog
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.RuntimeState
 import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.data.TaskState
-import kotlinx.coroutines.test.runTest
 import java.io.File
 import java.nio.file.Files
-import com.thomaswcode.decrastination.core.Uptime
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
+import java.util.concurrent.CountDownLatch
+import kotlin.concurrent.thread
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.runTest
 
 class FocusTest {
     private val dir: File = Files.createTempDirectory("focus").toFile()
@@ -132,6 +137,26 @@ class FocusTest {
         assertEquals(BlockPolicy.Verdict.Spend, focus.verdict())
         focus.spend(10 * 60_000L)
         assertEquals(BlockPolicy.Verdict.Block(BlockPolicy.Reason.NoFreeTime), focus.verdict())
+    }
+
+    @Test
+    fun `what was just spent is off the credit at once, before it's saved`() = runTest {
+        focus.onCompleted(listOf(task("hw", effort = 30).copy(status = Status.Done, doneAt = clock.time)))
+        // The store held mid-write, so the save waits.
+        val entered = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val holder = thread { runBlocking { runtime.update { entered.countDown(); release.await(); it } } }
+        entered.await()
+        val saving = focus.spendSoon(4 * 60_000L, CoroutineScope(Dispatchers.Default))
+        // Not saved yet, and already counted.
+        assertEquals(10 * 60_000L, runtime.value.credit.on(focus.today()).leftMs)
+        assertEquals(6 * 60_000L, focus.creditLeftMs())
+        release.countDown()
+        saving?.join()
+        holder.join()
+        // Saved, and counted once.
+        assertEquals(6 * 60_000L, runtime.value.credit.on(focus.today()).leftMs)
+        assertEquals(6 * 60_000L, focus.creditLeftMs())
     }
 
     @Test

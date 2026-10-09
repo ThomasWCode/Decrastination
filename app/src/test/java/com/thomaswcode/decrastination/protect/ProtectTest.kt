@@ -186,6 +186,19 @@ class SettingsChangesTest {
     }
 
     @Test
+    fun `where restarts can't be told apart, sessions use the wall clock and waits count only what's sure`() {
+        val unknown = Uptime.UNKNOWN_BOOT
+        // A session can't be timed across what may have been a restart.
+        assertNull(Uptime(unknown, 50 * 60_000L).since(Uptime(unknown, 10 * 60_000L)))
+        assertEquals(40 * 60_000L, Uptime(3, 50 * 60_000L).since(Uptime(3, 10 * 60_000L)))
+        // A wait counts the clock's rise, at most what passed; a fall counts nothing.
+        assertEquals(40 * 60_000L, Uptime(unknown, 50 * 60_000L).atLeastSince(Uptime(unknown, 10 * 60_000L)))
+        assertNull(Uptime(unknown, 5 * 60_000L).atLeastSince(Uptime(unknown, 10 * 60_000L)))
+        val change = PendingChange("1", "armed", kotlinx.serialization.json.JsonPrimitive(false), "Protection: off", now, now, waitMs = 60 * 60_000L)
+        assertEquals(40 * 60_000L, SettingsChanges.counting(listOf(change), Uptime(unknown, 10 * 60_000L), Uptime(unknown, 50 * 60_000L), force = true))
+    }
+
+    @Test
     fun `disarming waits, arming doesn't`() {
         val armed = SettingsChanges.propose(Settings(), Settings(armed = true), emptyList(), now, ::newId)
         assertTrue(armed.settings.armed)
