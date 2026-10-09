@@ -1,10 +1,12 @@
 package com.thomaswcode.decrastination.enrich
 
+import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import androidx.core.app.NotificationCompat
 import com.thomaswcode.decrastination.R
+import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.notify.Channels
 import com.thomaswcode.decrastination.notify.Notify
@@ -16,8 +18,12 @@ object ModelAlerts {
     private const val DROPPED_ID = 5001
     private const val KEY_ID = 5002
 
-    /** Claude's key or account can't be used ([problem]): said once a stretch of it, till it's put right in Setup. */
-    fun keyProblem(context: Context, problem: KeyProblem) {
+    /**
+     * Claude's key or account can't be used ([problem]): said once a stretch of it, till it's put
+     * right in Setup. False if it couldn't be shown (notifications off), so it's tried again.
+     */
+    fun keyProblem(context: Context, problem: KeyProblem): Boolean {
+        if (!Notify.shown(context, Channels.MODEL)) return false
         Notify.post(
             context,
             KEY_ID,
@@ -30,6 +36,7 @@ object ModelAlerts {
                 .setAutoCancel(true)
                 .build(),
         )
+        return true
     }
 
     /** The key works again, or a new one is in: the alert is out of date. */
@@ -54,6 +61,16 @@ object ModelAlerts {
 
     /** A plan for [taskId] kept since: the warning about the last one is out of date. */
     fun planKept(context: Context, taskId: String) = Notify.cancel(context, taskId, DROPPED_ID)
+
+    /**
+     * Withdraws the warnings whose task no longer has a dropped plan: done or gone (a sync, which the
+     * enrichment loop never sees again), or changed or planned since. Those still standing stay.
+     */
+    fun tidyDropped(context: Context, tasks: List<TaskItem>) {
+        val standing = tasks.filter { it.isOpen && Enrichments.current(it)?.dropped != null }.mapTo(HashSet()) { it.id }
+        val posted = context.getSystemService(NotificationManager::class.java)?.activeNotifications ?: return
+        posted.filter { it.id == DROPPED_ID && it.tag != null && it.tag !in standing }.forEach { Notify.cancel(context, it.tag, DROPPED_ID) }
+    }
 
     private fun open(context: Context, id: Int, tab: Int): PendingIntent = PendingIntent.getActivity(
         context,
