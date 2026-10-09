@@ -63,7 +63,10 @@ data class Settings(
     /**
      * The most the model may cost in a calendar month, in US dollars as the API bills; none by
      * default, as the account is prepaid with no card: its calls stop when its credit runs out, and
-     * that's alerted ([com.thomaswcode.decrastination.enrich.KeyProblem.NoCredit]).
+     * that's alerted ([com.thomaswcode.decrastination.enrich.KeyProblem.NoCredit]). An install from
+     * before 1.2.0 had a cap of £200 (`aiMonthlyCapGbp`, no longer read); dropping it with the
+     * upgrade was the owner's decision (9 Oct), made by installing it, so it isn't a change through
+     * Settings that waits.
      */
     val aiMonthlyCapUsd: Int? = null,
 

@@ -86,6 +86,9 @@ fun TaskItem.enriched(): TaskItem {
  * keeping those already done; steps of the source's own are kept.
  */
 /** Whether the task's steps are the ones its enrichment gave, not the source's own. */
+/** This task with its enrichment forgotten, and the steps it gave with it (the source's own stay): to be asked about afresh. */
+fun TaskItem.withoutEnrichment(): TaskItem = copy(enrichment = null, subSteps = if (stepsFromEnrichment()) emptyList() else subSteps)
+
 private fun TaskItem.stepsFromEnrichment(): Boolean = subSteps.isNotEmpty() && enrichment?.subSteps?.map { it.title } == subSteps.map { it.title }
 
 fun TaskItem.withEnrichment(new: Enrichment): TaskItem {

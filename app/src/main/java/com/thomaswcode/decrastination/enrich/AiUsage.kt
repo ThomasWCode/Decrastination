@@ -23,11 +23,17 @@ data class AiUsage(
     val lastCallAt: Long? = null,
     /** What's wrong with the key or the account, from a failed call that showed it; gone at a call that works, or a new key. */
     val keyProblem: KeyProblem? = null,
-    /** When [keyProblem] began: retries finding it again keep it, so it's alerted once. */
+    /** When [keyProblem] began: retries finding it again keep it. */
     val keyProblemSince: Long? = null,
+    /**
+     * Whether [keyProblem]'s alert has been shown. Not while notifications can't show it: then it's
+     * tried again at the next failed call and when the app starts, so it's seen once it can be.
+     */
+    val keyAlerted: Boolean = false,
 ) {
     /** This month's, or a new one's from nothing; a key problem, not being the month's, carries over. */
-    fun forMonth(month: String): AiUsage = if (month == this.month) this else AiUsage(month = month, keyProblem = keyProblem, keyProblemSince = keyProblemSince)
+    fun forMonth(month: String): AiUsage =
+        if (month == this.month) this else AiUsage(month = month, keyProblem = keyProblem, keyProblemSince = keyProblemSince, keyAlerted = keyAlerted)
 
     /** Whether one more call stays under [capUsd] even at its dearest ([Pricing.WORST_CALL_USD]); with no cap, always. */
     fun allows(capUsd: Int?): Boolean = capUsd == null || spentUsd + Pricing.WORST_CALL_USD <= capUsd
@@ -41,6 +47,7 @@ data class AiUsage(
         lastCallAt = at,
         keyProblem = null,
         keyProblemSince = null,
+        keyAlerted = false,
     )
 
     /**
@@ -53,13 +60,17 @@ data class AiUsage(
         lastCallAt = at,
         keyProblem = problem ?: keyProblem,
         keyProblemSince = if (problem != null && problem != keyProblem) at else keyProblemSince,
+        keyAlerted = if (problem != null && problem != keyProblem) false else keyAlerted,
     )
 
-    /** Whether [after] begins a key problem this didn't have (or another one): its alert is due. */
-    fun startsKeyProblem(after: AiUsage): Boolean = after.keyProblem != null && after.keyProblemSince != keyProblemSince
+    /** A key problem whose alert hasn't been shown yet. */
+    val keyAlertDue: Boolean get() = keyProblem != null && !keyAlerted
+
+    /** [problem]'s alert shown, if it's still the one standing. */
+    fun alerted(problem: KeyProblem): AiUsage = if (keyProblem == problem) copy(keyAlerted = true) else this
 
     /** A new key: the last one's failure and problem aren't this one's, so it's tried at once. */
-    fun newKey(): AiUsage = copy(lastError = null, keyProblem = null, keyProblemSince = null)
+    fun newKey(): AiUsage = copy(lastError = null, keyProblem = null, keyProblemSince = null, keyAlerted = false)
 
     companion object {
         fun monthOf(now: Long, zone: ZoneId): String = YearMonth.from(Instant.ofEpochMilli(now).atZone(zone)).toString()
