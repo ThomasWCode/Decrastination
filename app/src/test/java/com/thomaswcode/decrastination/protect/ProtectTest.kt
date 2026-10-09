@@ -217,6 +217,13 @@ class SettingsChangesTest {
     }
 
     @Test
+    fun `a box length changed either way waits once armed`() {
+        val armed = Settings(armed = true)
+        assertEquals(1, SettingsChanges.propose(armed, armed.copy(boxMin = armed.boxMin - 15), emptyList(), now, ::newId).pending.size)
+        assertEquals(1, SettingsChanges.propose(armed, armed.copy(boxMin = armed.boxMin + 15), emptyList(), now, ::newId).pending.size)
+    }
+
+    @Test
     fun `disarming waits, arming doesn't`() {
         val armed = SettingsChanges.propose(Settings(), Settings(armed = true), emptyList(), now, ::newId)
         assertTrue(armed.settings.armed)
