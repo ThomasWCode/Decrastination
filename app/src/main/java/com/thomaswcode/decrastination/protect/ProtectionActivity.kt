@@ -20,8 +20,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
@@ -67,6 +69,8 @@ import com.thomaswcode.decrastination.notify.Channels
 import com.thomaswcode.decrastination.notify.Notify
 import com.thomaswcode.decrastination.ui.AppTheme
 import com.thomaswcode.decrastination.ui.Format
+import com.thomaswcode.decrastination.ui.Group
+import com.thomaswcode.decrastination.ui.SectionHeading
 import com.thomaswcode.decrastination.ui.SetupItem
 import kotlinx.coroutines.launch
 
@@ -161,7 +165,7 @@ class ProtectionActivity : ComponentActivity() {
                 }
 
                 if (runtime.pending.isNotEmpty()) {
-                    Text("Waiting", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(start = 16.dp, top = 16.dp))
+                    SectionHeading("Waiting")
                     runtime.pending.forEach { change ->
                         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
@@ -175,69 +179,71 @@ class ProtectionActivity : ComponentActivity() {
                     }
                 }
 
-                Text("What's in place", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 4.dp))
-                SetupItem(
-                    title = "Focus service",
-                    done = report.serviceEnabled && report.accessibilityOn,
-                    detail = when {
-                        report.serviceEnabled && connected -> "On: blocked apps are covered."
-                        report.serviceEnabled -> "On, starting."
-                        else -> "Off: nothing is blocked. Settings → Accessibility → Installed apps → Decrastination focus."
-                    },
-                    action = if (report.serviceEnabled) null else "Open" to { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) },
-                )
-                SetupItem(
-                    title = "Self-repair",
-                    done = report.canRepair,
-                    detail = if (report.canRepair) {
-                        "Granted: once armed, the watchdog switches the service back on and off any shortcut."
-                    } else {
-                        "Needs one command from a PC: adb shell pm grant $packageName android.permission.WRITE_SECURE_SETTINGS"
-                    },
-                )
-                SetupItem(
-                    title = "Device admin",
-                    done = report.adminActive,
-                    detail = if (report.adminActive) "Active: the app can't be uninstalled until it's deactivated." else "Not active. Arming asks for it.",
-                )
-                SetupItem(
-                    title = "On no accessibility shortcut",
-                    done = report.onShortcuts.isEmpty() && report.unreadableShortcuts.isEmpty(),
-                    detail = ProtectionCheck.shortcutsDetail(report),
-                )
-                val notifications = remember(refresh) { Notify.allowed(this@ProtectionActivity) }
-                val alerts = remember(refresh) { Notify.shown(this@ProtectionActivity, Channels.PROTECTION) }
-                SetupItem(
-                    title = "Notifications",
-                    done = alerts,
-                    detail = if (notifications && !alerts) "Allowed, but the Protection channel is off: its alerts wouldn't show." else "For focus sessions and protection alerts.",
-                    action = if (alerts) null else "Allow" to {
-                        if (notifications) {
-                            // Allowed, its channel off: that channel's own page.
-                            startActivity(
-                                Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS)
-                                    .putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
-                                    .putExtra(Settings.EXTRA_CHANNEL_ID, Channels.PROTECTION),
-                            )
-                        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                            notificationLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                Group("What's in place") {
+                    SetupItem(
+                        title = "Focus service",
+                        done = report.serviceEnabled && report.accessibilityOn,
+                        detail = when {
+                            report.serviceEnabled && connected -> "On: blocked apps are covered."
+                            report.serviceEnabled -> "On, starting."
+                            else -> "Off: nothing is blocked. Settings → Accessibility → Installed apps → Decrastination focus."
+                        },
+                        action = if (report.serviceEnabled) null else "Open" to { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) },
+                    )
+                    SetupItem(
+                        title = "Self-repair",
+                        done = report.canRepair,
+                        detail = if (report.canRepair) {
+                            "Granted: once armed, the watchdog switches the service back on and off any shortcut."
                         } else {
-                            startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, packageName))
-                        }
-                    },
-                )
-                val unrestricted = getSystemService(PowerManager::class.java)?.isIgnoringBatteryOptimizations(packageName) == true
-                SetupItem(
-                    title = "Battery: unrestricted",
-                    done = unrestricted,
-                    detail = if (unrestricted) "One UI won't put the app to sleep." else "One UI may stop the app in the background.",
-                    action = if (unrestricted) null else "Allow" to { requestUnrestricted() },
-                )
-                SetupItem(
-                    title = "Parent code",
-                    done = hasParentCode,
-                    detail = if (hasParentCode) "Set: a code from your dad's authenticator applies one waiting change." else "Not set: only the 24-hour wait.",
-                )
+                            "Needs one command from a PC: adb shell pm grant $packageName android.permission.WRITE_SECURE_SETTINGS"
+                        },
+                    )
+                    SetupItem(
+                        title = "Device admin",
+                        done = report.adminActive,
+                        detail = if (report.adminActive) "Active: the app can't be uninstalled until it's deactivated." else "Not active. Arming asks for it.",
+                    )
+                    SetupItem(
+                        title = "On no accessibility shortcut",
+                        done = report.onShortcuts.isEmpty() && report.unreadableShortcuts.isEmpty(),
+                        detail = ProtectionCheck.shortcutsDetail(report),
+                    )
+                    val notifications = remember(refresh) { Notify.allowed(this@ProtectionActivity) }
+                    val alerts = remember(refresh) { Notify.shown(this@ProtectionActivity, Channels.PROTECTION) }
+                    SetupItem(
+                        title = "Notifications",
+                        done = alerts,
+                        detail = if (notifications && !alerts) "Allowed, but the Protection channel is off: its alerts wouldn't show." else "For focus sessions and protection alerts.",
+                        action = if (alerts) null else "Allow" to {
+                            if (notifications) {
+                                // Allowed, its channel off: that channel's own page.
+                                startActivity(
+                                    Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS)
+                                        .putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+                                        .putExtra(Settings.EXTRA_CHANNEL_ID, Channels.PROTECTION),
+                                )
+                            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                notificationLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                            } else {
+                                startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, packageName))
+                            }
+                        },
+                    )
+                    val unrestricted = getSystemService(PowerManager::class.java)?.isIgnoringBatteryOptimizations(packageName) == true
+                    SetupItem(
+                        title = "Battery: unrestricted",
+                        done = unrestricted,
+                        detail = if (unrestricted) "One UI won't put the app to sleep." else "One UI may stop the app in the background.",
+                        action = if (unrestricted) null else "Allow" to { requestUnrestricted() },
+                    )
+                    SetupItem(
+                        title = "Parent code",
+                        done = hasParentCode,
+                        detail = if (hasParentCode) "Set: a code from your dad's authenticator applies one waiting change." else "Not set: only the 24-hour wait.",
+                    )
+                }
+                Spacer(Modifier.height(24.dp))
             }
         }
 
