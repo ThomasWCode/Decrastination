@@ -185,6 +185,24 @@ class CommandActivity : Activity() {
                 File(filesDir, "ai-prompts.json").writeText(JsonArray(items).toString())
                 Log.i(TAG, "Wrote ${items.size} prompts to files/ai-prompts.json")
             }
+            "ai-endpoint" -> {
+                // --es base <url> sends the model's calls to a stand-in till the app restarts; none, to Anthropic again.
+                graph.modelEndpoint = intent.getStringExtra("base")
+                Log.w(TAG, graph.modelEndpoint?.let { "Claude's calls now go to $it, not Anthropic, till this is cleared or the app restarts" } ?: "Claude's calls go to Anthropic again")
+            }
+            "enrich-task" -> {
+                val id = intent.getStringExtra("task")
+                if (graph.tasks.value.tasks.none { it.id == id }) {
+                    Log.w(TAG, "enrich-task needs --es task <id> of a task")
+                } else {
+                    // Its enrichment forgotten: out of date, so this run asks for it again now.
+                    graph.tasks.update { state -> state.copy(tasks = state.tasks.map { if (it.id == id) it.copy(enrichment = null) else it }) }
+                    graph.enrichNow()
+                    val task = graph.tasks.value.tasks.first { it.id == id }
+                    val e = task.enrichment
+                    Log.i(TAG, "enrich-task $id: by ${e?.by}, dropped ${e?.dropped}, ${task.subSteps.size} steps: ${task.subSteps.joinToString(" | ") { "${it.title} (${it.minutes})" }}")
+                }
+            }
             "ai-check" -> {
                 val base = intent.getStringExtra("base")
                 if (base == null) {

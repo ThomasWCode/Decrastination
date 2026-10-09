@@ -401,11 +401,22 @@ class AppGraph private constructor(context: Context) {
         return "Restored the settings, ${backup.log.completions.size} completions and ${backup.log.sessions.size} sessions, what the app had learned, and your calendar answers.$waits"
     }
 
+    /**
+     * Debug only (`ai-endpoint`): where the model's calls go instead of Anthropic, a stand-in on the
+     * PC, so its failures and answers can be tried on the phone through the real paths without a
+     * paid call. Never stored: a restart forgets it.
+     */
+    @Volatile
+    var modelEndpoint: String? = null
+
+    /** [modelEndpoint], said loudly each time a client is made with it. */
+    private fun endpoint(): String? = modelEndpoint?.also { Log.w(TAG, "Claude's calls go to $it, not Anthropic (debug ai-endpoint)") }
+
     /** The photo check, while Claude is switched on and has its key; else null. */
-    fun photoChecker(): PhotoChecker? = claudeKey()?.let(::PhotoChecker)
+    fun photoChecker(): PhotoChecker? = claudeKey()?.let { PhotoChecker(it, endpoint()) }
 
     /** The model's weekly review, while Claude is switched on and has its key; else null. */
-    fun modelReviewer(): ClaudeReviewer? = claudeKey()?.let(::ClaudeReviewer)
+    fun modelReviewer(): ClaudeReviewer? = claudeKey()?.let { ClaudeReviewer(it, endpoint()) }
 
     /** Claude's API key, while Claude is switched on and the key is in use; else null. */
     fun claudeKey(): String? {
@@ -414,7 +425,7 @@ class AppGraph private constructor(context: Context) {
         return secrets[Secret.AnthropicApiKey]?.takeIf { it.isNotBlank() }
     }
 
-    fun modelEnricher(): Enricher? = claudeKey()?.let { ClaudeEnricher(it, clock.zone()) }
+    fun modelEnricher(): Enricher? = claudeKey()?.let { ClaudeEnricher(it, clock.zone(), endpoint()) }
 
     /**
      * What stops the model being asked now ([ModelHold]), or null: off, resting after a failed
