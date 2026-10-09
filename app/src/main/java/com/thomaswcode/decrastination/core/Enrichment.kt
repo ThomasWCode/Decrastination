@@ -87,6 +87,8 @@ fun TaskItem.withEnrichment(new: Enrichment): TaskItem {
     // How many by each title were done: that many of the new steps by it are, in order, so two
     // steps of the same name aren't both ticked by one.
     val done = subSteps.filter { it.done }.groupingBy { it.title }.eachCount().toMutableMap()
+    // And how many of those were ticked by hand, so they still earn nothing.
+    val byHand = subSteps.filter { it.done && it.byHand }.groupingBy { it.title }.eachCount().toMutableMap()
     val base = if (fromEnrichment) copy(subSteps = emptyList()) else this
     val next = base.copy(enrichment = new).enriched()
     return next.copy(
@@ -94,7 +96,9 @@ fun TaskItem.withEnrichment(new: Enrichment): TaskItem {
             val left = done[step.title] ?: 0
             if (left == 0) return@map step
             done[step.title] = left - 1
-            step.copy(done = true)
+            val hand = byHand[step.title] ?: 0
+            if (hand > 0) byHand[step.title] = hand - 1
+            step.copy(done = true, byHand = hand > 0)
         },
     )
 }

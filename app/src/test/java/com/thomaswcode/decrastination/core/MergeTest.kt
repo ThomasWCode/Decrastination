@@ -142,7 +142,7 @@ class MergeTest {
     @Test
     fun `an email archived with dated blocks still to do stays, as a follow-up, till they're done`() {
         val read = Merge.apply(emptyList(), Source.Gmail, listOf(fetched("t1")), t0).tasks
-        val withBlocks = read.map { it.copy(subSteps = listOf(SubStep("Apply to RAL", 60, from = t0 + 10 * 86_400_000L))) }
+        val withBlocks = read.map { it.copy(subSteps = listOf(SubStep("Apply to RAL", 60, from = t0 + 10 * 86_400_000L)), enrichment = readOf(it)) }
         val archived = Merge.apply(withBlocks, Source.Gmail, emptyList(), later)
         assertEquals(Status.Open, archived.tasks.single().status)
         assertEquals("true", archived.tasks.single().extra[Merge.EXTRA_FOLLOW_UP])
@@ -152,10 +152,22 @@ class MergeTest {
         assertEquals(Status.Done, Merge.apply(ticked, Source.Gmail, emptyList(), later + 1).tasks.single().status)
     }
 
+    /** An enrichment of [task] as it is: what it says has been read. */
+    private fun readOf(task: TaskItem) = Enrichment(Enrichments.inputHash(task), "rules", t0)
+
+    @Test
+    fun `an email archived before what it says was read stays till it has been`() {
+        val unread = Merge.apply(emptyList(), Source.Gmail, listOf(fetched("t3")), t0).tasks
+        assertEquals(Status.Open, Merge.apply(unread, Source.Gmail, emptyList(), later).tasks.single().status)
+        // Read (no blocks in it): the next read finds it gone, and it's done.
+        val readNow = unread.map { it.copy(enrichment = readOf(it)) }
+        assertEquals(Status.Done, Merge.apply(readNow, Source.Gmail, emptyList(), later + 1).tasks.single().status)
+    }
+
     @Test
     fun `an email archived with blocks due by its own deadline stays too`() {
         val read = Merge.apply(emptyList(), Source.Gmail, listOf(fetched("t2", dueAt = t0 + 5 * 86_400_000L)), t0).tasks
-        val withBlocks = read.map { it.copy(subSteps = listOf(SubStep("Reply", 10), SubStep("Pay", 10))) }
+        val withBlocks = read.map { it.copy(subSteps = listOf(SubStep("Reply", 10), SubStep("Pay", 10)), enrichment = readOf(it)) }
         assertEquals(Status.Open, Merge.apply(withBlocks, Source.Gmail, emptyList(), later).tasks.single().status)
     }
 

@@ -41,7 +41,7 @@ fun TasksScreen(graph: AppGraph) {
     val now = graph.clock.now()
     val zone = graph.clock.zone()
     val scope = rememberCoroutineScope()
-    val tick = { task: TaskItem, title: String -> scope.launch { graph.focus.tickBlock(task.id, title) }; Unit }
+    val tick = { task: TaskItem, index: Int, title: String -> scope.launch { graph.focus.tickBlock(task.id, index, title) }; Unit }
     LazyColumn(Modifier.fillMaxWidth()) {
         for (source in Source.entries) {
             val open = state.tasks.filter { it.source == source && it.isOpen }.sortedWith(compareBy(nullsLast()) { it.dueAt })
@@ -79,7 +79,7 @@ private fun SourceHeader(source: Source, status: SourceStatus, count: Int, now: 
 }
 
 @Composable
-private fun TaskRow(task: TaskItem, now: Long, zone: java.time.ZoneId, tick: (TaskItem, String) -> Unit) {
+private fun TaskRow(task: TaskItem, now: Long, zone: java.time.ZoneId, tick: (TaskItem, Int, String) -> Unit) {
     var expanded by rememberSaveable(task.id) { mutableStateOf(false) }
     Column(
         Modifier.fillMaxWidth().clickable { expanded = !expanded }.padding(horizontal = 16.dp, vertical = 10.dp),
@@ -106,7 +106,7 @@ private fun TaskRow(task: TaskItem, now: Long, zone: java.time.ZoneId, tick: (Ta
             // The enrichment's step only while it's of the email as it is: a new message's own rules' step otherwise.
             (Enrichments.current(task)?.nextStep ?: task.extra[GmailThreads.EXTRA_NEXT_STEP])?.let { Text("Next: $it", style = MaterialTheme.typography.bodySmall) }
             task.enrichment?.takeIf { it.by != RuleEnricher.BY }?.let { Text("Steps and estimate by Claude", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-            task.subSteps.forEach { step ->
+            task.subSteps.forEachIndexed { index, step ->
                 // A block's own dates, where it has them; an email's can be ticked off here.
                 val dates = listOfNotNull(step.from?.let { "from " + Format.at(it, now, zone) }, step.dueAt?.let { Format.due(it, now, zone) }).joinToString(", ")
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -115,7 +115,7 @@ private fun TaskRow(task: TaskItem, now: Long, zone: java.time.ZoneId, tick: (Ta
                         style = MaterialTheme.typography.bodySmall,
                         modifier = Modifier.weight(1f),
                     )
-                    if (task.source == Source.Gmail && task.isOpen && !step.done) TextButton(onClick = { tick(task, step.title) }) { Text("Done") }
+                    if (task.source == Source.Gmail && task.isOpen && !step.done) TextButton(onClick = { tick(task, index, step.title) }) { Text("Done") }
                 }
             }
             if (task.detail.isNotBlank()) Text(task.detail, style = MaterialTheme.typography.bodySmall)

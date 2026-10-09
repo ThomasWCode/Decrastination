@@ -111,7 +111,7 @@ object Merge {
                 f.done -> updated.copy(status = Status.Done)
                 // A new round of it: the last round's minutes count towards neither this one's
                 // completion record nor what's left of it.
-                else -> updated.copy(status = Status.Open, doneAt = null, workedMin = 0, photoMin = 0, handMin = 0, firstProgress = f.sourceProgress).also { reopened += it }
+                else -> updated.copy(status = Status.Open, doneAt = null, workedMin = 0, photoMin = 0, firstProgress = f.sourceProgress).also { reopened += it }
             }
             fresh[id] = next
         }
@@ -122,6 +122,10 @@ object Merge {
             when {
                 old.status != Status.Open -> old.takeIf { now - (old.doneAt ?: old.lastSeenAt) < KEEP_FINISHED_MS }
                 old.derived -> old.copy(status = Status.Missed).also { missed += it }
+                // An email gone from the inbox before its latest content was read (its enrichment still
+                // to come, perhaps under way): kept as it is till it has been, so blocks found in it
+                // aren't lost to the archive; the next read then decides.
+                old.source == Source.Gmail && Enrichments.jobFor(old) != null && Enrichments.current(old) == null -> old
                 // An email whose blocks are still to do, dated by their own dates or by the email's
                 // (applications that open later, work due by its deadline): archived, it stays on the
                 // list, marked as a follow-up, until they're done.
