@@ -13,11 +13,13 @@ import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.data.Settings
+import com.thomaswcode.decrastination.learn.CalendarTime
+import com.thomaswcode.decrastination.learn.Daily
+import java.time.DayOfWeek
+import java.time.ZoneId
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import java.time.DayOfWeek
-import java.time.ZoneId
 
 /** Redraws every placed widget, and schedules the next redraw for when the plan turns over by itself. */
 object WidgetUpdater {
@@ -99,9 +101,13 @@ class NextWidgetReceiver : GlanceAppWidgetReceiver() {
         }
         // No sync, just draw the plan again: at midnight or a deadline, or because the time zone
         // or clock changed, which moves both the day boundaries and the next alarm.
+        // The zone or the clock moved: the daily alarms are wall-clock times, so they're set again.
+        if (intent.action != WidgetUpdater.ACTION_REDRAW) Daily.schedule(context)
         val pending = goAsync()
         CoroutineScope(Dispatchers.Default).launch {
             try {
+                // Long events' hours are put on days where you are: read again in the new zone.
+                if (intent.action != WidgetUpdater.ACTION_REDRAW) CalendarTime.refresh(context)
                 WidgetUpdater.update(context)
             } finally {
                 pending.finish()

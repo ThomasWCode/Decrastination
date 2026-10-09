@@ -39,6 +39,7 @@ import com.thomaswcode.decrastination.block.Blocklist
 import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.data.Window
 import com.thomaswcode.decrastination.enrich.AiUsage
+import com.thomaswcode.decrastination.learn.Daily
 import com.thomaswcode.decrastination.protect.SettingsChanges
 import java.util.Locale
 import kotlinx.coroutines.Dispatchers
@@ -89,6 +90,8 @@ class SettingsActivity : ComponentActivity() {
                             scope.launch {
                                 val wanted = draft
                                 graph.changeSettings { wanted }
+                                // The reminders' alarms, at their new times.
+                                Daily.schedule(this@SettingsActivity)
                                 val waiting = graph.runtime.value.pending
                                 message = if (waiting.isEmpty()) {
                                     "Saved."
@@ -122,6 +125,14 @@ class SettingsActivity : ComponentActivity() {
                     WindowField("Weekends: work", draft.weekendHours, "weekendHours", ::valid) { draft = draft.copy(weekendHours = it) }
                     WindowField("Quiet hours (nothing blocked)", draft.quietHours, "quietHours", ::valid, overnight = true) { draft = draft.copy(quietHours = it) }
                     TimeField("School days: blocking from", draft.weekdayBlockFromMin, "weekdayBlockFromMin", ::valid) { draft = draft.copy(weekdayBlockFromMin = it) }
+                }
+
+                item { Section("Reminders") }
+                item {
+                    TimeField("Morning briefing, school days", draft.briefingWeekdayMin, "briefingWeekdayMin", ::valid) { draft = draft.copy(briefingWeekdayMin = it) }
+                    TimeField("Morning briefing, weekends", draft.briefingWeekendMin, "briefingWeekendMin", ::valid) { draft = draft.copy(briefingWeekendMin = it) }
+                    TimeField("Sunday check-in", draft.checkInMin, "checkInMin", ::valid) { draft = draft.copy(checkInMin = it) }
+                    Note("The week's review follows the check-in an hour and a half later, answered or not.")
                 }
 
                 item { Section("Teams") }

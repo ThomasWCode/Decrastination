@@ -32,6 +32,8 @@ data class Chunk(
     val taskMinutes: Int,
     /** When it can be started, if that's later than the plan's now (an Anki deck's cards come at 04:00). */
     val availableAt: Long? = null,
+    /** The box length that cut it, when its task was split into boxes; null for a step or a task in one piece. */
+    val box: Int? = null,
 ) {
     val label: String get() = step?.let { "$title: $it" } ?: title
 
@@ -39,6 +41,9 @@ data class Chunk(
     val urgent: Boolean get() = overdue || dueToday || behind
 
     fun startable(now: Long): Boolean = availableAt == null || availableAt <= now
+
+    /** Written homework, which a photo can show done: not a deck's cards, an email or an event. */
+    val photoCheckable: Boolean get() = kind == Kind.Homework && source != Source.Anki
 }
 
 data class DayBucket(val date: LocalDate, val capacityMin: Int, val chunks: List<Chunk>) {

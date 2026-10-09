@@ -83,6 +83,31 @@ Everything the app learns is a number you can see in Settings, and every paramet
 6. **Weekly check-in questionnaire** (your choice): five fixed questions on Sunday evening before the review runs, each a 1–5 scale or one line: how the week felt, what you avoided and why, what got in the way, what you'd change about the plan, energy by time of day. Answers are stored with the week's log.
 7. **Weekly review (LLM, Opus 5.5, high effort).** Sunday evening: the week's log, the self-assessments, the questionnaire answers and the current calibration go to the model, which returns proposed parameter changes within the bounds above and a five-line note ("You start German fastest around 17:00 and never after 20:30; moved its chunks earlier."). Changes that loosen blocking still go through the 24-hour delay. The model cannot change the floor settings.
 
+**As built (Phase 5, 9 Oct): everything but the model's parts, which wait for Claude.**
+- **Calibration** (`learn/Calibrator.kt`) is worked out afresh from the activity log at each weekly review, so replaying the log gives the same values and nothing drifts. The planner uses it at once.
+  - Effort multipliers, per kind and class (and per kind for a class not yet seen): a moving average (weight 0.3) of actual over estimated minutes, from completions with timed minutes. Your self-assessments nudge it: *harder* raises it 5 % where there are timed minutes and 10 % where there aren't, and *easier* lowers it the same. Kept within 0.5–3.0.
+  - Safety margins, per kind, 1–3 days: one more after two finishes in a row within an hour of the deadline or past it, one less after five in a row a day early or more.
+  - Box lengths, per kind, over 25, 45 and 60 minutes. A session's reward is running its full length on work its source then confirmed done by the deadline. Only sessions on a piece the box cut count: a task done in one piece wasn't shaped by the box. Until a kind has 20 sessions, each week mostly takes the best so far and one time in five tries another (seeded by the week, so a replay agrees); after that, the best.
+- **The capacity check** (`learn/Days.kt`): the morning briefing records the day's plan, and the next morning it's marked done in full or not. A task counts as done if its source confirmed it by the day's end, or as far as that day's focus sessions on it went. Once ten days are recorded, if fewer than 40 % of the last fortnight's plans with work in them were done in full, the review says the hours look more than the evenings hold. It only advises: the hours are yours to change.
+- **"How was it?"** (`learn/Assessment.kt`): after each verified completion of homework or revision, a notification with *harder*, *as expected* and *easier*, or a tap to add a line. It feeds the multipliers and the review.
+- **The Sunday check-in** (`learn/CheckIns.kt`): a reminder at 19:30 opens the five questions, with the latest review below them.
+- **The review** (`learn/Review.kt`) runs 90 minutes after the reminder (21:00), answered or not, or at once when you save the answers.
+  - The rules' part always runs: the calibration learned afresh, what changed in words, and the capacity advice.
+  - With Claude on, the week also goes to the model (`enrich/ClaudeReviewer.kt`). It writes a note of up to five lines and may change four settings within bounds: box length 25–60 minutes, safety margin 0–3 days, undated work 30–120 minutes a day, and work minutes per free minute 2–5. It can't touch blocking, protection or hours. Its changes go through `changeSettings`, so once armed a loosening one waits 24 hours, as yours do.
+- **The morning briefing** (`learn/Briefing.kt`, Q13): at 07:00 on school days and 08:30 at weekends, today's plan in a notification. An unlock within 90 minutes of it brings the Teams sync offer. The times are in Settings.
+- **The calendar** (`learn/CalendarTime.kt`, `learn/EventJudge.kt`, Q7) reads the next fortnight's events and judges them one by one:
+  - a declined event is left out;
+  - an event marked free, one in a holidays or birthdays calendar, or travel (a train, a coach, a flight) is time you can work;
+  - a timed event under four hours takes its slot;
+  - an all-day event, or a timed one of four hours or more, is asked about once in the week before it, never in quiet hours: *Free*, *Busy*, or *A few hours* (three hours of that day, at no set time).
+
+  Your answer holds for every event of that name, and the calendar is read again whenever it changes.
+- **The photo check** (`enrich/PhotoChecker.kt`, `block/PhotoChecks.kt`, Q16): once Claude is on, *Photo check* on the block screen photographs written work for the piece shown.
+  - The photo is sent shrunk to 1 568 pixels on its long side.
+  - A "done" with confidence 0.7 or more ticks the piece as a finished session would, earning its share of free time.
+  - The photo is deleted once checked.
+  - It waits for Claude (decided 8 Oct: no paid calls yet), so until then the timer and the source are the ways to finish a piece.
+
 Practice-test scheduling before assessments was offered and not chosen; it stays out.
 
 ## 6. Anti-tamper
@@ -129,7 +154,7 @@ Layer 2 needs care so it never traps you out of Settings entirely: it acts only 
 - A blocked app in picture-in-picture: the block screen is started with `FLAG_ACTIVITY_NO_USER_ACTION`, so covering an app never sends it there; one already there is found through the window list (a pinned window is never the one in use, so the active-window check alone misses it), relaunched to full screen (One UI's floating window offers no dismiss action) and covered. Proved in Phase 0 after a blocking test left a YouTube Short floating for 20 minutes (`docs/phase0-findings.md` §5).
 - A blocked site in Chrome or Brave whose address is hidden (a video full screen): judged by the page the browser last showed in front while the focus service watched. Nothing is remembered across a restart of the service, as a browser may have moved on unseen, to a blocked page or from one; a browser hiding its address with no page seen since the service connected gets Back once, while anything is blocked, to leave full screen so the address shows (a refused Back is tried again at the next look), and one beside another app is first brought forward, once, to be looked at there. A browser's picture-in-picture video is judged by the page the browser showed as it went into the corner, not by what its other windows show since. One that still hides it is taken as not blocked: Back again and again would make a browser whose address bar can't be read unusable.
 - An automatic Teams sync the widget doesn't start (its sync service off, no answer): offered again in 15 minutes, up to twice in a row, without using up the day's first-unlock sync; after that, at its usual time.
-- A task that disappears from its source without you acting: `Done` with reason `GoneFromSource`, shown separately in stats and excluded from calibration.
+- A task that disappears from its source: counted done. Teams and Gmail say no more than that (an assignment handed in and one deleted both just leave the list; an email archived and one snoozed both leave the inbox), so the planned `GoneFromSource` reason can't be told; a snoozed email that comes back reopens and starts a new round.
 - The daily quota at 23:30 unmet: it is overdue; whether that blocks at that hour is quiet hours' decision.
 - Clock and time-zone changes: planner re-runs on the system broadcasts.
 - A pending loosening change crossing midnight, a reboot, or a reinstall: pending changes are persisted with their apply-at time.

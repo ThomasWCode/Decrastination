@@ -92,8 +92,15 @@ data class TaskItem(
     val peakEffortMin: Int? = null,
     /** Minutes of finished focus sessions spent on it. */
     val workedMin: Int = 0,
+    /**
+     * Minutes of it a photo check found done: they come off what's left like [workedMin], but
+     * weren't timed, so they're kept apart from it and out of what the app learns from timing.
+     */
+    val photoMin: Int = 0,
     /** The sessions counted in [workedMin], by start time, so each is counted once. */
     val sessionsCounted: List<Long> = emptyList(),
+    /** The photo checks counted in [photoMin], by id, with the minutes each was given, so each is counted once. */
+    val photosCounted: Map<String, Int> = emptyMap(),
     val subSteps: List<SubStep> = emptyList(),
     /** At most this many of its sub-steps can be done in a day: an Anki deck releases 20 new cards a day. */
     val stepsPerDay: Int? = null,

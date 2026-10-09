@@ -157,6 +157,8 @@ Phase 0 also built what Phase 1 would have scaffolded: the Gradle setup, the sha
 
 ### Phase 5: Learning and review
 
+*Built 9 Oct 2026. The calibration, capacity check, self-assessments, Sunday check-in and the rules' review, the morning briefing, and the calendar as busy time all run now. The model's review and the photo check are built and wait for Claude (no paid calls yet). Tried on the phone: the check-in screen and a review by the rules, and the calendar's judgement of your events. `docs/scheduler.md` §5 ("As built").*
+
 - Session and completion logging; calibration (`docs/scheduler.md` §5 items 1–4) as pure Kotlin with tests.
 - One-tap self-assessment after each verified completion; the Sunday five-question check-in.
 - Weekly review call (Sunday 20:00, after the check-in): proposes bounded changes, writes the note; changes applied through the same pending-change path.
