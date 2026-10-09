@@ -94,8 +94,9 @@ class MainActivity : ComponentActivity() {
     }
 
     companion object {
-        /** The tab to open on: [TAB_SETUP] from a protection alert. */
+        /** The tab to open on: [TAB_SETUP] from a protection alert, [TAB_TASKS] from a dropped plan's. */
         const val EXTRA_TAB = "tab"
+        const val TAB_TASKS = 1
         const val TAB_SETUP = 3
         private val TABS = listOf("Plan", "Tasks", "Stats", "Setup")
     }

@@ -289,12 +289,14 @@ class AnswersTest {
         val wild = parse(Enrichments.Job.Effort, """{"effortMin":1250,"blocks":[$blocks]}""")!!
         assertNull(wild.subSteps)
         assertNull(wild.effortMin)
+        assertEquals("20.8 hours of blocks, past the 20 the app takes from one task", wild.dropped)
         // The email due on the 15th; a block opening on the 20th can't be done by then.
         val late = parse(
             Enrichments.Job.Email,
             """{"kind":"Admin","actionableFrom":null,"deadline":"2026-10-15","effortMin":60,"nextStep":"Apply","blocks":[{"title":"Apply","minutes":60,"from":"2026-10-20","due":null}]}""",
         )!!
         assertNull(late.subSteps)
+        assertEquals("a block starts after the task is due", late.dropped)
     }
 
     @Test
@@ -304,8 +306,10 @@ class AnswersTest {
             """{"kind":"Admin","actionableFrom":"2026-12-01","deadline":"2026-12-31","effortMin":60,"nextStep":"Apply","blocks":[{"title":"Apply","minutes":60,"from":null,"due":"2026-11-15"}]}""",
         )!!
         assertNull(early.subSteps)
+        assertEquals("a block is due before the email can be started", early.dropped)
         val backwards = parse(Enrichments.Job.Effort, """{"effortMin":60,"blocks":[{"title":"A","minutes":30,"from":"2026-10-20","due":null},{"title":"B","minutes":30,"from":null,"due":"2026-10-12"}]}""")!!
         assertNull(backwards.subSteps)
+        assertEquals("the blocks' dates are out of order", backwards.dropped)
     }
 
     @Test
@@ -315,7 +319,9 @@ class AnswersTest {
         val e = parse(Enrichments.Job.Effort, """{"effortMin":$total,"blocks":[${given(Prompts.MAX_BLOCKS)}]}""")!!
         assertEquals(Prompts.MAX_BLOCKS + 1, e.subSteps!!.size)
         // One more than that isn't trusted.
-        assertNull(parse(Enrichments.Job.Effort, """{"effortMin":${total + 10},"blocks":[${given(Prompts.MAX_BLOCKS + 1)}]}""")!!.subSteps)
+        val over = parse(Enrichments.Job.Effort, """{"effortMin":${total + 10},"blocks":[${given(Prompts.MAX_BLOCKS + 1)}]}""")!!
+        assertNull(over.subSteps)
+        assertEquals("31 blocks, past the 30 the app takes", over.dropped)
     }
 
     @Test
@@ -334,6 +340,24 @@ class AnswersTest {
     }
 
     @Test
+    fun `a dropped plan says why`() {
+        fun block(title: String = "Apply", minutes: Int = 30, from: String? = null, due: String? = null) =
+            """{"title":"$title","minutes":$minutes,"from":${from?.let { "\"$it\"" }},"due":${due?.let { "\"$it\"" }}}"""
+        fun effort(vararg blocks: String) = parse(Enrichments.Job.Effort, """{"effortMin":${30 * blocks.size},"blocks":[${blocks.joinToString(",")}]}""")!!.dropped
+        assertEquals("a block has no title", effort(block(title = " ")))
+        assertEquals("a block has no minutes", parse(Enrichments.Job.Effort, """{"effortMin":30,"blocks":[${block(minutes = 0)}]}""")!!.dropped)
+        assertEquals("a block of 700 minutes, past the 600 one can take", parse(Enrichments.Job.Effort, """{"effortMin":700,"blocks":[${block(minutes = 700)}]}""")!!.dropped)
+        assertEquals("a block's date can't be read", effort(block(due = "soon")))
+        assertEquals("a block's date is out of range", effort(block(due = "2030-01-01")))
+        assertEquals("a block starts after it's due", effort(block(from = "2026-10-20", due = "2026-10-15")))
+        // An assignment's steps say the same of a step, and of a total past one task's.
+        val split = { steps: String, total: Int -> parse(Enrichments.Job.Assignment, """{"subSteps":[$steps],"effortMin":$total,"ankiSections":[],"testDate":null}""", assignment("Do it"))!!.dropped }
+        assertEquals("a step of 300 minutes, past the 240 one can take", split("""{"title":"Essay","minutes":300,"ankiSections":[],"from":null,"due":null}""", 300))
+        assertEquals("the steps add up to 60 minutes, not the 120 it gives in all", split("""{"title":"Essay","minutes":60,"ankiSections":[],"from":null,"due":null}""", 120))
+        assertNull(split("""{"title":"Essay","minutes":60,"ankiSections":[],"from":null,"due":null}""", 60))
+    }
+
+    @Test
     fun `a planner item can come back in blocks too`() {
         val e = parse(Enrichments.Job.Effort, """{"effortMin":120,"blocks":[{"title":"Past paper 1","minutes":60,"from":null,"due":null},{"title":"Mark it and go over mistakes","minutes":60,"from":null,"due":null}]}""")!!
         assertEquals(listOf("Past paper 1", "Mark it and go over mistakes"), e.subSteps!!.map { it.title })
@@ -343,6 +367,10 @@ class AnswersTest {
         val off = parse(Enrichments.Job.Effort, """{"effortMin":200,"blocks":[{"title":"A","minutes":30,"from":null,"due":null}]}""")!!
         assertNull(off.subSteps)
         assertEquals(200, off.effortMin)
+        assertEquals("the blocks add up to 30 minutes, not the 200 it gives in all", off.dropped)
+        // Kept, or none given: nothing dropped.
+        assertNull(e.dropped)
+        assertNull(parse(Enrichments.Job.Effort, """{"effortMin":35,"blocks":[]}""")!!.dropped)
     }
 
     @Test
