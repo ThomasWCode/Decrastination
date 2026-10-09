@@ -18,7 +18,12 @@ data class PendingChange(
     val value: JsonElement,
     val description: String,
     val requestedAt: Long,
+    /** When it should apply by the wall clock: what's shown. Setting the date forward doesn't hurry it. */
     val applyAt: Long,
+    /** How long it waits, counted on the uptime clock (the time the phone is on), which the date can't move. */
+    val waitMs: Long = applyAt - requestedAt,
+    /** Waited so far by that clock. */
+    val waitedMs: Long = 0,
 )
 
 /**
@@ -115,9 +120,17 @@ object SettingsChanges {
         return Outcome(decode(applied), waiting)
     }
 
-    /** Applies the pending changes whose time has come. */
-    fun applyDue(settings: Settings, pending: List<PendingChange>, now: Long): Outcome {
-        val (due, waiting) = pending.partition { it.applyAt <= now }
+    /**
+     * Counts [elapsedMs] of uptime towards every pending change, moving its shown time to match,
+     * and applies those that have waited long enough. Uptime, not the wall clock: setting the date
+     * forward a day mustn't skip the wait (and the time the phone is off doesn't count).
+     */
+    fun applyDue(settings: Settings, pending: List<PendingChange>, now: Long, elapsedMs: Long): Outcome {
+        val counted = pending.map { change ->
+            val waited = change.waitedMs + elapsedMs.coerceAtLeast(0)
+            change.copy(waitedMs = waited, applyAt = now + (change.waitMs - waited).coerceAtLeast(0))
+        }
+        val (due, waiting) = counted.partition { it.waitedMs >= it.waitMs }
         return Outcome(due.fold(settings, ::apply), waiting)
     }
 

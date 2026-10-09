@@ -1,5 +1,6 @@
 package com.thomaswcode.decrastination.ui
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -18,8 +19,10 @@ import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -34,6 +37,9 @@ import com.thomaswcode.decrastination.sync.SyncWorker
 /** The app's screens: the plan, the tasks every source lists, and the setup checklist. */
 class MainActivity : ComponentActivity() {
 
+    /** A tab asked for by an intent that reached this activity already open (it's singleTop). */
+    private val askedTab = mutableStateOf<Int?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
@@ -41,10 +47,22 @@ class MainActivity : ComponentActivity() {
         setContent { AppTheme { Main(graph) } }
     }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (intent.hasExtra(EXTRA_TAB)) askedTab.value = intent.getIntExtra(EXTRA_TAB, 0)
+    }
+
     @OptIn(ExperimentalMaterial3Api::class)
     @Composable
     private fun Main(graph: AppGraph) {
         var tab by rememberSaveable { mutableIntStateOf(intent.getIntExtra(EXTRA_TAB, 0)) }
+        askedTab.value?.let { asked ->
+            LaunchedEffect(asked) {
+                tab = asked
+                askedTab.value = null
+            }
+        }
         val syncs by remember { WorkManager.getInstance(this).getWorkInfosForUniqueWorkFlow(SyncWorker.NOW) }
             .collectAsStateWithLifecycle(emptyList())
         val syncing = syncs.any { !it.state.isFinished }

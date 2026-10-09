@@ -1,5 +1,6 @@
 package com.thomaswcode.decrastination.block
 
+import com.thomaswcode.decrastination.core.Uptime
 import com.thomaswcode.decrastination.data.Settings
 import java.time.DayOfWeek
 import java.time.Instant
@@ -93,6 +94,8 @@ data class FocusSession(
     val step: String?,
     val minutes: Int,
     val startedAt: Long,
+    /** The uptime clock at the start, so setting the date forward can't finish it early. */
+    val startedUptime: Uptime? = null,
 ) {
     val endsAt: Long get() = startedAt + minutes * 60_000L
 }

@@ -111,7 +111,7 @@ class Focus(
     /** Starts a session on [taskId]'s chunk; one already running is ended first. */
     suspend fun startSession(taskId: String, label: String, step: String?, minutes: Int): FocusSession {
         stopSession()
-        val session = FocusSession(taskId, label, step, minutes.coerceIn(1, MAX_SESSION_MIN), clock.now())
+        val session = FocusSession(taskId, label, step, minutes.coerceIn(1, MAX_SESSION_MIN), clock.now(), clock.uptime())
         runtime.update { it.copy(session = session) }
         return session
     }
@@ -122,10 +122,20 @@ class Focus(
      * adds the minutes worked. Returns what was recorded, or null if there was no session.
      */
     suspend fun stopSession(): SessionRecord? {
-        val session = runtime.value.session ?: return null
+        // Taken and cleared in one step, so two callers at once (the ticker, the alarm and Stop)
+        // can't both finish it: the second finds none.
+        var claimed: FocusSession? = null
+        runtime.update { state ->
+            claimed = state.session
+            if (state.session == null) state else state.copy(session = null)
+        }
+        val session = claimed ?: return null
         val now = clock.now()
-        val completed = now >= session.endsAt
-        val worked = if (completed) session.minutes else ((now - session.startedAt) / 60_000L).toInt().coerceIn(0, session.minutes)
+        // By the uptime clock where it can say (the same start), so setting the date forward
+        // doesn't finish it; across a restart, the wall clock.
+        val ran = clock.uptime()?.since(session.startedUptime) ?: (now - session.startedAt)
+        val completed = now >= session.endsAt && ran >= session.minutes * 60_000L - FINISH_SLACK_MS
+        val worked = if (completed) session.minutes else (ran / 60_000L).toInt().coerceIn(0, session.minutes)
         var task: TaskItem? = null
         tasks.update { state ->
             state.copy(
@@ -144,10 +154,7 @@ class Focus(
         val today = today(now)
         val ratio = settings.value.workMinPerFreeMin
         runtime.update { state ->
-            state.copy(
-                session = null,
-                credit = if (completed) state.credit.earn(today, Credit.forSession(session.minutes, ratio)) else state.credit.on(today),
-            )
+            state.copy(credit = if (completed) state.credit.earn(today, Credit.forSession(session.minutes, ratio)) else state.credit.on(today))
         }
         val record = SessionRecord(
             taskId = session.taskId,
@@ -201,6 +208,9 @@ class Focus(
 
     companion object {
         private const val PLAN_TTL_MS = 60_000L
+        /** A session ended by its alarm a moment before its minutes are up still counts as finished. */
+        private const val FINISH_SLACK_MS = 5_000L
+
         const val MAX_SESSION_MIN = 180
     }
 }

@@ -103,7 +103,8 @@ class FocusService : AccessibilityService() {
                     handler.post { tick() }
                 }
                 Intent.ACTION_SCREEN_OFF -> {
-                    commitSpending()
+                    // Locked, nothing is being used: stop, so the time asleep isn't spent.
+                    stopSpending()
                     banner.cancel()
                 }
             }
@@ -427,8 +428,14 @@ class FocusService : AccessibilityService() {
             return
         }
         // An app already in front when blocking begins (16:45, the end of free time, new work due)
-        // sends no event of its own: look at whatever is in front now.
-        frontPackage()?.let { if (it != packageName && graph.focus.target(it) != null && spending == null) onFront(it, firstLook = false) }
+        // sends no event of its own, nor does a blocked site already open in Chrome or Brave: look
+        // at whatever is in front now. (While free time is being spent, its own check does this.)
+        frontPackage()?.takeIf { it != packageName && spending == null }?.let { front ->
+            when {
+                graph.focus.target(front) != null -> onFront(front, firstLook = false)
+                graph.focus.isCheckedBrowser(front) -> checkAddress(front)
+            }
+        }
         scope.launch {
             // A session that has run its time.
             graph.focus.session?.takeIf { graph.clock.now() >= it.endsAt }?.let { Sessions.end(this@FocusService, early = false) }
@@ -537,9 +544,14 @@ class FocusService : AccessibilityService() {
          * Android can count an instance bound that it no longer sends anything (after a crash).
          * From a process without it, Android's list of bound services is all there is.
          */
-        fun isRunning(context: Context): Boolean = if (hosted) _connected.value else isEnabled(context)
+        fun isRunning(context: Context): Boolean = if (hosted) _connected.value else isBound(context)
 
-        fun isEnabled(context: Context): Boolean {
+        /**
+         * Whether Android has this service bound. [AccessibilityManager.getEnabledAccessibilityServiceList]
+         * lists the bound services, not the setting's enabled ones: a crashed service, still in the
+         * setting, isn't in it (a crash on the phone showed exactly that, 9 Oct).
+         */
+        fun isBound(context: Context): Boolean {
             val manager = context.getSystemService(AccessibilityManager::class.java) ?: return false
             return manager.getEnabledAccessibilityServiceList(AccessibilityServiceInfo.FEEDBACK_ALL_MASK).any {
                 val info = it.resolveInfo.serviceInfo

@@ -10,9 +10,9 @@ import com.thomaswcode.decrastination.block.Focus
 import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.Planner
 import com.thomaswcode.decrastination.core.Source
-import com.thomaswcode.decrastination.core.SystemWallClock
 import com.thomaswcode.decrastination.core.WallClock
 import com.thomaswcode.decrastination.data.ActivityLog
+import com.thomaswcode.decrastination.data.DeviceClock
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.KeystoreCipher
 import com.thomaswcode.decrastination.data.RuntimeState
@@ -50,7 +50,7 @@ import java.io.File
 @OptIn(FlowPreview::class)
 class AppGraph private constructor(context: Context) {
     val app: Context = context.applicationContext
-    val clock: WallClock = SystemWallClock
+    val clock: WallClock = DeviceClock(app)
 
     /** Work that outlives the screen or receiver that started it; a failure is logged, not fatal. */
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default + CoroutineExceptionHandler { _, error -> Log.e(TAG, "Background work failed", error) })
@@ -83,23 +83,36 @@ class AppGraph private constructor(context: Context) {
 
     /** Applies a settings change: at once, or, once armed, pending if it loosens blocking. */
     suspend fun changeSettings(proposed: Settings) {
+        // What's waiting is counted up to now first, so a new change's wait starts now.
+        applyDueChanges(force = true)
         val now = clock.now()
         var outcome: SettingsChanges.Outcome? = null
         runtime.update { state ->
             outcome = SettingsChanges.propose(settings.value, proposed, state.pending, now) { java.util.UUID.randomUUID().toString() }
-            state.copy(pending = outcome!!.pending)
+            val waiting = outcome!!.pending
+            state.copy(pending = waiting, uptimeMark = if (waiting.isEmpty()) null else state.uptimeMark ?: clock.uptime())
         }
         outcome?.let { result -> settings.update { result.settings } }
     }
 
-    /** Applies the pending changes whose 24 hours are up. */
-    suspend fun applyDueChanges() {
+    /**
+     * Counts the uptime since the last count towards the pending changes and applies those whose
+     * wait is over. Called every half minute; it writes (and so counts) only every few minutes, or
+     * when a change falls due, unless [force]d.
+     */
+    suspend fun applyDueChanges(force: Boolean = false) {
+        if (runtime.value.pending.isEmpty()) return
         val now = clock.now()
-        if (runtime.value.pending.none { it.applyAt <= now }) return
+        val uptime = clock.uptime()
         var applied: SettingsChanges.Outcome? = null
         runtime.update { state ->
-            applied = SettingsChanges.applyDue(settings.value, state.pending, now)
-            state.copy(pending = applied!!.pending)
+            if (state.pending.isEmpty()) return@update state
+            // Across a restart the gap can't be measured: it isn't counted.
+            val elapsed = uptime?.since(state.uptimeMark) ?: 0L
+            val due = state.pending.any { it.waitedMs + elapsed >= it.waitMs }
+            if (!force && !due && elapsed < UPTIME_COUNT_MS && state.uptimeMark?.boot == uptime?.boot) return@update state
+            applied = SettingsChanges.applyDue(settings.value, state.pending, now, elapsed)
+            state.copy(pending = applied!!.pending, uptimeMark = if (applied!!.pending.isEmpty()) null else uptime)
         }
         applied?.let { result -> settings.update { result.settings } }
     }
@@ -175,6 +188,9 @@ class AppGraph private constructor(context: Context) {
         /** The widget sends a change for each step of a sync; read once they've stopped. */
         private const val TEAMS_QUIET_MS = 5_000L
         private const val WIDGET_DEBOUNCE_MS = 1_000L
+
+        /** How often the pending changes' uptime is counted (and saved) while nothing falls due. */
+        private const val UPTIME_COUNT_MS = 5 * 60_000L
 
         // It holds only the application context, which lives as long as the process anyway.
         @SuppressLint("StaticFieldLeak")

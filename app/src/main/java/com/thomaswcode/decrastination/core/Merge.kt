@@ -86,7 +86,9 @@ object Merge {
                 extra = f.extra,
             )
             val next = when {
-                old.status == Status.Open && f.done -> updated.copy(status = Status.Done, doneAt = now).also { completed += it }
+                // Reported with the progress it had while open: finished through its own progress
+                // (Power Planner at 100 %), the earned time is for the work that was still left.
+                old.status == Status.Open && f.done -> updated.copy(status = Status.Done, doneAt = now).also { completed += it.copy(sourceProgress = old.sourceProgress) }
                 old.status == Status.Open -> updated
                 old.derived && old.status == Status.Done -> updated.copy(status = Status.Done)
                 f.done -> updated.copy(status = Status.Done)
