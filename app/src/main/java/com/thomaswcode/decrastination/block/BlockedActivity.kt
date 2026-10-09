@@ -128,6 +128,8 @@ class BlockedActivity : ComponentActivity() {
         val photoFile = remember { File(cacheDir, "photos/check.jpg").also { it.parentFile?.mkdirs() } }
         val photoUri = remember { FileProvider.getUriForFile(this, "$packageName.photos", photoFile) }
         var photoFor by remember { mutableStateOf<Chunk?>(null) }
+        // A photo being checked: no session is started meanwhile, as both would count the piece.
+        var checking by remember { mutableStateOf(false) }
         val takePhoto = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { taken ->
             val piece = photoFor
             if (!taken || piece == null || photoChecker == null) {
@@ -136,7 +138,14 @@ class BlockedActivity : ComponentActivity() {
                 return@rememberLauncherForActivityResult
             }
             message = "Checking the photo…"
-            scope.launch { message = PhotoChecks.check(this@BlockedActivity, graph, photoFile, piece) }
+            checking = true
+            scope.launch {
+                try {
+                    message = PhotoChecks.check(this@BlockedActivity, graph, photoFile, piece)
+                } finally {
+                    checking = false
+                }
+            }
         }
 
         Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
@@ -164,7 +173,7 @@ class BlockedActivity : ComponentActivity() {
                         }) { Text("Open") }
                         if (session == null) {
                             // Not before it's available (an Anki deck's next cards at 04:00).
-                            FilledTonalButton(enabled = next.startable(plan.now), onClick = {
+                            FilledTonalButton(enabled = next.startable(plan.now) && !checking, onClick = {
                                 scope.launch { Sessions.start(this@BlockedActivity, next.taskId, next.label, next.step, next.minutes, next.box) }
                             }) { Text("Start ${Format.minutes(minOf(next.minutes, Focus.MAX_SESSION_MIN))}") }
                         } else {
@@ -191,7 +200,7 @@ class BlockedActivity : ComponentActivity() {
                         // Written work: a photo instead of the timer, once Claude is on (Q16). Not
                         // during a session: the two would count the same piece twice.
                         if (photoChecker != null && session == null) {
-                            OutlinedButton(onClick = {
+                            OutlinedButton(enabled = !checking, onClick = {
                                 photoFor = next
                                 takePhoto.launch(photoUri)
                             }) { Text("Photo check") }

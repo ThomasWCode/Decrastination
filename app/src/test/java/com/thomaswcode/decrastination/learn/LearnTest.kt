@@ -246,6 +246,22 @@ class DaysTest {
     }
 
     @Test
+    fun `an answer that changes today keeps what was done and takes the rest from the plan now`() {
+        val day = DayRecord("2026-10-09", 90, listOf(DayChunk("teams:a", 30), DayChunk("teams:b", 30), DayChunk("teams:c", 30)), zone = "Europe/London")
+        val log = ActivityLog(
+            completions = listOf(done("teams:a", doneAt = Fixtures.at("2026-10-09T17:30"))),
+            sessions = listOf(SessionRecord("teams:b", Kind.Homework, label = "b", plannedMin = 30, workedMin = 10, startedAt = Fixtures.at("2026-10-09T18:00"), endedAt = 0, completed = false)),
+        )
+        // The evening's event takes most of it: today now holds b's last 20 minutes; c has moved on.
+        val again = Days.replan(day, listOf(DayChunk("teams:b", 20)), log, Fixtures.at("2026-10-09T18:30"), LONDON)
+        assertEquals(listOf(DayChunk("teams:a", 30), DayChunk("teams:b", 10), DayChunk("teams:b", 20)), again.chunks)
+        assertEquals(60, again.plannedMin)
+        // b finished that evening: the day was done in full.
+        val finished = Days.finish(again, log.copy(completions = log.completions + done("teams:b", doneAt = Fixtures.at("2026-10-09T21:00"))), LONDON)
+        assertEquals(true, finished.full)
+    }
+
+    @Test
     fun `fewer than four in ten days done in full over a fortnight brings advice, not before`() {
         fun days(full: Int, total: Int) = (1..total).map { DayRecord("2026-10-%02d".format(it), 60, emptyList(), doneMin = 0, full = it <= full) }
         val today = LocalDate.parse("2026-10-14")

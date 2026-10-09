@@ -396,7 +396,6 @@ class AppGraph private constructor(context: Context) {
             val job = Enrichments.jobFor(task) ?: continue
             if (!Enrichments.stale(task, enricher != null, RuleEnricher.BY)) continue
             val now = clock.now()
-            val month = AiUsage.monthOf(now, clock.zone())
             // Switched off (or its key removed) while this runs: nothing more is sent.
             if (claudeKey() == null) enricher = null
             var enrichment = if (enricher != null && calls < MAX_MODEL_CALLS) modelCalls.withLock call@{
@@ -408,14 +407,18 @@ class AppGraph private constructor(context: Context) {
                     return@call null
                 }
                 calls++
+                // Counted in the month it's made in, as the cap was checked for: it may have
+                // waited for the lock past midnight.
+                val at = clock.now()
+                val month = AiUsage.monthOf(at, clock.zone())
                 val result = runCatching { enricher!!.enrich(task, job, now) }
                     .onFailure { error ->
                         Log.w(TAG, "The model's enrichment failed; the rules stand in", error)
-                        runtime.update { it.copy(aiUsage = it.aiUsage.forMonth(month).failure(error.message ?: error.javaClass.simpleName, now)) }
+                        runtime.update { it.copy(aiUsage = it.aiUsage.forMonth(month).failure(error.message ?: error.javaClass.simpleName, at)) }
                         enricher = null
                     }
                     .getOrNull()
-                result?.let { r -> runtime.update { it.copy(aiUsage = it.aiUsage.forMonth(month).record(r.costUsd, r.refused, now)) } }
+                result?.let { r -> runtime.update { it.copy(aiUsage = it.aiUsage.forMonth(month).record(r.costUsd, r.refused, at)) } }
                 when {
                     result?.enrichment != null -> result.enrichment
                     // Declined, or no answer it could read: the rules' say, under the model's name.
