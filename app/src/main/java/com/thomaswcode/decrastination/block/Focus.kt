@@ -285,7 +285,7 @@ class Focus(
                     val i = t.subSteps.indexOfFirst { !it.done && it.title == title }
                     if (i < 0) return@map t
                     ticked = true
-                    t.copy(subSteps = t.subSteps.mapIndexed { j, s -> if (j == i) s.copy(done = true) else s })
+                    t.copy(subSteps = t.subSteps.mapIndexed { j, s -> if (j == i) s.copy(done = true) else s }, handMin = t.handMin + t.subSteps[i].minutes)
                 },
             )
         }
@@ -408,6 +408,8 @@ class Focus(
         // Its deck tasks, missed ones too: the read that closes an assignment drops its unfinished
         // deck in the same sync, before this, and that deck's sessions earned their time already.
         val decks = AnkiRules.heldDecks(tasks.value.tasks, settings.value.ankiTextbook, missed = true)
+        // Blocks you ticked off by hand: done, but not timed, so not something to learn times from.
+        fun handMinutes(task: TaskItem): Int = tasks.value.tasks.firstOrNull { it.id == task.id && it.doneAt == task.doneAt }?.handMin ?: task.handMin
         // Its vocabulary steps its decks hold: their work is the decks', and learned from theirs.
         fun deckMinutes(task: TaskItem): Int = task.subSteps
             .filter { step -> step.ankiSections.isNotEmpty() && step.ankiSections.all { decks[task.id]?.containsKey(it) == true } }
@@ -434,8 +436,11 @@ class Focus(
                 }
                 // Less what sessions and photo checks already earned time for: as stored while it's still
                 // this completion, as the completion had it once the task has reopened.
-                val photos = tasks.value.tasks.firstOrNull { it.id == task.id && it.doneAt == task.doneAt }?.photoMin ?: task.photoMin
-                val remaining = Planner.remaining(task.copy(workedMin = worked(task), photoMin = photos), multiplier) - delegated
+                val stored = tasks.value.tasks.firstOrNull { it.id == task.id && it.doneAt == task.doneAt }
+                val photos = stored?.photoMin ?: task.photoMin
+                // Nor for blocks you ticked off by hand: done, but not timed or checked.
+                val hand = (stored?.handMin ?: task.handMin) * multiplier
+                val remaining = Planner.remaining(task.copy(workedMin = worked(task), photoMin = photos), multiplier) - delegated - hand
                 Credit.forCompletion(remaining.roundToInt().coerceAtLeast(0), ratio)
             }
             state.copy(
@@ -456,7 +461,7 @@ class Focus(
                         className = task.className,
                         // What was left of it when first seen: progress it already had isn't work done here,
                         // nor is vocabulary its decks hold (their own records learn from it).
-                        estimateMin = (task.effortMin * (1 - task.sourceProgress.coerceIn(0.0, 1.0)) - deckMinutes(task)).roundToInt().coerceAtLeast(1),
+                        estimateMin = (task.effortMin * (1 - task.sourceProgress.coerceIn(0.0, 1.0)) - deckMinutes(task) - handMinutes(task)).roundToInt().coerceAtLeast(1),
                         workedMin = worked(task),
                         dueAt = task.dueAt,
                         firstSeenAt = task.firstSeenAt,

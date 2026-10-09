@@ -159,6 +159,20 @@ class PlannerTest {
     }
 
     @Test
+    fun `a task's runs of blocks keep their order, and their parts numbers of their own`() {
+        // Two long blocks due the same day, the second opening later: one fits a day, in order.
+        val steps = listOf(
+            SubStep("Draft", 200, dueAt = Fixtures.at("2026-10-16T23:59")),
+            SubStep("Final", 200, from = Fixtures.at("2026-10-10T00:00"), dueAt = Fixtures.at("2026-10-16T23:59")),
+        )
+        val plan = plan(listOf(task("e", dueAt = null, steps = steps)), "2026-10-08T17:00")
+        fun dayOf(step: String) = plan.buckets.first { b -> b.chunks.any { it.step == step } }.date
+        assertTrue(dayOf("Draft") < dayOf("Final"), "draft ${dayOf("Draft")}, final ${dayOf("Final")}")
+        assertEquals(listOf(1, 2), plan.chunksOf("teams:e").map { it.part }.sorted())
+        assertEquals(setOf(2), plan.chunksOf("teams:e").map { it.parts }.toSet())
+    }
+
+    @Test
     fun `a block opening past the plan's reach isn't planned yet`() {
         val steps = listOf(SubStep("Apply in spring", 60, from = Fixtures.at("2027-03-01T00:00"), dueAt = Fixtures.at("2027-03-20T23:59")))
         val plan = plan(listOf(task("e", dueAt = null, steps = steps)), "2026-10-08T17:00")

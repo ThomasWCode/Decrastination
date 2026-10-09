@@ -513,6 +513,16 @@ class FocusTest {
     }
 
     @Test
+    fun `an email whose blocks were ticked off by hand earns nothing when it completes`() = runTest {
+        val email = task("e", kind = Kind.Admin, effort = 30).copy(id = "gmail:e", source = Source.Gmail, subSteps = listOf(SubStep("Apply", 30)))
+        tasks.update { it.copy(tasks = listOf(email)) }
+        assertTrue(focus.tickBlock("gmail:e", "Apply"))
+        assertEquals(30, tasks.value.tasks.single().handMin)
+        focus.onCompleted(listOf(tasks.value.tasks.single().copy(status = Status.Done, doneAt = clock.time)))
+        assertEquals(0L, focus.creditLeftMs())
+    }
+
+    @Test
     fun `what counts as blocked follows the settings`() {
         assertEquals(Focus.Target.App("com.google.android.youtube"), focus.target("com.google.android.youtube"))
         assertEquals(Focus.Target.Browser("org.mozilla.firefox"), focus.target("org.mozilla.firefox"))
