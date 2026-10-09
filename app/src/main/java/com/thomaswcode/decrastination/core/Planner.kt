@@ -93,33 +93,47 @@ object Planner {
             val last = runs.lastOrNull()?.last()
             if (last != null && last.from == piece.from && last.due == piece.due) runs.last() += piece else runs += mutableListOf(piece)
         }
-        var offset = 0
-        var previous: Item? = null
-        return runs.mapIndexed { index, run ->
+        // Each run's window from its own dates (one with none follows the run before it)...
+        class Window(val from: Long?, val real: Long?, var end: Long, var soft: Boolean)
+        val windows = ArrayList<Window>()
+        for (run in runs) {
             val head = run.first()
             val own = head.from != null || head.due != null
+            val previous = windows.lastOrNull()
             // A real deadline: its own (never after the task's), or the task's.
             val real = head.due?.let { d -> task.dueAt?.let { minOf(d, it) } ?: d } ?: task.dueAt
-            val from = if (own) head.from else previous?.notBefore
-            val end = real ?: listOfNotNull(deadline, from?.let(softFrom), previous?.deadline?.takeIf { !own }).max()
+            val from = if (own) head.from else previous?.from
+            val end = real ?: listOfNotNull(deadline, from?.let(softFrom), previous?.end?.takeIf { !own }).max()
+            windows += Window(from, real, end, real == null)
+        }
+        // ...then planned to be done by the deadline of any run after it, as they're done in order;
+        // each still shows its own.
+        var cap: Long? = null
+        for (window in windows.asReversed()) {
+            cap?.takeIf { it < window.end }?.let {
+                window.end = it
+                window.soft = false
+            }
+            if (!window.soft) cap = cap?.let { minOf(it, window.end) } ?: window.end
+        }
+        var offset = 0
+        return runs.mapIndexed { index, run ->
+            val window = windows[index]
             Item(
                 task = task,
-                deadline = end,
-                soft = real == null,
+                deadline = window.end,
+                soft = window.soft,
                 chunks = run,
                 // Never opening after a real deadline: a start past it is held to it. A soft one is
                 // the app's own, so a later start stands, and the plan's reach defers it.
-                notBefore = listOfNotNull(task.notBefore, from?.let { f -> real?.let { minOf(f, it) } ?: f }).maxOrNull(),
-                dueAt = real,
+                notBefore = listOfNotNull(task.notBefore, window.from?.let { f -> if (window.soft) f else minOf(f, window.end) }).maxOrNull(),
+                dueAt = window.real,
                 windowed = true,
                 run = index,
                 offset = offset,
                 taskParts = pieces.size,
                 taskMinutes = pieces.sumOf { it.minutes },
-            ).also {
-                offset += run.size
-                previous = it
-            }
+            ).also { offset += run.size }
         }
     }
 
@@ -366,8 +380,10 @@ object Planner {
             if (left.isEmpty()) return if (task.source == Source.Gmail) emptyList() else listOf(Piece("finish and hand in", MIN_CHUNK))
             // Minutes worked beyond the steps ticked off (a session stopped early) come off the
             // next steps in order, each kept to at least a last few minutes, as it isn't done.
-            // Steps ticked by hand gave no minutes, so they take none back from what was worked.
-            var spare = (task.workedMin + task.photoMin - task.subSteps.filter { it.done && !it.byHand }.sumOf { it.minutes * multiplier }).roundToInt().coerceAtLeast(0)
+            // Steps ticked by hand take back only the timed minutes they kept when ticked (work on them
+            // before the tick), the rest none: what's left goes to the next steps.
+            var spare = (task.workedMin + task.photoMin - task.subSteps.filter { it.done }.sumOf { if (it.byHand) it.timedMin.toDouble() else it.minutes * multiplier })
+                .roundToInt().coerceAtLeast(0)
             return left.map { step ->
                 val full = (step.minutes * multiplier).roundToInt().coerceAtLeast(1)
                 val off = minOf(spare, (full - MIN_CHUNK).coerceAtLeast(0))

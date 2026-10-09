@@ -95,7 +95,7 @@ fun TaskItem.withEnrichment(new: Enrichment): TaskItem {
         subSteps = next.subSteps.map { step ->
             val place = seen.merge(step.title, 1, Int::plus)!! - 1
             val old = before[step.title]?.getOrNull(place)
-            if (old?.done == true) step.copy(done = true, byHand = old.byHand) else step
+            if (old?.done == true) step.copy(done = true, byHand = old.byHand, timedMin = old.timedMin) else step
         },
     )
 }

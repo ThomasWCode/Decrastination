@@ -199,6 +199,25 @@ class PlannerTest {
     }
 
     @Test
+    fun `minutes timed on a block before it was ticked by hand aren't taken off the next`() {
+        // Ten minutes on A, stopped, then A ticked by hand: it kept them.
+        val steps = listOf(SubStep("A", 30, done = true, byHand = true, timedMin = 10), SubStep("B", 30))
+        val plan = plan(listOf(task("t", Fixtures.at("2026-10-20T09:00"), steps = steps, worked = 10)), "2026-10-08T17:00")
+        assertEquals(listOf(30), plan.chunksOf("teams:t").map { it.minutes })
+    }
+
+    @Test
+    fun `a run is planned to be done by any later run's deadline, and in order`() {
+        // Listed first but due later than the block after it: done by then, before it.
+        val steps = listOf(SubStep("First", 30, dueAt = Fixtures.at("2026-10-16T23:59")), SubStep("Second", 30, dueAt = Fixtures.at("2026-10-12T23:59")))
+        val plan = plan(listOf(task("e", dueAt = null, steps = steps)), "2026-10-08T17:00")
+        val chunks = plan.buckets.flatMap { it.chunks }.filter { it.taskId == "teams:e" }
+        assertEquals(listOf("First", "Second"), chunks.map { it.step })
+        // Each still shows its own date.
+        assertEquals(Fixtures.at("2026-10-16T23:59"), chunks.first().dueAt)
+    }
+
+    @Test
     fun `a task's runs all carry its whole length, for the shorter-first order`() {
         val steps = listOf(SubStep("A", 60, dueAt = Fixtures.at("2026-10-12T23:59")), SubStep("B", 60, from = Fixtures.at("2026-10-10T00:00"), dueAt = Fixtures.at("2026-10-14T23:59")))
         val plan = plan(listOf(task("e", dueAt = null, steps = steps)), "2026-10-08T17:00")
