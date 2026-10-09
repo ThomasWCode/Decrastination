@@ -258,6 +258,16 @@ class PlannerTest {
     }
 
     @Test
+    fun `a per-day step that misses its deadline goes to a later day with time, not a full one`() {
+        // 22:10 on Thursday: Thursday has no time left. Due Saturday 09:00, so Friday is the last
+        // usable day: one step there, the other two on Saturday and Sunday, none tonight.
+        val steps = (1..3).map { SubStep("20 new cards", 9) }
+        val deck = task("deck", Fixtures.at("2026-10-10T09:00"), steps = steps).copy(stepsPerDay = 1)
+        val days = plan(listOf(deck), "2026-10-08T22:10").dayOf("deck")
+        assertEquals(listOf("2026-10-09", "2026-10-10", "2026-10-11").map(LocalDate::parse), days)
+    }
+
+    @Test
     fun `work whose last usable day comes first is placed first`() {
         // The essay is due later but has a three-day margin, so its last usable day (Wednesday)
         // comes before the other's (Friday): it gets Wednesday, its own last usable day.

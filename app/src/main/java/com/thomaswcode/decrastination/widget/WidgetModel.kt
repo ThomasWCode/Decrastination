@@ -76,6 +76,9 @@ data class WidgetModel(
         private fun warning(state: TaskState, now: Long): String? {
             val failing = Source.entries.firstOrNull { state.status(it).error != null }
             if (failing != null) return "Can't read ${failing.label}"
+            // The Teams widget's own trouble (its sync service off, its last sync failed), which
+            // also explains a ↻ that didn't sync Teams.
+            state.status(Source.Teams).note?.let { return it }
             val teamsAsOf = state.status(Source.Teams).dataAsOf
             if (teamsAsOf != null && now - teamsAsOf > TEAMS_STALE_MS) return "Teams synced ${Format.ago(teamsAsOf, now)}"
             return null
