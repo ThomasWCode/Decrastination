@@ -32,6 +32,12 @@ data class Enrichment(
     val ankiSections: List<String> = emptyList(),
     /** The day of a test the work prepares for: it's due by then. */
     val testDate: Long? = null,
+    /**
+     * Why the model's steps or blocks weren't used (out of range, not adding up), so it's said on
+     * the task: its estimate is planned whole instead. Null when they were, or it gave none; the
+     * rules never drop a plan.
+     */
+    val dropped: String? = null,
 )
 
 /**

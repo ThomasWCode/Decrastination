@@ -31,6 +31,7 @@ import com.thomaswcode.decrastination.enrich.ClaudeEnricher
 import com.thomaswcode.decrastination.enrich.ClaudeReviewer
 import com.thomaswcode.decrastination.enrich.EnrichWorker
 import com.thomaswcode.decrastination.enrich.Enricher
+import com.thomaswcode.decrastination.enrich.ModelAlerts
 import com.thomaswcode.decrastination.enrich.ModelHold
 import com.thomaswcode.decrastination.enrich.PhotoChecker
 import com.thomaswcode.decrastination.enrich.RuleEnricher
@@ -502,6 +503,8 @@ class AppGraph private constructor(context: Context) {
                 )
             }
             if (!laid) continue
+            // A plan of the model's dropped (out of range, not adding up): said once, as it's laid.
+            made.dropped?.let { ModelAlerts.dropped(app, task, it) } ?: run { if (task.enrichment?.dropped != null) ModelAlerts.planKept(app, task.id) }
             // Its deck tasks take their sections and due date from it.
             val after = task.withEnrichment(made)
             val sections = AnkiRules.sectionsOf(after)

@@ -102,6 +102,10 @@ private fun TaskRow(task: TaskItem, now: Long, zone: java.time.ZoneId, tick: (Ta
         if (task.isOpen && task.extra[Merge.EXTRA_FOLLOW_UP] == "true") {
             Text("Archived in Gmail: kept for its blocks till they're done", style = MaterialTheme.typography.bodySmall)
         }
+        // Claude's plan for it not used (out of range, or not adding up): said, so it can be checked.
+        Enrichments.current(task)?.dropped?.takeIf { task.isOpen }?.let { why ->
+            Text("Claude's plan was dropped ($why): planned as one piece", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+        }
         if (expanded) {
             // The enrichment's step only while it's of the email as it is: a new message's own rules' step otherwise.
             (Enrichments.current(task)?.nextStep ?: task.extra[GmailThreads.EXTRA_NEXT_STEP])?.let { Text("Next: $it", style = MaterialTheme.typography.bodySmall) }
