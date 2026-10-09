@@ -133,7 +133,8 @@ class CheckInActivity : ComponentActivity() {
                     HorizontalDivider()
                     Text("Review, ${Format.at(review.at, graph.clock.now(), graph.clock.zone())}", style = MaterialTheme.typography.titleSmall)
                     review.lines.forEach { Text("• $it", style = MaterialTheme.typography.bodyMedium) }
-                    Text(if (review.by == "rules") "By the rules (Claude is off)." else "By Claude.", style = MaterialTheme.typography.bodySmall)
+                    // Why the rules wrote it, where that was kept (older reviews didn't keep it).
+                    Text(if (review.by == "rules") "By the rules" + (review.why?.let { ": $it." } ?: ".") else "By Claude.", style = MaterialTheme.typography.bodySmall)
                 }
             }
         }

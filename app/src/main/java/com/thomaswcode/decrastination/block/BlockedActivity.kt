@@ -119,7 +119,9 @@ class BlockedActivity : ComponentActivity() {
         }
         // Nothing is blocked any more (free time earned, quiet hours begun), or not this: let it through.
         LaunchedEffect(verdict, session, targetBlocked) {
-            if ((verdict !is BlockPolicy.Verdict.Block || !targetBlocked) && session == null) finish()
+            // Its target no longer blocked goes at once, session or not; otherwise once nothing's
+            // blocked and no session holds it.
+            if (!targetBlocked || (verdict !is BlockPolicy.Verdict.Block && session == null)) finish()
         }
         val next = if (session != null) plan.chunksOf(session.taskId).firstOrNull() ?: plan.next else plan.next
         val photoChecker = remember(settings.aiEnabled, settings.aiKeyActive) { graph.photoChecker() }
@@ -163,8 +165,8 @@ class BlockedActivity : ComponentActivity() {
                         if (session == null) {
                             // Not before it's available (an Anki deck's next cards at 04:00).
                             FilledTonalButton(enabled = next.startable(plan.now), onClick = {
-                                scope.launch { Sessions.start(this@BlockedActivity, next.taskId, next.label, next.step, next.minutes) }
-                            }) { Text("Start ${Format.minutes(next.minutes)}") }
+                                scope.launch { Sessions.start(this@BlockedActivity, next.taskId, next.label, next.step, next.minutes, next.box) }
+                            }) { Text("Start ${Format.minutes(minOf(next.minutes, Focus.MAX_SESSION_MIN))}") }
                         } else {
                             OutlinedButton(onClick = { scope.launch { Sessions.end(this@BlockedActivity, early = true) } }) { Text("Stop session") }
                         }

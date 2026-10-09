@@ -66,6 +66,13 @@ class Focus(
 
     fun today(now: Long = clock.now()): LocalDate = Instant.ofEpochMilli(now).atZone(clock.zone()).toLocalDate()
 
+    /**
+     * Whether a session that ended at [endedAt] earns free time [now]: finished, on today's date.
+     * One finished on a day that's over (given late, the phone off at midnight) earns nothing, as
+     * that day's free time has gone.
+     */
+    fun earnsNow(completed: Boolean, endedAt: Long, now: Long = clock.now()): Boolean = completed && today(endedAt) == today(now)
+
     /** Whether a blocked app may be in front now. */
     fun verdict(now: Long = clock.now()): BlockPolicy.Verdict {
         val state = runtime.value
@@ -138,13 +145,14 @@ class Focus(
 
     val session: FocusSession? get() = runtime.value.session
 
-    /** Starts a session on [taskId]'s chunk; one already running is ended first. */
-    suspend fun startSession(taskId: String, label: String, step: String?, minutes: Int): FocusSession {
+    /**
+     * Starts a session on [taskId]'s chunk; one already running is ended first. [box] is the box
+     * length that cut the chunk ([com.thomaswcode.decrastination.core.Chunk.box]): only those
+     * sessions go to the box experiment, as a task done in one piece wasn't shaped by it.
+     */
+    suspend fun startSession(taskId: String, label: String, step: String?, minutes: Int, box: Int? = null): FocusSession {
         stopSession()
-        // The box it's a piece of, as it is now: a review or a setting may change it while it runs.
-        val kind = tasks.value.tasks.firstOrNull { it.id == taskId }?.kind ?: Kind.Admin
-        val box = if (step == null || step.startsWith("part ")) runtime.value.calibration.boxMin[kind] ?: settings.value.boxMin else null
-        val session = FocusSession(taskId, label, step, minutes.coerceIn(1, MAX_SESSION_MIN), clock.now(), clock.uptime(), box)
+        val session = FocusSession(taskId, label, step, minutes.coerceIn(1, MAX_SESSION_MIN), clock.now(), clock.uptime(), box, whole = minutes <= MAX_SESSION_MIN)
         runtime.update { it.copy(session = session) }
         return session
     }
@@ -165,7 +173,9 @@ class Focus(
             val session = state.session ?: return@update state
             val completed = session.isDue(now, uptime)
             val worked = if (completed) session.minutes else (session.ran(now, uptime) / 60_000L).toInt().coerceIn(0, session.minutes)
-            val end = EndedSession(session, worked, completed, now)
+            // A finished session ended when it was due, not when this ran (the phone off at its
+            // alarm, on again after midnight): its free time is that day's.
+            val end = EndedSession(session, worked, completed, if (completed) minOf(now, session.endsAt) else now)
             ended = end
             state.copy(session = null, finishing = state.finishing + end)
         }
@@ -191,7 +201,9 @@ class Focus(
                 tasks = state.tasks.map { t ->
                     if (t.id != session.taskId) return@map t
                     if (session.startedAt in t.sessionsCounted) return@map t.also { task = it }
-                    val stepIndex = if (ended.completed && session.step != null) t.subSteps.indexOfFirst { !it.done && it.title == session.step } else -1
+                    // A step longer than the session ran (cut to the most a session can be) isn't done:
+                    // its minutes count, and the planner takes them off what's left of it.
+                    val stepIndex = if (ended.completed && session.step != null && session.whole) t.subSteps.indexOfFirst { !it.done && it.title == session.step } else -1
                     val steps = if (stepIndex >= 0) t.subSteps.mapIndexed { i, s -> if (i == stepIndex) s.copy(done = true) else s } else t.subSteps
                     t.copy(
                         subSteps = steps,
@@ -224,7 +236,7 @@ class Focus(
         runtime.update { state ->
             // Given already (another caller finished it first): nothing more.
             if (ended !in state.finishing) return@update state
-            val earns = ended.completed && today(ended.endedAt) == today
+            val earns = earnsNow(ended.completed, ended.endedAt, now)
             state.copy(
                 finishing = state.finishing - ended,
                 credit = if (earns) state.credit.earn(today, Credit.forSession(session.minutes, ratio)) else state.credit.on(today),
@@ -285,14 +297,16 @@ class Focus(
     }
 
     /**
-     * Gives what's owed for the completions syncs confirmed ([TaskState.unrewarded]), then clears
-     * them. Stopped before that, they're given next time (after the next sync, or when the app
-     * starts), and [onCompleted] gives each only once. Says whether it ended a running session.
+     * Gives what's owed for the completions syncs confirmed ([TaskState.unrewarded]), hands them to
+     * [then] (which asks how each went), and only then clears them. Stopped before that, it's all
+     * done again next time (after the next sync, or when the app starts): [onCompleted] gives each
+     * only once, and [then] must be safe to repeat. Says whether it ended a running session.
      */
-    suspend fun rewardCompletions(): Boolean {
+    suspend fun rewardCompletions(then: suspend (List<TaskItem>) -> Unit = {}): Boolean {
         val waiting = tasks.value.unrewarded
         if (waiting.isEmpty()) return false
         val stopped = onCompleted(waiting)
+        then(waiting)
         tasks.update { state -> state.copy(unrewarded = state.unrewarded.filterNot { t -> waiting.any { it.id == t.id && it.doneAt == t.doneAt } }) }
         return stopped
     }
@@ -324,12 +338,14 @@ class Focus(
             // that day is over, it has gone as the rest of that day's has.
             val held = AnkiRules.heldSections(tasks.value.tasks, settings.value.ankiTextbook)
             val earned = fresh.filter { it.kind != Kind.Info && it.kind != Kind.Event && today(it.doneAt ?: now) == today }.sumOf { task ->
+                // In the plan's units, as its sessions earned theirs: the estimate as calibrated.
+                val multiplier = state.calibration.multiplier(task.kind, task.className)
                 // Vocabulary a deck task held earned its time with the deck, not again here.
-                val delegated = task.subSteps.filter { it.ankiSections.isNotEmpty() && held[task.id].orEmpty().containsAll(it.ankiSections) }.sumOf { it.minutes }
+                val delegated = task.subSteps.filter { it.ankiSections.isNotEmpty() && held[task.id].orEmpty().containsAll(it.ankiSections) }.sumOf { it.minutes } * multiplier
                 // Less what sessions and photo checks already earned time for.
                 val photos = tasks.value.tasks.firstOrNull { it.id == task.id }?.photoMin ?: task.photoMin
-                val remaining = (task.effortMin * (1 - task.sourceProgress)).roundToInt() - delegated - worked(task) - photos
-                Credit.forCompletion(remaining.coerceAtLeast(0), ratio)
+                val remaining = Planner.remaining(task.copy(workedMin = worked(task), photoMin = photos), multiplier) - delegated
+                Credit.forCompletion(remaining.roundToInt().coerceAtLeast(0), ratio)
             }
             state.copy(
                 credit = state.credit.earn(today, earned),

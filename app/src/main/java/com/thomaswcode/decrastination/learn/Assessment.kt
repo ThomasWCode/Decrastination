@@ -67,7 +67,11 @@ object Assessment {
      * judge. While notifications can't be seen, the questions are kept and asked once they can.
      */
     suspend fun ask(context: Context, completed: List<TaskItem>) {
-        val asks = completed.filter { it.kind == Kind.Homework || it.kind == Kind.Revision }.map { AssessLater(it.id, it.title, it.doneAt) }
+        // Asked again after a stop: one answered meanwhile isn't asked again.
+        val answered = AppGraph.get(context).log.value.completions.filter { it.assessment != null }
+        val asks = completed.filter { it.kind == Kind.Homework || it.kind == Kind.Revision }
+            .filterNot { t -> answered.any { it.taskId == t.id && it.doneAt == t.doneAt } }
+            .map { AssessLater(it.id, it.title, it.doneAt) }
         if (asks.isEmpty()) return
         if (!Notify.shown(context, Channels.DAILY)) {
             AppGraph.get(context).runtime.update { it.copy(assessLater = (it.assessLater + asks).distinctBy { a -> a.taskId to a.doneAt }.takeLast(MAX_LATER)) }

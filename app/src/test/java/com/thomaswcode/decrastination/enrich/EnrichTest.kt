@@ -224,6 +224,32 @@ class AnswersTest {
     }
 
     @Test
+    fun `a step longer than a focus session is cut into even parts that each fit one`() {
+        val e = parse(
+            Enrichments.Job.Assignment,
+            """{"subSteps":[{"title":"Write the essay","minutes":220,"ankiSections":[]},{"title":"Check it","minutes":20,"ankiSections":[]}],"effortMin":240,"ankiSections":[],"testDate":null}""",
+            assignment("Essay"),
+        )!!
+        assertEquals(listOf("Write the essay (1 of 2)" to 110, "Write the essay (2 of 2)" to 110, "Check it" to 20), e.subSteps!!.map { it.title to it.minutes })
+    }
+
+    @Test
+    fun `vocabulary past the step limit keeps its own step and sections, the rest folds`() {
+        val questions = (1..12).joinToString(",") { """{"title":"Question $it","minutes":10,"ankiSections":[]}""" }
+        val words = """{"title":"Learn vocabulary 2.3","minutes":20,"ankiSections":["2.3"]}"""
+        val e = parse(
+            Enrichments.Job.Assignment,
+            """{"subSteps":[$questions,$words,{"title":"Question 13","minutes":10,"ankiSections":[]}],"effortMin":150,"ankiSections":["2.3"],"testDate":null}""",
+            assignment("Questions 1-13, vocabulary 2.3"),
+        )!!
+        val steps = e.subSteps!!
+        // Its own step, with its section, so the deck that holds it still does.
+        assertEquals(listOf("2.3"), steps.single { it.title == "Learn vocabulary 2.3" }.ankiSections)
+        assertEquals("The rest: Question 12; Question 13", steps.last().title)
+        assertEquals(150, steps.sumOf { it.minutes })
+    }
+
+    @Test
     fun `an assignment that's all vocabulary is a hand-in, its work in the decks`() {
         val e = parse(Enrichments.Job.Assignment, """{"subSteps":[],"effortMin":0,"ankiSections":["1.2"],"testDate":null}""", assignment("Learn vocabulary 1.2"))!!
         assertEquals(5, e.effortMin)
@@ -237,6 +263,18 @@ class AnswersTest {
 }
 
 class AiUsageTest {
+    @Test
+    fun `the model is held while off, for an hour after a failed call, and at its cap`() {
+        val now = Fixtures.at("2026-10-10T12:00")
+        val month = AiUsage.monthOf(now, LONDON)
+        assertEquals(ModelHold.Off, ModelHold.of(false, AiUsage(month = month), now, LONDON, 200, 0.79))
+        val failed = AiUsage(month = month).failure("no connection", now - 10 * 60_000L)
+        assertEquals(ModelHold.Resting, ModelHold.of(true, failed, now, LONDON, 200, 0.79))
+        assertNull(ModelHold.of(true, failed, now + ModelHold.REST_MS, LONDON, 200, 0.79))
+        assertEquals(ModelHold.Capped, ModelHold.of(true, AiUsage(month = month, spentUsd = 1000.0), now, LONDON, 200, 0.79))
+        assertNull(ModelHold.of(true, AiUsage(month = month), now, LONDON, 200, 0.79))
+    }
+
     @Test
     fun `a new month starts at nothing, and a call is refused that could pass the cap`() {
         val usage = AiUsage(month = "2026-09", spentUsd = 250.0)
