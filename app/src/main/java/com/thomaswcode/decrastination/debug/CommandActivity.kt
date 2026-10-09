@@ -12,6 +12,7 @@ import com.thomaswcode.decrastination.block.TeamsAutoSync
 import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.Source
+import com.thomaswcode.decrastination.core.withoutEnrichment
 import com.thomaswcode.decrastination.data.Secret
 import com.thomaswcode.decrastination.enrich.ClaudeEnricher
 import com.thomaswcode.decrastination.enrich.ModelAlerts
@@ -196,8 +197,9 @@ class CommandActivity : Activity() {
                 if (graph.tasks.value.tasks.none { it.id == id }) {
                     Log.w(TAG, "enrich-task needs --es task <id> of a task")
                 } else {
-                    // Its enrichment forgotten: out of date, so this run asks for it again now.
-                    graph.tasks.update { state -> state.copy(tasks = state.tasks.map { if (it.id == id) it.copy(enrichment = null) else it }) }
+                    // Its enrichment forgotten, and the steps it gave: out of date, so this run asks for it
+                    // again now, and its answer's steps aren't taken for the source's.
+                    graph.tasks.update { state -> state.copy(tasks = state.tasks.map { if (it.id == id) it.withoutEnrichment() else it }) }
                     graph.enrichNow()
                     val task = graph.tasks.value.tasks.first { it.id == id }
                     val e = task.enrichment

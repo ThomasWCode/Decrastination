@@ -443,27 +443,31 @@ class AiUsageTest {
     }
 
     @Test
-    fun `a key problem is alerted once a stretch, and ends with a call that works or a new key`() {
-        val usage = AiUsage("2026-10")
-        val first = usage.failure("401", NOW, KeyProblem.Rejected)
-        assertTrue(usage.startsKeyProblem(first))
+    fun `a key problem is alerted once a stretch, once it can be seen, and ends with a call that works or a new key`() {
+        val first = AiUsage("2026-10").failure("401", NOW, KeyProblem.Rejected)
+        assertTrue(first.keyAlertDue)
         assertEquals(NOW, first.keyProblemSince)
-        // The hourly retry finds it again: no new alert.
+        // Not shown (notifications off): the hourly retry finds it still due.
         val retry = first.failure("401", NOW + 3_600_000, KeyProblem.Rejected)
-        assertFalse(first.startsKeyProblem(retry))
-        // No network meanwhile: the problem stands, not begun again.
-        val offline = retry.failure("timeout", NOW + 7_200_000)
+        assertTrue(retry.keyAlertDue)
+        assertEquals(NOW, retry.keyProblemSince)
+        // Shown: not again while it stands, nor for no network meanwhile.
+        val shown = retry.alerted(KeyProblem.Rejected)
+        assertFalse(shown.failure("401", NOW + 7_200_000, KeyProblem.Rejected).keyAlertDue)
+        val offline = shown.failure("timeout", NOW + 7_200_000)
         assertEquals(KeyProblem.Rejected, offline.keyProblem)
-        assertFalse(retry.startsKeyProblem(offline))
-        // Another problem is another stretch.
+        assertFalse(offline.keyAlertDue)
+        // Another problem is another stretch, and another alert; one shown for the last doesn't count.
         val broke = offline.failure("400", NOW + 10_800_000, KeyProblem.NoCredit)
-        assertTrue(offline.startsKeyProblem(broke))
-        // Over at a call that works, or with a new key; carried into a new month till then.
+        assertTrue(broke.keyAlertDue)
+        assertTrue(broke.alerted(KeyProblem.Rejected).keyAlertDue)
+        // Over at a call that works, or with a new key; carried into a new month till then, as shown.
         assertNull(broke.record(0.01, refused = false, at = NOW + 14_400_000).keyProblem)
         assertNull(broke.newKey().keyProblem)
         assertNull(broke.newKey().lastError)
-        assertEquals(KeyProblem.NoCredit, broke.forMonth("2026-11").keyProblem)
-        assertFalse(broke.startsKeyProblem(broke.forMonth("2026-11")))
+        val told = broke.alerted(KeyProblem.NoCredit)
+        assertEquals(KeyProblem.NoCredit, told.forMonth("2026-11").keyProblem)
+        assertFalse(told.forMonth("2026-11").keyAlertDue)
     }
 
     @Test
