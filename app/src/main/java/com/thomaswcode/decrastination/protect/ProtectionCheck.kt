@@ -77,6 +77,7 @@ object ProtectionCheck {
         else if (!report.serviceRunning) add("The focus service has stopped: nothing is blocked")
         if (!armed) return@buildList
         if (report.onShortcuts.isNotEmpty()) add("The focus service is on an accessibility shortcut")
+        if (!report.canRepair) add("Self-repair isn't granted: the service switched off would stay off")
         if (!report.adminActive) add("Device admin is off: the app can be uninstalled")
     }
 
