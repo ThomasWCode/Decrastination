@@ -31,6 +31,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.core.About
 import com.thomaswcode.decrastination.core.Enrichments
+import com.thomaswcode.decrastination.core.Instructions
 import com.thomaswcode.decrastination.core.Merge
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
@@ -52,8 +53,7 @@ fun TasksScreen(graph: AppGraph, activity: Activity) {
     val tick = { task: TaskItem, index: Int, title: String -> scope.launch { graph.focus.tickBlock(task.id, index, title) }; Unit }
     var writingAbout by remember { mutableStateOf<TaskItem?>(null) }
     val titles = state.tasks.associate { it.id to it.title }
-    val openIds = state.tasks.filter { it.isOpen }.mapTo(HashSet()) { it.id }
-    val actions = TileActions(tick, { writingAbout = it }, titles, openIds)
+    val actions = TileActions(tick, { writingAbout = it }, titles, state.tasks.associateBy { it.id })
     // Sources open, the finished folded, till you say otherwise.
     var folded by rememberSaveable { mutableStateOf(listOf(FINISHED, NOT_TASKS)) }
     val toggle = { key: String -> folded = if (key in folded) folded - key else folded + key }
@@ -73,7 +73,7 @@ fun TasksScreen(graph: AppGraph, activity: Activity) {
             item(key = NOT_TASKS) { FoldingHeading("Not tasks, as you said", expanded, { toggle(NOT_TASKS) }, summary = "${notTasks.size}") }
             if (expanded) itemsIndexed(notTasks, key = { _, it -> "not-" + it.id }) { index, task -> TaskTile(task, index, notTasks.size, now, zone, actions) }
         }
-        val finished = state.tasks.filter { !it.isOpen && !it.justAnEmail }.sortedByDescending { it.doneAt ?: it.lastSeenAt }
+        val finished = state.tasks.filter { !it.isOpen && !it.hidden }.sortedByDescending { it.doneAt ?: it.lastSeenAt }
         if (finished.isNotEmpty()) {
             val expanded = FINISHED !in folded
             item(key = "finished") { FoldingHeading("Finished or missed lately", expanded, { toggle(FINISHED) }, summary = "${finished.size}") }
@@ -93,7 +93,7 @@ private class TileActions(
     val tick: (TaskItem, Int, String) -> Unit,
     val instruct: (TaskItem) -> Unit,
     val titles: Map<String, String>,
-    val open: Set<String>,
+    val byId: Map<String, TaskItem>,
 )
 
 private const val FINISHED = "finished"
@@ -125,7 +125,7 @@ private fun TaskTile(task: TaskItem, index: Int, count: Int, now: Long, zone: ja
     // Claude's plan for it not used (out of range, or not adding up): said, so it can be checked.
     val dropped = Enrichments.current(task)?.dropped?.takeIf { task.isOpen }
     // Your instructions' say: waiting for another task, or a due date of yours.
-    val waitsFor = task.userAfter?.takeIf { task.isOpen && task.waiting(actions.open) }?.let { actions.titles[it] ?: it }
+    val waitsFor = task.userAfter?.takeIf { task.isOpen && Instructions.waiting(task, actions.byId) }?.let { actions.titles[it] ?: it }
     val yourDue = task.isOpen && task.userDueAt != null
     ListTile(index, count, onClick = { expanded = !expanded }) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {

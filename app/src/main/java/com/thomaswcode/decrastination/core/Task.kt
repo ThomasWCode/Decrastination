@@ -156,9 +156,6 @@ data class TaskItem(
     /** Not work to plan: an email that's just an email, or one you've said isn't a task. */
     val hidden: Boolean get() = justAnEmail || userNotATask
 
-    /** Waiting, as you said, for another task still open (in [open]) to be done first. */
-    fun waiting(open: Set<String>): Boolean = userAfter != null && userAfter != id && userAfter in open
-
     /** Your estimate, else the enrichment's, else the source's or rules', else the kind's default. */
     /**
      * Minutes of blocks you ticked off by hand in Tasks: done, but neither timed nor checked, so

@@ -16,9 +16,9 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -59,11 +59,9 @@ class CalendarActivity : ComponentActivity() {
     private fun Screen(graph: AppGraph) {
         val instructions by graph.instructions.state.collectAsStateWithLifecycle()
         val runtime by graph.runtime.state.collectAsStateWithLifecycle()
-        // Read afresh on opening, and whenever the instructions change.
-        val time by produceState(graph.calendarTime, instructions) {
-            CalendarTime.refresh(applicationContext)
-            value = graph.calendarTime
-        }
+        // As read, whenever it's read (the calendar changed, an instruction applied); and afresh on opening.
+        val time by graph.calendarState.collectAsStateWithLifecycle()
+        LaunchedEffect(Unit) { CalendarTime.refresh(applicationContext) }
         val now = graph.clock.now()
         val zone = graph.clock.zone()
         val applied = instructions.applied

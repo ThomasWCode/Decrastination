@@ -113,6 +113,38 @@ class InstructionsTest {
     }
 
     @Test
+    fun `a day you've limited isn't overfilled even by overdue work, which goes to the next day with time`() {
+        // Friday evening; the essay was due yesterday. Today: no work, as you said.
+        val essay = task("essay", "2026-10-08T09:00", effort = 90)
+        val off = applied(Change(ChangeType.DayLimit, date = "2026-10-09", freeMin = 0))
+        val p = plan(listOf(essay), listOf(off), at = Fixtures.at("2026-10-09T17:00"))
+        assertTrue(p.buckets.first { it.date == LocalDate.parse("2026-10-09") }.chunks.isEmpty())
+        assertEquals(90, p.buckets.first { it.date == LocalDate.parse("2026-10-10") }.chunks.filter { it.taskId == essay.id }.sumOf { it.minutes })
+        // Limited to 45 minutes: no more than that today, the rest tomorrow.
+        val some = applied(Change(ChangeType.DayLimit, date = "2026-10-09", freeMin = 45))
+        val q = plan(listOf(essay), listOf(some), at = Fixtures.at("2026-10-09T17:00"))
+        assertTrue(q.buckets.first { it.date == LocalDate.parse("2026-10-09") }.plannedMin <= 45)
+        assertEquals(90, q.buckets.sumOf { b -> b.chunks.filter { it.taskId == essay.id }.sumOf { it.minutes } })
+    }
+
+    @Test
+    fun `tasks waiting on each other in a circle both get planned, and a circle isn't applied`() {
+        val a = task("a", "2026-10-12T09:00").copy(userAfter = "teams:b")
+        val b = task("b", "2026-10-13T09:00").copy(userAfter = "teams:a")
+        val byId = listOf(a, b).associateBy { it.id }
+        assertFalse(Instructions.waiting(a, byId))
+        assertFalse(Instructions.waiting(b, byId))
+        assertEquals(setOf(a.id, b.id), plan(listOf(a, b)).ordered.map { it.taskId }.toSet())
+        // One waiting on a task stuck in a circle still waits for it.
+        val c = task("c", "2026-10-14T09:00").copy(userAfter = "teams:a")
+        assertTrue(Instructions.waiting(c, byId + (c.id to c)))
+        // A new one closing a circle with one applied is caught.
+        val applied = listOf(applied(Change(ChangeType.After, taskId = "teams:a", afterTaskId = "teams:b")))
+        assertTrue(Instructions.makesCircle(listOf(Change(ChangeType.After, taskId = "teams:b", afterTaskId = "teams:a")), applied))
+        assertFalse(Instructions.makesCircle(listOf(Change(ChangeType.After, taskId = "teams:c", afterTaskId = "teams:a")), applied))
+    }
+
+    @Test
     fun `a date's own limit beats its weekday's, and a weekday's holds every week`() {
         val rules = listOf(
             applied(Change(ChangeType.DayLimit, weekday = 6, freeMin = 0), at = now),
@@ -199,6 +231,17 @@ class InstructionsTest {
         assertIs<InstructionAnswers.Reading.Unclear>(farOff)
         val self = parse("""{"understood":true,"question":null,"changes":[{"type":"After","taskId":"teams:essay","afterTaskId":"teams:essay","eventKey":null,"eventTime":null,"minutes":null,"date":null,"weekday":null,"time":null,"endTime":null}]}""")
         assertIs<InstructionAnswers.Reading.Unclear>(self)
+    }
+
+    @Test
+    fun `a reading with tasks waiting on each other in a circle isn't taken`() {
+        val circle = parse(
+            """{"understood":true,"question":null,"changes":[
+              {"type":"After","taskId":"teams:prep","afterTaskId":"teams:essay","eventKey":null,"eventTime":null,"minutes":null,"date":null,"weekday":null,"time":null,"endTime":null},
+              {"type":"After","taskId":"teams:essay","afterTaskId":"teams:prep","eventKey":null,"eventTime":null,"minutes":null,"date":null,"weekday":null,"time":null,"endTime":null}
+            ]}""",
+        )
+        assertIs<InstructionAnswers.Reading.Unclear>(circle)
     }
 
     @Test

@@ -128,7 +128,11 @@ class AppGraph private constructor(context: Context) {
         set(value) {
             field = value
             focus.forgetPlan()
+            calendarState.value = value
         }
+
+    /** [calendarTime] as it changes, for a screen open while the calendar is read again. */
+    val calendarState = kotlinx.coroutines.flow.MutableStateFlow(calendarTime)
 
     fun plan(state: TaskState = tasks.value, settings: Settings = this.settings.value, now: Long = clock.now()): Plan {
         val zone = clock.zone()
@@ -371,8 +375,12 @@ class AppGraph private constructor(context: Context) {
                 }
             }
         }
-        // Instructions left waiting for Claude (off, resting, or the app stopped mid-read).
-        scope.launch { readInstructions() }
+        // Instructions left waiting for Claude (off, resting, or the app stopped mid-read); and the
+        // tasks' overrides made what the applied ones say, should a stop have come between the two.
+        scope.launch {
+            layTaskOverrides()
+            readInstructions()
+        }
         runCatching {
             app.contentResolver.registerContentObserver(
                 TeamsProvider.root,
@@ -731,6 +739,7 @@ class AppGraph private constructor(context: Context) {
     /** Applies [id], read and checked by you. False if it needs a parent code ([applyInstructionWithCode]). */
     suspend fun applyInstruction(id: String): Boolean {
         val instruction = instructions.value.instructions.firstOrNull { it.id == id && it.state == InstructionStatus.Understood } ?: return true
+        if (refuseCircle(instruction)) return true
         if (instructionNeedsCode(instruction)) return false
         setApplied(id)
         return true
@@ -738,9 +747,26 @@ class AppGraph private constructor(context: Context) {
 
     /** Applies [id] with a parent [code]. Returns what went wrong, or null. */
     suspend fun applyInstructionWithCode(id: String, code: String): String? {
+        instructions.value.instructions.firstOrNull { it.id == id }?.let { if (refuseCircle(it)) return null }
         useParentCode(code)?.let { return it }
         setApplied(id)
         return null
+    }
+
+    /**
+     * [instruction] would have tasks wait for each other in a circle, with those applied: it's
+     * marked unclear, saying so, rather than applied.
+     */
+    private suspend fun refuseCircle(instruction: Instruction): Boolean {
+        if (!Instructions.makesCircle(instruction.changes, instructions.value.applied)) return false
+        instructions.update { state ->
+            state.copy(
+                instructions = state.instructions.map {
+                    if (it.id == instruction.id) it.copy(state = InstructionStatus.Unclear, note = "It would have tasks wait for each other in a circle, so none would ever be planned") else it
+                },
+            )
+        }
+        return true
     }
 
     private suspend fun setApplied(id: String) {
@@ -780,6 +806,19 @@ class AppGraph private constructor(context: Context) {
      * again as an answer about an event does.
      */
     private suspend fun layInstructions() {
+        layTaskOverrides()
+        focus.forgetPlan()
+        CalendarTime.refresh(app)
+        Briefing.replanToday(app)
+    }
+
+    /**
+     * Each task's overrides made what the applied instructions say: the instructions are what's
+     * kept, the tasks follow. Done at start as well, so a stop between writing the one and the other
+     * (an instruction applied but not yet laid, or taken back with its override still on the task)
+     * is put right.
+     */
+    private suspend fun layTaskOverrides() {
         val overrides = Instructions.taskOverrides(instructions.value.applied)
         tasks.update { state ->
             state.copy(
@@ -790,9 +829,6 @@ class AppGraph private constructor(context: Context) {
                 },
             )
         }
-        focus.forgetPlan()
-        CalendarTime.refresh(app)
-        Briefing.replanToday(app)
     }
 
     companion object {

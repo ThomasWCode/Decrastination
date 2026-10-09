@@ -126,6 +126,43 @@ object Instructions {
     /** A change of a task's due date: once protection is armed, it needs a parent code to apply, or to take back. */
     fun needsCode(changes: List<Change>): Boolean = changes.any { it.type == ChangeType.DueBy }
 
+    /**
+     * Whether [task] waits, as you said, for another still open ([byId]: every task). Never for one
+     * that, along its own waits, comes back to it: tasks waiting on each other in a circle would
+     * never be planned, so neither waits.
+     */
+    fun waiting(task: TaskItem, byId: Map<String, TaskItem>): Boolean {
+        val first = task.userAfter ?: return false
+        if (byId[first]?.isOpen != true) return false
+        val seen = hashSetOf(task.id)
+        var next: String? = first
+        while (next != null) {
+            if (!seen.add(next)) return next != task.id
+            next = byId[next]?.takeIf { it.isOpen }?.userAfter
+        }
+        return true
+    }
+
+    /**
+     * Whether [changes], with those already [applied], would have tasks wait for each other in a
+     * circle: then it isn't applied.
+     */
+    fun makesCircle(changes: List<Change>, applied: List<Instruction>): Boolean {
+        val after = HashMap<String, String>()
+        (applied.flatMap { it.changes } + changes).filter { it.type == ChangeType.After && it.taskId != null && it.afterTaskId != null }
+            .forEach { after[it.taskId!!] = it.afterTaskId!! }
+        for (start in after.keys) {
+            val seen = hashSetOf(start)
+            var next = after[start]
+            while (next != null) {
+                if (next == start) return true
+                if (!seen.add(next)) break
+                next = after[next]
+            }
+        }
+        return false
+    }
+
     /** Each task's overrides from [applied] (in order: a later one's wins). */
     fun taskOverrides(applied: List<Instruction>): Map<String, TaskOverrides> {
         val out = HashMap<String, TaskOverrides>()
