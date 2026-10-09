@@ -107,4 +107,14 @@ class SyncerTest {
         syncer.sync(setOf(Source.Gmail))
         assertEquals(1, heard)
     }
+
+    @Test
+    fun `after-every-sync listeners hear every sync, changed or not`() = runTest {
+        val syncer = syncer(listOf(FakeSource(Source.Gmail) { items("m") }))
+        var syncs = 0
+        syncer.addAfterEverySync { syncs++ }
+        syncer.sync()
+        syncer.sync()
+        assertEquals(2, syncs)
+    }
 }

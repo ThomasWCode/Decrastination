@@ -98,6 +98,8 @@ data class TaskItem(
     val extra: Map<String, String> = emptyMap(),
     /** What the enrichment said about it (Phase 4), laid over the source's values at every merge. */
     val enrichment: Enrichment? = null,
+    /** The source's own kind, deadline and start, before the enrichment's overlay; null before Phase 4. */
+    val sourceValues: SourceValues? = null,
 ) {
     val isOpen: Boolean get() = status == Status.Open
 
@@ -110,6 +112,10 @@ data class TaskItem(
         fun id(source: Source, sourceId: String): String = "${source.name.lowercase()}:$sourceId"
     }
 }
+
+/** What a source said about a task's kind, deadline and start, kept so an overlay can be redone. */
+@Serializable
+data class SourceValues(val kind: Kind, val dueAt: Long? = null, val availableFrom: Long? = null)
 
 /**
  * A source's view of one task, as read by a sync. [Merge] turns these into [TaskItem]s, keeping

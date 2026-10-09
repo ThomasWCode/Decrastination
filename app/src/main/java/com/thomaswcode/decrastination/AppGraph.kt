@@ -168,9 +168,11 @@ class AppGraph private constructor(context: Context) {
 
     init {
         // Work a source confirms done earns free time and is logged; what's new or changed is enriched.
-        syncer.addListener { report ->
-            focus.onCompleted(report.completed)
-            EnrichWorker.enqueue(app)
+        syncer.addListener { report -> focus.onCompleted(report.completed) }
+        // What's new or changed, even in place, is enriched.
+        syncer.addAfterEverySync {
+            val modelOn = modelEnricher() != null
+            if (tasks.value.tasks.any { Enrichments.jobFor(it) != null && Enrichments.stale(it, modelOn, RuleEnricher.BY) }) EnrichWorker.enqueue(app)
         }
         // Switched on, the model goes over what only the rules have seen.
         scope.launch {
@@ -216,7 +218,10 @@ class AppGraph private constructor(context: Context) {
      * that the model declines (recorded as the model's, so it isn't asked again).
      */
     suspend fun enrichNow(model: Enricher? = modelEnricher()) {
-        var enricher = model
+        // A call that failed in the last hour (no network, a bad key) rests the model till then.
+        val usage = runtime.value.aiUsage
+        val resting = usage.lastError != null && clock.now() - (usage.lastCallAt ?: 0L) < MODEL_REST_MS
+        var enricher = model.takeIf { !resting }
         var calls = 0
         val candidates = tasks.value.tasks
             .mapNotNull { task -> Enrichments.jobFor(task)?.let { task to it } }
@@ -226,6 +231,8 @@ class AppGraph private constructor(context: Context) {
             val now = clock.now()
             val month = AiUsage.monthOf(now, clock.zone())
             val s = settings.value
+            // Switched off (or its key removed) while this runs: nothing more is sent.
+            if (!s.aiEnabled || secrets[Secret.AnthropicApiKey].isNullOrBlank()) enricher = null
             val useModel = enricher != null && calls < MAX_MODEL_CALLS && runtime.value.aiUsage.forMonth(month).allows(s.aiMonthlyCapGbp, s.usdToGbp)
             var enrichment = if (useModel) {
                 calls++
@@ -258,6 +265,9 @@ class AppGraph private constructor(context: Context) {
         /** The widget sends a change for each step of a sync; read once they've stopped. */
         private const val TEAMS_QUIET_MS = 5_000L
         private const val WIDGET_DEBOUNCE_MS = 1_000L
+
+        /** After a failed call, the model is left alone this long. */
+        private const val MODEL_REST_MS = 3_600_000L
 
         /** The most model calls one enrichment run makes: the rest wait for the next. */
         const val MAX_MODEL_CALLS = 20

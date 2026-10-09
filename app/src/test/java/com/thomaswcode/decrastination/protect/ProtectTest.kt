@@ -186,6 +186,15 @@ class SettingsChangesTest {
     }
 
     @Test
+    fun `switching Claude on or raising its cap waits once armed, switching it off doesn't`() {
+        val armed = Settings(armed = true)
+        assertEquals(1, SettingsChanges.propose(armed, armed.copy(aiEnabled = true), emptyList(), now, ::newId).pending.size)
+        assertEquals(1, SettingsChanges.propose(armed, armed.copy(aiMonthlyCapGbp = 300), emptyList(), now, ::newId).pending.size)
+        val on = armed.copy(aiEnabled = true)
+        assertEquals(false, SettingsChanges.propose(on, on.copy(aiEnabled = false), emptyList(), now, ::newId).settings.aiEnabled)
+    }
+
+    @Test
     fun `disarming waits, arming doesn't`() {
         val armed = SettingsChanges.propose(Settings(), Settings(armed = true), emptyList(), now, ::newId)
         assertTrue(armed.settings.armed)

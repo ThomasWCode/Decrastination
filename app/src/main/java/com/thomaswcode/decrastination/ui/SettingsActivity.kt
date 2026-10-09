@@ -165,7 +165,12 @@ class SettingsActivity : ComponentActivity() {
                         SwitchRow("${browserName(browser)}: blocked outright", blocked) { on ->
                             draft = draft.copy(
                                 blockedBrowsers = if (on) (draft.blockedBrowsers + browser).distinct() else draft.blockedBrowsers - browser,
-                                checkedBrowsers = if (on) draft.checkedBrowsers - browser else draft.checkedBrowsers,
+                                // Not blocked outright, one whose address bar can be read is watched for the sites again.
+                                checkedBrowsers = when {
+                                    on -> draft.checkedBrowsers - browser
+                                    browser in Blocklist.CHECKED_BROWSERS -> (draft.checkedBrowsers + browser).distinct()
+                                    else -> draft.checkedBrowsers
+                                },
                             )
                         }
                     }

@@ -62,10 +62,11 @@ object SettingsChanges {
         "teamsSyncEveryMin" to { _, _ -> false },
         "armed" to { old, new -> old.armed && !new.armed },
         "loosenDelayHours" to { old, new -> new.loosenDelayHours < old.loosenDelayHours },
-        // The model's work changes estimates and steps, not what's blocked or when.
-        "aiEnabled" to { _, _ -> false },
-        "aiMonthlyCapGbp" to { _, _ -> false },
-        "usdToGbp" to { _, _ -> false },
+        // The model's triage can put an email off or call it an event, lifting pressure: switching
+        // it on, or letting it spend more, waits.
+        "aiEnabled" to { old, new -> !old.aiEnabled && new.aiEnabled },
+        "aiMonthlyCapGbp" to { old, new -> new.aiMonthlyCapGbp > old.aiMonthlyCapGbp },
+        "usdToGbp" to { old, new -> new.usdToGbp < old.usdToGbp },
     )
 
     private val LABELS = mapOf(

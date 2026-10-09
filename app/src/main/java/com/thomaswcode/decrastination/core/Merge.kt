@@ -65,6 +65,7 @@ object Merge {
                     firstSeenAt = now,
                     lastSeenAt = now,
                     extra = f.extra,
+                    sourceValues = SourceValues(f.kind, f.dueAt, f.availableFrom),
                 )
                 added += task
                 fresh[id] = task
@@ -85,6 +86,7 @@ object Merge {
                 derived = f.derived,
                 lastSeenAt = now,
                 extra = f.extra,
+                sourceValues = SourceValues(f.kind, f.dueAt, f.availableFrom),
             ).enriched()
             val next = when {
                 // Reported with the progress it had while open: finished through its own progress
