@@ -35,6 +35,9 @@ data class Chunk(
 ) {
     val label: String get() = step?.let { "$title: $it" } ?: title
 
+    /** Bad news, shown in red wherever it appears: overdue, due today, or behind. */
+    val urgent: Boolean get() = overdue || dueToday || behind
+
     fun startable(now: Long): Boolean = availableAt == null || availableAt <= now
 }
 
