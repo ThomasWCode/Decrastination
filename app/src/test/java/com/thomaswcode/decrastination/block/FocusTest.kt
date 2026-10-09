@@ -366,6 +366,37 @@ class FocusTest {
     }
 
     @Test
+    fun `a finished session processed late is dated at its end, and its time isn't today's`() = runTest {
+        tasks.update { it.copy(tasks = listOf(task("hw", effort = 90))) }
+        val session = focus.startSession("teams:hw", "hw", null, 30)
+        // The phone was off at its alarm, and it's processed the next morning.
+        clock.time += 14 * 3_600_000L
+        focus.stopSession()
+        assertEquals(session.endsAt, log.value.sessions.single().endedAt)
+        assertEquals(0L, focus.creditLeftMs())
+    }
+
+    @Test
+    fun `a session finished on a day that's over earns nothing, and says so`() = runTest {
+        val yesterday = clock.time - 24 * 3_600_000L
+        assertTrue(focus.earnsNow(true, clock.time))
+        assertFalse(focus.earnsNow(true, yesterday))
+        assertFalse(focus.earnsNow(false, clock.time))
+    }
+
+    @Test
+    fun `a step longer than a session isn't ticked by one, its minutes count`() = runTest {
+        tasks.update { it.copy(tasks = listOf(task("t", effort = 240, steps = listOf(SubStep("Essay", 240))))) }
+        focus.startSession("teams:t", "t: Essay", "Essay", 240)
+        assertEquals(Focus.MAX_SESSION_MIN, focus.session!!.minutes)
+        clock.time += Focus.MAX_SESSION_MIN * 60_000L
+        focus.stopSession()
+        val t = tasks.value.tasks.single()
+        assertEquals(listOf(false), t.subSteps.map { it.done })
+        assertEquals(Focus.MAX_SESSION_MIN, t.workedMin)
+    }
+
+    @Test
     fun `what counts as blocked follows the settings`() {
         assertEquals(Focus.Target.App("com.google.android.youtube"), focus.target("com.google.android.youtube"))
         assertEquals(Focus.Target.Browser("org.mozilla.firefox"), focus.target("org.mozilla.firefox"))

@@ -100,6 +100,8 @@ data class FocusSession(
     val startedUptime: Uptime? = null,
     /** The box length that cut it, for the box experiment; null for a step of its own or a task done in one piece. */
     val box: Int? = null,
+    /** False when its chunk was longer than a session can run: finished, it adds its minutes, not its step done. */
+    val whole: Boolean = true,
 ) {
     val endsAt: Long get() = startedAt + minutes * 60_000L
 

@@ -1,5 +1,6 @@
 package com.thomaswcode.decrastination.enrich
 
+import com.thomaswcode.decrastination.block.Focus
 import com.thomaswcode.decrastination.core.Enrichment
 import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.core.Kind
@@ -163,6 +164,16 @@ object Answers {
     private const val STEPS_SLACK_MIN = 10
     private val SECTION = Regex("""^[1-9]\.[1-9]$""")
 
+    /** [step] in even parts no longer than a focus session ([Focus.MAX_SESSION_MIN]), numbered if there's more than one. */
+    private fun fitSessions(step: SubStep): List<SubStep> {
+        val parts = (step.minutes + Focus.MAX_SESSION_MIN - 1) / Focus.MAX_SESSION_MIN
+        if (parts <= 1) return listOf(step)
+        val suffix = { i: Int -> " (${i + 1} of $parts)" }
+        return (0 until parts).map { i ->
+            step.copy(title = step.title.take(MAX_TITLE - suffix(i).length) + suffix(i), minutes = step.minutes / parts + if (i < step.minutes % parts) 1 else 0)
+        }
+    }
+
     /** A test's day: work must be done before school that morning. */
     private val SCHOOL_STARTS: LocalTime = LocalTime.of(8, 30)
 
@@ -186,12 +197,18 @@ object Answers {
                 val valid = s.subSteps.takeIf { usable }.orEmpty()
                     // A step tagged as vocabulary that asks for anything else too stays planned whole.
                     .map { SubStep(it.title.trim().take(MAX_TITLE), it.minutes, ankiSections = if (AnkiRules.vocabularyOnly(it.title)) sections(it.ankiSections) else emptyList()) }
-                // More steps than the planner takes: the rest become one last step, so none of the work goes.
+                    // Longer than a focus session can run: even parts that each fit one, so finishing
+                    // a session never ticks off more than it did.
+                    .flatMap(::fitSessions)
+                // More steps than the planner takes: the rest become one last step, so none of the work
+                // goes. Vocabulary among them keeps a step of its own, with its sections, so the decks
+                // that hold it still do, and it isn't planned in the last step as well.
                 val steps = if (valid.size <= MAX_STEPS) {
                     valid
                 } else {
-                    val rest = valid.drop(MAX_STEPS - 1)
-                    valid.take(MAX_STEPS - 1) + SubStep(("The rest: " + rest.joinToString("; ") { it.title }).take(MAX_TITLE), rest.sumOf { it.minutes })
+                    val (words, rest) = valid.drop(MAX_STEPS - 1).partition { it.ankiSections.isNotEmpty() }
+                    valid.take(MAX_STEPS - 1) + words +
+                        listOfNotNull(rest.takeIf { it.isNotEmpty() }?.let { r -> SubStep(("The rest: " + r.joinToString("; ") { it.title }).take(MAX_TITLE), r.sumOf { it.minutes }) })
                 }
                 val sections = sections(s.ankiSections + steps.flatMap { it.ankiSections })
                 // Steps that don't add up to the total (within a tenth, or ten minutes): one of the two

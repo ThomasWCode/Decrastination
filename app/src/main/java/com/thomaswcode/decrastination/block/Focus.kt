@@ -66,6 +66,13 @@ class Focus(
 
     fun today(now: Long = clock.now()): LocalDate = Instant.ofEpochMilli(now).atZone(clock.zone()).toLocalDate()
 
+    /**
+     * Whether a session that ended at [endedAt] earns free time [now]: finished, on today's date.
+     * One finished on a day that's over (given late, the phone off at midnight) earns nothing, as
+     * that day's free time has gone.
+     */
+    fun earnsNow(completed: Boolean, endedAt: Long, now: Long = clock.now()): Boolean = completed && today(endedAt) == today(now)
+
     /** Whether a blocked app may be in front now. */
     fun verdict(now: Long = clock.now()): BlockPolicy.Verdict {
         val state = runtime.value
@@ -145,7 +152,7 @@ class Focus(
      */
     suspend fun startSession(taskId: String, label: String, step: String?, minutes: Int, box: Int? = null): FocusSession {
         stopSession()
-        val session = FocusSession(taskId, label, step, minutes.coerceIn(1, MAX_SESSION_MIN), clock.now(), clock.uptime(), box)
+        val session = FocusSession(taskId, label, step, minutes.coerceIn(1, MAX_SESSION_MIN), clock.now(), clock.uptime(), box, whole = minutes <= MAX_SESSION_MIN)
         runtime.update { it.copy(session = session) }
         return session
     }
@@ -166,7 +173,9 @@ class Focus(
             val session = state.session ?: return@update state
             val completed = session.isDue(now, uptime)
             val worked = if (completed) session.minutes else (session.ran(now, uptime) / 60_000L).toInt().coerceIn(0, session.minutes)
-            val end = EndedSession(session, worked, completed, now)
+            // A finished session ended when it was due, not when this ran (the phone off at its
+            // alarm, on again after midnight): its free time is that day's.
+            val end = EndedSession(session, worked, completed, if (completed) minOf(now, session.endsAt) else now)
             ended = end
             state.copy(session = null, finishing = state.finishing + end)
         }
@@ -192,7 +201,9 @@ class Focus(
                 tasks = state.tasks.map { t ->
                     if (t.id != session.taskId) return@map t
                     if (session.startedAt in t.sessionsCounted) return@map t.also { task = it }
-                    val stepIndex = if (ended.completed && session.step != null) t.subSteps.indexOfFirst { !it.done && it.title == session.step } else -1
+                    // A step longer than the session ran (cut to the most a session can be) isn't done:
+                    // its minutes count, and the planner takes them off what's left of it.
+                    val stepIndex = if (ended.completed && session.step != null && session.whole) t.subSteps.indexOfFirst { !it.done && it.title == session.step } else -1
                     val steps = if (stepIndex >= 0) t.subSteps.mapIndexed { i, s -> if (i == stepIndex) s.copy(done = true) else s } else t.subSteps
                     t.copy(
                         subSteps = steps,
@@ -225,7 +236,7 @@ class Focus(
         runtime.update { state ->
             // Given already (another caller finished it first): nothing more.
             if (ended !in state.finishing) return@update state
-            val earns = ended.completed && today(ended.endedAt) == today
+            val earns = earnsNow(ended.completed, ended.endedAt, now)
             state.copy(
                 finishing = state.finishing - ended,
                 credit = if (earns) state.credit.earn(today, Credit.forSession(session.minutes, ratio)) else state.credit.on(today),
