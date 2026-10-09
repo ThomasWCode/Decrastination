@@ -84,6 +84,7 @@ class CheckInActivity : ComponentActivity() {
         val log by graph.log.state.collectAsStateWithLifecycle()
         val scope = rememberCoroutineScope()
         var feel by remember { mutableIntStateOf(0) }
+        var saving by remember { mutableStateOf(false) }
         var avoided by remember { mutableStateOf("") }
         var inTheWay by remember { mutableStateOf("") }
         var change by remember { mutableStateOf("") }
@@ -106,12 +107,20 @@ class CheckInActivity : ComponentActivity() {
                     OutlinedTextField(change, { change = it }, label = { Text("What would you change about the plan?") }, modifier = Modifier.fillMaxWidth())
                     OutlinedTextField(energy, { energy = it }, label = { Text("When in the day did you have most energy?") }, modifier = Modifier.fillMaxWidth())
                     Button(
-                        enabled = feel > 0,
+                        enabled = feel > 0 && !saving,
                         onClick = {
+                            saving = true
                             scope.launch {
                                 val now = graph.clock.now()
-                                graph.log.update { it.copy(checkIns = it.checkIns + CheckIn(week, now, feel, avoided.trim(), inTheWay.trim(), change.trim(), energy.trim())).trimmed(now) }
+                                var added = false
+                                graph.log.update { log ->
+                                    // Once a week: a second tap (or another screen) finds it there already.
+                                    if (log.checkIns.any { it.weekOf == week }) return@update log
+                                    added = true
+                                    log.copy(checkIns = log.checkIns + CheckIn(week, now, feel, avoided.trim(), inTheWay.trim(), change.trim(), energy.trim())).trimmed(now)
+                                }
                                 Notify.cancel(this@CheckInActivity, CheckIns.ID)
+                                if (!added) return@launch
                                 // As a job: it can outlast this screen.
                                 ReviewWorker.enqueue(this@CheckInActivity, ifDue = false)
                             }

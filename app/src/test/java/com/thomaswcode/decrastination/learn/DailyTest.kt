@@ -99,6 +99,14 @@ class ReviewInputTest {
     private val now = Fixtures.at("2026-10-11T21:00")
 
     @Test
+    fun `the model sees the learned margins and boxes, not only the settings`() {
+        val calibration = Calibration(marginDays = mapOf(Kind.Homework to 3), boxMin = mapOf(Kind.Homework to 25))
+        val text = ReviewInput.describe(ActivityLog(), calibration, Settings(), now, LONDON)
+        assertTrue("Learned margins (days, used instead of marginDays): Homework 3" in text, text)
+        assertTrue("Learned box lengths (minutes, used instead of boxMin): Homework 25" in text, text)
+    }
+
+    @Test
     fun `the model's changes are said as they stand, in place or waiting`() {
         val changes = listOf(ReviewInput.Change("boxMin", 30, "shorter pieces got finished"), ReviewInput.Change("marginDays", 0, "always early"))
         // Armed, the margin's lowering waits: the margin is still 1.

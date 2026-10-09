@@ -84,6 +84,9 @@ object ReviewInput {
         appendLine()
         appendLine("Settings: boxMin ${settings.boxMin}, marginDays ${settings.marginDays}, softMinPerDay ${settings.softMinPerDay}, workMinPerFreeMin ${settings.workMinPerFreeMin}.")
         if (calibration.multipliers.isNotEmpty()) appendLine("Learned time multipliers: " + calibration.multipliers.entries.joinToString { (k, v) -> "$k ×%.2f".format(Locale.UK, v) })
+        // Per kind, these stand in for the settings above: the planner uses them where they're set.
+        if (calibration.marginDays.isNotEmpty()) appendLine("Learned margins (days, used instead of marginDays): " + calibration.marginDays.entries.joinToString { (k, v) -> "${k.name} $v" })
+        if (calibration.boxMin.isNotEmpty()) appendLine("Learned box lengths (minutes, used instead of boxMin): " + calibration.boxMin.entries.joinToString { (k, v) -> "${k.name} $v" })
     }.trimEnd()
 
     /** Whether [change] is to a setting the review may change, and within its bounds. */

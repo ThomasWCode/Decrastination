@@ -1,5 +1,6 @@
 package com.thomaswcode.decrastination.sources.anki
 
+import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.core.Fetched
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.Source
@@ -112,7 +113,8 @@ object AnkiRules {
 
     /** The vocabulary sections the enrichment read in [task] ("1.2"). */
     fun enrichedSections(task: TaskItem): List<Pair<Int, Int>> =
-        task.enrichment?.ankiSections.orEmpty().mapNotNull { section ->
+        // Only an enrichment of the task as it is: one of content since changed names old sections.
+        task.enrichment?.takeIf { it.inputHash == Enrichments.inputHash(task) }?.ankiSections.orEmpty().mapNotNull { section ->
             section.split('.').takeIf { it.size == 2 }?.let { (major, minor) -> major.toIntOrNull()?.let { a -> minor.toIntOrNull()?.let { b -> a to b } } }
         }.distinct()
 

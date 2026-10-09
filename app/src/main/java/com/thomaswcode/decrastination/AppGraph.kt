@@ -7,6 +7,7 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import com.thomaswcode.decrastination.block.Focus
+import com.thomaswcode.decrastination.block.Sessions
 import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.Planner
@@ -257,8 +258,9 @@ class AppGraph private constructor(context: Context) {
 
     init {
         // Work a source confirms done earns free time and is logged.
+        // A session on a task the sync found done ends with it, and so do its notification and alarm.
         syncer.addListener { report ->
-            focus.rewardCompletions()
+            if (focus.rewardCompletions()) Sessions.clear(app)
             // "How was it?" for finished homework and revision.
             Assessment.ask(app, report.completed)
             CalendarTime.refresh(app)
@@ -266,8 +268,10 @@ class AppGraph private constructor(context: Context) {
         // Any a stop left ungiven: completions, and sessions' endings.
         scope.launch {
             focus.finishSessions()
-            focus.rewardCompletions()
+            if (focus.rewardCompletions()) Sessions.clear(app)
         }
+        // "How was it?" questions kept while notifications were off, once they're on.
+        syncer.addAfterEverySync { Assessment.askLater(app) }
         // What's new or changed, even in place, is enriched.
         syncer.addAfterEverySync {
             val modelOn = modelAvailable()
