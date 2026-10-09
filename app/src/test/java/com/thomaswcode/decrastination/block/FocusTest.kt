@@ -341,6 +341,32 @@ class FocusTest {
     }
 
     @Test
+    fun `a session ended with its task's completion is counted in the saved completion too`() = runTest {
+        tasks.update { it.copy(tasks = listOf(task("hw", effort = 45))) }
+        focus.startSession("teams:hw", "hw", null, 30)
+        clock.time += 30 * 60_000L
+        val done = tasks.value.tasks.single().copy(status = Status.Done, doneAt = clock.time)
+        tasks.update { it.copy(tasks = listOf(done), unrewarded = listOf(done)) }
+        // The session ended (the reward's first step), then the app stopped, and the next read reopened the task.
+        focus.stopSession()
+        tasks.update { s -> s.copy(tasks = s.tasks.map { it.copy(status = Status.Open, doneAt = null, workedMin = 0) }) }
+        val sessionCredit = focus.creditLeftMs()
+        focus.rewardCompletions()
+        // 45 less the session's 30: 5 minutes more, not 15.
+        assertEquals(sessionCredit + 5 * 60_000L, focus.creditLeftMs())
+        assertEquals(30, log.value.completions.single().workedMin)
+    }
+
+    @Test
+    fun `a stop meant for one session doesn't end the one after it`() = runTest {
+        tasks.update { it.copy(tasks = listOf(task("a"), task("b"))) }
+        val first = focus.startSession("teams:a", "a", null, 30)
+        focus.startSession("teams:b", "b", null, 30)
+        assertNull(focus.stopSession(first))
+        assertEquals("teams:b", focus.session?.taskId)
+    }
+
+    @Test
     fun `what counts as blocked follows the settings`() {
         assertEquals(Focus.Target.App("com.google.android.youtube"), focus.target("com.google.android.youtube"))
         assertEquals(Focus.Target.Browser("org.mozilla.firefox"), focus.target("org.mozilla.firefox"))
