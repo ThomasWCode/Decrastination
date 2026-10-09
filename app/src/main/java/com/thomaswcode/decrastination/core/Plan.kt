@@ -30,8 +30,12 @@ data class Chunk(
     val parts: Int,
     /** The whole task's remaining minutes: shorter tasks go first among equals. */
     val taskMinutes: Int,
+    /** When it can be started, if that's later than the plan's now (an Anki deck's cards come at 04:00). */
+    val availableAt: Long? = null,
 ) {
     val label: String get() = step?.let { "$title: $it" } ?: title
+
+    fun startable(now: Long): Boolean = availableAt == null || availableAt <= now
 }
 
 data class DayBucket(val date: LocalDate, val capacityMin: Int, val chunks: List<Chunk>) {
@@ -60,11 +64,14 @@ data class Plan(
     /** Every chunk in the order it's meant to be done. */
     val ordered: List<Chunk> get() = buckets.flatMap { it.chunks }
 
-    /** The single next thing to do: today's first chunk, else the nearest day's. */
-    val next: Chunk? get() = ordered.firstOrNull()
+    /**
+     * The single next thing to do: the first chunk that can be started now, today's before the
+     * nearest day's; if none can, the first.
+     */
+    val next: Chunk? get() = ordered.firstOrNull { it.startable(now) } ?: ordered.firstOrNull()
 
-    /** And the one after it. */
-    val then: Chunk? get() = ordered.getOrNull(1)
+    /** And the one after it, chosen the same way. */
+    val then: Chunk? get() = next?.let { first -> ordered.filter { it !== first }.let { rest -> rest.firstOrNull { it.startable(now) } ?: rest.firstOrNull() } }
 
     fun chunksOf(taskId: String): List<Chunk> = ordered.filter { it.taskId == taskId }
 }

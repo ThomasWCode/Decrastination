@@ -195,6 +195,18 @@ class AnkiRulesTest {
     }
 
     @Test
+    fun `a homework deck part-way through today's new cards steps from what's left today`() {
+        val homework = listOf(assignment("Familie und Ehe", "Learn vocabulary column 1.2", Fixtures.at("2026-10-02T09:00")))
+        val partway = decks.map { if (it.id == 12L) it.copy(new = 5) else it }
+        val deck = AnkiRules.homeworkDecks(partway, 1, homework, unseen = { 45 }, now = NOW, zone = LONDON).single()
+        assertEquals(listOf("5 new cards", "20 new cards", "20 new cards"), deck.subSteps!!.map { it.title })
+        // None left today: 20 a day from Anki's next day.
+        val studied = decks.map { if (it.id == 12L) it.copy(new = 0) else it }
+        val waiting = AnkiRules.homeworkDecks(studied, 1, homework, unseen = { 45 }, now = NOW, zone = LONDON).single()
+        assertEquals(listOf("20 new cards", "20 new cards", "5 new cards"), waiting.subSteps!!.map { it.title })
+    }
+
+    @Test
     fun `deck counts parse`() {
         assertEquals(listOf(0, 3, 20), AnkiProvider.parseCounts("[0, 3, 20]")?.toList())
         assertNull(AnkiProvider.parseCounts("[0, 3]"))

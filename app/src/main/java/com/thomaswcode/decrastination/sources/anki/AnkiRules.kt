@@ -206,7 +206,7 @@ object AnkiRules {
                 sourceEffortMin = effortMin(0, left).coerceAtLeast(1),
                 done = left == 0,
                 derived = true,
-                subSteps = newCardSteps(left),
+                subSteps = newCardSteps(left, deck.new),
                 stepsPerDay = 1,
                 notBefore = if (waits) nextRollover(now, zone) else null,
                 extra = mapOf(EXTRA_DECK_ID to deck.id.toString(), EXTRA_DECK_NAME to deck.name, EXTRA_FOR to linked.joinToString(",") { it.id }),
@@ -218,12 +218,17 @@ object AnkiRules {
     fun nextRollover(now: Long, zone: ZoneId): Long =
         ankiDay(now, zone).plusDays(1).atTime(ROLLOVER_HOUR.toInt(), 0).atZone(zone).toInstant().toEpochMilli()
 
-    /** The deck's daily limit makes a day's step: 45 unseen cards are 20, 20 and 5. */
-    private fun newCardSteps(unseen: Int): List<SubStep> =
-        (0 until unseen step NEW_PER_DAY).map { start ->
-            val cards = minOf(NEW_PER_DAY, unseen - start)
-            SubStep("$cards new cards", effortMin(0, cards).coerceAtLeast(1))
-        }
+    /**
+     * The deck's daily limit makes a day's step: 45 unseen cards are 20, 20 and 5. The first is
+     * what Anki will still show today ([today] new cards), so with 5 left today they're 5, 20 and
+     * 20; with none left today (the deck waits for Anki's next day) they're 20 a day from then.
+     */
+    private fun newCardSteps(unseen: Int, today: Int): List<SubStep> {
+        if (unseen <= 0) return emptyList()
+        val first = minOf(unseen, if (today > 0) today else NEW_PER_DAY)
+        val sizes = listOf(first) + (first until unseen step NEW_PER_DAY).map { minOf(NEW_PER_DAY, unseen - it) }
+        return sizes.map { cards -> SubStep("$cards new cards", effortMin(0, cards).coerceAtLeast(1)) }
+    }
 
     const val EXTRA_DECK_ID = "deckId"
     const val EXTRA_DECK_NAME = "deckName"
