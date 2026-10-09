@@ -147,7 +147,8 @@ class BlockedActivity : ComponentActivity() {
                             }
                         }) { Text("Open") }
                         if (session == null) {
-                            FilledTonalButton(onClick = {
+                            // Not before it's available (an Anki deck's next cards at 04:00).
+                            FilledTonalButton(enabled = next.startable(plan.now), onClick = {
                                 scope.launch { Sessions.start(this@BlockedActivity, next.taskId, next.label, next.step, next.minutes) }
                             }) { Text("Start ${Format.minutes(next.minutes)}") }
                         } else {

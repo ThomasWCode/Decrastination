@@ -61,6 +61,12 @@ object AnkiRules {
     private val SECTION_IN_TEXT = Regex("""(?<![\d.])([1-9])\.([1-9])(?![\d.])""")
     private val VOCABULARY = Regex("""vocab|vokabel|wortschatz|anki""", RegexOption.IGNORE_CASE)
 
+    /** Work besides learning words: an exercise, a text, questions. */
+    private val OTHER_WORK = Regex(
+        """\b(complete|do|write|answer|read|reading|translate|translation|prepare|finish|exercises?|questions?|tasks?|essay|summary|übung\w*|aufgabe\w*|schreib\w*|lesen|lies|beantwort\w*|übersetz\w*)\b""",
+        RegexOption.IGNORE_CASE,
+    )
+
     fun ankiDay(now: Long, zone: ZoneId): LocalDate =
         Instant.ofEpochMilli(now).atZone(zone).minusHours(ROLLOVER_HOUR).toLocalDate()
 
@@ -85,6 +91,13 @@ object AnkiRules {
             .sortedWith(compareBy({ it.second.first != textbook }, { it.second.first }, { it.second.second }, { it.second.third }))
             .firstOrNull { (deck, _) -> deck.new > 0 || unseen(deck) > 0 }
             ?.first
+
+    /**
+     * Whether [text] asks for more than learning words ("Learn vocabulary 2.2 and complete
+     * exercises 3–5"). A step like that stays planned whole, deck or not: its other work isn't
+     * the deck's.
+     */
+    fun otherWork(text: String): Boolean = OTHER_WORK.containsMatchIn(text)
 
     /** The sections a piece of vocabulary homework names, in order, without repeats. */
     fun linkedSections(text: String): List<Pair<Int, Int>> {

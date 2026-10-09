@@ -92,6 +92,7 @@ object Watchdog {
             adminActive = isAdminActive(context),
             canRepair = canRepair(context),
             serviceRunning = FocusService.isRunning(context),
+            alertsShown = Notify.shown(context, Channels.PROTECTION),
         )
     }
 

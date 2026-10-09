@@ -4,6 +4,7 @@ import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.Fixtures.LONDON
 import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.core.Kind
+import com.thomaswcode.decrastination.core.SourceValues
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
 import kotlinx.coroutines.runBlocking
@@ -52,6 +53,12 @@ class RuleEnricherTest {
     }
 
     @Test
+    fun `a part that mixes vocabulary with other work isn't tagged, so it stays planned`() {
+        val steps = RuleEnricher.steps("1. Learn vocabulary 2.2 and complete exercises 3-5\n2. Translation of the text", 40)!!
+        assertEquals(listOf(emptyList<String>(), emptyList()), steps.map { it.ankiSections })
+    }
+
+    @Test
     fun `a part that's learning numbered vocabulary is a step tagged with its sections`() {
         val steps = RuleEnricher.steps("1. Learn vocabulary p46-47/ 2.2/2.3 ( vocabulary test ! )\n2. Complete the reading task", 40)!!
         assertEquals(listOf(listOf("2.2", "2.3"), emptyList()), steps.map { it.ankiSections })
@@ -76,6 +83,24 @@ class RuleEnricherTest {
 }
 
 class PromptsTest {
+    @Test
+    fun `the schema is written out as the JSON it's sent as`() {
+        val schema = Prompts.schemaJson(Enrichments.Job.Email).jsonObject
+        assertEquals("object", schema["type"]!!.jsonPrimitive.content)
+        assertEquals(JsonPrimitive(false), schema["additionalProperties"])
+        assertEquals(Json.parseToJsonElement(schema.toString()), schema)
+    }
+
+    @Test
+    fun `the model is told what the source says is due, not an older enrichment's date`() {
+        val task = assignment("Page 7-11 of booklet.").copy(
+            dueAt = Fixtures.at("2026-10-12T08:30"),
+            sourceValues = SourceValues(Kind.Homework, Fixtures.at("2026-10-14T08:30"), null),
+        )
+        val text = Prompts.describe(task, Enrichments.Job.Assignment, NOW, Fixtures.LONDON)
+        assertTrue("Due: Wednesday 14 October 2026 08:30" in text, text)
+    }
+
     @Test
     fun `every object in every schema is closed and asks for all its fields`() {
         fun check(schema: Map<*, *>) {
@@ -161,6 +186,13 @@ class AnswersTest {
         )!!
         assertEquals(listOf(listOf("3.1"), emptyList()), tagged.subSteps!!.map { it.ankiSections })
         assertEquals(listOf("3.1"), tagged.ankiSections)
+        // Tagged, but asking for other work too: kept untagged, so it's planned whole.
+        val mixed = parse(
+            Enrichments.Job.Assignment,
+            """{"subSteps":[{"title":"Learn vocabulary 3.1 and answer questions 1-4","minutes":30,"ankiSections":["3.1"]}],"effortMin":30,"ankiSections":["3.1"],"testDate":null}""",
+            task,
+        )!!
+        assertEquals(listOf(emptyList<String>()), mixed.subSteps!!.map { it.ankiSections })
         // A test's day: done before school that morning.
         assertEquals(Fixtures.at("2026-10-12T08:30"), e.testDate)
         assertEquals(40, e.effortMin)
