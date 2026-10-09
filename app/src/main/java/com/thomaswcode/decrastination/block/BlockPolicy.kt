@@ -98,4 +98,18 @@ data class FocusSession(
     val startedUptime: Uptime? = null,
 ) {
     val endsAt: Long get() = startedAt + minutes * 60_000L
+
+    /** How long it has run: by the uptime clock where it can say (the same start of the phone), else the wall clock. */
+    fun ran(now: Long, uptime: Uptime?): Long = uptime?.since(startedUptime) ?: (now - startedAt)
+
+    /**
+     * Its time is up. By the uptime clock where it can say, so setting the date either way neither
+     * ends it early nor holds it; across a restart, by the wall clock.
+     */
+    fun isDue(now: Long, uptime: Uptime?): Boolean = ran(now, uptime) >= minutes * 60_000L - FINISH_SLACK_MS
+
+    companion object {
+        /** A session ended by its alarm a moment before its minutes are up still counts as finished. */
+        const val FINISH_SLACK_MS = 5_000L
+    }
 }

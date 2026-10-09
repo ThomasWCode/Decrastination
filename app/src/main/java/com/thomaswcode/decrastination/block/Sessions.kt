@@ -39,7 +39,8 @@ object Sessions {
      */
     suspend fun restore(context: Context) {
         val session = AppGraph.get(context).focus.session ?: return
-        if (AppGraph.get(context).clock.now() >= session.endsAt) {
+        val clock = AppGraph.get(context).clock
+        if (session.isDue(clock.now(), clock.uptime())) {
             end(context, early = false)
         } else {
             showOngoing(context, session)
@@ -51,7 +52,8 @@ object Sessions {
     suspend fun end(context: Context, early: Boolean) {
         val focus = AppGraph.get(context).focus
         val session = focus.session ?: return clear(context)
-        if (!early && AppGraph.get(context).clock.now() < session.endsAt) return
+        val clock = AppGraph.get(context).clock
+        if (!early && !session.isDue(clock.now(), clock.uptime())) return
         val record = focus.stopSession() ?: return clear(context)
         clear(context)
         val text = if (record.completed) {
