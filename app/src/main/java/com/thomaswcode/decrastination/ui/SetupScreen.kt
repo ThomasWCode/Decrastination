@@ -95,11 +95,13 @@ fun SetupScreen(graph: AppGraph, activity: Activity) {
         val usage = runtime.aiUsage.forMonth(AiUsage.monthOf(graph.clock.now(), graph.clock.zone()))
         SetupItem(
             title = "Claude",
-            done = settings.aiEnabled && settings.aiKeyActive && Secret.AnthropicApiKey in secrets,
+            done = settings.aiEnabled && settings.aiKeyActive && Secret.AnthropicApiKey in secrets && usage.lastError == null,
             detail = when {
                 Secret.AnthropicApiKey !in secrets -> "No API key: the rules do what they can, and nothing is sent to Claude."
                 !settings.aiKeyActive -> "Key saved; it waits like switching Claude on (Settings lists when it applies), so nothing is sent yet."
                 !settings.aiEnabled -> "Key saved; switched off in Settings, so nothing is sent."
+                // Its calls failing (a bad key, no connection): said, so it can be put right.
+                usage.lastError != null -> "On, but its last call failed (${usage.lastError.take(80)}): the rules stand in, and it's tried again after an hour."
                 else -> "On: £%.2f of £%d this month.".format(Locale.UK, usage.spentGbp(settings.usdToGbp), settings.aiMonthlyCapGbp)
             },
             action = "Enter key" to { enteringKey = true },

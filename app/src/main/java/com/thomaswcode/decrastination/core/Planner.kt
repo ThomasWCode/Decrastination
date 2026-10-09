@@ -64,7 +64,7 @@ object Planner {
         val (events, work) = input.tasks
             .filter { it.isOpen && it.isAvailable(input.now) }
             .partition { it.kind == Kind.Event }
-        val held = AnkiRules.heldSections(input.tasks)
+        val held = AnkiRules.heldSections(input.tasks, input.settings.ankiTextbook)
         val items = work.map { task ->
             val soft = task.dueAt == null
             // Calendar days where you are, so a week is a week across the clocks changing.

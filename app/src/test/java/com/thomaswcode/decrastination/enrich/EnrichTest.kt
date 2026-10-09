@@ -8,6 +8,7 @@ import com.thomaswcode.decrastination.core.SourceValues
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
 import kotlinx.coroutines.runBlocking
+import com.thomaswcode.decrastination.sources.anki.AnkiRules
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -20,6 +21,7 @@ import okhttp3.mockwebserver.MockWebServer
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -50,6 +52,16 @@ class RuleEnricherTest {
         val task = assignment("1. Complete the reading task\n2. Mark it").copy(sourceEffortMin = 40, aiEffortMin = 120)
         val steps = RuleEnricher().enrich(task, Enrichments.Job.Assignment, NOW).enrichment!!.subSteps!!
         assertEquals(listOf(20, 20), steps.map { it.minutes })
+    }
+
+    @Test
+    fun `only vocabulary and nothing else counts as vocabulary-only`() {
+        assertTrue(AnkiRules.vocabularyOnly("Learn vocabulary p46-47/ 2.2/2.3 ( vocabulary test ! )"))
+        assertTrue(AnkiRules.vocabularyOnly("Revise vocabulary 3.1 on Anki"))
+        assertFalse(AnkiRules.vocabularyOnly("Learn vocabulary 2.2 and complete exercises 3-5"))
+        // Work it doesn't know is still work.
+        assertFalse(AnkiRules.vocabularyOnly("Learn vocabulary 2.2 and revise the grammar"))
+        assertFalse(AnkiRules.vocabularyOnly("Complete exercise 4"))
     }
 
     @Test
@@ -193,6 +205,12 @@ class AnswersTest {
             task,
         )!!
         assertEquals(listOf(emptyList<String>()), mixed.subSteps!!.map { it.ankiSections })
+        // More steps than the planner takes: the rest become one, none of the work lost.
+        val many = (1..14).joinToString(",") { """{"title":"Question $it","minutes":10,"ankiSections":[]}""" }
+        val long = parse(Enrichments.Job.Assignment, """{"subSteps":[$many],"effortMin":140,"ankiSections":[],"testDate":null}""", task)!!
+        assertEquals(12, long.subSteps!!.size)
+        assertEquals(140, long.subSteps!!.sumOf { it.minutes })
+        assertTrue(long.subSteps!!.last().title.startsWith("The rest: Question 12"))
         // A test's day: done before school that morning.
         assertEquals(Fixtures.at("2026-10-12T08:30"), e.testDate)
         assertEquals(40, e.effortMin)
