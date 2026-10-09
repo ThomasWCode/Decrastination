@@ -64,6 +64,13 @@ class Focus(
 
     fun today(now: Long = clock.now()): LocalDate = Instant.ofEpochMilli(now).atZone(clock.zone()).toLocalDate()
 
+    /**
+     * Whether a session that ended at [endedAt] earns free time [now]: finished, on today's date.
+     * One finished on a day that's over (given late, the phone off at midnight) earns nothing, as
+     * that day's free time has gone.
+     */
+    fun earnsNow(completed: Boolean, endedAt: Long, now: Long = clock.now()): Boolean = completed && today(endedAt) == today(now)
+
     /** Whether a blocked app may be in front now. */
     fun verdict(now: Long = clock.now()): BlockPolicy.Verdict {
         val state = runtime.value
@@ -219,7 +226,7 @@ class Focus(
         runtime.update { state ->
             // Given already (another caller finished it first): nothing more.
             if (ended !in state.finishing) return@update state
-            val earns = ended.completed && today(ended.endedAt) == today
+            val earns = earnsNow(ended.completed, ended.endedAt, now)
             state.copy(
                 finishing = state.finishing - ended,
                 credit = if (earns) state.credit.earn(today, Credit.forSession(session.minutes, ratio)) else state.credit.on(today),
