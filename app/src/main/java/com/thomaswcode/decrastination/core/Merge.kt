@@ -97,7 +97,8 @@ object Merge {
                 old.status == Status.Open -> updated
                 old.derived && old.status == Status.Done -> updated.copy(status = Status.Done)
                 f.done -> updated.copy(status = Status.Done)
-                else -> updated.copy(status = Status.Open, doneAt = null).also { reopened += it }
+                // Reopened: a new round, measured from where it reopened, with none of it worked yet.
+                else -> updated.copy(status = Status.Open, doneAt = null, workedMin = 0, firstProgress = f.sourceProgress).also { reopened += it }
             }
             fresh[id] = next
         }
