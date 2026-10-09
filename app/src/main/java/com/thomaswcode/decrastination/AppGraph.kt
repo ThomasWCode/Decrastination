@@ -213,7 +213,7 @@ class AppGraph private constructor(context: Context) {
         }
         // What's new or changed, even in place, is enriched.
         syncer.addAfterEverySync {
-            val modelOn = modelEnricher() != null
+            val modelOn = modelAvailable()
             if (tasks.value.tasks.any { Enrichments.jobFor(it) != null && Enrichments.stale(it, modelOn, RuleEnricher.BY) }) EnrichWorker.enqueue(app)
         }
         // Switched on, the model goes over what only the rules have seen.
@@ -256,6 +256,20 @@ class AppGraph private constructor(context: Context) {
     fun modelEnricher(): Enricher? = claudeKey()?.let { ClaudeEnricher(it, clock.zone()) }
 
     /**
+     * Whether the model can be asked now: on with its key in use, not resting after a failed call,
+     * and with room under this month's cap for another. When it can't, what only the rules have
+     * seen isn't due for it, so it isn't redone every sync while the cap is used up.
+     */
+    fun modelAvailable(): Boolean {
+        if (claudeKey() == null) return false
+        val now = clock.now()
+        val usage = runtime.value.aiUsage
+        if (usage.lastError != null && now - (usage.lastCallAt ?: 0L) < MODEL_REST_MS) return false
+        val s = settings.value
+        return usage.forMonth(AiUsage.monthOf(now, clock.zone())).allows(s.aiMonthlyCapGbp, s.usdToGbp)
+    }
+
+    /**
      * Enriches every task that's new or changed since it was last enriched, and, while the model is
      * on, those only the rules have seen; soonest due first. The model does it while it's on and
      * the month's spend leaves room under the cap, at most [MAX_MODEL_CALLS] a run; the rules do
@@ -263,10 +277,9 @@ class AppGraph private constructor(context: Context) {
      * that the model declines (recorded as the model's, so it isn't asked again).
      */
     suspend fun enrichNow(model: Enricher? = modelEnricher()) {
-        // A call that failed in the last hour (no network, a bad key) rests the model till then.
-        val usage = runtime.value.aiUsage
-        val resting = usage.lastError != null && clock.now() - (usage.lastCallAt ?: 0L) < MODEL_REST_MS
-        var enricher = model.takeIf { !resting }
+        // Not while it rests after a failed call (no network, a bad key), nor with no room under the
+        // cap: then what only the rules have seen isn't due for it.
+        var enricher = model.takeIf { modelAvailable() }
         var calls = 0
         var decksChanged = false
         val candidates = tasks.value.tasks
