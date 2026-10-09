@@ -207,6 +207,18 @@ class AnkiRulesTest {
     }
 
     @Test
+    fun `sections the enrichment read link decks when the pattern finds none, and never beat it`() {
+        // "Revise the family topic" names no section the pattern can see; the enrichment read 1.2.
+        val unread = assignment("Familie", "Revise the family topic for Monday's test", Fixtures.at("2026-10-12T08:30"))
+        val enriched = unread.copy(enrichment = com.thomaswcode.decrastination.core.Enrichment("h", "claude-opus-5-5", 0, ankiSections = listOf("1.2")))
+        assertEquals(emptyList(), AnkiRules.homeworkDecks(decks, 1, listOf(unread), unseen = { 25 }, now = NOW, zone = LONDON).map { it.sourceId })
+        assertEquals(listOf("deck:12"), AnkiRules.homeworkDecks(decks, 1, listOf(enriched), unseen = { 25 }, now = NOW, zone = LONDON).map { it.sourceId })
+        // Where the pattern finds a section, it wins over the enrichment's.
+        val named = assignment("Familie", "Learn vocabulary 1.3", Fixtures.at("2026-10-12T08:30")).copy(enrichment = enriched.enrichment)
+        assertEquals(listOf("deck:13"), AnkiRules.homeworkDecks(decks, 1, listOf(named), unseen = { 25 }, now = NOW, zone = LONDON).map { it.sourceId })
+    }
+
+    @Test
     fun `deck counts parse`() {
         assertEquals(listOf(0, 3, 20), AnkiProvider.parseCounts("[0, 3, 20]")?.toList())
         assertNull(AnkiProvider.parseCounts("[0, 3]"))

@@ -1,0 +1,254 @@
+package com.thomaswcode.decrastination.enrich
+
+import com.thomaswcode.decrastination.Fixtures
+import com.thomaswcode.decrastination.Fixtures.LONDON
+import com.thomaswcode.decrastination.core.Enrichments
+import com.thomaswcode.decrastination.core.Kind
+import com.thomaswcode.decrastination.core.Source
+import com.thomaswcode.decrastination.core.TaskItem
+import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import okhttp3.mockwebserver.MockResponse
+import okhttp3.mockwebserver.MockWebServer
+import kotlin.test.AfterTest
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
+
+private val NOW = Fixtures.at("2026-10-09T17:00")
+
+private fun email(body: String = "Please sign and return the trip form by Monday 12 October.") = TaskItem(
+    id = "gmail:t1", source = Source.Gmail, sourceId = "t1", title = "Berlin trip form", detail = body, kind = Kind.Admin,
+    sourceEffortMin = 15, firstSeenAt = NOW, lastSeenAt = NOW,
+    extra = mapOf("from" to "Mr Hughes <hughes@school.example>", "received" to Fixtures.at("2026-10-08T16:30").toString()),
+)
+
+private fun assignment(detail: String) = TaskItem(
+    id = "teams:a1", source = Source.Teams, sourceId = "a1", title = "Gefahren in den sozialen Netzwerken", detail = detail,
+    className = "12.1 German 2026-27", dueAt = Fixtures.at("2026-10-14T08:30"), kind = Kind.Homework, firstSeenAt = NOW, lastSeenAt = NOW,
+)
+
+class RuleEnricherTest {
+    @Test
+    fun `listed parts become steps sharing the estimate`() = runBlocking {
+        val task = assignment("Hausaufgaben\n1. Learn vocabulary p46-47/ 2.2/2.3 ( vocabulary test ! )\n2. Complete the reading task: past paper ( June 2022 )")
+        val steps = RuleEnricher().enrich(task, Enrichments.Job.Assignment, NOW).enrichment!!.subSteps!!
+        assertEquals(listOf("Learn vocabulary p46-47/ 2.2/2.3 ( vocabulary test ! )", "Complete the reading task: past paper ( June 2022 )"), steps.map { it.title })
+        assertEquals(listOf(20, 20), steps.map { it.minutes })
+    }
+
+    @Test
+    fun `dashes and a number without its space count, a section number doesn't`() {
+        assertEquals(2, RuleEnricher.steps("- Learn vocabulary - verschiedene Familienformen\n- Translation - from the booklet", 40)!!.size)
+        assertEquals(2, RuleEnricher.steps("1.Past paper: print it out\n2.Mark it", 40)!!.size)
+        // "1.2 Familie" is a section, and one item is no list.
+        assertNull(RuleEnricher.steps("1.2 Familie und Ehe - both ways.\nPage 15 - exercises 4 and 5.", 40))
+        assertNull(RuleEnricher.steps("1. Do page 7", 40))
+    }
+
+    @Test
+    fun `a long item is shortened, and every step gets five minutes at least`() {
+        val steps = RuleEnricher.steps("1. " + "a".repeat(100) + "\n2. b\n3. c\n4. d\n5. e\n6. f\n7. g\n8. h\n9. i\n10. j", 30)!!
+        assertEquals(60, steps.first().title.length)
+        assertTrue(steps.first().title.endsWith("…"))
+        assertTrue(steps.all { it.minutes == 5 })
+    }
+}
+
+class PromptsTest {
+    @Test
+    fun `every object in every schema is closed and asks for all its fields`() {
+        fun check(schema: Map<*, *>) {
+            if (schema["type"] == "object") {
+                assertEquals(false, schema["additionalProperties"], "$schema")
+                assertEquals((schema["properties"] as Map<*, *>).keys.toList(), schema["required"])
+            }
+            schema.values.forEach { value ->
+                when (value) {
+                    is Map<*, *> -> check(value)
+                    is List<*> -> value.filterIsInstance<Map<*, *>>().forEach(::check)
+                }
+            }
+        }
+        Enrichments.Job.entries.forEach { check(Prompts.schema(it)) }
+    }
+
+    @Test
+    fun `an email is described with when it came, who from, and its text`() {
+        val text = Prompts.describe(email(), Enrichments.Job.Email, NOW, LONDON)
+        assertTrue(text.startsWith("Today: Friday 9 October 2026"), text)
+        assertTrue("Received: Thursday 8 October 2026 16:30" in text, text)
+        assertTrue("From: Mr Hughes <hughes@school.example>" in text, text)
+        assertTrue("Subject: Berlin trip form" in text, text)
+        assertTrue(text.endsWith("Please sign and return the trip form by Monday 12 October."), text)
+    }
+
+    @Test
+    fun `an assignment gives its class, due time and multiplier, and a long text says it's cut`() {
+        val text = Prompts.describe(assignment("x".repeat(Prompts.MAX_TEXT + 10)), Enrichments.Job.Assignment, NOW, LONDON, 1.25)
+        assertTrue("Class: 12.1 German 2026-27" in text, text)
+        assertTrue("Due: Wednesday 14 October 2026 08:30" in text, text)
+        assertTrue("Class effort multiplier: 1.25" in text, text)
+        assertTrue(text.endsWith("[The rest of this long text is left out.]"), text.takeLast(80))
+    }
+}
+
+class AnswersTest {
+    private fun parse(job: Enrichments.Job, text: String, task: TaskItem = email()) = Answers.parse(job, text, task, "claude-opus-5-5", NOW, LONDON)
+
+    @Test
+    fun `an email's triage is read, its dates in local time`() {
+        val e = parse(Enrichments.Job.Email, """{"kind":"Admin","actionableFrom":null,"deadline":"2026-10-12T08:30","effortMin":10,"nextStep":"Sign the form and give it to Mr Hughes"}""")!!
+        assertEquals(Kind.Admin, e.kind)
+        assertEquals(Fixtures.at("2026-10-12T08:30"), e.deadline)
+        assertEquals(10, e.effortMin)
+        assertEquals("Sign the form and give it to Mr Hughes", e.nextStep)
+        assertEquals(Enrichments.inputHash(email()), e.inputHash)
+        // A date alone means the end of that day.
+        assertEquals(Fixtures.at("2026-10-12T23:59"), parse(Enrichments.Job.Email, """{"kind":"Admin","actionableFrom":null,"deadline":"2026-10-12","effortMin":10,"nextStep":"x"}""")!!.deadline)
+    }
+
+    @Test
+    fun `what's out of range is dropped rather than trusted`() {
+        val e = parse(Enrichments.Job.Email, """{"kind":"Homework","actionableFrom":"1999-01-01","deadline":"2031-01-01T09:00","effortMin":5000,"nextStep":"  "}""")!!
+        assertNull(e.kind)
+        assertNull(e.actionableFrom)
+        assertNull(e.deadline)
+        assertNull(e.effortMin)
+        assertNull(e.nextStep)
+        assertNull(parse(Enrichments.Job.Email, "not json"))
+    }
+
+    @Test
+    fun `an assignment's steps, sections and test date`() {
+        val task = assignment("1. Learn vocabulary 2.2/2.3")
+        val e = parse(
+            Enrichments.Job.Assignment,
+            """{"subSteps":[{"title":"Learn vocabulary 2.2","minutes":20},{"title":"","minutes":10},{"title":"Learn vocabulary 2.3","minutes":999}],"effortMin":40,"ankiSections":["2.2"," 2.3","12","2.2"],"testDate":"2026-10-12"}""",
+            task,
+        )!!
+        assertEquals(listOf("Learn vocabulary 2.2"), e.subSteps!!.map { it.title })
+        assertEquals(listOf("2.2", "2.3"), e.ankiSections)
+        // A test's day: done before school that morning.
+        assertEquals(Fixtures.at("2026-10-12T08:30"), e.testDate)
+        assertEquals(40, e.effortMin)
+    }
+
+    @Test
+    fun `an estimate alone`() {
+        assertEquals(35, parse(Enrichments.Job.Effort, """{"effortMin":35}""")!!.effortMin)
+    }
+}
+
+class AiUsageTest {
+    @Test
+    fun `a new month starts at nothing, and a call is refused that could pass the cap`() {
+        val usage = AiUsage(month = "2026-09", spentUsd = 250.0)
+        assertEquals(0.0, usage.forMonth("2026-10").spentUsd)
+        assertTrue(AiUsage("2026-10", spentUsd = 10.0).allows(capGbp = 200, usdToGbp = 0.79))
+        // £200 at 0.79 is $253.16: $252.80 spent leaves no room for a call at its dearest.
+        assertEquals(false, AiUsage("2026-10", spentUsd = 252.80).allows(capGbp = 200, usdToGbp = 0.79))
+    }
+
+    @Test
+    fun `calls, refusals and failures are counted`() {
+        val usage = AiUsage("2026-10").record(0.01, refused = false, at = NOW).record(0.02, refused = true, at = NOW).failure("timeout", NOW)
+        assertEquals(2, usage.calls)
+        assertEquals(1, usage.refused)
+        assertEquals(1, usage.failed)
+        assertEquals(0.03, usage.spentUsd, 1e-9)
+        assertEquals("timeout", usage.lastError)
+    }
+
+    @Test
+    fun `prices are Opus 5 point 5's, or the dearer older Opus's a fallback may use`() {
+        assertEquals(0.0108, Pricing.costUsd("claude-opus-5-5", input = 1_200, output = 300), 1e-9)
+        assertEquals(0.0135, Pricing.costUsd("claude-opus-4-8", input = 1_200, output = 300), 1e-9)
+    }
+}
+
+/** The client against a stand-in for the API: what it sends, and what it makes of the answers. */
+class ClaudeEnricherTest {
+    private val server = MockWebServer().apply { start() }
+
+    @AfterTest
+    fun stop() = server.shutdown()
+
+    private fun reply(text: String?, stop: String = "end_turn", model: String = "claude-opus-5-5"): MockResponse {
+        val content = if (text == null) JsonArray(emptyList()) else JsonArray(listOf(JsonObject(mapOf("type" to JsonPrimitive("text"), "text" to JsonPrimitive(text)))))
+        val body = JsonObject(
+            mapOf(
+                "id" to JsonPrimitive("msg_test"),
+                "type" to JsonPrimitive("message"),
+                "role" to JsonPrimitive("assistant"),
+                "model" to JsonPrimitive(model),
+                "content" to content,
+                "stop_reason" to JsonPrimitive(stop),
+                "stop_sequence" to kotlinx.serialization.json.JsonNull,
+                "usage" to JsonObject(mapOf("input_tokens" to JsonPrimitive(1_200), "output_tokens" to JsonPrimitive(300))),
+            ),
+        )
+        return MockResponse().setHeader("Content-Type", "application/json").setBody(body.toString())
+    }
+
+    private fun enricher() = ClaudeEnricher("test-key", LONDON, endpoint = server.url("").toString().trimEnd('/'))
+
+    @Test
+    fun `it asks Opus 5 point 5 at high effort for the schema's answer, with fallbacks on`() = runBlocking {
+        server.enqueue(reply("""{"kind":"Admin","actionableFrom":null,"deadline":"2026-10-12T08:30","effortMin":10,"nextStep":"Sign the form"}"""))
+        val result = enricher().enrich(email(), Enrichments.Job.Email, NOW)
+        val request = server.takeRequest()
+        assertEquals("/v1/messages", request.path)
+        assertEquals("test-key", request.getHeader("x-api-key"))
+        assertTrue(ClaudeEnricher.FALLBACK_BETA in request.getHeader("anthropic-beta").orEmpty(), request.headers.toString())
+        val body = Json.parseToJsonElement(request.body.readUtf8()).jsonObject
+        assertEquals("claude-opus-5-5", body["model"]!!.jsonPrimitive.content)
+        assertEquals(16_000, body["max_tokens"]!!.jsonPrimitive.content.toInt())
+        assertEquals("default", body["fallbacks"]!!.jsonPrimitive.content)
+        val config = body["output_config"]!!.jsonObject
+        assertEquals("high", config["effort"]!!.jsonPrimitive.content)
+        val format = config["format"]!!.jsonObject
+        assertEquals("json_schema", format["type"]!!.jsonPrimitive.content)
+        assertEquals(listOf("kind", "actionableFrom", "deadline", "effortMin", "nextStep"), format["schema"]!!.jsonObject["required"]!!.jsonArray.map { it.jsonPrimitive.content })
+        assertTrue("triage one email" in body["system"].toString(), body["system"].toString().take(120))
+        assertTrue("Subject: Berlin trip form" in body["messages"].toString())
+        // No thinking setting: Opus 5.5 always thinks, and rejects one that turns it off.
+        assertNull(body["thinking"])
+
+        val e = result.enrichment!!
+        assertEquals("claude-opus-5-5", e.by)
+        assertEquals(Fixtures.at("2026-10-12T08:30"), e.deadline)
+        assertEquals(0.0108, result.costUsd, 1e-9)
+    }
+
+    @Test
+    fun `a refusal is counted, and says nothing`() = runBlocking {
+        server.enqueue(reply(null, stop = "refusal"))
+        val result = enricher().enrich(email(), Enrichments.Job.Email, NOW)
+        assertTrue(result.refused)
+        assertNull(result.enrichment)
+        assertEquals(0.0108, result.costUsd, 1e-9)
+    }
+
+    @Test
+    fun `an answer cut off by its token limit is not trusted`() = runBlocking {
+        server.enqueue(reply("""{"subSteps":[{"title":"Pa""", stop = "max_tokens"))
+        assertNull(enricher().enrich(assignment("1. a\n2. b"), Enrichments.Job.Assignment, NOW).enrichment)
+    }
+
+    @Test
+    fun `a fallback model's answer is priced at its own rates`() = runBlocking {
+        server.enqueue(reply("""{"effortMin":30}""", model = "claude-opus-4-8"))
+        val item = assignment("Revise").copy(source = Source.PowerPlanner, id = "powerplanner:p")
+        val result = enricher().enrich(item, Enrichments.Job.Effort, NOW)
+        assertEquals(30, result.enrichment!!.effortMin)
+        assertEquals(0.0135, result.costUsd, 1e-9)
+    }
+}
