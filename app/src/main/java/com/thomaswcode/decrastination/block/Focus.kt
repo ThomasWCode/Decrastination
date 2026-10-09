@@ -273,19 +273,21 @@ class Focus(
     }
 
     /**
-     * A block of an email you've done, ticked off in Tasks: an email is yours to say, as archiving it
-     * is. No free time for it (that's for timed or photographed work). Says whether one was ticked.
+     * The block of an email at [index] you've done, ticked off in Tasks (still [title], so a list
+     * changed meanwhile ticks nothing): an email is yours to say, as archiving it is. Marked as
+     * ticked by hand, so it earns no free time (that's for timed or photographed work). Says
+     * whether it was ticked.
      */
-    suspend fun tickBlock(taskId: String, title: String): Boolean {
+    suspend fun tickBlock(taskId: String, index: Int, title: String): Boolean {
         var ticked = false
         tasks.update { state ->
             state.copy(
                 tasks = state.tasks.map { t ->
                     if (t.id != taskId || t.source != Source.Gmail || !t.isOpen) return@map t
-                    val i = t.subSteps.indexOfFirst { !it.done && it.title == title }
-                    if (i < 0) return@map t
+                    val step = t.subSteps.getOrNull(index)
+                    if (step == null || step.done || step.title != title) return@map t
                     ticked = true
-                    t.copy(subSteps = t.subSteps.mapIndexed { j, s -> if (j == i) s.copy(done = true) else s }, handMin = t.handMin + t.subSteps[i].minutes)
+                    t.copy(subSteps = t.subSteps.mapIndexed { j, s -> if (j == index) s.copy(done = true, byHand = true) else s })
                 },
             )
         }

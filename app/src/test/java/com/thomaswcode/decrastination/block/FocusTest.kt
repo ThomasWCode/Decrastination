@@ -502,11 +502,22 @@ class FocusTest {
     }
 
     @Test
+    fun `of two blocks of one name, the one ticked is the one ticked`() = runTest {
+        val email = task("e").copy(id = "gmail:e", source = Source.Gmail, subSteps = listOf(SubStep("Apply", 30), SubStep("Apply", 60)))
+        tasks.update { it.copy(tasks = listOf(email)) }
+        assertTrue(focus.tickBlock("gmail:e", 1, "Apply"))
+        assertEquals(listOf(false, true), tasks.value.tasks.single().subSteps.map { it.done })
+        assertEquals(60, tasks.value.tasks.single().handMin)
+    }
+
+    @Test
     fun `a block of an email can be ticked off by hand, an assignment's step can't`() = runTest {
         val email = task("e").copy(id = "gmail:e", source = Source.Gmail, subSteps = listOf(SubStep("Apply", 30)))
         tasks.update { it.copy(tasks = listOf(email, task("hw", steps = listOf(SubStep("Q1", 30))))) }
-        assertTrue(focus.tickBlock("gmail:e", "Apply"))
-        assertFalse(focus.tickBlock("teams:hw", "Q1"))
+        assertTrue(focus.tickBlock("gmail:e", 0, "Apply"))
+        assertFalse(focus.tickBlock("teams:hw", 0, "Q1"))
+        // Twice, or by a title no longer there: nothing more.
+        assertFalse(focus.tickBlock("gmail:e", 0, "Apply"))
         assertEquals(listOf(true), tasks.value.tasks.first { it.id == "gmail:e" }.subSteps.map { it.done })
         // No free time for a tick.
         assertEquals(0L, focus.creditLeftMs())
@@ -516,7 +527,7 @@ class FocusTest {
     fun `an email whose blocks were ticked off by hand earns nothing when it completes`() = runTest {
         val email = task("e", kind = Kind.Admin, effort = 30).copy(id = "gmail:e", source = Source.Gmail, subSteps = listOf(SubStep("Apply", 30)))
         tasks.update { it.copy(tasks = listOf(email)) }
-        assertTrue(focus.tickBlock("gmail:e", "Apply"))
+        assertTrue(focus.tickBlock("gmail:e", 0, "Apply"))
         assertEquals(30, tasks.value.tasks.single().handMin)
         focus.onCompleted(listOf(tasks.value.tasks.single().copy(status = Status.Done, doneAt = clock.time)))
         assertEquals(0L, focus.creditLeftMs())

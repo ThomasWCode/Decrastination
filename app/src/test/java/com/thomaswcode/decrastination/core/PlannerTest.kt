@@ -173,6 +173,24 @@ class PlannerTest {
     }
 
     @Test
+    fun `a block opening after an undated task's soft deadline keeps its own start`() {
+        val steps = listOf(SubStep("Apply", 60, from = Fixtures.at("2026-11-15T00:00")))
+        val plan = plan(listOf(task("e", dueAt = null, steps = steps)), "2026-10-08T17:00")
+        val day = plan.buckets.first { b -> b.chunks.any { it.step == "Apply" } }.date
+        assertTrue(day >= LocalDate.parse("2026-11-15"), "planned $day")
+    }
+
+    @Test
+    fun `an undated block after a dated one waits for it`() {
+        // An old undated item: its own soft deadline long gone.
+        val steps = listOf(SubStep("Apply", 30, from = Fixtures.at("2026-10-20T00:00")), SubStep("Follow up", 30))
+        val plan = plan(listOf(task("e", dueAt = null, steps = steps, firstSeen = Fixtures.at("2026-09-01T12:00"))), "2026-10-08T17:00")
+        fun dayOf(step: String) = plan.buckets.first { b -> b.chunks.any { it.step == step } }.date
+        assertTrue(dayOf("Apply") >= LocalDate.parse("2026-10-20"))
+        assertTrue(dayOf("Follow up") >= dayOf("Apply"), "apply ${dayOf("Apply")}, follow up ${dayOf("Follow up")}")
+    }
+
+    @Test
     fun `a block opening past the plan's reach isn't planned yet`() {
         val steps = listOf(SubStep("Apply in spring", 60, from = Fixtures.at("2027-03-01T00:00"), dueAt = Fixtures.at("2027-03-20T23:59")))
         val plan = plan(listOf(task("e", dueAt = null, steps = steps)), "2026-10-08T17:00")

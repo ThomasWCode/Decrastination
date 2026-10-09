@@ -191,6 +191,16 @@ class EnrichmentTest {
     }
 
     @Test
+    fun `a block ticked by hand stays so through a fresh enrichment, at its minutes now`() {
+        val task = email()
+        val first = listOf(SubStep("Reply", 20))
+        val ticked = task.copy(subSteps = listOf(SubStep("Reply", 20, done = true, byHand = true)), enrichment = enrichment(task).copy(subSteps = first))
+        val again = ticked.withEnrichment(enrichment(task).copy(subSteps = listOf(SubStep("Reply", 25))))
+        assertEquals(listOf(true), again.subSteps.map { it.byHand })
+        assertEquals(25, again.handMin)
+    }
+
+    @Test
     fun `what's enriched is emails, assignments and planner items, not done, derived or events`() {
         assertEquals(Enrichments.Job.Email, Enrichments.jobFor(email()))
         // Its text still to be read: it waits.

@@ -79,9 +79,12 @@ object Planner {
     /**
      * [task]'s pieces as the planner places them: one item, or, where its blocks have dates of
      * their own (one email's calendar of deadlines), one item per run of blocks sharing them, each
-     * in its own window: not before its `from`, and by its own deadline, never after the task's.
+     * in its own window: not before its `from`, and by its own deadline, never after the task's. A
+     * run with no dates of its own follows the run before it: not starting before that one opens,
+     * nor due before it. Without a real deadline, a run's is a soft one ([softFrom]), counted from
+     * when it opens.
      */
-    private fun windows(task: TaskItem, deadline: Long, soft: Boolean, pieces: List<Piece>): List<Item> {
+    private fun windows(task: TaskItem, deadline: Long, soft: Boolean, pieces: List<Piece>, softFrom: (Long) -> Long): List<Item> {
         if (pieces.all { it.from == null && it.due == null }) return listOf(Item(task, deadline, soft, pieces))
         val runs = mutableListOf<MutableList<Piece>>()
         for (piece in pieces) {
@@ -89,23 +92,31 @@ object Planner {
             if (last != null && last.from == piece.from && last.due == piece.due) runs.last() += piece else runs += mutableListOf(piece)
         }
         var offset = 0
+        var previous: Item? = null
         return runs.mapIndexed { index, run ->
             val head = run.first()
-            val due = head.due?.let { own -> task.dueAt?.let { minOf(own, it) } ?: own }
-            val end = due ?: deadline
+            val own = head.from != null || head.due != null
+            // A real deadline: its own (never after the task's), or the task's.
+            val real = head.due?.let { d -> task.dueAt?.let { minOf(d, it) } ?: d } ?: task.dueAt
+            val from = if (own) head.from else previous?.notBefore
+            val end = real ?: listOfNotNull(deadline, from?.let(softFrom), previous?.deadline?.takeIf { !own }).max()
             Item(
                 task = task,
                 deadline = end,
-                soft = due == null && soft,
+                soft = real == null,
                 chunks = run,
-                // Never opening after it's due: a start past the task's own deadline is held to it.
-                notBefore = listOfNotNull(task.notBefore, head.from?.let { minOf(it, end) }).maxOrNull(),
-                dueAt = due ?: task.dueAt,
+                // Never opening after a real deadline: a start past it is held to it. A soft one is
+                // the app's own, so a later start stands, and the plan's reach defers it.
+                notBefore = listOfNotNull(task.notBefore, from?.let { f -> real?.let { minOf(f, it) } ?: f }).maxOrNull(),
+                dueAt = real,
                 windowed = true,
                 run = index,
                 offset = offset,
                 taskParts = pieces.size,
-            ).also { offset += run.size }
+            ).also {
+                offset += run.size
+                previous = it
+            }
         }
     }
 
@@ -121,7 +132,9 @@ object Planner {
             // Calendar days where you are, so a week is a week across the clocks changing.
             val deadline = task.dueAt
                 ?: Instant.ofEpochMilli(task.firstSeenAt).atZone(zone).plusDays(input.settings.softDeadlineDays.toLong()).toInstant().toEpochMilli()
-            windows(task, deadline, soft, pieces(task, input, held[task.id].orEmpty()))
+            windows(task, deadline, soft, pieces(task, input, held[task.id].orEmpty())) { start ->
+                Instant.ofEpochMilli(start).atZone(zone).plusDays(input.settings.softDeadlineDays.toLong()).toInstant().toEpochMilli()
+            }
         }.filter { it.chunks.isNotEmpty() }
 
         val lastDeadline = items.maxOfOrNull { date(it.deadline, zone) } ?: today

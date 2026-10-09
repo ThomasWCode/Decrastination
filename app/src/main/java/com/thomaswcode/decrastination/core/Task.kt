@@ -51,6 +51,8 @@ data class SubStep(
     val from: Long? = null,
     /** Its own deadline, before the task's: one of several dated items in one email or planner item. */
     val dueAt: Long? = null,
+    /** Ticked off by hand in Tasks, not by a session or a photo check: done, but earning nothing. */
+    val byHand: Boolean = false,
 )
 
 /**
@@ -101,11 +103,7 @@ data class TaskItem(
      * weren't timed, so they're kept apart from it and out of what the app learns from timing.
      */
     val photoMin: Int = 0,
-    /**
-     * Minutes of blocks you ticked off by hand in Tasks: done, but neither timed nor checked, so
-     * they earn no free time when the task completes and teach the calibration nothing.
-     */
-    val handMin: Int = 0,
+
     /** The sessions counted in [workedMin], by start time, so each is counted once. */
     val sessionsCounted: List<Long> = emptyList(),
     /** The photo checks counted in [photoMin], by id, with the minutes each was given, so each is counted once. */
@@ -138,6 +136,13 @@ data class TaskItem(
     val isOpen: Boolean get() = status == Status.Open
 
     /** Your estimate, else the enrichment's, else the source's or rules', else the kind's default. */
+    /**
+     * Minutes of blocks you ticked off by hand in Tasks: done, but neither timed nor checked, so
+     * they earn no free time when the task completes and teach the calibration nothing. From the
+     * blocks themselves, so a block re-estimated since counts at its minutes now.
+     */
+    val handMin: Int get() = subSteps.filter { it.done && it.byHand }.sumOf { it.minutes }
+
     val effortMin: Int get() = userEffortMin ?: aiEffortMin ?: sourceEffortMin ?: kind.defaultEffortMin
 
     fun isAvailable(now: Long): Boolean = availableFrom == null || availableFrom <= now
