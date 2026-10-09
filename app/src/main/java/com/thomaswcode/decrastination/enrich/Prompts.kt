@@ -178,9 +178,16 @@ object Answers {
                 )
             }
             Enrichments.Job.Assignment -> json.decodeFromString(Split.serializer(), text).let { s ->
-                val steps = s.subSteps.filter { it.title.isNotBlank() && it.minutes in 1..MAX_STEP }.take(MAX_STEPS)
-                    // A step tagged as vocabulary that asks for other work too stays planned whole.
-                    .map { SubStep(it.title.trim().take(MAX_TITLE), it.minutes, ankiSections = if (AnkiRules.otherWork(it.title)) emptyList() else sections(it.ankiSections)) }
+                val valid = s.subSteps.filter { it.title.isNotBlank() && it.minutes in 1..MAX_STEP }
+                    // A step tagged as vocabulary that asks for anything else too stays planned whole.
+                    .map { SubStep(it.title.trim().take(MAX_TITLE), it.minutes, ankiSections = if (AnkiRules.vocabularyOnly(it.title)) sections(it.ankiSections) else emptyList()) }
+                // More steps than the planner takes: the rest become one last step, so none of the work goes.
+                val steps = if (valid.size <= MAX_STEPS) {
+                    valid
+                } else {
+                    val rest = valid.drop(MAX_STEPS - 1)
+                    valid.take(MAX_STEPS - 1) + SubStep(("The rest: " + rest.joinToString("; ") { it.title }).take(MAX_TITLE), rest.sumOf { it.minutes })
+                }
                 val sections = sections(s.ankiSections + steps.flatMap { it.ankiSections })
                 base.copy(
                     // Vocabulary only: the decks hold the work, and this is the hand-in.
