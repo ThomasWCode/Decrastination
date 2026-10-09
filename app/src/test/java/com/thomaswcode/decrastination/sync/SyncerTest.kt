@@ -119,6 +119,18 @@ class SyncerTest {
     }
 
     @Test
+    fun `an email that's just an email, archived, isn't work to reward`() = runTest {
+        val gmail = FakeSource(Source.Gmail) { SourceRead(listOf(Fetched("n", "I want to connect", Kind.Info), Fetched("a", "Sign the form", Kind.Admin))) }
+        val syncer = syncer(listOf(gmail))
+        syncer.sync()
+        gmail.answer = { SourceRead(listOf(Fetched("n", "I want to connect", Kind.Info, done = true), Fetched("a", "Sign the form", Kind.Admin, done = true))) }
+        syncer.sync()
+        assertEquals(listOf("gmail:a"), tasks.value.unrewarded.map { it.id })
+        // Finished all the same.
+        assertEquals(Status.Done, tasks.value.tasks.first { it.id == "gmail:n" }.status)
+    }
+
+    @Test
     fun `a sync's completions are saved with the tasks' move to done, to be rewarded after`() = runTest {
         val teams = FakeSource(Source.Teams) { items("a", "b") }
         val syncer = syncer(listOf(teams))
