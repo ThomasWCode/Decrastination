@@ -84,6 +84,17 @@ class EnrichmentTest {
     }
 
     @Test
+    fun `an enrichment of content that has since changed isn't laid over it`() {
+        val task = email().copy(sourceValues = SourceValues(Kind.Admin, null, null))
+        val later = task.withEnrichment(enrichment(task).copy(kind = Kind.Event, actionableFrom = Fixtures.at("2026-10-20T00:00")))
+        assertEquals(Kind.Event, later.kind)
+        // A new message in the thread: the source's say until it's enriched again.
+        val changed = later.copy(detail = "Urgent: sign it today.").enriched()
+        assertEquals(Kind.Admin, changed.kind)
+        assertEquals(null, changed.availableFrom)
+    }
+
+    @Test
     fun `a start after the deadline is dropped`() {
         val task = email().copy(sourceValues = SourceValues(Kind.Admin, null, null))
         val late = task.withEnrichment(enrichment(task).copy(deadline = Fixtures.at("2026-10-12T09:00"), actionableFrom = Fixtures.at("2026-10-14T00:00")))

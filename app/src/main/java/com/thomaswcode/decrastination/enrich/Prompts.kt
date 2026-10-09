@@ -178,7 +178,10 @@ object Answers {
                 )
             }
             Enrichments.Job.Assignment -> json.decodeFromString(Split.serializer(), text).let { s ->
-                val valid = s.subSteps.filter { it.title.isNotBlank() && it.minutes in 1..MAX_STEP }
+                // One step it can't take (no title, minutes out of range) and the split isn't trusted:
+                // the task's whole estimate is planned instead, none of it lost with that step.
+                val usable = s.subSteps.all { it.title.isNotBlank() && it.minutes in 1..MAX_STEP }
+                val valid = s.subSteps.takeIf { usable }.orEmpty()
                     // A step tagged as vocabulary that asks for anything else too stays planned whole.
                     .map { SubStep(it.title.trim().take(MAX_TITLE), it.minutes, ankiSections = if (AnkiRules.vocabularyOnly(it.title)) sections(it.ankiSections) else emptyList()) }
                 // More steps than the planner takes: the rest become one last step, so none of the work goes.
