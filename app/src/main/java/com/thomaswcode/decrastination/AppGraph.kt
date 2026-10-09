@@ -106,7 +106,8 @@ class AppGraph private constructor(context: Context) {
 
     /**
      * The Teams widget announces every change to its list: a sync, or a hand-in it saw while
-     * Teams was open. Reading it needs no network, so it's read here, once the changes stop.
+     * Teams was open. Reading it needs no network, so it's read here, once the changes stop, and
+     * Anki with it: its homework decks come from Teams' assignments (Anki is read after Teams).
      */
     private val teamsChanged = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
 
@@ -123,7 +124,7 @@ class AppGraph private constructor(context: Context) {
             )
         }.onFailure { Log.w(TAG, "Can't watch the Teams widget", it) }
         scope.launch {
-            teamsChanged.debounce(TEAMS_QUIET_MS).collect { syncer.sync(setOf(Source.Teams)) }
+            teamsChanged.debounce(TEAMS_QUIET_MS).collect { syncer.sync(setOf(Source.Teams, Source.Anki)) }
         }
         // Redraw the widget whenever what it shows may have changed.
         scope.launch {
