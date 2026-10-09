@@ -66,6 +66,11 @@ class MergeTest {
         val result = Merge.apply(open, Source.PowerPlanner, listOf(Fetched("p", "Essay", Kind.Homework, sourceProgress = 1.0, done = true)), t0 + 1)
         assertEquals(0.5, result.completed.single().sourceProgress)
         assertEquals(1.0, result.tasks.single().sourceProgress)
+        // Progress synced on the way doesn't move the baseline: first seen at none, it's all earned.
+        val fresh = Merge.apply(emptyList(), Source.PowerPlanner, listOf(Fetched("q", "Notes", Kind.Homework, sourceProgress = 0.0)), t0).tasks
+        val halfway = Merge.apply(fresh, Source.PowerPlanner, listOf(Fetched("q", "Notes", Kind.Homework, sourceProgress = 0.5)), t0 + 1).tasks
+        val done = Merge.apply(halfway, Source.PowerPlanner, listOf(Fetched("q", "Notes", Kind.Homework, sourceProgress = 1.0, done = true)), t0 + 2)
+        assertEquals(0.0, done.completed.single().sourceProgress)
         assertEquals(Status.Done, result.tasks.single().status)
     }
 

@@ -74,6 +74,11 @@ data class TaskItem(
     val userEffortMin: Int? = null,
     /** How far the source says it is (Power Planner's percent complete), 0 to 1. */
     val sourceProgress: Double = 0.0,
+    /**
+     * How far it was when this app first saw it: what was left then is the work its completion
+     * earns time for, however its progress moved on the way. Null for a task saved before this was kept.
+     */
+    val firstProgress: Double? = null,
     /** Minutes of finished focus sessions spent on it. */
     val workedMin: Int = 0,
     val subSteps: List<SubStep> = emptyList(),
