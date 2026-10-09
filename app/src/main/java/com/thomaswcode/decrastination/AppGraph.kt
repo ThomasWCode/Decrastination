@@ -336,6 +336,14 @@ class AppGraph private constructor(context: Context) {
         scope.launch {
             teamsChanged.debounce(TEAMS_QUIET_MS).collect { syncer.sync(setOf(Source.Teams, Source.Anki)) }
         }
+        // A key problem standing from before, whose alert couldn't be shown then.
+        scope.launch { alertKeyProblem(runtime.value.aiUsage) }
+        // Dropped plans' warnings withdrawn once their tasks close, go, or are planned since.
+        scope.launch {
+            tasks.state.drop(1).debounce(WIDGET_DEBOUNCE_MS).collect { state ->
+                runCatching { ModelAlerts.tidyDropped(app, state.tasks) }.onFailure { Log.w(TAG, "Tidying dropped-plan warnings failed", it) }
+            }
+        }
         // Redraw the widget whenever what it shows may have changed.
         scope.launch {
             combine(tasks.state, settings.state, runtime.state) { _, _, _ -> }.drop(1).debounce(WIDGET_DEBOUNCE_MS).collect {
@@ -435,14 +443,17 @@ class AppGraph private constructor(context: Context) {
      */
     suspend fun modelFailed(error: Throwable, month: String, at: Long) {
         val problem = KeyProblem.of(error)
-        var starts = false
-        runtime.update { state ->
-            val before = state.aiUsage.forMonth(month)
-            val after = before.failure(error.message ?: error.javaClass.simpleName, at, problem)
-            starts = before.startsKeyProblem(after)
-            state.copy(aiUsage = after)
-        }
-        if (starts && problem != null) ModelAlerts.keyProblem(app, problem)
+        val after = runtime.update { state -> state.copy(aiUsage = state.aiUsage.forMonth(month).failure(error.message ?: error.javaClass.simpleName, at, problem)) }
+        alertKeyProblem(after.aiUsage)
+    }
+
+    /**
+     * [usage]'s key problem alerted, if it hasn't been yet and can be seen: one that couldn't
+     * (notifications off) is tried again at the next failed call and when the app starts.
+     */
+    private suspend fun alertKeyProblem(usage: AiUsage) {
+        val problem = usage.keyProblem?.takeIf { usage.keyAlertDue } ?: return
+        if (ModelAlerts.keyProblem(app, problem)) runtime.update { it.copy(aiUsage = it.aiUsage.alerted(problem)) }
     }
 
     /** A model call that went through, counted in [month]: its cost, and the key working again if it wasn't. */
