@@ -118,9 +118,13 @@ class BlockedActivity : ComponentActivity() {
         var photoFor by remember { mutableStateOf<Chunk?>(null) }
         val takePhoto = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { taken ->
             val piece = photoFor
-            if (!taken || piece == null || photoChecker == null) return@rememberLauncherForActivityResult
+            if (!taken || piece == null || photoChecker == null) {
+                // Not to be checked (cancelled, or this screen made afresh meanwhile): not kept either.
+                photoFile.delete()
+                return@rememberLauncherForActivityResult
+            }
             message = "Checking the photo…"
-            scope.launch { message = PhotoChecks.check(this@BlockedActivity, graph, photoChecker, photoFile, piece) }
+            scope.launch { message = PhotoChecks.check(this@BlockedActivity, graph, photoFile, piece) }
         }
 
         Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {

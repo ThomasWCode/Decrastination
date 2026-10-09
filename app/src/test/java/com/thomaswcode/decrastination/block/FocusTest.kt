@@ -23,6 +23,7 @@ import java.util.concurrent.CountDownLatch
 import kotlin.concurrent.thread
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -252,6 +253,16 @@ class FocusTest {
         assertEquals(1, log.value.sessions.size)
         assertEquals(10 * 60_000L, focus.creditLeftMs())
         assertEquals(emptyList(), runtime.value.finishing)
+    }
+
+    @Test
+    fun `a photo check's success applies once, to a piece still to do`() = runTest {
+        tasks.update { it.copy(tasks = listOf(task("hw", effort = 60, steps = listOf(SubStep("Q1-8", 30), SubStep("Q9-16", 30))))) }
+        assertTrue(focus.photoChecked("teams:hw", "Q1-8", 30))
+        // A second check of the same piece (or one a session ticked meanwhile): nothing more.
+        assertFalse(focus.photoChecked("teams:hw", "Q1-8", 30))
+        assertEquals(30, tasks.value.tasks.single().workedMin)
+        assertEquals(10 * 60_000L, focus.creditLeftMs())
     }
 
     @Test

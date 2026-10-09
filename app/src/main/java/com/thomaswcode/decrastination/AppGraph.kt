@@ -358,6 +358,11 @@ class AppGraph private constructor(context: Context) {
             // Switched off (or its key removed) while this runs: nothing more is sent.
             if (claudeKey() == null) enricher = null
             var enrichment = if (enricher != null && calls < MAX_MODEL_CALLS) modelCalls.withLock call@{
+                // Switched off while another call held the lock: nothing more is sent.
+                if (claudeKey() == null) {
+                    enricher = null
+                    return@call null
+                }
                 // Checked under the lock, so a review or photo check at the same time is counted.
                 val s = settings.value
                 if (!runtime.value.aiUsage.forMonth(month).allows(s.aiMonthlyCapGbp, s.usdToGbp)) return@call null

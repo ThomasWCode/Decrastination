@@ -7,6 +7,7 @@ import android.content.ContentUris
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.provider.CalendarContract
 import android.util.Log
 import androidx.core.app.NotificationCompat
@@ -114,7 +115,9 @@ object CalendarTime {
 
     private fun ask(context: Context, event: CalendarEvent, zone: ZoneId) {
         val key = EventJudge.key(event)
-        val id = BASE_ID + Math.floorMod(key.hashCode(), 700)
+        // One notification per event name, told apart by its tag, and actions told apart by their
+        // data: no two questions can share either.
+        val tag = TAG_PREFIX + key
         val day = questionDay(event, zone)
         val builder = NotificationCompat.Builder(context, Channels.DAILY)
             .setSmallIcon(R.drawable.ic_focus)
@@ -129,14 +132,22 @@ object CalendarTime {
         answers.forEachIndexed { i, (label, answer) ->
             val tap = PendingIntent.getBroadcast(
                 context,
-                id * 4 + i,
-                Intent(context, EventAnswerReceiver::class.java).setAction(ACTION_ANSWER).putExtra(EXTRA_KEY, key).putExtra(EXTRA_ANSWER, answer).putExtra("id", id),
+                i,
+                Intent(context, EventAnswerReceiver::class.java)
+                    .setAction(ACTION_ANSWER)
+                    .setData(Uri.fromParts("event", "$key#$i", null))
+                    .putExtra(EXTRA_KEY, key)
+                    .putExtra(EXTRA_ANSWER, answer),
                 PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
             )
             builder.addAction(0, label, tap)
         }
-        Notify.post(context, id, builder.build())
+        Notify.post(context, tag, BASE_ID, builder.build())
     }
+
+    fun cancelQuestion(context: Context, key: String) = Notify.cancel(context, TAG_PREFIX + key, BASE_ID)
+
+    private const val TAG_PREFIX = "event:"
 }
 
 /** Your answer about an event: kept for every event of that name, and the plan redone. */
@@ -148,7 +159,7 @@ class EventAnswerReceiver : BroadcastReceiver() {
         CoroutineScope(Dispatchers.Default).launch {
             try {
                 AppGraph.get(context).runtime.update { it.copy(eventAnswers = it.eventAnswers + (key to answer)) }
-                Notify.cancel(context, intent.getIntExtra("id", 0))
+                CalendarTime.cancelQuestion(context, key)
                 CalendarTime.refresh(context)
             } finally {
                 pending.finish()

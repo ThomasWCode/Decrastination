@@ -20,7 +20,7 @@ import kotlinx.coroutines.withContext
 object PhotoChecks {
 
     /** Checks [photo] against [piece], records the cost, and says how it went. The photo is deleted, whatever happens. */
-    suspend fun check(context: Context, graph: AppGraph, checker: PhotoChecker, photo: File, piece: Chunk): String {
+    suspend fun check(context: Context, graph: AppGraph, photo: File, piece: Chunk): String {
         val jpeg = try {
             withContext(Dispatchers.IO) { shrink(photo) } ?: return "Couldn't read the photo."
         } finally {
@@ -30,16 +30,18 @@ object PhotoChecks {
         val month = AiUsage.monthOf(now, graph.clock.zone())
         // The cap checked and the cost recorded in one turn with every other model call.
         val result = graph.modelCalls.withLock {
+            // Checked again here: switched off while another call held the lock, nothing is sent.
+            val current = graph.photoChecker() ?: return "Claude was switched off: the timer or the source will have to do."
             val settings = graph.settings.value
             if (!graph.runtime.value.aiUsage.forMonth(month).allows(settings.aiMonthlyCapGbp, settings.usdToGbp)) return "Claude's monthly cap is reached: the timer or the source will have to do."
-            runCatching { checker.check(jpeg, piece.label) }
+            runCatching { current.check(jpeg, piece.label) }
                 .onFailure { Log.w(AppGraph.TAG, "The photo check failed", it) }
                 .getOrElse { return "The check didn't go through (${it.message ?: "no connection"})." }
                 .also { r -> graph.runtime.update { it.copy(aiUsage = it.aiUsage.forMonth(month).record(r.costUsd, r.refused, now)) } }
         }
         val verdict = result.verdict ?: return "Claude couldn't say. Try a clearer photo."
         if (!verdict.done || verdict.confidence < PhotoChecker.ACCEPT) return "Not yet: ${verdict.reason}"
-        graph.focus.photoChecked(piece.taskId, piece.step, piece.minutes)
+        if (!graph.focus.photoChecked(piece.taskId, piece.step, piece.minutes)) return "Done, but it was already ticked off: ${verdict.reason}"
         return "Done: ${verdict.reason}"
     }
 

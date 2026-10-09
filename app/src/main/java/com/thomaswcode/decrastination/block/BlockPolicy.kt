@@ -98,6 +98,8 @@ data class FocusSession(
     val startedAt: Long,
     /** The uptime clock at the start, so setting the date forward can't finish it early. */
     val startedUptime: Uptime? = null,
+    /** The box length its task was being cut into when it started, for the box experiment; null for a step of its own. */
+    val box: Int? = null,
 ) {
     val endsAt: Long get() = startedAt + minutes * 60_000L
 

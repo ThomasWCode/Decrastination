@@ -13,6 +13,7 @@ import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.data.Settings
+import com.thomaswcode.decrastination.learn.CalendarTime
 import com.thomaswcode.decrastination.learn.Daily
 import java.time.DayOfWeek
 import java.time.ZoneId
@@ -105,6 +106,8 @@ class NextWidgetReceiver : GlanceAppWidgetReceiver() {
         val pending = goAsync()
         CoroutineScope(Dispatchers.Default).launch {
             try {
+                // Long events' hours are put on days where you are: read again in the new zone.
+                if (intent.action != WidgetUpdater.ACTION_REDRAW) CalendarTime.refresh(context)
                 WidgetUpdater.update(context)
             } finally {
                 pending.finish()

@@ -93,6 +93,16 @@ class MergeTest {
     }
 
     @Test
+    fun `a reopened task's minutes start again, a new round of it`() {
+        val open = first(fetched("a"))
+        val worked = listOf(open.single().copy(workedMin = 40))
+        val done = Merge.apply(worked, Source.Teams, listOf(fetched("a", done = true)), t0 + 1).tasks
+        val again = Merge.apply(done, Source.Teams, listOf(fetched("a")), t0 + 2)
+        assertEquals(listOf("teams:a"), again.reopened.map { it.id })
+        assertEquals(0, again.tasks.single().workedMin)
+    }
+
+    @Test
     fun `a done task listed again reopens, as a snoozed email does`() {
         val done = Merge.apply(first(fetched("a")), Source.Teams, emptyList(), later).tasks
         val result = Merge.apply(done, Source.Teams, listOf(fetched("a")), later + 1)
