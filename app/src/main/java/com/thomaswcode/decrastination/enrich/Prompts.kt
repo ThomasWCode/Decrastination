@@ -13,6 +13,7 @@ import java.time.LocalTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import kotlin.math.abs
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -159,6 +160,7 @@ object Answers {
     private const val MAX_TITLE = 80
     private const val MAX_NEXT_STEP = 120
     private const val HAND_IN_MIN = 5
+    private const val STEPS_SLACK_MIN = 10
     private val SECTION = Regex("""^[1-9]\.[1-9]$""")
 
     /** A test's day: work must be done before school that morning. */
@@ -192,10 +194,15 @@ object Answers {
                     valid.take(MAX_STEPS - 1) + SubStep(("The rest: " + rest.joinToString("; ") { it.title }).take(MAX_TITLE), rest.sumOf { it.minutes })
                 }
                 val sections = sections(s.ankiSections + steps.flatMap { it.ankiSections })
+                // Steps that don't add up to the total (within a tenth, or ten minutes): one of the two
+                // is wrong, and planning the steps could lose work, so the total is planned instead.
+                val total = effort(s.effortMin)
+                val sum = steps.sumOf { it.minutes }
+                val agree = total == null || abs(sum - total) <= maxOf(STEPS_SLACK_MIN, total / 10)
                 base.copy(
                     // Vocabulary only: the decks hold the work, and this is the hand-in.
-                    effortMin = effort(s.effortMin) ?: steps.sumOf { it.minutes }.takeIf { it > 0 } ?: HAND_IN_MIN.takeIf { sections.isNotEmpty() },
-                    subSteps = steps.ifEmpty { null },
+                    effortMin = total ?: sum.takeIf { it > 0 } ?: HAND_IN_MIN.takeIf { sections.isNotEmpty() },
+                    subSteps = steps.takeIf { agree }.orEmpty().ifEmpty { null },
                     ankiSections = sections,
                     testDate = s.testDate?.let { date(it, zone, SCHOOL_STARTS) }?.takeIf { plausible(it, now) },
                 )
