@@ -125,15 +125,18 @@ object AnkiRules {
      * For each assignment, the vocabulary sections ("1.2") its deck tasks from the current
      * [textbook] hold, open or finished. A missed one holds none, nor does another textbook's.
      */
-    fun heldSections(tasks: List<TaskItem>, textbook: Int): Map<String, Set<String>> = tasks
+    fun heldSections(tasks: List<TaskItem>, textbook: Int): Map<String, Set<String>> = heldDecks(tasks, textbook).mapValues { it.value.keys }
+
+    /** For each assignment, the deck tasks [heldSections] counts, by the section each holds. */
+    fun heldDecks(tasks: List<TaskItem>, textbook: Int): Map<String, Map<String, TaskItem>> = tasks
         .filter { it.source == Source.Anki && it.sourceId.startsWith(DECK_PREFIX) && it.status != Status.Missed }
         .flatMap { deck ->
             val name = deck.extra[EXTRA_DECK_NAME]?.takeIf { it.startsWith("Textbook $textbook${Deck.SEPARATOR}") } ?: return@flatMap emptyList()
             val section = name.substringAfterLast(Deck.SEPARATOR)
-            deck.extra[EXTRA_FOR].orEmpty().split(',').filter { it.isNotEmpty() }.map { it to section }
+            deck.extra[EXTRA_FOR].orEmpty().split(',').filter { it.isNotEmpty() }.map { Triple(it, section, deck) }
         }
-        .groupBy({ it.first }, { it.second })
-        .mapValues { it.value.toSet() }
+        .groupBy({ it.first }, { it.second to it.third })
+        .mapValues { it.value.toMap() }
 
     fun deckName(textbook: Int, section: Pair<Int, Int>): String = "Textbook $textbook::${section.first}.${section.second}"
 

@@ -276,10 +276,19 @@ class Focus(
             // Reading or archiving an email, or an event passing, isn't work that earns time. Free
             // time is for the day the work was confirmed: given late (the app stopped first), after
             // that day is over, it has gone as the rest of that day's has.
-            val held = AnkiRules.heldSections(tasks.value.tasks, settings.value.ankiTextbook)
+            val decks = AnkiRules.heldDecks(tasks.value.tasks, settings.value.ankiTextbook)
             val earned = fresh.filter { it.kind != Kind.Info && it.kind != Kind.Event && today(it.doneAt ?: now) == today }.sumOf { task ->
-                // Vocabulary a deck task held earned its time with the deck, not again here.
-                val delegated = task.subSteps.filter { it.ankiSections.isNotEmpty() && held[task.id].orEmpty().containsAll(it.ankiSections) }.sumOf { it.minutes }
+                // Vocabulary its deck tasks hold earns its time through them, not again here: all of
+                // it once they're done, else as far as their sessions went. No more, as a deck left
+                // unfinished when the work closes is dropped, and mustn't take that time with it.
+                val delegated = task.subSteps.filter { it.ankiSections.isNotEmpty() }.sumOf { step ->
+                    val holding = step.ankiSections.mapNotNull { decks[task.id]?.get(it) }
+                    when {
+                        holding.size < step.ankiSections.size -> 0
+                        holding.all { it.status == Status.Done } -> step.minutes
+                        else -> minOf(step.minutes, holding.sumOf { it.workedMin })
+                    }
+                }
                 val remaining = (task.effortMin * (1 - task.sourceProgress)).roundToInt() - delegated - worked(task)
                 Credit.forCompletion(remaining.coerceAtLeast(0), ratio)
             }
