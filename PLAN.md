@@ -177,6 +177,10 @@ Phase 0 also built what Phase 1 would have scaffolded: the Gradle setup, the sha
 
 *Built 9 Oct 2026 (Q12): the model can split any task (an email, a Power Planner item, an assignment) into blocks with their own dates; the planner places each in its own window; an email archived with dated blocks to do stays as a follow-up until they're done, and an email's blocks can be ticked off in Tasks.*
 
+### 1.1.1: long emails read to their end
+
+*Built 9 Oct 2026: the app kept only the first 4 000 characters of an email, which cut the dated timeline off an 8 500-character one before the model could see it; it now keeps 20 000, of which the model reads 16 000 (told when there's more), and reads again, once, the emails it had cut. Read whole, that email's plan came to 12 to 14 hours in 17 to 20 blocks, past the ten hours and twenty blocks 1.1.0 trusted from one email, so an email's or planner item's blocks may now come to twenty hours and thirty blocks.*
+
 ## 6. Verification
 
 - **Unit tests (JVM):** `Planner` bucket allocation and ordering against `fixtures/` (expected buckets for tonight are written out in `docs/scheduler.md` §3); `BlockPolicy` strict/earned/quiet transitions; pending-change timing across midnight and reboot; source parsers against recorded JSON; deck-regex mapping against the real assignment texts; calibration maths; enrichment cache.
