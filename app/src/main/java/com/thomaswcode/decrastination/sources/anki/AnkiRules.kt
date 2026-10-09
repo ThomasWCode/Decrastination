@@ -114,7 +114,7 @@ object AnkiRules {
     /** The vocabulary sections the enrichment read in [task] ("1.2"). */
     fun enrichedSections(task: TaskItem): List<Pair<Int, Int>> =
         // Only an enrichment of the task as it is: one of content since changed names old sections.
-        task.enrichment?.takeIf { it.inputHash == Enrichments.inputHash(task) }?.ankiSections.orEmpty().mapNotNull { section ->
+        Enrichments.current(task)?.ankiSections.orEmpty().mapNotNull { section ->
             section.split('.').takeIf { it.size == 2 }?.let { (major, minor) -> major.toIntOrNull()?.let { a -> minor.toIntOrNull()?.let { b -> a to b } } }
         }.distinct()
 

@@ -30,16 +30,20 @@ object Review {
         // Once a week: the check-in runs it at once, and the evening's alarm finds it done since
         // Sunday's check-in time (a review at any other time doesn't count). The latest Sunday at or
         // before now, so an alarm after midnight still finds Sunday's.
-        if (ifDue && graph.log.value.reviews.any { it.at >= Daily.lastCheckIn(now, graph.clock.zone(), graph.settings.value.checkInMin) }) return
-        val learned = Calibrator.learn(graph.log.value, graph.runtime.value.calibration, graph.settings.value.boxMin, week = now / WEEK_MS)
+        val zone = graph.clock.zone()
+        val week = Daily.checkInWeek(now, zone, graph.settings.value.checkInMin)
+        if (ifDue && reviewed(graph.log.value.reviews, week, Daily.lastCheckIn(now, zone, graph.settings.value.checkInMin))) return
+        val learned = Calibrator.learn(graph.log.value, graph.runtime.value.calibration, graph.settings.value.boxMin, week = now / WEEK_MS, defaultMargin = graph.settings.value.marginDays)
         graph.runtime.update { it.copy(calibration = learned.calibration) }
         val findings = learned.changes + listOfNotNull(Days.capacityAdvice(graph.log.value.days, graph.focus.today(now)))
         val model = runCatching { modelReview(graph, now) }
             .onFailure { Log.w(AppGraph.TAG, "The model's weekly review failed; the rules' stands", it) }
             .getOrNull()
         // The rules' findings always stand: the model's note comes first, and they follow.
-        val review = model?.let { it.copy(lines = it.lines + findings) }
-            ?: WeeklyReview(now, findings.ifEmpty { listOf("Nothing to change this week: the estimates held.") }, by = "rules")
+        val review = (
+            model?.let { it.copy(lines = it.lines + findings) }
+                ?: WeeklyReview(now, findings.ifEmpty { listOf("Nothing to change this week: the estimates held.") }, by = "rules")
+            ).copy(week = week)
         graph.log.update { it.copy(reviews = it.reviews + review).trimmed(now) }
         val open = PendingIntent.getActivity(
             context,
@@ -60,6 +64,13 @@ object Review {
                 .build(),
         )
     }
+
+    /**
+     * Whether [week] has had its review: one marked with it, or (before reviews were marked) one
+     * since [lastCheckIn]. By the week, so moving the check-in later doesn't bring a second.
+     */
+    fun reviewed(reviews: List<WeeklyReview>, week: String, lastCheckIn: Long): Boolean =
+        reviews.any { it.week == week || (it.week == null && it.at >= lastCheckIn) }
 
     /**
      * The model's review, while Claude is on and under its cap: a note and bounded changes, the

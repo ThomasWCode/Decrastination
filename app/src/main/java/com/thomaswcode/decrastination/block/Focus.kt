@@ -2,6 +2,7 @@ package com.thomaswcode.decrastination.block
 
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.Plan
+import com.thomaswcode.decrastination.core.Planner
 import com.thomaswcode.decrastination.core.Status
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.WallClock
@@ -15,6 +16,7 @@ import com.thomaswcode.decrastination.data.RuntimeState
 import com.thomaswcode.decrastination.data.SessionRecord
 import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.data.TaskState
+import com.thomaswcode.decrastination.sources.anki.AnkiRules
 import java.time.Instant
 import java.time.LocalDate
 import java.util.concurrent.atomic.AtomicLong
@@ -252,15 +254,33 @@ class Focus(
                         return@map t.copy(subSteps = t.subSteps.mapIndexed { j, s -> if (j == i) s.copy(done = true) else s }, workedMin = t.workedMin + minutes)
                     }
                     // A piece of time (the whole task, or a part the planner cut it into): counted
-                    // against what's left of its estimate, so the same work can't be counted past it.
-                    val left = (t.effortMin * (1 - t.sourceProgress.coerceIn(0.0, 1.0))).roundToInt() - t.workedMin
+                    // against what's left of it as the plan measures it (calibrated), so the same
+                    // work can't be counted past it.
+                    val left = Planner.remaining(t, runtime.value.calibration.multiplier(t.kind, t.className)).roundToInt()
                     if (left <= 0) return@map t
                     credited = minOf(minutes, left)
                     t.copy(workedMin = t.workedMin + credited)
                 },
             )
         }
-        if (credited > 0) runtime.update { it.copy(credit = it.credit.earn(today(now), Credit.forSession(credited, settings.value.workMinPerFreeMin))) }
+        if (credited > 0) {
+            runtime.update { it.copy(credit = it.credit.earn(today(now), Credit.forSession(credited, settings.value.workMinPerFreeMin))) }
+            // Recorded as the day's work, as a session's minutes are, and marked a photo, not timed.
+            val task = tasks.value.tasks.firstOrNull { it.id == taskId }
+            val record = SessionRecord(
+                taskId = taskId,
+                kind = task?.kind ?: Kind.Admin,
+                className = task?.className,
+                label = "Photo check: " + (step ?: task?.title.orEmpty()),
+                plannedMin = minutes,
+                workedMin = credited,
+                startedAt = now,
+                endedAt = now,
+                completed = true,
+                photo = true,
+            )
+            log.update { it.copy(sessions = it.sessions + record).trimmed(now) }
+        }
         return credited > 0
     }
 
@@ -302,8 +322,11 @@ class Focus(
             // Reading or archiving an email, or an event passing, isn't work that earns time. Free
             // time is for the day the work was confirmed: given late (the app stopped first), after
             // that day is over, it has gone as the rest of that day's has.
+            val held = AnkiRules.heldSections(tasks.value.tasks, settings.value.ankiTextbook)
             val earned = fresh.filter { it.kind != Kind.Info && it.kind != Kind.Event && today(it.doneAt ?: now) == today }.sumOf { task ->
-                val remaining = (task.effortMin * (1 - task.sourceProgress)).roundToInt() - worked(task)
+                // Vocabulary a deck task held earned its time with the deck, not again here.
+                val delegated = task.subSteps.filter { it.ankiSections.isNotEmpty() && held[task.id].orEmpty().containsAll(it.ankiSections) }.sumOf { it.minutes }
+                val remaining = (task.effortMin * (1 - task.sourceProgress)).roundToInt() - delegated - worked(task)
                 Credit.forCompletion(remaining.coerceAtLeast(0), ratio)
             }
             state.copy(
@@ -322,7 +345,8 @@ class Focus(
                         source = task.source,
                         kind = task.kind,
                         className = task.className,
-                        estimateMin = task.effortMin,
+                        // What was left of it when first seen: progress it already had isn't work done here.
+                        estimateMin = (task.effortMin * (1 - task.sourceProgress.coerceIn(0.0, 1.0))).roundToInt().coerceAtLeast(1),
                         workedMin = worked(task),
                         dueAt = task.dueAt,
                         firstSeenAt = task.firstSeenAt,
