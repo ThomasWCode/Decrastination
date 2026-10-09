@@ -128,7 +128,7 @@ class ProtectionActivity : ComponentActivity() {
                         runtime.protection.problems.forEach { Text("• $it", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error) }
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             if (settings.armed) {
-                                OutlinedButton(onClick = { scope.launch { graph.changeSettings(settings.copy(armed = false)) } }) { Text("Disarm") }
+                                OutlinedButton(onClick = { scope.launch { graph.changeSettings { it.copy(armed = false) } } }) { Text("Disarm") }
                                 if (hasParentCode) {
                                     OutlinedButton(onClick = { codeFor = CodeTarget.Unblock }) { Text("Unblock for an hour") }
                                 }
@@ -151,6 +151,8 @@ class ProtectionActivity : ComponentActivity() {
                                 Text(change.description, style = MaterialTheme.typography.bodyLarge)
                                 Text("Applies ${Format.at(change.applyAt, now, graph.clock.zone())}", style = MaterialTheme.typography.bodySmall)
                             }
+                            // Changed your mind: cancelling a loosening tightens, so it's at once.
+                            TextButton(onClick = { scope.launch { graph.cancelChange(change.id) } }) { Text("Cancel") }
                             if (hasParentCode) TextButton(onClick = { codeFor = CodeTarget.Change(change.id) }) { Text("Parent code") }
                         }
                     }
@@ -257,7 +259,7 @@ class ProtectionActivity : ComponentActivity() {
                     TextButton(onClick = {
                         step = Step.None
                         scope.launch {
-                            graph.changeSettings(graph.settings.value.copy(armed = true))
+                            graph.changeSettings { it.copy(armed = true) }
                             Watchdog.check(this@ProtectionActivity, repair = true)
                         }
                     }) { Text("Arm") }

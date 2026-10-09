@@ -90,10 +90,15 @@ class AppGraph private constructor(context: Context) {
      */
     private val changing = Mutex()
 
-    suspend fun changeSettings(proposed: Settings) = changing.withLock {
+    /**
+     * Changes the settings as [change] says, from what's been asked for (the settings with what's
+     * waiting applied), so a change to one field leaves the others' waiting changes be.
+     */
+    suspend fun changeSettings(change: (Settings) -> Settings) = changing.withLock {
         // What's waiting is counted up to now first, so a new change's wait starts now.
         applyDue(force = true)
         val state = runtime.value
+        val proposed = change(SettingsChanges.requested(settings.value, state.pending))
         val outcome = SettingsChanges.propose(settings.value, proposed, state.pending, clock.now()) { java.util.UUID.randomUUID().toString() }
         // Nothing was waiting: the count starts now, whatever an old mark says.
         val mark = if (state.pending.isEmpty()) clock.uptime() else state.uptimeMark ?: clock.uptime()
@@ -126,6 +131,14 @@ class AppGraph private constructor(context: Context) {
         // applied again (to the same value), never lost.
         if (due.isNotEmpty()) settings.update { latest -> due.fold(latest, SettingsChanges::apply) }
         runtime.update { it.copy(pending = outcome.pending, uptimeMark = if (outcome.pending.isEmpty()) null else uptime) }
+    }
+
+    /** Drops the pending change [id]: what it would loosen stays as it is. Never waits, since it tightens. */
+    suspend fun cancelChange(id: String) = changing.withLock {
+        runtime.update { state ->
+            val rest = state.pending.filterNot { it.id == id }
+            state.copy(pending = rest, uptimeMark = if (rest.isEmpty()) null else state.uptimeMark)
+        }
     }
 
     /** Applies the pending change [id] now (a parent's code allowed it), if it's still waiting. */
@@ -181,7 +194,9 @@ class AppGraph private constructor(context: Context) {
 
     init {
         // Work a source confirms done earns free time and is logged.
-        syncer.addListener { report -> focus.onCompleted(report.completed) }
+        syncer.addListener { focus.rewardCompletions() }
+        // Any a stop left ungiven.
+        scope.launch { focus.rewardCompletions() }
         runCatching {
             app.contentResolver.registerContentObserver(
                 TeamsProvider.root,

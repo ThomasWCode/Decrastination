@@ -97,18 +97,25 @@ object SettingsChanges {
 
     data class Outcome(val settings: Settings, val pending: List<PendingChange>)
 
+    /** The settings as asked for: [current] with every [pending] change applied. What the Settings screen shows. */
+    fun requested(current: Settings, pending: List<PendingChange>): Settings = pending.fold(current, ::apply)
+
     /**
-     * Applies what may apply now of the move from [current] to [proposed], and returns the rest as
-     * pending changes, added to [pending]. A new change to a field replaces any pending one for it.
+     * Applies what may apply now of the move to [proposed], and returns the rest as pending
+     * changes, added to [pending]. [proposed] is read against what's been asked for ([requested]):
+     * a field left as asked keeps its pending change and its wait; one set back to its current
+     * value cancels it; any other change replaces it.
      */
     fun propose(current: Settings, proposed: Settings, pending: List<PendingChange>, now: Long, newId: () -> String): Outcome {
         val old = encode(current)
+        val asked = encode(requested(current, pending))
         val new = encode(proposed)
         var applied = old
         val waiting = pending.toMutableList()
         for ((field, value) in new) {
-            if (old[field] == value) continue
+            if (asked[field] == value) continue
             waiting.removeAll { it.field == field }
+            if (old[field] == value) continue
             val single = decode(JsonObject(old + (field to value)))
             if (current.armed && loosens(field, current, single)) {
                 waiting += PendingChange(
