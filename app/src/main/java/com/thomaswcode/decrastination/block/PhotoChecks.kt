@@ -23,6 +23,10 @@ object PhotoChecks {
 
     /** Checks [photo] against [piece], records the cost, and says how it went. The photo is deleted, whatever happens. */
     suspend fun check(context: Context, graph: AppGraph, photo: File, piece: Chunk): String {
+        if (!piece.photoCheckable) {
+            withContext(NonCancellable + Dispatchers.IO) { photo.delete() }
+            return "Only written homework can be checked from a photo."
+        }
         val jpeg = try {
             withContext(Dispatchers.IO) { shrink(photo) } ?: return "Couldn't read the photo."
         } finally {

@@ -167,9 +167,10 @@ class Focus(
     /**
      * Ends the session: a finished one ([FocusSession.endsAt] has passed) marks its step done (or
      * adds its minutes to the task's) and earns its share of free time; one stopped early only
-     * adds the minutes worked. Returns what was recorded, or null if there was no session.
+     * adds the minutes worked. With [expected], only that session: one started since is left
+     * running. Returns what was recorded, or null if there was no session (or another).
      */
-    suspend fun stopSession(): SessionRecord? {
+    suspend fun stopSession(expected: FocusSession? = null): SessionRecord? {
         // Taken and cleared in one step, so two callers at once (the ticker, the alarm and Stop)
         // can't both finish it: the second finds none. What it's owed is saved in that same step,
         // so a stop before it's all given loses none of it.
@@ -178,6 +179,7 @@ class Focus(
         var ended: EndedSession? = null
         runtime.update { state ->
             val session = state.session ?: return@update state
+            if (expected != null && session != expected) return@update state
             val completed = session.isDue(now, uptime)
             val worked = if (completed) session.minutes else (session.ran(now, uptime) / 60_000L).toInt().coerceIn(0, session.minutes)
             // A finished session ended when it was due, not when this ran (the phone off at its
@@ -217,6 +219,12 @@ class Focus(
                         workedMin = t.workedMin + ended.workedMin,
                         sessionsCounted = (t.sessionsCounted + session.startedAt).takeLast(MAX_COUNTED),
                     ).also { task = it }
+                },
+                // A completion of the task saved for its reward counts the session too, in the same
+                // step: stopped before the reward, and the task reopened meanwhile, it's still there.
+                unrewarded = state.unrewarded.map { u ->
+                    if (u.id != session.taskId || session.startedAt in u.sessionsCounted) return@map u
+                    u.copy(workedMin = u.workedMin + ended.workedMin, sessionsCounted = (u.sessionsCounted + session.startedAt).takeLast(MAX_COUNTED))
                 },
             )
         }
@@ -366,7 +374,7 @@ class Focus(
         // A task confirmed done while its session runs: the session ends now, its minutes count
         // as work on the task (not as a finished session's credit as well as the completion's).
         val sessionMin = runtime.value.session?.takeIf { s -> completed.any { it.id == s.taskId } }
-            ?.let { s -> stopSession()?.let { record -> s.taskId to record.workedMin } }
+            ?.let { s -> stopSession(s)?.let { record -> s.taskId to record.workedMin } }
         val now = clock.now()
         val today = today(now)
         val ratio = settings.value.workMinPerFreeMin
@@ -376,12 +384,18 @@ class Focus(
         fun worked(task: TaskItem): Int = tasks.value.tasks.firstOrNull { it.id == task.id && it.doneAt == task.doneAt }?.workedMin
             ?: (task.workedMin + if (sessionMin?.first == task.id) sessionMin.second else 0)
         fun key(task: TaskItem) = Rewarded(task.id, task.doneAt ?: task.lastSeenAt)
+        // Its deck tasks, missed ones too: the read that closes an assignment drops its unfinished
+        // deck in the same sync, before this, and that deck's sessions earned their time already.
+        val decks = AnkiRules.heldDecks(tasks.value.tasks, settings.value.ankiTextbook, missed = true)
+        // Its vocabulary steps its decks hold: their work is the decks', and learned from theirs.
+        fun deckMinutes(task: TaskItem): Int = task.subSteps
+            .filter { step -> step.ankiSections.isNotEmpty() && step.ankiSections.all { decks[task.id]?.containsKey(it) == true } }
+            .sumOf { it.minutes }
         runtime.update { state ->
             val fresh = completed.filter { key(it) !in state.rewarded }
             // Reading or archiving an email, or an event passing, isn't work that earns time. Free
             // time is for the day the work was confirmed: given late (the app stopped first), after
             // that day is over, it has gone as the rest of that day's has.
-            val decks = AnkiRules.heldDecks(tasks.value.tasks, settings.value.ankiTextbook)
             val earned = fresh.filter { it.kind != Kind.Info && it.kind != Kind.Event && today(it.doneAt ?: now) == today }.sumOf { task ->
                 // In the plan's units, as its sessions earned theirs: the estimate as calibrated.
                 val multiplier = state.calibration.multiplier(task.kind, task.className)
@@ -419,8 +433,9 @@ class Focus(
                         source = task.source,
                         kind = task.kind,
                         className = task.className,
-                        // What was left of it when first seen: progress it already had isn't work done here.
-                        estimateMin = (task.effortMin * (1 - task.sourceProgress.coerceIn(0.0, 1.0))).roundToInt().coerceAtLeast(1),
+                        // What was left of it when first seen: progress it already had isn't work done here,
+                        // nor is vocabulary its decks hold (their own records learn from it).
+                        estimateMin = (task.effortMin * (1 - task.sourceProgress.coerceIn(0.0, 1.0)) - deckMinutes(task)).roundToInt().coerceAtLeast(1),
                         workedMin = worked(task),
                         dueAt = task.dueAt,
                         firstSeenAt = task.firstSeenAt,

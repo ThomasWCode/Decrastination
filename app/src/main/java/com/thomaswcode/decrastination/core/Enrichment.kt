@@ -43,10 +43,17 @@ data class Enrichment(
 fun TaskItem.enriched(): TaskItem {
     // Always from what the source said, so a changed enrichment doesn't leave the last one's dates.
     val base = sourceValues ?: SourceValues(kind, dueAt, availableFrom)
-    // None, or one of content that has since changed (a new email in the thread): what the source
-    // says, until it's enriched again. The steps it gave stay, with their ticks, till then.
+    // None, or one of content that has since changed (new instructions, a new email in the thread):
+    // what the source says, until it's enriched again. Steps it gave were of what the task said
+    // then, so they go too, and the task's own estimate is planned meanwhile; the source's own stay.
     val e = Enrichments.current(this)
-        ?: return copy(kind = base.kind, dueAt = base.dueAt, availableFrom = base.availableFrom, aiEffortMin = null)
+        ?: return copy(
+            kind = base.kind,
+            dueAt = base.dueAt,
+            availableFrom = base.availableFrom,
+            aiEffortMin = null,
+            subSteps = if (stepsFromEnrichment()) emptyList() else subSteps,
+        )
     val due = when {
         // An email has no deadline of its own: what the rules found is a guess from its words
         // ("appointment"), and the enrichment's reading of it wins where it gives one.
@@ -72,8 +79,11 @@ fun TaskItem.enriched(): TaskItem {
  * The task with a fresh enrichment: steps an earlier enrichment gave are replaced by the new ones,
  * keeping those already done; steps of the source's own are kept.
  */
+/** Whether the task's steps are the ones its enrichment gave, not the source's own. */
+private fun TaskItem.stepsFromEnrichment(): Boolean = subSteps.isNotEmpty() && enrichment?.subSteps?.map { it.title } == subSteps.map { it.title }
+
 fun TaskItem.withEnrichment(new: Enrichment): TaskItem {
-    val fromEnrichment = enrichment?.subSteps?.map { it.title } == subSteps.map { it.title } && subSteps.isNotEmpty()
+    val fromEnrichment = stepsFromEnrichment()
     // How many by each title were done: that many of the new steps by it are, in order, so two
     // steps of the same name aren't both ticked by one.
     val done = subSteps.filter { it.done }.groupingBy { it.title }.eachCount().toMutableMap()
@@ -129,9 +139,13 @@ object Enrichments {
     /** [task]'s enrichment if it's of the task as it is now; one of content since changed, null. */
     fun current(task: TaskItem): Enrichment? = task.enrichment?.takeIf { it.inputHash == inputHash(task) }
 
-    /** Whether [task] needs enriching again: never done, changed since, or done by the rules when the model is now on. */
-    fun stale(task: TaskItem, modelOn: Boolean, rules: String): Boolean {
+    /**
+     * Whether [task] needs enriching again: never done, changed since, done by the rules when the
+     * model is now on, or done by the model when it's now switched off ([modelOff]: what it read goes
+     * with it, and the rules' reading stands instead).
+     */
+    fun stale(task: TaskItem, modelOn: Boolean, rules: String, modelOff: Boolean = false): Boolean {
         val e = task.enrichment ?: return true
-        return e.inputHash != inputHash(task) || (modelOn && e.by == rules)
+        return e.inputHash != inputHash(task) || (modelOn && e.by == rules) || (modelOff && e.by != rules)
     }
 }

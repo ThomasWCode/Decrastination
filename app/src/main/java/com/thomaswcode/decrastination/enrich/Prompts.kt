@@ -224,9 +224,12 @@ object Answers {
                 // All vocabulary, the model's total is the hand-in alone: the step's estimate stands.
                 val total = effort(s.effortMin).takeUnless { allVocabulary }
                 val sum = planned.sumOf { it.minutes }
-                val agree = total == null || abs(sum - total) <= maxOf(STEPS_SLACK_MIN, total / 10)
+                // A total past the most one task is taken to be isn't one to plan by, nor are steps
+                // adding up past it: the task's own estimate is planned instead.
+                val inRange = sum <= MAX_EFFORT && (allVocabulary || s.effortMin <= MAX_EFFORT)
+                val agree = inRange && (total == null || abs(sum - total) <= maxOf(STEPS_SLACK_MIN, total / 10))
                 base.copy(
-                    effortMin = total ?: sum.takeIf { it > 0 },
+                    effortMin = total ?: sum.takeIf { agree && it > 0 },
                     subSteps = planned.takeIf { agree }.orEmpty().ifEmpty { null },
                     // A split not trusted hands no vocabulary to a deck either: its total, planned
                     // whole, already holds it.

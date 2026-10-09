@@ -2,14 +2,17 @@ package com.thomaswcode.decrastination.learn
 
 import android.content.Context
 import androidx.core.app.NotificationCompat
+import androidx.work.Constraints
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingWorkPolicy
 import androidx.work.ForegroundInfo
+import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.OutOfQuotaPolicy
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
+import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.R
 import com.thomaswcode.decrastination.notify.Channels
 
@@ -40,9 +43,13 @@ class ReviewWorker(context: Context, params: WorkerParameters) : CoroutineWorker
 
         /** The review now; [ifDue], only if none has run since Sunday's check-in. One after another. */
         fun enqueue(context: Context, ifDue: Boolean) {
+            // With Claude on, the model's review is expected: it waits for a connection, rather
+            // than its call failing offline and the rules' review standing for the week.
+            val online = AppGraph.get(context).claudeKey() != null
             val request = OneTimeWorkRequestBuilder<ReviewWorker>()
                 .setInputData(workDataOf(KEY_IF_DUE to ifDue))
                 .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
+                .apply { if (online) setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()) }
                 .build()
             WorkManager.getInstance(context).enqueueUniqueWork(NAME, ExistingWorkPolicy.APPEND_OR_REPLACE, request)
         }

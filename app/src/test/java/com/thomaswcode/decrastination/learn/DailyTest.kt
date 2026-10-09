@@ -11,6 +11,7 @@ import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.data.ActivityLog
 import com.thomaswcode.decrastination.data.CompletionRecord
 import com.thomaswcode.decrastination.data.DailyRetry
+import com.thomaswcode.decrastination.data.SessionRecord
 import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.data.WeeklyReview
 import com.thomaswcode.decrastination.enrich.ClaudeReviewer
@@ -139,6 +140,23 @@ class ReviewInputTest {
         repeat(Daily.RETRIES) { retries = Daily.failed(retries, Daily.ACTION_BRIEFING, Fixtures.at("2026-10-12T07:00")) }
         assertEquals(DailyRetry(Fixtures.at("2026-10-12T07:10"), Daily.RETRIES), retries[Daily.ACTION_BRIEFING])
         assertEquals(emptyMap(), Daily.failed(retries, Daily.ACTION_BRIEFING, Fixtures.at("2026-10-12T07:30")))
+    }
+
+    @Test
+    fun `a session across the week's end counts only its minutes within the week`() {
+        // Sunday 23:30 to Monday 02:30: 30 minutes of the reviewed week.
+        val log = ActivityLog(sessions = listOf(SessionRecord("teams:a", Kind.Homework, label = "a", plannedMin = 180, workedMin = 180, startedAt = Fixtures.at("2026-10-11T23:30"), endedAt = 0, completed = true)))
+        val text = ReviewInput.describe(log, Calibration(), Settings(), Fixtures.at("2026-10-12T10:00"), LONDON, week = "2026-10-05")
+        assertTrue("Focus sessions: 1, 1 run to the end, 30 min in all." in text, text)
+    }
+
+    @Test
+    fun `a briefing that ran today isn't run again when its time moves later`() {
+        val ran = Fixtures.at("2026-10-12T07:00")
+        val later = Settings(briefingWeekdayMin = 8 * 60)
+        assertEquals(Fixtures.at("2026-10-13T08:00"), Daily.nextBriefing(Daily.from(ran, Fixtures.at("2026-10-12T07:30"), LONDON), LONDON, later))
+        // Run yesterday, today's still to be delivered keeps its time.
+        assertEquals(Fixtures.at("2026-10-12T07:00"), Daily.nextBriefing(Daily.from(Fixtures.at("2026-10-11T08:30"), Fixtures.at("2026-10-12T07:05"), LONDON), LONDON, Settings()))
     }
 
     @Test
