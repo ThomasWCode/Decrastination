@@ -9,7 +9,10 @@ import androidx.core.app.NotificationManagerCompat
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.block.FocusService
 import com.thomaswcode.decrastination.block.TeamsAutoSync
+import com.thomaswcode.decrastination.core.About
 import com.thomaswcode.decrastination.core.Enrichments
+import com.thomaswcode.decrastination.core.InstructionStatus
+import com.thomaswcode.decrastination.core.Instructions
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.withoutEnrichment
@@ -61,6 +64,10 @@ import kotlinx.serialization.json.JsonPrimitive
  * - `ai-check --es base http://127.0.0.1:8089`: one model call per job through the real client
  *   to a stand-in server (`adb reverse` to the PC), with a dummy key, logging what it reads back.
  *   Nothing reaches Anthropic and nothing is stored: it checks the client works on the phone.
+ * - `instruction --es text "<words>"` (about `--es task <id>`, `--es event <name>` or `--es day
+ *   YYYY-MM-DD`, or none): an instruction written as on the phone, read by Claude (a paid call)
+ *   and left for you to apply; `instructions` logs them all with Claude's reading, and
+ *   `instruction-discard --es id <id|all>` discards those not applied.
  * - Test hooks: `test-arm`, `test-disarm` (at once, unlike the app's own disarming), `remove-admin`,
  *   `clear-parent-code`, `offer-teams-sync` (the countdown banner now, whatever the rules), and
  *   `clean-up` (this app's notifications, a delayed Teams sync, forced blocking hours, the
@@ -207,6 +214,41 @@ class CommandActivity : Activity() {
                     val task = graph.tasks.value.tasks.first { it.id == id }
                     val e = task.enrichment
                     Log.i(TAG, "enrich-task $id: by ${e?.by}, dropped ${e?.dropped}, ${task.subSteps.size} steps: ${task.subSteps.joinToString(" | ") { "${it.title} (${it.minutes})" }}")
+                }
+            }
+            "instruction" -> {
+                // --es text "<words>", about --es task <id>, --es event <name>, or --es day YYYY-MM-DD (or none):
+                // written as on the phone, then read by Claude; it waits for you to apply it.
+                val text = intent.getStringExtra("text")
+                if (text.isNullOrBlank()) {
+                    Log.w(TAG, "instruction needs --es text <words>")
+                } else {
+                    val task = intent.getStringExtra("task")?.let { id -> graph.tasks.value.tasks.firstOrNull { it.id == id } }
+                    val event = intent.getStringExtra("event")?.let { key -> graph.calendarTime.events.firstOrNull { EventJudge.key(it) == key } }
+                    val about = About(
+                        taskId = task?.id,
+                        taskTitle = task?.title,
+                        eventKey = event?.let(EventJudge::key),
+                        eventTitle = event?.title,
+                        eventStart = event?.start,
+                        day = intent.getStringExtra("day"),
+                    )
+                    val id = graph.addInstruction(text, about)
+                    Log.i(TAG, "instruction $id written; `instructions` shows Claude's reading")
+                }
+            }
+            "instruction-discard" -> {
+                // --es id <id>, or all: discards those not applied (a test's), as Discard does.
+                val which = intent.getStringExtra("id")
+                val ids = graph.instructions.value.instructions.filter { it.state != InstructionStatus.Applied && (which == "all" || it.id == which) }.map { it.id }
+                ids.forEach { graph.deleteInstruction(it) }
+                Log.i(TAG, "instruction-discard: ${ids.size} discarded")
+            }
+            "instructions" -> {
+                val tasks = graph.tasks.value.tasks.associateBy { it.id }
+                graph.instructions.value.instructions.forEach { i ->
+                    val read = i.changes.joinToString(" | ") { Instructions.describe(it, tasks, graph.clock.zone()) }
+                    Log.i(TAG, "instruction ${i.id} ${i.state}: '${i.text}' -> ${read.ifEmpty { i.note ?: "-" }}")
                 }
             }
             "ai-check" -> {

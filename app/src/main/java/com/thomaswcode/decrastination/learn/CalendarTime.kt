@@ -14,6 +14,7 @@ import androidx.core.app.NotificationCompat
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.R
 import com.thomaswcode.decrastination.block.BlockPolicy
+import com.thomaswcode.decrastination.core.Instructions
 import com.thomaswcode.decrastination.notify.Channels
 import com.thomaswcode.decrastination.notify.Notify
 import com.thomaswcode.decrastination.widget.WidgetUpdater
@@ -90,7 +91,9 @@ object CalendarTime {
         val events = runCatching { withContext(Dispatchers.IO) { read(context, now - DAY_MS, now + LOOK_AHEAD_MS) } }
             .onFailure { Log.w(AppGraph.TAG, "Can't read the calendar", it) }
             .getOrNull() ?: return
-        val time = EventJudge.time(events, graph.runtime.value.eventAnswers, graph.clock.zone())
+        // Your instructions about events over your answers to its questions.
+        val answers = graph.runtime.value.eventAnswers + Instructions.eventAnswers(graph.instructions.value.applied)
+        val time = EventJudge.time(events, answers, graph.clock.zone())
         graph.calendarTime = time
         // Not at night: they're asked at the first look after quiet hours. Nor while the question
         // couldn't be seen (notifications off): it's asked once it can be, not marked asked unseen.
