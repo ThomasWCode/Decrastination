@@ -118,6 +118,8 @@ fun SetupScreen(graph: AppGraph, activity: Activity) {
             enteringKey = false
             scope.launch {
                 graph.secrets.put(Secret.AnthropicApiKey, key)
+                // The last key's failure isn't this one's: it's tried at once, not after the rest.
+                graph.runtime.update { it.copy(aiUsage = it.aiUsage.copy(lastError = null)) }
                 // Put to use as switching Claude on is: at once unarmed, after the wait armed.
                 graph.changeSettings { it.copy(aiKeyActive = true) }
                 // A new key for one already in use: straight to work.
