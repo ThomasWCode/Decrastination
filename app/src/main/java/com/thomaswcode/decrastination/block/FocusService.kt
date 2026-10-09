@@ -92,6 +92,9 @@ class FocusService : AccessibilityService() {
      */
     private val lastSite = mutableMapOf<String, Focus.Target.Site?>()
 
+    /** The site [browser] last showed, while it's still blocked as the settings now say. */
+    private fun remembered(browser: String): Focus.Target.Site? = lastSite[browser]?.takeIf(::stillBlocked)
+
     /** Notes what [browser] shows, in memory and, when it's changed, in the store. */
     private fun rememberSite(browser: String, site: Focus.Target.Site?) {
         if (browser in lastSite && lastSite[browser] == site) return
@@ -157,6 +160,11 @@ class FocusService : AccessibilityService() {
         )
         // What each browser last showed, as saved: a page whose address is hidden can still be judged.
         graph.runtime.value.browserSites.forEach { (browser, site) -> lastSite[browser] = site?.let { Focus.Target.Site(it, browser) } }
+        // Connected (or restarted) while the phone is already unlocked and in use: the unlock it
+        // missed counts, so the first-unlock Teams sync can still be offered.
+        val power = getSystemService(PowerManager::class.java)
+        val keyguard = getSystemService(android.app.KeyguardManager::class.java)
+        if (power?.isInteractive == true && keyguard?.isKeyguardLocked != true) unlockedAt = SystemClock.elapsedRealtime()
         _connected.value = true
         Log.i(TAG, "Focus service connected")
         closeBlockedPictureInPicture()
@@ -319,7 +327,7 @@ class FocusService : AccessibilityService() {
             ?: return
         val text = root.findAccessibilityNodeInfosByViewId(Blocklist.urlBarId(browser)).firstOrNull()?.text?.toString()
         // No address bar (a video full screen hides it): still the page it last showed.
-        val site = if (text != null) graph.focus.siteTarget(browser, text) else lastSite[browser]
+        val site = if (text != null) graph.focus.siteTarget(browser, text) else remembered(browser)
         if (text != null) rememberSite(browser, site)
         if (site != null) act(site) else stopSpendingUnlessAside()
     }
@@ -346,7 +354,7 @@ class FocusService : AccessibilityService() {
             // went into the corner before this instance started), it's brought back to look.
             val address = if (browser) root.findAccessibilityNodeInfosByViewId(Blocklist.urlBarId(pkg)).firstOrNull()?.text?.toString() else null
             val known = app != null || address != null || pkg in lastSite
-            val target = app ?: if (address != null) graph.focus.siteTarget(pkg, address) else lastSite[pkg]
+            val target = app ?: if (address != null) graph.focus.siteTarget(pkg, address) else remembered(pkg)
             if (known && target == null) continue
             // Allowed on free time: a video playing in the corner spends it like one in front.
             if (verdict == BlockPolicy.Verdict.Spend && target != null) {
@@ -390,7 +398,7 @@ class FocusService : AccessibilityService() {
         if (!graph.focus.isCheckedBrowser(pkg)) return null
         val address = root.findAccessibilityNodeInfosByViewId(Blocklist.urlBarId(pkg)).firstOrNull()?.text?.toString()
         // No address bar (a video full screen in its pane): the page it last showed in front.
-        return if (address != null) graph.focus.siteTarget(pkg, address) else lastSite[pkg]
+        return if (address != null) graph.focus.siteTarget(pkg, address) else remembered(pkg)
     }
 
     /** Whether [target] is playing in a picture-in-picture window. */
