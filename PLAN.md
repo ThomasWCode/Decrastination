@@ -173,6 +173,10 @@ Phase 0 also built what Phase 1 would have scaffolded: the Gradle setup, the sha
 - Stats screen: completions per day, sessions, blocks triggered, protection-off events, calibration values.
 - Export/import of settings and the log.
 
+### After v1: blocks (1.1.0)
+
+*Built 9 Oct 2026 (Q12): the model can split any task (an email, a Power Planner item, an assignment) into blocks with their own dates; the planner places each in its own window; an email archived with dated blocks to do stays as a follow-up until they're done, and an email's blocks can be ticked off in Tasks.*
+
 ## 6. Verification
 
 - **Unit tests (JVM):** `Planner` bucket allocation and ordering against `fixtures/` (expected buckets for tonight are written out in `docs/scheduler.md` §3); `BlockPolicy` strict/earned/quiet transitions; pending-change timing across midnight and reboot; source parsers against recorded JSON; deck-regex mapping against the real assignment texts; calibration maths; enrichment cache.

@@ -3,6 +3,7 @@ package com.thomaswcode.decrastination.block
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.Planner
+import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Status
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.WallClock
@@ -271,6 +272,35 @@ class Focus(
         return finishPhoto(done)
     }
 
+    /**
+     * The block of an email at [index] you've done, ticked off in Tasks (still [title], so a list
+     * changed meanwhile ticks nothing): an email is yours to say, as archiving it is. Marked as
+     * ticked by hand, so it earns no free time (that's for timed or photographed work). Says
+     * whether it was ticked.
+     */
+    suspend fun tickBlock(taskId: String, index: Int, title: String): Boolean {
+        var ticked = false
+        tasks.update { state ->
+            state.copy(
+                tasks = state.tasks.map { t ->
+                    if (t.id != taskId || t.source != Source.Gmail || !t.isOpen) return@map t
+                    val step = t.subSteps.getOrNull(index)
+                    if (step == null || step.done || step.title != title) return@map t
+                    ticked = true
+                    // The timed minutes not yet taken up by its other steps were worked on this one
+                    // (stopped early, then ticked): it keeps them, up to its length, so they aren't
+                    // taken off the next step as well.
+                    val multiplier = runtime.value.calibration.multiplier(t.kind, t.className)
+                    val taken = t.subSteps.filter { it.done }.sumOf { if (it.byHand) it.timedMin.toDouble() else it.minutes * multiplier }
+                    val spare = (t.workedMin + t.photoMin - taken).roundToInt().coerceAtLeast(0)
+                    val kept = minOf(spare, (step.minutes * multiplier).roundToInt())
+                    t.copy(subSteps = t.subSteps.mapIndexed { j, s -> if (j == index) s.copy(done = true, byHand = true, timedMin = kept) else s })
+                },
+            )
+        }
+        return ticked
+    }
+
     /** Gives the photo checks a stop left part-way ([RuntimeState.photosDone]) what they're owed: at start-up. */
     suspend fun finishPhotos() {
         runtime.value.photosDone.forEach { finishPhoto(it) }
@@ -387,6 +417,8 @@ class Focus(
         // Its deck tasks, missed ones too: the read that closes an assignment drops its unfinished
         // deck in the same sync, before this, and that deck's sessions earned their time already.
         val decks = AnkiRules.heldDecks(tasks.value.tasks, settings.value.ankiTextbook, missed = true)
+        // Blocks you ticked off by hand: done, but not timed, so the completion's no measure of time.
+        fun handMinutes(task: TaskItem): Int = tasks.value.tasks.firstOrNull { it.id == task.id && it.doneAt == task.doneAt }?.handMin ?: task.handMin
         // Its vocabulary steps its decks hold: their work is the decks', and learned from theirs.
         fun deckMinutes(task: TaskItem): Int = task.subSteps
             .filter { step -> step.ankiSections.isNotEmpty() && step.ankiSections.all { decks[task.id]?.containsKey(it) == true } }
@@ -413,8 +445,12 @@ class Focus(
                 }
                 // Less what sessions and photo checks already earned time for: as stored while it's still
                 // this completion, as the completion had it once the task has reopened.
-                val photos = tasks.value.tasks.firstOrNull { it.id == task.id && it.doneAt == task.doneAt }?.photoMin ?: task.photoMin
-                val remaining = Planner.remaining(task.copy(workedMin = worked(task), photoMin = photos), multiplier) - delegated
+                val stored = tasks.value.tasks.firstOrNull { it.id == task.id && it.doneAt == task.doneAt }
+                val photos = stored?.photoMin ?: task.photoMin
+                // Nor for blocks you ticked off by hand: done, but not timed or checked (bar what was
+                // timed on them first, which counts as worked).
+                val hand = (stored ?: task).subSteps.filter { it.done && it.byHand }.sumOf { (it.minutes * multiplier - it.timedMin).coerceAtLeast(0.0) }
+                val remaining = Planner.remaining(task.copy(workedMin = worked(task), photoMin = photos), multiplier) - delegated - hand
                 Credit.forCompletion(remaining.roundToInt().coerceAtLeast(0), ratio)
             }
             state.copy(
@@ -437,9 +473,11 @@ class Focus(
                         // nor is vocabulary its decks hold (their own records learn from it).
                         estimateMin = (task.effortMin * (1 - task.sourceProgress.coerceIn(0.0, 1.0)) - deckMinutes(task)).roundToInt().coerceAtLeast(1),
                         workedMin = worked(task),
-                        dueAt = task.dueAt,
+                        // Its own deadline; one split into dated blocks with none of its own, its last block's.
+                        dueAt = task.dueAt ?: task.subSteps.mapNotNull { it.dueAt }.maxOrNull(),
                         firstSeenAt = task.firstSeenAt,
                         doneAt = task.doneAt ?: now,
+                        byHand = handMinutes(task) > 0,
                     )
                 },
             ).trimmed(now)
