@@ -355,6 +355,8 @@ class AppGraph private constructor(context: Context) {
         }
         // "How was it?" questions kept while notifications were off, once they're on.
         syncer.addAfterEverySync { Assessment.askLater(app) }
+        // A task back after aging out of the list (or new) takes the overrides its instructions give.
+        syncer.addAfterEverySync { layTaskOverrides() }
         // Instructions left waiting for Claude, once it can be asked (a new month under the cap
         // changes nothing it watches).
         syncer.addAfterEverySync { if (instructions.value.instructions.any { it.state == InstructionStatus.Reading }) readInstructions() }
@@ -820,6 +822,9 @@ class AppGraph private constructor(context: Context) {
         focus.forgetPlan()
         CalendarTime.refresh(app)
         Briefing.replanToday(app)
+        // A day's or time's instruction changes no store the widget watches, and the calendar's read
+        // (which redraws it) is skipped without its permission: so it's redrawn here.
+        runCatching { WidgetUpdater.update(app) }.onFailure { Log.w(TAG, "Widget update failed", it) }
     }
 
     /**

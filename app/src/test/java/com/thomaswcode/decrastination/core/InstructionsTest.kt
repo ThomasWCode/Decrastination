@@ -85,6 +85,20 @@ class InstructionsTest {
     }
 
     @Test
+    fun `a start later in a day has only that day's time from then`() {
+        // Friday 17:00; can't start before 21:30, and Friday's hours end at 22:00: half an hour.
+        val from = Fixtures.at("2026-10-09T21:30")
+        val later = task("later", "2026-10-12T23:59", effort = 90).withOverrides(TaskOverrides(from = from))
+        val p = plan(listOf(later), at = Fixtures.at("2026-10-09T17:00"))
+        assertTrue(p.buckets.first { it.date == LocalDate.parse("2026-10-09") }.chunks.none { it.taskId == later.id })
+        assertEquals(90, p.buckets.sumOf { b -> b.chunks.filter { it.taskId == later.id }.sumOf { it.minutes } })
+        // Due by Friday's end: what can't fit after 21:30 is behind, not counted as fitting.
+        val tight = task("tight", "2026-10-10T23:59", effort = 90).withOverrides(TaskOverrides(from = from))
+        val q = plan(listOf(tight), at = Fixtures.at("2026-10-09T17:00"))
+        assertTrue(q.buckets.flatMap { it.chunks }.filter { it.taskId == tight.id }.any { it.behind })
+    }
+
+    @Test
     fun `a day's limit counts what's been worked today already`() {
         val essay = task("essay", "2026-10-09T23:00", effort = 120)
         val limit = applied(Change(ChangeType.DayLimit, date = "2026-10-09", freeMin = 60))
