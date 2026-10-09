@@ -50,7 +50,7 @@ object Briefing {
         val now = graph.clock.now()
         val zone = graph.clock.zone()
         val plan = graph.plan()
-        val today = Days.record(plan)
+        val today = Days.record(plan, zone)
         graph.log.update { log ->
             val finished = log.days.map { day -> if (day.full == null && day.date < today.date) Days.finish(day, log, zone) else day }
             log.copy(days = finished.filterNot { it.date == today.date } + today).trimmed(now)

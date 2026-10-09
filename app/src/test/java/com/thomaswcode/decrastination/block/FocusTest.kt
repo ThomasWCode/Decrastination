@@ -2,6 +2,7 @@ package com.thomaswcode.decrastination.block
 
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.Fixtures.LONDON
+import com.thomaswcode.decrastination.core.Calibration
 import com.thomaswcode.decrastination.core.FixedClock
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.Planner
@@ -285,6 +286,24 @@ class FocusTest {
         assertTrue(focus.onCompleted(listOf(done)))
         assertNull(focus.session)
         assertEquals(false, focus.onCompleted(listOf(task("other", effort = 10).copy(status = Status.Done, doneAt = clock.time))))
+    }
+
+    @Test
+    fun `a photo's cap is the calibrated estimate, and its work is the day's`() = runTest {
+        // Twice its estimate, learned: a 90-minute task is 180 minutes of pieces.
+        runtime.update { it.copy(calibration = Calibration(multipliers = mapOf("Homework|" to 2.0))) }
+        tasks.update { it.copy(tasks = listOf(task("hw", effort = 90))) }
+        repeat(4) { assertTrue(focus.photoChecked("teams:hw", "part 1 of 4", 45)) }
+        assertFalse(focus.photoChecked("teams:hw", null, 45))
+        // Each one recorded as work, a photo's, not a timed session.
+        assertEquals(4, log.value.sessions.count { it.photo })
+    }
+
+    @Test
+    fun `a completion's estimate is what was left when it was first seen`() = runTest {
+        val halfDone = task("pp", effort = 100).copy(status = Status.Done, doneAt = clock.time, sourceProgress = 0.5)
+        focus.onCompleted(listOf(halfDone))
+        assertEquals(50, log.value.completions.single().estimateMin)
     }
 
     @Test

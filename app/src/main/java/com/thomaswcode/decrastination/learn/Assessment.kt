@@ -34,6 +34,7 @@ import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.R
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.TaskItem
+import com.thomaswcode.decrastination.data.ActivityLog
 import com.thomaswcode.decrastination.data.AssessLater
 import com.thomaswcode.decrastination.notify.Channels
 import com.thomaswcode.decrastination.notify.Notify
@@ -56,18 +57,20 @@ object Assessment {
 
     private val ANSWERS = listOf("Harder" to Calibrator.HARDER, "As expected" to Calibrator.AS_EXPECTED, "Easier" to Calibrator.EASIER)
 
-    /** One notification per task, told apart by its tag, so no two tasks share one. */
-    private fun tag(taskId: String) = "assess:$taskId"
+    const val EXTRA_DONE_AT = "doneAt"
+
+    /** One notification per completion, told apart by its tag: two rounds of one task don't share one. */
+    private fun tag(taskId: String, doneAt: Long?) = "assess:$taskId@${doneAt ?: 0}"
 
     /**
      * Asked about homework and revision only: an archived email or a passed event isn't work to
      * judge. While notifications can't be seen, the questions are kept and asked once they can.
      */
     suspend fun ask(context: Context, completed: List<TaskItem>) {
-        val asks = completed.filter { it.kind == Kind.Homework || it.kind == Kind.Revision }.map { AssessLater(it.id, it.title) }
+        val asks = completed.filter { it.kind == Kind.Homework || it.kind == Kind.Revision }.map { AssessLater(it.id, it.title, it.doneAt) }
         if (asks.isEmpty()) return
         if (!Notify.shown(context, Channels.DAILY)) {
-            AppGraph.get(context).runtime.update { it.copy(assessLater = (it.assessLater + asks).distinctBy { a -> a.taskId }.takeLast(MAX_LATER)) }
+            AppGraph.get(context).runtime.update { it.copy(assessLater = (it.assessLater + asks).distinctBy { a -> a.taskId to a.doneAt }.takeLast(MAX_LATER)) }
             return
         }
         asks.forEach { post(context, it) }
@@ -94,8 +97,9 @@ object Assessment {
                     context,
                     0,
                     Intent(context, AssessActivity::class.java)
-                        .setData(Uri.fromParts("task", ask.taskId, null))
+                        .setData(Uri.fromParts("task", "${ask.taskId}@${ask.doneAt ?: 0}", null))
                         .putExtra(EXTRA_TASK, ask.taskId)
+                        .putExtra(EXTRA_DONE_AT, ask.doneAt ?: 0L)
                         .putExtra(EXTRA_TITLE, ask.title)
                         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
                     PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
@@ -108,24 +112,28 @@ object Assessment {
                 i,
                 Intent(context, AssessmentReceiver::class.java)
                     .setAction(ACTION)
-                    .setData(Uri.fromParts("task", "${ask.taskId}#$i", null))
+                    .setData(Uri.fromParts("task", "${ask.taskId}@${ask.doneAt ?: 0}#$i", null))
                     .putExtra(EXTRA_TASK, ask.taskId)
+                    .putExtra(EXTRA_DONE_AT, ask.doneAt ?: 0L)
                     .putExtra(EXTRA_ANSWER, answer),
                 PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
             )
             builder.addAction(0, label, tap)
         }
-        Notify.post(context, tag(ask.taskId), BASE_ID, builder.build())
+        Notify.post(context, tag(ask.taskId, ask.doneAt), BASE_ID, builder.build())
     }
 
-    /** Records [answer] (and [note]) on [taskId]'s latest completion. */
-    suspend fun record(context: Context, taskId: String, answer: String, note: String? = null) {
-        AppGraph.get(context).log.update { log ->
-            val i = log.completions.indexOfLast { it.taskId == taskId }
-            if (i < 0) return@update log
-            log.copy(completions = log.completions.toMutableList().also { it[i] = it[i].copy(assessment = answer, note = note?.trim()?.takeIf(String::isNotEmpty) ?: it[i].note) })
-        }
-        Notify.cancel(context, tag(taskId), BASE_ID)
+    /** Records [answer] (and [note]) on the completion of [taskId] done at [doneAt] (0: its latest, for older questions). */
+    suspend fun record(context: Context, taskId: String, doneAt: Long, answer: String, note: String? = null) {
+        AppGraph.get(context).log.update { answered(it, taskId, doneAt, answer, note) }
+        Notify.cancel(context, tag(taskId, doneAt.takeIf { it != 0L }), BASE_ID)
+    }
+
+    /** [log] with [answer] on the completion it's about: the one done at [doneAt], or (0) the latest of [taskId]'s. */
+    fun answered(log: ActivityLog, taskId: String, doneAt: Long, answer: String, note: String?): ActivityLog {
+        val i = if (doneAt != 0L) log.completions.indexOfFirst { it.taskId == taskId && it.doneAt == doneAt } else log.completions.indexOfLast { it.taskId == taskId }
+        if (i < 0) return log
+        return log.copy(completions = log.completions.toMutableList().also { it[i] = it[i].copy(assessment = answer, note = note?.trim()?.takeIf(String::isNotEmpty) ?: it[i].note) })
     }
 }
 
@@ -134,10 +142,11 @@ class AssessmentReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val task = intent.getStringExtra(Assessment.EXTRA_TASK) ?: return
         val answer = intent.getStringExtra(Assessment.EXTRA_ANSWER) ?: return
+        val doneAt = intent.getLongExtra(Assessment.EXTRA_DONE_AT, 0L)
         val pending = goAsync()
         CoroutineScope(Dispatchers.Default).launch {
             try {
-                Assessment.record(context, task, answer)
+                Assessment.record(context, task, doneAt, answer)
             } finally {
                 pending.finish()
             }
@@ -152,16 +161,17 @@ class AssessActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         val task = intent.getStringExtra(Assessment.EXTRA_TASK) ?: return finish()
         val title = intent.getStringExtra(Assessment.EXTRA_TITLE).orEmpty()
-        setContent { AppTheme { Screen(task, title) } }
+        val doneAt = intent.getLongExtra(Assessment.EXTRA_DONE_AT, 0L)
+        setContent { AppTheme { Screen(task, doneAt, title) } }
     }
 
     @Composable
-    private fun Screen(task: String, title: String) {
+    private fun Screen(task: String, doneAt: Long, title: String) {
         var note by remember { mutableStateOf("") }
         val scope = rememberCoroutineScope()
         fun save(answer: String) {
             scope.launch {
-                Assessment.record(this@AssessActivity, task, answer, note)
+                Assessment.record(this@AssessActivity, task, doneAt, answer, note)
                 finish()
             }
         }

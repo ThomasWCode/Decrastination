@@ -109,6 +109,24 @@ class CalibratorTest {
     }
 
     @Test
+    fun `a learned margin starts from your setting, and going back is going back to it`() {
+        val due = Fixtures.at("2026-10-20T09:00")
+        // A setting of three days, and five finishes a day or more early: two.
+        val early = (0..4).map { done("e$it", dueAt = due + it * DAY, doneAt = due + it * DAY - 3 * DAY) }
+        assertEquals(mapOf(Kind.Homework to 2), Calibrator.margins(early, start = 3))
+        // Two late after that: back to three, which is the setting, so nothing of its own.
+        val late = (5..6).map { done("l$it", dueAt = due + it * DAY, doneAt = due + it * DAY) }
+        assertEquals(emptyMap(), Calibrator.margins(early + late, start = 3))
+    }
+
+    @Test
+    fun `an answer is kept on the completion it's about`() {
+        val log = ActivityLog(completions = listOf(done("t", doneAt = Fixtures.at("2026-10-10T19:00")), done("t", doneAt = Fixtures.at("2026-10-12T19:00"))))
+        val answered = Assessment.answered(log, "t", Fixtures.at("2026-10-10T19:00"), Calibrator.HARDER, null)
+        assertEquals(listOf(Calibrator.HARDER, null), answered.completions.map { it.assessment })
+    }
+
+    @Test
     fun `what changed is said in words`() {
         val learned = Calibrator.learn(ActivityLog(completions = listOf(done("a", worked = 80))), Calibration(), defaultBox = 45, week = 1)
         assertTrue(learned.changes.any { "Homework in 12.1 Physics takes ×1.30" in it }, learned.changes.toString())
@@ -203,6 +221,14 @@ class DaysTest {
         val day = DayRecord("2026-10-09", 40, listOf(DayChunk("teams:a", 40)))
         val log = ActivityLog(completions = listOf(done("teams:a", doneAt = Fixtures.at("2026-10-07T20:00"))))
         assertEquals(0, Days.finish(day, log, LONDON).doneMin)
+    }
+
+    @Test
+    fun `a day is finished by its own midnights, wherever the phone is now`() {
+        // Planned in London; a session at 23:30 there is that day's, though it's the next day in Tokyo.
+        val day = DayRecord("2026-10-09", 30, listOf(DayChunk("teams:a", 30)), zone = "Europe/London")
+        val log = ActivityLog(sessions = listOf(SessionRecord("teams:a", Kind.Homework, label = "a", plannedMin = 30, workedMin = 30, startedAt = Fixtures.at("2026-10-09T23:30"), endedAt = 0, completed = true)))
+        assertEquals(30, Days.finish(day, log, java.time.ZoneId.of("Asia/Tokyo")).doneMin)
     }
 
     @Test

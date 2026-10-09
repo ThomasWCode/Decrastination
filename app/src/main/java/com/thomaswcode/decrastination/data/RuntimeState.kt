@@ -116,6 +116,8 @@ data class SessionRecord(
     val completed: Boolean,
     /** The box length its task was being cut into, for the box experiment; null for a step of its own. */
     val box: Int? = null,
+    /** Work a photo check found done, not a timed session: counted as the day's work, not as a session. */
+    val photo: Boolean = false,
 )
 
 @Serializable
@@ -140,7 +142,13 @@ data class CompletionRecord(
 
 /** The Sunday review: what changed, in a few lines, and who wrote it (the rules or the model). */
 @Serializable
-data class WeeklyReview(val at: Long, val lines: List<String>, val by: String)
+data class WeeklyReview(
+    val at: Long,
+    val lines: List<String>,
+    val by: String,
+    /** The week it reviewed (its Monday), so each week has one, whenever the check-in is moved to. */
+    val week: String? = null,
+)
 
 @Serializable
 data class BlockRecord(val at: Long, val target: String, val reason: String)
@@ -158,4 +166,4 @@ data class EndedSession(val session: FocusSession, val workedMin: Int, val compl
 
 /** A finished task's "how was it?", kept to ask once notifications can be seen. */
 @Serializable
-data class AssessLater(val taskId: String, val title: String)
+data class AssessLater(val taskId: String, val title: String, val doneAt: Long? = null)
