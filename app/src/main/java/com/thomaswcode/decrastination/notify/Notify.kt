@@ -17,6 +17,16 @@ object Notify {
             NotificationManagerCompat.from(context).areNotificationsEnabled()
         }
 
+    /** Whether [channel]'s notifications reach the screen: allowed, and the channel not switched off. */
+    fun shown(context: Context, channel: String): Boolean {
+        if (!allowed(context)) return false
+        val manager = NotificationManagerCompat.from(context)
+        if (!manager.areNotificationsEnabled()) return false
+        // Not made yet: it's made switched on, at its first use.
+        val made = manager.getNotificationChannelCompat(channel) ?: return true
+        return made.importance != NotificationManagerCompat.IMPORTANCE_NONE
+    }
+
     // allowed() is the permission check.
     @SuppressLint("MissingPermission")
     fun post(context: Context, id: Int, notification: Notification) {
