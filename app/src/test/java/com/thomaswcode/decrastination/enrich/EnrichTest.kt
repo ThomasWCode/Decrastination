@@ -211,6 +211,10 @@ class AnswersTest {
         val many = (1..14).joinToString(",") { """{"title":"Question $it","minutes":10,"ankiSections":[]}""" }
         val long = parse(Enrichments.Job.Assignment, """{"subSteps":[$many],"effortMin":140,"ankiSections":[],"testDate":null}""", task)!!
         assertEquals(12, long.subSteps!!.size)
+        // Steps that don't add up to the total: the total is planned, not ten minutes of it.
+        val short = parse(Enrichments.Job.Assignment, """{"subSteps":[{"title":"Read the text","minutes":10,"ankiSections":[]}],"effortMin":120,"ankiSections":[],"testDate":null}""", task)!!
+        assertNull(short.subSteps)
+        assertEquals(120, short.effortMin)
         assertEquals(140, long.subSteps!!.sumOf { it.minutes })
         assertTrue(long.subSteps!!.last().title.startsWith("The rest: Question 12"))
         // A test's day: done before school that morning.

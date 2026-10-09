@@ -10,6 +10,8 @@ import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.serialization.descriptors.elementNames
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonPrimitive
 
 class TotpTest {
     /** RFC 6238 appendix B's SHA-1 secret, "12345678901234567890". */
@@ -263,6 +265,21 @@ class SettingsChangesTest {
         val armed = Settings(armed = true)
         assertEquals(1, SettingsChanges.propose(armed, armed.copy(boxMin = armed.boxMin - 15), emptyList(), now, ::newId).pending.size)
         assertEquals(1, SettingsChanges.propose(armed, armed.copy(boxMin = armed.boxMin + 15), emptyList(), now, ::newId).pending.size)
+    }
+
+    @Test
+    fun `a list change applies its additions now, and only its removals wait, keeping their wait`() {
+        val armed = Settings(armed = true, blockedApps = listOf("a", "b"))
+        val first = SettingsChanges.propose(armed, armed.copy(blockedApps = listOf("a", "c")), emptyList(), now, ::newId)
+        assertEquals(listOf("a", "b", "c"), first.settings.blockedApps)
+        assertEquals(listOf("a", "c"), first.pending.single().value.jsonArray.map { it.jsonPrimitive.content })
+        // Another app added an hour on: the removal keeps its wait.
+        val asked = SettingsChanges.requested(first.settings, first.pending)
+        val second = SettingsChanges.propose(first.settings, asked.copy(blockedApps = asked.blockedApps + "d"), first.pending, now + 3_600_000L, ::newId)
+        assertEquals(listOf("a", "b", "c", "d"), second.settings.blockedApps)
+        assertEquals(first.pending.single().id, second.pending.single().id)
+        assertEquals(first.pending.single().applyAt, second.pending.single().applyAt)
+        assertEquals(listOf("a", "c", "d"), second.pending.single().value.jsonArray.map { it.jsonPrimitive.content })
     }
 
     @Test
