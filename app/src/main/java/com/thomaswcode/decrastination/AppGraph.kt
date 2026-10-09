@@ -208,10 +208,16 @@ class AppGraph private constructor(context: Context) {
 
     init {
         // Disarmed (once the wait is over, or at once by a parent's code): the device admin goes
-        // too, so uninstalling is allowed again, as the protection screen says.
+        // too, so uninstalling is allowed again, as the protection screen says. Checked at start as
+        // well as on each change, so a disarm the app stopped before seeing through is finished.
         scope.launch {
-            settings.state.map { it.armed }.distinctUntilChanged().drop(1).collect { armed ->
-                if (!armed) runCatching { app.getSystemService(DevicePolicyManager::class.java)?.removeActiveAdmin(Watchdog.admin(app)) }
+            settings.state.map { it.armed }.distinctUntilChanged().collect { armed ->
+                val wasArmed = runtime.value.adminArmed
+                if (armed && !wasArmed) runtime.update { it.copy(adminArmed = true) }
+                if (!armed && wasArmed) {
+                    runCatching { app.getSystemService(DevicePolicyManager::class.java)?.removeActiveAdmin(Watchdog.admin(app)) }
+                    runtime.update { it.copy(adminArmed = false) }
+                }
             }
         }
         // Work a source confirms done earns free time and is logged.
