@@ -138,12 +138,13 @@ class Focus(
 
     val session: FocusSession? get() = runtime.value.session
 
-    /** Starts a session on [taskId]'s chunk; one already running is ended first. */
-    suspend fun startSession(taskId: String, label: String, step: String?, minutes: Int): FocusSession {
+    /**
+     * Starts a session on [taskId]'s chunk; one already running is ended first. [box] is the box
+     * length that cut the chunk ([com.thomaswcode.decrastination.core.Chunk.box]): only those
+     * sessions go to the box experiment, as a task done in one piece wasn't shaped by it.
+     */
+    suspend fun startSession(taskId: String, label: String, step: String?, minutes: Int, box: Int? = null): FocusSession {
         stopSession()
-        // The box it's a piece of, as it is now: a review or a setting may change it while it runs.
-        val kind = tasks.value.tasks.firstOrNull { it.id == taskId }?.kind ?: Kind.Admin
-        val box = if (step == null || step.startsWith("part ")) runtime.value.calibration.boxMin[kind] ?: settings.value.boxMin else null
         val session = FocusSession(taskId, label, step, minutes.coerceIn(1, MAX_SESSION_MIN), clock.now(), clock.uptime(), box)
         runtime.update { it.copy(session = session) }
         return session
@@ -285,14 +286,16 @@ class Focus(
     }
 
     /**
-     * Gives what's owed for the completions syncs confirmed ([TaskState.unrewarded]), then clears
-     * them. Stopped before that, they're given next time (after the next sync, or when the app
-     * starts), and [onCompleted] gives each only once. Says whether it ended a running session.
+     * Gives what's owed for the completions syncs confirmed ([TaskState.unrewarded]), hands them to
+     * [then] (which asks how each went), and only then clears them. Stopped before that, it's all
+     * done again next time (after the next sync, or when the app starts): [onCompleted] gives each
+     * only once, and [then] must be safe to repeat. Says whether it ended a running session.
      */
-    suspend fun rewardCompletions(): Boolean {
+    suspend fun rewardCompletions(then: suspend (List<TaskItem>) -> Unit = {}): Boolean {
         val waiting = tasks.value.unrewarded
         if (waiting.isEmpty()) return false
         val stopped = onCompleted(waiting)
+        then(waiting)
         tasks.update { state -> state.copy(unrewarded = state.unrewarded.filterNot { t -> waiting.any { it.id == t.id && it.doneAt == t.doneAt } }) }
         return stopped
     }
@@ -324,12 +327,14 @@ class Focus(
             // that day is over, it has gone as the rest of that day's has.
             val held = AnkiRules.heldSections(tasks.value.tasks, settings.value.ankiTextbook)
             val earned = fresh.filter { it.kind != Kind.Info && it.kind != Kind.Event && today(it.doneAt ?: now) == today }.sumOf { task ->
+                // In the plan's units, as its sessions earned theirs: the estimate as calibrated.
+                val multiplier = state.calibration.multiplier(task.kind, task.className)
                 // Vocabulary a deck task held earned its time with the deck, not again here.
-                val delegated = task.subSteps.filter { it.ankiSections.isNotEmpty() && held[task.id].orEmpty().containsAll(it.ankiSections) }.sumOf { it.minutes }
+                val delegated = task.subSteps.filter { it.ankiSections.isNotEmpty() && held[task.id].orEmpty().containsAll(it.ankiSections) }.sumOf { it.minutes } * multiplier
                 // Less what sessions and photo checks already earned time for.
                 val photos = tasks.value.tasks.firstOrNull { it.id == task.id }?.photoMin ?: task.photoMin
-                val remaining = (task.effortMin * (1 - task.sourceProgress)).roundToInt() - delegated - worked(task) - photos
-                Credit.forCompletion(remaining.coerceAtLeast(0), ratio)
+                val remaining = Planner.remaining(task.copy(workedMin = worked(task), photoMin = photos), multiplier) - delegated
+                Credit.forCompletion(remaining.roundToInt().coerceAtLeast(0), ratio)
             }
             state.copy(
                 credit = state.credit.earn(today, earned),

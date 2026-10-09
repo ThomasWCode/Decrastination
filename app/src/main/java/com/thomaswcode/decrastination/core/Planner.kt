@@ -55,8 +55,8 @@ object Planner {
         val minutes = chunks.sumOf { it.minutes }
     }
 
-    /** A sub-step, or (with [step] null and [boxed]) a box of time, labelled by its place in the day order. */
-    private class Piece(val step: String?, val minutes: Int, val boxed: Boolean = false)
+    /** A sub-step, or (with [step] null and a [box]) a box of time, labelled by its place in the day order. */
+    private class Piece(val step: String?, val minutes: Int, val box: Int? = null)
 
     fun plan(input: Input): Plan {
         val zone = input.zone
@@ -97,7 +97,7 @@ object Planner {
                 source = item.task.source,
                 kind = item.task.kind,
                 title = item.task.title,
-                step = if (piece.boxed) "part $part of ${item.chunks.size}" else piece.step,
+                step = if (piece.box != null) "part $part of ${item.chunks.size}" else piece.step,
                 minutes = piece.minutes,
                 dueAt = item.task.dueAt,
                 deadline = item.deadline,
@@ -109,6 +109,7 @@ object Planner {
                 parts = item.chunks.size,
                 taskMinutes = item.minutes,
                 availableAt = item.task.notBefore?.takeIf { it > input.now },
+                box = piece.box,
             )
         }
 
@@ -293,7 +294,8 @@ object Planner {
         return (0 until count).map { i ->
             // Even boxes: 100 minutes is 34, 33 and 33, not 45, 45 and a stray 10.
             val minutes = remaining / count + if (i < remaining % count) 1 else 0
-            Piece(null, minutes, boxed = count > 1)
+            // The box only where it cut the task: in one piece, its length was the task's own.
+            Piece(null, minutes, box = box.takeIf { count > 1 })
         }
     }
 

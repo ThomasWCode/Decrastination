@@ -137,6 +137,14 @@ class PlannerTest {
     }
 
     @Test
+    fun `a task cut into boxes says the box, one in a single piece doesn't`() {
+        val due = Fixtures.at("2026-10-20T09:00")
+        val plan = plan(listOf(task("long", due, effort = 90), task("short", due, effort = 10)), "2026-10-08T17:00")
+        assertEquals(listOf(45, 45), plan.chunksOf("teams:long").map { it.box })
+        assertEquals(listOf(null), plan.chunksOf("teams:short").map { it.box })
+    }
+
+    @Test
     fun `boxes are even`() {
         val plan = plan(listOf(task("t", Fixtures.at("2026-10-20T09:00"), effort = 100)), "2026-10-08T17:00")
         assertEquals(listOf(34, 33, 33), plan.chunksOf("teams:t").map { it.minutes })
