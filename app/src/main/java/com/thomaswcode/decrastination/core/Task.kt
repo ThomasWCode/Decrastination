@@ -85,6 +85,11 @@ data class TaskItem(
      * earns time for, however its progress moved on the way. Null for a task saved before this was kept.
      */
     val firstProgress: Double? = null,
+    /**
+     * The most the source's estimate has been: a count that shrinks as it's worked through (an
+     * Anki deck's cards) ends near nothing, and its completion is for all of it.
+     */
+    val peakEffortMin: Int? = null,
     /** Minutes of finished focus sessions spent on it. */
     val workedMin: Int = 0,
     /** The sessions counted in [workedMin], by start time, so each is counted once. */
