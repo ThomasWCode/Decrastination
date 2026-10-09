@@ -163,6 +163,13 @@ class PlannerTest {
     }
 
     @Test
+    fun `progress corrected downward brings its work back`() {
+        // First seen at 50 %, then corrected to 20 %, no sessions: 80 minutes are left, not 50.
+        val t = task("t", Fixtures.at("2026-10-20T09:00"), effort = 100).copy(sourceProgress = 0.2, firstProgress = 0.5)
+        assertEquals(80, plan(listOf(t), "2026-10-08T17:00").chunksOf("teams:t").sumOf { it.minutes })
+    }
+
+    @Test
     fun `work a session did and the source's progress both show isn't taken off twice`() {
         // A 100-minute task: a 30-minute session, then Power Planner moved to 30 %.
         val t = task("t", Fixtures.at("2026-10-20T09:00"), effort = 100, worked = 30).copy(sourceProgress = 0.3, firstProgress = 0.0)

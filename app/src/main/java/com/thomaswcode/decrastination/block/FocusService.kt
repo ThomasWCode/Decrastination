@@ -378,7 +378,8 @@ class FocusService : AccessibilityService() {
         graph.focus.target(pkg)?.let { return it }
         if (!graph.focus.isCheckedBrowser(pkg)) return null
         val address = root.findAccessibilityNodeInfosByViewId(Blocklist.urlBarId(pkg)).firstOrNull()?.text?.toString()
-        return graph.focus.siteTarget(pkg, address)
+        // No address bar (a video full screen in its pane): the page it last showed in front.
+        return if (address != null) graph.focus.siteTarget(pkg, address) else lastSite[pkg]
     }
 
     /** Whether [target] is playing in a picture-in-picture window. */

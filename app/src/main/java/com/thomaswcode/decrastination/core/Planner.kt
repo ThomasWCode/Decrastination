@@ -263,7 +263,10 @@ object Planner {
         // show the sessions' work (Power Planner's percentage, updated), and the sessions' minutes
         // since the task was first seen. Taking both off would count the same work twice.
         val bySource = whole * (1 - task.sourceProgress.coerceIn(0.0, 1.0))
-        val bySessions = whole * (1 - (task.firstProgress ?: task.sourceProgress).coerceIn(0.0, 1.0)) - task.workedMin
+        // From the lower of the first-seen and current progress: a percentage corrected downward
+        // brings its work back, rather than the first-seen one capping what's left.
+        val baseline = minOf(task.firstProgress ?: task.sourceProgress, task.sourceProgress)
+        val bySessions = whole * (1 - baseline.coerceIn(0.0, 1.0)) - task.workedMin
         val remaining = minOf(bySource, bySessions).roundToInt().coerceAtLeast(minOf(MIN_CHUNK, task.effortMin))
         val box = (input.calibration.boxMin[task.kind] ?: input.settings.boxMin).coerceAtLeast(MIN_CHUNK)
         val count = ceil(remaining / box.toDouble()).toInt().coerceAtLeast(1)
