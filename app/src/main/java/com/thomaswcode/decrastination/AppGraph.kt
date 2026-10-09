@@ -462,7 +462,7 @@ class AppGraph private constructor(context: Context) {
      */
     fun modelHold(): ModelHold? {
         val s = settings.value
-        return ModelHold.of(claudeKey() != null, runtime.value.aiUsage, clock.now(), clock.zone(), s.aiMonthlyCapGbp, s.usdToGbp)
+        return ModelHold.of(claudeKey() != null, runtime.value.aiUsage, clock.now(), clock.zone(), s.aiMonthlyCapUsd)
     }
 
     /**

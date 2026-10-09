@@ -91,7 +91,7 @@ fun StatsScreen(graph: AppGraph) {
                 if (graph.claudeKey() == null && usage.calls == 0) {
                     "Off: nothing sent."
                 } else {
-                    "£%.2f of £%d in %d call%s.".format(Locale.UK, usage.spentGbp(settings.usdToGbp), settings.aiMonthlyCapGbp, usage.calls, if (usage.calls == 1) "" else "s")
+                    "$%.2f".format(Locale.UK, usage.spentUsd) + (settings.aiMonthlyCapUsd?.let { " of $$it" } ?: "") + " in ${usage.calls} call${if (usage.calls == 1) "" else "s"}."
                 },
             )
         }

@@ -135,7 +135,7 @@ fun SetupScreen(graph: AppGraph, activity: Activity) {
                 usage.keyProblem != null -> "${usage.keyProblem.says}. ${usage.keyProblem.fix}: the rules stand in, and it's tried again every hour."
                 // Its calls failing (a bad key, no connection): said, so it can be put right.
                 usage.lastError != null -> "On, but its last call failed (${usage.lastError.take(80)}): the rules stand in, and it's tried again after an hour."
-                else -> "On: £%.2f of £%d this month.".format(Locale.UK, usage.spentGbp(settings.usdToGbp), settings.aiMonthlyCapGbp)
+                else -> "On: $%.2f this month".format(Locale.UK, usage.spentUsd) + (settings.aiMonthlyCapUsd?.let { " of $$it" } ?: ", no cap: it stops when the account's credit runs out") + "."
             },
             action = "Enter key" to { enteringKey = true },
         )

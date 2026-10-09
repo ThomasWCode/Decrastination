@@ -60,10 +60,12 @@ data class Settings(
      * same wait as switching Claude on, so a key can't switch on triage that's already on.
      */
     val aiKeyActive: Boolean = false,
-    /** The most the model may cost in a calendar month, in pounds. */
-    val aiMonthlyCapGbp: Int = 200,
-    /** Pounds to the US dollar, to turn the API's dollar prices into pounds against the cap. */
-    val usdToGbp: Double = 0.79,
+    /**
+     * The most the model may cost in a calendar month, in US dollars as the API bills; none by
+     * default, as the account is prepaid with no card: its calls stop when its credit runs out, and
+     * that's alerted ([com.thomaswcode.decrastination.enrich.KeyProblem.NoCredit]).
+     */
+    val aiMonthlyCapUsd: Int? = null,
 
     /** The morning briefing (Q13): 07:00 on school days, 08:30 at weekends. */
     val briefingWeekdayMin: Int = 7 * 60,
