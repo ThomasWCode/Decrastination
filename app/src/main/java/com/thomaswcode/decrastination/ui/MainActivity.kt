@@ -86,6 +86,7 @@ class MainActivity : ComponentActivity() {
                 when (tab) {
                     0 -> TodayScreen(graph, this@MainActivity)
                     1 -> TasksScreen(graph)
+                    2 -> StatsScreen(graph)
                     else -> SetupScreen(graph, this@MainActivity)
                 }
             }
@@ -95,7 +96,7 @@ class MainActivity : ComponentActivity() {
     companion object {
         /** The tab to open on: [TAB_SETUP] from a protection alert. */
         const val EXTRA_TAB = "tab"
-        const val TAB_SETUP = 2
-        private val TABS = listOf("Plan", "Tasks", "Setup")
+        const val TAB_SETUP = 3
+        private val TABS = listOf("Plan", "Tasks", "Stats", "Setup")
     }
 }
