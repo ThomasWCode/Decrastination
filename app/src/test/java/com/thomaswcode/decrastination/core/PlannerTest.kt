@@ -163,6 +163,16 @@ class PlannerTest {
     }
 
     @Test
+    fun `work a session did and the source's progress both show isn't taken off twice`() {
+        // A 100-minute task: a 30-minute session, then Power Planner moved to 30 %.
+        val t = task("t", Fixtures.at("2026-10-20T09:00"), effort = 100, worked = 30).copy(sourceProgress = 0.3, firstProgress = 0.0)
+        assertEquals(70, plan(listOf(t), "2026-10-08T17:00").chunksOf("teams:t").sumOf { it.minutes })
+        // The percentage not moved: the session's minutes come off.
+        val unmoved = t.copy(sourceProgress = 0.0)
+        assertEquals(70, plan(listOf(unmoved), "2026-10-08T17:00").chunksOf("teams:t").sumOf { it.minutes })
+    }
+
+    @Test
     fun `sub-steps are the chunks, done ones skipped`() {
         val steps = listOf(SubStep("Q1-8", 25, done = true), SubStep("Q9-16", 25), SubStep("mark", 10))
         val plan = plan(listOf(task("t", Fixtures.at("2026-10-20T09:00"), steps = steps)), "2026-10-08T17:00")

@@ -58,7 +58,9 @@ class RuleEnricher : Enricher {
             if (items.size < 2) return null
             val each = (effortMin / items.size).coerceAtLeast(5)
             return items.map { item ->
-                SubStep(title(item), each, ankiSections = AnkiRules.linkedSections(item).map { (major, minor) -> "$major.$minor" })
+                // Tagged only if learning the words is all it asks: other work in it stays planned.
+                val sections = if (AnkiRules.otherWork(item)) emptyList() else AnkiRules.linkedSections(item).map { (major, minor) -> "$major.$minor" }
+                SubStep(title(item), each, ankiSections = sections)
             }
         }
 
