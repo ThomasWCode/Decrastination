@@ -71,6 +71,7 @@ fun SetupScreen(graph: AppGraph, activity: Activity) {
     }
     val calendarAllowed = remember(refresh) { CalendarTime.allowed(activity) }
     var backupNote by remember { mutableStateOf<String?>(null) }
+    var restoreNote by remember { mutableStateOf<String?>(null) }
     val exporter = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
         scope.launch {
@@ -87,7 +88,7 @@ fun SetupScreen(graph: AppGraph, activity: Activity) {
     val importer = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
         scope.launch {
-            backupNote = runCatching {
+            restoreNote = runCatching {
                 val bytes = withContext(Dispatchers.IO) {
                     val input = requireNotNull(activity.contentResolver.openInputStream(uri)) { "no file to read" }
                     input.use { Backups.read(it) }
@@ -162,7 +163,7 @@ fun SetupScreen(graph: AppGraph, activity: Activity) {
         SetupItem(
             title = "Restore",
             done = null,
-            detail = "From a backup. Once protection is armed, only the settings, and one that loosens blocking waits.",
+            detail = restoreNote ?: "From a backup. Once protection is armed, only the settings, and one that loosens blocking waits.",
             action = "Import" to { importer.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) },
         )
         SetupItem(
