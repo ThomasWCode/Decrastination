@@ -131,11 +131,8 @@ class Focus(
         }
         val session = claimed ?: return null
         val now = clock.now()
-        // By the uptime clock where it can say (the same start), so setting the date forward
-        // doesn't finish it; across a restart, the wall clock.
-        val ran = clock.uptime()?.since(session.startedUptime) ?: (now - session.startedAt)
-        val completed = now >= session.endsAt && ran >= session.minutes * 60_000L - FINISH_SLACK_MS
-        val worked = if (completed) session.minutes else (ran / 60_000L).toInt().coerceIn(0, session.minutes)
+        val completed = session.isDue(now, clock.uptime())
+        val worked = if (completed) session.minutes else (session.ran(now, clock.uptime()) / 60_000L).toInt().coerceIn(0, session.minutes)
         var task: TaskItem? = null
         tasks.update { state ->
             state.copy(
@@ -201,7 +198,7 @@ class Focus(
                         kind = task.kind,
                         className = task.className,
                         estimateMin = task.effortMin,
-                        workedMin = task.workedMin,
+                        workedMin = task.workedMin + if (sessionMin?.first == task.id) sessionMin.second else 0,
                         dueAt = task.dueAt,
                         firstSeenAt = task.firstSeenAt,
                         doneAt = task.doneAt ?: now,
@@ -213,9 +210,6 @@ class Focus(
 
     companion object {
         private const val PLAN_TTL_MS = 60_000L
-        /** A session ended by its alarm a moment before its minutes are up still counts as finished. */
-        private const val FINISH_SLACK_MS = 5_000L
-
         const val MAX_SESSION_MIN = 180
     }
 }

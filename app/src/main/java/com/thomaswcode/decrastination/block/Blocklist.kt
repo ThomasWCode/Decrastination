@@ -62,7 +62,13 @@ object Blocklist {
     fun blockedSite(address: Address, sites: List<String>): String? = sites.firstOrNull { site ->
         val host = site.substringBefore('/').lowercase()
         val path = site.drop(host.length).lowercase()
-        (address.host == host || address.host.endsWith(".$host")) && (path.isEmpty() || address.path.lowercase().startsWith(path))
+        (address.host == host || address.host.endsWith(".$host")) && (path.isEmpty() || under(address.path.lowercase(), path))
+    }
+
+    /** [path] is [entry] or below it: `/iplayer` and `/iplayer/live`, not `/iplayer-news`. */
+    private fun under(path: String, entry: String): Boolean {
+        val base = entry.trimEnd('/')
+        return path == base || path.startsWith("$base/") || path.startsWith("$base?") || path.startsWith("$base#")
     }
 
     /** The view id of a checked browser's address bar. */

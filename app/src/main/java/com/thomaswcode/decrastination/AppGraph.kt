@@ -90,7 +90,9 @@ class AppGraph private constructor(context: Context) {
         runtime.update { state ->
             outcome = SettingsChanges.propose(settings.value, proposed, state.pending, now) { java.util.UUID.randomUUID().toString() }
             val waiting = outcome!!.pending
-            state.copy(pending = waiting, uptimeMark = if (waiting.isEmpty()) null else state.uptimeMark ?: clock.uptime())
+            // Nothing was waiting: the count starts now, whatever an old mark says.
+            val mark = if (state.pending.isEmpty()) clock.uptime() else state.uptimeMark ?: clock.uptime()
+            state.copy(pending = waiting, uptimeMark = if (waiting.isEmpty()) null else mark)
         }
         outcome?.let { result -> settings.update { result.settings } }
     }

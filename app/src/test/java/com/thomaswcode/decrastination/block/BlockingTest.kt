@@ -27,6 +27,10 @@ class BlocklistTest {
         assertEquals("youtube.com", Blocklist.blockedSite(Blocklist.address("m.youtube.com/watch")!!, sites))
         assertEquals("bbc.co.uk/iplayer", Blocklist.blockedSite(Blocklist.address("www.bbc.co.uk/iplayer/live")!!, sites))
         assertNull(Blocklist.blockedSite(Blocklist.address("www.bbc.co.uk/bitesize")!!, sites))
+        // A path entry is that path and what's under it, not a longer name sharing its start.
+        assertEquals("bbc.co.uk/iplayer", Blocklist.blockedSite(Blocklist.address("bbc.co.uk/iplayer")!!, sites))
+        assertNull(Blocklist.blockedSite(Blocklist.address("bbc.co.uk/iplayer-news/today")!!, sites))
+        assertNull(Blocklist.blockedSite(Blocklist.address("bbc.co.uk/iplayer2")!!, sites))
         assertNull(Blocklist.blockedSite(Blocklist.address("notyoutube.com")!!, sites))
         assertNull(Blocklist.blockedSite(Blocklist.address("docs.google.com/document")!!, sites))
     }

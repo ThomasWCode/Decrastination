@@ -148,6 +148,8 @@ object Watchdog {
         val armed = graph.settings.value.armed
         var report = report(context)
         var problems = ProtectionCheck.problems(report, armed)
+        // What was found, before any repair: a lapse put right at once is still a lapse.
+        val found = problems
         var repaired = false
         if (problems.isNotEmpty() && armed && repair && (!report.serviceEnabled || !report.accessibilityOn || report.onShortcuts.isNotEmpty())) {
             repaired = repair(context)
@@ -186,10 +188,12 @@ object Watchdog {
                 ),
             )
         }
-        // Each change, both ways, so the log shows how long each lapse lasted.
-        if (problems != before.problems) {
-            graph.log.update { it.copy(protection = it.protection + ProtectionRecord(now, problems, repaired)).trimmed(now) }
-            Log.i(TAG, "Protection: ${problems.ifEmpty { listOf("all well") }}${if (repaired) " (repaired)" else ""}")
+        // Each change, both ways, so the log shows how long each lapse lasted; and each repair, with
+        // what it put right, even when the check ends where the last one did.
+        if (repaired || problems != before.problems) {
+            val recorded = if (repaired) found else problems
+            graph.log.update { it.copy(protection = it.protection + ProtectionRecord(now, recorded, repaired)).trimmed(now) }
+            Log.i(TAG, "Protection: ${recorded.ifEmpty { listOf("all well") }}${if (repaired) " (repaired)" else ""}")
         }
         if (problems.isEmpty()) Notify.cancel(context, NOTIFICATION_ID) else alert(context, problems, armed)
     }
