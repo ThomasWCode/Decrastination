@@ -1,5 +1,6 @@
 package com.thomaswcode.decrastination.protect
 
+import com.thomaswcode.decrastination.core.Uptime
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.data.Window
@@ -132,6 +133,22 @@ object SettingsChanges {
         }
         val (due, waiting) = counted.partition { it.waitedMs >= it.waitMs }
         return Outcome(due.fold(settings, ::apply), waiting)
+    }
+
+    /** How often the uptime is counted (and saved) while nothing falls due. */
+    const val COUNT_EVERY_MS = 5 * 60_000L
+
+    /**
+     * How much uptime to count towards [pending] now, from [mark] to [uptime]; null when it can
+     * wait (little time, nothing due). A gap that can't be measured (a restart) counts nothing but
+     * is never left waiting: the count starts again from now, so it can't freeze.
+     */
+    fun counting(pending: List<PendingChange>, mark: Uptime?, uptime: Uptime?, force: Boolean): Long? {
+        val since = uptime?.since(mark)
+        val elapsed = since ?: 0L
+        val due = pending.any { it.waitedMs + elapsed >= it.waitMs }
+        if (!force && !due && since != null && since < COUNT_EVERY_MS) return null
+        return elapsed
     }
 
     fun apply(settings: Settings, change: PendingChange): Settings = decode(JsonObject(encode(settings) + (change.field to change.value)))

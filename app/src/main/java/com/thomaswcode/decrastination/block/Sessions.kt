@@ -33,6 +33,20 @@ object Sessions {
         scheduleEnd(context, session)
     }
 
+    /**
+     * After a restart, which takes the session's notification and alarm with it: ends the session
+     * if its time is up, else shows it and sets its alarm again.
+     */
+    suspend fun restore(context: Context) {
+        val session = AppGraph.get(context).focus.session ?: return
+        if (AppGraph.get(context).clock.now() >= session.endsAt) {
+            end(context, early = false)
+        } else {
+            showOngoing(context, session)
+            scheduleEnd(context, session)
+        }
+    }
+
     /** Ends the session if it's due (or now, with [early]); says how it went. Safe to call twice. */
     suspend fun end(context: Context, early: Boolean) {
         val focus = AppGraph.get(context).focus
