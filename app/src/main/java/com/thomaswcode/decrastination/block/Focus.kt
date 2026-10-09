@@ -160,6 +160,8 @@ class Focus(
             className = task?.className,
             label = session.label,
             plannedMin = session.minutes,
+            // The box its task was cut into, when the session was on a box, not a step of its own.
+            box = if (session.step == null || session.step.startsWith("part ")) runtime.value.calibration.boxMin[task?.kind ?: Kind.Admin] ?: settings.value.boxMin else null,
             workedMin = worked,
             startedAt = session.startedAt,
             endedAt = now,

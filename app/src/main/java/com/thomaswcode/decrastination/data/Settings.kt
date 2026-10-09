@@ -60,6 +60,12 @@ data class Settings(
     /** Pounds to the US dollar, to turn the API's dollar prices into pounds against the cap. */
     val usdToGbp: Double = 0.79,
 
+    /** The morning briefing (Q13): 07:00 on school days, 08:30 at weekends. */
+    val briefingWeekdayMin: Int = 7 * 60,
+    val briefingWeekendMin: Int = 8 * 60 + 30,
+    /** The Sunday check-in's reminder; the week's review follows it. */
+    val checkInMin: Int = 19 * 60 + 30,
+
     /** Anti-tamper (docs/scheduler.md §6) is built but off until you arm it (Q20). */
     val armed: Boolean = false,
     /** How long a change that loosens blocking waits, once armed. */

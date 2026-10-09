@@ -65,6 +65,10 @@ object SettingsChanges {
         "aiEnabled" to { _, _ -> false },
         "aiMonthlyCapGbp" to { _, _ -> false },
         "usdToGbp" to { _, _ -> false },
+        // Reminders' times: nothing is blocked by them.
+        "briefingWeekdayMin" to { _, _ -> false },
+        "briefingWeekendMin" to { _, _ -> false },
+        "checkInMin" to { _, _ -> false },
     )
 
     private val LABELS = mapOf(
@@ -91,6 +95,9 @@ object SettingsChanges {
         "aiEnabled" to "Claude",
         "aiMonthlyCapGbp" to "Claude's monthly cap (£)",
         "usdToGbp" to "Pounds per dollar",
+        "briefingWeekdayMin" to "Morning briefing, school days",
+        "briefingWeekendMin" to "Morning briefing, weekends",
+        "checkInMin" to "Sunday check-in",
     )
 
     /** Every setting with a rule: a test checks none is missing. */
@@ -175,7 +182,7 @@ object SettingsChanges {
                 ).joinToString("; ").let { "$label: $it" }
             }
             "quietHours", "weekdayHours", "weekendHours" -> "$label: ${window(field, old)} → ${window(field, new)}"
-            "ankiDeadlineMin", "weekdayBlockFromMin", "teamsFirstUnlockMin" -> "$label: ${time(before)} → ${time(after)}"
+            "ankiDeadlineMin", "weekdayBlockFromMin", "teamsFirstUnlockMin", "briefingWeekdayMin", "briefingWeekendMin", "checkInMin" -> "$label: ${time(before)} → ${time(after)}"
             "armed" -> if (new.armed) "Arm protection" else "Disarm protection"
             else -> "$label: $before → $after"
         }
