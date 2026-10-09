@@ -224,6 +224,14 @@ class AnswersTest {
     }
 
     @Test
+    fun `a split adding up past the most one task can be isn't trusted`() {
+        val steps = (1..3).joinToString(",") { """{"title":"Part $it","minutes":240,"ankiSections":[]}""" }
+        val e = parse(Enrichments.Job.Assignment, """{"subSteps":[$steps],"effortMin":720,"ankiSections":[],"testDate":null}""", assignment("Essay"))!!
+        assertNull(e.subSteps)
+        assertNull(e.effortMin)
+    }
+
+    @Test
     fun `a step longer than a focus session is cut into even parts that each fit one`() {
         val e = parse(
             Enrichments.Job.Assignment,

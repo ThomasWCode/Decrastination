@@ -277,7 +277,9 @@ class Focus(
             // Reading or archiving an email, or an event passing, isn't work that earns time. Free
             // time is for the day the work was confirmed: given late (the app stopped first), after
             // that day is over, it has gone as the rest of that day's has.
-            val decks = AnkiRules.heldDecks(tasks.value.tasks, settings.value.ankiTextbook)
+            // Missed ones too: the read that closes an assignment drops its unfinished deck in the
+            // same sync, before this, and that deck's sessions earned their time already.
+            val decks = AnkiRules.heldDecks(tasks.value.tasks, settings.value.ankiTextbook, missed = true)
             val earned = fresh.filter { it.kind != Kind.Info && it.kind != Kind.Event && today(it.doneAt ?: now) == today }.sumOf { task ->
                 // Vocabulary its deck tasks hold earns its time through them, not again here: all of
                 // it once they're done, else as far as their sessions went. No more, as a deck left
