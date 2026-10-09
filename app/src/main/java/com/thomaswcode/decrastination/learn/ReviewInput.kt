@@ -78,7 +78,7 @@ object ReviewInput {
         log.completions.filter { inWeek(it.doneAt) }.ifEmpty { null }?.forEach { c ->
             val due = c.dueAt?.let { " due ${at(it)}," }.orEmpty()
             val answer = c.assessment?.let { " felt $it" }.orEmpty() + c.note?.let { " (\"$it\")" }.orEmpty()
-            appendLine("- ${c.title} [${c.kind.label}${c.className?.let { ", $it" }.orEmpty()}]:$due done ${at(c.doneAt)}, estimate ${c.estimateMin} min, timed ${c.workedMin} min.$answer")
+            appendLine("- ${c.title} [${c.kind.label}${c.className?.let { ", $it" }.orEmpty()}]:$due done ${at(c.doneAt)}, estimate ${c.estimateMin} min, timed ${c.workedMin} min${if (c.byHand) " (some ticked off by hand)" else ""}.$answer")
         } ?: appendLine("- nothing")
         // A session across the week's start or end: only its minutes within the week.
         fun minutes(session: SessionRecord) = Days.minutesIn(session, start, end)

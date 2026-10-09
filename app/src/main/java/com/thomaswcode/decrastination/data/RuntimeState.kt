@@ -142,6 +142,8 @@ data class CompletionRecord(
     val assessment: String? = null,
     /** And the line you added, if any. */
     val note: String? = null,
+    /** Some of it ticked off by hand: its minutes aren't a measure of how long it took. */
+    val byHand: Boolean = false,
 )
 
 /** The Sunday review: what changed, in a few lines, and who wrote it (the rules or the model). */

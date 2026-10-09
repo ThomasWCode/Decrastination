@@ -30,6 +30,12 @@ private fun done(
 
 class CalibratorTest {
     @Test
+    fun `a completion with blocks ticked by hand teaches no times`() {
+        val ticked = done("a", estimate = 30, worked = 10).copy(byHand = true)
+        assertEquals(emptyMap(), Calibrator.multipliers(listOf(ticked)))
+    }
+
+    @Test
     fun `timed work moves the multiplier towards actual over estimate, within bounds`() {
         val m = Calibrator.multipliers(listOf(done("a", worked = 64), done("b", worked = 64, doneAt = Fixtures.at("2026-10-19T19:00"))))
         // 1.6× twice, at a weight of 0.3: 1 → 1.18 → 1.306.
