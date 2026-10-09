@@ -104,7 +104,8 @@ object Sessions {
         )
     }
 
-    private fun clear(context: Context) {
+    /** The session's notification and alarm gone: for a session ended without [end] (its task done). */
+    fun clear(context: Context) {
         Notify.cancel(context, NOTIFICATION_ID)
         context.getSystemService(AlarmManager::class.java)?.cancel(endIntent(context))
     }
