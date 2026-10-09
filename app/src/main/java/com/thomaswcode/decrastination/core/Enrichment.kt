@@ -59,7 +59,9 @@ fun TaskItem.enriched(): TaskItem {
     return copy(
         kind = if (source == Source.Gmail) e.kind ?: base.kind else base.kind,
         dueAt = due,
-        availableFrom = listOfNotNull(base.availableFrom, from).maxOrNull(),
+        // An email the model has read (it gives a kind): its start replaces the rules' guess, as its
+        // deadline does. Otherwise the later of the two.
+        availableFrom = if (source == Source.Gmail && e.kind != null) from else listOfNotNull(base.availableFrom, from).maxOrNull(),
         // This enrichment's estimate, or none: an older one's doesn't outlive it.
         aiEffortMin = e.effortMin,
         subSteps = if (subSteps.isEmpty()) e.subSteps.orEmpty() else subSteps,

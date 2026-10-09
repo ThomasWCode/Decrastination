@@ -103,6 +103,17 @@ class EnrichmentTest {
     }
 
     @Test
+    fun `an email the model has read takes its start, not the rules' guess`() {
+        // The rules took "Appointment next week" for an event, available the day before it.
+        val task = email().copy(sourceValues = SourceValues(Kind.Event, Fixtures.at("2026-10-16T09:00"), Fixtures.at("2026-10-15T00:00")))
+        val read = task.withEnrichment(enrichment(task).copy(kind = Kind.Admin, deadline = Fixtures.at("2026-10-09T20:00")))
+        assertEquals(null, read.availableFrom)
+        // The rules' own enrichment (no kind of its own) leaves the rules' start.
+        val rules = task.withEnrichment(enrichment(task, by = "rules"))
+        assertEquals(Fixtures.at("2026-10-15T00:00"), rules.availableFrom)
+    }
+
+    @Test
     fun `a start after the deadline is dropped`() {
         val task = email().copy(sourceValues = SourceValues(Kind.Admin, null, null))
         val late = task.withEnrichment(enrichment(task).copy(deadline = Fixtures.at("2026-10-12T09:00"), actionableFrom = Fixtures.at("2026-10-14T00:00")))
