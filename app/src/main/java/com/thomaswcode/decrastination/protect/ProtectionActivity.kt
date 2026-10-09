@@ -304,12 +304,14 @@ class ProtectionActivity : ComponentActivity() {
             },
             confirmButton = {
                 TextButton(enabled = code.length == Totp.DIGITS, onClick = {
-                    if (Totp.matchingStep(secret, code, graph.clock.now()) == null) {
+                    val step = Totp.matchingStep(secret, code, graph.clock.now())
+                    if (step == null) {
                         error = "That isn't the code. Check his app has the new entry."
                     } else {
                         scope.launch {
                             graph.secrets.put(Secret.TotpSecret, Totp.base32(secret))
-                            graph.runtime.update { it.copy(codeLock = CodeLock(lastUsedStep = Totp.step(graph.clock.now()) + 1)) }
+                            // Only the code checked is used up: the next one his app shows works.
+                            graph.runtime.update { it.copy(codeLock = CodeLock(lastUsedStep = step)) }
                             onDone()
                         }
                     }
@@ -361,21 +363,18 @@ class ProtectionActivity : ComponentActivity() {
         val secret = graph.secrets[Secret.TotpSecret]?.let(Totp::fromBase32) ?: return "No parent code is set"
         val now = graph.clock.now()
         var outcome: CodeLock.Result = CodeLock.Result.Reused
-        var applied: PendingChange? = null
+        // The code is used up first (with the unblock, if that's what it was for), then the change
+        // it allows is applied.
         graph.runtime.update { state ->
             val (result, lock) = state.codeLock.attempt(secret, code, now)
             outcome = result
-            if (result !is CodeLock.Result.Accepted) return@update state.copy(codeLock = lock)
-            when (target) {
-                CodeTarget.Unblock -> state.copy(codeLock = lock, overrideUntil = now + UNBLOCK_MS)
-                is CodeTarget.Change -> {
-                    applied = state.pending.firstOrNull { it.id == target.id }
-                    val rest = state.pending.filterNot { it.id == target.id }
-                    state.copy(codeLock = lock, pending = rest, uptimeMark = if (rest.isEmpty()) null else state.uptimeMark)
-                }
+            if (result is CodeLock.Result.Accepted && target == CodeTarget.Unblock) {
+                state.copy(codeLock = lock, overrideUntil = now + UNBLOCK_MS)
+            } else {
+                state.copy(codeLock = lock)
             }
         }
-        applied?.let { change -> graph.settings.update { SettingsChanges.apply(it, change) } }
+        if (outcome is CodeLock.Result.Accepted && target is CodeTarget.Change) graph.applyNow(target.id)
         return when (val result = outcome) {
             is CodeLock.Result.Accepted -> null
             is CodeLock.Result.Wrong -> "Wrong code: ${result.triesLeft} ${if (result.triesLeft == 1) "try" else "tries"} left"

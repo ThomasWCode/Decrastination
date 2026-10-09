@@ -117,10 +117,11 @@ object Sessions {
     private fun scheduleEnd(context: Context, session: FocusSession) {
         val alarms = context.getSystemService(AlarmManager::class.java) ?: return
         // On the uptime clock while the phone hasn't restarted since the session began, so setting
-        // the date can't move it; after a restart, the wall clock's end.
+        // the date can't move it; after a restart, or where restarts can't be told apart, the
+        // wall clock's end.
         val uptime = AppGraph.get(context).clock.uptime()
         val started = session.startedUptime
-        val (type, at) = if (uptime != null && started != null && started.boot == uptime.boot) {
+        val (type, at) = if (uptime != null && started != null && uptime.since(started) != null) {
             AlarmManager.ELAPSED_REALTIME_WAKEUP to started.elapsedMs + session.minutes * 60_000L
         } else {
             AlarmManager.RTC_WAKEUP to session.endsAt
