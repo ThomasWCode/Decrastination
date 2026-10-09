@@ -148,7 +148,7 @@ class BlockedActivity : ComponentActivity() {
                             // Not before it's available (an Anki deck's next cards at 04:00).
                             FilledTonalButton(enabled = next.startable(plan.now), onClick = {
                                 scope.launch { Sessions.start(this@BlockedActivity, next.taskId, next.label, next.step, next.minutes) }
-                            }) { Text("Start ${Format.minutes(next.minutes)}") }
+                            }) { Text("Start ${Format.minutes(minOf(next.minutes, Focus.MAX_SESSION_MIN))}") }
                         } else {
                             OutlinedButton(onClick = { scope.launch { Sessions.end(this@BlockedActivity, early = true) } }) { Text("Stop session") }
                         }

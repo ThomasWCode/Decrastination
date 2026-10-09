@@ -147,7 +147,7 @@ class Focus(
     /** Starts a session on [taskId]'s chunk; one already running is ended first. */
     suspend fun startSession(taskId: String, label: String, step: String?, minutes: Int): FocusSession {
         stopSession()
-        val session = FocusSession(taskId, label, step, minutes.coerceIn(1, MAX_SESSION_MIN), clock.now(), clock.uptime())
+        val session = FocusSession(taskId, label, step, minutes.coerceIn(1, MAX_SESSION_MIN), clock.now(), clock.uptime(), whole = minutes <= MAX_SESSION_MIN)
         runtime.update { it.copy(session = session) }
         return session
     }
@@ -196,7 +196,9 @@ class Focus(
                 tasks = state.tasks.map { t ->
                     if (t.id != session.taskId) return@map t
                     if (session.startedAt in t.sessionsCounted) return@map t.also { task = it }
-                    val stepIndex = if (ended.completed && session.step != null) t.subSteps.indexOfFirst { !it.done && it.title == session.step } else -1
+                    // A step longer than the session ran (cut to the most a session can be) isn't done:
+                    // its minutes count, and the planner takes them off what's left of it.
+                    val stepIndex = if (ended.completed && session.step != null && session.whole) t.subSteps.indexOfFirst { !it.done && it.title == session.step } else -1
                     val steps = if (stepIndex >= 0) t.subSteps.mapIndexed { i, s -> if (i == stepIndex) s.copy(done = true) else s } else t.subSteps
                     t.copy(
                         subSteps = steps,
