@@ -123,6 +123,9 @@
         </receiver>
 
         <receiver
+            android:name=".protect.WatchdogReceiver"
+            android:exported="false" />
+        <receiver
             android:name=".protect.BootReceiver"
             android:exported="true">
             <intent-filter>

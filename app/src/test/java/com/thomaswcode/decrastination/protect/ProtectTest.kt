@@ -215,6 +215,32 @@ class ProtectionCheckTest {
     }
 
     @Test
+    fun `a service switched on but not running has stopped, armed or not`() {
+        val crashed = ProtectionCheck.Report(serviceEnabled = true, accessibilityOn = true, onShortcuts = emptyList(), adminActive = true, canRepair = true, serviceRunning = false)
+        assertEquals(listOf("The focus service has stopped: nothing is blocked"), ProtectionCheck.problems(crashed, armed = false))
+        assertEquals(listOf("The focus service has stopped: nothing is blocked"), ProtectionCheck.problems(crashed, armed = true))
+        // Switched off says off, whether or not it's running.
+        assertEquals(listOf("The focus service is off: nothing is blocked"), ProtectionCheck.problems(crashed.copy(serviceEnabled = false), armed = false))
+    }
+
+    @Test
+    fun `a stopped service is restarted after a minute's grace, at most once in ten minutes`() {
+        val crashed = ProtectionCheck.Report(serviceEnabled = true, accessibilityOn = true, onShortcuts = emptyList(), adminActive = false, canRepair = true, serviceRunning = false)
+        val t = 1_000_000_000L
+        assertEquals(false, ProtectionCheck.shouldRestart(crashed, stoppedSince = null, restartedAt = null, now = t))
+        assertEquals(false, ProtectionCheck.shouldRestart(crashed, stoppedSince = t, restartedAt = null, now = t + 30_000L))
+        assertEquals(true, ProtectionCheck.shouldRestart(crashed, stoppedSince = t, restartedAt = null, now = t + 60_000L))
+        assertEquals(false, ProtectionCheck.shouldRestart(crashed, stoppedSince = t, restartedAt = t + 60_000L, now = t + 5 * 60_000L))
+        assertEquals(true, ProtectionCheck.shouldRestart(crashed, stoppedSince = t, restartedAt = t + 60_000L, now = t + 11 * 60_000L))
+        assertEquals(t + 11 * 60_000L, ProtectionCheck.restartAt(crashed, stoppedSince = t, restartedAt = t + 60_000L))
+        // Not without the permission, not when it's running, and not when it's switched off: that's
+        // someone's choice, put right only once armed.
+        assertEquals(false, ProtectionCheck.shouldRestart(crashed.copy(canRepair = false), t, null, t + 60_000L))
+        assertEquals(false, ProtectionCheck.shouldRestart(crashed.copy(serviceRunning = true), t, null, t + 60_000L))
+        assertEquals(false, ProtectionCheck.shouldRestart(crashed.copy(serviceEnabled = false), t, null, t + 60_000L))
+    }
+
+    @Test
     fun `unarmed, only the service being off is a problem`() {
         val report = ProtectionCheck.Report(serviceEnabled = true, accessibilityOn = true, onShortcuts = listOf("accessibility_button_targets"), adminActive = false, canRepair = true)
         assertEquals(emptyList(), ProtectionCheck.problems(report, armed = false))

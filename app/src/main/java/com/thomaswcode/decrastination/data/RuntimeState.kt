@@ -32,6 +32,10 @@ data class ProtectionState(
     /** Since when something has been wrong; null while all is well. */
     val offSince: Long? = null,
     val checkedAt: Long? = null,
+    /** Since when the service has been switched on but not running (crashed). */
+    val stoppedSince: Long? = null,
+    /** When the watchdog last switched a stopped service off and on. */
+    val restartedAt: Long? = null,
 )
 
 /**

@@ -468,9 +468,10 @@ class FocusService : AccessibilityService() {
         banner.cancel()
         _connected.value = false
         Log.i(TAG, "Focus service disconnected")
-        // Off is a protection problem: the watchdog says so at once rather than at its next run.
+        // Off is a protection problem: the watchdog says so at once rather than at its next run,
+        // and, once armed, switches the service back on.
         val app = applicationContext
-        graph.scope.launch { Watchdog.check(app, repair = false) }
+        graph.scope.launch { Watchdog.check(app, repair = true) }
         scope.cancel()
     }
 

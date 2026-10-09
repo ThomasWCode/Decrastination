@@ -1,6 +1,7 @@
 package com.thomaswcode.decrastination.protect
 
 import android.Manifest
+import android.app.AlarmManager
 import android.app.PendingIntent
 import android.app.admin.DeviceAdminReceiver
 import android.app.admin.DevicePolicyManager
@@ -28,6 +29,7 @@ import com.thomaswcode.decrastination.sync.SyncWorker
 import com.thomaswcode.decrastination.ui.MainActivity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.concurrent.TimeUnit
 
@@ -40,10 +42,15 @@ import java.util.concurrent.TimeUnit
  *
  * Runs from the focus service every five minutes, as a job every 15, at boot, and the moment the
  * service is switched off.
+ *
+ * A service that's switched on but not running has crashed, and Android won't bind it again until
+ * it's switched off and on (seen on the phone, 9 Oct). The watchdog does that after a minute's
+ * grace, armed or not, at most once in ten minutes.
  */
 object Watchdog {
     private const val NOTIFICATION_ID = 3001
     private const val TAG = AppGraph.TAG
+    private const val RESTART_PAUSE_MS = 1_500L
 
     fun service(context: Context): ComponentName = ComponentName(context, FocusService::class.java)
     fun admin(context: Context): ComponentName = ComponentName(context, AdminReceiver::class.java)
@@ -76,7 +83,29 @@ object Watchdog {
             onShortcuts = shortcuts,
             adminActive = isAdminActive(context),
             canRepair = canRepair(context),
+            // In its own process the service knows it's connected before Android lists it as bound.
+            serviceRunning = FocusService.connected.value || FocusService.isEnabled(context),
         )
+    }
+
+    /**
+     * Switches a stopped service off and on again. Android lets a crashed service be bound again
+     * once the setting stops listing it; the pause lets it see the list without the service before
+     * the service is put back.
+     */
+    private suspend fun restart(context: Context): Boolean {
+        if (!canRepair(context)) return false
+        val resolver = context.contentResolver
+        val pkg = context.packageName
+        val cls = FocusService::class.java.name
+        return runCatching {
+            val enabled = Settings.Secure.getString(resolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES)
+            Settings.Secure.putString(resolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES, ProtectionCheck.withoutService(enabled, pkg, cls))
+            delay(RESTART_PAUSE_MS)
+            val current = Settings.Secure.getString(resolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES)
+            Settings.Secure.putString(resolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES, ProtectionCheck.withService(current, pkg, cls))
+            true
+        }.onFailure { Log.w(TAG, "Couldn't restart the focus service", it) }.getOrDefault(false)
     }
 
     /**
@@ -104,8 +133,8 @@ object Watchdog {
     }
 
     /**
-     * Checks, repairs if armed (and [repair] and able), records the finding, and says so in a
-     * notification while anything is wrong.
+     * Checks, repairs if armed (and [repair] and able), restarts a stopped service (if [repair]
+     * and able), records the finding, and says so in a notification while anything is wrong.
      */
     suspend fun check(context: Context, repair: Boolean) {
         val graph = AppGraph.get(context)
@@ -122,10 +151,31 @@ object Watchdog {
         }
         val now = graph.clock.now()
         val before = graph.runtime.value.protection
-        graph.runtime.update {
-            it.copy(protection = ProtectionState(problems = problems, offSince = if (problems.isEmpty()) null else before.offSince ?: now, checkedAt = now))
+        val stoppedSince = if (ProtectionCheck.stopped(report)) before.stoppedSince ?: now else null
+        var restartedAt = before.restartedAt
+        val restartAt = ProtectionCheck.restartAt(report, stoppedSince, restartedAt)
+        if (repair && restartAt != null && now >= restartAt) {
+            restartedAt = now
+            val restarted = restart(context)
+            Log.i(TAG, "Protection: the focus service had stopped; ${if (restarted) "switched it off and on" else "couldn't restart it"}")
+            // Back, it runs the watchdog as it connects; if not, the periodic check finds it stopped.
+        } else if (restartAt != null) {
+            // Look again when the restart is due, rather than at the next periodic run.
+            WatchdogReceiver.checkIn(context, restartAt - now)
         }
-        if (problems != before.problems && (problems.isNotEmpty() || repaired)) {
+        graph.runtime.update {
+            it.copy(
+                protection = ProtectionState(
+                    problems = problems,
+                    offSince = if (problems.isEmpty()) null else before.offSince ?: now,
+                    checkedAt = now,
+                    stoppedSince = stoppedSince,
+                    restartedAt = restartedAt,
+                ),
+            )
+        }
+        // Each change, both ways, so the log shows how long each lapse lasted.
+        if (problems != before.problems) {
             graph.log.update { it.copy(protection = it.protection + ProtectionRecord(now, problems, repaired)).trimmed(now) }
             Log.i(TAG, "Protection: ${problems.ifEmpty { listOf("all well") }}${if (repaired) " (repaired)" else ""}")
         }
@@ -176,6 +226,43 @@ class WatchdogWorker(context: Context, params: WorkerParameters) : CoroutineWork
                 PeriodicWorkRequestBuilder<WatchdogWorker>(15, TimeUnit.MINUTES).build(),
             )
         }
+
+    }
+}
+
+/**
+ * A check at a set time: when a stopped service's restart falls due. An alarm, so each time asked
+ * for replaces the last; every check works it out from the same saved state, so the latest is right.
+ */
+class WatchdogReceiver : BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent) {
+        if (intent.action != ACTION_CHECK) return
+        val pending = goAsync()
+        CoroutineScope(Dispatchers.Default).launch {
+            try {
+                Watchdog.check(context, repair = true)
+            } finally {
+                pending.finish()
+            }
+        }
+    }
+
+    companion object {
+        private const val ACTION_CHECK = "com.thomaswcode.decrastination.action.WATCHDOG_CHECK"
+        private const val SLACK_MS = 15_000L
+
+        fun checkIn(context: Context, delayMs: Long) {
+            val alarms = context.getSystemService(AlarmManager::class.java) ?: return
+            val at = System.currentTimeMillis() + delayMs.coerceAtLeast(0L) + SLACK_MS
+            alarms.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, intent(context))
+        }
+
+        private fun intent(context: Context): PendingIntent = PendingIntent.getBroadcast(
+            context,
+            0,
+            Intent(context, WatchdogReceiver::class.java).setAction(ACTION_CHECK),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
     }
 }
 
