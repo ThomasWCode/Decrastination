@@ -101,8 +101,9 @@ class WidgetModelTest {
         val stale = mapOf(Source.Teams to SourceStatus(lastSuccessAt = now, dataAsOf = now - 30 * 3_600_000L))
         assertEquals("Teams synced 30 h ago", model(emptyList(), stale).warning)
         assertNull(model(emptyList(), mapOf(Source.Teams to SourceStatus(lastSuccessAt = now, dataAsOf = now - 3_600_000L))).warning)
-        // Read, but never synced by the Teams widget: no Teams data at all.
+        // Read but never synced by the Teams widget, or not read at all: no Teams data at all.
         assertEquals("Teams hasn't synced yet", model(emptyList(), mapOf(Source.Teams to SourceStatus(lastSuccessAt = now, dataAsOf = null))).warning)
+        assertEquals("Teams hasn't synced yet", model(emptyList()).warning)
         // The Teams widget's own trouble is shown too: a refresh it refused, its service off.
         val off = mapOf(Source.Teams to SourceStatus(lastSuccessAt = now, dataAsOf = now - 3_600_000L, note = "The Teams widget's sync service is off"))
         assertEquals("The Teams widget's sync service is off", model(emptyList(), off).warning)

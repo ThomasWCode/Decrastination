@@ -40,6 +40,12 @@ object Format {
         else -> "${minutes / 60} h ${minutes % 60} min"
     }
 
+    /** A day's load: "1 h planned, 4 h 15 min free", or "7 h planned, 1 h 45 min over". */
+    fun load(plannedMin: Int, capacityMin: Int): String {
+        val left = capacityMin - plannedMin
+        return "${minutes(plannedMin)} planned, " + if (left >= 0) "${minutes(left)} free" else "${minutes(-left)} over"
+    }
+
     /** "just now", "5 min ago", "3 h ago", "2 days ago". */
     fun ago(time: Long, now: Long): String {
         val elapsed = Duration.ofMillis((now - time).coerceAtLeast(0))
