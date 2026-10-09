@@ -341,6 +341,18 @@ class FocusTest {
     }
 
     @Test
+    fun `a completion's estimate for learning leaves out the vocabulary its decks hold`() = runTest {
+        val homework = task("hw", effort = 60, steps = listOf(SubStep("Learn vocabulary 2.2", 30, ankiSections = listOf("2.2")), SubStep("Exercise 4", 30)))
+        val deck = TaskItem(
+            id = "anki:deck:1", source = Source.Anki, sourceId = "deck:1", title = "Learn Anki deck 2.2", kind = Kind.Homework, derived = true,
+            firstSeenAt = clock.time, lastSeenAt = clock.time, extra = mapOf("deckName" to "Textbook 1::2.2", "for" to "teams:hw"), status = Status.Done,
+        )
+        tasks.update { it.copy(tasks = listOf(homework, deck)) }
+        focus.onCompleted(listOf(homework.copy(status = Status.Done, doneAt = clock.time)))
+        assertEquals(30, log.value.completions.single().estimateMin)
+    }
+
+    @Test
     fun `vocabulary a deck held isn't rewarded again with its assignment`() = runTest {
         val homework = task("hw", effort = 60, steps = listOf(SubStep("Learn vocabulary 2.2", 30, ankiSections = listOf("2.2")), SubStep("Exercise 4", 30)))
         val deck = TaskItem(
