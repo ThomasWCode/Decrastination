@@ -397,8 +397,9 @@ class Focus(
                         else -> minOf(step.minutes * multiplier, holding.sumOf { it.workedMin + it.photoMin }.toDouble())
                     }
                 }
-                // Less what sessions and photo checks already earned time for.
-                val photos = tasks.value.tasks.firstOrNull { it.id == task.id }?.photoMin ?: task.photoMin
+                // Less what sessions and photo checks already earned time for: as stored while it's still
+                // this completion, as the completion had it once the task has reopened.
+                val photos = tasks.value.tasks.firstOrNull { it.id == task.id && it.doneAt == task.doneAt }?.photoMin ?: task.photoMin
                 val remaining = Planner.remaining(task.copy(workedMin = worked(task), photoMin = photos), multiplier) - delegated
                 Credit.forCompletion(remaining.roundToInt().coerceAtLeast(0), ratio)
             }

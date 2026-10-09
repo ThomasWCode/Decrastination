@@ -440,12 +440,12 @@ class FocusTest {
     @Test
     fun `a completion rewarded after its task reopened uses the work it was done with`() = runTest {
         // Done after 30 minutes of sessions; the app stopped before the reward, and the next read reopened it.
-        val done = task("hw", effort = 45).copy(status = Status.Done, doneAt = clock.time, workedMin = 30)
-        tasks.update { it.copy(tasks = listOf(done.copy(status = Status.Open, doneAt = null, workedMin = 0)), unrewarded = listOf(done)) }
+        val done = task("hw", effort = 45).copy(status = Status.Done, doneAt = clock.time, workedMin = 20, photoMin = 10)
+        tasks.update { it.copy(tasks = listOf(done.copy(status = Status.Open, doneAt = null, workedMin = 0, photoMin = 0)), unrewarded = listOf(done)) }
         focus.rewardCompletions()
-        // 45 less the 30 worked: 5 minutes of free time, not 15.
+        // 45 less the 20 timed and 10 photographed: 5 minutes of free time, not 15.
         assertEquals(5 * 60_000L, focus.creditLeftMs())
-        assertEquals(30, log.value.completions.single().workedMin)
+        assertEquals(20, log.value.completions.single().workedMin)
     }
 
     @Test
