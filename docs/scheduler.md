@@ -58,6 +58,14 @@ shouldBlock(now) = !quiet && ( pressure || credit <= 0 )
 - **Quiet hours** are the only unconditional release, and shortening them is a "loosening" change subject to the 24-hour delay (§6).
 - **No bypass button.** Removed at your request. The only override is the parent-held code (§6).
 
+**As built (Phase 3, 9 Oct).** The policy (`block/BlockPolicy.kt`) applies, in order:
+- a focus session you started blocks whatever the hour;
+- a parent-approved unblock lets everything through for an hour;
+- quiet hours (22:30–07:00) and, on weekdays, school hours (before 16:45, Q6b) never block;
+- then pressure blocks strictly, and with no pressure earned time is spent.
+
+Earned time: a finished focus session earns a third of its minutes (Q22). A task its source confirms done earns a third of what no session counted, up to 30 minutes, with **no floor** and nothing for reading or archiving an email or an event passing: with the 10-minute floor, archiving a pile of emails would have earned time. Blocked apps and sites are in `block/Blocklist.kt` (Q8). Chrome's and Brave's address bars are read (`<browser>:id/url_bar`), so a blocked site is covered as soon as its address is typed, before it loads; Firefox and Tor are covered outright.
+
 **Chunk completion.** The final state of a task is always source-verified (hand in, tick, archive, deck count). A *chunk* of a bigger task cannot be verified at the source, so a chunk completes in one of two ways:
 
 1. **Focus session.** Tapping **Start** on the block screen runs a timer for the chunk's minutes; blocked apps stay blocked throughout; the chunk is marked done when the timer completes. Idling through a timer is possible, but the deadline and the source check still bite at the end, and the learning layer (§5) notices when timed chunks never translate into finished tasks.
@@ -97,6 +105,15 @@ Nothing on an un-rooted personal phone is unbypassable: adb from a PC, booting t
 - **Delivery must not pass through a mailbox you can read.** If the app sent the code from your own Gmail, it would sit in your Sent folder and the override would be yours, not his. So the sender is a **dedicated mailbox whose credentials your dad enters at setup** (a free Gmail address created for the app; its app password goes into the app's encrypted storage through a setup screen he completes, and the password is never displayed afterwards). The app sends over SMTP (`smtp.gmail.com:465`). Alternative if he would rather not run a mailbox: an authenticator app on *his* phone holding a TOTP secret the app shows once as a QR code at setup; the email then just says "Thomas requested X; if you approve, read him the current code"; no secret ever travels by email. Both are implementable; the dedicated mailbox matches what you asked for and is the **default**.
 - The weekly note going to him as well is a toggle, **default off**, since you did not ask for it.
 - Nothing else is ever emailed to anyone.
+
+**As built (Phase 3, 9 Oct): left unarmed (Q20), with an authenticator app for the override and no email (Q17).**
+- *Arm protection* (Setup → *Blocking and protection*) asks for the device admin, then shows a QR code for your dad's authenticator app and checks a code from it (skippable), then arms.
+- **Unarmed**: the guard is off, loosening applies at once, and the watchdog only warns.
+- **Armed**: a loosening change waits `loosenDelayHours` (24) and shows under *Waiting*, where a code from his app applies it at once; *Unblock for an hour* takes a code too.
+- Each code works once, and three wrong ones lock entry for an hour, across restarts (`protect/Totp.kt`, `CodeLock`).
+- The watchdog (`protect/Watchdog.kt`) runs in the focus service every five minutes, as a job every 15, at boot, and the moment the service is switched off. It reads the four shortcut settings defensively: Android 12+ refuses some to apps, and reading `accessibility_qs_targets` threw on the phone and took the service down before that was caught.
+- The guard (`protect/GuardRules.kt`) adds this app's storage and device-admin pages, Device Care's page for it, and the confirmation pages of *Reset all settings* and *Reset accessibility settings*. The reset pages' button text ("Reset settings") is taken from One UI's other reset pages and is unverified.
+- A tap on the service's name on a shortcut page is undone, and the watchdog takes it off any shortcut.
 
 Residual holes stated plainly: adb (`settings put secure enabled_accessibility_services`, or any UiAutomation tool such as `uiautomator`, which pauses every accessibility service while it runs), safe mode, factory reset, a second user profile (the phone already has one, user 150, most likely Secure Folder), and an Android update that changes the Settings screens layer 2 recognises (same class of fragility as the Teams scraper; the guard matches on the app's own name, which is stable, and the setup screen has a "test the guard" button). The override's strength rests on the sender mailbox staying his.
 

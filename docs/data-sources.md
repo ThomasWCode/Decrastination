@@ -180,6 +180,11 @@ Cost at list price ($4 / $20 per million tokens in/out): an email with a 4 000-c
 - Chrome: read `com.android.chrome:id/url_bar` text on window-content events (only when Chrome is foreground and the policy is active) and block on hostname match. Costs a little battery; optional (Q8).
 - Blocklist stored as package names; the settings screen lists installed launchable apps with toggles.
 - Proved in Phase 0 (`probe/FocusProbeService.kt`): on window-state events alone the block screen covered YouTube 0.62–0.66 s after it opened, because Android delivers an app's first window-state event about 0.6 s late; also acting on `typeWindowsChanged` and checking which app owns the active window cut that to 0.21 s. The same check skips a blocked app's late events once something else is in front (YouTube's bedtime snackbar would otherwise have covered Home). `BlockedProbeActivity` uses `singleTask` with its own `taskAffinity`, and Back sends it home itself. It's started with `FLAG_ACTIVITY_NO_USER_ACTION`: without it, covering a playing YouTube Short counted as the user leaving, and YouTube carried on in a picture-in-picture window over everything. A blocked app already in picture-in-picture is relaunched to full screen and covered, since One UI's floating window offers no dismiss action; that needs the blocked apps under the manifest's `<queries>`.
+- **Built in Phase 3** (`block/FocusService.kt`), tested on the phone on 9 Oct with blocking hours forced on from a PC (`.debug.Command --es cmd force-block`):
+  - YouTube was covered 0.24 s after it started; the block screen's *Go to the home screen* went home;
+  - typing `youtube.com` into Chrome's address bar was covered before the page loaded;
+  - Firefox was covered. On its first run, Firefox opened a "make Firefox your default browser?" system dialog, which isn't Firefox's window: the service covered Firefox once the dialog closed.
+  - The service also re-checks the app in front every half minute, so an app already open when blocking begins (16:45, free time running out) is covered then too.
 - The service must survive One UI: request `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`, and the setup screen walks through "Never sleeping apps", exactly as the Teams widget's README does.
 
 ## 7. Optional: device calendar
