@@ -28,6 +28,8 @@ data class Chunk(
      * be met; or its task's overdue part, which comes before it.
      */
     val dueSoon: Boolean = false,
+    /** The deadline it ranks by among work due soon: its task's soonest one still to come. */
+    val rankedBy: Long? = null,
     /** Couldn't fit before its deadline, so it's today's. */
     val behind: Boolean,
     /** 1-based, of [parts]. */
