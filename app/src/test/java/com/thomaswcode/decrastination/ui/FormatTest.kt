@@ -31,4 +31,10 @@ class FormatTest {
         assertEquals("1 h 30 min", Format.minutes(90))
         assertEquals("5 min ago", Format.ago(now - 5 * 60_000, now))
     }
+
+    @Test
+    fun `a day's load says what's left free, or how far over`() {
+        assertEquals("1 h planned, 4 h 15 min free", Format.load(60, 315))
+        assertEquals("7 h planned, 1 h 45 min over", Format.load(420, 315))
+    }
 }

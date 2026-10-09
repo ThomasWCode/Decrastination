@@ -92,9 +92,6 @@ object GmailThreads {
             .mapNotNull { task -> task.extra[EXTRA_MESSAGE_ID]?.let { it to task.detail } }
             .toMap()
 
-    /** Gmail's web link for a conversation; the Gmail app opens it too. */
-    fun link(threadId: String): String = "https://mail.google.com/mail/u/0/#all/" + threadId.toULong().toString(16)
-
     private val INTERNAL_DATE = DateTimeFormatter.ofPattern("d-MMM-yyyy HH:mm:ss Z", Locale.ENGLISH)
 
     /** One FETCH response, or null if it lacks what a task needs. */

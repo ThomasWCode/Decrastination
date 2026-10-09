@@ -133,11 +133,6 @@ class GmailTest {
     }
 
     @Test
-    fun `a conversation's link uses its id in hex`() {
-        assertEquals("https://mail.google.com/mail/u/0/#all/1a04a20165a9dc31", GmailThreads.link("1874801471777266737"))
-    }
-
-    @Test
     fun `a message without Gmail's ids is skipped`() {
         assertNull(GmailThreads.message(mapOf("UID" to ImapValue.Atom("1"))))
     }

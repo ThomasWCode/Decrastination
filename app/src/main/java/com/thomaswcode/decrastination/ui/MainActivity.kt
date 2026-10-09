@@ -31,7 +31,7 @@ import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.R
 import com.thomaswcode.decrastination.sync.SyncWorker
 
-/** The app's screens: the tasks every source lists, and the setup checklist. */
+/** The app's screens: the plan, the tasks every source lists, and the setup checklist. */
 class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -66,7 +66,8 @@ class MainActivity : ComponentActivity() {
                     TABS.forEachIndexed { i, name -> Tab(selected = tab == i, onClick = { tab = i }, text = { Text(name) }) }
                 }
                 when (tab) {
-                    0 -> TasksScreen(graph)
+                    0 -> TodayScreen(graph, this@MainActivity)
+                    1 -> TasksScreen(graph)
                     else -> SetupScreen(graph, this@MainActivity)
                 }
             }
@@ -74,6 +75,6 @@ class MainActivity : ComponentActivity() {
     }
 
     private companion object {
-        val TABS = listOf("Tasks", "Setup")
+        val TABS = listOf("Plan", "Tasks", "Setup")
     }
 }

@@ -115,7 +115,7 @@ Querying from `adb shell` fails with `Permission not granted for: CardContentPro
 
 **Completion test.** For a deck task: `new + learn + review == 0` for that deck. For the daily quota: all review/learn counts zero and new cards introduced ≥ quota (new-introduced-today is derived as `min(quota, newAtStartOfDay − newNow)`).
 
-**Opening a deck.** `update(selected_deck, deck_id)` then start `com.ichi2.anki/.Reviewer` (exported, `VIEW` filter; **verify** it opens the selected deck, otherwise start the deck picker and let the tap happen).
+**Opening a deck.** `update(selected_deck, deck_id)` then start `com.ichi2.anki/.Reviewer`, which is exported and opens on the selected deck (checked on the phone on 9 Oct: deck 1.2's first new card). The daily quota spans every deck, so it opens the deck list instead, with its deck highlighted.
 
 **Built in Phase 1** (`sources/anki/`), with three refinements found on the phone:
 
@@ -134,7 +134,7 @@ Operations the app needs:
 | List inbox | `SELECT INBOX`, `UID SEARCH ALL` (or `SINCE` for incremental), `UID FETCH … (UID FLAGS ENVELOPE BODYSTRUCTURE)` |
 | Body for triage | `UID FETCH … BODY.PEEK[TEXT]` or the first `text/plain` part; strip HTML, cap at ~4 000 chars before sending to the LLM |
 | Completion test | `UID SEARCH X-GM-MSGID <id>` in INBOX; absent = archived/snoozed/deleted = done for now; back in INBOX later (a snooze waking) = the same task, reopened |
-| Open the message | Gmail deep link: `https://mail.google.com/mail/u/0/#inbox/<thread-or-msg hex id>` is not derivable from IMAP; instead launch Gmail with `ACTION_VIEW` on `googlegmail://` is unreliable. Practical: open the Gmail app (main activity) and show the subject on the block screen; or use `X-GM-MSGID` from Gmail's IMAP extension (`FETCH (X-GM-MSGID)`) which **does** form `https://mail.google.com/mail/#all/<hex of X-GM-MSGID>`. **Verify** on device. |
+| Open the message | **The Gmail app can't be opened on one conversation from outside**: it answers `https://mail.google.com/mail/u/0/#inbox/<thread id in hex>` and `#all/…` by opening its inbox (tried on the phone, 9 Oct). So **Open** opens Gmail and says which subject, from whom, to look for; the inbox is in date order, so it's near the top. |
 
 Library: `jakarta.mail` works on Android with the `android-mail`/`android-activation` artifacts (`com.sun.mail:android-mail:1.6.7`), or a 200-line hand-rolled IMAP client over `SSLSocket` since only `SELECT`, `UID SEARCH`, `UID FETCH` are needed. The hand-rolled one has no dependency risk and is my recommendation.
 
