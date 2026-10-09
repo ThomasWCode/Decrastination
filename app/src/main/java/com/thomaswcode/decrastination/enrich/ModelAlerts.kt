@@ -43,7 +43,8 @@ object ModelAlerts {
     fun keyFixed(context: Context) = Notify.cancel(context, KEY_ID)
 
     /** [task]'s plan from the model dropped, [why]: its estimate is planned whole, so it's worth a look. */
-    fun dropped(context: Context, task: TaskItem, why: String) {
+    fun dropped(context: Context, task: TaskItem, why: String): Boolean {
+        if (!Notify.shown(context, Channels.MODEL)) return false
         Notify.post(
             context,
             task.id,
@@ -57,17 +58,22 @@ object ModelAlerts {
                 .setAutoCancel(true)
                 .build(),
         )
+        return true
     }
 
-    /** A plan for [taskId] kept since: the warning about the last one is out of date. */
-    fun planKept(context: Context, taskId: String) = Notify.cancel(context, taskId, DROPPED_ID)
+    /** The open tasks with a dropped plan standing (their enrichment current), and why. */
+    fun standing(tasks: List<TaskItem>): List<Pair<TaskItem, String>> =
+        tasks.mapNotNull { task -> Enrichments.current(task)?.dropped?.takeIf { task.isOpen }?.let { task to it } }
+
+    /** Of [standing], those whose warning hasn't been shown for the plan as it is ([shown]: task id to content hash). */
+    fun unshown(standing: List<Pair<TaskItem, String>>, shown: Map<String, String>): List<Pair<TaskItem, String>> =
+        standing.filter { (task, _) -> shown[task.id] != task.enrichment?.inputHash }
 
     /**
      * Withdraws the warnings whose task no longer has a dropped plan: done or gone (a sync, which the
      * enrichment loop never sees again), or changed or planned since. Those still standing stay.
      */
-    fun tidyDropped(context: Context, tasks: List<TaskItem>) {
-        val standing = tasks.filter { it.isOpen && Enrichments.current(it)?.dropped != null }.mapTo(HashSet()) { it.id }
+    fun withdrawExcept(context: Context, standing: Set<String>) {
         val posted = context.getSystemService(NotificationManager::class.java)?.activeNotifications ?: return
         posted.filter { it.id == DROPPED_ID && it.tag != null && it.tag !in standing }.forEach { Notify.cancel(context, it.tag, DROPPED_ID) }
     }

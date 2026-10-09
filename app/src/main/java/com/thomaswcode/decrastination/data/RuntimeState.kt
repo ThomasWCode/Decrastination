@@ -48,6 +48,12 @@ data class RuntimeState(
     val eventAnswers: Map<String, String> = emptyMap(),
     /** Events you've been asked about, by name, so each is asked once. */
     val eventsAsked: Set<String> = emptySet(),
+    /**
+     * Dropped-plan warnings shown: each task's id, and the content (its enrichment's input hash) of
+     * the plan it was about. One not here (laid while notifications couldn't show it) is shown once
+     * they can; a later plan dropped for changed content is another warning.
+     */
+    val droppedAlerted: Map<String, String> = emptyMap(),
     /** "How was it?" questions kept while notifications couldn't be seen, to ask once they can. */
     val assessLater: List<AssessLater> = emptyList(),
     /** Completions whose free time has been given, so each is given once (`Focus.onCompleted`); kept a fortnight. */
