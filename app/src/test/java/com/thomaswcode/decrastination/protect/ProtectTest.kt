@@ -127,7 +127,8 @@ class SettingsChangesTest {
         val loose = SettingsChanges.propose(current, current.copy(blockedApps = emptyList()), emptyList(), now, ::newId)
         // A second later the first has waited a second; then another change.
         val counted = SettingsChanges.applyDue(loose.settings, loose.pending, now + 1000, 1000)
-        val other = SettingsChanges.propose(counted.settings, counted.settings.copy(boxMin = 60), counted.pending, now + 1000, ::newId)
+        // Proposed from what's been asked for, as the Settings screen does.
+        val other = SettingsChanges.propose(counted.settings, SettingsChanges.requested(counted.settings, counted.pending).copy(boxMin = 60), counted.pending, now + 1000, ::newId)
         assertEquals(2, other.pending.size)
         val early = SettingsChanges.applyDue(other.settings, other.pending, now + 23 * hour, 23 * hour - 1000)
         assertEquals(current.blockedApps, early.settings.blockedApps)
@@ -183,6 +184,45 @@ class SettingsChangesTest {
         val armed = Settings(armed = true)
         assertEquals(1, SettingsChanges.propose(armed, armed.copy(softMinPerDay = 15), emptyList(), now, ::newId).pending.size)
         assertEquals(120, SettingsChanges.propose(armed, armed.copy(softMinPerDay = 120), emptyList(), now, ::newId).settings.softMinPerDay)
+    }
+
+    @Test
+    fun `switching Claude on or raising its cap waits once armed, switching it off doesn't`() {
+        val armed = Settings(armed = true)
+        assertEquals(1, SettingsChanges.propose(armed, armed.copy(aiEnabled = true), emptyList(), now, ::newId).pending.size)
+        assertEquals(1, SettingsChanges.propose(armed, armed.copy(aiMonthlyCapGbp = 300), emptyList(), now, ::newId).pending.size)
+        val on = armed.copy(aiEnabled = true)
+        assertEquals(false, SettingsChanges.propose(on, on.copy(aiEnabled = false), emptyList(), now, ::newId).settings.aiEnabled)
+    }
+
+    @Test
+    fun `where restarts can't be told apart, sessions use the wall clock and waits count only what's sure`() {
+        val unknown = Uptime.UNKNOWN_BOOT
+        // A session can't be timed across what may have been a restart.
+        assertNull(Uptime(unknown, 50 * 60_000L).since(Uptime(unknown, 10 * 60_000L)))
+        assertEquals(40 * 60_000L, Uptime(3, 50 * 60_000L).since(Uptime(3, 10 * 60_000L)))
+        // A wait counts the clock's rise, at most what passed; a fall counts nothing.
+        assertEquals(40 * 60_000L, Uptime(unknown, 50 * 60_000L).atLeastSince(Uptime(unknown, 10 * 60_000L)))
+        assertNull(Uptime(unknown, 5 * 60_000L).atLeastSince(Uptime(unknown, 10 * 60_000L)))
+        val change = PendingChange("1", "armed", kotlinx.serialization.json.JsonPrimitive(false), "Protection: off", now, now, waitMs = 60 * 60_000L)
+        assertEquals(40 * 60_000L, SettingsChanges.counting(listOf(change), Uptime(unknown, 10 * 60_000L), Uptime(unknown, 50 * 60_000L), force = true))
+    }
+
+    @Test
+    fun `a waiting change set back is cancelled, and one left as asked keeps its wait`() {
+        val armed = Settings(armed = true)
+        val first = SettingsChanges.propose(armed, armed.copy(aiEnabled = true), emptyList(), now, ::newId)
+        assertEquals(1, first.pending.size)
+        val asked = SettingsChanges.requested(armed, first.pending)
+        assertEquals(true, asked.aiEnabled)
+        // Saved again with something else changed: the waiting change keeps its wait.
+        val again = SettingsChanges.propose(armed, asked.copy(workMinPerFreeMin = armed.workMinPerFreeMin + 1), first.pending, now + 3_600_000L, ::newId)
+        assertEquals(first.pending, again.pending)
+        assertEquals(armed.workMinPerFreeMin + 1, again.settings.workMinPerFreeMin)
+        // Set back to what it is: cancelled, and Claude stays off.
+        val back = SettingsChanges.propose(armed, asked.copy(aiEnabled = false), first.pending, now, ::newId)
+        assertEquals(emptyList(), back.pending)
+        assertEquals(false, back.settings.aiEnabled)
     }
 
     @Test

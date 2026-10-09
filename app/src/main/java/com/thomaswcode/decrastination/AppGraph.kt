@@ -33,6 +33,7 @@ import com.thomaswcode.decrastination.learn.Assessment
 import com.thomaswcode.decrastination.learn.CalendarTime
 import com.thomaswcode.decrastination.net.UrlConnectionHttp
 import com.thomaswcode.decrastination.protect.SettingsChanges
+import com.thomaswcode.decrastination.sources.anki.AnkiRules
 import com.thomaswcode.decrastination.sources.anki.AnkiSource
 import com.thomaswcode.decrastination.sources.gmail.GmailSource
 import com.thomaswcode.decrastination.sources.powerplanner.PowerPlannerApi
@@ -55,6 +56,8 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 /**
@@ -110,19 +113,28 @@ class AppGraph private constructor(context: Context) {
     val focus = Focus(tasks, settings, runtime, log, clock) { state, s, now -> plan(state, s, now) }
 
     /** Applies a settings change: at once, or, once armed, pending if it loosens blocking. */
-    suspend fun changeSettings(proposed: Settings) {
+    /**
+     * Held while the settings and their pending changes are changed: two files, written in turn,
+     * so each change finishes before the next reads them.
+     */
+    private val changing = Mutex()
+
+    /**
+     * Changes the settings as [change] says, from what's been asked for (the settings with what's
+     * waiting applied), so a change to one field leaves the others' waiting changes be.
+     */
+    suspend fun changeSettings(change: (Settings) -> Settings) = changing.withLock {
         // What's waiting is counted up to now first, so a new change's wait starts now.
-        applyDueChanges(force = true)
-        val now = clock.now()
-        var outcome: SettingsChanges.Outcome? = null
-        runtime.update { state ->
-            outcome = SettingsChanges.propose(settings.value, proposed, state.pending, now) { java.util.UUID.randomUUID().toString() }
-            val waiting = outcome!!.pending
-            // Nothing was waiting: the count starts now, whatever an old mark says.
-            val mark = if (state.pending.isEmpty()) clock.uptime() else state.uptimeMark ?: clock.uptime()
-            state.copy(pending = waiting, uptimeMark = if (waiting.isEmpty()) null else mark)
-        }
-        outcome?.let { result -> settings.update { result.settings } }
+        applyDue(force = true)
+        val state = runtime.value
+        val proposed = change(SettingsChanges.requested(settings.value, state.pending))
+        val outcome = SettingsChanges.propose(settings.value, proposed, state.pending, clock.now()) { java.util.UUID.randomUUID().toString() }
+        // Nothing was waiting: the count starts now, whatever an old mark says.
+        val mark = if (state.pending.isEmpty()) clock.uptime() else state.uptimeMark ?: clock.uptime()
+        // The pending list first: stopped between the two, what applies now is lost (and seen to
+        // be), but a waiting change this one replaced can't come back.
+        runtime.update { it.copy(pending = outcome.pending, uptimeMark = if (outcome.pending.isEmpty()) null else mark) }
+        settings.update { outcome.settings }
     }
 
     /**
@@ -132,16 +144,33 @@ class AppGraph private constructor(context: Context) {
      */
     suspend fun applyDueChanges(force: Boolean = false) {
         if (runtime.value.pending.isEmpty()) return
-        val now = clock.now()
+        changing.withLock { applyDue(force) }
+    }
+
+    /** [applyDueChanges], with [changing] held. */
+    private suspend fun applyDue(force: Boolean) {
+        val state = runtime.value
+        if (state.pending.isEmpty()) return
         val uptime = clock.uptime()
-        var applied: SettingsChanges.Outcome? = null
+        val elapsed = SettingsChanges.counting(state.pending, state.uptimeMark, uptime, force) ?: return
+        val outcome = SettingsChanges.applyDue(settings.value, state.pending, clock.now(), elapsed)
+        val waiting = outcome.pending.map { it.id }.toSet()
+        val due = state.pending.filter { it.id !in waiting }
+        // The settings first: stopped before the pending list is saved, a change that fell due is
+        // applied again (to the same value), never lost.
+        if (due.isNotEmpty()) settings.update { latest -> due.fold(latest, SettingsChanges::apply) }
+        runtime.update { it.copy(pending = outcome.pending, uptimeMark = if (outcome.pending.isEmpty()) null else uptime) }
+    }
+
+    /** Applies the pending change [id] now (a parent's code allowed it), if it's still waiting. */
+    suspend fun applyNow(id: String) = changing.withLock {
+        val change = runtime.value.pending.firstOrNull { it.id == id } ?: return@withLock
+        // Saved before its pending entry goes, as in [applyDue].
+        settings.update { SettingsChanges.apply(it, change) }
         runtime.update { state ->
-            if (state.pending.isEmpty()) return@update state
-            val elapsed = SettingsChanges.counting(state.pending, state.uptimeMark, uptime, force) ?: return@update state
-            applied = SettingsChanges.applyDue(settings.value, state.pending, now, elapsed)
-            state.copy(pending = applied!!.pending, uptimeMark = if (applied!!.pending.isEmpty()) null else uptime)
+            val rest = state.pending.filterNot { it.id == id }
+            state.copy(pending = rest, uptimeMark = if (rest.isEmpty()) null else state.uptimeMark)
         }
-        applied?.let { result -> settings.update { result.settings } }
     }
 
     /**
@@ -193,8 +222,12 @@ class AppGraph private constructor(context: Context) {
             focus.onCompleted(report.completed)
             // "How was it?" for finished homework and revision.
             Assessment.ask(app, report.completed)
-            EnrichWorker.enqueue(app)
             CalendarTime.refresh(app)
+        }
+        // What's new or changed, even in place, is enriched.
+        syncer.addAfterEverySync {
+            val modelOn = modelEnricher() != null
+            if (tasks.value.tasks.any { Enrichments.jobFor(it) != null && Enrichments.stale(it, modelOn, RuleEnricher.BY) }) EnrichWorker.enqueue(app)
         }
         scope.launch { CalendarTime.refresh(app) }
         runCatching {
@@ -267,8 +300,12 @@ class AppGraph private constructor(context: Context) {
      * that the model declines (recorded as the model's, so it isn't asked again).
      */
     suspend fun enrichNow(model: Enricher? = modelEnricher()) {
-        var enricher = model
+        // A call that failed in the last hour (no network, a bad key) rests the model till then.
+        val usage = runtime.value.aiUsage
+        val resting = usage.lastError != null && clock.now() - (usage.lastCallAt ?: 0L) < MODEL_REST_MS
+        var enricher = model.takeIf { !resting }
         var calls = 0
+        var decksChanged = false
         val candidates = tasks.value.tasks
             .mapNotNull { task -> Enrichments.jobFor(task)?.let { task to it } }
             .filter { (task, _) -> Enrichments.stale(task, enricher != null, RuleEnricher.BY) }
@@ -277,6 +314,8 @@ class AppGraph private constructor(context: Context) {
             val now = clock.now()
             val month = AiUsage.monthOf(now, clock.zone())
             val s = settings.value
+            // Switched off (or its key removed) while this runs: nothing more is sent.
+            if (!s.aiEnabled || secrets[Secret.AnthropicApiKey].isNullOrBlank()) enricher = null
             val useModel = enricher != null && calls < MAX_MODEL_CALLS && runtime.value.aiUsage.forMonth(month).allows(s.aiMonthlyCapGbp, s.usdToGbp)
             var enrichment = if (useModel) {
                 calls++
@@ -300,7 +339,10 @@ class AppGraph private constructor(context: Context) {
             if (enrichment == null) enrichment = rules.enrich(task, job, now).enrichment
             val made = enrichment ?: continue
             tasks.update { state -> state.copy(tasks = state.tasks.map { if (it.id == task.id) it.withEnrichment(made) else it }) }
+            if (AnkiRules.sectionsOf(task.withEnrichment(made)) != AnkiRules.sectionsOf(task)) decksChanged = true
         }
+        // Sections the deck pattern missed: their deck tasks come from reading Anki again, now.
+        if (decksChanged) SyncWorker.syncNow(app, setOf(Source.Anki))
     }
 
     companion object {
@@ -311,6 +353,9 @@ class AppGraph private constructor(context: Context) {
         private const val WIDGET_DEBOUNCE_MS = 1_000L
 
         private const val CALENDAR_QUIET_MS = 5_000L
+
+        /** After a failed call, the model is left alone this long. */
+        private const val MODEL_REST_MS = 3_600_000L
 
         /** The most model calls one enrichment run makes: the rest wait for the next. */
         const val MAX_MODEL_CALLS = 20

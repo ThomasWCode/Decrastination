@@ -71,8 +71,8 @@ object Review {
         val result = reviewer.review(input)
         graph.runtime.update { it.copy(aiUsage = it.aiUsage.forMonth(month).record(result.costUsd, result.refused, now)) }
         val answer = result.answer ?: return null
-        val proposed = ReviewInput.apply(settings, answer.changes)
-        if (proposed != settings) graph.changeSettings(proposed)
+        // Laid over what's been asked for, so a change waiting elsewhere keeps its wait.
+        if (answer.changes.isNotEmpty()) graph.changeSettings { ReviewInput.apply(it, answer.changes) }
         return WeeklyReview(now, answer.note.ifEmpty { listOf("No note this week.") } + answer.changes.map { "Changed: ${it.setting} to ${it.value} (${it.why})" }, by = reviewer.model)
     }
 }
