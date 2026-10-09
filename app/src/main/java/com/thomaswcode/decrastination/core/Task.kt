@@ -87,6 +87,8 @@ data class TaskItem(
     val firstProgress: Double? = null,
     /** Minutes of finished focus sessions spent on it. */
     val workedMin: Int = 0,
+    /** The sessions counted in [workedMin], by start time, so each is counted once. */
+    val sessionsCounted: List<Long> = emptyList(),
     val subSteps: List<SubStep> = emptyList(),
     /** At most this many of its sub-steps can be done in a day: an Anki deck releases 20 new cards a day. */
     val stepsPerDay: Int? = null,

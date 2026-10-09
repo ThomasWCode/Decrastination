@@ -28,11 +28,11 @@ import com.thomaswcode.decrastination.notify.Channels
 import com.thomaswcode.decrastination.notify.Notify
 import com.thomaswcode.decrastination.sync.SyncWorker
 import com.thomaswcode.decrastination.ui.MainActivity
+import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import java.util.concurrent.TimeUnit
 
 /**
  * Layer 5 of the anti-tamper (docs/scheduler.md §6): checks that the focus service is on, on no
@@ -91,6 +91,7 @@ object Watchdog {
             adminActive = isAdminActive(context),
             canRepair = canRepair(context),
             serviceRunning = FocusService.isRunning(context),
+            alertsShown = Notify.shown(context, Channels.PROTECTION),
         )
     }
 

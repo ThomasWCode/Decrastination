@@ -206,8 +206,11 @@ class AppGraph private constructor(context: Context) {
     init {
         // Work a source confirms done earns free time and is logged.
         syncer.addListener { focus.rewardCompletions() }
-        // Any a stop left ungiven.
-        scope.launch { focus.rewardCompletions() }
+        // Any a stop left ungiven: completions, and sessions' endings.
+        scope.launch {
+            focus.finishSessions()
+            focus.rewardCompletions()
+        }
         // What's new or changed, even in place, is enriched.
         syncer.addAfterEverySync {
             val modelOn = modelEnricher() != null

@@ -16,6 +16,8 @@ import kotlinx.serialization.Serializable
 data class RuntimeState(
     val credit: Credit = Credit(),
     val session: FocusSession? = null,
+    /** Sessions ended whose due (the task's minutes and step, the log, free time) isn't all given yet. */
+    val finishing: List<EndedSession> = emptyList(),
     /** Loosening changes waiting their delay. */
     val pending: List<PendingChange> = emptyList(),
     /** A parent code unblocked everything until then. */
@@ -116,3 +118,7 @@ data class ProtectionRecord(val at: Long, val problems: List<String>, val repair
 /** A completion that has had its free time: the task, and when it was confirmed done. */
 @Serializable
 data class Rewarded(val taskId: String, val doneAt: Long)
+
+/** A focus session as it ended: what it's owed, saved with its ending (`Focus.stopSession`). */
+@Serializable
+data class EndedSession(val session: FocusSession, val workedMin: Int, val completed: Boolean, val endedAt: Long)
