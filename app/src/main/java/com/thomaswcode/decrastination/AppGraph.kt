@@ -234,12 +234,17 @@ class AppGraph private constructor(context: Context) {
         // What's new or changed, even in place, is enriched.
         syncer.addAfterEverySync {
             val modelOn = modelAvailable()
-            if (tasks.value.tasks.any { Enrichments.jobFor(it) != null && Enrichments.stale(it, modelOn, RuleEnricher.BY) }) EnrichWorker.enqueue(app)
+            val modelOff = claudeKey() == null
+            if (tasks.value.tasks.any { Enrichments.jobFor(it) != null && Enrichments.stale(it, modelOn, RuleEnricher.BY, modelOff) }) EnrichWorker.enqueue(app)
         }
         // Anki's deadline or textbook changed (saved, or a waiting change fallen due): its tasks are
         // made with them, so it's read again now.
         scope.launch {
             settings.state.map { it.ankiDeadlineMin to it.ankiTextbook }.distinctUntilChanged().drop(1).collect { SyncWorker.syncNow(app, setOf(Source.Anki)) }
+        }
+        // Switched off: the rules go over what the model read, as its reading goes with it.
+        scope.launch {
+            settings.state.map { it.aiEnabled && it.aiKeyActive }.distinctUntilChanged().drop(1).collect { on -> if (!on) EnrichWorker.enqueue(app) }
         }
         // Able to be asked again (switched on, its key put to use, a higher cap or another exchange
         // rate saved, its rest after a failure over), the model goes over what only the rules have seen.
@@ -310,7 +315,7 @@ class AppGraph private constructor(context: Context) {
         var decksChanged = false
         val candidates = tasks.value.tasks
             .mapNotNull { task -> Enrichments.jobFor(task)?.let { task to it } }
-            .filter { (task, _) -> Enrichments.stale(task, enricher != null, RuleEnricher.BY) }
+            .filter { (task, _) -> Enrichments.stale(task, enricher != null, RuleEnricher.BY, modelOff = claudeKey() == null) }
             .sortedBy { (task, _) -> task.dueAt ?: Long.MAX_VALUE }
         for ((snapshot, _) in candidates) {
             // Read afresh: a sync since the run began may have closed or changed it.
@@ -319,7 +324,7 @@ class AppGraph private constructor(context: Context) {
             // step it's on would be gone when it does. It's done at the next run after.
             if (focus.session?.taskId == task.id) continue
             val job = Enrichments.jobFor(task) ?: continue
-            if (!Enrichments.stale(task, enricher != null, RuleEnricher.BY)) continue
+            if (!Enrichments.stale(task, enricher != null, RuleEnricher.BY, modelOff = claudeKey() == null)) continue
             val now = clock.now()
             val month = AiUsage.monthOf(now, clock.zone())
             val s = settings.value
