@@ -7,10 +7,12 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.R
+import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.data.WeeklyReview
 import com.thomaswcode.decrastination.enrich.AiUsage
 import com.thomaswcode.decrastination.notify.Channels
 import com.thomaswcode.decrastination.notify.Notify
+import kotlinx.coroutines.sync.withLock
 
 /**
  * The weekly review (docs/scheduler.md §5, item 7): on Sunday evening, after the check-in (or
@@ -26,16 +28,18 @@ object Review {
         val graph = AppGraph.get(context)
         val now = graph.clock.now()
         // Once a week: the check-in runs it at once, and the evening's alarm finds it done since
-        // the check-in's time today (a review at any other time doesn't count).
-        if (ifDue && graph.log.value.reviews.any { it.at >= Daily.checkInOn(now, graph.clock.zone(), graph.settings.value.checkInMin) }) return
+        // Sunday's check-in time (a review at any other time doesn't count). The latest Sunday at or
+        // before now, so an alarm after midnight still finds Sunday's.
+        if (ifDue && graph.log.value.reviews.any { it.at >= Daily.lastCheckIn(now, graph.clock.zone(), graph.settings.value.checkInMin) }) return
         val learned = Calibrator.learn(graph.log.value, graph.runtime.value.calibration, graph.settings.value.boxMin, week = now / WEEK_MS)
         graph.runtime.update { it.copy(calibration = learned.calibration) }
-        val rules = (learned.changes + listOfNotNull(Days.capacityAdvice(graph.log.value.days)))
-            .ifEmpty { listOf("Nothing to change this week: the estimates held.") }
+        val findings = learned.changes + listOfNotNull(Days.capacityAdvice(graph.log.value.days))
         val model = runCatching { modelReview(graph, now) }
             .onFailure { Log.w(AppGraph.TAG, "The model's weekly review failed; the rules' stands", it) }
             .getOrNull()
-        val review = model ?: WeeklyReview(now, rules, by = "rules")
+        // The rules' findings always stand: the model's note comes first, and they follow.
+        val review = model?.let { it.copy(lines = it.lines + findings) }
+            ?: WeeklyReview(now, findings.ifEmpty { listOf("Nothing to change this week: the estimates held.") }, by = "rules")
         graph.log.update { it.copy(reviews = it.reviews + review).trimmed(now) }
         val open = PendingIntent.getActivity(
             context,
@@ -65,14 +69,27 @@ object Review {
         val reviewer = graph.modelReviewer() ?: return null
         val zone = graph.clock.zone()
         val month = AiUsage.monthOf(now, zone)
-        val settings = graph.settings.value
-        if (!graph.runtime.value.aiUsage.forMonth(month).allows(settings.aiMonthlyCapGbp, settings.usdToGbp)) return null
-        val input = ReviewInput.describe(graph.log.value, graph.runtime.value.calibration, settings, now, zone)
-        val result = reviewer.review(input)
-        graph.runtime.update { it.copy(aiUsage = it.aiUsage.forMonth(month).record(result.costUsd, result.refused, now)) }
+        val input = ReviewInput.describe(graph.log.value, graph.runtime.value.calibration, graph.settings.value, now, zone)
+        // The cap checked and the cost recorded in one turn with every other model call.
+        val result = graph.modelCalls.withLock {
+            val settings = graph.settings.value
+            if (!graph.runtime.value.aiUsage.forMonth(month).allows(settings.aiMonthlyCapGbp, settings.usdToGbp)) return@withLock null
+            reviewer.review(input).also { r -> graph.runtime.update { it.copy(aiUsage = it.aiUsage.forMonth(month).record(r.costUsd, r.refused, now)) } }
+        } ?: return null
         val answer = result.answer ?: return null
+        val changes = answer.changes.filter(ReviewInput::allowed)
         // Laid over what's been asked for, so a change waiting elsewhere keeps its wait.
-        if (answer.changes.isNotEmpty()) graph.changeSettings { ReviewInput.apply(it, answer.changes) }
-        return WeeklyReview(now, answer.note.ifEmpty { listOf("No note this week.") } + answer.changes.map { "Changed: ${it.setting} to ${it.value} (${it.why})" }, by = reviewer.model)
+        if (changes.isNotEmpty()) graph.changeSettings { ReviewInput.apply(it, changes) }
+        val note = answer.note.ifEmpty { listOf("No note this week.") }
+        return WeeklyReview(now, note + changeLines(changes, graph.settings.value), by = reviewer.model)
+    }
+
+    /**
+     * The model's changes in words, as they stand after [after]: in place, or waiting (once armed,
+     * one that loosens blocking waits like yours).
+     */
+    fun changeLines(changes: List<ReviewInput.Change>, after: Settings): List<String> = changes.map { change ->
+        val what = "${change.setting} to ${change.value} (${change.why})"
+        if (ReviewInput.valueOf(after, change.setting) == change.value) "Changed: $what" else "Waiting ${after.loosenDelayHours} hours, as it loosens blocking: $what"
     }
 }

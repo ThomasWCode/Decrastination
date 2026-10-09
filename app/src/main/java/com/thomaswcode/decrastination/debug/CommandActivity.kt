@@ -168,7 +168,7 @@ class CommandActivity : Activity() {
                                 "job" to JsonPrimitive(job.name),
                                 "system" to JsonPrimitive(Prompts.system(job)),
                                 "user" to JsonPrimitive(Prompts.describe(task, job, now, graph.clock.zone())),
-                                "schema" to JsonPrimitive(Prompts.schema(job).toString()),
+                                "schema" to Prompts.schemaJson(job),
                             ),
                         )
                     }

@@ -16,13 +16,15 @@ import com.thomaswcode.decrastination.block.BlockPolicy
 import com.thomaswcode.decrastination.notify.Channels
 import com.thomaswcode.decrastination.notify.Notify
 import com.thomaswcode.decrastination.widget.WidgetUpdater
+import java.time.Instant
+import java.time.ZoneId
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.time.Instant
-import java.time.format.DateTimeFormatter
-import java.util.Locale
 
 /**
  * The phone's calendar as busy time (Q7, PLAN.md Phase 5): the next fortnight's events, judged one
@@ -82,18 +84,19 @@ object CalendarTime {
             graph.calendarTime = EventJudge.Time(emptyList(), emptyMap(), emptyList())
             return
         }
+        graph.watchCalendar()
         val now = graph.clock.now()
         val events = runCatching { withContext(Dispatchers.IO) { read(context, now - DAY_MS, now + LOOK_AHEAD_MS) } }
             .onFailure { Log.w(AppGraph.TAG, "Can't read the calendar", it) }
             .getOrNull() ?: return
         val time = EventJudge.time(events, graph.runtime.value.eventAnswers, graph.clock.zone())
         graph.calendarTime = time
-        val asked = graph.runtime.value.eventsAsked
-        // Not at night: they're asked at the first look after quiet hours.
+        // Not at night: they're asked at the first look after quiet hours. Nor while the question
+        // couldn't be seen (notifications off): it's asked once it can be, not marked asked unseen.
         val quiet = BlockPolicy.isQuiet(now, graph.clock.zone(), graph.settings.value)
-        val toAsk = if (quiet) emptyList() else time.toAsk.filter { it.start < now + ASK_AHEAD_MS && EventJudge.key(it) !in asked }
+        val toAsk = if (quiet || !Notify.shown(context, Channels.DAILY)) emptyList() else questions(time.toAsk, graph.runtime.value.eventsAsked, now)
         if (toAsk.isNotEmpty()) {
-            toAsk.forEach { ask(context, it) }
+            toAsk.forEach { ask(context, it, graph.clock.zone()) }
             graph.runtime.update { it.copy(eventsAsked = it.eventsAsked + toAsk.map(EventJudge::key)) }
         }
         runCatching { WidgetUpdater.update(context) }
@@ -101,10 +104,18 @@ object CalendarTime {
 
     private val DAY = DateTimeFormatter.ofPattern("EEEE d MMMM", Locale.UK)
 
-    private fun ask(context: Context, event: CalendarEvent) {
+    /** Of the events the rules can't judge, those to ask about now: not over, within the week, not asked before. */
+    fun questions(candidates: List<CalendarEvent>, asked: Set<String>, now: Long): List<CalendarEvent> =
+        candidates.filter { it.end > now && it.start < now + ASK_AHEAD_MS && EventJudge.key(it) !in asked }
+
+    /** The day a question names: an all-day event's date as stored (UTC), a timed one's where you are. */
+    fun questionDay(event: CalendarEvent, zone: ZoneId): String =
+        Instant.ofEpochMilli(event.start).atZone(if (event.allDay) ZoneOffset.UTC else zone).toLocalDate().format(DAY)
+
+    private fun ask(context: Context, event: CalendarEvent, zone: ZoneId) {
         val key = EventJudge.key(event)
         val id = BASE_ID + Math.floorMod(key.hashCode(), 700)
-        val day = Instant.ofEpochMilli(event.start).atZone(java.time.ZoneOffset.UTC).toLocalDate().format(DAY)
+        val day = questionDay(event, zone)
         val builder = NotificationCompat.Builder(context, Channels.DAILY)
             .setSmallIcon(R.drawable.ic_focus)
             .setContentTitle("${event.title}, $day")

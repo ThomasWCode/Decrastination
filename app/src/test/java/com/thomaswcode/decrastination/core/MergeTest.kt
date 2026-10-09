@@ -29,6 +29,15 @@ class MergeTest {
     }
 
     @Test
+    fun `a derived task already finished when first seen is kept, as done`() {
+        val result = Merge.apply(emptyList(), Source.Anki, listOf(fetched("deck:1", done = true, derived = true)), t0)
+        assertEquals(listOf(Status.Done), result.tasks.map { it.status })
+        // Neither new work nor a completion: nothing was done here.
+        assertTrue(result.added.isEmpty())
+        assertTrue(result.completed.isEmpty())
+    }
+
+    @Test
     fun `an update keeps the app's own bookkeeping`() {
         val stored = first(fetched("a", dueAt = 5)).map {
             it.copy(workedMin = 25, userEffortMin = 60, subSteps = listOf(SubStep("Q1-8", 25, done = true)))
@@ -66,7 +75,21 @@ class MergeTest {
         val result = Merge.apply(open, Source.PowerPlanner, listOf(Fetched("p", "Essay", Kind.Homework, sourceProgress = 1.0, done = true)), t0 + 1)
         assertEquals(0.5, result.completed.single().sourceProgress)
         assertEquals(1.0, result.tasks.single().sourceProgress)
+        // Progress synced on the way doesn't move the baseline: first seen at none, it's all earned.
+        val fresh = Merge.apply(emptyList(), Source.PowerPlanner, listOf(Fetched("q", "Notes", Kind.Homework, sourceProgress = 0.0)), t0).tasks
+        val halfway = Merge.apply(fresh, Source.PowerPlanner, listOf(Fetched("q", "Notes", Kind.Homework, sourceProgress = 0.5)), t0 + 1).tasks
+        val done = Merge.apply(halfway, Source.PowerPlanner, listOf(Fetched("q", "Notes", Kind.Homework, sourceProgress = 1.0, done = true)), t0 + 2)
+        assertEquals(0.0, done.completed.single().sourceProgress)
         assertEquals(Status.Done, result.tasks.single().status)
+    }
+
+    @Test
+    fun `a count that shrinks to nothing as it's worked through is rewarded for the most it was`() {
+        fun quota(minutes: Int, done: Boolean = false) = Fetched(sourceId = "quota", title = "Anki", kind = Kind.Homework, sourceEffortMin = minutes, done = done, derived = true)
+        val morning = Merge.apply(emptyList(), Source.Anki, listOf(quota(60)), t0).tasks
+        val halfway = Merge.apply(morning, Source.Anki, listOf(quota(30)), t0 + 1).tasks
+        val finished = Merge.apply(halfway, Source.Anki, listOf(quota(1, done = true)), t0 + 2)
+        assertEquals(60, finished.completed.single().sourceEffortMin)
     }
 
     @Test

@@ -163,6 +163,16 @@ class PlannerTest {
     }
 
     @Test
+    fun `work a session did and the source's progress both show isn't taken off twice`() {
+        // A 100-minute task: a 30-minute session, then Power Planner moved to 30 %.
+        val t = task("t", Fixtures.at("2026-10-20T09:00"), effort = 100, worked = 30).copy(sourceProgress = 0.3, firstProgress = 0.0)
+        assertEquals(70, plan(listOf(t), "2026-10-08T17:00").chunksOf("teams:t").sumOf { it.minutes })
+        // The percentage not moved: the session's minutes come off.
+        val unmoved = t.copy(sourceProgress = 0.0)
+        assertEquals(70, plan(listOf(unmoved), "2026-10-08T17:00").chunksOf("teams:t").sumOf { it.minutes })
+    }
+
+    @Test
     fun `sub-steps are the chunks, done ones skipped`() {
         val steps = listOf(SubStep("Q1-8", 25, done = true), SubStep("Q9-16", 25), SubStep("mark", 10))
         val plan = plan(listOf(task("t", Fixtures.at("2026-10-20T09:00"), steps = steps)), "2026-10-08T17:00")
@@ -186,6 +196,9 @@ class PlannerTest {
             extra = mapOf("deckName" to "Textbook 1::2.2", "for" to "teams:t"),
         )
         assertEquals(listOf("Exercise 4"), plan(listOf(homework, deck), "2026-10-08T17:00").chunksOf("teams:t").map { it.step })
+        // Another textbook's deck holds nothing for this one.
+        val oldBook = deck.copy(extra = mapOf("deckName" to "Textbook 2::2.2", "for" to "teams:t"))
+        assertEquals(listOf("Learn vocabulary 2.2", "Exercise 4"), plan(listOf(homework, oldBook), "2026-10-08T17:00").chunksOf("teams:t").map { it.step })
         // A deck task missed (the deck gone) holds nothing: the step is planned again.
         val missed = deck.copy(status = Status.Missed)
         assertEquals(listOf("Learn vocabulary 2.2", "Exercise 4"), plan(listOf(homework, missed), "2026-10-08T17:00").chunksOf("teams:t").map { it.step })

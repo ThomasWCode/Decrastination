@@ -112,7 +112,8 @@ class CheckInActivity : ComponentActivity() {
                                 val now = graph.clock.now()
                                 graph.log.update { it.copy(checkIns = it.checkIns + CheckIn(week, now, feel, avoided.trim(), inTheWay.trim(), change.trim(), energy.trim())).trimmed(now) }
                                 Notify.cancel(this@CheckInActivity, CheckIns.ID)
-                                Review.run(this@CheckInActivity, ifDue = false)
+                                // As a job: it can outlast this screen.
+                                ReviewWorker.enqueue(this@CheckInActivity, ifDue = false)
                             }
                         },
                         modifier = Modifier.fillMaxWidth(),

@@ -276,6 +276,9 @@ class FocusService : AccessibilityService() {
         // anything covered when it would have run out.
         if (verdict is BlockPolicy.Verdict.Allow) return@Runnable stopSpending()
         if (left > 0 && verdict !is BlockPolicy.Verdict.Block) {
+            // Saved as it goes: the service stopped (a crash, the process killed), at most one
+            // check's worth is lost, not all of it since spending began.
+            commitSpending()
             handler.postDelayed(creditCheck, left.coerceIn(1_000L, SPEND_TICK_MS))
         } else {
             // Spent first, so the policy now says blocked: each is covered where it is (in front,
@@ -304,7 +307,8 @@ class FocusService : AccessibilityService() {
             ?: windows.mapNotNull { it.root }.firstOrNull { it.packageName == browser }
             ?: return
         val text = root.findAccessibilityNodeInfosByViewId(Blocklist.urlBarId(browser)).firstOrNull()?.text?.toString()
-        val site = graph.focus.siteTarget(browser, text)
+        // No address bar (a video full screen hides it): still the page it last showed.
+        val site = if (text != null) graph.focus.siteTarget(browser, text) else lastSite[browser]
         if (text != null) lastSite[browser] = site
         if (site != null) act(site) else stopSpendingUnlessAside()
     }

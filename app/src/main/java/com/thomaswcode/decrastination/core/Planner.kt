@@ -64,7 +64,7 @@ object Planner {
         val (events, work) = input.tasks
             .filter { it.isOpen && it.isAvailable(input.now) }
             .partition { it.kind == Kind.Event }
-        val held = AnkiRules.heldSections(input.tasks)
+        val held = AnkiRules.heldSections(input.tasks, input.settings.ankiTextbook)
         val items = work.map { task ->
             val soft = task.dueAt == null
             // Calendar days where you are, so a week is a week across the clocks changing.
@@ -263,8 +263,13 @@ object Planner {
             return left.map { Piece(it.title, (it.minutes * multiplier).roundToInt().coerceAtLeast(1)) }
         }
         if (task.effortMin <= 0) return emptyList()
-        val estimate = task.effortMin * multiplier * (1 - task.sourceProgress.coerceIn(0.0, 1.0))
-        val remaining = (estimate.roundToInt() - task.workedMin).coerceAtLeast(minOf(MIN_CHUNK, task.effortMin))
+        val whole = task.effortMin * multiplier
+        // Two measures of what's left, and the smaller: the source's progress, which may already
+        // show the sessions' work (Power Planner's percentage, updated), and the sessions' minutes
+        // since the task was first seen. Taking both off would count the same work twice.
+        val bySource = whole * (1 - task.sourceProgress.coerceIn(0.0, 1.0))
+        val bySessions = whole * (1 - (task.firstProgress ?: task.sourceProgress).coerceIn(0.0, 1.0)) - task.workedMin
+        val remaining = minOf(bySource, bySessions).roundToInt().coerceAtLeast(minOf(MIN_CHUNK, task.effortMin))
         val box = (input.calibration.boxMin[task.kind] ?: input.settings.boxMin).coerceAtLeast(MIN_CHUNK)
         val count = ceil(remaining / box.toDouble()).toInt().coerceAtLeast(1)
         return (0 until count).map { i ->

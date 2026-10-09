@@ -75,6 +75,22 @@ class CalibratorTest {
     }
 
     @Test
+    fun `your own box is a candidate, and with nothing to judge the others by, it stands`() {
+        // Twenty sessions at a box that's neither yours (30) nor one the experiment tries.
+        val other = ActivityLog(sessions = (1..20).map { SessionRecord("b$it", Kind.Homework, label = "b", plannedMin = 40, workedMin = 40, startedAt = 0, endedAt = 0, completed = true, box = 40) })
+        assertEquals(emptyMap(), Calibrator.boxes(other, defaultBox = 30, week = 7))
+    }
+
+    @Test
+    fun `a session is judged by its own round of the task, not an earlier round's finish`() {
+        val due = Fixtures.at("2026-10-10T09:00")
+        // Done in time once, then reopened and done late: the second round's sessions didn't end well.
+        val rounds = listOf(done("t", dueAt = due, doneAt = due - HOUR), done("t", dueAt = due + 5 * DAY, doneAt = due + 6 * DAY))
+        val sessions = (1..20).map { SessionRecord("t", Kind.Homework, label = "t", plannedMin = 25, workedMin = 25, startedAt = due + 2 * DAY + it * HOUR, endedAt = 0, completed = true, box = 25) }
+        assertEquals(emptyMap(), Calibrator.boxes(ActivityLog(sessions = sessions, completions = rounds), defaultBox = 45, week = 7))
+    }
+
+    @Test
     fun `what changed is said in words`() {
         val learned = Calibrator.learn(ActivityLog(completions = listOf(done("a", worked = 80))), Calibration(), defaultBox = 45, week = 1)
         assertTrue(learned.changes.any { "Homework in 12.1 Physics takes ×1.30" in it }, learned.changes.toString())
@@ -119,6 +135,29 @@ class EventJudgeTest {
     }
 }
 
+class CalendarQuestionsTest {
+    private val now = Fixtures.at("2026-10-09T17:00")
+
+    private fun event(id: Long, title: String, start: String, end: String) = CalendarEvent(id, title, Fixtures.at(start), Fixtures.at(end), allDay = false)
+
+    @Test
+    fun `asked about only if not over, within the week, and not asked before`() {
+        val over = event(1, "Van hire", "2026-10-08T09:00", "2026-10-08T18:00")
+        val soon = event(2, "Open day", "2026-10-10T09:00", "2026-10-10T17:00")
+        val far = event(3, "Trip", "2026-10-20T09:00", "2026-10-20T17:00")
+        val asked = event(4, "Course", "2026-10-11T09:00", "2026-10-11T14:00")
+        assertEquals(listOf(soon), CalendarTime.questions(listOf(over, soon, far, asked), setOf(EventJudge.key(asked)), now))
+    }
+
+    @Test
+    fun `a question names a timed event's day where you are, and an all-day one's as stored`() {
+        // Just after midnight in summer time: still Saturday here, though Friday in UTC.
+        assertEquals("Saturday 10 October", CalendarTime.questionDay(event(5, "Party", "2026-10-10T00:30", "2026-10-10T05:00"), LONDON))
+        val utcMidnight = LocalDate.parse("2026-10-12").atStartOfDay(java.time.ZoneOffset.UTC).toInstant().toEpochMilli()
+        assertEquals("Monday 12 October", CalendarTime.questionDay(CalendarEvent(6, "Holiday", utcMidnight, utcMidnight + DAY, allDay = true), LONDON))
+    }
+}
+
 class DaysTest {
     @Test
     fun `a day is done in full when its tasks were confirmed done or worked for their minutes`() {
@@ -130,6 +169,13 @@ class DaysTest {
         val finished = Days.finish(day, log, LONDON)
         assertEquals(60, finished.doneMin)
         assertEquals(false, finished.full)
+    }
+
+    @Test
+    fun `a task done on an earlier day and since reopened isn't done that day`() {
+        val day = DayRecord("2026-10-09", 40, listOf(DayChunk("teams:a", 40)))
+        val log = ActivityLog(completions = listOf(done("teams:a", doneAt = Fixtures.at("2026-10-07T20:00"))))
+        assertEquals(0, Days.finish(day, log, LONDON).doneMin)
     }
 
     @Test

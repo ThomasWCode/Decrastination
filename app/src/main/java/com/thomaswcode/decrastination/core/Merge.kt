@@ -45,7 +45,9 @@ object Merge {
             if (!listed.add(id)) continue
             val old = byId[id]
             if (old == null) {
-                if (f.done) continue
+                // Finished before it was ever seen: nothing to do, so it isn't added. A derived
+                // task is kept, as done: a deck already studied still stands for its sections.
+                if (f.done && !f.derived) continue
                 val task = TaskItem(
                     id = id,
                     source = source,
@@ -58,6 +60,8 @@ object Merge {
                     kind = f.kind,
                     sourceEffortMin = f.sourceEffortMin,
                     sourceProgress = f.sourceProgress,
+                    firstProgress = f.sourceProgress,
+                    peakEffortMin = f.sourceEffortMin,
                     subSteps = f.subSteps.orEmpty(),
                     stepsPerDay = f.stepsPerDay,
                     notBefore = f.notBefore,
@@ -66,7 +70,11 @@ object Merge {
                     lastSeenAt = now,
                     extra = f.extra,
                     sourceValues = SourceValues(f.kind, f.dueAt, f.availableFrom),
-                )
+                ).let { if (f.done) it.copy(status = Status.Done, doneAt = now) else it }
+                if (f.done) {
+                    fresh[id] = task
+                    continue
+                }
                 added += task
                 fresh[id] = task
                 continue
@@ -80,6 +88,8 @@ object Merge {
                 kind = f.kind,
                 sourceEffortMin = f.sourceEffortMin,
                 sourceProgress = f.sourceProgress,
+                firstProgress = old.firstProgress ?: old.sourceProgress,
+                peakEffortMin = listOfNotNull(old.peakEffortMin, old.sourceEffortMin, f.sourceEffortMin).maxOrNull(),
                 subSteps = f.subSteps ?: old.subSteps,
                 stepsPerDay = f.stepsPerDay,
                 notBefore = f.notBefore,
@@ -89,9 +99,8 @@ object Merge {
                 sourceValues = SourceValues(f.kind, f.dueAt, f.availableFrom),
             ).enriched()
             val next = when {
-                // Reported with the progress it had while open: finished through its own progress
-                // (Power Planner at 100 %), the earned time is for the work that was still left.
-                old.status == Status.Open && f.done -> updated.copy(status = Status.Done, doneAt = now).also { completed += it.copy(sourceProgress = old.sourceProgress) }
+                // Reported as it stood before it finished (see completion()).
+                old.status == Status.Open && f.done -> updated.copy(status = Status.Done, doneAt = now).also { completed += completion(old, it) }
                 old.status == Status.Open -> updated
                 old.derived && old.status == Status.Done -> updated.copy(status = Status.Done)
                 f.done -> updated.copy(status = Status.Done)
@@ -106,10 +115,21 @@ object Merge {
             when {
                 old.status != Status.Open -> old.takeIf { now - (old.doneAt ?: old.lastSeenAt) < KEEP_FINISHED_MS }
                 old.derived -> old.copy(status = Status.Missed).also { missed += it }
-                else -> old.copy(status = Status.Done, doneAt = now).also { completed += it }
+                else -> old.copy(status = Status.Done, doneAt = now).also { completed += completion(old, it) }
             }
         } + fresh.values.filter { it.id !in byId }
 
         return Result(result, completed, reopened, added, missed)
     }
+
+    /**
+     * [done] as its completion is rewarded: with the progress it had when first seen (finished
+     * through its own progress, Power Planner at 50 % then 100 %, the time is for all the work
+     * since), and its estimate before it finished. A derived count (an Anki deck's cards) shrinks
+     * as it's worked through, so it's rewarded for the most it was.
+     */
+    private fun completion(old: TaskItem, done: TaskItem): TaskItem = done.copy(
+        sourceProgress = old.firstProgress ?: old.sourceProgress,
+        sourceEffortMin = if (old.derived) old.peakEffortMin ?: old.sourceEffortMin else old.sourceEffortMin,
+    )
 }
