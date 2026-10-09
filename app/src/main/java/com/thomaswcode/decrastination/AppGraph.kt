@@ -16,6 +16,8 @@ import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.WallClock
 import com.thomaswcode.decrastination.core.withEnrichment
 import com.thomaswcode.decrastination.data.ActivityLog
+import com.thomaswcode.decrastination.data.Backup
+import com.thomaswcode.decrastination.data.Backups
 import com.thomaswcode.decrastination.data.DeviceClock
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.KeystoreCipher
@@ -33,7 +35,9 @@ import com.thomaswcode.decrastination.enrich.ModelHold
 import com.thomaswcode.decrastination.enrich.PhotoChecker
 import com.thomaswcode.decrastination.enrich.RuleEnricher
 import com.thomaswcode.decrastination.learn.Assessment
+import com.thomaswcode.decrastination.learn.Briefing
 import com.thomaswcode.decrastination.learn.CalendarTime
+import com.thomaswcode.decrastination.learn.Daily
 import com.thomaswcode.decrastination.net.UrlConnectionHttp
 import com.thomaswcode.decrastination.protect.SettingsChanges
 import com.thomaswcode.decrastination.protect.Watchdog
@@ -350,13 +354,55 @@ class AppGraph private constructor(context: Context) {
     /** The rules' enrichment: always there, and the fallback for the model. */
     private val rules = RuleEnricher()
 
+    /** A backup of what the sources can't give back, as text ([Backups]). */
+    fun exportBackup(): String = Backups.encode(
+        Backup(
+            exportedAt = clock.now(),
+            versionName = BuildConfig.VERSION_NAME,
+            // As asked for: a change still waiting its delay is in it, and restored goes through
+            // the same wait (or, restored here, keeps waiting) rather than being lost.
+            settings = SettingsChanges.requested(settings.value, runtime.value.pending),
+            log = log.value,
+            calibration = runtime.value.calibration,
+            eventAnswers = runtime.value.eventAnswers,
+            aiUsage = runtime.value.aiUsage,
+        ),
+    )
+
+    /**
+     * Restores the backup [text] and says what happened. The settings go through [changeSettings],
+     * so once armed a loosening one waits. The log, the calibration and the calendar answers are
+     * restored only while unarmed: armed, an edited file could teach the planner to plan less.
+     */
+    suspend fun importBackup(text: String): String {
+        val backup = Backups.decode(text) ?: return "That isn't a Decrastination backup (or it's from a newer version)."
+        val armed = settings.value.armed
+        changeSettings { Backups.importedSettings(it, backup) }
+        // This month's spend on Claude, armed or not: it can only rise, so the cap isn't given again.
+        val month = AiUsage.monthOf(clock.now(), clock.zone())
+        runtime.update { it.copy(aiUsage = Backups.mergeUsage(it.aiUsage, backup.aiUsage, month)) }
+        // The reminders' alarms at the restored times, as a save in Settings sets them.
+        Daily.schedule(app)
+        val waiting = runtime.value.pending.size
+        val waits = if (waiting > 0) " $waiting change${if (waiting == 1) "" else "s"} that loosen blocking wait ${settings.value.loosenDelayHours} hours." else ""
+        if (armed) return "Settings restored.$waits Protection is armed, so the log and what the app learned were left as they are."
+        log.update { Backups.mergeLog(it, backup.log, clock.now()) }
+        // Your answers on this phone win over the backup's.
+        runtime.update { it.copy(calibration = backup.calibration, eventAnswers = backup.eventAnswers + it.eventAnswers) }
+        // Read with the restored answers, and today's record made again, as an answer given here does.
+        scope.launch {
+            CalendarTime.refresh(app)
+            Briefing.replanToday(app)
+        }
+        return "Restored the settings, ${backup.log.completions.size} completions and ${backup.log.sessions.size} sessions, what the app had learned, and your calendar answers.$waits"
+    }
+
     /** The photo check, while Claude is switched on and has its key; else null. */
     fun photoChecker(): PhotoChecker? = claudeKey()?.let(::PhotoChecker)
 
     /** The model's weekly review, while Claude is switched on and has its key; else null. */
     fun modelReviewer(): ClaudeReviewer? = claudeKey()?.let(::ClaudeReviewer)
 
-    /** The model, while it's switched on and has its key; else null. */
     /** Claude's API key, while Claude is switched on and the key is in use; else null. */
     fun claudeKey(): String? {
         val s = settings.value
