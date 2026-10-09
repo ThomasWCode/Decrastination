@@ -75,10 +75,22 @@ class CalibratorTest {
     }
 
     @Test
+    fun `a box session waits for its task's outcome before it counts`() {
+        // Twenty full sessions at 25 on work not done yet: no outcome, so nothing settled or steered.
+        val pending = ActivityLog(sessions = (1..20).map { SessionRecord("t$it", Kind.Homework, label = "t", plannedMin = 25, workedMin = 25, startedAt = 0, endedAt = 0, completed = true, box = 25) })
+        val kept = (1L..40L).count { Calibrator.boxes(pending, defaultBox = 45, week = it).isEmpty() }
+        assertTrue(kept >= 25, "kept $kept of 40")
+    }
+
+    @Test
     fun `your own box is a candidate, and with nothing to judge the others by, it stands most weeks`() {
         // Twenty sessions at a box that's neither yours (30) nor one the experiment tries: nothing
         // to judge them by, so yours is the best, and only the weeks it tries another move off it.
-        val other = ActivityLog(sessions = (1..20).map { SessionRecord("b$it", Kind.Homework, label = "b", plannedMin = 40, workedMin = 40, startedAt = 0, endedAt = 0, completed = true, box = 40) })
+        val other = ActivityLog(
+            sessions = (1..20).map { SessionRecord("b$it", Kind.Homework, label = "b", plannedMin = 40, workedMin = 40, startedAt = 0, endedAt = 0, completed = true, box = 40) },
+            // Each one's task since done, so each is judged.
+            completions = (1..20).map { done("b$it", doneAt = 1) },
+        )
         val kept = (1L..40L).count { Calibrator.boxes(other, defaultBox = 30, week = it).isEmpty() }
         assertTrue(kept >= 25, "kept $kept of 40 weeks")
     }
@@ -95,7 +107,10 @@ class CalibratorTest {
     @Test
     fun `an old box of yours doesn't settle the experiment`() {
         // Twenty sessions at your old box of 40; you've since set 30.
-        val old = ActivityLog(sessions = (1..20).map { SessionRecord("b$it", Kind.Homework, label = "b", plannedMin = 40, workedMin = 40, startedAt = 0, endedAt = 0, completed = true, box = 40) })
+        val old = ActivityLog(
+            sessions = (1..20).map { SessionRecord("b$it", Kind.Homework, label = "b", plannedMin = 40, workedMin = 40, startedAt = 0, endedAt = 0, completed = true, box = 40) },
+            completions = (1..20).map { done("b$it", doneAt = 1) },
+        )
         // Unsettled, some weeks try another box.
         val tried = (1L..40L).map { Calibrator.boxes(old, defaultBox = 30, week = it)[Kind.Homework] }
         assertTrue(tried.any { it != null && it != 30 })

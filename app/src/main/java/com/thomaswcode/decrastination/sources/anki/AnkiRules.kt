@@ -127,9 +127,13 @@ object AnkiRules {
      */
     fun heldSections(tasks: List<TaskItem>, textbook: Int): Map<String, Set<String>> = heldDecks(tasks, textbook).mapValues { it.value.keys }
 
-    /** For each assignment, the deck tasks [heldSections] counts, by the section each holds. */
-    fun heldDecks(tasks: List<TaskItem>, textbook: Int): Map<String, Map<String, TaskItem>> = tasks
-        .filter { it.source == Source.Anki && it.sourceId.startsWith(DECK_PREFIX) && it.status != Status.Missed }
+    /**
+     * For each assignment, the deck tasks [heldSections] counts, by the section each holds; with
+     * [missed], those since missed too (a deck dropped as its assignment closed), for the work they
+     * had.
+     */
+    fun heldDecks(tasks: List<TaskItem>, textbook: Int, missed: Boolean = false): Map<String, Map<String, TaskItem>> = tasks
+        .filter { it.source == Source.Anki && it.sourceId.startsWith(DECK_PREFIX) && (missed || it.status != Status.Missed) }
         .flatMap { deck ->
             val name = deck.extra[EXTRA_DECK_NAME]?.takeIf { it.startsWith("Textbook $textbook${Deck.SEPARATOR}") } ?: return@flatMap emptyList()
             val section = name.substringAfterLast(Deck.SEPARATOR)
