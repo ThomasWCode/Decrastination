@@ -2,16 +2,16 @@
 
 Review date: **9 October 2026**. Reviewed default branch: `main`, commit [`a89c7007d71b13bcf997cd700a70881fd3c2ac6d`](https://github.com/ThomasWCode/Decrastination/commit/a89c7007d71b13bcf997cd700a70881fd3c2ac6d). Review branch: `docs/repo-review-2026-10-09`.
 
-This review documents **31 deduplicated findings: 6 P1, 20 P2, 5 P3**. It changes documentation only and implements no fixes.
+This review documents **48 deduplicated findings: 6 P1, 20 P2, 22 P3**. It changes documentation only and implements no fixes.
 
 ## Review documents
 
 | Document | Contents | P1 | P2 | P3 | Total |
 |---|---|---:|---:|---:|---:|
 | [Bugs and inconsistencies](BUGS_AND_INCONSISTENCIES.md) | Incorrect behavior, security defects, and interface/documentation inconsistencies | 6 | 18 | 5 | 29 |
-| [Improvements](IMPROVEMENTS.md) | Dependency maintenance and automated integration-test coverage | 0 | 2 | 0 | 2 |
+| [Improvements](IMPROVEMENTS.md) | Dependency/test maintenance plus UI, data, AI, planning, blocking and recovery improvements | 0 | 2 | 17 | 19 |
 
-The split is by finding type, independently of priority: lower-priority defects and documentation inconsistencies remain in the first document. Original IDs, priorities, evidence and recommendations are preserved. The dependency-maintenance entry retains its unresolved application-reachability limitation.
+The split is by finding type, independently of priority: lower-priority defects and documentation inconsistencies remain in the first document. The original 31 IDs, priorities, evidence and recommendations are preserved. The focused improvement pass adds 17 P3 entries (P3-006–P3-022). The dependency-maintenance entry retains its unresolved application-reachability limitation.
 
 ## Scope and method
 
@@ -24,6 +24,22 @@ Suspected defects were exercised against the actual compiled application classes
 **Status:** “Verified” means the stated failure or a clearly identified sub-path was reproduced/confirmed by a run; each entry names what was and was not run. “Confirmed by reading” means the code establishes the behavior but runtime/device validation remains unavailable. No unvalidated candidate is promoted to a demonstrated end-to-end device exploit. No finding currently uses “Suspected”.
 
 **Priorities:** P1 is a likely-use incorrect result, data loss/corruption, vulnerability, crash or build/deploy failure to address before the next release. P2 requires particular conditions or has a workaround, or is a significant inconsistency/critical test gap. P3 is a lower-impact quality, accessibility, documentation or maintainability improvement. Higher choices at a boundary are explained in the finding.
+
+### Focused improvement pass — 9 October 2026
+
+A second pass specifically examined ways to improve the app, revisiting **72 baseline files in full or in targeted sections** across the areas below. The application remains at the same reviewed SHA; only review documentation has changed. The inventory marks each file revisited in this pass. Previously read files outside this focused scope were not all reread, and generated/binary exclusions remain unchanged.
+
+| Area | Focus of the additional review | New findings |
+|---|---|---|
+| UI, widget and onboarding | Task context/navigation, search, source health and optional-feature status | P3-006, P3-013, P3-019, P3-021 |
+| Collection, sync and planning | Full-snapshot contracts, unchanged envelope work, request coalescing, placement explanations and deferred work | P3-007, P3-012, P3-020 |
+| AI, calendar and learning | Interpretation provenance/correction, prompt evaluation and revisioning, per-purpose operation outcomes, calendar answers and calibration support | P3-008–P3-010, P3-014–P3-015 |
+| Blocking and protection | Rule previews, effective/pending changes, local recovery observations and earned-time transitions | P3-011, P3-016–P3-017, P3-022 |
+| Backup and restore | Valid-backup inspection and preview of protected/merged restore effects | P3-018 |
+
+Candidates were checked against existing findings and the documented product decisions, including deterministic planning, source-confirmed completion, rules-only operation, earned-time accounting and delayed/parent-authorized loosening. Independent cross-checks clarified per-source in-flight state, future block filters, limited-work deferral versus forced placement of ordinary deadline work, prompt retry behavior, and protection for proposed task/calendar edits. Shared UI surfaces are cross-linked rather than documented as duplicate causes.
+
+All **17 new entries are P3 and Confirmed by reading**: the existing behavior is traceable to source, while benefits are proposals that require implementation and evaluation. Every entry has a concrete recommendation, effort estimate and acceptance checks. No usability, battery, latency or model-quality improvement is claimed as measured. No new product code or tests were written, no private input was sent to a model, and no account or calendar was accessed. The prior bugs-and-inconsistencies document is unchanged.
 
 ## Repository and runtime map
 
@@ -43,6 +59,7 @@ Commands ran at the reviewed commit in `/workspace/Decrastination`, using provis
 | `git ls-files`, `git ls-files`-derived parent directories; default branch lookup; `git fetch origin main`; `git rev-parse HEAD` | 149 tracked files, 55 subdirectories (plus the repository root); `main` at the SHA above. Clean starting tree. No `AGENTS.md` or `SECURITY.md` found. |
 | `./gradlew testDebugUnitTest lintDebug assembleDebug --console=plain` | Passed; most tasks reused existing outputs, so a fresh run followed. |
 | `./gradlew testDebugUnitTest lintDebug assembleDebug --rerun-tasks --no-build-cache --console=plain` | **Passed**, 53 tasks executed, 1m 52s. **386 tests in 41 suites; 0 failures, 0 errors, 0 skipped.** Android lint: **No issues found.** Debug APK built. Gradle reused its configuration cache only. |
+| Focused improvement pass: `./gradlew testDebugUnitTest lintDebug assembleDebug --rerun-tasks --no-build-cache --console=plain` | **Passed again**, 53 tasks executed, 59s; **386 tests / 41 suites, zero failures/errors/skips**, lint **No issues found**, debug APK assembled. Includes existing Planner (50), Syncer (7) and Gmail (13) cases cited by the new recommendations. These checks verify current behavior, not an unimplemented enhancement. |
 | Fresh build diagnostic | `libandroidx.graphics.path.so` could not be stripped and was packaged as supplied. Build succeeded; no runtime failure inferred from this diagnostic. |
 | `python3 -m py_compile scripts/*.py` | Passed. This is syntax/bytecode compilation, not live service or credential loading. |
 | `./gradlew -I /workspace/work/repo-review/review.init.gradle :app:reviewClasspath --no-configuration-cache --console=plain` | Passed. An external init script captured the actual unit-test classpath and 121 unique debug runtime dependency coordinates; no project build file was changed. |
@@ -62,6 +79,8 @@ Temporary verification files were kept in `/workspace/work/repo-review/`, outsid
 | HTML complexity | `timeout 30s java -cp <harness>:<test-classpath> SourceChecks`: initial scaling run reached timeout while attempting 200k input after smaller cases. Separate `timeout 95s java -cp <harness>:<test-classpath> HtmlCapCheck` completed a permitted 200,000-character input in **59,348 ms**. Exact host measurements and limits are in P1-005. |
 | Gmail probe TLS | `python3 /workspace/work/repo-review/protect/probe_checks.py`: passed, invoking the existing probe with synthetic credentials against a loopback self-signed, wrong-host TLS certificate; server received LOGIN. |
 | Guard locale | Provisioned JDK `javac` then `java ... GuardLocaleCheck`: English synthetic app-info returned Back; localized synthetic app-info/time screens returned Leave. The first unqualified `javac` attempt was unavailable on PATH; rerun with the provisioned JDK succeeded. No handset bypass executed. |
+
+The focused pass also checked all **55 new code excerpts** against their actual source ranges (each at most 10 lines), validated finding/index links and counts, and checked that the original 31 finding bodies were preserved. These documentation checks used temporary scripts outside the checkout.
 
 There is no separate configured type-check/lint task beyond Kotlin compilation and Android lint. The debug variant matches all documented/CI checks. Release installation, real integrations, paid calls and deployment were not attempted. No source/config/test/lockfile was edited to make checks pass.
 
@@ -100,8 +119,25 @@ There is no separate configured type-check/lint task beyond Kotlin compilation a
 | [P3-003](BUGS_AND_INCONSISTENCIES.md#p3-003) | Status explanations hard-code configurable deadlines and blocking hours | P3 | Verified | [widget/WidgetModel.kt:77](https://github.com/ThomasWCode/Decrastination/blob/a89c7007d71b13bcf997cd700a70881fd3c2ac6d/app/src/main/java/com/thomaswcode/decrastination/widget/WidgetModel.kt#L77) |
 | [P3-004](BUGS_AND_INCONSISTENCIES.md#p3-004) | The accessibility disclosure promises no data leaves the phone, but reviews send block counts | P3 | Confirmed by reading | [app/src/main/res/values/strings.xml:12](https://github.com/ThomasWCode/Decrastination/blob/a89c7007d71b13bcf997cd700a70881fd3c2ac6d/app/src/main/res/values/strings.xml#L12) |
 | [P3-005](BUGS_AND_INCONSISTENCIES.md#p3-005) | Current reference documents still present superseded contracts as active behavior | P3 | Confirmed by reading | [docs/data-sources.md:57](https://github.com/ThomasWCode/Decrastination/blob/a89c7007d71b13bcf997cd700a70881fd3c2ac6d/docs/data-sources.md#L57) |
+| [P3-006](IMPROVEMENTS.md#p3-006) | Bring source freshness and recovery into the Plan and compact widget | P3 | Confirmed by reading | [ui/TodayScreen.kt:95](https://github.com/ThomasWCode/Decrastination/blob/a89c7007d71b13bcf997cd700a70881fd3c2ac6d/app/src/main/java/com/thomaswcode/decrastination/ui/TodayScreen.kt#L95) |
+| [P3-007](IMPROVEMENTS.md#p3-007) | Explain placement decisions and show work outside the current plan | P3 | Confirmed by reading | [core/Planner.kt:226](https://github.com/ThomasWCode/Decrastination/blob/a89c7007d71b13bcf997cd700a70881fd3c2ac6d/app/src/main/java/com/thomaswcode/decrastination/core/Planner.kt#L226) |
+| [P3-008](IMPROVEMENTS.md#p3-008) | Make task enrichment inspectable and correctable without losing source authority | P3 | Confirmed by reading | [core/Enrichment.kt:14](https://github.com/ThomasWCode/Decrastination/blob/a89c7007d71b13bcf997cd700a70881fd3c2ac6d/app/src/main/java/com/thomaswcode/decrastination/core/Enrichment.kt#L14) |
+| [P3-009](IMPROVEMENTS.md#p3-009) | Add a calendar review inbox with explicit answer scope and duration | P3 | Confirmed by reading | [learn/CalendarTime.kt:108](https://github.com/ThomasWCode/Decrastination/blob/a89c7007d71b13bcf997cd700a70881fd3c2ac6d/app/src/main/java/com/thomaswcode/decrastination/learn/CalendarTime.kt#L108) |
+| [P3-010](IMPROVEMENTS.md#p3-010) | Make prompt upgrades repeatable with semantic cases and revision tracking | P3 | Confirmed by reading | [core/Enrichment.kt:148](https://github.com/ThomasWCode/Decrastination/blob/a89c7007d71b13bcf997cd700a70881fd3c2ac6d/app/src/main/java/com/thomaswcode/decrastination/core/Enrichment.kt#L148) |
+| [P3-011](IMPROVEMENTS.md#p3-011) | Preview exactly which app and site rules will apply | P3 | Confirmed by reading | [ui/SettingsActivity.kt:162](https://github.com/ThomasWCode/Decrastination/blob/a89c7007d71b13bcf997cd700a70881fd3c2ac6d/app/src/main/java/com/thomaswcode/decrastination/ui/SettingsActivity.kt#L162) |
+| [P3-012](IMPROVEMENTS.md#p3-012) | Coalesce sync requests and isolate independent source work | P3 | Confirmed by reading | [sync/Syncer.kt:81](https://github.com/ThomasWCode/Decrastination/blob/a89c7007d71b13bcf997cd700a70881fd3c2ac6d/app/src/main/java/com/thomaswcode/decrastination/sync/Syncer.kt#L81) |
+| [P3-013](IMPROVEMENTS.md#p3-013) | Connect task context and source handoff through one reusable detail view | P3 | Confirmed by reading | [ui/TodayScreen.kt:56](https://github.com/ThomasWCode/Decrastination/blob/a89c7007d71b13bcf997cd700a70881fd3c2ac6d/app/src/main/java/com/thomaswcode/decrastination/ui/TodayScreen.kt#L56) |
+| [P3-014](IMPROVEMENTS.md#p3-014) | Show AI work and spending by purpose and outcome | P3 | Confirmed by reading | [enrich/AiUsage.kt:15](https://github.com/ThomasWCode/Decrastination/blob/a89c7007d71b13bcf997cd700a70881fd3c2ac6d/app/src/main/java/com/thomaswcode/decrastination/enrich/AiUsage.kt#L15) |
+| [P3-015](IMPROVEMENTS.md#p3-015) | Explain learned estimates with sample support and experiment state | P3 | Confirmed by reading | [learn/Calibrator.kt:47](https://github.com/ThomasWCode/Decrastination/blob/a89c7007d71b13bcf997cd700a70881fd3c2ac6d/app/src/main/java/com/thomaswcode/decrastination/learn/Calibrator.kt#L47) |
+| [P3-016](IMPROVEMENTS.md#p3-016) | Show effective and pending protection settings together | P3 | Confirmed by reading | [ui/SettingsActivity.kt:68](https://github.com/ThomasWCode/Decrastination/blob/a89c7007d71b13bcf997cd700a70881fd3c2ac6d/app/src/main/java/com/thomaswcode/decrastination/ui/SettingsActivity.kt#L68) |
+| [P3-017](IMPROVEMENTS.md#p3-017) | Surface protection recovery history and the next recovery step | P3 | Confirmed by reading | [data/RuntimeState.kt:61](https://github.com/ThomasWCode/Decrastination/blob/a89c7007d71b13bcf997cd700a70881fd3c2ac6d/app/src/main/java/com/thomaswcode/decrastination/data/RuntimeState.kt#L61) |
+| [P3-018](IMPROVEMENTS.md#p3-018) | Preview backup contents and restore effects before applying them | P3 | Confirmed by reading | [ui/SetupScreen.kt:88](https://github.com/ThomasWCode/Decrastination/blob/a89c7007d71b13bcf997cd700a70881fd3c2ac6d/app/src/main/java/com/thomaswcode/decrastination/ui/SetupScreen.kt#L88) |
+| [P3-019](IMPROVEMENTS.md#p3-019) | Add lightweight search and filters to the task inventory | P3 | Confirmed by reading | [ui/TasksScreen.kt:45](https://github.com/ThomasWCode/Decrastination/blob/a89c7007d71b13bcf997cd700a70881fd3c2ac6d/app/src/main/java/com/thomaswcode/decrastination/ui/TasksScreen.kt#L45) |
+| [P3-020](IMPROVEMENTS.md#p3-020) | Reuse unchanged Gmail envelope metadata between full inbox reconciliations | P3 | Confirmed by reading | [sources/gmail/GmailSource.kt:157](https://github.com/ThomasWCode/Decrastination/blob/a89c7007d71b13bcf997cd700a70881fd3c2ac6d/app/src/main/java/com/thomaswcode/decrastination/sources/gmail/GmailSource.kt#L157) |
+| [P3-021](IMPROVEMENTS.md#p3-021) | Distinguish optional features from required setup and failures | P3 | Confirmed by reading | [ui/SetupScreen.kt:125](https://github.com/ThomasWCode/Decrastination/blob/a89c7007d71b13bcf997cd700a70881fd3c2ac6d/app/src/main/java/com/thomaswcode/decrastination/ui/SetupScreen.kt#L125) |
+| [P3-022](IMPROVEMENTS.md#p3-022) | Warn before earned free time expires | P3 | Confirmed by reading | [block/FocusService.kt:266](https://github.com/ThomasWCode/Decrastination/blob/a89c7007d71b13bcf997cd700a70881fd3c2ac6d/app/src/main/java/com/thomaswcode/decrastination/block/FocusService.kt#L266) |
 
-Counts: **P1 6 · P2 20 · P3 5**. Complete locations, excerpts, triggers, effects, recommendations and effort estimates are in the linked category files.
+Counts: **P1 6 · P2 20 · P3 22**. Complete locations, excerpts, triggers, effects, recommendations and effort estimates are in the linked category files.
 
 ## Coverage and limitations
 
@@ -130,159 +166,159 @@ Every eligible tracked file was read; a reviewed file without a finding is not a
 
 ## Complete tracked-file inventory
 
-“Reviewed” means fully read at the reviewed SHA. “Skipped” refers to the explicit reasons above. New review documents and the temporary progress ledger are not part of this baseline inventory.
+“Reviewed” means fully read during the original full review at the reviewed SHA. “Skipped” refers to the explicit reasons above. “Revisited” marks the 72 files inspected again, wholly or in targeted sections, for the focused improvement pass; a dash means it was outside that repeat pass. New review documents and the temporary progress ledger are not part of this baseline inventory.
 
-| File | Coverage |
-|---|---|
-| `.gitattributes` | Reviewed |
-| `.github/workflows/ci.yml` | Reviewed |
-| `.gitignore` | Reviewed |
-| `PLAN.md` | Reviewed |
-| `README.md` | Reviewed |
-| `app/build.gradle.kts` | Reviewed |
-| `app/debug.keystore` | Skipped; see above |
-| `app/lint.xml` | Reviewed |
-| `app/src/main/AndroidManifest.xml` | Reviewed |
-| `app/src/main/java/com/thomaswcode/decrastination/AppGraph.kt` | Reviewed |
-| `app/src/main/java/com/thomaswcode/decrastination/DecrastinationApp.kt` | Reviewed |
-| `app/src/main/java/com/thomaswcode/decrastination/block/BlockPolicy.kt` | Reviewed |
-| `app/src/main/java/com/thomaswcode/decrastination/block/BlockedActivity.kt` | Reviewed |
-| `app/src/main/java/com/thomaswcode/decrastination/block/Blocklist.kt` | Reviewed |
-| `app/src/main/java/com/thomaswcode/decrastination/block/CountdownBanner.kt` | Reviewed |
-| `app/src/main/java/com/thomaswcode/decrastination/block/Credit.kt` | Reviewed |
-| `app/src/main/java/com/thomaswcode/decrastination/block/Focus.kt` | Reviewed |
-| `app/src/main/java/com/thomaswcode/decrastination/block/FocusService.kt` | Reviewed |
-| `app/src/main/java/com/thomaswcode/decrastination/block/PhotoChecks.kt` | Reviewed |
-| `app/src/main/java/com/thomaswcode/decrastination/block/Sessions.kt` | Reviewed |
-| `app/src/main/java/com/thomaswcode/decrastination/block/TeamsAutoSync.kt` | Reviewed |
-| `app/src/main/java/com/thomaswcode/decrastination/core/Enrichment.kt` | Reviewed |
-| `app/src/main/java/com/thomaswcode/decrastination/core/Merge.kt` | Reviewed |
-| `app/src/main/java/com/thomaswcode/decrastination/core/Plan.kt` | Reviewed |
-| `app/src/main/java/com/thomaswcode/decrastination/core/Planner.kt` | Reviewed |
-| `app/src/main/java/com/thomaswcode/decrastination/core/Task.kt` | Reviewed |
-| `app/src/main/java/com/thomaswcode/decrastination/core/WallClock.kt` | Reviewed |
-| `app/src/main/java/com/thomaswcode/decrastination/data/Backup.kt` | Reviewed |
-| `app/src/main/java/com/thomaswcode/decrastination/data/DeviceClock.kt` | Reviewed |
-| `app/src/main/java/com/thomaswcode/decrastination/data/JsonStore.kt` | Reviewed |
-| `app/src/main/java/com/thomaswcode/decrastination/data/RuntimeState.kt` | Reviewed |
-| `app/src/main/java/com/thomaswcode/decrastination/data/SecretStore.kt` | Reviewed |
-| `app/src/main/java/com/thomaswcode/decrastination/data/Settings.kt` | Reviewed |
-| `app/src/main/java/com/thomaswcode/decrastination/data/TaskState.kt` | Reviewed |
-| `app/src/main/java/com/thomaswcode/decrastination/debug/CommandActivity.kt` | Reviewed |
-| `app/src/main/java/com/thomaswcode/decrastination/enrich/AiUsage.kt` | Reviewed |
-| `app/src/main/java/com/thomaswcode/decrastination/enrich/ClaudeEnricher.kt` | Reviewed |
-| `app/src/main/java/com/thomaswcode/decrastination/enrich/ClaudeReviewer.kt` | Reviewed |
-| `app/src/main/java/com/thomaswcode/decrastination/enrich/EnrichWorker.kt` | Reviewed |
-| `app/src/main/java/com/thomaswcode/decrastination/enrich/Enricher.kt` | Reviewed |
-| `app/src/main/java/com/thomaswcode/decrastination/enrich/ModelHold.kt` | Reviewed |
-| `app/src/main/java/com/thomaswcode/decrastination/enrich/PhotoChecker.kt` | Reviewed |
-| `app/src/main/java/com/thomaswcode/decrastination/enrich/Prompts.kt` | Reviewed |
-| `app/src/main/java/com/thomaswcode/decrastination/learn/Assessment.kt` | Reviewed |
-| `app/src/main/java/com/thomaswcode/decrastination/learn/Briefing.kt` | Reviewed |
-| `app/src/main/java/com/thomaswcode/decrastination/learn/CalendarTime.kt` | Reviewed |
-| `app/src/main/java/com/thomaswcode/decrastination/learn/Calibrator.kt` | Reviewed |
-| `app/src/main/java/com/thomaswcode/decrastination/learn/CheckIns.kt` | Reviewed |
-| `app/src/main/java/com/thomaswcode/decrastination/learn/Daily.kt` | Reviewed |
-| `app/src/main/java/com/thomaswcode/decrastination/learn/Days.kt` | Reviewed |
-| `app/src/main/java/com/thomaswcode/decrastination/learn/EventJudge.kt` | Reviewed |
-| `app/src/main/java/com/thomaswcode/decrastination/learn/Review.kt` | Reviewed |
-| `app/src/main/java/com/thomaswcode/decrastination/learn/ReviewInput.kt` | Reviewed |
-| `app/src/main/java/com/thomaswcode/decrastination/learn/ReviewWorker.kt` | Reviewed |
-| `app/src/main/java/com/thomaswcode/decrastination/learn/Stats.kt` | Reviewed |
-| `app/src/main/java/com/thomaswcode/decrastination/net/Http.kt` | Reviewed |
-| `app/src/main/java/com/thomaswcode/decrastination/notify/Channels.kt` | Reviewed |
-| `app/src/main/java/com/thomaswcode/decrastination/notify/Notify.kt` | Reviewed |
-| `app/src/main/java/com/thomaswcode/decrastination/protect/GuardRules.kt` | Reviewed |
-| `app/src/main/java/com/thomaswcode/decrastination/protect/ProtectionActivity.kt` | Reviewed |
-| `app/src/main/java/com/thomaswcode/decrastination/protect/ProtectionCheck.kt` | Reviewed |
-| `app/src/main/java/com/thomaswcode/decrastination/protect/SettingsChanges.kt` | Reviewed |
-| `app/src/main/java/com/thomaswcode/decrastination/protect/Totp.kt` | Reviewed |
-| `app/src/main/java/com/thomaswcode/decrastination/protect/Watchdog.kt` | Reviewed |
-| `app/src/main/java/com/thomaswcode/decrastination/sources/TaskSource.kt` | Reviewed |
-| `app/src/main/java/com/thomaswcode/decrastination/sources/anki/AnkiRules.kt` | Reviewed |
-| `app/src/main/java/com/thomaswcode/decrastination/sources/anki/AnkiSource.kt` | Reviewed |
-| `app/src/main/java/com/thomaswcode/decrastination/sources/gmail/EmailRules.kt` | Reviewed |
-| `app/src/main/java/com/thomaswcode/decrastination/sources/gmail/GmailSource.kt` | Reviewed |
-| `app/src/main/java/com/thomaswcode/decrastination/sources/gmail/Imap.kt` | Reviewed |
-| `app/src/main/java/com/thomaswcode/decrastination/sources/gmail/Mime.kt` | Reviewed |
-| `app/src/main/java/com/thomaswcode/decrastination/sources/powerplanner/PowerPlannerApi.kt` | Reviewed |
-| `app/src/main/java/com/thomaswcode/decrastination/sources/powerplanner/PowerPlannerItems.kt` | Reviewed |
-| `app/src/main/java/com/thomaswcode/decrastination/sources/powerplanner/PowerPlannerSource.kt` | Reviewed |
-| `app/src/main/java/com/thomaswcode/decrastination/sources/teams/TeamsSource.kt` | Reviewed |
-| `app/src/main/java/com/thomaswcode/decrastination/sync/SyncWorker.kt` | Reviewed |
-| `app/src/main/java/com/thomaswcode/decrastination/sync/Syncer.kt` | Reviewed |
-| `app/src/main/java/com/thomaswcode/decrastination/ui/Format.kt` | Reviewed |
-| `app/src/main/java/com/thomaswcode/decrastination/ui/MainActivity.kt` | Reviewed |
-| `app/src/main/java/com/thomaswcode/decrastination/ui/OpenTaskActivity.kt` | Reviewed |
-| `app/src/main/java/com/thomaswcode/decrastination/ui/SettingsActivity.kt` | Reviewed |
-| `app/src/main/java/com/thomaswcode/decrastination/ui/SetupScreen.kt` | Reviewed |
-| `app/src/main/java/com/thomaswcode/decrastination/ui/StatsScreen.kt` | Reviewed |
-| `app/src/main/java/com/thomaswcode/decrastination/ui/TaskOpener.kt` | Reviewed |
-| `app/src/main/java/com/thomaswcode/decrastination/ui/TasksScreen.kt` | Reviewed |
-| `app/src/main/java/com/thomaswcode/decrastination/ui/Theme.kt` | Reviewed |
-| `app/src/main/java/com/thomaswcode/decrastination/ui/TodayScreen.kt` | Reviewed |
-| `app/src/main/java/com/thomaswcode/decrastination/widget/NextWidget.kt` | Reviewed |
-| `app/src/main/java/com/thomaswcode/decrastination/widget/WidgetModel.kt` | Reviewed |
-| `app/src/main/java/com/thomaswcode/decrastination/widget/WidgetUpdater.kt` | Reviewed |
-| `app/src/main/res/drawable/ic_focus.xml` | Reviewed |
-| `app/src/main/res/drawable/ic_launcher_foreground.xml` | Reviewed |
-| `app/src/main/res/drawable/ic_refresh.xml` | Reviewed |
-| `app/src/main/res/mipmap-anydpi/ic_launcher.xml` | Reviewed |
-| `app/src/main/res/values/colors.xml` | Reviewed |
-| `app/src/main/res/values/strings.xml` | Reviewed |
-| `app/src/main/res/values/themes.xml` | Reviewed |
-| `app/src/main/res/xml/backup_rules.xml` | Reviewed |
-| `app/src/main/res/xml/data_extraction_rules.xml` | Reviewed |
-| `app/src/main/res/xml/device_admin.xml` | Reviewed |
-| `app/src/main/res/xml/focus_service_config.xml` | Reviewed |
-| `app/src/main/res/xml/next_widget_info.xml` | Reviewed |
-| `app/src/main/res/xml/photo_paths.xml` | Reviewed |
-| `app/src/test/java/com/thomaswcode/decrastination/Fixtures.kt` | Reviewed |
-| `app/src/test/java/com/thomaswcode/decrastination/block/BlockingTest.kt` | Reviewed |
-| `app/src/test/java/com/thomaswcode/decrastination/block/FocusTest.kt` | Reviewed |
-| `app/src/test/java/com/thomaswcode/decrastination/core/EnrichmentTest.kt` | Reviewed |
-| `app/src/test/java/com/thomaswcode/decrastination/core/MergeTest.kt` | Reviewed |
-| `app/src/test/java/com/thomaswcode/decrastination/core/PlannerTest.kt` | Reviewed |
-| `app/src/test/java/com/thomaswcode/decrastination/data/BackupTest.kt` | Reviewed |
-| `app/src/test/java/com/thomaswcode/decrastination/data/StoresTest.kt` | Reviewed |
-| `app/src/test/java/com/thomaswcode/decrastination/enrich/EnrichTest.kt` | Reviewed |
-| `app/src/test/java/com/thomaswcode/decrastination/learn/DailyTest.kt` | Reviewed |
-| `app/src/test/java/com/thomaswcode/decrastination/learn/LearnTest.kt` | Reviewed |
-| `app/src/test/java/com/thomaswcode/decrastination/learn/StatsTest.kt` | Reviewed |
-| `app/src/test/java/com/thomaswcode/decrastination/protect/ProtectTest.kt` | Reviewed |
-| `app/src/test/java/com/thomaswcode/decrastination/sources/anki/AnkiRulesTest.kt` | Reviewed |
-| `app/src/test/java/com/thomaswcode/decrastination/sources/gmail/GmailTest.kt` | Reviewed |
-| `app/src/test/java/com/thomaswcode/decrastination/sources/gmail/ImapTest.kt` | Reviewed |
-| `app/src/test/java/com/thomaswcode/decrastination/sources/gmail/MimeTest.kt` | Reviewed |
-| `app/src/test/java/com/thomaswcode/decrastination/sources/powerplanner/PowerPlannerItemsTest.kt` | Reviewed |
-| `app/src/test/java/com/thomaswcode/decrastination/sources/powerplanner/PowerPlannerSourceTest.kt` | Reviewed |
-| `app/src/test/java/com/thomaswcode/decrastination/sources/teams/TeamsRowsTest.kt` | Reviewed |
-| `app/src/test/java/com/thomaswcode/decrastination/sync/SyncerTest.kt` | Reviewed |
-| `app/src/test/java/com/thomaswcode/decrastination/ui/FormatTest.kt` | Reviewed |
-| `app/src/test/java/com/thomaswcode/decrastination/widget/WidgetModelTest.kt` | Reviewed |
-| `build.gradle.kts` | Reviewed |
-| `docs/data-sources.md` | Reviewed |
-| `docs/needs-you.md` | Reviewed |
-| `docs/open-questions.md` | Reviewed |
-| `docs/phase0-findings.md` | Reviewed |
-| `docs/scheduler.md` | Reviewed |
-| `fixtures/README.md` | Reviewed |
-| `fixtures/anki_decks.json` | Reviewed |
-| `fixtures/home_page2_ui.xml` | Skipped; see above |
-| `fixtures/powerplanner_agenda.json` | Reviewed |
-| `fixtures/powerplanner_agenda_ui.xml` | Skipped; see above |
-| `fixtures/teams_widget_state.json` | Reviewed |
-| `gradle.properties` | Reviewed |
-| `gradle/libs.versions.toml` | Reviewed |
-| `gradle/wrapper/gradle-wrapper.jar` | Skipped; see above |
-| `gradle/wrapper/gradle-wrapper.properties` | Reviewed |
-| `gradlew` | Skipped; see above |
-| `gradlew.bat` | Skipped; see above |
-| `scripts/gmail_probe.py` | Reviewed |
-| `scripts/load_credentials.py` | Reviewed |
-| `scripts/powerplanner_probe.py` | Reviewed |
-| `scripts/pull_teams_state.ps1` | Reviewed |
-| `settings.gradle.kts` | Reviewed |
+| File | Original coverage | Improvement pass |
+|---|---|---|
+| `.gitattributes` | Reviewed | — |
+| `.github/workflows/ci.yml` | Reviewed | — |
+| `.gitignore` | Reviewed | — |
+| `PLAN.md` | Reviewed | Revisited |
+| `README.md` | Reviewed | Revisited |
+| `app/build.gradle.kts` | Reviewed | — |
+| `app/debug.keystore` | Skipped; see above | — |
+| `app/lint.xml` | Reviewed | — |
+| `app/src/main/AndroidManifest.xml` | Reviewed | — |
+| `app/src/main/java/com/thomaswcode/decrastination/AppGraph.kt` | Reviewed | Revisited |
+| `app/src/main/java/com/thomaswcode/decrastination/DecrastinationApp.kt` | Reviewed | — |
+| `app/src/main/java/com/thomaswcode/decrastination/block/BlockPolicy.kt` | Reviewed | Revisited |
+| `app/src/main/java/com/thomaswcode/decrastination/block/BlockedActivity.kt` | Reviewed | Revisited |
+| `app/src/main/java/com/thomaswcode/decrastination/block/Blocklist.kt` | Reviewed | Revisited |
+| `app/src/main/java/com/thomaswcode/decrastination/block/CountdownBanner.kt` | Reviewed | — |
+| `app/src/main/java/com/thomaswcode/decrastination/block/Credit.kt` | Reviewed | — |
+| `app/src/main/java/com/thomaswcode/decrastination/block/Focus.kt` | Reviewed | Revisited |
+| `app/src/main/java/com/thomaswcode/decrastination/block/FocusService.kt` | Reviewed | Revisited |
+| `app/src/main/java/com/thomaswcode/decrastination/block/PhotoChecks.kt` | Reviewed | — |
+| `app/src/main/java/com/thomaswcode/decrastination/block/Sessions.kt` | Reviewed | Revisited |
+| `app/src/main/java/com/thomaswcode/decrastination/block/TeamsAutoSync.kt` | Reviewed | — |
+| `app/src/main/java/com/thomaswcode/decrastination/core/Enrichment.kt` | Reviewed | Revisited |
+| `app/src/main/java/com/thomaswcode/decrastination/core/Merge.kt` | Reviewed | — |
+| `app/src/main/java/com/thomaswcode/decrastination/core/Plan.kt` | Reviewed | Revisited |
+| `app/src/main/java/com/thomaswcode/decrastination/core/Planner.kt` | Reviewed | Revisited |
+| `app/src/main/java/com/thomaswcode/decrastination/core/Task.kt` | Reviewed | Revisited |
+| `app/src/main/java/com/thomaswcode/decrastination/core/WallClock.kt` | Reviewed | — |
+| `app/src/main/java/com/thomaswcode/decrastination/data/Backup.kt` | Reviewed | Revisited |
+| `app/src/main/java/com/thomaswcode/decrastination/data/DeviceClock.kt` | Reviewed | — |
+| `app/src/main/java/com/thomaswcode/decrastination/data/JsonStore.kt` | Reviewed | — |
+| `app/src/main/java/com/thomaswcode/decrastination/data/RuntimeState.kt` | Reviewed | Revisited |
+| `app/src/main/java/com/thomaswcode/decrastination/data/SecretStore.kt` | Reviewed | — |
+| `app/src/main/java/com/thomaswcode/decrastination/data/Settings.kt` | Reviewed | Revisited |
+| `app/src/main/java/com/thomaswcode/decrastination/data/TaskState.kt` | Reviewed | Revisited |
+| `app/src/main/java/com/thomaswcode/decrastination/debug/CommandActivity.kt` | Reviewed | — |
+| `app/src/main/java/com/thomaswcode/decrastination/enrich/AiUsage.kt` | Reviewed | Revisited |
+| `app/src/main/java/com/thomaswcode/decrastination/enrich/ClaudeEnricher.kt` | Reviewed | Revisited |
+| `app/src/main/java/com/thomaswcode/decrastination/enrich/ClaudeReviewer.kt` | Reviewed | Revisited |
+| `app/src/main/java/com/thomaswcode/decrastination/enrich/EnrichWorker.kt` | Reviewed | Revisited |
+| `app/src/main/java/com/thomaswcode/decrastination/enrich/Enricher.kt` | Reviewed | Revisited |
+| `app/src/main/java/com/thomaswcode/decrastination/enrich/ModelHold.kt` | Reviewed | Revisited |
+| `app/src/main/java/com/thomaswcode/decrastination/enrich/PhotoChecker.kt` | Reviewed | — |
+| `app/src/main/java/com/thomaswcode/decrastination/enrich/Prompts.kt` | Reviewed | Revisited |
+| `app/src/main/java/com/thomaswcode/decrastination/learn/Assessment.kt` | Reviewed | — |
+| `app/src/main/java/com/thomaswcode/decrastination/learn/Briefing.kt` | Reviewed | — |
+| `app/src/main/java/com/thomaswcode/decrastination/learn/CalendarTime.kt` | Reviewed | Revisited |
+| `app/src/main/java/com/thomaswcode/decrastination/learn/Calibrator.kt` | Reviewed | Revisited |
+| `app/src/main/java/com/thomaswcode/decrastination/learn/CheckIns.kt` | Reviewed | Revisited |
+| `app/src/main/java/com/thomaswcode/decrastination/learn/Daily.kt` | Reviewed | — |
+| `app/src/main/java/com/thomaswcode/decrastination/learn/Days.kt` | Reviewed | — |
+| `app/src/main/java/com/thomaswcode/decrastination/learn/EventJudge.kt` | Reviewed | Revisited |
+| `app/src/main/java/com/thomaswcode/decrastination/learn/Review.kt` | Reviewed | Revisited |
+| `app/src/main/java/com/thomaswcode/decrastination/learn/ReviewInput.kt` | Reviewed | Revisited |
+| `app/src/main/java/com/thomaswcode/decrastination/learn/ReviewWorker.kt` | Reviewed | — |
+| `app/src/main/java/com/thomaswcode/decrastination/learn/Stats.kt` | Reviewed | Revisited |
+| `app/src/main/java/com/thomaswcode/decrastination/net/Http.kt` | Reviewed | — |
+| `app/src/main/java/com/thomaswcode/decrastination/notify/Channels.kt` | Reviewed | Revisited |
+| `app/src/main/java/com/thomaswcode/decrastination/notify/Notify.kt` | Reviewed | Revisited |
+| `app/src/main/java/com/thomaswcode/decrastination/protect/GuardRules.kt` | Reviewed | — |
+| `app/src/main/java/com/thomaswcode/decrastination/protect/ProtectionActivity.kt` | Reviewed | Revisited |
+| `app/src/main/java/com/thomaswcode/decrastination/protect/ProtectionCheck.kt` | Reviewed | Revisited |
+| `app/src/main/java/com/thomaswcode/decrastination/protect/SettingsChanges.kt` | Reviewed | Revisited |
+| `app/src/main/java/com/thomaswcode/decrastination/protect/Totp.kt` | Reviewed | — |
+| `app/src/main/java/com/thomaswcode/decrastination/protect/Watchdog.kt` | Reviewed | Revisited |
+| `app/src/main/java/com/thomaswcode/decrastination/sources/TaskSource.kt` | Reviewed | Revisited |
+| `app/src/main/java/com/thomaswcode/decrastination/sources/anki/AnkiRules.kt` | Reviewed | — |
+| `app/src/main/java/com/thomaswcode/decrastination/sources/anki/AnkiSource.kt` | Reviewed | — |
+| `app/src/main/java/com/thomaswcode/decrastination/sources/gmail/EmailRules.kt` | Reviewed | — |
+| `app/src/main/java/com/thomaswcode/decrastination/sources/gmail/GmailSource.kt` | Reviewed | Revisited |
+| `app/src/main/java/com/thomaswcode/decrastination/sources/gmail/Imap.kt` | Reviewed | Revisited |
+| `app/src/main/java/com/thomaswcode/decrastination/sources/gmail/Mime.kt` | Reviewed | — |
+| `app/src/main/java/com/thomaswcode/decrastination/sources/powerplanner/PowerPlannerApi.kt` | Reviewed | — |
+| `app/src/main/java/com/thomaswcode/decrastination/sources/powerplanner/PowerPlannerItems.kt` | Reviewed | — |
+| `app/src/main/java/com/thomaswcode/decrastination/sources/powerplanner/PowerPlannerSource.kt` | Reviewed | Revisited |
+| `app/src/main/java/com/thomaswcode/decrastination/sources/teams/TeamsSource.kt` | Reviewed | Revisited |
+| `app/src/main/java/com/thomaswcode/decrastination/sync/SyncWorker.kt` | Reviewed | Revisited |
+| `app/src/main/java/com/thomaswcode/decrastination/sync/Syncer.kt` | Reviewed | Revisited |
+| `app/src/main/java/com/thomaswcode/decrastination/ui/Format.kt` | Reviewed | Revisited |
+| `app/src/main/java/com/thomaswcode/decrastination/ui/MainActivity.kt` | Reviewed | Revisited |
+| `app/src/main/java/com/thomaswcode/decrastination/ui/OpenTaskActivity.kt` | Reviewed | Revisited |
+| `app/src/main/java/com/thomaswcode/decrastination/ui/SettingsActivity.kt` | Reviewed | Revisited |
+| `app/src/main/java/com/thomaswcode/decrastination/ui/SetupScreen.kt` | Reviewed | Revisited |
+| `app/src/main/java/com/thomaswcode/decrastination/ui/StatsScreen.kt` | Reviewed | Revisited |
+| `app/src/main/java/com/thomaswcode/decrastination/ui/TaskOpener.kt` | Reviewed | Revisited |
+| `app/src/main/java/com/thomaswcode/decrastination/ui/TasksScreen.kt` | Reviewed | Revisited |
+| `app/src/main/java/com/thomaswcode/decrastination/ui/Theme.kt` | Reviewed | Revisited |
+| `app/src/main/java/com/thomaswcode/decrastination/ui/TodayScreen.kt` | Reviewed | Revisited |
+| `app/src/main/java/com/thomaswcode/decrastination/widget/NextWidget.kt` | Reviewed | Revisited |
+| `app/src/main/java/com/thomaswcode/decrastination/widget/WidgetModel.kt` | Reviewed | Revisited |
+| `app/src/main/java/com/thomaswcode/decrastination/widget/WidgetUpdater.kt` | Reviewed | Revisited |
+| `app/src/main/res/drawable/ic_focus.xml` | Reviewed | — |
+| `app/src/main/res/drawable/ic_launcher_foreground.xml` | Reviewed | — |
+| `app/src/main/res/drawable/ic_refresh.xml` | Reviewed | — |
+| `app/src/main/res/mipmap-anydpi/ic_launcher.xml` | Reviewed | — |
+| `app/src/main/res/values/colors.xml` | Reviewed | — |
+| `app/src/main/res/values/strings.xml` | Reviewed | — |
+| `app/src/main/res/values/themes.xml` | Reviewed | — |
+| `app/src/main/res/xml/backup_rules.xml` | Reviewed | — |
+| `app/src/main/res/xml/data_extraction_rules.xml` | Reviewed | — |
+| `app/src/main/res/xml/device_admin.xml` | Reviewed | — |
+| `app/src/main/res/xml/focus_service_config.xml` | Reviewed | — |
+| `app/src/main/res/xml/next_widget_info.xml` | Reviewed | — |
+| `app/src/main/res/xml/photo_paths.xml` | Reviewed | — |
+| `app/src/test/java/com/thomaswcode/decrastination/Fixtures.kt` | Reviewed | — |
+| `app/src/test/java/com/thomaswcode/decrastination/block/BlockingTest.kt` | Reviewed | Revisited |
+| `app/src/test/java/com/thomaswcode/decrastination/block/FocusTest.kt` | Reviewed | Revisited |
+| `app/src/test/java/com/thomaswcode/decrastination/core/EnrichmentTest.kt` | Reviewed | — |
+| `app/src/test/java/com/thomaswcode/decrastination/core/MergeTest.kt` | Reviewed | — |
+| `app/src/test/java/com/thomaswcode/decrastination/core/PlannerTest.kt` | Reviewed | Revisited |
+| `app/src/test/java/com/thomaswcode/decrastination/data/BackupTest.kt` | Reviewed | Revisited |
+| `app/src/test/java/com/thomaswcode/decrastination/data/StoresTest.kt` | Reviewed | — |
+| `app/src/test/java/com/thomaswcode/decrastination/enrich/EnrichTest.kt` | Reviewed | Revisited |
+| `app/src/test/java/com/thomaswcode/decrastination/learn/DailyTest.kt` | Reviewed | Revisited |
+| `app/src/test/java/com/thomaswcode/decrastination/learn/LearnTest.kt` | Reviewed | Revisited |
+| `app/src/test/java/com/thomaswcode/decrastination/learn/StatsTest.kt` | Reviewed | — |
+| `app/src/test/java/com/thomaswcode/decrastination/protect/ProtectTest.kt` | Reviewed | Revisited |
+| `app/src/test/java/com/thomaswcode/decrastination/sources/anki/AnkiRulesTest.kt` | Reviewed | — |
+| `app/src/test/java/com/thomaswcode/decrastination/sources/gmail/GmailTest.kt` | Reviewed | Revisited |
+| `app/src/test/java/com/thomaswcode/decrastination/sources/gmail/ImapTest.kt` | Reviewed | — |
+| `app/src/test/java/com/thomaswcode/decrastination/sources/gmail/MimeTest.kt` | Reviewed | — |
+| `app/src/test/java/com/thomaswcode/decrastination/sources/powerplanner/PowerPlannerItemsTest.kt` | Reviewed | — |
+| `app/src/test/java/com/thomaswcode/decrastination/sources/powerplanner/PowerPlannerSourceTest.kt` | Reviewed | — |
+| `app/src/test/java/com/thomaswcode/decrastination/sources/teams/TeamsRowsTest.kt` | Reviewed | — |
+| `app/src/test/java/com/thomaswcode/decrastination/sync/SyncerTest.kt` | Reviewed | Revisited |
+| `app/src/test/java/com/thomaswcode/decrastination/ui/FormatTest.kt` | Reviewed | — |
+| `app/src/test/java/com/thomaswcode/decrastination/widget/WidgetModelTest.kt` | Reviewed | Revisited |
+| `build.gradle.kts` | Reviewed | — |
+| `docs/data-sources.md` | Reviewed | Revisited |
+| `docs/needs-you.md` | Reviewed | Revisited |
+| `docs/open-questions.md` | Reviewed | Revisited |
+| `docs/phase0-findings.md` | Reviewed | — |
+| `docs/scheduler.md` | Reviewed | Revisited |
+| `fixtures/README.md` | Reviewed | — |
+| `fixtures/anki_decks.json` | Reviewed | — |
+| `fixtures/home_page2_ui.xml` | Skipped; see above | — |
+| `fixtures/powerplanner_agenda.json` | Reviewed | — |
+| `fixtures/powerplanner_agenda_ui.xml` | Skipped; see above | — |
+| `fixtures/teams_widget_state.json` | Reviewed | — |
+| `gradle.properties` | Reviewed | — |
+| `gradle/libs.versions.toml` | Reviewed | — |
+| `gradle/wrapper/gradle-wrapper.jar` | Skipped; see above | — |
+| `gradle/wrapper/gradle-wrapper.properties` | Reviewed | — |
+| `gradlew` | Skipped; see above | — |
+| `gradlew.bat` | Skipped; see above | — |
+| `scripts/gmail_probe.py` | Reviewed | — |
+| `scripts/load_credentials.py` | Reviewed | — |
+| `scripts/powerplanner_probe.py` | Reviewed | — |
+| `scripts/pull_teams_state.ps1` | Reviewed | — |
+| `settings.gradle.kts` | Reviewed | — |
 
 ## Complete tracked-directory inventory
 
@@ -353,3 +389,5 @@ scripts
 - Missing, deferred or malformed external data is sometimes collapsed into a successful empty value. Reconciliation then interprets absence as completed work rather than preserving an uncertain state.
 - Tests are strong around pure rules but thin at Android lifecycle boundaries and combined workflows. Cross-module tests and a small component suite would catch several independently reproduced defects.
 - Fixed explanatory text, historical contracts and fixed cost assumptions have outlived configurable behavior. Keep these tied to effective settings and enforced input bounds.
+- Useful decision context is already computed or stored but rarely reaches the primary workflow: source freshness, effective versus requested settings, interpretation provenance and learning support. Derive explanations from the same state and rules that drive behavior.
+- New editing or retry controls need the same protection and accounting boundaries as existing actions. Task interpretations, calendar capacity, backup previews and model reevaluation should preserve source authority, delayed changes and bounded calls.
