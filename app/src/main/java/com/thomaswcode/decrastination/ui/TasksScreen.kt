@@ -44,11 +44,12 @@ fun TasksScreen(graph: AppGraph) {
     val tick = { task: TaskItem, index: Int, title: String -> scope.launch { graph.focus.tickBlock(task.id, index, title) }; Unit }
     LazyColumn(Modifier.fillMaxWidth()) {
         for (source in Source.entries) {
-            val open = state.tasks.filter { it.source == source && it.isOpen }.sortedWith(compareBy(nullsLast()) { it.dueAt })
+            // Emails that are just emails aren't tasks: not listed (your call, 9 Oct).
+            val open = state.tasks.filter { it.source == source && it.isOpen && !it.justAnEmail }.sortedWith(compareBy(nullsLast()) { it.dueAt })
             item(key = "header-$source") { SourceHeader(source, state.status(source), open.size, now) }
             items(open, key = { it.id }) { TaskRow(it, now, zone, tick) }
         }
-        val finished = state.tasks.filter { !it.isOpen }.sortedByDescending { it.doneAt ?: it.lastSeenAt }
+        val finished = state.tasks.filter { !it.isOpen && !it.justAnEmail }.sortedByDescending { it.doneAt ?: it.lastSeenAt }
         if (finished.isNotEmpty()) {
             item(key = "finished") {
                 Text(

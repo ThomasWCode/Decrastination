@@ -137,6 +137,14 @@ data class TaskItem(
 ) {
     val isOpen: Boolean get() = status == Status.Open
 
+    /**
+     * An email that only needs reading, or tells of an event (your call, 9 Oct): not a task. It's
+     * kept, so archiving it still finishes it and a reply that asks something brings it back as a
+     * task, but it's kept off the plan (so the widget, the briefing and blocking), the Tasks list,
+     * and the rewards for finishing work. Its kind is the enrichment's reading, or the rules'.
+     */
+    val justAnEmail: Boolean get() = source == Source.Gmail && (kind == Kind.Info || kind == Kind.Event)
+
     /** Your estimate, else the enrichment's, else the source's or rules', else the kind's default. */
     /**
      * Minutes of blocks you ticked off by hand in Tasks: done, but neither timed nor checked, so

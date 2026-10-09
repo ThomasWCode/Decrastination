@@ -32,6 +32,8 @@ import kotlin.math.roundToInt
  *    most `softMinPerDay` of it a day, so the whole inbox, first seen at once, spreads over the week.
  * 6. A task that can only go so far a day ([TaskItem.stepsPerDay]: an Anki deck, which releases
  *    20 new cards a day) never has more steps than that on one day, overdue or not.
+ * 7. An email that's just an email ([TaskItem.justAnEmail]: only to read, or about an event) isn't
+ *    planned, nor reminded of.
  *
  * Placing backwards means today's bucket holds exactly what must happen today for every deadline
  * to be met; placing everything early would put every task in today and the block would never lift.
@@ -145,7 +147,7 @@ object Planner {
         val zone = input.zone
         val today = date(input.now, zone)
         val (events, work) = input.tasks
-            .filter { it.isOpen && it.isAvailable(input.now) }
+            .filter { it.isOpen && it.isAvailable(input.now) && !it.justAnEmail }
             .partition { it.kind == Kind.Event }
         val held = AnkiRules.heldSections(input.tasks, input.settings.ankiTextbook)
         val items = work.flatMap { task ->
