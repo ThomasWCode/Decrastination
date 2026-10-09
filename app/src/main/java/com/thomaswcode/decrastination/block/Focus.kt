@@ -263,9 +263,10 @@ class Focus(
         val now = clock.now()
         val today = today(now)
         val ratio = settings.value.workMinPerFreeMin
-        // What was worked on it, a session just ended included: as stored, where it is (a session
-        // ended on an earlier try is there already).
-        fun worked(task: TaskItem): Int = tasks.value.tasks.firstOrNull { it.id == task.id }?.workedMin
+        // What was worked on it, a session just ended included: as stored, where it's still this
+        // completion (a session ended on an earlier try is there already); once it has reopened
+        // (its minutes started again), as the completion had it.
+        fun worked(task: TaskItem): Int = tasks.value.tasks.firstOrNull { it.id == task.id && it.doneAt == task.doneAt }?.workedMin
             ?: (task.workedMin + if (sessionMin?.first == task.id) sessionMin.second else 0)
         fun key(task: TaskItem) = Rewarded(task.id, task.doneAt ?: task.lastSeenAt)
         runtime.update { state ->
