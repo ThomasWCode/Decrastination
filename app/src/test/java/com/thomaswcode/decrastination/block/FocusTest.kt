@@ -186,6 +186,18 @@ class FocusTest {
     }
 
     @Test
+    fun `a completion rewarded after its day is over earns nothing then`() = runTest {
+        val homework = task("hw", effort = 45).copy(status = Status.Done, doneAt = clock.time)
+        tasks.update { it.copy(tasks = listOf(homework), unrewarded = listOf(homework)) }
+        // The app stopped before the reward, and started again the next day.
+        clock.time += 24 * 3_600_000L
+        focus.rewardCompletions()
+        assertEquals(0L, focus.creditLeftMs())
+        assertEquals(listOf("teams:hw"), log.value.completions.map { it.taskId })
+        assertEquals(emptyList(), tasks.value.unrewarded)
+    }
+
+    @Test
     fun `what counts as blocked follows the settings`() {
         assertEquals(Focus.Target.App("com.google.android.youtube"), focus.target("com.google.android.youtube"))
         assertEquals(Focus.Target.Browser("org.mozilla.firefox"), focus.target("org.mozilla.firefox"))

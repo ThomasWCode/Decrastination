@@ -276,6 +276,9 @@ class FocusService : AccessibilityService() {
         // anything covered when it would have run out.
         if (verdict is BlockPolicy.Verdict.Allow) return@Runnable stopSpending()
         if (left > 0 && verdict !is BlockPolicy.Verdict.Block) {
+            // Saved as it goes: the service stopped (a crash, the process killed), at most one
+            // check's worth is lost, not all of it since spending began.
+            commitSpending()
             handler.postDelayed(creditCheck, left.coerceIn(1_000L, SPEND_TICK_MS))
         } else {
             // Spent first, so the policy now says blocked: each is covered where it is (in front,

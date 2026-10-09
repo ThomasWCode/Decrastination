@@ -57,6 +57,7 @@ object Merge {
                     kind = f.kind,
                     sourceEffortMin = f.sourceEffortMin,
                     sourceProgress = f.sourceProgress,
+                    firstProgress = f.sourceProgress,
                     subSteps = f.subSteps.orEmpty(),
                     stepsPerDay = f.stepsPerDay,
                     notBefore = f.notBefore,
@@ -78,6 +79,7 @@ object Merge {
                 kind = f.kind,
                 sourceEffortMin = f.sourceEffortMin,
                 sourceProgress = f.sourceProgress,
+                firstProgress = old.firstProgress ?: old.sourceProgress,
                 subSteps = f.subSteps ?: old.subSteps,
                 stepsPerDay = f.stepsPerDay,
                 notBefore = f.notBefore,
@@ -86,9 +88,10 @@ object Merge {
                 extra = f.extra,
             )
             val next = when {
-                // Reported with the progress it had while open: finished through its own progress
-                // (Power Planner at 100 %), the earned time is for the work that was still left.
-                old.status == Status.Open && f.done -> updated.copy(status = Status.Done, doneAt = now).also { completed += it.copy(sourceProgress = old.sourceProgress) }
+                // Reported with the progress it had when first seen: finished through its own
+                // progress (Power Planner at 50 %, then 100 %), the earned time is for all the work
+                // done since, not just the last step of it.
+                old.status == Status.Open && f.done -> updated.copy(status = Status.Done, doneAt = now).also { completed += it.copy(sourceProgress = old.firstProgress ?: old.sourceProgress) }
                 old.status == Status.Open -> updated
                 old.derived && old.status == Status.Done -> updated.copy(status = Status.Done)
                 f.done -> updated.copy(status = Status.Done)
