@@ -67,6 +67,7 @@ class StatsTest {
         assertEquals(2, stats.dated)
         assertEquals(1, stats.onTime)
         assertEquals(2, stats.sessions)
+        assertEquals(0, stats.photoChecks)
         assertEquals(1, stats.sessionsFinished)
         assertEquals(42, stats.focusMin)
         assertEquals(listOf("com.google.android.youtube" to 2, "youtube.com" to 1), stats.topBlocked)

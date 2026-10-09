@@ -59,6 +59,7 @@ fun StatsScreen(graph: AppGraph) {
             Title("The last ${Stats.DAYS} days")
             Line("${stats.completions} finished" + if (stats.dated > 0) "; ${stats.onTime} of the ${stats.dated} with a deadline by it." else ".")
             Line("${stats.sessions} focus session${if (stats.sessions == 1) "" else "s"}, ${stats.sessionsFinished} run to the end: ${Format.minutes(stats.focusMin)} in all.")
+            if (stats.photoChecks > 0) Line("${stats.photoChecks} piece${if (stats.photoChecks == 1) "" else "s"} a photo check found done.")
             val top = stats.topBlocked.joinToString { (target, times) -> "${Blocklist.NAMES[target] ?: target} $times" }
             Line("Blocked ${stats.blocks} time${if (stats.blocks == 1) "" else "s"}" + if (top.isNotEmpty()) ": $top." else ".")
             Line(
