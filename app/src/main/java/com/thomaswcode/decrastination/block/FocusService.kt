@@ -96,6 +96,9 @@ class FocusService : AccessibilityService() {
     /** Browsers given Back this connection, to show an address they hid ([lookForAddress]). */
     private val lookedFor = mutableSetOf<String>()
 
+    /** Browsers brought forward this connection, from beside another app, to be looked at ([bringForward]). */
+    private val broughtForward = mutableSetOf<String>()
+
     /** The site [browser] last showed, while it's still blocked as the settings now say. */
     private fun remembered(browser: String): Focus.Target.Site? = lastSite[browser]?.takeIf(::stillBlocked)
 
@@ -164,6 +167,7 @@ class FocusService : AccessibilityService() {
         // to a blocked page or from one. One hiding its address is looked at afresh.
         lastSite.clear()
         lookedFor.clear()
+        broughtForward.clear()
         // Connected (or restarted) while the phone is already unlocked and in use: the unlock it
         // missed counts, so the first-unlock Teams sync can still be offered.
         val power = getSystemService(PowerManager::class.java)
@@ -408,11 +412,36 @@ class FocusService : AccessibilityService() {
         if (appWindows.size < 2) return
         val verdict = graph.focus.verdict()
         if (verdict is BlockPolicy.Verdict.Allow) return
-        val target = appWindows.filter { !it.isActive }.firstNotNullOfOrNull { windowTarget(it) } ?: return
+        val target = appWindows.filter { !it.isActive }.firstNotNullOfOrNull { windowTarget(it) }
+        if (target == null) {
+            // A browser there hiding its address, with no page of it seen since the service
+            // connected: brought forward, where its address is read (or Back shows it).
+            appWindows.filter { !it.isActive }.firstNotNullOfOrNull { unknownBrowser(it) }?.let(::bringForward)
+            return
+        }
         if (verdict !is BlockPolicy.Verdict.Block) return startSpending(target)
         Log.i(TAG, "${target.name} is on screen beside another app: leaving both")
         performGlobalAction(GLOBAL_ACTION_HOME)
         handler.postDelayed({ block(target, verdict.reason) }, 300)
+    }
+
+    /** The checked browser in [window], if it hides its address and no page of it has been seen since the service connected. */
+    private fun unknownBrowser(window: AccessibilityWindowInfo): String? {
+        val root = window.root ?: return null
+        val pkg = root.packageName?.toString() ?: return null
+        if (!graph.focus.isCheckedBrowser(pkg) || pkg in lastSite) return null
+        return pkg.takeIf { root.findAccessibilityNodeInfosByViewId(Blocklist.urlBarId(pkg)).firstOrNull()?.text?.toString() == null }
+    }
+
+    /**
+     * Brings [browser] forward from beside another app, as tapping its icon does, so what it shows
+     * is judged in front. Once per browser per connection: one that doesn't come forward is left
+     * unknown, as not blocked, rather than launched again and again.
+     */
+    private fun bringForward(browser: String) {
+        if (!broughtForward.add(browser)) return
+        Log.i(TAG, "$browser is beside another app hiding its address, with no page of it seen since connecting: bringing it forward to look")
+        packageManager.getLaunchIntentForPackage(browser)?.let { startActivity(it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
     }
 
     /** What's blocked in [window]: its app, or the blocked site its browser's address bar shows. */
