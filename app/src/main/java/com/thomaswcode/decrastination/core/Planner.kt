@@ -227,14 +227,25 @@ object Planner {
         // Undated work has its own daily allowance, so a batch seen together spreads out. A day
         // with none yet takes one chunk however long, so no chunk is too big to place anywhere.
         val softUsed = HashMap<LocalDate, Int>()
+        // Work that can't start till later in a day (a start you gave of 21:00) has only that day's
+        // time from then: its own share of the day, its time after the start, less what it's taken.
+        fun opening(item: Item): LocalDate? = item.notBefore?.takeIf { it > input.now }?.let { date(it, zone) }
+        val openingUsed = HashMap<Item, Int>()
+        fun openingRoom(item: Item): Int {
+            val day = opening(item) ?: return Int.MAX_VALUE
+            val from = input.copy(now = item.notBefore!!, workedTodayMin = if (day == today) input.workedTodayMin else 0)
+            return capacity(day, from) - (openingUsed[item] ?: 0)
+        }
         fun room(item: Item, day: LocalDate): Int {
             val left = free.getValue(day)
             val used = softUsed[day] ?: 0
-            return if (item.soft && used > 0) minOf(left, input.settings.softMinPerDay - used) else left
+            val mine = if (day == opening(item)) openingRoom(item) else Int.MAX_VALUE
+            return minOf(if (item.soft && used > 0) minOf(left, input.settings.softMinPerDay - used) else left, mine)
         }
         fun take(item: Item, day: LocalDate, minutes: Int) {
             free[day] = free.getValue(day) - minutes
             if (item.soft) softUsed[day] = (softUsed[day] ?: 0) + minutes
+            if (day == opening(item)) openingUsed[item] = (openingUsed[item] ?: 0) + minutes
         }
         fun give(item: Item, day: LocalDate, minutes: Int) = take(item, day, -minutes)
         // A day you've limited ([Input.dayCaps]) is never overfilled, not even by overdue work,
