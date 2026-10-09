@@ -150,9 +150,9 @@ object Planner {
     fun plan(input: Input): Plan {
         val zone = input.zone
         val today = date(input.now, zone)
-        val open = input.tasks.filter { it.isOpen }.mapTo(HashSet()) { it.id }
+        val byId = input.tasks.associateBy { it.id }
         val (events, work) = input.tasks
-            .filter { it.isOpen && it.isAvailable(input.now) && !it.hidden && !it.waiting(open) }
+            .filter { it.isOpen && it.isAvailable(input.now) && !it.hidden && !Instructions.waiting(it, byId) }
             .partition { it.kind == Kind.Event }
         val held = AnkiRules.heldSections(input.tasks, input.settings.ankiTextbook)
         val items = work.flatMap { task ->
@@ -234,6 +234,9 @@ object Planner {
             if (item.soft) softUsed[day] = (softUsed[day] ?: 0) + minutes
         }
         fun give(item: Item, day: LocalDate, minutes: Int) = take(item, day, -minutes)
+        // A day you've limited ([Input.dayCaps]) is never overfilled, not even by overdue work,
+        // which otherwise piles into today: it goes to the next day with the time.
+        fun capped(day: LocalDate, minutes: Int) = day in input.dayCaps && free.getValue(day) < minutes
         // The first day a task's work can start: today, or later if it says so (an Anki deck
         // whose new cards for today are used up).
         fun firstDay(item: Item): LocalDate =
@@ -266,7 +269,8 @@ object Planner {
                 // bigger than the allowance, never bigger than the time left).
                 fun waits(day: LocalDate) =
                     (perDay != null && (countOn(assigned, day) >= perDay || room(item, day) < item.chunks[i].minutes)) ||
-                        (item.soft && room(item, day) < item.chunks[i].minutes)
+                        (item.soft && room(item, day) < item.chunks[i].minutes) ||
+                        capped(day, item.chunks[i].minutes)
                 while (day < horizon && waits(day)) day = day.plusDays(1)
                 // Beyond the horizon, the rest goes unplanned rather than breaking a per-day task's
                 // limit or undated work's allowance.
@@ -310,7 +314,9 @@ object Planner {
                 if (assigned[i] != null) continue
                 val day = latest(assigned.getOrNull(i + 1) ?: lastUsable, i)
                 if (day == null && carriesOn) break
-                val chosen = day ?: earliest
+                // Behind, it's today's, or the first day after it you haven't limited past it.
+                val chosen = day ?: generateSequence(earliest) { it.plusDays(1) }.takeWhile { it <= horizon }
+                    .firstOrNull { !capped(it, item.chunks[i].minutes) } ?: continue
                 assigned[i] = chosen
                 behind[i] = day == null
                 take(item, chosen, item.chunks[i].minutes)

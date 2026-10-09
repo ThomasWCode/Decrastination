@@ -10,6 +10,7 @@ import com.anthropic.models.messages.StopReason
 import com.thomaswcode.decrastination.core.Change
 import com.thomaswcode.decrastination.core.ChangeType
 import com.thomaswcode.decrastination.core.Instruction
+import com.thomaswcode.decrastination.core.Instructions
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.learn.CalendarEvent
 import com.thomaswcode.decrastination.learn.EventJudge
@@ -185,6 +186,8 @@ object InstructionAnswers {
         val changes = answer.changes.map { g ->
             change(g, byId, titles, now, zone) ?: return Reading.Unclear("Claude's reading couldn't be used: ${problem(g, byId, titles)}")
         }
+        // Tasks waiting on each other in a circle within this one reading: none would ever be planned.
+        if (Instructions.makesCircle(changes, emptyList())) return Reading.Unclear("Claude's reading would have tasks wait for each other in a circle")
         return Reading.Changes(changes)
     }
 

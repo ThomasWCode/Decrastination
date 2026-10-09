@@ -91,8 +91,11 @@ object CalendarTime {
         val events = runCatching { withContext(Dispatchers.IO) { read(context, now - DAY_MS, now + LOOK_AHEAD_MS) } }
             .onFailure { Log.w(AppGraph.TAG, "Can't read the calendar", it) }
             .getOrNull() ?: return
-        // Your instructions about events over your answers to its questions.
-        val answers = graph.runtime.value.eventAnswers + Instructions.eventAnswers(graph.instructions.value.applied)
+        // Your instructions about events over your answers to its questions; a question one of them
+        // has answered since it was asked is withdrawn.
+        val yours = Instructions.eventAnswers(graph.instructions.value.applied)
+        yours.keys.forEach { cancelQuestion(context, it) }
+        val answers = graph.runtime.value.eventAnswers + yours
         val time = EventJudge.time(events, answers, graph.clock.zone())
         graph.calendarTime = time
         // Not at night: they're asked at the first look after quiet hours. Nor while the question
