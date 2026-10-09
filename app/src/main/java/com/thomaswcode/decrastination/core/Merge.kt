@@ -104,7 +104,9 @@ object Merge {
                 old.status == Status.Open -> updated
                 old.derived && old.status == Status.Done -> updated.copy(status = Status.Done)
                 f.done -> updated.copy(status = Status.Done)
-                else -> updated.copy(status = Status.Open, doneAt = null).also { reopened += it }
+                // A new round of it: the last round's minutes count towards neither this one's
+                // completion record nor what's left of it.
+                else -> updated.copy(status = Status.Open, doneAt = null, workedMin = 0).also { reopened += it }
             }
             fresh[id] = next
         }
