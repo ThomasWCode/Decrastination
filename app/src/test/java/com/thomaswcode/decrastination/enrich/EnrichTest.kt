@@ -38,10 +38,16 @@ private fun assignment(detail: String) = TaskItem(
 class RuleEnricherTest {
     @Test
     fun `listed parts become steps sharing the estimate`() = runBlocking {
-        val task = assignment("Hausaufgaben\n1. Learn vocabulary p46-47/ 2.2/2.3 ( vocabulary test ! )\n2. Complete the reading task: past paper ( June 2022 )")
+        val task = assignment("Hausaufgaben\n1. Complete the reading task: past paper ( June 2022 )\n2. Mark it and highlight your mistakes")
         val steps = RuleEnricher().enrich(task, Enrichments.Job.Assignment, NOW).enrichment!!.subSteps!!
-        assertEquals(listOf("Learn vocabulary p46-47/ 2.2/2.3 ( vocabulary test ! )", "Complete the reading task: past paper ( June 2022 )"), steps.map { it.title })
+        assertEquals(listOf("Complete the reading task: past paper ( June 2022 )", "Mark it and highlight your mistakes"), steps.map { it.title })
         assertEquals(listOf(20, 20), steps.map { it.minutes })
+    }
+
+    @Test
+    fun `a part that's learning numbered vocabulary is the decks' work, not a step`() {
+        // What's left is one part: no list to split.
+        assertNull(RuleEnricher.steps("1. Learn vocabulary p46-47/ 2.2/2.3 ( vocabulary test ! )\n2. Complete the reading task", 40))
     }
 
     @Test
@@ -83,19 +89,23 @@ class PromptsTest {
     @Test
     fun `an email is described with when it came, who from, and its text`() {
         val text = Prompts.describe(email(), Enrichments.Job.Email, NOW, LONDON)
-        assertTrue(text.startsWith("Today: Friday 9 October 2026"), text)
+        assertTrue(text.startsWith("Today: Friday 9 October 2026, 17:00"), text)
         assertTrue("Received: Thursday 8 October 2026 16:30" in text, text)
         assertTrue("From: Mr Hughes <hughes@school.example>" in text, text)
         assertTrue("Subject: Berlin trip form" in text, text)
         assertTrue(text.endsWith("Please sign and return the trip form by Monday 12 October."), text)
+        // A note to self says so, rather than giving your own address.
+        val note = Prompts.describe(email().copy(extra = mapOf("sent" to "true", "from" to "Thomas <t@example.com>")), Enrichments.Job.Email, NOW, LONDON)
+        assertTrue("From: the student (a note to self)" in note, note)
     }
 
     @Test
-    fun `an assignment gives its class, due time and multiplier, and a long text says it's cut`() {
-        val text = Prompts.describe(assignment("x".repeat(Prompts.MAX_TEXT + 10)), Enrichments.Job.Assignment, NOW, LONDON, 1.25)
+    fun `an assignment gives its class and due time, no multiplier, and a long text says it's cut`() {
+        val text = Prompts.describe(assignment("x".repeat(Prompts.MAX_TEXT + 10)), Enrichments.Job.Assignment, NOW, LONDON)
         assertTrue("Class: 12.1 German 2026-27" in text, text)
         assertTrue("Due: Wednesday 14 October 2026 08:30" in text, text)
-        assertTrue("Class effort multiplier: 1.25" in text, text)
+        // The planner applies the learned multiplier itself; the model gives typical times.
+        assertTrue("multiplier" !in text, text)
         assertTrue(text.endsWith("[The rest of this long text is left out.]"), text.takeLast(80))
     }
 }
@@ -139,6 +149,13 @@ class AnswersTest {
         // A test's day: done before school that morning.
         assertEquals(Fixtures.at("2026-10-12T08:30"), e.testDate)
         assertEquals(40, e.effortMin)
+    }
+
+    @Test
+    fun `an assignment that's all vocabulary is a hand-in, its work in the decks`() {
+        val e = parse(Enrichments.Job.Assignment, """{"subSteps":[],"effortMin":0,"ankiSections":["1.2"],"testDate":null}""", assignment("Learn vocabulary 1.2"))!!
+        assertEquals(5, e.effortMin)
+        assertEquals(listOf("1.2"), e.ankiSections)
     }
 
     @Test

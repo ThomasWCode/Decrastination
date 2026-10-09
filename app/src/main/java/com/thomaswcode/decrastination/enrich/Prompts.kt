@@ -29,12 +29,12 @@ object Prompts {
 
     fun system(job: Enrichments.Job): String = when (job) {
         Enrichments.Job.Email -> """
-            You triage one email for a planner app used by $STUDENT. The planner turns each obligation into scheduled work and blocks distracting apps until it's done, so overstating the work costs the student free time and understating it lets work slip.
+            You triage one email for a planner app used by $STUDENT. The planner turns each obligation into scheduled work and blocks distracting apps until it's done, so overstating the work costs the student free time and understating it lets work slip. An email the student sent themselves is a note of something they mean to do.
 
             Decide, from the email:
-            - kind: "Admin" if it asks the student to do something (reply, sign, pay, fill in a form, bring or prepare something); "Event" if it's about something happening at a set time that needs nothing beyond turning up (a trip, a call, an open evening); "Info" if it only needs reading (newsletters, notifications, receipts, marketing, automatic messages).
+            - kind: "Admin" if it asks the student to do something (reply, sign, pay, fill in a form, bring or prepare something); "Event" if it's about something happening at a set time that needs nothing beyond turning up (a trip, a call, an open evening); "Info" if it only needs reading (newsletters, notifications, receipts, marketing, automatic messages, or a message forwarded or copied to the student that asks them nothing).
             - actionableFrom: the date (YYYY-MM-DD) before which nothing can be done, if the email says so (a form that opens next week); otherwise null.
-            - deadline: when it must be done by, as a local date and time (YYYY-MM-DDTHH:MM), only if the email states or clearly implies one; for an Event, when it starts; otherwise null. Never invent one.
+            - deadline: when it must be done by, only if the email states or clearly implies one (a day it suggests for doing it counts); for an Event, when it starts; otherwise null. Never invent one. Write it as a local date and time (YYYY-MM-DDTHH:MM), or the date alone (YYYY-MM-DD) if it gives no time.
             - effortMin: the minutes of the student's own work it needs, reading included: about 2 for Info.
             - nextStep: the one concrete next action, as an instruction under 12 words ("Reply to Mr Hughes confirming the trip").
 
@@ -43,15 +43,15 @@ object Prompts {
         Enrichments.Job.Assignment -> """
             You plan one homework assignment for $STUDENT, for a planner that schedules the work over the days before it's due and blocks distracting apps until it's done.
 
-            Split the work into the ordered steps the student will actually do, each with a realistic duration in minutes. Keep steps between 10 and 60 minutes where the work allows, and a short task as one step. Base the steps on the instructions; add a final "Check and hand in" step only when there's something to hand in. The class's effort multiplier says how this student's real times compare with estimates (above 1 means they take longer): apply it.
+            Split the work into the ordered steps the student will actually do, each with a realistic duration in minutes for a typical Year 12 student (the planner adjusts them to this one). Keep steps between 10 and 60 minutes where the work allows, and a short task as one step. Base the steps on the instructions, but leave out learning the vocabulary sections you give in ankiSections: the planner schedules those as Anki cards. Add a step for handing work in only where the instructions ask for it, in its place in the order.
 
             Also give:
-            - effortMin: the total minutes, the sum of the steps.
+            - effortMin: the total minutes, the sum of the steps (0 if all there is to do is the vocabulary).
             - ankiSections: the vocabulary sections the student is asked to learn, written like "1.2" (from "learn vocabulary 1.2" or "p46-47/ 2.2/2.3"); otherwise an empty list.
             - testDate: if the work prepares for a test or assessment on a stated date, that date (YYYY-MM-DD); otherwise null.
         """.trimIndent()
         Enrichments.Job.Effort -> """
-            Estimate how many minutes of work $STUDENT needs to finish one item from their planner, from its title, class and details. Give a realistic total for this student; the class's effort multiplier says how their real times compare with estimates (above 1 means they take longer): apply it.
+            Estimate how many minutes of work $STUDENT needs to finish one item from their planner, from its title, class and details: a realistic total for a typical Year 12 student (the planner adjusts it to this one). A call, meeting or other appointment isn't work: give only the minutes needed to prepare for it, at least 1.
         """.trimIndent()
     }
 
@@ -60,7 +60,7 @@ object Prompts {
         Enrichments.Job.Email -> obj(
             "kind" to mapOf("type" to "string", "enum" to listOf("Admin", "Event", "Info")),
             "actionableFrom" to nullable(mapOf("type" to "string", "format" to "date")),
-            "deadline" to nullable(mapOf("type" to "string", "description" to "Local date and time, YYYY-MM-DDTHH:MM")),
+            "deadline" to nullable(mapOf("type" to "string", "description" to "Local date and time, YYYY-MM-DDTHH:MM, or the date alone, YYYY-MM-DD")),
             "effortMin" to mapOf("type" to "integer"),
             "nextStep" to mapOf("type" to "string"),
         )
@@ -85,24 +85,23 @@ object Prompts {
 
     private fun nullable(schema: Map<String, Any>): Map<String, Any> = mapOf("anyOf" to listOf(schema, mapOf("type" to "null")))
 
-    private val DAY = DateTimeFormatter.ofPattern("EEEE d MMMM yyyy", Locale.UK)
+    private val TODAY = DateTimeFormatter.ofPattern("EEEE d MMMM yyyy, HH:mm", Locale.UK)
     private val DAY_TIME = DateTimeFormatter.ofPattern("EEEE d MMMM yyyy HH:mm", Locale.UK)
 
     /** The item, as the model reads it. */
-    fun describe(task: TaskItem, job: Enrichments.Job, now: Long, zone: ZoneId, multiplier: Double = 1.0): String = buildString {
+    fun describe(task: TaskItem, job: Enrichments.Job, now: Long, zone: ZoneId): String = buildString {
         fun at(time: Long) = Instant.ofEpochMilli(time).atZone(zone)
-        appendLine("Today: ${at(now).format(DAY)}")
+        appendLine("Today: ${at(now).format(TODAY)}")
         when (job) {
             Enrichments.Job.Email -> {
                 task.extra["received"]?.toLongOrNull()?.let { appendLine("Received: ${at(it).format(DAY_TIME)}") }
-                task.extra["from"]?.let { appendLine("From: $it") }
+                if (task.extra["sent"] == "true") appendLine("From: the student (a note to self)") else task.extra["from"]?.let { appendLine("From: $it") }
                 appendLine("Subject: ${task.title}")
             }
             else -> {
                 appendLine("Title: ${task.title}")
                 task.className?.let { appendLine("Class: $it") }
                 appendLine("Due: " + (task.dueAt?.let { at(it).format(DAY_TIME) } ?: "no date"))
-                appendLine("Class effort multiplier: %.2f".format(Locale.UK, multiplier))
             }
         }
         val text = task.detail.trim()
@@ -135,6 +134,7 @@ object Answers {
     private const val MAX_STEPS = 12
     private const val MAX_TITLE = 80
     private const val MAX_NEXT_STEP = 120
+    private const val HAND_IN_MIN = 5
     private val SECTION = Regex("""^[1-9]\.[1-9]$""")
 
     /** A test's day: work must be done before school that morning. */
@@ -156,10 +156,12 @@ object Answers {
             Enrichments.Job.Assignment -> json.decodeFromString(Split.serializer(), text).let { s ->
                 val steps = s.subSteps.filter { it.title.isNotBlank() && it.minutes in 1..MAX_STEP }.take(MAX_STEPS)
                     .map { SubStep(it.title.trim().take(MAX_TITLE), it.minutes) }
+                val sections = s.ankiSections.map { it.trim() }.filter { SECTION.matches(it) }.distinct()
                 base.copy(
-                    effortMin = effort(s.effortMin) ?: steps.sumOf { it.minutes }.takeIf { it > 0 },
+                    // Vocabulary only: the decks hold the work, and this is the hand-in.
+                    effortMin = effort(s.effortMin) ?: steps.sumOf { it.minutes }.takeIf { it > 0 } ?: HAND_IN_MIN.takeIf { sections.isNotEmpty() },
                     subSteps = steps.ifEmpty { null },
-                    ankiSections = s.ankiSections.map { it.trim() }.filter { SECTION.matches(it) }.distinct(),
+                    ankiSections = sections,
                     testDate = s.testDate?.let { date(it, zone, SCHOOL_STARTS) }?.takeIf { plausible(it, now) },
                 )
             }

@@ -28,7 +28,6 @@ class ClaudeEnricher(
     private val zone: ZoneId,
     endpoint: String? = null,
     private val model: String = MODEL,
-    private val multiplier: (TaskItem) -> Double = { 1.0 },
 ) : Enricher {
     override val by = model
 
@@ -44,7 +43,7 @@ class ClaudeEnricher(
             .model(model)
             .maxTokens(MAX_TOKENS)
             .system(Prompts.system(job))
-            .addUserMessage(Prompts.describe(task, job, now, zone, multiplier(task)))
+            .addUserMessage(Prompts.describe(task, job, now, zone))
             .outputConfig(
                 OutputConfig.builder()
                     .effort(OutputConfig.Effort.HIGH)

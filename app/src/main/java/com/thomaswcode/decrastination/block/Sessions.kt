@@ -53,7 +53,11 @@ object Sessions {
         val focus = AppGraph.get(context).focus
         val session = focus.session ?: return clear(context)
         val clock = AppGraph.get(context).clock
-        if (!early && !session.isDue(clock.now(), clock.uptime())) return
+        if (!early && !session.isDue(clock.now(), clock.uptime())) {
+            // Early (the date set forward): the alarm is spent, so it's set again for the real end.
+            scheduleEnd(context, session)
+            return
+        }
         val record = focus.stopSession() ?: return clear(context)
         clear(context)
         val text = if (record.completed) {
@@ -112,10 +116,19 @@ object Sessions {
      */
     private fun scheduleEnd(context: Context, session: FocusSession) {
         val alarms = context.getSystemService(AlarmManager::class.java) ?: return
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || alarms.canScheduleExactAlarms()) {
-            alarms.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, session.endsAt, endIntent(context))
+        // On the uptime clock while the phone hasn't restarted since the session began, so setting
+        // the date can't move it; after a restart, the wall clock's end.
+        val uptime = AppGraph.get(context).clock.uptime()
+        val started = session.startedUptime
+        val (type, at) = if (uptime != null && started != null && started.boot == uptime.boot) {
+            AlarmManager.ELAPSED_REALTIME_WAKEUP to started.elapsedMs + session.minutes * 60_000L
         } else {
-            alarms.setWindow(AlarmManager.RTC_WAKEUP, session.endsAt, 60_000L, endIntent(context))
+            AlarmManager.RTC_WAKEUP to session.endsAt
+        }
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || alarms.canScheduleExactAlarms()) {
+            alarms.setExactAndAllowWhileIdle(type, at, endIntent(context))
+        } else {
+            alarms.setWindow(type, at, 60_000L, endIntent(context))
         }
     }
 
