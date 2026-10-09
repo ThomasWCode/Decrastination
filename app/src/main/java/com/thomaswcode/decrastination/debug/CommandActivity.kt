@@ -36,7 +36,8 @@ import java.io.File
  * - `protection [--ez repair true]`: runs the watchdog and logs what it found.
  * - Test hooks: `test-arm`, `test-disarm` (at once, unlike the app's own disarming), `remove-admin`,
  *   `clear-parent-code`, `offer-teams-sync` (the countdown banner now, whatever the rules), and
- *   `clean-up` (this app's notifications, a delayed Teams sync and forced blocking hours cleared).
+ *   `clean-up` (this app's notifications, a delayed Teams sync, forced blocking hours and the
+ *   watchdog's restarts cleared).
  *
  * The manifest guards the alias with DUMP, which the adb shell holds and no ordinary app can, so
  * nothing else on the phone can reach these. The activity itself isn't exported.
@@ -90,7 +91,13 @@ class CommandActivity : Activity() {
             "clean-up" -> {
                 // After testing: this app's notifications gone, and no Teams sync left waiting.
                 NotificationManagerCompat.from(this).cancelAll()
-                graph.runtime.update { it.copy(teamsAuto = TeamsAutoSync.State(), forceActiveUntil = null) }
+                graph.runtime.update {
+                    it.copy(
+                        teamsAuto = TeamsAutoSync.State(),
+                        forceActiveUntil = null,
+                        protection = it.protection.copy(stoppedSince = null, restartedAt = null, restartTries = 0),
+                    )
+                }
                 Log.i(TAG, "Cleaned up after testing")
             }
             "clear-parent-code" -> graph.secrets.put(Secret.TotpSecret, null).also { Log.i(TAG, "Parent code cleared") }

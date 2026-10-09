@@ -36,6 +36,8 @@ data class ProtectionState(
     val stoppedSince: Long? = null,
     /** When the watchdog last switched a stopped service off and on. */
     val restartedAt: Long? = null,
+    /** Restarts in a row that it hasn't stayed up after; back to 0 once it's seen running. */
+    val restartTries: Int = 0,
 )
 
 /**

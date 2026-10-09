@@ -73,18 +73,23 @@ object ProtectionCheck {
     /** At most one restart in this long, so a service that crashes as it starts isn't restarted over and over. */
     const val RESTART_GAP_MS = 10 * 60_000L
 
+    /** A restart that leaves the service stopped within this long didn't take. */
+    const val RESTART_SETTLE_MS = 60_000L
+
     /**
      * When to switch a stopped service off and on again: a minute after it was first seen stopped,
-     * and ten minutes after the last restart. Null while it's running or switched off, or if it
-     * can't be. That's no override of anyone's choice (it's still switched on), so it doesn't wait
-     * for arming.
+     * and ten minutes after the last restart; but at once if the first restart of a run ([tries]
+     * 1) left it stopped within a minute. Null while it's running or switched off, or if it can't
+     * be. That's no override of anyone's choice (it's still switched on), so it doesn't wait for
+     * arming.
      */
-    fun restartAt(report: Report, stoppedSince: Long?, restartedAt: Long?): Long? {
+    fun restartAt(report: Report, stoppedSince: Long?, restartedAt: Long?, tries: Int = 0): Long? {
         if (!stopped(report) || !report.canRepair || stoppedSince == null) return null
+        if (restartedAt != null && tries == 1 && stoppedSince - restartedAt in 0..RESTART_SETTLE_MS) return stoppedSince
         val afterGrace = stoppedSince + RESTART_GRACE_MS
         return if (restartedAt == null) afterGrace else maxOf(afterGrace, restartedAt + RESTART_GAP_MS)
     }
 
-    fun shouldRestart(report: Report, stoppedSince: Long?, restartedAt: Long?, now: Long): Boolean =
-        restartAt(report, stoppedSince, restartedAt)?.let { now >= it } == true
+    fun shouldRestart(report: Report, stoppedSince: Long?, restartedAt: Long?, now: Long, tries: Int = 0): Boolean =
+        restartAt(report, stoppedSince, restartedAt, tries)?.let { now >= it } == true
 }

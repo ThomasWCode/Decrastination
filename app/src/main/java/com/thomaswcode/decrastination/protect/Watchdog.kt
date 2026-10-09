@@ -45,7 +45,10 @@ import java.util.concurrent.TimeUnit
  *
  * A service that's switched on but not running has crashed, and Android won't bind it again until
  * it's switched off and on (seen on the phone, 9 Oct). The watchdog does that after a minute's
- * grace, armed or not, at most once in ten minutes.
+ * grace, armed or not, at most once in ten minutes; except that a restart that leaves it stopped
+ * within a minute is tried once more at once. After a crash Android keeps the crashed connection
+ * bound, hands the restarted service to it as well, and that connection then resets it: the
+ * second restart, with the service already up, gets a clean connection (seen on the phone).
  */
 object Watchdog {
     private const val NOTIFICATION_ID = 3001
@@ -83,8 +86,7 @@ object Watchdog {
             onShortcuts = shortcuts,
             adminActive = isAdminActive(context),
             canRepair = canRepair(context),
-            // In its own process the service knows it's connected before Android lists it as bound.
-            serviceRunning = FocusService.connected.value || FocusService.isEnabled(context),
+            serviceRunning = FocusService.isRunning(context),
         )
     }
 
@@ -151,11 +153,15 @@ object Watchdog {
         }
         val now = graph.clock.now()
         val before = graph.runtime.value.protection
-        val stoppedSince = if (ProtectionCheck.stopped(report)) before.stoppedSince ?: now else null
+        var stoppedSince = if (ProtectionCheck.stopped(report)) before.stoppedSince ?: now else null
         var restartedAt = before.restartedAt
-        val restartAt = ProtectionCheck.restartAt(report, stoppedSince, restartedAt)
+        var tries = if (stoppedSince == null) 0 else before.restartTries
+        val restartAt = ProtectionCheck.restartAt(report, stoppedSince, restartedAt, tries)
         if (repair && restartAt != null && now >= restartAt) {
             restartedAt = now
+            tries += 1
+            // A fresh start: found stopped again from here, it's this restart that didn't take.
+            stoppedSince = null
             val restarted = restart(context)
             Log.i(TAG, "Protection: the focus service had stopped; ${if (restarted) "switched it off and on" else "couldn't restart it"}")
             // Back, it runs the watchdog as it connects; if not, the periodic check finds it stopped.
@@ -171,6 +177,7 @@ object Watchdog {
                     checkedAt = now,
                     stoppedSince = stoppedSince,
                     restartedAt = restartedAt,
+                    restartTries = tries,
                 ),
             )
         }
