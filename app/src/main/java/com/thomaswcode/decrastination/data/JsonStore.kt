@@ -1,5 +1,10 @@
 package com.thomaswcode.decrastination.data
 
+import java.io.File
+import java.nio.file.AccessDeniedException
+import java.nio.file.AtomicMoveNotSupportedException
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -9,10 +14,6 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.json.Json
-import java.io.File
-import java.nio.file.AtomicMoveNotSupportedException
-import java.nio.file.Files
-import java.nio.file.StandardCopyOption
 
 /**
  * One piece of the app's state, kept in a JSON file and exposed as a [StateFlow], the way the
@@ -61,14 +62,28 @@ class JsonStore<T>(
         dir.mkdirs()
         val tmp = File(dir, "${file.name}.tmp")
         tmp.writeText(json.encodeToString(serializer, value))
-        try {
-            Files.move(tmp.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
-        } catch (_: AtomicMoveNotSupportedException) {
-            Files.move(tmp.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING)
+        // Windows (the JVM tests on a PC) can refuse the replace for a moment while something else
+        // has the file open (a virus scanner reading what was just written): a few tries more.
+        var tries = 0
+        while (true) {
+            try {
+                try {
+                    Files.move(tmp.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
+                } catch (_: AtomicMoveNotSupportedException) {
+                    Files.move(tmp.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING)
+                }
+                return
+            } catch (refused: AccessDeniedException) {
+                if (++tries >= MOVE_TRIES) throw refused
+                Thread.sleep(MOVE_WAIT_MS * tries)
+            }
         }
     }
 
     companion object {
+        private const val MOVE_TRIES = 5
+        private const val MOVE_WAIT_MS = 20L
+
         /** Unknown keys are ignored and defaults written, so a newer or older file still loads. */
         val json = Json {
             ignoreUnknownKeys = true

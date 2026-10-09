@@ -84,17 +84,18 @@ private fun TaskItem.stepsFromEnrichment(): Boolean = subSteps.isNotEmpty() && e
 
 fun TaskItem.withEnrichment(new: Enrichment): TaskItem {
     val fromEnrichment = stepsFromEnrichment()
-    // How many by each title were done: that many of the new steps by it are, in order, so two
-    // steps of the same name aren't both ticked by one.
-    val done = subSteps.filter { it.done }.groupingBy { it.title }.eachCount().toMutableMap()
+    // The steps as they were, by name: each new step takes the marks (done, and ticked by hand) of
+    // the old one at the same place among its name's (the second "Apply" the second's), so two
+    // steps of one name aren't both ticked by one, and a mark stays on the block it was made on.
+    val before = subSteps.groupBy { it.title }
     val base = if (fromEnrichment) copy(subSteps = emptyList()) else this
     val next = base.copy(enrichment = new).enriched()
+    val seen = HashMap<String, Int>()
     return next.copy(
         subSteps = next.subSteps.map { step ->
-            val left = done[step.title] ?: 0
-            if (left == 0) return@map step
-            done[step.title] = left - 1
-            step.copy(done = true)
+            val place = seen.merge(step.title, 1, Int::plus)!! - 1
+            val old = before[step.title]?.getOrNull(place)
+            if (old?.done == true) step.copy(done = true, byHand = old.byHand, timedMin = old.timedMin) else step
         },
     )
 }

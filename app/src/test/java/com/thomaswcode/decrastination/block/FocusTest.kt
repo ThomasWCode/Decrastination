@@ -502,6 +502,58 @@ class FocusTest {
     }
 
     @Test
+    fun `a block ticked by hand after a session on it keeps that session's minutes`() = runTest {
+        val email = task("e", kind = Kind.Admin, effort = 60).copy(id = "gmail:e", source = Source.Gmail, subSteps = listOf(SubStep("A", 30), SubStep("B", 30)), workedMin = 10)
+        tasks.update { it.copy(tasks = listOf(email)) }
+        assertTrue(focus.tickBlock("gmail:e", 0, "A"))
+        assertEquals(10, tasks.value.tasks.single().subSteps.first().timedMin)
+        // Completed: B's 30 minutes earn, not A's 20 untimed ones (nor its 10 timed ones twice).
+        focus.onCompleted(listOf(tasks.value.tasks.single().copy(status = Status.Done, doneAt = clock.time)))
+        assertEquals(10 * 60_000L, focus.creditLeftMs())
+    }
+
+    @Test
+    fun `of two blocks of one name, the one ticked is the one ticked`() = runTest {
+        val email = task("e").copy(id = "gmail:e", source = Source.Gmail, subSteps = listOf(SubStep("Apply", 30), SubStep("Apply", 60)))
+        tasks.update { it.copy(tasks = listOf(email)) }
+        assertTrue(focus.tickBlock("gmail:e", 1, "Apply"))
+        assertEquals(listOf(false, true), tasks.value.tasks.single().subSteps.map { it.done })
+        assertEquals(60, tasks.value.tasks.single().handMin)
+    }
+
+    @Test
+    fun `a block of an email can be ticked off by hand, an assignment's step can't`() = runTest {
+        val email = task("e").copy(id = "gmail:e", source = Source.Gmail, subSteps = listOf(SubStep("Apply", 30)))
+        tasks.update { it.copy(tasks = listOf(email, task("hw", steps = listOf(SubStep("Q1", 30))))) }
+        assertTrue(focus.tickBlock("gmail:e", 0, "Apply"))
+        assertFalse(focus.tickBlock("teams:hw", 0, "Q1"))
+        // Twice, or by a title no longer there: nothing more.
+        assertFalse(focus.tickBlock("gmail:e", 0, "Apply"))
+        assertEquals(listOf(true), tasks.value.tasks.first { it.id == "gmail:e" }.subSteps.map { it.done })
+        // No free time for a tick.
+        assertEquals(0L, focus.creditLeftMs())
+    }
+
+    @Test
+    fun `an email whose blocks were ticked off by hand earns nothing when it completes`() = runTest {
+        val email = task("e", kind = Kind.Admin, effort = 30).copy(id = "gmail:e", source = Source.Gmail, subSteps = listOf(SubStep("Apply", 30)))
+        tasks.update { it.copy(tasks = listOf(email)) }
+        assertTrue(focus.tickBlock("gmail:e", 0, "Apply"))
+        assertEquals(30, tasks.value.tasks.single().handMin)
+        focus.onCompleted(listOf(tasks.value.tasks.single().copy(status = Status.Done, doneAt = clock.time)))
+        assertEquals(0L, focus.creditLeftMs())
+        assertTrue(log.value.completions.single().byHand)
+    }
+
+    @Test
+    fun `a split task with no deadline of its own completes against its last block's`() = runTest {
+        val due = clock.time + 3 * 86_400_000L
+        val email = task("e", kind = Kind.Admin, due = null).copy(id = "gmail:e", source = Source.Gmail, subSteps = listOf(SubStep("Apply", 30, dueAt = due)))
+        focus.onCompleted(listOf(email.copy(status = Status.Done, doneAt = clock.time)))
+        assertEquals(due, log.value.completions.single().dueAt)
+    }
+
+    @Test
     fun `what counts as blocked follows the settings`() {
         assertEquals(Focus.Target.App("com.google.android.youtube"), focus.target("com.google.android.youtube"))
         assertEquals(Focus.Target.Browser("org.mozilla.firefox"), focus.target("org.mozilla.firefox"))
