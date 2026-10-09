@@ -169,6 +169,32 @@ class FocusTest {
     }
 
     @Test
+    fun `a completion is rewarded once, however often it's offered`() = runTest {
+        val homework = task("hw", effort = 45).copy(status = Status.Done, doneAt = clock.time)
+        focus.onCompleted(listOf(homework))
+        focus.onCompleted(listOf(homework))
+        assertEquals(15 * 60_000L, focus.creditLeftMs())
+        assertEquals(1, log.value.completions.size)
+    }
+
+    @Test
+    fun `a completion saved with the sync is rewarded later, if the app stopped first`() = runTest {
+        val homework = task("hw", effort = 45).copy(status = Status.Done, doneAt = clock.time)
+        // The sync saved it; the app stopped before the reward.
+        tasks.update { it.copy(tasks = listOf(homework), unrewarded = listOf(homework)) }
+        focus.rewardCompletions()
+        assertEquals(15 * 60_000L, focus.creditLeftMs())
+        assertEquals(listOf("teams:hw"), log.value.completions.map { it.taskId })
+        assertEquals(emptyList(), tasks.value.unrewarded)
+        // Stopped after the free time but before the record and the clearing: neither is doubled.
+        tasks.update { it.copy(unrewarded = listOf(homework)) }
+        log.update { it.copy(completions = emptyList()) }
+        focus.rewardCompletions()
+        assertEquals(15 * 60_000L, focus.creditLeftMs())
+        assertEquals(1, log.value.completions.size)
+    }
+
+    @Test
     fun `what counts as blocked follows the settings`() {
         assertEquals(Focus.Target.App("com.google.android.youtube"), focus.target("com.google.android.youtube"))
         assertEquals(Focus.Target.Browser("org.mozilla.firefox"), focus.target("org.mozilla.firefox"))
