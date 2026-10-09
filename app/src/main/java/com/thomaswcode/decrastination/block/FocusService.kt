@@ -177,7 +177,8 @@ class FocusService : AccessibilityService() {
     /** [pkg] owns the window in use: block it, let it spend free time, or leave it. */
     private fun onFront(pkg: String, firstLook: Boolean) {
         if (pkg == packageName) {
-            commitSpending()
+            // Time in this app isn't time on the blocked one.
+            stopSpending()
             return
         }
         val target = graph.focus.target(pkg)
@@ -303,7 +304,14 @@ class FocusService : AccessibilityService() {
         for (window in windows) {
             if (!window.isInPictureInPictureMode) continue
             val pkg = window.root?.packageName?.toString() ?: continue
-            if (graph.focus.target(pkg) == null || graph.focus.verdict() !is BlockPolicy.Verdict.Block) continue
+            val browser = graph.focus.target(pkg) == null && graph.focus.isCheckedBrowser(pkg)
+            if ((graph.focus.target(pkg) == null && !browser) || graph.focus.verdict() !is BlockPolicy.Verdict.Block) continue
+            // A browser's video: its address, where Android still shows it, says whether it's a
+            // blocked site; where it doesn't, the browser is brought back and its page checked.
+            if (browser) {
+                val address = window.root?.findAccessibilityNodeInfosByViewId(Blocklist.urlBarId(pkg))?.firstOrNull()?.text?.toString()
+                if (address != null && graph.focus.siteTarget(pkg, address) == null) continue
+            }
             val now = SystemClock.uptimeMillis()
             if (now - lastPipRelaunchAt < PIP_RELAUNCH_GAP_MS) continue
             lastPipRelaunchAt = now
@@ -360,7 +368,11 @@ class FocusService : AccessibilityService() {
             if (front != null && front != pkg) return
             lastBackAt = now
             Log.i(TAG, "Guard: Back, from ${verdict.reason}")
-            performGlobalAction(GLOBAL_ACTION_BACK)
+            // Android can refuse Back (a window mid-transition): Home leaves the page all the same.
+            if (!performGlobalAction(GLOBAL_ACTION_BACK)) {
+                Log.i(TAG, "Guard: Back refused, Home instead")
+                performGlobalAction(GLOBAL_ACTION_HOME)
+            }
         }
     }
 

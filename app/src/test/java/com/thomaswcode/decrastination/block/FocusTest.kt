@@ -81,6 +81,18 @@ class FocusTest {
     }
 
     @Test
+    fun `work confirmed done during its session ends the session, its minutes counted once`() = runTest {
+        tasks.update { it.copy(tasks = listOf(task("t", effort = 40))) }
+        focus.startSession("teams:t", "t", null, 30)
+        clock.time += 10 * 60_000L
+        focus.onCompleted(listOf(tasks.value.tasks.single().copy(status = Status.Done)))
+        assertNull(runtime.value.session)
+        assertEquals(10, tasks.value.tasks.single().workedMin)
+        // The 30 minutes left of the estimate, a minute for three: ten, and no session's credit.
+        assertEquals(10 * 60_000L, focus.creditLeftMs())
+    }
+
+    @Test
     fun `a session stopped early counts its minutes but earns nothing`() = runTest {
         tasks.update { it.copy(tasks = listOf(task("t"))) }
         focus.startSession("teams:t", "t", null, 45)
