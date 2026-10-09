@@ -50,20 +50,22 @@ object WidgetUpdater {
 
     /**
      * The next moment the plan can change with no new data: midnight, the next deadline (a chunk
-     * turns overdue), the start or end of today's working hours, and, while they last, every 15
-     * minutes, since the time left today shrinks with every minute. A minute away at the soonest.
+     * turns overdue), the moment a chunk can be started (an Anki deck's cards at 04:00), the start
+     * or end of today's working hours, and, while they last, every 15 minutes, since the time left
+     * today shrinks with every minute. A minute away at the soonest.
      */
     fun nextRedrawAt(plan: Plan, zone: ZoneId, settings: Settings): Long {
         val now = plan.now
         val midnight = plan.today.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
         val deadline = plan.ordered.map { it.deadline }.filter { it > now }.minOrNull() ?: Long.MAX_VALUE
+        val startable = plan.ordered.mapNotNull { it.availableAt }.filter { it > now }.minOrNull() ?: Long.MAX_VALUE
         val weekend = plan.today.dayOfWeek == DayOfWeek.SATURDAY || plan.today.dayOfWeek == DayOfWeek.SUNDAY
         val hours = if (weekend) settings.weekendHours else settings.weekdayHours
         val start = plan.today.atStartOfDay().plusMinutes(hours.startMin.toLong()).atZone(zone).toInstant().toEpochMilli()
         val end = plan.today.atStartOfDay().plusMinutes(hours.endMin.toLong()).atZone(zone).toInstant().toEpochMilli()
         val working = if (now in start until end) now + WORKING_REDRAW_MS else Long.MAX_VALUE
         val boundary = listOf(start, end).filter { it > now }.minOrNull() ?: Long.MAX_VALUE
-        return maxOf(minOf(midnight, deadline, working, boundary), now + 60_000L)
+        return maxOf(minOf(midnight, deadline, startable, working, boundary), now + 60_000L)
     }
 
     fun cancelRedraw(context: Context) {

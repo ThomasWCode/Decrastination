@@ -63,8 +63,9 @@ data class WidgetModel(
             )
         }
 
-        /** "Overdue", "Due 23:59" (today), "Behind", or when it's due. */
+        /** "From 04:00" (it can't be started yet), "Overdue", "Due 23:59" (today), "Behind", or when it's due. */
         fun badge(chunk: Chunk, now: Long, zone: ZoneId): String = when {
+            !chunk.startable(now) -> "From " + Format.at(chunk.availableAt!!, now, zone).removePrefix("today ")
             chunk.overdue && chunk.soft -> "Waiting a week"
             chunk.overdue -> "Overdue"
             chunk.dueToday -> "Due " + Format.at(chunk.deadline, now, zone).removePrefix("today ")
@@ -79,7 +80,10 @@ data class WidgetModel(
             // The Teams widget's own trouble (its sync service off, its last sync failed), which
             // also explains a ↻ that didn't sync Teams.
             state.status(Source.Teams).note?.let { return it }
-            val teamsAsOf = state.status(Source.Teams).dataAsOf
+            val teams = state.status(Source.Teams)
+            // Read, but the Teams widget has never synced: there's nothing from Teams at all.
+            if (teams.lastSuccessAt != null && teams.dataAsOf == null) return "Teams hasn't synced yet"
+            val teamsAsOf = teams.dataAsOf
             if (teamsAsOf != null && now - teamsAsOf > TEAMS_STALE_MS) return "Teams synced ${Format.ago(teamsAsOf, now)}"
             return null
         }

@@ -246,15 +246,64 @@ class PlannerTest {
     }
 
     @Test
-    fun `steps that run past the deadline keep their own sizes on their own days`() {
+    fun `steps that run past the deadline stay in order, so the most is done before it`() {
         // Due Saturday 09:00, so Friday is the last usable day; Thursday and Friday have room for
-        // one step each (a step a day), and the third runs on to Saturday.
+        // one step each (a step a day): the first two, 40 cards, before the deadline, 5 after.
         val steps = listOf(SubStep("20 new cards", 9), SubStep("20 new cards", 9), SubStep("5 new cards", 3))
         val deck = task("deck", Fixtures.at("2026-10-10T09:00"), steps = steps).copy(stepsPerDay = 1)
         val plan = plan(listOf(deck), "2026-10-08T17:00")
         val byDay = plan.buckets.filter { it.chunks.isNotEmpty() }.map { it.date.toString() to it.chunks.single().minutes }
-        assertEquals(listOf("2026-10-08" to 9, "2026-10-09" to 3, "2026-10-10" to 9), byDay)
+        assertEquals(listOf("2026-10-08" to 9, "2026-10-09" to 9, "2026-10-10" to 3), byDay)
         assertEquals(listOf(1, 2, 3), plan.chunksOf("teams:deck").map { it.part })
+        assertEquals(listOf(false, false, true), plan.chunksOf("teams:deck").map { it.behind })
+    }
+
+    @Test
+    fun `undated work never breaks its daily allowance, even at the horizon`() {
+        // 61 quarter-hour emails seen at once: four a day fills all 15 days to the horizon, and
+        // the 61st goes unplanned rather than onto a day already at its hour.
+        val emails = (1..61).map { task("email$it", null, effort = 15, kind = Kind.Admin, firstSeen = Fixtures.at("2026-10-08T17:00")) }
+        val plan = plan(emails, "2026-10-08T17:00")
+        val perDay = plan.buckets.map { b -> b.chunks.sumOf { it.minutes } }
+        assertTrue(perDay.all { it <= 60 }, "$perDay")
+        assertEquals(15, plan.buckets.size)
+        assertEquals(60, plan.ordered.size)
+    }
+
+    @Test
+    fun `work after its calibrated last usable day is behind, even when that day has gone`() {
+        // Due tomorrow evening with a two-day margin: its last usable day was yesterday.
+        val margins = Calibration(marginDays = mapOf(Kind.Homework to 2))
+        val essay = task("essay", Fixtures.at("2026-10-09T21:00"), effort = 30)
+        val plan = Planner.plan(Planner.Input(listOf(essay), Fixtures.at("2026-10-08T17:00"), LONDON, settings, calibration = margins))
+        assertEquals(listOf(LocalDate.parse("2026-10-08")), plan.dayOf("essay"))
+        assertTrue(plan.ordered.single().behind)
+    }
+
+    @Test
+    fun `a soft deadline is a week of calendar days, across the clocks changing`() {
+        // First seen 23:30 on 22 March 2026; the clocks go forward on the 29th. A week on is
+        // 23:30 on the 29th, not 00:30 on the 30th.
+        val email = task("email", null, effort = 15, kind = Kind.Admin, firstSeen = Fixtures.at("2026-03-22T23:30"))
+        val plan = plan(listOf(email), "2026-03-23T17:00")
+        assertEquals(Fixtures.at("2026-03-29T23:30"), plan.ordered.single().deadline)
+    }
+
+    @Test
+    fun `work that can't be started until later today isn't next until then`() {
+        // 01:00: the deck's new cards come at 04:00, Anki's new day. It's still today's work, and
+        // first, but the essay is the thing to do now.
+        val deck = task("deck", Fixtures.at("2026-10-01T08:30"), steps = listOf(SubStep("20 new cards", 9))).copy(stepsPerDay = 1, notBefore = Fixtures.at("2026-10-09T04:00"))
+        val essay = task("essay", Fixtures.at("2026-10-10T21:00"), effort = 30)
+        val plan = plan(listOf(deck, essay), "2026-10-09T01:00")
+        assertEquals("teams:deck", plan.todayBucket!!.chunks.first().taskId)
+        assertEquals(Fixtures.at("2026-10-09T04:00"), plan.todayBucket!!.chunks.first().availableAt)
+        assertEquals("teams:essay", plan.next!!.taskId)
+        assertEquals("teams:deck", plan.then!!.taskId)
+        // With nothing else to do, it's next all the same.
+        assertEquals("teams:deck", plan(listOf(deck), "2026-10-09T01:00").next!!.taskId)
+        // From 04:00 it can be started: nothing waits.
+        assertNull(plan(listOf(deck), "2026-10-09T04:00").next!!.availableAt)
     }
 
     @Test
