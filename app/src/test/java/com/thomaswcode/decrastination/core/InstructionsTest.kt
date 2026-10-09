@@ -99,6 +99,36 @@ class InstructionsTest {
     }
 
     @Test
+    fun `tasks starting late the same day share that day's time after the start`() {
+        // Friday's hours end at 22:00: an hour after 21:00, for two 45-minute tasks that can't start before it.
+        val from = Fixtures.at("2026-10-09T21:00")
+        val a = task("a", "2026-10-12T23:59", effort = 45).withOverrides(TaskOverrides(from = from))
+        val b = task("b", "2026-10-12T23:59", effort = 45).withOverrides(TaskOverrides(from = from))
+        val friday = plan(listOf(a, b), at = Fixtures.at("2026-10-09T17:00")).buckets.first { it.date == LocalDate.parse("2026-10-09") }
+        assertTrue(friday.plannedMin <= 60)
+    }
+
+    @Test
+    fun `a deck task made for an assignment follows the assignment's instructions`() {
+        val homework = task("vocab", "2026-10-13T09:00")
+        val deck = TaskItem(
+            id = "anki:deck:1", source = Source.Anki, sourceId = "deck:1", title = "Learn Anki deck 1.2", kind = Kind.Homework,
+            dueAt = Fixtures.at("2026-10-13T09:00"), sourceEffortMin = 20, derived = true, firstSeenAt = now, lastSeenAt = now,
+            extra = mapOf(com.thomaswcode.decrastination.sources.anki.AnkiRules.EXTRA_FOR to homework.id),
+        )
+        // Not a task: its deck goes with it.
+        val hidden = plan(listOf(homework.withOverrides(TaskOverrides(notATask = true)), deck)).ordered.map { it.taskId }
+        assertTrue(deck.id !in hidden)
+        // Can't start before Sunday: nor can its deck.
+        val sunday = Fixtures.at("2026-10-11T00:00")
+        val started = plan(listOf(homework.withOverrides(TaskOverrides(from = sunday)), deck))
+        val deckDays = started.buckets.filter { b -> b.chunks.any { it.taskId == deck.id } }.map { it.date }
+        assertTrue(deckDays.isNotEmpty() && deckDays.all { it >= LocalDate.parse("2026-10-11") })
+        // Left as it is, the deck's planned.
+        assertTrue(deck.id in plan(listOf(homework, deck)).ordered.map { it.taskId })
+    }
+
+    @Test
     fun `a day's limit counts what's been worked today already`() {
         val essay = task("essay", "2026-10-09T23:00", effort = 120)
         val limit = applied(Change(ChangeType.DayLimit, date = "2026-10-09", freeMin = 60))
