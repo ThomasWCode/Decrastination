@@ -9,8 +9,9 @@ import com.thomaswcode.decrastination.sync.SyncWorker
 class DecrastinationApp : Application() {
     override fun onCreate() {
         super.onCreate()
-        AppGraph.get(this)
+        // The channels first: the graph may show a waiting alert as it starts.
         Channels.create(this)
+        AppGraph.get(this)
         SyncWorker.schedule(this)
         WatchdogWorker.schedule(this)
         Daily.schedule(this)
