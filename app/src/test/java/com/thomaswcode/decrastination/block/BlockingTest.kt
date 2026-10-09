@@ -2,6 +2,7 @@ package com.thomaswcode.decrastination.block
 
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.Fixtures.LONDON
+import com.thomaswcode.decrastination.core.Uptime
 import com.thomaswcode.decrastination.data.Settings
 import java.time.LocalDate
 import kotlin.test.Test
@@ -90,6 +91,16 @@ class BlockPolicyTest {
     fun `with nothing due soon, earned time is spent, and without it the app is blocked`() {
         assertEquals(BlockPolicy.Verdict.Spend, decide("2026-10-10T12:00", pressure = false, creditMs = 600_000))
         assertEquals(BlockPolicy.Verdict.Block(BlockPolicy.Reason.NoFreeTime), decide("2026-10-10T12:00", pressure = false))
+    }
+
+    @Test
+    fun `a session blocks until the uptime clock says its time is up, the date set forward or not`() {
+        val now = Fixtures.at("2026-10-10T12:00")
+        val session = FocusSession("teams:t", "t", null, 30, startedAt = now - 60 * 60_000L, startedUptime = Uptime(1, 0))
+        // The wall clock says an hour has passed; the phone has been on for ten minutes.
+        val input = BlockPolicy.Input(now, LONDON, Settings(), pressure = false, creditLeftMs = 60_000L, session = session, uptime = Uptime(1, 10 * 60_000L))
+        assertEquals(BlockPolicy.Verdict.Block(BlockPolicy.Reason.Session), BlockPolicy.decide(input))
+        assertEquals(BlockPolicy.Verdict.Spend, BlockPolicy.decide(input.copy(uptime = Uptime(1, 31 * 60_000L))))
     }
 
     @Test
