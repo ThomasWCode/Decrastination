@@ -218,6 +218,11 @@ class AppGraph private constructor(context: Context) {
             val modelOn = modelAvailable()
             if (tasks.value.tasks.any { Enrichments.jobFor(it) != null && Enrichments.stale(it, modelOn, RuleEnricher.BY) }) EnrichWorker.enqueue(app)
         }
+        // Anki's deadline or textbook changed (saved, or a waiting change fallen due): its tasks are
+        // made with them, so it's read again now.
+        scope.launch {
+            settings.state.map { it.ankiDeadlineMin to it.ankiTextbook }.distinctUntilChanged().drop(1).collect { SyncWorker.syncNow(app, setOf(Source.Anki)) }
+        }
         // Switched on, the model goes over what only the rules have seen.
         scope.launch {
             settings.state.map { it.aiEnabled && it.aiKeyActive }.distinctUntilChanged().drop(1).collect { on -> if (on) EnrichWorker.enqueue(app) }

@@ -120,7 +120,7 @@ class SettingsActivity : ComponentActivity() {
                 item {
                     WindowField("School days: work", draft.weekdayHours, "weekdayHours", ::valid) { draft = draft.copy(weekdayHours = it) }
                     WindowField("Weekends: work", draft.weekendHours, "weekendHours", ::valid) { draft = draft.copy(weekendHours = it) }
-                    WindowField("Quiet hours (nothing blocked)", draft.quietHours, "quietHours", ::valid) { draft = draft.copy(quietHours = it) }
+                    WindowField("Quiet hours (nothing blocked)", draft.quietHours, "quietHours", ::valid, overnight = true) { draft = draft.copy(quietHours = it) }
                     TimeField("School days: blocking from", draft.weekdayBlockFromMin, "weekdayBlockFromMin", ::valid) { draft = draft.copy(weekdayBlockFromMin = it) }
                 }
 
@@ -287,13 +287,15 @@ private fun TimeField(label: String, minuteOfDay: Int, key: String, valid: (Stri
     ParsedField(label, SettingsChanges.clock(minuteOfDay), key, valid, ::parseTime, onChange, number = false)
 
 @Composable
-private fun WindowField(label: String, window: Window, key: String, valid: (String, Boolean) -> Unit, onChange: (Window) -> Unit) =
+private fun WindowField(label: String, window: Window, key: String, valid: (String, Boolean) -> Unit, overnight: Boolean = false, onChange: (Window) -> Unit) =
     ParsedField(
         "$label (from–to)",
         "${SettingsChanges.clock(window.startMin)}–${SettingsChanges.clock(window.endMin)}",
         key,
         valid,
-        { text -> text.split('–', '-').map { it.trim() }.takeIf { it.size == 2 }?.let { (a, b) -> parseTime(a)?.let { s -> parseTime(b)?.let { e -> Window(s, e).takeIf { s != e } } } } },
+        // Working hours end the day they start (the planner plans each day's own); quiet hours
+        // may run past midnight.
+        { text -> text.split('–', '-').map { it.trim() }.takeIf { it.size == 2 }?.let { (a, b) -> parseTime(a)?.let { s -> parseTime(b)?.let { e -> Window(s, e).takeIf { s != e && (overnight || e > s) } } } } },
         onChange,
         number = false,
     )

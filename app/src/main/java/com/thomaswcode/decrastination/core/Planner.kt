@@ -260,7 +260,15 @@ object Planner {
         if (task.subSteps.isNotEmpty()) {
             val left = task.subSteps.filterNot { it.done || (it.ankiSections.isNotEmpty() && held.containsAll(it.ankiSections)) }
             if (left.isEmpty()) return listOf(Piece("finish and hand in", MIN_CHUNK))
-            return left.map { Piece(it.title, (it.minutes * multiplier).roundToInt().coerceAtLeast(1)) }
+            // Minutes worked beyond the steps ticked off (a session stopped early) come off the
+            // next steps in order, each kept to at least a last few minutes, as it isn't done.
+            var spare = (task.workedMin - task.subSteps.filter { it.done }.sumOf { it.minutes * multiplier }).roundToInt().coerceAtLeast(0)
+            return left.map { step ->
+                val full = (step.minutes * multiplier).roundToInt().coerceAtLeast(1)
+                val off = minOf(spare, (full - MIN_CHUNK).coerceAtLeast(0))
+                spare -= off
+                Piece(step.title, full - off)
+            }
         }
         if (task.effortMin <= 0) return emptyList()
         val whole = task.effortMin * multiplier

@@ -256,6 +256,19 @@ class FocusTest {
     }
 
     @Test
+    fun `vocabulary a deck held isn't rewarded again with its assignment`() = runTest {
+        val homework = task("hw", effort = 60, steps = listOf(SubStep("Learn vocabulary 2.2", 30, ankiSections = listOf("2.2")), SubStep("Exercise 4", 30)))
+        val deck = TaskItem(
+            id = "anki:deck:1", source = Source.Anki, sourceId = "deck:1", title = "Learn Anki deck 2.2", kind = Kind.Homework, derived = true,
+            firstSeenAt = clock.time, lastSeenAt = clock.time, extra = mapOf("deckName" to "Textbook 1::2.2", "for" to "teams:hw"),
+        )
+        tasks.update { it.copy(tasks = listOf(homework, deck)) }
+        focus.onCompleted(listOf(homework.copy(status = Status.Done, doneAt = clock.time)))
+        // 30 minutes of the 60 were the deck's: 10 minutes of free time, not 20.
+        assertEquals(10 * 60_000L, focus.creditLeftMs())
+    }
+
+    @Test
     fun `what counts as blocked follows the settings`() {
         assertEquals(Focus.Target.App("com.google.android.youtube"), focus.target("com.google.android.youtube"))
         assertEquals(Focus.Target.Browser("org.mozilla.firefox"), focus.target("org.mozilla.firefox"))
