@@ -170,13 +170,14 @@ class SettingsChangesTest {
     }
 
     @Test
-    fun `a working window moved later waits, even at the same length`() {
+    fun `a working window changed any way waits, and so does another textbook`() {
         val armed = Settings(armed = true)
         val later = armed.copy(weekdayHours = Window(17 * 60 + 45, 23 * 60))
         assertEquals(1, SettingsChanges.propose(armed, later, emptyList(), now, ::newId).pending.size)
-        // Inside the old one, it's less time: at once.
+        // Shorter waits too: less time can carry a piece past tomorrow.
         val shorter = armed.copy(weekdayHours = Window(17 * 60, 21 * 60))
-        assertEquals(shorter.weekdayHours, SettingsChanges.propose(armed, shorter, emptyList(), now, ::newId).settings.weekdayHours)
+        assertEquals(1, SettingsChanges.propose(armed, shorter, emptyList(), now, ::newId).pending.size)
+        assertEquals(1, SettingsChanges.propose(armed, armed.copy(ankiTextbook = 2), emptyList(), now, ::newId).pending.size)
     }
 
     @Test
