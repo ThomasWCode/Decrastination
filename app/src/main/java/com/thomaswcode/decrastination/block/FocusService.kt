@@ -269,6 +269,8 @@ class FocusService : AccessibilityService() {
      */
     private val creditCheck: Runnable = Runnable {
         val (target, since) = spending ?: return@Runnable
+        // Taken off the blocklist meanwhile (a removal that fell due): no longer charged.
+        if (!stillBlocked(target)) return@Runnable stopSpending()
         if (frontPackage() != packageOf(target) && !aside(target)) return@Runnable stopSpending()
         val left = graph.focus.creditLeftMs() - (SystemClock.elapsedRealtime() - since)
         val verdict = graph.focus.verdict()
@@ -378,7 +380,8 @@ class FocusService : AccessibilityService() {
         graph.focus.target(pkg)?.let { return it }
         if (!graph.focus.isCheckedBrowser(pkg)) return null
         val address = root.findAccessibilityNodeInfosByViewId(Blocklist.urlBarId(pkg)).firstOrNull()?.text?.toString()
-        return graph.focus.siteTarget(pkg, address)
+        // No address bar (a video full screen in its pane): the page it last showed in front.
+        return if (address != null) graph.focus.siteTarget(pkg, address) else lastSite[pkg]
     }
 
     /** Whether [target] is playing in a picture-in-picture window. */
@@ -390,6 +393,12 @@ class FocusService : AccessibilityService() {
     /** Whether [target] is on screen outside the window in use: in picture-in-picture, or beside another app. */
     private fun aside(target: Focus.Target): Boolean = inPictureInPicture(target) || windows.any {
         it.type == AccessibilityWindowInfo.TYPE_APPLICATION && !it.isActive && !it.isInPictureInPictureMode && windowTarget(it) == target
+    }
+
+    /** Whether [target] is still something the blocker covers, as the settings now say. */
+    private fun stillBlocked(target: Focus.Target): Boolean = when (target) {
+        is Focus.Target.Site -> graph.focus.isCheckedBrowser(target.browser) && target.name in graph.settings.value.blockedSites
+        else -> graph.focus.target(target.name) == target
     }
 
     private fun packageOf(target: Focus.Target): String = when (target) {
