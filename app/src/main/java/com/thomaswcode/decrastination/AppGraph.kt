@@ -7,6 +7,7 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import com.thomaswcode.decrastination.block.Focus
+import com.thomaswcode.decrastination.block.Sessions
 import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.Planner
 import com.thomaswcode.decrastination.core.Source
@@ -194,11 +195,12 @@ class AppGraph private constructor(context: Context) {
 
     init {
         // Work a source confirms done earns free time and is logged.
-        syncer.addListener { focus.rewardCompletions() }
+        // A session on a task the sync found done ends with it, and so do its notification and alarm.
+        syncer.addListener { if (focus.rewardCompletions()) Sessions.clear(app) }
         // Any a stop left ungiven: completions, and sessions' endings.
         scope.launch {
             focus.finishSessions()
-            focus.rewardCompletions()
+            if (focus.rewardCompletions()) Sessions.clear(app)
         }
         runCatching {
             app.contentResolver.registerContentObserver(
