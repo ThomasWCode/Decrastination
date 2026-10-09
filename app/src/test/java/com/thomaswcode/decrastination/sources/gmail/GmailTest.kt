@@ -5,11 +5,14 @@ import com.thomaswcode.decrastination.Fixtures.LONDON
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.Merge
 import com.thomaswcode.decrastination.core.Source
+import com.thomaswcode.decrastination.core.TaskItem
+import com.thomaswcode.decrastination.enrich.Prompts
 import java.io.ByteArrayInputStream
 import java.time.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 /** Made-up messages in the shapes Gmail's IMAP gave on 8 Oct (docs/phase0-findings.md §4): the inbox isn't committed. */
 class GmailTest {
@@ -108,7 +111,7 @@ class GmailTest {
             InboxMessage(2, "m2", "t1", 200, "Re: Plans", "Tom", "tom@example.com", sent = true),
             InboxMessage(3, "m3", "t2", 150, "Ticket", "Shop", "noreply@shop.example", sent = false),
         )
-        val tasks = GmailThreads.fetched(messages, mapOf("m2" to "Sounds good"), now, LONDON)
+        val tasks = GmailThreads.fetched(messages, mapOf("m2" to GmailThreads.Body("Sounds good")), now, LONDON)
         assertEquals(listOf("t1", "t2"), tasks.map { it.sourceId })
         val thread = tasks.first()
         assertEquals("Re: Plans", thread.title)
@@ -121,8 +124,48 @@ class GmailTest {
 
     @Test
     fun `stored text is reused while a conversation's newest message is the same`() {
-        val tasks = Merge.apply(emptyList(), Source.Gmail, GmailThreads.fetched(listOf(InboxMessage(1, "m1", "t1", 1, "Hi", null, "a@b.c", false)), mapOf("m1" to "Body"), now, LONDON), now).tasks
-        assertEquals(mapOf("m1" to "Body"), GmailThreads.knownBodies(tasks))
+        val message = InboxMessage(1, "m1", "t1", 1, "Hi", null, "a@b.c", false)
+        val tasks = Merge.apply(emptyList(), Source.Gmail, GmailThreads.fetched(listOf(message), mapOf("m1" to GmailThreads.Body("Body")), now, LONDON), now).tasks
+        assertEquals(mapOf("m1" to GmailThreads.Body("Body")), GmailThreads.knownBodies(tasks))
+        assertEquals(emptyList(), GmailThreads.toRead(listOf(message), GmailThreads.knownBodies(tasks), 60))
+    }
+
+    @Test
+    fun `text cut shorter than reads now go is read again, once`() {
+        val message = InboxMessage(1, "m1", "t1", 1, "Hi", null, "a@b.c", false)
+        fun stored(text: String, readTo: Int?) = Merge.apply(emptyList(), Source.Gmail, GmailThreads.fetched(listOf(message), mapOf("m1" to GmailThreads.Body(text)), now, LONDON), now).tasks
+            .map { task -> task.copy(extra = if (readTo == null) task.extra - GmailThreads.EXTRA_TEXT_READ_TO else task.extra + (GmailThreads.EXTRA_TEXT_READ_TO to "$readTo")) }
+        fun read(tasks: List<TaskItem>) = GmailThreads.toRead(listOf(message), GmailThreads.knownBodies(tasks), 60)
+        // Stored before how far it was read was kept, when reads went to 4 000 characters: cut there, or all there was.
+        assertEquals(listOf(message), read(stored("x".repeat(4_000), readTo = null)))
+        assertEquals(emptyList(), read(stored("x".repeat(3_999), readTo = null)))
+        // Read as far as reads go now, cut or not, it stays; cut by a lower limit, it's read again.
+        assertEquals(emptyList(), read(stored("x".repeat(GmailThreads.MAX_BODY_CHARS), readTo = GmailThreads.MAX_BODY_CHARS)))
+        assertEquals(listOf(message), read(stored("x".repeat(10_000), readTo = 10_000)))
+        // Read again, it's marked as read now.
+        val again = GmailThreads.fetched(listOf(message), mapOf("m1" to GmailThreads.Body("x".repeat(5_000))), now, LONDON).single()
+        assertEquals("${GmailThreads.MAX_BODY_CHARS}", again.extra[GmailThreads.EXTRA_TEXT_READ_TO])
+    }
+
+    @Test
+    fun `a cut text waiting for a read with room keeps what it has`() {
+        val messages = listOf(
+            InboxMessage(1, "m1", "t1", 2, "New", null, "a@b.c", false),
+            InboxMessage(2, "m2", "t2", 1, "Cut", null, "a@b.c", false),
+        )
+        val known = mapOf("m2" to GmailThreads.Body("x".repeat(4_000), readTo = 4_000))
+        // A read with room for one: the newest conversation's text, never read, goes first.
+        assertEquals(listOf("m1"), GmailThreads.toRead(messages, known, 1).map { it.messageId })
+        // The cut one keeps its text, still marked as cut, so a later read takes it.
+        val cut = GmailThreads.fetched(messages, known, now, LONDON).single { it.sourceId == "t2" }
+        assertEquals("x".repeat(4_000), cut.detail)
+        assertEquals("4000", cut.extra[GmailThreads.EXTRA_TEXT_READ_TO])
+        assertNull(cut.extra[GmailThreads.EXTRA_TEXT_PENDING])
+    }
+
+    @Test
+    fun `a message's text is kept past what the model is shown, so it's told when there's more`() {
+        assertTrue(GmailThreads.MAX_BODY_CHARS > Prompts.MAX_TEXT)
     }
 
     @Test
