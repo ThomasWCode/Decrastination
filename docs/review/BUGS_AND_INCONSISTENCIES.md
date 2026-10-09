@@ -1,6 +1,354 @@
-# P2 findings
+# Bugs and inconsistencies
 
-Reviewed commit: `a89c7007d71b13bcf997cd700a70881fd3c2ac6d`. See [review scope and verification](README.md). Findings are ordered by impact within this priority; condition-specific priority choices are explained in each entry.
+29 findings covering incorrect behavior, security defects, and inconsistencies in interfaces or documentation: **6 P1, 18 P2, 5 P3**.
+
+Reviewed commit: `a89c7007d71b13bcf997cd700a70881fd3c2ac6d`. See [review scope, verification and full index](README.md). Original finding IDs, priorities, evidence and recommendations are retained. Findings are ordered by priority and impact.
+
+<a id="p1-001"></a>
+
+## P1-001 — Committed private signing key defeats the signature trust boundary
+
+- **ID:** P1-001
+- **Title:** Committed private signing key defeats the signature trust boundary
+- **Priority and category:** P1 — security / signing and authorization.
+- **Status:** Verified (the committed keystore opens with the committed password, contains a private-key entry, and its certificate matches the freshly built debug APK; installation of a separate caller on the companion app was not attempted).
+- **Locations:**
+
+[app/build.gradle.kts:24-29](https://github.com/ThomasWCode/Decrastination/blob/a89c7007d71b13bcf997cd700a70881fd3c2ac6d/app/build.gradle.kts#L24-L29):
+
+```kotlin
+        getByName("debug") {
+            storeFile = file("debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
+```
+
+[app/src/main/AndroidManifest.xml:8-13](https://github.com/ThomasWCode/Decrastination/blob/a89c7007d71b13bcf997cd700a70881fd3c2ac6d/app/src/main/AndroidManifest.xml#L8-L13):
+
+```xml
+    <permission
+        android:name="com.teamsassignments.widget.permission.READ_ASSIGNMENTS"
+        android:description="@string/read_assignments_permission_description"
+        android:label="@string/read_assignments_permission_label"
+        android:protectionLevel="signature" />
+    <uses-permission android:name="com.teamsassignments.widget.permission.READ_ASSIGNMENTS" />
+```
+
+[app/build.gradle.kts:33-35](https://github.com/ThomasWCode/Decrastination/blob/a89c7007d71b13bcf997cd700a70881fd3c2ac6d/app/build.gradle.kts#L33-L35):
+
+```kotlin
+        debug {
+            signingConfig = signingConfigs.getByName("debug")
+        }
+```
+
+[README.md:29-33](https://github.com/ThomasWCode/Decrastination/blob/a89c7007d71b13bcf997cd700a70881fd3c2ac6d/README.md#L29-L33):
+
+````text
+./gradlew testDebugUnitTest lintDebug assembleDebug
+./gradlew installDebug
+```
+
+Debug builds are signed with a copy of the widget's committed `app/debug.keystore`. Sharing its key is what grants this app the widget's signature-level permission to read the assignments, so don't change it.
+````
+
+[docs/data-sources.md:35-44](https://github.com/ThomasWCode/Decrastination/blob/a89c7007d71b13bcf997cd700a70881fd3c2ac6d/docs/data-sources.md#L35-L44):
+
+```text
+
+Manifest in the Teams widget: a `signature` permission `com.teamsassignments.widget.permission.READ_ASSIGNMENTS`, and `.provider.AssignmentsProvider` at authority `com.teamsassignments.widget.assignments`, exported, with `android:permission` set to it (queries; `call()` checks it in code, since Android checks no permission on calls).
+
+| URI or call | Returns |
+|---|---|
+| `content://com.teamsassignments.widget.assignments/assignments` | One row per assignment not handed in, in the widget's order (due time, undated last, then title): `key, title, class_name, description, due_text, due_at, tab, detail_read_at, last_synced_at` |
+| `content://com.teamsassignments.widget.assignments/state` | One row: `last_success_at, status` (`idle`/`running`/`failed`/`stopped`), `status_message, status_at, assignment_count, sync_service_enabled` |
+| `call(root, "requestSync", null, null)` | Starts a sync as ↻ does. Result: `started`, and `reason` (`service_off`, `busy`) when not |
+| `call(root, "open", key, null)` | Opens that assignment in Teams as a row tap does. One more `reason`: `unknown_key` |
+
+```
+
+`app/debug.keystore` is binary; its private-key entry and matching certificate were inspected (no text line/excerpt).
+
+- **Description:** The same private key is both publicly distributed and treated as the identity that authorizes reading Teams assignments. A signature permission authenticates possession of that key, not the repository owner or a particular package name. Publishing it allows an unrelated installed APK to present the same signer. Calling it a debug key does not contain the issue: debug APKs are the documented installed distribution and CI artifact. The repository explicitly uses this key to cross the companion app's authorization boundary.
+- **When it occurs:** A third-party APK requesting `READ_ASSIGNMENTS` is signed with the published key and installed alongside the documented companion app. Under the documented signature-permission contract, that caller qualifies as a trusted signer. The local checks were `keytool -list -keystore app/debug.keystore -storepass android -alias androiddebugkey` and `apksigner verify --print-certs app/build/outputs/apk/debug/app-debug.apk`; both reported certificate SHA-256 `9A48B9F997E612B0249E75AF3944A4174C2BA0E9B2CD03680F0C39D7416C7BF6`, and keytool identified `PrivateKeyEntry`.
+- **Impact:** The assignment permission no longer separates approved applications from arbitrary installed callers holding the public key. The documented provider exposes assignment titles, descriptions and class/deadline information plus sync/open calls. The key also cannot authenticate the provenance of APK updates; installing an update still requires the platform's normal user/install authorization. This is P1 because the shipped authorization credential is already public. The companion implementation is outside this repository and was not independently audited.
+- **Recommended fix:** Coordinate a migration of both installed apps to a private signing identity held outside the repository, with restricted CI signing access. Plan backup/reinstallation or a supported signing-key migration for existing users; do not merely remove the keystore from the current tree, because Git history retains it. Review the companion provider's caller policy and rotate away from trusting the old certificate. Keep any public debug identity restricted to synthetic development installations with no personal assignment data.
+- **Effort:** M.
+
+<a id="p1-002"></a>
+
+## P1-002 — Gmail probe sends the app password without authenticating the TLS server
+
+- **ID:** P1-002
+- **Title:** Gmail probe sends the app password without authenticating the TLS server
+- **Priority and category:** P1 — Security / credential exposure.
+- **Status:** Verified (offline end-to-end run of the existing probe against a local self-signed TLS server).
+- **Locations:**
+
+[scripts/gmail_probe.py:117-119](https://github.com/ThomasWCode/Decrastination/blob/a89c7007d71b13bcf997cd700a70881fd3c2ac6d/scripts/gmail_probe.py#L117-L119):
+
+```python
+    imap = imaplib.IMAP4_SSL(HOST, 993, timeout=30)
+    try:
+        imap.login(address, password)
+```
+
+- **Description:** `IMAP4_SSL` is called without an explicit validating `ssl_context`. The installed Python standard-library implementation supplies `ssl._create_stdlib_context()`, which has `verify_mode == ssl.CERT_NONE` and `check_hostname == False`. Consequently the TLS connection encrypts traffic but does not authenticate Gmail before `login` transmits the account's app password. The standard library's default was inspected directly, rather than inferred from the `SSL` name.
+- **When it occurs:** Run the documented Gmail probe with an app password while an attacker can redirect or intercept its IMAP connection (for example through network or DNS interception). No optional `--save` flag is needed. The offline reproduction redirected only the connection destination to a loopback IMAP test server presenting a self-signed certificate for `untrusted.invalid`, then executed the existing `main()` with a synthetic address/password. It completed and the server received `LOGIN`. No real account or external service was contacted.
+- **Impact:** An intercepting server can obtain the Gmail app password and access mail available to that credential. Certificate verification is a normal requirement for this account-setup diagnostic; this is P1 despite the affected path being a script rather than the Android app.
+- **Recommended fix:** Import `ssl` and pass `ssl_context=ssl.create_default_context()` to `imaplib.IMAP4_SSL`. Keep hostname checking enabled. Add a local TLS regression check that rejects an untrusted/wrong-host certificate and succeeds only with a deliberately trusted test certificate for the correct hostname.
+- **Effort:** S.
+
+<a id="p1-003"></a>
+
+## P1-003 — Cancelling a store write leaves committed disk state and live state inconsistent
+
+- **ID:** P1-003
+- **Title:** Cancelling a store write leaves committed disk state and live state inconsistent
+- **Priority and category:** P1 — concurrency, data integrity. Saving and leaving a screen is a normal sequence; if cancellation lands during its I/O, the next unrelated update silently discards the committed change. This is prioritized as data loss rather than only a cosmetic missed refresh.
+- **Status:** Verified (deterministically reproduced for both stores with external JVM harnesses).
+- **Locations:**
+
+[app/src/main/java/com/thomaswcode/decrastination/data/JsonStore.kt:42-48](https://github.com/ThomasWCode/Decrastination/blob/a89c7007d71b13bcf997cd700a70881fd3c2ac6d/app/src/main/java/com/thomaswcode/decrastination/data/JsonStore.kt#L42-L48):
+
+```kotlin
+    suspend fun update(transform: (T) -> T): T = mutex.withLock {
+        val next = transform(_state.value)
+        if (next != _state.value) {
+            withContext(Dispatchers.IO) { write(next) }
+            _state.value = next
+        }
+        next
+```
+
+[app/src/main/java/com/thomaswcode/decrastination/data/SecretStore.kt:70-74](https://github.com/ThomasWCode/Decrastination/blob/a89c7007d71b13bcf997cd700a70881fd3c2ac6d/app/src/main/java/com/thomaswcode/decrastination/data/SecretStore.kt#L70-L74):
+
+```kotlin
+        if (next != _values.value) {
+            withContext(Dispatchers.IO) { write(next) }
+            _values.value = next
+            _present.value = next.keys
+        }
+```
+
+[app/src/main/java/com/thomaswcode/decrastination/ui/SettingsActivity.kt:90-94](https://github.com/ThomasWCode/Decrastination/blob/a89c7007d71b13bcf997cd700a70881fd3c2ac6d/app/src/main/java/com/thomaswcode/decrastination/ui/SettingsActivity.kt#L90-L94):
+
+```kotlin
+                            scope.launch {
+                                val wanted = draft
+                                graph.changeSettings { wanted }
+                                // The reminders' alarms, at their new times.
+                                Daily.schedule(this@SettingsActivity)
+```
+
+- **Description:** `withContext(Dispatchers.IO)` guarantees prompt cancellation when returning to the caller's dispatcher. Cancellation can happen after `write()` atomically replaces the file but before the statements after `withContext` run. The mutex then unlocks while the live flow still contains the old value. Subsequent updates start from that old value and overwrite the successful disk write. Atomic rename prevents torn files, but does not make the disk-and-memory transaction atomic with respect to cancellation. The settings UI uses a composition-owned coroutine scope, so leaving that composition can cancel an active save.
+- **When it occurs:** Begin a store update, suspend its serializer/cipher while executing on the I/O dispatcher, cancel the calling job, and let serialization/encryption and the rename finish. In the reproduction, `JsonStore` persisted `ankiTextbook=2` while `store.value.ankiTextbook` remained 1; an unrelated update to `boxMin` wrote 1 back to disk. `SecretStore` likewise persisted a synthetic Gmail address while reporting it absent, and a later write of an unrelated synthetic API key erased the address. The harness's latch controls the race; it does not alter either store's implementation. On device, the equivalent window is cancelling a save while filesystem/encryption work is in progress.
+- **Impact:** Settings, task/runtime/log data, or credentials can appear saved after restart, remain invisible during the current process, and then be silently lost to another update. The stores underpin the app's bookkeeping, so the invariant affects more than settings. Both stores share the same root cause.
+- **Recommended fix:** Make successful file replacement and publication of the matching in-memory state one cancellation-safe transaction while retaining the mutex. For example, perform the write and subsequent flow assignments within a `withContext(NonCancellable + Dispatchers.IO)` section (after any desired pre-commit cancellation check), or otherwise publish the successfully committed state before returning across the cancellable dispatcher boundary. Preserve write failures and cancellation semantics deliberately; do not publish a state whose file write failed. Add a deterministic cancellation regression test to both store implementations.
+- **Effort:** S.
+
+<a id="p1-004"></a>
+
+## P1-004 — Incomplete source snapshots can falsely finish or discard tracked work
+
+- **ID:** P1-004
+- **Title:** Incomplete source snapshots can falsely finish or discard tracked work
+- **Priority and category:** P1; data integrity / error handling. The malformed-response trigger is conditional, but the consequence is an irreversible-looking completion and potentially undeserved rewards; the higher priority is chosen because a failed read must not become a successful destructive reconciliation.
+- **Status:** Verified for Power Planner; other affected adapters confirmed by reading.
+- **Locations:**
+
+[app/src/main/java/com/thomaswcode/decrastination/sources/powerplanner/PowerPlannerApi.kt:45-53](https://github.com/ThomasWCode/Decrastination/blob/a89c7007d71b13bcf997cd700a70881fd3c2ac6d/app/src/main/java/com/thomaswcode/decrastination/sources/powerplanner/PowerPlannerApi.kt#L45-L53):
+
+```kotlin
+    fun agenda(login: Login, semesterId: String, nowIso: String): List<PpItem> =
+        call(
+            "GetAgenda",
+            withLogin(login) {
+                put("SemesterIdentifier", semesterId)
+                put("CurrentTime", nowIso)
+            },
+            AgendaResponse.serializer(),
+        ).items.orEmpty()
+```
+
+[app/src/main/java/com/thomaswcode/decrastination/sources/powerplanner/PowerPlannerApi.kt:116-120](https://github.com/ThomasWCode/Decrastination/blob/a89c7007d71b13bcf997cd700a70881fd3c2ac6d/app/src/main/java/com/thomaswcode/decrastination/sources/powerplanner/PowerPlannerApi.kt#L116-L120):
+
+```kotlin
+@Serializable
+data class AgendaResponse(
+    @SerialName("Items") val items: List<PpItem>? = null,
+    @SerialName("Error") override val error: String? = null,
+) : WithError
+```
+
+[app/src/main/java/com/thomaswcode/decrastination/sources/teams/TeamsSource.kt:73-74](https://github.com/ThomasWCode/Decrastination/blob/a89c7007d71b13bcf997cd700a70881fd3c2ac6d/app/src/main/java/com/thomaswcode/decrastination/sources/teams/TeamsSource.kt#L73-L74):
+
+```kotlin
+    fun fetched(row: Map<String, Any?>): Fetched? {
+        val key = row["key"] as? String ?: return null
+```
+
+[app/src/main/java/com/thomaswcode/decrastination/sources/teams/TeamsSource.kt:105-109](https://github.com/ThomasWCode/Decrastination/blob/a89c7007d71b13bcf997cd700a70881fd3c2ac6d/app/src/main/java/com/thomaswcode/decrastination/sources/teams/TeamsSource.kt#L105-L109):
+
+```kotlin
+    override suspend fun read(context: ReadContext): SourceRead = withContext(Dispatchers.IO) {
+        val rows = TeamsProvider.assignments(resolver)
+        val state = TeamsProvider.state(resolver)
+        SourceRead(
+            items = rows.mapNotNull(TeamsRows::fetched),
+```
+
+[app/src/main/java/com/thomaswcode/decrastination/sources/anki/AnkiSource.kt:29-37](https://github.com/ThomasWCode/Decrastination/blob/a89c7007d71b13bcf997cd700a70881fd3c2ac6d/app/src/main/java/com/thomaswcode/decrastination/sources/anki/AnkiSource.kt#L29-L37):
+
+```kotlin
+    fun decks(resolver: ContentResolver): List<Deck> =
+        resolver.query(decksUri, arrayOf("deck_id", "deck_name", "deck_count"), null, null, null)?.use { cursor ->
+            buildList {
+                while (cursor.moveToNext()) {
+                    val counts = parseCounts(cursor.getString(2)) ?: continue
+                    add(Deck(cursor.getLong(0), cursor.getString(1), counts[0], counts[1], counts[2]))
+                }
+            }
+        } ?: throw SourceUnavailable("AnkiDroid isn't answering (is it installed?)")
+```
+
+[app/src/main/java/com/thomaswcode/decrastination/core/Merge.kt:140-142](https://github.com/ThomasWCode/Decrastination/blob/a89c7007d71b13bcf997cd700a70881fd3c2ac6d/app/src/main/java/com/thomaswcode/decrastination/core/Merge.kt#L140-L142):
+
+```kotlin
+            when {
+                old.status != Status.Open -> old.takeIf { now - (old.doneAt ?: old.lastSeenAt) < KEEP_FINISHED_MS }
+                old.derived -> old.copy(status = Status.Missed).also { missed += it }
+```
+
+[app/src/main/java/com/thomaswcode/decrastination/core/Merge.kt:153](https://github.com/ThomasWCode/Decrastination/blob/a89c7007d71b13bcf997cd700a70881fd3c2ac6d/app/src/main/java/com/thomaswcode/decrastination/core/Merge.kt#L153):
+
+```kotlin
+                else -> old.copy(status = Status.Done, doneAt = now).also { completed += completion(old, it) }
+```
+
+- **Description:** The `TaskSource` contract requires a complete read or an exception because absence means completion. Power Planner accepts an HTTP 200 `{}` or `{"Items":null}` as an authoritative empty agenda. Teams silently drops rows without a key; Anki silently drops rows with unparseable counts. These adapter failures become task absence rather than source failure. The existing Teams unit test expressly tests skipping a missing key without checking the destructive merge consequence.
+- **When it occurs:** Seed an open Power Planner task, stub `Http.post` to return `HttpResponse(200, "{}")`, call `PowerPlannerApi.agenda`, and reconcile the resulting empty list with `Merge.apply`. The offline production-class harness printed `malformed agenda size=0 task status=Done completed=1`. Other triggers are a Teams row with absent/non-string key or an Anki row with missing/malformed `deck_count`; their filtered lists omit previously tracked items. No claim is made that the live services currently return these malformed shapes.
+- **Impact:** Power Planner/Teams work can disappear from the plan as completed, with completion-side effects through `Syncer` (including its unrewarded list); Anki homework can be marked missed or counts incorrectly reduced. Source health is recorded as successful, so the user receives no error explaining the lost work. A later authoritative read may reopen ordinary tasks, but cannot make the earlier false completion harmless.
+- **Recommended fix:** Validate that the expected collection is present and every required row parses before returning `SourceRead`; throw a descriptive source error otherwise. Accept an explicit valid empty collection as an empty source, not missing data. Preserve the old snapshot on malformed rows, or introduce an explicit partial-read result that forbids absence-based completion. Add end-to-end adapter-to-merge tests for absent Items, invalid keys/counts, and explicit empty lists.
+- **Effort:** M.
+
+<a id="p1-005"></a>
+
+## P1-005 — HTML email stripping permits quadratic CPU exhaustion
+
+- **ID:** P1-005
+- **Title:** HTML email stripping permits quadratic CPU exhaustion
+- **Priority and category:** P1; security / performance / availability. This is an externally triggerable resource-exhaustion weakness in an input processed automatically during normal inbox synchronization.
+- **Status:** Verified (production `Mime.htmlToText` run on synthetic offline input).
+- **Locations:**
+
+[app/src/main/java/com/thomaswcode/decrastination/sources/gmail/Mime.kt:110-112](https://github.com/ThomasWCode/Decrastination/blob/a89c7007d71b13bcf997cd700a70881fd3c2ac6d/app/src/main/java/com/thomaswcode/decrastination/sources/gmail/Mime.kt#L110-L112):
+
+```kotlin
+    private val DROPPED_BLOCKS = Regex("""<(style|script|head)\b[^>]*>.*?</\1\s*>""", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
+    private val LINE_TAGS = Regex("""<\s*(br|/p|/div|/tr|/li|/h\d)\b[^>]*>""", RegexOption.IGNORE_CASE)
+    private val TAG = Regex("""<[^>]*>""")
+```
+
+[app/src/main/java/com/thomaswcode/decrastination/sources/gmail/Mime.kt:119-120](https://github.com/ThomasWCode/Decrastination/blob/a89c7007d71b13bcf997cd700a70881fd3c2ac6d/app/src/main/java/com/thomaswcode/decrastination/sources/gmail/Mime.kt#L119-L120):
+
+```kotlin
+    fun htmlToText(html: String): String {
+        val text = html.replace(DROPPED_BLOCKS, " ").replace(UNCLOSED_BLOCK, " ").replace(LINE_TAGS, "\n").replace(TAG, " ")
+```
+
+[app/src/main/java/com/thomaswcode/decrastination/sources/gmail/GmailSource.kt:185-191](https://github.com/ThomasWCode/Decrastination/blob/a89c7007d71b13bcf997cd700a70881fd3c2ac6d/app/src/main/java/com/thomaswcode/decrastination/sources/gmail/GmailSource.kt#L185-L191):
+
+```kotlin
+    private fun text(imap: ImapClient, uid: Long): String {
+        val structure = imap.uidFetch(listOf(uid), "UID BODYSTRUCTURE").firstOrNull()?.get("BODYSTRUCTURE") ?: return ""
+        val part = Mime.textPart(structure) ?: return ""
+        val limit = if (part.subtype == "html") MAX_HTML_BYTES else MAX_TEXT_BYTES
+        val response = imap.uidFetch(listOf(uid), "UID BODY.PEEK[${part.section}]<0.$limit>").firstOrNull() ?: return ""
+        val body = response.entries.firstOrNull { it.key.startsWith("BODY[") }?.value as? ImapValue.Str ?: return ""
+        return Mime.tidy(Mime.decode(body.bytes, part), MAX_BODY_CHARS)
+```
+
+[app/src/main/java/com/thomaswcode/decrastination/sources/gmail/GmailSource.kt:214-217](https://github.com/ThomasWCode/Decrastination/blob/a89c7007d71b13bcf997cd700a70881fd3c2ac6d/app/src/main/java/com/thomaswcode/decrastination/sources/gmail/GmailSource.kt#L214-L217):
+
+```kotlin
+        const val MAX_BODIES = 60
+        const val MAX_TEXT_BYTES = 32_000
+        const val MAX_HTML_BYTES = 200_000
+        const val MAX_BODY_CHARS = 4_000
+```
+
+- **Description:** For a string containing many `<` characters and no `>`, `TAG` scans the remaining suffix at every potential start. The resulting quadratic work occurs before the final 4,000-character truncation. The 200 KB fetch cap is large enough to consume substantial CPU. A sender controls the MIME HTML body; Gmail's IMAP raw-body fetch does not require HTML to be well formed. Syncer's coroutine timeout stops waiting but cannot interrupt this CPU work.
+- **When it occurs:** Deliver an HTML-only message whose body contains 200,000 literal `<` characters (the offline reproduction calls `Mime.htmlToText("<".repeat(200_000))` directly). Against the compiled implementation on JVM 17, the full permitted body took **59,348 ms** and returned 200,000 characters. An earlier scaling run measured 10k/20k/40k/80k at 553/1,480/5,457/14,974 ms; it was terminated at a total 30 seconds during the 200k case. Several such messages can consume the 90-second source budget; the source supports up to 60 newly fetched bodies per sync. These are host measurements, not Android timings.
+- **Impact:** Any sender who can put messages in the user's inbox can force prolonged CPU use and stale Gmail tasks. When the source exceeds its budget, no body-cache update is committed, so the same payloads are eligible again at the next sync. Other sources and the UI do not necessarily crash; the proven impact is severe parsing cost, with source timeouts depending on message count/device speed.
+- **Recommended fix:** Replace repeated unanchored regex stripping with a parser or a single forward scan that bounds work by input length. Apply a parsing budget/cancellation check independently of the final display truncation. Add adversarial tests for a full-cap unterminated tag sequence and repeated unterminated style/head blocks, with a deterministic operation bound or a generous runtime ceiling.
+- **Effort:** M.
+
+<a id="p1-006"></a>
+
+## P1-006 — Timed Anki work is deducted again after the source counts shrink
+
+- **ID:** P1-006
+- **Title:** Timed Anki work is deducted again after the source counts shrink
+- **Priority and category:** P1 — correctness, data integrity of the schedule. This affects normal syncs after using the app's Anki focus timer and produces incorrect remaining work; the higher priority follows the requested definition for incorrect results in likely use.
+- **Status:** Verified (external JVM reproduction using actual `AnkiRules`, `Merge`, and `Planner` classes).
+- **Locations:**
+
+[app/src/main/java/com/thomaswcode/decrastination/core/Merge.kt:102-108](https://github.com/ThomasWCode/Decrastination/blob/a89c7007d71b13bcf997cd700a70881fd3c2ac6d/app/src/main/java/com/thomaswcode/decrastination/core/Merge.kt#L102-L108):
+
+```kotlin
+                sourceEffortMin = f.sourceEffortMin,
+                sourceProgress = f.sourceProgress,
+                firstProgress = old.firstProgress ?: old.sourceProgress,
+                peakEffortMin = listOfNotNull(old.peakEffortMin, old.sourceEffortMin, f.sourceEffortMin).maxOrNull(),
+                // The source's steps, unless they're the same as before: then the ones kept here,
+                // with what a session ticked off, until the source's counts catch up (Anki's cards).
+                subSteps = f.subSteps?.takeIf { new -> new.map { it.title } != old.subSteps.map { it.title } } ?: old.subSteps,
+```
+
+[app/src/main/java/com/thomaswcode/decrastination/core/Planner.kt:362-369](https://github.com/ThomasWCode/Decrastination/blob/a89c7007d71b13bcf997cd700a70881fd3c2ac6d/app/src/main/java/com/thomaswcode/decrastination/core/Planner.kt#L362-L369):
+
+```kotlin
+    fun remaining(task: TaskItem, multiplier: Double): Double {
+        val whole = task.effortMin * multiplier
+        val bySource = whole * (1 - task.sourceProgress.coerceIn(0.0, 1.0))
+        // From the lower of the first-seen and current progress: a percentage corrected downward
+        // brings its work back, rather than the first-seen one capping what's left.
+        val baseline = minOf(task.firstProgress ?: task.sourceProgress, task.sourceProgress)
+        val bySessions = whole * (1 - baseline.coerceIn(0.0, 1.0)) - task.workedMin - task.photoMin
+        return minOf(bySource, bySessions)
+```
+
+[app/src/main/java/com/thomaswcode/decrastination/core/Planner.kt:386-392](https://github.com/ThomasWCode/Decrastination/blob/a89c7007d71b13bcf997cd700a70881fd3c2ac6d/app/src/main/java/com/thomaswcode/decrastination/core/Planner.kt#L386-L392):
+
+```kotlin
+            var spare = (task.workedMin + task.photoMin - task.subSteps.filter { it.done }.sumOf { if (it.byHand) it.timedMin.toDouble() else it.minutes * multiplier })
+                .roundToInt().coerceAtLeast(0)
+            return left.map { step ->
+                val full = (step.minutes * multiplier).roundToInt().coerceAtLeast(1)
+                val off = minOf(spare, (full - MIN_CHUNK).coerceAtLeast(0))
+                spare -= off
+                Piece(step.title, full - off, from = step.from, due = step.dueAt)
+```
+
+[app/src/main/java/com/thomaswcode/decrastination/sources/anki/AnkiRules.kt:260-265](https://github.com/ThomasWCode/Decrastination/blob/a89c7007d71b13bcf997cd700a70881fd3c2ac6d/app/src/main/java/com/thomaswcode/decrastination/sources/anki/AnkiRules.kt#L260-L265):
+
+```kotlin
+                sourceEffortMin = effortMin(0, left).coerceAtLeast(1),
+                done = left == 0,
+                derived = true,
+                subSteps = newCardSteps(left, deck.new),
+                stepsPerDay = 1,
+                notBefore = if (waits) nextRollover(now, zone) else null,
+```
+
+- **Description:** Anki's fetched estimate and steps describe cards *remaining*, not a stable whole-task estimate. A sync replaces those values but retains `workedMin`. The planner then subtracts all recorded timed work from the already reduced estimate or newly shortened step list. For homework decks, replacing the steps also removes the completed step that previously absorbed its session minutes. The same consumed cards therefore lower the plan twice. The percentage-progress safeguard handles Power Planner's stable estimate but does not handle Anki's shrinking counts.
+- **When it occurs:** Start with an Anki homework deck containing 45 unseen cards (steps of 9, 9, and 3 estimated minutes). Finish a nine-minute focus session on its first 20-card step, and sync after those 20 cards have been studied (`unseen=25`, today's new cards exhausted). The new source steps are 9 and 3 minutes, but the plan contains 5 and 3. Independently, a review quota with 150 reviews has a 20-minute estimate; after a ten-minute focus session and a sync reporting 75 reviews, its source estimate is 10 minutes but the planner produces the five-minute floor.
+- **Impact:** Normal Anki use understates future work and shortens subsequent focus sessions despite the remaining cards. Homework decks lose four minutes in the small reproduction; larger recorded totals can drive multiple later steps to their minimum. The daily plan and the time offered to complete the quota no longer match the source's own remaining estimate.
+- **Recommended fix:** Model count-derived tasks' source remaining work separately from the stable baseline used for timed-work accounting. Reconcile newly observed source progress with already recorded session work and subtract only session work not yet reflected in the source counts. Keep lifetime `workedMin` for rewards/history instead of resetting it blindly. Cover both quota and homework-deck flows with tests spanning focus completion, unchanged-count sync, partially reduced counts, and fully reduced counts.
+- **Effort:** M.
 
 <a id="p2-001"></a>
 
@@ -942,134 +1290,258 @@ Write-Host ("Pulled {0} assignments, last successful sync {1}" -f $state.assignm
 - **Recommended fix:** Capture ADB output into a temporary file, check `$LASTEXITCODE`, parse and validate the expected state structure, and only then replace the fixture. Use `try/finally` to remove the temporary file. Check native exit codes for subsequent `adb pull`, `apksigner`, and `keytool` commands as well so failures cannot masquerade as a completed diagnostic.
 - **Effort:** S.
 
-<a id="p2-019"></a>
+<a id="p3-001"></a>
 
-## P2-019 — The shipped dependency graph retains five versions with published security advisories
+## P3-001 — Rotating during parent-code enrollment silently replaces the QR secret
 
-- **ID:** P2-019
-- **Title:** The shipped dependency graph retains five versions with published security advisories
-- **Priority and category:** P2 — Dependency and build hygiene / security maintenance.
-- **Status:** Verified (resolved versions and advisory matches); exploitability through this application is unproven.
+- **ID:** P3-001
+- **Title:** Rotating during parent-code enrollment silently replaces the QR secret
+- **Priority and category:** P3 — UI state / maintainability.
+- **Status:** Confirmed by reading (configuration-change UI behavior could not be exercised without Android).
 - **Locations:**
 
-[gradle/libs.versions.toml:17-18](https://github.com/ThomasWCode/Decrastination/blob/a89c7007d71b13bcf997cd700a70881fd3c2ac6d/gradle/libs.versions.toml#L17-L18):
-
-```toml
-anthropic = "2.34.0"
-okhttp = "4.12.0"
-```
-
-[gradle/libs.versions.toml:37](https://github.com/ThomasWCode/Decrastination/blob/a89c7007d71b13bcf997cd700a70881fd3c2ac6d/gradle/libs.versions.toml#L37):
-
-```toml
-anthropic-java = { group = "com.anthropic", name = "anthropic-java", version.ref = "anthropic" }
-```
-
-[app/build.gradle.kts:78](https://github.com/ThomasWCode/Decrastination/blob/a89c7007d71b13bcf997cd700a70881fd3c2ac6d/app/build.gradle.kts#L78):
+[app/src/main/java/com/thomaswcode/decrastination/protect/ProtectionActivity.kt:99-100](https://github.com/ThomasWCode/Decrastination/blob/a89c7007d71b13bcf997cd700a70881fd3c2ac6d/app/src/main/java/com/thomaswcode/decrastination/protect/ProtectionActivity.kt#L99-L100):
 
 ```kotlin
-    implementation(libs.anthropic.java)
+        // Kept through the screen being recreated (turned): the wizard isn't left half-done unseen.
+        var step by rememberSaveable { mutableStateOf(Step.None) }
 ```
 
-[app/build.gradle.kts:46-49](https://github.com/ThomasWCode/Decrastination/blob/a89c7007d71b13bcf997cd700a70881fd3c2ac6d/app/build.gradle.kts#L46-L49):
+[app/src/main/java/com/thomaswcode/decrastination/protect/ProtectionActivity.kt:302-308](https://github.com/ThomasWCode/Decrastination/blob/a89c7007d71b13bcf997cd700a70881fd3c2ac6d/app/src/main/java/com/thomaswcode/decrastination/protect/ProtectionActivity.kt#L302-L308):
 
 ```kotlin
-    packaging {
-        resources {
-            // The Anthropic SDK's Apache HTTP jars each carry these; nothing reads them at run time.
-            excludes += setOf("META-INF/DEPENDENCIES", "META-INF/INDEX.LIST")
+    /** Shows a new secret as a QR code for your dad's authenticator; saved once a code from it checks out. */
+    @Composable
+    private fun ParentCodeDialog(graph: AppGraph, onDone: () -> Unit, onCancel: () -> Unit) {
+        val secret = remember { Totp.newSecret() }
+        val qr = remember(secret) { qrBitmap(Totp.uri(secret), 720) }
+        var code by remember { mutableStateOf("") }
+        var error by remember { mutableStateOf<String?>(null) }
 ```
 
-[app/src/main/java/com/thomaswcode/decrastination/enrich/ClaudeEnricher.kt:34-39](https://github.com/ThomasWCode/Decrastination/blob/a89c7007d71b13bcf997cd700a70881fd3c2ac6d/app/src/main/java/com/thomaswcode/decrastination/enrich/ClaudeEnricher.kt#L34-L39):
+[app/src/main/java/com/thomaswcode/decrastination/protect/ProtectionActivity.kt:329-335](https://github.com/ThomasWCode/Decrastination/blob/a89c7007d71b13bcf997cd700a70881fd3c2ac6d/app/src/main/java/com/thomaswcode/decrastination/protect/ProtectionActivity.kt#L329-L335):
 
 ```kotlin
-    private val client: AnthropicClient = AnthropicOkHttpClient.builder()
-        .apiKey(apiKey)
-        .apply { if (endpoint != null) baseUrl(endpoint) }
-        .timeout(Duration.ofMinutes(3))
-        .maxRetries(2)
-        .build()
+                TextButton(enabled = code.length == Totp.DIGITS, onClick = {
+                    val step = Totp.matchingStep(secret, code, graph.clock.now())
+                    if (step == null) {
+                        error = "That isn't the code. Check his app has the new entry."
+                    } else {
+                        scope.launch {
+                            graph.secrets.put(Secret.TotpSecret, Totp.base32(secret))
 ```
 
-[app/src/main/java/com/thomaswcode/decrastination/enrich/ClaudeReviewer.kt:24-29](https://github.com/ThomasWCode/Decrastination/blob/a89c7007d71b13bcf997cd700a70881fd3c2ac6d/app/src/main/java/com/thomaswcode/decrastination/enrich/ClaudeReviewer.kt#L24-L29):
+- **Description:** The wizard stage is restored after Activity recreation, but the enrollment secret is only held by `remember`. Rotation disposes that composition and generates a different secret while returning directly to the same enrollment step. An authenticator already scanned from the preceding QR now contains the wrong key, although enrollment appears to have continued.
+- **When it occurs:** Open the arming wizard, scan the parent QR into the parent's authenticator, rotate/recreate the phone Activity before confirming the code, then enter the code from the previously scanned entry. It will not validate except for an accidental six-digit collision; scanning the new QR is required.
+- **Impact:** Interrupted or confusing setup and duplicate/stale authenticator entries. It does not reveal the stored parent secret or bypass an already armed configuration, hence P3.
+- **Recommended fix:** Retain a single in-progress enrollment secret across configuration changes, for example in an Activity-scoped ViewModel. Clear it on explicit abandon or successful enrollment. After process death, intentionally restart enrollment with a clear message rather than restoring the stage while silently changing its secret. Avoid putting the secret into an unencrypted saved-state bundle merely to preserve it.
+- **Effort:** S.
 
-```kotlin
-    private val client: AnthropicClient = AnthropicOkHttpClient.builder()
-        .apiKey(apiKey)
-        .apply { if (endpoint != null) baseUrl(endpoint) }
-        .timeout(Duration.ofMinutes(5))
-        .maxRetries(2)
-        .build()
-```
+<a id="p3-002"></a>
 
-[app/src/main/java/com/thomaswcode/decrastination/enrich/PhotoChecker.kt:33-38](https://github.com/ThomasWCode/Decrastination/blob/a89c7007d71b13bcf997cd700a70881fd3c2ac6d/app/src/main/java/com/thomaswcode/decrastination/enrich/PhotoChecker.kt#L33-L38):
+## P3-002 — Settings switches do not expose their labels to accessibility services
 
-```kotlin
-    private val client: AnthropicClient = AnthropicOkHttpClient.builder()
-        .apiKey(apiKey)
-        .apply { if (endpoint != null) baseUrl(endpoint) }
-        .timeout(Duration.ofMinutes(3))
-        .maxRetries(2)
-        .build()
-```
-
-- **Description:** The resolved debug runtime graph contains 121 dependency coordinates. Matching those exact versions against OSV on 9 October 2026 produced 20 advisory IDs across the five coordinates below, transitively supplied by the Anthropic SDK. These are confirmed dependency-version matches, deduplicated into one dependency-maintenance finding; they are not 20 verified application exploits. The application explicitly constructs the OkHttp client. Apache classes are present in the packaged graph, but an application path using the vulnerable Apache behavior was not established. Jackson advisories require particular parsers, target types, or mapper features; their presence alone does not prove those prerequisites in the SDK's use.
-
-  | Resolved coordinate | Matched advisory IDs |
-  |---|---|
-  | `com.fasterxml.jackson.core:jackson-databind:2.18.2` | [GHSA-3pjw-73gf-8qr5](https://osv.dev/vulnerability/GHSA-3pjw-73gf-8qr5), [GHSA-5gvw-p9qm-jgwh](https://osv.dev/vulnerability/GHSA-5gvw-p9qm-jgwh), [GHSA-5jmj-h7xm-6q6v](https://osv.dev/vulnerability/GHSA-5jmj-h7xm-6q6v), [GHSA-cxp5-3px4-pw24](https://osv.dev/vulnerability/GHSA-cxp5-3px4-pw24), [GHSA-gx83-3vf8-gh7j](https://osv.dev/vulnerability/GHSA-gx83-3vf8-gh7j), [GHSA-hgj6-7826-r7m5](https://osv.dev/vulnerability/GHSA-hgj6-7826-r7m5), [GHSA-j3rv-43j4-c7qm](https://osv.dev/vulnerability/GHSA-j3rv-43j4-c7qm), [GHSA-mhm7-754m-9p8w](https://osv.dev/vulnerability/GHSA-mhm7-754m-9p8w), [GHSA-q4xh-88c3-wmh7](https://osv.dev/vulnerability/GHSA-q4xh-88c3-wmh7), [GHSA-rmj7-2vxq-3g9f](https://osv.dev/vulnerability/GHSA-rmj7-2vxq-3g9f), [GHSA-vvgp-rfg2-7rr6](https://osv.dev/vulnerability/GHSA-vvgp-rfg2-7rr6), [GHSA-wjgm-6hv5-3cvf](https://osv.dev/vulnerability/GHSA-wjgm-6hv5-3cvf), [GHSA-wv8q-qhhj-9h54](https://osv.dev/vulnerability/GHSA-wv8q-qhhj-9h54) |
-  | `com.fasterxml.jackson.core:jackson-core:2.18.2` | [GHSA-72hv-8253-57qq](https://osv.dev/vulnerability/GHSA-72hv-8253-57qq), [GHSA-7hhh-6rmp-j9qf](https://osv.dev/vulnerability/GHSA-7hhh-6rmp-j9qf), [GHSA-p6pp-m3f8-5c89](https://osv.dev/vulnerability/GHSA-p6pp-m3f8-5c89), [GHSA-r7wm-3cxj-wff9](https://osv.dev/vulnerability/GHSA-r7wm-3cxj-wff9) |
-  | `org.apache.httpcomponents.client5:httpclient5:5.3.1` | [GHSA-hjcp-jmpx-g3qm](https://osv.dev/vulnerability/GHSA-hjcp-jmpx-g3qm) |
-  | `org.apache.httpcomponents.core5:httpcore5-h2:5.2.4` | [GHSA-v3jc-474w-2wm6](https://osv.dev/vulnerability/GHSA-v3jc-474w-2wm6) |
-  | `org.apache.httpcomponents.core5:httpcore5:5.2.4` | [GHSA-hf6x-8p5f-cgmf](https://osv.dev/vulnerability/GHSA-hf6x-8p5f-cgmf) |
-
-- **When it occurs:** Build the documented debug variant with the reviewed dependency catalog and resolve `debugRuntimeClasspath`; these versions enter that runtime graph. Confirming an application vulnerability requires an additional source-to-sink review or targeted reproduction demonstrating each advisory's input and configuration prerequisites. No such exploit was assumed from the scanner results.
-- **Impact:** The distributed app carries dependencies for which parser limits, type/field restrictions, or HTTP resource handling have published fixes. This creates a concrete security-maintenance gap and avoidable exposure if an affected feature is reachable or enabled later. The evidence does not justify attributing arbitrary deserialization, SSRF, or Apache HTTP denial of service to the app today. P2 reflects verified affected dependencies with unresolved reachability rather than a proven normal-use compromise.
-- **Recommended fix:** Prefer an Anthropic SDK update compatible with this Android/Kotlin toolchain that resolves the advisories; otherwise explicitly align/upgrade its transitive dependencies after compatibility testing. The saved advisories identify Jackson `2.18.11` as the newest required patch floor within the existing 2.18 line for these Jackson matches, HttpClient `5.6.3`, and HttpCore/HttpCore-H2 `5.4.3`; select an internally compatible set and check the current advisory database again before adoption. Remove unused Apache components only after proving the SDK does not need them. Add CI scanning of resolved runtime coordinates and retain reachability notes for any intentionally deferred match. Rerun existing AI serialization/client tests and Android build/lint after upgrading.
-- **Effort:** M.
-
-<a id="p2-020"></a>
-
-## P2-020 — Critical Android lifecycle and permission paths have no automated integration coverage
-
-- **ID:** P2-020
-- **Title:** Critical Android lifecycle and permission paths have no automated integration coverage
-- **Priority and category:** P2 — test coverage / regression risk on critical paths.
-- **Status:** Confirmed by reading (complete tracked-file inventory, test sources, dependency declarations and CI; the existing JVM tests and Android lint/build were run successfully).
+- **ID:** P3-002
+- **Title:** Settings switches do not expose their labels to accessibility services
+- **Priority and category:** P3 — accessibility / UI consistency.
+- **Status:** Confirmed by reading — the shared row has separate text and switch semantics; no TalkBack device run was performed.
 - **Locations:**
 
-[app/build.gradle.kts:58-60](https://github.com/ThomasWCode/Decrastination/blob/a89c7007d71b13bcf997cd700a70881fd3c2ac6d/app/build.gradle.kts#L58-L60):
+[app/src/main/java/com/thomaswcode/decrastination/ui/SettingsActivity.kt:252-255](https://github.com/ThomasWCode/Decrastination/blob/a89c7007d71b13bcf997cd700a70881fd3c2ac6d/app/src/main/java/com/thomaswcode/decrastination/ui/SettingsActivity.kt#L252-L255):
 
 ```kotlin
-    testOptions {
-        unitTests.isReturnDefaultValues = true
-    }
+private fun SwitchRow(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+        Switch(checked = checked, onCheckedChange = onChange)
 ```
 
-[app/build.gradle.kts:80-83](https://github.com/ThomasWCode/Decrastination/blob/a89c7007d71b13bcf997cd700a70881fd3c2ac6d/app/build.gradle.kts#L80-L83):
+- **Description:** Every shared settings switch is an independently interactive accessibility node, but its label is a sibling `Text`, with neither merged semantics nor a content description. A screen-reader user focusing the switch receives its role/state without the setting or app it controls; activating the visible label also does nothing.
+- **When it occurs:** Navigate Settings using TalkBack or switch access, especially through the repeated Blocked apps/browser switches. The helper is also used for Claude and automatic Teams sync. The preceding text can be read separately as a workaround.
+- **Impact:** Identifying and changing the intended switch requires extra navigation and remembering a separate label, making a long blocklist unnecessarily error-prone.
+- **Recommended fix:** Make the row `toggleable(value = checked, role = Role.Switch, onValueChange = onChange)` so descendants merge into one labelled control, and pass `onCheckedChange = null` to the visual switch. Verify the resulting semantics tree has one labelled toggle per row and test TalkBack traversal.
+- **Effort:** S.
+
+<a id="p3-003"></a>
+
+## P3-003 — Status explanations hard-code configurable deadlines and blocking hours
+
+- **ID:** P3-003
+- **Title:** Status explanations hard-code configurable deadlines and blocking hours
+- **Priority and category:** P3 — naming / display consistency.
+- **Status:** Verified for the soft-deadline badge; the blocking-hours explanation is confirmed by reading.
+- **Locations:**
+
+[app/src/main/java/com/thomaswcode/decrastination/widget/WidgetModel.kt:77-81](https://github.com/ThomasWCode/Decrastination/blob/a89c7007d71b13bcf997cd700a70881fd3c2ac6d/app/src/main/java/com/thomaswcode/decrastination/widget/WidgetModel.kt#L77-L81):
 
 ```kotlin
-    testImplementation(libs.junit)
-    testImplementation(libs.kotlin.test.junit)
-    testImplementation(libs.kotlinx.coroutines.test)
-    testImplementation(libs.okhttp.mockwebserver)
+        fun badge(chunk: Chunk, now: Long, zone: ZoneId): String = when {
+            !chunk.startable(now) -> "From " + Format.at(chunk.availableAt!!, now, zone).removePrefix("today ")
+            chunk.overdue && chunk.soft -> "Waiting a week"
+            chunk.overdue -> "Overdue"
+            chunk.dueToday -> "Due " + Format.at(chunk.deadline, now, zone).removePrefix("today ")
 ```
 
-[.github/workflows/ci.yml:31-38](https://github.com/ThomasWCode/Decrastination/blob/a89c7007d71b13bcf997cd700a70881fd3c2ac6d/.github/workflows/ci.yml#L31-L38):
+[app/src/main/java/com/thomaswcode/decrastination/ui/SettingsActivity.kt:149](https://github.com/ThomasWCode/Decrastination/blob/a89c7007d71b13bcf997cd700a70881fd3c2ac6d/app/src/main/java/com/thomaswcode/decrastination/ui/SettingsActivity.kt#L149):
 
-```yaml
-      - name: Unit tests
-        run: ./gradlew testDebugUnitTest --console=plain
-
-      - name: Lint
-        run: ./gradlew lintDebug --console=plain
-
-      - name: Build debug APK
-        run: ./gradlew assembleDebug --console=plain
+```kotlin
+                    NumberField("Days given to undated work", draft.softDeadlineDays, 1..60, "softDeadlineDays", ::valid) { draft = draft.copy(softDeadlineDays = it) }
 ```
 
-- **Description:** The 386 existing tests validate substantial pure logic and mocked network behavior, but no automated suite drives an Activity recreation, service disconnect/reconnect, real alarm/notification identity, Android permission enforcement, or Compose state restoration. Android framework calls in local tests are configured to return default values. Building and linting Android test models is not execution of an Android test suite. These are core blocker, timer and protection behaviors, not peripheral screens.
-- **When it occurs:** A change breaks lifecycle wiring or the relationship between framework state and the tested pure policy. CI can remain green because it runs only the local unit-test task, lint and APK assembly. The exported-tab, deferred service-callback and enrollment-state findings in this review illustrate the missing boundaries; their individual implementation root causes are documented separately.
-- **Impact:** Release checks provide no repeatable evidence that the app still blocks, protects settings, ends sessions or restores its screens correctly on Android. Historical handset checks in the docs help establish past behavior but do not provide regression protection. P2 follows the requested priority for missing tests on critical paths.
-- **Recommended fix:** Add a small emulator/instrumentation or suitable Robolectric suite for Activity intents/recreation, session alarm identity, service reconnect cleanup and permission denial. Add Compose tests for editor scrolling/state and labeled controls. Keep a separate, explicit Samsung handset matrix for OEM accessibility/Settings behavior that an emulator cannot prove, and run the automated suite in CI alongside the existing unit tests.
-- **Effort:** L.
+[app/src/main/java/com/thomaswcode/decrastination/core/Planner.kt:149-154](https://github.com/ThomasWCode/Decrastination/blob/a89c7007d71b13bcf997cd700a70881fd3c2ac6d/app/src/main/java/com/thomaswcode/decrastination/core/Planner.kt#L149-L154):
+
+```kotlin
+            val soft = task.dueAt == null
+            // Calendar days where you are, so a week is a week across the clocks changing.
+            val deadline = task.dueAt
+                ?: Instant.ofEpochMilli(task.firstSeenAt).atZone(zone).plusDays(input.settings.softDeadlineDays.toLong()).toInstant().toEpochMilli()
+            windows(task, deadline, soft, pieces(task, input, held[task.id].orEmpty())) { start ->
+                Instant.ofEpochMilli(start).atZone(zone).plusDays(input.settings.softDeadlineDays.toLong()).toInstant().toEpochMilli()
+```
+
+[app/src/main/java/com/thomaswcode/decrastination/block/BlockedActivity.kt:255](https://github.com/ThomasWCode/Decrastination/blob/a89c7007d71b13bcf997cd700a70881fd3c2ac6d/app/src/main/java/com/thomaswcode/decrastination/block/BlockedActivity.kt#L255):
+
+```kotlin
+            Text("Nothing is blocked 22:30–07:00, or before 16:45 on school days.", style = MaterialTheme.typography.bodySmall)
+```
+
+[app/src/main/java/com/thomaswcode/decrastination/block/BlockPolicy.kt:78-84](https://github.com/ThomasWCode/Decrastination/blob/a89c7007d71b13bcf997cd700a70881fd3c2ac6d/app/src/main/java/com/thomaswcode/decrastination/block/BlockPolicy.kt#L78-L84):
+
+```kotlin
+    fun isQuiet(now: Long, zone: ZoneId, settings: Settings): Boolean = minuteOfDay(now, zone) in settings.quietHours
+
+    /** A weekday before blocking starts, outside sleep. */
+    fun isSchoolHours(now: Long, zone: ZoneId, settings: Settings): Boolean {
+        val day = Instant.ofEpochMilli(now).atZone(zone).dayOfWeek
+        if (day == DayOfWeek.SATURDAY || day == DayOfWeek.SUNDAY) return false
+        return !isQuiet(now, zone, settings) && minuteOfDay(now, zone) < settings.weekdayBlockFromMin
+```
+
+- **Description:** The badge converts every overdue undated task into the literal age `Waiting a week`. Soft deadlines are configurable between 1 and 60 days, and overdue tasks can also remain outstanding far longer than their initial deadline. The wording is therefore not derived from either the setting or actual task age. The shared badge is used in the widget and Plan screen. The block screen has the same root cause: its explanation always promises no blocking at 22:30–07:00 or before 16:45 on school days, although the policy reads effective settings. It also omits the active-focus-session exception.
+- **When it occurs:** Set Days given to undated work to 1 and retain an undated task for two days. The task correctly becomes overdue, but its displayed badge says it has waited a week. Values greater than seven days and long-overdue tasks are also mislabelled. Separately, change effective quiet hours or weekday start, then expand “Why am I blocked?”: it still shows the defaults. A quiet-hours focus session also contradicts the absolute “Nothing is blocked” wording.
+- **Impact:** Users receive misleading age information; the block explanation also misstates when apps become available. The underlying configured policy and deadlines are unaffected.
+- **Recommended fix:** Use a configuration-independent label such as `Past planned date`, or carry actual first-seen/available date into the presentation model and format its elapsed duration. Pass effective Settings to the block explanation, format its current times, and explain the focus-session exception. Test non-default soft deadlines, blocking hours and long-overdue undated tasks.
+- **Effort:** S.
+
+<a id="p3-004"></a>
+
+## P3-004 — The accessibility disclosure promises no data leaves the phone, but reviews send block counts
+
+- **ID:** P3-004
+- **Title:** The accessibility disclosure promises no data leaves the phone, but reviews send block counts
+- **Priority and category:** P3 — privacy disclosure / user-facing consistency.
+- **Status:** Confirmed by reading.
+- **Locations:**
+
+[app/src/main/res/values/strings.xml:12](https://github.com/ThomasWCode/Decrastination/blob/a89c7007d71b13bcf997cd700a70881fd3c2ac6d/app/src/main/res/values/strings.xml#L12):
+
+```xml
+    <string name="focus_service_description">Decrastination watches which app is in front. While homework or other work is due today or tomorrow, opening an app you\'ve chosen to block (YouTube, say) shows your next task instead. Once protection is armed, it also stops this setting being switched off from the phone.\n\nIt only notes which app is on screen, reads the address bar in Chrome and Brave, and reads Settings screens to recognise its own. Nothing leaves your phone.</string>
+```
+
+[app/src/main/java/com/thomaswcode/decrastination/learn/ReviewInput.kt:92](https://github.com/ThomasWCode/Decrastination/blob/a89c7007d71b13bcf997cd700a70881fd3c2ac6d/app/src/main/java/com/thomaswcode/decrastination/learn/ReviewInput.kt#L92):
+
+```kotlin
+        appendLine("Times the blocker stopped them: ${log.blocks.count { inWeek(it.at) }}.")
+```
+
+[app/src/main/java/com/thomaswcode/decrastination/enrich/ClaudeReviewer.kt:37-39](https://github.com/ThomasWCode/Decrastination/blob/a89c7007d71b13bcf997cd700a70881fd3c2ac6d/app/src/main/java/com/thomaswcode/decrastination/enrich/ClaudeReviewer.kt#L37-L39):
+
+```kotlin
+            .maxTokens(ClaudeEnricher.MAX_TOKENS)
+            .system(ReviewInput.SYSTEM)
+            .addUserMessage(week)
+```
+
+[app/src/main/java/com/thomaswcode/decrastination/enrich/ClaudeReviewer.kt:44](https://github.com/ThomasWCode/Decrastination/blob/a89c7007d71b13bcf997cd700a70881fd3c2ac6d/app/src/main/java/com/thomaswcode/decrastination/enrich/ClaudeReviewer.kt#L44):
+
+```kotlin
+        val message = withContext(Dispatchers.IO) { client.messages().create(params) }
+```
+
+- **Description:** The text shown when enabling accessibility makes an unconditional local-only claim. Once the user opts into Claude, the weekly prompt sends an aggregate derived from those blocker events. The code sends the weekly count, not the individual blocked package names, URLs or screen contents; those stronger disclosures are not alleged. Claude is off by default and requires user setup, which limits the severity.
+- **When it occurs:** Enable Claude and an active API key, then run a weekly review after one or more blocking events. `ReviewInput.describe` includes the count in the request body sent by `ClaudeReviewer`.
+- **Impact:** The accessibility permission explanation gives an inaccurate account of data handling after an optional feature is enabled. The disclosed aggregate is low sensitivity relative to the task information already used by the opted-in review, hence P3.
+- **Recommended fix:** Describe accessibility observations as processed locally, and explicitly state that an optional Claude weekly review sends aggregate blocking counts along with its other documented inputs. Keep that qualification visible both in the accessibility explanation and the Claude opt-in screen.
+- **Effort:** S.
+
+<a id="p3-005"></a>
+
+## P3-005 — Current reference documents still present superseded contracts as active behavior
+
+- **ID:** P3-005
+- **Title:** Current reference documents still present superseded contracts as active behavior
+- **Priority and category:** P3 — documentation / API consistency and maintainability.
+- **Status:** Confirmed by reading (cross-checked current code against all repository Markdown documents).
+- **Locations:**
+
+[docs/data-sources.md:57](https://github.com/ThomasWCode/Decrastination/blob/a89c7007d71b13bcf997cd700a70881fd3c2ac6d/docs/data-sources.md#L57):
+
+```text
+**Freshness.** Manual sync only (plus read-along while Teams is open). Decrastination calls `requestSync` from the block screen's **Refresh Teams** button and once in the morning routine, never silently in the background, because a sync takes over the screen. On 8 Oct both calls started but the widget's own sync and navigation then failed, because Teams now pages a Past due list of seven or more behind a "load more" placeholder; widget 0.3.1 (TeamsAssignmentsWidget #14) brings the placeholder into view, and its syncs work again (`docs/phase0-findings.md` §1).
+```
+
+[docs/data-sources.md:83](https://github.com/ThomasWCode/Decrastination/blob/a89c7007d71b13bcf997cd700a70881fd3c2ac6d/docs/data-sources.md#L83):
+
+```text
+**Credentials.** Username and password in EncryptedSharedPreferences; session token cached and refreshed on an `Error` response. The mobile apps' richer sync API (`data.powerplanner.net/api/Sync`) needs a device registration flow that lives in a closed NuGet (`PowerPlannerAppAuthLibrary`), so the web API is the practical choice.
+```
+
+[docs/scheduler.md:162-164](https://github.com/ThomasWCode/Decrastination/blob/a89c7007d71b13bcf997cd700a70881fd3c2ac6d/docs/scheduler.md#L162-L164):
+
+```text
+- The settings guard must not fire on another app that happens to contain the word "Decrastination" in its text (match on the Settings package *and* the app's own component or package name in the node tree).
+- Override codes: a code for request A must not open request B; a code must stop working once the delay has elapsed on its own; the lockout after three wrong entries must survive a restart; a request raised while offline queues the email and still starts the 24-hour clock.
+- The dedicated sender mailbox being unreachable (password revoked, no network) must degrade to "the request waits its 24 hours" with a visible notice, never to "the change applies".
+```
+
+[docs/data-sources.md:113-116](https://github.com/ThomasWCode/Decrastination/blob/a89c7007d71b13bcf997cd700a70881fd3c2ac6d/docs/data-sources.md#L113-L116):
+
+```text
+- *Daily quota task* (every day): "Anki: N reviews due + M new" with deadline 21:00. Effort ≈ reviews × 8 s + new × 25 s. Quota (your answer, 7 Oct): all due reviews plus 20 new cards from the lowest-numbered deck that still has new cards, plus any deck a German assignment names.
+- *Homework deck task*: for each assignment with linked decks, "Learn deck 1.2 (k cards still new)", deadline = assignment due time (or the test date if the instructions name one), effort = new cards × 25 s + due × 8 s.
+
+**Completion test.** For a deck task: `new + learn + review == 0` for that deck. For the daily quota: all review/learn counts zero and new cards introduced ≥ quota (new-introduced-today is derived as `min(quota, newAtStartOfDay − newNow)`).
+```
+
+[docs/data-sources.md:150-159](https://github.com/ThomasWCode/Decrastination/blob/a89c7007d71b13bcf997cd700a70881fd3c2ac6d/docs/data-sources.md#L150-L159):
+
+```text
+- From yourself → `Admin`, actionable now, effort 15 min unless the LLM says otherwise.
+- Known noise senders (LinkedIn, marketing) → `Info`, suggested action "archive".
+- Contains a date in the future and words like ticket/booking/open day → `Event` with `availableFrom = date − 1 day`.
+- Everything else → `Admin`, actionable now, "read and decide".
+
+**Alternative not taken: Gmail API (OAuth).** Cleaner scopes, proper message ids and deep links, labels; cost is a Google Cloud project, consent screen, and either 7-day token expiry in "Testing" or publishing unverified. You chose IMAP (Q2, 7 Oct).
+
+**Sending, for the parent-held override only.** The app sends two kinds of email, both to `richard.white@lshtm.ac.uk`: a pending-change notice carrying a one-time code, and a "protection off for over an hour" alert. They go over SMTP (`smtp.gmail.com:465`, implicit TLS, `AUTH PLAIN`) from a **dedicated mailbox whose credentials your dad enters at setup**, not from your own account, because a code sent from your Gmail would be readable in your Sent folder. The same hand-rolled client approach works for SMTP (`EHLO`, `AUTH`, `MAIL FROM`, `RCPT TO`, `DATA`); messages are plain text with the request description, the code, and when the change would apply on its own. Design and the authenticator-app alternative: `docs/scheduler.md` §6.
+
+## 5. The LLM enrichment
+```
+
+[docs/data-sources.md:197](https://github.com/ThomasWCode/Decrastination/blob/a89c7007d71b13bcf997cd700a70881fd3c2ac6d/docs/data-sources.md#L197):
+
+```text
+- `BlockedActivity`: `excludeFromRecents`, `launchMode="singleInstance"`, Back → `performGlobalAction(GLOBAL_ACTION_HOME)` via the service (the activity itself cannot). Shows `NextAction`, **Open**, **Check it's done**, **Refresh Teams**, **Why am I blocked?** (lists the pressure tasks), and the bypass control.
+```
+
+[PLAN.md:184](https://github.com/ThomasWCode/Decrastination/blob/a89c7007d71b13bcf997cd700a70881fd3c2ac6d/PLAN.md#L184):
+
+```text
+- **Device checks:** each source populates; the widget shows the right chunk after a sync; opening YouTube while Ch17 review is pending shows the block screen; a focus session blocks throughout and marks the chunk; handing in in Teams then **Check it's done** clears the task; with buckets empty, credit is spent only while YouTube is in front; the settings guard backs out of the app's own accessibility page and App info; uninstall is refused while the admin is active; a loosening change waits 24 h; the override email arrives at the parent address from the dedicated mailbox and nowhere in your own Gmail, its code applies only that change and only once, three wrong codes lock entry; the watchdog notices the service being turned off within 15 minutes and the alert email goes after an hour; everything survives a reboot and a day of One UI battery management.
+```
+
+[PLAN.md:188-191](https://github.com/ThomasWCode/Decrastination/blob/a89c7007d71b13bcf997cd700a70881fd3c2ac6d/PLAN.md#L188-L191):
+
+```text
+- **Teams data is only as fresh as the Teams widget's last sync** (manual, takes over the screen). The app requests a sync only at deliberate moments (block screen, morning). The widget's read-along observer catches hand-ins whenever Teams is open, which is when you hand in.
+- **Power Planner's web API key is the rate-limited development key** from its open-source web app; 15-minute polling is modest; fallback is screen reading.
+- **An app password grants full mailbox access**; encrypted on a phone you control; revocable.
+- **Anti-tamper is friction, not security**: adb, safe mode, a factory reset or a new user profile defeat it. Layer 2 depends on Settings screen text, like the Teams scraper depends on Teams. The parent override is only as strong as the sender mailbox staying his; the setup makes him enter its password, and the app never displays it.
+```
+
+- **Description:** Historical proposals remain mixed with current operational contracts and the list of tests that "must cover" them. Implemented behavior uses automatic Teams syncs (`block/TeamsAutoSync.kt:40-75`), AES-GCM Android Keystore storage (`data/SecretStore.kt:107-136`), and TOTP codes (`protect/Totp.kt:36-47`, `ProtectionActivity.kt:350-402`), with no parent-email sender. A TOTP is deliberately not bound to one pending request, as the later as-built text correctly acknowledges. The obsolete statements are therefore not merely missing implementation details; they contradict the actual contract. Source locations here are relative to `app/src/main/java/com/thomaswcode/decrastination/`.
+- **When it occurs:** Follow a reference section or implement a test directly from the listed edge cases without discovering a later correction in the same document or a separate historical decision. For example, an engineer following the current test list would require request-specific emailed codes that the current design deliberately does not provide.
+- **Impact:** Misleading setup and validation expectations, incorrect security assumptions about override scope, and extra maintenance work resolving competing descriptions. This review does not treat clearly labeled historical Phase 0 observations as current defects.
+- **Recommended fix:** Make each current reference describe one final contract. Move superseded proposals into a clearly marked historical section and link to the replacement. Align the edge-case checklist with TOTP, uptime-based delays, current storage and automatic sync behavior; retain the documented limitations of TOTP rather than promising request binding.
+- **Effort:** S.
