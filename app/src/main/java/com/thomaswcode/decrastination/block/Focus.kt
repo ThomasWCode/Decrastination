@@ -71,6 +71,7 @@ class Focus(
                 session = state.session,
                 overrideUntil = state.overrideUntil,
                 forceActiveUntil = state.forceActiveUntil,
+                uptime = clock.uptime(),
             ),
         )
     }
