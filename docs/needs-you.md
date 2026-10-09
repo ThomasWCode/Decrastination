@@ -2,6 +2,15 @@
 
 The v1 build ran while you were away (from 8 Oct 2026, evening). Anything that needed you, a decision or a hand on the phone, waited here instead of stopping the build. Newest phase last; each item says what's waiting and what happens meanwhile.
 
+## In short
+
+Version 1.0.0 is on your phone and running: the four sources sync, the plan and the widget are live, blocking starts at 16:45 on school days, and the morning briefing comes at 07:00. What waits for you:
+
+1. **Arming protection, with your dad** (Setup → *Blocking and protection* → *Arm protection*): the device admin, then his authenticator app scans a QR code. Until then, blocking works but nothing stops it being switched off (Phase 3).
+2. **Claude**, if and when you want it: an API key in Setup, then *Use Claude* in Settings. Until then the rules do what they can, the weekly review is the rules', and there's no photo check (Phases 4 and 5).
+3. **Four calendar questions**, as notifications from 07:00: how much of the day each long event takes (Phase 5).
+4. **Things only you can try**: a blocked app in split screen, spending earned free time on a day with nothing due, the guard on the reset pages once armed, and restoring a backup (Phases 3 and 6).
+
 ## Phase 1: sources, storage, sync
 
 - **Nothing blocking.** All four sources read on the phone on 8 Oct: Teams (11 assignments), Power Planner (2 items), Gmail (28 conversations) and AnkiDroid (the quota and 3 linked decks). Credentials went in with `scripts/load_credentials.py`.
@@ -36,3 +45,9 @@ The v1 build ran while you were away (from 8 Oct 2026, evening). Anything that n
 - **On Sunday at 19:30**, a reminder opens the five-question check-in, and the week's review follows at 21:00 (or as soon as you save the answers). Until Claude is on, the review is the rules': what the app learned from the week, and, after ten days of plans, whether your hours are more than your evenings hold. It changes the planner's numbers only within fixed bounds, and never blocking, protection or your hours.
 - **Waiting for Claude** (you decided on no paid calls yet): the model's weekly note and the photo check of written work. Both appear by themselves once Claude is on and its key is in use.
 - **Not tried on the phone**: the briefing notification (it fires at 07:00), an answer to a calendar question, and the photo check (it needs Claude). The calendar's judgement of your real events, the check-in screen and a review by the rules were tried.
+
+## Phase 6: stats, backup, version 1.0.0
+
+- **A Stats tab** (between Tasks and Setup): the last fortnight's finished work (and how much of it with a deadline was done by it), your focus sessions, how often the blocker stopped you and on what, and what protection found; day by day below. Then today's free time, what the app has learned about your estimates in plain words, and Claude's month. Most of it fills in as you use the app; tonight it shows the testing.
+- **Back up and Restore** (Setup): *Export* saves the settings, the activity log, what the app has learned and your calendar answers to a file you choose (it never includes passwords or keys, which stay encrypted on the phone). *Import* reads one back. The settings go through the same waiting as any change once protection is armed, and this phone's own protection and Claude key stay as they are; once armed, the log and what the app learned aren't restored, so an edited file can't teach the planner to plan less.
+- **Tried on the phone**: the Stats tab, and a backup saved to Downloads through Android's file picker (12 KB; the format has no place for passwords or keys; I deleted it afterwards). Restoring one wasn't tried: it would have replaced your settings.

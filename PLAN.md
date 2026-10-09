@@ -168,6 +168,8 @@ Phase 0 also built what Phase 1 would have scaffolded: the Gradle setup, the sha
 
 ### Phase 6: Polish
 
+*Built 9 Oct 2026, version 1.0.0. A Stats tab (the last fortnight's finished work, focus sessions, blocks and protection findings, day by day; today's free time; what the app has learned, in words; Claude's month) and Back up / Restore in Setup (the settings, the log, the calibration and your calendar answers, never passwords or keys). Tried on the phone: the Stats tab, and a backup saved through Android's file picker.*
+
 - Stats screen: completions per day, sessions, blocks triggered, protection-off events, calibration values.
 - Export/import of settings and the log.
 

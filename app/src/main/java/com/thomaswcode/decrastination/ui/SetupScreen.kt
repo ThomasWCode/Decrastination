@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.core.Source
+import com.thomaswcode.decrastination.data.Backups
 import com.thomaswcode.decrastination.data.Secret
 import com.thomaswcode.decrastination.data.SourceStatus
 import com.thomaswcode.decrastination.enrich.AiUsage
@@ -44,7 +45,9 @@ import com.thomaswcode.decrastination.protect.ProtectionActivity
 import com.thomaswcode.decrastination.sources.anki.AnkiProvider
 import com.thomaswcode.decrastination.sync.SyncWorker
 import java.util.Locale
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /** The setup checklist (PLAN.md Phase 1): what each part of the app needs, and whether it has it. */
 @Composable
@@ -67,6 +70,33 @@ fun SetupScreen(graph: AppGraph, activity: Activity) {
         if (granted) scope.launch { CalendarTime.refresh(activity) }
     }
     val calendarAllowed = remember(refresh) { CalendarTime.allowed(activity) }
+    var backupNote by remember { mutableStateOf<String?>(null) }
+    var restoreNote by remember { mutableStateOf<String?>(null) }
+    val exporter = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            backupNote = runCatching {
+                val text = graph.exportBackup()
+                withContext(Dispatchers.IO) {
+                    val out = requireNotNull(activity.contentResolver.openOutputStream(uri, "wt")) { "no file to write" }
+                    out.use { it.write(text.toByteArray()) }
+                }
+                "Saved: the settings, the log, what the app has learned and your calendar answers. No passwords or keys."
+            }.getOrElse { "Couldn't save it: ${it.message}" }
+        }
+    }
+    val importer = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            restoreNote = runCatching {
+                val bytes = withContext(Dispatchers.IO) {
+                    val input = requireNotNull(activity.contentResolver.openInputStream(uri)) { "no file to read" }
+                    input.use { Backups.read(it) }
+                }
+                if (bytes == null) "That file is too big to be a backup." else graph.importBackup(bytes.decodeToString())
+            }.getOrElse { "Couldn't read it: ${it.message}" }
+        }
+    }
 
     Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
         SetupItem(
@@ -123,6 +153,18 @@ fun SetupScreen(graph: AppGraph, activity: Activity) {
             done = null,
             detail = "Hours, planning, Anki, what's blocked, and Claude.",
             action = "Open" to { activity.startActivity(Intent(activity, SettingsActivity::class.java)) },
+        )
+        SetupItem(
+            title = "Back up",
+            done = null,
+            detail = backupNote ?: "The settings, the log, what the app has learned and your calendar answers, to a file you choose. No passwords or keys.",
+            action = "Export" to { exporter.launch("decrastination-backup.json") },
+        )
+        SetupItem(
+            title = "Restore",
+            done = null,
+            detail = restoreNote ?: "From a backup. Once protection is armed, only the settings, and one that loosens blocking waits.",
+            action = "Import" to { importer.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) },
         )
         SetupItem(
             title = "Blocking and protection",
