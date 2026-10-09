@@ -30,6 +30,7 @@ import com.thomaswcode.decrastination.sources.teams.TeamsSource
 import com.thomaswcode.decrastination.sync.SyncWorker
 import com.thomaswcode.decrastination.sync.Syncer
 import com.thomaswcode.decrastination.widget.WidgetUpdater
+import java.io.File
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -40,8 +41,9 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import java.io.File
 
 /**
  * The app's singletons. The sync, the focus service, the widget and the screens all run in the
@@ -82,19 +84,23 @@ class AppGraph private constructor(context: Context) {
     val focus = Focus(tasks, settings, runtime, log, clock) { state, s, now -> plan(state, s, now) }
 
     /** Applies a settings change: at once, or, once armed, pending if it loosens blocking. */
-    suspend fun changeSettings(proposed: Settings) {
+    /**
+     * Held while the settings and their pending changes are changed: two files, written in turn,
+     * so each change finishes before the next reads them.
+     */
+    private val changing = Mutex()
+
+    suspend fun changeSettings(proposed: Settings) = changing.withLock {
         // What's waiting is counted up to now first, so a new change's wait starts now.
-        applyDueChanges(force = true)
-        val now = clock.now()
-        var outcome: SettingsChanges.Outcome? = null
-        runtime.update { state ->
-            outcome = SettingsChanges.propose(settings.value, proposed, state.pending, now) { java.util.UUID.randomUUID().toString() }
-            val waiting = outcome!!.pending
-            // Nothing was waiting: the count starts now, whatever an old mark says.
-            val mark = if (state.pending.isEmpty()) clock.uptime() else state.uptimeMark ?: clock.uptime()
-            state.copy(pending = waiting, uptimeMark = if (waiting.isEmpty()) null else mark)
-        }
-        outcome?.let { result -> settings.update { result.settings } }
+        applyDue(force = true)
+        val state = runtime.value
+        val outcome = SettingsChanges.propose(settings.value, proposed, state.pending, clock.now()) { java.util.UUID.randomUUID().toString() }
+        // Nothing was waiting: the count starts now, whatever an old mark says.
+        val mark = if (state.pending.isEmpty()) clock.uptime() else state.uptimeMark ?: clock.uptime()
+        // The pending list first: stopped between the two, what applies now is lost (and seen to
+        // be), but a waiting change this one replaced can't come back.
+        runtime.update { it.copy(pending = outcome.pending, uptimeMark = if (outcome.pending.isEmpty()) null else mark) }
+        settings.update { outcome.settings }
     }
 
     /**
@@ -104,16 +110,33 @@ class AppGraph private constructor(context: Context) {
      */
     suspend fun applyDueChanges(force: Boolean = false) {
         if (runtime.value.pending.isEmpty()) return
-        val now = clock.now()
+        changing.withLock { applyDue(force) }
+    }
+
+    /** [applyDueChanges], with [changing] held. */
+    private suspend fun applyDue(force: Boolean) {
+        val state = runtime.value
+        if (state.pending.isEmpty()) return
         val uptime = clock.uptime()
-        var applied: SettingsChanges.Outcome? = null
+        val elapsed = SettingsChanges.counting(state.pending, state.uptimeMark, uptime, force) ?: return
+        val outcome = SettingsChanges.applyDue(settings.value, state.pending, clock.now(), elapsed)
+        val waiting = outcome.pending.map { it.id }.toSet()
+        val due = state.pending.filter { it.id !in waiting }
+        // The settings first: stopped before the pending list is saved, a change that fell due is
+        // applied again (to the same value), never lost.
+        if (due.isNotEmpty()) settings.update { latest -> due.fold(latest, SettingsChanges::apply) }
+        runtime.update { it.copy(pending = outcome.pending, uptimeMark = if (outcome.pending.isEmpty()) null else uptime) }
+    }
+
+    /** Applies the pending change [id] now (a parent's code allowed it), if it's still waiting. */
+    suspend fun applyNow(id: String) = changing.withLock {
+        val change = runtime.value.pending.firstOrNull { it.id == id } ?: return@withLock
+        // Saved before its pending entry goes, as in [applyDue].
+        settings.update { SettingsChanges.apply(it, change) }
         runtime.update { state ->
-            if (state.pending.isEmpty()) return@update state
-            val elapsed = SettingsChanges.counting(state.pending, state.uptimeMark, uptime, force) ?: return@update state
-            applied = SettingsChanges.applyDue(settings.value, state.pending, now, elapsed)
-            state.copy(pending = applied!!.pending, uptimeMark = if (applied!!.pending.isEmpty()) null else uptime)
+            val rest = state.pending.filterNot { it.id == id }
+            state.copy(pending = rest, uptimeMark = if (rest.isEmpty()) null else state.uptimeMark)
         }
-        applied?.let { result -> settings.update { result.settings } }
     }
 
     /**
