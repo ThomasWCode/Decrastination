@@ -42,6 +42,7 @@ import com.thomaswcode.decrastination.enrich.AiUsage
 import com.thomaswcode.decrastination.learn.Daily
 import com.thomaswcode.decrastination.protect.SettingsChanges
 import java.util.Locale
+import java.util.Optional
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -112,11 +113,10 @@ class SettingsActivity : ComponentActivity() {
                     val usage = runtime.aiUsage.forMonth(AiUsage.monthOf(graph.clock.now(), graph.clock.zone()))
                     SwitchRow("Use Claude for steps, estimates and email triage", draft.aiEnabled) { draft = draft.copy(aiEnabled = it) }
                     Note(
-                        "Off, nothing is sent to Claude; the rules do what they can. On, it needs its API key (Setup) and stays under the monthly cap. " +
-                            "This month: £%.2f in %d calls.".format(Locale.UK, usage.spentGbp(draft.usdToGbp), usage.calls),
+                        "Off, nothing is sent to Claude; the rules do what they can. On, it needs its API key (Setup); with no cap, it stops when the account's credit runs out. " +
+                            "This month: $%.2f in %d calls.".format(Locale.UK, usage.spentUsd, usage.calls),
                     )
-                    NumberField("Monthly cap (£)", draft.aiMonthlyCapGbp, 1..1000, "aiMonthlyCapGbp", ::valid) { draft = draft.copy(aiMonthlyCapGbp = it) }
-                    DecimalField("Pounds per dollar", draft.usdToGbp, 0.3..2.0, "usdToGbp", ::valid) { draft = draft.copy(usdToGbp = it) }
+                    OptionalNumberField("Monthly cap ($, blank for none)", draft.aiMonthlyCapUsd, 1..10_000, "aiMonthlyCapUsd", ::valid) { draft = draft.copy(aiMonthlyCapUsd = it) }
                 }
 
                 item { Section("Hours") }
@@ -281,9 +281,18 @@ private fun <T> ParsedField(label: String, shown: String, key: String, valid: (S
 private fun NumberField(label: String, value: Int, range: IntRange, key: String, valid: (String, Boolean) -> Unit, onChange: (Int) -> Unit) =
     ParsedField(label, value.toString(), key, valid, { it.trim().toIntOrNull()?.takeIf { n -> n in range } }, onChange, number = true)
 
+/** A whole number in [range], or blank for none. */
 @Composable
-private fun DecimalField(label: String, value: Double, range: ClosedFloatingPointRange<Double>, key: String, valid: (String, Boolean) -> Unit, onChange: (Double) -> Unit) =
-    ParsedField(label, value.toString(), key, valid, { it.trim().toDoubleOrNull()?.takeIf { n -> n in range } }, onChange, number = true)
+private fun OptionalNumberField(label: String, value: Int?, range: IntRange, key: String, valid: (String, Boolean) -> Unit, onChange: (Int?) -> Unit) =
+    ParsedField(
+        label,
+        value?.toString().orEmpty(),
+        key,
+        valid,
+        { text -> text.trim().let { if (it.isEmpty()) Optional.empty() else it.toIntOrNull()?.takeIf { n -> n in range }?.let { n -> Optional.of(n) } } },
+        { onChange(it.orElse(null)) },
+        number = true,
+    )
 
 @Composable
 private fun TimeField(label: String, minuteOfDay: Int, key: String, valid: (String, Boolean) -> Unit, onChange: (Int) -> Unit) =

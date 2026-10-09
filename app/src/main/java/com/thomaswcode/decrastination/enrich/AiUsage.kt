@@ -29,10 +29,8 @@ data class AiUsage(
     /** This month's, or a new one's from nothing; a key problem, not being the month's, carries over. */
     fun forMonth(month: String): AiUsage = if (month == this.month) this else AiUsage(month = month, keyProblem = keyProblem, keyProblemSince = keyProblemSince)
 
-    fun spentGbp(usdToGbp: Double): Double = spentUsd * usdToGbp
-
-    /** Whether one more call stays under [capGbp] even at its dearest ([Pricing.WORST_CALL_USD]). */
-    fun allows(capGbp: Int, usdToGbp: Double): Boolean = (spentUsd + Pricing.WORST_CALL_USD) * usdToGbp <= capGbp
+    /** Whether one more call stays under [capUsd] even at its dearest ([Pricing.WORST_CALL_USD]); with no cap, always. */
+    fun allows(capUsd: Int?): Boolean = capUsd == null || spentUsd + Pricing.WORST_CALL_USD <= capUsd
 
     /** A call that went through: the key works, whatever was wrong with it before. */
     fun record(costUsd: Double, refused: Boolean, at: Long): AiUsage = copy(

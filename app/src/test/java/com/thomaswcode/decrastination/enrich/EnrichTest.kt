@@ -413,21 +413,24 @@ class AiUsageTest {
     fun `the model is held while off, for an hour after a failed call, and at its cap`() {
         val now = Fixtures.at("2026-10-10T12:00")
         val month = AiUsage.monthOf(now, LONDON)
-        assertEquals(ModelHold.Off, ModelHold.of(false, AiUsage(month = month), now, LONDON, 200, 0.79))
+        assertEquals(ModelHold.Off, ModelHold.of(false, AiUsage(month = month), now, LONDON, 200))
         val failed = AiUsage(month = month).failure("no connection", now - 10 * 60_000L)
-        assertEquals(ModelHold.Resting, ModelHold.of(true, failed, now, LONDON, 200, 0.79))
-        assertNull(ModelHold.of(true, failed, now + ModelHold.REST_MS, LONDON, 200, 0.79))
-        assertEquals(ModelHold.Capped, ModelHold.of(true, AiUsage(month = month, spentUsd = 1000.0), now, LONDON, 200, 0.79))
-        assertNull(ModelHold.of(true, AiUsage(month = month), now, LONDON, 200, 0.79))
+        assertEquals(ModelHold.Resting, ModelHold.of(true, failed, now, LONDON, 200))
+        assertNull(ModelHold.of(true, failed, now + ModelHold.REST_MS, LONDON, 200))
+        assertEquals(ModelHold.Capped, ModelHold.of(true, AiUsage(month = month, spentUsd = 1000.0), now, LONDON, 200))
+        assertNull(ModelHold.of(true, AiUsage(month = month), now, LONDON, 200))
     }
 
     @Test
     fun `a new month starts at nothing, and a call is refused that could pass the cap`() {
         val usage = AiUsage(month = "2026-09", spentUsd = 250.0)
         assertEquals(0.0, usage.forMonth("2026-10").spentUsd)
-        assertTrue(AiUsage("2026-10", spentUsd = 10.0).allows(capGbp = 200, usdToGbp = 0.79))
-        // £200 at 0.79 is $253.16: $252.80 spent leaves no room for a call at its dearest.
-        assertEquals(false, AiUsage("2026-10", spentUsd = 252.80).allows(capGbp = 200, usdToGbp = 0.79))
+        assertTrue(AiUsage("2026-10", spentUsd = 10.0).allows(capUsd = 200))
+        // $199.50 spent leaves no room under $200 for a call at its dearest.
+        assertEquals(false, AiUsage("2026-10", spentUsd = 199.50).allows(capUsd = 200))
+        // No cap, as by default: the prepaid account's credit is the limit.
+        assertTrue(AiUsage("2026-10", spentUsd = 5_000.0).allows(capUsd = null))
+        assertNull(ModelHold.of(true, AiUsage(month = "2026-10", spentUsd = 5_000.0), Fixtures.at("2026-10-10T12:00"), LONDON, null))
     }
 
     @Test
