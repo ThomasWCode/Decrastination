@@ -140,7 +140,7 @@ class MainActivity : ComponentActivity() {
                 }
                 when (tab) {
                     0 -> TodayScreen(graph, this@MainActivity)
-                    1 -> TasksScreen(graph)
+                    1 -> TasksScreen(graph, this@MainActivity)
                     else -> StatsScreen(graph)
                 }
             }
@@ -158,6 +158,8 @@ class MainActivity : ComponentActivity() {
         private val MENU = listOf(
             "Setup" to SetupActivity::class.java,
             "Settings" to SettingsActivity::class.java,
+            "Instructions" to InstructionsActivity::class.java,
+            "Calendar" to CalendarActivity::class.java,
             "Blocking and protection" to ProtectionActivity::class.java,
             "This week" to CheckInActivity::class.java,
         )
