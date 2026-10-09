@@ -80,6 +80,16 @@ object GmailThreads {
         val whole: Boolean get() = text.length < readTo || readTo >= MAX_BODY_CHARS
     }
 
+    /** [task]'s stored text, and how far it was read: stored before that was kept, nowhere near far enough. */
+    fun bodyOf(task: TaskItem): Body = Body(task.detail, task.extra[EXTRA_TEXT_READ_TO]?.toIntOrNull() ?: 0)
+
+    /**
+     * Whether [task]'s text has been read as far as reads now go: not still to be fetched, nor cut
+     * by an older, lower limit. Until it has, it isn't asked about, so nothing is planned from part
+     * of an email, nor kept from the archive for blocks found in that part.
+     */
+    fun textRead(task: TaskItem): Boolean = EXTRA_TEXT_PENDING !in task.extra && bodyOf(task).whole
+
     /** Each conversation's newest message, newest conversation first. */
     fun latest(messages: List<InboxMessage>): List<InboxMessage> =
         messages.groupBy { it.threadId }
@@ -121,10 +131,7 @@ object GmailThreads {
      */
     fun knownBodies(known: List<TaskItem>): Map<String, Body> =
         known.filter { it.source == Source.Gmail && EXTRA_TEXT_PENDING !in it.extra }
-            .mapNotNull { task ->
-                // Read before how far was kept: nowhere near far enough, so it's read again.
-                task.extra[EXTRA_MESSAGE_ID]?.let { it to Body(task.detail, task.extra[EXTRA_TEXT_READ_TO]?.toIntOrNull() ?: 0) }
-            }
+            .mapNotNull { task -> task.extra[EXTRA_MESSAGE_ID]?.let { it to bodyOf(task) } }
             .toMap()
 
     /**
@@ -134,6 +141,15 @@ object GmailThreads {
      */
     fun toRead(messages: List<InboxMessage>, known: Map<String, Body>, max: Int): List<InboxMessage> =
         latest(messages).filter { known[it.messageId]?.whole != true }.take(max)
+
+    /**
+     * The texts a read ends with: those [read] now, by message id, over the [known] ones. One that
+     * couldn't be read (null: gone from the mailbox between its listing and its fetch) keeps the
+     * text it had, still marked as read only so far, so a later read tries again; a new one is
+     * left to be fetched.
+     */
+    fun withRead(known: Map<String, Body>, read: Map<String, String?>): Map<String, Body> =
+        known + read.mapNotNull { (id, text) -> text?.let { id to Body(it) } }
 
     private val INTERNAL_DATE = DateTimeFormatter.ofPattern("d-MMM-yyyy HH:mm:ss Z", Locale.ENGLISH)
 
@@ -198,7 +214,8 @@ class GmailSource(private val secrets: SecretStore) : TaskSource {
                     imap.uidFetch(batch, "UID INTERNALDATE X-GM-MSGID X-GM-THRID X-GM-LABELS ENVELOPE").mapNotNull(GmailThreads::message)
                 }
                 if (messages.size < uids.size) throw IOException("Gmail listed ${uids.size} messages but described ${messages.size}")
-                val bodies = known + GmailThreads.toRead(messages, known, MAX_BODIES).associate { it.messageId to GmailThreads.Body(text(imap, it.uid)) }
+                val read = GmailThreads.toRead(messages, known, MAX_BODIES).associate { it.messageId to text(imap, it.uid) }
+                val bodies = GmailThreads.withRead(known, read)
                 imap.logout()
                 SourceRead(GmailThreads.fetched(messages, bodies, context.now, context.zone))
             }
@@ -209,15 +226,17 @@ class GmailSource(private val secrets: SecretStore) : TaskSource {
 
     /**
      * The message's readable text, from its first plain (else HTML) part, cut to
-     * [GmailThreads.MAX_BODY_CHARS]. The part is fetched whole, up to [MAX_PART_BYTES]: HTML's
+     * [GmailThreads.MAX_BODY_CHARS]: empty if it has none, null if it couldn't be read (gone from
+     * the mailbox since it was listed). The part is fetched whole, up to [MAX_PART_BYTES]: HTML's
      * text can come after 50 KB of markup and styles (Warwick's Open Day email's did).
      */
-    private fun text(imap: ImapClient, uid: Long): String {
-        val structure = imap.uidFetch(listOf(uid), "UID BODYSTRUCTURE").firstOrNull()?.get("BODYSTRUCTURE") ?: return ""
+    private fun text(imap: ImapClient, uid: Long): String? {
+        val structure = imap.uidFetch(listOf(uid), "UID BODYSTRUCTURE").firstOrNull()?.get("BODYSTRUCTURE") ?: return null
         val part = Mime.textPart(structure) ?: return ""
-        val response = imap.uidFetch(listOf(uid), "UID BODY.PEEK[${part.section}]<0.$MAX_PART_BYTES>").firstOrNull() ?: return ""
-        val body = response.entries.firstOrNull { it.key.startsWith("BODY[") }?.value as? ImapValue.Str ?: return ""
-        return Mime.tidy(Mime.decode(body.bytes, part), GmailThreads.MAX_BODY_CHARS)
+        val response = imap.uidFetch(listOf(uid), "UID BODY.PEEK[${part.section}]<0.$MAX_PART_BYTES>").firstOrNull() ?: return null
+        val body = response.entries.firstOrNull { it.key.startsWith("BODY[") }?.value ?: return null
+        // NIL: a part with nothing in it.
+        return (body as? ImapValue.Str)?.let { Mime.tidy(Mime.decode(it.bytes, part), GmailThreads.MAX_BODY_CHARS) }.orEmpty()
     }
 
     /** TLS to Gmail, with the host name checked against its certificate. */
