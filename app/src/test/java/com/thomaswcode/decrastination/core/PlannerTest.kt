@@ -180,6 +180,13 @@ class PlannerTest {
     }
 
     @Test
+    fun `minutes of a session stopped early come off the next steps`() {
+        val steps = listOf(SubStep("A", 30), SubStep("B", 30))
+        val plan = plan(listOf(task("t", Fixtures.at("2026-10-20T09:00"), steps = steps, worked = 20)), "2026-10-08T17:00")
+        assertEquals(listOf(10, 30), plan.chunksOf("teams:t").map { it.minutes })
+    }
+
+    @Test
     fun `sub-steps are the chunks, done ones skipped`() {
         val steps = listOf(SubStep("Q1-8", 25, done = true), SubStep("Q9-16", 25), SubStep("mark", 10))
         val plan = plan(listOf(task("t", Fixtures.at("2026-10-20T09:00"), steps = steps)), "2026-10-08T17:00")

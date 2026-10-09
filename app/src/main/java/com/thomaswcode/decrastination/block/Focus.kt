@@ -16,6 +16,7 @@ import com.thomaswcode.decrastination.data.RuntimeState
 import com.thomaswcode.decrastination.data.SessionRecord
 import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.data.TaskState
+import com.thomaswcode.decrastination.sources.anki.AnkiRules
 import java.time.Instant
 import java.time.LocalDate
 import java.util.concurrent.atomic.AtomicLong
@@ -321,8 +322,11 @@ class Focus(
             // Reading or archiving an email, or an event passing, isn't work that earns time. Free
             // time is for the day the work was confirmed: given late (the app stopped first), after
             // that day is over, it has gone as the rest of that day's has.
+            val held = AnkiRules.heldSections(tasks.value.tasks, settings.value.ankiTextbook)
             val earned = fresh.filter { it.kind != Kind.Info && it.kind != Kind.Event && today(it.doneAt ?: now) == today }.sumOf { task ->
-                val remaining = (task.effortMin * (1 - task.sourceProgress)).roundToInt() - worked(task)
+                // Vocabulary a deck task held earned its time with the deck, not again here.
+                val delegated = task.subSteps.filter { it.ankiSections.isNotEmpty() && held[task.id].orEmpty().containsAll(it.ankiSections) }.sumOf { it.minutes }
+                val remaining = (task.effortMin * (1 - task.sourceProgress)).roundToInt() - delegated - worked(task)
                 Credit.forCompletion(remaining.coerceAtLeast(0), ratio)
             }
             state.copy(
