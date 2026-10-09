@@ -8,7 +8,7 @@ A personal, sideloaded app for one phone (a Samsung Galaxy S24 on Android 16).
 
 **Phase 0, proving each data path, is done** (8 Oct 2026): all four sources can be read, a blocklisted app can be covered, and the app's own Settings pages can be guarded. What it found is in [`docs/phase0-findings.md`](docs/phase0-findings.md).
 
-**Phase 1, sources, storage and sync** (8–9 Oct): the app reads all four sources into one task list every 15 minutes, and shows every task and how each source's last read went, with a setup checklist. **Phase 2, the planner and widget** (9 Oct): the work is planned backwards from each deadline into day buckets; the app opens on the plan, and the *Next task* widget shows the single next thing to do, at any size from 2×1 up. **Phase 3, the blocker** (9 Oct): while anything is due today or tomorrow, from 16:45 on school days and 07:00 at weekends until 22:30, blocked apps and sites show the block screen instead; focus sessions, earned free time, automatic Teams syncs, and anti-tamper protection that's built but left for you to arm. [`PLAN.md`](PLAN.md) has the whole plan; [`docs/needs-you.md`](docs/needs-you.md) lists what's waiting for you.
+**Phase 1, sources, storage and sync** (8–9 Oct): the app reads all four sources into one task list every 15 minutes, and shows every task and how each source's last read went, with a setup checklist. **Phase 2, the planner and widget** (9 Oct): the work is planned backwards from each deadline into day buckets; the app opens on the plan, and the *Next task* widget shows the single next thing to do, at any size from 2×1 up. **Phase 3, the blocker** (9 Oct): while anything is due today or tomorrow, from 16:45 on school days and 07:00 at weekends until 22:30, blocked apps and sites show the block screen instead; focus sessions, earned free time, automatic Teams syncs, and anti-tamper protection that's built but left for you to arm. **Phase 4, enrichment and settings** (9 Oct): the rules split listed assignments into steps; Claude for email triage, assignment steps and estimates is built but off until you give it a key and switch it on, under a monthly cap; and a Settings screen edits everything. [`PLAN.md`](PLAN.md) has the whole plan; [`docs/needs-you.md`](docs/needs-you.md) lists what's waiting for you.
 
 ## Documents
 
@@ -47,6 +47,7 @@ adb shell am start -n com.thomaswcode.decrastination/.debug.Command --es cmd syn
 adb shell am start -n com.thomaswcode.decrastination/.debug.Command --es cmd state    # each source's status, every task
 adb shell am start -n com.thomaswcode.decrastination/.debug.Command --es cmd force-block --ei minutes 10   # blocking hours now, for testing
 adb shell am start -n com.thomaswcode.decrastination/.debug.Command --es cmd protection   # run the watchdog
+adb shell am start -n com.thomaswcode.decrastination/.debug.Command --es cmd enrich       # enrich what's new now
 ```
 
 `CommandActivity` lists the rest, including test hooks that arm and disarm at once and a `clean-up` after testing.

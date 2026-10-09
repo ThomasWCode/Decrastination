@@ -23,6 +23,21 @@ object Blocklist {
         "com.linkedin.android",
     )
 
+    /** The listed apps' names, for showing one that isn't installed. */
+    val NAMES = mapOf(
+        "com.google.android.youtube" to "YouTube",
+        "com.zhiliaoapp.musically" to "TikTok",
+        "com.ss.android.ugc.trill" to "TikTok (Asia)",
+        "com.netflix.mediaclient" to "Netflix",
+        "bbc.iplayer.android" to "BBC iPlayer",
+        "tv.twitch.android.app" to "Twitch",
+        "com.naver.linewebtoon" to "Webtoon",
+        "com.snapchat.android" to "Snapchat",
+        "xyz.blueskyweb.app" to "Bluesky",
+        "com.discord" to "Discord",
+        "com.linkedin.android" to "LinkedIn",
+    )
+
     val SITES = listOf(
         "youtube.com",
         "youtu.be",

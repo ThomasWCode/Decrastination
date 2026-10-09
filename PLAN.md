@@ -149,6 +149,8 @@ Phase 0 also built what Phase 1 would have scaffolded: the Gradle setup, the sha
 
 ### Phase 4: Enrichment
 
+*Built 9 Oct 2026; Claude off until you switch it on (no paid calls yet). The rules split listed assignments into steps; Claude's client was checked against stand-in servers in the tests and on the phone, and its prompts on real items by Opus through the subscription. `docs/data-sources.md` §5 ("As built").*
+
 - `Enricher` interface with `RuleEnricher` (always) and `ClaudeEnricher` (Opus 5.5, `output_config.effort = "high"`, JSON schema output, server-side fallbacks on, usage logged against a monthly cap).
 - Email triage → `{kind, actionableFrom, deadline?, effortMin, nextStep}`. Assignment → `{subSteps[], effortMin, ankiDecks[], testDate?}` (the deck regex always wins when it matches). Power Planner → effort.
 - Settings screen: blocklist, hours, quota, box length, margins, credentials, API key, cap; loosening changes shown as pending with their apply time.

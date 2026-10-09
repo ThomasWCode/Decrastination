@@ -35,6 +35,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.thomaswcode.decrastination.AppGraph
+import com.thomaswcode.decrastination.block.Blocklist
 import com.thomaswcode.decrastination.data.Window
 import com.thomaswcode.decrastination.enrich.AiUsage
 import com.thomaswcode.decrastination.protect.SettingsChanges
@@ -172,7 +173,8 @@ class SettingsActivity : ComponentActivity() {
                 }
 
                 item { Section("Blocked apps") }
-                val listed = draft.blockedApps.filter { pkg -> apps.none { it.packageName == pkg } }.map { App(it, it) }
+                val listed = draft.blockedApps.filter { pkg -> apps.none { it.packageName == pkg } }
+                    .map { App("${Blocklist.NAMES[it] ?: it} (not installed)", it) }
                 items(listed + apps.filter { it.packageName != packageName }, key = { it.packageName }) { app ->
                     SwitchRow(app.label, app.packageName in draft.blockedApps) { on ->
                         draft = draft.copy(blockedApps = if (on) (draft.blockedApps + app.packageName).distinct() else draft.blockedApps - app.packageName)
