@@ -136,19 +136,20 @@ object Planner {
             var day = firstDay(item)
             for (i in item.chunks.indices) {
                 // Past its deadline it's due now, but a task that can only go so far a day carries
-                // on over the next days, and undated work keeps to its daily allowance.
-                while (day < horizon && ((perDay != null && countOn(assigned, day) >= perDay) ||
-                        (item.soft && room(item, day) < item.chunks[i].minutes && (softUsed[day] ?: 0) > 0))
-                ) {
-                    day = day.plusDays(1)
-                }
+                // on over the next days, each step to a day with both a step and the time free (not
+                // tonight once tonight's hours are gone), and undated work keeps to its daily allowance.
+                fun waits(day: LocalDate) =
+                    (perDay != null && (countOn(assigned, day) >= perDay || room(item, day) < item.chunks[i].minutes)) ||
+                        (item.soft && room(item, day) < item.chunks[i].minutes && (softUsed[day] ?: 0) > 0)
+                while (day < horizon && waits(day)) day = day.plusDays(1)
                 // Beyond the horizon, the rest goes unplanned rather than breaking a per-day task's
                 // limit or undated work's allowance.
-                if (perDay != null && countOn(assigned, day) >= perDay) break
-                if (item.soft && room(item, day) < item.chunks[i].minutes && (softUsed[day] ?: 0) > 0) break
+                if (waits(day)) break
                 assigned[i] = day
                 take(item, day, item.chunks[i].minutes)
-                placed.getValue(day) += chunk(item, i, behind = false)
+                // Due today but only possible from a later day (a deck whose next cards come
+                // tomorrow): it misses its deadline, so it's behind.
+                placed.getValue(day) += chunk(item, i, behind = day > date(item.deadline, zone))
             }
         }
 

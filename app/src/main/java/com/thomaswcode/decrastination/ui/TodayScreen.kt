@@ -121,7 +121,7 @@ private fun DayHeader(bucket: DayBucket, today: LocalDate) {
         today.plusDays(1) -> "Tomorrow"
         else -> bucket.date.format(DAY)
     }
-    val load = "${Format.minutes(bucket.plannedMin)} planned, ${Format.minutes(bucket.capacityMin)} free"
+    val load = Format.load(bucket.plannedMin, bucket.capacityMin)
     Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 4.dp)) {
         Text(name, style = MaterialTheme.typography.titleMedium)
         Text(

@@ -317,6 +317,26 @@ class PlannerTest {
     }
 
     @Test
+    fun `an overdue deck's steps wait for a day with time, not tonight after its hours`() {
+        // 22:10 on Thursday, the evening's hours gone: Friday, Saturday and Sunday.
+        val steps = (1..3).map { SubStep("20 new cards", 9) }
+        val deck = task("deck", Fixtures.at("2026-10-01T08:30"), steps = steps).copy(stepsPerDay = 1)
+        assertEquals(listOf("2026-10-09", "2026-10-10", "2026-10-11").map(LocalDate::parse), plan(listOf(deck), "2026-10-08T22:10").dayOf("deck"))
+    }
+
+    @Test
+    fun `work due today that can only start tomorrow is behind`() {
+        // Due tonight, but the deck's next cards come at 04:00 tomorrow.
+        val deck = task("deck", Fixtures.at("2026-10-08T23:00"), steps = listOf(SubStep("20 new cards", 9)))
+            .copy(stepsPerDay = 1, notBefore = Fixtures.at("2026-10-09T04:00"))
+        val plan = plan(listOf(deck), "2026-10-08T17:00")
+        assertEquals(listOf(LocalDate.parse("2026-10-09")), plan.dayOf("deck"))
+        val chunk = plan.ordered.single()
+        assertTrue(chunk.behind)
+        assertTrue(chunk.dueToday)
+    }
+
+    @Test
     fun `work whose last usable day comes first is placed first`() {
         // The essay is due later but has a three-day margin, so its last usable day (Wednesday)
         // comes before the other's (Friday): it gets Wednesday, its own last usable day.

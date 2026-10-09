@@ -80,11 +80,9 @@ data class WidgetModel(
             // The Teams widget's own trouble (its sync service off, its last sync failed), which
             // also explains a ↻ that didn't sync Teams.
             state.status(Source.Teams).note?.let { return it }
-            val teams = state.status(Source.Teams)
-            // Read, but the Teams widget has never synced: there's nothing from Teams at all.
-            if (teams.lastSuccessAt != null && teams.dataAsOf == null) return "Teams hasn't synced yet"
-            val teamsAsOf = teams.dataAsOf
-            if (teamsAsOf != null && now - teamsAsOf > TEAMS_STALE_MS) return "Teams synced ${Format.ago(teamsAsOf, now)}"
+            // Not read yet, or read but never synced by the Teams widget: nothing from Teams at all.
+            val teamsAsOf = state.status(Source.Teams).dataAsOf ?: return "Teams hasn't synced yet"
+            if (now - teamsAsOf > TEAMS_STALE_MS) return "Teams synced ${Format.ago(teamsAsOf, now)}"
             return null
         }
     }
