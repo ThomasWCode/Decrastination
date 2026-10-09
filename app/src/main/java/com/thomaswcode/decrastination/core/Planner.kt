@@ -153,12 +153,20 @@ object Planner {
         val zone = input.zone
         val today = date(input.now, zone)
         val byId = input.tasks.associateBy { it.id }
+        // The assignments a deck task was made for (its vocabulary is theirs, done in Anki).
+        fun linked(task: TaskItem): List<TaskItem> =
+            task.extra[AnkiRules.EXTRA_FOR]?.takeIf { task.source == Source.Anki }?.split(',')?.mapNotNull { byId[it]?.takeIf { a -> a.isOpen } }.orEmpty()
+        // Off the plan as you said: a task you said isn't one, or waits for another; and a deck task
+        // whose every assignment is, as its vocabulary is theirs.
+        fun heldBack(task: TaskItem) = task.hidden || Instructions.waiting(task, byId)
         val (events, work) = input.tasks
-            .filter { it.isOpen && it.isAvailable(input.now) && !it.hidden && !Instructions.waiting(it, byId) }
+            .filter { it.isOpen && it.isAvailable(input.now) && !heldBack(it) && linked(it).let { a -> a.isEmpty() || !a.all(::heldBack) } }
             .partition { it.kind == Kind.Event }
         val held = AnkiRules.heldSections(input.tasks, input.settings.ankiTextbook)
-        // A start you gave (an instruction) places the work from then on, as a deck's next cards do.
-        val items = work.map { t -> t.userFrom?.let { from -> t.copy(notBefore = listOfNotNull(t.notBefore, from).maxOrNull()) } ?: t }.flatMap { task ->
+        // A start you gave (an instruction) places the work from then on, as a deck's next cards do;
+        // a deck task's, from the earliest its assignments can start, where they all have one.
+        fun startOf(task: TaskItem): Long? = task.userFrom ?: linked(task).takeIf { a -> a.isNotEmpty() && a.all { it.userFrom != null } }?.minOf { it.userFrom!! }
+        val items = work.map { t -> startOf(t)?.let { from -> t.copy(notBefore = listOfNotNull(t.notBefore, from).maxOrNull()) } ?: t }.flatMap { task ->
             val soft = task.dueAt == null
             // Calendar days where you are, so a week is a week across the clocks changing.
             val deadline = task.dueAt
@@ -230,11 +238,14 @@ object Planner {
         // Work that can't start till later in a day (a start you gave of 21:00) has only that day's
         // time from then: its own share of the day, its time after the start, less what it's taken.
         fun opening(item: Item): LocalDate? = item.notBefore?.takeIf { it > input.now }?.let { date(it, zone) }
-        val openingUsed = HashMap<Item, Int>()
+        // Each item's minutes on its opening day, with its start: the time after a start is shared by
+        // everything starting then or later that day (two tasks opening at 21:00 share one evening).
+        val openingPlaced = HashMap<LocalDate, MutableList<Pair<Long, Int>>>()
         fun openingRoom(item: Item): Int {
             val day = opening(item) ?: return Int.MAX_VALUE
-            val from = input.copy(now = item.notBefore!!, workedTodayMin = if (day == today) input.workedTodayMin else 0)
-            return capacity(day, from) - (openingUsed[item] ?: 0)
+            val start = item.notBefore!!
+            val from = input.copy(now = start, workedTodayMin = if (day == today) input.workedTodayMin else 0)
+            return capacity(day, from) - openingPlaced[day].orEmpty().filter { it.first >= start }.sumOf { it.second }
         }
         fun room(item: Item, day: LocalDate): Int {
             val left = free.getValue(day)
@@ -245,7 +256,7 @@ object Planner {
         fun take(item: Item, day: LocalDate, minutes: Int) {
             free[day] = free.getValue(day) - minutes
             if (item.soft) softUsed[day] = (softUsed[day] ?: 0) + minutes
-            if (day == opening(item)) openingUsed[item] = (openingUsed[item] ?: 0) + minutes
+            if (day == opening(item)) openingPlaced.getOrPut(day) { mutableListOf() } += item.notBefore!! to minutes
         }
         fun give(item: Item, day: LocalDate, minutes: Int) = take(item, day, -minutes)
         // A day you've limited ([Input.dayCaps]) is never overfilled, not even by overdue work,

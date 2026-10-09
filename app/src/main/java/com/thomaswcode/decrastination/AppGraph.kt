@@ -748,21 +748,24 @@ class AppGraph private constructor(context: Context) {
     /** Whether applying (or taking back) [instruction] needs a parent code now: armed, and it changes a due date. */
     fun instructionNeedsCode(instruction: Instruction): Boolean = settings.value.armed && Instructions.needsCode(instruction.changes)
 
+    /** Held from checking an instruction to applying it, so two applied at once can't both pass the check. */
+    private val applying = Mutex()
+
     /** Applies [id], read and checked by you. False if it needs a parent code ([applyInstructionWithCode]). */
-    suspend fun applyInstruction(id: String): Boolean {
-        val instruction = instructions.value.instructions.firstOrNull { it.id == id && it.state == InstructionStatus.Understood } ?: return true
-        if (refuseCircle(instruction)) return true
-        if (instructionNeedsCode(instruction)) return false
+    suspend fun applyInstruction(id: String): Boolean = applying.withLock {
+        val instruction = instructions.value.instructions.firstOrNull { it.id == id && it.state == InstructionStatus.Understood } ?: return@withLock true
+        if (refuseCircle(instruction)) return@withLock true
+        if (instructionNeedsCode(instruction)) return@withLock false
         setApplied(id)
-        return true
+        true
     }
 
     /** Applies [id] with a parent [code]. Returns what went wrong, or null. */
-    suspend fun applyInstructionWithCode(id: String, code: String): String? {
-        instructions.value.instructions.firstOrNull { it.id == id }?.let { if (refuseCircle(it)) return null }
-        useParentCode(code)?.let { return it }
+    suspend fun applyInstructionWithCode(id: String, code: String): String? = applying.withLock {
+        instructions.value.instructions.firstOrNull { it.id == id }?.let { if (refuseCircle(it)) return@withLock null }
+        useParentCode(code)?.let { return@withLock it }
         setApplied(id)
-        return null
+        null
     }
 
     /**
