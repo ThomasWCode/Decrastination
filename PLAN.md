@@ -189,6 +189,10 @@ Phase 0 also built what Phase 1 would have scaffolded: the Gradle setup, the sha
 
 *Built 9 Oct 2026, your call: an email that only needs reading (Info) or tells of an event (Event) isn't a task. It's kept, unseen, so archiving it finishes it and a reply asking something brings it back, but it's off the plan, the widget, the briefing, blocking and the Tasks list, and archiving it earns nothing.*
 
+### 1.4.0: a cleaner look
+
+*Built 9 Oct 2026, your ask: Setup, Settings, protection and the week's check-in moved into a ⋮ menu (with a dot when one needs you); Plan, Tasks and Stats as grouped tiles with bold section headings; long sections folded, with nothing taken away.*
+
 ## 6. Verification
 
 - **Unit tests (JVM):** `Planner` bucket allocation and ordering against `fixtures/` (expected buckets for tonight are written out in `docs/scheduler.md` §3); `BlockPolicy` strict/earned/quiet transitions; pending-change timing across midnight and reboot; source parsers against recorded JSON; deck-regex mapping against the real assignment texts; calibration maths; enrichment cache.
