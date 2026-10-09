@@ -14,6 +14,7 @@ import com.thomaswcode.decrastination.core.Uptime
 import com.thomaswcode.decrastination.data.ActivityLog
 import com.thomaswcode.decrastination.data.EndedSession
 import com.thomaswcode.decrastination.data.JsonStore
+import com.thomaswcode.decrastination.data.PhotoDone
 import com.thomaswcode.decrastination.data.RuntimeState
 import com.thomaswcode.decrastination.data.SessionRecord
 import com.thomaswcode.decrastination.data.Settings
@@ -408,6 +409,32 @@ class FocusTest {
         val t = tasks.value.tasks.single()
         assertEquals(listOf(false), t.subSteps.map { it.done })
         assertEquals(Focus.MAX_SESSION_MIN, t.workedMin)
+    }
+
+    @Test
+    fun `a photo check stopped part-way is finished at start-up, each part once`() = runTest {
+        // Saved, and its minutes given to the task, then the app stopped.
+        val done = PhotoDone("p1", "teams:hw", null, 45, clock.time)
+        tasks.update { it.copy(tasks = listOf(task("hw", effort = 90).copy(photoMin = 45, photosCounted = mapOf("p1" to 45)))) }
+        runtime.update { it.copy(photosDone = listOf(done)) }
+        focus.finishPhotos()
+        focus.finishPhotos()
+        assertEquals(45, tasks.value.tasks.single().photoMin)
+        assertEquals(1, log.value.sessions.count { it.photo })
+        assertEquals(15 * 60_000L, focus.creditLeftMs())
+        assertEquals(emptyList(), runtime.value.photosDone)
+    }
+
+    @Test
+    fun `a plan dropped is worked out again, not taken from the minute's keeping`() {
+        var made = 0
+        val counting = Focus(tasks, settings, runtime, log, clock) { state, s, now -> made++; Planner.plan(Planner.Input(state.tasks, now, LONDON, s)) }
+        counting.plan()
+        counting.plan()
+        assertEquals(1, made)
+        counting.forgetPlan()
+        counting.plan()
+        assertEquals(2, made)
     }
 
     @Test

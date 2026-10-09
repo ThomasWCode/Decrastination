@@ -11,6 +11,7 @@ import com.thomaswcode.decrastination.data.BlockRecord
 import com.thomaswcode.decrastination.data.CompletionRecord
 import com.thomaswcode.decrastination.data.EndedSession
 import com.thomaswcode.decrastination.data.JsonStore
+import com.thomaswcode.decrastination.data.PhotoDone
 import com.thomaswcode.decrastination.data.Rewarded
 import com.thomaswcode.decrastination.data.RuntimeState
 import com.thomaswcode.decrastination.data.SessionRecord
@@ -19,6 +20,7 @@ import com.thomaswcode.decrastination.data.TaskState
 import com.thomaswcode.decrastination.sources.anki.AnkiRules
 import java.time.Instant
 import java.time.LocalDate
+import java.util.UUID
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.math.roundToInt
 import kotlinx.coroutines.CoroutineScope
@@ -62,6 +64,11 @@ class Focus(
             cachedFor = key
             cachedAt = now
         }
+    }
+
+    /** Drops the plan kept for the minute: what it was made from beside the tasks and settings (the calendar) has changed. */
+    fun forgetPlan() {
+        cachedPlan = null
     }
 
     fun today(now: Long = clock.now()): LocalDate = Instant.ofEpochMilli(now).atZone(clock.zone()).toLocalDate()
@@ -248,50 +255,87 @@ class Focus(
     /**
      * A piece of [taskId] the photo check found done (Phase 5): as a finished session on it would,
      * its step is ticked (or its minutes added to the task's) and its share of free time earned.
+     * Saved first ([RuntimeState.photosDone]), so a stop part-way is finished at start-up.
      */
     suspend fun photoChecked(taskId: String, step: String?, minutes: Int): Boolean {
-        val now = clock.now()
+        val done = PhotoDone(UUID.randomUUID().toString(), taskId, step, minutes, clock.now())
+        runtime.update { it.copy(photosDone = it.photosDone + done) }
+        return finishPhoto(done)
+    }
+
+    /** Gives the photo checks a stop left part-way ([RuntimeState.photosDone]) what they're owed: at start-up. */
+    suspend fun finishPhotos() {
+        runtime.value.photosDone.forEach { finishPhoto(it) }
+    }
+
+    /**
+     * Gives [done] its due, each part once however often this runs: its step or minutes to its task
+     * (which notes what it was given), its record to the log (unless it's there), and its free time
+     * (only while it's still waiting, which it stops being in the same step).
+     */
+    private suspend fun finishPhoto(done: PhotoDone): Boolean {
         // Applied only while the piece is still to do: the task open and, for a step, that step not
         // ticked meanwhile (another check, a session, a sync). Free time only for what was.
         var credited = 0
         tasks.update { state ->
             state.copy(
                 tasks = state.tasks.map { t ->
-                    if (t.id != taskId || !t.isOpen) return@map t
+                    if (t.id != done.taskId) return@map t
+                    // Given already (a stop came after): what it was given then.
+                    t.photosCounted[done.id]?.let { given ->
+                        credited = given
+                        return@map t
+                    }
+                    if (!t.isOpen) return@map t
+                    fun counted(minutes: Int) = (t.photosCounted + (done.id to minutes)).entries.toList().takeLast(MAX_COUNTED).associate { it.key to it.value }
                     // One of its own steps: ticked, once.
-                    if (step != null && t.subSteps.any { it.title == step }) {
-                        val i = t.subSteps.indexOfFirst { !it.done && it.title == step }
+                    if (done.step != null && t.subSteps.any { it.title == done.step }) {
+                        val i = t.subSteps.indexOfFirst { !it.done && it.title == done.step }
                         if (i < 0) return@map t
-                        credited = minutes
-                        return@map t.copy(subSteps = t.subSteps.mapIndexed { j, s -> if (j == i) s.copy(done = true) else s }, photoMin = t.photoMin + minutes)
+                        credited = done.minutes
+                        return@map t.copy(
+                            subSteps = t.subSteps.mapIndexed { j, s -> if (j == i) s.copy(done = true) else s },
+                            photoMin = t.photoMin + done.minutes,
+                            photosCounted = counted(done.minutes),
+                        )
                     }
                     // A piece of time (the whole task, or a part the planner cut it into): counted
                     // against what's left of it as the plan measures it (calibrated), so the same
                     // work can't be counted past it.
                     val left = Planner.remaining(t, runtime.value.calibration.multiplier(t.kind, t.className)).roundToInt()
                     if (left <= 0) return@map t
-                    credited = minOf(minutes, left)
-                    t.copy(photoMin = t.photoMin + credited)
+                    credited = minOf(done.minutes, left)
+                    t.copy(photoMin = t.photoMin + credited, photosCounted = counted(credited))
                 },
             )
         }
         if (credited > 0) {
-            runtime.update { it.copy(credit = it.credit.earn(today(now), Credit.forSession(credited, settings.value.workMinPerFreeMin))) }
             // Recorded as the day's work, as a session's minutes are, and marked a photo, not timed.
-            val task = tasks.value.tasks.firstOrNull { it.id == taskId }
+            val task = tasks.value.tasks.firstOrNull { it.id == done.taskId }
             val record = SessionRecord(
-                taskId = taskId,
+                taskId = done.taskId,
                 kind = task?.kind ?: Kind.Admin,
                 className = task?.className,
-                label = "Photo check: " + (step ?: task?.title.orEmpty()),
-                plannedMin = minutes,
+                label = "Photo check: " + (done.step ?: task?.title.orEmpty()),
+                plannedMin = done.minutes,
                 workedMin = credited,
-                startedAt = now,
-                endedAt = now,
+                startedAt = done.at,
+                endedAt = done.at,
                 completed = true,
                 photo = true,
+                check = done.id,
             )
-            log.update { it.copy(sessions = it.sessions + record).trimmed(now) }
+            log.update { state -> if (state.sessions.any { it.check == done.id }) state else state.copy(sessions = state.sessions + record).trimmed(done.at) }
+        }
+        val ratio = settings.value.workMinPerFreeMin
+        runtime.update { state ->
+            // Given already (another caller finished it first): nothing more.
+            if (done !in state.photosDone) return@update state
+            state.copy(
+                photosDone = state.photosDone - done,
+                // The day's, as a session's is: given after that day, it has gone with it.
+                credit = if (credited > 0) state.credit.earn(today(done.at), Credit.forSession(credited, ratio)) else state.credit,
+            )
         }
         return credited > 0
     }
