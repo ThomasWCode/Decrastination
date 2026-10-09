@@ -196,6 +196,9 @@ class CommandActivity : Activity() {
                 val id = intent.getStringExtra("task")
                 if (graph.tasks.value.tasks.none { it.id == id }) {
                     Log.w(TAG, "enrich-task needs --es task <id> of a task")
+                } else if (graph.focus.session?.taskId == id) {
+                    // Its steps stay while a session works through them: try once it's ended.
+                    Log.w(TAG, "enrich-task: $id has a focus session under way; try again after it")
                 } else {
                     // Its enrichment forgotten, and the steps it gave: out of date, so this run asks for it
                     // again now, and its answer's steps aren't taken for the source's.

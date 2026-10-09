@@ -338,7 +338,7 @@ class AppGraph private constructor(context: Context) {
             teamsChanged.debounce(TEAMS_QUIET_MS).collect { syncer.sync(setOf(Source.Teams, Source.Anki)) }
         }
         // A key problem standing from before, whose alert couldn't be shown then.
-        scope.launch { alertKeyProblem(runtime.value.aiUsage) }
+        reconcileAlerts()
         // Dropped plans' warnings kept in step with the tasks, from the start.
         scope.launch {
             tasks.state.debounce(WIDGET_DEBOUNCE_MS).collect { state ->
@@ -446,6 +446,23 @@ class AppGraph private constructor(context: Context) {
         val problem = KeyProblem.of(error)
         val after = runtime.update { state -> state.copy(aiUsage = state.aiUsage.forMonth(month).failure(error.message ?: error.javaClass.simpleName, at, problem)) }
         alertKeyProblem(after.aiUsage)
+        // Once its hour's rest is over, it's tried again on what's still the rules' (a key topped up
+        // or put right meanwhile works then), rather than at whatever next changes.
+        EnrichWorker.retryAfter(app, ModelHold.REST_MS + RETRY_SLACK_MS)
+    }
+
+    /**
+     * Shows the alerts not shown yet, a key problem and dropped plans, as notifications may have
+     * come on since (allowed, or the channel switched back on): at the start, whenever the app comes
+     * to the front (back from notification settings), and once the permission is granted.
+     */
+    fun reconcileAlerts() {
+        scope.launch {
+            runCatching {
+                alertKeyProblem(runtime.value.aiUsage)
+                droppedAlerts(tasks.value.tasks)
+            }.onFailure { Log.w(TAG, "Showing waiting alerts failed", it) }
+        }
     }
 
     /**
@@ -585,6 +602,9 @@ class AppGraph private constructor(context: Context) {
 
     companion object {
         const val TAG = "Decrastination"
+
+        /** Past the model's hour of rest, so the retry finds it over. */
+        private const val RETRY_SLACK_MS = 60_000L
 
         /** [requestTeamsSync]'s answer when the widget is syncing already: as good as one started. */
         const val TEAMS_BUSY = "The Teams widget is already syncing"

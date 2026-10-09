@@ -132,7 +132,7 @@ fun SetupScreen(graph: AppGraph, activity: Activity) {
                 !settings.aiKeyActive -> "Key saved; it waits like switching Claude on (Settings lists when it applies), so nothing is sent yet."
                 !settings.aiEnabled -> "Key saved; switched off in Settings, so nothing is sent."
                 // The key or its account can't be used: said with what puts it right.
-                usage.keyProblem != null -> "${usage.keyProblem.says}. ${usage.keyProblem.fix}: the rules stand in, and it's tried again every hour."
+                usage.keyProblem != null -> "${usage.keyProblem.says}. ${usage.keyProblem.fix}: the rules stand in, and it's tried again an hour after each failed try."
                 // Its calls failing (a bad key, no connection): said, so it can be put right.
                 usage.lastError != null -> "On, but its last call failed (${usage.lastError.take(80)}): the rules stand in, and it's tried again after an hour."
                 else -> "On: $%.2f this month".format(Locale.UK, usage.spentUsd) + (settings.aiMonthlyCapUsd?.let { " of $$it" } ?: ", no cap: it stops when the account's credit runs out") + "."
