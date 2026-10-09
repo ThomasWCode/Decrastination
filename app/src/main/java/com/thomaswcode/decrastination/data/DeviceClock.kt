@@ -17,7 +17,7 @@ class DeviceClock(context: Context) : WallClock {
     override fun zone(): ZoneId = SystemWallClock.zone()
 
     override fun uptime(): Uptime = Uptime(
-        boot = runCatching { Settings.Global.getInt(resolver, Settings.Global.BOOT_COUNT) }.getOrDefault(-1),
+        boot = runCatching { Settings.Global.getInt(resolver, Settings.Global.BOOT_COUNT) }.getOrDefault(Uptime.UNKNOWN_BOOT),
         elapsedMs = SystemClock.elapsedRealtime(),
     )
 }
