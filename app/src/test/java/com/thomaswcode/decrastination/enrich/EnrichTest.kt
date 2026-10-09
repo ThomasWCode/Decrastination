@@ -45,6 +45,13 @@ class RuleEnricherTest {
     }
 
     @Test
+    fun `the rules share the source's estimate, not a stale one of the model's`() = runBlocking {
+        val task = assignment("1. Complete the reading task\n2. Mark it").copy(sourceEffortMin = 40, aiEffortMin = 120)
+        val steps = RuleEnricher().enrich(task, Enrichments.Job.Assignment, NOW).enrichment!!.subSteps!!
+        assertEquals(listOf(20, 20), steps.map { it.minutes })
+    }
+
+    @Test
     fun `a part that's learning numbered vocabulary is a step tagged with its sections`() {
         val steps = RuleEnricher.steps("1. Learn vocabulary p46-47/ 2.2/2.3 ( vocabulary test ! )\n2. Complete the reading task", 40)!!
         assertEquals(listOf(listOf("2.2", "2.3"), emptyList()), steps.map { it.ankiSections })

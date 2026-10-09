@@ -186,6 +186,9 @@ class PlannerTest {
             extra = mapOf("deckName" to "Textbook 1::2.2", "for" to "teams:t"),
         )
         assertEquals(listOf("Exercise 4"), plan(listOf(homework, deck), "2026-10-08T17:00").chunksOf("teams:t").map { it.step })
+        // A deck task missed (the deck gone) holds nothing: the step is planned again.
+        val missed = deck.copy(status = Status.Missed)
+        assertEquals(listOf("Learn vocabulary 2.2", "Exercise 4"), plan(listOf(homework, missed), "2026-10-08T17:00").chunksOf("teams:t").map { it.step })
     }
 
     @Test

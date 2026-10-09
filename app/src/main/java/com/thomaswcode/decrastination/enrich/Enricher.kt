@@ -37,7 +37,8 @@ class RuleEnricher : Enricher {
     override val by = BY
 
     override suspend fun enrich(task: TaskItem, job: Enrichments.Job, now: Long): Enricher.Result {
-        val steps = if (job == Enrichments.Job.Assignment) steps(task.detail, task.effortMin) else null
+        // The source's estimate (or yours), not one an out-of-date enrichment of the model's left.
+        val steps = if (job == Enrichments.Job.Assignment) steps(task.detail, task.copy(aiEffortMin = null).effortMin) else null
         return Enricher.Result(Enrichment(inputHash = Enrichments.inputHash(task), by = BY, at = now, subSteps = steps))
     }
 

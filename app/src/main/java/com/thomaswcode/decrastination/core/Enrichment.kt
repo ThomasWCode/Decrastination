@@ -65,10 +65,19 @@ fun TaskItem.enriched(): TaskItem {
  */
 fun TaskItem.withEnrichment(new: Enrichment): TaskItem {
     val fromEnrichment = enrichment?.subSteps?.map { it.title } == subSteps.map { it.title } && subSteps.isNotEmpty()
-    val done = subSteps.filter { it.done }.map { it.title }.toSet()
+    // How many by each title were done: that many of the new steps by it are, in order, so two
+    // steps of the same name aren't both ticked by one.
+    val done = subSteps.filter { it.done }.groupingBy { it.title }.eachCount().toMutableMap()
     val base = if (fromEnrichment) copy(subSteps = emptyList()) else this
     val next = base.copy(enrichment = new).enriched()
-    return next.copy(subSteps = next.subSteps.map { if (it.title in done) it.copy(done = true) else it })
+    return next.copy(
+        subSteps = next.subSteps.map { step ->
+            val left = done[step.title] ?: 0
+            if (left == 0) return@map step
+            done[step.title] = left - 1
+            step.copy(done = true)
+        },
+    )
 }
 
 /** What there is to enrich, and how to tell when it has changed. */

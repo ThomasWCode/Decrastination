@@ -3,14 +3,15 @@ package com.thomaswcode.decrastination.sources.anki
 import com.thomaswcode.decrastination.core.Fetched
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.Source
+import com.thomaswcode.decrastination.core.Status
 import com.thomaswcode.decrastination.core.SubStep
 import com.thomaswcode.decrastination.core.TaskItem
-import kotlinx.serialization.Serializable
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
 import kotlin.math.ceil
+import kotlinx.serialization.Serializable
 
 /** One AnkiDroid deck with today's counts (`deck_count` is `[learn, review, new]`). */
 data class Deck(val id: Long, val name: String, val learn: Int, val review: Int, val new: Int) {
@@ -100,9 +101,9 @@ object AnkiRules {
     /** The vocabulary sections [task] asks for: the deck pattern wins when it finds anything; else the sections the enrichment read. */
     fun sectionsOf(task: TaskItem): List<Pair<Int, Int>> = linkedSections(task.title + "\n" + task.detail).ifEmpty { enrichedSections(task) }
 
-    /** For each assignment, the vocabulary sections ("1.2") its deck tasks hold, open or finished. */
+    /** For each assignment, the vocabulary sections ("1.2") its deck tasks hold, open or finished; a missed one holds none. */
     fun heldSections(tasks: List<TaskItem>): Map<String, Set<String>> = tasks
-        .filter { it.source == Source.Anki && it.sourceId.startsWith(DECK_PREFIX) }
+        .filter { it.source == Source.Anki && it.sourceId.startsWith(DECK_PREFIX) && it.status != Status.Missed }
         .flatMap { deck ->
             val section = deck.extra[EXTRA_DECK_NAME]?.substringAfterLast(Deck.SEPARATOR) ?: return@flatMap emptyList()
             deck.extra[EXTRA_FOR].orEmpty().split(',').filter { it.isNotEmpty() }.map { it to section }
