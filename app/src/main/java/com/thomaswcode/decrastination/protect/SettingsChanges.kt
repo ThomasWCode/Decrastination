@@ -46,7 +46,9 @@ object SettingsChanges {
         // window moved later adds time tonight even at the same length.
         "weekdayHours" to { old, new -> adds(old.weekdayHours, new.weekdayHours) },
         "weekendHours" to { old, new -> adds(old.weekendHours, new.weekendHours) },
-        "boxMin" to { old, new -> new.boxMin > old.boxMin },
+        // Bigger pieces or smaller, either can move work off today and tomorrow (smaller ones fit
+        // into later days' gaps), so either waits.
+        "boxMin" to { old, new -> new.boxMin != old.boxMin },
         "marginDays" to { old, new -> new.marginDays < old.marginDays },
         "softDeadlineDays" to { old, new -> new.softDeadlineDays > old.softDeadlineDays },
         // Less a day can push overdue undated work out of today and tomorrow, lifting the pressure.
