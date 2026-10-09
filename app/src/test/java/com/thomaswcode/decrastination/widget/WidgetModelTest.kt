@@ -7,6 +7,8 @@ import com.thomaswcode.decrastination.core.Planner
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.SubStep
 import com.thomaswcode.decrastination.core.TaskItem
+import com.thomaswcode.decrastination.data.ProtectionState
+import com.thomaswcode.decrastination.data.RuntimeState
 import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.data.SourceStatus
 import com.thomaswcode.decrastination.data.TaskState
@@ -57,6 +59,23 @@ class WidgetModelTest {
         // Each row opens its own task.
         assertEquals(listOf("teams:Chapter 17"), model.list.map { it.taskId })
         assertEquals("teams:Statics", model.taskId)
+    }
+
+    @Test
+    fun `protection trouble comes first, loudest when armed`() {
+        val off = RuntimeState(protection = ProtectionState(problems = listOf("The focus service is off: nothing is blocked")))
+        val plan = Planner.plan(Planner.Input(emptyList(), now, LONDON, Settings()))
+        assertEquals("The focus service is off: nothing is blocked", WidgetModel.from(plan, TaskState(), LONDON, off, armed = false).warning)
+        assertEquals("PROTECTION OFF: The focus service is off: nothing is blocked", WidgetModel.from(plan, TaskState(), LONDON, off, armed = true).warning)
+    }
+
+    @Test
+    fun `a focus session and free time show in the summary`() {
+        val plan = Planner.plan(Planner.Input(emptyList(), now, LONDON, Settings()))
+        val session = RuntimeState(session = com.thomaswcode.decrastination.block.FocusSession("teams:t", "Statics Prep", null, 25, now - 5 * 60_000L))
+        assertEquals("Focus: Statics Prep, 20 min left", WidgetModel.from(plan, TaskState(), LONDON, session).summary)
+        val credit = RuntimeState(credit = com.thomaswcode.decrastination.block.Credit().earn(java.time.LocalDate.of(2026, 10, 9), 15.0))
+        assertEquals("Nothing due soon · 15 min of free time", WidgetModel.from(plan, TaskState(), LONDON, credit).summary)
     }
 
     @Test

@@ -74,8 +74,20 @@ data class TaskItem(
     val userEffortMin: Int? = null,
     /** How far the source says it is (Power Planner's percent complete), 0 to 1. */
     val sourceProgress: Double = 0.0,
+    /**
+     * How far it was when this app first saw it: what was left then is the work its completion
+     * earns time for, however its progress moved on the way. Null for a task saved before this was kept.
+     */
+    val firstProgress: Double? = null,
+    /**
+     * The most the source's estimate has been: a count that shrinks as it's worked through (an
+     * Anki deck's cards) ends near nothing, and its completion is for all of it.
+     */
+    val peakEffortMin: Int? = null,
     /** Minutes of finished focus sessions spent on it. */
     val workedMin: Int = 0,
+    /** The sessions counted in [workedMin], by start time, so each is counted once. */
+    val sessionsCounted: List<Long> = emptyList(),
     val subSteps: List<SubStep> = emptyList(),
     /** At most this many of its sub-steps can be done in a day: an Anki deck releases 20 new cards a day. */
     val stepsPerDay: Int? = null,

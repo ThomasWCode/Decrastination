@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <!-- The Teams Assignments widget's provider (docs/data-sources.md §1). Signature-level, so it
          is granted without asking because both apps are signed with the same key. Defined here
@@ -17,16 +18,32 @@
     <!-- Power Planner's web API and Gmail's IMAP. -->
     <uses-permission android:name="android.permission.INTERNET" />
 
-    <!-- Package visibility (Android 11+): the apps whose providers this reads, and the blocked
-         apps, which the focus service relaunches out of picture-in-picture to cover them. -->
-    <queries>
-        <package android:name="com.teamsassignments.widget" />
-        <package android:name="com.ichi2.anki" />
-        <package android:name="com.barebonesdev.powerplanner" />
-        <package android:name="com.google.android.gm" />
-        <package android:name="com.microsoft.teams" />
-        <package android:name="com.google.android.youtube" />
-    </queries>
+    <!-- Focus sessions and protection alerts. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- The watchdog and the periodic jobs after a reboot (docs/scheduler.md §6, layer 5). -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
+    <!-- Asking One UI not to put the app to sleep. -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+
+    <!-- A focus session ends on time even when the focus service isn't running: a timer's alarm. -->
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <uses-permission
+        android:name="android.permission.SCHEDULE_EXACT_ALARM"
+        android:maxSdkVersion="32" />
+
+    <!-- Granted once over adb at setup (Q19): lets the armed watchdog switch the focus service back
+         on and take it off accessibility shortcuts. Never granted to an ordinary app otherwise. -->
+    <uses-permission
+        android:name="android.permission.WRITE_SECURE_SETTINGS"
+        tools:ignore="ProtectedPermissions" />
+
+    <!-- Every installed app: the blocked ones are relaunched out of picture-in-picture to be
+         covered, and Settings lists apps to choose what's blocked. A sideloaded app, not on Play. -->
+    <uses-permission
+        android:name="android.permission.QUERY_ALL_PACKAGES"
+        tools:ignore="QueryAllPackagesPermission" />
 
     <application
         android:name=".DecrastinationApp"
@@ -57,6 +74,77 @@
             android:taskAffinity=""
             android:theme="@android:style/Theme.Translucent.NoTitleBar" />
 
+        <!-- Shown over a blocked app. Its own task, so Back and Recents can't reveal the app behind. -->
+        <activity
+            android:name=".block.BlockedActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:launchMode="singleTask"
+            android:taskAffinity="com.thomaswcode.decrastination.blocked" />
+
+        <activity
+            android:name=".protect.ProtectionActivity"
+            android:exported="false" />
+
+        <!-- Set-up and test commands from a PC (see CommandActivity). The alias needs DUMP, which
+             the adb shell holds and no ordinary app can, so nothing else on the phone reaches it. -->
+        <activity
+            android:name=".debug.CommandActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+        <activity-alias
+            android:name=".debug.Command"
+            android:exported="true"
+            android:permission="android.permission.DUMP"
+            android:targetActivity=".debug.CommandActivity" />
+
+        <!-- The blocker. Only the system can bind it (BIND_ACCESSIBILITY_SERVICE). -->
+        <service
+            android:name=".block.FocusService"
+            android:exported="true"
+            android:label="@string/focus_service_label"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/focus_service_config" />
+        </service>
+
+        <!-- Layer 3: an active device admin can't be uninstalled. Asks for no powers. -->
+        <receiver
+            android:name=".protect.AdminReceiver"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:permission="android.permission.BIND_DEVICE_ADMIN">
+            <meta-data
+                android:name="android.app.device_admin"
+                android:resource="@xml/device_admin" />
+            <intent-filter>
+                <action android:name="android.app.action.DEVICE_ADMIN_ENABLED" />
+            </intent-filter>
+        </receiver>
+
+        <receiver
+            android:name=".protect.WatchdogReceiver"
+            android:exported="false" />
+        <receiver
+            android:name=".protect.BootReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+
+        <receiver
+            android:name=".block.SessionReceiver"
+            android:exported="false" />
+
         <receiver
             android:name=".widget.NextWidgetReceiver"
             android:exported="false"
@@ -73,57 +161,6 @@
                 android:name="android.appwidget.provider"
                 android:resource="@xml/next_widget_info" />
         </receiver>
-
-        <!-- Phase 0's probes, kept as a debug screen (Setup → Phase 0 probes). -->
-        <activity
-            android:name=".probe.ProbeActivity"
-            android:exported="false"
-            android:launchMode="singleTop" />
-
-        <!-- Set-up and test commands from a PC (see CommandActivity), guarded like the probes' alias below. -->
-        <activity
-            android:name=".debug.CommandActivity"
-            android:exported="false"
-            android:excludeFromRecents="true"
-            android:noHistory="true"
-            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
-        <activity-alias
-            android:name=".debug.Command"
-            android:exported="true"
-            android:permission="android.permission.DUMP"
-            android:targetActivity=".debug.CommandActivity" />
-
-        <!-- The probes' adb entry point: am start of .probe.ProbeCommand with a "probe" extra (see
-             ProbeActivity). DUMP is held by the adb shell and the system, never granted to an
-             ordinary app, so no other app can make this one sync or open Teams with its signature
-             permission. -->
-        <activity-alias
-            android:name=".probe.ProbeCommand"
-            android:exported="true"
-            android:permission="android.permission.DUMP"
-            android:targetActivity=".probe.ProbeActivity" />
-
-        <!-- Shown over a blocked app. Its own task, so Back and Recents can't reveal the app behind. -->
-        <activity
-            android:name=".probe.BlockedProbeActivity"
-            android:excludeFromRecents="true"
-            android:exported="false"
-            android:launchMode="singleTask"
-            android:taskAffinity="com.thomaswcode.decrastination.blocked" />
-
-        <!-- Only the system can bind it (BIND_ACCESSIBILITY_SERVICE). -->
-        <service
-            android:name=".probe.FocusProbeService"
-            android:exported="true"
-            android:label="@string/focus_service_label"
-            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
-            <intent-filter>
-                <action android:name="android.accessibilityservice.AccessibilityService" />
-            </intent-filter>
-            <meta-data
-                android:name="android.accessibilityservice"
-                android:resource="@xml/focus_service_config" />
-        </service>
     </application>
 
 </manifest>

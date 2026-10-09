@@ -8,7 +8,7 @@ A personal, sideloaded app for one phone (a Samsung Galaxy S24 on Android 16).
 
 **Phase 0, proving each data path, is done** (8 Oct 2026): all four sources can be read, a blocklisted app can be covered, and the app's own Settings pages can be guarded. What it found is in [`docs/phase0-findings.md`](docs/phase0-findings.md).
 
-**Phase 1, sources, storage and sync** (8–9 Oct): the app reads all four sources into one task list every 15 minutes, and shows every task and how each source's last read went, with a setup checklist. **Phase 2, the planner and widget** (9 Oct): the work is planned backwards from each deadline into day buckets; the app opens on the plan, and the *Next task* widget shows the single next thing to do, at any size from 2×1 up. [`PLAN.md`](PLAN.md) has the whole plan; [`docs/needs-you.md`](docs/needs-you.md) lists what's waiting for you.
+**Phase 1, sources, storage and sync** (8–9 Oct): the app reads all four sources into one task list every 15 minutes, and shows every task and how each source's last read went, with a setup checklist. **Phase 2, the planner and widget** (9 Oct): the work is planned backwards from each deadline into day buckets; the app opens on the plan, and the *Next task* widget shows the single next thing to do, at any size from 2×1 up. **Phase 3, the blocker** (9 Oct): while anything is due today or tomorrow, from 16:45 on school days and 07:00 at weekends until 22:30, blocked apps and sites show the block screen instead; focus sessions, earned free time, automatic Teams syncs, and anti-tamper protection that's built but left for you to arm. [`PLAN.md`](PLAN.md) has the whole plan; [`docs/needs-you.md`](docs/needs-you.md) lists what's waiting for you.
 
 ## Documents
 
@@ -45,16 +45,22 @@ It pipes them into the app's private storage with `adb exec-in run-as` (debug bu
 ```bash
 adb shell am start -n com.thomaswcode.decrastination/.debug.Command --es cmd sync     # optionally --es sources gmail,anki
 adb shell am start -n com.thomaswcode.decrastination/.debug.Command --es cmd state    # each source's status, every task
+adb shell am start -n com.thomaswcode.decrastination/.debug.Command --es cmd force-block --ei minutes 10   # blocking hours now, for testing
+adb shell am start -n com.thomaswcode.decrastination/.debug.Command --es cmd protection   # run the watchdog
 ```
 
-## The Phase 0 probes
+`CommandActivity` lists the rest, including test hooks that arm and disarm at once and a `clean-up` after testing.
 
-Setup → *Phase 0 probes* opens them; each probe also runs from a PC, logging to `adb logcat -s Decrastination`:
+## Setting up the blocker
+
+The focus service is an accessibility service; a sideloaded app's can only be switched on in Settings after "Allow restricted settings", or from a PC:
 
 ```bash
-adb shell am start -n com.thomaswcode.decrastination/.probe.ProbeCommand --es probe teams   # or anki, sync, open, status
+adb shell settings put secure enabled_accessibility_services "$(adb shell settings get secure enabled_accessibility_services):com.thomaswcode.decrastination/com.thomaswcode.decrastination.block.FocusService"
+adb shell pm grant com.thomaswcode.decrastination android.permission.WRITE_SECURE_SETTINGS   # self-repair, once armed (Q19)
+adb shell pm grant com.thomaswcode.decrastination android.permission.POST_NOTIFICATIONS
 ```
 
-`ProbeCommand` is an alias of the probe screen that only the adb shell can start (it needs `android.permission.DUMP`), so no other app can make this one sync or open Teams; a probe sent to the launcher's entry is ignored.
+## Phase 0
 
-The focus service, a spike of the blocker, blocks YouTube whenever it's switched on, so it's off except while testing. A test that opens YouTube ends with `adb shell am force-stop com.google.android.youtube`, and with `adb shell dumpsys window windows | grep -c "mWindowingMode=pinned"` printing 0: nothing may be left playing in a picture-in-picture window. Power Planner and Gmail are checked from the PC, with `scripts/powerplanner_probe.py` and `scripts/gmail_probe.py`; their `--save` output goes to the git-ignored `private/`.
+The data-path probes of 8 Oct (`docs/phase0-findings.md`) were retired in Phase 3, when the real blocker replaced their spike. Power Planner and Gmail can still be checked from the PC with `scripts/powerplanner_probe.py` and `scripts/gmail_probe.py`; their `--save` output goes to the git-ignored `private/`. A test that opens YouTube or another blocked app ends with `adb shell am force-stop <package>`, and with `adb shell dumpsys window windows | grep -c "mWindowingMode=pinned"` printing 0.
