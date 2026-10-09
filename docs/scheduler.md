@@ -126,6 +126,8 @@ Layer 2 needs care so it never traps you out of Settings entirely: it acts only 
 - A deadline passes while the widget is on screen: redraw at the deadline (alarm).
 - A split-screen or pop-up window holding a blocked app: the service checks every window, not only the active one.
 - A blocked app in picture-in-picture: the block screen is started with `FLAG_ACTIVITY_NO_USER_ACTION`, so covering an app never sends it there; one already there is found through the window list (a pinned window is never the one in use, so the active-window check alone misses it), relaunched to full screen (One UI's floating window offers no dismiss action) and covered. Proved in Phase 0 after a blocking test left a YouTube Short floating for 20 minutes (`docs/phase0-findings.md` §5).
+- A blocked site in Chrome or Brave whose address is hidden (a video full screen): judged by the page the browser last showed in front. Across a restart of the focus service only a blocked page is remembered, as the browser may have moved on unseen; a browser hiding its address with no page seen since the service connected gets Back once, while anything is blocked, to leave full screen so the address shows.
+- An automatic Teams sync the widget doesn't start (its sync service off, no answer): offered again in 15 minutes, up to twice in a row, without using up the day's first-unlock sync; after that, at its usual time.
 - A task that disappears from its source without you acting: `Done` with reason `GoneFromSource`, shown separately in stats and excluded from calibration.
 - The daily quota at 23:30 unmet: it is overdue; whether that blocks at that hour is quiet hours' decision.
 - Clock and time-zone changes: planner re-runs on the system broadcasts.

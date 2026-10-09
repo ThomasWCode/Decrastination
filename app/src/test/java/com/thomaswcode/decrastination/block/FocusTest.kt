@@ -23,6 +23,7 @@ import java.util.concurrent.CountDownLatch
 import kotlin.concurrent.thread
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -266,6 +267,25 @@ class FocusTest {
         focus.onCompleted(listOf(homework.copy(status = Status.Done, doneAt = clock.time)))
         // 30 minutes of the 60 were the deck's: 10 minutes of free time, not 20.
         assertEquals(10 * 60_000L, focus.creditLeftMs())
+    }
+
+    @Test
+    fun `a finished session processed late is dated at its end, and its time isn't today's`() = runTest {
+        tasks.update { it.copy(tasks = listOf(task("hw", effort = 90))) }
+        val session = focus.startSession("teams:hw", "hw", null, 30)
+        // The phone was off at its alarm, and it's processed the next morning.
+        clock.time += 14 * 3_600_000L
+        focus.stopSession()
+        assertEquals(session.endsAt, log.value.sessions.single().endedAt)
+        assertEquals(0L, focus.creditLeftMs())
+    }
+
+    @Test
+    fun `a session finished on a day that's over earns nothing, and says so`() = runTest {
+        val yesterday = clock.time - 24 * 3_600_000L
+        assertTrue(focus.earnsNow(true, clock.time))
+        assertFalse(focus.earnsNow(true, yesterday))
+        assertFalse(focus.earnsNow(false, clock.time))
     }
 
     @Test

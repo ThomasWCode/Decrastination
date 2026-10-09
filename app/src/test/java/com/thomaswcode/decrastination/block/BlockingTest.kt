@@ -134,6 +134,16 @@ class CreditTest {
     }
 
     @Test
+    fun `a late write for a day the ledger has moved past changes nothing`() {
+        val tomorrow = today.plusDays(1)
+        val credit = Credit().earn(tomorrow, 10.0)
+        // A spend (or an earning) begun before midnight, saved after: the new day's credit stands.
+        assertEquals(credit, credit.spend(today, 60_000L))
+        assertEquals(credit, credit.earn(today, 5.0))
+        assertEquals(9 * 60_000L, credit.spend(tomorrow, 60_000L).leftMs)
+    }
+
+    @Test
     fun `a minute of free time for three of work, a completion's capped at half an hour`() {
         assertEquals(15.0, Credit.forSession(45, 3))
         assertEquals(10.0, Credit.forCompletion(30, 3))
@@ -187,5 +197,26 @@ class TeamsAutoSyncTest {
         assertEquals("2026-10-10", state.firstUnlockDay)
         assertEquals(Fixtures.at("2026-10-10T17:00"), state.lastOfferedAt)
         assertEquals(null, TeamsAutoSync.offered(TeamsAutoSync.State(), Fixtures.at("2026-10-10T10:00"), LONDON, settings).firstUnlockDay)
+    }
+
+    @Test
+    fun `a sync the widget didn't start is offered again shortly, twice, then at its usual time`() {
+        fun failedAt(state: TeamsAutoSync.State, at: Long) = TeamsAutoSync.retry(state, TeamsAutoSync.offered(state, at, LONDON, settings), at)
+        val at = Fixtures.at("2026-10-09T17:00")
+        val first = failedAt(TeamsAutoSync.State(), at)
+        // Not used up: the day's first-unlock sync, nor the three hours.
+        assertNull(first.firstUnlockDay)
+        assertNull(first.lastOfferedAt)
+        assertNull(due("2026-10-09T17:14", first, syncedAt = "2026-10-09T12:00"))
+        assertEquals(TeamsAutoSync.Trigger.Delayed, due("2026-10-09T17:15", first, syncedAt = "2026-10-09T12:00"))
+        val second = failedAt(first, at + 15 * 60_000L)
+        assertEquals(2, second.retries)
+        // A third in a row: the offer stands, and the next comes at its usual time.
+        val third = failedAt(second, at + 30 * 60_000L)
+        assertNull(third.delayedUntil)
+        assertEquals(at + 30 * 60_000L, third.lastOfferedAt)
+        assertEquals(0, third.retries)
+        // One that starts clears the count.
+        assertEquals(0, TeamsAutoSync.offered(second, at, LONDON, settings).retries)
     }
 }
