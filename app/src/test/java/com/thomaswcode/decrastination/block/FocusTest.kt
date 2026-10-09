@@ -11,8 +11,10 @@ import com.thomaswcode.decrastination.core.SubStep
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.Uptime
 import com.thomaswcode.decrastination.data.ActivityLog
+import com.thomaswcode.decrastination.data.EndedSession
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.RuntimeState
+import com.thomaswcode.decrastination.data.SessionRecord
 import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.data.TaskState
 import java.io.File
@@ -195,6 +197,52 @@ class FocusTest {
         assertEquals(0L, focus.creditLeftMs())
         assertEquals(listOf("teams:hw"), log.value.completions.map { it.taskId })
         assertEquals(emptyList(), tasks.value.unrewarded)
+    }
+
+    @Test
+    fun `a session's ending saved before its due was given is given it at start-up, once`() = runTest {
+        tasks.update { it.copy(tasks = listOf(task("hw", effort = 90))) }
+        val session = FocusSession("teams:hw", "hw", null, 30, startedAt = clock.time - 30 * 60_000L)
+        // Stopped part-way: the session ended and saved, nothing yet given.
+        runtime.update { it.copy(finishing = listOf(EndedSession(session, 30, completed = true, endedAt = clock.time))) }
+        focus.finishSessions()
+        assertEquals(30, tasks.value.tasks.single().workedMin)
+        assertEquals(1, log.value.sessions.size)
+        assertEquals(10 * 60_000L, focus.creditLeftMs())
+        assertEquals(emptyList(), runtime.value.finishing)
+        // Run again: nothing more.
+        focus.finishSessions()
+        assertEquals(30, tasks.value.tasks.single().workedMin)
+        assertEquals(1, log.value.sessions.size)
+        assertEquals(10 * 60_000L, focus.creditLeftMs())
+    }
+
+    @Test
+    fun `stopped after a session's minutes and record were saved, only its free time is left to give`() = runTest {
+        val session = FocusSession("teams:hw", "hw", null, 30, startedAt = clock.time - 30 * 60_000L)
+        tasks.update { it.copy(tasks = listOf(task("hw", effort = 90).copy(workedMin = 30, sessionsCounted = listOf(session.startedAt)))) }
+        log.update {
+            it.copy(
+                sessions = listOf(
+                    SessionRecord(
+                        taskId = "teams:hw",
+                        kind = Kind.Homework,
+                        label = "hw",
+                        plannedMin = 30,
+                        workedMin = 30,
+                        startedAt = session.startedAt,
+                        endedAt = clock.time,
+                        completed = true,
+                    ),
+                ),
+            )
+        }
+        runtime.update { it.copy(finishing = listOf(EndedSession(session, 30, completed = true, endedAt = clock.time))) }
+        focus.finishSessions()
+        assertEquals(30, tasks.value.tasks.single().workedMin)
+        assertEquals(1, log.value.sessions.size)
+        assertEquals(10 * 60_000L, focus.creditLeftMs())
+        assertEquals(emptyList(), runtime.value.finishing)
     }
 
     @Test
