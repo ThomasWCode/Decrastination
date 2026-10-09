@@ -31,6 +31,7 @@ import com.thomaswcode.decrastination.enrich.ClaudeEnricher
 import com.thomaswcode.decrastination.enrich.ClaudeReviewer
 import com.thomaswcode.decrastination.enrich.EnrichWorker
 import com.thomaswcode.decrastination.enrich.Enricher
+import com.thomaswcode.decrastination.enrich.KeyProblem
 import com.thomaswcode.decrastination.enrich.ModelAlerts
 import com.thomaswcode.decrastination.enrich.ModelHold
 import com.thomaswcode.decrastination.enrich.PhotoChecker
@@ -428,6 +429,34 @@ class AppGraph private constructor(context: Context) {
     fun modelEnricher(): Enricher? = claudeKey()?.let { ClaudeEnricher(it, clock.zone(), endpoint()) }
 
     /**
+     * A failed model call, counted in [month]: the model rests ([ModelHold.Resting]), and one showing
+     * that the key or the account can't be used ([KeyProblem]) is alerted, once a stretch of it,
+     * not at each hourly retry. The rules stand in meanwhile.
+     */
+    suspend fun modelFailed(error: Throwable, month: String, at: Long) {
+        val problem = KeyProblem.of(error)
+        var starts = false
+        runtime.update { state ->
+            val before = state.aiUsage.forMonth(month)
+            val after = before.failure(error.message ?: error.javaClass.simpleName, at, problem)
+            starts = before.startsKeyProblem(after)
+            state.copy(aiUsage = after)
+        }
+        if (starts && problem != null) ModelAlerts.keyProblem(app, problem)
+    }
+
+    /** A model call that went through, counted in [month]: its cost, and the key working again if it wasn't. */
+    suspend fun modelWorked(costUsd: Double, refused: Boolean, month: String, at: Long) {
+        var mended = false
+        runtime.update { state ->
+            val before = state.aiUsage.forMonth(month)
+            mended = before.keyProblem != null
+            state.copy(aiUsage = before.record(costUsd, refused, at))
+        }
+        if (mended) ModelAlerts.keyFixed(app)
+    }
+
+    /**
      * What stops the model being asked now ([ModelHold]), or null: off, resting after a failed
      * call, or no room under the cap. Each call checks it under [modelCalls] just before sending.
      */
@@ -487,11 +516,11 @@ class AppGraph private constructor(context: Context) {
                 val result = runCatching { enricher!!.enrich(task, job, now) }
                     .onFailure { error ->
                         Log.w(TAG, "The model's enrichment failed; the rules stand in", error)
-                        runtime.update { it.copy(aiUsage = it.aiUsage.forMonth(month).failure(error.message ?: error.javaClass.simpleName, at)) }
+                        modelFailed(error, month, at)
                         enricher = null
                     }
                     .getOrNull()
-                result?.let { r -> runtime.update { it.copy(aiUsage = it.aiUsage.forMonth(month).record(r.costUsd, r.refused, at)) } }
+                result?.let { r -> modelWorked(r.costUsd, r.refused, month, at) }
                 when {
                     result?.enrichment != null -> result.enrichment
                     // Declined, or no answer it could read: the rules' say, under the model's name.

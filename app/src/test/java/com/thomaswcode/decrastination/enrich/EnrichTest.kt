@@ -440,6 +440,41 @@ class AiUsageTest {
     }
 
     @Test
+    fun `a key problem is alerted once a stretch, and ends with a call that works or a new key`() {
+        val usage = AiUsage("2026-10")
+        val first = usage.failure("401", NOW, KeyProblem.Rejected)
+        assertTrue(usage.startsKeyProblem(first))
+        assertEquals(NOW, first.keyProblemSince)
+        // The hourly retry finds it again: no new alert.
+        val retry = first.failure("401", NOW + 3_600_000, KeyProblem.Rejected)
+        assertFalse(first.startsKeyProblem(retry))
+        // No network meanwhile: the problem stands, not begun again.
+        val offline = retry.failure("timeout", NOW + 7_200_000)
+        assertEquals(KeyProblem.Rejected, offline.keyProblem)
+        assertFalse(retry.startsKeyProblem(offline))
+        // Another problem is another stretch.
+        val broke = offline.failure("400", NOW + 10_800_000, KeyProblem.NoCredit)
+        assertTrue(offline.startsKeyProblem(broke))
+        // Over at a call that works, or with a new key; carried into a new month till then.
+        assertNull(broke.record(0.01, refused = false, at = NOW + 14_400_000).keyProblem)
+        assertNull(broke.newKey().keyProblem)
+        assertNull(broke.newKey().lastError)
+        assertEquals(KeyProblem.NoCredit, broke.forMonth("2026-11").keyProblem)
+        assertFalse(broke.startsKeyProblem(broke.forMonth("2026-11")))
+    }
+
+    @Test
+    fun `a key or credit problem is told from any other failure`() {
+        assertEquals(KeyProblem.Rejected, KeyProblem.of(401, "authentication_error", "invalid x-api-key"))
+        assertEquals(KeyProblem.NotAllowed, KeyProblem.of(403, "permission_error", "not allowed"))
+        assertEquals(KeyProblem.NoCredit, KeyProblem.of(400, "invalid_request_error", "Your credit balance is too low to access the Anthropic API."))
+        assertEquals(KeyProblem.NoCredit, KeyProblem.of(402, "billing_error", null))
+        assertNull(KeyProblem.of(400, "invalid_request_error", "max_tokens: too large"))
+        assertNull(KeyProblem.of(529, "overloaded_error", "Overloaded"))
+        assertNull(KeyProblem.of(java.io.IOException("no network")))
+    }
+
+    @Test
     fun `calls, refusals and failures are counted`() {
         val usage = AiUsage("2026-10").record(0.01, refused = false, at = NOW).record(0.02, refused = true, at = NOW).failure("timeout", NOW)
         assertEquals(2, usage.calls)
@@ -523,6 +558,21 @@ class ClaudeEnricherTest {
     fun `an answer cut off by its token limit is not trusted`() = runBlocking {
         server.enqueue(reply("""{"subSteps":[{"title":"Pa""", stop = "max_tokens"))
         assertNull(enricher().enrich(assignment("1. a\n2. b"), Enrichments.Job.Assignment, NOW).enrichment)
+    }
+
+    @Test
+    fun `the API's refusal of a key, or of the account, is read from the SDK's exception`() = runBlocking {
+        fun error(status: Int, type: String, message: String) = MockResponse().setResponseCode(status).setHeader("Content-Type", "application/json")
+            .setBody("""{"type":"error","error":{"type":"$type","message":"$message"}}""")
+        suspend fun failure(): Throwable = runCatching { enricher().enrich(email(), Enrichments.Job.Email, NOW) }.exceptionOrNull()!!
+        server.enqueue(error(401, "authentication_error", "invalid x-api-key"))
+        assertEquals(KeyProblem.Rejected, KeyProblem.of(failure()))
+        server.enqueue(error(403, "permission_error", "Your API key does not have permission to use the specified resource."))
+        assertEquals(KeyProblem.NotAllowed, KeyProblem.of(failure()))
+        server.enqueue(error(400, "invalid_request_error", "Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits."))
+        assertEquals(KeyProblem.NoCredit, KeyProblem.of(failure()))
+        server.enqueue(error(400, "invalid_request_error", "messages: at least one message is required"))
+        assertNull(KeyProblem.of(failure()))
     }
 
     @Test
