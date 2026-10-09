@@ -150,6 +150,18 @@ class SettingsChangesTest {
     }
 
     @Test
+    fun `the uptime count waits a while, but restarts at once after a gap it can't measure`() {
+        val change = PendingChange("1", "boxMin", kotlinx.serialization.json.JsonPrimitive(60), "x", now, now + 24 * 3_600_000L)
+        // A minute on, nothing due: it can wait.
+        assertNull(SettingsChanges.counting(listOf(change), Uptime(2, 0), Uptime(2, 60_000L), force = false))
+        // Five minutes on: counted.
+        assertEquals(5 * 60_000L, SettingsChanges.counting(listOf(change), Uptime(2, 0), Uptime(2, 5 * 60_000L), force = false))
+        // After a restart with no boot count (-1 both times), the gap can't be measured: nothing
+        // counted, but counted now, so the mark moves on rather than freezing.
+        assertEquals(0L, SettingsChanges.counting(listOf(change), Uptime(-1, 10 * 3_600_000L), Uptime(-1, 5 * 60_000L), force = false))
+    }
+
+    @Test
     fun `the uptime clock measures only within one start of the phone`() {
         assertEquals(5_000L, Uptime(3, 15_000L).since(Uptime(3, 10_000L)))
         assertNull(Uptime(4, 15_000L).since(Uptime(3, 10_000L)))

@@ -177,12 +177,17 @@ class Focus(
      */
     suspend fun onCompleted(completed: List<TaskItem>) {
         if (completed.isEmpty()) return
+        // A task confirmed done while its session runs: the session ends now, its minutes count
+        // as work on the task (not as a finished session's credit as well as the completion's).
+        val sessionMin = runtime.value.session?.takeIf { s -> completed.any { it.id == s.taskId } }
+            ?.let { s -> stopSession()?.let { record -> s.taskId to record.workedMin } }
         val now = clock.now()
         val today = today(now)
         val ratio = settings.value.workMinPerFreeMin
         // Reading or archiving an email, or an event passing, isn't work that earns time.
         val earned = completed.filter { it.kind != Kind.Info && it.kind != Kind.Event }.sumOf { task ->
-            val remaining = (task.effortMin * (1 - task.sourceProgress)).roundToInt() - task.workedMin
+            val worked = task.workedMin + if (sessionMin?.first == task.id) sessionMin.second else 0
+            val remaining = (task.effortMin * (1 - task.sourceProgress)).roundToInt() - worked
             Credit.forCompletion(remaining.coerceAtLeast(0), ratio)
         }
         runtime.update { it.copy(credit = it.credit.earn(today, earned)) }

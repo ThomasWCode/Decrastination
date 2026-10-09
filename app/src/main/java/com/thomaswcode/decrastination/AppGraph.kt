@@ -117,10 +117,7 @@ class AppGraph private constructor(context: Context) {
         var applied: SettingsChanges.Outcome? = null
         runtime.update { state ->
             if (state.pending.isEmpty()) return@update state
-            // Across a restart the gap can't be measured: it isn't counted.
-            val elapsed = uptime?.since(state.uptimeMark) ?: 0L
-            val due = state.pending.any { it.waitedMs + elapsed >= it.waitMs }
-            if (!force && !due && elapsed < UPTIME_COUNT_MS && state.uptimeMark?.boot == uptime?.boot) return@update state
+            val elapsed = SettingsChanges.counting(state.pending, state.uptimeMark, uptime, force) ?: return@update state
             applied = SettingsChanges.applyDue(settings.value, state.pending, now, elapsed)
             state.copy(pending = applied!!.pending, uptimeMark = if (applied!!.pending.isEmpty()) null else uptime)
         }
@@ -262,9 +259,6 @@ class AppGraph private constructor(context: Context) {
 
         /** The most model calls one enrichment run makes: the rest wait for the next. */
         const val MAX_MODEL_CALLS = 20
-
-        /** How often the pending changes' uptime is counted (and saved) while nothing falls due. */
-        private const val UPTIME_COUNT_MS = 5 * 60_000L
 
         // It holds only the application context, which lives as long as the process anyway.
         @SuppressLint("StaticFieldLeak")
