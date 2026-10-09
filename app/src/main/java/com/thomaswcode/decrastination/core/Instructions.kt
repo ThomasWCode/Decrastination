@@ -246,9 +246,16 @@ object Instructions {
             }
             ChangeType.After -> "${title(change.taskId)}: waits until ${title(change.afterTaskId)} is done"
             ChangeType.DueBy -> {
-                val was = change.taskId?.let { tasks[it] }?.let { t -> t.sourceValues?.dueAt ?: t.dueAt }
+                val task = change.taskId?.let { tasks[it] }
+                // Against the date as it is now; once this is the date in use, against the source's.
+                val inUse = task?.userDueAt != null && task.userDueAt == change.time
+                val was = if (inUse) task?.sourceValues?.dueAt else task?.dueAt
                 "${title(change.taskId)}: due ${at(change.time)?.format(DAY_TIME) ?: "on another date"}" +
-                    (if (was != null) " (it says ${at(was)!!.format(DAY_TIME)})" else " (it has no due date)")
+                    when {
+                        was == null -> " (it has no due date)"
+                        inUse -> " (its source says ${at(was)!!.format(DAY_TIME)})"
+                        else -> " (now ${at(was)!!.format(DAY_TIME)})"
+                    }
             }
             ChangeType.EventTime -> {
                 val name = "“" + (change.eventTitle ?: change.eventKey ?: "an event") + "”"

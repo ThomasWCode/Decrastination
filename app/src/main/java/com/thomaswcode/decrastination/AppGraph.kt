@@ -150,8 +150,15 @@ class AppGraph private constructor(context: Context) {
                 busy = calendarTime.busy + Instructions.busy(applied, zone, today, reach),
                 dayLoads = calendarTime.dayLoads,
                 dayCaps = Instructions.dayCaps(applied, today, reach),
+                workedTodayMin = workedToday(now, zone),
             ),
         )
+    }
+
+    /** Minutes of focus sessions and photo checks today, as the day's record counts them. */
+    private fun workedToday(now: Long, zone: java.time.ZoneId): Int {
+        val start = java.time.Instant.ofEpochMilli(now).atZone(zone).toLocalDate().atStartOfDay(zone).toInstant().toEpochMilli()
+        return log.value.sessions.sumOf { com.thomaswcode.decrastination.learn.Days.minutesIn(it, start, now + 1) }
     }
 
     /** The blocker's state and decisions (block/Focus.kt). */
@@ -348,6 +355,9 @@ class AppGraph private constructor(context: Context) {
         }
         // "How was it?" questions kept while notifications were off, once they're on.
         syncer.addAfterEverySync { Assessment.askLater(app) }
+        // Instructions left waiting for Claude, once it can be asked (a new month under the cap
+        // changes nothing it watches).
+        syncer.addAfterEverySync { if (instructions.value.instructions.any { it.state == InstructionStatus.Reading }) readInstructions() }
         // What's new or changed, even in place, is enriched.
         syncer.addAfterEverySync {
             val modelOn = modelAvailable()
