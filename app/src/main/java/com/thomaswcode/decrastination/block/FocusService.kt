@@ -185,7 +185,8 @@ class FocusService : AccessibilityService() {
         when {
             target != null -> act(target)
             graph.focus.isCheckedBrowser(pkg) -> checkAddress(pkg)
-            else -> stopSpending()
+            // Free time keeps running while what spends it plays in picture-in-picture.
+            else -> if (spending?.first?.let(::inPictureInPicture) != true) stopSpending()
         }
         if (GuardRules.watches(pkg)) guard(pkg, firstLook)
     }
@@ -257,14 +258,15 @@ class FocusService : AccessibilityService() {
         val stillThere = when (target) {
             is Focus.Target.Site -> front == target.browser
             else -> front == target.name
-        }
+        } || inPictureInPicture(target)
         if (!stillThere) return@Runnable stopSpending()
         val left = graph.focus.creditLeftMs() - (SystemClock.elapsedRealtime() - since)
         val verdict = graph.focus.verdict()
         when {
             left <= 0 -> {
                 stopSpending()
-                block(target, BlockPolicy.Reason.NoFreeTime)
+                // Out of time while playing in the corner: brought back to full screen and covered.
+                if (inPictureInPicture(target)) closeBlockedPictureInPicture() else block(target, BlockPolicy.Reason.NoFreeTime)
             }
             verdict is BlockPolicy.Verdict.Block -> {
                 stopSpending()
@@ -305,7 +307,14 @@ class FocusService : AccessibilityService() {
             if (!window.isInPictureInPictureMode) continue
             val pkg = window.root?.packageName?.toString() ?: continue
             val browser = graph.focus.target(pkg) == null && graph.focus.isCheckedBrowser(pkg)
-            if ((graph.focus.target(pkg) == null && !browser) || graph.focus.verdict() !is BlockPolicy.Verdict.Block) continue
+            if (graph.focus.target(pkg) == null && !browser) continue
+            val verdict = graph.focus.verdict()
+            // Allowed on free time: a video playing in the corner spends it like one in front.
+            if (verdict == BlockPolicy.Verdict.Spend) {
+                windowTarget(window)?.let(::startSpending)
+                continue
+            }
+            if (verdict !is BlockPolicy.Verdict.Block) continue
             // A browser's video: its address, where Android still shows it, says whether it's a
             // blocked site; where it doesn't, the browser is brought back and its page checked.
             if (browser) {
@@ -323,17 +332,38 @@ class FocusService : AccessibilityService() {
         }
     }
 
-    /** A blocked app beside another (split screen, a pop-up window): leave both, and cover it. */
+    /**
+     * A blocked app, or a blocked site in Chrome or Brave, beside another app (split screen, a
+     * pop-up window): leave both, and cover it.
+     */
     private fun coverBlockedSideWindows() {
         val appWindows = windows.filter { it.type == AccessibilityWindowInfo.TYPE_APPLICATION && !it.isInPictureInPictureMode }
         if (appWindows.size < 2) return
-        val blocked = appWindows.firstOrNull { !it.isActive && it.root?.packageName?.toString()?.let(graph.focus::target) != null } ?: return
-        val pkg = blocked.root?.packageName?.toString() ?: return
         val verdict = graph.focus.verdict()
         if (verdict !is BlockPolicy.Verdict.Block) return
-        Log.i(TAG, "$pkg is on screen beside another app: leaving both")
+        val target = appWindows.filter { !it.isActive }.firstNotNullOfOrNull { windowTarget(it) } ?: return
+        Log.i(TAG, "${target.name} is on screen beside another app: leaving both")
         performGlobalAction(GLOBAL_ACTION_HOME)
-        handler.postDelayed({ graph.focus.target(pkg)?.let { block(it, verdict.reason) } }, 300)
+        handler.postDelayed({ block(target, verdict.reason) }, 300)
+    }
+
+    /** What's blocked in [window]: its app, or the blocked site its browser's address bar shows. */
+    private fun windowTarget(window: AccessibilityWindowInfo): Focus.Target? {
+        val root = window.root ?: return null
+        val pkg = root.packageName?.toString() ?: return null
+        graph.focus.target(pkg)?.let { return it }
+        if (!graph.focus.isCheckedBrowser(pkg)) return null
+        val address = root.findAccessibilityNodeInfosByViewId(Blocklist.urlBarId(pkg)).firstOrNull()?.text?.toString()
+        return graph.focus.siteTarget(pkg, address)
+    }
+
+    /** Whether [target] is playing in a picture-in-picture window. */
+    private fun inPictureInPicture(target: Focus.Target): Boolean {
+        val pkg = when (target) {
+            is Focus.Target.Site -> target.browser
+            else -> target.name
+        }
+        return windows.any { it.isInPictureInPictureMode && it.root?.packageName?.toString() == pkg }
     }
 
     /** The package of the window the user is using (its active window), or null if there's none to read. */
@@ -450,7 +480,7 @@ class FocusService : AccessibilityService() {
         }
         scope.launch {
             // A session that has run its time.
-            graph.focus.session?.takeIf { graph.clock.now() >= it.endsAt }?.let { Sessions.end(this@FocusService, early = false) }
+            graph.focus.session?.takeIf { it.isDue(graph.clock.now(), graph.clock.uptime()) }?.let { Sessions.end(this@FocusService, early = false) }
             graph.applyDueChanges()
             val now = SystemClock.elapsedRealtime()
             if (now - lastWatchdogAt >= WATCHDOG_MS) {
