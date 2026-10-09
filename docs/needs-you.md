@@ -47,7 +47,7 @@ Still waiting for you:
 
 - **Claude is built but off, as you decided: nothing has been sent to it, and nothing will be until you turn it on.** To try it: Setup → *Claude* → *Enter key* (an Anthropic API key, `sk-ant-…`), then Settings → *Use Claude*. Once protection is armed, both the switch and a new key wait 24 hours, as any change that can lift pressure does. It then goes over your inbox and assignments once (roughly 50 calls: about £1–2 at list price) and then only what's new. There's no monthly cap (as you asked on 9 Oct: the account is prepaid with no card, so calls stop when its credit runs out, and the app alerts you then); you can set one in Settings, in dollars. Setup shows the month's spend.
 - **Without it, the rules split assignments that list their parts** into those parts as steps: on the phone, three of eleven (the two German homeworks with numbered or dashed lists, and the assessment preparation).
-- **Settings** (Setup → *Settings*) edits the hours, Teams' automatic syncs, the planning numbers, Anki, the blocked sites, browsers and apps (a switch per installed app), and Claude. Once protection is armed, a change that loosens blocking waits 24 hours and is listed there until it applies. The screen shows what you've asked for, waiting changes included; setting one back and saving cancels it.
+- **Settings** (the ⋮ menu → *Settings*) edits the hours, Teams' automatic syncs, the planning numbers, Anki, the blocked sites, browsers and apps (a switch per installed app), and Claude. Once protection is armed, a change that loosens blocking waits 24 hours and is listed there until it applies. The screen shows what you've asked for, waiting changes included; setting one back and saving cancels it.
 
 ## Phase 5: learning, the briefing and the calendar
 
@@ -60,7 +60,7 @@ Still waiting for you:
 
 ## Phase 6: stats, backup, version 1.0.0
 
-- **A Stats tab** (between Tasks and Setup): the last fortnight's finished work (and how much of it with a deadline was done by it), your focus sessions, how often the blocker stopped you and on what, and what protection found; day by day below. Then today's free time, what the app has learned about your estimates in plain words, and Claude's month. Most of it fills in as you use the app; tonight it shows the testing.
+- **A Stats tab** (after Tasks): the last fortnight's finished work (and how much of it with a deadline was done by it), your focus sessions, how often the blocker stopped you and on what, and what protection found; day by day below. Then today's free time, what the app has learned about your estimates in plain words, and Claude's month. Most of it fills in as you use the app; tonight it shows the testing.
 - **Back up and Restore** (Setup): *Export* saves the settings, the activity log, what the app has learned and your calendar answers to a file you choose (it never includes passwords or keys, which stay encrypted on the phone). *Import* reads one back. The settings go through the same waiting as any change once protection is armed, and this phone's own protection and Claude key stay as they are; once armed, the log and what the app learned aren't restored, so an edited file can't teach the planner to plan less.
 - **Tried on the phone**: the Stats tab, and a backup saved to Downloads through Android's file picker (12 KB; the format has no place for passwords or keys; I deleted it afterwards). Restoring one was tried on 9 Oct, evening, with you, before arming: a backup exported and imported again changed nothing, as it should ("Restored the settings, 25 completions and 2 sessions, what the app had learned, and your calendar answers").
 
@@ -91,3 +91,14 @@ Still waiting for you:
 
 - **Your call, 9 Oct**: only an email with something to do is a task. One that only needs reading (notifications, LinkedIn, newsletters, marketing, an empty note) or that tells of an event (an open day's information, a ticket) isn't: it's off the plan, the widget, the briefing and blocking, it's not in the Tasks list, and archiving it earns no free time and asks nothing. That's 13 of the 25 emails in your inbox on 9 Oct (10 to read, 3 about events).
 - **Kept, unseen**: Claude (or, with it off, the rules) still reads each email to tell which it is, and a reply that asks you something brings one back as a task. One Claude misjudges as only to read is only seen in Gmail, as you chose.
+
+## 1.4.0: a cleaner look
+
+- **Your ask, 9 Oct**: settings and setup out of the way, screens that skim, nothing taken away, more contrast between sections and items.
+- **The menu** (⋮, top right) holds *Setup*, *Settings*, *Blocking and protection* and *This week*; the tabs are Plan, Tasks and Stats. A dot on ⋮ (and by *Setup*) means something there needs you: a source failing to read, Claude's key, or protection. Alerts about those open Setup over the plan, so Back comes to the plan.
+- **Tiles**: each item is a tile a shade lighter than the background, with a sliver of background between items and a bold coloured heading over each section. Urgent work has a red bar down its edge; durations are pills.
+- **Folded, not gone**:
+  - **Plan**: today and tomorrow are open, later days folded to a heading that still gives the day's load and pieces. A day shows 8 pieces, then *Show N more*.
+  - **Tasks**: each source folds under its heading (what it last read, and any failure, stay on the heading). A task shows its title, when it's due (red when late) and one line of class or sender. *Claude's plan dropped*, *Hidden till…* and *Archived* show as tags. A tap opens the rest: the full reasons, the next step, the steps and the source's own text. *Finished or missed lately* starts folded.
+  - **Stats**: six tiles: finished, focus, blocked, protection, free time left, and Claude's month. Day by day shows the last week, with the older week a tap away. The sentences the tiles come from are under *In full*.
+- **Tried on the phone, 9 Oct**: each tab, the menu, Setup through an alert's route (it opened over the plan), a long day's *Show 5 more*, and a task opened. Light mode wasn't looked at: the phone's in dark mode.
