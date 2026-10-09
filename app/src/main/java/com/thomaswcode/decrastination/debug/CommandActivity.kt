@@ -12,13 +12,16 @@ import com.thomaswcode.decrastination.block.TeamsAutoSync
 import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.Source
+import com.thomaswcode.decrastination.core.withoutEnrichment
 import com.thomaswcode.decrastination.data.Secret
 import com.thomaswcode.decrastination.enrich.ClaudeEnricher
+import com.thomaswcode.decrastination.enrich.ModelAlerts
 import com.thomaswcode.decrastination.enrich.Prompts
 import com.thomaswcode.decrastination.learn.Assessment
 import com.thomaswcode.decrastination.learn.Briefing
 import com.thomaswcode.decrastination.learn.CalendarTime
 import com.thomaswcode.decrastination.learn.CheckIns
+import com.thomaswcode.decrastination.learn.EventJudge
 import com.thomaswcode.decrastination.learn.Review
 import com.thomaswcode.decrastination.protect.Watchdog
 import com.thomaswcode.decrastination.sync.SyncWorker
@@ -149,6 +152,14 @@ class CommandActivity : Activity() {
                 Log.i(TAG, "Review: ${graph.log.value.reviews.lastOrNull()?.lines}; calibration ${graph.runtime.value.calibration}")
             }
             "calendar" -> {
+                // --ez again true: the questions still unanswered are asked again (their notifications
+                // gone): what's to ask about is read first, then no longer counted as asked.
+                if (intent.getBooleanExtra("again", false)) {
+                    CalendarTime.refresh(this)
+                    val keys = graph.calendarTime.toAsk.map(EventJudge::key).toSet()
+                    graph.runtime.update { it.copy(eventsAsked = it.eventsAsked - keys) }
+                    Log.i(TAG, "Asking again about ${keys.size}: ${keys.joinToString()}")
+                }
                 CalendarTime.refresh(this)
                 val time = graph.calendarTime
                 Log.i(TAG, "Calendar: ${time.busy.size} busy, loads ${time.dayLoads}, ${time.toAsk.size} to ask about; allowed ${CalendarTime.allowed(this)}")
@@ -175,6 +186,28 @@ class CommandActivity : Activity() {
                 }
                 File(filesDir, "ai-prompts.json").writeText(JsonArray(items).toString())
                 Log.i(TAG, "Wrote ${items.size} prompts to files/ai-prompts.json")
+            }
+            "ai-endpoint" -> {
+                // --es base <url> sends the model's calls to a stand-in till the app restarts; none, to Anthropic again.
+                graph.modelEndpoint = intent.getStringExtra("base")
+                Log.w(TAG, graph.modelEndpoint?.let { "Claude's calls now go to $it, not Anthropic, till this is cleared or the app restarts" } ?: "Claude's calls go to Anthropic again")
+            }
+            "enrich-task" -> {
+                val id = intent.getStringExtra("task")
+                if (graph.tasks.value.tasks.none { it.id == id }) {
+                    Log.w(TAG, "enrich-task needs --es task <id> of a task")
+                } else if (graph.focus.session?.taskId == id) {
+                    // Its steps stay while a session works through them: try once it's ended.
+                    Log.w(TAG, "enrich-task: $id has a focus session under way; try again after it")
+                } else {
+                    // Its enrichment forgotten, and the steps it gave: out of date, so this run asks for it
+                    // again now, and its answer's steps aren't taken for the source's.
+                    graph.tasks.update { state -> state.copy(tasks = state.tasks.map { if (it.id == id) it.withoutEnrichment() else it }) }
+                    graph.enrichNow(only = id)
+                    val task = graph.tasks.value.tasks.first { it.id == id }
+                    val e = task.enrichment
+                    Log.i(TAG, "enrich-task $id: by ${e?.by}, dropped ${e?.dropped}, ${task.subSteps.size} steps: ${task.subSteps.joinToString(" | ") { "${it.title} (${it.minutes})" }}")
+                }
             }
             "ai-check" -> {
                 val base = intent.getStringExtra("base")
@@ -212,6 +245,11 @@ class CommandActivity : Activity() {
                 emptyMap()
             }
             graph.secrets.put(reset + secrets)
+            // A new Claude key, as from Setup: the last one's failure and alert aren't its.
+            if (Secret.AnthropicApiKey in secrets) {
+                graph.runtime.update { it.copy(aiUsage = it.aiUsage.newKey()) }
+                ModelAlerts.keyFixed(this)
+            }
             Log.i(TAG, "Imported ${secrets.keys.joinToString()}; ignored ${(values.keys - secrets.keys.map { it.name }.toSet()).size} unknown")
         } finally {
             withContext(Dispatchers.IO) { file.delete() }

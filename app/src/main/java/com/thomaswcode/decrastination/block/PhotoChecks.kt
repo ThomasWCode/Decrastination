@@ -49,10 +49,10 @@ object PhotoChecks {
             runCatching { current.check(jpeg, piece.label) }
                 .onFailure { e ->
                     Log.w(AppGraph.TAG, "The photo check failed", e)
-                    graph.runtime.update { it.copy(aiUsage = it.aiUsage.forMonth(month).failure(e.message ?: e.javaClass.simpleName, now)) }
+                    graph.modelFailed(e, month, now)
                 }
                 .getOrElse { return "The check didn't go through (${it.message ?: "no connection"})." }
-                .also { r -> graph.runtime.update { it.copy(aiUsage = it.aiUsage.forMonth(month).record(r.costUsd, r.refused, now)) } }
+                .also { r -> graph.modelWorked(r.costUsd, r.refused, month, now) }
         }
         val verdict = result.verdict ?: return "Claude couldn't say. Try a clearer photo."
         if (!verdict.done || verdict.confidence < PhotoChecker.ACCEPT) return "Not yet: ${verdict.reason}"

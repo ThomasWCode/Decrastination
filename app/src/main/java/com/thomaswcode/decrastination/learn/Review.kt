@@ -95,9 +95,9 @@ object Review {
             val month = AiUsage.monthOf(at, zone)
             // A failure is recorded (Setup shows it; the model rests), then the rules' review stands.
             runCatching { current.review(input) }
-                .onFailure { e -> graph.runtime.update { it.copy(aiUsage = it.aiUsage.forMonth(month).failure(e.message ?: e.javaClass.simpleName, at)) } }
+                .onFailure { e -> graph.modelFailed(e, month, at) }
                 .getOrThrow()
-                .also { r -> graph.runtime.update { it.copy(aiUsage = it.aiUsage.forMonth(month).record(r.costUsd, r.refused, at)) } }
+                .also { r -> graph.modelWorked(r.costUsd, r.refused, month, at) }
         }
         val answer = result.answer ?: return Outcome(why = if (result.refused) "Claude declined to review it" else "Claude's answer couldn't be used")
         val changes = answer.changes.filter(ReviewInput::allowed)

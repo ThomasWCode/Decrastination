@@ -25,7 +25,7 @@ The four sources, and what "done" means for each:
 
 **Gmail: IMAP with an app password** (confirmed). Simplest route that gives the inbox list, bodies for triage, and the "still in INBOX?" completion test. Gmail's snooze already implements "wait until date" natively; the app treats snoozing as a legitimate deferral.
 
-**AI: an Anthropic API key, Claude Opus 5.5, high effort** (confirmed; you have £200/month of unused credit). The core stays deterministic: ranking, deadlines, bucket allocation, quotas and completion checks never depend on the model, or the app becomes unpredictable. With the budget no longer a constraint, the model takes on five bounded jobs, each cached so nothing is sent twice: (1) inbox triage into actionable-now / from-a-date / informational, with effort; (2) splitting an assignment's instructions into ordered sub-steps with estimates, so the planner has real chunks ("Q1–8 ~25 min") rather than "45 minutes of"; (3) effort estimates where there is no better signal; (4) a weekly review of your completion log that proposes calibration changes within bounds and writes a short note; (5) optionally, vision checks of photographed written work to confirm a chunk is done. Estimated spend at high effort: under £5 a month; a monthly cap in Settings stops surprises. Subscriptions cannot be used by a third-party app; both vendors restrict subscription auth to their own clients. `docs/data-sources.md` §5.
+**AI: an Anthropic API key, Claude Opus 5.5, high effort** (confirmed; you have $200 of prepaid credit and no card on the account, so it stops when that runs out). The core stays deterministic: ranking, deadlines, bucket allocation, quotas and completion checks never depend on the model, or the app becomes unpredictable. With the budget no longer a constraint, the model takes on five bounded jobs, each cached so nothing is sent twice: (1) inbox triage into actionable-now / from-a-date / informational, with effort; (2) splitting an assignment's instructions into ordered sub-steps with estimates, so the planner has real chunks ("Q1–8 ~25 min") rather than "45 minutes of"; (3) effort estimates where there is no better signal; (4) a weekly review of your completion log that proposes calibration changes within bounds and writes a short note; (5) optionally, vision checks of photographed written work to confirm a chunk is done. Estimated spend at high effort: under £5 a month; a monthly cap in Settings stops surprises. Subscriptions cannot be used by a third-party app; both vendors restrict subscription auth to their own clients. `docs/data-sources.md` §5.
 
 **Blocking: an accessibility service, a full-screen block activity, and no bypass** (confirmed). The service receives a window-state event the instant a blocklisted app comes to the foreground and starts `BlockedActivity` over it. The policy is strict while anything sits in today's or tomorrow's bucket and switches to earned free time only when those buckets are empty. "Cannot be bypassed" is engineered as six layers (no bypass button, settings guard, device admin, 24-hour delayed loosening, watchdog, and a parent-held override: each pending change emails a one-time code to richard.white@lshtm.ac.uk from a mailbox you cannot read, and typing that code applies that one change immediately) with the residual holes stated honestly; `docs/scheduler.md` §6.
 
@@ -151,7 +151,7 @@ Phase 0 also built what Phase 1 would have scaffolded: the Gradle setup, the sha
 
 *Built 9 Oct 2026; Claude off until you switch it on (no paid calls yet). The rules split listed assignments into steps; Claude's client was checked against stand-in servers in the tests and on the phone, and its prompts on real items by Opus through the subscription. `docs/data-sources.md` §5 ("As built").*
 
-- `Enricher` interface with `RuleEnricher` (always) and `ClaudeEnricher` (Opus 5.5, `output_config.effort = "high"`, JSON schema output, server-side fallbacks on, usage logged against a monthly cap).
+- `Enricher` interface with `RuleEnricher` (always) and `ClaudeEnricher` (Opus 5.5, `output_config.effort = "high"`, JSON schema output, server-side fallbacks on, usage logged against an optional monthly cap).
 - Email triage → `{kind, actionableFrom, deadline?, effortMin, nextStep}`. Assignment → `{subSteps[], effortMin, ankiDecks[], testDate?}` (the deck regex always wins when it matches). Power Planner → effort.
 - Settings screen: blocklist, hours, quota, box length, margins, credentials, API key, cap; loosening changes shown as pending with their apply time.
 
@@ -180,6 +180,10 @@ Phase 0 also built what Phase 1 would have scaffolded: the Gradle setup, the sha
 ### 1.1.1: long emails read to their end
 
 *Built 9 Oct 2026: the app kept only the first 4 000 characters of an email, which cut the dated timeline off an 8 500-character one before the model could see it; it now keeps 20 000, of which the model reads 16 000 (told when there's more), and reads again, once, the emails it had cut. Read whole, that email's plan came to 12 to 14 hours in 17 to 20 blocks, past the ten hours and twenty blocks 1.1.0 trusted from one email, so an email's or planner item's blocks may now come to twenty hours and thirty blocks.*
+
+### 1.2.0: alerts
+
+*Built 9 Oct 2026: a plan of Claude's that the checks drop is said on the task and in a notification, with why; a key the API refuses (rejected, not allowed, or out of credit) is alerted once a stretch, in a notification, a banner on the Plan and Setup.*
 
 ## 6. Verification
 

@@ -13,6 +13,7 @@ import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.Planner
 import com.thomaswcode.decrastination.core.Source
+import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.WallClock
 import com.thomaswcode.decrastination.core.withEnrichment
 import com.thomaswcode.decrastination.data.ActivityLog
@@ -31,6 +32,8 @@ import com.thomaswcode.decrastination.enrich.ClaudeEnricher
 import com.thomaswcode.decrastination.enrich.ClaudeReviewer
 import com.thomaswcode.decrastination.enrich.EnrichWorker
 import com.thomaswcode.decrastination.enrich.Enricher
+import com.thomaswcode.decrastination.enrich.KeyProblem
+import com.thomaswcode.decrastination.enrich.ModelAlerts
 import com.thomaswcode.decrastination.enrich.ModelHold
 import com.thomaswcode.decrastination.enrich.PhotoChecker
 import com.thomaswcode.decrastination.enrich.RuleEnricher
@@ -334,6 +337,14 @@ class AppGraph private constructor(context: Context) {
         scope.launch {
             teamsChanged.debounce(TEAMS_QUIET_MS).collect { syncer.sync(setOf(Source.Teams, Source.Anki)) }
         }
+        // A key problem standing from before, whose alert couldn't be shown then.
+        reconcileAlerts()
+        // Dropped plans' warnings kept in step with the tasks, from the start.
+        scope.launch {
+            tasks.state.debounce(WIDGET_DEBOUNCE_MS).collect { state ->
+                runCatching { droppedAlerts(state.tasks) }.onFailure { Log.w(TAG, "Dropped-plan warnings failed", it) }
+            }
+        }
         // Redraw the widget whenever what it shows may have changed.
         scope.launch {
             combine(tasks.state, settings.state, runtime.state) { _, _, _ -> }.drop(1).debounce(WIDGET_DEBOUNCE_MS).collect {
@@ -400,11 +411,22 @@ class AppGraph private constructor(context: Context) {
         return "Restored the settings, ${backup.log.completions.size} completions and ${backup.log.sessions.size} sessions, what the app had learned, and your calendar answers.$waits"
     }
 
+    /**
+     * Debug only (`ai-endpoint`): where the model's calls go instead of Anthropic, a stand-in on the
+     * PC, so its failures and answers can be tried on the phone through the real paths without a
+     * paid call. Never stored: a restart forgets it.
+     */
+    @Volatile
+    var modelEndpoint: String? = null
+
+    /** [modelEndpoint], said loudly each time a client is made with it. */
+    private fun endpoint(): String? = modelEndpoint?.also { Log.w(TAG, "Claude's calls go to $it, not Anthropic (debug ai-endpoint)") }
+
     /** The photo check, while Claude is switched on and has its key; else null. */
-    fun photoChecker(): PhotoChecker? = claudeKey()?.let(::PhotoChecker)
+    fun photoChecker(): PhotoChecker? = claudeKey()?.let { PhotoChecker(it, endpoint()) }
 
     /** The model's weekly review, while Claude is switched on and has its key; else null. */
-    fun modelReviewer(): ClaudeReviewer? = claudeKey()?.let(::ClaudeReviewer)
+    fun modelReviewer(): ClaudeReviewer? = claudeKey()?.let { ClaudeReviewer(it, endpoint()) }
 
     /** Claude's API key, while Claude is switched on and the key is in use; else null. */
     fun claudeKey(): String? {
@@ -413,7 +435,70 @@ class AppGraph private constructor(context: Context) {
         return secrets[Secret.AnthropicApiKey]?.takeIf { it.isNotBlank() }
     }
 
-    fun modelEnricher(): Enricher? = claudeKey()?.let { ClaudeEnricher(it, clock.zone()) }
+    fun modelEnricher(): Enricher? = claudeKey()?.let { ClaudeEnricher(it, clock.zone(), endpoint()) }
+
+    /**
+     * A failed model call, counted in [month]: the model rests ([ModelHold.Resting]), and one showing
+     * that the key or the account can't be used ([KeyProblem]) is alerted, once a stretch of it,
+     * not at each hourly retry. The rules stand in meanwhile.
+     */
+    suspend fun modelFailed(error: Throwable, month: String, at: Long) {
+        val problem = KeyProblem.of(error)
+        val after = runtime.update { state -> state.copy(aiUsage = state.aiUsage.forMonth(month).failure(error.message ?: error.javaClass.simpleName, at, problem)) }
+        alertKeyProblem(after.aiUsage)
+        // Once its hour's rest is over, it's tried again on what's still the rules' (a key topped up
+        // or put right meanwhile works then), rather than at whatever next changes.
+        EnrichWorker.retryAfter(app, ModelHold.REST_MS + RETRY_SLACK_MS)
+    }
+
+    /**
+     * Shows the alerts not shown yet, a key problem and dropped plans, as notifications may have
+     * come on since (allowed, or the channel switched back on): at the start, whenever the app comes
+     * to the front (back from notification settings), and once the permission is granted.
+     */
+    fun reconcileAlerts() {
+        scope.launch {
+            runCatching {
+                alertKeyProblem(runtime.value.aiUsage)
+                droppedAlerts(tasks.value.tasks)
+            }.onFailure { Log.w(TAG, "Showing waiting alerts failed", it) }
+        }
+    }
+
+    /**
+     * The dropped-plan warnings in step with [all]: those whose task no longer has one withdrawn
+     * (done or gone, which the enrichment loop never sees again, or planned since), and any not
+     * shown yet shown, once notifications can show it.
+     */
+    private suspend fun droppedAlerts(all: List<TaskItem>) {
+        val standing = ModelAlerts.standing(all)
+        ModelAlerts.withdrawExcept(app, standing.mapTo(HashSet()) { it.first.id })
+        val shown = ModelAlerts.unshown(standing, runtime.value.droppedAlerted).filter { (task, why) -> ModelAlerts.dropped(app, task, why) }
+        runtime.update { state ->
+            val kept = state.droppedAlerted.filterKeys { id -> standing.any { it.first.id == id } }
+            state.copy(droppedAlerted = kept + shown.mapNotNull { (task, _) -> task.enrichment?.let { task.id to it.inputHash } })
+        }
+    }
+
+    /**
+     * [usage]'s key problem alerted, if it hasn't been yet and can be seen: one that couldn't
+     * (notifications off) is tried again at the next failed call and when the app starts.
+     */
+    private suspend fun alertKeyProblem(usage: AiUsage) {
+        val problem = usage.keyProblem?.takeIf { usage.keyAlertDue } ?: return
+        if (ModelAlerts.keyProblem(app, problem)) runtime.update { it.copy(aiUsage = it.aiUsage.alerted(problem)) }
+    }
+
+    /** A model call that went through, counted in [month]: its cost, and the key working again if it wasn't. */
+    suspend fun modelWorked(costUsd: Double, refused: Boolean, month: String, at: Long) {
+        var mended = false
+        runtime.update { state ->
+            val before = state.aiUsage.forMonth(month)
+            mended = before.keyProblem != null
+            state.copy(aiUsage = before.record(costUsd, refused, at))
+        }
+        if (mended) ModelAlerts.keyFixed(app)
+    }
 
     /**
      * What stops the model being asked now ([ModelHold]), or null: off, resting after a failed
@@ -421,7 +506,7 @@ class AppGraph private constructor(context: Context) {
      */
     fun modelHold(): ModelHold? {
         val s = settings.value
-        return ModelHold.of(claudeKey() != null, runtime.value.aiUsage, clock.now(), clock.zone(), s.aiMonthlyCapGbp, s.usdToGbp)
+        return ModelHold.of(claudeKey() != null, runtime.value.aiUsage, clock.now(), clock.zone(), s.aiMonthlyCapUsd)
     }
 
     /**
@@ -438,13 +523,15 @@ class AppGraph private constructor(context: Context) {
      * the rest, and stand in for a call that fails (the model is then left alone for the run) or
      * that the model declines (recorded as the model's, so it isn't asked again).
      */
-    suspend fun enrichNow(model: Enricher? = modelEnricher()) {
+    suspend fun enrichNow(model: Enricher? = modelEnricher(), only: String? = null) {
         // Not while it rests after a failed call (no network, a bad key), nor with no room under the
         // cap: then what only the rules have seen isn't due for it.
         var enricher = model.takeIf { modelAvailable() }
         var calls = 0
         var decksChanged = false
         val candidates = tasks.value.tasks
+            // [only]: that task alone (the debug `enrich-task`), so nothing else is sent anywhere.
+            .filter { only == null || it.id == only }
             .mapNotNull { task -> Enrichments.jobFor(task)?.let { task to it } }
             .filter { (task, _) -> Enrichments.stale(task, enricher != null, RuleEnricher.BY, modelOff = claudeKey() == null) }
             .sortedBy { (task, _) -> task.dueAt ?: Long.MAX_VALUE }
@@ -475,11 +562,11 @@ class AppGraph private constructor(context: Context) {
                 val result = runCatching { enricher!!.enrich(task, job, now) }
                     .onFailure { error ->
                         Log.w(TAG, "The model's enrichment failed; the rules stand in", error)
-                        runtime.update { it.copy(aiUsage = it.aiUsage.forMonth(month).failure(error.message ?: error.javaClass.simpleName, at)) }
+                        modelFailed(error, month, at)
                         enricher = null
                     }
                     .getOrNull()
-                result?.let { r -> runtime.update { it.copy(aiUsage = it.aiUsage.forMonth(month).record(r.costUsd, r.refused, at)) } }
+                result?.let { r -> modelWorked(r.costUsd, r.refused, month, at) }
                 when {
                     result?.enrichment != null -> result.enrichment
                     // Declined, or no answer it could read: the rules' say, under the model's name.
@@ -502,6 +589,8 @@ class AppGraph private constructor(context: Context) {
                 )
             }
             if (!laid) continue
+            // A plan of the model's dropped (out of range, not adding up) is said once it's laid,
+            // by droppedAlerts, as the tasks change.
             // Its deck tasks take their sections and due date from it.
             val after = task.withEnrichment(made)
             val sections = AnkiRules.sectionsOf(after)
@@ -513,6 +602,9 @@ class AppGraph private constructor(context: Context) {
 
     companion object {
         const val TAG = "Decrastination"
+
+        /** Past the model's hour of rest, so the retry finds it over. */
+        private const val RETRY_SLACK_MS = 60_000L
 
         /** [requestTeamsSync]'s answer when the widget is syncing already: as good as one started. */
         const val TEAMS_BUSY = "The Teams widget is already syncing"
