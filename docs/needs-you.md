@@ -102,3 +102,30 @@ Still waiting for you:
   - **Tasks**: each source folds under its heading (what it last read, and any failure, stay on the heading). A task shows its title, when it's due (red when late) and one line of class or sender. *Claude's plan dropped*, *Hidden till…* and *Archived* show as tags. A tap opens the rest: the full reasons, the next step, the steps and the source's own text. *Finished or missed lately* starts folded.
   - **Stats**: six tiles: finished, focus, blocked, protection, free time left, and Claude's month. Day by day shows the last week, with the older week a tap away. The sentences the tiles come from are under *In full*.
 - **Tried on the phone, 9 Oct**: each tab, the menu, Setup through an alert's route (it opened over the plan), a long day's *Show 5 more*, and a task opened. Light mode wasn't looked at: the phone's in dark mode.
+
+## 1.5.0: instructions
+
+- **Your ask, 9 Oct**: instructions in your own words, read by Claude. Where to write them:
+  - about a task: open it in **Tasks**, then *Add an instruction*;
+  - about an event or a day: the new **Calendar** page (⋮ menu): tap an event, or a day's *Add instruction*;
+  - about nothing in particular: **Instructions** (⋮ menu).
+- **What Claude can make of one**:
+  - a task isn't one (off the plan and the list; it's listed under *Not tasks, as you said*);
+  - a task can't start before a date, or waits until another task is done;
+  - a task's due date is another;
+  - an event of that name is free time, takes all its time, or takes some hours of its day;
+  - a day (or every such weekday) holds at most so many minutes of work, or none;
+  - you're busy at set times (once, or every week).
+- **You check first**: Instructions shows Claude's reading ("Sat 10 Oct: no work"), with *Apply* and *Discard*. One it can't make into changes says why, with *Write again*. One in use can be taken back, which undoes it.
+- **Protection** (your calls): while armed, applying or taking back a **change of due date** needs your dad's code (taking one back changes the date again). Days, times, events, hiding a task and holding one back apply when you tap Apply.
+- **Cost**: one Claude call per instruction, a few cents. With Claude off, resting or capped, it waits and says so.
+- **Tried on the phone, 9 Oct**: six instructions read through the real path. Claude read each one right:
+  - "this cannot be done until the Prep… review is done" on Statics Prep;
+  - "this email is just an email";
+  - "I cannot do anything on this day" on Saturday;
+  - "football every Tuesday from 4 to 6pm";
+  - "the due date needs to be next Wednesday" (shown with *Apply with parent code*);
+  - "make me do more maths": unclear, with why.
+
+  I applied Saturday's and took it back (the Calendar page showed it in between), then discarded them all: nothing of the tests is left.
+- **Not done**: instructions aren't in backups yet. And an email Claude hid as only to read can't be brought back by an instruction, as it isn't listed anywhere to write one about.
