@@ -48,13 +48,43 @@ object ProtectionCheck {
         val onShortcuts: List<String>,
         val adminActive: Boolean,
         val canRepair: Boolean,
+        /**
+         * Whether Android has the service bound. Switched on but not bound means it crashed:
+         * Android doesn't bind a crashed service again until it's switched off and on.
+         */
+        val serviceRunning: Boolean = true,
     )
+
+    /** Switched on in the settings but not running. */
+    fun stopped(report: Report): Boolean = report.serviceEnabled && report.accessibilityOn && !report.serviceRunning
 
     /** What's wrong, in words, worst first. Unarmed, only the service being off matters (blocking needs it). */
     fun problems(report: Report, armed: Boolean): List<String> = buildList {
         if (!report.serviceEnabled || !report.accessibilityOn) add("The focus service is off: nothing is blocked")
+        else if (!report.serviceRunning) add("The focus service has stopped: nothing is blocked")
         if (!armed) return@buildList
         if (report.onShortcuts.isNotEmpty()) add("The focus service is on an accessibility shortcut")
         if (!report.adminActive) add("Device admin is off: the app can be uninstalled")
     }
+
+    /** How long a stopped service is given to come back by itself: it's briefly unbound while binding, at boot and after an update. */
+    const val RESTART_GRACE_MS = 60_000L
+
+    /** At most one restart in this long, so a service that crashes as it starts isn't restarted over and over. */
+    const val RESTART_GAP_MS = 10 * 60_000L
+
+    /**
+     * When to switch a stopped service off and on again: a minute after it was first seen stopped,
+     * and ten minutes after the last restart. Null while it's running or switched off, or if it
+     * can't be. That's no override of anyone's choice (it's still switched on), so it doesn't wait
+     * for arming.
+     */
+    fun restartAt(report: Report, stoppedSince: Long?, restartedAt: Long?): Long? {
+        if (!stopped(report) || !report.canRepair || stoppedSince == null) return null
+        val afterGrace = stoppedSince + RESTART_GRACE_MS
+        return if (restartedAt == null) afterGrace else maxOf(afterGrace, restartedAt + RESTART_GAP_MS)
+    }
+
+    fun shouldRestart(report: Report, stoppedSince: Long?, restartedAt: Long?, now: Long): Boolean =
+        restartAt(report, stoppedSince, restartedAt)?.let { now >= it } == true
 }
