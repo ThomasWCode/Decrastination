@@ -112,7 +112,7 @@ class BlockedActivity : ComponentActivity() {
             if (verdict !is BlockPolicy.Verdict.Block && session == null) finish()
         }
         val next = if (session != null) plan.chunksOf(session.taskId).firstOrNull() ?: plan.next else plan.next
-        val photoChecker = remember(settings.aiEnabled) { graph.photoChecker() }
+        val photoChecker = remember(settings.aiEnabled, settings.aiKeyActive) { graph.photoChecker() }
         val photoFile = remember { File(cacheDir, "photos/check.jpg").also { it.parentFile?.mkdirs() } }
         val photoUri = remember { FileProvider.getUriForFile(this, "$packageName.photos", photoFile) }
         var photoFor by remember { mutableStateOf<Chunk?>(null) }
