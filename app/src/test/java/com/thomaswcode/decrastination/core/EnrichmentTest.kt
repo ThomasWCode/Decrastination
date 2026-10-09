@@ -95,6 +95,14 @@ class EnrichmentTest {
     }
 
     @Test
+    fun `an email's deadline is the enrichment's reading, not the rules' guess`() {
+        // The rules took "Appointment on 20 October" for its date; it asks for a reply today.
+        val task = email().copy(sourceValues = SourceValues(Kind.Event, Fixtures.at("2026-10-20T00:00"), null))
+        val read = task.withEnrichment(enrichment(task).copy(kind = Kind.Admin, deadline = Fixtures.at("2026-10-09T20:00")))
+        assertEquals(Fixtures.at("2026-10-09T20:00"), read.dueAt)
+    }
+
+    @Test
     fun `a start after the deadline is dropped`() {
         val task = email().copy(sourceValues = SourceValues(Kind.Admin, null, null))
         val late = task.withEnrichment(enrichment(task).copy(deadline = Fixtures.at("2026-10-12T09:00"), actionableFrom = Fixtures.at("2026-10-14T00:00")))

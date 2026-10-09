@@ -11,6 +11,7 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.OutOfQuotaPolicy
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
+import androidx.work.workDataOf
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.R
 import com.thomaswcode.decrastination.notify.Channels
@@ -22,7 +23,10 @@ import com.thomaswcode.decrastination.notify.Channels
 class EnrichWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
 
     override suspend fun doWork(): Result {
-        AppGraph.get(applicationContext).enrichNow()
+        val graph = AppGraph.get(applicationContext)
+        // Queued for the rules alone (no connection asked for): the model isn't asked, even if
+        // it's been switched on since; switching it on queues a job of its own that waits online.
+        graph.enrichNow(if (inputData.getBoolean(KEY_MODEL, false)) graph.modelEnricher() else null)
         return Result.success()
     }
 
@@ -37,6 +41,7 @@ class EnrichWorker(context: Context, params: WorkerParameters) : CoroutineWorker
 
     companion object {
         private const val NAME = "enrich"
+        private const val KEY_MODEL = "model"
         private const val NOTIFICATION_ID = 1002
 
         /** After each sync, and when the model is switched on or given its key; one run after another. */
@@ -46,6 +51,7 @@ class EnrichWorker(context: Context, params: WorkerParameters) : CoroutineWorker
             val online = AppGraph.get(context).modelAvailable()
             val request = OneTimeWorkRequestBuilder<EnrichWorker>()
                 .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
+                .setInputData(workDataOf(KEY_MODEL to online))
                 .apply { if (online) setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()) }
                 .build()
             WorkManager.getInstance(context).enqueueUniqueWork(NAME, ExistingWorkPolicy.APPEND_OR_REPLACE, request)
