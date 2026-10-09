@@ -45,7 +45,9 @@ object Merge {
             if (!listed.add(id)) continue
             val old = byId[id]
             if (old == null) {
-                if (f.done) continue
+                // Finished before it was ever seen: nothing to do, so it isn't added. A derived
+                // task is kept, as done: a deck already studied still stands for its sections.
+                if (f.done && !f.derived) continue
                 val task = TaskItem(
                     id = id,
                     source = source,
@@ -67,7 +69,11 @@ object Merge {
                     lastSeenAt = now,
                     extra = f.extra,
                     sourceValues = SourceValues(f.kind, f.dueAt, f.availableFrom),
-                )
+                ).let { if (f.done) it.copy(status = Status.Done, doneAt = now) else it }
+                if (f.done) {
+                    fresh[id] = task
+                    continue
+                }
                 added += task
                 fresh[id] = task
                 continue
