@@ -126,7 +126,7 @@ fun SetupScreen(graph: AppGraph, activity: Activity) {
         val usage = runtime.aiUsage.forMonth(AiUsage.monthOf(graph.clock.now(), graph.clock.zone()))
         SetupItem(
             title = "Claude",
-            done = settings.aiEnabled && settings.aiKeyActive && Secret.AnthropicApiKey in secrets && usage.lastError == null,
+            done = settings.aiEnabled && settings.aiKeyActive && Secret.AnthropicApiKey in secrets && usage.lastError == null && usage.keyProblem == null,
             detail = when {
                 Secret.AnthropicApiKey !in secrets -> "No API key: the rules do what they can, and nothing is sent to Claude."
                 !settings.aiKeyActive -> "Key saved; it waits like switching Claude on (Settings lists when it applies), so nothing is sent yet."
@@ -262,7 +262,7 @@ private fun KeyDialog(onDismiss: () -> Unit, onSave: (String) -> Unit) {
                     visualTransformation = PasswordVisualTransformation(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                 )
-                Text("Stored encrypted on this phone. Claude is used only once it's switched on in Settings, and never past the monthly cap.", style = MaterialTheme.typography.bodySmall)
+                Text("Stored encrypted on this phone. Claude is used only once it's switched on in Settings, and stops when the account's credit runs out, or at the monthly cap if you set one (Settings).", style = MaterialTheme.typography.bodySmall)
             }
         },
         confirmButton = { TextButton(enabled = key.isNotBlank(), onClick = { onSave(key.trim()) }) { Text("Save") } },
