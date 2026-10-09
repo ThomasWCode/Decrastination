@@ -12,6 +12,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class AnkiRulesTest {
+    private val NOW = Fixtures.at("2026-10-08T17:00")
 
     private fun deck(id: Long, name: String, new: Int = 20, review: Int = 0, learn: Int = 0) = Deck(id, name, learn, review, new)
 
@@ -127,21 +128,22 @@ class AnkiRulesTest {
             assignment("Gefahren", "1. Learn vocabulary p46-47/ 1.2/2.2", Fixtures.at("2026-10-01T08:30")),
             assignment("Done already", "Learn vocabulary 1.3", Fixtures.at("2026-10-01T08:30"), open = false),
         )
-        val tasks = AnkiRules.homeworkDecks(decks, 1, homework) { if (it.id == 12L) 45 else 10 }
+        val tasks = AnkiRules.homeworkDecks(decks, 1, homework, unseen = { if (it.id == 12L) 45 else 10 }, now = NOW, zone = LONDON)
         assertEquals(listOf("deck:12", "deck:22"), tasks.map { it.sourceId })
         val deck12 = tasks.first()
-        assertEquals("Learn Anki deck 1.2 (45 new)", deck12.title)
+        assertEquals("Learn Anki deck 1.2", deck12.title)
+        assertEquals(1, deck12.stepsPerDay)
         assertEquals(Fixtures.at("2026-10-01T08:30"), deck12.dueAt)
         assertEquals(listOf("20 new cards", "20 new cards", "5 new cards"), deck12.subSteps!!.map { it.title })
-        assertEquals("For: Familie und Ehe; Gefahren", deck12.detail)
+        assertEquals("45 cards never studied. For: Familie und Ehe; Gefahren", deck12.detail)
         assertTrue(deck12.derived)
     }
 
     @Test
-    fun `a homework deck is done when every card has been seen and nothing is due`() {
+    fun `a homework deck is done when every card has been seen, reviews or not`() {
         val homework = listOf(assignment("Familie und Ehe", "Learn vocabulary column 1.3", null))
-        val studied = decks.map { if (it.id == 13L) it.copy(new = 0) else it }
-        assertTrue(AnkiRules.homeworkDecks(studied, 1, homework) { 0 }.single().done)
+        val studied = decks.map { if (it.id == 13L) it.copy(new = 0, review = 4) else it }
+        assertTrue(AnkiRules.homeworkDecks(studied, 1, homework, unseen = { 0 }, now = NOW, zone = LONDON).single().done)
     }
 
     @Test
@@ -161,9 +163,47 @@ class AnkiRulesTest {
         }
         val handedIn = assignment("Familie und Ehe", "Learn vocabulary column 1.2 and 1.3", null, open = false)
         val finished = decks.map { if (it.id == 12L) it.copy(new = 0, review = 0) else it }
-        val tasks = AnkiRules.homeworkDecks(finished, 1, listOf(handedIn, tracked(12), tracked(13))) { if (it.id == 12L) 0 else 30 }
+        val tasks = AnkiRules.homeworkDecks(finished, 1, listOf(handedIn, tracked(12), tracked(13)), unseen = { if (it.id == 12L) 0 else 30 }, now = NOW, zone = LONDON)
         assertEquals(listOf("deck:12"), tasks.map { it.sourceId })
         assertTrue(tasks.single().done)
+    }
+
+    @Test
+    fun `the quota's new cards come from a deck homework doesn't name`() {
+        // 1.1 is finished; 1.2 is the lowest deck with cards left, but homework names it: it's a task of its own.
+        val (task, day) = AnkiRules.quota(decks, 1, null, NOW, LONDON, 21 * 60 + 30, homework = setOf(12L)) { if (it.id == 11L) 0 else 30 }
+        assertEquals(13L, day.deckId)
+        assertEquals("Anki: 10 reviews + 20 new (1.3)", task!!.title)
+        // Delegated to homework with nothing due: no quota at all, so it can come back if the
+        // homework goes before the cards are studied.
+        val (none, _) = AnkiRules.quota(decks.map { it.copy(review = 0, learn = 0) }, 1, AnkiDay("2026-10-08", 12, "Textbook 1::1.2"), NOW, LONDON, 21 * 60 + 30, homework = setOf(12L)) { 30 }
+        assertNull(none)
+        // Chosen this morning, named by homework since: counted there only.
+        val (later, _) = AnkiRules.quota(decks, 1, AnkiDay("2026-10-08", 12, "Textbook 1::1.2"), NOW, LONDON, 21 * 60 + 30, homework = setOf(12L)) { 30 }
+        assertEquals("Anki: 10 reviews", later!!.title)
+    }
+
+    @Test
+    fun `a homework deck whose new cards for today are studied waits for Anki's next day`() {
+        val homework = listOf(assignment("Familie und Ehe", "Learn vocabulary column 1.2", Fixtures.at("2026-10-02T09:00")))
+        // Reviews still due in it (deck 1.2 has 5) don't release more new cards today.
+        val studied = decks.map { if (it.id == 12L) it.copy(new = 0) else it }
+        val deck = AnkiRules.homeworkDecks(studied, 1, homework, unseen = { 25 }, now = NOW, zone = LONDON).single()
+        assertEquals(Fixtures.at("2026-10-09T04:00"), deck.notBefore)
+        val fresh = AnkiRules.homeworkDecks(decks, 1, homework, unseen = { 25 }, now = NOW, zone = LONDON).single()
+        assertEquals(null, fresh.notBefore)
+    }
+
+    @Test
+    fun `a homework deck part-way through today's new cards steps from what's left today`() {
+        val homework = listOf(assignment("Familie und Ehe", "Learn vocabulary column 1.2", Fixtures.at("2026-10-02T09:00")))
+        val partway = decks.map { if (it.id == 12L) it.copy(new = 5) else it }
+        val deck = AnkiRules.homeworkDecks(partway, 1, homework, unseen = { 45 }, now = NOW, zone = LONDON).single()
+        assertEquals(listOf("5 new cards", "20 new cards", "20 new cards"), deck.subSteps!!.map { it.title })
+        // None left today: 20 a day from Anki's next day.
+        val studied = decks.map { if (it.id == 12L) it.copy(new = 0) else it }
+        val waiting = AnkiRules.homeworkDecks(studied, 1, homework, unseen = { 45 }, now = NOW, zone = LONDON).single()
+        assertEquals(listOf("20 new cards", "20 new cards", "5 new cards"), waiting.subSteps!!.map { it.title })
     }
 
     @Test

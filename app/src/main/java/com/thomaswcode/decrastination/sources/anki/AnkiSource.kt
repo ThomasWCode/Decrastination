@@ -57,12 +57,23 @@ object AnkiProvider {
     fun hasPermission(context: Context): Boolean =
         context.checkSelfPermission(PERMISSION) == PackageManager.PERMISSION_GRANTED
 
-    /** Opens AnkiDroid on [deckId], or on its deck list. */
-    fun open(context: Context, deckId: Long?): Boolean {
-        if (deckId != null) selectDeck(context.contentResolver, deckId)
-        val launch = context.packageManager.getLaunchIntentForPackage(PACKAGE) ?: return false
+    enum class Opened { Studying, DeckList, NotInstalled }
+
+    /**
+     * Opens AnkiDroid with [deckId] selected: studying it, with [study] (its reviewer is exported
+     * and opens on the selected deck, tried on the phone on 9 Oct), or on the deck list, where the
+     * selected deck is highlighted. The reviewer is started only if the deck was selected, or it
+     * would open on whichever deck was before; otherwise the deck list.
+     */
+    fun open(context: Context, deckId: Long?, study: Boolean): Opened {
+        val selected = deckId != null && selectDeck(context.contentResolver, deckId)
+        if (selected && study) {
+            val reviewer = Intent().setClassName(PACKAGE, "$PACKAGE.Reviewer").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            if (runCatching { context.startActivity(reviewer) }.isSuccess) return Opened.Studying
+        }
+        val launch = context.packageManager.getLaunchIntentForPackage(PACKAGE) ?: return Opened.NotInstalled
         context.startActivity(launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-        return true
+        return Opened.DeckList
     }
 }
 
@@ -78,8 +89,9 @@ class AnkiSource(private val context: Context) : TaskSource {
         val unseen = HashMap<Long, Int>()
         val count = { deck: Deck -> unseen.getOrPut(deck.id) { AnkiProvider.unseenNotes(resolver, deck.name) } }
         val textbook = context.settings.ankiTextbook
-        val (quota, day) = AnkiRules.quota(decks, textbook, context.ankiDay, context.now, context.zone, context.settings.ankiDeadlineMin, count)
-        val homework = AnkiRules.homeworkDecks(decks, textbook, context.known, count)
+        val homework = AnkiRules.homeworkDecks(decks, textbook, context.known, count, context.now, context.zone)
+        val homeworkDecks = homework.filter { !it.done }.mapNotNull { it.extra[AnkiRules.EXTRA_DECK_ID]?.toLongOrNull() }.toSet()
+        val (quota, day) = AnkiRules.quota(decks, textbook, context.ankiDay, context.now, context.zone, context.settings.ankiDeadlineMin, homeworkDecks, count)
         SourceRead(items = listOfNotNull(quota) + homework, ankiDay = day)
     }
 }

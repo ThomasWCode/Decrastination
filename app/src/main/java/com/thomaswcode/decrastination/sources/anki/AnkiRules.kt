@@ -38,7 +38,8 @@ data class AnkiDay(
  *   21:30. Done once nothing is due and that deck has no new cards left today.
  * - **A deck homework names**: "Learn vocabulary column 1.2" in an open German assignment makes
  *   `Textbook 1::1.2` a task with the assignment's deadline, in 20-card steps (the decks' daily
- *   limit). Done once every card in it has been seen; dropped, unfinished, if the assignment goes.
+ *   limit). Done once every card in it has been seen (its reviews are the quota's); dropped,
+ *   unfinished, if the assignment goes.
  */
 object AnkiRules {
 
@@ -77,8 +78,9 @@ object AnkiRules {
      * still have some, held back by its daily limit (studied before the day's first read), so
      * [unseen] is asked about those.
      */
-    fun quotaDeck(decks: List<Deck>, textbook: Int, unseen: (Deck) -> Int): Deck? =
-        decks.mapNotNull { deck -> section(deck)?.let { deck to it } }
+    fun quotaDeck(decks: List<Deck>, textbook: Int, homework: Set<Long> = emptySet(), unseen: (Deck) -> Int): Deck? =
+        decks.filter { it.id !in homework }
+            .mapNotNull { deck -> section(deck)?.let { deck to it } }
             .sortedWith(compareBy({ it.second.first != textbook }, { it.second.first }, { it.second.second }, { it.second.third }))
             .firstOrNull { (deck, _) -> deck.new > 0 || unseen(deck) > 0 }
             ?.first
@@ -103,14 +105,20 @@ object AnkiRules {
         now: Long,
         zone: ZoneId,
         deadlineMin: Int,
+        /** Decks homework names: their new cards are their own tasks, so the quota's come from another. */
+        homework: Set<Long> = emptySet(),
         unseen: (Deck) -> Int,
     ): Pair<Fetched?, AnkiDay> {
         val day = ankiDay(now, zone)
         val today = previous?.takeIf { it.day == day.toString() }
-            ?: quotaDeck(decks, textbook, unseen).let { AnkiDay(day.toString(), it?.id, it?.name) }
+            ?: quotaDeck(decks, textbook, homework, unseen).let { AnkiDay(day.toString(), it?.id, it?.name) }
         val reviews = dueReviews(decks)
-        val newLeft = today.deckId?.let { id -> decks.firstOrNull { it.id == id }?.new } ?: 0
+        // A deck chosen this morning that homework has named since is counted there, not twice.
+        val newLeft = today.deckId?.takeIf { it !in homework }?.let { id -> decks.firstOrNull { it.id == id }?.new } ?: 0
         if (today.deckId == null && reviews == 0) return null to today
+        // Its deck is homework's for now and nothing is due: no quota today, rather than one done.
+        // A quota marked done would stay done if the homework went before its cards were studied.
+        if (today.deckId != null && today.deckId in homework && reviews == 0) return null to today
         val shortName = today.deckName?.substringAfterLast(Deck.SEPARATOR)
         val parts = buildList {
             if (reviews > 0) add("$reviews review${if (reviews == 1) "" else "s"}")
@@ -148,6 +156,8 @@ object AnkiRules {
         textbook: Int,
         assignments: List<TaskItem>,
         unseen: (Deck) -> Int,
+        now: Long,
+        zone: ZoneId,
     ): List<Fetched> {
         val byName = decks.associateBy { it.name }
         val wanted = LinkedHashMap<Deck, MutableList<TaskItem>>()
@@ -164,7 +174,7 @@ object AnkiRules {
             .filter { it.isOpen && it.source == Source.Anki && it.sourceId.startsWith(DECK_PREFIX) }
             .mapNotNull { task ->
                 val deck = decks.firstOrNull { it.id.toString() == task.extra[EXTRA_DECK_ID] } ?: return@mapNotNull null
-                if (deck in wanted || unseen(deck) > 0 || deck.learn + deck.review > 0) return@mapNotNull null
+                if (deck in wanted || unseen(deck) > 0) return@mapNotNull null
                 Fetched(
                     sourceId = task.sourceId,
                     title = task.title,
@@ -182,30 +192,43 @@ object AnkiRules {
         return finishing + wanted.map { (deck, linked) ->
             val first = linked.minWith(compareBy(nullsLast()) { it.dueAt })
             val left = unseen(deck)
-            val due = deck.learn + deck.review
+            // Today's new cards for this deck are studied: the rest wait for Anki's next day,
+            // whatever reviews it has (those are the daily quota's).
+            val waits = deck.new == 0 && left > 0
             val section = deck.name.substringAfterLast(Deck.SEPARATOR)
             Fetched(
                 sourceId = DECK_PREFIX + deck.id,
-                title = "Learn Anki deck $section ($left new)",
+                title = "Learn Anki deck $section",
                 kind = Kind.Homework,
-                detail = "For: " + linked.joinToString("; ") { it.title },
+                detail = "$left cards never studied. For: " + linked.joinToString("; ") { it.title },
                 className = first.className,
                 dueAt = first.dueAt,
-                sourceEffortMin = effortMin(due, left).coerceAtLeast(1),
-                done = left == 0 && due == 0,
+                sourceEffortMin = effortMin(0, left).coerceAtLeast(1),
+                done = left == 0,
                 derived = true,
-                subSteps = newCardSteps(left),
+                subSteps = newCardSteps(left, deck.new),
+                stepsPerDay = 1,
+                notBefore = if (waits) nextRollover(now, zone) else null,
                 extra = mapOf(EXTRA_DECK_ID to deck.id.toString(), EXTRA_DECK_NAME to deck.name, EXTRA_FOR to linked.joinToString(",") { it.id }),
             )
         }
     }
 
-    /** The deck's daily limit makes a day's step: 45 unseen cards are 20, 20 and 5. */
-    private fun newCardSteps(unseen: Int): List<SubStep> =
-        (0 until unseen step NEW_PER_DAY).map { start ->
-            val cards = minOf(NEW_PER_DAY, unseen - start)
-            SubStep("$cards new cards", effortMin(0, cards).coerceAtLeast(1))
-        }
+    /** When Anki's next day starts: the next 04:00. */
+    fun nextRollover(now: Long, zone: ZoneId): Long =
+        ankiDay(now, zone).plusDays(1).atTime(ROLLOVER_HOUR.toInt(), 0).atZone(zone).toInstant().toEpochMilli()
+
+    /**
+     * The deck's daily limit makes a day's step: 45 unseen cards are 20, 20 and 5. The first is
+     * what Anki will still show today ([today] new cards), so with 5 left today they're 5, 20 and
+     * 20; with none left today (the deck waits for Anki's next day) they're 20 a day from then.
+     */
+    private fun newCardSteps(unseen: Int, today: Int): List<SubStep> {
+        if (unseen <= 0) return emptyList()
+        val first = minOf(unseen, if (today > 0) today else NEW_PER_DAY)
+        val sizes = listOf(first) + (first until unseen step NEW_PER_DAY).map { minOf(NEW_PER_DAY, unseen - it) }
+        return sizes.map { cards -> SubStep("$cards new cards", effortMin(0, cards).coerceAtLeast(1)) }
+    }
 
     const val EXTRA_DECK_ID = "deckId"
     const val EXTRA_DECK_NAME = "deckName"

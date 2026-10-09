@@ -77,6 +77,13 @@ data class TaskItem(
     /** Minutes of finished focus sessions spent on it. */
     val workedMin: Int = 0,
     val subSteps: List<SubStep> = emptyList(),
+    /** At most this many of its sub-steps can be done in a day: an Anki deck releases 20 new cards a day. */
+    val stepsPerDay: Int? = null,
+    /**
+     * Its work can't start before then, though it's due as ever: an Anki deck whose new cards for
+     * today are studied releases more only after Anki's next 04:00.
+     */
+    val notBefore: Long? = null,
     val status: Status = Status.Open,
     /**
      * Derived by this app from a source's counts (the daily Anki quota, a deck homework names)
@@ -120,5 +127,7 @@ data class Fetched(
     val done: Boolean = false,
     val derived: Boolean = false,
     val subSteps: List<SubStep>? = null,
+    val stepsPerDay: Int? = null,
+    val notBefore: Long? = null,
     val extra: Map<String, String> = emptyMap(),
 )

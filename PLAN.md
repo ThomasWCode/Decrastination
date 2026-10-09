@@ -130,6 +130,9 @@ Phase 0 also built what Phase 1 would have scaffolded: the Gradle setup, the sha
 
 ### Phase 2: Planner and widget
 
+*Done 9 Oct 2026: the planner (with a daily cap on undated work and one Anki step a day, `docs/scheduler.md` §3 item 7), a Plan screen, and the Next task widget, placed on the 4th home page and tried at 2×1, 4×1, 2×2, 4×2, 4×3 and 4×5. ↻ reads every source and asks the Teams widget to sync; the Teams widget's change notifications bring the result back.*
+
+
 - `Planner` as pure Kotlin, tested against `fixtures/` with the clock pinned to tonight.
 - Availability template, box length and margins in Settings (defaults in Q6).
 - `NextWidget` (Glance): "Do:" line, due/behind badge, minutes, "then:" line, ↻; tap opens the task. Midnight and deadline redraws.
