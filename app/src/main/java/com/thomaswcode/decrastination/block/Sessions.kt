@@ -58,8 +58,14 @@ object Sessions {
             scheduleEnd(context, session)
             return
         }
-        val record = focus.stopSession() ?: return clear(context)
+        // Only the session seen above: one started since (Start, racing this) is left running.
+        val record = focus.stopSession(session) ?: return
         clear(context)
+        // One started meanwhile keeps its notification and alarm.
+        focus.session?.let { current ->
+            showOngoing(context, current)
+            scheduleEnd(context, current)
+        }
         val text = when {
             !record.completed -> "${record.label}: stopped after ${record.workedMin} min"
             focus.earnsNow(true, record.endedAt) -> {
