@@ -152,6 +152,8 @@ data class WeeklyReview(
     val by: String,
     /** The week it reviewed (its Monday), so each week has one, whenever the check-in is moved to. */
     val week: String? = null,
+    /** Why the rules wrote it, not Claude: off, resting, at its cap, or no answer that could be used. */
+    val why: String? = null,
 )
 
 @Serializable

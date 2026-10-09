@@ -10,6 +10,7 @@ import com.thomaswcode.decrastination.R
 import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.data.WeeklyReview
 import com.thomaswcode.decrastination.enrich.AiUsage
+import com.thomaswcode.decrastination.enrich.ModelHold
 import com.thomaswcode.decrastination.notify.Channels
 import com.thomaswcode.decrastination.notify.Notify
 import kotlinx.coroutines.sync.withLock
@@ -38,11 +39,11 @@ object Review {
         val findings = learned.changes + listOfNotNull(Days.capacityAdvice(graph.log.value.days, graph.focus.today(now)))
         val model = runCatching { modelReview(graph, now) }
             .onFailure { Log.w(AppGraph.TAG, "The model's weekly review failed; the rules' stands", it) }
-            .getOrNull()
+            .getOrElse { Outcome(why = "Claude's call failed") }
         // The rules' findings always stand: the model's note comes first, and they follow.
         val review = (
-            model?.let { it.copy(lines = it.lines + findings) }
-                ?: WeeklyReview(now, findings.ifEmpty { listOf("Nothing to change this week: the estimates held.") }, by = "rules")
+            model.review?.let { it.copy(lines = it.lines + findings) }
+                ?: WeeklyReview(now, findings.ifEmpty { listOf("Nothing to change this week: the estimates held.") }, by = "rules", why = model.why)
             ).copy(week = week)
         graph.log.update { it.copy(reviews = it.reviews + review).trimmed(now) }
         val open = PendingIntent.getActivity(
@@ -72,33 +73,43 @@ object Review {
     fun reviewed(reviews: List<WeeklyReview>, week: String, lastCheckIn: Long): Boolean =
         reviews.any { it.week == week || (it.week == null && it.at >= lastCheckIn) }
 
+    /** The model's review, or why there's none (the rules' stands then, saying so). */
+    private class Outcome(val review: WeeklyReview? = null, val why: String? = null)
+
     /**
      * The model's review, while Claude is on and under its cap: a note and bounded changes, the
-     * changes applied through [AppGraph.changeSettings]. Null otherwise.
+     * changes applied through [AppGraph.changeSettings]. Otherwise why it couldn't be had.
      */
-    private suspend fun modelReview(graph: AppGraph, now: Long): WeeklyReview? {
-        val reviewer = graph.modelReviewer() ?: return null
+    private suspend fun modelReview(graph: AppGraph, now: Long): Outcome {
+        val reviewer = graph.modelReviewer() ?: return Outcome(why = because(ModelHold.Off))
         val zone = graph.clock.zone()
         val month = AiUsage.monthOf(now, zone)
         val input = ReviewInput.describe(graph.log.value, graph.runtime.value.calibration, graph.settings.value, now, zone)
         // The cap checked and the cost recorded in one turn with every other model call.
         val result = graph.modelCalls.withLock {
-            // Checked again here: switched off while another call held the lock, nothing is sent.
-            val current = graph.modelReviewer() ?: return@withLock null
-            val settings = graph.settings.value
-            if (!graph.runtime.value.aiUsage.forMonth(month).allows(settings.aiMonthlyCapGbp, settings.usdToGbp)) return@withLock null
+            // Checked again here, just before sending: switched off, resting after a failed call
+            // (perhaps one made while this waited), or no room under the cap.
+            graph.modelHold()?.let { return Outcome(why = because(it)) }
+            val current = graph.modelReviewer() ?: return Outcome(why = because(ModelHold.Off))
             // A failure is recorded (Setup shows it; the model rests), then the rules' review stands.
             runCatching { current.review(input) }
                 .onFailure { e -> graph.runtime.update { it.copy(aiUsage = it.aiUsage.forMonth(month).failure(e.message ?: e.javaClass.simpleName, now)) } }
                 .getOrThrow()
                 .also { r -> graph.runtime.update { it.copy(aiUsage = it.aiUsage.forMonth(month).record(r.costUsd, r.refused, now)) } }
-        } ?: return null
-        val answer = result.answer ?: return null
+        }
+        val answer = result.answer ?: return Outcome(why = if (result.refused) "Claude declined to review it" else "Claude's answer couldn't be used")
         val changes = answer.changes.filter(ReviewInput::allowed)
         // Laid over what's been asked for, so a change waiting elsewhere keeps its wait.
         if (changes.isNotEmpty()) graph.changeSettings { ReviewInput.apply(it, changes) }
         val note = answer.note.ifEmpty { listOf("No note this week.") }
-        return WeeklyReview(now, note + changeLines(changes, graph.settings.value), by = reviewer.model)
+        return Outcome(WeeklyReview(now, note + changeLines(changes, graph.settings.value), by = reviewer.model))
+    }
+
+    /** Why the model didn't review the week, in words. */
+    private fun because(hold: ModelHold): String = when (hold) {
+        ModelHold.Off -> "Claude was off"
+        ModelHold.Resting -> "Claude was resting after a failed call"
+        ModelHold.Capped -> "Claude's monthly cap was reached"
     }
 
     /**

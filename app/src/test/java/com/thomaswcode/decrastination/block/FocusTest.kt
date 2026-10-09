@@ -324,6 +324,48 @@ class FocusTest {
     }
 
     @Test
+    fun `a completion earns from the calibrated estimate, as the plan and its sessions do`() = runTest {
+        // Learned to take half its estimate: a 100-minute task is 50 minutes of pieces.
+        runtime.update { it.copy(calibration = Calibration(multipliers = mapOf("Homework|" to 0.5))) }
+        tasks.update { it.copy(tasks = listOf(task("hw", effort = 100))) }
+        focus.startSession("teams:hw", "hw", null, 50)
+        clock.time += 50 * 60_000L
+        focus.stopSession()
+        val afterSession = focus.creditLeftMs()
+        focus.onCompleted(listOf(tasks.value.tasks.single().copy(status = Status.Done, doneAt = clock.time)))
+        // The session was all of it: the completion earns nothing more.
+        assertEquals(afterSession, focus.creditLeftMs())
+        // With no session, the completion earns for the 50 calibrated minutes: 50 / 3.
+        tasks.update { it.copy(tasks = listOf(task("other", effort = 100))) }
+        focus.onCompleted(listOf(task("other", effort = 100).copy(status = Status.Done, doneAt = clock.time)))
+        assertEquals(afterSession + 50 * 60_000L / 3, focus.creditLeftMs())
+    }
+
+    @Test
+    fun `completions are handed on before they leave the queue, so a stop loses none`() = runTest {
+        val homework = task("hw", effort = 45).copy(status = Status.Done, doneAt = clock.time)
+        tasks.update { it.copy(tasks = listOf(homework), unrewarded = listOf(homework)) }
+        // Stopped while asking how it went: still queued, so it's all done again next time.
+        runCatching { focus.rewardCompletions { error("stopped") } }
+        assertEquals(listOf("teams:hw"), tasks.value.unrewarded.map { it.id })
+        val asked = mutableListOf<String>()
+        focus.rewardCompletions { completed -> asked += completed.map { it.id } }
+        assertEquals(listOf("teams:hw"), asked)
+        assertEquals(emptyList(), tasks.value.unrewarded)
+        // Its free time given once, for all that.
+        assertEquals(15 * 60_000L, focus.creditLeftMs())
+    }
+
+    @Test
+    fun `only a piece the box cut goes to the box experiment`() = runTest {
+        tasks.update { it.copy(tasks = listOf(task("t", effort = 90))) }
+        focus.startSession("teams:t", "t: part 1 of 2", "part 1 of 2", 45, box = 45)
+        assertEquals(45, runtime.value.session!!.box)
+        focus.startSession("teams:t", "t", null, 10)
+        assertNull(runtime.value.session!!.box)
+    }
+
+    @Test
     fun `what counts as blocked follows the settings`() {
         assertEquals(Focus.Target.App("com.google.android.youtube"), focus.target("com.google.android.youtube"))
         assertEquals(Focus.Target.Browser("org.mozilla.firefox"), focus.target("org.mozilla.firefox"))

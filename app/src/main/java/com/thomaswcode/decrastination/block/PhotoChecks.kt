@@ -8,6 +8,7 @@ import androidx.core.graphics.scale
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.core.Chunk
 import com.thomaswcode.decrastination.enrich.AiUsage
+import com.thomaswcode.decrastination.enrich.ModelHold
 import com.thomaswcode.decrastination.enrich.PhotoChecker
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -18,6 +19,7 @@ import kotlinx.coroutines.withContext
 
 /** A photo of written work, checked by the model and, if it's done, the piece ticked off. */
 object PhotoChecks {
+    private const val OFF = "Claude is off: the timer or the source will have to do."
 
     /** Checks [photo] against [piece], records the cost, and says how it went. The photo is deleted, whatever happens. */
     suspend fun check(context: Context, graph: AppGraph, photo: File, piece: Chunk): String {
@@ -30,10 +32,15 @@ object PhotoChecks {
         val month = AiUsage.monthOf(now, graph.clock.zone())
         // The cap checked and the cost recorded in one turn with every other model call.
         val result = graph.modelCalls.withLock {
-            // Checked again here: switched off while another call held the lock, nothing is sent.
-            val current = graph.photoChecker() ?: return "Claude was switched off: the timer or the source will have to do."
-            val settings = graph.settings.value
-            if (!graph.runtime.value.aiUsage.forMonth(month).allows(settings.aiMonthlyCapGbp, settings.usdToGbp)) return "Claude's monthly cap is reached: the timer or the source will have to do."
+            // Checked again here, just before sending: switched off, resting after a failed call
+            // (perhaps one made while this waited), or no room under the cap.
+            when (graph.modelHold()) {
+                ModelHold.Off -> return OFF
+                ModelHold.Resting -> return "Claude's last call failed, so it's left alone for an hour (Setup says why): the timer or the source will have to do."
+                ModelHold.Capped -> return "Claude's monthly cap is reached: the timer or the source will have to do."
+                null -> Unit
+            }
+            val current = graph.photoChecker() ?: return OFF
             runCatching { current.check(jpeg, piece.label) }
                 .onFailure { e ->
                     Log.w(AppGraph.TAG, "The photo check failed", e)
