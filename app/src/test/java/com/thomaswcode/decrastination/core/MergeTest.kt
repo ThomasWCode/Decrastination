@@ -29,6 +29,15 @@ class MergeTest {
     }
 
     @Test
+    fun `a derived task already finished when first seen is kept, as done`() {
+        val result = Merge.apply(emptyList(), Source.Anki, listOf(fetched("deck:1", done = true, derived = true)), t0)
+        assertEquals(listOf(Status.Done), result.tasks.map { it.status })
+        // Neither new work nor a completion: nothing was done here.
+        assertTrue(result.added.isEmpty())
+        assertTrue(result.completed.isEmpty())
+    }
+
+    @Test
     fun `an update keeps the app's own bookkeeping`() {
         val stored = first(fetched("a", dueAt = 5)).map {
             it.copy(workedMin = 25, userEffortMin = 60, subSteps = listOf(SubStep("Q1-8", 25, done = true)))

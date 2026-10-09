@@ -98,6 +98,8 @@ data class FocusSession(
     val startedAt: Long,
     /** The uptime clock at the start, so setting the date forward can't finish it early. */
     val startedUptime: Uptime? = null,
+    /** False when its chunk was longer than a session can run: finished, it adds its minutes, not its step done. */
+    val whole: Boolean = true,
 ) {
     val endsAt: Long get() = startedAt + minutes * 60_000L
 

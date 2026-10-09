@@ -257,6 +257,48 @@ class FocusTest {
     }
 
     @Test
+    fun `vocabulary a deck left unfinished is rewarded with its assignment, less its sessions`() = runTest {
+        val homework = task("hw", effort = 60, steps = listOf(SubStep("Learn vocabulary 2.2", 30, ankiSections = listOf("2.2")), SubStep("Exercise 4", 30)))
+        // The deck still has cards: 9 minutes of sessions on it so far.
+        val deck = TaskItem(
+            id = "anki:deck:1", source = Source.Anki, sourceId = "deck:1", title = "Learn Anki deck 2.2", kind = Kind.Homework, derived = true,
+            firstSeenAt = clock.time, lastSeenAt = clock.time, extra = mapOf("deckName" to "Textbook 1::2.2", "for" to "teams:hw"), workedMin = 9,
+        )
+        tasks.update { it.copy(tasks = listOf(homework, deck)) }
+        focus.onCompleted(listOf(homework.copy(status = Status.Done, doneAt = clock.time)))
+        // 60 less the deck's 9 minutes: 17 minutes of free time.
+        assertEquals(17 * 60_000L, focus.creditLeftMs())
+    }
+
+    @Test
+    fun `vocabulary of a deck dropped as its assignment closed is rewarded less the deck's sessions`() = runTest {
+        val homework = task("hw", effort = 60, steps = listOf(SubStep("Learn vocabulary 2.2", 30, ankiSections = listOf("2.2")), SubStep("Exercise 4", 30)))
+        // The same sync that closed the assignment dropped its unfinished deck: 9 minutes of sessions on it.
+        val deck = TaskItem(
+            id = "anki:deck:1", source = Source.Anki, sourceId = "deck:1", title = "Learn Anki deck 2.2", kind = Kind.Homework, derived = true,
+            firstSeenAt = clock.time, lastSeenAt = clock.time, extra = mapOf("deckName" to "Textbook 1::2.2", "for" to "teams:hw"), workedMin = 9,
+            status = Status.Missed,
+        )
+        tasks.update { it.copy(tasks = listOf(homework, deck)) }
+        focus.onCompleted(listOf(homework.copy(status = Status.Done, doneAt = clock.time)))
+        // 60 less the deck's 9 minutes: 17 minutes of free time, not 20.
+        assertEquals(17 * 60_000L, focus.creditLeftMs())
+    }
+
+    @Test
+    fun `vocabulary a deck held isn't rewarded again with its assignment`() = runTest {
+        val homework = task("hw", effort = 60, steps = listOf(SubStep("Learn vocabulary 2.2", 30, ankiSections = listOf("2.2")), SubStep("Exercise 4", 30)))
+        val deck = TaskItem(
+            id = "anki:deck:1", source = Source.Anki, sourceId = "deck:1", title = "Learn Anki deck 2.2", kind = Kind.Homework, derived = true,
+            firstSeenAt = clock.time, lastSeenAt = clock.time, extra = mapOf("deckName" to "Textbook 1::2.2", "for" to "teams:hw"), status = Status.Done,
+        )
+        tasks.update { it.copy(tasks = listOf(homework, deck)) }
+        focus.onCompleted(listOf(homework.copy(status = Status.Done, doneAt = clock.time)))
+        // 30 minutes of the 60 were the finished deck's: 10 minutes of free time, not 20.
+        assertEquals(10 * 60_000L, focus.creditLeftMs())
+    }
+
+    @Test
     fun `a finished session processed late is dated at its end, and its time isn't today's`() = runTest {
         tasks.update { it.copy(tasks = listOf(task("hw", effort = 90))) }
         val session = focus.startSession("teams:hw", "hw", null, 30)
@@ -273,6 +315,18 @@ class FocusTest {
         assertTrue(focus.earnsNow(true, clock.time))
         assertFalse(focus.earnsNow(true, yesterday))
         assertFalse(focus.earnsNow(false, clock.time))
+    }
+
+    @Test
+    fun `a step longer than a session isn't ticked by one, its minutes count`() = runTest {
+        tasks.update { it.copy(tasks = listOf(task("t", effort = 240, steps = listOf(SubStep("Essay", 240))))) }
+        focus.startSession("teams:t", "t: Essay", "Essay", 240)
+        assertEquals(Focus.MAX_SESSION_MIN, focus.session!!.minutes)
+        clock.time += Focus.MAX_SESSION_MIN * 60_000L
+        focus.stopSession()
+        val t = tasks.value.tasks.single()
+        assertEquals(listOf(false), t.subSteps.map { it.done })
+        assertEquals(Focus.MAX_SESSION_MIN, t.workedMin)
     }
 
     @Test

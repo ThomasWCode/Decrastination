@@ -3,12 +3,15 @@ package com.thomaswcode.decrastination.protect
 import com.thomaswcode.decrastination.core.Uptime
 import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.data.Window
-import kotlinx.serialization.descriptors.elementNames
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlinx.serialization.descriptors.elementNames
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonPrimitive
 
 class TotpTest {
     /** RFC 6238 appendix B's SHA-1 secret, "12345678901234567890". */
@@ -188,6 +191,15 @@ class SettingsChangesTest {
     }
 
     @Test
+    fun `switching Claude on or raising its cap waits once armed, switching it off doesn't`() {
+        val armed = Settings(armed = true)
+        assertEquals(1, SettingsChanges.propose(armed, armed.copy(aiEnabled = true), emptyList(), now, ::newId).pending.size)
+        assertEquals(1, SettingsChanges.propose(armed, armed.copy(aiMonthlyCapGbp = 300), emptyList(), now, ::newId).pending.size)
+        val on = armed.copy(aiEnabled = true)
+        assertEquals(false, SettingsChanges.propose(on, on.copy(aiEnabled = false), emptyList(), now, ::newId).settings.aiEnabled)
+    }
+
+    @Test
     fun `where restarts can't be told apart, sessions use the wall clock and waits count only what's sure`() {
         val unknown = Uptime.UNKNOWN_BOOT
         // A session can't be timed across what may have been a restart.
@@ -198,6 +210,23 @@ class SettingsChangesTest {
         assertNull(Uptime(unknown, 5 * 60_000L).atLeastSince(Uptime(unknown, 10 * 60_000L)))
         val change = PendingChange("1", "armed", kotlinx.serialization.json.JsonPrimitive(false), "Protection: off", now, now, waitMs = 60 * 60_000L)
         assertEquals(40 * 60_000L, SettingsChanges.counting(listOf(change), Uptime(unknown, 10 * 60_000L), Uptime(unknown, 50 * 60_000L), force = true))
+    }
+
+    @Test
+    fun `a waiting change set back is cancelled, and one left as asked keeps its wait`() {
+        val armed = Settings(armed = true)
+        val first = SettingsChanges.propose(armed, armed.copy(aiEnabled = true), emptyList(), now, ::newId)
+        assertEquals(1, first.pending.size)
+        val asked = SettingsChanges.requested(armed, first.pending)
+        assertEquals(true, asked.aiEnabled)
+        // Saved again with something else changed: the waiting change keeps its wait.
+        val again = SettingsChanges.propose(armed, asked.copy(workMinPerFreeMin = armed.workMinPerFreeMin + 1), first.pending, now + 3_600_000L, ::newId)
+        assertEquals(first.pending, again.pending)
+        assertEquals(armed.workMinPerFreeMin + 1, again.settings.workMinPerFreeMin)
+        // Set back to what it is: cancelled, and Claude stays off.
+        val back = SettingsChanges.propose(armed, asked.copy(aiEnabled = false), first.pending, now, ::newId)
+        assertEquals(emptyList(), back.pending)
+        assertEquals(false, back.settings.aiEnabled)
     }
 
     @Test
@@ -218,10 +247,39 @@ class SettingsChangesTest {
     }
 
     @Test
+    fun `fewer or later Teams syncs, another textbook, and a key put to use wait once armed`() {
+        val armed = Settings(armed = true)
+        fun waits(new: Settings) = SettingsChanges.propose(armed, new, emptyList(), now, ::newId).pending.size == 1
+        assertTrue(waits(armed.copy(teamsAutoSync = false)))
+        assertTrue(waits(armed.copy(teamsFirstUnlockMin = armed.teamsFirstUnlockMin + 60)))
+        assertTrue(waits(armed.copy(teamsSyncEveryMin = armed.teamsSyncEveryMin + 60)))
+        assertTrue(waits(armed.copy(ankiTextbook = armed.ankiTextbook + 1)))
+        assertTrue(waits(armed.copy(aiKeyActive = true)))
+        // More often, or sooner: at once.
+        assertFalse(waits(armed.copy(teamsSyncEveryMin = armed.teamsSyncEveryMin - 60)))
+        assertFalse(waits(armed.copy(teamsFirstUnlockMin = armed.teamsFirstUnlockMin - 60)))
+    }
+
+    @Test
     fun `a box length changed either way waits once armed`() {
         val armed = Settings(armed = true)
         assertEquals(1, SettingsChanges.propose(armed, armed.copy(boxMin = armed.boxMin - 15), emptyList(), now, ::newId).pending.size)
         assertEquals(1, SettingsChanges.propose(armed, armed.copy(boxMin = armed.boxMin + 15), emptyList(), now, ::newId).pending.size)
+    }
+
+    @Test
+    fun `a list change applies its additions now, and only its removals wait, keeping their wait`() {
+        val armed = Settings(armed = true, blockedApps = listOf("a", "b"))
+        val first = SettingsChanges.propose(armed, armed.copy(blockedApps = listOf("a", "c")), emptyList(), now, ::newId)
+        assertEquals(listOf("a", "b", "c"), first.settings.blockedApps)
+        assertEquals(listOf("a", "c"), first.pending.single().value.jsonArray.map { it.jsonPrimitive.content })
+        // Another app added an hour on: the removal keeps its wait.
+        val asked = SettingsChanges.requested(first.settings, first.pending)
+        val second = SettingsChanges.propose(first.settings, asked.copy(blockedApps = asked.blockedApps + "d"), first.pending, now + 3_600_000L, ::newId)
+        assertEquals(listOf("a", "b", "c", "d"), second.settings.blockedApps)
+        assertEquals(first.pending.single().id, second.pending.single().id)
+        assertEquals(first.pending.single().applyAt, second.pending.single().applyAt)
+        assertEquals(listOf("a", "c", "d"), second.pending.single().value.jsonArray.map { it.jsonPrimitive.content })
     }
 
     @Test

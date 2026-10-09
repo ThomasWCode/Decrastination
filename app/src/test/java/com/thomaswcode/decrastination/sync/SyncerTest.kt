@@ -109,6 +109,16 @@ class SyncerTest {
     }
 
     @Test
+    fun `after-every-sync listeners hear every sync, changed or not`() = runTest {
+        val syncer = syncer(listOf(FakeSource(Source.Gmail) { items("m") }))
+        var syncs = 0
+        syncer.addAfterEverySync { syncs++ }
+        syncer.sync()
+        syncer.sync()
+        assertEquals(2, syncs)
+    }
+
+    @Test
     fun `a sync's completions are saved with the tasks' move to done, to be rewarded after`() = runTest {
         val teams = FakeSource(Source.Teams) { items("a", "b") }
         val syncer = syncer(listOf(teams))

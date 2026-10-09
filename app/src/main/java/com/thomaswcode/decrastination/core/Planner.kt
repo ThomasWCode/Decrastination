@@ -1,6 +1,7 @@
 package com.thomaswcode.decrastination.core
 
 import com.thomaswcode.decrastination.data.Settings
+import com.thomaswcode.decrastination.sources.anki.AnkiRules
 import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalDate
@@ -63,12 +64,13 @@ object Planner {
         val (events, work) = input.tasks
             .filter { it.isOpen && it.isAvailable(input.now) }
             .partition { it.kind == Kind.Event }
+        val held = AnkiRules.heldSections(input.tasks, input.settings.ankiTextbook)
         val items = work.map { task ->
             val soft = task.dueAt == null
             // Calendar days where you are, so a week is a week across the clocks changing.
             val deadline = task.dueAt
                 ?: Instant.ofEpochMilli(task.firstSeenAt).atZone(zone).plusDays(input.settings.softDeadlineDays.toLong()).toInstant().toEpochMilli()
-            Item(task, deadline, soft, pieces(task, input))
+            Item(task, deadline, soft, pieces(task, input, held[task.id].orEmpty()))
         }.filter { it.chunks.isNotEmpty() }
 
         val lastDeadline = items.maxOfOrNull { date(it.deadline, zone) } ?: today
@@ -249,13 +251,24 @@ object Planner {
         return if (margin == 0 && due.toLocalTime() < NOON) last.minusDays(1) else last
     }
 
-    /** The task's remaining work as ordered pieces. */
-    private fun pieces(task: TaskItem, input: Input): List<Piece> {
+    /**
+     * The task's remaining work as ordered pieces. A vocabulary step whose sections its Anki deck
+     * tasks hold ([held]) isn't among them: the decks' cards are that work.
+     */
+    private fun pieces(task: TaskItem, input: Input, held: Set<String>): List<Piece> {
         val multiplier = input.calibration.multiplier(task.kind, task.className)
         if (task.subSteps.isNotEmpty()) {
-            val left = task.subSteps.filterNot { it.done }
+            val left = task.subSteps.filterNot { it.done || (it.ankiSections.isNotEmpty() && held.containsAll(it.ankiSections)) }
             if (left.isEmpty()) return listOf(Piece("finish and hand in", MIN_CHUNK))
-            return left.map { Piece(it.title, (it.minutes * multiplier).roundToInt().coerceAtLeast(1)) }
+            // Minutes worked beyond the steps ticked off (a session stopped early) come off the
+            // next steps in order, each kept to at least a last few minutes, as it isn't done.
+            var spare = (task.workedMin - task.subSteps.filter { it.done }.sumOf { it.minutes * multiplier }).roundToInt().coerceAtLeast(0)
+            return left.map { step ->
+                val full = (step.minutes * multiplier).roundToInt().coerceAtLeast(1)
+                val off = minOf(spare, (full - MIN_CHUNK).coerceAtLeast(0))
+                spare -= off
+                Piece(step.title, full - off)
+            }
         }
         if (task.effortMin <= 0) return emptyList()
         val whole = task.effortMin * multiplier

@@ -43,6 +43,13 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
+    packaging {
+        resources {
+            // The Anthropic SDK's Apache HTTP jars each carry these; nothing reads them at run time.
+            excludes += setOf("META-INF/DEPENDENCIES", "META-INF/INDEX.LIST")
+        }
+    }
+
     buildFeatures {
         compose = true
     }
@@ -67,8 +74,10 @@ dependencies {
     implementation(libs.androidx.glance.appwidget)
     implementation(libs.androidx.glance.material3)
     implementation(libs.zxing.core)
+    implementation(libs.anthropic.java)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlin.test.junit)
     testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.okhttp.mockwebserver)
 }

@@ -63,10 +63,16 @@ class Syncer(
     private val readers = CoroutineScope(SupervisorJob() + readContext)
     private val lock = Mutex()
     private val listeners = mutableListOf<suspend (SyncReport) -> Unit>()
+    private val afterEvery = mutableListOf<suspend () -> Unit>()
 
     /** Called after each sync that changed anything, in the order added. */
     fun addListener(listener: suspend (SyncReport) -> Unit) {
         listeners += listener
+    }
+
+    /** Called after every sync, changed or not: a task can change in place (a new email in a thread). */
+    fun addAfterEverySync(listener: suspend () -> Unit) {
+        afterEvery += listener
     }
 
     suspend fun sync(only: Set<Source>? = null): SyncReport = lock.withLock {
@@ -78,6 +84,7 @@ class Syncer(
         if (report.completed.isNotEmpty() || report.reopened.isNotEmpty() || report.added.isNotEmpty() || report.missed.isNotEmpty()) {
             listeners.forEach { it(report) }
         }
+        afterEvery.forEach { it() }
         report
     }
 
