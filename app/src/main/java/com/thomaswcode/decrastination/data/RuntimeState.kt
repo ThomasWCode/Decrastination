@@ -21,12 +21,6 @@ data class RuntimeState(
     val pending: List<PendingChange> = emptyList(),
     /** A parent code unblocked everything until then. */
     val overrideUntil: Long? = null,
-    /**
-     * The blocked site each checked browser last showed in front (null: a page that isn't), kept
-     * so a service started afresh can judge a page whose address bar is hidden (a video full
-     * screen). A browser not in it hasn't been read.
-     */
-    val browserSites: Map<String, String?> = emptyMap(),
     /** Whether the device admin was last left for an armed phone, so a disarm the app didn't see through is finished at start. */
     val adminArmed: Boolean = false,
     val codeLock: CodeLock = CodeLock(),
