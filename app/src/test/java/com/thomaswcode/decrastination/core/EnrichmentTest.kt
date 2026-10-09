@@ -75,6 +75,15 @@ class EnrichmentTest {
     }
 
     @Test
+    fun `a step done is kept done by occurrence, not by title`() {
+        val task = assignment()
+        val first = task.withEnrichment(enrichment(task).copy(subSteps = listOf(SubStep("Exercise", 20), SubStep("Exercise", 20))))
+        val oneDone = first.copy(subSteps = first.subSteps.mapIndexed { i, s -> if (i == 0) s.copy(done = true) else s })
+        val again = oneDone.withEnrichment(enrichment(task).copy(subSteps = listOf(SubStep("Exercise", 25), SubStep("Exercise", 25))))
+        assertEquals(listOf(true, false), again.subSteps.map { it.done })
+    }
+
+    @Test
     fun `a start after the deadline is dropped`() {
         val task = email().copy(sourceValues = SourceValues(Kind.Admin, null, null))
         val late = task.withEnrichment(enrichment(task).copy(deadline = Fixtures.at("2026-10-12T09:00"), actionableFrom = Fixtures.at("2026-10-14T00:00")))

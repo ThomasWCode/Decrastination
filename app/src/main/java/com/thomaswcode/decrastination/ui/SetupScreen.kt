@@ -95,9 +95,10 @@ fun SetupScreen(graph: AppGraph, activity: Activity) {
         val usage = runtime.aiUsage.forMonth(AiUsage.monthOf(graph.clock.now(), graph.clock.zone()))
         SetupItem(
             title = "Claude",
-            done = settings.aiEnabled && Secret.AnthropicApiKey in secrets,
+            done = settings.aiEnabled && settings.aiKeyActive && Secret.AnthropicApiKey in secrets,
             detail = when {
                 Secret.AnthropicApiKey !in secrets -> "No API key: the rules do what they can, and nothing is sent to Claude."
+                !settings.aiKeyActive -> "Key saved; it waits like switching Claude on (Settings lists when it applies), so nothing is sent yet."
                 !settings.aiEnabled -> "Key saved; switched off in Settings, so nothing is sent."
                 else -> "On: £%.2f of £%d this month.".format(Locale.UK, usage.spentGbp(settings.usdToGbp), settings.aiMonthlyCapGbp)
             },
@@ -134,7 +135,10 @@ fun SetupScreen(graph: AppGraph, activity: Activity) {
             enteringKey = false
             scope.launch {
                 graph.secrets.put(Secret.AnthropicApiKey, key)
-                if (graph.settings.value.aiEnabled) EnrichWorker.enqueue(activity)
+                // Put to use as switching Claude on is: at once unarmed, after the wait armed.
+                graph.changeSettings { it.copy(aiKeyActive = true) }
+                // A new key for one already in use: straight to work.
+                if (graph.claudeKey() != null) EnrichWorker.enqueue(activity)
             }
         }
     }

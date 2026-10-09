@@ -254,7 +254,7 @@ class AppGraph private constructor(context: Context) {
         scope.launch { calendarChanged.debounce(CALENDAR_QUIET_MS).collect { CalendarTime.refresh(app) } }
         // Switched on, the model goes over what only the rules have seen.
         scope.launch {
-            settings.state.map { it.aiEnabled }.distinctUntilChanged().drop(1).collect { on -> if (on) EnrichWorker.enqueue(app) }
+            settings.state.map { it.aiEnabled && it.aiKeyActive }.distinctUntilChanged().drop(1).collect { on -> if (on) EnrichWorker.enqueue(app) }
         }
         runCatching {
             app.contentResolver.registerContentObserver(
@@ -296,11 +296,14 @@ class AppGraph private constructor(context: Context) {
     }
 
     /** The model, while it's switched on and has its key; else null. */
-    fun modelEnricher(): Enricher? {
-        val key = secrets[Secret.AnthropicApiKey]
-        if (!settings.value.aiEnabled || key.isNullOrBlank()) return null
-        return ClaudeEnricher(key, clock.zone())
+    /** Claude's API key, while Claude is switched on and the key is in use; else null. */
+    fun claudeKey(): String? {
+        val s = settings.value
+        if (!s.aiEnabled || !s.aiKeyActive) return null
+        return secrets[Secret.AnthropicApiKey]?.takeIf { it.isNotBlank() }
     }
+
+    fun modelEnricher(): Enricher? = claudeKey()?.let { ClaudeEnricher(it, clock.zone()) }
 
     /**
      * Enriches every task that's new or changed since it was last enriched, and, while the model is
@@ -320,12 +323,16 @@ class AppGraph private constructor(context: Context) {
             .mapNotNull { task -> Enrichments.jobFor(task)?.let { task to it } }
             .filter { (task, _) -> Enrichments.stale(task, enricher != null, RuleEnricher.BY) }
             .sortedBy { (task, _) -> task.dueAt ?: Long.MAX_VALUE }
-        for ((task, job) in candidates) {
+        for ((snapshot, _) in candidates) {
+            // Read afresh: a sync since the run began may have closed or changed it.
+            val task = tasks.value.tasks.firstOrNull { it.id == snapshot.id } ?: continue
+            val job = Enrichments.jobFor(task) ?: continue
+            if (!Enrichments.stale(task, enricher != null, RuleEnricher.BY)) continue
             val now = clock.now()
             val month = AiUsage.monthOf(now, clock.zone())
             val s = settings.value
             // Switched off (or its key removed) while this runs: nothing more is sent.
-            if (!s.aiEnabled || secrets[Secret.AnthropicApiKey].isNullOrBlank()) enricher = null
+            if (claudeKey() == null) enricher = null
             val useModel = enricher != null && calls < MAX_MODEL_CALLS && runtime.value.aiUsage.forMonth(month).allows(s.aiMonthlyCapGbp, s.usdToGbp)
             var enrichment = if (useModel) {
                 calls++
@@ -348,10 +355,14 @@ class AppGraph private constructor(context: Context) {
             }
             if (enrichment == null) enrichment = rules.enrich(task, job, now).enrichment
             val made = enrichment ?: continue
-            tasks.update { state -> state.copy(tasks = state.tasks.map { if (it.id == task.id) it.withEnrichment(made) else it }) }
-            if (AnkiRules.sectionsOf(task.withEnrichment(made)) != AnkiRules.sectionsOf(task)) decksChanged = true
+            // Laid only over the task as it was read: changed during the call, the next run does it.
+            tasks.update { state -> state.copy(tasks = state.tasks.map { if (it.id == task.id && Enrichments.inputHash(it) == made.inputHash) it.withEnrichment(made) else it }) }
+            // Its deck tasks take their sections and due date from it.
+            val after = task.withEnrichment(made)
+            val sections = AnkiRules.sectionsOf(after)
+            if (sections != AnkiRules.sectionsOf(task) || (sections.isNotEmpty() && after.dueAt != task.dueAt)) decksChanged = true
         }
-        // Sections the deck pattern missed: their deck tasks come from reading Anki again, now.
+        // Sections the deck pattern missed, or a deadline moved: their deck tasks come from reading Anki again, now.
         if (decksChanged) SyncWorker.syncNow(app, setOf(Source.Anki))
     }
 

@@ -3,12 +3,13 @@ package com.thomaswcode.decrastination.protect
 import com.thomaswcode.decrastination.core.Uptime
 import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.data.Window
-import kotlinx.serialization.descriptors.elementNames
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlinx.serialization.descriptors.elementNames
 
 class TotpTest {
     /** RFC 6238 appendix B's SHA-1 secret, "12345678901234567890". */
@@ -240,6 +241,20 @@ class SettingsChangesTest {
         val back = SettingsChanges.propose(armed, asked.copy(armed = true), first.pending, now, ::newId)
         assertEquals(emptyList(), back.pending)
         assertEquals(true, back.settings.armed)
+    }
+
+    @Test
+    fun `fewer or later Teams syncs, another textbook, and a key put to use wait once armed`() {
+        val armed = Settings(armed = true)
+        fun waits(new: Settings) = SettingsChanges.propose(armed, new, emptyList(), now, ::newId).pending.size == 1
+        assertTrue(waits(armed.copy(teamsAutoSync = false)))
+        assertTrue(waits(armed.copy(teamsFirstUnlockMin = armed.teamsFirstUnlockMin + 60)))
+        assertTrue(waits(armed.copy(teamsSyncEveryMin = armed.teamsSyncEveryMin + 60)))
+        assertTrue(waits(armed.copy(ankiTextbook = armed.ankiTextbook + 1)))
+        assertTrue(waits(armed.copy(aiKeyActive = true)))
+        // More often, or sooner: at once.
+        assertFalse(waits(armed.copy(teamsSyncEveryMin = armed.teamsSyncEveryMin - 60)))
+        assertFalse(waits(armed.copy(teamsFirstUnlockMin = armed.teamsFirstUnlockMin - 60)))
     }
 
     @Test
