@@ -167,6 +167,30 @@ class GmailTest {
     }
 
     @Test
+    fun `a text that couldn't be read again keeps what it had, and a new one waits`() {
+        val known = mapOf("m1" to GmailThreads.Body("Old text", readTo = 0))
+        // Gone between its listing and its fetch: as it was, still to be read again.
+        assertEquals(known, GmailThreads.withRead(known, mapOf("m1" to null)))
+        // No text in it: that's all there is.
+        assertEquals(GmailThreads.Body(""), GmailThreads.withRead(known, mapOf("m1" to ""))["m1"])
+        assertEquals(GmailThreads.Body("New text"), GmailThreads.withRead(known, mapOf("m1" to "New text"))["m1"])
+        // A new message that couldn't be read is left to be fetched.
+        assertNull(GmailThreads.withRead(known, mapOf("m2" to null))["m2"])
+    }
+
+    @Test
+    fun `an email is asked about only once its text is read as far as reads go`() {
+        val message = InboxMessage(1, "m1", "t1", 1, "Hi", null, "a@b.c", false)
+        val task = Merge.apply(emptyList(), Source.Gmail, GmailThreads.fetched(listOf(message), mapOf("m1" to GmailThreads.Body("x".repeat(100))), now, LONDON), now).tasks.single()
+        assertTrue(GmailThreads.textRead(task))
+        // Stored before how far it was read was kept, or cut by a lower limit: not yet.
+        assertEquals(false, GmailThreads.textRead(task.copy(extra = task.extra - GmailThreads.EXTRA_TEXT_READ_TO)))
+        assertEquals(false, GmailThreads.textRead(task.copy(detail = "x".repeat(4_000), extra = task.extra + (GmailThreads.EXTRA_TEXT_READ_TO to "4000"))))
+        // Nor while its text is still to be fetched.
+        assertEquals(false, GmailThreads.textRead(Merge.apply(emptyList(), Source.Gmail, GmailThreads.fetched(listOf(message), emptyMap(), now, LONDON), now).tasks.single()))
+    }
+
+    @Test
     fun `a message's text is kept past what the model is shown, so it's told when there's more`() {
         assertTrue(GmailThreads.MAX_BODY_CHARS > Prompts.MAX_TEXT)
     }
