@@ -115,7 +115,9 @@ class BlockedActivity : ComponentActivity() {
         }
         // Nothing is blocked any more (free time earned, quiet hours begun), or not this: let it through.
         LaunchedEffect(verdict, session, targetBlocked) {
-            if ((verdict !is BlockPolicy.Verdict.Block || !targetBlocked) && session == null) finish()
+            // Its target no longer blocked goes at once, session or not; otherwise once nothing's
+            // blocked and no session holds it.
+            if (!targetBlocked || (verdict !is BlockPolicy.Verdict.Block && session == null)) finish()
         }
         val next = if (session != null) plan.chunksOf(session.taskId).firstOrNull() ?: plan.next else plan.next
 

@@ -256,6 +256,17 @@ class FocusTest {
     }
 
     @Test
+    fun `a finished session processed late is dated at its end, and its time isn't today's`() = runTest {
+        tasks.update { it.copy(tasks = listOf(task("hw", effort = 90))) }
+        val session = focus.startSession("teams:hw", "hw", null, 30)
+        // The phone was off at its alarm, and it's processed the next morning.
+        clock.time += 14 * 3_600_000L
+        focus.stopSession()
+        assertEquals(session.endsAt, log.value.sessions.single().endedAt)
+        assertEquals(0L, focus.creditLeftMs())
+    }
+
+    @Test
     fun `what counts as blocked follows the settings`() {
         assertEquals(Focus.Target.App("com.google.android.youtube"), focus.target("com.google.android.youtube"))
         assertEquals(Focus.Target.Browser("org.mozilla.firefox"), focus.target("org.mozilla.firefox"))

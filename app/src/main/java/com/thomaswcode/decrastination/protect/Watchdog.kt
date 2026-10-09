@@ -10,6 +10,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.os.Build
 import android.provider.Settings
 import android.util.Log
 import androidx.core.app.NotificationCompat
@@ -52,8 +53,11 @@ import kotlinx.coroutines.launch
  * second restart, with the service already up, gets a clean connection (seen on the phone).
  */
 object Watchdog {
-    /** Past the restart's settling time, so the look after it sees how it settled. */
-    private const val VERIFY_SLACK_MS = 10_000L
+    /**
+     * How soon after a restart to look again: inside the minute a restart is given to settle (with
+     * the alarm's own margin, about 40 seconds), so a restart that didn't take is tried again at once.
+     */
+    private const val RESTART_VERIFY_MS = 25_000L
 
     private const val NOTIFICATION_ID = 3001
     private const val TAG = AppGraph.TAG
@@ -177,7 +181,7 @@ object Watchdog {
             Log.i(TAG, "Protection: the focus service had stopped; ${if (restarted) "switched it off and on" else "couldn't restart it"}")
             // Back, it runs the watchdog as it connects. If not, a look once it should have settled
             // finds it stopped again, and the second try follows at once.
-            WatchdogReceiver.checkIn(context, ProtectionCheck.RESTART_SETTLE_MS + VERIFY_SLACK_MS)
+            WatchdogReceiver.checkIn(context, RESTART_VERIFY_MS)
         } else if (restartAt != null) {
             // Look again when the restart is due, rather than at the next periodic run.
             WatchdogReceiver.checkIn(context, restartAt - now)
@@ -278,7 +282,12 @@ class WatchdogReceiver : BroadcastReceiver() {
         fun checkIn(context: Context, delayMs: Long) {
             val alarms = context.getSystemService(AlarmManager::class.java) ?: return
             val at = System.currentTimeMillis() + delayMs.coerceAtLeast(0L) + SLACK_MS
-            alarms.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, intent(context))
+            // Exact where allowed: a look meant for inside a restart's minute mustn't drift past it.
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || alarms.canScheduleExactAlarms()) {
+                alarms.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, intent(context))
+            } else {
+                alarms.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, intent(context))
+            }
         }
 
         private fun intent(context: Context): PendingIntent = PendingIntent.getBroadcast(

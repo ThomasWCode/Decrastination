@@ -160,7 +160,9 @@ class Focus(
             val session = state.session ?: return@update state
             val completed = session.isDue(now, uptime)
             val worked = if (completed) session.minutes else (session.ran(now, uptime) / 60_000L).toInt().coerceIn(0, session.minutes)
-            val end = EndedSession(session, worked, completed, now)
+            // A finished session ended when it was due, not when this ran (the phone off at its
+            // alarm, on again after midnight): its free time is that day's.
+            val end = EndedSession(session, worked, completed, if (completed) minOf(now, session.endsAt) else now)
             ended = end
             state.copy(session = null, finishing = state.finishing + end)
         }
