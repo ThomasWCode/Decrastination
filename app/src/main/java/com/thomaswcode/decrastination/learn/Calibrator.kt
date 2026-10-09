@@ -4,6 +4,7 @@ import com.thomaswcode.decrastination.core.Calibration
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.data.ActivityLog
 import com.thomaswcode.decrastination.data.CompletionRecord
+import com.thomaswcode.decrastination.data.SessionRecord
 import kotlin.random.Random
 
 /**
@@ -121,14 +122,23 @@ object Calibrator {
      * [week], so a replay agrees); after, the best.
      */
     fun boxes(log: ActivityLog, defaultBox: Int, week: Long): Map<Kind, Int> {
-        val onTime = log.completions.filter { it.dueAt != null && it.doneAt <= it.dueAt }.map { it.taskId }.toSet()
+        // Each session is judged by its own task's next completion after it, so a later round of
+        // a task done again isn't credited with an earlier round's finish.
+        val completions = log.completions.groupBy { it.taskId }.mapValues { (_, list) -> list.sortedBy { it.doneAt } }
+        fun rewarded(session: SessionRecord): Boolean {
+            if (!session.completed) return false
+            val next = completions[session.taskId]?.firstOrNull { it.doneAt >= session.startedAt } ?: return false
+            return next.dueAt != null && next.doneAt <= next.dueAt
+        }
+        // Your own box is a candidate too: with nothing to go on, it's kept.
+        val candidates = (BOXES + defaultBox).distinct()
         val result = HashMap<Kind, Int>()
         for ((kind, sessions) in log.sessions.filter { it.box != null }.groupBy { it.kind }) {
             val byBox = sessions.groupBy { it.box!! }
-            fun mean(box: Int): Double = byBox[box]?.let { list -> list.count { it.completed && it.taskId in onTime }.toDouble() / list.size } ?: 0.5
-            val best = BOXES.maxWith(compareBy<Int>({ mean(it) }, { if (it == defaultBox) 1 else 0 }))
+            fun mean(box: Int): Double = byBox[box]?.let { list -> list.count(::rewarded).toDouble() / list.size } ?: 0.5
+            val best = candidates.maxWith(compareBy<Int>({ mean(it) }, { if (it == defaultBox) 1 else 0 }))
             val random = Random(week * 31 + kind.ordinal)
-            val choice = if (sessions.size < BOX_SETTLED && random.nextDouble() < EXPLORE) BOXES.filter { it != best }.random(random) else best
+            val choice = if (sessions.size < BOX_SETTLED && random.nextDouble() < EXPLORE) candidates.filter { it != best }.random(random) else best
             if (choice != defaultBox) result[kind] = choice
         }
         return result

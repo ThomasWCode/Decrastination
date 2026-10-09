@@ -9,29 +9,34 @@ import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.core.Chunk
 import com.thomaswcode.decrastination.enrich.AiUsage
 import com.thomaswcode.decrastination.enrich.PhotoChecker
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 import java.io.File
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 
 /** A photo of written work, checked by the model and, if it's done, the piece ticked off. */
 object PhotoChecks {
 
-    /** Checks [photo] against [piece], records the cost, and says how it went. The photo is deleted. */
+    /** Checks [photo] against [piece], records the cost, and says how it went. The photo is deleted, whatever happens. */
     suspend fun check(context: Context, graph: AppGraph, checker: PhotoChecker, photo: File, piece: Chunk): String {
+        val jpeg = try {
+            withContext(Dispatchers.IO) { shrink(photo) } ?: return "Couldn't read the photo."
+        } finally {
+            withContext(NonCancellable + Dispatchers.IO) { photo.delete() }
+        }
         val now = graph.clock.now()
         val month = AiUsage.monthOf(now, graph.clock.zone())
-        val settings = graph.settings.value
-        if (!graph.runtime.value.aiUsage.forMonth(month).allows(settings.aiMonthlyCapGbp, settings.usdToGbp)) {
-            photo.delete()
-            return "Claude's monthly cap is reached: the timer or the source will have to do."
+        // The cap checked and the cost recorded in one turn with every other model call.
+        val result = graph.modelCalls.withLock {
+            val settings = graph.settings.value
+            if (!graph.runtime.value.aiUsage.forMonth(month).allows(settings.aiMonthlyCapGbp, settings.usdToGbp)) return "Claude's monthly cap is reached: the timer or the source will have to do."
+            runCatching { checker.check(jpeg, piece.label) }
+                .onFailure { Log.w(AppGraph.TAG, "The photo check failed", it) }
+                .getOrElse { return "The check didn't go through (${it.message ?: "no connection"})." }
+                .also { r -> graph.runtime.update { it.copy(aiUsage = it.aiUsage.forMonth(month).record(r.costUsd, r.refused, now)) } }
         }
-        val jpeg = withContext(Dispatchers.IO) { shrink(photo) } ?: return "Couldn't read the photo."
-        photo.delete()
-        val result = runCatching { checker.check(jpeg, piece.label) }
-            .onFailure { Log.w(AppGraph.TAG, "The photo check failed", it) }
-            .getOrElse { return "The check didn't go through (${it.message ?: "no connection"})." }
-        graph.runtime.update { it.copy(aiUsage = it.aiUsage.forMonth(month).record(result.costUsd, result.refused, now)) }
         val verdict = result.verdict ?: return "Claude couldn't say. Try a clearer photo."
         if (!verdict.done || verdict.confidence < PhotoChecker.ACCEPT) return "Not yet: ${verdict.reason}"
         graph.focus.photoChecked(piece.taskId, piece.step, piece.minutes)

@@ -50,6 +50,18 @@ object Daily {
         }
     }
 
+    /** The latest Sunday check-in at or before [now]: still Sunday's, for a review that runs after midnight. */
+    fun lastCheckIn(now: Long, zone: ZoneId, minuteOfDay: Int): Long {
+        var day = Instant.ofEpochMilli(now).atZone(zone).toLocalDate()
+        while (true) {
+            if (day.dayOfWeek == DayOfWeek.SUNDAY) {
+                val at = day.atStartOfDay().plusMinutes(minuteOfDay.toLong()).atZone(zone).toInstant().toEpochMilli()
+                if (at <= now) return at
+            }
+            day = day.minusDays(1)
+        }
+    }
+
     /** The check-in's time on [now]'s day. */
     fun checkInOn(now: Long, zone: ZoneId, minuteOfDay: Int): Long =
         Instant.ofEpochMilli(now).atZone(zone).toLocalDate().atStartOfDay().plusMinutes(minuteOfDay.toLong()).atZone(zone).toInstant().toEpochMilli()
@@ -99,7 +111,8 @@ class DailyReceiver : BroadcastReceiver() {
                 when (intent.action) {
                     Daily.ACTION_BRIEFING -> Briefing.run(context)
                     Daily.ACTION_CHECK_IN -> CheckIns.remind(context)
-                    Daily.ACTION_REVIEW -> Review.run(context, ifDue = true)
+                    // As a job: a model call can outlast what a receiver is let run.
+                    Daily.ACTION_REVIEW -> ReviewWorker.enqueue(context, ifDue = true)
                 }
             } catch (error: Exception) {
                 Log.w(AppGraph.TAG, "Daily ${intent.action} failed", error)

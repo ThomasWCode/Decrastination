@@ -40,6 +40,14 @@ class DailyTest {
     }
 
     @Test
+    fun `a review after midnight still finds Sunday's check-in`() {
+        // Check-in at 23:30: the review's alarm goes at 01:00 on Monday.
+        assertEquals(Fixtures.at("2026-10-11T23:30"), Daily.lastCheckIn(Fixtures.at("2026-10-12T01:00"), LONDON, 23 * 60 + 30))
+        // Before Sunday's, the Sunday before's.
+        assertEquals(Fixtures.at("2026-10-04T19:30"), Daily.lastCheckIn(Fixtures.at("2026-10-11T19:00"), LONDON, 19 * 60 + 30))
+    }
+
+    @Test
     fun `the check-in is on Sunday evening, and the review an hour and a half after`() {
         assertEquals(Fixtures.at("2026-10-11T19:30"), Daily.nextSunday(Fixtures.at("2026-10-09T17:00"), LONDON, settings.checkInMin))
         assertEquals(Fixtures.at("2026-10-18T19:30"), Daily.nextSunday(Fixtures.at("2026-10-11T19:30"), LONDON, settings.checkInMin))
@@ -73,6 +81,17 @@ class DailyTest {
 
 class ReviewInputTest {
     private val now = Fixtures.at("2026-10-11T21:00")
+
+    @Test
+    fun `the model's changes are said as they stand, in place or waiting`() {
+        val changes = listOf(ReviewInput.Change("boxMin", 30, "shorter pieces got finished"), ReviewInput.Change("marginDays", 0, "always early"))
+        // Armed, the margin's lowering waits: the margin is still 1.
+        val after = Settings(boxMin = 30, marginDays = 1)
+        assertEquals(
+            listOf("Changed: boxMin to 30 (shorter pieces got finished)", "Waiting 24 hours, as it loosens blocking: marginDays to 0 (always early)"),
+            Review.changeLines(changes, after),
+        )
+    }
 
     @Test
     fun `the week is described with its work, sessions, answers and settings`() {
