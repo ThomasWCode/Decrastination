@@ -47,6 +47,10 @@ data class SubStep(
     val done: Boolean = false,
     /** The vocabulary sections ("1.2") this step learns: left out of the plan where Anki deck tasks hold them. */
     val ankiSections: List<String> = emptyList(),
+    /** Not to be started before then: a block whose window opens on a date (an application that opens on 30 Oct). */
+    val from: Long? = null,
+    /** Its own deadline, before the task's: one of several dated items in one email or planner item. */
+    val dueAt: Long? = null,
 )
 
 /**

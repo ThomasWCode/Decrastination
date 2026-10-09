@@ -12,9 +12,11 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -24,11 +26,13 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.core.Enrichments
+import com.thomaswcode.decrastination.core.Merge
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.data.SourceStatus
 import com.thomaswcode.decrastination.enrich.RuleEnricher
 import com.thomaswcode.decrastination.sources.gmail.GmailThreads
+import kotlinx.coroutines.launch
 
 /** Every task each source lists, with its raw detail: the debug view PLAN.md's Phase 1 asks for. */
 @Composable
@@ -36,11 +40,13 @@ fun TasksScreen(graph: AppGraph) {
     val state by graph.tasks.state.collectAsStateWithLifecycle()
     val now = graph.clock.now()
     val zone = graph.clock.zone()
+    val scope = rememberCoroutineScope()
+    val tick = { task: TaskItem, title: String -> scope.launch { graph.focus.tickBlock(task.id, title) }; Unit }
     LazyColumn(Modifier.fillMaxWidth()) {
         for (source in Source.entries) {
             val open = state.tasks.filter { it.source == source && it.isOpen }.sortedWith(compareBy(nullsLast()) { it.dueAt })
             item(key = "header-$source") { SourceHeader(source, state.status(source), open.size, now) }
-            items(open, key = { it.id }) { TaskRow(it, now, zone) }
+            items(open, key = { it.id }) { TaskRow(it, now, zone, tick) }
         }
         val finished = state.tasks.filter { !it.isOpen }.sortedByDescending { it.doneAt ?: it.lastSeenAt }
         if (finished.isNotEmpty()) {
@@ -51,7 +57,7 @@ fun TasksScreen(graph: AppGraph) {
                     modifier = Modifier.padding(start = 16.dp, top = 24.dp, bottom = 4.dp),
                 )
             }
-            items(finished, key = { "done-" + it.id }) { TaskRow(it, now, zone) }
+            items(finished, key = { "done-" + it.id }) { TaskRow(it, now, zone, tick) }
         }
     }
 }
@@ -73,7 +79,7 @@ private fun SourceHeader(source: Source, status: SourceStatus, count: Int, now: 
 }
 
 @Composable
-private fun TaskRow(task: TaskItem, now: Long, zone: java.time.ZoneId) {
+private fun TaskRow(task: TaskItem, now: Long, zone: java.time.ZoneId, tick: (TaskItem, String) -> Unit) {
     var expanded by rememberSaveable(task.id) { mutableStateOf(false) }
     Column(
         Modifier.fillMaxWidth().clickable { expanded = !expanded }.padding(horizontal = 16.dp, vertical = 10.dp),
@@ -93,11 +99,25 @@ private fun TaskRow(task: TaskItem, now: Long, zone: java.time.ZoneId) {
         task.availableFrom?.takeIf { it > now }?.let {
             Text("Hidden from the plan until ${Format.at(it, now, zone)}", style = MaterialTheme.typography.bodySmall)
         }
+        if (task.isOpen && task.extra[Merge.EXTRA_FOLLOW_UP] == "true") {
+            Text("Archived in Gmail: kept for its dated blocks till they're done", style = MaterialTheme.typography.bodySmall)
+        }
         if (expanded) {
             // The enrichment's step only while it's of the email as it is: a new message's own rules' step otherwise.
             (Enrichments.current(task)?.nextStep ?: task.extra[GmailThreads.EXTRA_NEXT_STEP])?.let { Text("Next: $it", style = MaterialTheme.typography.bodySmall) }
             task.enrichment?.takeIf { it.by != RuleEnricher.BY }?.let { Text("Steps and estimate by Claude", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-            task.subSteps.forEach { Text("• ${it.title} (${Format.minutes(it.minutes)})${if (it.done) " ✓" else ""}", style = MaterialTheme.typography.bodySmall) }
+            task.subSteps.forEach { step ->
+                // A block's own dates, where it has them; an email's can be ticked off here.
+                val dates = listOfNotNull(step.from?.let { "from " + Format.at(it, now, zone) }, step.dueAt?.let { Format.due(it, now, zone) }).joinToString(", ")
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "• ${step.title} (${Format.minutes(step.minutes)}${if (dates.isEmpty()) "" else "; $dates"})${if (step.done) " ✓" else ""}",
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.weight(1f),
+                    )
+                    if (task.source == Source.Gmail && task.isOpen && !step.done) TextButton(onClick = { tick(task, step.title) }) { Text("Done") }
+                }
+            }
             if (task.detail.isNotBlank()) Text(task.detail, style = MaterialTheme.typography.bodySmall)
         }
     }

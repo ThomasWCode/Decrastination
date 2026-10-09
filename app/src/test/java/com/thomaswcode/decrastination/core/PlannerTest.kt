@@ -145,6 +145,27 @@ class PlannerTest {
     }
 
     @Test
+    fun `blocks with dates of their own are each planned in their own window`() {
+        // One item, two applications: one by the 12th; one opening on the 20th, due by the 25th.
+        val steps = listOf(
+            SubStep("Apply to STEM Potential", 60, dueAt = Fixtures.at("2026-10-12T23:59")),
+            SubStep("Apply to RAL", 60, from = Fixtures.at("2026-10-20T00:00"), dueAt = Fixtures.at("2026-10-25T23:59")),
+        )
+        val plan = plan(listOf(task("e", dueAt = null, steps = steps)), "2026-10-08T17:00")
+        fun dayOf(step: String) = plan.buckets.first { b -> b.chunks.any { it.step == step } }.date
+        assertTrue(dayOf("Apply to STEM Potential") <= LocalDate.parse("2026-10-11"))
+        assertTrue(dayOf("Apply to RAL") in LocalDate.parse("2026-10-20")..LocalDate.parse("2026-10-24"))
+        assertEquals(Fixtures.at("2026-10-25T23:59"), plan.chunksOf("teams:e").single { it.step == "Apply to RAL" }.dueAt)
+    }
+
+    @Test
+    fun `a block opening past the plan's reach isn't planned yet`() {
+        val steps = listOf(SubStep("Apply in spring", 60, from = Fixtures.at("2027-03-01T00:00"), dueAt = Fixtures.at("2027-03-20T23:59")))
+        val plan = plan(listOf(task("e", dueAt = null, steps = steps)), "2026-10-08T17:00")
+        assertEquals(emptyList(), plan.chunksOf("teams:e"))
+    }
+
+    @Test
     fun `boxes are even`() {
         val plan = plan(listOf(task("t", Fixtures.at("2026-10-20T09:00"), effort = 100)), "2026-10-08T17:00")
         assertEquals(listOf(34, 33, 33), plan.chunksOf("teams:t").map { it.minutes })

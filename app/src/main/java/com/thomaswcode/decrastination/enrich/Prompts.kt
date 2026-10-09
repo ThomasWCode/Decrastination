@@ -45,13 +45,14 @@ object Prompts {
             - deadline: when it must be done by, only if the email states or clearly implies one (a day it suggests for doing it counts); for an Event, when it starts; otherwise null. Never invent one. Write it as a local date and time (YYYY-MM-DDTHH:MM), or the date alone (YYYY-MM-DD) if it gives no time.
             - effortMin: the minutes of the student's own work it needs, reading included: about 2 for Info.
             - nextStep: the one concrete next action, as an instruction under 12 words ("Reply to Mr Hughes confirming the trip").
+            - blocks: when the email holds more than one piece of work for the student, or dated items (a calendar of deadlines, an application that opens on a date), the pieces of work in order, each with its minutes, from (the date before which it can't be done, or null) and due (when it must be done by, written as for deadline, or null). The planner schedules each block in its own window, so one email can become work spread over months, kept after the email is archived. An email with blocks is Admin, and its effortMin is their total. Otherwise an empty list.
 
             Work out relative dates ("next Friday") from when the email was received.
         """.trimIndent()
         Enrichments.Job.Assignment -> """
             You plan one homework assignment for $STUDENT, for a planner that schedules the work over the days before it's due and blocks distracting apps until it's done.
 
-            Split the work into the ordered steps the student will actually do, each with a realistic duration in minutes for a typical Year 12 student (the planner adjusts them to this one). Keep steps between 10 and 60 minutes where the work allows, and a short task as one step. Base the steps on the instructions. Learning numbered vocabulary sections is a step of its own, with nothing else in it, and those sections in its ankiSections: the planner leaves it out where the student's Anki decks hold them. Every other step has an empty ankiSections. Add a step for handing work in only where the instructions ask for it, in its place in the order.
+            Split the work into the ordered steps the student will actually do, each with a realistic duration in minutes for a typical Year 12 student (the planner adjusts them to this one). Keep steps between 10 and 60 minutes where the work allows, and a short task as one step. A step has dates of its own only where the instructions give them (a draft due before the final version): from, the date before which it can't be started, and due, when it must be done by (YYYY-MM-DDTHH:MM, or the date alone); otherwise both null. Base the steps on the instructions. Learning numbered vocabulary sections is a step of its own, with nothing else in it, and those sections in its ankiSections: the planner leaves it out where the student's Anki decks hold them. Every other step has an empty ankiSections. Add a step for handing work in only where the instructions ask for it, in its place in the order.
 
             Also give:
             - effortMin: the total minutes, the sum of the steps.
@@ -60,6 +61,8 @@ object Prompts {
         """.trimIndent()
         Enrichments.Job.Effort -> """
             Estimate how many minutes of work $STUDENT needs to finish one item from their planner, from its title, class and details: a realistic total for a typical Year 12 student (the planner adjusts it to this one). A call, meeting or other appointment isn't work: give only the minutes needed to prepare for it, at least 1.
+
+            If it's big enough to be worth doing in parts (revising for a test, a project), also split it into blocks: the ordered pieces of work, 10 to 60 minutes each, adding up to effortMin, each with from (the date before which it can't be done, YYYY-MM-DD) and due (when it must be done by, YYYY-MM-DDTHH:MM or the date alone) where the details give them, otherwise null. Otherwise blocks is an empty list.
         """.trimIndent()
     }
 
@@ -68,25 +71,35 @@ object Prompts {
         Enrichments.Job.Email -> obj(
             "kind" to mapOf("type" to "string", "enum" to listOf("Admin", "Event", "Info")),
             "actionableFrom" to nullable(mapOf("type" to "string", "format" to "date")),
-            "deadline" to nullable(mapOf("type" to "string", "description" to "Local date and time, YYYY-MM-DDTHH:MM, or the date alone, YYYY-MM-DD")),
+            "deadline" to nullable(LOCAL_TIME),
             "effortMin" to mapOf("type" to "integer"),
             "nextStep" to mapOf("type" to "string"),
+            "blocks" to mapOf("type" to "array", "items" to block(vocabulary = false)),
         )
         Enrichments.Job.Assignment -> obj(
-            "subSteps" to mapOf(
-                "type" to "array",
-                "items" to obj(
-                    "title" to mapOf("type" to "string"),
-                    "minutes" to mapOf("type" to "integer"),
-                    "ankiSections" to mapOf("type" to "array", "items" to mapOf("type" to "string")),
-                ),
-            ),
+            "subSteps" to mapOf("type" to "array", "items" to block(vocabulary = true)),
             "effortMin" to mapOf("type" to "integer"),
             "ankiSections" to mapOf("type" to "array", "items" to mapOf("type" to "string")),
             "testDate" to nullable(mapOf("type" to "string", "format" to "date")),
         )
-        Enrichments.Job.Effort -> obj("effortMin" to mapOf("type" to "integer"))
+        Enrichments.Job.Effort -> obj(
+            "effortMin" to mapOf("type" to "integer"),
+            "blocks" to mapOf("type" to "array", "items" to block(vocabulary = false)),
+        )
     }
+
+    private val LOCAL_TIME = mapOf("type" to "string", "description" to "Local date and time, YYYY-MM-DDTHH:MM, or the date alone, YYYY-MM-DD")
+
+    /** One block (or step) of work: its own dates where it has them; an assignment's, its vocabulary sections too. */
+    private fun block(vocabulary: Boolean): Map<String, Any> = obj(
+        *listOfNotNull(
+            "title" to mapOf("type" to "string"),
+            "minutes" to mapOf("type" to "integer"),
+            ("ankiSections" to mapOf("type" to "array", "items" to mapOf("type" to "string"))).takeIf { vocabulary },
+            "from" to nullable(mapOf("type" to "string", "format" to "date")),
+            "due" to nullable(LOCAL_TIME),
+        ).toTypedArray(),
+    )
 
     /** [job]'s schema as the JSON it's sent as. */
     fun schemaJson(job: Enrichments.Job): JsonElement = toJson(schema(job))
@@ -144,16 +157,23 @@ object Answers {
     private val json = Json { ignoreUnknownKeys = true }
 
     @Serializable
-    private data class Triage(val kind: String, val actionableFrom: String? = null, val deadline: String? = null, val effortMin: Int, val nextStep: String)
+    private data class Triage(
+        val kind: String,
+        val actionableFrom: String? = null,
+        val deadline: String? = null,
+        val effortMin: Int,
+        val nextStep: String,
+        val blocks: List<Step> = emptyList(),
+    )
 
     @Serializable
-    private data class Step(val title: String, val minutes: Int, val ankiSections: List<String> = emptyList())
+    private data class Step(val title: String, val minutes: Int, val ankiSections: List<String> = emptyList(), val from: String? = null, val due: String? = null)
 
     @Serializable
     private data class Split(val subSteps: List<Step>, val effortMin: Int, val ankiSections: List<String> = emptyList(), val testDate: String? = null)
 
     @Serializable
-    private data class Estimate(val effortMin: Int)
+    private data class Estimate(val effortMin: Int, val blocks: List<Step> = emptyList())
 
     private const val MAX_EFFORT = 600
     private const val MAX_STEP = 240
@@ -181,32 +201,34 @@ object Answers {
         val base = Enrichment(inputHash = Enrichments.inputHash(task), by = by, at = now)
         when (job) {
             Enrichments.Job.Email -> json.decodeFromString(Triage.serializer(), text).let { t ->
+                val total = effort(t.effortMin)
+                // Blocks of work, each perhaps with its own dates (Q12): not trusted, the triage stands
+                // without them.
+                val blocks = trusted(steps(t.blocks, now, zone, vocabulary = false), total)
                 base.copy(
-                    kind = Kind.entries.firstOrNull { it.name == t.kind && it in setOf(Kind.Admin, Kind.Event, Kind.Info) },
+                    // Blocks of work make it something to do, whatever else it says.
+                    kind = if (blocks != null) Kind.Admin else Kind.entries.firstOrNull { it.name == t.kind && it in setOf(Kind.Admin, Kind.Event, Kind.Info) },
                     actionableFrom = t.actionableFrom?.let { date(it, zone, LocalTime.MIDNIGHT) }?.takeIf { plausible(it, now) },
                     deadline = t.deadline?.let { dateTime(it, zone) }?.takeIf { plausible(it, now) },
-                    effortMin = effort(t.effortMin),
+                    effortMin = blocks?.sumOf { it.minutes } ?: total,
                     nextStep = t.nextStep.trim().takeIf { it.isNotEmpty() }?.take(MAX_NEXT_STEP),
+                    subSteps = blocks,
                 )
             }
             Enrichments.Job.Assignment -> json.decodeFromString(Split.serializer(), text).let { s ->
-                // One step it can't take (no title, minutes out of range) and the split isn't trusted:
-                // the task's whole estimate is planned instead, none of it lost with that step.
-                val usable = s.subSteps.all { it.title.isNotBlank() && it.minutes in 1..MAX_STEP }
-                val valid = s.subSteps.takeIf { usable }.orEmpty()
-                    // A step tagged as vocabulary that asks for anything else too stays planned whole.
-                    .map { SubStep(it.title.trim().take(MAX_TITLE), it.minutes, ankiSections = if (AnkiRules.vocabularyOnly(it.title)) sections(it.ankiSections) else emptyList()) }
-                    // Longer than a focus session can run: even parts that each fit one, so finishing
-                    // a session never ticks off more than it did.
-                    .flatMap(::fitSessions)
+                // One step it can't take (no title, minutes or a date out of range) and the split isn't
+                // trusted: the task's whole estimate is planned instead, none of it lost with that step.
+                val read = steps(s.subSteps, now, zone, vocabulary = true)
+                val usable = read != null
+                val valid = read.orEmpty()
                 // More steps than the planner takes: the rest become one last step, so none of the work
-                // goes. Vocabulary among them keeps a step of its own, with its sections, so the decks
-                // that hold it still do, and it isn't planned in the last step as well.
+                // goes. Vocabulary among them, and a step with dates of its own, keep a step of their
+                // own, so the decks that hold it still do and the dates still count.
                 val steps = if (valid.size <= MAX_STEPS) {
                     valid
                 } else {
-                    val (words, rest) = valid.drop(MAX_STEPS - 1).partition { it.ankiSections.isNotEmpty() }
-                    valid.take(MAX_STEPS - 1) + words +
+                    val (own, rest) = valid.drop(MAX_STEPS - 1).partition { it.ankiSections.isNotEmpty() || it.from != null || it.dueAt != null }
+                    valid.take(MAX_STEPS - 1) + own +
                         listOfNotNull(rest.takeIf { it.isNotEmpty() }?.let { r -> SubStep(("The rest: " + r.joinToString("; ") { it.title }).take(MAX_TITLE), r.sumOf { it.minutes }) })
                 }
                 val sections = sections(s.ankiSections + steps.flatMap { it.ankiSections })
@@ -237,9 +259,46 @@ object Answers {
                     testDate = s.testDate?.let { date(it, zone, SCHOOL_STARTS) }?.takeIf { plausible(it, now) },
                 )
             }
-            Enrichments.Job.Effort -> base.copy(effortMin = effort(json.decodeFromString(Estimate.serializer(), text).effortMin))
+            Enrichments.Job.Effort -> json.decodeFromString(Estimate.serializer(), text).let { e ->
+                val total = effort(e.effortMin)
+                // Big enough to do in parts: its blocks, each perhaps with its own dates (Q12).
+                val blocks = trusted(steps(e.blocks, now, zone, vocabulary = false), total)
+                base.copy(effortMin = blocks?.sumOf { it.minutes } ?: total, subSteps = blocks)
+            }
         }
     }.getOrNull()
+
+    /**
+     * [given] as steps the planner can take, or null if any can't be: no title, minutes out of
+     * range, a date out of range or a start after its own deadline. Each keeps its own dates; one
+     * longer than a focus session is cut into parts that keep them, so finishing a session never
+     * ticks off more than it did. A step tagged as vocabulary ([vocabulary] jobs only) that asks for
+     * anything else too stays planned whole.
+     */
+    private fun steps(given: List<Step>, now: Long, zone: ZoneId, vocabulary: Boolean): List<SubStep>? {
+        val read = given.map { step ->
+            if (step.title.isBlank() || step.minutes !in 1..MAX_STEP) return null
+            val from = step.from?.let { date(it, zone, LocalTime.MIDNIGHT)?.takeIf { at -> plausible(at, now) } ?: return null }
+            val due = step.due?.let { dateTime(it, zone)?.takeIf { at -> plausible(at, now) } ?: return null }
+            if (from != null && due != null && from > due) return null
+            val sections = if (vocabulary && AnkiRules.vocabularyOnly(step.title)) sections(step.ankiSections) else emptyList()
+            SubStep(step.title.trim().take(MAX_TITLE), step.minutes, ankiSections = sections, from = from, dueAt = due)
+        }
+        return read.flatMap(::fitSessions)
+    }
+
+    /**
+     * An email's or planner item's [blocks], if they can be planned: some, no more than the planner
+     * takes, within the most one task is taken to be, and adding up to its [total] where it gives
+     * one (within a tenth, or ten minutes). Otherwise null, and its estimate is planned whole.
+     */
+    private fun trusted(blocks: List<SubStep>?, total: Int?): List<SubStep>? {
+        if (blocks.isNullOrEmpty() || blocks.size > MAX_STEPS) return null
+        val sum = blocks.sumOf { it.minutes }
+        if (sum > MAX_EFFORT) return null
+        if (total != null && abs(sum - total) > maxOf(STEPS_SLACK_MIN, total / 10)) return null
+        return blocks
+    }
 
     private fun effort(minutes: Int): Int? = minutes.takeIf { it in 1..MAX_EFFORT }
 

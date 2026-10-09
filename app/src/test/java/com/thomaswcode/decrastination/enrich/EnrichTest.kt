@@ -267,6 +267,45 @@ class AnswersTest {
     }
 
     @Test
+    fun `an email can come back in dated blocks, and is then something to do`() {
+        val calendar = """{"kind":"Info","actionableFrom":null,"deadline":null,"effortMin":90,"nextStep":"Note the dates","blocks":[{"title":"Apply to STEM Potential","minutes":60,"from":"2026-10-30","due":"2026-11-20"},{"title":"Apply to RAL","minutes":30,"from":null,"due":"2027-01-15"}]}"""
+        val e = parse(Enrichments.Job.Email, calendar)!!
+        assertEquals(Kind.Admin, e.kind)
+        assertEquals(90, e.effortMin)
+        val blocks = e.subSteps!!
+        assertEquals(Fixtures.at("2026-10-30T00:00"), blocks[0].from)
+        assertEquals(Fixtures.at("2026-11-20T23:59"), blocks[0].dueAt)
+        assertNull(blocks[1].from)
+        // A block that opens after it's due isn't to be trusted: the triage stands without them.
+        val muddled = parse(Enrichments.Job.Email, calendar.replace("2026-11-20", "2026-10-29"))!!
+        assertNull(muddled.subSteps)
+        assertEquals(Kind.Info, muddled.kind)
+    }
+
+    @Test
+    fun `a planner item can come back in blocks too`() {
+        val e = parse(Enrichments.Job.Effort, """{"effortMin":120,"blocks":[{"title":"Past paper 1","minutes":60,"from":null,"due":null},{"title":"Mark it and go over mistakes","minutes":60,"from":null,"due":null}]}""")!!
+        assertEquals(listOf("Past paper 1", "Mark it and go over mistakes"), e.subSteps!!.map { it.title })
+        assertEquals(120, e.effortMin)
+        assertNull(parse(Enrichments.Job.Effort, """{"effortMin":35,"blocks":[]}""")!!.subSteps)
+        // Blocks that don't add up to the total aren't trusted: the total is planned whole.
+        val off = parse(Enrichments.Job.Effort, """{"effortMin":200,"blocks":[{"title":"A","minutes":30,"from":null,"due":null}]}""")!!
+        assertNull(off.subSteps)
+        assertEquals(200, off.effortMin)
+    }
+
+    @Test
+    fun `an assignment's step can have dates of its own`() {
+        val e = parse(
+            Enrichments.Job.Assignment,
+            """{"subSteps":[{"title":"Draft","minutes":60,"ankiSections":[],"from":null,"due":"2026-10-12"},{"title":"Final version","minutes":40,"ankiSections":[],"from":"2026-10-13","due":null}],"effortMin":100,"ankiSections":[],"testDate":null}""",
+            assignment("Essay"),
+        )!!
+        assertEquals(Fixtures.at("2026-10-12T23:59"), e.subSteps!![0].dueAt)
+        assertEquals(Fixtures.at("2026-10-13T00:00"), e.subSteps!![1].from)
+    }
+
+    @Test
     fun `an estimate alone`() {
         assertEquals(35, parse(Enrichments.Job.Effort, """{"effortMin":35}""")!!.effortMin)
     }
@@ -353,7 +392,7 @@ class ClaudeEnricherTest {
         assertEquals("high", config["effort"]!!.jsonPrimitive.content)
         val format = config["format"]!!.jsonObject
         assertEquals("json_schema", format["type"]!!.jsonPrimitive.content)
-        assertEquals(listOf("kind", "actionableFrom", "deadline", "effortMin", "nextStep"), format["schema"]!!.jsonObject["required"]!!.jsonArray.map { it.jsonPrimitive.content })
+        assertEquals(listOf("kind", "actionableFrom", "deadline", "effortMin", "nextStep", "blocks"), format["schema"]!!.jsonObject["required"]!!.jsonArray.map { it.jsonPrimitive.content })
         assertTrue("triage one email" in body["system"].toString(), body["system"].toString().take(120))
         assertTrue("Subject: Berlin trip form" in body["messages"].toString())
         // No thinking setting: Opus 5.5 always thinks, and rejects one that turns it off.

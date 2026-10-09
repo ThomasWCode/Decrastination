@@ -3,6 +3,7 @@ package com.thomaswcode.decrastination.block
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.Planner
+import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Status
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.WallClock
@@ -269,6 +270,26 @@ class Focus(
         val done = PhotoDone(UUID.randomUUID().toString(), taskId, step, minutes, clock.now())
         runtime.update { it.copy(photosDone = it.photosDone + done) }
         return finishPhoto(done)
+    }
+
+    /**
+     * A block of an email you've done, ticked off in Tasks: an email is yours to say, as archiving it
+     * is. No free time for it (that's for timed or photographed work). Says whether one was ticked.
+     */
+    suspend fun tickBlock(taskId: String, title: String): Boolean {
+        var ticked = false
+        tasks.update { state ->
+            state.copy(
+                tasks = state.tasks.map { t ->
+                    if (t.id != taskId || t.source != Source.Gmail || !t.isOpen) return@map t
+                    val i = t.subSteps.indexOfFirst { !it.done && it.title == title }
+                    if (i < 0) return@map t
+                    ticked = true
+                    t.copy(subSteps = t.subSteps.mapIndexed { j, s -> if (j == i) s.copy(done = true) else s })
+                },
+            )
+        }
+        return ticked
     }
 
     /** Gives the photo checks a stop left part-way ([RuntimeState.photosDone]) what they're owed: at start-up. */

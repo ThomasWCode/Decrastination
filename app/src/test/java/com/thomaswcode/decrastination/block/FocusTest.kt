@@ -502,6 +502,17 @@ class FocusTest {
     }
 
     @Test
+    fun `a block of an email can be ticked off by hand, an assignment's step can't`() = runTest {
+        val email = task("e").copy(id = "gmail:e", source = Source.Gmail, subSteps = listOf(SubStep("Apply", 30)))
+        tasks.update { it.copy(tasks = listOf(email, task("hw", steps = listOf(SubStep("Q1", 30))))) }
+        assertTrue(focus.tickBlock("gmail:e", "Apply"))
+        assertFalse(focus.tickBlock("teams:hw", "Q1"))
+        assertEquals(listOf(true), tasks.value.tasks.first { it.id == "gmail:e" }.subSteps.map { it.done })
+        // No free time for a tick.
+        assertEquals(0L, focus.creditLeftMs())
+    }
+
+    @Test
     fun `what counts as blocked follows the settings`() {
         assertEquals(Focus.Target.App("com.google.android.youtube"), focus.target("com.google.android.youtube"))
         assertEquals(Focus.Target.Browser("org.mozilla.firefox"), focus.target("org.mozilla.firefox"))
