@@ -174,16 +174,17 @@ object Planner {
 
         // Work due later today or tomorrow comes before work already past its deadline: those
         // deadlines can still be met. A task with some brings the runs of its blocks due by then
-        // along, its overdue ones first, as they come before it in its order. They rank by the
-        // task's soonest deadline still to come, not their own long gone: an email's old reply,
-        // brought along with tomorrow's application, doesn't go ahead of homework due tonight.
+        // along, its overdue ones first, as they come before it in its order. Those overdue ones
+        // rank by the task's soonest deadline still to come, not their own long gone: an email's old
+        // reply, brought along with tomorrow's application, doesn't go ahead of homework due tonight.
+        // Every other run ranks by its own, so tomorrow's doesn't go ahead of tonight's either.
         val tomorrow = today.plusDays(1)
         val soonBy = HashMap<String, Long>()
         items.filter { !it.soft && it.deadline >= input.now && date(it.deadline, zone) <= tomorrow }
             .forEach { soonBy.merge(it.task.id, it.deadline, ::minOf) }
         fun soon(item: Item) = !item.soft && item.task.id in soonBy && date(item.deadline, zone) <= tomorrow
-        /** The deadline [item] ranks by: its task's soonest one to come for work due soon, else its own. */
-        fun rankedBy(item: Item): Long = if (soon(item)) soonBy.getValue(item.task.id) else item.deadline
+        /** The deadline [item] ranks by: for an overdue run brought along, its task's soonest one to come; else its own. */
+        fun rankedBy(item: Item): Long = if (soon(item) && item.deadline < input.now) soonBy.getValue(item.task.id) else item.deadline
 
         /** Piece [index] of [item]: every task's pieces are placed in order, so it's done ([index] + 1)th. */
         fun chunk(item: Item, index: Int, behind: Boolean): Chunk {
@@ -356,8 +357,8 @@ object Planner {
     /**
      * Within a day: work with a real deadline before undated work; then work due later today or
      * tomorrow (with its task's overdue part first), overdue, behind, the rest; then the earliest
-     * deadline (for work due soon, its task's soonest one to come, so a task's overdue part brought
-     * along doesn't rank by its own long gone), homework before revision before admin, the shorter
+     * deadline (for a task's overdue part brought along, its task's soonest one to come, rather than
+     * its own long gone), homework before revision before admin, the shorter
      * task, and the title, so the order never flickers. A task's parts stay in order.
      */
     val ORDER: Comparator<Chunk> = compareBy<Chunk>(

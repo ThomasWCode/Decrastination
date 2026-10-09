@@ -137,6 +137,16 @@ class PlannerTest {
     }
 
     @Test
+    fun `a task's block due tomorrow doesn't go ahead of other work due tonight`() {
+        // One block due at 18:00, another tomorrow; homework due at 19:00 in between.
+        val steps = listOf(SubStep("First", 20, dueAt = Fixtures.at("2026-10-08T18:00")), SubStep("Second", 20, dueAt = Fixtures.at("2026-10-09T23:59")))
+        val email = task("e", dueAt = null, steps = steps)
+        val homework = task("hw", dueAt = Fixtures.at("2026-10-08T19:00"), effort = 20)
+        val plan = plan(listOf(email, homework), "2026-10-08T17:00")
+        assertEquals(listOf("First", "hw", "Second"), plan.todayBucket!!.chunks.map { it.step ?: it.title })
+    }
+
+    @Test
     fun `a task due soon brings its overdue blocks along, ahead of it in their order`() {
         val steps = listOf(SubStep("Reply", 30, dueAt = Fixtures.at("2026-10-07T23:59")), SubStep("Apply", 30, dueAt = Fixtures.at("2026-10-09T23:59")))
         val email = task("e", dueAt = null, steps = steps)
