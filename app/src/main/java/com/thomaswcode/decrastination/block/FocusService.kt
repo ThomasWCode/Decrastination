@@ -365,10 +365,11 @@ class FocusService : AccessibilityService() {
             if (now - lastPipRelaunchAt < PIP_RELAUNCH_GAP_MS) continue
             lastPipRelaunchAt = now
             Log.i(TAG, "Picture-in-picture: $pkg, bringing it back to ${if (target == null) "look at it" else "cover it"}")
-            // Blocked, it can be closed outright where the window offers that; otherwise (and
-            // always just to look) it's brought back to full screen, as tapping its icon does.
+            // Known to be blocked, it can be closed outright where the window offers that; otherwise
+            // (and always to look at a page not known) it's brought back to full screen, as tapping
+            // its icon does.
             val dismiss = AccessibilityNodeInfo.AccessibilityAction.ACTION_DISMISS
-            if (verdict is BlockPolicy.Verdict.Block && dismiss in root.actionList && root.performAction(dismiss.id)) continue
+            if (target != null && verdict is BlockPolicy.Verdict.Block && dismiss in root.actionList && root.performAction(dismiss.id)) continue
             packageManager.getLaunchIntentForPackage(pkg)?.let { startActivity(it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
         }
     }
