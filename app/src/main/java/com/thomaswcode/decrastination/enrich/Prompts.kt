@@ -203,7 +203,9 @@ object Answers {
                     // Vocabulary only: the decks hold the work, and this is the hand-in.
                     effortMin = total ?: sum.takeIf { it > 0 } ?: HAND_IN_MIN.takeIf { sections.isNotEmpty() },
                     subSteps = steps.takeIf { agree }.orEmpty().ifEmpty { null },
-                    ankiSections = sections,
+                    // A split not trusted hands no vocabulary to a deck either: its total, planned
+                    // whole, already holds it.
+                    ankiSections = if (usable && agree) sections else emptyList(),
                     testDate = s.testDate?.let { date(it, zone, SCHOOL_STARTS) }?.takeIf { plausible(it, now) },
                 )
             }
