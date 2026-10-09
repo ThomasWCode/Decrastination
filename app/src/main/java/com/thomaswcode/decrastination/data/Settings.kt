@@ -1,5 +1,6 @@
 package com.thomaswcode.decrastination.data
 
+import com.thomaswcode.decrastination.block.Blocklist
 import kotlinx.serialization.Serializable
 
 /**
@@ -28,10 +29,38 @@ data class Settings(
      * whole inbox, the day the app arrived) spreads over the week instead of filling one evening.
      */
     val softMinPerDay: Int = 60,
+
+    /** Apps covered by the block screen while blocking applies (Q8, decided 8 Oct). */
+    val blockedApps: List<String> = Blocklist.APPS,
+    /** Sites covered in the browsers whose address bar is read: a host, or a host and path. */
+    val blockedSites: List<String> = Blocklist.SITES,
+    /** Browsers whose address bar is read, so only the blocked sites are covered (Chrome, Brave). */
+    val checkedBrowsers: List<String> = Blocklist.CHECKED_BROWSERS,
+    /** Browsers covered outright while blocking applies (Firefox, Tor). */
+    val blockedBrowsers: List<String> = Blocklist.BLOCKED_BROWSERS,
+    /** Sleep: nothing is blocked (Q6). Crosses midnight. */
+    val quietHours: Window = Window(22 * 60 + 30, 7 * 60),
+    /** On school days blocking starts here (Q6b): school hours are left alone. */
+    val weekdayBlockFromMin: Int = 16 * 60 + 45,
+    /** Minutes of work that earn one minute of free time (Q22: about 1 for 3). */
+    val workMinPerFreeMin: Int = 3,
+
+    /** Automatic Teams syncs (Q21): on the first unlock after [teamsFirstUnlockMin], and every so often. */
+    val teamsAutoSync: Boolean = true,
+    val teamsFirstUnlockMin: Int = 16 * 60 + 45,
+    val teamsSyncEveryMin: Int = 180,
+
+    /** Anti-tamper (docs/scheduler.md §6) is built but off until you arm it (Q20). */
+    val armed: Boolean = false,
+    /** How long a change that loosens blocking waits, once armed. */
+    val loosenDelayHours: Int = 24,
 )
 
-/** A stretch of a day, in minutes after midnight. */
+/** A stretch of a day, in minutes after midnight; one that ends before it starts crosses midnight. */
 @Serializable
 data class Window(val startMin: Int, val endMin: Int) {
-    val minutes: Int get() = (endMin - startMin).coerceAtLeast(0)
+    val minutes: Int get() = if (endMin >= startMin) endMin - startMin else 24 * 60 - startMin + endMin
+
+    operator fun contains(minuteOfDay: Int): Boolean =
+        if (endMin >= startMin) minuteOfDay in startMin until endMin else minuteOfDay >= startMin || minuteOfDay < endMin
 }
