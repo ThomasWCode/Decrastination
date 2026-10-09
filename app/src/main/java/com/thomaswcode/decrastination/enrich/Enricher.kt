@@ -4,6 +4,7 @@ import com.thomaswcode.decrastination.core.Enrichment
 import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.core.SubStep
 import com.thomaswcode.decrastination.core.TaskItem
+import com.thomaswcode.decrastination.sources.anki.AnkiRules
 
 /**
  * Says more about a task than its source does (docs/data-sources.md §5): the rules always, the
@@ -26,9 +27,10 @@ interface Enricher {
 }
 
 /**
- * What can be said without a model: an assignment whose instructions list its parts ("1. Learn
- * vocabulary…", "- Translation…") is cut into those parts, sharing its estimate. An email's kind,
- * estimate and next step already come from the email rules at the source.
+ * What can be said without a model: an assignment whose instructions list its parts ("1. Complete
+ * the reading task…", "- Translation…") is cut into those parts, sharing its estimate. A part that's
+ * learning numbered vocabulary sections is left out: the Anki deck tasks hold that work. An email's
+ * kind, estimate and next step already come from the email rules at the source.
  */
 class RuleEnricher : Enricher {
     override val by = BY
@@ -50,7 +52,7 @@ class RuleEnricher : Enricher {
         fun steps(instructions: String, effortMin: Int): List<SubStep>? {
             val items = instructions.lines().mapNotNull { line ->
                 (NUMBERED.find(line) ?: BULLETED.find(line))?.groupValues?.get(1)?.trim()
-            }.filter { it.isNotEmpty() }
+            }.filter { it.isNotEmpty() && AnkiRules.linkedSections(it).isEmpty() }
             if (items.size < 2) return null
             val each = (effortMin / items.size).coerceAtLeast(5)
             return items.map { SubStep(title(it), each) }
