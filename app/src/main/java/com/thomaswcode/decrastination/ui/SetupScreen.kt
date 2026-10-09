@@ -36,7 +36,7 @@ import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.data.Secret
 import com.thomaswcode.decrastination.data.SourceStatus
-import com.thomaswcode.decrastination.probe.ProbeActivity
+import com.thomaswcode.decrastination.protect.ProtectionActivity
 import com.thomaswcode.decrastination.sources.anki.AnkiProvider
 import com.thomaswcode.decrastination.sync.SyncWorker
 import kotlinx.coroutines.launch
@@ -46,6 +46,8 @@ import kotlinx.coroutines.launch
 fun SetupScreen(graph: AppGraph, activity: Activity) {
     val state by graph.tasks.state.collectAsStateWithLifecycle()
     val secrets by graph.secrets.present.collectAsStateWithLifecycle()
+    val runtime by graph.runtime.state.collectAsStateWithLifecycle()
+    val settings by graph.settings.state.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     var refresh by remember { mutableIntStateOf(0) }
     var editing by remember { mutableStateOf<Credential?>(null) }
@@ -80,10 +82,10 @@ fun SetupScreen(graph: AppGraph, activity: Activity) {
             action = "Enter" to { editing = Credential.Gmail },
         )
         SetupItem(
-            title = "Phase 0 probes",
-            done = null,
-            detail = "The data-path checks from 8 Oct, kept as a debug screen.",
-            action = "Open" to { activity.startActivity(Intent(activity, ProbeActivity::class.java)) },
+            title = "Blocking and protection",
+            done = runtime.protection.problems.isEmpty() && runtime.protection.checkedAt != null,
+            detail = runtime.protection.problems.firstOrNull() ?: if (settings.armed) "Armed." else "Blocking works; protection isn't armed.",
+            action = "Open" to { activity.startActivity(Intent(activity, ProtectionActivity::class.java)) },
         )
     }
 

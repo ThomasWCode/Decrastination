@@ -44,7 +44,7 @@ class MainActivity : ComponentActivity() {
     @OptIn(ExperimentalMaterial3Api::class)
     @Composable
     private fun Main(graph: AppGraph) {
-        var tab by rememberSaveable { mutableIntStateOf(0) }
+        var tab by rememberSaveable { mutableIntStateOf(intent.getIntExtra(EXTRA_TAB, 0)) }
         val syncs by remember { WorkManager.getInstance(this).getWorkInfosForUniqueWorkFlow(SyncWorker.NOW) }
             .collectAsStateWithLifecycle(emptyList())
         val syncing = syncs.any { !it.state.isFinished }
@@ -74,7 +74,10 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private companion object {
-        val TABS = listOf("Plan", "Tasks", "Setup")
+    companion object {
+        /** The tab to open on: [TAB_SETUP] from a protection alert. */
+        const val EXTRA_TAB = "tab"
+        const val TAB_SETUP = 2
+        private val TABS = listOf("Plan", "Tasks", "Setup")
     }
 }
