@@ -102,7 +102,7 @@ private fun NextCard(plan: Plan, zone: ZoneId, open: (Chunk) -> Unit) {
             Text(
                 listOf(WidgetModel.badge(next, plan.now, zone), Format.minutes(next.minutes), next.source.label).joinToString(" · "),
                 style = MaterialTheme.typography.bodyMedium,
-                color = if (next.overdue || next.behind) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onPrimaryContainer,
+                color = if (next.urgent) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onPrimaryContainer,
             )
             plan.then?.let { Text("Then: ${it.label}", style = MaterialTheme.typography.bodyMedium) }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -149,7 +149,7 @@ private fun ChunkRow(chunk: Chunk, now: Long, zone: ZoneId, onClick: () -> Unit)
             Text(
                 "${chunk.source.label} · ${WidgetModel.badge(chunk, now, zone)}",
                 style = MaterialTheme.typography.bodySmall,
-                color = if (chunk.overdue || chunk.behind) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                color = if (chunk.urgent) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
         Text(Format.minutes(chunk.minutes), style = MaterialTheme.typography.labelLarge)
