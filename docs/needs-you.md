@@ -4,13 +4,24 @@ The v1 build ran while you were away (from 8 Oct 2026, evening). Anything that n
 
 ## In short
 
-Version 1.0.0 is on your phone and running: the four sources sync, the plan and the widget are live, blocking starts at 16:45 on school days, and the morning briefing comes at 07:00. What waits for you:
+**Version 1.3.0 is on your phone (9 Oct, evening), armed, with Claude on**: the four sources sync, the plan and the widget are live, blocking starts at 16:45 on school days, and the morning briefing comes at 07:00. Done with you that evening:
 
-1. **Arming protection, with your dad** (Setup → *Blocking and protection* → *Arm protection*): the device admin, then his authenticator app scans a QR code. Until then, blocking works but nothing stops it being switched off (Phase 3).
-2. **Claude**, if and when you want it: an API key in Setup, then *Use Claude* in Settings. Until then the rules do what they can, the weekly review is the rules', and there's no photo check (Phases 4 and 5).
-3. **Four calendar questions**, as notifications from 07:00: how much of the day each long event takes (Phase 5).
-4. **Things only you can try**: a blocked app in split screen, spending earned free time on a day with nothing due, the guard on the reset pages once armed, and restoring a backup (Phases 3 and 6).
-5. **Versions 1.1.0 and 1.1.1 aren't on the phone yet**: they were built after the phone was disconnected on 9 Oct. 1.1.0 adds blocks (Q12), which wait for Claude like the other model jobs; 1.1.1 reads long emails to their end. Until Claude is on, nothing reads the dates in your dad's work-experience email, so keep **Imperial STEM Potential (opens 30 Oct)** in mind yourself.
+- **Protection armed with your dad**: the device admin, and his authenticator app's code. Changes that loosen blocking now wait 24 hours unless his code applies them.
+- **Claude switched on**: its first pass read your inbox and assignments (40 calls, $0.60). Your dad's work-experience email became 18 blocks over five months, Imperial STEM Potential among them (check eligibility by 30 Oct, apply from then), so it's tracked now. There's no monthly cap: the account is prepaid, and the app alerts you when its credit runs out.
+- **Tried on the phone**:
+  - a blocked app in split screen and in a pop-up window (covered);
+  - the guard on the app's accessibility page, its App info, the uninstall prompt, and both reset-settings pages (backed out of, the reset pages after about a second);
+  - a backup restored (no change, as it should be);
+  - the morning briefing;
+  - answers to two calendar questions;
+  - both new alerts, the dropped plan and the key failure, through a stand-in on the PC.
+
+Still waiting for you:
+
+1. **The photo check**: next time the block screen's next piece is written homework, tap *Photo check* and photograph it (a few cents; Phase 5).
+2. **Spending earned free time**: needs a day with nothing due today or tomorrow (Phase 3; unit-tested).
+3. **Two more calendar questions** (Apple day, and R in Amsterdam): asked once they're within a week.
+4. **The repository review** (`docs/review`, #10): not worked through yet, as you asked; some of it is your call (P1-001, the committed signing key, is deliberate).
 
 ## Phase 1: sources, storage, sync
 
@@ -29,7 +40,7 @@ Version 1.0.0 is on your phone and running: the four sources sync, the plan and 
 - **Blocking is on, for real, from 16:45 today (Friday 9 Oct).** With 14 things due today, every blocked app (YouTube, TikTok, Netflix, iPlayer, Twitch, Webtoon, Snapchat, Bluesky, Discord, LinkedIn, and Firefox and Tor) shows the block screen until 22:30, and so do their sites in Chrome and Brave. It stays strict while anything is planned for today or tomorrow, so handing work in is what lifts it: *Check it's done* on the block screen asks the source at once. If something goes wrong, the focus service can be switched off in Settings → Accessibility → Installed apps, since protection isn't armed.
 - **Protection is built but not armed, as you decided.** When you're ready, Setup → *Blocking and protection* → *Arm protection*. It asks for the device admin (a system dialog), then shows a QR code for **your dad** to scan into an authenticator app (Google or Microsoft Authenticator). He reads you the code it shows to confirm, or you skip that step. After that, a code is for him to type in himself, on the screen that says what it's for: an authenticator's code works for whatever it's typed into, so one read out for one change could be used for another. Without his code there's no override, only the 24-hour wait. The self-repair permission is already granted.
 - **Automatic Teams syncs start today**: on your first unlock after 16:45, then every three hours until 22:30. Each one shows the 10-second banner first. One test sync of Teams ran at 01:02 (allowed: you said I could sync Teams at any hour).
-- **Not tried on the phone**: a blocked app in split screen or a pop-up window (the code covers it; Phase 0 tried picture-in-picture); spending earned free time, which needs a day with nothing due (unit-tested); and the guard on the reset-settings pages, whose button text is a guess. Arming is the moment to try the guard on your own pages.
+- **Tried on the phone on 9 Oct, evening, with you**: a blocked app in split screen and in a pop-up window (both covered, logged as blocks), and, once armed, the guard on the app's accessibility page, its App info, the uninstall prompt and both reset-settings pages (the guessed button text, *Reset settings*, is right: it backs out after about a second, once the page has drawn its button). **Not tried**: spending earned free time, which needs a day with nothing due (unit-tested).
 - **Media volume**: I muted media while testing at night and set it back to 5, where it was.
 
 ## Phase 4: Claude and the Settings screen
@@ -45,13 +56,13 @@ Version 1.0.0 is on your phone and running: the four sources sync, the plan and 
 - **After each finished homework or revision**, a notification asks how it went (*harder*, *as expected*, *easier*, or a line). Your answers adjust its estimates for that kind and class.
 - **On Sunday at 19:30**, a reminder opens the five-question check-in, and the week's review follows at 21:00 (or as soon as you save the answers). Until Claude is on, the review is the rules': what the app learned from the week, and, after ten days of plans, whether your hours are more than your evenings hold. It changes the planner's numbers only within fixed bounds, and never blocking, protection or your hours.
 - **Waiting for Claude** (you decided on no paid calls yet): the model's weekly note and the photo check of written work. Both appear by themselves once Claude is on and its key is in use.
-- **Not tried on the phone**: the briefing notification (it fires at 07:00), an answer to a calendar question, and the photo check (it needs Claude). The calendar's judgement of your real events, the check-in screen and a review by the rules were tried.
+- **Tried on the phone on 9 Oct, evening**: the briefing notification (posted on demand: "Today: 34 things, 14 h 49 min", led by what's due today), and answers to two calendar questions (the UG Open Day takes all of Saturday; the van hire, a few hours of Sunday): both kept, and the plan counts them. **Not tried**: the photo check, now possible with Claude on. The calendar's judgement of your real events, the check-in screen and a review by the rules were tried earlier.
 
 ## Phase 6: stats, backup, version 1.0.0
 
 - **A Stats tab** (between Tasks and Setup): the last fortnight's finished work (and how much of it with a deadline was done by it), your focus sessions, how often the blocker stopped you and on what, and what protection found; day by day below. Then today's free time, what the app has learned about your estimates in plain words, and Claude's month. Most of it fills in as you use the app; tonight it shows the testing.
 - **Back up and Restore** (Setup): *Export* saves the settings, the activity log, what the app has learned and your calendar answers to a file you choose (it never includes passwords or keys, which stay encrypted on the phone). *Import* reads one back. The settings go through the same waiting as any change once protection is armed, and this phone's own protection and Claude key stay as they are; once armed, the log and what the app learned aren't restored, so an edited file can't teach the planner to plan less.
-- **Tried on the phone**: the Stats tab, and a backup saved to Downloads through Android's file picker (12 KB; the format has no place for passwords or keys; I deleted it afterwards). Restoring one wasn't tried: it would have replaced your settings.
+- **Tried on the phone**: the Stats tab, and a backup saved to Downloads through Android's file picker (12 KB; the format has no place for passwords or keys; I deleted it afterwards). Restoring one was tried on 9 Oct, evening, with you, before arming: a backup exported and imported again changed nothing, as it should ("Restored the settings, 25 completions and 2 sessions, what the app had learned, and your calendar answers").
 
 ## 1.1.0: blocks (Q12)
 
