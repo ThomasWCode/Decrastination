@@ -23,6 +23,7 @@ import java.util.concurrent.CountDownLatch
 import kotlin.concurrent.thread
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -264,6 +265,14 @@ class FocusTest {
         focus.stopSession()
         assertEquals(session.endsAt, log.value.sessions.single().endedAt)
         assertEquals(0L, focus.creditLeftMs())
+    }
+
+    @Test
+    fun `a session finished on a day that's over earns nothing, and says so`() = runTest {
+        val yesterday = clock.time - 24 * 3_600_000L
+        assertTrue(focus.earnsNow(true, clock.time))
+        assertFalse(focus.earnsNow(true, yesterday))
+        assertFalse(focus.earnsNow(false, clock.time))
     }
 
     @Test

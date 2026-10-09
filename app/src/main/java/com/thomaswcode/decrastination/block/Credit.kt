@@ -17,9 +17,17 @@ data class Credit(val day: String = "", val earnedMs: Long = 0, val spentMs: Lon
     /** This credit as of [today]: yesterday's is gone. */
     fun on(today: LocalDate): Credit = if (day == today.toString()) this else Credit(today.toString())
 
-    fun earn(today: LocalDate, minutes: Double): Credit = on(today).let { it.copy(earnedMs = it.earnedMs + (minutes * 60_000).roundToLong()) }
+    /**
+     * Whether the ledger has moved on past [day]: a write for it that lands late (a save begun
+     * before midnight) changes nothing, as that day's credit has gone, and mustn't reset the newer.
+     */
+    private fun past(day: LocalDate): Boolean = this.day.isNotEmpty() && LocalDate.parse(this.day).isAfter(day)
 
-    fun spend(today: LocalDate, ms: Long): Credit = on(today).let { it.copy(spentMs = (it.spentMs + ms).coerceAtMost(it.earnedMs)) }
+    fun earn(today: LocalDate, minutes: Double): Credit =
+        if (past(today)) this else on(today).let { it.copy(earnedMs = it.earnedMs + (minutes * 60_000).roundToLong()) }
+
+    fun spend(today: LocalDate, ms: Long): Credit =
+        if (past(today)) this else on(today).let { it.copy(spentMs = (it.spentMs + ms).coerceAtMost(it.earnedMs)) }
 
     companion object {
         /** A finished focus session of [minutes] earns a third of them (with the default ratio). */
