@@ -222,19 +222,13 @@ object Answers {
             Enrichments.Job.Assignment -> json.decodeFromString(Split.serializer(), text).let { s ->
                 // One step it can't take (no title, minutes or a date out of range) and the split isn't
                 // trusted: the task's whole estimate is planned instead, none of it lost with that step.
-                val read = steps(s.subSteps, now, zone, vocabulary = true, maxMinutes = MAX_STEP, dueBy = sourceDue(task))
+                val testDate = s.testDate?.let { date(it, zone, SCHOOL_STARTS) }?.takeIf { plausible(it, now) }
+                // By the test, where there's one before the source's deadline: it's the task's then.
+                val read = steps(s.subSteps, now, zone, vocabulary = true, maxMinutes = MAX_STEP, dueBy = listOfNotNull(sourceDue(task), testDate).minOrNull())
                 val usable = read != null
                 val valid = read.orEmpty()
-                // More steps than the planner takes: the rest become one last step, so none of the work
-                // goes. Vocabulary among them, and a step with dates of its own, keep a step of their
-                // own, so the decks that hold it still do and the dates still count.
-                val steps = if (valid.size <= MAX_STEPS) {
-                    valid
-                } else {
-                    val (own, rest) = valid.drop(MAX_STEPS - 1).partition { it.ankiSections.isNotEmpty() || it.from != null || it.dueAt != null }
-                    valid.take(MAX_STEPS - 1) + own +
-                        listOfNotNull(rest.takeIf { it.isNotEmpty() }?.let { r -> SubStep(("The rest: " + r.joinToString("; ") { it.title }).take(MAX_TITLE), r.sumOf { it.minutes }) })
-                }
+                // More steps than the planner takes: the rest folded, so none of the work goes (see [fold]).
+                val steps = if (valid.size <= MAX_STEPS) valid else valid.take(MAX_STEPS - 1) + fold(valid.drop(MAX_STEPS - 1))
                 val sections = sections(s.ankiSections + steps.flatMap { it.ankiSections })
                 // All vocabulary (no steps, its sections named): a step for it all the same, at the
                 // task's own estimate. Where decks hold those sections the planner leaves it out, and
@@ -260,7 +254,7 @@ object Answers {
                     // A split not trusted hands no vocabulary to a deck either: its total, planned
                     // whole, already holds it.
                     ankiSections = if (usable && agree) sections else emptyList(),
-                    testDate = s.testDate?.let { date(it, zone, SCHOOL_STARTS) }?.takeIf { plausible(it, now) },
+                    testDate = testDate,
                 )
             }
             Enrichments.Job.Effort -> json.decodeFromString(Estimate.serializer(), text).let { e ->
@@ -302,6 +296,34 @@ object Answers {
         val sum = blocks.sumOf { it.minutes }
         if (sum > MAX_EFFORT || abs(sum - total) > maxOf(STEPS_SLACK_MIN, total / 10)) return null
         return blocks
+    }
+
+    /**
+     * [tail], the steps past what the planner takes, with each run of plain steps made one ("The
+     * rest: …") in its place. Vocabulary (its decks may hold it) and a step with dates of its own
+     * keep a step of their own, between the runs, so no step moves ahead of one before it.
+     */
+    private fun fold(tail: List<SubStep>): List<SubStep> {
+        val out = mutableListOf<SubStep>()
+        val run = mutableListOf<SubStep>()
+        fun flush() {
+            when (run.size) {
+                0 -> Unit
+                1 -> out += run.single()
+                else -> out += SubStep(("The rest: " + run.joinToString("; ") { it.title }).take(MAX_TITLE), run.sumOf { it.minutes })
+            }
+            run.clear()
+        }
+        for (step in tail) {
+            if (step.ankiSections.isNotEmpty() || step.from != null || step.dueAt != null) {
+                flush()
+                out += step
+            } else {
+                run += step
+            }
+        }
+        flush()
+        return out
     }
 
     /** What [task]'s source says it's due by, not what an older enrichment laid over it. */
