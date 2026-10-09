@@ -151,6 +151,15 @@ class WidgetRedrawTest {
     }
 
     @Test
+    fun `it redraws when Teams' data turns stale`() {
+        // Synced 23 h 30 min before noon: stale at 12:30, before the evening's hours start.
+        val asOf = Fixtures.at("2026-10-09T12:00") - 23 * 3_600_000L - 30 * 60_000L
+        assertEquals(Fixtures.at("2026-10-09T12:30"), WidgetUpdater.nextRedrawAt(planAt("2026-10-09T12:00"), LONDON, settings, asOf))
+        // Already stale: nothing more to wait for.
+        assertEquals(Fixtures.at("2026-10-09T16:45"), WidgetUpdater.nextRedrawAt(planAt("2026-10-09T12:00"), LONDON, settings, asOf - 3_600_000L))
+    }
+
+    @Test
     fun `a deadline before then comes first`() {
         val task = TaskItem(
             id = "teams:t", source = Source.Teams, sourceId = "t", title = "t", dueAt = Fixtures.at("2026-10-09T23:00"),
