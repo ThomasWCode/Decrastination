@@ -34,7 +34,17 @@ object Merge {
     /** How long a finished task stays in the list after it was last seen or finished. */
     const val KEEP_FINISHED_MS = 14 * 24 * 3_600_000L
 
-    fun apply(tasks: List<TaskItem>, source: Source, fetched: List<Fetched>, now: Long): Result {
+    /**
+     * [unread]: whether what a task says has yet to be read as it will be (its enrichment to come,
+     * or due again: the rules' reading while the model is on), so an email archived meanwhile waits.
+     */
+    fun apply(
+        tasks: List<TaskItem>,
+        source: Source,
+        fetched: List<Fetched>,
+        now: Long,
+        unread: (TaskItem) -> Boolean = { Enrichments.current(it) == null },
+    ): Result {
         val byId = tasks.associateBy { it.id }
         val listed = HashSet<String>()
         val completed = mutableListOf<TaskItem>()
@@ -130,10 +140,11 @@ object Merge {
             when {
                 old.status != Status.Open -> old.takeIf { now - (old.doneAt ?: old.lastSeenAt) < KEEP_FINISHED_MS }
                 old.derived -> old.copy(status = Status.Missed).also { missed += it }
-                // An email gone from the inbox before its latest content was read (its enrichment still
-                // to come, perhaps under way): kept as it is till it has been, so blocks found in it
-                // aren't lost to the archive; the next read then decides.
-                old.source == Source.Gmail && Enrichments.jobFor(old) != null && Enrichments.current(old) == null -> old
+                // An email gone from the inbox before what it says was read as it will be (its
+                // enrichment still to come, perhaps under way, or the model's due over the rules'):
+                // kept as it is till it has been, so blocks found in it aren't lost to the archive;
+                // the next read then decides.
+                old.source == Source.Gmail && Enrichments.jobFor(old) != null && unread(old) -> old
                 // An email whose blocks are still to do, dated by their own dates or by the email's
                 // (applications that open later, work due by its deadline): archived, it stays on the
                 // list, marked as a follow-up, until they're done.

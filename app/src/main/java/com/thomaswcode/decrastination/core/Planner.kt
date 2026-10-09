@@ -81,10 +81,10 @@ object Planner {
     /**
      * [task]'s pieces as the planner places them: one item, or, where its blocks have dates of
      * their own (one email's calendar of deadlines), one item per run of blocks sharing them, each
-     * in its own window: not before its `from`, and by its own deadline, never after the task's. A
-     * run with no dates of its own follows the run before it: not starting before that one opens,
-     * nor due before it. Without a real deadline, a run's is a soft one ([softFrom]), counted from
-     * when it opens.
+     * in its own window: not before its `from`, and by its own deadline, never after the task's.
+     * The windows keep the list's order: no run starts before the one before it, none is planned
+     * to finish after a later one is due, and without a real deadline a run's soft one
+     * ([softFrom], counted from when it opens) is no earlier than the run before it's.
      */
     private fun windows(task: TaskItem, deadline: Long, soft: Boolean, pieces: List<Piece>, softFrom: (Long) -> Long): List<Item> {
         if (pieces.all { it.from == null && it.due == null }) return listOf(Item(task, deadline, soft, pieces))
@@ -93,17 +93,18 @@ object Planner {
             val last = runs.lastOrNull()?.last()
             if (last != null && last.from == piece.from && last.due == piece.due) runs.last() += piece else runs += mutableListOf(piece)
         }
-        // Each run's window from its own dates (one with none follows the run before it)...
+        // Each run's window from its own dates, in order: none starts before the run before it can
+        // (so one after a run opening past the plan's reach waits too), and one without a real
+        // deadline is due no earlier than the run before it...
         class Window(val from: Long?, val real: Long?, var end: Long, var soft: Boolean)
         val windows = ArrayList<Window>()
         for (run in runs) {
             val head = run.first()
-            val own = head.from != null || head.due != null
             val previous = windows.lastOrNull()
             // A real deadline: its own (never after the task's), or the task's.
             val real = head.due?.let { d -> task.dueAt?.let { minOf(d, it) } ?: d } ?: task.dueAt
-            val from = if (own) head.from else previous?.from
-            val end = real ?: listOfNotNull(deadline, from?.let(softFrom), previous?.end?.takeIf { !own }).max()
+            val from = listOfNotNull(head.from, previous?.from).maxOrNull()
+            val end = real ?: listOfNotNull(deadline, from?.let(softFrom), previous?.end).max()
             windows += Window(from, real, end, real == null)
         }
         // ...then planned to be done by the deadline of any run after it, as they're done in order;

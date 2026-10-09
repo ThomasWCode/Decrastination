@@ -218,6 +218,25 @@ class PlannerTest {
     }
 
     @Test
+    fun `a block with only a start, after a dated one, stays behind it`() {
+        // An old undated item: its soft deadline long gone; the follow-up's start already past.
+        val steps = listOf(SubStep("Apply", 30, dueAt = Fixtures.at("2026-10-20T23:59")), SubStep("Follow up", 30, from = Fixtures.at("2026-10-01T00:00")))
+        val plan = plan(listOf(task("e", dueAt = null, steps = steps, firstSeen = Fixtures.at("2026-09-01T12:00"))), "2026-10-08T17:00")
+        fun dayOf(step: String) = plan.buckets.first { b -> b.chunks.any { it.step == step } }.date
+        assertTrue(dayOf("Follow up") >= dayOf("Apply"), "apply ${dayOf("Apply")}, follow up ${dayOf("Follow up")}")
+    }
+
+    @Test
+    fun `a block after one opening past the plan's reach waits with it`() {
+        val steps = listOf(
+            SubStep("First", 30, from = Fixtures.at("2027-01-16T00:00")),
+            SubStep("Second", 30, dueAt = Fixtures.at("2027-02-05T23:59")),
+        )
+        val plan = plan(listOf(task("e", dueAt = null, steps = steps)), "2026-10-08T17:00")
+        assertEquals(emptyList(), plan.chunksOf("teams:e"))
+    }
+
+    @Test
     fun `a task's runs all carry its whole length, for the shorter-first order`() {
         val steps = listOf(SubStep("A", 60, dueAt = Fixtures.at("2026-10-12T23:59")), SubStep("B", 60, from = Fixtures.at("2026-10-10T00:00"), dueAt = Fixtures.at("2026-10-14T23:59")))
         val plan = plan(listOf(task("e", dueAt = null, steps = steps)), "2026-10-08T17:00")

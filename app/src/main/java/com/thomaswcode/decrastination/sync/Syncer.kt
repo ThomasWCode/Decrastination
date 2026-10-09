@@ -1,5 +1,6 @@
 package com.thomaswcode.decrastination.sync
 
+import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.core.Merge
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
@@ -10,6 +11,7 @@ import com.thomaswcode.decrastination.data.SourceStatus
 import com.thomaswcode.decrastination.data.TaskState
 import com.thomaswcode.decrastination.sources.ReadContext
 import com.thomaswcode.decrastination.sources.TaskSource
+import kotlin.coroutines.CoroutineContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -19,7 +21,6 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeout
-import kotlin.coroutines.CoroutineContext
 
 /** What one sync found, for the log, the credit and the self-assessment prompts. */
 data class SyncReport(
@@ -57,6 +58,8 @@ class Syncer(
     private val timeoutMs: Long = 90_000,
     /** Hears each source's failure in full, for the log; the store keeps only its message. */
     private val onFailure: (Source, Throwable) -> Unit = { _, _ -> },
+    /** Whether a task's reading is still to come ([Merge.apply]'s `unread`). */
+    private val unread: (TaskItem) -> Boolean = { Enrichments.current(it) == null },
     readContext: CoroutineContext = Dispatchers.IO,
 ) {
     private val sources = sources.sortedBy { it.source == Source.Anki }
@@ -110,7 +113,7 @@ class Syncer(
         var report = SyncReport()
         tasks.update { current ->
             val now = clock.now()
-            val merged = Merge.apply(current.tasks, source.source, read.items, now)
+            val merged = Merge.apply(current.tasks, source.source, read.items, now, unread)
             report = SyncReport(
                 completed = merged.completed,
                 reopened = merged.reopened,

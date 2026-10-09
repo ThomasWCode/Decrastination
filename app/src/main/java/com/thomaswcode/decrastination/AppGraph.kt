@@ -97,6 +97,9 @@ class AppGraph private constructor(context: Context) {
         ),
         clock = clock,
         onFailure = { source, error -> Log.w(TAG, "Reading ${source.label} failed", error) },
+        // Still to be read as it will be: never yet, changed since, or the rules' reading while the
+        // model is there to upgrade it. An email archived meanwhile waits for it.
+        unread = { task -> Enrichments.stale(task, modelAvailable(), RuleEnricher.BY) },
     )
 
     /** The plan now, from the stored tasks and settings. Cheap: dozens of tasks. */
