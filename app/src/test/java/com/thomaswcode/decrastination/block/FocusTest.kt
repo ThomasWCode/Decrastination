@@ -326,6 +326,21 @@ class FocusTest {
     }
 
     @Test
+    fun `vocabulary of a deck dropped as its assignment closed is rewarded less the deck's sessions`() = runTest {
+        val homework = task("hw", effort = 60, steps = listOf(SubStep("Learn vocabulary 2.2", 30, ankiSections = listOf("2.2")), SubStep("Exercise 4", 30)))
+        // The same sync that closed the assignment dropped its unfinished deck: 9 minutes of sessions on it.
+        val deck = TaskItem(
+            id = "anki:deck:1", source = Source.Anki, sourceId = "deck:1", title = "Learn Anki deck 2.2", kind = Kind.Homework, derived = true,
+            firstSeenAt = clock.time, lastSeenAt = clock.time, extra = mapOf("deckName" to "Textbook 1::2.2", "for" to "teams:hw"), workedMin = 9,
+            status = Status.Missed,
+        )
+        tasks.update { it.copy(tasks = listOf(homework, deck)) }
+        focus.onCompleted(listOf(homework.copy(status = Status.Done, doneAt = clock.time)))
+        // 60 less the deck's 9 minutes: 17 minutes of free time, not 20.
+        assertEquals(17 * 60_000L, focus.creditLeftMs())
+    }
+
+    @Test
     fun `vocabulary a deck held isn't rewarded again with its assignment`() = runTest {
         val homework = task("hw", effort = 60, steps = listOf(SubStep("Learn vocabulary 2.2", 30, ankiSections = listOf("2.2")), SubStep("Exercise 4", 30)))
         val deck = TaskItem(
@@ -446,6 +461,32 @@ class FocusTest {
         // 45 less the 20 timed and 10 photographed: 5 minutes of free time, not 15.
         assertEquals(5 * 60_000L, focus.creditLeftMs())
         assertEquals(20, log.value.completions.single().workedMin)
+    }
+
+    @Test
+    fun `a session ended with its task's completion is counted in the saved completion too`() = runTest {
+        tasks.update { it.copy(tasks = listOf(task("hw", effort = 45))) }
+        focus.startSession("teams:hw", "hw", null, 30)
+        clock.time += 30 * 60_000L
+        val done = tasks.value.tasks.single().copy(status = Status.Done, doneAt = clock.time)
+        tasks.update { it.copy(tasks = listOf(done), unrewarded = listOf(done)) }
+        // The session ended (the reward's first step), then the app stopped, and the next read reopened the task.
+        focus.stopSession()
+        tasks.update { s -> s.copy(tasks = s.tasks.map { it.copy(status = Status.Open, doneAt = null, workedMin = 0) }) }
+        val sessionCredit = focus.creditLeftMs()
+        focus.rewardCompletions()
+        // 45 less the session's 30: 5 minutes more, not 15.
+        assertEquals(sessionCredit + 5 * 60_000L, focus.creditLeftMs())
+        assertEquals(30, log.value.completions.single().workedMin)
+    }
+
+    @Test
+    fun `a stop meant for one session doesn't end the one after it`() = runTest {
+        tasks.update { it.copy(tasks = listOf(task("a"), task("b"))) }
+        val first = focus.startSession("teams:a", "a", null, 30)
+        focus.startSession("teams:b", "b", null, 30)
+        assertNull(focus.stopSession(first))
+        assertEquals("teams:b", focus.session?.taskId)
     }
 
     @Test

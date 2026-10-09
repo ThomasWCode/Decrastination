@@ -169,6 +169,28 @@ class EnrichmentTest {
     }
 
     @Test
+    fun `what the model read is stale once Claude is switched off, the rules' isn't`() {
+        val task = email()
+        assertTrue(Enrichments.stale(task.copy(enrichment = enrichment(task)), modelOn = false, rules = "rules", modelOff = true))
+        assertFalse(Enrichments.stale(task.copy(enrichment = enrichment(task, by = "rules")), modelOn = false, rules = "rules", modelOff = true))
+        // Only resting (a failed call, the cap): what it read stands.
+        assertFalse(Enrichments.stale(task.copy(enrichment = enrichment(task)), modelOn = false, rules = "rules", modelOff = false))
+    }
+
+    @Test
+    fun `steps an enrichment gave go when the content changes, the source's own stay`() {
+        val task = assignment()
+        val steps = listOf(SubStep("Pages 7-9", 30, done = true), SubStep("Pages 10-11", 20))
+        val split = task.copy(subSteps = steps, enrichment = enrichment(task).copy(subSteps = steps.map { it.copy(done = false) }))
+        assertEquals(steps, split.enriched().subSteps)
+        // New instructions: the task's own estimate until it's split again.
+        assertEquals(emptyList(), split.copy(detail = "Pages 7-15 of booklet.").enriched().subSteps)
+        val own = listOf(SubStep("20 new cards", 9))
+        val counted = task.copy(subSteps = own, enrichment = enrichment(task))
+        assertEquals(own, counted.copy(detail = "Changed.").enriched().subSteps)
+    }
+
+    @Test
     fun `what's enriched is emails, assignments and planner items, not done, derived or events`() {
         assertEquals(Enrichments.Job.Email, Enrichments.jobFor(email()))
         // Its text still to be read: it waits.
