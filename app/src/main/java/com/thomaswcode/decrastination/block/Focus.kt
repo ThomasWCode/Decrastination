@@ -196,10 +196,6 @@ class Focus(
     }
 
     /**
-     * Work a source has just confirmed done: it's logged, and earns free time for what no
-     * session counted (docs/scheduler.md §4).
-     */
-    /**
      * Gives what's owed for the completions syncs confirmed ([TaskState.unrewarded]), then clears
      * them. Stopped before that, they're given next time (after the next sync, or when the app
      * starts), and [onCompleted] gives each only once.
