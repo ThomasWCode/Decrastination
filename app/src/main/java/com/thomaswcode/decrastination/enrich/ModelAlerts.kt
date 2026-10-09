@@ -10,10 +10,30 @@ import com.thomaswcode.decrastination.notify.Channels
 import com.thomaswcode.decrastination.notify.Notify
 import com.thomaswcode.decrastination.ui.MainActivity
 
-/** Claude's warnings (docs/data-sources.md §5): a plan of its dropped. */
+/** Claude's warnings (docs/data-sources.md §5): a plan of its dropped, and its key no longer working. */
 object ModelAlerts {
     /** One a task, told apart by its id as the tag. */
     private const val DROPPED_ID = 5001
+    private const val KEY_ID = 5002
+
+    /** Claude's key or account can't be used ([problem]): said once a stretch of it, till it's put right in Setup. */
+    fun keyProblem(context: Context, problem: KeyProblem) {
+        Notify.post(
+            context,
+            KEY_ID,
+            NotificationCompat.Builder(context, Channels.MODEL)
+                .setSmallIcon(R.drawable.ic_focus)
+                .setContentTitle("Claude has stopped working")
+                .setContentText(problem.says)
+                .setStyle(NotificationCompat.BigTextStyle().bigText("${problem.says}. ${problem.fix}. The rules stand in meanwhile."))
+                .setContentIntent(open(context, KEY_ID, MainActivity.TAB_SETUP))
+                .setAutoCancel(true)
+                .build(),
+        )
+    }
+
+    /** The key works again, or a new one is in: the alert is out of date. */
+    fun keyFixed(context: Context) = Notify.cancel(context, KEY_ID)
 
     /** [task]'s plan from the model dropped, [why]: its estimate is planned whole, so it's worth a look. */
     fun dropped(context: Context, task: TaskItem, why: String) {

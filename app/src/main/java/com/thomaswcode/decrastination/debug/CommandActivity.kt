@@ -14,6 +14,7 @@ import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.data.Secret
 import com.thomaswcode.decrastination.enrich.ClaudeEnricher
+import com.thomaswcode.decrastination.enrich.ModelAlerts
 import com.thomaswcode.decrastination.enrich.Prompts
 import com.thomaswcode.decrastination.learn.Assessment
 import com.thomaswcode.decrastination.learn.Briefing
@@ -239,6 +240,11 @@ class CommandActivity : Activity() {
                 emptyMap()
             }
             graph.secrets.put(reset + secrets)
+            // A new Claude key, as from Setup: the last one's failure and alert aren't its.
+            if (Secret.AnthropicApiKey in secrets) {
+                graph.runtime.update { it.copy(aiUsage = it.aiUsage.newKey()) }
+                ModelAlerts.keyFixed(this)
+            }
             Log.i(TAG, "Imported ${secrets.keys.joinToString()}; ignored ${(values.keys - secrets.keys.map { it.name }.toSet()).size} unknown")
         } finally {
             withContext(Dispatchers.IO) { file.delete() }
