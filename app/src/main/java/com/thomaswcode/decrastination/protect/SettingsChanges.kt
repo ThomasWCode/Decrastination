@@ -41,9 +41,10 @@ object SettingsChanges {
     private val LOOSER: Map<String, (Settings, Settings) -> Boolean> = mapOf(
         "ankiTextbook" to { _, _ -> false },
         "ankiDeadlineMin" to { old, new -> new.ankiDeadlineMin > old.ankiDeadlineMin },
-        // More hours to work in means less lands on today and tomorrow.
-        "weekdayHours" to { old, new -> new.weekdayHours.minutes > old.weekdayHours.minutes },
-        "weekendHours" to { old, new -> new.weekendHours.minutes > old.weekendHours.minutes },
+        // Any minute to work in that wasn't there means less can land on today and tomorrow: a
+        // window moved later adds time tonight even at the same length.
+        "weekdayHours" to { old, new -> adds(old.weekdayHours, new.weekdayHours) },
+        "weekendHours" to { old, new -> adds(old.weekendHours, new.weekendHours) },
         "boxMin" to { old, new -> new.boxMin > old.boxMin },
         "marginDays" to { old, new -> new.marginDays < old.marginDays },
         "softDeadlineDays" to { old, new -> new.softDeadlineDays > old.softDeadlineDays },
@@ -53,7 +54,7 @@ object SettingsChanges {
         "blockedSites" to { old, new -> !new.blockedSites.containsAll(old.blockedSites) },
         "checkedBrowsers" to { old, new -> !new.checkedBrowsers.containsAll(old.checkedBrowsers) },
         "blockedBrowsers" to { old, new -> !new.blockedBrowsers.containsAll(old.blockedBrowsers) },
-        "quietHours" to { old, new -> (0 until 24 * 60).any { it in new.quietHours && it !in old.quietHours } },
+        "quietHours" to { old, new -> adds(old.quietHours, new.quietHours) },
         "weekdayBlockFromMin" to { old, new -> new.weekdayBlockFromMin > old.weekdayBlockFromMin },
         "workMinPerFreeMin" to { old, new -> new.workMinPerFreeMin < old.workMinPerFreeMin },
         "teamsAutoSync" to { _, _ -> false },
@@ -92,6 +93,9 @@ object SettingsChanges {
         "aiMonthlyCapGbp" to "Claude's monthly cap (£)",
         "usdToGbp" to "Pounds per dollar",
     )
+
+    /** [new] has a minute of the day that [old] hasn't. */
+    private fun adds(old: Window, new: Window): Boolean = (0 until 24 * 60).any { it in new && it !in old }
 
     /** Every setting with a rule: a test checks none is missing. */
     val fields: Set<String> get() = LOOSER.keys
