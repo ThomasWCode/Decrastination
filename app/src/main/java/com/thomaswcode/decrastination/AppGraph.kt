@@ -282,18 +282,10 @@ class AppGraph private constructor(context: Context) {
     private val rules = RuleEnricher()
 
     /** The photo check, while Claude is switched on and has its key; else null. */
-    fun photoChecker(): PhotoChecker? {
-        val key = secrets[Secret.AnthropicApiKey]
-        if (!settings.value.aiEnabled || key.isNullOrBlank()) return null
-        return PhotoChecker(key)
-    }
+    fun photoChecker(): PhotoChecker? = claudeKey()?.let(::PhotoChecker)
 
     /** The model's weekly review, while Claude is switched on and has its key; else null. */
-    fun modelReviewer(): ClaudeReviewer? {
-        val key = secrets[Secret.AnthropicApiKey]
-        if (!settings.value.aiEnabled || key.isNullOrBlank()) return null
-        return ClaudeReviewer(key)
-    }
+    fun modelReviewer(): ClaudeReviewer? = claudeKey()?.let(::ClaudeReviewer)
 
     /** The model, while it's switched on and has its key; else null. */
     /** Claude's API key, while Claude is switched on and the key is in use; else null. */
