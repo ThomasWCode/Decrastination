@@ -238,25 +238,30 @@ class Focus(
     suspend fun photoChecked(taskId: String, step: String?, minutes: Int): Boolean {
         val now = clock.now()
         // Applied only while the piece is still to do: the task open and, for a step, that step not
-        // ticked meanwhile (another check, a session, a sync). Free time only when it was.
-        var applied = false
+        // ticked meanwhile (another check, a session, a sync). Free time only for what was.
+        var credited = 0
         tasks.update { state ->
             state.copy(
                 tasks = state.tasks.map { t ->
                     if (t.id != taskId || !t.isOpen) return@map t
-                    if (step == null) {
-                        applied = true
-                        return@map t.copy(workedMin = t.workedMin + minutes)
+                    // One of its own steps: ticked, once.
+                    if (step != null && t.subSteps.any { it.title == step }) {
+                        val i = t.subSteps.indexOfFirst { !it.done && it.title == step }
+                        if (i < 0) return@map t
+                        credited = minutes
+                        return@map t.copy(subSteps = t.subSteps.mapIndexed { j, s -> if (j == i) s.copy(done = true) else s }, workedMin = t.workedMin + minutes)
                     }
-                    val i = t.subSteps.indexOfFirst { !it.done && it.title == step }
-                    if (i < 0) return@map t
-                    applied = true
-                    t.copy(subSteps = t.subSteps.mapIndexed { j, s -> if (j == i) s.copy(done = true) else s }, workedMin = t.workedMin + minutes)
+                    // A piece of time (the whole task, or a part the planner cut it into): counted
+                    // against what's left of its estimate, so the same work can't be counted past it.
+                    val left = (t.effortMin * (1 - t.sourceProgress.coerceIn(0.0, 1.0))).roundToInt() - t.workedMin
+                    if (left <= 0) return@map t
+                    credited = minOf(minutes, left)
+                    t.copy(workedMin = t.workedMin + credited)
                 },
             )
         }
-        if (applied) runtime.update { it.copy(credit = it.credit.earn(today(now), Credit.forSession(minutes, settings.value.workMinPerFreeMin))) }
-        return applied
+        if (credited > 0) runtime.update { it.copy(credit = it.credit.earn(today(now), Credit.forSession(credited, settings.value.workMinPerFreeMin))) }
+        return credited > 0
     }
 
     /**

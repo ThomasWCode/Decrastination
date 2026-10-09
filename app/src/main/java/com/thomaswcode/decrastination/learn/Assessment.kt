@@ -34,6 +34,7 @@ import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.R
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.TaskItem
+import com.thomaswcode.decrastination.data.AssessLater
 import com.thomaswcode.decrastination.notify.Channels
 import com.thomaswcode.decrastination.notify.Notify
 import com.thomaswcode.decrastination.ui.AppTheme
@@ -58,41 +59,63 @@ object Assessment {
     /** One notification per task, told apart by its tag, so no two tasks share one. */
     private fun tag(taskId: String) = "assess:$taskId"
 
-    /** Asked about homework and revision only: an archived email or a passed event isn't work to judge. */
-    fun ask(context: Context, completed: List<TaskItem>) {
-        for (task in completed.filter { it.kind == Kind.Homework || it.kind == Kind.Revision }) {
-            val builder = NotificationCompat.Builder(context, Channels.DAILY)
-                .setSmallIcon(R.drawable.ic_focus)
-                .setContentTitle("Done: ${task.title}")
-                .setContentText("How was it?")
-                .setContentIntent(
-                    PendingIntent.getActivity(
-                        context,
-                        0,
-                        Intent(context, AssessActivity::class.java)
-                            .setData(Uri.fromParts("task", task.id, null))
-                            .putExtra(EXTRA_TASK, task.id)
-                            .putExtra(EXTRA_TITLE, task.title)
-                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-                        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
-                    ),
-                )
-                .setAutoCancel(true)
-            ANSWERS.forEachIndexed { i, (label, answer) ->
-                val tap = PendingIntent.getBroadcast(
-                    context,
-                    i,
-                    Intent(context, AssessmentReceiver::class.java)
-                        .setAction(ACTION)
-                        .setData(Uri.fromParts("task", "${task.id}#$i", null))
-                        .putExtra(EXTRA_TASK, task.id)
-                        .putExtra(EXTRA_ANSWER, answer),
-                    PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
-                )
-                builder.addAction(0, label, tap)
-            }
-            Notify.post(context, tag(task.id), BASE_ID, builder.build())
+    /**
+     * Asked about homework and revision only: an archived email or a passed event isn't work to
+     * judge. While notifications can't be seen, the questions are kept and asked once they can.
+     */
+    suspend fun ask(context: Context, completed: List<TaskItem>) {
+        val asks = completed.filter { it.kind == Kind.Homework || it.kind == Kind.Revision }.map { AssessLater(it.id, it.title) }
+        if (asks.isEmpty()) return
+        if (!Notify.shown(context, Channels.DAILY)) {
+            AppGraph.get(context).runtime.update { it.copy(assessLater = (it.assessLater + asks).distinctBy { a -> a.taskId }.takeLast(MAX_LATER)) }
+            return
         }
+        asks.forEach { post(context, it) }
+    }
+
+    /** The questions kept while notifications couldn't be seen, asked now they can. */
+    suspend fun askLater(context: Context) {
+        val graph = AppGraph.get(context)
+        val waiting = graph.runtime.value.assessLater
+        if (waiting.isEmpty() || !Notify.shown(context, Channels.DAILY)) return
+        waiting.forEach { post(context, it) }
+        graph.runtime.update { it.copy(assessLater = it.assessLater - waiting.toSet()) }
+    }
+
+    private const val MAX_LATER = 20
+
+    private fun post(context: Context, ask: AssessLater) {
+        val builder = NotificationCompat.Builder(context, Channels.DAILY)
+            .setSmallIcon(R.drawable.ic_focus)
+            .setContentTitle("Done: ${ask.title}")
+            .setContentText("How was it?")
+            .setContentIntent(
+                PendingIntent.getActivity(
+                    context,
+                    0,
+                    Intent(context, AssessActivity::class.java)
+                        .setData(Uri.fromParts("task", ask.taskId, null))
+                        .putExtra(EXTRA_TASK, ask.taskId)
+                        .putExtra(EXTRA_TITLE, ask.title)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                    PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+                ),
+            )
+            .setAutoCancel(true)
+        ANSWERS.forEachIndexed { i, (label, answer) ->
+            val tap = PendingIntent.getBroadcast(
+                context,
+                i,
+                Intent(context, AssessmentReceiver::class.java)
+                    .setAction(ACTION)
+                    .setData(Uri.fromParts("task", "${ask.taskId}#$i", null))
+                    .putExtra(EXTRA_TASK, ask.taskId)
+                    .putExtra(EXTRA_ANSWER, answer),
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+            )
+            builder.addAction(0, label, tap)
+        }
+        Notify.post(context, tag(ask.taskId), BASE_ID, builder.build())
     }
 
     /** Records [answer] (and [note]) on [taskId]'s latest completion. */

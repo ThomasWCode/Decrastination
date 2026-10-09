@@ -76,7 +76,11 @@ object Review {
             val current = graph.modelReviewer() ?: return@withLock null
             val settings = graph.settings.value
             if (!graph.runtime.value.aiUsage.forMonth(month).allows(settings.aiMonthlyCapGbp, settings.usdToGbp)) return@withLock null
-            current.review(input).also { r -> graph.runtime.update { it.copy(aiUsage = it.aiUsage.forMonth(month).record(r.costUsd, r.refused, now)) } }
+            // A failure is recorded (Setup shows it; the model rests), then the rules' review stands.
+            runCatching { current.review(input) }
+                .onFailure { e -> graph.runtime.update { it.copy(aiUsage = it.aiUsage.forMonth(month).failure(e.message ?: e.javaClass.simpleName, now)) } }
+                .getOrThrow()
+                .also { r -> graph.runtime.update { it.copy(aiUsage = it.aiUsage.forMonth(month).record(r.costUsd, r.refused, now)) } }
         } ?: return null
         val answer = result.answer ?: return null
         val changes = answer.changes.filter(ReviewInput::allowed)

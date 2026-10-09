@@ -265,6 +265,8 @@ class AppGraph private constructor(context: Context) {
             focus.finishSessions()
             focus.rewardCompletions()
         }
+        // "How was it?" questions kept while notifications were off, once they're on.
+        syncer.addAfterEverySync { Assessment.askLater(app) }
         // What's new or changed, even in place, is enriched.
         syncer.addAfterEverySync {
             val modelOn = modelAvailable()

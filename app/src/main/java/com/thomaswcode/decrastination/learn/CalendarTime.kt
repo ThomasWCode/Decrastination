@@ -107,7 +107,7 @@ object CalendarTime {
 
     /** Of the events the rules can't judge, those to ask about now: not over, within the week, not asked before. */
     fun questions(candidates: List<CalendarEvent>, asked: Set<String>, now: Long): List<CalendarEvent> =
-        candidates.filter { it.end > now && it.start < now + ASK_AHEAD_MS && EventJudge.key(it) !in asked }
+        candidates.filter { it.end > now && it.start < now + ASK_AHEAD_MS && EventJudge.key(it) !in asked }.distinctBy(EventJudge::key)
 
     /** The day a question names: an all-day event's date as stored (UTC), a timed one's where you are. */
     fun questionDay(event: CalendarEvent, zone: ZoneId): String =
