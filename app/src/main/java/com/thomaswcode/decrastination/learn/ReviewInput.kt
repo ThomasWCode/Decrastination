@@ -71,11 +71,13 @@ object ReviewInput {
             val answer = c.assessment?.let { " felt $it" }.orEmpty() + c.note?.let { " (\"$it\")" }.orEmpty()
             appendLine("- ${c.title} [${c.kind.label}${c.className?.let { ", $it" }.orEmpty()}]:$due done ${at(c.doneAt)}, estimate ${c.estimateMin} min, timed ${c.workedMin} min.$answer")
         } ?: appendLine("- nothing")
-        val sessions = log.sessions.filter { it.startedAt >= since }
+        val sessions = log.sessions.filter { it.startedAt >= since && !it.photo }
+        val photos = log.sessions.count { it.startedAt >= since && it.photo }
         appendLine()
         appendLine("Focus sessions: ${sessions.size}, ${sessions.count { it.completed }} run to the end, ${sessions.sumOf { it.workedMin }} min in all.")
         val byHour = sessions.groupBy { Instant.ofEpochMilli(it.startedAt).atZone(zone).hour }.toSortedMap()
         if (byHour.isNotEmpty()) appendLine("Started by hour: " + byHour.entries.joinToString { (h, s) -> "%02d:00 ×%d".format(Locale.UK, h, s.size) })
+        if (photos > 0) appendLine("Pieces a photo check found done: $photos.")
         appendLine("Times the blocker stopped them: ${log.blocks.count { it.at >= since }}.")
         log.checkIns.maxByOrNull { it.at }?.takeIf { it.at >= since }?.let { c ->
             appendLine()

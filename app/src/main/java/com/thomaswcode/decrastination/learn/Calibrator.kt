@@ -43,12 +43,12 @@ object Calibrator {
     /** The calibration the log teaches, and what changed from [previous], in words. */
     data class Learned(val calibration: Calibration, val changes: List<String>)
 
-    fun learn(log: ActivityLog, previous: Calibration, defaultBox: Int, week: Long): Learned {
+    fun learn(log: ActivityLog, previous: Calibration, defaultBox: Int, week: Long, defaultMargin: Int = MIN_MARGIN): Learned {
         val multipliers = multipliers(log.completions)
-        val margins = margins(log.completions)
+        val margins = margins(log.completions, defaultMargin)
         val boxes = boxes(log, defaultBox, week)
         val next = Calibration(multipliers = multipliers, marginDays = margins, boxMin = boxes)
-        return Learned(next, describe(previous, next))
+        return Learned(next, describe(previous, next, defaultMargin))
     }
 
     /**
@@ -79,10 +79,14 @@ object Calibrator {
      * Safety margins per kind: from 1 day, one more (up to 3) after two finishes in a row within an
      * hour of the deadline or past it, and one less (down to 1) after five in a row a day early or more.
      */
-    fun margins(completions: List<CompletionRecord>): Map<Kind, Int> {
+    fun margins(completions: List<CompletionRecord>, start: Int = MIN_MARGIN): Map<Kind, Int> {
+        // From your own setting, so a kind brought back to it falls back to it, not past it; within
+        // the usual bounds, widened to take in a setting outside them.
+        val floor = minOf(MIN_MARGIN, start)
+        val ceiling = maxOf(MAX_MARGIN, start)
         val result = HashMap<Kind, Int>()
         for ((kind, records) in completions.filter { it.dueAt != null }.groupBy { it.kind }) {
-            var margin = MIN_MARGIN
+            var margin = start
             var late = 0
             var early = 0
             for (record in records.sortedBy { it.doneAt }) {
@@ -102,15 +106,15 @@ object Calibrator {
                     }
                 }
                 if (late >= LATE_IN_A_ROW) {
-                    margin = (margin + 1).coerceAtMost(MAX_MARGIN)
+                    margin = (margin + 1).coerceAtMost(ceiling)
                     late = 0
                 }
                 if (early >= EARLY_IN_A_ROW) {
-                    margin = (margin - 1).coerceAtLeast(MIN_MARGIN)
+                    margin = (margin - 1).coerceAtLeast(floor)
                     early = 0
                 }
             }
-            if (margin != MIN_MARGIN) result[kind] = margin
+            if (margin != start) result[kind] = margin
         }
         return result
     }
@@ -147,7 +151,7 @@ object Calibrator {
         return result
     }
 
-    private fun describe(previous: Calibration, next: Calibration): List<String> = buildList {
+    private fun describe(previous: Calibration, next: Calibration, defaultMargin: Int): List<String> = buildList {
         // Every key either has, so one whose last completion aged out of the log is said to be back
         // to what it falls back on (the kind's, or the estimate itself).
         for (key in (previous.multipliers.keys + next.multipliers.keys).toSortedSet()) {
@@ -156,8 +160,8 @@ object Calibrator {
             if (kotlin.math.abs(after - before) >= 0.05) add("${label(key)} takes ×%.2f its estimate (was ×%.2f)".format(java.util.Locale.UK, after, before))
         }
         for (kind in Kind.entries) {
-            val before = previous.marginDays[kind] ?: MIN_MARGIN
-            val after = next.marginDays[kind] ?: MIN_MARGIN
+            val before = previous.marginDays[kind] ?: defaultMargin
+            val after = next.marginDays[kind] ?: defaultMargin
             if (before != after) add("${kind.label}: finished ${days(after)} early (was ${days(before)})")
             val boxBefore = previous.boxMin[kind]
             val boxAfter = next.boxMin[kind]

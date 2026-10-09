@@ -11,7 +11,11 @@ import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.data.ActivityLog
 import com.thomaswcode.decrastination.data.CompletionRecord
 import com.thomaswcode.decrastination.data.Settings
+import com.thomaswcode.decrastination.data.WeeklyReview
 import com.thomaswcode.decrastination.enrich.ClaudeReviewer
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -22,9 +26,6 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
-import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertTrue
 
 class DailyTest {
     private val settings = Settings()
@@ -92,6 +93,18 @@ class DailyTest {
         assertEquals(null, TeamsAutoSync.due(now, LONDON, settings, state, teamsSyncedAt = null, unlocked = false))
         val offered = TeamsAutoSync.offered(state, now, LONDON, settings)
         assertEquals(null, TeamsAutoSync.due(now + 60_000L, LONDON, settings, offered, teamsSyncedAt = null, unlocked = true))
+        // Delayed: not before its five minutes, then even though the morning's window has gone.
+        val delayed = state.copy(delayedUntil = now + 5 * 60_000L)
+        assertEquals(null, TeamsAutoSync.due(now + 60_000L, LONDON, settings, delayed, teamsSyncedAt = null, unlocked = true))
+        assertEquals(TeamsAutoSync.Trigger.Delayed, TeamsAutoSync.due(Fixtures.at("2026-10-09T08:45"), LONDON, settings, delayed, teamsSyncedAt = null, unlocked = false))
+    }
+
+    @Test
+    fun `a review is once a week, by the week, wherever the check-in is moved`() {
+        val reviews = listOf(WeeklyReview(Fixtures.at("2026-10-11T21:00"), listOf("x"), "rules", week = "2026-10-05"))
+        // The check-in moved to 23:00 after the review: the same week, reviewed.
+        assertTrue(Review.reviewed(reviews, "2026-10-05", Fixtures.at("2026-10-11T23:00")))
+        assertEquals(false, Review.reviewed(reviews, "2026-10-12", Fixtures.at("2026-10-18T19:30")))
     }
 }
 
