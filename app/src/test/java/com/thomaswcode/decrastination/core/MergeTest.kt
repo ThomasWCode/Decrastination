@@ -140,6 +140,19 @@ class MergeTest {
     }
 
     @Test
+    fun `an email archived with dated blocks still to do stays, as a follow-up, till they're done`() {
+        val read = Merge.apply(emptyList(), Source.Gmail, listOf(fetched("t1")), t0).tasks
+        val withBlocks = read.map { it.copy(subSteps = listOf(SubStep("Apply to RAL", 60, from = t0 + 10 * 86_400_000L))) }
+        val archived = Merge.apply(withBlocks, Source.Gmail, emptyList(), later)
+        assertEquals(Status.Open, archived.tasks.single().status)
+        assertEquals("true", archived.tasks.single().extra[Merge.EXTRA_FOLLOW_UP])
+        assertTrue(archived.completed.isEmpty())
+        // Its blocks done: archived, it's done.
+        val ticked = archived.tasks.map { it.copy(subSteps = it.subSteps.map { s -> s.copy(done = true) }) }
+        assertEquals(Status.Done, Merge.apply(ticked, Source.Gmail, emptyList(), later + 1).tasks.single().status)
+    }
+
+    @Test
     fun `a derived task that stops being listed was missed, not done`() {
         val stored = first(fetched("quota:2026-10-07", derived = true))
         val result = Merge.apply(stored, Source.Teams, listOf(fetched("quota:2026-10-08", derived = true)), later)

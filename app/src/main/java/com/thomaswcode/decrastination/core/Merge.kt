@@ -18,6 +18,9 @@ package com.thomaswcode.decrastination.core
  * Sources throw rather than return a partial list, so "not listed" always means gone.
  */
 object Merge {
+    /** An email kept after it left the inbox, for its dated blocks still to do. */
+    const val EXTRA_FOLLOW_UP = "followUp"
+
 
     data class Result(
         val tasks: List<TaskItem>,
@@ -119,6 +122,10 @@ object Merge {
             when {
                 old.status != Status.Open -> old.takeIf { now - (old.doneAt ?: old.lastSeenAt) < KEEP_FINISHED_MS }
                 old.derived -> old.copy(status = Status.Missed).also { missed += it }
+                // An email whose dated blocks are still to do (applications that open later): archived,
+                // it stays on the list, marked as a follow-up, until they're done.
+                old.source == Source.Gmail && old.subSteps.any { !it.done && (it.from != null || it.dueAt != null) } ->
+                    old.copy(extra = old.extra + (EXTRA_FOLLOW_UP to "true"))
                 else -> old.copy(status = Status.Done, doneAt = now).also { completed += completion(old, it) }
             }
         } + fresh.values.filter { it.id !in byId }
