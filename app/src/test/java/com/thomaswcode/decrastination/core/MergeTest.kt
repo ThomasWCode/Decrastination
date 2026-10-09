@@ -93,6 +93,29 @@ class MergeTest {
     }
 
     @Test
+    fun `a reopened task's minutes start again, a new round of it`() {
+        val open = first(fetched("a"))
+        val worked = listOf(open.single().copy(workedMin = 40))
+        val done = Merge.apply(worked, Source.Teams, listOf(fetched("a", done = true)), t0 + 1).tasks
+        val again = Merge.apply(done, Source.Teams, listOf(fetched("a")), t0 + 2)
+        assertEquals(listOf("teams:a"), again.reopened.map { it.id })
+        assertEquals(0, again.tasks.single().workedMin)
+    }
+
+    @Test
+    fun `steps ticked off here stay ticked while the source sends the same ones`() {
+        fun deck(vararg steps: String) = Fetched(sourceId = "deck:1", title = "Deck", kind = Kind.Homework, derived = true, subSteps = steps.map { SubStep(it, 9) })
+        val stored = Merge.apply(emptyList(), Source.Anki, listOf(deck("20 new cards", "20 new cards", "5 new cards")), t0).tasks
+        // A session ticked the first off; the counts haven't moved yet.
+        val ticked = stored.map { t -> t.copy(subSteps = t.subSteps.mapIndexed { i, s -> if (i == 0) s.copy(done = true) else s }) }
+        val again = Merge.apply(ticked, Source.Anki, listOf(deck("20 new cards", "20 new cards", "5 new cards")), t0 + 1).tasks
+        assertEquals(listOf(true, false, false), again.single().subSteps.map { it.done })
+        // The cards studied: the source's own, shorter list.
+        val caughtUp = Merge.apply(again, Source.Anki, listOf(deck("20 new cards", "5 new cards")), t0 + 2).tasks
+        assertEquals(listOf(false, false), caughtUp.single().subSteps.map { it.done })
+    }
+
+    @Test
     fun `a done task listed again reopens, as a snoozed email does`() {
         val done = Merge.apply(first(fetched("a")), Source.Teams, emptyList(), later).tasks
         val result = Merge.apply(done, Source.Teams, listOf(fetched("a")), later + 1)

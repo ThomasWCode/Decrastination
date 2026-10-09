@@ -384,6 +384,9 @@ class AppGraph private constructor(context: Context) {
         for ((snapshot, _) in candidates) {
             // Read afresh: a sync since the run began may have closed or changed it.
             val task = tasks.value.tasks.firstOrNull { it.id == snapshot.id } ?: continue
+            // Being worked on in a focus session: its steps stay till the session ends, or the
+            // step it's on would be gone when it does. It's done at the next run after.
+            if (focus.session?.taskId == task.id) continue
             val job = Enrichments.jobFor(task) ?: continue
             if (!Enrichments.stale(task, enricher != null, RuleEnricher.BY)) continue
             val now = clock.now()
@@ -391,6 +394,11 @@ class AppGraph private constructor(context: Context) {
             // Switched off (or its key removed) while this runs: nothing more is sent.
             if (claudeKey() == null) enricher = null
             var enrichment = if (enricher != null && calls < MAX_MODEL_CALLS) modelCalls.withLock call@{
+                // Switched off while another call held the lock: nothing more is sent.
+                if (claudeKey() == null) {
+                    enricher = null
+                    return@call null
+                }
                 // Checked under the lock, so a review or photo check at the same time is counted.
                 val s = settings.value
                 if (!runtime.value.aiUsage.forMonth(month).allows(s.aiMonthlyCapGbp, s.usdToGbp)) return@call null

@@ -4,6 +4,7 @@ import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -54,12 +55,12 @@ object Assessment {
 
     private val ANSWERS = listOf("Harder" to Calibrator.HARDER, "As expected" to Calibrator.AS_EXPECTED, "Easier" to Calibrator.EASIER)
 
-    fun id(taskId: String): Int = BASE_ID + Math.floorMod(taskId.hashCode(), 900)
+    /** One notification per task, told apart by its tag, so no two tasks share one. */
+    private fun tag(taskId: String) = "assess:$taskId"
 
     /** Asked about homework and revision only: an archived email or a passed event isn't work to judge. */
     fun ask(context: Context, completed: List<TaskItem>) {
         for (task in completed.filter { it.kind == Kind.Homework || it.kind == Kind.Revision }) {
-            val id = id(task.id)
             val builder = NotificationCompat.Builder(context, Channels.DAILY)
                 .setSmallIcon(R.drawable.ic_focus)
                 .setContentTitle("Done: ${task.title}")
@@ -67,8 +68,12 @@ object Assessment {
                 .setContentIntent(
                     PendingIntent.getActivity(
                         context,
-                        id,
-                        Intent(context, AssessActivity::class.java).putExtra(EXTRA_TASK, task.id).putExtra(EXTRA_TITLE, task.title).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                        0,
+                        Intent(context, AssessActivity::class.java)
+                            .setData(Uri.fromParts("task", task.id, null))
+                            .putExtra(EXTRA_TASK, task.id)
+                            .putExtra(EXTRA_TITLE, task.title)
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
                         PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
                     ),
                 )
@@ -76,13 +81,17 @@ object Assessment {
             ANSWERS.forEachIndexed { i, (label, answer) ->
                 val tap = PendingIntent.getBroadcast(
                     context,
-                    id * 4 + i,
-                    Intent(context, AssessmentReceiver::class.java).setAction(ACTION).putExtra(EXTRA_TASK, task.id).putExtra(EXTRA_ANSWER, answer),
+                    i,
+                    Intent(context, AssessmentReceiver::class.java)
+                        .setAction(ACTION)
+                        .setData(Uri.fromParts("task", "${task.id}#$i", null))
+                        .putExtra(EXTRA_TASK, task.id)
+                        .putExtra(EXTRA_ANSWER, answer),
                     PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
                 )
                 builder.addAction(0, label, tap)
             }
-            Notify.post(context, id, builder.build())
+            Notify.post(context, tag(task.id), BASE_ID, builder.build())
         }
     }
 
@@ -93,7 +102,7 @@ object Assessment {
             if (i < 0) return@update log
             log.copy(completions = log.completions.toMutableList().also { it[i] = it[i].copy(assessment = answer, note = note?.trim()?.takeIf(String::isNotEmpty) ?: it[i].note) })
         }
-        Notify.cancel(context, id(taskId))
+        Notify.cancel(context, tag(taskId), BASE_ID)
     }
 }
 
