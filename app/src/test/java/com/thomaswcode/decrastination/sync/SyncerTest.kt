@@ -107,4 +107,15 @@ class SyncerTest {
         syncer.sync(setOf(Source.Gmail))
         assertEquals(1, heard)
     }
+
+    @Test
+    fun `a sync's completions are saved with the tasks' move to done, to be rewarded after`() = runTest {
+        val teams = FakeSource(Source.Teams) { items("a", "b") }
+        val syncer = syncer(listOf(teams))
+        syncer.sync()
+        teams.answer = { SourceRead(listOf(Fetched("a", "a", Kind.Homework), Fetched("b", "b", Kind.Homework, done = true))) }
+        syncer.sync()
+        assertEquals(listOf("teams:b"), tasks.value.unrewarded.map { it.id })
+        assertEquals(Status.Done, tasks.value.tasks.first { it.id == "teams:b" }.status)
+    }
 }

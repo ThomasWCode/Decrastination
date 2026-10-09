@@ -9,6 +9,7 @@ import com.thomaswcode.decrastination.data.ActivityLog
 import com.thomaswcode.decrastination.data.BlockRecord
 import com.thomaswcode.decrastination.data.CompletionRecord
 import com.thomaswcode.decrastination.data.JsonStore
+import com.thomaswcode.decrastination.data.Rewarded
 import com.thomaswcode.decrastination.data.RuntimeState
 import com.thomaswcode.decrastination.data.SessionRecord
 import com.thomaswcode.decrastination.data.Settings
@@ -198,6 +199,24 @@ class Focus(
      * Work a source has just confirmed done: it's logged, and earns free time for what no
      * session counted (docs/scheduler.md §4).
      */
+    /**
+     * Gives what's owed for the completions syncs confirmed ([TaskState.unrewarded]), then clears
+     * them. Stopped before that, they're given next time (after the next sync, or when the app
+     * starts), and [onCompleted] gives each only once.
+     */
+    suspend fun rewardCompletions() {
+        val waiting = tasks.value.unrewarded
+        if (waiting.isEmpty()) return
+        onCompleted(waiting)
+        tasks.update { state -> state.copy(unrewarded = state.unrewarded.filterNot { t -> waiting.any { it.id == t.id && it.doneAt == t.doneAt } }) }
+    }
+
+    /**
+     * Work a source confirmed done: free time for what was left of it, a record in the log, and
+     * an end to a session still running on it. Each is given once per completion however often
+     * it's offered: the free time with a ledger of what's had it ([RuntimeState.rewarded]), written
+     * in the same step; the record only if the log hasn't got it.
+     */
     suspend fun onCompleted(completed: List<TaskItem>) {
         if (completed.isEmpty()) return
         // A task confirmed done while its session runs: the session ends now, its minutes count
@@ -207,16 +226,28 @@ class Focus(
         val now = clock.now()
         val today = today(now)
         val ratio = settings.value.workMinPerFreeMin
-        // Reading or archiving an email, or an event passing, isn't work that earns time.
-        val earned = completed.filter { it.kind != Kind.Info && it.kind != Kind.Event }.sumOf { task ->
-            val worked = task.workedMin + if (sessionMin?.first == task.id) sessionMin.second else 0
-            val remaining = (task.effortMin * (1 - task.sourceProgress)).roundToInt() - worked
-            Credit.forCompletion(remaining.coerceAtLeast(0), ratio)
-        }
-        runtime.update { it.copy(credit = it.credit.earn(today, earned)) }
-        log.update { state ->
+        // What was worked on it, a session just ended included: as stored, where it is (a session
+        // ended on an earlier try is there already).
+        fun worked(task: TaskItem): Int = tasks.value.tasks.firstOrNull { it.id == task.id }?.workedMin
+            ?: (task.workedMin + if (sessionMin?.first == task.id) sessionMin.second else 0)
+        fun key(task: TaskItem) = Rewarded(task.id, task.doneAt ?: task.lastSeenAt)
+        runtime.update { state ->
+            val fresh = completed.filter { key(it) !in state.rewarded }
+            // Reading or archiving an email, or an event passing, isn't work that earns time.
+            val earned = fresh.filter { it.kind != Kind.Info && it.kind != Kind.Event }.sumOf { task ->
+                val remaining = (task.effortMin * (1 - task.sourceProgress)).roundToInt() - worked(task)
+                Credit.forCompletion(remaining.coerceAtLeast(0), ratio)
+            }
             state.copy(
-                completions = state.completions + completed.filter { it.status == Status.Done }.map { task ->
+                credit = state.credit.earn(today, earned),
+                rewarded = (state.rewarded + fresh.map(::key)).distinct().filter { it.doneAt > now - REWARDED_KEPT_MS },
+            )
+        }
+        log.update { state ->
+            val unrecorded = completed.filter { it.status == Status.Done }
+                .filter { task -> state.completions.none { it.taskId == task.id && it.doneAt == (task.doneAt ?: now) } }
+            state.copy(
+                completions = state.completions + unrecorded.map { task ->
                     CompletionRecord(
                         taskId = task.id,
                         title = task.title,
@@ -224,7 +255,7 @@ class Focus(
                         kind = task.kind,
                         className = task.className,
                         estimateMin = task.effortMin,
-                        workedMin = task.workedMin + if (sessionMin?.first == task.id) sessionMin.second else 0,
+                        workedMin = worked(task),
                         dueAt = task.dueAt,
                         firstSeenAt = task.firstSeenAt,
                         doneAt = task.doneAt ?: now,
@@ -236,6 +267,9 @@ class Focus(
 
     companion object {
         private const val PLAN_TTL_MS = 60_000L
+
+        /** How long a completion stays in the ledger of those rewarded: far longer than any retry. */
+        private const val REWARDED_KEPT_MS = 14 * 24 * 3_600_000L
         const val MAX_SESSION_MIN = 180
     }
 }

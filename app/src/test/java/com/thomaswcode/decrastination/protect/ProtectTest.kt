@@ -127,7 +127,8 @@ class SettingsChangesTest {
         val loose = SettingsChanges.propose(current, current.copy(blockedApps = emptyList()), emptyList(), now, ::newId)
         // A second later the first has waited a second; then another change.
         val counted = SettingsChanges.applyDue(loose.settings, loose.pending, now + 1000, 1000)
-        val other = SettingsChanges.propose(counted.settings, counted.settings.copy(boxMin = 60), counted.pending, now + 1000, ::newId)
+        // Proposed from what's been asked for, as the Settings screen does.
+        val other = SettingsChanges.propose(counted.settings, SettingsChanges.requested(counted.settings, counted.pending).copy(boxMin = 60), counted.pending, now + 1000, ::newId)
         assertEquals(2, other.pending.size)
         val early = SettingsChanges.applyDue(other.settings, other.pending, now + 23 * hour, 23 * hour - 1000)
         assertEquals(current.blockedApps, early.settings.blockedApps)
@@ -196,6 +197,23 @@ class SettingsChangesTest {
         assertNull(Uptime(unknown, 5 * 60_000L).atLeastSince(Uptime(unknown, 10 * 60_000L)))
         val change = PendingChange("1", "armed", kotlinx.serialization.json.JsonPrimitive(false), "Protection: off", now, now, waitMs = 60 * 60_000L)
         assertEquals(40 * 60_000L, SettingsChanges.counting(listOf(change), Uptime(unknown, 10 * 60_000L), Uptime(unknown, 50 * 60_000L), force = true))
+    }
+
+    @Test
+    fun `a waiting disarm set back is cancelled, and one left as asked keeps its wait`() {
+        val armed = Settings(armed = true)
+        val first = SettingsChanges.propose(armed, armed.copy(armed = false), emptyList(), now, ::newId)
+        assertEquals(1, first.pending.size)
+        val asked = SettingsChanges.requested(armed, first.pending)
+        assertEquals(false, asked.armed)
+        // Something else changed: the disarm keeps its wait.
+        val again = SettingsChanges.propose(armed, asked.copy(workMinPerFreeMin = armed.workMinPerFreeMin + 1), first.pending, now + 3_600_000L, ::newId)
+        assertEquals(first.pending, again.pending)
+        assertEquals(armed.workMinPerFreeMin + 1, again.settings.workMinPerFreeMin)
+        // Armed again before it applied: cancelled.
+        val back = SettingsChanges.propose(armed, asked.copy(armed = true), first.pending, now, ::newId)
+        assertEquals(emptyList(), back.pending)
+        assertEquals(true, back.settings.armed)
     }
 
     @Test
