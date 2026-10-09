@@ -75,10 +75,12 @@ class CalibratorTest {
     }
 
     @Test
-    fun `your own box is a candidate, and with nothing to judge the others by, it stands`() {
-        // Twenty sessions at a box that's neither yours (30) nor one the experiment tries.
+    fun `your own box is a candidate, and with nothing to judge the others by, it stands most weeks`() {
+        // Twenty sessions at a box that's neither yours (30) nor one the experiment tries: nothing
+        // to judge them by, so yours is the best, and only the weeks it tries another move off it.
         val other = ActivityLog(sessions = (1..20).map { SessionRecord("b$it", Kind.Homework, label = "b", plannedMin = 40, workedMin = 40, startedAt = 0, endedAt = 0, completed = true, box = 40) })
-        assertEquals(emptyMap(), Calibrator.boxes(other, defaultBox = 30, week = 7))
+        val kept = (1L..40L).count { Calibrator.boxes(other, defaultBox = 30, week = it).isEmpty() }
+        assertTrue(kept >= 25, "kept $kept of 40 weeks")
     }
 
     @Test
@@ -88,6 +90,22 @@ class CalibratorTest {
         val rounds = listOf(done("t", dueAt = due, doneAt = due - HOUR), done("t", dueAt = due + 5 * DAY, doneAt = due + 6 * DAY))
         val sessions = (1..20).map { SessionRecord("t", Kind.Homework, label = "t", plannedMin = 25, workedMin = 25, startedAt = due + 2 * DAY + it * HOUR, endedAt = 0, completed = true, box = 25) }
         assertEquals(emptyMap(), Calibrator.boxes(ActivityLog(sessions = sessions, completions = rounds), defaultBox = 45, week = 7))
+    }
+
+    @Test
+    fun `an old box of yours doesn't settle the experiment`() {
+        // Twenty sessions at your old box of 40; you've since set 30.
+        val old = ActivityLog(sessions = (1..20).map { SessionRecord("b$it", Kind.Homework, label = "b", plannedMin = 40, workedMin = 40, startedAt = 0, endedAt = 0, completed = true, box = 40) })
+        // Unsettled, some weeks try another box.
+        val tried = (1L..40L).map { Calibrator.boxes(old, defaultBox = 30, week = it)[Kind.Homework] }
+        assertTrue(tried.any { it != null && it != 30 })
+    }
+
+    @Test
+    fun `a multiplier gone back to its fallback is said`() {
+        val previous = Calibration(multipliers = mapOf("Homework|12.1 Physics" to 1.5))
+        val learned = Calibrator.learn(ActivityLog(), previous, defaultBox = 45, week = 1)
+        assertTrue(learned.changes.any { "Homework in 12.1 Physics takes ×1.00" in it }, learned.changes.toString())
     }
 
     @Test
@@ -128,9 +146,10 @@ class EventJudgeTest {
     }
 
     @Test
-    fun `what can't be judged is listed to ask, once per name`() {
+    fun `what can't be judged is listed to ask, and asked once per name`() {
         val time = EventJudge.time(listOf(event("Van hire", allDay = true), event("van hire ", allDay = true)), emptyMap(), LONDON)
-        assertEquals(1, time.toAsk.size)
+        assertEquals(2, time.toAsk.size)
+        assertEquals(1, CalendarTime.questions(time.toAsk, emptySet(), start - 3_600_000L).size)
         assertEquals(emptyMap(), time.dayLoads)
     }
 }
@@ -139,6 +158,14 @@ class CalendarQuestionsTest {
     private val now = Fixtures.at("2026-10-09T17:00")
 
     private fun event(id: Long, title: String, start: String, end: String) = CalendarEvent(id, title, Fixtures.at(start), Fixtures.at(end), allDay = false)
+
+    @Test
+    fun `an ended occurrence of a long event doesn't stand in for the next`() {
+        val yesterday = event(7, "Course", "2026-10-08T09:00", "2026-10-08T15:00")
+        val tomorrow = event(8, "Course", "2026-10-10T09:00", "2026-10-10T15:00")
+        val time = EventJudge.time(listOf(yesterday, tomorrow), emptyMap(), LONDON)
+        assertEquals(listOf(tomorrow), CalendarTime.questions(time.toAsk, emptySet(), now))
+    }
 
     @Test
     fun `asked about only if not over, within the week, and not asked before`() {

@@ -100,7 +100,9 @@ object EventJudge {
                 Judgement.Ask -> ask += event
             }
         }
-        return Time(busy, loads, ask.distinctBy { key(it) })
+        // Every one to ask about: which of them is asked (not over yet, one per name) is decided
+        // with the time, so an ended occurrence can't stand in for the next.
+        return Time(busy, loads, ask)
     }
 
     /**

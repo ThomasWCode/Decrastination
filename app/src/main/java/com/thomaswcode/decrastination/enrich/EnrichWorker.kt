@@ -2,9 +2,11 @@ package com.thomaswcode.decrastination.enrich
 
 import android.content.Context
 import androidx.core.app.NotificationCompat
+import androidx.work.Constraints
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingWorkPolicy
 import androidx.work.ForegroundInfo
+import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.OutOfQuotaPolicy
 import androidx.work.WorkManager
@@ -39,8 +41,12 @@ class EnrichWorker(context: Context, params: WorkerParameters) : CoroutineWorker
 
         /** After each sync, and when the model is switched on or given its key; one run after another. */
         fun enqueue(context: Context) {
+            // With the model to ask, it waits for a connection: offline, a call would fail and rest
+            // the model for an hour. Without it, the rules need none.
+            val online = AppGraph.get(context).modelAvailable()
             val request = OneTimeWorkRequestBuilder<EnrichWorker>()
                 .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
+                .apply { if (online) setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()) }
                 .build()
             WorkManager.getInstance(context).enqueueUniqueWork(NAME, ExistingWorkPolicy.APPEND_OR_REPLACE, request)
         }

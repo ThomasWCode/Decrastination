@@ -266,6 +266,28 @@ class FocusTest {
     }
 
     @Test
+    fun `a photo of a piece of time counts against what's left of the estimate, once`() = runTest {
+        tasks.update { it.copy(tasks = listOf(task("hw", effort = 90))) }
+        // A part the planner cut, with no step of its own: counted.
+        assertTrue(focus.photoChecked("teams:hw", "part 1 of 2", 45))
+        assertTrue(focus.photoChecked("teams:hw", "part 1 of 1", 45))
+        assertEquals(90, tasks.value.tasks.single().workedMin)
+        // All of the estimate counted: the same work can't earn again.
+        assertFalse(focus.photoChecked("teams:hw", null, 45))
+        assertEquals(30 * 60_000L, focus.creditLeftMs())
+    }
+
+    @Test
+    fun `a completion that ends a running session says so`() = runTest {
+        tasks.update { it.copy(tasks = listOf(task("hw", effort = 45))) }
+        focus.startSession("teams:hw", "hw", null, 30)
+        val done = tasks.value.tasks.single().copy(status = Status.Done, doneAt = clock.time)
+        assertTrue(focus.onCompleted(listOf(done)))
+        assertNull(focus.session)
+        assertEquals(false, focus.onCompleted(listOf(task("other", effort = 10).copy(status = Status.Done, doneAt = clock.time))))
+    }
+
+    @Test
     fun `what counts as blocked follows the settings`() {
         assertEquals(Focus.Target.App("com.google.android.youtube"), focus.target("com.google.android.youtube"))
         assertEquals(Focus.Target.Browser("org.mozilla.firefox"), focus.target("org.mozilla.firefox"))

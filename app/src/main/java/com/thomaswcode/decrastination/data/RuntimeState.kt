@@ -25,6 +25,12 @@ data class RuntimeState(
     val pending: List<PendingChange> = emptyList(),
     /** A parent code unblocked everything until then. */
     val overrideUntil: Long? = null,
+    /**
+     * The blocked site each checked browser last showed in front (null: a page that isn't), kept
+     * so a service started afresh can judge a page whose address bar is hidden (a video full
+     * screen). A browser not in it hasn't been read.
+     */
+    val browserSites: Map<String, String?> = emptyMap(),
     val codeLock: CodeLock = CodeLock(),
     val teamsAuto: TeamsAutoSync.State = TeamsAutoSync.State(),
     val protection: ProtectionState = ProtectionState(),
@@ -40,6 +46,8 @@ data class RuntimeState(
     val eventAnswers: Map<String, String> = emptyMap(),
     /** Events you've been asked about, by name, so each is asked once. */
     val eventsAsked: Set<String> = emptySet(),
+    /** "How was it?" questions kept while notifications couldn't be seen, to ask once they can. */
+    val assessLater: List<AssessLater> = emptyList(),
     /** Completions whose free time has been given, so each is given once (`Focus.onCompleted`); kept a fortnight. */
     val rewarded: List<Rewarded> = emptyList(),
 )
@@ -147,3 +155,7 @@ data class Rewarded(val taskId: String, val doneAt: Long)
 /** A focus session as it ended: what it's owed, saved with its ending (`Focus.stopSession`). */
 @Serializable
 data class EndedSession(val session: FocusSession, val workedMin: Int, val completed: Boolean, val endedAt: Long)
+
+/** A finished task's "how was it?", kept to ask once notifications can be seen. */
+@Serializable
+data class AssessLater(val taskId: String, val title: String)
