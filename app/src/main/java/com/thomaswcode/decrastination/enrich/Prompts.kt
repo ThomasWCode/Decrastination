@@ -206,13 +206,14 @@ object Answers {
             Enrichments.Job.Email -> json.decodeFromString(Triage.serializer(), text).let { t ->
                 val total = effort(t.effortMin)
                 val deadline = t.deadline?.let { dateTime(it, zone) }?.takeIf { plausible(it, now) }
+                val opens = t.actionableFrom?.let { date(it, zone, LocalTime.MIDNIGHT) }?.takeIf { plausible(it, now) }
                 // Blocks of work, each perhaps with its own dates (Q12): not trusted, the triage stands
                 // without them.
-                val blocks = trusted(steps(t.blocks, now, zone, vocabulary = false, maxMinutes = MAX_EFFORT, dueBy = deadline ?: sourceDue(task)), t.effortMin)
+                val blocks = trusted(steps(t.blocks, now, zone, vocabulary = false, maxMinutes = MAX_EFFORT, dueBy = deadline ?: sourceDue(task), opens = opens), t.effortMin)
                 base.copy(
                     // Blocks of work make it something to do, whatever else it says.
                     kind = if (blocks != null) Kind.Admin else Kind.entries.firstOrNull { it.name == t.kind && it in setOf(Kind.Admin, Kind.Event, Kind.Info) },
-                    actionableFrom = t.actionableFrom?.let { date(it, zone, LocalTime.MIDNIGHT) }?.takeIf { plausible(it, now) },
+                    actionableFrom = opens,
                     deadline = deadline,
                     effortMin = blocks?.sumOf { it.minutes } ?: total,
                     nextStep = t.nextStep.trim().takeIf { it.isNotEmpty() }?.take(MAX_NEXT_STEP),
@@ -268,20 +269,26 @@ object Answers {
 
     /**
      * [given] as steps the planner can take, or null if any can't be: no title, minutes out of
-     * range (up to [maxMinutes]), a date out of range, or a start after its own deadline or after
-     * its task's ([dueBy]). Each keeps its own dates; one
+     * range (up to [maxMinutes]), a date out of range, a start after its own deadline or after its
+     * task's ([dueBy]), a deadline before its task can be started ([opens]), or an order its dates
+     * forbid (a step that can't start till after one listed later is due). Each keeps its own dates; one
      * longer than a focus session is cut into parts that keep them, so finishing a session never
      * ticks off more than it did. A step tagged as vocabulary ([vocabulary] jobs only) that asks for
      * anything else too stays planned whole.
      */
-    private fun steps(given: List<Step>, now: Long, zone: ZoneId, vocabulary: Boolean, maxMinutes: Int, dueBy: Long?): List<SubStep>? {
+    private fun steps(given: List<Step>, now: Long, zone: ZoneId, vocabulary: Boolean, maxMinutes: Int, dueBy: Long?, opens: Long? = null): List<SubStep>? {
         val read = given.map { step ->
             if (step.title.isBlank() || step.minutes !in 1..maxMinutes) return null
             val from = step.from?.let { date(it, zone, LocalTime.MIDNIGHT)?.takeIf { at -> plausible(at, now) } ?: return null }
             val due = step.due?.let { dateTime(it, zone)?.takeIf { at -> plausible(at, now) } ?: return null }
             if (from != null && ((due != null && from > due) || (dueBy != null && from > dueBy))) return null
+            if (due != null && opens != null && due < opens) return null
             val sections = if (vocabulary && AnkiRules.vocabularyOnly(step.title)) sections(step.ankiSections) else emptyList()
             SubStep(step.title.trim().take(MAX_TITLE), step.minutes, ankiSections = sections, from = from, dueAt = due)
+        }
+        for (i in read.indices) {
+            val from = read[i].from ?: continue
+            if (read.drop(i + 1).any { later -> later.dueAt != null && later.dueAt < from }) return null
         }
         return read.flatMap(::fitSessions)
     }

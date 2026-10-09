@@ -410,7 +410,7 @@ class Focus(
         // Its deck tasks, missed ones too: the read that closes an assignment drops its unfinished
         // deck in the same sync, before this, and that deck's sessions earned their time already.
         val decks = AnkiRules.heldDecks(tasks.value.tasks, settings.value.ankiTextbook, missed = true)
-        // Blocks you ticked off by hand: done, but not timed, so not something to learn times from.
+        // Blocks you ticked off by hand: done, but not timed, so the completion's no measure of time.
         fun handMinutes(task: TaskItem): Int = tasks.value.tasks.firstOrNull { it.id == task.id && it.doneAt == task.doneAt }?.handMin ?: task.handMin
         // Its vocabulary steps its decks hold: their work is the decks', and learned from theirs.
         fun deckMinutes(task: TaskItem): Int = task.subSteps
@@ -463,11 +463,13 @@ class Focus(
                         className = task.className,
                         // What was left of it when first seen: progress it already had isn't work done here,
                         // nor is vocabulary its decks hold (their own records learn from it).
-                        estimateMin = (task.effortMin * (1 - task.sourceProgress.coerceIn(0.0, 1.0)) - deckMinutes(task) - handMinutes(task)).roundToInt().coerceAtLeast(1),
+                        estimateMin = (task.effortMin * (1 - task.sourceProgress.coerceIn(0.0, 1.0)) - deckMinutes(task)).roundToInt().coerceAtLeast(1),
                         workedMin = worked(task),
-                        dueAt = task.dueAt,
+                        // Its own deadline; one split into dated blocks with none of its own, its last block's.
+                        dueAt = task.dueAt ?: task.subSteps.mapNotNull { it.dueAt }.maxOrNull(),
                         firstSeenAt = task.firstSeenAt,
                         doneAt = task.doneAt ?: now,
+                        byHand = handMinutes(task) > 0,
                     )
                 },
             ).trimmed(now)

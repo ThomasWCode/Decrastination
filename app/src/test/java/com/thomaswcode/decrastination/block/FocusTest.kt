@@ -531,6 +531,15 @@ class FocusTest {
         assertEquals(30, tasks.value.tasks.single().handMin)
         focus.onCompleted(listOf(tasks.value.tasks.single().copy(status = Status.Done, doneAt = clock.time)))
         assertEquals(0L, focus.creditLeftMs())
+        assertTrue(log.value.completions.single().byHand)
+    }
+
+    @Test
+    fun `a split task with no deadline of its own completes against its last block's`() = runTest {
+        val due = clock.time + 3 * 86_400_000L
+        val email = task("e", kind = Kind.Admin, due = null).copy(id = "gmail:e", source = Source.Gmail, subSteps = listOf(SubStep("Apply", 30, dueAt = due)))
+        focus.onCompleted(listOf(email.copy(status = Status.Done, doneAt = clock.time)))
+        assertEquals(due, log.value.completions.single().dueAt)
     }
 
     @Test

@@ -296,6 +296,17 @@ class AnswersTest {
     }
 
     @Test
+    fun `blocks due before the email opens, or in an order their dates forbid, aren't trusted`() {
+        val early = parse(
+            Enrichments.Job.Email,
+            """{"kind":"Admin","actionableFrom":"2026-12-01","deadline":"2026-12-31","effortMin":60,"nextStep":"Apply","blocks":[{"title":"Apply","minutes":60,"from":null,"due":"2026-11-15"}]}""",
+        )!!
+        assertNull(early.subSteps)
+        val backwards = parse(Enrichments.Job.Effort, """{"effortMin":60,"blocks":[{"title":"A","minutes":30,"from":"2026-10-20","due":null},{"title":"B","minutes":30,"from":null,"due":"2026-10-12"}]}""")!!
+        assertNull(backwards.subSteps)
+    }
+
+    @Test
     fun `a planner item can come back in blocks too`() {
         val e = parse(Enrichments.Job.Effort, """{"effortMin":120,"blocks":[{"title":"Past paper 1","minutes":60,"from":null,"due":null},{"title":"Mark it and go over mistakes","minutes":60,"from":null,"due":null}]}""")!!
         assertEquals(listOf("Past paper 1", "Mark it and go over mistakes"), e.subSteps!!.map { it.title })
