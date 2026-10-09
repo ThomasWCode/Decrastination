@@ -86,6 +86,15 @@
             android:taskAffinity="com.thomaswcode.decrastination.blocked" />
 
         <activity
+            android:name=".ui.InstructionsActivity"
+            android:exported="false"
+            android:label="Instructions"
+            android:windowSoftInputMode="adjustResize" />
+        <activity
+            android:name=".ui.CalendarActivity"
+            android:exported="false"
+            android:label="Calendar" />
+        <activity
             android:name=".ui.SetupActivity"
             android:exported="false"
             android:label="Setup" />

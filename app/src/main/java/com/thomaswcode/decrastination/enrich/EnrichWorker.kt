@@ -28,6 +28,8 @@ class EnrichWorker(context: Context, params: WorkerParameters) : CoroutineWorker
         // Queued for the rules alone (no connection asked for): the model isn't asked, even if
         // it's been switched on since; switching it on queues a job of its own that waits online.
         graph.enrichNow(if (inputData.getBoolean(KEY_MODEL, false)) graph.modelEnricher() else null)
+        // Instructions waiting for Claude, as its rest after a failed call ends.
+        if (inputData.getBoolean(KEY_MODEL, false)) graph.readInstructions()
         return Result.success()
     }
 
