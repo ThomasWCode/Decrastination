@@ -139,6 +139,8 @@ Phase 0 also built what Phase 1 would have scaffolded: the Gradle setup, the sha
 
 ### Phase 3: Blocker and anti-tamper
 
+*Built 9 Oct 2026 and left as decided (Q20): blocking on, protection unarmed. Tested on the phone: blocking apps, sites and browsers; focus sessions; the Teams-sync banner; and, armed for the test, the guard on App info and the uninstall prompt, the watchdog switching the service back on, the device admin, and a parent code from a TOTP computed on the PC. `docs/scheduler.md` §4 and §6 ("As built").*
+
 - `FocusAccessibilityService`: window-state and windows-changed events, blocklist, quiet hours, every-window check (split screen, pop-up, PiP).
 - `BlockedActivity`: full screen, `excludeFromRecents`, Back → Home. Shows the top chunk, **Open**, **Start N min** (focus session), **Check it's done**, **Refresh Teams**, **Why am I blocked?**.
 - `BlockPolicy`: strict while today/tomorrow buckets are non-empty, earned time otherwise; unit-tested.
