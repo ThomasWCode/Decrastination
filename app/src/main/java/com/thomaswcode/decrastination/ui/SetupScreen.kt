@@ -39,6 +39,7 @@ import com.thomaswcode.decrastination.data.Secret
 import com.thomaswcode.decrastination.data.SourceStatus
 import com.thomaswcode.decrastination.enrich.AiUsage
 import com.thomaswcode.decrastination.enrich.EnrichWorker
+import com.thomaswcode.decrastination.enrich.ModelAlerts
 import com.thomaswcode.decrastination.learn.CalendarTime
 import com.thomaswcode.decrastination.learn.CheckInActivity
 import com.thomaswcode.decrastination.protect.ProtectionActivity
@@ -125,14 +126,16 @@ fun SetupScreen(graph: AppGraph, activity: Activity) {
         val usage = runtime.aiUsage.forMonth(AiUsage.monthOf(graph.clock.now(), graph.clock.zone()))
         SetupItem(
             title = "Claude",
-            done = settings.aiEnabled && settings.aiKeyActive && Secret.AnthropicApiKey in secrets && usage.lastError == null,
+            done = settings.aiEnabled && settings.aiKeyActive && Secret.AnthropicApiKey in secrets && usage.lastError == null && usage.keyProblem == null,
             detail = when {
                 Secret.AnthropicApiKey !in secrets -> "No API key: the rules do what they can, and nothing is sent to Claude."
                 !settings.aiKeyActive -> "Key saved; it waits like switching Claude on (Settings lists when it applies), so nothing is sent yet."
                 !settings.aiEnabled -> "Key saved; switched off in Settings, so nothing is sent."
+                // The key or its account can't be used: said with what puts it right.
+                usage.keyProblem != null -> "${usage.keyProblem.says}. ${usage.keyProblem.fix}: the rules stand in, and it's tried again an hour after each failed try."
                 // Its calls failing (a bad key, no connection): said, so it can be put right.
                 usage.lastError != null -> "On, but its last call failed (${usage.lastError.take(80)}): the rules stand in, and it's tried again after an hour."
-                else -> "On: £%.2f of £%d this month.".format(Locale.UK, usage.spentGbp(settings.usdToGbp), settings.aiMonthlyCapGbp)
+                else -> "On: $%.2f this month".format(Locale.UK, usage.spentUsd) + (settings.aiMonthlyCapUsd?.let { " of $$it" } ?: ", no cap: it stops when the account's credit runs out") + "."
             },
             action = "Enter key" to { enteringKey = true },
         )
@@ -179,8 +182,10 @@ fun SetupScreen(graph: AppGraph, activity: Activity) {
             enteringKey = false
             scope.launch {
                 graph.secrets.put(Secret.AnthropicApiKey, key)
-                // The last key's failure isn't this one's: it's tried at once, not after the rest.
-                graph.runtime.update { it.copy(aiUsage = it.aiUsage.copy(lastError = null)) }
+                // The last key's failure isn't this one's: it's tried at once, not after the rest, and
+                // its alert goes.
+                graph.runtime.update { it.copy(aiUsage = it.aiUsage.newKey()) }
+                ModelAlerts.keyFixed(activity)
                 // Put to use as switching Claude on is: at once unarmed, after the wait armed.
                 graph.changeSettings { it.copy(aiKeyActive = true) }
                 // A new key for one already in use: straight to work.
@@ -257,7 +262,7 @@ private fun KeyDialog(onDismiss: () -> Unit, onSave: (String) -> Unit) {
                     visualTransformation = PasswordVisualTransformation(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                 )
-                Text("Stored encrypted on this phone. Claude is used only once it's switched on in Settings, and never past the monthly cap.", style = MaterialTheme.typography.bodySmall)
+                Text("Stored encrypted on this phone. Claude is used only once it's switched on in Settings, and stops when the account's credit runs out, or at the monthly cap if you set one (Settings).", style = MaterialTheme.typography.bodySmall)
             }
         },
         confirmButton = { TextButton(enabled = key.isNotBlank(), onClick = { onSave(key.trim()) }) { Text("Save") } },

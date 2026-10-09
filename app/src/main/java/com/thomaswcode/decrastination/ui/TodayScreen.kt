@@ -1,6 +1,7 @@
 package com.thomaswcode.decrastination.ui
 
 import android.app.Activity
+import android.content.Intent
 import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -30,19 +31,21 @@ import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.core.Chunk
 import com.thomaswcode.decrastination.core.DayBucket
 import com.thomaswcode.decrastination.core.Plan
+import com.thomaswcode.decrastination.enrich.KeyProblem
 import com.thomaswcode.decrastination.widget.WidgetModel
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 /** The plan: the next thing to do, then each day's chunks (docs/scheduler.md §3). */
 @Composable
 fun TodayScreen(graph: AppGraph, activity: Activity) {
     val tasks by graph.tasks.state.collectAsStateWithLifecycle()
     val settings by graph.settings.state.collectAsStateWithLifecycle()
+    val runtime by graph.runtime.state.collectAsStateWithLifecycle()
     // The plan moves with the clock as well as the data: deadlines pass, the evening runs out.
     val now by produceState(graph.clock.now()) {
         while (true) {
@@ -61,6 +64,12 @@ fun TodayScreen(graph: AppGraph, activity: Activity) {
     }
 
     LazyColumn(Modifier.fillMaxWidth(), contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 24.dp)) {
+        // Claude's key stopped working while it's on: said first, till it's put right in Setup.
+        runtime.aiUsage.keyProblem?.takeIf { settings.aiEnabled && settings.aiKeyActive }?.let { problem ->
+            item(key = "key") {
+                KeyProblemCard(problem) { activity.startActivity(Intent(activity, MainActivity::class.java).putExtra(MainActivity.EXTRA_TAB, MainActivity.TAB_SETUP)) }
+            }
+        }
         item(key = "next") { NextCard(plan, zone, open) }
         plan.buckets.filter { it.chunks.isNotEmpty() || it.date == plan.today }.forEach { bucket ->
             item(key = "day-${bucket.date}") { DayHeader(bucket, plan.today) }
@@ -80,6 +89,20 @@ fun TodayScreen(graph: AppGraph, activity: Activity) {
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun KeyProblemCard(problem: KeyProblem, setup: () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("Claude has stopped working", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onErrorContainer)
+            Text("${problem.says}. ${problem.fix}; the rules stand in meanwhile.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onErrorContainer)
+            Button(onClick = setup) { Text("Open Setup") }
         }
     }
 }

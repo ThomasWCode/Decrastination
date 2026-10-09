@@ -6,6 +6,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class EnrichmentTest {
@@ -210,6 +211,19 @@ class EnrichmentTest {
         val again = ticked.withEnrichment(enrichment(task).copy(subSteps = steps))
         assertEquals(listOf(false, true), again.subSteps.map { it.done })
         assertEquals(60, again.handMin)
+    }
+
+    @Test
+    fun `a task's enrichment forgotten takes the steps it gave, not the source's`() {
+        val task = email()
+        val given = task.withEnrichment(enrichment(task).copy(subSteps = listOf(SubStep("Apply", 30))))
+        assertEquals(listOf("Apply"), given.subSteps.map { it.title })
+        val forgotten = given.withoutEnrichment()
+        assertNull(forgotten.enrichment)
+        assertEquals(emptyList(), forgotten.subSteps)
+        // The source's own steps stay.
+        val own = task.copy(subSteps = listOf(SubStep("Read", 5))).copy(enrichment = enrichment(task))
+        assertEquals(listOf("Read"), own.withoutEnrichment().subSteps.map { it.title })
     }
 
     @Test

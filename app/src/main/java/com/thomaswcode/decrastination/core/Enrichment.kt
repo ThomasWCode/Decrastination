@@ -32,6 +32,12 @@ data class Enrichment(
     val ankiSections: List<String> = emptyList(),
     /** The day of a test the work prepares for: it's due by then. */
     val testDate: Long? = null,
+    /**
+     * Why the model's steps or blocks weren't used (out of range, not adding up), so it's said on
+     * the task: its estimate is planned whole instead. Null when they were, or it gave none; the
+     * rules never drop a plan.
+     */
+    val dropped: String? = null,
 )
 
 /**
@@ -80,6 +86,9 @@ fun TaskItem.enriched(): TaskItem {
  * keeping those already done; steps of the source's own are kept.
  */
 /** Whether the task's steps are the ones its enrichment gave, not the source's own. */
+/** This task with its enrichment forgotten, and the steps it gave with it (the source's own stay): to be asked about afresh. */
+fun TaskItem.withoutEnrichment(): TaskItem = copy(enrichment = null, subSteps = if (stepsFromEnrichment()) emptyList() else subSteps)
+
 private fun TaskItem.stepsFromEnrichment(): Boolean = subSteps.isNotEmpty() && enrichment?.subSteps?.map { it.title } == subSteps.map { it.title }
 
 fun TaskItem.withEnrichment(new: Enrichment): TaskItem {

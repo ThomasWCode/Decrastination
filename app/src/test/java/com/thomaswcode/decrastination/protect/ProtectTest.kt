@@ -194,7 +194,12 @@ class SettingsChangesTest {
     fun `switching Claude on or raising its cap waits once armed, switching it off doesn't`() {
         val armed = Settings(armed = true)
         assertEquals(1, SettingsChanges.propose(armed, armed.copy(aiEnabled = true), emptyList(), now, ::newId).pending.size)
-        assertEquals(1, SettingsChanges.propose(armed, armed.copy(aiMonthlyCapGbp = 300), emptyList(), now, ::newId).pending.size)
+        // A cap raised or lifted waits; one set where there was none, or lowered, doesn't.
+        val capped = armed.copy(aiMonthlyCapUsd = 200)
+        assertEquals(1, SettingsChanges.propose(capped, capped.copy(aiMonthlyCapUsd = 300), emptyList(), now, ::newId).pending.size)
+        assertEquals(1, SettingsChanges.propose(capped, capped.copy(aiMonthlyCapUsd = null), emptyList(), now, ::newId).pending.size)
+        assertEquals(100, SettingsChanges.propose(armed, armed.copy(aiMonthlyCapUsd = 100), emptyList(), now, ::newId).settings.aiMonthlyCapUsd)
+        assertEquals(100, SettingsChanges.propose(capped, capped.copy(aiMonthlyCapUsd = 100), emptyList(), now, ::newId).settings.aiMonthlyCapUsd)
         val on = armed.copy(aiEnabled = true)
         assertEquals(false, SettingsChanges.propose(on, on.copy(aiEnabled = false), emptyList(), now, ::newId).settings.aiEnabled)
     }

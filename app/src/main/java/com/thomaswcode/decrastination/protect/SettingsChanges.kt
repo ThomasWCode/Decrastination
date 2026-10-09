@@ -71,8 +71,7 @@ object SettingsChanges {
         // it on, or letting it spend more, waits.
         "aiEnabled" to { old, new -> !old.aiEnabled && new.aiEnabled },
         "aiKeyActive" to { old, new -> !old.aiKeyActive && new.aiKeyActive },
-        "aiMonthlyCapGbp" to { old, new -> new.aiMonthlyCapGbp > old.aiMonthlyCapGbp },
-        "usdToGbp" to { old, new -> new.usdToGbp < old.usdToGbp },
+        "aiMonthlyCapUsd" to { old, new -> old.aiMonthlyCapUsd != null && (new.aiMonthlyCapUsd == null || new.aiMonthlyCapUsd > old.aiMonthlyCapUsd) },
         // Reminders' times: nothing is blocked by them.
         "briefingWeekdayMin" to { _, _ -> false },
         "briefingWeekendMin" to { _, _ -> false },
@@ -102,8 +101,7 @@ object SettingsChanges {
         "armed" to "Protection",
         "loosenDelayHours" to "Delay on loosening changes (hours)",
         "aiEnabled" to "Claude",
-        "aiMonthlyCapGbp" to "Claude's monthly cap (£)",
-        "usdToGbp" to "Pounds per dollar",
+        "aiMonthlyCapUsd" to "Claude's monthly cap ($)",
         "briefingWeekdayMin" to "Morning briefing, school days",
         "briefingWeekendMin" to "Morning briefing, weekends",
         "checkInMin" to "Sunday check-in",

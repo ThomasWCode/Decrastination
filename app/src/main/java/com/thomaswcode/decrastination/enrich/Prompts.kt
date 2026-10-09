@@ -197,6 +197,12 @@ object Answers {
     private const val STEPS_SLACK_MIN = 10
     private val SECTION = Regex("""^[1-9]\.[1-9]$""")
 
+    /** The model's steps or blocks as checked: those the planner can take, or none, and then why not. */
+    private class Checked(val steps: List<SubStep>?, val dropped: String? = null)
+
+    /** [minutes] in hours, for a reason given: "21 hours", "20.8 hours". */
+    private fun hours(minutes: Int): String = if (minutes % 60 == 0) "${minutes / 60} hours" else "%.1f hours".format(Locale.UK, minutes / 60.0)
+
     /** [step] in even parts no longer than a focus session ([Focus.MAX_SESSION_MIN]), numbered if there's more than one. */
     private fun fitSessions(step: SubStep): List<SubStep> {
         val parts = (step.minutes + Focus.MAX_SESSION_MIN - 1) / Focus.MAX_SESSION_MIN
@@ -219,8 +225,9 @@ object Answers {
                 val deadline = t.deadline?.let { dateTime(it, zone) }?.takeIf { plausible(it, now) }
                 val opens = t.actionableFrom?.let { date(it, zone, LocalTime.MIDNIGHT) }?.takeIf { plausible(it, now) }
                 // Blocks of work, each perhaps with its own dates (Q12): not trusted, the triage stands
-                // without them.
-                val blocks = trusted(steps(t.blocks, now, zone, vocabulary = false, maxMinutes = MAX_EFFORT, dueBy = deadline ?: sourceDue(task), opens = opens), t.effortMin, t.blocks.size)
+                // without them, and the task says why.
+                val checked = trusted(steps(t.blocks, now, zone, vocabulary = false, maxMinutes = MAX_EFFORT, dueBy = deadline ?: sourceDue(task), opens = opens, noun = "block"), t.effortMin, t.blocks.size)
+                val blocks = checked.steps
                 base.copy(
                     // Blocks of work make it something to do, whatever else it says.
                     kind = if (blocks != null) Kind.Admin else Kind.entries.firstOrNull { it.name == t.kind && it in setOf(Kind.Admin, Kind.Event, Kind.Info) },
@@ -229,6 +236,7 @@ object Answers {
                     effortMin = blocks?.sumOf { it.minutes } ?: total,
                     nextStep = t.nextStep.trim().takeIf { it.isNotEmpty() }?.take(MAX_NEXT_STEP),
                     subSteps = blocks,
+                    dropped = checked.dropped,
                 )
             }
             Enrichments.Job.Assignment -> json.decodeFromString(Split.serializer(), text).let { s ->
@@ -237,8 +245,8 @@ object Answers {
                 val testDate = s.testDate?.let { date(it, zone, SCHOOL_STARTS) }?.takeIf { plausible(it, now) }
                 // By the test, where there's one before the source's deadline: it's the task's then.
                 val read = steps(s.subSteps, now, zone, vocabulary = true, maxMinutes = MAX_STEP, dueBy = listOfNotNull(sourceDue(task), testDate).minOrNull())
-                val usable = read != null
-                val valid = read.orEmpty()
+                val usable = read.steps != null
+                val valid = read.steps.orEmpty()
                 // More steps than the planner takes: the rest folded, so none of the work goes (see [fold]).
                 val steps = if (valid.size <= MAX_STEPS) valid else valid.take(MAX_STEPS - 1) + fold(valid.drop(MAX_STEPS - 1))
                 val sections = sections(s.ankiSections + steps.flatMap { it.ankiSections })
@@ -260,9 +268,18 @@ object Answers {
                 // adding up past it: the task's own estimate is planned instead.
                 val inRange = sum <= MAX_EFFORT && (allVocabulary || s.effortMin <= MAX_EFFORT)
                 val agree = inRange && (total == null || abs(sum - total) <= maxOf(STEPS_SLACK_MIN, total / 10))
+                // Steps given but not planned, and why: said on the task, so it can be checked.
+                val dropped = when {
+                    !usable -> read.dropped
+                    agree || planned.isEmpty() -> null
+                    sum > MAX_EFFORT -> "${hours(sum)} of steps, past the ${MAX_EFFORT / 60} the app takes from one task"
+                    !allVocabulary && s.effortMin > MAX_EFFORT -> "a total of ${hours(s.effortMin)}, past the ${MAX_EFFORT / 60} the app takes from one task"
+                    else -> "the steps add up to $sum minutes, not the ${s.effortMin} it gives in all"
+                }
                 base.copy(
                     effortMin = total ?: sum.takeIf { agree && it > 0 },
                     subSteps = planned.takeIf { agree }.orEmpty().ifEmpty { null },
+                    dropped = dropped,
                     // A split not trusted hands no vocabulary to a deck either: its total, planned
                     // whole, already holds it.
                     ankiSections = if (usable && agree) sections else emptyList(),
@@ -272,50 +289,63 @@ object Answers {
             Enrichments.Job.Effort -> json.decodeFromString(Estimate.serializer(), text).let { e ->
                 val total = effort(e.effortMin)
                 // Big enough to do in parts: its blocks, each perhaps with its own dates (Q12).
-                val blocks = trusted(steps(e.blocks, now, zone, vocabulary = false, maxMinutes = MAX_EFFORT, dueBy = sourceDue(task)), e.effortMin, e.blocks.size)
-                base.copy(effortMin = blocks?.sumOf { it.minutes } ?: total, subSteps = blocks)
+                val checked = trusted(steps(e.blocks, now, zone, vocabulary = false, maxMinutes = MAX_EFFORT, dueBy = sourceDue(task), noun = "block"), e.effortMin, e.blocks.size)
+                val blocks = checked.steps
+                base.copy(effortMin = blocks?.sumOf { it.minutes } ?: total, subSteps = blocks, dropped = checked.dropped)
             }
         }
     }.getOrNull()
 
     /**
-     * [given] as steps the planner can take, or null if any can't be: no title, minutes out of
-     * range (up to [maxMinutes]), a date out of range, a start after its own deadline or after its
-     * task's ([dueBy]), a deadline before its task can be started ([opens]), or an order its dates
-     * forbid (a step that can't start till after one listed later is due). Each keeps its own dates; one
-     * longer than a focus session is cut into parts that keep them, so finishing a session never
-     * ticks off more than it did. A step tagged as vocabulary ([vocabulary] jobs only) that asks for
-     * anything else too stays planned whole.
+     * [given] as steps the planner can take, or none if any can't be, and why ([noun] names them):
+     * no title, minutes out of range (up to [maxMinutes]), a date that can't be read or is out of
+     * range, a start after its own deadline or after its task's ([dueBy]), a deadline before its
+     * task can be started ([opens]), or an order its dates forbid (a step that can't start till
+     * after one listed later is due). Each keeps its own dates; one longer than a focus session is
+     * cut into parts that keep them, so finishing a session never ticks off more than it did. A
+     * step tagged as vocabulary ([vocabulary] jobs only) that asks for anything else too stays
+     * planned whole.
      */
-    private fun steps(given: List<Step>, now: Long, zone: ZoneId, vocabulary: Boolean, maxMinutes: Int, dueBy: Long?, opens: Long? = null): List<SubStep>? {
+    private fun steps(given: List<Step>, now: Long, zone: ZoneId, vocabulary: Boolean, maxMinutes: Int, dueBy: Long?, opens: Long? = null, noun: String = "step"): Checked {
+        fun no(why: String) = Checked(null, why)
         val read = given.map { step ->
-            if (step.title.isBlank() || step.minutes !in 1..maxMinutes) return null
-            val from = step.from?.let { date(it, zone, LocalTime.MIDNIGHT)?.takeIf { at -> plausible(at, now) } ?: return null }
-            val due = step.due?.let { dateTime(it, zone)?.takeIf { at -> plausible(at, now) } ?: return null }
-            if (from != null && ((due != null && from > due) || (dueBy != null && from > dueBy))) return null
-            if (due != null && opens != null && due < opens) return null
+            if (step.title.isBlank()) return no("a $noun has no title")
+            if (step.minutes < 1) return no("a $noun has no minutes")
+            if (step.minutes > maxMinutes) return no("a $noun of ${step.minutes} minutes, past the $maxMinutes one can take")
+            val from = step.from?.let { date(it, zone, LocalTime.MIDNIGHT) ?: return no("a $noun's date can't be read") }
+            val due = step.due?.let { dateTime(it, zone) ?: return no("a $noun's date can't be read") }
+            if (listOfNotNull(from, due).any { !plausible(it, now) }) return no("a $noun's date is out of range")
+            if (from != null && due != null && from > due) return no("a $noun starts after it's due")
+            if (from != null && dueBy != null && from > dueBy) return no("a $noun starts after the task is due")
+            if (due != null && opens != null && due < opens) return no("a $noun is due before the email can be started")
             val sections = if (vocabulary && AnkiRules.vocabularyOnly(step.title)) sections(step.ankiSections) else emptyList()
             SubStep(step.title.trim().take(MAX_TITLE), step.minutes, ankiSections = sections, from = from, dueAt = due)
         }
         for (i in read.indices) {
             val from = read[i].from ?: continue
-            if (read.drop(i + 1).any { later -> later.dueAt != null && later.dueAt < from }) return null
+            if (read.drop(i + 1).any { later -> later.dueAt != null && later.dueAt < from }) return no("the ${noun}s' dates are out of order")
         }
-        return read.flatMap(::fitSessions)
+        return Checked(read.flatMap(::fitSessions))
     }
 
     /**
-     * An email's or planner item's [blocks], if they can be planned: some, no more than
+     * An email's or planner item's blocks ([checked]), if they can be planned: some, no more than
      * [Prompts.MAX_BLOCKS] as [given] (before a long one was cut into parts that fit a session),
      * within the most a task in blocks is taken to be ([MAX_BLOCKS_EFFORT]), and adding up to its
-     * [total] (within a tenth, or ten minutes), which has to be within it too. Otherwise null, and
-     * its estimate is planned whole.
+     * [total] (within a tenth, or ten minutes), which has to be within it too. Otherwise none, and
+     * why: its estimate is planned whole. None given, there's nothing to drop.
      */
-    private fun trusted(blocks: List<SubStep>?, total: Int, given: Int): List<SubStep>? {
-        if (blocks.isNullOrEmpty() || given > Prompts.MAX_BLOCKS || total !in 1..MAX_BLOCKS_EFFORT) return null
+    private fun trusted(checked: Checked, total: Int, given: Int): Checked {
+        val blocks = checked.steps ?: return checked
+        if (blocks.isEmpty()) return Checked(null)
+        fun no(why: String) = Checked(null, why)
+        if (given > Prompts.MAX_BLOCKS) return no("$given blocks, past the ${Prompts.MAX_BLOCKS} the app takes")
         val sum = blocks.sumOf { it.minutes }
-        if (sum > MAX_BLOCKS_EFFORT || abs(sum - total) > maxOf(STEPS_SLACK_MIN, total / 10)) return null
-        return blocks
+        val most = maxOf(sum, total)
+        if (most > MAX_BLOCKS_EFFORT) return no("${hours(most)} of blocks, past the ${MAX_BLOCKS_EFFORT / 60} the app takes from one task")
+        if (total < 1) return no("the blocks come with no total")
+        if (abs(sum - total) > maxOf(STEPS_SLACK_MIN, total / 10)) return no("the blocks add up to $sum minutes, not the $total it gives in all")
+        return checked
     }
 
     /**

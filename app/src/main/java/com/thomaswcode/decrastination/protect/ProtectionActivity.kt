@@ -104,7 +104,11 @@ class ProtectionActivity : ComponentActivity() {
             refresh++
             if (step == Step.Explain && Watchdog.isAdminActive(this)) step = Step.ParentCode
         }
-        val notificationLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { refresh++ }
+        val notificationLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
+            refresh++
+            // Allowed now: alerts that couldn't be shown before are.
+            graph.reconcileAlerts()
+        }
         val hasParentCode = Secret.TotpSecret in secrets
         val now = graph.clock.now()
 

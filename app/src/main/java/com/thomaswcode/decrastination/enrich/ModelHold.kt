@@ -13,17 +13,17 @@ enum class ModelHold {
     /** Its last call failed (no connection, a bad key): it's left alone for [REST_MS] after. */
     Resting,
 
-    /** No room under this month's cap for another call at its dearest. */
+    /** No room under this month's cap, where one is set, for another call at its dearest. */
     Capped;
 
     companion object {
         const val REST_MS = 3_600_000L
 
         /** What holds the model at [now], or null if it can be asked. */
-        fun of(on: Boolean, usage: AiUsage, now: Long, zone: ZoneId, capGbp: Int, usdToGbp: Double): ModelHold? = when {
+        fun of(on: Boolean, usage: AiUsage, now: Long, zone: ZoneId, capUsd: Int?): ModelHold? = when {
             !on -> Off
             usage.lastError != null && now - (usage.lastCallAt ?: 0L) < REST_MS -> Resting
-            !usage.forMonth(AiUsage.monthOf(now, zone)).allows(capGbp, usdToGbp) -> Capped
+            !usage.forMonth(AiUsage.monthOf(now, zone)).allows(capUsd) -> Capped
             else -> null
         }
     }

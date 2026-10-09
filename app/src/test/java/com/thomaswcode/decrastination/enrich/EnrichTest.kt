@@ -2,13 +2,21 @@ package com.thomaswcode.decrastination.enrich
 
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.Fixtures.LONDON
+import com.thomaswcode.decrastination.core.Enrichment
 import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.core.Kind
-import com.thomaswcode.decrastination.core.SourceValues
 import com.thomaswcode.decrastination.core.Source
+import com.thomaswcode.decrastination.core.SourceValues
+import com.thomaswcode.decrastination.core.Status
 import com.thomaswcode.decrastination.core.TaskItem
-import kotlinx.coroutines.runBlocking
 import com.thomaswcode.decrastination.sources.anki.AnkiRules
+import kotlin.test.AfterTest
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
+import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -18,12 +26,6 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
-import kotlin.test.AfterTest
-import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertFalse
-import kotlin.test.assertNull
-import kotlin.test.assertTrue
 
 private val NOW = Fixtures.at("2026-10-09T17:00")
 
@@ -289,12 +291,14 @@ class AnswersTest {
         val wild = parse(Enrichments.Job.Effort, """{"effortMin":1250,"blocks":[$blocks]}""")!!
         assertNull(wild.subSteps)
         assertNull(wild.effortMin)
+        assertEquals("20.8 hours of blocks, past the 20 the app takes from one task", wild.dropped)
         // The email due on the 15th; a block opening on the 20th can't be done by then.
         val late = parse(
             Enrichments.Job.Email,
             """{"kind":"Admin","actionableFrom":null,"deadline":"2026-10-15","effortMin":60,"nextStep":"Apply","blocks":[{"title":"Apply","minutes":60,"from":"2026-10-20","due":null}]}""",
         )!!
         assertNull(late.subSteps)
+        assertEquals("a block starts after the task is due", late.dropped)
     }
 
     @Test
@@ -304,8 +308,10 @@ class AnswersTest {
             """{"kind":"Admin","actionableFrom":"2026-12-01","deadline":"2026-12-31","effortMin":60,"nextStep":"Apply","blocks":[{"title":"Apply","minutes":60,"from":null,"due":"2026-11-15"}]}""",
         )!!
         assertNull(early.subSteps)
+        assertEquals("a block is due before the email can be started", early.dropped)
         val backwards = parse(Enrichments.Job.Effort, """{"effortMin":60,"blocks":[{"title":"A","minutes":30,"from":"2026-10-20","due":null},{"title":"B","minutes":30,"from":null,"due":"2026-10-12"}]}""")!!
         assertNull(backwards.subSteps)
+        assertEquals("the blocks' dates are out of order", backwards.dropped)
     }
 
     @Test
@@ -315,7 +321,9 @@ class AnswersTest {
         val e = parse(Enrichments.Job.Effort, """{"effortMin":$total,"blocks":[${given(Prompts.MAX_BLOCKS)}]}""")!!
         assertEquals(Prompts.MAX_BLOCKS + 1, e.subSteps!!.size)
         // One more than that isn't trusted.
-        assertNull(parse(Enrichments.Job.Effort, """{"effortMin":${total + 10},"blocks":[${given(Prompts.MAX_BLOCKS + 1)}]}""")!!.subSteps)
+        val over = parse(Enrichments.Job.Effort, """{"effortMin":${total + 10},"blocks":[${given(Prompts.MAX_BLOCKS + 1)}]}""")!!
+        assertNull(over.subSteps)
+        assertEquals("31 blocks, past the 30 the app takes", over.dropped)
     }
 
     @Test
@@ -334,6 +342,24 @@ class AnswersTest {
     }
 
     @Test
+    fun `a dropped plan says why`() {
+        fun block(title: String = "Apply", minutes: Int = 30, from: String? = null, due: String? = null) =
+            """{"title":"$title","minutes":$minutes,"from":${from?.let { "\"$it\"" }},"due":${due?.let { "\"$it\"" }}}"""
+        fun effort(vararg blocks: String) = parse(Enrichments.Job.Effort, """{"effortMin":${30 * blocks.size},"blocks":[${blocks.joinToString(",")}]}""")!!.dropped
+        assertEquals("a block has no title", effort(block(title = " ")))
+        assertEquals("a block has no minutes", parse(Enrichments.Job.Effort, """{"effortMin":30,"blocks":[${block(minutes = 0)}]}""")!!.dropped)
+        assertEquals("a block of 700 minutes, past the 600 one can take", parse(Enrichments.Job.Effort, """{"effortMin":700,"blocks":[${block(minutes = 700)}]}""")!!.dropped)
+        assertEquals("a block's date can't be read", effort(block(due = "soon")))
+        assertEquals("a block's date is out of range", effort(block(due = "2030-01-01")))
+        assertEquals("a block starts after it's due", effort(block(from = "2026-10-20", due = "2026-10-15")))
+        // An assignment's steps say the same of a step, and of a total past one task's.
+        val split = { steps: String, total: Int -> parse(Enrichments.Job.Assignment, """{"subSteps":[$steps],"effortMin":$total,"ankiSections":[],"testDate":null}""", assignment("Do it"))!!.dropped }
+        assertEquals("a step of 300 minutes, past the 240 one can take", split("""{"title":"Essay","minutes":300,"ankiSections":[],"from":null,"due":null}""", 300))
+        assertEquals("the steps add up to 60 minutes, not the 120 it gives in all", split("""{"title":"Essay","minutes":60,"ankiSections":[],"from":null,"due":null}""", 120))
+        assertNull(split("""{"title":"Essay","minutes":60,"ankiSections":[],"from":null,"due":null}""", 60))
+    }
+
+    @Test
     fun `a planner item can come back in blocks too`() {
         val e = parse(Enrichments.Job.Effort, """{"effortMin":120,"blocks":[{"title":"Past paper 1","minutes":60,"from":null,"due":null},{"title":"Mark it and go over mistakes","minutes":60,"from":null,"due":null}]}""")!!
         assertEquals(listOf("Past paper 1", "Mark it and go over mistakes"), e.subSteps!!.map { it.title })
@@ -343,6 +369,10 @@ class AnswersTest {
         val off = parse(Enrichments.Job.Effort, """{"effortMin":200,"blocks":[{"title":"A","minutes":30,"from":null,"due":null}]}""")!!
         assertNull(off.subSteps)
         assertEquals(200, off.effortMin)
+        assertEquals("the blocks add up to 30 minutes, not the 200 it gives in all", off.dropped)
+        // Kept, or none given: nothing dropped.
+        assertNull(e.dropped)
+        assertNull(parse(Enrichments.Job.Effort, """{"effortMin":35,"blocks":[]}""")!!.dropped)
     }
 
     @Test
@@ -385,21 +415,24 @@ class AiUsageTest {
     fun `the model is held while off, for an hour after a failed call, and at its cap`() {
         val now = Fixtures.at("2026-10-10T12:00")
         val month = AiUsage.monthOf(now, LONDON)
-        assertEquals(ModelHold.Off, ModelHold.of(false, AiUsage(month = month), now, LONDON, 200, 0.79))
+        assertEquals(ModelHold.Off, ModelHold.of(false, AiUsage(month = month), now, LONDON, 200))
         val failed = AiUsage(month = month).failure("no connection", now - 10 * 60_000L)
-        assertEquals(ModelHold.Resting, ModelHold.of(true, failed, now, LONDON, 200, 0.79))
-        assertNull(ModelHold.of(true, failed, now + ModelHold.REST_MS, LONDON, 200, 0.79))
-        assertEquals(ModelHold.Capped, ModelHold.of(true, AiUsage(month = month, spentUsd = 1000.0), now, LONDON, 200, 0.79))
-        assertNull(ModelHold.of(true, AiUsage(month = month), now, LONDON, 200, 0.79))
+        assertEquals(ModelHold.Resting, ModelHold.of(true, failed, now, LONDON, 200))
+        assertNull(ModelHold.of(true, failed, now + ModelHold.REST_MS, LONDON, 200))
+        assertEquals(ModelHold.Capped, ModelHold.of(true, AiUsage(month = month, spentUsd = 1000.0), now, LONDON, 200))
+        assertNull(ModelHold.of(true, AiUsage(month = month), now, LONDON, 200))
     }
 
     @Test
     fun `a new month starts at nothing, and a call is refused that could pass the cap`() {
         val usage = AiUsage(month = "2026-09", spentUsd = 250.0)
         assertEquals(0.0, usage.forMonth("2026-10").spentUsd)
-        assertTrue(AiUsage("2026-10", spentUsd = 10.0).allows(capGbp = 200, usdToGbp = 0.79))
-        // £200 at 0.79 is $253.16: $252.80 spent leaves no room for a call at its dearest.
-        assertEquals(false, AiUsage("2026-10", spentUsd = 252.80).allows(capGbp = 200, usdToGbp = 0.79))
+        assertTrue(AiUsage("2026-10", spentUsd = 10.0).allows(capUsd = 200))
+        // $199.50 spent leaves no room under $200 for a call at its dearest.
+        assertEquals(false, AiUsage("2026-10", spentUsd = 199.50).allows(capUsd = 200))
+        // No cap, as by default: the prepaid account's credit is the limit.
+        assertTrue(AiUsage("2026-10", spentUsd = 5_000.0).allows(capUsd = null))
+        assertNull(ModelHold.of(true, AiUsage(month = "2026-10", spentUsd = 5_000.0), Fixtures.at("2026-10-10T12:00"), LONDON, null))
     }
 
     @Test
@@ -409,6 +442,62 @@ class AiUsageTest {
         val longest = Pricing.costUsd("claude-opus-4-8", input = 3L * Prompts.MAX_TEXT + 2_000, output = ClaudeEnricher.MAX_TOKENS)
         assertTrue(longest <= Pricing.WORST_CALL_USD, "$longest > ${Pricing.WORST_CALL_USD}")
         assertEquals(0.66, Pricing.WORST_CALL_USD, 1e-9)
+    }
+
+    @Test
+    fun `a key problem is alerted once a stretch, once it can be seen, and ends with a call that works or a new key`() {
+        val first = AiUsage("2026-10").failure("401", NOW, KeyProblem.Rejected)
+        assertTrue(first.keyAlertDue)
+        assertEquals(NOW, first.keyProblemSince)
+        // Not shown (notifications off): the hourly retry finds it still due.
+        val retry = first.failure("401", NOW + 3_600_000, KeyProblem.Rejected)
+        assertTrue(retry.keyAlertDue)
+        assertEquals(NOW, retry.keyProblemSince)
+        // Shown: not again while it stands, nor for no network meanwhile.
+        val shown = retry.alerted(KeyProblem.Rejected)
+        assertFalse(shown.failure("401", NOW + 7_200_000, KeyProblem.Rejected).keyAlertDue)
+        val offline = shown.failure("timeout", NOW + 7_200_000)
+        assertEquals(KeyProblem.Rejected, offline.keyProblem)
+        assertFalse(offline.keyAlertDue)
+        // Another problem is another stretch, and another alert; one shown for the last doesn't count.
+        val broke = offline.failure("400", NOW + 10_800_000, KeyProblem.NoCredit)
+        assertTrue(broke.keyAlertDue)
+        assertTrue(broke.alerted(KeyProblem.Rejected).keyAlertDue)
+        // Over at a call that works, or with a new key; carried into a new month till then, as shown.
+        assertNull(broke.record(0.01, refused = false, at = NOW + 14_400_000).keyProblem)
+        assertNull(broke.newKey().keyProblem)
+        assertNull(broke.newKey().lastError)
+        val told = broke.alerted(KeyProblem.NoCredit)
+        assertEquals(KeyProblem.NoCredit, told.forMonth("2026-11").keyProblem)
+        assertFalse(told.forMonth("2026-11").keyAlertDue)
+    }
+
+    @Test
+    fun `a dropped plan's warning is due till shown for the plan as it is`() {
+        val task = TaskItem(id = "gmail:t1", source = Source.Gmail, sourceId = "t1", title = "Calendar", detail = "x", kind = Kind.Admin, firstSeenAt = NOW, lastSeenAt = NOW)
+        val dropped = task.copy(enrichment = Enrichment(inputHash = Enrichments.inputHash(task), by = "model", at = NOW, dropped = "31 blocks, past the 30 the app takes"))
+        val standing = ModelAlerts.standing(listOf(dropped))
+        assertEquals(listOf("gmail:t1" to "31 blocks, past the 30 the app takes"), standing.map { it.first.id to it.second })
+        // Not shown yet (notifications off when it was laid): due.
+        assertEquals(1, ModelAlerts.unshown(standing, emptyMap()).size)
+        // Shown for this content: not again.
+        assertEquals(0, ModelAlerts.unshown(standing, mapOf("gmail:t1" to Enrichments.inputHash(task))).size)
+        // Shown for an older content: this plan is another warning.
+        assertEquals(1, ModelAlerts.unshown(standing, mapOf("gmail:t1" to "older")).size)
+        // Done, or its plan kept since: nothing standing.
+        assertEquals(0, ModelAlerts.standing(listOf(dropped.copy(status = Status.Done))).size)
+        assertEquals(0, ModelAlerts.standing(listOf(dropped.copy(enrichment = dropped.enrichment!!.copy(dropped = null)))).size)
+    }
+
+    @Test
+    fun `a key or credit problem is told from any other failure`() {
+        assertEquals(KeyProblem.Rejected, KeyProblem.of(401, "authentication_error", "invalid x-api-key"))
+        assertEquals(KeyProblem.NotAllowed, KeyProblem.of(403, "permission_error", "not allowed"))
+        assertEquals(KeyProblem.NoCredit, KeyProblem.of(400, "invalid_request_error", "Your credit balance is too low to access the Anthropic API."))
+        assertEquals(KeyProblem.NoCredit, KeyProblem.of(402, "billing_error", null))
+        assertNull(KeyProblem.of(400, "invalid_request_error", "max_tokens: too large"))
+        assertNull(KeyProblem.of(529, "overloaded_error", "Overloaded"))
+        assertNull(KeyProblem.of(java.io.IOException("no network")))
     }
 
     @Test
@@ -495,6 +584,21 @@ class ClaudeEnricherTest {
     fun `an answer cut off by its token limit is not trusted`() = runBlocking {
         server.enqueue(reply("""{"subSteps":[{"title":"Pa""", stop = "max_tokens"))
         assertNull(enricher().enrich(assignment("1. a\n2. b"), Enrichments.Job.Assignment, NOW).enrichment)
+    }
+
+    @Test
+    fun `the API's refusal of a key, or of the account, is read from the SDK's exception`() = runBlocking {
+        fun error(status: Int, type: String, message: String) = MockResponse().setResponseCode(status).setHeader("Content-Type", "application/json")
+            .setBody("""{"type":"error","error":{"type":"$type","message":"$message"}}""")
+        suspend fun failure(): Throwable = runCatching { enricher().enrich(email(), Enrichments.Job.Email, NOW) }.exceptionOrNull()!!
+        server.enqueue(error(401, "authentication_error", "invalid x-api-key"))
+        assertEquals(KeyProblem.Rejected, KeyProblem.of(failure()))
+        server.enqueue(error(403, "permission_error", "Your API key does not have permission to use the specified resource."))
+        assertEquals(KeyProblem.NotAllowed, KeyProblem.of(failure()))
+        server.enqueue(error(400, "invalid_request_error", "Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits."))
+        assertEquals(KeyProblem.NoCredit, KeyProblem.of(failure()))
+        server.enqueue(error(400, "invalid_request_error", "messages: at least one message is required"))
+        assertNull(KeyProblem.of(failure()))
     }
 
     @Test

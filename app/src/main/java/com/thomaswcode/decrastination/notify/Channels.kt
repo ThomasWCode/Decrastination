@@ -10,6 +10,7 @@ object Channels {
     const val SESSION = "session"
     const val PROTECTION = "protection"
     const val DAILY = "daily"
+    const val MODEL = "model"
 
     fun create(context: Context) {
         val manager = context.getSystemService(NotificationManager::class.java) ?: return
@@ -26,6 +27,9 @@ object Channels {
                 },
                 NotificationChannel(DAILY, "Plan and check-ins", NotificationManager.IMPORTANCE_DEFAULT).apply {
                     description = "The morning briefing, how finished work went, calendar questions, and the Sunday check-in"
+                },
+                NotificationChannel(MODEL, "Claude", NotificationManager.IMPORTANCE_DEFAULT).apply {
+                    description = "When Claude's plan for a task is dropped, or its API key stops working"
                 },
             ),
         )
