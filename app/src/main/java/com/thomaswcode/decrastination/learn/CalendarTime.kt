@@ -14,6 +14,7 @@ import androidx.core.app.NotificationCompat
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.R
 import com.thomaswcode.decrastination.block.BlockPolicy
+import com.thomaswcode.decrastination.core.Instructions
 import com.thomaswcode.decrastination.notify.Channels
 import com.thomaswcode.decrastination.notify.Notify
 import com.thomaswcode.decrastination.widget.WidgetUpdater
@@ -87,10 +88,22 @@ object CalendarTime {
         }
         graph.watchCalendar()
         val now = graph.clock.now()
+        // Your instructions about events over your answers to its questions; a question one of them
+        // has answered since it was asked is withdrawn.
+        val yours = Instructions.eventAnswers(graph.instructions.value.applied)
         val events = runCatching { withContext(Dispatchers.IO) { read(context, now - DAY_MS, now + LOOK_AHEAD_MS) } }
             .onFailure { Log.w(AppGraph.TAG, "Can't read the calendar", it) }
-            .getOrNull() ?: return
-        val time = EventJudge.time(events, graph.runtime.value.eventAnswers, graph.clock.zone())
+            .getOrNull() ?: run {
+            // Not read this time: the events last read, judged again with the answers as they are
+            // now, so an instruction applied or taken back counts all the same.
+            graph.calendarTime = EventJudge.time(graph.calendarTime.events, graph.runtime.value.eventAnswers + yours, graph.clock.zone())
+            return
+        }
+        yours.keys.forEach { cancelQuestion(context, it) }
+        // Not counted as asked: taken back, the instruction leaves it to be asked again.
+        if (graph.runtime.value.eventsAsked.any { it in yours }) graph.runtime.update { it.copy(eventsAsked = it.eventsAsked - yours.keys) }
+        val answers = graph.runtime.value.eventAnswers + yours
+        val time = EventJudge.time(events, answers, graph.clock.zone())
         graph.calendarTime = time
         // Not at night: they're asked at the first look after quiet hours. Nor while the question
         // couldn't be seen (notifications off): it's asked once it can be, not marked asked unseen.

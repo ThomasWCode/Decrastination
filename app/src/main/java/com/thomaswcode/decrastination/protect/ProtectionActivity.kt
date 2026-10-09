@@ -403,27 +403,12 @@ class ProtectionActivity : ComponentActivity() {
 
     /** Checks [code] and, if it's right, does what it was for. Returns what went wrong, or null. */
     private suspend fun applyWithCode(graph: AppGraph, target: CodeTarget, code: String): String? {
-        val secret = graph.secrets[Secret.TotpSecret]?.let(Totp::fromBase32) ?: return "No parent code is set"
-        val now = graph.clock.now()
-        var outcome: CodeLock.Result = CodeLock.Result.Reused
         // The code is used up first (with the unblock, if that's what it was for), then the change
         // it allows is applied.
-        graph.runtime.update { state ->
-            val (result, lock) = state.codeLock.attempt(secret, code, now)
-            outcome = result
-            if (result is CodeLock.Result.Accepted && target == CodeTarget.Unblock) {
-                state.copy(codeLock = lock, overrideUntil = now + UNBLOCK_MS)
-            } else {
-                state.copy(codeLock = lock)
-            }
-        }
-        if (outcome is CodeLock.Result.Accepted && target is CodeTarget.Change) graph.applyNow(target.id)
-        return when (val result = outcome) {
-            is CodeLock.Result.Accepted -> null
-            is CodeLock.Result.Wrong -> "Wrong code: ${result.triesLeft} ${if (result.triesLeft == 1) "try" else "tries"} left"
-            is CodeLock.Result.Locked -> "Too many wrong codes: try again ${Format.at(result.until, now, graph.clock.zone())}"
-            CodeLock.Result.Reused -> "That code has been used: wait for the next one"
-        }
+        val unblock = if (target == CodeTarget.Unblock) graph.clock.now() + UNBLOCK_MS else null
+        graph.useParentCode(code, unblock)?.let { return it }
+        if (target is CodeTarget.Change) graph.applyNow(target.id)
+        return null
     }
 
     /** A sideloaded app, never on Play, whose blocker One UI mustn't put to sleep. */

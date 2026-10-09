@@ -83,8 +83,11 @@ object EventJudge {
         }
     }
 
-    /** What the planner takes: the busy intervals, and the minutes of each day taken at no set time. */
-    data class Time(val busy: List<Busy>, val dayLoads: Map<LocalDate, Int>, val toAsk: List<CalendarEvent>)
+    /**
+     * What the planner takes: the busy intervals, and the minutes of each day taken at no set time;
+     * and the events as read, for the calendar's page and your instructions about them.
+     */
+    data class Time(val busy: List<Busy>, val dayLoads: Map<LocalDate, Int>, val toAsk: List<CalendarEvent>, val events: List<CalendarEvent> = emptyList())
 
     fun time(events: List<CalendarEvent>, answers: Map<String, String>, zone: ZoneId): Time {
         val busy = mutableListOf<Busy>()
@@ -108,7 +111,7 @@ object EventJudge {
         }
         // Every one to ask about: which of them is asked (not over yet, one per name) is decided
         // with the time, so an ended occurrence can't stand in for the next.
-        return Time(busy, loads, ask)
+        return Time(busy, loads, ask, events)
     }
 
     /**

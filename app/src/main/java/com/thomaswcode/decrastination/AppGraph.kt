@@ -9,13 +9,20 @@ import android.os.Looper
 import android.util.Log
 import com.thomaswcode.decrastination.block.Focus
 import com.thomaswcode.decrastination.block.Sessions
+import com.thomaswcode.decrastination.core.About
 import com.thomaswcode.decrastination.core.Enrichments
+import com.thomaswcode.decrastination.core.Instruction
+import com.thomaswcode.decrastination.core.InstructionState
+import com.thomaswcode.decrastination.core.InstructionStatus
+import com.thomaswcode.decrastination.core.Instructions
 import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.Planner
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
+import com.thomaswcode.decrastination.core.TaskOverrides
 import com.thomaswcode.decrastination.core.WallClock
 import com.thomaswcode.decrastination.core.withEnrichment
+import com.thomaswcode.decrastination.core.withOverrides
 import com.thomaswcode.decrastination.data.ActivityLog
 import com.thomaswcode.decrastination.data.Backup
 import com.thomaswcode.decrastination.data.Backups
@@ -32,6 +39,9 @@ import com.thomaswcode.decrastination.enrich.ClaudeEnricher
 import com.thomaswcode.decrastination.enrich.ClaudeReviewer
 import com.thomaswcode.decrastination.enrich.EnrichWorker
 import com.thomaswcode.decrastination.enrich.Enricher
+import com.thomaswcode.decrastination.enrich.InstructionAnswers
+import com.thomaswcode.decrastination.enrich.InstructionPrompts
+import com.thomaswcode.decrastination.enrich.InstructionReader
 import com.thomaswcode.decrastination.enrich.KeyProblem
 import com.thomaswcode.decrastination.enrich.ModelAlerts
 import com.thomaswcode.decrastination.enrich.ModelHold
@@ -42,7 +52,9 @@ import com.thomaswcode.decrastination.learn.Briefing
 import com.thomaswcode.decrastination.learn.CalendarTime
 import com.thomaswcode.decrastination.learn.Daily
 import com.thomaswcode.decrastination.net.UrlConnectionHttp
+import com.thomaswcode.decrastination.protect.CodeLock
 import com.thomaswcode.decrastination.protect.SettingsChanges
+import com.thomaswcode.decrastination.protect.Totp
 import com.thomaswcode.decrastination.protect.Watchdog
 import com.thomaswcode.decrastination.sources.anki.AnkiRules
 import com.thomaswcode.decrastination.sources.anki.AnkiSource
@@ -89,6 +101,9 @@ class AppGraph private constructor(context: Context) {
     val runtime = JsonStore(File(app.filesDir, "runtime.json"), RuntimeState.serializer(), ::RuntimeState)
     val log = JsonStore(File(app.filesDir, "log.json"), ActivityLog.serializer(), ::ActivityLog)
 
+    /** Your instructions about tasks, events and days, and what Claude read them as ([Instructions]). */
+    val instructions = JsonStore(File(app.filesDir, "instructions.json"), InstructionState.serializer(), ::InstructionState)
+
     val syncer = Syncer(
         tasks = tasks,
         settings = settings,
@@ -113,20 +128,46 @@ class AppGraph private constructor(context: Context) {
         set(value) {
             field = value
             focus.forgetPlan()
+            calendarState.value = value
         }
 
-    fun plan(state: TaskState = tasks.value, settings: Settings = this.settings.value, now: Long = clock.now()): Plan =
-        Planner.plan(
+    /** [calendarTime] as it changes, for a screen open while the calendar is read again. */
+    val calendarState = kotlinx.coroutines.flow.MutableStateFlow(calendarTime)
+
+    fun plan(state: TaskState = tasks.value, settings: Settings = this.settings.value, now: Long = clock.now()): Plan {
+        val zone = clock.zone()
+        // Your instructions' days and times, over as far as the plan can reach.
+        val today = java.time.Instant.ofEpochMilli(now).atZone(zone).toLocalDate()
+        val applied = instructions.value.applied
+        val reach = today.plusDays(PLAN_REACH_DAYS)
+        // Each task as its instructions say, whatever the task file (a stop between writing the two,
+        // not yet put right): the instructions are what's kept.
+        val overrides = Instructions.taskOverrides(applied)
+        val tasks = state.tasks.map { task ->
+            val o = overrides[task.id] ?: TaskOverrides.NONE
+            if (o == TaskOverrides(task.userNotATask, task.userFrom, task.userAfter, task.userDueAt)) task else task.withOverrides(o)
+        }
+        return Planner.plan(
             Planner.Input(
-                tasks = state.tasks,
+                tasks = tasks,
                 now = now,
-                zone = clock.zone(),
+                zone = zone,
                 settings = settings,
                 calibration = runtime.value.calibration,
                 busy = calendarTime.busy,
+                hardBusy = Instructions.busy(applied, zone, today, reach),
                 dayLoads = calendarTime.dayLoads,
+                dayCaps = Instructions.dayCaps(applied, today, reach),
+                workedTodayMin = workedToday(now, zone),
             ),
         )
+    }
+
+    /** Minutes of focus sessions and photo checks today, as the day's record counts them. */
+    private fun workedToday(now: Long, zone: java.time.ZoneId): Int {
+        val start = java.time.Instant.ofEpochMilli(now).atZone(zone).toLocalDate().atStartOfDay(zone).toInstant().toEpochMilli()
+        return log.value.sessions.sumOf { com.thomaswcode.decrastination.learn.Days.minutesIn(it, start, now + 1) }
+    }
 
     /** The blocker's state and decisions (block/Focus.kt). */
     val focus = Focus(tasks, settings, runtime, log, clock) { state, s, now -> plan(state, s, now) }
@@ -185,6 +226,27 @@ class AppGraph private constructor(context: Context) {
         // applied again (to the same value), never lost.
         if (due.isNotEmpty()) settings.update { latest -> due.fold(latest, SettingsChanges::apply) }
         runtime.update { it.copy(pending = outcome.pending, uptimeMark = if (outcome.pending.isEmpty()) null else uptime) }
+    }
+
+    /**
+     * Checks a parent [code] from your dad's authenticator, using it up if it's right (with an
+     * hour's unblock until [unblockUntil], if that's what it's for). Returns what went wrong, or null.
+     */
+    suspend fun useParentCode(code: String, unblockUntil: Long? = null): String? {
+        val secret = secrets[Secret.TotpSecret]?.let(Totp::fromBase32) ?: return "No parent code is set"
+        val now = clock.now()
+        var outcome: CodeLock.Result = CodeLock.Result.Reused
+        runtime.update { state ->
+            val (result, lock) = state.codeLock.attempt(secret, code, now)
+            outcome = result
+            if (result is CodeLock.Result.Accepted && unblockUntil != null) state.copy(codeLock = lock, overrideUntil = unblockUntil) else state.copy(codeLock = lock)
+        }
+        return when (val result = outcome) {
+            is CodeLock.Result.Accepted -> null
+            is CodeLock.Result.Wrong -> "Wrong code: ${result.triesLeft} ${if (result.triesLeft == 1) "try" else "tries"} left"
+            is CodeLock.Result.Locked -> "Too many wrong codes: try again ${com.thomaswcode.decrastination.ui.Format.at(result.until, now, clock.zone())}"
+            CodeLock.Result.Reused -> "That code has been used: wait for the next one"
+        }
     }
 
     /** Drops the pending change [id]: what it would loosen stays as it is. Never waits, since it tightens. */
@@ -301,6 +363,11 @@ class AppGraph private constructor(context: Context) {
         }
         // "How was it?" questions kept while notifications were off, once they're on.
         syncer.addAfterEverySync { Assessment.askLater(app) }
+        // A task back after aging out of the list (or new) takes the overrides its instructions give.
+        syncer.addAfterEverySync { layTaskOverrides() }
+        // Instructions left waiting for Claude, once it can be asked (a new month under the cap
+        // changes nothing it watches).
+        syncer.addAfterEverySync { if (instructions.value.instructions.any { it.state == InstructionStatus.Reading }) readInstructions() }
         // What's new or changed, even in place, is enriched.
         syncer.addAfterEverySync {
             val modelOn = modelAvailable()
@@ -321,7 +388,18 @@ class AppGraph private constructor(context: Context) {
         // Able to be asked again (switched on, its key put to use, a higher cap or another exchange
         // rate saved, its rest after a failure over), the model goes over what only the rules have seen.
         scope.launch {
-            combine(settings.state, runtime.state) { _, _ -> modelAvailable() }.distinctUntilChanged().drop(1).collect { on -> if (on) EnrichWorker.enqueue(app) }
+            combine(settings.state, runtime.state) { _, _ -> modelAvailable() }.distinctUntilChanged().drop(1).collect { on ->
+                if (on) {
+                    EnrichWorker.enqueue(app)
+                    readInstructions()
+                }
+            }
+        }
+        // Instructions left waiting for Claude (off, resting, or the app stopped mid-read); and the
+        // tasks' overrides made what the applied ones say, should a stop have come between the two.
+        scope.launch {
+            layTaskOverrides()
+            readInstructions()
         }
         runCatching {
             app.contentResolver.registerContentObserver(
@@ -600,8 +678,209 @@ class AppGraph private constructor(context: Context) {
         if (decksChanged) SyncWorker.syncNow(app, setOf(Source.Anki))
     }
 
+    /** Held while instructions are read, so each is read once. */
+    private val readingInstructions = Mutex()
+
+    /**
+     * Writes down a new instruction about [about] and has Claude read it. It changes nothing until
+     * you apply it ([applyInstruction]).
+     */
+    suspend fun addInstruction(text: String, about: About): String {
+        val id = java.util.UUID.randomUUID().toString()
+        instructions.update { it.copy(instructions = it.instructions + Instruction(id, text.trim().take(InstructionPrompts.MAX_TEXT), about, clock.now())) }
+        scope.launch { readInstructions() }
+        return id
+    }
+
+    /** Has Claude read [id] again (written again, or after it found it unclear). */
+    suspend fun rereadInstruction(id: String, text: String) {
+        instructions.update { state ->
+            state.copy(instructions = state.instructions.map { if (it.id == id && it.state != InstructionStatus.Applied) it.copy(text = text.trim().take(InstructionPrompts.MAX_TEXT), state = InstructionStatus.Reading, changes = emptyList(), note = null) else it })
+        }
+        scope.launch { readInstructions() }
+    }
+
+    /**
+     * Reads the instructions waiting for Claude, one call each, as the enrichment's calls are made:
+     * under the cap, and resting after a failure. While Claude can't be asked, each says why.
+     */
+    suspend fun readInstructions() = readingInstructions.withLock {
+        while (true) {
+            val next = instructions.value.instructions.firstOrNull { it.state == InstructionStatus.Reading } ?: return@withLock
+            val waiting = modelCalls.withLock call@{
+                modelHold()?.let { return@call because(it) }
+                val reader = instructionReader() ?: return@call because(ModelHold.Off)
+                val at = clock.now()
+                val month = AiUsage.monthOf(at, clock.zone())
+                val result = runCatching { reader.read(next, tasks.value.tasks, calendarTime.events, at) }
+                    .onFailure { error ->
+                        Log.w(TAG, "Reading an instruction failed", error)
+                        modelFailed(error, month, at)
+                    }
+                    .getOrNull() ?: return@call "Claude's call failed: it's tried again within the hour"
+                modelWorked(result.costUsd, result.refused, month, at)
+                val reading = result.reading ?: InstructionAnswers.Reading.Unclear(if (result.refused) "Claude declined to read it" else "Claude's answer couldn't be used")
+                instructions.update { state ->
+                    state.copy(
+                        instructions = state.instructions.map { i ->
+                            // Only as it was sent: written again meanwhile, it's read again.
+                            if (i.id != next.id || i.state != InstructionStatus.Reading || i.text != next.text) {
+                                i
+                            } else {
+                                when (reading) {
+                                    is InstructionAnswers.Reading.Changes -> i.copy(state = InstructionStatus.Understood, changes = reading.changes, note = null)
+                                    is InstructionAnswers.Reading.Unclear -> i.copy(state = InstructionStatus.Unclear, changes = emptyList(), note = reading.why)
+                                }
+                            }
+                        },
+                    )
+                }
+                null
+            }
+            if (waiting != null) {
+                // Not now: each still waiting says why, and they're read when Claude can be asked.
+                instructions.update { state -> state.copy(instructions = state.instructions.map { if (it.state == InstructionStatus.Reading) it.copy(note = waiting) else it }) }
+                return@withLock
+            }
+        }
+    }
+
+    private fun because(hold: ModelHold): String = when (hold) {
+        ModelHold.Off -> "Waiting for Claude, which is off (Settings)"
+        ModelHold.Resting -> "Waiting for Claude, resting an hour after a failed call"
+        ModelHold.Capped -> "Waiting for Claude: this month's cap is reached"
+    }
+
+    private fun instructionReader(): InstructionReader? = claudeKey()?.let { InstructionReader(it, clock.zone(), endpoint()) }
+
+    /** Whether applying (or taking back) [instruction] needs a parent code now: armed, and it changes a due date. */
+    fun instructionNeedsCode(instruction: Instruction): Boolean = settings.value.armed && Instructions.needsCode(instruction.changes)
+
+    /** Held from checking an instruction to applying it, so two applied at once can't both pass the check. */
+    private val applying = Mutex()
+
+    /** Applies [id], read and checked by you. False if it needs a parent code ([applyInstructionWithCode]). */
+    suspend fun applyInstruction(id: String): Boolean = applying.withLock {
+        val instruction = instructions.value.instructions.firstOrNull { it.id == id && it.state == InstructionStatus.Understood } ?: return@withLock true
+        if (refuseCircle(instruction)) return@withLock true
+        if (instructionNeedsCode(instruction)) return@withLock false
+        setApplied(id)
+        true
+    }
+
+    /** Applies [id] with a parent [code]. Returns what went wrong, or null. */
+    suspend fun applyInstructionWithCode(id: String, code: String): String? = applying.withLock {
+        instructions.value.instructions.firstOrNull { it.id == id }?.let { if (refuseCircle(it)) return@withLock null }
+        useParentCode(code)?.let { return@withLock it }
+        setApplied(id)
+        null
+    }
+
+    /**
+     * [instruction] would have tasks wait for each other in a circle, with those applied: it's
+     * marked unclear, saying so, rather than applied.
+     */
+    private suspend fun refuseCircle(instruction: Instruction): Boolean {
+        if (!Instructions.makesCircle(instruction.changes, instructions.value.applied)) return false
+        instructions.update { state ->
+            state.copy(
+                instructions = state.instructions.map {
+                    if (it.id == instruction.id) it.copy(state = InstructionStatus.Unclear, note = "It would have tasks wait for each other in a circle, so none would ever be planned") else it
+                },
+            )
+        }
+        return true
+    }
+
+    private suspend fun setApplied(id: String) {
+        instructions.update { state ->
+            state.copy(instructions = state.instructions.map { if (it.id == id && it.state == InstructionStatus.Understood) it.copy(state = InstructionStatus.Applied, appliedAt = clock.now()) else it })
+        }
+        layInstructions()
+    }
+
+    /**
+     * Deletes [id]: discarded if it wasn't applied, taken back if it was. False if taking it back
+     * needs a parent code ([deleteInstructionWithCode]): armed, and it changed a due date, which
+     * taking back changes again.
+     */
+    suspend fun deleteInstruction(id: String): Boolean = applying.withLock {
+        val instruction = instructions.value.instructions.firstOrNull { it.id == id } ?: return@withLock true
+        if (instruction.state == InstructionStatus.Applied && refuseTakingBack(instruction)) return@withLock true
+        if (instruction.state == InstructionStatus.Applied && instructionNeedsCode(instruction)) return@withLock false
+        remove(id)
+        true
+    }
+
+    suspend fun deleteInstructionWithCode(id: String, code: String): String? = applying.withLock {
+        instructions.value.instructions.firstOrNull { it.id == id }?.let { if (refuseTakingBack(it)) return@withLock null }
+        useParentCode(code)?.let { return@withLock it }
+        remove(id)
+        null
+    }
+
+    /**
+     * Taking [instruction] back would leave tasks waiting for each other in a circle (an older
+     * instruction it replaced coming back into force): it stays, saying so.
+     */
+    private suspend fun refuseTakingBack(instruction: Instruction): Boolean {
+        val rest = instructions.value.applied.filterNot { it.id == instruction.id }
+        if (!Instructions.makesCircle(emptyList(), rest)) return false
+        instructions.update { state ->
+            state.copy(
+                instructions = state.instructions.map {
+                    if (it.id == instruction.id) it.copy(note = "Taking this back would bring back an earlier instruction that has tasks waiting for each other in a circle: take that one back first") else it
+                },
+            )
+        }
+        return true
+    }
+
+    private suspend fun remove(id: String) {
+        val was = instructions.value.instructions.firstOrNull { it.id == id }
+        instructions.update { state -> state.copy(instructions = state.instructions.filterNot { it.id == id }) }
+        if (was?.state == InstructionStatus.Applied) layInstructions()
+    }
+
+    /**
+     * The applied instructions laid over everything they change: each task's overrides (on the
+     * task, so syncs keep them), the calendar's answers, and the plan, with today's record made
+     * again as an answer about an event does.
+     */
+    private suspend fun layInstructions() {
+        layTaskOverrides()
+        focus.forgetPlan()
+        CalendarTime.refresh(app)
+        Briefing.replanToday(app)
+        // A day's or time's instruction changes no store the widget watches, and the calendar's read
+        // (which redraws it) is skipped without its permission: so it's redrawn here.
+        runCatching { WidgetUpdater.update(app) }.onFailure { Log.w(TAG, "Widget update failed", it) }
+    }
+
+    /**
+     * Each task's overrides made what the applied instructions say: the instructions are what's
+     * kept, the tasks follow. Done at start as well, so a stop between writing the one and the other
+     * (an instruction applied but not yet laid, or taken back with its override still on the task)
+     * is put right.
+     */
+    private suspend fun layTaskOverrides() {
+        val overrides = Instructions.taskOverrides(instructions.value.applied)
+        tasks.update { state ->
+            state.copy(
+                tasks = state.tasks.map { task ->
+                    val o = overrides[task.id] ?: TaskOverrides.NONE
+                    val now = TaskOverrides(task.userNotATask, task.userFrom, task.userAfter, task.userDueAt)
+                    if (o == now) task else task.withOverrides(o)
+                },
+            )
+        }
+    }
+
     companion object {
         const val TAG = "Decrastination"
+
+        /** How far ahead your instructions' days and times are laid out for the plan: as far as it reaches. */
+        private const val PLAN_REACH_DAYS = 90L
 
         /** Past the model's hour of rest, so the retry finds it over. */
         private const val RETRY_SLACK_MS = 60_000L

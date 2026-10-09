@@ -134,6 +134,14 @@ data class TaskItem(
     val enrichment: Enrichment? = null,
     /** The source's own kind, deadline and start, before the enrichment's overlay; null before Phase 4. */
     val sourceValues: SourceValues? = null,
+    /**
+     * Your instructions' say about it ([Instructions]), laid over the source's and the enrichment's
+     * at every merge: not a task; not before then; not until another task is done; due by then.
+     */
+    val userNotATask: Boolean = false,
+    val userFrom: Long? = null,
+    val userAfter: String? = null,
+    val userDueAt: Long? = null,
 ) {
     val isOpen: Boolean get() = status == Status.Open
 
@@ -144,6 +152,9 @@ data class TaskItem(
      * and the rewards for finishing work. Its kind is the enrichment's reading, or the rules'.
      */
     val justAnEmail: Boolean get() = source == Source.Gmail && (kind == Kind.Info || kind == Kind.Event)
+
+    /** Not work to plan: an email that's just an email, or one you've said isn't a task. */
+    val hidden: Boolean get() = justAnEmail || userNotATask
 
     /** Your estimate, else the enrichment's, else the source's or rules', else the kind's default. */
     /**
