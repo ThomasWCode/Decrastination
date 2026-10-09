@@ -87,10 +87,14 @@ class FocusService : AccessibilityService() {
 
     /**
      * The blocked site each checked browser last showed in front (null: a page that isn't), for
-     * when Android hides its address (picture-in-picture, a video full screen). Loaded from the
-     * store when the service connects, so it outlives a restart; a browser not in it hasn't been read.
+     * when Android hides its address (picture-in-picture, a video full screen). The blocked ones are
+     * loaded from the store when the service connects, so they outlive a restart; a browser not in
+     * it hasn't been read since then.
      */
     private val lastSite = mutableMapOf<String, Focus.Target.Site?>()
+
+    /** Browsers given Back this connection, to show an address they hid ([lookForAddress]). */
+    private val lookedFor = mutableSetOf<String>()
 
     /** The site [browser] last showed, while it's still blocked as the settings now say. */
     private fun remembered(browser: String): Focus.Target.Site? = lastSite[browser]?.takeIf(::stillBlocked)
@@ -158,8 +162,12 @@ class FocusService : AccessibilityService() {
             },
             ContextCompat.RECEIVER_NOT_EXPORTED,
         )
-        // What each browser last showed, as saved: a page whose address is hidden can still be judged.
-        graph.runtime.value.browserSites.forEach { (browser, site) -> lastSite[browser] = site?.let { Focus.Target.Site(it, browser) } }
+        // What each browser last showed, as saved, so a page whose address is hidden can still be
+        // judged: only the blocked ones. While no service watched, a browser may have moved on
+        // from a page that wasn't, unseen, so that one isn't known any more.
+        lastSite.clear()
+        lookedFor.clear()
+        graph.runtime.value.browserSites.forEach { (browser, site) -> if (site != null) lastSite[browser] = Focus.Target.Site(site, browser) }
         // Connected (or restarted) while the phone is already unlocked and in use: the unlock it
         // missed counts, so the first-unlock Teams sync can still be offered.
         val power = getSystemService(PowerManager::class.java)
@@ -326,10 +334,26 @@ class FocusService : AccessibilityService() {
             ?: windows.mapNotNull { it.root }.firstOrNull { it.packageName == browser }
             ?: return
         val text = root.findAccessibilityNodeInfosByViewId(Blocklist.urlBarId(browser)).firstOrNull()?.text?.toString()
+        // Its address hidden, and no page of it seen since the service connected: Back, once, to
+        // leave full screen so it shows.
+        if (text == null && browser !in lastSite && lookForAddress(browser)) return
         // No address bar (a video full screen hides it): still the page it last showed.
         val site = if (text != null) graph.focus.siteTarget(browser, text) else remembered(browser)
         if (text != null) rememberSite(browser, site)
         if (site != null) act(site) else stopSpendingUnlessAside()
+    }
+
+    /**
+     * [browser] is in front with its address hidden (a video full screen) and no page of it seen
+     * since the service connected, so what it shows isn't known. While anything is blocked: Back,
+     * once per browser per connection, to leave full screen, so the address shows and is read. One
+     * that still hides it is left unknown, as not blocked. Says whether it pressed Back.
+     */
+    private fun lookForAddress(browser: String): Boolean {
+        if (browser in lookedFor || graph.focus.verdict() is BlockPolicy.Verdict.Allow) return false
+        lookedFor += browser
+        Log.i(TAG, "$browser hides its address, and no page of it has been seen since connecting: Back, to see it")
+        return performGlobalAction(GLOBAL_ACTION_BACK)
     }
 
     // --- Windows other than the one in use ---
@@ -365,10 +389,11 @@ class FocusService : AccessibilityService() {
             if (now - lastPipRelaunchAt < PIP_RELAUNCH_GAP_MS) continue
             lastPipRelaunchAt = now
             Log.i(TAG, "Picture-in-picture: $pkg, bringing it back to ${if (target == null) "look at it" else "cover it"}")
-            // Blocked, it can be closed outright where the window offers that; otherwise (and
-            // always just to look) it's brought back to full screen, as tapping its icon does.
+            // Known to be blocked, it can be closed outright where the window offers that; otherwise
+            // (and always to look at a page not known) it's brought back to full screen, as tapping
+            // its icon does.
             val dismiss = AccessibilityNodeInfo.AccessibilityAction.ACTION_DISMISS
-            if (verdict is BlockPolicy.Verdict.Block && dismiss in root.actionList && root.performAction(dismiss.id)) continue
+            if (target != null && verdict is BlockPolicy.Verdict.Block && dismiss in root.actionList && root.performAction(dismiss.id)) continue
             packageManager.getLaunchIntentForPackage(pkg)?.let { startActivity(it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
         }
     }
@@ -583,8 +608,15 @@ class FocusService : AccessibilityService() {
             onDelay = { scope.launch { graph.runtime.update { it.copy(teamsAuto = TeamsAutoSync.delayed(it.teamsAuto, graph.clock.now())) } } },
             onTimeout = {
                 scope.launch {
+                    // Counted as offered first, so the next look doesn't offer it again meanwhile.
+                    val before = graph.runtime.value.teamsAuto
                     recordOffer()
-                    graph.requestTeamsSync()?.let { Log.w(TAG, "Automatic Teams sync didn't start: $it") }
+                    val why = graph.requestTeamsSync() ?: return@launch
+                    // One already running is as good as one started.
+                    if (why == AppGraph.TEAMS_BUSY) return@launch
+                    Log.w(TAG, "Automatic Teams sync didn't start: $why")
+                    // Not started (its sync service off, no answer): offered again shortly, not in three hours.
+                    graph.runtime.update { it.copy(teamsAuto = TeamsAutoSync.retry(before, it.teamsAuto, graph.clock.now())) }
                 }
             },
         )

@@ -60,11 +60,14 @@ object Sessions {
         }
         val record = focus.stopSession() ?: return clear(context)
         clear(context)
-        val text = if (record.completed) {
-            val earned = Credit.forSession(record.plannedMin, AppGraph.get(context).settings.value.workMinPerFreeMin).toInt()
-            "${record.label}: ${record.workedMin} min done, $earned min of free time earned"
-        } else {
-            "${record.label}: stopped after ${record.workedMin} min"
+        val text = when {
+            !record.completed -> "${record.label}: stopped after ${record.workedMin} min"
+            focus.earnsNow(true, record.endedAt) -> {
+                val earned = Credit.forSession(record.plannedMin, AppGraph.get(context).settings.value.workMinPerFreeMin).toInt()
+                "${record.label}: ${record.workedMin} min done, $earned min of free time earned"
+            }
+            // Finished on a day that's over (seen too late): its free time went with that day.
+            else -> "${record.label}: ${record.workedMin} min done. It ended on a day that's over, so its free time went with it."
         }
         notify(
             context,

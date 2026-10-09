@@ -45,6 +45,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -95,7 +96,8 @@ class ProtectionActivity : ComponentActivity() {
         val connected by FocusService.connected.collectAsStateWithLifecycle()
         val scope = rememberCoroutineScope()
         var refresh by remember { mutableIntStateOf(0) }
-        var step by remember { mutableStateOf(Step.None) }
+        // Kept through the screen being recreated (turned): the wizard isn't left half-done unseen.
+        var step by rememberSaveable { mutableStateOf(Step.None) }
         var codeFor by remember { mutableStateOf<CodeTarget?>(null) }
         val report = remember(refresh, runtime.protection) { Watchdog.report(this) }
         val adminLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
@@ -105,6 +107,16 @@ class ProtectionActivity : ComponentActivity() {
         val notificationLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { refresh++ }
         val hasParentCode = Secret.TotpSecret in secrets
         val now = graph.clock.now()
+
+        // The wizard left before arming: the device admin it asked for goes too, so uninstalling is
+        // allowed, as "Not armed" says.
+        fun abandon() {
+            step = Step.None
+            if (!graph.settings.value.armed && Watchdog.isAdminActive(this)) {
+                runCatching { getSystemService(DevicePolicyManager::class.java)?.removeActiveAdmin(Watchdog.admin(this)) }
+                refresh++
+            }
+        }
 
         Surface(Modifier.fillMaxSize()) {
             Column(Modifier.fillMaxSize().safeDrawingPadding().verticalScroll(rememberScrollState())) {
@@ -228,7 +240,7 @@ class ProtectionActivity : ComponentActivity() {
         when (step) {
             Step.None -> Unit
             Step.Explain -> AlertDialog(
-                onDismissRequest = { step = Step.None },
+                onDismissRequest = { abandon() },
                 title = { Text("Arm protection?") },
                 text = {
                     Text(
@@ -253,15 +265,15 @@ class ProtectionActivity : ComponentActivity() {
                         }
                     }) { Text("Continue") }
                 },
-                dismissButton = { TextButton(onClick = { step = Step.None }) { Text("Cancel") } },
+                dismissButton = { TextButton(onClick = { abandon() }) { Text("Cancel") } },
             )
             Step.ParentCode -> ParentCodeDialog(
                 graph = graph,
                 onDone = { step = Step.Confirm },
-                onCancel = { step = Step.None },
+                onCancel = { abandon() },
             )
             Step.Confirm -> AlertDialog(
-                onDismissRequest = { step = Step.None },
+                onDismissRequest = { abandon() },
                 title = { Text("Arm now?") },
                 text = { Text(if (hasParentCode) "Your dad's code is set." else "No parent code: loosening will always wait the full ${settings.loosenDelayHours} hours.") },
                 confirmButton = {
@@ -273,7 +285,7 @@ class ProtectionActivity : ComponentActivity() {
                         }
                     }) { Text("Arm") }
                 },
-                dismissButton = { TextButton(onClick = { step = Step.None }) { Text("Not yet") } },
+                dismissButton = { TextButton(onClick = { abandon() }) { Text("Not yet") } },
             )
         }
 
