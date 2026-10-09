@@ -297,9 +297,10 @@ class AppGraph private constructor(context: Context) {
         scope.launch {
             settings.state.map { it.ankiDeadlineMin to it.ankiTextbook }.distinctUntilChanged().drop(1).collect { SyncWorker.syncNow(app, setOf(Source.Anki)) }
         }
-        // Switched on, the model goes over what only the rules have seen.
+        // Able to be asked again (switched on, its key put to use, a higher cap or another exchange
+        // rate saved, its rest after a failure over), the model goes over what only the rules have seen.
         scope.launch {
-            settings.state.map { it.aiEnabled && it.aiKeyActive }.distinctUntilChanged().drop(1).collect { on -> if (on) EnrichWorker.enqueue(app) }
+            combine(settings.state, runtime.state) { _, _ -> modelAvailable() }.distinctUntilChanged().drop(1).collect { on -> if (on) EnrichWorker.enqueue(app) }
         }
         runCatching {
             app.contentResolver.registerContentObserver(
@@ -430,8 +431,17 @@ class AppGraph private constructor(context: Context) {
             }
             if (enrichment == null) enrichment = rules.enrich(task, job, now).enrichment
             val made = enrichment ?: continue
-            // Laid only over the task as it was read: changed during the call, the next run does it.
-            tasks.update { state -> state.copy(tasks = state.tasks.map { if (it.id == task.id && Enrichments.inputHash(it) == made.inputHash) it.withEnrichment(made) else it }) }
+            // Laid only over the task as it was read (changed during the call, the next run does it),
+            // and not over one a session started on during the call: its steps stay till it ends.
+            var laid = false
+            tasks.update { state ->
+                state.copy(
+                    tasks = state.tasks.map {
+                        if (it.id == task.id && Enrichments.inputHash(it) == made.inputHash && focus.session?.taskId != task.id) it.withEnrichment(made).also { laid = true } else it
+                    },
+                )
+            }
+            if (!laid) continue
             // Its deck tasks take their sections and due date from it.
             val after = task.withEnrichment(made)
             val sections = AnkiRules.sectionsOf(after)

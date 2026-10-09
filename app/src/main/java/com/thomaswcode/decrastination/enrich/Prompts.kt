@@ -160,7 +160,6 @@ object Answers {
     private const val MAX_STEPS = 12
     private const val MAX_TITLE = 80
     private const val MAX_NEXT_STEP = 120
-    private const val HAND_IN_MIN = 5
     private const val STEPS_SLACK_MIN = 10
     private val SECTION = Regex("""^[1-9]\.[1-9]$""")
 
@@ -211,15 +210,24 @@ object Answers {
                         listOfNotNull(rest.takeIf { it.isNotEmpty() }?.let { r -> SubStep(("The rest: " + r.joinToString("; ") { it.title }).take(MAX_TITLE), r.sumOf { it.minutes }) })
                 }
                 val sections = sections(s.ankiSections + steps.flatMap { it.ankiSections })
+                // All vocabulary (no steps, its sections named): a step for it all the same, at the
+                // task's own estimate. Where decks hold those sections the planner leaves it out, and
+                // handing in is what's left; where none does (no such deck yet), it's planned.
+                val allVocabulary = usable && steps.isEmpty() && sections.isNotEmpty()
+                val planned = if (allVocabulary) {
+                    listOf(SubStep(("Learn vocabulary " + sections.joinToString("/")).take(MAX_TITLE), task.copy(aiEffortMin = null).effortMin, ankiSections = sections))
+                } else {
+                    steps
+                }
                 // Steps that don't add up to the total (within a tenth, or ten minutes): one of the two
                 // is wrong, and planning the steps could lose work, so the total is planned instead.
-                val total = effort(s.effortMin)
-                val sum = steps.sumOf { it.minutes }
+                // All vocabulary, the model's total is the hand-in alone: the step's estimate stands.
+                val total = effort(s.effortMin).takeUnless { allVocabulary }
+                val sum = planned.sumOf { it.minutes }
                 val agree = total == null || abs(sum - total) <= maxOf(STEPS_SLACK_MIN, total / 10)
                 base.copy(
-                    // Vocabulary only: the decks hold the work, and this is the hand-in.
-                    effortMin = total ?: sum.takeIf { it > 0 } ?: HAND_IN_MIN.takeIf { sections.isNotEmpty() },
-                    subSteps = steps.takeIf { agree }.orEmpty().ifEmpty { null },
+                    effortMin = total ?: sum.takeIf { it > 0 },
+                    subSteps = planned.takeIf { agree }.orEmpty().ifEmpty { null },
                     // A split not trusted hands no vocabulary to a deck either: its total, planned
                     // whole, already holds it.
                     ankiSections = if (usable && agree) sections else emptyList(),
