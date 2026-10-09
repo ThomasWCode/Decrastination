@@ -1,6 +1,7 @@
 package com.thomaswcode.decrastination
 
 import android.annotation.SuppressLint
+import android.app.admin.DevicePolicyManager
 import android.content.Context
 import android.database.ContentObserver
 import android.os.Handler
@@ -34,6 +35,7 @@ import com.thomaswcode.decrastination.learn.Assessment
 import com.thomaswcode.decrastination.learn.CalendarTime
 import com.thomaswcode.decrastination.net.UrlConnectionHttp
 import com.thomaswcode.decrastination.protect.SettingsChanges
+import com.thomaswcode.decrastination.protect.Watchdog
 import com.thomaswcode.decrastination.sources.anki.AnkiRules
 import com.thomaswcode.decrastination.sources.anki.AnkiSource
 import com.thomaswcode.decrastination.sources.gmail.GmailSource
@@ -254,6 +256,13 @@ class AppGraph private constructor(context: Context) {
     }
 
     init {
+        // Disarmed (once the wait is over, or at once by a parent's code): the device admin goes
+        // too, so uninstalling is allowed again, as the protection screen says.
+        scope.launch {
+            settings.state.map { it.armed }.distinctUntilChanged().drop(1).collect { armed ->
+                if (!armed) runCatching { app.getSystemService(DevicePolicyManager::class.java)?.removeActiveAdmin(Watchdog.admin(app)) }
+            }
+        }
         // Work a source confirms done earns free time and is logged.
         // A session on a task the sync found done ends with it, and so do its notification and alarm.
         syncer.addListener { report ->
@@ -276,6 +285,11 @@ class AppGraph private constructor(context: Context) {
         }
         scope.launch { CalendarTime.refresh(app) }
         scope.launch { calendarChanged.debounce(CALENDAR_QUIET_MS).collect { CalendarTime.refresh(app) } }
+        // Anki's deadline or textbook changed (saved, or a waiting change fallen due): its tasks are
+        // made with them, so it's read again now.
+        scope.launch {
+            settings.state.map { it.ankiDeadlineMin to it.ankiTextbook }.distinctUntilChanged().drop(1).collect { SyncWorker.syncNow(app, setOf(Source.Anki)) }
+        }
         // Switched on, the model goes over what only the rules have seen.
         scope.launch {
             settings.state.map { it.aiEnabled && it.aiKeyActive }.distinctUntilChanged().drop(1).collect { on -> if (on) EnrichWorker.enqueue(app) }
