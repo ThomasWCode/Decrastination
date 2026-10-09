@@ -43,11 +43,11 @@ object Prompts {
         Enrichments.Job.Assignment -> """
             You plan one homework assignment for $STUDENT, for a planner that schedules the work over the days before it's due and blocks distracting apps until it's done.
 
-            Split the work into the ordered steps the student will actually do, each with a realistic duration in minutes for a typical Year 12 student (the planner adjusts them to this one). Keep steps between 10 and 60 minutes where the work allows, and a short task as one step. Base the steps on the instructions, but leave out learning the vocabulary sections you give in ankiSections: the planner schedules those as Anki cards. Add a step for handing work in only where the instructions ask for it, in its place in the order.
+            Split the work into the ordered steps the student will actually do, each with a realistic duration in minutes for a typical Year 12 student (the planner adjusts them to this one). Keep steps between 10 and 60 minutes where the work allows, and a short task as one step. Base the steps on the instructions. Learning numbered vocabulary sections is a step of its own, with those sections in its ankiSections: the planner leaves it out where the student's Anki decks hold them. Every other step has an empty ankiSections. Add a step for handing work in only where the instructions ask for it, in its place in the order.
 
             Also give:
-            - effortMin: the total minutes, the sum of the steps (0 if all there is to do is the vocabulary).
-            - ankiSections: the vocabulary sections the student is asked to learn, written like "1.2" (from "learn vocabulary 1.2" or "p46-47/ 2.2/2.3"); otherwise an empty list.
+            - effortMin: the total minutes, the sum of the steps.
+            - ankiSections: every vocabulary section the student is asked to learn, written like "1.2" (from "learn vocabulary 1.2" or "p46-47/ 2.2/2.3"); otherwise an empty list.
             - testDate: if the work prepares for a test or assessment on a stated date, that date (YYYY-MM-DD); otherwise null.
         """.trimIndent()
         Enrichments.Job.Effort -> """
@@ -67,7 +67,11 @@ object Prompts {
         Enrichments.Job.Assignment -> obj(
             "subSteps" to mapOf(
                 "type" to "array",
-                "items" to obj("title" to mapOf("type" to "string"), "minutes" to mapOf("type" to "integer")),
+                "items" to obj(
+                    "title" to mapOf("type" to "string"),
+                    "minutes" to mapOf("type" to "integer"),
+                    "ankiSections" to mapOf("type" to "array", "items" to mapOf("type" to "string")),
+                ),
             ),
             "effortMin" to mapOf("type" to "integer"),
             "ankiSections" to mapOf("type" to "array", "items" to mapOf("type" to "string")),
@@ -121,7 +125,7 @@ object Answers {
     private data class Triage(val kind: String, val actionableFrom: String? = null, val deadline: String? = null, val effortMin: Int, val nextStep: String)
 
     @Serializable
-    private data class Step(val title: String, val minutes: Int)
+    private data class Step(val title: String, val minutes: Int, val ankiSections: List<String> = emptyList())
 
     @Serializable
     private data class Split(val subSteps: List<Step>, val effortMin: Int, val ankiSections: List<String> = emptyList(), val testDate: String? = null)
@@ -155,8 +159,8 @@ object Answers {
             }
             Enrichments.Job.Assignment -> json.decodeFromString(Split.serializer(), text).let { s ->
                 val steps = s.subSteps.filter { it.title.isNotBlank() && it.minutes in 1..MAX_STEP }.take(MAX_STEPS)
-                    .map { SubStep(it.title.trim().take(MAX_TITLE), it.minutes) }
-                val sections = s.ankiSections.map { it.trim() }.filter { SECTION.matches(it) }.distinct()
+                    .map { SubStep(it.title.trim().take(MAX_TITLE), it.minutes, ankiSections = sections(it.ankiSections)) }
+                val sections = sections(s.ankiSections + steps.flatMap { it.ankiSections })
                 base.copy(
                     // Vocabulary only: the decks hold the work, and this is the hand-in.
                     effortMin = effort(s.effortMin) ?: steps.sumOf { it.minutes }.takeIf { it > 0 } ?: HAND_IN_MIN.takeIf { sections.isNotEmpty() },
@@ -170,6 +174,8 @@ object Answers {
     }.getOrNull()
 
     private fun effort(minutes: Int): Int? = minutes.takeIf { it in 1..MAX_EFFORT }
+
+    private fun sections(given: List<String>): List<String> = given.map { it.trim() }.filter { SECTION.matches(it) }.distinct()
 
     private fun date(text: String, zone: ZoneId, time: LocalTime): Long? = runCatching {
         LocalDate.parse(text.trim().take(10)).atTime(time).atZone(zone).toInstant().toEpochMilli()

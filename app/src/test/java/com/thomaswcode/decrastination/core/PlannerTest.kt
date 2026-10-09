@@ -170,6 +170,25 @@ class PlannerTest {
     }
 
     @Test
+    fun `a vocabulary step is left out where an Anki deck task holds its sections, and planned where none does`() {
+        val steps = listOf(SubStep("Learn vocabulary 2.2", 20, ankiSections = listOf("2.2")), SubStep("Exercise 4", 25))
+        val homework = task("t", Fixtures.at("2026-10-20T09:00"), steps = steps)
+        assertEquals(listOf("Learn vocabulary 2.2", "Exercise 4"), plan(listOf(homework), "2026-10-08T17:00").chunksOf("teams:t").map { it.step })
+        val deck = TaskItem(
+            id = "anki:deck:1",
+            source = Source.Anki,
+            sourceId = "deck:1",
+            title = "Learn Anki deck 2.2",
+            kind = Kind.Homework,
+            derived = true,
+            firstSeenAt = Fixtures.at("2026-10-07T12:00"),
+            lastSeenAt = Fixtures.at("2026-10-07T12:00"),
+            extra = mapOf("deckName" to "Textbook 1::2.2", "for" to "teams:t"),
+        )
+        assertEquals(listOf("Exercise 4"), plan(listOf(homework, deck), "2026-10-08T17:00").chunksOf("teams:t").map { it.step })
+    }
+
+    @Test
     fun `undated work has a soft deadline a week on, and goes after real deadlines`() {
         val email = task("email", null, effort = 15, kind = Kind.Admin, firstSeen = Fixtures.at("2026-10-01T09:00"))
         val homework = task("hw", Fixtures.at("2026-10-08T21:00"), effort = 30)

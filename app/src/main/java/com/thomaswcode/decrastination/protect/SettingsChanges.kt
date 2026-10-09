@@ -62,10 +62,11 @@ object SettingsChanges {
         "teamsSyncEveryMin" to { _, _ -> false },
         "armed" to { old, new -> old.armed && !new.armed },
         "loosenDelayHours" to { old, new -> new.loosenDelayHours < old.loosenDelayHours },
-        // The model's work changes estimates and steps, not what's blocked or when.
-        "aiEnabled" to { _, _ -> false },
-        "aiMonthlyCapGbp" to { _, _ -> false },
-        "usdToGbp" to { _, _ -> false },
+        // The model's triage can put an email off or call it an event, lifting pressure: switching
+        // it on, or letting it spend more, waits.
+        "aiEnabled" to { old, new -> !old.aiEnabled && new.aiEnabled },
+        "aiMonthlyCapGbp" to { old, new -> new.aiMonthlyCapGbp > old.aiMonthlyCapGbp },
+        "usdToGbp" to { old, new -> new.usdToGbp < old.usdToGbp },
         // Reminders' times: nothing is blocked by them.
         "briefingWeekdayMin" to { _, _ -> false },
         "briefingWeekendMin" to { _, _ -> false },
@@ -111,18 +112,25 @@ object SettingsChanges {
 
     data class Outcome(val settings: Settings, val pending: List<PendingChange>)
 
+    /** The settings as asked for: [current] with every [pending] change applied. What the Settings screen shows. */
+    fun requested(current: Settings, pending: List<PendingChange>): Settings = pending.fold(current, ::apply)
+
     /**
-     * Applies what may apply now of the move from [current] to [proposed], and returns the rest as
-     * pending changes, added to [pending]. A new change to a field replaces any pending one for it.
+     * Applies what may apply now of the move to [proposed], and returns the rest as pending
+     * changes, added to [pending]. [proposed] is read against what's been asked for ([requested]):
+     * a field left as asked keeps its pending change and its wait; one set back to its current
+     * value cancels it; any other change replaces it.
      */
     fun propose(current: Settings, proposed: Settings, pending: List<PendingChange>, now: Long, newId: () -> String): Outcome {
         val old = encode(current)
+        val asked = encode(requested(current, pending))
         val new = encode(proposed)
         var applied = old
         val waiting = pending.toMutableList()
         for ((field, value) in new) {
-            if (old[field] == value) continue
+            if (asked[field] == value) continue
             waiting.removeAll { it.field == field }
+            if (old[field] == value) continue
             val single = decode(JsonObject(old + (field to value)))
             if (current.armed && loosens(field, current, single)) {
                 waiting += PendingChange(
@@ -160,10 +168,11 @@ object SettingsChanges {
     /**
      * How much uptime to count towards [pending] now, from [mark] to [uptime]; null when it can
      * wait (little time, nothing due). A gap that can't be measured (a restart) counts nothing but
-     * is never left waiting: the count starts again from now, so it can't freeze.
+     * is never left waiting: the count starts again from now, so it can't freeze. Where restarts
+     * can't be told apart, what's sure to have passed is counted, never more.
      */
     fun counting(pending: List<PendingChange>, mark: Uptime?, uptime: Uptime?, force: Boolean): Long? {
-        val since = uptime?.since(mark)
+        val since = uptime?.atLeastSince(mark)
         val elapsed = since ?: 0L
         val due = pending.any { it.waitedMs + elapsed >= it.waitMs }
         if (!force && !due && since != null && since < COUNT_EVERY_MS) return null

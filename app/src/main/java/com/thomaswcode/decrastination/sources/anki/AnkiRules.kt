@@ -97,6 +97,19 @@ object AnkiRules {
             section.split('.').takeIf { it.size == 2 }?.let { (major, minor) -> major.toIntOrNull()?.let { a -> minor.toIntOrNull()?.let { b -> a to b } } }
         }.distinct()
 
+    /** The vocabulary sections [task] asks for: the deck pattern wins when it finds anything; else the sections the enrichment read. */
+    fun sectionsOf(task: TaskItem): List<Pair<Int, Int>> = linkedSections(task.title + "\n" + task.detail).ifEmpty { enrichedSections(task) }
+
+    /** For each assignment, the vocabulary sections ("1.2") its deck tasks hold, open or finished. */
+    fun heldSections(tasks: List<TaskItem>): Map<String, Set<String>> = tasks
+        .filter { it.source == Source.Anki && it.sourceId.startsWith(DECK_PREFIX) }
+        .flatMap { deck ->
+            val section = deck.extra[EXTRA_DECK_NAME]?.substringAfterLast(Deck.SEPARATOR) ?: return@flatMap emptyList()
+            deck.extra[EXTRA_FOR].orEmpty().split(',').filter { it.isNotEmpty() }.map { it to section }
+        }
+        .groupBy({ it.first }, { it.second })
+        .mapValues { it.value.toSet() }
+
     fun deckName(textbook: Int, section: Pair<Int, Int>): String = "Textbook $textbook::${section.first}.${section.second}"
 
     /**
@@ -169,9 +182,7 @@ object AnkiRules {
         val wanted = LinkedHashMap<Deck, MutableList<TaskItem>>()
         for (task in assignments) {
             if (!task.isOpen || task.source == Source.Anki) continue
-            // The deck pattern wins when it finds anything; else the sections the enrichment read.
-            val sections = linkedSections(task.title + "\n" + task.detail).ifEmpty { enrichedSections(task) }
-            for (section in sections) {
+            for (section in sectionsOf(task)) {
                 val deck = byName[deckName(textbook, section)] ?: continue
                 wanted.getOrPut(deck) { mutableListOf() } += task
             }

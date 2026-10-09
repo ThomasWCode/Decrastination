@@ -40,16 +40,21 @@ data class Enrichment(
  * where the source gives none.
  */
 fun TaskItem.enriched(): TaskItem {
-    val e = enrichment ?: return this
+    // Always from what the source said, so a changed enrichment doesn't leave the last one's dates.
+    val base = sourceValues ?: SourceValues(kind, dueAt, availableFrom)
+    val e = enrichment ?: return copy(kind = base.kind, dueAt = base.dueAt, availableFrom = base.availableFrom, aiEffortMin = null)
     val due = when {
-        e.testDate != null && (dueAt == null || e.testDate < dueAt) -> e.testDate
-        else -> dueAt ?: e.deadline
+        e.testDate != null && (base.dueAt == null || e.testDate < base.dueAt) -> e.testDate
+        else -> base.dueAt ?: e.deadline
     }
+    // A start after the deadline would hide the work until it's overdue: it's dropped.
+    val from = e.actionableFrom?.takeIf { due == null || it <= due }
     return copy(
-        kind = if (source == Source.Gmail) e.kind ?: kind else kind,
+        kind = if (source == Source.Gmail) e.kind ?: base.kind else base.kind,
         dueAt = due,
-        availableFrom = listOfNotNull(availableFrom, e.actionableFrom).maxOrNull(),
-        aiEffortMin = e.effortMin ?: aiEffortMin,
+        availableFrom = listOfNotNull(base.availableFrom, from).maxOrNull(),
+        // This enrichment's estimate, or none: an older one's doesn't outlive it.
+        aiEffortMin = e.effortMin,
         subSteps = if (subSteps.isEmpty()) e.subSteps.orEmpty() else subSteps,
     )
 }
@@ -81,14 +86,19 @@ object Enrichments {
         else -> null
     }
 
-    /** A hash of everything the enrichment reads, so a change in any of it makes it out of date. */
+    /**
+     * A hash of everything the enrichment reads, so a change in any of it makes it out of date. The
+     * source's deadline, not the one the enrichment lays over it, which would make it out of date itself.
+     */
     fun inputHash(task: TaskItem): String {
         val text = listOf(
             task.source.name,
             task.title,
             task.detail,
             task.className.orEmpty(),
-            task.dueAt?.toString().orEmpty(),
+            // A source with no deadline has none here, whatever the overlay says; only a task kept
+            // from before Phase 4 has no source values to read.
+            (if (task.sourceValues != null) task.sourceValues.dueAt else task.dueAt)?.toString().orEmpty(),
             task.extra["from"].orEmpty(),
             task.extra["received"].orEmpty(),
         ).joinToString("\n")
