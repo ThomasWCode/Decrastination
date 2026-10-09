@@ -141,6 +141,8 @@ class EnrichmentTest {
     @Test
     fun `what's enriched is emails, assignments and planner items, not done, derived or events`() {
         assertEquals(Enrichments.Job.Email, Enrichments.jobFor(email()))
+        // Its text still to be read: it waits.
+        assertEquals(null, Enrichments.jobFor(email().copy(extra = mapOf("textPending" to "true"))))
         assertEquals(Enrichments.Job.Assignment, Enrichments.jobFor(assignment()))
         val item = assignment().copy(source = Source.PowerPlanner, id = "powerplanner:p")
         assertEquals(Enrichments.Job.Effort, Enrichments.jobFor(item))

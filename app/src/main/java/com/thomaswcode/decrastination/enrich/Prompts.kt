@@ -5,8 +5,7 @@ import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.SubStep
 import com.thomaswcode.decrastination.core.TaskItem
-import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.Json
+import com.thomaswcode.decrastination.sources.anki.AnkiRules
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -14,6 +13,13 @@ import java.time.LocalTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 
 /**
  * What the model is asked (docs/data-sources.md §5), one job at a time: the instructions, the
@@ -43,7 +49,7 @@ object Prompts {
         Enrichments.Job.Assignment -> """
             You plan one homework assignment for $STUDENT, for a planner that schedules the work over the days before it's due and blocks distracting apps until it's done.
 
-            Split the work into the ordered steps the student will actually do, each with a realistic duration in minutes for a typical Year 12 student (the planner adjusts them to this one). Keep steps between 10 and 60 minutes where the work allows, and a short task as one step. Base the steps on the instructions. Learning numbered vocabulary sections is a step of its own, with those sections in its ankiSections: the planner leaves it out where the student's Anki decks hold them. Every other step has an empty ankiSections. Add a step for handing work in only where the instructions ask for it, in its place in the order.
+            Split the work into the ordered steps the student will actually do, each with a realistic duration in minutes for a typical Year 12 student (the planner adjusts them to this one). Keep steps between 10 and 60 minutes where the work allows, and a short task as one step. Base the steps on the instructions. Learning numbered vocabulary sections is a step of its own, with nothing else in it, and those sections in its ankiSections: the planner leaves it out where the student's Anki decks hold them. Every other step has an empty ankiSections. Add a step for handing work in only where the instructions ask for it, in its place in the order.
 
             Also give:
             - effortMin: the total minutes, the sum of the steps.
@@ -80,6 +86,18 @@ object Prompts {
         Enrichments.Job.Effort -> obj("effortMin" to mapOf("type" to "integer"))
     }
 
+    /** [job]'s schema as the JSON it's sent as. */
+    fun schemaJson(job: Enrichments.Job): JsonElement = toJson(schema(job))
+
+    private fun toJson(value: Any?): JsonElement = when (value) {
+        null -> JsonNull
+        is Map<*, *> -> JsonObject(value.entries.associate { (key, item) -> key.toString() to toJson(item) })
+        is List<*> -> JsonArray(value.map(::toJson))
+        is Boolean -> JsonPrimitive(value)
+        is Number -> JsonPrimitive(value)
+        else -> JsonPrimitive(value.toString())
+    }
+
     private fun obj(vararg properties: Pair<String, Any>): Map<String, Any> = mapOf(
         "type" to "object",
         "properties" to properties.toMap(),
@@ -105,7 +123,9 @@ object Prompts {
             else -> {
                 appendLine("Title: ${task.title}")
                 task.className?.let { appendLine("Class: $it") }
-                appendLine("Due: " + (task.dueAt?.let { at(it).format(DAY_TIME) } ?: "no date"))
+                // What the source says, not what an older enrichment laid over it.
+                val due = if (task.sourceValues != null) task.sourceValues.dueAt else task.dueAt
+                appendLine("Due: " + (due?.let { at(it).format(DAY_TIME) } ?: "no date"))
             }
         }
         val text = task.detail.trim()
@@ -159,7 +179,8 @@ object Answers {
             }
             Enrichments.Job.Assignment -> json.decodeFromString(Split.serializer(), text).let { s ->
                 val steps = s.subSteps.filter { it.title.isNotBlank() && it.minutes in 1..MAX_STEP }.take(MAX_STEPS)
-                    .map { SubStep(it.title.trim().take(MAX_TITLE), it.minutes, ankiSections = sections(it.ankiSections)) }
+                    // A step tagged as vocabulary that asks for other work too stays planned whole.
+                    .map { SubStep(it.title.trim().take(MAX_TITLE), it.minutes, ankiSections = if (AnkiRules.otherWork(it.title)) emptyList() else sections(it.ankiSections)) }
                 val sections = sections(s.ankiSections + steps.flatMap { it.ankiSections })
                 base.copy(
                     // Vocabulary only: the decks hold the work, and this is the hand-in.

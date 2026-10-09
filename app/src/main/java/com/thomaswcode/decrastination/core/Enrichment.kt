@@ -1,7 +1,8 @@
 package com.thomaswcode.decrastination.core
 
-import kotlinx.serialization.Serializable
+import com.thomaswcode.decrastination.sources.gmail.GmailThreads
 import java.security.MessageDigest
+import kotlinx.serialization.Serializable
 
 /**
  * What the enrichment (docs/data-sources.md §5) says about a task beyond what its source does: an
@@ -89,6 +90,8 @@ object Enrichments {
     /** What [task] needs, or null: done, derived (the Anki quota and decks), or an event. */
     fun jobFor(task: TaskItem): Job? = when {
         !task.isOpen || task.derived -> null
+        // Its text not read yet (more new emails than one read takes): asked about once it is.
+        task.source == Source.Gmail && GmailThreads.EXTRA_TEXT_PENDING in task.extra -> null
         task.source == Source.Gmail -> Job.Email
         task.source == Source.Teams -> Job.Assignment
         task.source == Source.PowerPlanner && task.kind != Kind.Event -> Job.Effort
