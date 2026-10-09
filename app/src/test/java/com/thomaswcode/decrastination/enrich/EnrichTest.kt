@@ -307,6 +307,13 @@ class AnswersTest {
     }
 
     @Test
+    fun `twenty blocks are counted as given, before a long one is cut into parts`() {
+        val blocks = (listOf("""{"title":"Long","minutes":181,"from":null,"due":null}""") + (1..19).map { """{"title":"B$it","minutes":10,"from":null,"due":null}""" }).joinToString(",")
+        val e = parse(Enrichments.Job.Effort, """{"effortMin":371,"blocks":[$blocks]}""")!!
+        assertEquals(21, e.subSteps!!.size)
+    }
+
+    @Test
     fun `a planner item can come back in blocks too`() {
         val e = parse(Enrichments.Job.Effort, """{"effortMin":120,"blocks":[{"title":"Past paper 1","minutes":60,"from":null,"due":null},{"title":"Mark it and go over mistakes","minutes":60,"from":null,"due":null}]}""")!!
         assertEquals(listOf("Past paper 1", "Mark it and go over mistakes"), e.subSteps!!.map { it.title })
