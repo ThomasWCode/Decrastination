@@ -60,8 +60,8 @@ import kotlinx.serialization.json.JsonPrimitive
  *   Nothing reaches Anthropic and nothing is stored: it checks the client works on the phone.
  * - Test hooks: `test-arm`, `test-disarm` (at once, unlike the app's own disarming), `remove-admin`,
  *   `clear-parent-code`, `offer-teams-sync` (the countdown banner now, whatever the rules), and
- *   `clean-up` (this app's notifications, a delayed Teams sync, forced blocking hours and the
- *   watchdog's restarts cleared).
+ *   `clean-up` (this app's notifications, a delayed Teams sync, forced blocking hours, the
+ *   watchdog's restarts, and reviews run at other times than Sunday evening, cleared).
  *
  * The manifest guards the alias with DUMP, which the adb shell holds and no ordinary app can, so
  * nothing else on the phone can reach these. The activity itself isn't exported.
@@ -115,6 +115,11 @@ class CommandActivity : Activity() {
             "clean-up" -> {
                 // After testing: this app's notifications gone, and no Teams sync left waiting.
                 NotificationManagerCompat.from(this).cancelAll()
+                // Reviews run from here (any but a Sunday evening's) were tests: dropped.
+                val zone = graph.clock.zone()
+                graph.log.update { log ->
+                    log.copy(reviews = log.reviews.filter { r -> java.time.Instant.ofEpochMilli(r.at).atZone(zone).let { it.dayOfWeek == java.time.DayOfWeek.SUNDAY && it.hour * 60 + it.minute >= graph.settings.value.checkInMin } })
+                }
                 graph.runtime.update {
                     it.copy(
                         teamsAuto = TeamsAutoSync.State(),

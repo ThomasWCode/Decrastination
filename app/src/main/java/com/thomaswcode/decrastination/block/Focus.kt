@@ -175,6 +175,28 @@ class Focus(
      * Work a source has just confirmed done: it's logged, and earns free time for what no
      * session counted (docs/scheduler.md §4).
      */
+    /**
+     * A piece of [taskId] the photo check found done (Phase 5): as a finished session on it would,
+     * its step is ticked (or its minutes added to the task's) and its share of free time earned.
+     */
+    suspend fun photoChecked(taskId: String, step: String?, minutes: Int) {
+        val now = clock.now()
+        tasks.update { state ->
+            state.copy(
+                tasks = state.tasks.map { t ->
+                    if (t.id != taskId) return@map t
+                    val i = if (step != null) t.subSteps.indexOfFirst { !it.done && it.title == step } else -1
+                    if (i >= 0) {
+                        t.copy(subSteps = t.subSteps.mapIndexed { j, s -> if (j == i) s.copy(done = true) else s }, workedMin = t.workedMin + minutes)
+                    } else {
+                        t.copy(workedMin = t.workedMin + minutes)
+                    }
+                },
+            )
+        }
+        runtime.update { it.copy(credit = it.credit.earn(today(now), Credit.forSession(minutes, settings.value.workMinPerFreeMin))) }
+    }
+
     suspend fun onCompleted(completed: List<TaskItem>) {
         if (completed.isEmpty()) return
         // A task confirmed done while its session runs: the session ends now, its minutes count

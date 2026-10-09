@@ -5,8 +5,10 @@ import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -37,6 +39,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.core.Chunk
@@ -45,6 +48,7 @@ import com.thomaswcode.decrastination.ui.AppTheme
 import com.thomaswcode.decrastination.ui.Format
 import com.thomaswcode.decrastination.ui.TaskOpener
 import com.thomaswcode.decrastination.widget.WidgetModel
+import java.io.File
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -108,6 +112,16 @@ class BlockedActivity : ComponentActivity() {
             if (verdict !is BlockPolicy.Verdict.Block && session == null) finish()
         }
         val next = if (session != null) plan.chunksOf(session.taskId).firstOrNull() ?: plan.next else plan.next
+        val photoChecker = remember(settings.aiEnabled) { graph.photoChecker() }
+        val photoFile = remember { File(cacheDir, "photos/check.jpg").also { it.parentFile?.mkdirs() } }
+        val photoUri = remember { FileProvider.getUriForFile(this, "$packageName.photos", photoFile) }
+        var photoFor by remember { mutableStateOf<Chunk?>(null) }
+        val takePhoto = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { taken ->
+            val piece = photoFor
+            if (!taken || piece == null || photoChecker == null) return@rememberLauncherForActivityResult
+            message = "Checking the photo…"
+            scope.launch { message = PhotoChecks.check(this@BlockedActivity, graph, photoChecker, photoFile, piece) }
+        }
 
         Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
             Column(
@@ -156,6 +170,13 @@ class BlockedActivity : ComponentActivity() {
                             OutlinedButton(onClick = {
                                 scope.launch { message = graph.requestTeamsSync() ?: "The Teams widget is syncing Teams" }
                             }) { Text("Refresh Teams") }
+                        }
+                        // Written work: a photo instead of the timer, once Claude is on (Q16).
+                        if (photoChecker != null) {
+                            OutlinedButton(onClick = {
+                                photoFor = next
+                                takePhoto.launch(photoUri)
+                            }) { Text("Photo check") }
                         }
                     }
                 } else {

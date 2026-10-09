@@ -269,3 +269,35 @@ class ClaudeEnricherTest {
         assertEquals(0.0135, result.costUsd, 1e-9)
     }
 }
+
+class PhotoCheckerTest {
+    @Test
+    fun `the photo goes as a JPEG image block with the piece, and the verdict is read`() = runBlocking {
+        val server = MockWebServer().apply { start() }
+        try {
+            val text = """{"done":true,"confidence":1.4,"reason":"All eight answers are written out."}"""
+            val body = JsonObject(
+                mapOf(
+                    "id" to JsonPrimitive("msg"), "type" to JsonPrimitive("message"), "role" to JsonPrimitive("assistant"), "model" to JsonPrimitive("claude-opus-5-5"),
+                    "content" to JsonArray(listOf(JsonObject(mapOf("type" to JsonPrimitive("text"), "text" to JsonPrimitive(text))))),
+                    "stop_reason" to JsonPrimitive("end_turn"), "stop_sequence" to kotlinx.serialization.json.JsonNull,
+                    "usage" to JsonObject(mapOf("input_tokens" to JsonPrimitive(1_600), "output_tokens" to JsonPrimitive(100))),
+                ),
+            )
+            server.enqueue(MockResponse().setHeader("Content-Type", "application/json").setBody(body.toString()))
+            val result = PhotoChecker("test-key", endpoint = server.url("").toString().trimEnd('/')).check(byteArrayOf(1, 2, 3), "Chapter 17 review, part 2 of 3")
+            val request = Json.parseToJsonElement(server.takeRequest().body.readUtf8()).jsonObject
+            val content = request["messages"]!!.jsonArray.single().jsonObject["content"]!!.jsonArray
+            val image = content.first().jsonObject
+            assertEquals("image", image["type"]!!.jsonPrimitive.content)
+            assertEquals("image/jpeg", image["source"]!!.jsonObject["media_type"]!!.jsonPrimitive.content)
+            assertEquals("AQID", image["source"]!!.jsonObject["data"]!!.jsonPrimitive.content)
+            assertTrue("Chapter 17 review, part 2 of 3" in content[1].toString())
+            assertEquals(true, result.verdict!!.done)
+            // A confidence past 1 is read as 1.
+            assertEquals(1.0, result.verdict!!.confidence)
+        } finally {
+            server.shutdown()
+        }
+    }
+}

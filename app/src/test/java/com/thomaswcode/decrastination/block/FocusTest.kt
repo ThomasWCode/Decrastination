@@ -106,6 +106,15 @@ class FocusTest {
     }
 
     @Test
+    fun `a piece the photo check finds done is ticked off and earns its time`() = runTest {
+        tasks.update { it.copy(tasks = listOf(task("t", steps = listOf(SubStep("Q1-8", 30), SubStep("Q9-16", 30))))) }
+        focus.photoChecked("teams:t", "Q1-8", 30)
+        assertEquals(listOf(true, false), tasks.value.tasks.single().subSteps.map { it.done })
+        assertEquals(30, tasks.value.tasks.single().workedMin)
+        assertEquals(10 * 60_000L, focus.creditLeftMs())
+    }
+
+    @Test
     fun `a session stopped early counts its minutes but earns nothing`() = runTest {
         tasks.update { it.copy(tasks = listOf(task("t"))) }
         focus.startSession("teams:t", "t", null, 45)
