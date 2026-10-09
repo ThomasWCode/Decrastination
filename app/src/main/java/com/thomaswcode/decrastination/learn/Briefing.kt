@@ -45,6 +45,8 @@ object Briefing {
 
     suspend fun run(context: Context) {
         val graph = AppGraph.get(context)
+        // The calendar read first: woken by its alarm, the app has had no time to read it yet.
+        CalendarTime.refresh(context)
         val now = graph.clock.now()
         val zone = graph.clock.zone()
         val plan = graph.plan()

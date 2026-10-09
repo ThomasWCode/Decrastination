@@ -61,6 +61,15 @@ object AnkiRules {
     private val SECTION_IN_TEXT = Regex("""(?<![\d.])([1-9])\.([1-9])(?![\d.])""")
     private val VOCABULARY = Regex("""vocab|vokabel|wortschatz|anki""", RegexOption.IGNORE_CASE)
 
+    /** A page reference ("p46", "pp. 12", "S. 30"): numbers, like the sections, not work. */
+    private val PAGES = Regex("""\b(pp?|s|pages?|seiten?)\.?\s*\d+""", RegexOption.IGNORE_CASE)
+
+    /** What an instruction that's only about learning words is made of, besides numbers. */
+    private val VOCABULARY_WORDS = Regex(
+        """\b(learn|learning|lerne|lernen|revise|revision|study|memori[sz]e|vocab\w*|vokabel\w*|wortschatz|anki|decks?|cards?|words?|column|sections?|test|quiz|both|ways|the|a|and|und|for|of|on|in|from|to|with|using)\b""",
+        RegexOption.IGNORE_CASE,
+    )
+
     fun ankiDay(now: Long, zone: ZoneId): LocalDate =
         Instant.ofEpochMilli(now).atZone(zone).minusHours(ROLLOVER_HOUR).toLocalDate()
 
@@ -86,6 +95,15 @@ object AnkiRules {
             .firstOrNull { (deck, _) -> deck.new > 0 || unseen(deck) > 0 }
             ?.first
 
+    /**
+     * Whether [text] asks only for learning vocabulary ("Learn vocabulary p46-47/ 2.2/2.3 (vocabulary
+     * test!)"): a vocabulary word, numbers, and nothing but words like those. Anything else in it,
+     * understood or not ("…and complete exercises 3–5", "…and revise the grammar"), is other work,
+     * so the step stays planned whole, deck or not.
+     */
+    fun vocabularyOnly(text: String): Boolean =
+        VOCABULARY.containsMatchIn(text) && text.replace(PAGES, " ").replace(VOCABULARY_WORDS, " ").none { it.isLetter() }
+
     /** The sections a piece of vocabulary homework names, in order, without repeats. */
     fun linkedSections(text: String): List<Pair<Int, Int>> {
         if (!VOCABULARY.containsMatchIn(text)) return emptyList()
@@ -101,11 +119,15 @@ object AnkiRules {
     /** The vocabulary sections [task] asks for: the deck pattern wins when it finds anything; else the sections the enrichment read. */
     fun sectionsOf(task: TaskItem): List<Pair<Int, Int>> = linkedSections(task.title + "\n" + task.detail).ifEmpty { enrichedSections(task) }
 
-    /** For each assignment, the vocabulary sections ("1.2") its deck tasks hold, open or finished; a missed one holds none. */
-    fun heldSections(tasks: List<TaskItem>): Map<String, Set<String>> = tasks
+    /**
+     * For each assignment, the vocabulary sections ("1.2") its deck tasks from the current
+     * [textbook] hold, open or finished. A missed one holds none, nor does another textbook's.
+     */
+    fun heldSections(tasks: List<TaskItem>, textbook: Int): Map<String, Set<String>> = tasks
         .filter { it.source == Source.Anki && it.sourceId.startsWith(DECK_PREFIX) && it.status != Status.Missed }
         .flatMap { deck ->
-            val section = deck.extra[EXTRA_DECK_NAME]?.substringAfterLast(Deck.SEPARATOR) ?: return@flatMap emptyList()
+            val name = deck.extra[EXTRA_DECK_NAME]?.takeIf { it.startsWith("Textbook $textbook${Deck.SEPARATOR}") } ?: return@flatMap emptyList()
+            val section = name.substringAfterLast(Deck.SEPARATOR)
             deck.extra[EXTRA_FOR].orEmpty().split(',').filter { it.isNotEmpty() }.map { it to section }
         }
         .groupBy({ it.first }, { it.second })

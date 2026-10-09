@@ -147,7 +147,8 @@ class BlockedActivity : ComponentActivity() {
                             }
                         }) { Text("Open") }
                         if (session == null) {
-                            FilledTonalButton(onClick = {
+                            // Not before it's available (an Anki deck's next cards at 04:00).
+                            FilledTonalButton(enabled = next.startable(plan.now), onClick = {
                                 scope.launch { Sessions.start(this@BlockedActivity, next.taskId, next.label, next.step, next.minutes) }
                             }) { Text("Start ${Format.minutes(next.minutes)}") }
                         } else {
@@ -171,8 +172,9 @@ class BlockedActivity : ComponentActivity() {
                                 scope.launch { message = graph.requestTeamsSync() ?: "The Teams widget is syncing Teams" }
                             }) { Text("Refresh Teams") }
                         }
-                        // Written work: a photo instead of the timer, once Claude is on (Q16).
-                        if (photoChecker != null) {
+                        // Written work: a photo instead of the timer, once Claude is on (Q16). Not
+                        // during a session: the two would count the same piece twice.
+                        if (photoChecker != null && session == null) {
                             OutlinedButton(onClick = {
                                 photoFor = next
                                 takePhoto.launch(photoUri)

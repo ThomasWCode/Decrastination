@@ -62,6 +62,7 @@ import com.google.zxing.qrcode.QRCodeWriter
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.block.FocusService
 import com.thomaswcode.decrastination.data.Secret
+import com.thomaswcode.decrastination.notify.Channels
 import com.thomaswcode.decrastination.notify.Notify
 import com.thomaswcode.decrastination.ui.AppTheme
 import com.thomaswcode.decrastination.ui.Format
@@ -189,12 +190,20 @@ class ProtectionActivity : ComponentActivity() {
                     detail = ProtectionCheck.shortcutsDetail(report),
                 )
                 val notifications = remember(refresh) { Notify.allowed(this@ProtectionActivity) }
+                val alerts = remember(refresh) { Notify.shown(this@ProtectionActivity, Channels.PROTECTION) }
                 SetupItem(
                     title = "Notifications",
-                    done = notifications,
-                    detail = "For focus sessions and protection alerts.",
-                    action = if (notifications) null else "Allow" to {
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    done = alerts,
+                    detail = if (notifications && !alerts) "Allowed, but the Protection channel is off: its alerts wouldn't show." else "For focus sessions and protection alerts.",
+                    action = if (alerts) null else "Allow" to {
+                        if (notifications) {
+                            // Allowed, its channel off: that channel's own page.
+                            startActivity(
+                                Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS)
+                                    .putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+                                    .putExtra(Settings.EXTRA_CHANNEL_ID, Channels.PROTECTION),
+                            )
+                        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                             notificationLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
                         } else {
                             startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, packageName))

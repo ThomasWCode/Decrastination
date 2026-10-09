@@ -258,6 +258,13 @@ class SettingsChangesTest {
     }
 
     @Test
+    fun `a box length changed either way waits once armed`() {
+        val armed = Settings(armed = true)
+        assertEquals(1, SettingsChanges.propose(armed, armed.copy(boxMin = armed.boxMin - 15), emptyList(), now, ::newId).pending.size)
+        assertEquals(1, SettingsChanges.propose(armed, armed.copy(boxMin = armed.boxMin + 15), emptyList(), now, ::newId).pending.size)
+    }
+
+    @Test
     fun `disarming waits, arming doesn't`() {
         val armed = SettingsChanges.propose(Settings(), Settings(armed = true), emptyList(), now, ::newId)
         assertTrue(armed.settings.armed)
@@ -389,6 +396,13 @@ class ProtectionCheckTest {
         assertTrue("Quick Settings can't be read" in detail, detail)
         assertEquals("Good: no shortcut can switch the service off.", ProtectionCheck.shortcutsDetail(report.copy(unreadableShortcuts = emptyList())))
         assertEquals("It's on the accessibility button.", ProtectionCheck.shortcutsDetail(report.copy(onShortcuts = listOf("accessibility_button_targets"))))
+    }
+
+    @Test
+    fun `protection alerts switched off are a problem once armed`() {
+        val report = ProtectionCheck.Report(serviceEnabled = true, accessibilityOn = true, onShortcuts = emptyList(), adminActive = true, canRepair = true, alertsShown = false)
+        assertEquals(listOf("Protection alerts are off: allow this app's notifications, and its Protection channel"), ProtectionCheck.problems(report, armed = true))
+        assertEquals(emptyList(), ProtectionCheck.problems(report, armed = false))
     }
 
     @Test
