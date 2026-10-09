@@ -41,10 +41,9 @@
 | Q24 | Testing on the phone | The widget goes on the 4th (last) home page, where there's room to try every size. Stay awake stays on; tests can run overnight. I may ask the Teams widget to sync at any hour when a test needs fresh data: the allowed hours govern only the app's own automatic syncs. |
 | Q25 | Credentials | Loaded from this PC's user environment into the app over adb (`scripts/load_credentials.py`): into its private storage, then its encrypted store, then the file is deleted. Never printed or committed. |
 
-## Still open: going with these defaults unless you say otherwise
+## Answered 9 Oct 2026
 
-### Q9. The sideloaded "Digital Wellbeing" app (`com.screentime` 1.6, installed 7 Sep)
-It holds usage-access permission. If it is a blocker you already tried, what went wrong is useful; otherwise I leave it alone. Also `app.humanforest`, if relevant.
-
-### Q12. The work-experience email from your dad
-It contains a calendar of 2027 deadlines (STEM Potential opens 30 Oct 2026, NPL/Diamond in December, RAL in January). **Default:** one task per email; extracting dated items into separate wait-until-date tasks is a Phase 5 option the model can do.
+| # | Question | Decision |
+|---|---|---|
+| Q9 | The sideloaded "Digital Wellbeing" app (`com.screentime` 1.6) and `app.humanforest` | **Ignore them.** The app leaves both alone. |
+| Q12 | The work-experience email from your dad (a calendar of 2027 deadlines) | **Yes: the AI can split anything it needs to into blocks.** Once Claude is on, an email, a Power Planner item or a Teams assignment can come back as blocks of work, each with its own dates where it has them (an application that opens on 30 Oct, another due in January). The planner places each in its own window, and an email archived with dated blocks still to do stays on the list until they're done. Built in 1.1.0. |
