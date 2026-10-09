@@ -289,6 +289,18 @@ class FocusTest {
     }
 
     @Test
+    fun `a step longer than a session isn't ticked by one, its minutes count`() = runTest {
+        tasks.update { it.copy(tasks = listOf(task("t", effort = 240, steps = listOf(SubStep("Essay", 240))))) }
+        focus.startSession("teams:t", "t: Essay", "Essay", 240)
+        assertEquals(Focus.MAX_SESSION_MIN, focus.session!!.minutes)
+        clock.time += Focus.MAX_SESSION_MIN * 60_000L
+        focus.stopSession()
+        val t = tasks.value.tasks.single()
+        assertEquals(listOf(false), t.subSteps.map { it.done })
+        assertEquals(Focus.MAX_SESSION_MIN, t.workedMin)
+    }
+
+    @Test
     fun `what counts as blocked follows the settings`() {
         assertEquals(Focus.Target.App("com.google.android.youtube"), focus.target("com.google.android.youtube"))
         assertEquals(Focus.Target.Browser("org.mozilla.firefox"), focus.target("org.mozilla.firefox"))

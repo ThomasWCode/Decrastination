@@ -224,6 +224,32 @@ class AnswersTest {
     }
 
     @Test
+    fun `a step longer than a focus session is cut into even parts that each fit one`() {
+        val e = parse(
+            Enrichments.Job.Assignment,
+            """{"subSteps":[{"title":"Write the essay","minutes":220,"ankiSections":[]},{"title":"Check it","minutes":20,"ankiSections":[]}],"effortMin":240,"ankiSections":[],"testDate":null}""",
+            assignment("Essay"),
+        )!!
+        assertEquals(listOf("Write the essay (1 of 2)" to 110, "Write the essay (2 of 2)" to 110, "Check it" to 20), e.subSteps!!.map { it.title to it.minutes })
+    }
+
+    @Test
+    fun `vocabulary past the step limit keeps its own step and sections, the rest folds`() {
+        val questions = (1..12).joinToString(",") { """{"title":"Question $it","minutes":10,"ankiSections":[]}""" }
+        val words = """{"title":"Learn vocabulary 2.3","minutes":20,"ankiSections":["2.3"]}"""
+        val e = parse(
+            Enrichments.Job.Assignment,
+            """{"subSteps":[$questions,$words,{"title":"Question 13","minutes":10,"ankiSections":[]}],"effortMin":150,"ankiSections":["2.3"],"testDate":null}""",
+            assignment("Questions 1-13, vocabulary 2.3"),
+        )!!
+        val steps = e.subSteps!!
+        // Its own step, with its section, so the deck that holds it still does.
+        assertEquals(listOf("2.3"), steps.single { it.title == "Learn vocabulary 2.3" }.ankiSections)
+        assertEquals("The rest: Question 12; Question 13", steps.last().title)
+        assertEquals(150, steps.sumOf { it.minutes })
+    }
+
+    @Test
     fun `an assignment that's all vocabulary is a hand-in, its work in the decks`() {
         val e = parse(Enrichments.Job.Assignment, """{"subSteps":[],"effortMin":0,"ankiSections":["1.2"],"testDate":null}""", assignment("Learn vocabulary 1.2"))!!
         assertEquals(5, e.effortMin)
