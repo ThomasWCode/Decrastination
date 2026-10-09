@@ -82,7 +82,9 @@ object Merge {
                 sourceProgress = f.sourceProgress,
                 firstProgress = old.firstProgress ?: old.sourceProgress,
                 peakEffortMin = listOfNotNull(old.peakEffortMin, old.sourceEffortMin, f.sourceEffortMin).maxOrNull(),
-                subSteps = f.subSteps ?: old.subSteps,
+                // The source's steps, unless they're the same as before: then the ones kept here,
+                // with what a session ticked off, until the source's counts catch up (Anki's cards).
+                subSteps = f.subSteps?.takeIf { new -> new.map { it.title } != old.subSteps.map { it.title } } ?: old.subSteps,
                 stepsPerDay = f.stepsPerDay,
                 notBefore = f.notBefore,
                 derived = f.derived,
