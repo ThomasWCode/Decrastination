@@ -38,6 +38,8 @@ data class RuntimeState(
     val eventAnswers: Map<String, String> = emptyMap(),
     /** Events you've been asked about, by name, so each is asked once. */
     val eventsAsked: Set<String> = emptySet(),
+    /** Completions whose free time has been given, so each is given once (`Focus.onCompleted`); kept a fortnight. */
+    val rewarded: List<Rewarded> = emptyList(),
 )
 
 /** The watchdog's last finding. */
@@ -135,3 +137,7 @@ data class BlockRecord(val at: Long, val target: String, val reason: String)
 
 @Serializable
 data class ProtectionRecord(val at: Long, val problems: List<String>, val repaired: Boolean)
+
+/** A completion that has had its free time: the task, and when it was confirmed done. */
+@Serializable
+data class Rewarded(val taskId: String, val doneAt: Long)

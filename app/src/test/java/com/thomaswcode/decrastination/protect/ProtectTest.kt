@@ -226,6 +226,23 @@ class SettingsChangesTest {
     }
 
     @Test
+    fun `a waiting disarm set back is cancelled, and one left as asked keeps its wait`() {
+        val armed = Settings(armed = true)
+        val first = SettingsChanges.propose(armed, armed.copy(armed = false), emptyList(), now, ::newId)
+        assertEquals(1, first.pending.size)
+        val asked = SettingsChanges.requested(armed, first.pending)
+        assertEquals(false, asked.armed)
+        // Something else changed: the disarm keeps its wait.
+        val again = SettingsChanges.propose(armed, asked.copy(workMinPerFreeMin = armed.workMinPerFreeMin + 1), first.pending, now + 3_600_000L, ::newId)
+        assertEquals(first.pending, again.pending)
+        assertEquals(armed.workMinPerFreeMin + 1, again.settings.workMinPerFreeMin)
+        // Armed again before it applied: cancelled.
+        val back = SettingsChanges.propose(armed, asked.copy(armed = true), first.pending, now, ::newId)
+        assertEquals(emptyList(), back.pending)
+        assertEquals(true, back.settings.armed)
+    }
+
+    @Test
     fun `disarming waits, arming doesn't`() {
         val armed = SettingsChanges.propose(Settings(), Settings(armed = true), emptyList(), now, ::newId)
         assertTrue(armed.settings.armed)

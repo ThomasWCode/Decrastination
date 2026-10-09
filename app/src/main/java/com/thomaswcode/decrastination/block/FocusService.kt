@@ -85,6 +85,13 @@ class FocusService : AccessibilityService() {
     private var lastUrlCheckAt = 0L
     private var urlCheckPending: String? = null
 
+    /**
+     * The blocked site each checked browser last showed in front (null: a page that isn't), for
+     * when it goes into picture-in-picture and Android hides its address. A browser not in it
+     * hasn't been read since this instance started.
+     */
+    private val lastSite = mutableMapOf<String, Focus.Target.Site?>()
+
     // The settings guard's pacing, as Phase 0 tuned it.
     private var lastGuardAt = 0L
     private var lastBackAt = Long.MIN_VALUE / 2
@@ -298,6 +305,7 @@ class FocusService : AccessibilityService() {
             ?: return
         val text = root.findAccessibilityNodeInfosByViewId(Blocklist.urlBarId(browser)).firstOrNull()?.text?.toString()
         val site = graph.focus.siteTarget(browser, text)
+        if (text != null) lastSite[browser] = site
         if (site != null) act(site) else stopSpendingUnlessAside()
     }
 
@@ -311,29 +319,33 @@ class FocusService : AccessibilityService() {
     private fun closeBlockedPictureInPicture() {
         for (window in windows) {
             if (!window.isInPictureInPictureMode) continue
-            val pkg = window.root?.packageName?.toString() ?: continue
-            val browser = graph.focus.target(pkg) == null && graph.focus.isCheckedBrowser(pkg)
-            if (graph.focus.target(pkg) == null && !browser) continue
+            val root = window.root ?: continue
+            val pkg = root.packageName?.toString() ?: continue
+            val app = graph.focus.target(pkg)
+            val browser = app == null && graph.focus.isCheckedBrowser(pkg)
+            if (app == null && !browser) continue
             val verdict = graph.focus.verdict()
-            // Allowed on free time: a video playing in the corner spends it like one in front.
-            if (verdict == BlockPolicy.Verdict.Spend) {
-                windowTarget(window)?.let(::startSpending)
-                continue
-            }
-            if (verdict !is BlockPolicy.Verdict.Block) continue
+            if (verdict is BlockPolicy.Verdict.Allow) continue
             // A browser's video: its address, where Android still shows it, says whether it's a
-            // blocked site; where it doesn't, the browser is brought back and its page checked.
-            if (browser) {
-                val address = window.root?.findAccessibilityNodeInfosByViewId(Blocklist.urlBarId(pkg))?.firstOrNull()?.text?.toString()
-                if (address != null && graph.focus.siteTarget(pkg, address) == null) continue
+            // blocked site; where it doesn't, the page it last showed in front. Neither known (it
+            // went into the corner before this instance started), it's brought back to look.
+            val address = if (browser) root.findAccessibilityNodeInfosByViewId(Blocklist.urlBarId(pkg)).firstOrNull()?.text?.toString() else null
+            val known = app != null || address != null || pkg in lastSite
+            val target = app ?: if (address != null) graph.focus.siteTarget(pkg, address) else lastSite[pkg]
+            if (known && target == null) continue
+            // Allowed on free time: a video playing in the corner spends it like one in front.
+            if (verdict == BlockPolicy.Verdict.Spend && target != null) {
+                startSpending(target)
+                continue
             }
             val now = SystemClock.uptimeMillis()
             if (now - lastPipRelaunchAt < PIP_RELAUNCH_GAP_MS) continue
             lastPipRelaunchAt = now
-            Log.i(TAG, "Picture-in-picture: $pkg, bringing it back to cover it")
+            Log.i(TAG, "Picture-in-picture: $pkg, bringing it back to ${if (target == null) "look at it" else "cover it"}")
+            // Blocked, it can be closed outright where the window offers that; otherwise (and
+            // always just to look) it's brought back to full screen, as tapping its icon does.
             val dismiss = AccessibilityNodeInfo.AccessibilityAction.ACTION_DISMISS
-            val root = window.root ?: continue
-            if (dismiss in root.actionList && root.performAction(dismiss.id)) continue
+            if (verdict is BlockPolicy.Verdict.Block && dismiss in root.actionList && root.performAction(dismiss.id)) continue
             packageManager.getLaunchIntentForPackage(pkg)?.let { startActivity(it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
         }
     }
