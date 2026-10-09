@@ -166,7 +166,7 @@ class ProtectionActivity : ComponentActivity() {
                             }
                             // Changed your mind: cancelling a loosening tightens, so it's at once.
                             TextButton(onClick = { scope.launch { graph.cancelChange(change.id) } }) { Text("Cancel") }
-                            if (hasParentCode) TextButton(onClick = { codeFor = CodeTarget.Change(change.id) }) { Text("Parent code") }
+                            if (hasParentCode) TextButton(onClick = { codeFor = CodeTarget.Change(change.id, change.description) }) { Text("Parent code") }
                         }
                     }
                 }
@@ -295,7 +295,7 @@ class ProtectionActivity : ComponentActivity() {
     }
 
     private sealed interface CodeTarget {
-        data class Change(val id: String) : CodeTarget
+        data class Change(val id: String, val description: String) : CodeTarget
         data object Unblock : CodeTarget
     }
 
@@ -358,7 +358,17 @@ class ProtectionActivity : ComponentActivity() {
             title = { Text(if (target == CodeTarget.Unblock) "Unblock for an hour" else "Apply now") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Ask your dad for the code his authenticator app shows for Decrastination.", style = MaterialTheme.typography.bodyMedium)
+                    // What the code will do, in full: a code can't say what it was given for, so your
+                    // dad has to see it here.
+                    Text(
+                        if (target is CodeTarget.Change) "It applies now: ${target.description}." else "It unblocks everything for an hour.",
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                    Text(
+                        "For your dad to type in, from his authenticator app, seeing this. A code works for whatever it's typed into, " +
+                            "so it's never read out for something he can't see.",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
                     OutlinedTextField(
                         code,
                         { code = it.filter(Char::isDigit).take(Totp.DIGITS) },
