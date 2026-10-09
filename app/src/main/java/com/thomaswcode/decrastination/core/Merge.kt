@@ -120,7 +120,8 @@ object Merge {
      * as it's worked through, so it's rewarded for the most it was.
      */
     private fun completion(old: TaskItem, done: TaskItem): TaskItem = done.copy(
-        sourceProgress = old.firstProgress ?: old.sourceProgress,
+        // The lower of first-seen and last progress: corrected downward, the work back since counts.
+        sourceProgress = minOf(old.firstProgress ?: old.sourceProgress, old.sourceProgress),
         sourceEffortMin = if (old.derived) old.peakEffortMin ?: old.sourceEffortMin else old.sourceEffortMin,
     )
 }
