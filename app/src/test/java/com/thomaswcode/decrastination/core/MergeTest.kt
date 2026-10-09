@@ -165,6 +165,14 @@ class MergeTest {
     }
 
     @Test
+    fun `an email archived while the model's reading of it is due stays till it's had it`() {
+        val read = Merge.apply(emptyList(), Source.Gmail, listOf(fetched("t5")), t0).tasks.map { it.copy(enrichment = readOf(it)) }
+        // Read by the rules; the model on and due to read it again.
+        assertEquals(Status.Open, Merge.apply(read, Source.Gmail, emptyList(), later, unread = { true }).tasks.single().status)
+        assertEquals(Status.Done, Merge.apply(read, Source.Gmail, emptyList(), later, unread = { false }).tasks.single().status)
+    }
+
+    @Test
     fun `an email archived with blocks due by its own deadline stays too`() {
         val read = Merge.apply(emptyList(), Source.Gmail, listOf(fetched("t2", dueAt = t0 + 5 * 86_400_000L)), t0).tasks
         val withBlocks = read.map { it.copy(subSteps = listOf(SubStep("Reply", 10), SubStep("Pay", 10)), enrichment = readOf(it)) }
