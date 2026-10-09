@@ -40,15 +40,17 @@ data class Enrichment(
  * where the source gives none.
  */
 fun TaskItem.enriched(): TaskItem {
-    val e = enrichment ?: return this
+    // Always from what the source said, so a changed enrichment doesn't leave the last one's dates.
+    val base = sourceValues ?: SourceValues(kind, dueAt, availableFrom)
+    val e = enrichment ?: return copy(kind = base.kind, dueAt = base.dueAt, availableFrom = base.availableFrom)
     val due = when {
-        e.testDate != null && (dueAt == null || e.testDate < dueAt) -> e.testDate
-        else -> dueAt ?: e.deadline
+        e.testDate != null && (base.dueAt == null || e.testDate < base.dueAt) -> e.testDate
+        else -> base.dueAt ?: e.deadline
     }
     return copy(
-        kind = if (source == Source.Gmail) e.kind ?: kind else kind,
+        kind = if (source == Source.Gmail) e.kind ?: base.kind else base.kind,
         dueAt = due,
-        availableFrom = listOfNotNull(availableFrom, e.actionableFrom).maxOrNull(),
+        availableFrom = listOfNotNull(base.availableFrom, e.actionableFrom).maxOrNull(),
         aiEffortMin = e.effortMin ?: aiEffortMin,
         subSteps = if (subSteps.isEmpty()) e.subSteps.orEmpty() else subSteps,
     )

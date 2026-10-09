@@ -67,6 +67,22 @@ class EnrichmentTest {
     }
 
     @Test
+    fun `a new enrichment is laid over what the source said, not over the last one`() {
+        val task = email().copy(sourceValues = SourceValues(Kind.Admin, null, null))
+        val dated = task.withEnrichment(enrichment(task).copy(deadline = Fixtures.at("2026-10-12T09:00"), kind = Kind.Event))
+        assertEquals(Fixtures.at("2026-10-12T09:00"), dated.dueAt)
+        // The email changed: the new enrichment finds no deadline, and the old one's is gone.
+        val undated = dated.withEnrichment(enrichment(task).copy(kind = Kind.Admin))
+        assertEquals(null, undated.dueAt)
+        assertEquals(Kind.Admin, undated.kind)
+        // A test moved later than the due date no longer brings it forward.
+        val assignment = assignment().copy(sourceValues = SourceValues(Kind.Homework, Fixtures.at("2026-10-16T08:30"), null))
+        val early = assignment.withEnrichment(enrichment(assignment).copy(testDate = Fixtures.at("2026-10-12T08:30")))
+        val later = early.withEnrichment(enrichment(assignment).copy(testDate = Fixtures.at("2026-10-20T08:30")))
+        assertEquals(Fixtures.at("2026-10-16T08:30"), later.dueAt)
+    }
+
+    @Test
     fun `a fresh enrichment replaces the steps the last one gave, keeping what's done`() {
         val task = assignment()
         val first = task.withEnrichment(enrichment(task).copy(subSteps = listOf(SubStep("Pages 7-9", 30), SubStep("Pages 10-11", 20))))
