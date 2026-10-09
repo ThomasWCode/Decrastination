@@ -188,7 +188,9 @@ class AnswersTest {
             """{"subSteps":[{"title":"Learn vocabulary 2.2","minutes":20},{"title":"","minutes":10},{"title":"Learn vocabulary 2.3","minutes":999}],"effortMin":40,"ankiSections":["2.2"," 2.3","12","2.2"],"testDate":"2026-10-12"}""",
             task,
         )!!
-        assertEquals(listOf("Learn vocabulary 2.2"), e.subSteps!!.map { it.title })
+        // A blank step and one of 999 minutes: the split isn't trusted, the estimate stands.
+        assertNull(e.subSteps)
+        assertEquals(40, e.effortMin)
         assertEquals(listOf("2.2", "2.3"), e.ankiSections)
         // A step's own sections are kept on it, and counted among the assignment's.
         val tagged = parse(
