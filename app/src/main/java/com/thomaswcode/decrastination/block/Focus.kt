@@ -196,10 +196,6 @@ class Focus(
     }
 
     /**
-     * Work a source has just confirmed done: it's logged, and earns free time for what no
-     * session counted (docs/scheduler.md §4).
-     */
-    /**
      * Gives what's owed for the completions syncs confirmed ([TaskState.unrewarded]), then clears
      * them. Stopped before that, they're given next time (after the next sync, or when the app
      * starts), and [onCompleted] gives each only once.
@@ -233,8 +229,10 @@ class Focus(
         fun key(task: TaskItem) = Rewarded(task.id, task.doneAt ?: task.lastSeenAt)
         runtime.update { state ->
             val fresh = completed.filter { key(it) !in state.rewarded }
-            // Reading or archiving an email, or an event passing, isn't work that earns time.
-            val earned = fresh.filter { it.kind != Kind.Info && it.kind != Kind.Event }.sumOf { task ->
+            // Reading or archiving an email, or an event passing, isn't work that earns time. Free
+            // time is for the day the work was confirmed: given late (the app stopped first), after
+            // that day is over, it has gone as the rest of that day's has.
+            val earned = fresh.filter { it.kind != Kind.Info && it.kind != Kind.Event && today(it.doneAt ?: now) == today }.sumOf { task ->
                 val remaining = (task.effortMin * (1 - task.sourceProgress)).roundToInt() - worked(task)
                 Credit.forCompletion(remaining.coerceAtLeast(0), ratio)
             }
