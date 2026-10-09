@@ -231,15 +231,7 @@ class SettingsActivity : ComponentActivity() {
         fun browsers(settings: Settings): List<String> =
             (Blocklist.CHECKED_BROWSERS + Blocklist.BLOCKED_BROWSERS + settings.checkedBrowsers + settings.blockedBrowsers).distinct()
 
-        fun browserName(pkg: String): String = when (pkg) {
-            "com.android.chrome" -> "Chrome"
-            "com.brave.browser" -> "Brave"
-            "org.mozilla.firefox" -> "Firefox"
-            "org.mozilla.firefox_beta" -> "Firefox Beta"
-            "org.mozilla.fenix" -> "Firefox Nightly"
-            "org.torproject.torbrowser" -> "Tor"
-            else -> pkg
-        }
+        fun browserName(pkg: String): String = Blocklist.NAMES[pkg] ?: pkg
     }
 }
 

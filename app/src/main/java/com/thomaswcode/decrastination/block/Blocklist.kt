@@ -23,8 +23,14 @@ object Blocklist {
         "com.linkedin.android",
     )
 
-    /** The listed apps' names, for showing one that isn't installed. */
+    /** The listed apps' and browsers' names, for showing one that isn't installed, or in the stats. */
     val NAMES = mapOf(
+        "com.android.chrome" to "Chrome",
+        "com.brave.browser" to "Brave",
+        "org.mozilla.firefox" to "Firefox",
+        "org.mozilla.firefox_beta" to "Firefox Beta",
+        "org.mozilla.fenix" to "Firefox Nightly",
+        "org.torproject.torbrowser" to "Tor",
         "com.google.android.youtube" to "YouTube",
         "com.zhiliaoapp.musically" to "TikTok",
         "com.ss.android.ugc.trill" to "TikTok (Asia)",
