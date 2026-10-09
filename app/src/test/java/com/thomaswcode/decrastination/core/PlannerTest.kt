@@ -111,6 +111,16 @@ class PlannerTest {
     }
 
     @Test
+    fun `an email that only needs reading, or tells of an event, isn't planned or reminded of`() {
+        fun email(id: String, kind: Kind) = task(id, null, effort = 10, kind = kind).copy(id = "gmail:$id", source = Source.Gmail)
+        val call = task("call", Fixtures.at("2026-10-09T17:00"), kind = Kind.Event).copy(id = "powerplanner:call", source = Source.PowerPlanner)
+        val plan = plan(listOf(email("note", Kind.Admin), email("linkedin", Kind.Info), email("openday", Kind.Event), call), "2026-10-08T17:00")
+        assertEquals(setOf("gmail:note"), plan.ordered.map { it.taskId }.toSet())
+        // A planner item that's an event is still a reminder; an email about one isn't.
+        assertEquals(listOf("powerplanner:call"), plan.events.map { it.id })
+    }
+
+    @Test
     fun `work due today or tomorrow takes today's time before overdue work`() {
         // Thursday 17:00: the evening's hours left; an overdue task bigger than all of them.
         val late = task("late", dueAt = Fixtures.at("2026-10-07T17:00"), effort = 400)

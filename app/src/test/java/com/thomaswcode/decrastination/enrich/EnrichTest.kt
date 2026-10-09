@@ -484,8 +484,9 @@ class AiUsageTest {
         assertEquals(0, ModelAlerts.unshown(standing, mapOf("gmail:t1" to Enrichments.inputHash(task))).size)
         // Shown for an older content: this plan is another warning.
         assertEquals(1, ModelAlerts.unshown(standing, mapOf("gmail:t1" to "older")).size)
-        // Done, or its plan kept since: nothing standing.
+        // Done, or its plan kept since, or just an email, not shown anywhere: nothing standing.
         assertEquals(0, ModelAlerts.standing(listOf(dropped.copy(status = Status.Done))).size)
+        assertEquals(0, ModelAlerts.standing(listOf(dropped.copy(kind = Kind.Info))).size)
         assertEquals(0, ModelAlerts.standing(listOf(dropped.copy(enrichment = dropped.enrichment!!.copy(dropped = null)))).size)
     }
 
