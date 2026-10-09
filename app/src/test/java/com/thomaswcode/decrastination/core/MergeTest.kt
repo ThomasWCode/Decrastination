@@ -1,5 +1,6 @@
 package com.thomaswcode.decrastination.core
 
+import com.thomaswcode.decrastination.sources.gmail.GmailThreads
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -8,8 +9,9 @@ class MergeTest {
     private val t0 = 1_000_000L
     private val later = t0 + 60_000
 
+    // Read as far as reads go, as an email's text is once fetched (see GmailThreads.textRead).
     private fun fetched(id: String, title: String = id, done: Boolean = false, derived: Boolean = false, dueAt: Long? = null) =
-        Fetched(sourceId = id, title = title, kind = Kind.Homework, done = done, derived = derived, dueAt = dueAt)
+        Fetched(sourceId = id, title = title, kind = Kind.Homework, done = done, derived = derived, dueAt = dueAt, extra = mapOf(GmailThreads.EXTRA_TEXT_READ_TO to "${GmailThreads.MAX_BODY_CHARS}"))
 
     private fun first(vararg items: Fetched) = Merge.apply(emptyList(), Source.Teams, items.toList(), t0).tasks
 
@@ -162,6 +164,13 @@ class MergeTest {
         // Read (no blocks in it): the next read finds it gone, and it's done.
         val readNow = unread.map { it.copy(enrichment = readOf(it)) }
         assertEquals(Status.Done, Merge.apply(readNow, Source.Gmail, emptyList(), later + 1).tasks.single().status)
+    }
+
+    @Test
+    fun `an email archived before its text was read as far as reads go isn't kept for its reading`() {
+        // Stored before how far it was read was kept: half an email can't be asked about.
+        val cut = Merge.apply(emptyList(), Source.Gmail, listOf(fetched("t6")), t0).tasks.map { it.copy(extra = it.extra - GmailThreads.EXTRA_TEXT_READ_TO) }
+        assertEquals(Status.Done, Merge.apply(cut, Source.Gmail, emptyList(), later, unread = { true }).tasks.single().status)
     }
 
     @Test

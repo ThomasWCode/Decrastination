@@ -1,6 +1,7 @@
 package com.thomaswcode.decrastination.core
 
 import com.thomaswcode.decrastination.Fixtures
+import com.thomaswcode.decrastination.sources.gmail.GmailThreads
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -13,6 +14,7 @@ class EnrichmentTest {
     private fun email(detail: String = "Please sign the trip form.") = TaskItem(
         id = "gmail:t1", source = Source.Gmail, sourceId = "t1", title = "Trip to Berlin", detail = detail,
         kind = Kind.Admin, sourceEffortMin = 15, firstSeenAt = t0, lastSeenAt = t0,
+        extra = mapOf(GmailThreads.EXTRA_TEXT_READ_TO to "${GmailThreads.MAX_BODY_CHARS}"),
     )
 
     private fun assignment(dueAt: Long? = Fixtures.at("2026-10-16T08:30")) = TaskItem(
@@ -213,8 +215,9 @@ class EnrichmentTest {
     @Test
     fun `what's enriched is emails, assignments and planner items, not done, derived or events`() {
         assertEquals(Enrichments.Job.Email, Enrichments.jobFor(email()))
-        // Its text still to be read: it waits.
+        // Its text still to be read, or read only as far as an older, lower limit went: it waits.
         assertEquals(null, Enrichments.jobFor(email().copy(extra = mapOf("textPending" to "true"))))
+        assertEquals(null, Enrichments.jobFor(email("x".repeat(4_000)).copy(extra = emptyMap())))
         assertEquals(Enrichments.Job.Assignment, Enrichments.jobFor(assignment()))
         val item = assignment().copy(source = Source.PowerPlanner, id = "powerplanner:p")
         assertEquals(Enrichments.Job.Effort, Enrichments.jobFor(item))

@@ -10,7 +10,7 @@ Version 1.0.0 is on your phone and running: the four sources sync, the plan and 
 2. **Claude**, if and when you want it: an API key in Setup, then *Use Claude* in Settings. Until then the rules do what they can, the weekly review is the rules', and there's no photo check (Phases 4 and 5).
 3. **Four calendar questions**, as notifications from 07:00: how much of the day each long event takes (Phase 5).
 4. **Things only you can try**: a blocked app in split screen, spending earned free time on a day with nothing due, the guard on the reset pages once armed, and restoring a backup (Phases 3 and 6).
-5. **Version 1.1.0 isn't on the phone yet**: it was built after the phone was disconnected on 9 Oct. It adds blocks (Q12), which wait for Claude like the other model jobs.
+5. **Versions 1.1.0 and 1.1.1 aren't on the phone yet**: they were built after the phone was disconnected on 9 Oct. 1.1.0 adds blocks (Q12), which wait for Claude like the other model jobs; 1.1.1 reads long emails to their end. Until Claude is on, nothing reads the dates in your dad's work-experience email, so keep **Imperial STEM Potential (opens 30 Oct)** in mind yourself.
 
 ## Phase 1: sources, storage, sync
 
@@ -57,4 +57,12 @@ Version 1.0.0 is on your phone and running: the four sources sync, the plan and 
 
 - **What it does**: once Claude is on, it can split any task into blocks: an email, a Power Planner item or a Teams assignment, each block with its own dates where it has them. Your dad's work-experience email becomes its applications, each planned between the day it opens and its own deadline. Archive the email and it stays on your list (marked as a follow-up) until its dated blocks are done; tick a block off in Tasks, or run a focus session on it.
 - **Tried without the API**: the prompt on that email by Opus through the subscription, in the JVM tests, and against the planner and the merge in tests. Not on the phone: it wasn't connected.
-- **Waiting for you**: Claude switched on; and the phone, to install 1.1.0.
+- **Waiting for you**: Claude switched on; and the phone, to install it (now as 1.1.1, below).
+
+## 1.1.1: long emails read to their end
+
+- **What was wrong**: the app kept only the first 4 000 characters of each email, so Claude would have read only the first half of your dad's work-experience email (8 500 characters). Its timeline was in the half cut off: Imperial STEM Potential (opens 30 Oct), the Rosalind Franklin Institute and Imperial Work Experience (January). A side check caught it: the first Opus tries for 1.1.0 read that cut copy, and none named STEM Potential.
+- **And the whole email's plan was more than 1.1.0 would take**: read whole, Opus planned it as 17 to 20 blocks, 12 to 14 hours over five months. 1.1.0 trusted at most 10 hours and 20 blocks from one email, and past either it drops every block, and the estimate with them.
+- **What it does now**: it keeps up to 20 000 characters of each email, and Claude reads up to 16 000 (and is told when there's more). Every email already stored is read again once, at the next sync: 5 of the 31 in your inbox on 9 Oct had been cut short at 4 000 characters, and the old reads could stop sooner on some. An email's or a planner item's blocks can come to 20 hours and 30 blocks (the prompt names the 30); an assignment's steps, and an estimate without blocks, keep the 10-hour limit.
+- **Tried without the API**: the app's own prompt for the whole email, four times by Opus through the subscription, each answer put through the app's checks and its planner. All four named STEM Potential (from 30 Oct; planned for 12 Nov), the Rosalind Franklin Institute and Imperial Work Experience (January), alongside NPL, Diamond, RAL, UKAEA, Rolls-Royce and the Beamline for Schools proposal; 1.1.0 would have dropped all four, and 1.1.1 takes all four. In the plan, the quick actions fall in the next three weeks and each application in its own window; whatever is due after the plan's 90-day reach sits on its last day for now and moves into its window as its deadline comes within reach.
+- **Waiting for you**: the phone, to install it; Claude switched on for the blocks.
