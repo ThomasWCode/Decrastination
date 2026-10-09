@@ -36,6 +36,8 @@ object Stats {
         val sessions: Int,
         /** Sessions run to their end. */
         val sessionsFinished: Int,
+        /** Pieces a photo check found done. */
+        val photoChecks: Int = 0,
         val focusMin: Int,
         val blocks: Int,
         /** What was covered most, with how often: a package or a site. */
@@ -51,7 +53,9 @@ object Stats {
         fun dateOf(at: Long): LocalDate = Instant.ofEpochMilli(at).atZone(zone).toLocalDate()
         fun inRange(at: Long): Boolean = dateOf(at).let { !it.isBefore(first) && !it.isAfter(today) }
         val completions = log.completions.filter { inRange(it.doneAt) }
-        val sessions = log.sessions.filter { inRange(it.startedAt) }
+        // Timed focus sessions; work a photo check found done is counted as such, apart.
+        val sessions = log.sessions.filter { inRange(it.startedAt) && !it.photo }
+        val photos = log.sessions.filter { inRange(it.startedAt) && it.photo }
         val blocks = log.blocks.filter { inRange(it.at) }
         val protection = log.protection.filter { inRange(it.at) }
         val plans = log.days.associateBy { it.date }
@@ -73,6 +77,7 @@ object Stats {
             onTime = dated.count { it.doneAt <= it.dueAt!! },
             sessions = sessions.size,
             sessionsFinished = sessions.count { it.completed },
+            photoChecks = photos.size,
             focusMin = sessions.sumOf { it.workedMin },
             blocks = blocks.size,
             topBlocked = blocks.groupingBy { it.target }.eachCount().entries
