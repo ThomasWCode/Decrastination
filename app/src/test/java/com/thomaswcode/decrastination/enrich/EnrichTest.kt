@@ -250,10 +250,12 @@ class AnswersTest {
     }
 
     @Test
-    fun `an assignment that's all vocabulary is a hand-in, its work in the decks`() {
-        val e = parse(Enrichments.Job.Assignment, """{"subSteps":[],"effortMin":0,"ankiSections":["1.2"],"testDate":null}""", assignment("Learn vocabulary 1.2"))!!
-        assertEquals(5, e.effortMin)
+    fun `an assignment that's all vocabulary is one step its decks hold, planned while none does`() {
+        val task = assignment("Learn vocabulary 1.2")
+        val e = parse(Enrichments.Job.Assignment, """{"subSteps":[],"effortMin":5,"ankiSections":["1.2"],"testDate":null}""", task)!!
+        assertEquals(listOf(Triple("Learn vocabulary 1.2", task.effortMin, listOf("1.2"))), e.subSteps!!.map { Triple(it.title, it.minutes, it.ankiSections) })
         assertEquals(listOf("1.2"), e.ankiSections)
+        assertEquals(task.effortMin, e.effortMin)
     }
 
     @Test
