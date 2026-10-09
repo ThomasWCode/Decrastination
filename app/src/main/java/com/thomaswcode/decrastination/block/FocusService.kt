@@ -30,6 +30,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 /**
@@ -55,10 +56,21 @@ class FocusService : AccessibilityService() {
     private lateinit var graph: AppGraph
     private lateinit var labels: GuardRules.Labels
     private lateinit var banner: CountdownBanner
-    /** A failure in one piece of work is logged, never allowed to bring the blocker down. */
-    private val scope = CoroutineScope(
+    /**
+     * The work of one connection. A failure in one piece of it is logged, never allowed to bring
+     * the blocker down. Cancelled when the connection ends; a new one starts its own.
+     */
+    private var scope = newScope()
+
+    private fun newScope() = CoroutineScope(
         SupervisorJob() + Dispatchers.Main.immediate + CoroutineExceptionHandler { _, error -> Log.e(TAG, "Focus service work failed", error) },
     )
+
+    /**
+     * Connected and set up. Android can connect one instance twice (after a crash it can hold two
+     * connections to it) and connect it again after a disconnection, so both are guarded.
+     */
+    private var active = false
 
     /** Events arrive on the main thread; deferred work runs there too. */
     private val handler = Handler(Looper.getMainLooper())
@@ -100,6 +112,12 @@ class FocusService : AccessibilityService() {
 
     override fun onServiceConnected() {
         super.onServiceConnected()
+        if (active) {
+            Log.i(TAG, "Focus service connected again")
+            return
+        }
+        active = true
+        if (!scope.isActive) scope = newScope()
         graph = AppGraph.get(this)
         labels = GuardRules.Labels(
             app = getString(R.string.app_name),
@@ -217,7 +235,8 @@ class FocusService : AccessibilityService() {
         val (target, since) = spending ?: return
         val now = SystemClock.elapsedRealtime()
         spending = target to now
-        scope.launch { graph.focus.spend(now - since) }
+        // The app's scope: this connection's may be ending.
+        graph.scope.launch { graph.focus.spend(now - since) }
     }
 
     /**
@@ -389,11 +408,17 @@ class FocusService : AccessibilityService() {
     private val ticker = object : Runnable {
         override fun run() {
             tick()
-            handler.postDelayed(this, TICK_MS)
+            if (active) handler.postDelayed(this, TICK_MS)
         }
     }
 
     private fun tick() {
+        // Switched off while a second, stale connection keeps this instance bound (it happened
+        // after a crash and restart on the phone): no onUnbind comes, but the connection is gone.
+        if (serviceInfo == null) {
+            disconnect("its connection is gone")
+            return
+        }
         // An app already in front when blocking begins (16:45, the end of free time, new work due)
         // sends no event of its own: look at whatever is in front now.
         frontPackage()?.let { if (it != packageName && graph.focus.target(it) != null && spending == null) onFront(it, firstLook = false) }
@@ -448,26 +473,25 @@ class FocusService : AccessibilityService() {
     override fun onInterrupt() = Unit
 
     override fun onUnbind(intent: Intent?): Boolean {
-        teardown()
+        disconnect("unbound")
         return super.onUnbind(intent)
     }
 
     override fun onDestroy() {
-        teardown()
+        disconnect("destroyed")
         super.onDestroy()
     }
 
-    private var tornDown = false
-
-    private fun teardown() {
-        if (tornDown || !::graph.isInitialized) return
-        tornDown = true
+    private fun disconnect(why: String) {
+        if (!active) return
+        active = false
         commitSpending()
+        spending = null
         handler.removeCallbacksAndMessages(null)
         runCatching { unregisterReceiver(screenReceiver) }
         banner.cancel()
         _connected.value = false
-        Log.i(TAG, "Focus service disconnected")
+        Log.i(TAG, "Focus service disconnected: $why")
         // Off is a protection problem: the watchdog says so at once rather than at its next run,
         // and, once armed, switches the service back on.
         val app = applicationContext
