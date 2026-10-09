@@ -6,17 +6,21 @@ import android.database.ContentObserver
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import com.thomaswcode.decrastination.block.Focus
 import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.Planner
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.SystemWallClock
 import com.thomaswcode.decrastination.core.WallClock
+import com.thomaswcode.decrastination.data.ActivityLog
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.KeystoreCipher
+import com.thomaswcode.decrastination.data.RuntimeState
 import com.thomaswcode.decrastination.data.SecretStore
 import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.data.TaskState
 import com.thomaswcode.decrastination.net.UrlConnectionHttp
+import com.thomaswcode.decrastination.protect.SettingsChanges
 import com.thomaswcode.decrastination.sources.anki.AnkiSource
 import com.thomaswcode.decrastination.sources.gmail.GmailSource
 import com.thomaswcode.decrastination.sources.powerplanner.PowerPlannerApi
@@ -26,6 +30,7 @@ import com.thomaswcode.decrastination.sources.teams.TeamsSource
 import com.thomaswcode.decrastination.sync.SyncWorker
 import com.thomaswcode.decrastination.sync.Syncer
 import com.thomaswcode.decrastination.widget.WidgetUpdater
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
@@ -47,12 +52,14 @@ class AppGraph private constructor(context: Context) {
     val app: Context = context.applicationContext
     val clock: WallClock = SystemWallClock
 
-    /** Work that outlives the screen or receiver that started it. */
-    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    /** Work that outlives the screen or receiver that started it; a failure is logged, not fatal. */
+    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default + CoroutineExceptionHandler { _, error -> Log.e(TAG, "Background work failed", error) })
 
     val tasks = JsonStore(File(app.filesDir, "tasks.json"), TaskState.serializer(), ::TaskState)
     val settings = JsonStore(File(app.filesDir, "settings.json"), Settings.serializer(), ::Settings)
     val secrets = SecretStore(File(app.filesDir, "secrets.bin"), KeystoreCipher())
+    val runtime = JsonStore(File(app.filesDir, "runtime.json"), RuntimeState.serializer(), ::RuntimeState)
+    val log = JsonStore(File(app.filesDir, "log.json"), ActivityLog.serializer(), ::ActivityLog)
 
     val syncer = Syncer(
         tasks = tasks,
@@ -70,6 +77,32 @@ class AppGraph private constructor(context: Context) {
     /** The plan now, from the stored tasks and settings. Cheap: dozens of tasks. */
     fun plan(state: TaskState = tasks.value, settings: Settings = this.settings.value, now: Long = clock.now()): Plan =
         Planner.plan(Planner.Input(state.tasks, now, clock.zone(), settings))
+
+    /** The blocker's state and decisions (block/Focus.kt). */
+    val focus = Focus(tasks, settings, runtime, log, clock) { state, s, now -> plan(state, s, now) }
+
+    /** Applies a settings change: at once, or, once armed, pending if it loosens blocking. */
+    suspend fun changeSettings(proposed: Settings) {
+        val now = clock.now()
+        var outcome: SettingsChanges.Outcome? = null
+        runtime.update { state ->
+            outcome = SettingsChanges.propose(settings.value, proposed, state.pending, now) { java.util.UUID.randomUUID().toString() }
+            state.copy(pending = outcome!!.pending)
+        }
+        outcome?.let { result -> settings.update { result.settings } }
+    }
+
+    /** Applies the pending changes whose 24 hours are up. */
+    suspend fun applyDueChanges() {
+        val now = clock.now()
+        if (runtime.value.pending.none { it.applyAt <= now }) return
+        var applied: SettingsChanges.Outcome? = null
+        runtime.update { state ->
+            applied = SettingsChanges.applyDue(settings.value, state.pending, now)
+            state.copy(pending = applied!!.pending)
+        }
+        applied?.let { result -> settings.update { result.settings } }
+    }
 
     /**
      * Reads every source now, as a job (it keeps its network after the screen that asked has
@@ -111,6 +144,8 @@ class AppGraph private constructor(context: Context) {
     private val teamsChanged = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
 
     init {
+        // Work a source confirms done earns free time and is logged.
+        syncer.addListener { report -> focus.onCompleted(report.completed) }
         runCatching {
             app.contentResolver.registerContentObserver(
                 TeamsProvider.root,
@@ -127,7 +162,7 @@ class AppGraph private constructor(context: Context) {
         }
         // Redraw the widget whenever what it shows may have changed.
         scope.launch {
-            combine(tasks.state, settings.state) { _, _ -> }.drop(1).debounce(WIDGET_DEBOUNCE_MS).collect {
+            combine(tasks.state, settings.state, runtime.state) { _, _, _ -> }.drop(1).debounce(WIDGET_DEBOUNCE_MS).collect {
                 runCatching { WidgetUpdater.update(app) }.onFailure { Log.w(TAG, "Widget update failed", it) }
             }
         }

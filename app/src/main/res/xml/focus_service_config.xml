@@ -1,15 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Events from every app: which app is in front is the whole point. Window-state changes say an app
-  or screen has come to the front; content changes are only looked at in Settings and the package
-  installer, whose pages can fill in after they open (see probe/GuardRules.kt).
+  Events from every app: which app is in front is the whole point. Window-state and windows changes
+  say an app has come to the front (the latter about 0.4 s sooner, Phase 0); content changes are
+  read only in Chrome and Brave (the address bar) and, once armed, Settings, Device Care and the
+  package installer, whose pages fill in after they open; clicks only in Settings (a shortcut
+  being set). Interactive windows are needed to see split-screen and picture-in-picture windows.
 -->
 <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
-    android:accessibilityEventTypes="typeWindowStateChanged|typeWindowContentChanged|typeWindowsChanged"
+    android:accessibilityEventTypes="typeWindowStateChanged|typeWindowContentChanged|typeWindowsChanged|typeViewClicked"
     android:accessibilityFeedbackType="feedbackGeneric"
     android:accessibilityFlags="flagReportViewIds|flagRetrieveInteractiveWindows|flagIncludeNotImportantViews"
     android:canRetrieveWindowContent="true"
     android:description="@string/focus_service_description"
     android:notificationTimeout="100"
-    android:settingsActivity="com.thomaswcode.decrastination.probe.ProbeActivity"
+    android:settingsActivity="com.thomaswcode.decrastination.ui.MainActivity"
     android:summary="@string/focus_service_summary" />
