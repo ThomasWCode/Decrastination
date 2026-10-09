@@ -19,6 +19,7 @@ import com.thomaswcode.decrastination.learn.Assessment
 import com.thomaswcode.decrastination.learn.Briefing
 import com.thomaswcode.decrastination.learn.CalendarTime
 import com.thomaswcode.decrastination.learn.CheckIns
+import com.thomaswcode.decrastination.learn.EventJudge
 import com.thomaswcode.decrastination.learn.Review
 import com.thomaswcode.decrastination.protect.Watchdog
 import com.thomaswcode.decrastination.sync.SyncWorker
@@ -149,6 +150,14 @@ class CommandActivity : Activity() {
                 Log.i(TAG, "Review: ${graph.log.value.reviews.lastOrNull()?.lines}; calibration ${graph.runtime.value.calibration}")
             }
             "calendar" -> {
+                // --ez again true: the questions still unanswered are asked again (their notifications
+                // gone): what's to ask about is read first, then no longer counted as asked.
+                if (intent.getBooleanExtra("again", false)) {
+                    CalendarTime.refresh(this)
+                    val keys = graph.calendarTime.toAsk.map(EventJudge::key).toSet()
+                    graph.runtime.update { it.copy(eventsAsked = it.eventsAsked - keys) }
+                    Log.i(TAG, "Asking again about ${keys.size}: ${keys.joinToString()}")
+                }
                 CalendarTime.refresh(this)
                 val time = graph.calendarTime
                 Log.i(TAG, "Calendar: ${time.busy.size} busy, loads ${time.dayLoads}, ${time.toAsk.size} to ask about; allowed ${CalendarTime.allowed(this)}")
