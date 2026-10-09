@@ -5,6 +5,7 @@ import com.thomaswcode.decrastination.Fixtures.LONDON
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.Planner
 import com.thomaswcode.decrastination.core.Source
+import com.thomaswcode.decrastination.core.SubStep
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.data.SourceStatus
@@ -81,6 +82,8 @@ class WidgetModelTest {
         val stale = mapOf(Source.Teams to SourceStatus(lastSuccessAt = now, dataAsOf = now - 30 * 3_600_000L))
         assertEquals("Teams synced 30 h ago", model(emptyList(), stale).warning)
         assertNull(model(emptyList(), mapOf(Source.Teams to SourceStatus(lastSuccessAt = now, dataAsOf = now - 3_600_000L))).warning)
+        // Read, but never synced by the Teams widget: no Teams data at all.
+        assertEquals("Teams hasn't synced yet", model(emptyList(), mapOf(Source.Teams to SourceStatus(lastSuccessAt = now, dataAsOf = null))).warning)
         // The Teams widget's own trouble is shown too: a refresh it refused, its service off.
         val off = mapOf(Source.Teams to SourceStatus(lastSuccessAt = now, dataAsOf = now - 3_600_000L, note = "The Teams widget's sync service is off"))
         assertEquals("The Teams widget's sync service is off", model(emptyList(), off).warning)
@@ -132,6 +135,19 @@ class WidgetRedrawTest {
     fun `before them it redraws when they start, and after them at midnight`() {
         assertEquals(Fixtures.at("2026-10-09T16:45"), WidgetUpdater.nextRedrawAt(planAt("2026-10-09T12:00"), LONDON, settings))
         assertEquals(Fixtures.at("2026-10-10T00:00"), WidgetUpdater.nextRedrawAt(planAt("2026-10-09T22:10"), LONDON, settings))
+    }
+
+    @Test
+    fun `a chunk that can't be started yet says from when, and the widget redraws then`() {
+        // An Anki deck at 01:00 whose new cards come at 04:00, Anki's new day.
+        val deck = TaskItem(
+            id = "anki:deck", source = Source.Anki, sourceId = "deck", title = "deck", dueAt = Fixtures.at("2026-10-01T08:30"),
+            kind = Kind.Homework, sourceEffortMin = 9, firstSeenAt = 0, lastSeenAt = 0,
+            subSteps = listOf(SubStep("20 new cards", 9)), stepsPerDay = 1, notBefore = Fixtures.at("2026-10-09T04:00"),
+        )
+        val plan = planAt("2026-10-09T01:00", listOf(deck))
+        assertEquals("From 04:00", WidgetModel.from(plan, TaskState(), LONDON).badge)
+        assertEquals(Fixtures.at("2026-10-09T04:00"), WidgetUpdater.nextRedrawAt(plan, LONDON, settings))
     }
 
     @Test
