@@ -108,7 +108,7 @@ object Merge {
                 f.done -> updated.copy(status = Status.Done)
                 // A new round of it: the last round's minutes count towards neither this one's
                 // completion record nor what's left of it.
-                else -> updated.copy(status = Status.Open, doneAt = null, workedMin = 0).also { reopened += it }
+                else -> updated.copy(status = Status.Open, doneAt = null, workedMin = 0, photoMin = 0, firstProgress = f.sourceProgress).also { reopened += it }
             }
             fresh[id] = next
         }

@@ -263,7 +263,7 @@ object Planner {
         // From the lower of the first-seen and current progress: a percentage corrected downward
         // brings its work back, rather than the first-seen one capping what's left.
         val baseline = minOf(task.firstProgress ?: task.sourceProgress, task.sourceProgress)
-        val bySessions = whole * (1 - baseline.coerceIn(0.0, 1.0)) - task.workedMin
+        val bySessions = whole * (1 - baseline.coerceIn(0.0, 1.0)) - task.workedMin - task.photoMin
         return minOf(bySource, bySessions)
     }
 
@@ -278,7 +278,7 @@ object Planner {
             if (left.isEmpty()) return listOf(Piece("finish and hand in", MIN_CHUNK))
             // Minutes worked beyond the steps ticked off (a session stopped early) come off the
             // next steps in order, each kept to at least a last few minutes, as it isn't done.
-            var spare = (task.workedMin - task.subSteps.filter { it.done }.sumOf { it.minutes * multiplier }).roundToInt().coerceAtLeast(0)
+            var spare = (task.workedMin + task.photoMin - task.subSteps.filter { it.done }.sumOf { it.minutes * multiplier }).roundToInt().coerceAtLeast(0)
             return left.map { step ->
                 val full = (step.minutes * multiplier).roundToInt().coerceAtLeast(1)
                 val off = minOf(spare, (full - MIN_CHUNK).coerceAtLeast(0))

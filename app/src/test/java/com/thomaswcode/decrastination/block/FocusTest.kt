@@ -119,7 +119,9 @@ class FocusTest {
         tasks.update { it.copy(tasks = listOf(task("t", steps = listOf(SubStep("Q1-8", 30), SubStep("Q9-16", 30))))) }
         focus.photoChecked("teams:t", "Q1-8", 30)
         assertEquals(listOf(true, false), tasks.value.tasks.single().subSteps.map { it.done })
-        assertEquals(30, tasks.value.tasks.single().workedMin)
+        // Its minutes come off what's left, kept apart from timed ones.
+        assertEquals(30, tasks.value.tasks.single().photoMin)
+        assertEquals(0, tasks.value.tasks.single().workedMin)
         assertEquals(10 * 60_000L, focus.creditLeftMs())
     }
 
@@ -262,7 +264,7 @@ class FocusTest {
         assertTrue(focus.photoChecked("teams:hw", "Q1-8", 30))
         // A second check of the same piece (or one a session ticked meanwhile): nothing more.
         assertFalse(focus.photoChecked("teams:hw", "Q1-8", 30))
-        assertEquals(30, tasks.value.tasks.single().workedMin)
+        assertEquals(30, tasks.value.tasks.single().photoMin)
         assertEquals(10 * 60_000L, focus.creditLeftMs())
     }
 
@@ -272,7 +274,7 @@ class FocusTest {
         // A part the planner cut, with no step of its own: counted.
         assertTrue(focus.photoChecked("teams:hw", "part 1 of 2", 45))
         assertTrue(focus.photoChecked("teams:hw", "part 1 of 1", 45))
-        assertEquals(90, tasks.value.tasks.single().workedMin)
+        assertEquals(90, tasks.value.tasks.single().photoMin)
         // All of the estimate counted: the same work can't earn again.
         assertFalse(focus.photoChecked("teams:hw", null, 45))
         assertEquals(30 * 60_000L, focus.creditLeftMs())
@@ -295,8 +297,10 @@ class FocusTest {
         tasks.update { it.copy(tasks = listOf(task("hw", effort = 90))) }
         repeat(4) { assertTrue(focus.photoChecked("teams:hw", "part 1 of 4", 45)) }
         assertFalse(focus.photoChecked("teams:hw", null, 45))
-        // Each one recorded as work, a photo's, not a timed session.
+        // Each one recorded as work, a photo's, not a timed session: kept apart from timed minutes.
         assertEquals(4, log.value.sessions.count { it.photo })
+        assertEquals(0, tasks.value.tasks.single().workedMin)
+        assertEquals(180, tasks.value.tasks.single().photoMin)
     }
 
     @Test
