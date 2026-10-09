@@ -169,6 +169,16 @@ class SettingsChangesTest {
     }
 
     @Test
+    fun `a working window moved later waits, even at the same length`() {
+        val armed = Settings(armed = true)
+        val later = armed.copy(weekdayHours = Window(17 * 60 + 45, 23 * 60))
+        assertEquals(1, SettingsChanges.propose(armed, later, emptyList(), now, ::newId).pending.size)
+        // Inside the old one, it's less time: at once.
+        val shorter = armed.copy(weekdayHours = Window(17 * 60, 21 * 60))
+        assertEquals(shorter.weekdayHours, SettingsChanges.propose(armed, shorter, emptyList(), now, ::newId).settings.weekdayHours)
+    }
+
+    @Test
     fun `a lower quota for undated work waits, a higher one doesn't`() {
         val armed = Settings(armed = true)
         assertEquals(1, SettingsChanges.propose(armed, armed.copy(softMinPerDay = 15), emptyList(), now, ::newId).pending.size)
@@ -307,6 +317,13 @@ class ProtectionCheckTest {
         assertTrue("Quick Settings can't be read" in detail, detail)
         assertEquals("Good: no shortcut can switch the service off.", ProtectionCheck.shortcutsDetail(report.copy(unreadableShortcuts = emptyList())))
         assertEquals("It's on the accessibility button.", ProtectionCheck.shortcutsDetail(report.copy(onShortcuts = listOf("accessibility_button_targets"))))
+    }
+
+    @Test
+    fun `armed without self-repair is a problem`() {
+        val report = ProtectionCheck.Report(serviceEnabled = true, accessibilityOn = true, onShortcuts = emptyList(), adminActive = true, canRepair = false)
+        assertEquals(listOf("Self-repair isn't granted: the service switched off would stay off"), ProtectionCheck.problems(report, armed = true))
+        assertEquals(emptyList(), ProtectionCheck.problems(report, armed = false))
     }
 
     @Test
