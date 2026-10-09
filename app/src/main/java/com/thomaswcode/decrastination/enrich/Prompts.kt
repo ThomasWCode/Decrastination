@@ -30,8 +30,15 @@ import kotlinx.serialization.json.JsonPrimitive
  */
 object Prompts {
 
-    /** An email body past this is left out (and the model told): a newsletter's tail doesn't change its triage. */
-    const val MAX_TEXT = 8_000
+    /**
+     * Text past this is left out (and the model told). Room for a long email's own calendar of
+     * deadlines (one seen ran to 8 500 characters); past it, a newsletter's tail, which doesn't
+     * change its triage.
+     */
+    const val MAX_TEXT = 16_000
+
+    /** Blocks an email or a planner item can come back in: one email can hold months of applications. */
+    const val MAX_BLOCKS = 30
 
     private const val STUDENT = "a UK sixth-form student (Year 12)"
 
@@ -45,7 +52,7 @@ object Prompts {
             - deadline: when it must be done by, only if the email states or clearly implies one (a day it suggests for doing it counts); for an Event, when it starts; otherwise null. Never invent one. Write it as a local date and time (YYYY-MM-DDTHH:MM), or the date alone (YYYY-MM-DD) if it gives no time.
             - effortMin: the minutes of the student's own work it needs, reading included: about 2 for Info.
             - nextStep: the one concrete next action, as an instruction under 12 words ("Reply to Mr Hughes confirming the trip").
-            - blocks: when the email holds more than one piece of work for the student, or dated items (a calendar of deadlines, an application that opens on a date), the pieces of work in order, each with its minutes (10 to 60 where the work allows: a long piece of work, like writing a proposal, is several blocks with the same dates), from (the date before which it can't be done, or null) and due (when it must be done by, written as for deadline). A window the email gives only roughly ("applications open in December") runs from its first day to its last. A quick action with no date of its own that's best done soon (signing up, replying, asking someone) is due within the next two weeks. Leave due null only for a block that can wait for the email's own deadline. The planner schedules each block in its own window, so one email can become work spread over months, kept after the email is archived. An email with blocks is Admin, and its effortMin is their total. Otherwise an empty list.
+            - blocks: when the email holds more than one piece of work for the student, or dated items (a calendar of deadlines, an application that opens on a date), the pieces of work in order, each with its minutes (10 to 60 where the work allows: a long piece of work, like writing a proposal, is several blocks with the same dates; at most $MAX_BLOCKS blocks, longer ones if there's more work than that), from (the date before which it can't be done, or null) and due (when it must be done by, written as for deadline). A window the email gives only roughly ("applications open in December") runs from its first day to its last. A quick action with no date of its own that's best done soon (signing up, replying, asking someone) is due within the next two weeks. Leave due null only for a block that can wait for the email's own deadline. The planner schedules each block in its own window, so one email can become work spread over months, kept after the email is archived. An email with blocks is Admin, and its effortMin is their total. Otherwise an empty list.
 
             Work out relative dates ("next Friday") from when the email was received.
         """.trimIndent()
@@ -62,7 +69,7 @@ object Prompts {
         Enrichments.Job.Effort -> """
             Estimate how many minutes of work $STUDENT needs to finish one item from their planner, from its title, class and details: a realistic total for a typical Year 12 student (the planner adjusts it to this one). A call, meeting or other appointment isn't work: give only the minutes needed to prepare for it, at least 1.
 
-            If it's big enough to be worth doing in parts (revising for a test, a project), also split it into blocks: the ordered pieces of work, 10 to 60 minutes each, adding up to effortMin, each with from (the date before which it can't be done, YYYY-MM-DD) and due (when it must be done by, YYYY-MM-DDTHH:MM or the date alone) where the details give them, otherwise null. Otherwise blocks is an empty list.
+            If it's big enough to be worth doing in parts (revising for a test, a project), also split it into blocks: the ordered pieces of work, 10 to 60 minutes each (at most $MAX_BLOCKS blocks), adding up to effortMin, each with from (the date before which it can't be done, YYYY-MM-DD) and due (when it must be done by, YYYY-MM-DDTHH:MM or the date alone) where the details give them, otherwise null. Otherwise blocks is an empty list.
         """.trimIndent()
     }
 
@@ -176,11 +183,15 @@ object Answers {
     private data class Estimate(val effortMin: Int, val blocks: List<Step> = emptyList())
 
     private const val MAX_EFFORT = 600
+
+    /**
+     * The most an email or planner item in blocks is taken to be: twenty hours, as one email can
+     * hold months of applications (a calendar of five months' came to 13). Past it, an estimate
+     * gone wrong.
+     */
+    private const val MAX_BLOCKS_EFFORT = 1_200
     private const val MAX_STEP = 240
     private const val MAX_STEPS = 12
-
-    /** Blocks an email or a planner item can come back in: one email can hold months of applications. */
-    private const val MAX_BLOCKS = 20
     private const val MAX_TITLE = 80
     private const val MAX_NEXT_STEP = 120
     private const val STEPS_SLACK_MIN = 10
@@ -294,15 +305,16 @@ object Answers {
     }
 
     /**
-     * An email's or planner item's [blocks], if they can be planned: some, no more than [MAX_BLOCKS]
-     * as [given] (before a long one was cut into parts that fit a session), within the most one
-     * task is taken to be, and adding up to its [total] (within a tenth, or ten minutes), which has
-     * to be one itself. Otherwise null, and its estimate is planned whole.
+     * An email's or planner item's [blocks], if they can be planned: some, no more than
+     * [Prompts.MAX_BLOCKS] as [given] (before a long one was cut into parts that fit a session),
+     * within the most a task in blocks is taken to be ([MAX_BLOCKS_EFFORT]), and adding up to its
+     * [total] (within a tenth, or ten minutes), which has to be within it too. Otherwise null, and
+     * its estimate is planned whole.
      */
     private fun trusted(blocks: List<SubStep>?, total: Int, given: Int): List<SubStep>? {
-        if (blocks.isNullOrEmpty() || given > MAX_BLOCKS || total !in 1..MAX_EFFORT) return null
+        if (blocks.isNullOrEmpty() || given > Prompts.MAX_BLOCKS || total !in 1..MAX_BLOCKS_EFFORT) return null
         val sum = blocks.sumOf { it.minutes }
-        if (sum > MAX_EFFORT || abs(sum - total) > maxOf(STEPS_SLACK_MIN, total / 10)) return null
+        if (sum > MAX_BLOCKS_EFFORT || abs(sum - total) > maxOf(STEPS_SLACK_MIN, total / 10)) return null
         return blocks
     }
 
