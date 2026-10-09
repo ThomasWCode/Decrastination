@@ -14,14 +14,11 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -63,7 +60,6 @@ class SettingsActivity : ComponentActivity() {
 
     private data class App(val label: String, val packageName: String)
 
-    @OptIn(ExperimentalMaterial3Api::class)
     @Composable
     private fun Editor(graph: AppGraph) {
         val saved by graph.settings.state.collectAsStateWithLifecycle()
@@ -81,7 +77,7 @@ class SettingsActivity : ComponentActivity() {
         }
 
         Scaffold(
-            topBar = { TopAppBar(title = { Text("Settings") }) },
+            topBar = { BackBar("Settings", this) },
             bottomBar = {
                 Column(Modifier.fillMaxWidth().padding(16.dp)) {
                     message?.let { Text(it, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(bottom = 8.dp)) }
@@ -236,12 +232,7 @@ class SettingsActivity : ComponentActivity() {
 }
 
 @Composable
-private fun Section(title: String) {
-    Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 4.dp)) {
-        HorizontalDivider()
-        Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 12.dp))
-    }
-}
+private fun Section(title: String) = SectionHeading(title)
 
 @Composable
 private fun Note(text: String) {

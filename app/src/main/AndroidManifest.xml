@@ -86,6 +86,10 @@
             android:taskAffinity="com.thomaswcode.decrastination.blocked" />
 
         <activity
+            android:name=".ui.SetupActivity"
+            android:exported="false"
+            android:label="Setup" />
+        <activity
             android:name=".ui.SettingsActivity"
             android:exported="false"
             android:label="Settings" />
