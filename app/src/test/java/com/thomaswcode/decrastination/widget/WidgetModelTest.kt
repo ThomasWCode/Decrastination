@@ -60,6 +60,12 @@ class WidgetModelTest {
     }
 
     @Test
+    fun `rows due today are urgent like the headline`() {
+        val tasks = listOf(task("a", "2026-10-09T21:00", effort = 10), task("b", "2026-10-09T22:00", effort = 10), task("c", "2026-10-09T23:00", effort = 10))
+        assertTrue(model(tasks).list.single().urgent)
+    }
+
+    @Test
     fun `a chunk due later today shows its time`() {
         val model = model(listOf(task("Chapter 17", "2026-10-09T23:59")))
         assertEquals("Due 23:59", model.badge)

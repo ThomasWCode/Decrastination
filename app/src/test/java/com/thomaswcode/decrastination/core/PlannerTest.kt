@@ -220,6 +220,13 @@ class PlannerTest {
     }
 
     @Test
+    fun `overdue undated work waits for a day with time, not tonight after its hours`() {
+        // Its soft deadline passed a week ago; at 22:10 tonight's hours are gone: tomorrow.
+        val email = task("email", null, effort = 15, kind = Kind.Admin, firstSeen = Fixtures.at("2026-09-24T09:00"))
+        assertEquals(listOf(LocalDate.parse("2026-10-09")), plan(listOf(email), "2026-10-08T22:10").dayOf("email"))
+    }
+
+    @Test
     fun `an undated chunk bigger than the allowance still finds a day`() {
         val big = task("big", null, effort = 90, kind = Kind.Admin, steps = listOf(SubStep("all of it", 90)))
         val plan = plan(listOf(big), "2026-10-08T17:00")

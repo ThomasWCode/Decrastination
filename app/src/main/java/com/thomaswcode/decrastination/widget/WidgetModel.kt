@@ -29,6 +29,7 @@ data class WidgetModel(
     /** The task a tap opens, if any. */
     val taskId: String?,
 ) {
+    /** A row of the list: [urgent] as the headline's badge is (overdue, due today, behind). */
     data class Line(val text: String, val minutes: String, val urgent: Boolean, val taskId: String)
 
     companion object {
@@ -57,7 +58,7 @@ data class WidgetModel(
                 },
                 // After the next and the one after it, which have lines of their own.
                 list = shown.filterNot { it === next || it === plan.then }.take(LIST_MAX)
-                    .map { Line(it.label, Format.minutes(it.minutes), it.overdue || it.behind, it.taskId) },
+                    .map { Line(it.label, Format.minutes(it.minutes), it.overdue || it.dueToday || it.behind, it.taskId) },
                 warning = warning(state, now),
                 taskId = next?.taskId,
             )
