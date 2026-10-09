@@ -38,9 +38,10 @@ object Daily {
         }
     }
 
-    /** The next Sunday at [minuteOfDay] after [now]. */
+    /** The next Sunday at [minuteOfDay] after [now]; past midnight (a late check-in's review), on the Monday after. */
     fun nextSunday(now: Long, zone: ZoneId, minuteOfDay: Int): Long {
-        var day = Instant.ofEpochMilli(now).atZone(zone).toLocalDate()
+        // From the Sunday a time past midnight belongs to, so an alarm due tonight isn't moved a week.
+        var day = Instant.ofEpochMilli(now).atZone(zone).toLocalDate().minusDays((minuteOfDay / (24 * 60)).toLong())
         while (true) {
             if (day.dayOfWeek == DayOfWeek.SUNDAY) {
                 val at = day.atStartOfDay().plusMinutes(minuteOfDay.toLong()).atZone(zone).toInstant().toEpochMilli()
@@ -93,6 +94,17 @@ object Daily {
         } else {
             alarms.setWindow(AlarmManager.RTC_WAKEUP, at, 10 * 60_000L, intent)
         }
+    }
+
+    /**
+     * The week a check-in made at [now] is about: that of the nearer Sunday check-in, before or
+     * after. Answers given after midnight (a late check-in) or on Monday belong to the week that
+     * ended; those given on Saturday, to the one ending.
+     */
+    fun checkInWeek(now: Long, zone: ZoneId, minuteOfDay: Int): String {
+        val last = lastCheckIn(now, zone, minuteOfDay)
+        val next = nextSunday(now, zone, minuteOfDay)
+        return weekOf(if (now - last <= next - now) last else next, zone)
     }
 
     /** "Monday 5 October", the week a check-in is about. */

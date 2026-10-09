@@ -139,7 +139,10 @@ class Focus(
     /** Starts a session on [taskId]'s chunk; one already running is ended first. */
     suspend fun startSession(taskId: String, label: String, step: String?, minutes: Int): FocusSession {
         stopSession()
-        val session = FocusSession(taskId, label, step, minutes.coerceIn(1, MAX_SESSION_MIN), clock.now(), clock.uptime())
+        // The box it's a piece of, as it is now: a review or a setting may change it while it runs.
+        val kind = tasks.value.tasks.firstOrNull { it.id == taskId }?.kind ?: Kind.Admin
+        val box = if (step == null || step.startsWith("part ")) runtime.value.calibration.boxMin[kind] ?: settings.value.boxMin else null
+        val session = FocusSession(taskId, label, step, minutes.coerceIn(1, MAX_SESSION_MIN), clock.now(), clock.uptime(), box)
         runtime.update { it.copy(session = session) }
         return session
     }
@@ -203,7 +206,7 @@ class Focus(
             label = session.label,
             plannedMin = session.minutes,
             // The box its task was cut into, when the session was on a box, not a step of its own.
-            box = if (session.step == null || session.step.startsWith("part ")) runtime.value.calibration.boxMin[task?.kind ?: Kind.Admin] ?: settings.value.boxMin else null,
+            box = session.box,
             workedMin = ended.workedMin,
             startedAt = session.startedAt,
             endedAt = ended.endedAt,
@@ -232,22 +235,28 @@ class Focus(
      * A piece of [taskId] the photo check found done (Phase 5): as a finished session on it would,
      * its step is ticked (or its minutes added to the task's) and its share of free time earned.
      */
-    suspend fun photoChecked(taskId: String, step: String?, minutes: Int) {
+    suspend fun photoChecked(taskId: String, step: String?, minutes: Int): Boolean {
         val now = clock.now()
+        // Applied only while the piece is still to do: the task open and, for a step, that step not
+        // ticked meanwhile (another check, a session, a sync). Free time only when it was.
+        var applied = false
         tasks.update { state ->
             state.copy(
                 tasks = state.tasks.map { t ->
-                    if (t.id != taskId) return@map t
-                    val i = if (step != null) t.subSteps.indexOfFirst { !it.done && it.title == step } else -1
-                    if (i >= 0) {
-                        t.copy(subSteps = t.subSteps.mapIndexed { j, s -> if (j == i) s.copy(done = true) else s }, workedMin = t.workedMin + minutes)
-                    } else {
-                        t.copy(workedMin = t.workedMin + minutes)
+                    if (t.id != taskId || !t.isOpen) return@map t
+                    if (step == null) {
+                        applied = true
+                        return@map t.copy(workedMin = t.workedMin + minutes)
                     }
+                    val i = t.subSteps.indexOfFirst { !it.done && it.title == step }
+                    if (i < 0) return@map t
+                    applied = true
+                    t.copy(subSteps = t.subSteps.mapIndexed { j, s -> if (j == i) s.copy(done = true) else s }, workedMin = t.workedMin + minutes)
                 },
             )
         }
-        runtime.update { it.copy(credit = it.credit.earn(today(now), Credit.forSession(minutes, settings.value.workMinPerFreeMin))) }
+        if (applied) runtime.update { it.copy(credit = it.credit.earn(today(now), Credit.forSession(minutes, settings.value.workMinPerFreeMin))) }
+        return applied
     }
 
     /**

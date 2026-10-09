@@ -181,8 +181,13 @@ class DaysTest {
     @Test
     fun `fewer than four in ten days done in full over a fortnight brings advice, not before`() {
         fun days(full: Int, total: Int) = (1..total).map { DayRecord("2026-10-%02d".format(it), 60, emptyList(), doneMin = 0, full = it <= full) }
-        assertNull(Days.capacityAdvice(days(full = 0, total = 9)))
-        assertTrue(Days.capacityAdvice(days(full = 3, total = 14))!!.startsWith("Only 3 of the last 14"))
-        assertNull(Days.capacityAdvice(days(full = 6, total = 14)))
+        val today = LocalDate.parse("2026-10-14")
+        assertNull(Days.capacityAdvice(days(full = 0, total = 9), today))
+        assertTrue(Days.capacityAdvice(days(full = 3, total = 14), today)!!.startsWith("Only 3 of the last 14"))
+        assertNull(Days.capacityAdvice(days(full = 6, total = 14), today))
+        // Old failures don't stand in for recent days with no work: the fortnight has five plans, all done.
+        val old = (1..20).map { DayRecord("2026-08-%02d".format(it), 60, emptyList(), doneMin = 0, full = false) }
+        val recent = (10..14).map { DayRecord("2026-10-%02d".format(it), 60, emptyList(), doneMin = 60, full = true) }
+        assertNull(Days.capacityAdvice(old + recent, today))
     }
 }

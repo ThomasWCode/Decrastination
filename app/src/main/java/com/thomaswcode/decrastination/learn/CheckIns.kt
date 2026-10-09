@@ -88,7 +88,7 @@ class CheckInActivity : ComponentActivity() {
         var inTheWay by remember { mutableStateOf("") }
         var change by remember { mutableStateOf("") }
         var energy by remember { mutableStateOf("") }
-        val week = Daily.weekOf(graph.clock.now(), graph.clock.zone())
+        val week = Daily.checkInWeek(graph.clock.now(), graph.clock.zone(), graph.settings.value.checkInMin)
         val done = log.checkIns.any { it.weekOf == week }
 
         Scaffold(topBar = { TopAppBar(title = { Text("This week") }) }) { padding ->

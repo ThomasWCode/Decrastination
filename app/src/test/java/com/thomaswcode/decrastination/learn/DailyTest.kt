@@ -40,6 +40,22 @@ class DailyTest {
     }
 
     @Test
+    fun `a late check-in's review is found on the Monday after, not moved a week`() {
+        // Check-in at 23:30, review at 01:00: at 00:30 on Monday the alarm is still tonight's.
+        assertEquals(Fixtures.at("2026-10-12T01:00"), Daily.nextSunday(Fixtures.at("2026-10-12T00:30"), LONDON, 23 * 60 + 30 + Daily.REVIEW_AFTER_MIN))
+    }
+
+    @Test
+    fun `a check-in's answers belong to the week of the nearer Sunday`() {
+        // Just after a late Sunday check-in, and on Monday afternoon: the week that ended.
+        assertEquals("2026-10-05", Daily.checkInWeek(Fixtures.at("2026-10-12T00:30"), LONDON, 23 * 60 + 30))
+        assertEquals("2026-10-05", Daily.checkInWeek(Fixtures.at("2026-10-12T16:00"), LONDON, 19 * 60 + 30))
+        // On Saturday: the week ending tomorrow.
+        assertEquals("2026-10-05", Daily.checkInWeek(Fixtures.at("2026-10-10T12:00"), LONDON, 19 * 60 + 30))
+        assertEquals("2026-10-12", Daily.checkInWeek(Fixtures.at("2026-10-17T12:00"), LONDON, 19 * 60 + 30))
+    }
+
+    @Test
     fun `a review after midnight still finds Sunday's check-in`() {
         // Check-in at 23:30: the review's alarm goes at 01:00 on Monday.
         assertEquals(Fixtures.at("2026-10-11T23:30"), Daily.lastCheckIn(Fixtures.at("2026-10-12T01:00"), LONDON, 23 * 60 + 30))

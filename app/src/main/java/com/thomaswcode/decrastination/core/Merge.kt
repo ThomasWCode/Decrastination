@@ -90,7 +90,9 @@ object Merge {
                 sourceProgress = f.sourceProgress,
                 firstProgress = old.firstProgress ?: old.sourceProgress,
                 peakEffortMin = listOfNotNull(old.peakEffortMin, old.sourceEffortMin, f.sourceEffortMin).maxOrNull(),
-                subSteps = f.subSteps ?: old.subSteps,
+                // The source's steps, unless they're the same as before: then the ones kept here,
+                // with what a session ticked off, until the source's counts catch up (Anki's cards).
+                subSteps = f.subSteps?.takeIf { new -> new.map { it.title } != old.subSteps.map { it.title } } ?: old.subSteps,
                 stepsPerDay = f.stepsPerDay,
                 notBefore = f.notBefore,
                 derived = f.derived,
@@ -104,7 +106,9 @@ object Merge {
                 old.status == Status.Open -> updated
                 old.derived && old.status == Status.Done -> updated.copy(status = Status.Done)
                 f.done -> updated.copy(status = Status.Done)
-                else -> updated.copy(status = Status.Open, doneAt = null).also { reopened += it }
+                // A new round of it: the last round's minutes count towards neither this one's
+                // completion record nor what's left of it.
+                else -> updated.copy(status = Status.Open, doneAt = null, workedMin = 0).also { reopened += it }
             }
             fresh[id] = next
         }
@@ -129,7 +133,8 @@ object Merge {
      * as it's worked through, so it's rewarded for the most it was.
      */
     private fun completion(old: TaskItem, done: TaskItem): TaskItem = done.copy(
-        sourceProgress = old.firstProgress ?: old.sourceProgress,
+        // The lower of first-seen and last progress: corrected downward, the work back since counts.
+        sourceProgress = minOf(old.firstProgress ?: old.sourceProgress, old.sourceProgress),
         sourceEffortMin = if (old.derived) old.peakEffortMin ?: old.sourceEffortMin else old.sourceEffortMin,
     )
 }

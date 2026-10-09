@@ -75,8 +75,11 @@ object Days {
      * Item 4: if fewer than 40 % of the last fortnight's plans (with work in them) were done in full,
      * the hours are more than the evenings hold. Advice in words, or null.
      */
-    fun capacityAdvice(days: List<DayRecord>): String? {
-        val judged = days.filter { it.full != null && it.plannedMin > 0 }.sortedBy { it.date }.takeLast(LOOK_BACK)
+    fun capacityAdvice(days: List<DayRecord>, today: LocalDate): String? {
+        // The last fourteen dates, then those of them with work: older plans don't stand in for
+        // days with none.
+        val from = today.minusDays(LOOK_BACK - 1L).toString()
+        val judged = days.filter { it.date >= from && it.date <= today.toString() && it.full != null && it.plannedMin > 0 }
         if (judged.size < CHECK_DAYS) return null
         val full = judged.count { it.full == true }
         if (full >= FULL_SHARE * judged.size) return null

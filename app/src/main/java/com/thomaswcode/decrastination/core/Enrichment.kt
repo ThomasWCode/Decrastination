@@ -43,7 +43,10 @@ data class Enrichment(
 fun TaskItem.enriched(): TaskItem {
     // Always from what the source said, so a changed enrichment doesn't leave the last one's dates.
     val base = sourceValues ?: SourceValues(kind, dueAt, availableFrom)
-    val e = enrichment ?: return copy(kind = base.kind, dueAt = base.dueAt, availableFrom = base.availableFrom, aiEffortMin = null)
+    // None, or one of content that has since changed (a new email in the thread): what the source
+    // says, until it's enriched again. The steps it gave stay, with their ticks, till then.
+    val e = enrichment?.takeIf { it.inputHash == Enrichments.inputHash(this) }
+        ?: return copy(kind = base.kind, dueAt = base.dueAt, availableFrom = base.availableFrom, aiEffortMin = null)
     val due = when {
         e.testDate != null && (base.dueAt == null || e.testDate < base.dueAt) -> e.testDate
         else -> base.dueAt ?: e.deadline

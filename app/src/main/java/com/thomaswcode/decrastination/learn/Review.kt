@@ -33,7 +33,7 @@ object Review {
         if (ifDue && graph.log.value.reviews.any { it.at >= Daily.lastCheckIn(now, graph.clock.zone(), graph.settings.value.checkInMin) }) return
         val learned = Calibrator.learn(graph.log.value, graph.runtime.value.calibration, graph.settings.value.boxMin, week = now / WEEK_MS)
         graph.runtime.update { it.copy(calibration = learned.calibration) }
-        val findings = learned.changes + listOfNotNull(Days.capacityAdvice(graph.log.value.days))
+        val findings = learned.changes + listOfNotNull(Days.capacityAdvice(graph.log.value.days, graph.focus.today(now)))
         val model = runCatching { modelReview(graph, now) }
             .onFailure { Log.w(AppGraph.TAG, "The model's weekly review failed; the rules' stands", it) }
             .getOrNull()
@@ -72,9 +72,11 @@ object Review {
         val input = ReviewInput.describe(graph.log.value, graph.runtime.value.calibration, graph.settings.value, now, zone)
         // The cap checked and the cost recorded in one turn with every other model call.
         val result = graph.modelCalls.withLock {
+            // Checked again here: switched off while another call held the lock, nothing is sent.
+            val current = graph.modelReviewer() ?: return@withLock null
             val settings = graph.settings.value
             if (!graph.runtime.value.aiUsage.forMonth(month).allows(settings.aiMonthlyCapGbp, settings.usdToGbp)) return@withLock null
-            reviewer.review(input).also { r -> graph.runtime.update { it.copy(aiUsage = it.aiUsage.forMonth(month).record(r.costUsd, r.refused, now)) } }
+            current.review(input).also { r -> graph.runtime.update { it.copy(aiUsage = it.aiUsage.forMonth(month).record(r.costUsd, r.refused, now)) } }
         } ?: return null
         val answer = result.answer ?: return null
         val changes = answer.changes.filter(ReviewInput::allowed)
