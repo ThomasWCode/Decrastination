@@ -50,6 +50,10 @@ object Daily {
         }
     }
 
+    /** The check-in's time on [now]'s day. */
+    fun checkInOn(now: Long, zone: ZoneId, minuteOfDay: Int): Long =
+        Instant.ofEpochMilli(now).atZone(zone).toLocalDate().atStartOfDay().plusMinutes(minuteOfDay.toLong()).atZone(zone).toInstant().toEpochMilli()
+
     /** The review runs this long after the check-in's reminder, with or without the answers. */
     const val REVIEW_AFTER_MIN = 90
 

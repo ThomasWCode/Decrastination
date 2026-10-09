@@ -97,6 +97,8 @@ class EventJudgeTest {
         // Marked free in the calendar.
         assertEquals(EventJudge.Judgement.Free, EventJudge.judge(event("Football", busy = false), emptyMap()))
         assertEquals(EventJudge.Judgement.Ask, EventJudge.judge(event("Van hire", allDay = true), emptyMap()))
+        // Booked 9 to 6 rather than all day: still asked about, not nine hours gone.
+        assertEquals(EventJudge.Judgement.Ask, EventJudge.judge(event("Van hire", hours = 9), emptyMap()))
         assertEquals(EventJudge.Judgement.Free, EventJudge.judge(event("Bank holiday", allDay = true, calendar = "Holidays in United Kingdom"), emptyMap()))
     }
 

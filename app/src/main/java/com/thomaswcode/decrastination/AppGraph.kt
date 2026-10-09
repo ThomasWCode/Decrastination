@@ -27,6 +27,7 @@ import com.thomaswcode.decrastination.enrich.ClaudeEnricher
 import com.thomaswcode.decrastination.enrich.ClaudeReviewer
 import com.thomaswcode.decrastination.enrich.EnrichWorker
 import com.thomaswcode.decrastination.enrich.Enricher
+import com.thomaswcode.decrastination.enrich.PhotoChecker
 import com.thomaswcode.decrastination.enrich.RuleEnricher
 import com.thomaswcode.decrastination.learn.Assessment
 import com.thomaswcode.decrastination.learn.CalendarTime
@@ -236,6 +237,13 @@ class AppGraph private constructor(context: Context) {
 
     /** The rules' enrichment: always there, and the fallback for the model. */
     private val rules = RuleEnricher()
+
+    /** The photo check, while Claude is switched on and has its key; else null. */
+    fun photoChecker(): PhotoChecker? {
+        val key = secrets[Secret.AnthropicApiKey]
+        if (!settings.value.aiEnabled || key.isNullOrBlank()) return null
+        return PhotoChecker(key)
+    }
 
     /** The model's weekly review, while Claude is switched on and has its key; else null. */
     fun modelReviewer(): ClaudeReviewer? {

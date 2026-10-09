@@ -20,15 +20,14 @@ import com.thomaswcode.decrastination.notify.Notify
  */
 object Review {
     private const val ID = 4003
-    private const val DAY_MS = 24 * 3_600_000L
-    private const val WEEK_MS = 7 * DAY_MS
+    private const val WEEK_MS = 7 * 24 * 3_600_000L
 
     suspend fun run(context: Context, ifDue: Boolean) {
         val graph = AppGraph.get(context)
         val now = graph.clock.now()
-        val last = graph.log.value.reviews.maxOfOrNull { it.at }
-        // Once a week: the check-in runs it at once, and the evening's alarm finds it done.
-        if (ifDue && last != null && now - last < 3 * DAY_MS) return
+        // Once a week: the check-in runs it at once, and the evening's alarm finds it done since
+        // the check-in's time today (a review at any other time doesn't count).
+        if (ifDue && graph.log.value.reviews.any { it.at >= Daily.checkInOn(now, graph.clock.zone(), graph.settings.value.checkInMin) }) return
         val learned = Calibrator.learn(graph.log.value, graph.runtime.value.calibration, graph.settings.value.boxMin, week = now / WEEK_MS)
         graph.runtime.update { it.copy(calibration = learned.calibration) }
         val rules = (learned.changes + listOfNotNull(Days.capacityAdvice(graph.log.value.days)))

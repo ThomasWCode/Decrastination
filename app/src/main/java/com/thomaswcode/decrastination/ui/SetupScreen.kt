@@ -106,7 +106,7 @@ fun SetupScreen(graph: AppGraph, activity: Activity) {
         SetupItem(
             title = "Calendar",
             done = calendarAllowed,
-            detail = if (calendarAllowed) "Its events come off your free time: lessons take their slot, trains don't, and you're asked about all-day ones." else "Read only, so lessons and plans come off your free time.",
+            detail = if (calendarAllowed) "Its events come off your free time: lessons take their slot, trains don't, and you're asked about all-day and long ones." else "Read only, so lessons and plans come off your free time.",
             action = if (calendarAllowed) null else "Allow" to { requestCalendar.launch(CalendarTime.PERMISSION) },
         )
         SetupItem(

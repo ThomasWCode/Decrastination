@@ -45,6 +45,8 @@ class DailyTest {
         assertEquals(Fixtures.at("2026-10-18T19:30"), Daily.nextSunday(Fixtures.at("2026-10-11T19:30"), LONDON, settings.checkInMin))
         assertEquals(Fixtures.at("2026-10-11T21:00"), Daily.nextSunday(Fixtures.at("2026-10-09T17:00"), LONDON, settings.checkInMin + Daily.REVIEW_AFTER_MIN))
         assertEquals("2026-10-05", Daily.weekOf(Fixtures.at("2026-10-11T19:30"), LONDON))
+        // The day's check-in time, which a review must come after to count as the week's.
+        assertEquals(Fixtures.at("2026-10-11T19:30"), Daily.checkInOn(Fixtures.at("2026-10-11T21:00"), LONDON, settings.checkInMin))
     }
 
     @Test

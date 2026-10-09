@@ -21,7 +21,8 @@ data class CalendarEvent(
 /**
  * How a calendar event bears on study time (Q7), judged event by event: a drum lesson takes its
  * whole slot; you can work on a train; an all-day van hire takes a few hours. What the rules can't
- * tell, you're asked, and your answer holds for every event of that name.
+ * tell (an all-day event, or a timed one of four hours or more), you're asked, and your answer
+ * holds for every event of that name.
  */
 object EventJudge {
 
@@ -41,6 +42,9 @@ object EventJudge {
 
     /** "A few hours", the middle answer to an all-day event. */
     const val FEW_HOURS_MIN = 180
+
+    /** A timed event this long may or may not take all its time: asked about, like an all-day one. */
+    private const val LONG_MS = 4 * 3_600_000L
 
     private val TRAVEL = Regex("""\b(train|bus|coach|flight|plane|ferry|tube|metro)\b""", RegexOption.IGNORE_CASE)
     private val NOT_YOURS = Regex("""holiday|birthday|observance|week number""", RegexOption.IGNORE_CASE)
@@ -69,8 +73,9 @@ object EventJudge {
         return when {
             // Marked free, a public holiday or a birthday, or travel you can work on.
             !event.busy || NOT_YOURS.containsMatchIn(event.calendar) || TRAVEL.containsMatchIn(event.title) -> Judgement.Free
-            // All day: anything from nothing to the whole day. Ask.
-            event.allDay -> Judgement.Ask
+            // All day, or most of one (an open day, a van hire booked 9 to 6): anything from nothing
+            // to all of it. Ask.
+            event.allDay || event.end - event.start >= LONG_MS -> Judgement.Ask
             else -> Judgement.Busy
         }
     }

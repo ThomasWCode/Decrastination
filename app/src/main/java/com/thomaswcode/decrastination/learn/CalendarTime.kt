@@ -12,6 +12,7 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.R
+import com.thomaswcode.decrastination.block.BlockPolicy
 import com.thomaswcode.decrastination.notify.Channels
 import com.thomaswcode.decrastination.notify.Notify
 import com.thomaswcode.decrastination.widget.WidgetUpdater
@@ -88,7 +89,9 @@ object CalendarTime {
         val time = EventJudge.time(events, graph.runtime.value.eventAnswers, graph.clock.zone())
         graph.calendarTime = time
         val asked = graph.runtime.value.eventsAsked
-        val toAsk = time.toAsk.filter { it.start < now + ASK_AHEAD_MS && EventJudge.key(it) !in asked }
+        // Not at night: they're asked at the first look after quiet hours.
+        val quiet = BlockPolicy.isQuiet(now, graph.clock.zone(), graph.settings.value)
+        val toAsk = if (quiet) emptyList() else time.toAsk.filter { it.start < now + ASK_AHEAD_MS && EventJudge.key(it) !in asked }
         if (toAsk.isNotEmpty()) {
             toAsk.forEach { ask(context, it) }
             graph.runtime.update { it.copy(eventsAsked = it.eventsAsked + toAsk.map(EventJudge::key)) }
