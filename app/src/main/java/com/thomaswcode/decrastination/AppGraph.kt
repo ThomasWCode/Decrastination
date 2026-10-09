@@ -7,18 +7,26 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import com.thomaswcode.decrastination.block.Focus
+import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.Planner
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.WallClock
+import com.thomaswcode.decrastination.core.withEnrichment
 import com.thomaswcode.decrastination.data.ActivityLog
 import com.thomaswcode.decrastination.data.DeviceClock
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.KeystoreCipher
 import com.thomaswcode.decrastination.data.RuntimeState
+import com.thomaswcode.decrastination.data.Secret
 import com.thomaswcode.decrastination.data.SecretStore
 import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.data.TaskState
+import com.thomaswcode.decrastination.enrich.AiUsage
+import com.thomaswcode.decrastination.enrich.ClaudeEnricher
+import com.thomaswcode.decrastination.enrich.EnrichWorker
+import com.thomaswcode.decrastination.enrich.Enricher
+import com.thomaswcode.decrastination.enrich.RuleEnricher
 import com.thomaswcode.decrastination.net.UrlConnectionHttp
 import com.thomaswcode.decrastination.protect.SettingsChanges
 import com.thomaswcode.decrastination.sources.anki.AnkiSource
@@ -30,6 +38,7 @@ import com.thomaswcode.decrastination.sources.teams.TeamsSource
 import com.thomaswcode.decrastination.sync.SyncWorker
 import com.thomaswcode.decrastination.sync.Syncer
 import com.thomaswcode.decrastination.widget.WidgetUpdater
+import java.io.File
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -38,10 +47,11 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.io.File
 
 /**
  * The app's singletons. The sync, the focus service, the widget and the screens all run in the
@@ -158,8 +168,15 @@ class AppGraph private constructor(context: Context) {
     private val teamsChanged = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
 
     init {
-        // Work a source confirms done earns free time and is logged.
-        syncer.addListener { report -> focus.onCompleted(report.completed) }
+        // Work a source confirms done earns free time and is logged; what's new or changed is enriched.
+        syncer.addListener { report ->
+            focus.onCompleted(report.completed)
+            EnrichWorker.enqueue(app)
+        }
+        // Switched on, the model goes over what only the rules have seen.
+        scope.launch {
+            settings.state.map { it.aiEnabled }.distinctUntilChanged().drop(1).collect { on -> if (on) EnrichWorker.enqueue(app) }
+        }
         runCatching {
             app.contentResolver.registerContentObserver(
                 TeamsProvider.root,
@@ -182,12 +199,69 @@ class AppGraph private constructor(context: Context) {
         }
     }
 
+    /** The rules' enrichment: always there, and the fallback for the model. */
+    private val rules = RuleEnricher()
+
+    /** The model, while it's switched on and has its key; else null. */
+    fun modelEnricher(): Enricher? {
+        val key = secrets[Secret.AnthropicApiKey]
+        if (!settings.value.aiEnabled || key.isNullOrBlank()) return null
+        return ClaudeEnricher(key, clock.zone())
+    }
+
+    /**
+     * Enriches every task that's new or changed since it was last enriched, and, while the model is
+     * on, those only the rules have seen; soonest due first. The model does it while it's on and
+     * the month's spend leaves room under the cap, at most [MAX_MODEL_CALLS] a run; the rules do
+     * the rest, and stand in for a call that fails (the model is then left alone for the run) or
+     * that the model declines (recorded as the model's, so it isn't asked again).
+     */
+    suspend fun enrichNow(model: Enricher? = modelEnricher()) {
+        var enricher = model
+        var calls = 0
+        val candidates = tasks.value.tasks
+            .mapNotNull { task -> Enrichments.jobFor(task)?.let { task to it } }
+            .filter { (task, _) -> Enrichments.stale(task, enricher != null, RuleEnricher.BY) }
+            .sortedBy { (task, _) -> task.dueAt ?: Long.MAX_VALUE }
+        for ((task, job) in candidates) {
+            val now = clock.now()
+            val month = AiUsage.monthOf(now, clock.zone())
+            val s = settings.value
+            val useModel = enricher != null && calls < MAX_MODEL_CALLS && runtime.value.aiUsage.forMonth(month).allows(s.aiMonthlyCapGbp, s.usdToGbp)
+            var enrichment = if (useModel) {
+                calls++
+                val result = runCatching { enricher!!.enrich(task, job, now) }
+                    .onFailure { error ->
+                        Log.w(TAG, "The model's enrichment failed; the rules stand in", error)
+                        runtime.update { it.copy(aiUsage = it.aiUsage.forMonth(month).failure(error.message ?: error.javaClass.simpleName, now)) }
+                        enricher = null
+                    }
+                    .getOrNull()
+                result?.let { r -> runtime.update { it.copy(aiUsage = it.aiUsage.forMonth(month).record(r.costUsd, r.refused, now)) } }
+                when {
+                    result?.enrichment != null -> result.enrichment
+                    // Declined, or no answer it could read: the rules' say, under the model's name.
+                    result != null -> rules.enrich(task, job, now).enrichment?.copy(by = enricher?.by ?: RuleEnricher.BY)
+                    else -> null
+                }
+            } else {
+                null
+            }
+            if (enrichment == null) enrichment = rules.enrich(task, job, now).enrichment
+            val made = enrichment ?: continue
+            tasks.update { state -> state.copy(tasks = state.tasks.map { if (it.id == task.id) it.withEnrichment(made) else it }) }
+        }
+    }
+
     companion object {
         const val TAG = "Decrastination"
 
         /** The widget sends a change for each step of a sync; read once they've stopped. */
         private const val TEAMS_QUIET_MS = 5_000L
         private const val WIDGET_DEBOUNCE_MS = 1_000L
+
+        /** The most model calls one enrichment run makes: the rest wait for the next. */
+        const val MAX_MODEL_CALLS = 20
 
         /** How often the pending changes' uptime is counted (and saved) while nothing falls due. */
         private const val UPTIME_COUNT_MS = 5 * 60_000L

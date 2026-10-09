@@ -48,6 +48,9 @@ data class InboxMessage(
 object GmailThreads {
     const val EXTRA_MESSAGE_ID = "messageId"
     const val EXTRA_FROM = "from"
+
+    /** When the newest message arrived (epoch millis), so "next Friday" is read from then. */
+    const val EXTRA_RECEIVED = "received"
     const val EXTRA_NEXT_STEP = "nextStep"
     const val EXTRA_MESSAGES = "messages"
 
@@ -79,6 +82,7 @@ object GmailThreads {
                     put(EXTRA_MESSAGE_ID, message.messageId)
                     put(EXTRA_NEXT_STEP, triage.nextStep)
                     put(EXTRA_MESSAGES, counts[message.threadId].toString())
+                    put(EXTRA_RECEIVED, message.receivedAt.toString())
                     if (from.isNotEmpty()) put(EXTRA_FROM, from)
                     if (body == null) put(EXTRA_TEXT_PENDING, "true")
                 },

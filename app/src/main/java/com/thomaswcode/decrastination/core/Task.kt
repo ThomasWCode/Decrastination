@@ -96,6 +96,8 @@ data class TaskItem(
     val doneAt: Long? = null,
     /** Source-specific values: Gmail's sender and labels, an Anki deck id, a Teams tab. */
     val extra: Map<String, String> = emptyMap(),
+    /** What the enrichment said about it (Phase 4), laid over the source's values at every merge. */
+    val enrichment: Enrichment? = null,
 ) {
     val isOpen: Boolean get() = status == Status.Open
 

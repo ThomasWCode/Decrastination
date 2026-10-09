@@ -14,6 +14,8 @@ work = "2.11.2"
 coroutines = "1.10.2"
 serialization = "1.9.0"
 zxing = "3.5.4"
+anthropic = "2.34.0"
+okhttp = "4.12.0"
 junit = "4.13.2"
 
 [libraries]
@@ -32,6 +34,8 @@ kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-
 kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "coroutines" }
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "serialization" }
 zxing-core = { group = "com.google.zxing", name = "core", version.ref = "zxing" }
+anthropic-java = { group = "com.anthropic", name = "anthropic-java", version.ref = "anthropic" }
+okhttp-mockwebserver = { group = "com.squareup.okhttp3", name = "mockwebserver", version.ref = "okhttp" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 kotlin-test-junit = { group = "org.jetbrains.kotlin", name = "kotlin-test-junit", version.ref = "kotlin" }
 

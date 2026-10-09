@@ -91,6 +91,12 @@ object AnkiRules {
         return SECTION_IN_TEXT.findAll(text).map { it.groupValues[1].toInt() to it.groupValues[2].toInt() }.distinct().toList()
     }
 
+    /** The vocabulary sections the enrichment read in [task] ("1.2"). */
+    fun enrichedSections(task: TaskItem): List<Pair<Int, Int>> =
+        task.enrichment?.ankiSections.orEmpty().mapNotNull { section ->
+            section.split('.').takeIf { it.size == 2 }?.let { (major, minor) -> major.toIntOrNull()?.let { a -> minor.toIntOrNull()?.let { b -> a to b } } }
+        }.distinct()
+
     fun deckName(textbook: Int, section: Pair<Int, Int>): String = "Textbook $textbook::${section.first}.${section.second}"
 
     /**
@@ -163,7 +169,9 @@ object AnkiRules {
         val wanted = LinkedHashMap<Deck, MutableList<TaskItem>>()
         for (task in assignments) {
             if (!task.isOpen || task.source == Source.Anki) continue
-            for (section in linkedSections(task.title + "\n" + task.detail)) {
+            // The deck pattern wins when it finds anything; else the sections the enrichment read.
+            val sections = linkedSections(task.title + "\n" + task.detail).ifEmpty { enrichedSections(task) }
+            for (section in sections) {
                 val deck = byName[deckName(textbook, section)] ?: continue
                 wanted.getOrPut(deck) { mutableListOf() } += task
             }
