@@ -36,13 +36,14 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.block.Blocklist
+import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.data.Window
 import com.thomaswcode.decrastination.enrich.AiUsage
 import com.thomaswcode.decrastination.protect.SettingsChanges
+import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.util.Locale
 
 /**
  * Everything you can change (PLAN.md Phase 4): hours, Teams, planning, Anki, what's blocked, and
@@ -65,7 +66,9 @@ class SettingsActivity : ComponentActivity() {
     private fun Editor(graph: AppGraph) {
         val saved by graph.settings.state.collectAsStateWithLifecycle()
         val runtime by graph.runtime.state.collectAsStateWithLifecycle()
-        var draft by remember { mutableStateOf(saved) }
+        // What's been asked for, waiting changes included: setting one back cancels it.
+        val asked = SettingsChanges.requested(saved, runtime.pending)
+        var draft by remember { mutableStateOf(asked) }
         var invalid by remember { mutableStateOf(emptySet<String>()) }
         var message by remember { mutableStateOf<String?>(null) }
         var apps by remember { mutableStateOf(emptyList<App>()) }
@@ -81,17 +84,18 @@ class SettingsActivity : ComponentActivity() {
                 Column(Modifier.fillMaxWidth().padding(16.dp)) {
                     message?.let { Text(it, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(bottom = 8.dp)) }
                     Button(
-                        enabled = invalid.isEmpty() && draft != saved,
+                        enabled = invalid.isEmpty() && draft != asked,
                         onClick = {
                             scope.launch {
-                                graph.changeSettings(draft)
+                                val wanted = draft
+                                graph.changeSettings { wanted }
                                 val waiting = graph.runtime.value.pending
-                                message = if (graph.settings.value == draft) {
+                                message = if (waiting.isEmpty()) {
                                     "Saved."
                                 } else {
-                                    "Saved. ${waiting.size} change${if (waiting.size == 1) "" else "s"} loosening blocking wait 24 hours, shown below."
+                                    "Saved. ${waiting.size} change${if (waiting.size == 1) "" else "s"} loosening blocking wait ${graph.settings.value.loosenDelayHours} hours, shown below."
                                 }
-                                draft = graph.settings.value
+                                draft = SettingsChanges.requested(graph.settings.value, waiting)
                             }
                         },
                         modifier = Modifier.fillMaxWidth(),
@@ -144,7 +148,7 @@ class SettingsActivity : ComponentActivity() {
 
                 item { Section("Blocked sites") }
                 item {
-                    var text by remember(saved.blockedSites) { mutableStateOf(draft.blockedSites.joinToString("\n")) }
+                    var text by remember(asked.blockedSites) { mutableStateOf(draft.blockedSites.joinToString("\n")) }
                     OutlinedTextField(
                         value = text,
                         onValueChange = { value ->
@@ -160,7 +164,7 @@ class SettingsActivity : ComponentActivity() {
 
                 item { Section("Browsers") }
                 item {
-                    for (browser in KNOWN_BROWSERS) {
+                    for (browser in browsers(draft)) {
                         val blocked = browser in draft.blockedBrowsers
                         SwitchRow("${browserName(browser)}: blocked outright", blocked) { on ->
                             draft = draft.copy(
@@ -178,9 +182,11 @@ class SettingsActivity : ComponentActivity() {
                 }
 
                 item { Section("Blocked apps") }
-                val listed = draft.blockedApps.filter { pkg -> apps.none { it.packageName == pkg } }
+                // Browsers have their own switches above.
+                val shownBrowsers = browsers(draft).toSet()
+                val listed = draft.blockedApps.filter { pkg -> apps.none { it.packageName == pkg } && pkg !in shownBrowsers }
                     .map { App("${Blocklist.NAMES[it] ?: it} (not installed)", it) }
-                items(listed + apps.filter { it.packageName != packageName }, key = { it.packageName }) { app ->
+                items(listed + apps.filter { it.packageName != packageName && it.packageName !in shownBrowsers }, key = { it.packageName }) { app ->
                     SwitchRow(app.label, app.packageName in draft.blockedApps) { on ->
                         draft = draft.copy(blockedApps = if (on) (draft.blockedApps + app.packageName).distinct() else draft.blockedApps - app.packageName)
                     }
@@ -189,7 +195,10 @@ class SettingsActivity : ComponentActivity() {
                 if (runtime.pending.isNotEmpty()) {
                     item { Section("Waiting (protection is armed)") }
                     items(runtime.pending, key = { it.id }) { change ->
-                        Note("${change.description}: applies about ${Format.at(change.applyAt, graph.clock.now(), graph.clock.zone())}. A parent code on the protection screen applies it now.")
+                        Note(
+                            "${change.description}: applies about ${Format.at(change.applyAt, graph.clock.now(), graph.clock.zone())}, and is shown above as if it had. " +
+                                "Set it back and save to cancel it; a parent code on the protection screen applies it now.",
+                        )
                     }
                 }
             }
@@ -205,12 +214,16 @@ class SettingsActivity : ComponentActivity() {
     }
 
     private companion object {
-        val KNOWN_BROWSERS = listOf("com.android.chrome", "com.brave.browser", "org.mozilla.firefox", "org.torproject.torbrowser")
+        /** Every browser the blocker knows, and any the settings name. */
+        fun browsers(settings: Settings): List<String> =
+            (Blocklist.CHECKED_BROWSERS + Blocklist.BLOCKED_BROWSERS + settings.checkedBrowsers + settings.blockedBrowsers).distinct()
 
         fun browserName(pkg: String): String = when (pkg) {
             "com.android.chrome" -> "Chrome"
             "com.brave.browser" -> "Brave"
             "org.mozilla.firefox" -> "Firefox"
+            "org.mozilla.firefox_beta" -> "Firefox Beta"
+            "org.mozilla.fenix" -> "Firefox Nightly"
             "org.torproject.torbrowser" -> "Tor"
             else -> pkg
         }

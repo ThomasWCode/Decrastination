@@ -41,7 +41,13 @@ enum class Status {
 
 /** One ordered part of a task, from the source or the enrichment, with its own estimate. */
 @Serializable
-data class SubStep(val title: String, val minutes: Int, val done: Boolean = false)
+data class SubStep(
+    val title: String,
+    val minutes: Int,
+    val done: Boolean = false,
+    /** The vocabulary sections ("1.2") this step learns: left out of the plan where Anki deck tasks hold them. */
+    val ankiSections: List<String> = emptyList(),
+)
 
 /**
  * One obligation from one source, in the shape every other part of the app works with
