@@ -23,6 +23,11 @@ data class Chunk(
     val soft: Boolean,
     val overdue: Boolean,
     val dueToday: Boolean,
+    /**
+     * Work due later today or tomorrow, which comes before overdue work as its deadline can still
+     * be met; or its task's overdue part, which comes before it.
+     */
+    val dueSoon: Boolean = false,
     /** Couldn't fit before its deadline, so it's today's. */
     val behind: Boolean,
     /** 1-based, of [parts]. */

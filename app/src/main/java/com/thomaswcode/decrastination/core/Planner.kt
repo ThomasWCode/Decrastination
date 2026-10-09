@@ -19,7 +19,10 @@ import kotlin.math.roundToInt
  * 2. A task is cut into chunks: its sub-steps, or its remaining time in even boxes of about
  *    `boxMin`. Remaining time is the estimate × your calibration multiplier × (1 − progress), less
  *    the minutes already worked, and never under 5 ("finish and hand in").
- * 3. Overdue work and work due today go straight into today, oldest deadline first.
+ * 3. Work due later today or tomorrow comes first, as its deadlines can still be met: it takes
+ *    today's time before work already past its deadline. A task with some brings its overdue
+ *    blocks along, ahead of it in their order. Then overdue work goes straight into today, oldest
+ *    deadline first.
  * 4. Everything else, in deadline order, is placed backwards from its last usable day (the
  *    deadline's day less the safety margin; a morning deadline's day is never usable), one chunk
  *    per day while days allow, so a big task spreads over several evenings. A chunk that fits
@@ -169,6 +172,13 @@ object Planner {
         val free = capacity.toMutableMap()
         val placed = days.associateWith { mutableListOf<Chunk>() }
 
+        // Work due later today or tomorrow comes before work already past its deadline: those
+        // deadlines can still be met. A task with some brings the runs of its blocks due by then
+        // along, its overdue ones first, as they come before it in its order.
+        val tomorrow = today.plusDays(1)
+        val soonTasks = items.filter { !it.soft && it.deadline >= input.now && date(it.deadline, zone) <= tomorrow }.mapTo(HashSet()) { it.task.id }
+        fun soon(item: Item) = !item.soft && item.task.id in soonTasks && date(item.deadline, zone) <= tomorrow
+
         /** Piece [index] of [item]: every task's pieces are placed in order, so it's done ([index] + 1)th. */
         fun chunk(item: Item, index: Int, behind: Boolean): Chunk {
             val piece = item.chunks[index]
@@ -186,6 +196,7 @@ object Planner {
                 soft = item.soft,
                 overdue = overdue,
                 dueToday = !overdue && date(item.deadline, zone) == today,
+                dueSoon = soon(item),
                 behind = behind && !overdue,
                 part = part,
                 parts = item.taskParts,
@@ -226,7 +237,9 @@ object Planner {
         // A block whose window opens past the plan's reach waits to be planned until it's within it.
         val placeable = items.filter { item -> item.notBefore?.let { date(it, zone) <= horizon } ?: true }
         val (urgent, later) = placeable.partition { date(it.deadline, zone) <= today }
-        for (item in urgent.sortedWith(compareBy({ it.soft }, { it.deadline }))) {
+
+        // Due by today (overdue, or later today): into today, from the first day it can be.
+        fun placeNow(item: Item) {
             val perDay = item.task.stepsPerDay
             val assigned = arrayOfNulls<LocalDate>(item.chunks.size)
             var day = maxOf(firstDay(item), floorOf(item) ?: today)
@@ -252,12 +265,8 @@ object Planner {
             note(item, assigned)
         }
 
-        // Earliest last usable day first, so the most constrained work reserves its days first (a
-        // later deadline with a bigger safety margin can be the more urgent).
-        // A task's later runs of blocks first among equals: placed backwards, they leave the earlier
-        // runs the days before them, so the order holds.
-        val order = compareBy<Item>({ it.soft }, { lastUsableDay(it, input) }, { it.deadline }, { if (it.windowed) it.task.id else "" }, { -it.run })
-        for (item in later.sortedWith(order)) {
+        // Due after today: backwards from its last usable day.
+        fun placeBack(item: Item) {
             val earliest = maxOf(firstDay(item), floorOf(item) ?: today)
             // The day it's due by, as calibrated: work after it is behind, even when that day has
             // already gone (a margin longer than the time left).
@@ -318,21 +327,36 @@ object Planner {
             note(item, assigned)
         }
 
+        // Real deadlines before undated work, then the oldest first.
+        val byDeadline = compareBy<Item>({ it.soft }, { it.deadline })
+        // Earliest last usable day first, so the most constrained work reserves its days first (a
+        // later deadline with a bigger safety margin can be the more urgent).
+        // A task's later runs of blocks first among equals: placed backwards, they leave the earlier
+        // runs the days before them, so the order holds.
+        val order = compareBy<Item>({ it.soft }, { lastUsableDay(it, input) }, { it.deadline }, { if (it.windowed) it.task.id else "" }, { -it.run })
+        // Work due soon takes today's time first: what's due by today (a soon task's overdue blocks
+        // among it), then what's due tomorrow; then what's overdue; then the rest.
+        urgent.filter(::soon).sortedWith(byDeadline).forEach(::placeNow)
+        later.filter(::soon).sortedWith(order).forEach(::placeBack)
+        urgent.filterNot(::soon).sortedWith(byDeadline).forEach(::placeNow)
+        later.filterNot(::soon).sortedWith(order).forEach(::placeBack)
+
         val buckets = days.map { DayBucket(it, capacity.getValue(it), placed.getValue(it).sortedWith(ORDER)) }
         return Plan(input.now, today, buckets, events.sortedWith(compareBy(nullsLast()) { it.dueAt }))
     }
 
     /**
-     * Within a day: work with a real deadline before undated work; then overdue, due today,
-     * behind, the rest; then the earliest deadline, homework before revision before admin, the
-     * shorter task, and the title, so the order never flickers. A task's parts stay together, in order.
+     * Within a day: work with a real deadline before undated work; then work due later today or
+     * tomorrow (with its task's overdue part first), overdue, behind, the rest; then the earliest
+     * deadline, homework before revision before admin, the shorter task, and the title, so the
+     * order never flickers. A task's parts stay in order.
      */
     val ORDER: Comparator<Chunk> = compareBy<Chunk>(
         { it.soft },
         {
             when {
-                it.overdue -> 0
-                it.dueToday -> 1
+                it.dueSoon -> 0
+                it.overdue || it.dueToday -> 1
                 it.behind -> 2
                 else -> 3
             }

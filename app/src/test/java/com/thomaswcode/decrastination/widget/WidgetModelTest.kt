@@ -48,17 +48,18 @@ class WidgetModelTest {
                 task("PREP 2", "2026-10-11T08:00"),
             ),
         )
-        assertEquals("Do: Statics", model.headline)
-        assertEquals("Overdue", model.badge)
+        // Work due later today before the overdue Statics: those deadlines can still be met.
+        assertEquals("Do: Essay", model.headline)
+        assertEquals("Due 21:00", model.badge)
         assertTrue(model.urgent)
-        assertEquals("40 min", model.minutes)
-        assertEquals("Then: Essay", model.then)
+        assertEquals("20 min", model.minutes)
+        assertEquals("Then: Chapter 17", model.then)
         assertEquals("3 today · 1 tomorrow", model.summary)
         // The list goes on from there: neither the next nor the one after it again.
-        assertEquals(listOf("Chapter 17"), model.list.map { it.text })
+        assertEquals(listOf("Statics"), model.list.map { it.text })
         // Each row opens its own task.
-        assertEquals(listOf("teams:Chapter 17"), model.list.map { it.taskId })
-        assertEquals("teams:Statics", model.taskId)
+        assertEquals(listOf("teams:Statics"), model.list.map { it.taskId })
+        assertEquals("teams:Essay", model.taskId)
     }
 
     @Test

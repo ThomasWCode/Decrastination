@@ -183,7 +183,7 @@ Phase 0 also built what Phase 1 would have scaffolded: the Gradle setup, the sha
 
 ### 1.2.0: alerts
 
-*Built 9 Oct 2026: a plan of Claude's that the checks drop is said on the task and in a notification, with why; a key the API refuses (rejected, not allowed, or out of credit) is alerted once a stretch, in a notification, a banner on the Plan and Setup.*
+*Built 9 Oct 2026: a plan of Claude's that the checks drop is said on the task and in a notification, with why; a key the API refuses (rejected, not allowed, or out of credit) is alerted once a stretch, in a notification, a banner on the Plan and Setup; Claude's monthly cap is optional and in dollars, none by default, as the account is prepaid; and work due today or tomorrow comes before overdue work, taking the evening's time first.*
 
 ## 6. Verification
 
