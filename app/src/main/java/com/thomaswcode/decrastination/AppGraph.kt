@@ -13,6 +13,7 @@ import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.Planner
 import com.thomaswcode.decrastination.core.Source
+import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.WallClock
 import com.thomaswcode.decrastination.core.withEnrichment
 import com.thomaswcode.decrastination.data.ActivityLog
@@ -338,10 +339,10 @@ class AppGraph private constructor(context: Context) {
         }
         // A key problem standing from before, whose alert couldn't be shown then.
         scope.launch { alertKeyProblem(runtime.value.aiUsage) }
-        // Dropped plans' warnings withdrawn once their tasks close, go, or are planned since.
+        // Dropped plans' warnings kept in step with the tasks, from the start.
         scope.launch {
-            tasks.state.drop(1).debounce(WIDGET_DEBOUNCE_MS).collect { state ->
-                runCatching { ModelAlerts.tidyDropped(app, state.tasks) }.onFailure { Log.w(TAG, "Tidying dropped-plan warnings failed", it) }
+            tasks.state.debounce(WIDGET_DEBOUNCE_MS).collect { state ->
+                runCatching { droppedAlerts(state.tasks) }.onFailure { Log.w(TAG, "Dropped-plan warnings failed", it) }
             }
         }
         // Redraw the widget whenever what it shows may have changed.
@@ -448,6 +449,21 @@ class AppGraph private constructor(context: Context) {
     }
 
     /**
+     * The dropped-plan warnings in step with [all]: those whose task no longer has one withdrawn
+     * (done or gone, which the enrichment loop never sees again, or planned since), and any not
+     * shown yet shown, once notifications can show it.
+     */
+    private suspend fun droppedAlerts(all: List<TaskItem>) {
+        val standing = ModelAlerts.standing(all)
+        ModelAlerts.withdrawExcept(app, standing.mapTo(HashSet()) { it.first.id })
+        val shown = ModelAlerts.unshown(standing, runtime.value.droppedAlerted).filter { (task, why) -> ModelAlerts.dropped(app, task, why) }
+        runtime.update { state ->
+            val kept = state.droppedAlerted.filterKeys { id -> standing.any { it.first.id == id } }
+            state.copy(droppedAlerted = kept + shown.mapNotNull { (task, _) -> task.enrichment?.let { task.id to it.inputHash } })
+        }
+    }
+
+    /**
      * [usage]'s key problem alerted, if it hasn't been yet and can be seen: one that couldn't
      * (notifications off) is tried again at the next failed call and when the app starts.
      */
@@ -490,13 +506,15 @@ class AppGraph private constructor(context: Context) {
      * the rest, and stand in for a call that fails (the model is then left alone for the run) or
      * that the model declines (recorded as the model's, so it isn't asked again).
      */
-    suspend fun enrichNow(model: Enricher? = modelEnricher()) {
+    suspend fun enrichNow(model: Enricher? = modelEnricher(), only: String? = null) {
         // Not while it rests after a failed call (no network, a bad key), nor with no room under the
         // cap: then what only the rules have seen isn't due for it.
         var enricher = model.takeIf { modelAvailable() }
         var calls = 0
         var decksChanged = false
         val candidates = tasks.value.tasks
+            // [only]: that task alone (the debug `enrich-task`), so nothing else is sent anywhere.
+            .filter { only == null || it.id == only }
             .mapNotNull { task -> Enrichments.jobFor(task)?.let { task to it } }
             .filter { (task, _) -> Enrichments.stale(task, enricher != null, RuleEnricher.BY, modelOff = claudeKey() == null) }
             .sortedBy { (task, _) -> task.dueAt ?: Long.MAX_VALUE }
@@ -554,8 +572,8 @@ class AppGraph private constructor(context: Context) {
                 )
             }
             if (!laid) continue
-            // A plan of the model's dropped (out of range, not adding up): said once, as it's laid.
-            made.dropped?.let { ModelAlerts.dropped(app, task, it) } ?: run { if (task.enrichment?.dropped != null) ModelAlerts.planKept(app, task.id) }
+            // A plan of the model's dropped (out of range, not adding up) is said once it's laid,
+            // by droppedAlerts, as the tasks change.
             // Its deck tasks take their sections and due date from it.
             val after = task.withEnrichment(made)
             val sections = AnkiRules.sectionsOf(after)
