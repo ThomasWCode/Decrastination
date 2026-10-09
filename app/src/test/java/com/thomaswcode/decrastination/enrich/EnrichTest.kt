@@ -191,7 +191,8 @@ class AnswersTest {
         // A blank step and one of 999 minutes: the split isn't trusted, the estimate stands.
         assertNull(e.subSteps)
         assertEquals(40, e.effortMin)
-        assertEquals(listOf("2.2", "2.3"), e.ankiSections)
+        // Nor its sections: the total planned whole holds the vocabulary.
+        assertEquals(emptyList(), e.ankiSections)
         // A step's own sections are kept on it, and counted among the assignment's.
         val tagged = parse(
             Enrichments.Job.Assignment,
