@@ -107,7 +107,9 @@ class BlockedActivity : ComponentActivity() {
         val targetBlocked = remember(settings) {
             when {
                 targetName.isEmpty() -> true
-                intent.getStringExtra(EXTRA_KIND) == KIND_SITE -> targetName in settings.blockedSites
+                // A site: still listed, and its browser still one whose address bar is read.
+                intent.getStringExtra(EXTRA_KIND) == KIND_SITE ->
+                    targetName in settings.blockedSites && intent.getStringExtra(EXTRA_BROWSER)?.let { it in settings.checkedBrowsers } != false
                 else -> graph.focus.target(targetName) != null
             }
         }
@@ -221,12 +223,14 @@ class BlockedActivity : ComponentActivity() {
         private const val EXTRA_TARGET = "target"
         private const val EXTRA_KIND = "kind"
         private const val EXTRA_REASON = "reason"
+        private const val EXTRA_BROWSER = "browser"
         private const val KIND_SITE = "site"
 
         fun intent(context: Context, target: Focus.Target, reason: BlockPolicy.Reason): Intent =
             Intent(context, BlockedActivity::class.java)
                 .putExtra(EXTRA_TARGET, target.name)
                 .putExtra(EXTRA_KIND, if (target is Focus.Target.Site) KIND_SITE else "app")
+                .putExtra(EXTRA_BROWSER, (target as? Focus.Target.Site)?.browser)
                 .putExtra(EXTRA_REASON, reason.name)
     }
 }
