@@ -76,10 +76,17 @@ object Daily {
         val now = graph.clock.now()
         val zone = graph.clock.zone()
         val settings = graph.settings.value
-        set(context, ACTION_BRIEFING, nextBriefing(now, zone, settings))
-        set(context, ACTION_CHECK_IN, nextSunday(now, zone, settings.checkInMin))
-        set(context, ACTION_REVIEW, nextSunday(now, zone, settings.checkInMin + REVIEW_AFTER_MIN))
+        // From a little before now, unless it ran since: an alarm Android is still to deliver
+        // (inexact ones get ten minutes) keeps its time rather than moving on a day or a week.
+        val ran = graph.runtime.value.dailyRanAt
+        fun from(action: String) = maxOf(now - LATE_MS, ran[action] ?: Long.MIN_VALUE)
+        set(context, ACTION_BRIEFING, nextBriefing(from(ACTION_BRIEFING), zone, settings))
+        set(context, ACTION_CHECK_IN, nextSunday(from(ACTION_CHECK_IN), zone, settings.checkInMin))
+        set(context, ACTION_REVIEW, nextSunday(from(ACTION_REVIEW), zone, settings.checkInMin + REVIEW_AFTER_MIN))
     }
+
+    /** How late an inexact alarm can come: its window, and a little more. */
+    private const val LATE_MS = 15 * 60_000L
 
     private fun set(context: Context, action: String, at: Long) {
         val alarms = context.getSystemService(AlarmManager::class.java) ?: return
@@ -120,6 +127,11 @@ class DailyReceiver : BroadcastReceiver() {
         val pending = goAsync()
         CoroutineScope(Dispatchers.Default).launch {
             try {
+                // Noted first, so setting the alarms again doesn't bring this one back.
+                intent.action?.let { action ->
+                    val graph = AppGraph.get(context)
+                    graph.runtime.update { it.copy(dailyRanAt = it.dailyRanAt + (action to graph.clock.now())) }
+                }
                 when (intent.action) {
                     Daily.ACTION_BRIEFING -> Briefing.run(context)
                     Daily.ACTION_CHECK_IN -> CheckIns.remind(context)

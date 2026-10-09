@@ -127,6 +127,13 @@ class CalibratorTest {
     }
 
     @Test
+    fun `a box length gone back to the default is said`() {
+        val previous = Calibration(boxMin = mapOf(Kind.Homework to 25))
+        val learned = Calibrator.learn(ActivityLog(), previous, defaultBox = 45, week = 1)
+        assertTrue(learned.changes.any { "Homework: pieces of 45 minutes" in it }, learned.changes.toString())
+    }
+
+    @Test
     fun `what changed is said in words`() {
         val learned = Calibrator.learn(ActivityLog(completions = listOf(done("a", worked = 80))), Calibration(), defaultBox = 45, week = 1)
         assertTrue(learned.changes.any { "Homework in 12.1 Physics takes ×1.30" in it }, learned.changes.toString())
@@ -161,6 +168,13 @@ class EventJudgeTest {
         assertEquals(mapOf(LocalDate.parse("2026-10-10") to EventJudge.FEW_HOURS_MIN), time.dayLoads)
         assertEquals(1, time.busy.size)
         assertEquals(emptyList(), time.toAsk)
+    }
+
+    @Test
+    fun `a timed event's few hours count once, an all-day event's on each day`() {
+        val night = CalendarEvent(9, "Party", Fixtures.at("2026-10-10T22:00"), Fixtures.at("2026-10-11T02:00"), allDay = false)
+        val time = EventJudge.time(listOf(night), mapOf(EventJudge.key(night) to "load:180"), LONDON)
+        assertEquals(mapOf(LocalDate.parse("2026-10-10") to 180), time.dayLoads)
     }
 
     @Test

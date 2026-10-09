@@ -100,6 +100,8 @@ class MergeTest {
         val again = Merge.apply(done, Source.Teams, listOf(fetched("a")), t0 + 2)
         assertEquals(listOf("teams:a"), again.reopened.map { it.id })
         assertEquals(0, again.tasks.single().workedMin)
+        // Its progress baseline is where it reopened.
+        assertEquals(0.0, again.tasks.single().firstProgress)
     }
 
     @Test

@@ -31,6 +31,8 @@ data class RuntimeState(
      * screen). A browser not in it hasn't been read.
      */
     val browserSites: Map<String, String?> = emptyMap(),
+    /** When each of the daily alarms (briefing, check-in, review) last ran, so a late one isn't run twice. */
+    val dailyRanAt: Map<String, Long> = emptyMap(),
     val codeLock: CodeLock = CodeLock(),
     val teamsAuto: TeamsAutoSync.State = TeamsAutoSync.State(),
     val protection: ProtectionState = ProtectionState(),
