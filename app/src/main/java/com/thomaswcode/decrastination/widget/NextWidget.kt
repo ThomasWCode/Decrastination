@@ -62,7 +62,8 @@ class NextWidget : GlanceAppWidget() {
             // WidgetUpdater redraws it after that, and at midnight and deadlines.
             val tasks by graph.tasks.state.collectAsState()
             val settings by graph.settings.state.collectAsState()
-            val model = WidgetModel.from(graph.plan(tasks, settings), tasks, graph.clock.zone())
+            val runtime by graph.runtime.state.collectAsState()
+            val model = WidgetModel.from(graph.plan(tasks, settings), tasks, graph.clock.zone(), runtime, settings.armed)
             GlanceTheme { Content(model) }
         }
     }

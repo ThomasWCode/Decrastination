@@ -1,22 +1,29 @@
 package com.thomaswcode.decrastination
 
 import android.annotation.SuppressLint
+import android.app.admin.DevicePolicyManager
 import android.content.Context
 import android.database.ContentObserver
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import com.thomaswcode.decrastination.block.Focus
+import com.thomaswcode.decrastination.block.Sessions
 import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.Planner
 import com.thomaswcode.decrastination.core.Source
-import com.thomaswcode.decrastination.core.SystemWallClock
 import com.thomaswcode.decrastination.core.WallClock
+import com.thomaswcode.decrastination.data.ActivityLog
+import com.thomaswcode.decrastination.data.DeviceClock
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.KeystoreCipher
+import com.thomaswcode.decrastination.data.RuntimeState
 import com.thomaswcode.decrastination.data.SecretStore
 import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.data.TaskState
 import com.thomaswcode.decrastination.net.UrlConnectionHttp
+import com.thomaswcode.decrastination.protect.SettingsChanges
+import com.thomaswcode.decrastination.protect.Watchdog
 import com.thomaswcode.decrastination.sources.anki.AnkiSource
 import com.thomaswcode.decrastination.sources.gmail.GmailSource
 import com.thomaswcode.decrastination.sources.powerplanner.PowerPlannerApi
@@ -26,6 +33,8 @@ import com.thomaswcode.decrastination.sources.teams.TeamsSource
 import com.thomaswcode.decrastination.sync.SyncWorker
 import com.thomaswcode.decrastination.sync.Syncer
 import com.thomaswcode.decrastination.widget.WidgetUpdater
+import java.io.File
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
@@ -33,10 +42,13 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import java.io.File
 
 /**
  * The app's singletons. The sync, the focus service, the widget and the screens all run in the
@@ -45,14 +57,16 @@ import java.io.File
 @OptIn(FlowPreview::class)
 class AppGraph private constructor(context: Context) {
     val app: Context = context.applicationContext
-    val clock: WallClock = SystemWallClock
+    val clock: WallClock = DeviceClock(app)
 
-    /** Work that outlives the screen or receiver that started it. */
-    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    /** Work that outlives the screen or receiver that started it; a failure is logged, not fatal. */
+    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default + CoroutineExceptionHandler { _, error -> Log.e(TAG, "Background work failed", error) })
 
     val tasks = JsonStore(File(app.filesDir, "tasks.json"), TaskState.serializer(), ::TaskState)
     val settings = JsonStore(File(app.filesDir, "settings.json"), Settings.serializer(), ::Settings)
     val secrets = SecretStore(File(app.filesDir, "secrets.bin"), KeystoreCipher())
+    val runtime = JsonStore(File(app.filesDir, "runtime.json"), RuntimeState.serializer(), ::RuntimeState)
+    val log = JsonStore(File(app.filesDir, "log.json"), ActivityLog.serializer(), ::ActivityLog)
 
     val syncer = Syncer(
         tasks = tasks,
@@ -70,6 +84,78 @@ class AppGraph private constructor(context: Context) {
     /** The plan now, from the stored tasks and settings. Cheap: dozens of tasks. */
     fun plan(state: TaskState = tasks.value, settings: Settings = this.settings.value, now: Long = clock.now()): Plan =
         Planner.plan(Planner.Input(state.tasks, now, clock.zone(), settings))
+
+    /** The blocker's state and decisions (block/Focus.kt). */
+    val focus = Focus(tasks, settings, runtime, log, clock) { state, s, now -> plan(state, s, now) }
+
+    /** Applies a settings change: at once, or, once armed, pending if it loosens blocking. */
+    /**
+     * Held while the settings and their pending changes are changed: two files, written in turn,
+     * so each change finishes before the next reads them.
+     */
+    private val changing = Mutex()
+
+    /**
+     * Changes the settings as [change] says, from what's been asked for (the settings with what's
+     * waiting applied), so a change to one field leaves the others' waiting changes be.
+     */
+    suspend fun changeSettings(change: (Settings) -> Settings) = changing.withLock {
+        // What's waiting is counted up to now first, so a new change's wait starts now.
+        applyDue(force = true)
+        val state = runtime.value
+        val proposed = change(SettingsChanges.requested(settings.value, state.pending))
+        val outcome = SettingsChanges.propose(settings.value, proposed, state.pending, clock.now()) { java.util.UUID.randomUUID().toString() }
+        // Nothing was waiting: the count starts now, whatever an old mark says.
+        val mark = if (state.pending.isEmpty()) clock.uptime() else state.uptimeMark ?: clock.uptime()
+        // The pending list first: stopped between the two, what applies now is lost (and seen to
+        // be), but a waiting change this one replaced can't come back.
+        runtime.update { it.copy(pending = outcome.pending, uptimeMark = if (outcome.pending.isEmpty()) null else mark) }
+        settings.update { outcome.settings }
+    }
+
+    /**
+     * Counts the uptime since the last count towards the pending changes and applies those whose
+     * wait is over. Called every half minute; it writes (and so counts) only every few minutes, or
+     * when a change falls due, unless [force]d.
+     */
+    suspend fun applyDueChanges(force: Boolean = false) {
+        if (runtime.value.pending.isEmpty()) return
+        changing.withLock { applyDue(force) }
+    }
+
+    /** [applyDueChanges], with [changing] held. */
+    private suspend fun applyDue(force: Boolean) {
+        val state = runtime.value
+        if (state.pending.isEmpty()) return
+        val uptime = clock.uptime()
+        val elapsed = SettingsChanges.counting(state.pending, state.uptimeMark, uptime, force) ?: return
+        val outcome = SettingsChanges.applyDue(settings.value, state.pending, clock.now(), elapsed)
+        val waiting = outcome.pending.map { it.id }.toSet()
+        val due = state.pending.filter { it.id !in waiting }
+        // The settings first: stopped before the pending list is saved, a change that fell due is
+        // applied again (to the same value), never lost.
+        if (due.isNotEmpty()) settings.update { latest -> due.fold(latest, SettingsChanges::apply) }
+        runtime.update { it.copy(pending = outcome.pending, uptimeMark = if (outcome.pending.isEmpty()) null else uptime) }
+    }
+
+    /** Drops the pending change [id]: what it would loosen stays as it is. Never waits, since it tightens. */
+    suspend fun cancelChange(id: String) = changing.withLock {
+        runtime.update { state ->
+            val rest = state.pending.filterNot { it.id == id }
+            state.copy(pending = rest, uptimeMark = if (rest.isEmpty()) null else state.uptimeMark)
+        }
+    }
+
+    /** Applies the pending change [id] now (a parent's code allowed it), if it's still waiting. */
+    suspend fun applyNow(id: String) = changing.withLock {
+        val change = runtime.value.pending.firstOrNull { it.id == id } ?: return@withLock
+        // Saved before its pending entry goes, as in [applyDue].
+        settings.update { SettingsChanges.apply(it, change) }
+        runtime.update { state ->
+            val rest = state.pending.filterNot { it.id == id }
+            state.copy(pending = rest, uptimeMark = if (rest.isEmpty()) null else state.uptimeMark)
+        }
+    }
 
     /**
      * Reads every source now, as a job (it keeps its network after the screen that asked has
@@ -98,7 +184,7 @@ class AppGraph private constructor(context: Context) {
             result == null -> "The Teams widget didn't answer"
             else -> when (result.getString(TeamsProvider.RESULT_REASON)) {
                 "service_off" -> "The Teams widget's sync service is off"
-                "busy" -> "The Teams widget is already syncing"
+                "busy" -> TEAMS_BUSY
                 else -> "The Teams widget didn't start a sync"
             }
         }
@@ -112,6 +198,30 @@ class AppGraph private constructor(context: Context) {
     private val teamsChanged = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
 
     init {
+        // Disarmed (once the wait is over, or at once by a parent's code): the device admin goes
+        // too, so uninstalling is allowed again, as the protection screen says. Checked at start as
+        // well as on each change, so a disarm the app stopped before seeing through is finished,
+        // and so is an arming left part-way (the admin given, then the app stopped mid-wizard).
+        scope.launch {
+            var starting = true
+            settings.state.map { it.armed }.distinctUntilChanged().collect { armed ->
+                val wasArmed = runtime.value.adminArmed
+                if (armed && !wasArmed) runtime.update { it.copy(adminArmed = true) }
+                if (!armed && (wasArmed || (starting && Watchdog.isAdminActive(app)))) {
+                    runCatching { app.getSystemService(DevicePolicyManager::class.java)?.removeActiveAdmin(Watchdog.admin(app)) }
+                    runtime.update { it.copy(adminArmed = false) }
+                }
+                starting = false
+            }
+        }
+        // Work a source confirms done earns free time and is logged.
+        // A session on a task the sync found done ends with it, and so do its notification and alarm.
+        syncer.addListener { if (focus.rewardCompletions()) Sessions.clear(app) }
+        // Any a stop left ungiven: completions, and sessions' endings.
+        scope.launch {
+            focus.finishSessions()
+            if (focus.rewardCompletions()) Sessions.clear(app)
+        }
         runCatching {
             app.contentResolver.registerContentObserver(
                 TeamsProvider.root,
@@ -128,7 +238,7 @@ class AppGraph private constructor(context: Context) {
         }
         // Redraw the widget whenever what it shows may have changed.
         scope.launch {
-            combine(tasks.state, settings.state) { _, _ -> }.drop(1).debounce(WIDGET_DEBOUNCE_MS).collect {
+            combine(tasks.state, settings.state, runtime.state) { _, _, _ -> }.drop(1).debounce(WIDGET_DEBOUNCE_MS).collect {
                 runCatching { WidgetUpdater.update(app) }.onFailure { Log.w(TAG, "Widget update failed", it) }
             }
         }
@@ -136,6 +246,9 @@ class AppGraph private constructor(context: Context) {
 
     companion object {
         const val TAG = "Decrastination"
+
+        /** [requestTeamsSync]'s answer when the widget is syncing already: as good as one started. */
+        const val TEAMS_BUSY = "The Teams widget is already syncing"
 
         /** The widget sends a change for each step of a sync; read once they've stopped. */
         private const val TEAMS_QUIET_MS = 5_000L

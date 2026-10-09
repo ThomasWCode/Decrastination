@@ -57,6 +57,8 @@ object Merge {
                     kind = f.kind,
                     sourceEffortMin = f.sourceEffortMin,
                     sourceProgress = f.sourceProgress,
+                    firstProgress = f.sourceProgress,
+                    peakEffortMin = f.sourceEffortMin,
                     subSteps = f.subSteps.orEmpty(),
                     stepsPerDay = f.stepsPerDay,
                     notBefore = f.notBefore,
@@ -78,7 +80,11 @@ object Merge {
                 kind = f.kind,
                 sourceEffortMin = f.sourceEffortMin,
                 sourceProgress = f.sourceProgress,
-                subSteps = f.subSteps ?: old.subSteps,
+                firstProgress = old.firstProgress ?: old.sourceProgress,
+                peakEffortMin = listOfNotNull(old.peakEffortMin, old.sourceEffortMin, f.sourceEffortMin).maxOrNull(),
+                // The source's steps, unless they're the same as before: then the ones kept here,
+                // with what a session ticked off, until the source's counts catch up (Anki's cards).
+                subSteps = f.subSteps?.takeIf { new -> new.map { it.title } != old.subSteps.map { it.title } } ?: old.subSteps,
                 stepsPerDay = f.stepsPerDay,
                 notBefore = f.notBefore,
                 derived = f.derived,
@@ -86,11 +92,13 @@ object Merge {
                 extra = f.extra,
             )
             val next = when {
-                old.status == Status.Open && f.done -> updated.copy(status = Status.Done, doneAt = now).also { completed += it }
+                // Reported as it stood before it finished (see completion()).
+                old.status == Status.Open && f.done -> updated.copy(status = Status.Done, doneAt = now).also { completed += completion(old, it) }
                 old.status == Status.Open -> updated
                 old.derived && old.status == Status.Done -> updated.copy(status = Status.Done)
                 f.done -> updated.copy(status = Status.Done)
-                else -> updated.copy(status = Status.Open, doneAt = null).also { reopened += it }
+                // Reopened: a new round, measured from where it reopened, with none of it worked yet.
+                else -> updated.copy(status = Status.Open, doneAt = null, workedMin = 0, firstProgress = f.sourceProgress).also { reopened += it }
             }
             fresh[id] = next
         }
@@ -101,10 +109,22 @@ object Merge {
             when {
                 old.status != Status.Open -> old.takeIf { now - (old.doneAt ?: old.lastSeenAt) < KEEP_FINISHED_MS }
                 old.derived -> old.copy(status = Status.Missed).also { missed += it }
-                else -> old.copy(status = Status.Done, doneAt = now).also { completed += it }
+                else -> old.copy(status = Status.Done, doneAt = now).also { completed += completion(old, it) }
             }
         } + fresh.values.filter { it.id !in byId }
 
         return Result(result, completed, reopened, added, missed)
     }
+
+    /**
+     * [done] as its completion is rewarded: with the progress it had when first seen (finished
+     * through its own progress, Power Planner at 50 % then 100 %, the time is for all the work
+     * since), and its estimate before it finished. A derived count (an Anki deck's cards) shrinks
+     * as it's worked through, so it's rewarded for the most it was.
+     */
+    private fun completion(old: TaskItem, done: TaskItem): TaskItem = done.copy(
+        // The lower of first-seen and last progress: corrected downward, the work back since counts.
+        sourceProgress = minOf(old.firstProgress ?: old.sourceProgress, old.sourceProgress),
+        sourceEffortMin = if (old.derived) old.peakEffortMin ?: old.sourceEffortMin else old.sourceEffortMin,
+    )
 }

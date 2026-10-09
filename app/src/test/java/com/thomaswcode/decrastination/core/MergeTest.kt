@@ -61,6 +61,55 @@ class MergeTest {
     }
 
     @Test
+    fun `finished through its own progress, it's reported with the progress it had`() {
+        val open = Merge.apply(emptyList(), Source.PowerPlanner, listOf(Fetched("p", "Essay", Kind.Homework, sourceProgress = 0.5)), t0).tasks
+        val result = Merge.apply(open, Source.PowerPlanner, listOf(Fetched("p", "Essay", Kind.Homework, sourceProgress = 1.0, done = true)), t0 + 1)
+        assertEquals(0.5, result.completed.single().sourceProgress)
+        assertEquals(1.0, result.tasks.single().sourceProgress)
+        // Progress synced on the way doesn't move the baseline: first seen at none, it's all earned.
+        val fresh = Merge.apply(emptyList(), Source.PowerPlanner, listOf(Fetched("q", "Notes", Kind.Homework, sourceProgress = 0.0)), t0).tasks
+        val halfway = Merge.apply(fresh, Source.PowerPlanner, listOf(Fetched("q", "Notes", Kind.Homework, sourceProgress = 0.5)), t0 + 1).tasks
+        val done = Merge.apply(halfway, Source.PowerPlanner, listOf(Fetched("q", "Notes", Kind.Homework, sourceProgress = 1.0, done = true)), t0 + 2)
+        assertEquals(0.0, done.completed.single().sourceProgress)
+        assertEquals(Status.Done, result.tasks.single().status)
+    }
+
+    @Test
+    fun `a task that reopens starts its round from where it reopened`() {
+        // First seen at none, done, reopened at 90 %, and done again.
+        val open = Merge.apply(emptyList(), Source.PowerPlanner, listOf(Fetched("p", "Essay", Kind.Homework, sourceProgress = 0.0)), t0).tasks
+        val done = Merge.apply(open, Source.PowerPlanner, listOf(Fetched("p", "Essay", Kind.Homework, sourceProgress = 1.0, done = true)), t0 + 1).tasks
+        val reopened = Merge.apply(done.map { it.copy(workedMin = 30) }, Source.PowerPlanner, listOf(Fetched("p", "Essay", Kind.Homework, sourceProgress = 0.9)), t0 + 2)
+        assertEquals(0.9, reopened.tasks.single().firstProgress)
+        assertEquals(0, reopened.tasks.single().workedMin)
+        val again = Merge.apply(reopened.tasks, Source.PowerPlanner, listOf(Fetched("p", "Essay", Kind.Homework, sourceProgress = 1.0, done = true)), t0 + 3)
+        // Rewarded for the last tenth, not the whole task again.
+        assertEquals(0.9, again.completed.single().sourceProgress)
+    }
+
+    @Test
+    fun `a count that shrinks to nothing as it's worked through is rewarded for the most it was`() {
+        fun quota(minutes: Int, done: Boolean = false) = Fetched(sourceId = "quota", title = "Anki", kind = Kind.Homework, sourceEffortMin = minutes, done = done, derived = true)
+        val morning = Merge.apply(emptyList(), Source.Anki, listOf(quota(60)), t0).tasks
+        val halfway = Merge.apply(morning, Source.Anki, listOf(quota(30)), t0 + 1).tasks
+        val finished = Merge.apply(halfway, Source.Anki, listOf(quota(1, done = true)), t0 + 2)
+        assertEquals(60, finished.completed.single().sourceEffortMin)
+    }
+
+    @Test
+    fun `steps ticked off here stay ticked while the source sends the same ones`() {
+        fun deck(vararg steps: String) = Fetched(sourceId = "deck:1", title = "Deck", kind = Kind.Homework, derived = true, subSteps = steps.map { SubStep(it, 9) })
+        val stored = Merge.apply(emptyList(), Source.Anki, listOf(deck("20 new cards", "20 new cards", "5 new cards")), t0).tasks
+        // A session ticked the first off; the counts haven't moved yet.
+        val ticked = stored.map { t -> t.copy(subSteps = t.subSteps.mapIndexed { i, s -> if (i == 0) s.copy(done = true) else s }) }
+        val again = Merge.apply(ticked, Source.Anki, listOf(deck("20 new cards", "20 new cards", "5 new cards")), t0 + 1).tasks
+        assertEquals(listOf(true, false, false), again.single().subSteps.map { it.done })
+        // The cards studied: the source's own, shorter list.
+        val caughtUp = Merge.apply(again, Source.Anki, listOf(deck("20 new cards", "5 new cards")), t0 + 2).tasks
+        assertEquals(listOf(false, false), caughtUp.single().subSteps.map { it.done })
+    }
+
+    @Test
     fun `a done task listed again reopens, as a snoozed email does`() {
         val done = Merge.apply(first(fetched("a")), Source.Teams, emptyList(), later).tasks
         val result = Merge.apply(done, Source.Teams, listOf(fetched("a")), later + 1)

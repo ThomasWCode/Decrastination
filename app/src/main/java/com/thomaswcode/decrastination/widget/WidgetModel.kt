@@ -3,6 +3,7 @@ package com.thomaswcode.decrastination.widget
 import com.thomaswcode.decrastination.core.Chunk
 import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.Source
+import com.thomaswcode.decrastination.data.RuntimeState
 import com.thomaswcode.decrastination.data.TaskState
 import com.thomaswcode.decrastination.ui.Format
 import java.time.ZoneId
@@ -37,7 +38,11 @@ data class WidgetModel(
         const val TEAMS_STALE_MS = 24 * 3_600_000L
         private const val LIST_MAX = 30
 
-        fun from(plan: Plan, state: TaskState, zone: ZoneId): WidgetModel {
+        /**
+         * [runtime] and [armed] add the blocker's side: protection trouble comes first among the
+         * warnings, a running focus session replaces the day's count, and free time is shown.
+         */
+        fun from(plan: Plan, state: TaskState, zone: ZoneId, runtime: RuntimeState = RuntimeState(), armed: Boolean = false): WidgetModel {
             val now = plan.now
             val next = plan.next
             val today = plan.todayBucket?.chunks.orEmpty()
@@ -50,7 +55,11 @@ data class WidgetModel(
                 minutes = next?.let { Format.minutes(it.minutes) },
                 then = plan.then?.let { "Then: ${it.label}" },
                 summary = when {
-                    today.isEmpty() && tomorrow.isEmpty() -> "Nothing due today or tomorrow"
+                    runtime.session != null && now < runtime.session.endsAt ->
+                        "Focus: ${runtime.session.label}, ${Format.minutes(((runtime.session.endsAt - now) / 60_000L).toInt().coerceAtLeast(1))} left"
+                    today.isEmpty() && tomorrow.isEmpty() -> runtime.credit.on(plan.today).leftMs.takeIf { it > 0 }
+                        ?.let { "Nothing due soon · ${Format.minutes((it / 60_000L).toInt())} of free time" }
+                        ?: "Nothing due today or tomorrow"
                     else -> listOfNotNull(
                         today.size.takeIf { it > 0 }?.let { "$it today" },
                         tomorrow.size.takeIf { it > 0 }?.let { "$it tomorrow" },
@@ -59,7 +68,7 @@ data class WidgetModel(
                 // After the next and the one after it, which have lines of their own.
                 list = shown.filterNot { it === next || it === plan.then }.take(LIST_MAX)
                     .map { Line(it.label, Format.minutes(it.minutes), it.urgent, it.taskId) },
-                warning = warning(state, now),
+                warning = protection(runtime, armed) ?: warning(state, now),
                 taskId = next?.taskId,
             )
         }
@@ -74,6 +83,10 @@ data class WidgetModel(
             chunk.dueAt == null -> "No deadline"
             else -> "Due " + Format.at(chunk.dueAt, now, zone)
         }
+
+        /** The watchdog's finding, worst first: blocking off matters before anything else on the widget. */
+        private fun protection(runtime: RuntimeState, armed: Boolean): String? =
+            runtime.protection.problems.firstOrNull()?.let { if (armed) "PROTECTION OFF: $it" else it }
 
         private fun warning(state: TaskState, now: Long): String? {
             val failing = Source.entries.firstOrNull { state.status(it).error != null }

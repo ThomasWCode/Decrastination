@@ -1,11 +1,17 @@
 package com.thomaswcode.decrastination.debug
 
 import android.app.Activity
+import android.app.admin.DevicePolicyManager
+import android.content.Intent
 import android.os.Bundle
 import android.util.Log
+import androidx.core.app.NotificationManagerCompat
 import com.thomaswcode.decrastination.AppGraph
+import com.thomaswcode.decrastination.block.FocusService
+import com.thomaswcode.decrastination.block.TeamsAutoSync
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.data.Secret
+import com.thomaswcode.decrastination.protect.Watchdog
 import com.thomaswcode.decrastination.sync.SyncWorker
 import com.thomaswcode.decrastination.ui.OpenTaskActivity
 import kotlinx.coroutines.Dispatchers
@@ -25,6 +31,13 @@ import java.io.File
  * - `sync`, optionally `--es sources teams,gmail`: reads the sources now, as a job (see SyncWorker).
  * - `state`: logs each source's status and the open tasks' titles (`adb logcat -s Decrastination`).
  * - `open --es task <id>`: opens that task where it lives, as the widget's tap does.
+ * - `force-block --ei minutes 10`: blocking hours apply for that long, whatever the time, for
+ *   testing at night; 0 ends it. It can only tighten: quiet and school hours stop protecting.
+ * - `protection [--ez repair true]`: runs the watchdog and logs what it found.
+ * - Test hooks: `test-arm`, `test-disarm` (at once, unlike the app's own disarming), `remove-admin`,
+ *   `clear-parent-code`, `offer-teams-sync` (the countdown banner now, whatever the rules), and
+ *   `clean-up` (this app's notifications, a delayed Teams sync, forced blocking hours and the
+ *   watchdog's restarts cleared).
  *
  * The manifest guards the alias with DUMP, which the adb shell holds and no ordinary app can, so
  * nothing else on the phone can reach these. The activity itself isn't exported.
@@ -57,6 +70,42 @@ class CommandActivity : Activity() {
                 Log.i(TAG, "Sync asked for; the worker logs what it found")
             }
             "state" -> logState(graph)
+            "force-block" -> {
+                // Testing at night: blocking hours apply for this many minutes (tightening only).
+                val minutes = intent.getIntExtra("minutes", 10).coerceIn(0, 120)
+                val until = graph.clock.now() + minutes * 60_000L
+                graph.runtime.update { it.copy(forceActiveUntil = if (minutes == 0) null else until) }
+                Log.i(TAG, "Blocking hours apply for $minutes min; verdict now ${graph.focus.verdict()}")
+            }
+            // Test hooks, from a PC only: arming and disarming at once, as no screen can.
+            "test-arm" -> graph.settings.update { it.copy(armed = true) }.also { Log.i(TAG, "Armed (test)") }
+            "test-disarm" -> {
+                graph.settings.update { it.copy(armed = false) }
+                graph.runtime.update { it.copy(pending = it.pending.filterNot { change -> change.field == "armed" }) }
+                Log.i(TAG, "Disarmed (test)")
+            }
+            "remove-admin" -> {
+                getSystemService(DevicePolicyManager::class.java)?.removeActiveAdmin(Watchdog.admin(this))
+                Log.i(TAG, "Device admin removed")
+            }
+            "clean-up" -> {
+                // After testing: this app's notifications gone, and no Teams sync left waiting.
+                NotificationManagerCompat.from(this).cancelAll()
+                graph.runtime.update {
+                    it.copy(
+                        teamsAuto = TeamsAutoSync.State(),
+                        forceActiveUntil = null,
+                        protection = it.protection.copy(stoppedSince = null, restartedAt = null, restartTries = 0),
+                    )
+                }
+                Log.i(TAG, "Cleaned up after testing")
+            }
+            "clear-parent-code" -> graph.secrets.put(Secret.TotpSecret, null).also { Log.i(TAG, "Parent code cleared") }
+            "offer-teams-sync" -> sendBroadcast(Intent(FocusService.ACTION_OFFER_TEAMS_SYNC).setPackage(packageName)).also { Log.i(TAG, "Asked the focus service to offer a Teams sync") }
+            "protection" -> {
+                Watchdog.check(this, repair = intent.getBooleanExtra("repair", false))
+                Log.i(TAG, "Protection: ${Watchdog.report(this)}; problems ${graph.runtime.value.protection.problems}")
+            }
             else -> Log.w(TAG, "Unknown command $command")
         }
     }
