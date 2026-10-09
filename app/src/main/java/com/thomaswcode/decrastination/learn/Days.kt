@@ -70,6 +70,29 @@ object Days {
         return day.copy(doneMin = doneMin, full = doneMin >= day.plannedMin)
     }
 
+    /**
+     * [old], today's record, made again once an answer about an event has changed what today holds:
+     * what was done of it already counts as planned and done (a finished task's pieces in full,
+     * another's sessions so far), and the rest is what the plan has today now ([ahead]). So the day
+     * is judged by what it could hold once the event was known.
+     */
+    fun replan(old: DayRecord, ahead: List<DayChunk>, log: ActivityLog, now: Long, zone: ZoneId): DayRecord {
+        val dayZone = old.zone?.let { runCatching { ZoneId.of(it) }.getOrNull() } ?: zone
+        val start = LocalDate.parse(old.date).atStartOfDay(dayZone).toInstant().toEpochMilli()
+        val done = log.completions.filter { it.doneAt in start..now }.map { it.taskId }.toSet()
+        val worked = log.sessions.filter { it.startedAt in start..now }.groupBy { it.taskId }.mapValues { (_, s) -> s.sumOf { it.workedMin } }
+        val kept = old.chunks.groupBy { it.taskId }.mapNotNull { (id, chunks) ->
+            val planned = chunks.sumOf { it.minutes }
+            when {
+                id in done -> DayChunk(id, planned)
+                (worked[id] ?: 0) > 0 -> DayChunk(id, minOf(planned, worked.getValue(id)))
+                else -> null
+            }
+        }
+        val chunks = kept + ahead.filter { it.taskId !in done }
+        return old.copy(plannedMin = chunks.sumOf { it.minutes }, chunks = chunks)
+    }
+
     /** At least this many finished days before the check says anything. */
     const val CHECK_DAYS = 10
     private const val LOOK_BACK = 14

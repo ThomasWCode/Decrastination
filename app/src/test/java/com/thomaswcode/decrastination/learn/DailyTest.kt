@@ -114,9 +114,17 @@ class ReviewInputTest {
     @Test
     fun `the model sees the learned margins and boxes, not only the settings`() {
         val calibration = Calibration(marginDays = mapOf(Kind.Homework to 3), boxMin = mapOf(Kind.Homework to 25))
-        val text = ReviewInput.describe(ActivityLog(), calibration, Settings(), now, LONDON)
+        val text = ReviewInput.describe(ActivityLog(), calibration, Settings(), now, LONDON, week = "2026-10-05")
         assertTrue("Learned margins (days, used instead of marginDays): Homework 3" in text, text)
         assertTrue("Learned box lengths (minutes, used instead of boxMin): Homework 25" in text, text)
+    }
+
+    @Test
+    fun `the model reads the reviewed week's check-in, not last week's answered late`() {
+        // Last week's, answered on Monday morning; none this week.
+        val log = ActivityLog(checkIns = listOf(CheckIn("2026-09-28", Fixtures.at("2026-10-05T08:00"), 2, "Maths", "Tired", "-", "-")))
+        val text = ReviewInput.describe(log, Calibration(), Settings(), now, LONDON, week = "2026-10-05")
+        assertTrue("the week felt" !in text, text)
     }
 
     @Test
@@ -136,7 +144,7 @@ class ReviewInputTest {
             completions = listOf(CompletionRecord("teams:a", "Statics Prep", Source.Teams, Kind.Homework, "12.1 Physics", 40, 55, Fixtures.at("2026-10-09T21:00"), 0, Fixtures.at("2026-10-09T20:00"), "harder", "the diagrams")),
             checkIns = listOf(CheckIn("2026-10-05", now - 60_000L, 3, "German", "Football", "Less on Fridays", "Before tea")),
         )
-        val text = ReviewInput.describe(log, Calibration(), Settings(), now, LONDON)
+        val text = ReviewInput.describe(log, Calibration(), Settings(), now, LONDON, week = "2026-10-05")
         assertTrue("- Statics Prep [Homework, 12.1 Physics]: due Fri 9 Oct 21:00, done Fri 9 Oct 20:00, estimate 40 min, timed 55 min. felt harder (\"the diagrams\")" in text, text)
         assertTrue("the week felt 3/5" in text, text)
         assertTrue("Settings: boxMin 45, marginDays 1, softMinPerDay 60, workMinPerFreeMin 3." in text, text)

@@ -61,8 +61,8 @@ object ReviewInput {
 
     private val WHEN = DateTimeFormatter.ofPattern("EEE d MMM HH:mm", Locale.UK)
 
-    /** The last seven days, as the model reads them. */
-    fun describe(log: ActivityLog, calibration: Calibration, settings: Settings, now: Long, zone: ZoneId): String = buildString {
+    /** The last seven days, as the model reads them, with [week]'s check-in (its Monday), if it had one. */
+    fun describe(log: ActivityLog, calibration: Calibration, settings: Settings, now: Long, zone: ZoneId, week: String): String = buildString {
         val since = now - 7 * 24 * 3_600_000L
         fun at(time: Long) = Instant.ofEpochMilli(time).atZone(zone).format(WHEN)
         appendLine("Finished this week:")
@@ -79,7 +79,8 @@ object ReviewInput {
         if (byHour.isNotEmpty()) appendLine("Started by hour: " + byHour.entries.joinToString { (h, s) -> "%02d:00 ×%d".format(Locale.UK, h, s.size) })
         if (photos > 0) appendLine("Pieces a photo check found done: $photos.")
         appendLine("Times the blocker stopped them: ${log.blocks.count { it.at >= since }}.")
-        log.checkIns.maxByOrNull { it.at }?.takeIf { it.at >= since }?.let { c ->
+        // The reviewed week's answers only: last week's, answered late, aren't this week's.
+        log.checkIns.filter { it.weekOf == week }.maxByOrNull { it.at }?.let { c ->
             appendLine()
             appendLine("Their Sunday answers: the week felt ${c.feel}/5. Avoided: ${c.avoided.ifBlank { "-" }}. In the way: ${c.inTheWay.ifBlank { "-" }}. Would change: ${c.change.ifBlank { "-" }}. Most energy: ${c.energy.ifBlank { "-" }}.")
         }
