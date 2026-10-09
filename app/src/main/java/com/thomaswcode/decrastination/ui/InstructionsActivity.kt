@@ -44,6 +44,13 @@ class InstructionsActivity : ComponentActivity() {
         setContent { AppTheme { Screen(graph) } }
     }
 
+    override fun onResume() {
+        super.onResume()
+        // Any left waiting (Claude capped last month, say) is tried again on opening.
+        val graph = AppGraph.get(this)
+        graph.scope.launch { graph.readInstructions() }
+    }
+
     @Composable
     private fun Screen(graph: AppGraph) {
         val state by graph.instructions.state.collectAsStateWithLifecycle()

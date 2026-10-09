@@ -63,7 +63,10 @@ fun TodayScreen(graph: AppGraph, activity: Activity) {
             value = graph.clock.now()
         }
     }
-    val plan = remember(tasks, settings, now) { graph.plan(tasks, settings, now) }
+    // Your instructions' days and the calendar count too: either changing redraws it.
+    val instructions by graph.instructions.state.collectAsStateWithLifecycle()
+    val calendar by graph.calendarState.collectAsStateWithLifecycle()
+    val plan = remember(tasks, settings, now, instructions, calendar) { graph.plan(tasks, settings, now) }
     val zone = graph.clock.zone()
     val scope = rememberCoroutineScope()
     val open = { chunk: Chunk ->

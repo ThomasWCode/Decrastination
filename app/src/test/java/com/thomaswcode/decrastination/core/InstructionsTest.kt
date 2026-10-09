@@ -73,11 +73,40 @@ class InstructionsTest {
     }
 
     @Test
-    fun `a start of yours holds a task back, but never brings it forward`() {
-        val later = Fixtures.at("2026-10-14T00:00")
-        val held = task("a", "2026-10-20T09:00").copy(availableFrom = Fixtures.at("2026-10-15T00:00"), sourceValues = SourceValues(Kind.Homework, Fixtures.at("2026-10-20T09:00"), Fixtures.at("2026-10-15T00:00")))
-        assertEquals(Fixtures.at("2026-10-15T00:00"), held.withOverrides(TaskOverrides(from = later)).availableFrom)
-        assertEquals(later, task("b", "2026-10-20T09:00").withOverrides(TaskOverrides(from = later)).availableFrom)
+    fun `a start of yours places the work from then on, seen coming, never earlier`() {
+        // Friday; can't start before Sunday; due Tuesday. Planned Sunday on, and in the plan now.
+        val essay = task("essay", "2026-10-13T23:59", effort = 90).withOverrides(TaskOverrides(from = Fixtures.at("2026-10-11T00:00")))
+        assertNull(essay.availableFrom)
+        val p = plan(listOf(essay))
+        val days = p.buckets.filter { b -> b.chunks.any { it.taskId == essay.id } }.map { it.date }
+        assertTrue(days.isNotEmpty())
+        assertTrue(days.all { it >= LocalDate.parse("2026-10-11") })
+        assertEquals(90, p.buckets.sumOf { b -> b.chunks.filter { it.taskId == essay.id }.sumOf { it.minutes } })
+    }
+
+    @Test
+    fun `a day's limit counts what's been worked today already`() {
+        val essay = task("essay", "2026-10-09T23:00", effort = 120)
+        val limit = applied(Change(ChangeType.DayLimit, date = "2026-10-09", freeMin = 60))
+        val at = Fixtures.at("2026-10-09T18:00")
+        val today = LocalDate.parse("2026-10-09")
+        val input = Planner.Input(listOf(essay), at, LONDON, Settings(), dayCaps = Instructions.dayCaps(listOf(limit), today, today.plusDays(30)))
+        assertEquals(60, Planner.capacity(today, input))
+        // An hour's session done: nothing more today.
+        assertEquals(0, Planner.capacity(today, input.copy(workedTodayMin = 60)))
+        // Tomorrow's limit is its own.
+        assertEquals(Planner.capacity(today.plusDays(1), input), Planner.capacity(today.plusDays(1), input.copy(workedTodayMin = 60)))
+    }
+
+    @Test
+    fun `work behind on a day you've limited keeps its steps in order`() {
+        // Due tomorrow, its last usable day today (a day's margin); today limited to 45 minutes.
+        val steps = listOf(SubStep("First", 45), SubStep("Second", 45))
+        val essay = task("essay", "2026-10-10T23:59", effort = 90).copy(subSteps = steps)
+        val limit = applied(Change(ChangeType.DayLimit, date = "2026-10-09", freeMin = 45))
+        val p = plan(listOf(essay), listOf(limit), at = Fixtures.at("2026-10-09T17:00"))
+        val placed = p.buckets.flatMap { b -> b.chunks.filter { it.taskId == essay.id }.map { b.date to it.step } }
+        assertEquals(listOf(LocalDate.parse("2026-10-09") to "First", LocalDate.parse("2026-10-10") to "Second"), placed)
     }
 
     @Test
@@ -185,7 +214,10 @@ class InstructionsTest {
     fun `changes read in words`() {
         val essay = task("Essay", "2026-10-12T09:00")
         val tasks = mapOf(essay.id to essay)
-        assertEquals("“Essay”: due Fri 16 Oct 23:59 (it says Mon 12 Oct 09:00)", Instructions.describe(Change(ChangeType.DueBy, taskId = essay.id, time = Fixtures.at("2026-10-16T23:59")), tasks, LONDON))
+        assertEquals("“Essay”: due Fri 16 Oct 23:59 (now Mon 12 Oct 09:00)", Instructions.describe(Change(ChangeType.DueBy, taskId = essay.id, time = Fixtures.at("2026-10-16T23:59")), tasks, LONDON))
+        // Once it's the date in use, against the source's.
+        val moved = essay.withOverrides(TaskOverrides(dueAt = Fixtures.at("2026-10-16T23:59")))
+        assertEquals("“Essay”: due Fri 16 Oct 23:59 (its source says Mon 12 Oct 09:00)", Instructions.describe(Change(ChangeType.DueBy, taskId = essay.id, time = Fixtures.at("2026-10-16T23:59")), mapOf(essay.id to moved), LONDON))
         assertEquals("“Essay”: can't be started before Wed 14 Oct", Instructions.describe(Change(ChangeType.StartFrom, taskId = essay.id, time = Fixtures.at("2026-10-14T00:00")), tasks, LONDON))
         assertEquals("Sat 10 Oct: no work", Instructions.describe(Change(ChangeType.DayLimit, date = "2026-10-10", freeMin = 0), tasks, LONDON))
         assertEquals("Every Friday: at most 1 h 30 min of work", Instructions.describe(Change(ChangeType.DayLimit, weekday = 5, freeMin = 90), tasks, LONDON))

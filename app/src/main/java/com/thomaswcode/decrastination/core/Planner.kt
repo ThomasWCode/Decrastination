@@ -53,6 +53,8 @@ object Planner {
         val dayLoads: Map<LocalDate, Int> = emptyMap(),
         /** The most minutes of work a day holds, where your instructions limit it (0: none). */
         val dayCaps: Map<LocalDate, Int> = emptyMap(),
+        /** Minutes of focus sessions and photo checks today: they come off today's limit, where there's one. */
+        val workedTodayMin: Int = 0,
     )
 
     private const val MIN_CHUNK = 5
@@ -155,7 +157,8 @@ object Planner {
             .filter { it.isOpen && it.isAvailable(input.now) && !it.hidden && !Instructions.waiting(it, byId) }
             .partition { it.kind == Kind.Event }
         val held = AnkiRules.heldSections(input.tasks, input.settings.ankiTextbook)
-        val items = work.flatMap { task ->
+        // A start you gave (an instruction) places the work from then on, as a deck's next cards do.
+        val items = work.map { t -> t.userFrom?.let { from -> t.copy(notBefore = listOfNotNull(t.notBefore, from).maxOrNull()) } ?: t }.flatMap { task ->
             val soft = task.dueAt == null
             // Calendar days where you are, so a week is a week across the clocks changing.
             val deadline = task.dueAt
@@ -309,20 +312,20 @@ object Planner {
             }
             // Then sharing days, still in order. What fits nowhere before the deadline is today's,
             // and behind; except for undated work and a task limited per day, below.
-            val carriesOn = perDay != null || item.soft
+            // Nor can work behind crowd into a first day you've limited: it too is done in order from
+            // the first day with the time, so its steps keep their order.
+            val carriesOn = perDay != null || item.soft || earliest in input.dayCaps
             for (i in item.chunks.indices.reversed()) {
                 if (assigned[i] != null) continue
                 val day = latest(assigned.getOrNull(i + 1) ?: lastUsable, i)
                 if (day == null && carriesOn) break
-                // Behind, it's today's, or the first day after it you haven't limited past it.
-                val chosen = day ?: generateSequence(earliest) { it.plusDays(1) }.takeWhile { it <= horizon }
-                    .firstOrNull { !capped(it, item.chunks[i].minutes) } ?: continue
+                val chosen = day ?: earliest
                 assigned[i] = chosen
                 behind[i] = day == null
                 take(item, chosen, item.chunks[i].minutes)
             }
-            // Undated work and a task limited per day can't crowd into today beyond what they
-            // allow. When they don't fit before the deadline, they're done in order from the first
+            // Undated work, a task limited per day, and work on a day you've limited can't crowd into
+            // today beyond what they allow. When they don't fit before the deadline, they're done in order from the first
             // day they can be, so that as much as can be is done by the deadline and the rest
             // follows it; what fits nowhere within the horizon goes unplanned.
             if (carriesOn && assigned.any { it == null }) {
@@ -473,7 +476,9 @@ object Planner {
             }
         }
         val minutes = ((end - start - taken) / 60_000L).toInt() - (input.dayLoads[day] ?: 0)
-        return minOf(minutes, input.dayCaps[day] ?: Int.MAX_VALUE).coerceAtLeast(0)
+        // A limit is of the whole day's work: what's been done today already comes off it.
+        val cap = input.dayCaps[day]?.let { if (day == date(input.now, input.zone)) it - input.workedTodayMin else it } ?: Int.MAX_VALUE
+        return minOf(minutes, cap).coerceAtLeast(0)
     }
 
     fun date(time: Long, zone: ZoneId): LocalDate = Instant.ofEpochMilli(time).atZone(zone).toLocalDate()

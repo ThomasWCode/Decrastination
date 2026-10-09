@@ -127,6 +127,8 @@ private fun TaskTile(task: TaskItem, index: Int, count: Int, now: Long, zone: ja
     // Your instructions' say: waiting for another task, or a due date of yours.
     val waitsFor = task.userAfter?.takeIf { task.isOpen && Instructions.waiting(task, actions.byId) }?.let { actions.titles[it] ?: it }
     val yourDue = task.isOpen && task.userDueAt != null
+    // A start you gave: planned from then on, not hidden.
+    val startsAt = task.userFrom?.takeIf { task.isOpen && it > now }
     ListTile(index, count, onClick = { expanded = !expanded }) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(
@@ -155,13 +157,14 @@ private fun TaskTile(task: TaskItem, index: Int, count: Int, now: Long, zone: ja
             overflow = TextOverflow.Ellipsis,
         )
         // Folded, what's out of the ordinary as a tag; opened, in full.
-        if (!expanded && (dropped != null || hiddenUntil != null || followUp || waitsFor != null || yourDue)) {
+        if (!expanded && (dropped != null || hiddenUntil != null || followUp || waitsFor != null || yourDue || startsAt != null)) {
             FlowRow(Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 if (dropped != null) WarningPill("Claude's plan dropped")
                 if (hiddenUntil != null) Pill("Hidden till ${Format.at(hiddenUntil, now, zone)}")
                 if (followUp) Pill("Archived")
                 if (waitsFor != null) Pill("Waits for another task")
                 if (yourDue) Pill("Due date yours")
+                if (startsAt != null) Pill("Starts ${Format.at(startsAt, now, zone)}")
             }
         }
         if (expanded) {
@@ -170,6 +173,7 @@ private fun TaskTile(task: TaskItem, index: Int, count: Int, now: Long, zone: ja
                 hiddenUntil?.let { Detail("Hidden from the plan until ${Format.at(it, now, zone)}") }
                 waitsFor?.let { Detail("Waits, as you said, until “$it” is done") }
                 if (yourDue) Detail("Its due date is yours, from an instruction: ${Format.due(task.dueAt, now, zone)}")
+                startsAt?.let { Detail("Can't be started before ${Format.at(it, now, zone)}, as you said: planned from then") }
                 if (task.userNotATask) Detail("You said it isn't a task: take that back in Instructions")
                 if (followUp) Detail("Archived in Gmail: kept for its blocks till they're done")
                 dropped?.let { Detail("Claude's plan was dropped ($it): planned as one piece", MaterialTheme.colorScheme.error) }

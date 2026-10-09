@@ -95,6 +95,8 @@ object CalendarTime {
         // has answered since it was asked is withdrawn.
         val yours = Instructions.eventAnswers(graph.instructions.value.applied)
         yours.keys.forEach { cancelQuestion(context, it) }
+        // Not counted as asked: taken back, the instruction leaves it to be asked again.
+        if (graph.runtime.value.eventsAsked.any { it in yours }) graph.runtime.update { it.copy(eventsAsked = it.eventsAsked - yours.keys) }
         val answers = graph.runtime.value.eventAnswers + yours
         val time = EventJudge.time(events, answers, graph.clock.zone())
         graph.calendarTime = time

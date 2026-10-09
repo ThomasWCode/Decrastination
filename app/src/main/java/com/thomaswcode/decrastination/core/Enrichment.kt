@@ -47,8 +47,9 @@ data class Enrichment(
  * where the source gives none.
  */
 fun TaskItem.enriched(): TaskItem = enrichedOnly().let { t ->
-    // Your instructions over both: the deadline you gave, and a start no earlier than you said.
-    t.copy(dueAt = userDueAt ?: t.dueAt, availableFrom = listOfNotNull(t.availableFrom, userFrom).maxOrNull())
+    // Your instructions over both: the deadline you gave. A start you gave isn't laid here: the
+    // planner places the work from then on ([TaskItem.userFrom]), so it's seen coming.
+    t.copy(dueAt = userDueAt ?: t.dueAt)
 }
 
 private fun TaskItem.enrichedOnly(): TaskItem {

@@ -100,8 +100,9 @@ object InstructionPrompts {
                 appendLine("  Title: ${task.title}")
                 appendLine("  From: ${task.source.label}" + (task.extra["from"]?.let { " ($it)" } ?: ""))
                 task.className?.let { appendLine("  Class: $it") }
-                appendLine("  Due: " + ((task.sourceValues?.dueAt ?: task.dueAt)?.let(::at) ?: "no date"))
-                task.availableFrom?.let { appendLine("  Can't start before: ${at(it)}") }
+                // As it is now, an earlier instruction's date included, so "two days later" counts from it.
+                appendLine("  Due: " + (task.dueAt?.let(::at) ?: "no date") + (if (task.userDueAt != null) " (set by an earlier instruction)" else ""))
+                listOfNotNull(task.availableFrom, task.userFrom).maxOrNull()?.let { appendLine("  Can't start before: ${at(it)}") }
                 task.detail.trim().takeIf { it.isNotEmpty() }?.let { appendLine("  Details: " + it.take(MAX_DETAIL).replace("\n", "\n    ")) }
             }
             about.eventKey != null -> appendLine(
