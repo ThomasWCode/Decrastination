@@ -93,6 +93,13 @@ class FocusService : AccessibilityService() {
      */
     private val lastSite = mutableMapOf<String, Focus.Target.Site?>()
 
+    /**
+     * What each browser's picture-in-picture video shows: the page the browser showed in front as
+     * it went into the corner (if this connection saw it), kept while it's there, whatever the
+     * browser's other windows show meanwhile.
+     */
+    private val pipSite = mutableMapOf<String, Focus.Target.Site?>()
+
     /** Browsers given Back this connection, to show an address they hid ([lookForAddress]). */
     private val lookedFor = mutableSetOf<String>()
 
@@ -166,6 +173,7 @@ class FocusService : AccessibilityService() {
         // Nothing known of what browsers show: while no service watched, any may have moved on,
         // to a blocked page or from one. One hiding its address is looked at afresh.
         lastSite.clear()
+        pipSite.clear()
         lookedFor.clear()
         broughtForward.clear()
         // Connected (or restarted) while the phone is already unlocked and in use: the unlock it
@@ -368,6 +376,7 @@ class FocusService : AccessibilityService() {
      * screen, as tapping its icon does, where the next window change covers it (Phase 0).
      */
     private fun closeBlockedPictureInPicture() {
+        val inCorner = mutableSetOf<String>()
         for (window in windows) {
             if (!window.isInPictureInPictureMode) continue
             val root = window.root ?: continue
@@ -375,14 +384,20 @@ class FocusService : AccessibilityService() {
             val app = graph.focus.target(pkg)
             val browser = app == null && graph.focus.isCheckedBrowser(pkg)
             if (app == null && !browser) continue
+            if (browser) {
+                // Its page as it went into the corner, noted whatever the policy: the browser's
+                // other windows may show other pages since.
+                inCorner += pkg
+                if (pkg !in pipSite && pkg in lastSite) pipSite[pkg] = lastSite[pkg]
+            }
             val verdict = graph.focus.verdict()
             if (verdict is BlockPolicy.Verdict.Allow) continue
             // A browser's video: its address, where Android still shows it, says whether it's a
-            // blocked site; where it doesn't, the page it last showed in front. Neither known (it
-            // went into the corner before this instance started), it's brought back to look.
+            // blocked site; where it doesn't, the page it showed as it went into the corner.
+            // Neither known (it went there unseen), it's brought back to look.
             val address = if (browser) root.findAccessibilityNodeInfosByViewId(Blocklist.urlBarId(pkg)).firstOrNull()?.text?.toString() else null
-            val known = app != null || address != null || pkg in lastSite
-            val target = app ?: if (address != null) graph.focus.siteTarget(pkg, address) else remembered(pkg)
+            val known = app != null || address != null || pkg in pipSite
+            val target = app ?: if (address != null) graph.focus.siteTarget(pkg, address) else pipSite[pkg]?.takeIf(::stillBlocked)
             if (known && target == null) continue
             // Allowed on free time: a video playing in the corner spends it like one in front.
             if (verdict == BlockPolicy.Verdict.Spend && target != null) {
@@ -400,6 +415,8 @@ class FocusService : AccessibilityService() {
             if (target != null && verdict is BlockPolicy.Verdict.Block && dismiss in root.actionList && root.performAction(dismiss.id)) continue
             packageManager.getLaunchIntentForPackage(pkg)?.let { startActivity(it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
         }
+        // Out of the corner: its page is forgotten with it.
+        pipSite.keys.retainAll(inCorner)
     }
 
     /**
