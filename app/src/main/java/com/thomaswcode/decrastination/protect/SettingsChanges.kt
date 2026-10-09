@@ -39,12 +39,13 @@ object SettingsChanges {
 
     /** For each setting, whether a new value loosens blocking compared with the old. */
     private val LOOSER: Map<String, (Settings, Settings) -> Boolean> = mapOf(
-        "ankiTextbook" to { _, _ -> false },
+        // Another textbook's decks: the old one's deck tasks can go, and with them their pressure.
+        "ankiTextbook" to { old, new -> new.ankiTextbook != old.ankiTextbook },
         "ankiDeadlineMin" to { old, new -> new.ankiDeadlineMin > old.ankiDeadlineMin },
-        // Any minute to work in that wasn't there means less can land on today and tomorrow: a
-        // window moved later adds time tonight even at the same length.
-        "weekdayHours" to { old, new -> adds(old.weekdayHours, new.weekdayHours) },
-        "weekendHours" to { old, new -> adds(old.weekendHours, new.weekendHours) },
+        // Any change to when you work can move work off today and tomorrow: more time spreads it
+        // out, and less can carry a piece that won't fit (an Anki deck's day of cards) past them.
+        "weekdayHours" to { old, new -> new.weekdayHours != old.weekdayHours },
+        "weekendHours" to { old, new -> new.weekendHours != old.weekendHours },
         // Bigger pieces or smaller, either can move work off today and tomorrow (smaller ones fit
         // into later days' gaps), so either waits.
         "boxMin" to { old, new -> new.boxMin != old.boxMin },
