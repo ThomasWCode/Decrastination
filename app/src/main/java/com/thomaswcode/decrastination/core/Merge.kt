@@ -118,7 +118,7 @@ object Merge {
                     workedMin = 0,
                     photoMin = 0,
                     firstProgress = f.sourceProgress,
-                    subSteps = updated.subSteps.map { it.copy(done = false, byHand = false) },
+                    subSteps = updated.subSteps.map { it.copy(done = false, byHand = false, timedMin = 0) },
                 ).also { reopened += it }
             }
             fresh[id] = next

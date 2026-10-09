@@ -287,7 +287,14 @@ class Focus(
                     val step = t.subSteps.getOrNull(index)
                     if (step == null || step.done || step.title != title) return@map t
                     ticked = true
-                    t.copy(subSteps = t.subSteps.mapIndexed { j, s -> if (j == index) s.copy(done = true, byHand = true) else s })
+                    // The timed minutes not yet taken up by its other steps were worked on this one
+                    // (stopped early, then ticked): it keeps them, up to its length, so they aren't
+                    // taken off the next step as well.
+                    val multiplier = runtime.value.calibration.multiplier(t.kind, t.className)
+                    val taken = t.subSteps.filter { it.done }.sumOf { if (it.byHand) it.timedMin.toDouble() else it.minutes * multiplier }
+                    val spare = (t.workedMin + t.photoMin - taken).roundToInt().coerceAtLeast(0)
+                    val kept = minOf(spare, (step.minutes * multiplier).roundToInt())
+                    t.copy(subSteps = t.subSteps.mapIndexed { j, s -> if (j == index) s.copy(done = true, byHand = true, timedMin = kept) else s })
                 },
             )
         }
@@ -440,8 +447,9 @@ class Focus(
                 // this completion, as the completion had it once the task has reopened.
                 val stored = tasks.value.tasks.firstOrNull { it.id == task.id && it.doneAt == task.doneAt }
                 val photos = stored?.photoMin ?: task.photoMin
-                // Nor for blocks you ticked off by hand: done, but not timed or checked.
-                val hand = (stored?.handMin ?: task.handMin) * multiplier
+                // Nor for blocks you ticked off by hand: done, but not timed or checked (bar what was
+                // timed on them first, which counts as worked).
+                val hand = (stored ?: task).subSteps.filter { it.done && it.byHand }.sumOf { (it.minutes * multiplier - it.timedMin).coerceAtLeast(0.0) }
                 val remaining = Planner.remaining(task.copy(workedMin = worked(task), photoMin = photos), multiplier) - delegated - hand
                 Credit.forCompletion(remaining.roundToInt().coerceAtLeast(0), ratio)
             }

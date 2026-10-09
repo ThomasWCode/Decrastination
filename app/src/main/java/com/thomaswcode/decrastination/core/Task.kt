@@ -53,6 +53,8 @@ data class SubStep(
     val dueAt: Long? = null,
     /** Ticked off by hand in Tasks, not by a session or a photo check: done, but earning nothing. */
     val byHand: Boolean = false,
+    /** Ticked by hand: the task's timed minutes not yet taken up by its other steps that it kept then, worked on it before the tick. */
+    val timedMin: Int = 0,
 )
 
 /**
