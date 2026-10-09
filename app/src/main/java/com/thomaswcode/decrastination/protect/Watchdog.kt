@@ -53,6 +53,9 @@ import kotlinx.coroutines.launch
  * second restart, with the service already up, gets a clean connection (seen on the phone).
  */
 object Watchdog {
+    /** Past the restart's settling time, so the look after it sees how it settled. */
+    private const val VERIFY_SLACK_MS = 10_000L
+
     private const val NOTIFICATION_ID = 3001
     private const val TAG = AppGraph.TAG
     private const val RESTART_PAUSE_MS = 1_500L
@@ -173,7 +176,9 @@ object Watchdog {
             stoppedSince = null
             val restarted = restart(context)
             Log.i(TAG, "Protection: the focus service had stopped; ${if (restarted) "switched it off and on" else "couldn't restart it"}")
-            // Back, it runs the watchdog as it connects; if not, the periodic check finds it stopped.
+            // Back, it runs the watchdog as it connects. If not, a look once it should have settled
+            // finds it stopped again, and the second try follows at once.
+            WatchdogReceiver.checkIn(context, ProtectionCheck.RESTART_SETTLE_MS + VERIFY_SLACK_MS)
         } else if (restartAt != null) {
             // Look again when the restart is due, rather than at the next periodic run.
             WatchdogReceiver.checkIn(context, restartAt - now)
