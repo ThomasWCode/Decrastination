@@ -33,6 +33,7 @@ import com.thomaswcode.decrastination.enrich.PhotoChecker
 import com.thomaswcode.decrastination.enrich.RuleEnricher
 import com.thomaswcode.decrastination.learn.Assessment
 import com.thomaswcode.decrastination.learn.CalendarTime
+import com.thomaswcode.decrastination.learn.Daily
 import com.thomaswcode.decrastination.net.UrlConnectionHttp
 import com.thomaswcode.decrastination.protect.SettingsChanges
 import com.thomaswcode.decrastination.sources.anki.AnkiRules
@@ -324,6 +325,8 @@ class AppGraph private constructor(context: Context) {
         val backup = Backups.decode(text) ?: return "That isn't a Decrastination backup (or it's from a newer version)."
         val armed = settings.value.armed
         changeSettings { Backups.importedSettings(it, backup) }
+        // The reminders' alarms at the restored times, as a save in Settings sets them.
+        Daily.schedule(app)
         val waiting = runtime.value.pending.size
         val waits = if (waiting > 0) " $waiting change${if (waiting == 1) "" else "s"} that loosen blocking wait ${settings.value.loosenDelayHours} hours." else ""
         if (armed) return "Settings restored.$waits Protection is armed, so the log and what the app learned were left as they are."
