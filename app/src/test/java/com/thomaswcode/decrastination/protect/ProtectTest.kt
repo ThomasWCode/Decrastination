@@ -283,6 +283,16 @@ class SettingsChangesTest {
     }
 
     @Test
+    fun `fewer or later automatic Teams syncs wait once armed, more or sooner don't`() {
+        val armed = Settings(armed = true)
+        fun waits(new: Settings) = SettingsChanges.propose(armed, new, emptyList(), now, ::newId).pending.size == 1
+        assertTrue(waits(armed.copy(teamsAutoSync = false)))
+        assertTrue(waits(armed.copy(teamsFirstUnlockMin = armed.teamsFirstUnlockMin + 60)))
+        assertTrue(waits(armed.copy(teamsSyncEveryMin = armed.teamsSyncEveryMin + 60)))
+        assertEquals(false, waits(armed.copy(teamsSyncEveryMin = armed.teamsSyncEveryMin - 60)))
+    }
+
+    @Test
     fun `disarming waits, arming doesn't`() {
         val armed = SettingsChanges.propose(Settings(), Settings(armed = true), emptyList(), now, ::newId)
         assertTrue(armed.settings.armed)

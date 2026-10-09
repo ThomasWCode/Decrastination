@@ -229,23 +229,24 @@ class Focus(
     /**
      * Gives what's owed for the completions syncs confirmed ([TaskState.unrewarded]), then clears
      * them. Stopped before that, they're given next time (after the next sync, or when the app
-     * starts), and [onCompleted] gives each only once.
+     * starts), and [onCompleted] gives each only once. Says whether it ended a running session.
      */
-    suspend fun rewardCompletions() {
+    suspend fun rewardCompletions(): Boolean {
         val waiting = tasks.value.unrewarded
-        if (waiting.isEmpty()) return
-        onCompleted(waiting)
+        if (waiting.isEmpty()) return false
+        val stopped = onCompleted(waiting)
         tasks.update { state -> state.copy(unrewarded = state.unrewarded.filterNot { t -> waiting.any { it.id == t.id && it.doneAt == t.doneAt } }) }
+        return stopped
     }
 
     /**
      * Work a source confirmed done: free time for what was left of it, a record in the log, and
      * an end to a session still running on it. Each is given once per completion however often
      * it's offered: the free time with a ledger of what's had it ([RuntimeState.rewarded]), written
-     * in the same step; the record only if the log hasn't got it.
+     * in the same step; the record only if the log hasn't got it. Says whether it ended a session.
      */
-    suspend fun onCompleted(completed: List<TaskItem>) {
-        if (completed.isEmpty()) return
+    suspend fun onCompleted(completed: List<TaskItem>): Boolean {
+        if (completed.isEmpty()) return false
         // A task confirmed done while its session runs: the session ends now, its minutes count
         // as work on the task (not as a finished session's credit as well as the completion's).
         val sessionMin = runtime.value.session?.takeIf { s -> completed.any { it.id == s.taskId } }
@@ -292,6 +293,7 @@ class Focus(
                 },
             ).trimmed(now)
         }
+        return sessionMin != null
     }
 
     companion object {

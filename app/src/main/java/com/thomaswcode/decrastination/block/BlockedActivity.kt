@@ -103,9 +103,17 @@ class BlockedActivity : ComponentActivity() {
         val scope = rememberCoroutineScope()
         var message by remember { mutableStateOf<String?>(null) }
         var why by remember { mutableStateOf(false) }
-        // Nothing is blocked any more (free time earned, quiet hours begun): let the app through.
-        LaunchedEffect(verdict, session) {
-            if (verdict !is BlockPolicy.Verdict.Block && session == null) finish()
+        // Its own target taken off the blocklist (a removal that fell due), whatever else is due.
+        val targetBlocked = remember(settings) {
+            when {
+                targetName.isEmpty() -> true
+                intent.getStringExtra(EXTRA_KIND) == KIND_SITE -> targetName in settings.blockedSites
+                else -> graph.focus.target(targetName) != null
+            }
+        }
+        // Nothing is blocked any more (free time earned, quiet hours begun), or not this: let it through.
+        LaunchedEffect(verdict, session, targetBlocked) {
+            if ((verdict !is BlockPolicy.Verdict.Block || !targetBlocked) && session == null) finish()
         }
         val next = if (session != null) plan.chunksOf(session.taskId).firstOrNull() ?: plan.next else plan.next
 
