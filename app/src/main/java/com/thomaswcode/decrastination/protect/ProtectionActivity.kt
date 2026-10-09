@@ -315,7 +315,10 @@ class ProtectionActivity : ComponentActivity() {
                     }
                 }) { Text("Check") }
             },
-            dismissButton = { TextButton(onClick = onDone) { Text("Skip: no parent code") } },
+            dismissButton = {
+                // No parent code means none: one kept from an earlier arming would still unblock.
+                TextButton(onClick = { scope.launch { graph.secrets.put(Secret.TotpSecret, null); onDone() } }) { Text("Skip: no parent code") }
+            },
         )
     }
 
@@ -367,7 +370,8 @@ class ProtectionActivity : ComponentActivity() {
                 CodeTarget.Unblock -> state.copy(codeLock = lock, overrideUntil = now + UNBLOCK_MS)
                 is CodeTarget.Change -> {
                     applied = state.pending.firstOrNull { it.id == target.id }
-                    state.copy(codeLock = lock, pending = state.pending.filterNot { it.id == target.id })
+                    val rest = state.pending.filterNot { it.id == target.id }
+                    state.copy(codeLock = lock, pending = rest, uptimeMark = if (rest.isEmpty()) null else state.uptimeMark)
                 }
             }
         }
