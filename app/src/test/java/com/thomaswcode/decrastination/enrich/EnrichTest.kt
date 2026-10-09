@@ -45,9 +45,9 @@ class RuleEnricherTest {
     }
 
     @Test
-    fun `a part that's learning numbered vocabulary is the decks' work, not a step`() {
-        // What's left is one part: no list to split.
-        assertNull(RuleEnricher.steps("1. Learn vocabulary p46-47/ 2.2/2.3 ( vocabulary test ! )\n2. Complete the reading task", 40))
+    fun `a part that's learning numbered vocabulary is a step tagged with its sections`() {
+        val steps = RuleEnricher.steps("1. Learn vocabulary p46-47/ 2.2/2.3 ( vocabulary test ! )\n2. Complete the reading task", 40)!!
+        assertEquals(listOf(listOf("2.2", "2.3"), emptyList()), steps.map { it.ankiSections })
     }
 
     @Test
@@ -146,6 +146,14 @@ class AnswersTest {
         )!!
         assertEquals(listOf("Learn vocabulary 2.2"), e.subSteps!!.map { it.title })
         assertEquals(listOf("2.2", "2.3"), e.ankiSections)
+        // A step's own sections are kept on it, and counted among the assignment's.
+        val tagged = parse(
+            Enrichments.Job.Assignment,
+            """{"subSteps":[{"title":"Learn vocabulary 3.1","minutes":20,"ankiSections":["3.1","x"]},{"title":"Exercise 4","minutes":25,"ankiSections":[]}],"effortMin":45,"ankiSections":[],"testDate":null}""",
+            task,
+        )!!
+        assertEquals(listOf(listOf("3.1"), emptyList()), tagged.subSteps!!.map { it.ankiSections })
+        assertEquals(listOf("3.1"), tagged.ankiSections)
         // A test's day: done before school that morning.
         assertEquals(Fixtures.at("2026-10-12T08:30"), e.testDate)
         assertEquals(40, e.effortMin)

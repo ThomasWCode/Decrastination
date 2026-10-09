@@ -29,8 +29,9 @@ interface Enricher {
 /**
  * What can be said without a model: an assignment whose instructions list its parts ("1. Complete
  * the reading task…", "- Translation…") is cut into those parts, sharing its estimate. A part that's
- * learning numbered vocabulary sections is left out: the Anki deck tasks hold that work. An email's
- * kind, estimate and next step already come from the email rules at the source.
+ * learning numbered vocabulary sections is tagged with them: where Anki deck tasks hold them, the
+ * planner leaves it out. An email's kind, estimate and next step already come from the email rules
+ * at the source.
  */
 class RuleEnricher : Enricher {
     override val by = BY
@@ -52,10 +53,12 @@ class RuleEnricher : Enricher {
         fun steps(instructions: String, effortMin: Int): List<SubStep>? {
             val items = instructions.lines().mapNotNull { line ->
                 (NUMBERED.find(line) ?: BULLETED.find(line))?.groupValues?.get(1)?.trim()
-            }.filter { it.isNotEmpty() && AnkiRules.linkedSections(it).isEmpty() }
+            }.filter { it.isNotEmpty() }
             if (items.size < 2) return null
             val each = (effortMin / items.size).coerceAtLeast(5)
-            return items.map { SubStep(title(it), each) }
+            return items.map { item ->
+                SubStep(title(item), each, ankiSections = AnkiRules.linkedSections(item).map { (major, minor) -> "$major.$minor" })
+            }
         }
 
         private fun title(item: String): String =

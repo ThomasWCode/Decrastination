@@ -67,6 +67,32 @@ class EnrichmentTest {
     }
 
     @Test
+    fun `a fresh enrichment without an estimate leaves none of the last one's`() {
+        val task = email().copy(sourceValues = SourceValues(Kind.Admin, null, null))
+        val estimated = task.withEnrichment(enrichment(task).copy(effortMin = 45))
+        assertEquals(45, estimated.aiEffortMin)
+        assertEquals(null, estimated.withEnrichment(enrichment(task).copy(effortMin = null)).aiEffortMin)
+    }
+
+    @Test
+    fun `a start after the deadline is dropped`() {
+        val task = email().copy(sourceValues = SourceValues(Kind.Admin, null, null))
+        val late = task.withEnrichment(enrichment(task).copy(deadline = Fixtures.at("2026-10-12T09:00"), actionableFrom = Fixtures.at("2026-10-14T00:00")))
+        assertEquals(null, late.availableFrom)
+        val fine = task.withEnrichment(enrichment(task).copy(deadline = Fixtures.at("2026-10-12T09:00"), actionableFrom = Fixtures.at("2026-10-11T00:00")))
+        assertEquals(Fixtures.at("2026-10-11T00:00"), fine.availableFrom)
+    }
+
+    @Test
+    fun `the hash reads the source's deadline, so the enrichment's own doesn't make it stale`() {
+        val task = email().copy(sourceValues = SourceValues(Kind.Admin, null, null))
+        val made = enrichment(task).copy(deadline = Fixtures.at("2026-10-12T09:00"))
+        val enriched = task.withEnrichment(made)
+        assertEquals(Fixtures.at("2026-10-12T09:00"), enriched.dueAt)
+        assertEquals(false, Enrichments.stale(enriched, modelOn = false, rules = "rules"))
+    }
+
+    @Test
     fun `a new enrichment is laid over what the source said, not over the last one`() {
         val task = email().copy(sourceValues = SourceValues(Kind.Admin, null, null))
         val dated = task.withEnrichment(enrichment(task).copy(deadline = Fixtures.at("2026-10-12T09:00"), kind = Kind.Event))

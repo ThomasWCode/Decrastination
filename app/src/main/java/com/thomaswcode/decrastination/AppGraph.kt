@@ -29,6 +29,7 @@ import com.thomaswcode.decrastination.enrich.Enricher
 import com.thomaswcode.decrastination.enrich.RuleEnricher
 import com.thomaswcode.decrastination.net.UrlConnectionHttp
 import com.thomaswcode.decrastination.protect.SettingsChanges
+import com.thomaswcode.decrastination.sources.anki.AnkiRules
 import com.thomaswcode.decrastination.sources.anki.AnkiSource
 import com.thomaswcode.decrastination.sources.gmail.GmailSource
 import com.thomaswcode.decrastination.sources.powerplanner.PowerPlannerApi
@@ -100,10 +101,15 @@ class AppGraph private constructor(context: Context) {
      */
     private val changing = Mutex()
 
-    suspend fun changeSettings(proposed: Settings) = changing.withLock {
+    /**
+     * Changes the settings as [change] says, from what's been asked for (the settings with what's
+     * waiting applied), so a change to one field leaves the others' waiting changes be.
+     */
+    suspend fun changeSettings(change: (Settings) -> Settings) = changing.withLock {
         // What's waiting is counted up to now first, so a new change's wait starts now.
         applyDue(force = true)
         val state = runtime.value
+        val proposed = change(SettingsChanges.requested(settings.value, state.pending))
         val outcome = SettingsChanges.propose(settings.value, proposed, state.pending, clock.now()) { java.util.UUID.randomUUID().toString() }
         // Nothing was waiting: the count starts now, whatever an old mark says.
         val mark = if (state.pending.isEmpty()) clock.uptime() else state.uptimeMark ?: clock.uptime()
@@ -246,6 +252,7 @@ class AppGraph private constructor(context: Context) {
         val resting = usage.lastError != null && clock.now() - (usage.lastCallAt ?: 0L) < MODEL_REST_MS
         var enricher = model.takeIf { !resting }
         var calls = 0
+        var decksChanged = false
         val candidates = tasks.value.tasks
             .mapNotNull { task -> Enrichments.jobFor(task)?.let { task to it } }
             .filter { (task, _) -> Enrichments.stale(task, enricher != null, RuleEnricher.BY) }
@@ -279,7 +286,10 @@ class AppGraph private constructor(context: Context) {
             if (enrichment == null) enrichment = rules.enrich(task, job, now).enrichment
             val made = enrichment ?: continue
             tasks.update { state -> state.copy(tasks = state.tasks.map { if (it.id == task.id) it.withEnrichment(made) else it }) }
+            if (AnkiRules.sectionsOf(task.withEnrichment(made)) != AnkiRules.sectionsOf(task)) decksChanged = true
         }
+        // Sections the deck pattern missed: their deck tasks come from reading Anki again, now.
+        if (decksChanged) SyncWorker.syncNow(app, setOf(Source.Anki))
     }
 
     companion object {
