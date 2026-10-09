@@ -53,8 +53,12 @@ object Stats {
         fun dateOf(at: Long): LocalDate = Instant.ofEpochMilli(at).atZone(zone).toLocalDate()
         fun inRange(at: Long): Boolean = dateOf(at).let { !it.isBefore(first) && !it.isAfter(today) }
         val completions = log.completions.filter { inRange(it.doneAt) }
-        // Timed focus sessions; work a photo check found done is counted as such, apart.
+        // Timed focus sessions; work a photo check found done is counted as such, apart. Their
+        // minutes go to the days they fell in: one across midnight is split between them.
         val sessions = log.sessions.filter { inRange(it.startedAt) && !it.photo }
+        val timed = log.sessions.filter { !it.photo }
+        fun startOf(date: LocalDate): Long = date.atStartOfDay(zone).toInstant().toEpochMilli()
+        fun minutesOn(date: LocalDate): Int = timed.sumOf { Days.minutesIn(it, startOf(date), startOf(date.plusDays(1))) }
         val photos = log.sessions.filter { inRange(it.startedAt) && it.photo }
         val blocks = log.blocks.filter { inRange(it.at) }
         val protection = log.protection.filter { inRange(it.at) }
@@ -64,7 +68,7 @@ object Stats {
             Day(
                 date = date,
                 completions = completions.count { dateOf(it.doneAt) == date },
-                focusMin = sessions.filter { dateOf(it.startedAt) == date }.sumOf { it.workedMin },
+                focusMin = minutesOn(date),
                 blocks = blocks.count { dateOf(it.at) == date },
                 planDone = plans[date.toString()]?.full,
             )
@@ -78,7 +82,7 @@ object Stats {
             sessions = sessions.size,
             sessionsFinished = sessions.count { it.completed },
             photoChecks = photos.size,
-            focusMin = sessions.sumOf { it.workedMin },
+            focusMin = timed.sumOf { Days.minutesIn(it, startOf(first), startOf(today.plusDays(1))) },
             blocks = blocks.size,
             topBlocked = blocks.groupingBy { it.target }.eachCount().entries
                 .sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key })
