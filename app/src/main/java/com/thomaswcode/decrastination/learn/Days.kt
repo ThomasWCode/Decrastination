@@ -23,6 +23,8 @@ data class DayRecord(
     val doneMin: Int? = null,
     /** All of it done. */
     val full: Boolean? = null,
+    /** The time zone it was planned in, so it's finished by that day's own midnight. */
+    val zone: String? = null,
 )
 
 /** The Sunday check-in (docs/scheduler.md §5, item 6): five questions, a scale or a line each. */
@@ -42,16 +44,18 @@ data class CheckIn(
 object Days {
 
     /** Today's plan as it stands, for the record. */
-    fun record(plan: Plan): DayRecord {
+    fun record(plan: Plan, zone: ZoneId): DayRecord {
         val chunks = plan.todayBucket?.chunks.orEmpty().map { DayChunk(it.taskId, it.minutes) }
-        return DayRecord(plan.today.toString(), chunks.sumOf { it.minutes }, chunks)
+        return DayRecord(plan.today.toString(), chunks.sumOf { it.minutes }, chunks, zone = zone.id)
     }
 
     /**
      * [day], finished: each of its tasks counts as done in full if its source confirmed it done by
      * the day's end, or as far as the day's focus sessions on it went.
      */
-    fun finish(day: DayRecord, log: ActivityLog, zone: ZoneId): DayRecord {
+    fun finish(day: DayRecord, log: ActivityLog, now: ZoneId): DayRecord {
+        // By the day's own midnights, where it was planned: travel since doesn't move them.
+        val zone = day.zone?.let { runCatching { ZoneId.of(it) }.getOrNull() } ?: now
         val date = LocalDate.parse(day.date)
         val end = date.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
         val start = date.atStartOfDay(zone).toInstant().toEpochMilli()

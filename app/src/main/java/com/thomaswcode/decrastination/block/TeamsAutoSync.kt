@@ -43,12 +43,14 @@ object TeamsAutoSync {
     ): Trigger? {
         if (!settings.teamsAutoSync) return null
         val recent = teamsSyncedAt != null && now - teamsSyncedAt < RECENT_MS
+        // Put off with "Delay 5 min": not before then, and then even outside the usual hours (a
+        // morning offer's, before school), though never at night.
+        val delayed = state.delayedUntil
+        if (delayed != null) return if (now >= delayed && !BlockPolicy.isQuiet(now, zone, settings)) Trigger.Delayed else null
         // The morning briefing's sync: at the next unlock in its hour and a half, school day or not.
         val morning = state.morningUntil
         if (unlocked && morning != null && now < morning && !recent && !BlockPolicy.isQuiet(now, zone, settings)) return Trigger.Morning
         if (!allowed(now, zone, settings)) return null
-        val delayed = state.delayedUntil
-        if (delayed != null) return if (now >= delayed) Trigger.Delayed else null
         val today = Instant.ofEpochMilli(now).atZone(zone).toLocalDate().toString()
         val minute = BlockPolicy.minuteOfDay(now, zone)
         if (unlocked && state.firstUnlockDay != today && minute >= settings.teamsFirstUnlockMin && !recent) return Trigger.FirstUnlock

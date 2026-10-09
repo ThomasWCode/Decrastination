@@ -45,9 +45,12 @@ fun TaskItem.enriched(): TaskItem {
     val base = sourceValues ?: SourceValues(kind, dueAt, availableFrom)
     // None, or one of content that has since changed (a new email in the thread): what the source
     // says, until it's enriched again. The steps it gave stay, with their ticks, till then.
-    val e = enrichment?.takeIf { it.inputHash == Enrichments.inputHash(this) }
+    val e = Enrichments.current(this)
         ?: return copy(kind = base.kind, dueAt = base.dueAt, availableFrom = base.availableFrom, aiEffortMin = null)
     val due = when {
+        // An email has no deadline of its own: what the rules found is a guess from its words
+        // ("appointment"), and the enrichment's reading of it wins where it gives one.
+        source == Source.Gmail -> e.deadline ?: base.dueAt
         e.testDate != null && (base.dueAt == null || e.testDate < base.dueAt) -> e.testDate
         else -> base.dueAt ?: e.deadline
     }
@@ -120,6 +123,9 @@ object Enrichments {
         val digest = MessageDigest.getInstance("SHA-256").digest(text.toByteArray(Charsets.UTF_8))
         return digest.take(8).joinToString("") { "%02x".format(it) }
     }
+
+    /** [task]'s enrichment if it's of the task as it is now; one of content since changed, null. */
+    fun current(task: TaskItem): Enrichment? = task.enrichment?.takeIf { it.inputHash == inputHash(task) }
 
     /** Whether [task] needs enriching again: never done, changed since, or done by the rules when the model is now on. */
     fun stale(task: TaskItem, modelOn: Boolean, rules: String): Boolean {
