@@ -31,6 +31,8 @@ object BlockPolicy {
         val overrideUntil: Long? = null,
         /** Testing from a PC (adb only): act as if within blocking hours until then. */
         val forceActiveUntil: Long? = null,
+        /** The uptime clock, which says whether a session's time is up (see [FocusSession.isDue]). */
+        val uptime: Uptime? = null,
     )
 
     enum class Reason(val headline: String) {
@@ -59,7 +61,7 @@ object BlockPolicy {
 
     fun decide(input: Input): Verdict {
         val now = input.now
-        if (input.session != null && now < input.session.endsAt) return Verdict.Block(Reason.Session)
+        if (input.session != null && !input.session.isDue(now, input.uptime)) return Verdict.Block(Reason.Session)
         if (input.overrideUntil != null && now < input.overrideUntil) return Verdict.Allow(Reason.Override)
         val forced = input.forceActiveUntil != null && now < input.forceActiveUntil
         if (!forced) {
