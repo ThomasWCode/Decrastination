@@ -87,10 +87,17 @@ class FocusService : AccessibilityService() {
 
     /**
      * The blocked site each checked browser last showed in front (null: a page that isn't), for
-     * when it goes into picture-in-picture and Android hides its address. A browser not in it
-     * hasn't been read since this instance started.
+     * when Android hides its address (picture-in-picture, a video full screen). Loaded from the
+     * store when the service connects, so it outlives a restart; a browser not in it hasn't been read.
      */
     private val lastSite = mutableMapOf<String, Focus.Target.Site?>()
+
+    /** Notes what [browser] shows, in memory and, when it's changed, in the store. */
+    private fun rememberSite(browser: String, site: Focus.Target.Site?) {
+        if (browser in lastSite && lastSite[browser] == site) return
+        lastSite[browser] = site
+        scope.launch { graph.runtime.update { it.copy(browserSites = it.browserSites + (browser to site?.name)) } }
+    }
 
     // The settings guard's pacing, as Phase 0 tuned it.
     private var lastGuardAt = 0L
@@ -148,6 +155,8 @@ class FocusService : AccessibilityService() {
             },
             ContextCompat.RECEIVER_NOT_EXPORTED,
         )
+        // What each browser last showed, as saved: a page whose address is hidden can still be judged.
+        graph.runtime.value.browserSites.forEach { (browser, site) -> lastSite[browser] = site?.let { Focus.Target.Site(it, browser) } }
         _connected.value = true
         Log.i(TAG, "Focus service connected")
         closeBlockedPictureInPicture()
@@ -311,7 +320,7 @@ class FocusService : AccessibilityService() {
         val text = root.findAccessibilityNodeInfosByViewId(Blocklist.urlBarId(browser)).firstOrNull()?.text?.toString()
         // No address bar (a video full screen hides it): still the page it last showed.
         val site = if (text != null) graph.focus.siteTarget(browser, text) else lastSite[browser]
-        if (text != null) lastSite[browser] = site
+        if (text != null) rememberSite(browser, site)
         if (site != null) act(site) else stopSpendingUnlessAside()
     }
 

@@ -60,9 +60,10 @@ object SettingsChanges {
         "quietHours" to { old, new -> adds(old.quietHours, new.quietHours) },
         "weekdayBlockFromMin" to { old, new -> new.weekdayBlockFromMin > old.weekdayBlockFromMin },
         "workMinPerFreeMin" to { old, new -> new.workMinPerFreeMin < old.workMinPerFreeMin },
-        "teamsAutoSync" to { _, _ -> false },
-        "teamsFirstUnlockMin" to { _, _ -> false },
-        "teamsSyncEveryMin" to { _, _ -> false },
+        // The automatic syncs are how new Teams work arrives: fewer or later ones can hide it.
+        "teamsAutoSync" to { old, new -> old.teamsAutoSync && !new.teamsAutoSync },
+        "teamsFirstUnlockMin" to { old, new -> new.teamsFirstUnlockMin > old.teamsFirstUnlockMin },
+        "teamsSyncEveryMin" to { old, new -> new.teamsSyncEveryMin > old.teamsSyncEveryMin },
         "armed" to { old, new -> old.armed && !new.armed },
         "loosenDelayHours" to { old, new -> new.loosenDelayHours < old.loosenDelayHours },
     )
