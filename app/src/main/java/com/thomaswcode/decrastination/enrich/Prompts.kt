@@ -209,7 +209,7 @@ object Answers {
                 val opens = t.actionableFrom?.let { date(it, zone, LocalTime.MIDNIGHT) }?.takeIf { plausible(it, now) }
                 // Blocks of work, each perhaps with its own dates (Q12): not trusted, the triage stands
                 // without them.
-                val blocks = trusted(steps(t.blocks, now, zone, vocabulary = false, maxMinutes = MAX_EFFORT, dueBy = deadline ?: sourceDue(task), opens = opens), t.effortMin)
+                val blocks = trusted(steps(t.blocks, now, zone, vocabulary = false, maxMinutes = MAX_EFFORT, dueBy = deadline ?: sourceDue(task), opens = opens), t.effortMin, t.blocks.size)
                 base.copy(
                     // Blocks of work make it something to do, whatever else it says.
                     kind = if (blocks != null) Kind.Admin else Kind.entries.firstOrNull { it.name == t.kind && it in setOf(Kind.Admin, Kind.Event, Kind.Info) },
@@ -261,7 +261,7 @@ object Answers {
             Enrichments.Job.Effort -> json.decodeFromString(Estimate.serializer(), text).let { e ->
                 val total = effort(e.effortMin)
                 // Big enough to do in parts: its blocks, each perhaps with its own dates (Q12).
-                val blocks = trusted(steps(e.blocks, now, zone, vocabulary = false, maxMinutes = MAX_EFFORT, dueBy = sourceDue(task)), e.effortMin)
+                val blocks = trusted(steps(e.blocks, now, zone, vocabulary = false, maxMinutes = MAX_EFFORT, dueBy = sourceDue(task)), e.effortMin, e.blocks.size)
                 base.copy(effortMin = blocks?.sumOf { it.minutes } ?: total, subSteps = blocks)
             }
         }
@@ -294,12 +294,13 @@ object Answers {
     }
 
     /**
-     * An email's or planner item's [blocks], if they can be planned: some, no more than [MAX_BLOCKS],
-     * within the most one task is taken to be, and adding up to its [total] (within a tenth, or ten
-     * minutes), which has to be one itself. Otherwise null, and its estimate is planned whole.
+     * An email's or planner item's [blocks], if they can be planned: some, no more than [MAX_BLOCKS]
+     * as [given] (before a long one was cut into parts that fit a session), within the most one
+     * task is taken to be, and adding up to its [total] (within a tenth, or ten minutes), which has
+     * to be one itself. Otherwise null, and its estimate is planned whole.
      */
-    private fun trusted(blocks: List<SubStep>?, total: Int): List<SubStep>? {
-        if (blocks.isNullOrEmpty() || blocks.size > MAX_BLOCKS || total !in 1..MAX_EFFORT) return null
+    private fun trusted(blocks: List<SubStep>?, total: Int, given: Int): List<SubStep>? {
+        if (blocks.isNullOrEmpty() || given > MAX_BLOCKS || total !in 1..MAX_EFFORT) return null
         val sum = blocks.sumOf { it.minutes }
         if (sum > MAX_EFFORT || abs(sum - total) > maxOf(STEPS_SLACK_MIN, total / 10)) return null
         return blocks

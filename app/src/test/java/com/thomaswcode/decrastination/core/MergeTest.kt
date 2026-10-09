@@ -172,6 +172,14 @@ class MergeTest {
     }
 
     @Test
+    fun `a task that comes back starts its steps afresh`() {
+        val read = Merge.apply(emptyList(), Source.Gmail, listOf(fetched("t4")), t0).tasks
+        val done = read.map { it.copy(status = Status.Done, doneAt = t0, subSteps = listOf(SubStep("Apply", 30, done = true, byHand = true))) }
+        val back = Merge.apply(done, Source.Gmail, listOf(fetched("t4")), later)
+        assertEquals(listOf(false), back.tasks.single().subSteps.map { it.done || it.byHand })
+    }
+
+    @Test
     fun `a derived task that stops being listed was missed, not done`() {
         val stored = first(fetched("quota:2026-10-07", derived = true))
         val result = Merge.apply(stored, Source.Teams, listOf(fetched("quota:2026-10-08", derived = true)), later)
