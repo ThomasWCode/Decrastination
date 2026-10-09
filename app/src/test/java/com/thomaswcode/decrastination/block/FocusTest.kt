@@ -246,6 +246,16 @@ class FocusTest {
     }
 
     @Test
+    fun `a completion that ends a running session says so`() = runTest {
+        tasks.update { it.copy(tasks = listOf(task("hw", effort = 45))) }
+        focus.startSession("teams:hw", "hw", null, 30)
+        val done = tasks.value.tasks.single().copy(status = Status.Done, doneAt = clock.time)
+        assertTrue(focus.onCompleted(listOf(done)))
+        assertNull(focus.session)
+        assertEquals(false, focus.onCompleted(listOf(task("other", effort = 10).copy(status = Status.Done, doneAt = clock.time))))
+    }
+
+    @Test
     fun `what counts as blocked follows the settings`() {
         assertEquals(Focus.Target.App("com.google.android.youtube"), focus.target("com.google.android.youtube"))
         assertEquals(Focus.Target.Browser("org.mozilla.firefox"), focus.target("org.mozilla.firefox"))
