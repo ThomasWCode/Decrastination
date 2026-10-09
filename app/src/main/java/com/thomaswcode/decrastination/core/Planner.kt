@@ -137,10 +137,12 @@ object Planner {
             for (i in item.chunks.indices) {
                 // Past its deadline it's due now, but a task that can only go so far a day carries
                 // on over the next days, each step to a day with both a step and the time free (not
-                // tonight once tonight's hours are gone), and undated work keeps to its daily allowance.
+                // tonight once tonight's hours are gone), and undated work goes to a day with the time
+                // free and within its daily allowance ([room] lets a day's first undated chunk be
+                // bigger than the allowance, never bigger than the time left).
                 fun waits(day: LocalDate) =
                     (perDay != null && (countOn(assigned, day) >= perDay || room(item, day) < item.chunks[i].minutes)) ||
-                        (item.soft && room(item, day) < item.chunks[i].minutes && (softUsed[day] ?: 0) > 0)
+                        (item.soft && room(item, day) < item.chunks[i].minutes)
                 while (day < horizon && waits(day)) day = day.plusDays(1)
                 // Beyond the horizon, the rest goes unplanned rather than breaking a per-day task's
                 // limit or undated work's allowance.
