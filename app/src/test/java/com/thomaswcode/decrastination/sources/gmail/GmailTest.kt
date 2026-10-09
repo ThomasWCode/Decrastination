@@ -136,12 +136,15 @@ class GmailTest {
         fun stored(text: String, readTo: Int?) = Merge.apply(emptyList(), Source.Gmail, GmailThreads.fetched(listOf(message), mapOf("m1" to GmailThreads.Body(text)), now, LONDON), now).tasks
             .map { task -> task.copy(extra = if (readTo == null) task.extra - GmailThreads.EXTRA_TEXT_READ_TO else task.extra + (GmailThreads.EXTRA_TEXT_READ_TO to "$readTo")) }
         fun read(tasks: List<TaskItem>) = GmailThreads.toRead(listOf(message), GmailThreads.knownBodies(tasks), 60)
-        // Stored before how far it was read was kept, when reads went to 4 000 characters: cut there, or all there was.
+        // Stored before how far it was read was kept: read again, however long. Those reads stopped
+        // at 4 000 characters, or sooner at 32 KB of a part.
         assertEquals(listOf(message), read(stored("x".repeat(4_000), readTo = null)))
-        assertEquals(emptyList(), read(stored("x".repeat(3_999), readTo = null)))
-        // Read as far as reads go now, cut or not, it stays; cut by a lower limit, it's read again.
+        assertEquals(listOf(message), read(stored("x".repeat(100), readTo = null)))
+        // Read as far as reads go now, cut or not, it stays; cut by a lower limit, it's read again,
+        // but not if it stopped short of that limit: then it was all there was.
         assertEquals(emptyList(), read(stored("x".repeat(GmailThreads.MAX_BODY_CHARS), readTo = GmailThreads.MAX_BODY_CHARS)))
         assertEquals(listOf(message), read(stored("x".repeat(10_000), readTo = 10_000)))
+        assertEquals(emptyList(), read(stored("x".repeat(5_000), readTo = 10_000)))
         // Read again, it's marked as read now.
         val again = GmailThreads.fetched(listOf(message), mapOf("m1" to GmailThreads.Body("x".repeat(5_000))), now, LONDON).single()
         assertEquals("${GmailThreads.MAX_BODY_CHARS}", again.extra[GmailThreads.EXTRA_TEXT_READ_TO])

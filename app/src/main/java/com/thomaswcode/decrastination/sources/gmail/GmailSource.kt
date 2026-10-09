@@ -62,7 +62,9 @@ object GmailThreads {
 
     /**
      * How far its text was read ([MAX_BODY_CHARS] at the time): text that long may have been cut,
-     * so it's read again once reads go further. Text stored without it was read to 4 000.
+     * so it's read again once reads go further. Text stored without it (1.1.0 and earlier) is read
+     * again once, however long: those reads stopped at 4 000 characters, or sooner at 32 KB of a
+     * part (quoted-printable takes up to nine bytes a character).
      */
     const val EXTRA_TEXT_READ_TO = "textReadTo"
 
@@ -71,9 +73,6 @@ object GmailThreads {
      * told when there's more, and the rules see as far as a long email's footer.
      */
     const val MAX_BODY_CHARS = 20_000
-
-    /** How far text was read before [EXTRA_TEXT_READ_TO] was kept (1.1.0 and earlier). */
-    private const val EARLIER_MAX_BODY_CHARS = 4_000
 
     /** A conversation's text, and how far it was read ([EXTRA_TEXT_READ_TO]). */
     data class Body(val text: String, val readTo: Int = MAX_BODY_CHARS) {
@@ -123,7 +122,8 @@ object GmailThreads {
     fun knownBodies(known: List<TaskItem>): Map<String, Body> =
         known.filter { it.source == Source.Gmail && EXTRA_TEXT_PENDING !in it.extra }
             .mapNotNull { task ->
-                task.extra[EXTRA_MESSAGE_ID]?.let { it to Body(task.detail, task.extra[EXTRA_TEXT_READ_TO]?.toIntOrNull() ?: EARLIER_MAX_BODY_CHARS) }
+                // Read before how far was kept: nowhere near far enough, so it's read again.
+                task.extra[EXTRA_MESSAGE_ID]?.let { it to Body(task.detail, task.extra[EXTRA_TEXT_READ_TO]?.toIntOrNull() ?: 0) }
             }
             .toMap()
 
