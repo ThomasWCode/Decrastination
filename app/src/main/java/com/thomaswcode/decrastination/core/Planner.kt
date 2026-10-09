@@ -33,7 +33,9 @@ import kotlin.math.roundToInt
  * 6. A task that can only go so far a day ([TaskItem.stepsPerDay]: an Anki deck, which releases
  *    20 new cards a day) never has more steps than that on one day, overdue or not.
  * 7. An email that's just an email ([TaskItem.justAnEmail]: only to read, or about an event) isn't
- *    planned, nor reminded of.
+ *    planned, nor reminded of; nor is a task you've said isn't one, or one you've said waits for
+ *    another still open ([Instructions]).
+ * 8. A day you've limited ([Input.dayCaps]) holds no more work than that.
  *
  * Placing backwards means today's bucket holds exactly what must happen today for every deadline
  * to be met; placing everything early would put every task in today and the block would never lift.
@@ -49,6 +51,8 @@ object Planner {
         val busy: List<Busy> = emptyList(),
         /** Minutes of a day taken by something with no set time (an all-day van hire's few hours). */
         val dayLoads: Map<LocalDate, Int> = emptyMap(),
+        /** The most minutes of work a day holds, where your instructions limit it (0: none). */
+        val dayCaps: Map<LocalDate, Int> = emptyMap(),
     )
 
     private const val MIN_CHUNK = 5
@@ -146,8 +150,9 @@ object Planner {
     fun plan(input: Input): Plan {
         val zone = input.zone
         val today = date(input.now, zone)
+        val open = input.tasks.filter { it.isOpen }.mapTo(HashSet()) { it.id }
         val (events, work) = input.tasks
-            .filter { it.isOpen && it.isAvailable(input.now) && !it.justAnEmail }
+            .filter { it.isOpen && it.isAvailable(input.now) && !it.hidden && !it.waiting(open) }
             .partition { it.kind == Kind.Event }
         val held = AnkiRules.heldSections(input.tasks, input.settings.ankiTextbook)
         val items = work.flatMap { task ->
@@ -462,7 +467,7 @@ object Planner {
             }
         }
         val minutes = ((end - start - taken) / 60_000L).toInt() - (input.dayLoads[day] ?: 0)
-        return minutes.coerceAtLeast(0)
+        return minOf(minutes, input.dayCaps[day] ?: Int.MAX_VALUE).coerceAtLeast(0)
     }
 
     fun date(time: Long, zone: ZoneId): LocalDate = Instant.ofEpochMilli(time).atZone(zone).toLocalDate()

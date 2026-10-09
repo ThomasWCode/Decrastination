@@ -123,8 +123,8 @@ class Syncer(
             current.copy(
                 tasks = merged.tasks,
                 // Their free time and record are given after; saved here, they can't be lost.
-                // An email that's just an email, archived, isn't work done: nothing to reward.
-                unrewarded = current.unrewarded + merged.completed.filterNot { it.justAnEmail },
+                // An email that's just an email, or a task you've said isn't one, finished isn't work done: nothing to reward.
+                unrewarded = current.unrewarded + merged.completed.filterNot { it.hidden },
                 sources = current.sources + (source.source to SourceStatus(lastSuccessAt = now, lastAttemptAt = startedAt, dataAsOf = read.dataAsOf, note = read.note)),
                 ankiDay = read.ankiDay ?: current.ankiDay,
             )

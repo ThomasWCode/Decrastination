@@ -46,7 +46,12 @@ data class Enrichment(
  * the later of the two start dates; the enrichment's estimate; an email's kind; and the steps,
  * where the source gives none.
  */
-fun TaskItem.enriched(): TaskItem {
+fun TaskItem.enriched(): TaskItem = enrichedOnly().let { t ->
+    // Your instructions over both: the deadline you gave, and a start no earlier than you said.
+    t.copy(dueAt = userDueAt ?: t.dueAt, availableFrom = listOfNotNull(t.availableFrom, userFrom).maxOrNull())
+}
+
+private fun TaskItem.enrichedOnly(): TaskItem {
     // Always from what the source said, so a changed enrichment doesn't leave the last one's dates.
     val base = sourceValues ?: SourceValues(kind, dueAt, availableFrom)
     // None, or one of content that has since changed (new instructions, a new email in the thread):
@@ -118,6 +123,8 @@ object Enrichments {
     /** What [task] needs, or null: done, derived (the Anki quota and decks), or an event. */
     fun jobFor(task: TaskItem): Job? = when {
         !task.isOpen || task.derived -> null
+        // You've said it isn't a task: nothing to read it for.
+        task.userNotATask -> null
         // Its text not read yet (more new emails than one read takes), or not as far as reads now
         // go (cut by an older, lower limit): asked about once it is (GmailThreads.textRead).
         task.source == Source.Gmail && !GmailThreads.textRead(task) -> null
