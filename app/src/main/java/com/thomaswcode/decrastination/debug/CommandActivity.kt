@@ -200,7 +200,7 @@ class CommandActivity : Activity() {
                     // Its enrichment forgotten, and the steps it gave: out of date, so this run asks for it
                     // again now, and its answer's steps aren't taken for the source's.
                     graph.tasks.update { state -> state.copy(tasks = state.tasks.map { if (it.id == id) it.withoutEnrichment() else it }) }
-                    graph.enrichNow()
+                    graph.enrichNow(only = id)
                     val task = graph.tasks.value.tasks.first { it.id == id }
                     val e = task.enrichment
                     Log.i(TAG, "enrich-task $id: by ${e?.by}, dropped ${e?.dropped}, ${task.subSteps.size} steps: ${task.subSteps.joinToString(" | ") { "${it.title} (${it.minutes})" }}")

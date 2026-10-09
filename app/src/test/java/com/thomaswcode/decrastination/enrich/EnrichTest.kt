@@ -2,13 +2,21 @@ package com.thomaswcode.decrastination.enrich
 
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.Fixtures.LONDON
+import com.thomaswcode.decrastination.core.Enrichment
 import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.core.Kind
-import com.thomaswcode.decrastination.core.SourceValues
 import com.thomaswcode.decrastination.core.Source
+import com.thomaswcode.decrastination.core.SourceValues
+import com.thomaswcode.decrastination.core.Status
 import com.thomaswcode.decrastination.core.TaskItem
-import kotlinx.coroutines.runBlocking
 import com.thomaswcode.decrastination.sources.anki.AnkiRules
+import kotlin.test.AfterTest
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
+import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -18,12 +26,6 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
-import kotlin.test.AfterTest
-import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertFalse
-import kotlin.test.assertNull
-import kotlin.test.assertTrue
 
 private val NOW = Fixtures.at("2026-10-09T17:00")
 
@@ -468,6 +470,23 @@ class AiUsageTest {
         val told = broke.alerted(KeyProblem.NoCredit)
         assertEquals(KeyProblem.NoCredit, told.forMonth("2026-11").keyProblem)
         assertFalse(told.forMonth("2026-11").keyAlertDue)
+    }
+
+    @Test
+    fun `a dropped plan's warning is due till shown for the plan as it is`() {
+        val task = TaskItem(id = "gmail:t1", source = Source.Gmail, sourceId = "t1", title = "Calendar", detail = "x", kind = Kind.Admin, firstSeenAt = NOW, lastSeenAt = NOW)
+        val dropped = task.copy(enrichment = Enrichment(inputHash = Enrichments.inputHash(task), by = "model", at = NOW, dropped = "31 blocks, past the 30 the app takes"))
+        val standing = ModelAlerts.standing(listOf(dropped))
+        assertEquals(listOf("gmail:t1" to "31 blocks, past the 30 the app takes"), standing.map { it.first.id to it.second })
+        // Not shown yet (notifications off when it was laid): due.
+        assertEquals(1, ModelAlerts.unshown(standing, emptyMap()).size)
+        // Shown for this content: not again.
+        assertEquals(0, ModelAlerts.unshown(standing, mapOf("gmail:t1" to Enrichments.inputHash(task))).size)
+        // Shown for an older content: this plan is another warning.
+        assertEquals(1, ModelAlerts.unshown(standing, mapOf("gmail:t1" to "older")).size)
+        // Done, or its plan kept since: nothing standing.
+        assertEquals(0, ModelAlerts.standing(listOf(dropped.copy(status = Status.Done))).size)
+        assertEquals(0, ModelAlerts.standing(listOf(dropped.copy(enrichment = dropped.enrichment!!.copy(dropped = null)))).size)
     }
 
     @Test
