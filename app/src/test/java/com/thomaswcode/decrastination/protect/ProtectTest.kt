@@ -233,6 +233,12 @@ class ProtectionCheckTest {
         assertEquals(false, ProtectionCheck.shouldRestart(crashed, stoppedSince = t, restartedAt = t + 60_000L, now = t + 5 * 60_000L))
         assertEquals(true, ProtectionCheck.shouldRestart(crashed, stoppedSince = t, restartedAt = t + 60_000L, now = t + 11 * 60_000L))
         assertEquals(t + 11 * 60_000L, ProtectionCheck.restartAt(crashed, stoppedSince = t, restartedAt = t + 60_000L))
+        // A first restart found stopped again within a minute is tried once more at once; a
+        // second isn't, and waits its ten minutes.
+        val restarted = t + 60_000L
+        assertEquals(restarted + 20L, ProtectionCheck.restartAt(crashed, stoppedSince = restarted + 20L, restartedAt = restarted, tries = 1))
+        assertEquals(restarted + 10 * 60_000L, ProtectionCheck.restartAt(crashed, stoppedSince = restarted + 20L, restartedAt = restarted, tries = 2))
+        assertEquals(restarted + 10 * 60_000L, ProtectionCheck.restartAt(crashed, stoppedSince = restarted + 2 * 60_000L, restartedAt = restarted, tries = 1))
         // Not without the permission, not when it's running, and not when it's switched off: that's
         // someone's choice, put right only once armed.
         assertEquals(false, ProtectionCheck.shouldRestart(crashed.copy(canRepair = false), t, null, t + 60_000L))

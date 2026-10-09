@@ -110,6 +110,11 @@ class FocusService : AccessibilityService() {
         }
     }
 
+    override fun onCreate() {
+        super.onCreate()
+        hosted = true
+    }
+
     override fun onServiceConnected() {
         super.onServiceConnected()
         if (active) {
@@ -413,8 +418,10 @@ class FocusService : AccessibilityService() {
     }
 
     private fun tick() {
-        // Switched off while a second, stale connection keeps this instance bound (it happened
-        // after a crash and restart on the phone): no onUnbind comes, but the connection is gone.
+        // The connection is gone though this instance lives on: switched off while a stale
+        // connection keeps it bound (no onUnbind comes), or, after a crash and restart, reset by
+        // that stale connection while Android still counts it bound. Both seen on the phone; in
+        // the second Android delivers it nothing, so the watchdog has to restart it.
         if (serviceInfo == null) {
             disconnect("its connection is gone")
             return
@@ -479,6 +486,7 @@ class FocusService : AccessibilityService() {
 
     override fun onDestroy() {
         disconnect("destroyed")
+        hosted = false
         super.onDestroy()
     }
 
@@ -516,7 +524,20 @@ class FocusService : AccessibilityService() {
         const val ACTION_OFFER_TEAMS_SYNC = "com.thomaswcode.decrastination.action.OFFER_TEAMS_SYNC"
 
         private val _connected = MutableStateFlow(false)
+
+        /** This process's instance has a working connection: events reach it. */
         val connected: StateFlow<Boolean> = _connected.asStateFlow()
+
+        /** An instance lives in this process (Android created it and hasn't destroyed it). */
+        @Volatile
+        private var hosted = false
+
+        /**
+         * Whether the service is really running. Here, where it lives, its own connection says;
+         * Android can count an instance bound that it no longer sends anything (after a crash).
+         * From a process without it, Android's list of bound services is all there is.
+         */
+        fun isRunning(context: Context): Boolean = if (hosted) _connected.value else isEnabled(context)
 
         fun isEnabled(context: Context): Boolean {
             val manager = context.getSystemService(AccessibilityManager::class.java) ?: return false
