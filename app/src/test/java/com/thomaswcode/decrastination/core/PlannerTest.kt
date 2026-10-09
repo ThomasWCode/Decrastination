@@ -98,11 +98,62 @@ class PlannerTest {
     }
 
     @Test
-    fun `tonight, the oldest deadline comes first`() {
-        assertEquals("Pg 60&61", tonight.next!!.title)
-        assertTrue(tonight.next!!.overdue)
-        val chapter17 = tonight.todayBucket!!.chunks.single { it.title.startsWith("Prep 30/09") }
-        assertTrue(chapter17.dueToday)
+    fun `tonight, work due today or tomorrow comes before overdue work, the oldest of that first`() {
+        val order = tonight.todayBucket!!.chunks.map { it.title }.distinct()
+        // Due tonight at 23:59, then tomorrow morning's two.
+        assertEquals("Prep 30/09/2026 Chapter 17 review", tonight.next!!.title)
+        assertTrue(tonight.next!!.dueToday)
+        val soon = tonight.todayBucket!!.chunks.takeWhile { it.dueSoon }.map { it.title }.distinct()
+        assertEquals(listOf("Prep 30/09/2026 Chapter 17 review", "Dr. Frost - Using F=ma - Week 4", "Prep and Assessment preparation"), soon)
+        // Then what's overdue, the oldest deadline first.
+        assertEquals("Pg 60&61", order[soon.size])
+        assertTrue(tonight.todayBucket!!.chunks.first { it.title == "Pg 60&61" }.overdue)
+    }
+
+    @Test
+    fun `work due today or tomorrow takes today's time before overdue work`() {
+        // Thursday 17:00: the evening's hours left; an overdue task bigger than all of them.
+        val late = task("late", dueAt = Fixtures.at("2026-10-07T17:00"), effort = 400)
+        val soon = task("soon", dueAt = Fixtures.at("2026-10-09T08:30"), effort = 40)
+        val tonight = task("tonight", dueAt = Fixtures.at("2026-10-08T23:00"), effort = 30)
+        val plan = plan(listOf(late, soon, tonight), "2026-10-08T17:00")
+        val today = plan.todayBucket!!.chunks
+        assertEquals(listOf("tonight", "soon", "late"), today.map { it.title }.distinct())
+        // Tomorrow morning's work fits tonight, before the overdue work fills it: not behind.
+        assertTrue(plan.chunksOf("teams:soon").none { it.behind })
+        assertTrue(plan.chunksOf("teams:soon").all { it.dueSoon })
+        assertTrue(plan.chunksOf("teams:late").none { it.dueSoon })
+    }
+
+    @Test
+    fun `a task's overdue block brought along doesn't go ahead of other work due sooner`() {
+        // An email's September reply, brought along by its application due tomorrow; homework due tonight.
+        val steps = listOf(SubStep("Reply", 30, dueAt = Fixtures.at("2026-09-30T23:59")), SubStep("Apply", 30, dueAt = Fixtures.at("2026-10-09T23:59")))
+        val email = task("e", dueAt = null, steps = steps)
+        val homework = task("hw", dueAt = Fixtures.at("2026-10-08T23:00"), effort = 30)
+        val plan = plan(listOf(email, homework), "2026-10-08T17:00")
+        assertEquals(listOf("hw", "Reply", "Apply"), plan.todayBucket!!.chunks.map { it.step ?: it.title })
+        assertEquals("teams:hw", plan.next!!.taskId)
+    }
+
+    @Test
+    fun `a task's block due tomorrow doesn't go ahead of other work due tonight`() {
+        // One block due at 18:00, another tomorrow; homework due at 19:00 in between.
+        val steps = listOf(SubStep("First", 20, dueAt = Fixtures.at("2026-10-08T18:00")), SubStep("Second", 20, dueAt = Fixtures.at("2026-10-09T23:59")))
+        val email = task("e", dueAt = null, steps = steps)
+        val homework = task("hw", dueAt = Fixtures.at("2026-10-08T19:00"), effort = 20)
+        val plan = plan(listOf(email, homework), "2026-10-08T17:00")
+        assertEquals(listOf("First", "hw", "Second"), plan.todayBucket!!.chunks.map { it.step ?: it.title })
+    }
+
+    @Test
+    fun `a task due soon brings its overdue blocks along, ahead of it in their order`() {
+        val steps = listOf(SubStep("Reply", 30, dueAt = Fixtures.at("2026-10-07T23:59")), SubStep("Apply", 30, dueAt = Fixtures.at("2026-10-09T23:59")))
+        val email = task("e", dueAt = null, steps = steps)
+        val other = task("x", dueAt = Fixtures.at("2026-10-06T17:00"), effort = 30)
+        val plan = plan(listOf(email, other), "2026-10-08T17:00")
+        val today = plan.todayBucket!!.chunks.map { it.step ?: it.title }
+        assertEquals(listOf("Reply", "Apply", "x"), today)
     }
 
     @Test
@@ -462,9 +513,10 @@ class PlannerTest {
     @Test
     fun `work that can't be started until later today isn't next until then`() {
         // 01:00: the deck's new cards come at 04:00, Anki's new day. It's still today's work, and
-        // first, but the essay is the thing to do now.
+        // first, but the essay (due after tomorrow, so not ahead of the overdue deck) is the thing
+        // to do now.
         val deck = task("deck", Fixtures.at("2026-10-01T08:30"), steps = listOf(SubStep("20 new cards", 9))).copy(stepsPerDay = 1, notBefore = Fixtures.at("2026-10-09T04:00"))
-        val essay = task("essay", Fixtures.at("2026-10-10T21:00"), effort = 30)
+        val essay = task("essay", Fixtures.at("2026-10-12T21:00"), effort = 30)
         val plan = plan(listOf(deck, essay), "2026-10-09T01:00")
         assertEquals("teams:deck", plan.todayBucket!!.chunks.first().taskId)
         assertEquals(Fixtures.at("2026-10-09T04:00"), plan.todayBucket!!.chunks.first().availableAt)
