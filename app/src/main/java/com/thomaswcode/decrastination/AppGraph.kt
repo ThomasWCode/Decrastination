@@ -144,6 +144,14 @@ class AppGraph private constructor(context: Context) {
         runtime.update { it.copy(pending = outcome.pending, uptimeMark = if (outcome.pending.isEmpty()) null else uptime) }
     }
 
+    /** Drops the pending change [id]: what it would loosen stays as it is. Never waits, since it tightens. */
+    suspend fun cancelChange(id: String) = changing.withLock {
+        runtime.update { state ->
+            val rest = state.pending.filterNot { it.id == id }
+            state.copy(pending = rest, uptimeMark = if (rest.isEmpty()) null else state.uptimeMark)
+        }
+    }
+
     /** Applies the pending change [id] now (a parent's code allowed it), if it's still waiting. */
     suspend fun applyNow(id: String) = changing.withLock {
         val change = runtime.value.pending.firstOrNull { it.id == id } ?: return@withLock
@@ -196,8 +204,10 @@ class AppGraph private constructor(context: Context) {
     private val teamsChanged = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
 
     init {
-        // Work a source confirms done earns free time and is logged; what's new or changed is enriched.
-        syncer.addListener { report -> focus.onCompleted(report.completed) }
+        // Work a source confirms done earns free time and is logged.
+        syncer.addListener { focus.rewardCompletions() }
+        // Any a stop left ungiven.
+        scope.launch { focus.rewardCompletions() }
         // What's new or changed, even in place, is enriched.
         syncer.addAfterEverySync {
             val modelOn = modelEnricher() != null

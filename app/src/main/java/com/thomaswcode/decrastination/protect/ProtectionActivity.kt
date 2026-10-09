@@ -151,6 +151,8 @@ class ProtectionActivity : ComponentActivity() {
                                 Text(change.description, style = MaterialTheme.typography.bodyLarge)
                                 Text("Applies ${Format.at(change.applyAt, now, graph.clock.zone())}", style = MaterialTheme.typography.bodySmall)
                             }
+                            // Changed your mind: cancelling a loosening tightens, so it's at once.
+                            TextButton(onClick = { scope.launch { graph.cancelChange(change.id) } }) { Text("Cancel") }
                             if (hasParentCode) TextButton(onClick = { codeFor = CodeTarget.Change(change.id) }) { Text("Parent code") }
                         }
                     }
