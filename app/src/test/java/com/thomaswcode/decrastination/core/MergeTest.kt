@@ -75,6 +75,15 @@ class MergeTest {
     }
 
     @Test
+    fun `a count that shrinks to nothing as it's worked through is rewarded for the most it was`() {
+        fun quota(minutes: Int, done: Boolean = false) = Fetched(sourceId = "quota", title = "Anki", kind = Kind.Homework, sourceEffortMin = minutes, done = done, derived = true)
+        val morning = Merge.apply(emptyList(), Source.Anki, listOf(quota(60)), t0).tasks
+        val halfway = Merge.apply(morning, Source.Anki, listOf(quota(30)), t0 + 1).tasks
+        val finished = Merge.apply(halfway, Source.Anki, listOf(quota(1, done = true)), t0 + 2)
+        assertEquals(60, finished.completed.single().sourceEffortMin)
+    }
+
+    @Test
     fun `a done task listed again reopens, as a snoozed email does`() {
         val done = Merge.apply(first(fetched("a")), Source.Teams, emptyList(), later).tasks
         val result = Merge.apply(done, Source.Teams, listOf(fetched("a")), later + 1)

@@ -58,6 +58,7 @@ object Merge {
                     sourceEffortMin = f.sourceEffortMin,
                     sourceProgress = f.sourceProgress,
                     firstProgress = f.sourceProgress,
+                    peakEffortMin = f.sourceEffortMin,
                     subSteps = f.subSteps.orEmpty(),
                     stepsPerDay = f.stepsPerDay,
                     notBefore = f.notBefore,
@@ -80,6 +81,7 @@ object Merge {
                 sourceEffortMin = f.sourceEffortMin,
                 sourceProgress = f.sourceProgress,
                 firstProgress = old.firstProgress ?: old.sourceProgress,
+                peakEffortMin = listOfNotNull(old.peakEffortMin, old.sourceEffortMin, f.sourceEffortMin).maxOrNull(),
                 subSteps = f.subSteps ?: old.subSteps,
                 stepsPerDay = f.stepsPerDay,
                 notBefore = f.notBefore,
@@ -88,10 +90,8 @@ object Merge {
                 extra = f.extra,
             )
             val next = when {
-                // Reported with the progress it had when first seen: finished through its own
-                // progress (Power Planner at 50 %, then 100 %), the earned time is for all the work
-                // done since, not just the last step of it.
-                old.status == Status.Open && f.done -> updated.copy(status = Status.Done, doneAt = now).also { completed += it.copy(sourceProgress = old.firstProgress ?: old.sourceProgress) }
+                // Reported as it stood before it finished (see completion()).
+                old.status == Status.Open && f.done -> updated.copy(status = Status.Done, doneAt = now).also { completed += completion(old, it) }
                 old.status == Status.Open -> updated
                 old.derived && old.status == Status.Done -> updated.copy(status = Status.Done)
                 f.done -> updated.copy(status = Status.Done)
@@ -106,10 +106,21 @@ object Merge {
             when {
                 old.status != Status.Open -> old.takeIf { now - (old.doneAt ?: old.lastSeenAt) < KEEP_FINISHED_MS }
                 old.derived -> old.copy(status = Status.Missed).also { missed += it }
-                else -> old.copy(status = Status.Done, doneAt = now).also { completed += it }
+                else -> old.copy(status = Status.Done, doneAt = now).also { completed += completion(old, it) }
             }
         } + fresh.values.filter { it.id !in byId }
 
         return Result(result, completed, reopened, added, missed)
     }
+
+    /**
+     * [done] as its completion is rewarded: with the progress it had when first seen (finished
+     * through its own progress, Power Planner at 50 % then 100 %, the time is for all the work
+     * since), and its estimate before it finished. A derived count (an Anki deck's cards) shrinks
+     * as it's worked through, so it's rewarded for the most it was.
+     */
+    private fun completion(old: TaskItem, done: TaskItem): TaskItem = done.copy(
+        sourceProgress = old.firstProgress ?: old.sourceProgress,
+        sourceEffortMin = if (old.derived) old.peakEffortMin ?: old.sourceEffortMin else old.sourceEffortMin,
+    )
 }
