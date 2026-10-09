@@ -80,6 +80,15 @@ class AnkiRulesTest {
     }
 
     @Test
+    fun `a deadline before Anki's day turns over is that night's, after midnight`() {
+        // Cards due by 01:00: the Anki day of the 8th runs to 04:00 on the 9th.
+        val (evening, _) = AnkiRules.quota(decks, 1, null, Fixtures.at("2026-10-08T20:00"), LONDON, 60) { it.new }
+        assertEquals(Fixtures.at("2026-10-09T01:00"), evening!!.dueAt)
+        val (late, _) = AnkiRules.quota(decks, 1, null, Fixtures.at("2026-10-09T02:00"), LONDON, 60) { it.new }
+        assertEquals(Fixtures.at("2026-10-09T01:00"), late!!.dueAt)
+    }
+
+    @Test
     fun `the quota deck stays fixed for the day once chosen`() {
         val studied = decks.map { if (it.id == 12L) it.copy(new = 0) else it }
         val (task, day) = quota(studied, previous = AnkiDay("2026-10-08", 12, "Textbook 1::1.2"))

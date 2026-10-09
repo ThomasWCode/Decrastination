@@ -24,9 +24,17 @@ object TeamsAutoSync {
         val firstUnlockDay: String? = null,
         /** The morning briefing's: a sync is offered at an unlock before then (before school too). */
         val morningUntil: Long? = null,
+        /** Offers in a row the widget didn't start (its sync service off, no answer). */
+        val retries: Int = 0,
     )
 
     enum class Trigger { FirstUnlock, Every3Hours, Delayed, Morning }
+
+    /** Minutes before an automatic sync the widget didn't start is offered again. */
+    const val RETRY_MIN = 15
+
+    /** Offers in a row that come to nothing before the next waits for its usual time. */
+    const val RETRIES = 2
 
     /** A sync of Teams this recent makes an automatic one pointless. */
     private const val RECENT_MS = 30 * 60_000L
@@ -80,8 +88,18 @@ object TeamsAutoSync {
             delayedUntil = null,
             firstUnlockDay = if (afterFirstUnlockTime) today else state.firstUnlockDay,
             morningUntil = null,
+            retries = 0,
         )
     }
+
+    /**
+     * The offer made at [now] came to nothing: the widget didn't start the sync (its sync service
+     * off, no answer). As things were [before] it, so the day's first-unlock sync isn't used up,
+     * and offered again in [RETRY_MIN] minutes, as a delayed one is. After [RETRIES] such offers in
+     * a row, the last ([offered]) stands, and the next comes at its usual time.
+     */
+    fun retry(before: State, offered: State, now: Long): State =
+        if (before.retries >= RETRIES) offered else before.copy(delayedUntil = now + RETRY_MIN * 60_000L, retries = before.retries + 1)
 
     fun delayed(state: State, now: Long, minutes: Int = 5): State = state.copy(delayedUntil = now + minutes * 60_000L)
 }

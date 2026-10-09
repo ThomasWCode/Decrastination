@@ -168,7 +168,10 @@ object AnkiRules {
             if (reviews > 0) add("$reviews review${if (reviews == 1) "" else "s"}")
             if (newLeft > 0) add("$newLeft new${shortName?.let { " ($it)" } ?: ""}")
         }
-        val dueAt = day.atTime(LocalTime.of(deadlineMin / 60, deadlineMin % 60)).atZone(zone).toInstant().toEpochMilli()
+        // A deadline before Anki's day turns over (01:00) is that night's, after midnight: the
+        // next calendar date, still within the Anki day.
+        val date = if (deadlineMin < ROLLOVER_HOUR * 60) day.plusDays(1) else day
+        val dueAt = date.atTime(LocalTime.of(deadlineMin / 60, deadlineMin % 60)).atZone(zone).toInstant().toEpochMilli()
         val fetched = Fetched(
             sourceId = QUOTA_PREFIX + day,
             title = if (parts.isEmpty()) "Anki: today's cards" else "Anki: ${parts.joinToString(" + ")}",

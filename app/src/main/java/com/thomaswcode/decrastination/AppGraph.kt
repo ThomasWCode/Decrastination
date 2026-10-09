@@ -31,6 +31,7 @@ import com.thomaswcode.decrastination.enrich.ClaudeEnricher
 import com.thomaswcode.decrastination.enrich.ClaudeReviewer
 import com.thomaswcode.decrastination.enrich.EnrichWorker
 import com.thomaswcode.decrastination.enrich.Enricher
+import com.thomaswcode.decrastination.enrich.ModelHold
 import com.thomaswcode.decrastination.enrich.PhotoChecker
 import com.thomaswcode.decrastination.enrich.RuleEnricher
 import com.thomaswcode.decrastination.learn.Assessment
@@ -220,7 +221,7 @@ class AppGraph private constructor(context: Context) {
             result == null -> "The Teams widget didn't answer"
             else -> when (result.getString(TeamsProvider.RESULT_REASON)) {
                 "service_off" -> "The Teams widget's sync service is off"
-                "busy" -> "The Teams widget is already syncing"
+                "busy" -> TEAMS_BUSY
                 else -> "The Teams widget didn't start a sync"
             }
         }
@@ -261,29 +262,29 @@ class AppGraph private constructor(context: Context) {
     init {
         // Disarmed (once the wait is over, or at once by a parent's code): the device admin goes
         // too, so uninstalling is allowed again, as the protection screen says. Checked at start as
-        // well as on each change, so a disarm the app stopped before seeing through is finished.
+        // well as on each change, so a disarm the app stopped before seeing through is finished,
+        // and so is an arming left part-way (the admin given, then the app stopped mid-wizard).
         scope.launch {
+            var starting = true
             settings.state.map { it.armed }.distinctUntilChanged().collect { armed ->
                 val wasArmed = runtime.value.adminArmed
                 if (armed && !wasArmed) runtime.update { it.copy(adminArmed = true) }
-                if (!armed && wasArmed) {
+                if (!armed && (wasArmed || (starting && Watchdog.isAdminActive(app)))) {
                     runCatching { app.getSystemService(DevicePolicyManager::class.java)?.removeActiveAdmin(Watchdog.admin(app)) }
                     runtime.update { it.copy(adminArmed = false) }
                 }
+                starting = false
             }
         }
-        // Work a source confirms done earns free time and is logged.
-        // A session on a task the sync found done ends with it, and so do its notification and alarm.
-        syncer.addListener { report ->
-            if (focus.rewardCompletions()) Sessions.clear(app)
-            // "How was it?" for finished homework and revision.
-            Assessment.ask(app, report.completed)
+        // Work a source confirms done earns free time, is logged and asked about.
+        syncer.addListener {
+            settleCompletions()
             CalendarTime.refresh(app)
         }
         // Any a stop left ungiven: completions, and sessions' endings.
         scope.launch {
             focus.finishSessions()
-            if (focus.rewardCompletions()) Sessions.clear(app)
+            settleCompletions()
         }
         // "How was it?" questions kept while notifications were off, once they're on.
         syncer.addAfterEverySync { Assessment.askLater(app) }
@@ -323,6 +324,18 @@ class AppGraph private constructor(context: Context) {
                 runCatching { WidgetUpdater.update(app) }.onFailure { Log.w(TAG, "Widget update failed", it) }
             }
         }
+    }
+
+    /**
+     * The completions syncs saved: free time and the log, then "How was it?" for finished homework
+     * and revision (asked, or kept till notifications show), and only then off the queue, so a stop
+     * part-way loses neither. A session on one ends with it, and so do its notification and alarm.
+     */
+    private suspend fun settleCompletions() {
+        val stopped = focus.rewardCompletions { completed ->
+            runCatching { Assessment.ask(app, completed) }.onFailure { Log.w(TAG, "Couldn't ask how the work went", it) }
+        }
+        if (stopped) Sessions.clear(app)
     }
 
     /** The rules' enrichment: always there, and the fallback for the model. */
@@ -378,18 +391,20 @@ class AppGraph private constructor(context: Context) {
     fun modelEnricher(): Enricher? = claudeKey()?.let { ClaudeEnricher(it, clock.zone()) }
 
     /**
+     * What stops the model being asked now ([ModelHold]), or null: off, resting after a failed
+     * call, or no room under the cap. Each call checks it under [modelCalls] just before sending.
+     */
+    fun modelHold(): ModelHold? {
+        val s = settings.value
+        return ModelHold.of(claudeKey() != null, runtime.value.aiUsage, clock.now(), clock.zone(), s.aiMonthlyCapGbp, s.usdToGbp)
+    }
+
+    /**
      * Whether the model can be asked now: on with its key in use, not resting after a failed call,
      * and with room under this month's cap for another. When it can't, what only the rules have
      * seen isn't due for it, so it isn't redone every sync while the cap is used up.
      */
-    fun modelAvailable(): Boolean {
-        if (claudeKey() == null) return false
-        val now = clock.now()
-        val usage = runtime.value.aiUsage
-        if (usage.lastError != null && now - (usage.lastCallAt ?: 0L) < MODEL_REST_MS) return false
-        val s = settings.value
-        return usage.forMonth(AiUsage.monthOf(now, clock.zone())).allows(s.aiMonthlyCapGbp, s.usdToGbp)
-    }
+    fun modelAvailable(): Boolean = modelHold() == null
 
     /**
      * Enriches every task that's new or changed since it was last enriched, and, while the model is
@@ -421,14 +436,13 @@ class AppGraph private constructor(context: Context) {
             // Switched off (or its key removed) while this runs: nothing more is sent.
             if (claudeKey() == null) enricher = null
             var enrichment = if (enricher != null && calls < MAX_MODEL_CALLS) modelCalls.withLock call@{
-                // Switched off while another call held the lock: nothing more is sent.
-                if (claudeKey() == null) {
+                // Checked again under the lock, just before sending, so every other call counts:
+                // switched off, resting after a failed call (one made while this waited), or no
+                // room under the cap. The rules then do the rest of the run.
+                if (modelHold() != null) {
                     enricher = null
                     return@call null
                 }
-                // Checked under the lock, so a review or photo check at the same time is counted.
-                val s = settings.value
-                if (!runtime.value.aiUsage.forMonth(month).allows(s.aiMonthlyCapGbp, s.usdToGbp)) return@call null
                 calls++
                 val result = runCatching { enricher!!.enrich(task, job, now) }
                     .onFailure { error ->
@@ -463,6 +477,9 @@ class AppGraph private constructor(context: Context) {
     companion object {
         const val TAG = "Decrastination"
 
+        /** [requestTeamsSync]'s answer when the widget is syncing already: as good as one started. */
+        const val TEAMS_BUSY = "The Teams widget is already syncing"
+
         /** The widget sends a change for each step of a sync; read once they've stopped. */
         private const val TEAMS_QUIET_MS = 5_000L
         private const val WIDGET_DEBOUNCE_MS = 1_000L
@@ -470,7 +487,6 @@ class AppGraph private constructor(context: Context) {
         private const val CALENDAR_QUIET_MS = 5_000L
 
         /** After a failed call, the model is left alone this long. */
-        private const val MODEL_REST_MS = 3_600_000L
 
         /** The most model calls one enrichment run makes: the rest wait for the next. */
         const val MAX_MODEL_CALLS = 20
