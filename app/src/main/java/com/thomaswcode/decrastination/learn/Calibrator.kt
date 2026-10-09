@@ -134,10 +134,13 @@ object Calibrator {
             val next = completions[session.taskId]?.firstOrNull { it.doneAt >= session.startedAt } ?: return false
             return next.dueAt != null && next.doneAt <= next.dueAt
         }
+        // Judged once its outcome is known: one cut short failed then; one run in full waits for
+        // its task's completion after it, and until then counts for no box, for or against.
+        fun judged(session: SessionRecord): Boolean = !session.completed || completions[session.taskId]?.any { it.doneAt >= session.startedAt } == true
         // Your own box is a candidate too: with nothing to go on, it's kept.
         val candidates = (BOXES + defaultBox).distinct()
         val result = HashMap<Kind, Int>()
-        for ((kind, sessions) in log.sessions.filter { it.box != null }.groupBy { it.kind }) {
+        for ((kind, sessions) in log.sessions.filter { it.box != null && judged(it) }.groupBy { it.kind }) {
             val byBox = sessions.groupBy { it.box!! }
             fun mean(box: Int): Double = byBox[box]?.let { list -> list.count(::rewarded).toDouble() / list.size } ?: 0.5
             val best = candidates.maxWith(compareBy<Int>({ mean(it) }, { if (it == defaultBox) 1 else 0 }))

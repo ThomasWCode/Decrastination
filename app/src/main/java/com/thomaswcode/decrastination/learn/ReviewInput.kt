@@ -2,6 +2,7 @@ package com.thomaswcode.decrastination.learn
 
 import com.thomaswcode.decrastination.core.Calibration
 import com.thomaswcode.decrastination.data.ActivityLog
+import com.thomaswcode.decrastination.data.SessionRecord
 import com.thomaswcode.decrastination.data.Settings
 import java.time.Instant
 import java.time.LocalDate
@@ -79,10 +80,12 @@ object ReviewInput {
             val answer = c.assessment?.let { " felt $it" }.orEmpty() + c.note?.let { " (\"$it\")" }.orEmpty()
             appendLine("- ${c.title} [${c.kind.label}${c.className?.let { ", $it" }.orEmpty()}]:$due done ${at(c.doneAt)}, estimate ${c.estimateMin} min, timed ${c.workedMin} min.$answer")
         } ?: appendLine("- nothing")
-        val sessions = log.sessions.filter { inWeek(it.startedAt) && !it.photo }
+        // A session across the week's start or end: only its minutes within the week.
+        fun minutes(session: SessionRecord) = Days.minutesIn(session, start, end)
+        val sessions = log.sessions.filter { !it.photo && (inWeek(it.startedAt) || minutes(it) > 0) }
         val photos = log.sessions.count { inWeek(it.startedAt) && it.photo }
         appendLine()
-        appendLine("Focus sessions: ${sessions.size}, ${sessions.count { it.completed }} run to the end, ${sessions.sumOf { it.workedMin }} min in all.")
+        appendLine("Focus sessions: ${sessions.size}, ${sessions.count { it.completed }} run to the end, ${sessions.sumOf { minutes(it) }} min in all.")
         val byHour = sessions.groupBy { Instant.ofEpochMilli(it.startedAt).atZone(zone).hour }.toSortedMap()
         if (byHour.isNotEmpty()) appendLine("Started by hour: " + byHour.entries.joinToString { (h, s) -> "%02d:00 ×%d".format(Locale.UK, h, s.size) })
         if (photos > 0) appendLine("Pieces a photo check found done: $photos.")

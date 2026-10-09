@@ -77,10 +77,8 @@ object Daily {
         val now = graph.clock.now()
         val zone = graph.clock.zone()
         val settings = graph.settings.value
-        // From a little before now, unless it ran since: an alarm Android is still to deliver
-        // (inexact ones get ten minutes) keeps its time rather than moving on a day or a week.
         val ran = graph.runtime.value.dailyRanAt
-        fun from(action: String) = maxOf(now - LATE_MS, ran[action] ?: Long.MIN_VALUE)
+        fun from(action: String) = from(ran[action], now, zone)
         set(context, ACTION_BRIEFING, nextBriefing(from(ACTION_BRIEFING), zone, settings))
         set(context, ACTION_CHECK_IN, nextSunday(from(ACTION_CHECK_IN), zone, settings.checkInMin))
         set(context, ACTION_REVIEW, nextSunday(from(ACTION_REVIEW), zone, settings.checkInMin + REVIEW_AFTER_MIN))
@@ -102,6 +100,18 @@ object Daily {
     fun failed(retries: Map<String, DailyRetry>, action: String, now: Long): Map<String, DailyRetry> {
         val tries = (retries[action]?.tries ?: 0) + 1
         return if (tries > RETRIES) retries - action else retries + (action to DailyRetry(now + RETRY_MS, tries))
+    }
+
+    /**
+     * Where to look for an alarm's next time from: a little before [now], so an alarm Android is
+     * still to deliver (inexact ones get ten minutes) keeps its time; after it last ran ([ranAt]);
+     * and, if that was today, after today: one that ran today stands for today, even with its
+     * time moved later since.
+     */
+    fun from(ranAt: Long?, now: Long, zone: ZoneId): Long {
+        if (ranAt == null) return now - LATE_MS
+        val endOfItsDay = Instant.ofEpochMilli(ranAt).atZone(zone).toLocalDate().plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli() - 1
+        return maxOf(now - LATE_MS, ranAt, if (endOfItsDay >= now) endOfItsDay else Long.MIN_VALUE)
     }
 
     /** How late an inexact alarm can come: its window, and a little more. */

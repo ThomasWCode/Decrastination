@@ -199,7 +199,7 @@ class BlockedActivity : ComponentActivity() {
                         }
                         // Written work: a photo instead of the timer, once Claude is on (Q16). Not
                         // during a session: the two would count the same piece twice.
-                        if (photoChecker != null && session == null) {
+                        if (photoChecker != null && session == null && next.photoCheckable) {
                             OutlinedButton(enabled = !checking, onClick = {
                                 photoFor = next
                                 takePhoto.launch(photoUri)

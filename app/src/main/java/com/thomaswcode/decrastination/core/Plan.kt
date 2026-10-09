@@ -41,6 +41,9 @@ data class Chunk(
     val urgent: Boolean get() = overdue || dueToday || behind
 
     fun startable(now: Long): Boolean = availableAt == null || availableAt <= now
+
+    /** Written homework, which a photo can show done: not a deck's cards, an email or an event. */
+    val photoCheckable: Boolean get() = kind == Kind.Homework && source != Source.Anki
 }
 
 data class DayBucket(val date: LocalDate, val capacityMin: Int, val chunks: List<Chunk>) {

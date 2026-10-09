@@ -384,14 +384,18 @@ class Focus(
         fun worked(task: TaskItem): Int = tasks.value.tasks.firstOrNull { it.id == task.id && it.doneAt == task.doneAt }?.workedMin
             ?: (task.workedMin + if (sessionMin?.first == task.id) sessionMin.second else 0)
         fun key(task: TaskItem) = Rewarded(task.id, task.doneAt ?: task.lastSeenAt)
+        // Its deck tasks, missed ones too: the read that closes an assignment drops its unfinished
+        // deck in the same sync, before this, and that deck's sessions earned their time already.
+        val decks = AnkiRules.heldDecks(tasks.value.tasks, settings.value.ankiTextbook, missed = true)
+        // Its vocabulary steps its decks hold: their work is the decks', and learned from theirs.
+        fun deckMinutes(task: TaskItem): Int = task.subSteps
+            .filter { step -> step.ankiSections.isNotEmpty() && step.ankiSections.all { decks[task.id]?.containsKey(it) == true } }
+            .sumOf { it.minutes }
         runtime.update { state ->
             val fresh = completed.filter { key(it) !in state.rewarded }
             // Reading or archiving an email, or an event passing, isn't work that earns time. Free
             // time is for the day the work was confirmed: given late (the app stopped first), after
             // that day is over, it has gone as the rest of that day's has.
-            // Missed ones too: the read that closes an assignment drops its unfinished deck in the
-            // same sync, before this, and that deck's sessions earned their time already.
-            val decks = AnkiRules.heldDecks(tasks.value.tasks, settings.value.ankiTextbook, missed = true)
             val earned = fresh.filter { it.kind != Kind.Info && it.kind != Kind.Event && today(it.doneAt ?: now) == today }.sumOf { task ->
                 // In the plan's units, as its sessions earned theirs: the estimate as calibrated.
                 val multiplier = state.calibration.multiplier(task.kind, task.className)
@@ -429,8 +433,9 @@ class Focus(
                         source = task.source,
                         kind = task.kind,
                         className = task.className,
-                        // What was left of it when first seen: progress it already had isn't work done here.
-                        estimateMin = (task.effortMin * (1 - task.sourceProgress.coerceIn(0.0, 1.0))).roundToInt().coerceAtLeast(1),
+                        // What was left of it when first seen: progress it already had isn't work done here,
+                        // nor is vocabulary its decks hold (their own records learn from it).
+                        estimateMin = (task.effortMin * (1 - task.sourceProgress.coerceIn(0.0, 1.0)) - deckMinutes(task)).roundToInt().coerceAtLeast(1),
                         workedMin = worked(task),
                         dueAt = task.dueAt,
                         firstSeenAt = task.firstSeenAt,
