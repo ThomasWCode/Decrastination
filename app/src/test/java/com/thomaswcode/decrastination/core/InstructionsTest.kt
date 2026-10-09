@@ -40,7 +40,7 @@ class InstructionsTest {
                 at,
                 LONDON,
                 Settings(),
-                busy = Instructions.busy(applied, LONDON, today, today.plusDays(90)),
+                hardBusy = Instructions.busy(applied, LONDON, today, today.plusDays(90)),
                 dayCaps = Instructions.dayCaps(applied, today, today.plusDays(90)),
             ),
         )
@@ -126,6 +126,45 @@ class InstructionsTest {
         assertTrue(deckDays.isNotEmpty() && deckDays.all { it >= LocalDate.parse("2026-10-11") })
         // Left as it is, the deck's planned.
         assertTrue(deck.id in plan(listOf(homework, deck)).ordered.map { it.taskId })
+    }
+
+    @Test
+    fun `earlier-starting work that can't fit before a later start shares its time`() {
+        // Friday's hours end at 22:00. 90 minutes from 20:00 and 60 from 21:00 don't both fit.
+        val a = task("a", "2026-10-12T23:59", effort = 90).copy(subSteps = listOf(SubStep("A", 90))).withOverrides(TaskOverrides(from = Fixtures.at("2026-10-09T20:00")))
+        val b = task("b", "2026-10-12T23:59", effort = 60).copy(subSteps = listOf(SubStep("B", 60))).withOverrides(TaskOverrides(from = Fixtures.at("2026-10-09T21:00")))
+        val friday = plan(listOf(a, b), at = Fixtures.at("2026-10-09T17:00")).buckets.first { it.date == LocalDate.parse("2026-10-09") }
+        assertTrue(friday.plannedMin <= 120)
+    }
+
+    @Test
+    fun `your busy times aren't overfilled even by overdue work`() {
+        // Friday 17:00, the essay overdue; busy all evening, as you said.
+        val essay = task("essay", "2026-10-08T09:00", effort = 60)
+        val busy = applied(Change(ChangeType.BusyTime, date = "2026-10-09", startMin = 16 * 60, endMin = 22 * 60))
+        val p = plan(listOf(essay), listOf(busy), at = Fixtures.at("2026-10-09T17:00"))
+        assertTrue(p.buckets.first { it.date == LocalDate.parse("2026-10-09") }.chunks.isEmpty())
+        assertEquals(60, p.buckets.sumOf { b -> b.chunks.filter { it.taskId == essay.id }.sumOf { it.minutes } })
+    }
+
+    @Test
+    fun `a task you said isn't one holds nothing back`() {
+        val info = task("info", null).withOverrides(TaskOverrides(notATask = true))
+        val essay = task("essay", "2026-10-12T09:00").withOverrides(TaskOverrides(after = info.id))
+        assertFalse(Instructions.waiting(essay, listOf(info, essay).associateBy { it.id }))
+        assertTrue(essay.id in plan(listOf(info, essay)).ordered.map { it.taskId })
+    }
+
+    @Test
+    fun `a deck task is due with its assignment's due date as it is now`() {
+        val homework = task("vocab", "2026-10-20T09:00").withOverrides(TaskOverrides(dueAt = Fixtures.at("2026-10-12T09:00")))
+        val deck = TaskItem(
+            id = "anki:deck:1", source = Source.Anki, sourceId = "deck:1", title = "Learn Anki deck 1.2", kind = Kind.Homework,
+            dueAt = Fixtures.at("2026-10-20T09:00"), sourceEffortMin = 20, derived = true, firstSeenAt = now, lastSeenAt = now,
+            extra = mapOf(com.thomaswcode.decrastination.sources.anki.AnkiRules.EXTRA_FOR to homework.id),
+        )
+        val chunk = plan(listOf(homework, deck)).ordered.first { it.taskId == deck.id }
+        assertEquals(Fixtures.at("2026-10-12T09:00"), chunk.dueAt)
     }
 
     @Test
