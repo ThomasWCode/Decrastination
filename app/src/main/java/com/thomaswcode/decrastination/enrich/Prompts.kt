@@ -45,7 +45,7 @@ object Prompts {
             - deadline: when it must be done by, only if the email states or clearly implies one (a day it suggests for doing it counts); for an Event, when it starts; otherwise null. Never invent one. Write it as a local date and time (YYYY-MM-DDTHH:MM), or the date alone (YYYY-MM-DD) if it gives no time.
             - effortMin: the minutes of the student's own work it needs, reading included: about 2 for Info.
             - nextStep: the one concrete next action, as an instruction under 12 words ("Reply to Mr Hughes confirming the trip").
-            - blocks: when the email holds more than one piece of work for the student, or dated items (a calendar of deadlines, an application that opens on a date), the pieces of work in order, each with its minutes, from (the date before which it can't be done, or null) and due (when it must be done by, written as for deadline, or null). The planner schedules each block in its own window, so one email can become work spread over months, kept after the email is archived. An email with blocks is Admin, and its effortMin is their total. Otherwise an empty list.
+            - blocks: when the email holds more than one piece of work for the student, or dated items (a calendar of deadlines, an application that opens on a date), the pieces of work in order, each with its minutes (10 to 60 where the work allows: a long piece of work, like writing a proposal, is several blocks with the same dates), from (the date before which it can't be done, or null) and due (when it must be done by, written as for deadline). A window the email gives only roughly ("applications open in December") runs from its first day to its last. A quick action with no date of its own that's best done soon (signing up, replying, asking someone) is due within the next two weeks. Leave due null only for a block that can wait for the email's own deadline. The planner schedules each block in its own window, so one email can become work spread over months, kept after the email is archived. An email with blocks is Admin, and its effortMin is their total. Otherwise an empty list.
 
             Work out relative dates ("next Friday") from when the email was received.
         """.trimIndent()
@@ -178,6 +178,9 @@ object Answers {
     private const val MAX_EFFORT = 600
     private const val MAX_STEP = 240
     private const val MAX_STEPS = 12
+
+    /** Blocks an email or a planner item can come back in: one email can hold months of applications. */
+    private const val MAX_BLOCKS = 20
     private const val MAX_TITLE = 80
     private const val MAX_NEXT_STEP = 120
     private const val STEPS_SLACK_MIN = 10
@@ -204,7 +207,7 @@ object Answers {
                 val total = effort(t.effortMin)
                 // Blocks of work, each perhaps with its own dates (Q12): not trusted, the triage stands
                 // without them.
-                val blocks = trusted(steps(t.blocks, now, zone, vocabulary = false), total)
+                val blocks = trusted(steps(t.blocks, now, zone, vocabulary = false, maxMinutes = MAX_EFFORT), total)
                 base.copy(
                     // Blocks of work make it something to do, whatever else it says.
                     kind = if (blocks != null) Kind.Admin else Kind.entries.firstOrNull { it.name == t.kind && it in setOf(Kind.Admin, Kind.Event, Kind.Info) },
@@ -218,7 +221,7 @@ object Answers {
             Enrichments.Job.Assignment -> json.decodeFromString(Split.serializer(), text).let { s ->
                 // One step it can't take (no title, minutes or a date out of range) and the split isn't
                 // trusted: the task's whole estimate is planned instead, none of it lost with that step.
-                val read = steps(s.subSteps, now, zone, vocabulary = true)
+                val read = steps(s.subSteps, now, zone, vocabulary = true, maxMinutes = MAX_STEP)
                 val usable = read != null
                 val valid = read.orEmpty()
                 // More steps than the planner takes: the rest become one last step, so none of the work
@@ -262,7 +265,7 @@ object Answers {
             Enrichments.Job.Effort -> json.decodeFromString(Estimate.serializer(), text).let { e ->
                 val total = effort(e.effortMin)
                 // Big enough to do in parts: its blocks, each perhaps with its own dates (Q12).
-                val blocks = trusted(steps(e.blocks, now, zone, vocabulary = false), total)
+                val blocks = trusted(steps(e.blocks, now, zone, vocabulary = false, maxMinutes = MAX_EFFORT), total)
                 base.copy(effortMin = blocks?.sumOf { it.minutes } ?: total, subSteps = blocks)
             }
         }
@@ -270,14 +273,14 @@ object Answers {
 
     /**
      * [given] as steps the planner can take, or null if any can't be: no title, minutes out of
-     * range, a date out of range or a start after its own deadline. Each keeps its own dates; one
+     * range (up to [maxMinutes]), a date out of range or a start after its own deadline. Each keeps its own dates; one
      * longer than a focus session is cut into parts that keep them, so finishing a session never
      * ticks off more than it did. A step tagged as vocabulary ([vocabulary] jobs only) that asks for
      * anything else too stays planned whole.
      */
-    private fun steps(given: List<Step>, now: Long, zone: ZoneId, vocabulary: Boolean): List<SubStep>? {
+    private fun steps(given: List<Step>, now: Long, zone: ZoneId, vocabulary: Boolean, maxMinutes: Int): List<SubStep>? {
         val read = given.map { step ->
-            if (step.title.isBlank() || step.minutes !in 1..MAX_STEP) return null
+            if (step.title.isBlank() || step.minutes !in 1..maxMinutes) return null
             val from = step.from?.let { date(it, zone, LocalTime.MIDNIGHT)?.takeIf { at -> plausible(at, now) } ?: return null }
             val due = step.due?.let { dateTime(it, zone)?.takeIf { at -> plausible(at, now) } ?: return null }
             if (from != null && due != null && from > due) return null
@@ -288,12 +291,12 @@ object Answers {
     }
 
     /**
-     * An email's or planner item's [blocks], if they can be planned: some, no more than the planner
-     * takes, within the most one task is taken to be, and adding up to its [total] where it gives
+     * An email's or planner item's [blocks], if they can be planned: some, no more than [MAX_BLOCKS],
+     * within the most one task is taken to be, and adding up to its [total] where it gives
      * one (within a tenth, or ten minutes). Otherwise null, and its estimate is planned whole.
      */
     private fun trusted(blocks: List<SubStep>?, total: Int?): List<SubStep>? {
-        if (blocks.isNullOrEmpty() || blocks.size > MAX_STEPS) return null
+        if (blocks.isNullOrEmpty() || blocks.size > MAX_BLOCKS) return null
         val sum = blocks.sumOf { it.minutes }
         if (sum > MAX_EFFORT) return null
         if (total != null && abs(sum - total) > maxOf(STEPS_SLACK_MIN, total / 10)) return null
