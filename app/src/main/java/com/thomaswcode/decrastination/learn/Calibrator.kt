@@ -137,17 +137,23 @@ object Calibrator {
             val byBox = sessions.groupBy { it.box!! }
             fun mean(box: Int): Double = byBox[box]?.let { list -> list.count(::rewarded).toDouble() / list.size } ?: 0.5
             val best = candidates.maxWith(compareBy<Int>({ mean(it) }, { if (it == defaultBox) 1 else 0 }))
-            val random = Random(week * 31 + kind.ordinal)
-            val choice = if (sessions.size < BOX_SETTLED && random.nextDouble() < EXPLORE) candidates.filter { it != best }.random(random) else best
+            // The seed scrambled first: small seeds a week apart would draw alike.
+            val random = Random(java.util.Random(week * 31 + kind.ordinal).nextLong())
+            // Settled on sessions at the boxes still tried: an old box of yours doesn't settle it.
+            val counted = sessions.count { it.box in candidates }
+            val choice = if (counted < BOX_SETTLED && random.nextDouble() < EXPLORE) candidates.filter { it != best }.random(random) else best
             if (choice != defaultBox) result[kind] = choice
         }
         return result
     }
 
     private fun describe(previous: Calibration, next: Calibration): List<String> = buildList {
-        for ((key, m) in next.multipliers.toSortedMap()) {
-            val before = previous.multipliers[key] ?: 1.0
-            if (kotlin.math.abs(m - before) >= 0.05) add("${label(key)} takes ×%.2f its estimate (was ×%.2f)".format(java.util.Locale.UK, m, before))
+        // Every key either has, so one whose last completion aged out of the log is said to be back
+        // to what it falls back on (the kind's, or the estimate itself).
+        for (key in (previous.multipliers.keys + next.multipliers.keys).toSortedSet()) {
+            val before = previous.multipliers[key] ?: fallback(previous, key)
+            val after = next.multipliers[key] ?: fallback(next, key)
+            if (kotlin.math.abs(after - before) >= 0.05) add("${label(key)} takes ×%.2f its estimate (was ×%.2f)".format(java.util.Locale.UK, after, before))
         }
         for (kind in Kind.entries) {
             val before = previous.marginDays[kind] ?: MIN_MARGIN
@@ -157,6 +163,12 @@ object Calibrator {
             val boxAfter = next.boxMin[kind]
             if (boxBefore != boxAfter && boxAfter != null) add("${kind.label}: pieces of $boxAfter minutes")
         }
+    }
+
+    /** What [key] uses with no value of its own: a class its kind's, a kind the estimate itself. */
+    private fun fallback(calibration: Calibration, key: String): Double {
+        val kind = key.substringBefore('|')
+        return if (key.substringAfter('|').isEmpty()) 1.0 else calibration.multipliers["$kind|"] ?: 1.0
     }
 
     private fun label(key: String): String {

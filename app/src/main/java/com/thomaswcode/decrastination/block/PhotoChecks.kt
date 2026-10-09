@@ -35,7 +35,10 @@ object PhotoChecks {
             val settings = graph.settings.value
             if (!graph.runtime.value.aiUsage.forMonth(month).allows(settings.aiMonthlyCapGbp, settings.usdToGbp)) return "Claude's monthly cap is reached: the timer or the source will have to do."
             runCatching { current.check(jpeg, piece.label) }
-                .onFailure { Log.w(AppGraph.TAG, "The photo check failed", it) }
+                .onFailure { e ->
+                    Log.w(AppGraph.TAG, "The photo check failed", e)
+                    graph.runtime.update { it.copy(aiUsage = it.aiUsage.forMonth(month).failure(e.message ?: e.javaClass.simpleName, now)) }
+                }
                 .getOrElse { return "The check didn't go through (${it.message ?: "no connection"})." }
                 .also { r -> graph.runtime.update { it.copy(aiUsage = it.aiUsage.forMonth(month).record(r.costUsd, r.refused, now)) } }
         }
