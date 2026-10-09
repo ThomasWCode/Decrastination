@@ -84,6 +84,19 @@ class MergeTest {
     }
 
     @Test
+    fun `a task that reopens starts its round from where it reopened`() {
+        // First seen at none, done, reopened at 90 %, and done again.
+        val open = Merge.apply(emptyList(), Source.PowerPlanner, listOf(Fetched("p", "Essay", Kind.Homework, sourceProgress = 0.0)), t0).tasks
+        val done = Merge.apply(open, Source.PowerPlanner, listOf(Fetched("p", "Essay", Kind.Homework, sourceProgress = 1.0, done = true)), t0 + 1).tasks
+        val reopened = Merge.apply(done.map { it.copy(workedMin = 30) }, Source.PowerPlanner, listOf(Fetched("p", "Essay", Kind.Homework, sourceProgress = 0.9)), t0 + 2)
+        assertEquals(0.9, reopened.tasks.single().firstProgress)
+        assertEquals(0, reopened.tasks.single().workedMin)
+        val again = Merge.apply(reopened.tasks, Source.PowerPlanner, listOf(Fetched("p", "Essay", Kind.Homework, sourceProgress = 1.0, done = true)), t0 + 3)
+        // Rewarded for the last tenth, not the whole task again.
+        assertEquals(0.9, again.completed.single().sourceProgress)
+    }
+
+    @Test
     fun `a count that shrinks to nothing as it's worked through is rewarded for the most it was`() {
         fun quota(minutes: Int, done: Boolean = false) = Fetched(sourceId = "quota", title = "Anki", kind = Kind.Homework, sourceEffortMin = minutes, done = done, derived = true)
         val morning = Merge.apply(emptyList(), Source.Anki, listOf(quota(60)), t0).tasks
