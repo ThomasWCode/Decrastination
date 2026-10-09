@@ -10,10 +10,16 @@ import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.block.FocusService
 import com.thomaswcode.decrastination.block.TeamsAutoSync
 import com.thomaswcode.decrastination.core.Enrichments
+import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.data.Secret
 import com.thomaswcode.decrastination.enrich.ClaudeEnricher
 import com.thomaswcode.decrastination.enrich.Prompts
+import com.thomaswcode.decrastination.learn.Assessment
+import com.thomaswcode.decrastination.learn.Briefing
+import com.thomaswcode.decrastination.learn.CalendarTime
+import com.thomaswcode.decrastination.learn.CheckIns
+import com.thomaswcode.decrastination.learn.Review
 import com.thomaswcode.decrastination.protect.Watchdog
 import com.thomaswcode.decrastination.sync.SyncWorker
 import com.thomaswcode.decrastination.ui.OpenTaskActivity
@@ -42,6 +48,10 @@ import kotlinx.serialization.json.JsonPrimitive
  * - `protection [--ez repair true]`: runs the watchdog and logs what it found.
  * - `enrich`: enriches what's new or changed now (the rules, or the model if it's on) and logs
  *   who enriched what.
+ * - `briefing`, `check-in`, `review`: the morning briefing, the Sunday check-in's reminder, and
+ *   the week's review, now (the review learns the calibration from the log as Sunday's does).
+ * - `calendar`: reads the calendar now, and logs how many events take time, load days, or need asking.
+ * - `assess --es task <id>`: asks "how was it?" about that task, as a completion does.
  * - `ai-prompts --ei count 6`: writes `files/ai-prompts.json`, the exact prompts and schemas the
  *   model would get for up to that many tasks per job, for trying them out without the API (the
  *   file holds your tasks' text: pull it into the git-ignored `private/`, then delete it).
@@ -126,6 +136,21 @@ class CommandActivity : Activity() {
                 Log.i(TAG, "Enriched: " + open.groupingBy { it.enrichment?.by ?: "nothing" }.eachCount())
                 open.filter { it.subSteps.isNotEmpty() && it.enrichment?.subSteps != null }
                     .forEach { Log.i(TAG, "  ${it.title}: ${it.subSteps.joinToString(" | ") { s -> "${s.title} (${s.minutes})" }}") }
+            }
+            "briefing" -> Briefing.run(this).also { Log.i(TAG, "Briefing posted") }
+            "check-in" -> CheckIns.remind(this).also { Log.i(TAG, "Check-in reminder posted") }
+            "review" -> {
+                Review.run(this, ifDue = false)
+                Log.i(TAG, "Review: ${graph.log.value.reviews.lastOrNull()?.lines}; calibration ${graph.runtime.value.calibration}")
+            }
+            "calendar" -> {
+                CalendarTime.refresh(this)
+                val time = graph.calendarTime
+                Log.i(TAG, "Calendar: ${time.busy.size} busy, loads ${time.dayLoads}, ${time.toAsk.size} to ask about; allowed ${CalendarTime.allowed(this)}")
+            }
+            "assess" -> {
+                val task = graph.tasks.value.tasks.firstOrNull { it.id == intent.getStringExtra("task") }
+                if (task == null) Log.w(TAG, "assess needs --es task <id>") else Assessment.ask(this, listOf(task.copy(kind = Kind.Homework)))
             }
             "ai-prompts" -> {
                 val count = intent.getIntExtra("count", 6)

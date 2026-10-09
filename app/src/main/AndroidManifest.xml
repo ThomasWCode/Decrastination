@@ -27,6 +27,9 @@
     <!-- Asking One UI not to put the app to sleep. -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
+    <!-- The calendar as busy time (Q7): read only, never written. -->
+    <uses-permission android:name="android.permission.READ_CALENDAR" />
+
     <!-- A focus session ends on time even when the focus service isn't running: a timer's alarm. -->
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
     <uses-permission
@@ -132,6 +135,23 @@
             </intent-filter>
         </receiver>
 
+        <activity
+            android:name=".learn.CheckInActivity"
+            android:exported="false"
+            android:label="This week" />
+        <activity
+            android:name=".learn.AssessActivity"
+            android:exported="false"
+            android:label="How was it?" />
+        <receiver
+            android:name=".learn.DailyReceiver"
+            android:exported="false" />
+        <receiver
+            android:name=".learn.AssessmentReceiver"
+            android:exported="false" />
+        <receiver
+            android:name=".learn.EventAnswerReceiver"
+            android:exported="false" />
         <receiver
             android:name=".protect.WatchdogReceiver"
             android:exported="false" />

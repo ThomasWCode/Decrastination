@@ -24,9 +24,12 @@ import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.data.TaskState
 import com.thomaswcode.decrastination.enrich.AiUsage
 import com.thomaswcode.decrastination.enrich.ClaudeEnricher
+import com.thomaswcode.decrastination.enrich.ClaudeReviewer
 import com.thomaswcode.decrastination.enrich.EnrichWorker
 import com.thomaswcode.decrastination.enrich.Enricher
 import com.thomaswcode.decrastination.enrich.RuleEnricher
+import com.thomaswcode.decrastination.learn.Assessment
+import com.thomaswcode.decrastination.learn.CalendarTime
 import com.thomaswcode.decrastination.net.UrlConnectionHttp
 import com.thomaswcode.decrastination.protect.SettingsChanges
 import com.thomaswcode.decrastination.sources.anki.AnkiSource
@@ -85,8 +88,22 @@ class AppGraph private constructor(context: Context) {
     )
 
     /** The plan now, from the stored tasks and settings. Cheap: dozens of tasks. */
+    /** The calendar's busy time and per-day loads (Phase 5), as last read and judged. */
+    @Volatile
+    var calendarTime: com.thomaswcode.decrastination.learn.EventJudge.Time = com.thomaswcode.decrastination.learn.EventJudge.Time(emptyList(), emptyMap(), emptyList())
+
     fun plan(state: TaskState = tasks.value, settings: Settings = this.settings.value, now: Long = clock.now()): Plan =
-        Planner.plan(Planner.Input(state.tasks, now, clock.zone(), settings))
+        Planner.plan(
+            Planner.Input(
+                tasks = state.tasks,
+                now = now,
+                zone = clock.zone(),
+                settings = settings,
+                calibration = runtime.value.calibration,
+                busy = calendarTime.busy,
+                dayLoads = calendarTime.dayLoads,
+            ),
+        )
 
     /** The blocker's state and decisions (block/Focus.kt). */
     val focus = Focus(tasks, settings, runtime, log, clock) { state, s, now -> plan(state, s, now) }
@@ -166,12 +183,31 @@ class AppGraph private constructor(context: Context) {
      */
     private val teamsChanged = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
 
+    /** The calendar announces each change; it's read again once they stop. */
+    private val calendarChanged = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+
     init {
         // Work a source confirms done earns free time and is logged; what's new or changed is enriched.
         syncer.addListener { report ->
             focus.onCompleted(report.completed)
+            // "How was it?" for finished homework and revision.
+            Assessment.ask(app, report.completed)
             EnrichWorker.enqueue(app)
+            CalendarTime.refresh(app)
         }
+        scope.launch { CalendarTime.refresh(app) }
+        runCatching {
+            app.contentResolver.registerContentObserver(
+                android.provider.CalendarContract.Events.CONTENT_URI,
+                true,
+                object : ContentObserver(Handler(Looper.getMainLooper())) {
+                    override fun onChange(selfChange: Boolean) {
+                        calendarChanged.tryEmit(Unit)
+                    }
+                },
+            )
+        }.onFailure { Log.w(TAG, "Can't watch the calendar", it) }
+        scope.launch { calendarChanged.debounce(CALENDAR_QUIET_MS).collect { CalendarTime.refresh(app) } }
         // Switched on, the model goes over what only the rules have seen.
         scope.launch {
             settings.state.map { it.aiEnabled }.distinctUntilChanged().drop(1).collect { on -> if (on) EnrichWorker.enqueue(app) }
@@ -200,6 +236,13 @@ class AppGraph private constructor(context: Context) {
 
     /** The rules' enrichment: always there, and the fallback for the model. */
     private val rules = RuleEnricher()
+
+    /** The model's weekly review, while Claude is switched on and has its key; else null. */
+    fun modelReviewer(): ClaudeReviewer? {
+        val key = secrets[Secret.AnthropicApiKey]
+        if (!settings.value.aiEnabled || key.isNullOrBlank()) return null
+        return ClaudeReviewer(key)
+    }
 
     /** The model, while it's switched on and has its key; else null. */
     fun modelEnricher(): Enricher? {
@@ -258,6 +301,8 @@ class AppGraph private constructor(context: Context) {
         /** The widget sends a change for each step of a sync; read once they've stopped. */
         private const val TEAMS_QUIET_MS = 5_000L
         private const val WIDGET_DEBOUNCE_MS = 1_000L
+
+        private const val CALENDAR_QUIET_MS = 5_000L
 
         /** The most model calls one enrichment run makes: the rest wait for the next. */
         const val MAX_MODEL_CALLS = 20

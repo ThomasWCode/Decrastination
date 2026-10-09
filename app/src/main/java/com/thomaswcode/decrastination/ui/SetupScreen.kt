@@ -38,6 +38,8 @@ import com.thomaswcode.decrastination.data.Secret
 import com.thomaswcode.decrastination.data.SourceStatus
 import com.thomaswcode.decrastination.enrich.AiUsage
 import com.thomaswcode.decrastination.enrich.EnrichWorker
+import com.thomaswcode.decrastination.learn.CalendarTime
+import com.thomaswcode.decrastination.learn.CheckInActivity
 import com.thomaswcode.decrastination.protect.ProtectionActivity
 import com.thomaswcode.decrastination.sources.anki.AnkiProvider
 import com.thomaswcode.decrastination.sync.SyncWorker
@@ -60,6 +62,11 @@ fun SetupScreen(graph: AppGraph, activity: Activity) {
         if (granted) SyncWorker.syncNow(activity, setOf(Source.Anki))
     }
     val ankiAllowed = remember(refresh) { AnkiProvider.hasPermission(activity) }
+    val requestCalendar = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        refresh++
+        if (granted) scope.launch { CalendarTime.refresh(activity) }
+    }
+    val calendarAllowed = remember(refresh) { CalendarTime.allowed(activity) }
 
     Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
         SetupItem(
@@ -95,6 +102,18 @@ fun SetupScreen(graph: AppGraph, activity: Activity) {
                 else -> "On: £%.2f of £%d this month.".format(Locale.UK, usage.spentGbp(settings.usdToGbp), settings.aiMonthlyCapGbp)
             },
             action = "Enter key" to { enteringKey = true },
+        )
+        SetupItem(
+            title = "Calendar",
+            done = calendarAllowed,
+            detail = if (calendarAllowed) "Its events come off your free time: lessons take their slot, trains don't, and you're asked about all-day ones." else "Read only, so lessons and plans come off your free time.",
+            action = if (calendarAllowed) null else "Allow" to { requestCalendar.launch(CalendarTime.PERMISSION) },
+        )
+        SetupItem(
+            title = "This week",
+            done = null,
+            detail = "The Sunday check-in and the week's review.",
+            action = "Open" to { activity.startActivity(Intent(activity, CheckInActivity::class.java)) },
         )
         SetupItem(
             title = "Settings",

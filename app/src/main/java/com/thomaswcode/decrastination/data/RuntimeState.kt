@@ -3,10 +3,13 @@ package com.thomaswcode.decrastination.data
 import com.thomaswcode.decrastination.block.Credit
 import com.thomaswcode.decrastination.block.FocusSession
 import com.thomaswcode.decrastination.block.TeamsAutoSync
+import com.thomaswcode.decrastination.core.Calibration
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Uptime
 import com.thomaswcode.decrastination.enrich.AiUsage
+import com.thomaswcode.decrastination.learn.CheckIn
+import com.thomaswcode.decrastination.learn.DayRecord
 import com.thomaswcode.decrastination.protect.CodeLock
 import com.thomaswcode.decrastination.protect.PendingChange
 import kotlinx.serialization.Serializable
@@ -29,6 +32,12 @@ data class RuntimeState(
     val uptimeMark: Uptime? = null,
     /** What the model has cost this month. */
     val aiUsage: AiUsage = AiUsage(),
+    /** What the app has learned about how long things take you (docs/scheduler.md §5). */
+    val calibration: Calibration = Calibration(),
+    /** Your answers about calendar events, by name: "free", "busy" or "load:<minutes>" (Q7). */
+    val eventAnswers: Map<String, String> = emptyMap(),
+    /** Events you've been asked about, by name, so each is asked once. */
+    val eventsAsked: Set<String> = emptySet(),
 )
 
 /** The watchdog's last finding. */
@@ -57,14 +66,22 @@ data class ActivityLog(
     val completions: List<CompletionRecord> = emptyList(),
     val blocks: List<BlockRecord> = emptyList(),
     val protection: List<ProtectionRecord> = emptyList(),
+    /** Each day's plan as it stood in the morning, and how much of it got done. */
+    val days: List<DayRecord> = emptyList(),
+    val checkIns: List<CheckIn> = emptyList(),
+    val reviews: List<WeeklyReview> = emptyList(),
 ) {
     fun trimmed(now: Long): ActivityLog {
         val since = now - KEEP_DAYS * 24 * 3_600_000L
+        val sinceDay = java.time.Instant.ofEpochMilli(since).atZone(java.time.ZoneOffset.UTC).toLocalDate().toString()
         return ActivityLog(
-            sessions.filter { it.startedAt >= since },
-            completions.filter { it.doneAt >= since },
-            blocks.filter { it.at >= since },
-            protection.filter { it.at >= since },
+            sessions = sessions.filter { it.startedAt >= since },
+            completions = completions.filter { it.doneAt >= since },
+            blocks = blocks.filter { it.at >= since },
+            protection = protection.filter { it.at >= since },
+            days = days.filter { it.date >= sinceDay },
+            checkIns = checkIns.filter { it.at >= since },
+            reviews = reviews.filter { it.at >= since },
         )
     }
 
@@ -85,6 +102,8 @@ data class SessionRecord(
     val endedAt: Long,
     /** Ran its full length. */
     val completed: Boolean,
+    /** The box length its task was being cut into, for the box experiment; null for a step of its own. */
+    val box: Int? = null,
 )
 
 @Serializable
@@ -103,7 +122,13 @@ data class CompletionRecord(
     val doneAt: Long,
     /** Your answer to "how was it?": harder, as expected, easier (Phase 5). */
     val assessment: String? = null,
+    /** And the line you added, if any. */
+    val note: String? = null,
 )
+
+/** The Sunday review: what changed, in a few lines, and who wrote it (the rules or the model). */
+@Serializable
+data class WeeklyReview(val at: Long, val lines: List<String>, val by: String)
 
 @Serializable
 data class BlockRecord(val at: Long, val target: String, val reason: String)

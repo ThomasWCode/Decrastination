@@ -24,15 +24,16 @@ import com.thomaswcode.decrastination.block.FocusService
 import com.thomaswcode.decrastination.block.Sessions
 import com.thomaswcode.decrastination.data.ProtectionRecord
 import com.thomaswcode.decrastination.data.ProtectionState
+import com.thomaswcode.decrastination.learn.Daily
 import com.thomaswcode.decrastination.notify.Channels
 import com.thomaswcode.decrastination.notify.Notify
 import com.thomaswcode.decrastination.sync.SyncWorker
 import com.thomaswcode.decrastination.ui.MainActivity
+import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import java.util.concurrent.TimeUnit
 
 /**
  * Layer 5 of the anti-tamper (docs/scheduler.md §6): checks that the focus service is on, on no
@@ -293,6 +294,7 @@ class BootReceiver : BroadcastReceiver() {
             try {
                 SyncWorker.schedule(context)
                 WatchdogWorker.schedule(context)
+                Daily.schedule(context)
                 Sessions.restore(context)
                 Watchdog.check(context, repair = true)
             } finally {
