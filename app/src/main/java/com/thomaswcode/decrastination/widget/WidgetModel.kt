@@ -51,7 +51,7 @@ data class WidgetModel(
             return WidgetModel(
                 headline = next?.let { "Do: ${it.label}" } ?: "Nothing due",
                 badge = next?.let { badge(it, now, zone) },
-                urgent = next != null && (next.overdue || next.dueToday || next.behind),
+                urgent = next?.urgent == true,
                 minutes = next?.let { Format.minutes(it.minutes) },
                 then = plan.then?.let { "Then: ${it.label}" },
                 summary = when {
@@ -67,7 +67,7 @@ data class WidgetModel(
                 },
                 // After the next and the one after it, which have lines of their own.
                 list = shown.filterNot { it === next || it === plan.then }.take(LIST_MAX)
-                    .map { Line(it.label, Format.minutes(it.minutes), it.overdue || it.dueToday || it.behind, it.taskId) },
+                    .map { Line(it.label, Format.minutes(it.minutes), it.urgent, it.taskId) },
                 warning = protection(runtime, armed) ?: warning(state, now),
                 taskId = next?.taskId,
             )
