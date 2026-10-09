@@ -28,8 +28,6 @@ object PhotoChecks {
         } finally {
             withContext(NonCancellable + Dispatchers.IO) { photo.delete() }
         }
-        val now = graph.clock.now()
-        val month = AiUsage.monthOf(now, graph.clock.zone())
         // The cap checked and the cost recorded in one turn with every other model call.
         val result = graph.modelCalls.withLock {
             // Checked again here, just before sending: switched off, resting after a failed call
@@ -41,6 +39,9 @@ object PhotoChecks {
                 null -> Unit
             }
             val current = graph.photoChecker() ?: return OFF
+            // The month it's made in, as the cap was checked for: it may have waited past midnight.
+            val now = graph.clock.now()
+            val month = AiUsage.monthOf(now, graph.clock.zone())
             runCatching { current.check(jpeg, piece.label) }
                 .onFailure { e ->
                     Log.w(AppGraph.TAG, "The photo check failed", e)
@@ -51,6 +52,8 @@ object PhotoChecks {
         }
         val verdict = result.verdict ?: return "Claude couldn't say. Try a clearer photo."
         if (!verdict.done || verdict.confidence < PhotoChecker.ACCEPT) return "Not yet: ${verdict.reason}"
+        // A session on it started while this was checked (from another screen): that counts it.
+        if (graph.focus.session?.taskId == piece.taskId) return "Done, but a session on it started meanwhile: it counts the work when it ends. ${verdict.reason}"
         if (!graph.focus.photoChecked(piece.taskId, piece.step, piece.minutes)) return "Done, but it was already ticked off: ${verdict.reason}"
         return "Done: ${verdict.reason}"
     }

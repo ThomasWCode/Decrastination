@@ -43,6 +43,22 @@ object Briefing {
         return title to lines
     }
 
+    /**
+     * Today's record made again ([Days.replan]) after an answer about an event changed the plan.
+     * A day the briefing hasn't recorded yet has none to change: it's recorded as it is then.
+     */
+    suspend fun replanToday(context: Context) {
+        val graph = AppGraph.get(context)
+        val now = graph.clock.now()
+        val zone = graph.clock.zone()
+        val plan = graph.plan()
+        val ahead = Days.record(plan, zone).chunks
+        graph.log.update { log ->
+            val old = log.days.firstOrNull { it.date == plan.today.toString() && it.full == null } ?: return@update log
+            log.copy(days = log.days.map { if (it === old) Days.replan(old, ahead, log, now, zone) else it })
+        }
+    }
+
     suspend fun run(context: Context) {
         val graph = AppGraph.get(context)
         // The calendar read first: woken by its alarm, the app has had no time to read it yet.

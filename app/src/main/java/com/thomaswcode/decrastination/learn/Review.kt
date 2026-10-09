@@ -37,7 +37,7 @@ object Review {
         val learned = Calibrator.learn(graph.log.value, graph.runtime.value.calibration, graph.settings.value.boxMin, week = now / WEEK_MS, defaultMargin = graph.settings.value.marginDays)
         graph.runtime.update { it.copy(calibration = learned.calibration) }
         val findings = learned.changes + listOfNotNull(Days.capacityAdvice(graph.log.value.days, graph.focus.today(now)))
-        val model = runCatching { modelReview(graph, now) }
+        val model = runCatching { modelReview(graph, now, week) }
             .onFailure { Log.w(AppGraph.TAG, "The model's weekly review failed; the rules' stands", it) }
             .getOrElse { Outcome(why = "Claude's call failed") }
         // The rules' findings always stand: the model's note comes first, and they follow.
@@ -80,22 +80,24 @@ object Review {
      * The model's review, while Claude is on and under its cap: a note and bounded changes, the
      * changes applied through [AppGraph.changeSettings]. Otherwise why it couldn't be had.
      */
-    private suspend fun modelReview(graph: AppGraph, now: Long): Outcome {
+    private suspend fun modelReview(graph: AppGraph, now: Long, week: String): Outcome {
         val reviewer = graph.modelReviewer() ?: return Outcome(why = because(ModelHold.Off))
         val zone = graph.clock.zone()
-        val month = AiUsage.monthOf(now, zone)
-        val input = ReviewInput.describe(graph.log.value, graph.runtime.value.calibration, graph.settings.value, now, zone)
+        val input = ReviewInput.describe(graph.log.value, graph.runtime.value.calibration, graph.settings.value, now, zone, week)
         // The cap checked and the cost recorded in one turn with every other model call.
         val result = graph.modelCalls.withLock {
             // Checked again here, just before sending: switched off, resting after a failed call
             // (perhaps one made while this waited), or no room under the cap.
             graph.modelHold()?.let { return Outcome(why = because(it)) }
             val current = graph.modelReviewer() ?: return Outcome(why = because(ModelHold.Off))
+            // Counted in the month it's made in, as the cap was checked for.
+            val at = graph.clock.now()
+            val month = AiUsage.monthOf(at, zone)
             // A failure is recorded (Setup shows it; the model rests), then the rules' review stands.
             runCatching { current.review(input) }
-                .onFailure { e -> graph.runtime.update { it.copy(aiUsage = it.aiUsage.forMonth(month).failure(e.message ?: e.javaClass.simpleName, now)) } }
+                .onFailure { e -> graph.runtime.update { it.copy(aiUsage = it.aiUsage.forMonth(month).failure(e.message ?: e.javaClass.simpleName, at)) } }
                 .getOrThrow()
-                .also { r -> graph.runtime.update { it.copy(aiUsage = it.aiUsage.forMonth(month).record(r.costUsd, r.refused, now)) } }
+                .also { r -> graph.runtime.update { it.copy(aiUsage = it.aiUsage.forMonth(month).record(r.costUsd, r.refused, at)) } }
         }
         val answer = result.answer ?: return Outcome(why = if (result.refused) "Claude declined to review it" else "Claude's answer couldn't be used")
         val changes = answer.changes.filter(ReviewInput::allowed)
