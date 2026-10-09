@@ -193,7 +193,7 @@ class AppGraph private constructor(context: Context) {
             result == null -> "The Teams widget didn't answer"
             else -> when (result.getString(TeamsProvider.RESULT_REASON)) {
                 "service_off" -> "The Teams widget's sync service is off"
-                "busy" -> "The Teams widget is already syncing"
+                "busy" -> TEAMS_BUSY
                 else -> "The Teams widget didn't start a sync"
             }
         }
@@ -209,15 +209,18 @@ class AppGraph private constructor(context: Context) {
     init {
         // Disarmed (once the wait is over, or at once by a parent's code): the device admin goes
         // too, so uninstalling is allowed again, as the protection screen says. Checked at start as
-        // well as on each change, so a disarm the app stopped before seeing through is finished.
+        // well as on each change, so a disarm the app stopped before seeing through is finished,
+        // and so is an arming left part-way (the admin given, then the app stopped mid-wizard).
         scope.launch {
+            var starting = true
             settings.state.map { it.armed }.distinctUntilChanged().collect { armed ->
                 val wasArmed = runtime.value.adminArmed
                 if (armed && !wasArmed) runtime.update { it.copy(adminArmed = true) }
-                if (!armed && wasArmed) {
+                if (!armed && (wasArmed || (starting && Watchdog.isAdminActive(app)))) {
                     runCatching { app.getSystemService(DevicePolicyManager::class.java)?.removeActiveAdmin(Watchdog.admin(app)) }
                     runtime.update { it.copy(adminArmed = false) }
                 }
+                starting = false
             }
         }
         // Work a source confirms done earns free time and is logged.
@@ -356,6 +359,9 @@ class AppGraph private constructor(context: Context) {
 
     companion object {
         const val TAG = "Decrastination"
+
+        /** [requestTeamsSync]'s answer when the widget is syncing already: as good as one started. */
+        const val TEAMS_BUSY = "The Teams widget is already syncing"
 
         /** The widget sends a change for each step of a sync; read once they've stopped. */
         private const val TEAMS_QUIET_MS = 5_000L
