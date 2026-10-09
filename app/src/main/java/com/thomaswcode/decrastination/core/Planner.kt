@@ -55,6 +55,11 @@ object Planner {
         val dayCaps: Map<LocalDate, Int> = emptyMap(),
         /** Minutes of focus sessions and photo checks today: they come off today's limit, where there's one. */
         val workedTodayMin: Int = 0,
+        /**
+         * Times you said you can't work (instructions): off a day's time as [busy] is, and, like a
+         * day's limit, never overfilled, not even by overdue work.
+         */
+        val hardBusy: List<Busy> = emptyList(),
     )
 
     private const val MIN_CHUNK = 5
@@ -166,7 +171,10 @@ object Planner {
         // A start you gave (an instruction) places the work from then on, as a deck's next cards do;
         // a deck task's, from the earliest its assignments can start, where they all have one.
         fun startOf(task: TaskItem): Long? = task.userFrom ?: linked(task).takeIf { a -> a.isNotEmpty() && a.all { it.userFrom != null } }?.minOf { it.userFrom!! }
-        val items = work.map { t -> startOf(t)?.let { from -> t.copy(notBefore = listOfNotNull(t.notBefore, from).maxOrNull()) } ?: t }.flatMap { task ->
+        // A deck task's deadline: the earliest of its assignments' as they are now (a due date you gave included).
+        fun dueOf(task: TaskItem): Long? = linked(task).filterNot(::heldBack).mapNotNull { it.dueAt }.minOrNull() ?: task.dueAt
+        val items = work.map { t -> startOf(t)?.let { from -> t.copy(notBefore = listOfNotNull(t.notBefore, from).maxOrNull()) } ?: t }
+            .map { t -> if (linked(t).isEmpty()) t else t.copy(dueAt = dueOf(t)) }.flatMap { task ->
             val soft = task.dueAt == null
             // Calendar days where you are, so a week is a week across the clocks changing.
             val deadline = task.dueAt
@@ -241,11 +249,17 @@ object Planner {
         // Each item's minutes on its opening day, with its start: the time after a start is shared by
         // everything starting then or later that day (two tasks opening at 21:00 share one evening).
         val openingPlaced = HashMap<LocalDate, MutableList<Pair<Long, Int>>>()
+        fun capacityFrom(day: LocalDate, start: Long) = capacity(day, input.copy(now = start, workedTodayMin = if (day == today) input.workedTodayMin else 0))
         fun openingRoom(item: Item): Int {
             val day = opening(item) ?: return Int.MAX_VALUE
             val start = item.notBefore!!
-            val from = input.copy(now = start, workedTodayMin = if (day == today) input.workedTodayMin else 0)
-            return capacity(day, from) - openingPlaced[day].orEmpty().filter { it.first >= start }.sumOf { it.second }
+            val placedThere = openingPlaced[day].orEmpty()
+            val after = capacityFrom(day, start)
+            // What starts then or later uses this time; what starts earlier, as much as can't fit before it.
+            val later = placedThere.filter { it.first >= start }.sumOf { it.second }
+            val earlier = placedThere.filter { it.first < start }
+            val spill = if (earlier.isEmpty()) 0 else maxOf(0, earlier.sumOf { it.second } - (capacityFrom(day, earlier.minOf { it.first }) - after))
+            return after - later - spill
         }
         fun room(item: Item, day: LocalDate): Int {
             val left = free.getValue(day)
@@ -261,7 +275,9 @@ object Planner {
         fun give(item: Item, day: LocalDate, minutes: Int) = take(item, day, -minutes)
         // A day you've limited ([Input.dayCaps]) is never overfilled, not even by overdue work,
         // which otherwise piles into today: it goes to the next day with the time.
-        fun capped(day: LocalDate, minutes: Int) = day in input.dayCaps && free.getValue(day) < minutes
+        // Days you've limited: by a day's limit, or by busy times of yours within its hours.
+        val limited = input.dayCaps.keys + if (input.hardBusy.isEmpty()) emptySet() else days.filter { capacity(it, input) < capacity(it, input.copy(hardBusy = emptyList())) }
+        fun capped(day: LocalDate, minutes: Int) = day in limited && free.getValue(day) < minutes
         // The first day a task's work can start: today, or later if it says so (an Anki deck
         // whose new cards for today are used up).
         fun firstDay(item: Item): LocalDate =
@@ -336,7 +352,7 @@ object Planner {
             // and behind; except for undated work and a task limited per day, below.
             // Nor can work behind crowd into a first day you've limited: it too is done in order from
             // the first day with the time, so its steps keep their order.
-            val carriesOn = perDay != null || item.soft || earliest in input.dayCaps
+            val carriesOn = perDay != null || item.soft || earliest in limited
             for (i in item.chunks.indices.reversed()) {
                 if (assigned[i] != null) continue
                 val day = latest(assigned.getOrNull(i + 1) ?: lastUsable, i)
@@ -487,7 +503,7 @@ object Planner {
         val end = midnight.plusMinutes(window.endMin.toLong()).atZone(input.zone).toInstant().toEpochMilli()
         val start = maxOf(midnight.plusMinutes(window.startMin.toLong()).atZone(input.zone).toInstant().toEpochMilli(), minOf(end, input.now))
         if (end <= start) return 0
-        val clipped = input.busy.map { maxOf(start, it.start) to minOf(end, it.end) }.filter { it.second > it.first }.sortedBy { it.first }
+        val clipped = (input.busy + input.hardBusy).map { maxOf(start, it.start) to minOf(end, it.end) }.filter { it.second > it.first }.sortedBy { it.first }
         var taken = 0L
         var reached = start
         for ((from, to) in clipped) {

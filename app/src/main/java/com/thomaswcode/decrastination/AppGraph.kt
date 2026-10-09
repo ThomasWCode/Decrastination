@@ -140,14 +140,22 @@ class AppGraph private constructor(context: Context) {
         val today = java.time.Instant.ofEpochMilli(now).atZone(zone).toLocalDate()
         val applied = instructions.value.applied
         val reach = today.plusDays(PLAN_REACH_DAYS)
+        // Each task as its instructions say, whatever the task file (a stop between writing the two,
+        // not yet put right): the instructions are what's kept.
+        val overrides = Instructions.taskOverrides(applied)
+        val tasks = state.tasks.map { task ->
+            val o = overrides[task.id] ?: TaskOverrides.NONE
+            if (o == TaskOverrides(task.userNotATask, task.userFrom, task.userAfter, task.userDueAt)) task else task.withOverrides(o)
+        }
         return Planner.plan(
             Planner.Input(
-                tasks = state.tasks,
+                tasks = tasks,
                 now = now,
                 zone = zone,
                 settings = settings,
                 calibration = runtime.value.calibration,
-                busy = calendarTime.busy + Instructions.busy(applied, zone, today, reach),
+                busy = calendarTime.busy,
+                hardBusy = Instructions.busy(applied, zone, today, reach),
                 dayLoads = calendarTime.dayLoads,
                 dayCaps = Instructions.dayCaps(applied, today, reach),
                 workedTodayMin = workedToday(now, zone),
@@ -796,17 +804,36 @@ class AppGraph private constructor(context: Context) {
      * needs a parent code ([deleteInstructionWithCode]): armed, and it changed a due date, which
      * taking back changes again.
      */
-    suspend fun deleteInstruction(id: String): Boolean {
-        val instruction = instructions.value.instructions.firstOrNull { it.id == id } ?: return true
-        if (instruction.state == InstructionStatus.Applied && instructionNeedsCode(instruction)) return false
+    suspend fun deleteInstruction(id: String): Boolean = applying.withLock {
+        val instruction = instructions.value.instructions.firstOrNull { it.id == id } ?: return@withLock true
+        if (instruction.state == InstructionStatus.Applied && refuseTakingBack(instruction)) return@withLock true
+        if (instruction.state == InstructionStatus.Applied && instructionNeedsCode(instruction)) return@withLock false
         remove(id)
-        return true
+        true
     }
 
-    suspend fun deleteInstructionWithCode(id: String, code: String): String? {
-        useParentCode(code)?.let { return it }
+    suspend fun deleteInstructionWithCode(id: String, code: String): String? = applying.withLock {
+        instructions.value.instructions.firstOrNull { it.id == id }?.let { if (refuseTakingBack(it)) return@withLock null }
+        useParentCode(code)?.let { return@withLock it }
         remove(id)
-        return null
+        null
+    }
+
+    /**
+     * Taking [instruction] back would leave tasks waiting for each other in a circle (an older
+     * instruction it replaced coming back into force): it stays, saying so.
+     */
+    private suspend fun refuseTakingBack(instruction: Instruction): Boolean {
+        val rest = instructions.value.applied.filterNot { it.id == instruction.id }
+        if (!Instructions.makesCircle(emptyList(), rest)) return false
+        instructions.update { state ->
+            state.copy(
+                instructions = state.instructions.map {
+                    if (it.id == instruction.id) it.copy(note = "Taking this back would bring back an earlier instruction that has tasks waiting for each other in a circle: take that one back first") else it
+                },
+            )
+        }
+        return true
     }
 
     private suspend fun remove(id: String) {

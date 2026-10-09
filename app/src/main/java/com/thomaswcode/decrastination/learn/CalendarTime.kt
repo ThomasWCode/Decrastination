@@ -88,12 +88,17 @@ object CalendarTime {
         }
         graph.watchCalendar()
         val now = graph.clock.now()
-        val events = runCatching { withContext(Dispatchers.IO) { read(context, now - DAY_MS, now + LOOK_AHEAD_MS) } }
-            .onFailure { Log.w(AppGraph.TAG, "Can't read the calendar", it) }
-            .getOrNull() ?: return
         // Your instructions about events over your answers to its questions; a question one of them
         // has answered since it was asked is withdrawn.
         val yours = Instructions.eventAnswers(graph.instructions.value.applied)
+        val events = runCatching { withContext(Dispatchers.IO) { read(context, now - DAY_MS, now + LOOK_AHEAD_MS) } }
+            .onFailure { Log.w(AppGraph.TAG, "Can't read the calendar", it) }
+            .getOrNull() ?: run {
+            // Not read this time: the events last read, judged again with the answers as they are
+            // now, so an instruction applied or taken back counts all the same.
+            graph.calendarTime = EventJudge.time(graph.calendarTime.events, graph.runtime.value.eventAnswers + yours, graph.clock.zone())
+            return
+        }
         yours.keys.forEach { cancelQuestion(context, it) }
         // Not counted as asked: taken back, the instruction leaves it to be asked again.
         if (graph.runtime.value.eventsAsked.any { it in yours }) graph.runtime.update { it.copy(eventsAsked = it.eventsAsked - yours.keys) }

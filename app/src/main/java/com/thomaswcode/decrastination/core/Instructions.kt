@@ -133,12 +133,13 @@ object Instructions {
      */
     fun waiting(task: TaskItem, byId: Map<String, TaskItem>): Boolean {
         val first = task.userAfter ?: return false
-        if (byId[first]?.isOpen != true) return false
+        // Done, gone, or one you said isn't a task (it may stay open for ever): nothing to wait for.
+        if (byId[first]?.let { it.isOpen && !it.hidden } != true) return false
         val seen = hashSetOf(task.id)
         var next: String? = first
         while (next != null) {
             if (!seen.add(next)) return next != task.id
-            next = byId[next]?.takeIf { it.isOpen }?.userAfter
+            next = byId[next]?.takeIf { it.isOpen && !it.hidden }?.userAfter
         }
         return true
     }

@@ -154,6 +154,10 @@ fun InstructionContent(graph: AppGraph, instruction: Instruction, tasks: Map<Str
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             instruction.changes.forEach { Text("• " + Instructions.describe(it, tasks, zone), style = MaterialTheme.typography.bodyMedium) }
+            // Why taking it back was refused, where it was.
+            instruction.note?.takeIf { instruction.state == InstructionStatus.Applied }?.let {
+                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 4.dp))
+            }
         }
     }
     val needsCode = graph.instructionNeedsCode(instruction)
