@@ -18,7 +18,7 @@ package com.thomaswcode.decrastination.core
  * Sources throw rather than return a partial list, so "not listed" always means gone.
  */
 object Merge {
-    /** An email kept after it left the inbox, for its dated blocks still to do. */
+    /** An email kept after it left the inbox, for its blocks still to do. */
     const val EXTRA_FOLLOW_UP = "followUp"
 
 
@@ -111,7 +111,7 @@ object Merge {
                 f.done -> updated.copy(status = Status.Done)
                 // A new round of it: the last round's minutes count towards neither this one's
                 // completion record nor what's left of it.
-                else -> updated.copy(status = Status.Open, doneAt = null, workedMin = 0, photoMin = 0, firstProgress = f.sourceProgress).also { reopened += it }
+                else -> updated.copy(status = Status.Open, doneAt = null, workedMin = 0, photoMin = 0, handMin = 0, firstProgress = f.sourceProgress).also { reopened += it }
             }
             fresh[id] = next
         }
@@ -122,9 +122,10 @@ object Merge {
             when {
                 old.status != Status.Open -> old.takeIf { now - (old.doneAt ?: old.lastSeenAt) < KEEP_FINISHED_MS }
                 old.derived -> old.copy(status = Status.Missed).also { missed += it }
-                // An email whose dated blocks are still to do (applications that open later): archived,
-                // it stays on the list, marked as a follow-up, until they're done.
-                old.source == Source.Gmail && old.subSteps.any { !it.done && (it.from != null || it.dueAt != null) } ->
+                // An email whose blocks are still to do, dated by their own dates or by the email's
+                // (applications that open later, work due by its deadline): archived, it stays on the
+                // list, marked as a follow-up, until they're done.
+                old.source == Source.Gmail && old.subSteps.any { !it.done && (it.from != null || it.dueAt != null || old.dueAt != null) } ->
                     old.copy(extra = old.extra + (EXTRA_FOLLOW_UP to "true"))
                 else -> old.copy(status = Status.Done, doneAt = now).also { completed += completion(old, it) }
             }

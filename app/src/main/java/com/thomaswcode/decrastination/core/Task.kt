@@ -101,6 +101,11 @@ data class TaskItem(
      * weren't timed, so they're kept apart from it and out of what the app learns from timing.
      */
     val photoMin: Int = 0,
+    /**
+     * Minutes of blocks you ticked off by hand in Tasks: done, but neither timed nor checked, so
+     * they earn no free time when the task completes and teach the calibration nothing.
+     */
+    val handMin: Int = 0,
     /** The sessions counted in [workedMin], by start time, so each is counted once. */
     val sessionsCounted: List<Long> = emptyList(),
     /** The photo checks counted in [photoMin], by id, with the minutes each was given, so each is counted once. */

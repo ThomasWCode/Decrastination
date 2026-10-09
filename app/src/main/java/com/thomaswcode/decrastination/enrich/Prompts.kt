@@ -205,14 +205,15 @@ object Answers {
         when (job) {
             Enrichments.Job.Email -> json.decodeFromString(Triage.serializer(), text).let { t ->
                 val total = effort(t.effortMin)
+                val deadline = t.deadline?.let { dateTime(it, zone) }?.takeIf { plausible(it, now) }
                 // Blocks of work, each perhaps with its own dates (Q12): not trusted, the triage stands
                 // without them.
-                val blocks = trusted(steps(t.blocks, now, zone, vocabulary = false, maxMinutes = MAX_EFFORT), total)
+                val blocks = trusted(steps(t.blocks, now, zone, vocabulary = false, maxMinutes = MAX_EFFORT, dueBy = deadline ?: sourceDue(task)), t.effortMin)
                 base.copy(
                     // Blocks of work make it something to do, whatever else it says.
                     kind = if (blocks != null) Kind.Admin else Kind.entries.firstOrNull { it.name == t.kind && it in setOf(Kind.Admin, Kind.Event, Kind.Info) },
                     actionableFrom = t.actionableFrom?.let { date(it, zone, LocalTime.MIDNIGHT) }?.takeIf { plausible(it, now) },
-                    deadline = t.deadline?.let { dateTime(it, zone) }?.takeIf { plausible(it, now) },
+                    deadline = deadline,
                     effortMin = blocks?.sumOf { it.minutes } ?: total,
                     nextStep = t.nextStep.trim().takeIf { it.isNotEmpty() }?.take(MAX_NEXT_STEP),
                     subSteps = blocks,
@@ -221,7 +222,7 @@ object Answers {
             Enrichments.Job.Assignment -> json.decodeFromString(Split.serializer(), text).let { s ->
                 // One step it can't take (no title, minutes or a date out of range) and the split isn't
                 // trusted: the task's whole estimate is planned instead, none of it lost with that step.
-                val read = steps(s.subSteps, now, zone, vocabulary = true, maxMinutes = MAX_STEP)
+                val read = steps(s.subSteps, now, zone, vocabulary = true, maxMinutes = MAX_STEP, dueBy = sourceDue(task))
                 val usable = read != null
                 val valid = read.orEmpty()
                 // More steps than the planner takes: the rest become one last step, so none of the work
@@ -265,7 +266,7 @@ object Answers {
             Enrichments.Job.Effort -> json.decodeFromString(Estimate.serializer(), text).let { e ->
                 val total = effort(e.effortMin)
                 // Big enough to do in parts: its blocks, each perhaps with its own dates (Q12).
-                val blocks = trusted(steps(e.blocks, now, zone, vocabulary = false, maxMinutes = MAX_EFFORT), total)
+                val blocks = trusted(steps(e.blocks, now, zone, vocabulary = false, maxMinutes = MAX_EFFORT, dueBy = sourceDue(task)), e.effortMin)
                 base.copy(effortMin = blocks?.sumOf { it.minutes } ?: total, subSteps = blocks)
             }
         }
@@ -273,17 +274,18 @@ object Answers {
 
     /**
      * [given] as steps the planner can take, or null if any can't be: no title, minutes out of
-     * range (up to [maxMinutes]), a date out of range or a start after its own deadline. Each keeps its own dates; one
+     * range (up to [maxMinutes]), a date out of range, or a start after its own deadline or after
+     * its task's ([dueBy]). Each keeps its own dates; one
      * longer than a focus session is cut into parts that keep them, so finishing a session never
      * ticks off more than it did. A step tagged as vocabulary ([vocabulary] jobs only) that asks for
      * anything else too stays planned whole.
      */
-    private fun steps(given: List<Step>, now: Long, zone: ZoneId, vocabulary: Boolean, maxMinutes: Int): List<SubStep>? {
+    private fun steps(given: List<Step>, now: Long, zone: ZoneId, vocabulary: Boolean, maxMinutes: Int, dueBy: Long?): List<SubStep>? {
         val read = given.map { step ->
             if (step.title.isBlank() || step.minutes !in 1..maxMinutes) return null
             val from = step.from?.let { date(it, zone, LocalTime.MIDNIGHT)?.takeIf { at -> plausible(at, now) } ?: return null }
             val due = step.due?.let { dateTime(it, zone)?.takeIf { at -> plausible(at, now) } ?: return null }
-            if (from != null && due != null && from > due) return null
+            if (from != null && ((due != null && from > due) || (dueBy != null && from > dueBy))) return null
             val sections = if (vocabulary && AnkiRules.vocabularyOnly(step.title)) sections(step.ankiSections) else emptyList()
             SubStep(step.title.trim().take(MAX_TITLE), step.minutes, ankiSections = sections, from = from, dueAt = due)
         }
@@ -292,16 +294,18 @@ object Answers {
 
     /**
      * An email's or planner item's [blocks], if they can be planned: some, no more than [MAX_BLOCKS],
-     * within the most one task is taken to be, and adding up to its [total] where it gives
-     * one (within a tenth, or ten minutes). Otherwise null, and its estimate is planned whole.
+     * within the most one task is taken to be, and adding up to its [total] (within a tenth, or ten
+     * minutes), which has to be one itself. Otherwise null, and its estimate is planned whole.
      */
-    private fun trusted(blocks: List<SubStep>?, total: Int?): List<SubStep>? {
-        if (blocks.isNullOrEmpty() || blocks.size > MAX_BLOCKS) return null
+    private fun trusted(blocks: List<SubStep>?, total: Int): List<SubStep>? {
+        if (blocks.isNullOrEmpty() || blocks.size > MAX_BLOCKS || total !in 1..MAX_EFFORT) return null
         val sum = blocks.sumOf { it.minutes }
-        if (sum > MAX_EFFORT) return null
-        if (total != null && abs(sum - total) > maxOf(STEPS_SLACK_MIN, total / 10)) return null
+        if (sum > MAX_EFFORT || abs(sum - total) > maxOf(STEPS_SLACK_MIN, total / 10)) return null
         return blocks
     }
+
+    /** What [task]'s source says it's due by, not what an older enrichment laid over it. */
+    private fun sourceDue(task: TaskItem): Long? = if (task.sourceValues != null) task.sourceValues.dueAt else task.dueAt
 
     private fun effort(minutes: Int): Int? = minutes.takeIf { it in 1..MAX_EFFORT }
 

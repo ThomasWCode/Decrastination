@@ -283,6 +283,19 @@ class AnswersTest {
     }
 
     @Test
+    fun `blocks with a total out of range, or starting after their task is due, aren't trusted`() {
+        val wild = parse(Enrichments.Job.Effort, """{"effortMin":999,"blocks":[{"title":"A","minutes":30,"from":null,"due":null}]}""")!!
+        assertNull(wild.subSteps)
+        assertNull(wild.effortMin)
+        // The email due on the 15th; a block opening on the 20th can't be done by then.
+        val late = parse(
+            Enrichments.Job.Email,
+            """{"kind":"Admin","actionableFrom":null,"deadline":"2026-10-15","effortMin":60,"nextStep":"Apply","blocks":[{"title":"Apply","minutes":60,"from":"2026-10-20","due":null}]}""",
+        )!!
+        assertNull(late.subSteps)
+    }
+
+    @Test
     fun `a planner item can come back in blocks too`() {
         val e = parse(Enrichments.Job.Effort, """{"effortMin":120,"blocks":[{"title":"Past paper 1","minutes":60,"from":null,"due":null},{"title":"Mark it and go over mistakes","minutes":60,"from":null,"due":null}]}""")!!
         assertEquals(listOf("Past paper 1", "Mark it and go over mistakes"), e.subSteps!!.map { it.title })

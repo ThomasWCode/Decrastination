@@ -100,7 +100,7 @@ private fun TaskRow(task: TaskItem, now: Long, zone: java.time.ZoneId, tick: (Ta
             Text("Hidden from the plan until ${Format.at(it, now, zone)}", style = MaterialTheme.typography.bodySmall)
         }
         if (task.isOpen && task.extra[Merge.EXTRA_FOLLOW_UP] == "true") {
-            Text("Archived in Gmail: kept for its dated blocks till they're done", style = MaterialTheme.typography.bodySmall)
+            Text("Archived in Gmail: kept for its blocks till they're done", style = MaterialTheme.typography.bodySmall)
         }
         if (expanded) {
             // The enrichment's step only while it's of the email as it is: a new message's own rules' step otherwise.
