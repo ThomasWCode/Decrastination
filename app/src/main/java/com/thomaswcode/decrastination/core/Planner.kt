@@ -176,7 +176,8 @@ object Planner {
                 val day = latest(assigned.getOrNull(i + 1) ?: lastUsable, i)
                 val chosen = day ?: when {
                     perDay == null && !item.soft -> earliest
-                    perDay != null -> generateSequence(earliest) { it.plusDays(1) }.takeWhile { it <= horizon }.firstOrNull { countOn(assigned, it) < perDay }
+                    // A per-day step goes on to the first later day with both a step and the time free.
+                    perDay != null -> generateSequence(lastUsable.plusDays(1)) { it.plusDays(1) }.takeWhile { it <= horizon }.firstOrNull { fits(it, i) }
                     else -> generateSequence(lastUsable.plusDays(1)) { it.plusDays(1) }.takeWhile { it <= horizon }.firstOrNull { fits(it, i) } ?: horizon
                 }
                 // A per-day task with no day left within the horizon: the rest goes unplanned.

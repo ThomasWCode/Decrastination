@@ -78,7 +78,15 @@ class AppGraph private constructor(context: Context) {
      * widget's change notifications.
      */
     fun refreshAll(teams: Boolean) {
-        if (teams) scope.launch { requestTeamsSync() }
+        if (teams) {
+            scope.launch {
+                // Refused (its service off, already syncing): say so where the widget shows it.
+                // The next read of Teams replaces the note with the widget's own state.
+                requestTeamsSync()?.let { reason ->
+                    tasks.update { state -> state.copy(sources = state.sources + (Source.Teams to state.status(Source.Teams).copy(note = reason))) }
+                }
+            }
+        }
         SyncWorker.syncNow(app)
     }
 
