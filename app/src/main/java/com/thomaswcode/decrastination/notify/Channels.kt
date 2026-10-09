@@ -9,6 +9,7 @@ object Channels {
     const val SYNC = "sync"
     const val SESSION = "session"
     const val PROTECTION = "protection"
+    const val DAILY = "daily"
 
     fun create(context: Context) {
         val manager = context.getSystemService(NotificationManager::class.java) ?: return
@@ -22,6 +23,9 @@ object Channels {
                 },
                 NotificationChannel(PROTECTION, "Protection", NotificationManager.IMPORTANCE_HIGH).apply {
                     description = "When blocking is off: the focus service switched off, or protection weakened"
+                },
+                NotificationChannel(DAILY, "Plan and check-ins", NotificationManager.IMPORTANCE_DEFAULT).apply {
+                    description = "The morning briefing, how finished work went, calendar questions, and the Sunday check-in"
                 },
             ),
         )

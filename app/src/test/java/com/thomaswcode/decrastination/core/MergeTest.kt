@@ -106,6 +106,18 @@ class MergeTest {
     }
 
     @Test
+    fun `a reopened task's minutes start again, a new round of it`() {
+        val open = first(fetched("a"))
+        val worked = listOf(open.single().copy(workedMin = 40))
+        val done = Merge.apply(worked, Source.Teams, listOf(fetched("a", done = true)), t0 + 1).tasks
+        val again = Merge.apply(done, Source.Teams, listOf(fetched("a")), t0 + 2)
+        assertEquals(listOf("teams:a"), again.reopened.map { it.id })
+        assertEquals(0, again.tasks.single().workedMin)
+        // Its progress baseline is where it reopened.
+        assertEquals(0.0, again.tasks.single().firstProgress)
+    }
+
+    @Test
     fun `steps ticked off here stay ticked while the source sends the same ones`() {
         fun deck(vararg steps: String) = Fetched(sourceId = "deck:1", title = "Deck", kind = Kind.Homework, derived = true, subSteps = steps.map { SubStep(it, 9) })
         val stored = Merge.apply(emptyList(), Source.Anki, listOf(deck("20 new cards", "20 new cards", "5 new cards")), t0).tasks

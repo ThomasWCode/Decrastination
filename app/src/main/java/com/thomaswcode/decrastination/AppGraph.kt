@@ -26,9 +26,14 @@ import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.data.TaskState
 import com.thomaswcode.decrastination.enrich.AiUsage
 import com.thomaswcode.decrastination.enrich.ClaudeEnricher
+import com.thomaswcode.decrastination.enrich.ClaudeReviewer
 import com.thomaswcode.decrastination.enrich.EnrichWorker
 import com.thomaswcode.decrastination.enrich.Enricher
+import com.thomaswcode.decrastination.enrich.ModelHold
+import com.thomaswcode.decrastination.enrich.PhotoChecker
 import com.thomaswcode.decrastination.enrich.RuleEnricher
+import com.thomaswcode.decrastination.learn.Assessment
+import com.thomaswcode.decrastination.learn.CalendarTime
 import com.thomaswcode.decrastination.net.UrlConnectionHttp
 import com.thomaswcode.decrastination.protect.SettingsChanges
 import com.thomaswcode.decrastination.protect.Watchdog
@@ -91,8 +96,27 @@ class AppGraph private constructor(context: Context) {
     )
 
     /** The plan now, from the stored tasks and settings. Cheap: dozens of tasks. */
+    /** The calendar's busy time and per-day loads (Phase 5), as last read and judged. */
+    @Volatile
+    /** The calendar as the planner counts it, from its last read: a plan made before that read is dropped with it. */
+    var calendarTime: com.thomaswcode.decrastination.learn.EventJudge.Time = com.thomaswcode.decrastination.learn.EventJudge.Time(emptyList(), emptyMap(), emptyList())
+        set(value) {
+            field = value
+            focus.forgetPlan()
+        }
+
     fun plan(state: TaskState = tasks.value, settings: Settings = this.settings.value, now: Long = clock.now()): Plan =
-        Planner.plan(Planner.Input(state.tasks, now, clock.zone(), settings))
+        Planner.plan(
+            Planner.Input(
+                tasks = state.tasks,
+                now = now,
+                zone = clock.zone(),
+                settings = settings,
+                calibration = runtime.value.calibration,
+                busy = calendarTime.busy,
+                dayLoads = calendarTime.dayLoads,
+            ),
+        )
 
     /** The blocker's state and decisions (block/Focus.kt). */
     val focus = Focus(tasks, settings, runtime, log, clock) { state, s, now -> plan(state, s, now) }
@@ -103,6 +127,12 @@ class AppGraph private constructor(context: Context) {
      * so each change finishes before the next reads them.
      */
     private val changing = Mutex()
+
+    /**
+     * Held for each call to the model, from checking it's under the cap to recording what it cost:
+     * the enrichment, the weekly review and the photo check can't together pass the cap.
+     */
+    val modelCalls = Mutex()
 
     /**
      * Changes the settings as [change] says, from what's been asked for (the settings with what's
@@ -206,6 +236,31 @@ class AppGraph private constructor(context: Context) {
      */
     private val teamsChanged = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
 
+    /** The calendar announces each change; it's read again once they stop. */
+    private val calendarChanged = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+
+    private var calendarWatched = false
+
+    /**
+     * Watches the calendar for changes, once it may be read: at start, and at each read of it
+     * after (so allowing it later, in Setup or Android's settings, starts the watching too).
+     */
+    @Synchronized
+    fun watchCalendar() {
+        if (calendarWatched || !CalendarTime.allowed(app)) return
+        runCatching {
+            app.contentResolver.registerContentObserver(
+                android.provider.CalendarContract.Events.CONTENT_URI,
+                true,
+                object : ContentObserver(Handler(Looper.getMainLooper())) {
+                    override fun onChange(selfChange: Boolean) {
+                        calendarChanged.tryEmit(Unit)
+                    }
+                },
+            )
+        }.onSuccess { calendarWatched = true }.onFailure { Log.w(TAG, "Can't watch the calendar", it) }
+    }
+
     init {
         // Disarmed (once the wait is over, or at once by a parent's code): the device admin goes
         // too, so uninstalling is allowed again, as the protection screen says. Checked at start as
@@ -223,20 +278,27 @@ class AppGraph private constructor(context: Context) {
                 starting = false
             }
         }
-        // Work a source confirms done earns free time and is logged.
-        // A session on a task the sync found done ends with it, and so do its notification and alarm.
-        syncer.addListener { if (focus.rewardCompletions()) Sessions.clear(app) }
+        // Work a source confirms done earns free time, is logged and asked about.
+        syncer.addListener {
+            settleCompletions()
+            CalendarTime.refresh(app)
+        }
         // Any a stop left ungiven: completions, and sessions' endings.
         scope.launch {
             focus.finishSessions()
-            if (focus.rewardCompletions()) Sessions.clear(app)
+            focus.finishPhotos()
+            settleCompletions()
         }
+        // "How was it?" questions kept while notifications were off, once they're on.
+        syncer.addAfterEverySync { Assessment.askLater(app) }
         // What's new or changed, even in place, is enriched.
         syncer.addAfterEverySync {
             val modelOn = modelAvailable()
             val modelOff = claudeKey() == null
             if (tasks.value.tasks.any { Enrichments.jobFor(it) != null && Enrichments.stale(it, modelOn, RuleEnricher.BY, modelOff) }) EnrichWorker.enqueue(app)
         }
+        scope.launch { CalendarTime.refresh(app) }
+        scope.launch { calendarChanged.debounce(CALENDAR_QUIET_MS).collect { CalendarTime.refresh(app) } }
         // Anki's deadline or textbook changed (saved, or a waiting change fallen due): its tasks are
         // made with them, so it's read again now.
         scope.launch {
@@ -273,8 +335,26 @@ class AppGraph private constructor(context: Context) {
         }
     }
 
+    /**
+     * The completions syncs saved: free time and the log, then "How was it?" for finished homework
+     * and revision (asked, or kept till notifications show), and only then off the queue, so a stop
+     * part-way loses neither. A session on one ends with it, and so do its notification and alarm.
+     */
+    private suspend fun settleCompletions() {
+        val stopped = focus.rewardCompletions { completed ->
+            runCatching { Assessment.ask(app, completed) }.onFailure { Log.w(TAG, "Couldn't ask how the work went", it) }
+        }
+        if (stopped) Sessions.clear(app)
+    }
+
     /** The rules' enrichment: always there, and the fallback for the model. */
     private val rules = RuleEnricher()
+
+    /** The photo check, while Claude is switched on and has its key; else null. */
+    fun photoChecker(): PhotoChecker? = claudeKey()?.let(::PhotoChecker)
+
+    /** The model's weekly review, while Claude is switched on and has its key; else null. */
+    fun modelReviewer(): ClaudeReviewer? = claudeKey()?.let(::ClaudeReviewer)
 
     /** The model, while it's switched on and has its key; else null. */
     /** Claude's API key, while Claude is switched on and the key is in use; else null. */
@@ -287,18 +367,20 @@ class AppGraph private constructor(context: Context) {
     fun modelEnricher(): Enricher? = claudeKey()?.let { ClaudeEnricher(it, clock.zone()) }
 
     /**
+     * What stops the model being asked now ([ModelHold]), or null: off, resting after a failed
+     * call, or no room under the cap. Each call checks it under [modelCalls] just before sending.
+     */
+    fun modelHold(): ModelHold? {
+        val s = settings.value
+        return ModelHold.of(claudeKey() != null, runtime.value.aiUsage, clock.now(), clock.zone(), s.aiMonthlyCapGbp, s.usdToGbp)
+    }
+
+    /**
      * Whether the model can be asked now: on with its key in use, not resting after a failed call,
      * and with room under this month's cap for another. When it can't, what only the rules have
      * seen isn't due for it, so it isn't redone every sync while the cap is used up.
      */
-    fun modelAvailable(): Boolean {
-        if (claudeKey() == null) return false
-        val now = clock.now()
-        val usage = runtime.value.aiUsage
-        if (usage.lastError != null && now - (usage.lastCallAt ?: 0L) < MODEL_REST_MS) return false
-        val s = settings.value
-        return usage.forMonth(AiUsage.monthOf(now, clock.zone())).allows(s.aiMonthlyCapGbp, s.usdToGbp)
-    }
+    fun modelAvailable(): Boolean = modelHold() == null
 
     /**
      * Enriches every task that's new or changed since it was last enriched, and, while the model is
@@ -326,21 +408,29 @@ class AppGraph private constructor(context: Context) {
             val job = Enrichments.jobFor(task) ?: continue
             if (!Enrichments.stale(task, enricher != null, RuleEnricher.BY, modelOff = claudeKey() == null)) continue
             val now = clock.now()
-            val month = AiUsage.monthOf(now, clock.zone())
-            val s = settings.value
             // Switched off (or its key removed) while this runs: nothing more is sent.
             if (claudeKey() == null) enricher = null
-            val useModel = enricher != null && calls < MAX_MODEL_CALLS && runtime.value.aiUsage.forMonth(month).allows(s.aiMonthlyCapGbp, s.usdToGbp)
-            var enrichment = if (useModel) {
+            var enrichment = if (enricher != null && calls < MAX_MODEL_CALLS) modelCalls.withLock call@{
+                // Checked again under the lock, just before sending, so every other call counts:
+                // switched off, resting after a failed call (one made while this waited), or no
+                // room under the cap. The rules then do the rest of the run.
+                if (modelHold() != null) {
+                    enricher = null
+                    return@call null
+                }
                 calls++
+                // Counted in the month it's made in, as the cap was checked for: it may have
+                // waited for the lock past midnight.
+                val at = clock.now()
+                val month = AiUsage.monthOf(at, clock.zone())
                 val result = runCatching { enricher!!.enrich(task, job, now) }
                     .onFailure { error ->
                         Log.w(TAG, "The model's enrichment failed; the rules stand in", error)
-                        runtime.update { it.copy(aiUsage = it.aiUsage.forMonth(month).failure(error.message ?: error.javaClass.simpleName, now)) }
+                        runtime.update { it.copy(aiUsage = it.aiUsage.forMonth(month).failure(error.message ?: error.javaClass.simpleName, at)) }
                         enricher = null
                     }
                     .getOrNull()
-                result?.let { r -> runtime.update { it.copy(aiUsage = it.aiUsage.forMonth(month).record(r.costUsd, r.refused, now)) } }
+                result?.let { r -> runtime.update { it.copy(aiUsage = it.aiUsage.forMonth(month).record(r.costUsd, r.refused, at)) } }
                 when {
                     result?.enrichment != null -> result.enrichment
                     // Declined, or no answer it could read: the rules' say, under the model's name.
@@ -382,8 +472,9 @@ class AppGraph private constructor(context: Context) {
         private const val TEAMS_QUIET_MS = 5_000L
         private const val WIDGET_DEBOUNCE_MS = 1_000L
 
+        private const val CALENDAR_QUIET_MS = 5_000L
+
         /** After a failed call, the model is left alone this long. */
-        private const val MODEL_REST_MS = 3_600_000L
 
         /** The most model calls one enrichment run makes: the rest wait for the next. */
         const val MAX_MODEL_CALLS = 20

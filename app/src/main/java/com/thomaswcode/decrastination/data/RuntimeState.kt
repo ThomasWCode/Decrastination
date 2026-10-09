@@ -3,10 +3,13 @@ package com.thomaswcode.decrastination.data
 import com.thomaswcode.decrastination.block.Credit
 import com.thomaswcode.decrastination.block.FocusSession
 import com.thomaswcode.decrastination.block.TeamsAutoSync
+import com.thomaswcode.decrastination.core.Calibration
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Uptime
 import com.thomaswcode.decrastination.enrich.AiUsage
+import com.thomaswcode.decrastination.learn.CheckIn
+import com.thomaswcode.decrastination.learn.DayRecord
 import com.thomaswcode.decrastination.protect.CodeLock
 import com.thomaswcode.decrastination.protect.PendingChange
 import kotlinx.serialization.Serializable
@@ -18,10 +21,16 @@ data class RuntimeState(
     val session: FocusSession? = null,
     /** Sessions ended whose due (the task's minutes and step, the log, free time) isn't all given yet. */
     val finishing: List<EndedSession> = emptyList(),
+    /** Photo checks found done whose due (the task's step or minutes, the log, free time) isn't all given yet. */
+    val photosDone: List<PhotoDone> = emptyList(),
     /** Loosening changes waiting their delay. */
     val pending: List<PendingChange> = emptyList(),
     /** A parent code unblocked everything until then. */
     val overrideUntil: Long? = null,
+    /** When each of the daily alarms (briefing, check-in, review) last ran, so a late one isn't run twice. */
+    val dailyRanAt: Map<String, Long> = emptyMap(),
+    /** Daily alarms whose last run failed, to be tried again ([DailyRetry]). */
+    val dailyRetries: Map<String, DailyRetry> = emptyMap(),
     /** Whether the device admin was last left for an armed phone, so a disarm the app didn't see through is finished at start. */
     val adminArmed: Boolean = false,
     val codeLock: CodeLock = CodeLock(),
@@ -33,6 +42,14 @@ data class RuntimeState(
     val uptimeMark: Uptime? = null,
     /** What the model has cost this month. */
     val aiUsage: AiUsage = AiUsage(),
+    /** What the app has learned about how long things take you (docs/scheduler.md §5). */
+    val calibration: Calibration = Calibration(),
+    /** Your answers about calendar events, by name: "free", "busy" or "load:<minutes>" (Q7). */
+    val eventAnswers: Map<String, String> = emptyMap(),
+    /** Events you've been asked about, by name, so each is asked once. */
+    val eventsAsked: Set<String> = emptySet(),
+    /** "How was it?" questions kept while notifications couldn't be seen, to ask once they can. */
+    val assessLater: List<AssessLater> = emptyList(),
     /** Completions whose free time has been given, so each is given once (`Focus.onCompleted`); kept a fortnight. */
     val rewarded: List<Rewarded> = emptyList(),
 )
@@ -63,14 +80,22 @@ data class ActivityLog(
     val completions: List<CompletionRecord> = emptyList(),
     val blocks: List<BlockRecord> = emptyList(),
     val protection: List<ProtectionRecord> = emptyList(),
+    /** Each day's plan as it stood in the morning, and how much of it got done. */
+    val days: List<DayRecord> = emptyList(),
+    val checkIns: List<CheckIn> = emptyList(),
+    val reviews: List<WeeklyReview> = emptyList(),
 ) {
     fun trimmed(now: Long): ActivityLog {
         val since = now - KEEP_DAYS * 24 * 3_600_000L
+        val sinceDay = java.time.Instant.ofEpochMilli(since).atZone(java.time.ZoneOffset.UTC).toLocalDate().toString()
         return ActivityLog(
-            sessions.filter { it.startedAt >= since },
-            completions.filter { it.doneAt >= since },
-            blocks.filter { it.at >= since },
-            protection.filter { it.at >= since },
+            sessions = sessions.filter { it.startedAt >= since },
+            completions = completions.filter { it.doneAt >= since },
+            blocks = blocks.filter { it.at >= since },
+            protection = protection.filter { it.at >= since },
+            days = days.filter { it.date >= sinceDay },
+            checkIns = checkIns.filter { it.at >= since },
+            reviews = reviews.filter { it.at >= since },
         )
     }
 
@@ -91,6 +116,12 @@ data class SessionRecord(
     val endedAt: Long,
     /** Ran its full length. */
     val completed: Boolean,
+    /** The box length its task was being cut into, for the box experiment; null for a step of its own. */
+    val box: Int? = null,
+    /** Work a photo check found done, not a timed session: counted as the day's work, not as a session. */
+    val photo: Boolean = false,
+    /** The photo check it records ([PhotoDone.id]), so finishing it again doesn't record it twice. */
+    val check: String? = null,
 )
 
 @Serializable
@@ -109,6 +140,20 @@ data class CompletionRecord(
     val doneAt: Long,
     /** Your answer to "how was it?": harder, as expected, easier (Phase 5). */
     val assessment: String? = null,
+    /** And the line you added, if any. */
+    val note: String? = null,
+)
+
+/** The Sunday review: what changed, in a few lines, and who wrote it (the rules or the model). */
+@Serializable
+data class WeeklyReview(
+    val at: Long,
+    val lines: List<String>,
+    val by: String,
+    /** The week it reviewed (its Monday), so each week has one, whenever the check-in is moved to. */
+    val week: String? = null,
+    /** Why the rules wrote it, not Claude: off, resting, at its cap, or no answer that could be used. */
+    val why: String? = null,
 )
 
 @Serializable
@@ -121,6 +166,18 @@ data class ProtectionRecord(val at: Long, val problems: List<String>, val repair
 @Serializable
 data class Rewarded(val taskId: String, val doneAt: Long)
 
+/** A piece a photo check found done: what it's owed, saved before any of it is given (`Focus.photoChecked`). */
+@Serializable
+data class PhotoDone(val id: String, val taskId: String, val step: String?, val minutes: Int, val at: Long)
+
+/** A daily alarm's run that failed: tried again [at], this being try [tries] (`Daily.failed`). */
+@Serializable
+data class DailyRetry(val at: Long, val tries: Int)
+
 /** A focus session as it ended: what it's owed, saved with its ending (`Focus.stopSession`). */
 @Serializable
 data class EndedSession(val session: FocusSession, val workedMin: Int, val completed: Boolean, val endedAt: Long)
+
+/** A finished task's "how was it?", kept to ask once notifications can be seen. */
+@Serializable
+data class AssessLater(val taskId: String, val title: String, val doneAt: Long? = null)

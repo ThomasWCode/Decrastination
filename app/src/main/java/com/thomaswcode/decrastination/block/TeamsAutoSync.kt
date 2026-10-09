@@ -22,11 +22,13 @@ object TeamsAutoSync {
         val delayedUntil: Long? = null,
         /** The day the first-unlock sync was last offered. */
         val firstUnlockDay: String? = null,
+        /** The morning briefing's: a sync is offered at an unlock before then (before school too). */
+        val morningUntil: Long? = null,
         /** Offers in a row the widget didn't start (its sync service off, no answer). */
         val retries: Int = 0,
     )
 
-    enum class Trigger { FirstUnlock, Every3Hours, Delayed }
+    enum class Trigger { FirstUnlock, Every3Hours, Delayed, Morning }
 
     /** Minutes before an automatic sync the widget didn't start is offered again. */
     const val RETRY_MIN = 15
@@ -47,10 +49,16 @@ object TeamsAutoSync {
         /** The phone was unlocked just now. */
         unlocked: Boolean,
     ): Trigger? {
-        if (!settings.teamsAutoSync || !allowed(now, zone, settings)) return null
-        val delayed = state.delayedUntil
-        if (delayed != null) return if (now >= delayed) Trigger.Delayed else null
+        if (!settings.teamsAutoSync) return null
         val recent = teamsSyncedAt != null && now - teamsSyncedAt < RECENT_MS
+        // Put off with "Delay 5 min": not before then, and then even outside the usual hours (a
+        // morning offer's, before school), though never at night.
+        val delayed = state.delayedUntil
+        if (delayed != null) return if (now >= delayed && !BlockPolicy.isQuiet(now, zone, settings)) Trigger.Delayed else null
+        // The morning briefing's sync: at the next unlock in its hour and a half, school day or not.
+        val morning = state.morningUntil
+        if (unlocked && morning != null && now < morning && !recent && !BlockPolicy.isQuiet(now, zone, settings)) return Trigger.Morning
+        if (!allowed(now, zone, settings)) return null
         val today = Instant.ofEpochMilli(now).atZone(zone).toLocalDate().toString()
         val minute = BlockPolicy.minuteOfDay(now, zone)
         if (unlocked && state.firstUnlockDay != today && minute >= settings.teamsFirstUnlockMin && !recent) return Trigger.FirstUnlock
@@ -79,6 +87,7 @@ object TeamsAutoSync {
             lastOfferedAt = now,
             delayedUntil = null,
             firstUnlockDay = if (afterFirstUnlockTime) today else state.firstUnlockDay,
+            morningUntil = null,
             retries = 0,
         )
     }

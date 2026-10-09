@@ -27,8 +27,8 @@ object Sessions {
     const val ACTION_END = "com.thomaswcode.decrastination.action.SESSION_END"
     const val ACTION_STOP = "com.thomaswcode.decrastination.action.SESSION_STOP"
 
-    suspend fun start(context: Context, taskId: String, label: String, step: String?, minutes: Int) {
-        val session = AppGraph.get(context).focus.startSession(taskId, label, step, minutes)
+    suspend fun start(context: Context, taskId: String, label: String, step: String?, minutes: Int, box: Int? = null) {
+        val session = AppGraph.get(context).focus.startSession(taskId, label, step, minutes, box)
         showOngoing(context, session)
         scheduleEnd(context, session)
     }

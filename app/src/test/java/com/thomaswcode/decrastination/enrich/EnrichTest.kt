@@ -274,6 +274,18 @@ class AnswersTest {
 
 class AiUsageTest {
     @Test
+    fun `the model is held while off, for an hour after a failed call, and at its cap`() {
+        val now = Fixtures.at("2026-10-10T12:00")
+        val month = AiUsage.monthOf(now, LONDON)
+        assertEquals(ModelHold.Off, ModelHold.of(false, AiUsage(month = month), now, LONDON, 200, 0.79))
+        val failed = AiUsage(month = month).failure("no connection", now - 10 * 60_000L)
+        assertEquals(ModelHold.Resting, ModelHold.of(true, failed, now, LONDON, 200, 0.79))
+        assertNull(ModelHold.of(true, failed, now + ModelHold.REST_MS, LONDON, 200, 0.79))
+        assertEquals(ModelHold.Capped, ModelHold.of(true, AiUsage(month = month, spentUsd = 1000.0), now, LONDON, 200, 0.79))
+        assertNull(ModelHold.of(true, AiUsage(month = month), now, LONDON, 200, 0.79))
+    }
+
+    @Test
     fun `a new month starts at nothing, and a call is refused that could pass the cap`() {
         val usage = AiUsage(month = "2026-09", spentUsd = 250.0)
         assertEquals(0.0, usage.forMonth("2026-10").spentUsd)
@@ -375,5 +387,37 @@ class ClaudeEnricherTest {
         val result = enricher().enrich(item, Enrichments.Job.Effort, NOW)
         assertEquals(30, result.enrichment!!.effortMin)
         assertEquals(0.0135, result.costUsd, 1e-9)
+    }
+}
+
+class PhotoCheckerTest {
+    @Test
+    fun `the photo goes as a JPEG image block with the piece, and the verdict is read`() = runBlocking {
+        val server = MockWebServer().apply { start() }
+        try {
+            val text = """{"done":true,"confidence":1.4,"reason":"All eight answers are written out."}"""
+            val body = JsonObject(
+                mapOf(
+                    "id" to JsonPrimitive("msg"), "type" to JsonPrimitive("message"), "role" to JsonPrimitive("assistant"), "model" to JsonPrimitive("claude-opus-5-5"),
+                    "content" to JsonArray(listOf(JsonObject(mapOf("type" to JsonPrimitive("text"), "text" to JsonPrimitive(text))))),
+                    "stop_reason" to JsonPrimitive("end_turn"), "stop_sequence" to kotlinx.serialization.json.JsonNull,
+                    "usage" to JsonObject(mapOf("input_tokens" to JsonPrimitive(1_600), "output_tokens" to JsonPrimitive(100))),
+                ),
+            )
+            server.enqueue(MockResponse().setHeader("Content-Type", "application/json").setBody(body.toString()))
+            val result = PhotoChecker("test-key", endpoint = server.url("").toString().trimEnd('/')).check(byteArrayOf(1, 2, 3), "Chapter 17 review, part 2 of 3")
+            val request = Json.parseToJsonElement(server.takeRequest().body.readUtf8()).jsonObject
+            val content = request["messages"]!!.jsonArray.single().jsonObject["content"]!!.jsonArray
+            val image = content.first().jsonObject
+            assertEquals("image", image["type"]!!.jsonPrimitive.content)
+            assertEquals("image/jpeg", image["source"]!!.jsonObject["media_type"]!!.jsonPrimitive.content)
+            assertEquals("AQID", image["source"]!!.jsonObject["data"]!!.jsonPrimitive.content)
+            assertTrue("Chapter 17 review, part 2 of 3" in content[1].toString())
+            assertEquals(true, result.verdict!!.done)
+            // A confidence past 1 is read as 1.
+            assertEquals(1.0, result.verdict!!.confidence)
+        } finally {
+            server.shutdown()
+        }
     }
 }

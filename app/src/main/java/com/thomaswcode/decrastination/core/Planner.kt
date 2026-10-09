@@ -55,8 +55,8 @@ object Planner {
         val minutes = chunks.sumOf { it.minutes }
     }
 
-    /** A sub-step, or (with [step] null and [boxed]) a box of time, labelled by its place in the day order. */
-    private class Piece(val step: String?, val minutes: Int, val boxed: Boolean = false)
+    /** A sub-step, or (with [step] null and a [box]) a box of time, labelled by its place in the day order. */
+    private class Piece(val step: String?, val minutes: Int, val box: Int? = null)
 
     fun plan(input: Input): Plan {
         val zone = input.zone
@@ -97,7 +97,7 @@ object Planner {
                 source = item.task.source,
                 kind = item.task.kind,
                 title = item.task.title,
-                step = if (piece.boxed) "part $part of ${item.chunks.size}" else piece.step,
+                step = if (piece.box != null) "part $part of ${item.chunks.size}" else piece.step,
                 minutes = piece.minutes,
                 dueAt = item.task.dueAt,
                 deadline = item.deadline,
@@ -109,6 +109,7 @@ object Planner {
                 parts = item.chunks.size,
                 taskMinutes = item.minutes,
                 availableAt = item.task.notBefore?.takeIf { it > input.now },
+                box = piece.box,
             )
         }
 
@@ -252,6 +253,22 @@ object Planner {
     }
 
     /**
+     * What's left of [task], in minutes of its calibrated estimate: the plan's pieces and a photo
+     * check's cap both go by it. Two measures, and the smaller: the source's progress, which may
+     * already show the sessions' work (Power Planner's percentage, updated), and the sessions'
+     * minutes since the task was first seen. Taking both off would count the same work twice.
+     */
+    fun remaining(task: TaskItem, multiplier: Double): Double {
+        val whole = task.effortMin * multiplier
+        val bySource = whole * (1 - task.sourceProgress.coerceIn(0.0, 1.0))
+        // From the lower of the first-seen and current progress: a percentage corrected downward
+        // brings its work back, rather than the first-seen one capping what's left.
+        val baseline = minOf(task.firstProgress ?: task.sourceProgress, task.sourceProgress)
+        val bySessions = whole * (1 - baseline.coerceIn(0.0, 1.0)) - task.workedMin - task.photoMin
+        return minOf(bySource, bySessions)
+    }
+
+    /**
      * The task's remaining work as ordered pieces. A vocabulary step whose sections its Anki deck
      * tasks hold ([held]) isn't among them: the decks' cards are that work.
      */
@@ -262,7 +279,7 @@ object Planner {
             if (left.isEmpty()) return listOf(Piece("finish and hand in", MIN_CHUNK))
             // Minutes worked beyond the steps ticked off (a session stopped early) come off the
             // next steps in order, each kept to at least a last few minutes, as it isn't done.
-            var spare = (task.workedMin - task.subSteps.filter { it.done }.sumOf { it.minutes * multiplier }).roundToInt().coerceAtLeast(0)
+            var spare = (task.workedMin + task.photoMin - task.subSteps.filter { it.done }.sumOf { it.minutes * multiplier }).roundToInt().coerceAtLeast(0)
             return left.map { step ->
                 val full = (step.minutes * multiplier).roundToInt().coerceAtLeast(1)
                 val off = minOf(spare, (full - MIN_CHUNK).coerceAtLeast(0))
@@ -271,22 +288,14 @@ object Planner {
             }
         }
         if (task.effortMin <= 0) return emptyList()
-        val whole = task.effortMin * multiplier
-        // Two measures of what's left, and the smaller: the source's progress, which may already
-        // show the sessions' work (Power Planner's percentage, updated), and the sessions' minutes
-        // since the task was first seen. Taking both off would count the same work twice.
-        val bySource = whole * (1 - task.sourceProgress.coerceIn(0.0, 1.0))
-        // From the lower of the first-seen and current progress: a percentage corrected downward
-        // brings its work back, rather than the first-seen one capping what's left.
-        val baseline = minOf(task.firstProgress ?: task.sourceProgress, task.sourceProgress)
-        val bySessions = whole * (1 - baseline.coerceIn(0.0, 1.0)) - task.workedMin
-        val remaining = minOf(bySource, bySessions).roundToInt().coerceAtLeast(minOf(MIN_CHUNK, task.effortMin))
+        val remaining = remaining(task, multiplier).roundToInt().coerceAtLeast(minOf(MIN_CHUNK, task.effortMin))
         val box = (input.calibration.boxMin[task.kind] ?: input.settings.boxMin).coerceAtLeast(MIN_CHUNK)
         val count = ceil(remaining / box.toDouble()).toInt().coerceAtLeast(1)
         return (0 until count).map { i ->
             // Even boxes: 100 minutes is 34, 33 and 33, not 45, 45 and a stray 10.
             val minutes = remaining / count + if (i < remaining % count) 1 else 0
-            Piece(null, minutes, boxed = count > 1)
+            // The box only where it cut the task: in one piece, its length was the task's own.
+            Piece(null, minutes, box = box.takeIf { count > 1 })
         }
     }
 

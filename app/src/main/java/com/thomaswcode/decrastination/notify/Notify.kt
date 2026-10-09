@@ -34,4 +34,12 @@ object Notify {
     }
 
     fun cancel(context: Context, id: Int) = NotificationManagerCompat.from(context).cancel(id)
+
+    /** Posts one of many of a kind, told apart by [tag] (a key), so no two share a slot. */
+    @SuppressLint("MissingPermission")
+    fun post(context: Context, tag: String, id: Int, notification: Notification) {
+        if (allowed(context)) NotificationManagerCompat.from(context).notify(tag, id, notification)
+    }
+
+    fun cancel(context: Context, tag: String, id: Int) = NotificationManagerCompat.from(context).cancel(tag, id)
 }
