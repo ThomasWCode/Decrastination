@@ -21,12 +21,16 @@ data class RuntimeState(
     val session: FocusSession? = null,
     /** Sessions ended whose due (the task's minutes and step, the log, free time) isn't all given yet. */
     val finishing: List<EndedSession> = emptyList(),
+    /** Photo checks found done whose due (the task's step or minutes, the log, free time) isn't all given yet. */
+    val photosDone: List<PhotoDone> = emptyList(),
     /** Loosening changes waiting their delay. */
     val pending: List<PendingChange> = emptyList(),
     /** A parent code unblocked everything until then. */
     val overrideUntil: Long? = null,
     /** When each of the daily alarms (briefing, check-in, review) last ran, so a late one isn't run twice. */
     val dailyRanAt: Map<String, Long> = emptyMap(),
+    /** Daily alarms whose last run failed, to be tried again ([DailyRetry]). */
+    val dailyRetries: Map<String, DailyRetry> = emptyMap(),
     /** Whether the device admin was last left for an armed phone, so a disarm the app didn't see through is finished at start. */
     val adminArmed: Boolean = false,
     val codeLock: CodeLock = CodeLock(),
@@ -116,6 +120,8 @@ data class SessionRecord(
     val box: Int? = null,
     /** Work a photo check found done, not a timed session: counted as the day's work, not as a session. */
     val photo: Boolean = false,
+    /** The photo check it records ([PhotoDone.id]), so finishing it again doesn't record it twice. */
+    val check: String? = null,
 )
 
 @Serializable
@@ -159,6 +165,14 @@ data class ProtectionRecord(val at: Long, val problems: List<String>, val repair
 /** A completion that has had its free time: the task, and when it was confirmed done. */
 @Serializable
 data class Rewarded(val taskId: String, val doneAt: Long)
+
+/** A piece a photo check found done: what it's owed, saved before any of it is given (`Focus.photoChecked`). */
+@Serializable
+data class PhotoDone(val id: String, val taskId: String, val step: String?, val minutes: Int, val at: Long)
+
+/** A daily alarm's run that failed: tried again [at], this being try [tries] (`Daily.failed`). */
+@Serializable
+data class DailyRetry(val at: Long, val tries: Int)
 
 /** A focus session as it ended: what it's owed, saved with its ending (`Focus.stopSession`). */
 @Serializable

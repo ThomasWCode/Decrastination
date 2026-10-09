@@ -101,7 +101,12 @@ class AppGraph private constructor(context: Context) {
     /** The plan now, from the stored tasks and settings. Cheap: dozens of tasks. */
     /** The calendar's busy time and per-day loads (Phase 5), as last read and judged. */
     @Volatile
+    /** The calendar as the planner counts it, from its last read: a plan made before that read is dropped with it. */
     var calendarTime: com.thomaswcode.decrastination.learn.EventJudge.Time = com.thomaswcode.decrastination.learn.EventJudge.Time(emptyList(), emptyMap(), emptyList())
+        set(value) {
+            field = value
+            focus.forgetPlan()
+        }
 
     fun plan(state: TaskState = tasks.value, settings: Settings = this.settings.value, now: Long = clock.now()): Plan =
         Planner.plan(
@@ -284,6 +289,7 @@ class AppGraph private constructor(context: Context) {
         // Any a stop left ungiven: completions, and sessions' endings.
         scope.launch {
             focus.finishSessions()
+            focus.finishPhotos()
             settleCompletions()
         }
         // "How was it?" questions kept while notifications were off, once they're on.

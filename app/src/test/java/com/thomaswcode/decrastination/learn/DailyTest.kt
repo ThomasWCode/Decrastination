@@ -10,6 +10,7 @@ import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.data.ActivityLog
 import com.thomaswcode.decrastination.data.CompletionRecord
+import com.thomaswcode.decrastination.data.DailyRetry
 import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.data.WeeklyReview
 import com.thomaswcode.decrastination.enrich.ClaudeReviewer
@@ -117,6 +118,27 @@ class ReviewInputTest {
         val text = ReviewInput.describe(ActivityLog(), calibration, Settings(), now, LONDON, week = "2026-10-05")
         assertTrue("Learned margins (days, used instead of marginDays): Homework 3" in text, text)
         assertTrue("Learned box lengths (minutes, used instead of boxMin): Homework 25" in text, text)
+    }
+
+    @Test
+    fun `the model reads the reviewed week's own days, even reviewed on the Monday after`() {
+        val log = ActivityLog(
+            completions = listOf(
+                CompletionRecord("teams:a", "Monday morning's", Source.Teams, Kind.Homework, null, 20, 20, null, 0, Fixtures.at("2026-10-05T08:00")),
+                CompletionRecord("teams:b", "The next Monday's", Source.Teams, Kind.Homework, null, 20, 20, null, 0, Fixtures.at("2026-10-12T09:00")),
+            ),
+        )
+        val text = ReviewInput.describe(log, Calibration(), Settings(), Fixtures.at("2026-10-12T10:00"), LONDON, week = "2026-10-05")
+        assertTrue("Monday morning's" in text, text)
+        assertTrue("The next Monday's" !in text, text)
+    }
+
+    @Test
+    fun `a daily alarm that failed is tried again, three times, then left to its next time`() {
+        var retries = emptyMap<String, DailyRetry>()
+        repeat(Daily.RETRIES) { retries = Daily.failed(retries, Daily.ACTION_BRIEFING, Fixtures.at("2026-10-12T07:00")) }
+        assertEquals(DailyRetry(Fixtures.at("2026-10-12T07:10"), Daily.RETRIES), retries[Daily.ACTION_BRIEFING])
+        assertEquals(emptyMap(), Daily.failed(retries, Daily.ACTION_BRIEFING, Fixtures.at("2026-10-12T07:30")))
     }
 
     @Test
