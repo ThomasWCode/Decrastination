@@ -403,6 +403,15 @@ class AiUsageTest {
     }
 
     @Test
+    fun `a call's dearest case covers the longest text the model reads`() {
+        // Every character three tokens, a long subject's worth more, and all the output, at the
+        // dearer rates of a fallback's older Opus.
+        val longest = Pricing.costUsd("claude-opus-4-8", input = 3L * Prompts.MAX_TEXT + 2_000, output = ClaudeEnricher.MAX_TOKENS)
+        assertTrue(longest <= Pricing.WORST_CALL_USD, "$longest > ${Pricing.WORST_CALL_USD}")
+        assertEquals(0.66, Pricing.WORST_CALL_USD, 1e-9)
+    }
+
+    @Test
     fun `calls, refusals and failures are counted`() {
         val usage = AiUsage("2026-10").record(0.01, refused = false, at = NOW).record(0.02, refused = true, at = NOW).failure("timeout", NOW)
         assertEquals(2, usage.calls)
