@@ -48,7 +48,7 @@ object Calibrator {
         val margins = margins(log.completions, defaultMargin)
         val boxes = boxes(log, defaultBox, week)
         val next = Calibration(multipliers = multipliers, marginDays = margins, boxMin = boxes)
-        return Learned(next, describe(previous, next, defaultMargin))
+        return Learned(next, describe(previous, next, defaultMargin, defaultBox))
     }
 
     /**
@@ -151,7 +151,7 @@ object Calibrator {
         return result
     }
 
-    private fun describe(previous: Calibration, next: Calibration, defaultMargin: Int): List<String> = buildList {
+    private fun describe(previous: Calibration, next: Calibration, defaultMargin: Int, defaultBox: Int): List<String> = buildList {
         // Every key either has, so one whose last completion aged out of the log is said to be back
         // to what it falls back on (the kind's, or the estimate itself).
         for (key in (previous.multipliers.keys + next.multipliers.keys).toSortedSet()) {
@@ -163,9 +163,10 @@ object Calibrator {
             val before = previous.marginDays[kind] ?: defaultMargin
             val after = next.marginDays[kind] ?: defaultMargin
             if (before != after) add("${kind.label}: finished ${days(after)} early (was ${days(before)})")
-            val boxBefore = previous.boxMin[kind]
-            val boxAfter = next.boxMin[kind]
-            if (boxBefore != boxAfter && boxAfter != null) add("${kind.label}: pieces of $boxAfter minutes")
+            // Each side as the planner sees it: no box of its own is the default's.
+            val boxBefore = previous.boxMin[kind] ?: defaultBox
+            val boxAfter = next.boxMin[kind] ?: defaultBox
+            if (boxBefore != boxAfter) add("${kind.label}: pieces of $boxAfter minutes")
         }
     }
 

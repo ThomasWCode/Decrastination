@@ -96,7 +96,10 @@ object EventJudge {
                 } else {
                     busy += Busy(event.start, event.end)
                 }
-                is Judgement.Load -> days(event, zone).forEach { day -> loads[day] = ((loads[day] ?: 0) + judgement.minutes).coerceAtMost(24 * 60) }
+                // An all-day event's load on each of its days; a timed one's once, on the day it starts.
+                is Judgement.Load -> (if (event.allDay) days(event, zone) else days(event, zone).take(1)).forEach { day ->
+                    loads[day] = ((loads[day] ?: 0) + judgement.minutes).coerceAtMost(24 * 60)
+                }
                 Judgement.Ask -> ask += event
             }
         }

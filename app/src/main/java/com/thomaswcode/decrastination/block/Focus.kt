@@ -251,7 +251,7 @@ class Focus(
                         val i = t.subSteps.indexOfFirst { !it.done && it.title == step }
                         if (i < 0) return@map t
                         credited = minutes
-                        return@map t.copy(subSteps = t.subSteps.mapIndexed { j, s -> if (j == i) s.copy(done = true) else s }, workedMin = t.workedMin + minutes)
+                        return@map t.copy(subSteps = t.subSteps.mapIndexed { j, s -> if (j == i) s.copy(done = true) else s }, photoMin = t.photoMin + minutes)
                     }
                     // A piece of time (the whole task, or a part the planner cut it into): counted
                     // against what's left of it as the plan measures it (calibrated), so the same
@@ -259,7 +259,7 @@ class Focus(
                     val left = Planner.remaining(t, runtime.value.calibration.multiplier(t.kind, t.className)).roundToInt()
                     if (left <= 0) return@map t
                     credited = minOf(minutes, left)
-                    t.copy(workedMin = t.workedMin + credited)
+                    t.copy(photoMin = t.photoMin + credited)
                 },
             )
         }
@@ -326,7 +326,9 @@ class Focus(
             val earned = fresh.filter { it.kind != Kind.Info && it.kind != Kind.Event && today(it.doneAt ?: now) == today }.sumOf { task ->
                 // Vocabulary a deck task held earned its time with the deck, not again here.
                 val delegated = task.subSteps.filter { it.ankiSections.isNotEmpty() && held[task.id].orEmpty().containsAll(it.ankiSections) }.sumOf { it.minutes }
-                val remaining = (task.effortMin * (1 - task.sourceProgress)).roundToInt() - delegated - worked(task)
+                // Less what sessions and photo checks already earned time for.
+                val photos = tasks.value.tasks.firstOrNull { it.id == task.id }?.photoMin ?: task.photoMin
+                val remaining = (task.effortMin * (1 - task.sourceProgress)).roundToInt() - delegated - worked(task) - photos
                 Credit.forCompletion(remaining.coerceAtLeast(0), ratio)
             }
             state.copy(

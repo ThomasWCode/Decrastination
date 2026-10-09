@@ -122,7 +122,8 @@ class CheckInActivity : ComponentActivity() {
                                 Notify.cancel(this@CheckInActivity, CheckIns.ID)
                                 if (!added) return@launch
                                 // As a job: it can outlast this screen.
-                                ReviewWorker.enqueue(this@CheckInActivity, ifDue = false)
+                                // Unless the week has had its review already (the evening's ran first).
+                                ReviewWorker.enqueue(this@CheckInActivity, ifDue = true)
                             }
                         },
                         modifier = Modifier.fillMaxWidth(),
