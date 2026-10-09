@@ -3,11 +3,12 @@ package com.thomaswcode.decrastination.learn
 import com.thomaswcode.decrastination.core.Calibration
 import com.thomaswcode.decrastination.data.ActivityLog
 import com.thomaswcode.decrastination.data.Settings
-import kotlinx.serialization.Serializable
 import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import kotlinx.serialization.Serializable
 
 /**
  * The weekly review as the model sees it (docs/scheduler.md §5, item 7): the week's log, your
@@ -61,24 +62,31 @@ object ReviewInput {
 
     private val WHEN = DateTimeFormatter.ofPattern("EEE d MMM HH:mm", Locale.UK)
 
-    /** The last seven days, as the model reads them, with [week]'s check-in (its Monday), if it had one. */
+    /**
+     * The reviewed [week] (its Monday), Monday to Sunday, as the model reads it, with its check-in
+     * if it had one: a review run late, on the Monday after, doesn't take that Monday's work in, nor
+     * leave the week's own Monday out.
+     */
     fun describe(log: ActivityLog, calibration: Calibration, settings: Settings, now: Long, zone: ZoneId, week: String): String = buildString {
-        val since = now - 7 * 24 * 3_600_000L
+        val monday = LocalDate.parse(week)
+        val start = monday.atStartOfDay(zone).toInstant().toEpochMilli()
+        val end = minOf(monday.plusDays(7).atStartOfDay(zone).toInstant().toEpochMilli(), now + 1)
+        fun inWeek(time: Long) = time in start until end
         fun at(time: Long) = Instant.ofEpochMilli(time).atZone(zone).format(WHEN)
         appendLine("Finished this week:")
-        log.completions.filter { it.doneAt >= since }.ifEmpty { null }?.forEach { c ->
+        log.completions.filter { inWeek(it.doneAt) }.ifEmpty { null }?.forEach { c ->
             val due = c.dueAt?.let { " due ${at(it)}," }.orEmpty()
             val answer = c.assessment?.let { " felt $it" }.orEmpty() + c.note?.let { " (\"$it\")" }.orEmpty()
             appendLine("- ${c.title} [${c.kind.label}${c.className?.let { ", $it" }.orEmpty()}]:$due done ${at(c.doneAt)}, estimate ${c.estimateMin} min, timed ${c.workedMin} min.$answer")
         } ?: appendLine("- nothing")
-        val sessions = log.sessions.filter { it.startedAt >= since && !it.photo }
-        val photos = log.sessions.count { it.startedAt >= since && it.photo }
+        val sessions = log.sessions.filter { inWeek(it.startedAt) && !it.photo }
+        val photos = log.sessions.count { inWeek(it.startedAt) && it.photo }
         appendLine()
         appendLine("Focus sessions: ${sessions.size}, ${sessions.count { it.completed }} run to the end, ${sessions.sumOf { it.workedMin }} min in all.")
         val byHour = sessions.groupBy { Instant.ofEpochMilli(it.startedAt).atZone(zone).hour }.toSortedMap()
         if (byHour.isNotEmpty()) appendLine("Started by hour: " + byHour.entries.joinToString { (h, s) -> "%02d:00 ×%d".format(Locale.UK, h, s.size) })
         if (photos > 0) appendLine("Pieces a photo check found done: $photos.")
-        appendLine("Times the blocker stopped them: ${log.blocks.count { it.at >= since }}.")
+        appendLine("Times the blocker stopped them: ${log.blocks.count { inWeek(it.at) }}.")
         // The reviewed week's answers only: last week's, answered late, aren't this week's.
         log.checkIns.filter { it.weekOf == week }.maxByOrNull { it.at }?.let { c ->
             appendLine()

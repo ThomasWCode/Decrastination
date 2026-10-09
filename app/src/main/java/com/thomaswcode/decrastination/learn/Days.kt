@@ -2,9 +2,10 @@ package com.thomaswcode.decrastination.learn
 
 import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.data.ActivityLog
-import kotlinx.serialization.Serializable
+import com.thomaswcode.decrastination.data.SessionRecord
 import java.time.LocalDate
 import java.time.ZoneId
+import kotlinx.serialization.Serializable
 
 /** One piece of a day's plan, as it stood that morning. */
 @Serializable
@@ -61,7 +62,7 @@ object Days {
         val start = date.atStartOfDay(zone).toInstant().toEpochMilli()
         // Confirmed that day: an older completion of a task since reopened doesn't count.
         val done = log.completions.filter { it.doneAt in start until end }.map { it.taskId }.toSet()
-        val worked = log.sessions.filter { it.startedAt in start until end }.groupBy { it.taskId }.mapValues { (_, s) -> s.sumOf { it.workedMin } }
+        val worked = workedIn(log, start, end)
         var doneMin = 0
         for ((taskId, chunks) in day.chunks.groupBy { it.taskId }) {
             val planned = chunks.sumOf { it.minutes }
@@ -80,7 +81,7 @@ object Days {
         val dayZone = old.zone?.let { runCatching { ZoneId.of(it) }.getOrNull() } ?: zone
         val start = LocalDate.parse(old.date).atStartOfDay(dayZone).toInstant().toEpochMilli()
         val done = log.completions.filter { it.doneAt in start..now }.map { it.taskId }.toSet()
-        val worked = log.sessions.filter { it.startedAt in start..now }.groupBy { it.taskId }.mapValues { (_, s) -> s.sumOf { it.workedMin } }
+        val worked = workedIn(log, start, now + 1)
         val kept = old.chunks.groupBy { it.taskId }.mapNotNull { (id, chunks) ->
             val planned = chunks.sumOf { it.minutes }
             when {
@@ -91,6 +92,21 @@ object Days {
         }
         val chunks = kept + ahead.filter { it.taskId !in done }
         return old.copy(plannedMin = chunks.sumOf { it.minutes }, chunks = chunks)
+    }
+
+    /** Minutes worked on each task from [start] until [end]: a session across either counts only its part within. */
+    private fun workedIn(log: ActivityLog, start: Long, end: Long): Map<String, Int> =
+        log.sessions.groupBy { it.taskId }.mapValues { (_, sessions) -> sessions.sumOf { minutesIn(it, start, end) } }.filterValues { it > 0 }
+
+    /**
+     * Minutes of [session] from [start] until [end]: a timed one's as far as its time fell in them
+     * (from its start, for the minutes it ran), a photo check's on the day it was taken.
+     */
+    fun minutesIn(session: SessionRecord, start: Long, end: Long): Int {
+        if (session.photo) return if (session.startedAt in start until end) session.workedMin else 0
+        val from = maxOf(session.startedAt, start)
+        val to = minOf(session.startedAt + session.workedMin * 60_000L, end)
+        return ((to - from) / 60_000L).toInt().coerceIn(0, session.workedMin)
     }
 
     /** At least this many finished days before the check says anything. */

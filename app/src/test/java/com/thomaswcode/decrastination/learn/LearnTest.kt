@@ -178,6 +178,14 @@ class EventJudgeTest {
     }
 
     @Test
+    fun `untitled events are answered apart`() {
+        val a = CalendarEvent(1, "", Fixtures.at("2026-10-10T10:00"), Fixtures.at("2026-10-10T18:00"), allDay = false)
+        val b = CalendarEvent(2, " ", Fixtures.at("2026-10-11T10:00"), Fixtures.at("2026-10-11T18:00"), allDay = false)
+        assertTrue(EventJudge.key(a) != EventJudge.key(b))
+        assertEquals("party", EventJudge.key(CalendarEvent(3, " Party ", Fixtures.at("2026-10-12T20:00"), Fixtures.at("2026-10-12T23:00"), allDay = false)))
+    }
+
+    @Test
     fun `what can't be judged is listed to ask, and asked once per name`() {
         val time = EventJudge.time(listOf(event("Van hire", allDay = true), event("van hire ", allDay = true)), emptyMap(), LONDON)
         assertEquals(2, time.toAsk.size)
@@ -259,6 +267,13 @@ class DaysTest {
         // b finished that evening: the day was done in full.
         val finished = Days.finish(again, log.copy(completions = log.completions + done("teams:b", doneAt = Fixtures.at("2026-10-09T21:00"))), LONDON)
         assertEquals(true, finished.full)
+    }
+
+    @Test
+    fun `a session across midnight counts on each day only its own minutes`() {
+        val log = ActivityLog(sessions = listOf(SessionRecord("teams:a", Kind.Homework, label = "a", plannedMin = 180, workedMin = 180, startedAt = Fixtures.at("2026-10-09T23:30"), endedAt = 0, completed = true)))
+        assertEquals(30, Days.finish(DayRecord("2026-10-09", 60, listOf(DayChunk("teams:a", 60)), zone = "Europe/London"), log, LONDON).doneMin)
+        assertEquals(150, Days.finish(DayRecord("2026-10-10", 200, listOf(DayChunk("teams:a", 200)), zone = "Europe/London"), log, LONDON).doneMin)
     }
 
     @Test

@@ -49,8 +49,11 @@ object EventJudge {
     private val TRAVEL = Regex("""\b(train|bus|coach|flight|plane|ferry|tube|metro)\b""", RegexOption.IGNORE_CASE)
     private val NOT_YOURS = Regex("""holiday|birthday|observance|week number""", RegexOption.IGNORE_CASE)
 
-    /** The key your answer is kept under: its name, so a weekly lesson is asked about once. */
-    fun key(event: CalendarEvent): String = event.title.trim().lowercase()
+    /**
+     * The key your answer is kept under: its name, so a weekly lesson is asked about once; one
+     * with no name, its own event, so untitled events aren't all answered as one.
+     */
+    fun key(event: CalendarEvent): String = event.title.trim().lowercase().ifEmpty { "#${event.id}" }
 
     /** Your answers as stored: "free", "busy", or "load:<minutes>". */
     fun parse(answer: String?): Judgement? = when {
