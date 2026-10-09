@@ -55,6 +55,11 @@ data class Settings(
      * off until you switch it on and give it an API key. Without it, the rules do what they can.
      */
     val aiEnabled: Boolean = false,
+    /**
+     * Whether the saved API key may be used: set when a key is saved, and, once armed, after the
+     * same wait as switching Claude on, so a key can't switch on triage that's already on.
+     */
+    val aiKeyActive: Boolean = false,
     /** The most the model may cost in a calendar month, in pounds. */
     val aiMonthlyCapGbp: Int = 200,
     /** Pounds to the US dollar, to turn the API's dollar prices into pounds against the cap. */

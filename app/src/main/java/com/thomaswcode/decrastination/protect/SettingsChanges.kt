@@ -39,7 +39,8 @@ object SettingsChanges {
 
     /** For each setting, whether a new value loosens blocking compared with the old. */
     private val LOOSER: Map<String, (Settings, Settings) -> Boolean> = mapOf(
-        "ankiTextbook" to { _, _ -> false },
+        // Another textbook's decks: the old one's deck tasks can go, and with them their pressure.
+        "ankiTextbook" to { old, new -> new.ankiTextbook != old.ankiTextbook },
         "ankiDeadlineMin" to { old, new -> new.ankiDeadlineMin > old.ankiDeadlineMin },
         // Any minute to work in that wasn't there means less can land on today and tomorrow: a
         // window moved later adds time tonight even at the same length.
@@ -57,14 +58,16 @@ object SettingsChanges {
         "quietHours" to { old, new -> adds(old.quietHours, new.quietHours) },
         "weekdayBlockFromMin" to { old, new -> new.weekdayBlockFromMin > old.weekdayBlockFromMin },
         "workMinPerFreeMin" to { old, new -> new.workMinPerFreeMin < old.workMinPerFreeMin },
-        "teamsAutoSync" to { _, _ -> false },
-        "teamsFirstUnlockMin" to { _, _ -> false },
-        "teamsSyncEveryMin" to { _, _ -> false },
+        // The automatic syncs are how new Teams work arrives: fewer or later ones can hide it.
+        "teamsAutoSync" to { old, new -> old.teamsAutoSync && !new.teamsAutoSync },
+        "teamsFirstUnlockMin" to { old, new -> new.teamsFirstUnlockMin > old.teamsFirstUnlockMin },
+        "teamsSyncEveryMin" to { old, new -> new.teamsSyncEveryMin > old.teamsSyncEveryMin },
         "armed" to { old, new -> old.armed && !new.armed },
         "loosenDelayHours" to { old, new -> new.loosenDelayHours < old.loosenDelayHours },
         // The model's triage can put an email off or call it an event, lifting pressure: switching
         // it on, or letting it spend more, waits.
         "aiEnabled" to { old, new -> !old.aiEnabled && new.aiEnabled },
+        "aiKeyActive" to { old, new -> !old.aiKeyActive && new.aiKeyActive },
         "aiMonthlyCapGbp" to { old, new -> new.aiMonthlyCapGbp > old.aiMonthlyCapGbp },
         "usdToGbp" to { old, new -> new.usdToGbp < old.usdToGbp },
         // Reminders' times: nothing is blocked by them.
@@ -92,6 +95,7 @@ object SettingsChanges {
         "teamsAutoSync" to "Automatic Teams syncs",
         "teamsFirstUnlockMin" to "First-unlock Teams sync after",
         "teamsSyncEveryMin" to "Teams sync every (minutes)",
+        "aiKeyActive" to "Claude's API key in use",
         "armed" to "Protection",
         "loosenDelayHours" to "Delay on loosening changes (hours)",
         "aiEnabled" to "Claude",

@@ -195,7 +195,9 @@ class SettingsActivity : ComponentActivity() {
                 item { Section("Blocked apps") }
                 // Browsers have their own switches above.
                 val shownBrowsers = browsers(draft).toSet()
-                val listed = draft.blockedApps.filter { pkg -> apps.none { it.packageName == pkg } && pkg !in shownBrowsers }
+                // Known ones not installed keep a row once switched off, so they can be switched back.
+                val listed = (Blocklist.APPS + asked.blockedApps + draft.blockedApps).distinct()
+                    .filter { pkg -> apps.none { it.packageName == pkg } && pkg !in shownBrowsers }
                     .map { App("${Blocklist.NAMES[it] ?: it} (not installed)", it) }
                 items(listed + apps.filter { it.packageName != packageName && it.packageName !in shownBrowsers }, key = { it.packageName }) { app ->
                     SwitchRow(app.label, app.packageName in draft.blockedApps) { on ->
