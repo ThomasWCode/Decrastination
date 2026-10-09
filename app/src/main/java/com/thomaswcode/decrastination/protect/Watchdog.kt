@@ -65,11 +65,12 @@ object Watchdog {
         context.getSystemService(DevicePolicyManager::class.java)?.isAdminActive(admin(context)) == true
 
     /**
-     * A secure setting, or null if this app may not read it: Android 12+ refuses hidden keys to
-     * apps (`accessibility_qs_targets` threw on the phone, 9 Oct, and took the service down).
+     * A secure setting (null when unset), or a failure if this app may not read it: Android 12+
+     * refuses hidden keys to apps (`accessibility_qs_targets` threw on the phone, 9 Oct, and took
+     * the service down).
      */
-    private fun readable(resolver: android.content.ContentResolver, key: String): String? =
-        runCatching { Settings.Secure.getString(resolver, key) }.getOrNull()
+    private fun read(resolver: android.content.ContentResolver, key: String): Result<String?> =
+        runCatching { Settings.Secure.getString(resolver, key) }
 
     fun report(context: Context): ProtectionCheck.Report {
         val resolver = context.contentResolver
@@ -77,13 +78,15 @@ object Watchdog {
         val cls = FocusService::class.java.name
         val enabled = Settings.Secure.getString(resolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES)
         val on = Settings.Secure.getInt(resolver, Settings.Secure.ACCESSIBILITY_ENABLED, 0) == 1
-        val shortcuts = ProtectionCheck.SHORTCUT_KEYS.filter { key ->
-            ProtectionCheck.entries(readable(resolver, key)).any { ProtectionCheck.matches(it, pkg, cls) }
-        }
+        val readings = ProtectionCheck.SHORTCUT_KEYS.associateWith { read(resolver, it) }
+        val shortcuts = readings.filterValues { value ->
+            value.getOrNull().let { ProtectionCheck.entries(it).any { entry -> ProtectionCheck.matches(entry, pkg, cls) } }
+        }.keys.toList()
         return ProtectionCheck.Report(
             serviceEnabled = ProtectionCheck.isEnabled(enabled, pkg, cls),
             accessibilityOn = on,
             onShortcuts = shortcuts,
+            unreadableShortcuts = readings.filterValues { it.isFailure }.keys.toList(),
             adminActive = isAdminActive(context),
             canRepair = canRepair(context),
             serviceRunning = FocusService.isRunning(context),
@@ -124,7 +127,8 @@ object Watchdog {
             Settings.Secure.putString(resolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES, ProtectionCheck.withService(enabled, pkg, cls))
             Settings.Secure.putInt(resolver, Settings.Secure.ACCESSIBILITY_ENABLED, 1)
             for (key in ProtectionCheck.SHORTCUT_KEYS) {
-                val value = readable(resolver, key)
+                // One that can't be read can't be filtered; switching off is undone instead.
+                val value = read(resolver, key).getOrElse { continue }
                 if (ProtectionCheck.entries(value).any { ProtectionCheck.matches(it, pkg, cls) }) {
                     runCatching { Settings.Secure.putString(resolver, key, ProtectionCheck.withoutService(value, pkg, cls)) }
                         .onFailure { Log.w(TAG, "Couldn't take the service off $key", it) }

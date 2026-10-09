@@ -27,6 +27,12 @@
     <!-- Asking One UI not to put the app to sleep. -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
+    <!-- A focus session ends on time even when the focus service isn't running: a timer's alarm. -->
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <uses-permission
+        android:name="android.permission.SCHEDULE_EXACT_ALARM"
+        android:maxSdkVersion="32" />
+
     <!-- Granted once over adb at setup (Q19): lets the armed watchdog switch the focus service back
          on and take it off accessibility shortcuts. Never granted to an ordinary app otherwise. -->
     <uses-permission

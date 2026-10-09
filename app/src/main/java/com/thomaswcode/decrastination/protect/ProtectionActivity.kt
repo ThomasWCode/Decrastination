@@ -183,8 +183,8 @@ class ProtectionActivity : ComponentActivity() {
                 )
                 SetupItem(
                     title = "On no accessibility shortcut",
-                    done = report.onShortcuts.isEmpty(),
-                    detail = if (report.onShortcuts.isEmpty()) "Good: no key press can switch the service off." else "It's on: ${report.onShortcuts.joinToString()}",
+                    done = report.onShortcuts.isEmpty() && report.unreadableShortcuts.isEmpty(),
+                    detail = ProtectionCheck.shortcutsDetail(report),
                 )
                 val notifications = remember(refresh) { Notify.allowed(this@ProtectionActivity) }
                 SetupItem(

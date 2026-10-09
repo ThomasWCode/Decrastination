@@ -1,5 +1,6 @@
 package com.thomaswcode.decrastination.protect
 
+import com.thomaswcode.decrastination.core.Uptime
 import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.data.Window
 import kotlinx.serialization.descriptors.elementNames
@@ -121,16 +122,38 @@ class SettingsChangesTest {
 
     @Test
     fun `pending changes apply when their time comes, each only its own field`() {
+        val hour = 3_600_000L
         val current = Settings(armed = true)
         val loose = SettingsChanges.propose(current, current.copy(blockedApps = emptyList()), emptyList(), now, ::newId)
-        val other = SettingsChanges.propose(loose.settings, loose.settings.copy(boxMin = 60), loose.pending, now + 1000, ::newId)
+        // A second later the first has waited a second; then another change.
+        val counted = SettingsChanges.applyDue(loose.settings, loose.pending, now + 1000, 1000)
+        val other = SettingsChanges.propose(counted.settings, counted.settings.copy(boxMin = 60), counted.pending, now + 1000, ::newId)
         assertEquals(2, other.pending.size)
-        val early = SettingsChanges.applyDue(other.settings, other.pending, now + 23 * 3_600_000L)
+        val early = SettingsChanges.applyDue(other.settings, other.pending, now + 23 * hour, 23 * hour - 1000)
         assertEquals(current.blockedApps, early.settings.blockedApps)
-        val due = SettingsChanges.applyDue(other.settings, other.pending, now + 24 * 3_600_000L)
+        val due = SettingsChanges.applyDue(early.settings, early.pending, now + 24 * hour, hour)
         assertEquals(emptyList(), due.settings.blockedApps)
         assertEquals(45, due.settings.boxMin)
         assertEquals(listOf("boxMin"), due.pending.map { it.field })
+    }
+
+    @Test
+    fun `setting the date forward doesn't hurry a loosening`() {
+        val hour = 3_600_000L
+        val current = Settings(armed = true)
+        val loose = SettingsChanges.propose(current, current.copy(blockedApps = emptyList()), emptyList(), now, ::newId)
+        // The wall clock jumps a day and an hour, but the phone has been on for a minute.
+        val jumped = SettingsChanges.applyDue(loose.settings, loose.pending, now + 25 * hour, 60_000L)
+        assertEquals(current.blockedApps, jumped.settings.blockedApps)
+        // Still shown as due 24 hours of the phone being on from the request.
+        assertEquals(now + 25 * hour + 24 * hour - 60_000L, jumped.pending.single().applyAt)
+    }
+
+    @Test
+    fun `the uptime clock measures only within one start of the phone`() {
+        assertEquals(5_000L, Uptime(3, 15_000L).since(Uptime(3, 10_000L)))
+        assertNull(Uptime(4, 15_000L).since(Uptime(3, 10_000L)))
+        assertNull(Uptime(3, 15_000L).since(null))
     }
 
     @Test
@@ -181,6 +204,15 @@ class GuardRulesTest {
             GuardRules.Verdict.Leave,
             decide(GuardRules.SETTINGS, "Reset", "Reset all settings", "Reset network settings", "Reset accessibility settings", "Factory data reset"),
         )
+    }
+
+    @Test
+    fun `the date and time page is left, its entry in General management isn't`() {
+        // What the guard read on the phone, 9 Oct.
+        val page = listOf("Navigate up", "Date and time", "Date and time", "13:00", "Use 24-hour format")
+        assertIs<GuardRules.Verdict.Back>(GuardRules.decide(GuardRules.SETTINGS, page, labels))
+        val general = listOf("General management", "Language", "Date and time", "Keyboard list and default")
+        assertEquals(GuardRules.Verdict.Leave, GuardRules.decide(GuardRules.SETTINGS, general, labels))
     }
 
     @Test
@@ -244,6 +276,18 @@ class ProtectionCheckTest {
         assertEquals(false, ProtectionCheck.shouldRestart(crashed.copy(canRepair = false), t, null, t + 60_000L))
         assertEquals(false, ProtectionCheck.shouldRestart(crashed.copy(serviceRunning = true), t, null, t + 60_000L))
         assertEquals(false, ProtectionCheck.shouldRestart(crashed.copy(serviceEnabled = false), t, null, t + 60_000L))
+    }
+
+    @Test
+    fun `a shortcut setting that can't be read is unknown, not clear`() {
+        val report = ProtectionCheck.Report(
+            serviceEnabled = true, accessibilityOn = true, onShortcuts = emptyList(), adminActive = true, canRepair = true,
+            unreadableShortcuts = listOf("accessibility_qs_targets"),
+        )
+        val detail = ProtectionCheck.shortcutsDetail(report)
+        assertTrue("Quick Settings can't be read" in detail, detail)
+        assertEquals("Good: no shortcut can switch the service off.", ProtectionCheck.shortcutsDetail(report.copy(unreadableShortcuts = emptyList())))
+        assertEquals("It's on the accessibility button.", ProtectionCheck.shortcutsDetail(report.copy(onShortcuts = listOf("accessibility_button_targets"))))
     }
 
     @Test

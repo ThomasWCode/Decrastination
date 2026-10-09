@@ -61,6 +61,15 @@ class MergeTest {
     }
 
     @Test
+    fun `finished through its own progress, it's reported with the progress it had`() {
+        val open = Merge.apply(emptyList(), Source.PowerPlanner, listOf(Fetched("p", "Essay", Kind.Homework, sourceProgress = 0.5)), t0).tasks
+        val result = Merge.apply(open, Source.PowerPlanner, listOf(Fetched("p", "Essay", Kind.Homework, sourceProgress = 1.0, done = true)), t0 + 1)
+        assertEquals(0.5, result.completed.single().sourceProgress)
+        assertEquals(1.0, result.tasks.single().sourceProgress)
+        assertEquals(Status.Done, result.tasks.single().status)
+    }
+
+    @Test
     fun `a done task listed again reopens, as a snoozed email does`() {
         val done = Merge.apply(first(fetched("a")), Source.Teams, emptyList(), later).tasks
         val result = Merge.apply(done, Source.Teams, listOf(fetched("a")), later + 1)

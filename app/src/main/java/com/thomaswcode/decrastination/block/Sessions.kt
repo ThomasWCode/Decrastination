@@ -5,6 +5,7 @@ import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import androidx.core.app.NotificationCompat
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.R
@@ -88,10 +89,18 @@ object Sessions {
         context.getSystemService(AlarmManager::class.java)?.cancel(endIntent(context))
     }
 
-    /** The backstop: an inexact alarm a little after the end, should the focus service not be running. */
+    /**
+     * The backstop, should the focus service not be running: an exact alarm at the end, since
+     * blocked apps stay blocked until the session ends and Android widens an inexact one by up to
+     * ten minutes. USE_EXACT_ALARM is a timer's permission; without it, the inexact one.
+     */
     private fun scheduleEnd(context: Context, session: FocusSession) {
-        context.getSystemService(AlarmManager::class.java)
-            ?.setWindow(AlarmManager.RTC_WAKEUP, session.endsAt, 60_000L, endIntent(context))
+        val alarms = context.getSystemService(AlarmManager::class.java) ?: return
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || alarms.canScheduleExactAlarms()) {
+            alarms.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, session.endsAt, endIntent(context))
+        } else {
+            alarms.setWindow(AlarmManager.RTC_WAKEUP, session.endsAt, 60_000L, endIntent(context))
+        }
     }
 
     private fun endIntent(context: Context): PendingIntent = PendingIntent.getBroadcast(

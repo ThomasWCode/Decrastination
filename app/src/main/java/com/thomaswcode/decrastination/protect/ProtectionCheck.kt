@@ -8,6 +8,14 @@ package com.thomaswcode.decrastination.protect
  */
 object ProtectionCheck {
 
+    /** What each shortcut setting is, in words. */
+    val SHORTCUT_NAMES = mapOf(
+        "accessibility_shortcut_target_service" to "the volume-key shortcut",
+        "accessibility_button_targets" to "the accessibility button",
+        "accessibility_gesture_targets" to "the accessibility gesture",
+        "accessibility_qs_targets" to "Quick Settings",
+    )
+
     /** The secure settings that hold accessibility shortcuts on Android 16 / One UI. */
     val SHORTCUT_KEYS = listOf(
         "accessibility_shortcut_target_service",
@@ -46,6 +54,11 @@ object ProtectionCheck {
         val accessibilityOn: Boolean,
         /** The shortcut settings the service is on. */
         val onShortcuts: List<String>,
+        /**
+         * Shortcut settings Android won't let this app read (Android 12+ refuses some hidden keys:
+         * `accessibility_qs_targets` on the phone). Unknown, so never reported as clear.
+         */
+        val unreadableShortcuts: List<String> = emptyList(),
         val adminActive: Boolean,
         val canRepair: Boolean,
         /**
@@ -92,4 +105,13 @@ object ProtectionCheck {
 
     fun shouldRestart(report: Report, stoppedSince: Long?, restartedAt: Long?, now: Long, tries: Int = 0): Boolean =
         restartAt(report, stoppedSince, restartedAt, tries)?.let { now >= it } == true
+
+    /** What the shortcut check found, in words, saying plainly what it couldn't check. */
+    fun shortcutsDetail(report: Report): String {
+        if (report.onShortcuts.isNotEmpty()) return "It's on ${report.onShortcuts.joinToString { SHORTCUT_NAMES[it] ?: it }}."
+        if (report.unreadableShortcuts.isEmpty()) return "Good: no shortcut can switch the service off."
+        val unknown = report.unreadableShortcuts.joinToString { SHORTCUT_NAMES[it] ?: it }
+        return "Not on the shortcuts Android lets this app read. $unknown can't be read on this phone; " +
+            "once armed, the service switched off any way is switched back on at once."
+    }
 }

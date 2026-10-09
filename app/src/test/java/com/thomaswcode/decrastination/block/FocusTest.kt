@@ -17,6 +17,9 @@ import com.thomaswcode.decrastination.data.TaskState
 import kotlinx.coroutines.test.runTest
 import java.io.File
 import java.nio.file.Files
+import com.thomaswcode.decrastination.core.Uptime
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -49,6 +52,32 @@ class FocusTest {
         assertEquals(10 * 60_000L, focus.creditLeftMs())
         assertNull(runtime.value.session)
         assertEquals(1, log.value.sessions.size)
+    }
+
+    @Test
+    fun `a session ended twice at once is finished once`() = runTest {
+        tasks.update { it.copy(tasks = listOf(task("t"))) }
+        focus.startSession("teams:t", "t", null, 30)
+        clock.time += 30 * 60_000L
+        val records = listOf(async { focus.stopSession() }, async { focus.stopSession() }).awaitAll()
+        assertEquals(1, records.count { it != null })
+        assertEquals(30, tasks.value.tasks.single().workedMin)
+        assertEquals(1, log.value.sessions.size)
+        assertEquals(10 * 60_000L, focus.creditLeftMs())
+    }
+
+    @Test
+    fun `setting the date forward doesn't finish a session`() = runTest {
+        tasks.update { it.copy(tasks = listOf(task("t"))) }
+        clock.up = Uptime(1, 1_000_000L)
+        focus.startSession("teams:t", "t", null, 30)
+        // The wall clock jumps the half hour; the phone has been on for two minutes.
+        clock.time += 30 * 60_000L
+        clock.up = Uptime(1, 1_000_000L + 2 * 60_000L)
+        val record = focus.stopSession()!!
+        assertEquals(false, record.completed)
+        assertEquals(2, record.workedMin)
+        assertEquals(0L, focus.creditLeftMs())
     }
 
     @Test
