@@ -6,6 +6,7 @@ import com.thomaswcode.decrastination.block.TeamsAutoSync
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Uptime
+import com.thomaswcode.decrastination.enrich.AiUsage
 import com.thomaswcode.decrastination.protect.CodeLock
 import com.thomaswcode.decrastination.protect.PendingChange
 import kotlinx.serialization.Serializable
@@ -26,6 +27,8 @@ data class RuntimeState(
     val forceActiveUntil: Long? = null,
     /** Up to when the pending changes' waits have been counted, by the uptime clock. */
     val uptimeMark: Uptime? = null,
+    /** What the model has cost this month. */
+    val aiUsage: AiUsage = AiUsage(),
 )
 
 /** The watchdog's last finding. */

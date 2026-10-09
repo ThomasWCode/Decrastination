@@ -59,6 +59,10 @@ object SettingsChanges {
         "teamsSyncEveryMin" to { _, _ -> false },
         "armed" to { old, new -> old.armed && !new.armed },
         "loosenDelayHours" to { old, new -> new.loosenDelayHours < old.loosenDelayHours },
+        // The model's work changes estimates and steps, not what's blocked or when.
+        "aiEnabled" to { _, _ -> false },
+        "aiMonthlyCapGbp" to { _, _ -> false },
+        "usdToGbp" to { _, _ -> false },
     )
 
     private val LABELS = mapOf(
@@ -82,6 +86,9 @@ object SettingsChanges {
         "teamsSyncEveryMin" to "Teams sync every (minutes)",
         "armed" to "Protection",
         "loosenDelayHours" to "Delay on loosening changes (hours)",
+        "aiEnabled" to "Claude",
+        "aiMonthlyCapGbp" to "Claude's monthly cap (£)",
+        "usdToGbp" to "Pounds per dollar",
     )
 
     /** Every setting with a rule: a test checks none is missing. */

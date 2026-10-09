@@ -4,7 +4,8 @@ package com.thomaswcode.decrastination.core
  * Applies one source's fresh list to the stored tasks. Pure, so the rules are tested directly.
  *
  * - A task the source lists is updated from it, keeping this app's own bookkeeping (first seen,
- *   minutes worked, sub-steps, estimates). One the source lists as finished becomes [Status.Done].
+ *   minutes worked, sub-steps, estimates, the enrichment, laid over the fresh values again). One the
+ *   source lists as finished becomes [Status.Done].
  * - An open task the source no longer lists is done: handed in, ticked, archived, or snoozed out
  *   of the inbox (PLAN.md §1). A [TaskItem.derived] one (the Anki quota) was missed instead: only
  *   its counts can say it's done.
@@ -84,7 +85,7 @@ object Merge {
                 derived = f.derived,
                 lastSeenAt = now,
                 extra = f.extra,
-            )
+            ).enriched()
             val next = when {
                 // Reported with the progress it had while open: finished through its own progress
                 // (Power Planner at 100 %), the earned time is for the work that was still left.
