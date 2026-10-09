@@ -47,7 +47,8 @@ object SettingsChanges {
         "boxMin" to { old, new -> new.boxMin > old.boxMin },
         "marginDays" to { old, new -> new.marginDays < old.marginDays },
         "softDeadlineDays" to { old, new -> new.softDeadlineDays > old.softDeadlineDays },
-        "softMinPerDay" to { _, _ -> false },
+        // Less a day can push overdue undated work out of today and tomorrow, lifting the pressure.
+        "softMinPerDay" to { old, new -> new.softMinPerDay < old.softMinPerDay },
         "blockedApps" to { old, new -> !new.blockedApps.containsAll(old.blockedApps) },
         "blockedSites" to { old, new -> !new.blockedSites.containsAll(old.blockedSites) },
         "checkedBrowsers" to { old, new -> !new.checkedBrowsers.containsAll(old.checkedBrowsers) },

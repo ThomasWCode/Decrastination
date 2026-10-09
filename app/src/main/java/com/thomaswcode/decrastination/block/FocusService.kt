@@ -262,6 +262,9 @@ class FocusService : AccessibilityService() {
         if (!stillThere) return@Runnable stopSpending()
         val left = graph.focus.creditLeftMs() - (SystemClock.elapsedRealtime() - since)
         val verdict = graph.focus.verdict()
+        // Allowed outright now (quiet hours, a parent's unblock): free time isn't spent, nor is
+        // anything covered when it would have run out.
+        if (verdict is BlockPolicy.Verdict.Allow) return@Runnable stopSpending()
         when {
             left <= 0 -> {
                 stopSpending()
@@ -289,7 +292,11 @@ class FocusService : AccessibilityService() {
     private fun checkAddress(browser: String) {
         lastUrlCheckAt = SystemClock.uptimeMillis()
         if (frontPackage() != browser) return
-        val root = windows.mapNotNull { it.root }.firstOrNull { it.packageName == browser } ?: rootInActiveWindow ?: return
+        // The window in use first: a browser can have others (picture-in-picture, a pop-up).
+        val root = rootInActiveWindow?.takeIf { it.packageName == browser }
+            ?: windows.firstOrNull { it.isActive && it.root?.packageName == browser }?.root
+            ?: windows.mapNotNull { it.root }.firstOrNull { it.packageName == browser }
+            ?: return
         val text = root.findAccessibilityNodeInfosByViewId(Blocklist.urlBarId(browser)).firstOrNull()?.text?.toString()
         val site = graph.focus.siteTarget(browser, text)
         if (site != null) act(site) else if (spending?.first is Focus.Target.Site) stopSpending()

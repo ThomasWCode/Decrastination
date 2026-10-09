@@ -169,6 +169,13 @@ class SettingsChangesTest {
     }
 
     @Test
+    fun `a lower quota for undated work waits, a higher one doesn't`() {
+        val armed = Settings(armed = true)
+        assertEquals(1, SettingsChanges.propose(armed, armed.copy(softMinPerDay = 15), emptyList(), now, ::newId).pending.size)
+        assertEquals(120, SettingsChanges.propose(armed, armed.copy(softMinPerDay = 120), emptyList(), now, ::newId).settings.softMinPerDay)
+    }
+
+    @Test
     fun `disarming waits, arming doesn't`() {
         val armed = SettingsChanges.propose(Settings(), Settings(armed = true), emptyList(), now, ::newId)
         assertTrue(armed.settings.armed)
