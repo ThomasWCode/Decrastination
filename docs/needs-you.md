@@ -15,7 +15,7 @@ Version 1.0.0 is on your phone and running: the four sources sync, the plan and 
 ## Phase 1: sources, storage, sync
 
 - **Nothing blocking.** All four sources read on the phone on 8 Oct: Teams (11 assignments), Power Planner (2 items), Gmail (28 conversations) and AnkiDroid (the quota and 3 linked decks). Credentials went in with `scripts/load_credentials.py`.
-- **Your inbox is all tasks now** (as you asked: everything in the inbox is outstanding). Your own notes are 10 minutes each, other people's emails 15, notifications 2 (GitHub's emails about these PRs are notifications too). Each email with no deadline gets a soft one a week after the app first sees it; since the 28 conversations already there were all first seen on 8 Oct, the planner caps undated work at an hour a day (Phase 2), so they spread over 9–14 Oct instead of all falling on one evening. The cap is a setting.
+- **Your inbox is all tasks now** (as you asked: everything in the inbox is outstanding; **changed on 9 Oct**: only emails with something to do are tasks, see 1.3.0). Your own notes are 10 minutes each, other people's emails 15, notifications 2 (GitHub's emails about these PRs are notifications too). Each email with no deadline gets a soft one a week after the app first sees it; since the 28 conversations already there were all first seen on 8 Oct, the planner caps undated work at an hour a day (Phase 2), so they spread over 9–14 Oct instead of all falling on one evening. The cap is a setting.
 - **Three German vocabulary decks are overdue tasks** (1.2, 2.2, 2.3: 169 cards between them), because the assignments that name them (*Familie und Ehe*, *Gefahren in den sozialen Netzwerken*) are past due and not handed in. Each disappears when its assignment is handed in.
 
 ## Phase 2: the planner and the widget
@@ -75,3 +75,8 @@ Version 1.0.0 is on your phone and running: the four sources sync, the plan and 
 - **Work due today or tomorrow comes before overdue work** (your call, 9 Oct): it's placed first, taking the evening's time, and comes first in the Plan, on the widget and in the briefing; overdue work follows it, oldest first. An email's overdue block still comes before its own due-soon one, so its order holds.
 - **Both arrive on a new notification channel, *Claude***, which you can turn down in Android's settings like the others.
 - **Tried**: in the JVM tests (every reason a plan is dropped, and the key failures as the SDK raises them from a stand-in's 401, 403 and out-of-credit 400). For trying them on the phone without a paid call, the debug commands `ai-endpoint` (the model's calls to a stand-in on the PC, till cleared or the app restarts) and `enrich-task` (one task asked about again now).
+
+## 1.3.0: just emails aren't tasks
+
+- **Your call, 9 Oct**: only an email with something to do is a task. One that only needs reading (notifications, LinkedIn, newsletters, marketing, an empty note) or that tells of an event (an open day's information, a ticket) isn't: it's off the plan, the widget, the briefing and blocking, it's not in the Tasks list, and archiving it earns no free time and asks nothing. That's 13 of the 25 emails in your inbox on 9 Oct (10 to read, 3 about events).
+- **Kept, unseen**: Claude (or, with it off, the rules) still reads each email to tell which it is, and a reply that asks you something brings one back as a task. One Claude misjudges as only to read is only seen in Gmail, as you chose.

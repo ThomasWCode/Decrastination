@@ -185,6 +185,10 @@ Phase 0 also built what Phase 1 would have scaffolded: the Gradle setup, the sha
 
 *Built 9 Oct 2026: a plan of Claude's that the checks drop is said on the task and in a notification, with why; a key the API refuses (rejected, not allowed, or out of credit) is alerted once a stretch, in a notification, a banner on the Plan and Setup; Claude's monthly cap is optional and in dollars, none by default, as the account is prepaid; and work due today or tomorrow comes before overdue work, taking the evening's time first.*
 
+### 1.3.0: just emails aren't tasks
+
+*Built 9 Oct 2026, your call: an email that only needs reading (Info) or tells of an event (Event) isn't a task. It's kept, unseen, so archiving it finishes it and a reply asking something brings it back, but it's off the plan, the widget, the briefing, blocking and the Tasks list, and archiving it earns nothing.*
+
 ## 6. Verification
 
 - **Unit tests (JVM):** `Planner` bucket allocation and ordering against `fixtures/` (expected buckets for tonight are written out in `docs/scheduler.md` §3); `BlockPolicy` strict/earned/quiet transitions; pending-change timing across midnight and reboot; source parsers against recorded JSON; deck-regex mapping against the real assignment texts; calibration maths; enrichment cache.
