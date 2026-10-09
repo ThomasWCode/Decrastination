@@ -66,6 +66,8 @@ object ProtectionCheck {
          * Android doesn't bind a crashed service again until it's switched off and on.
          */
         val serviceRunning: Boolean = true,
+        /** Whether protection alerts reach the screen: notifications allowed and their channel on. */
+        val alertsShown: Boolean = true,
     )
 
     /** Switched on in the settings but not running. */
@@ -79,6 +81,7 @@ object ProtectionCheck {
         if (report.onShortcuts.isNotEmpty()) add("The focus service is on an accessibility shortcut")
         if (!report.canRepair) add("Self-repair isn't granted: the service switched off would stay off")
         if (!report.adminActive) add("Device admin is off: the app can be uninstalled")
+        if (!report.alertsShown) add("Protection alerts are off: allow this app's notifications, and its Protection channel")
     }
 
     /** How long a stopped service is given to come back by itself: it's briefly unbound while binding, at boot and after an update. */

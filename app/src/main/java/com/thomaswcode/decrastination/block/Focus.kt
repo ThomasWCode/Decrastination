@@ -8,6 +8,7 @@ import com.thomaswcode.decrastination.core.WallClock
 import com.thomaswcode.decrastination.data.ActivityLog
 import com.thomaswcode.decrastination.data.BlockRecord
 import com.thomaswcode.decrastination.data.CompletionRecord
+import com.thomaswcode.decrastination.data.EndedSession
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.Rewarded
 import com.thomaswcode.decrastination.data.RuntimeState
@@ -150,35 +151,50 @@ class Focus(
      */
     suspend fun stopSession(): SessionRecord? {
         // Taken and cleared in one step, so two callers at once (the ticker, the alarm and Stop)
-        // can't both finish it: the second finds none.
-        var claimed: FocusSession? = null
-        runtime.update { state ->
-            claimed = state.session
-            if (state.session == null) state else state.copy(session = null)
-        }
-        val session = claimed ?: return null
+        // can't both finish it: the second finds none. What it's owed is saved in that same step,
+        // so a stop before it's all given loses none of it.
         val now = clock.now()
-        val completed = session.isDue(now, clock.uptime())
-        val worked = if (completed) session.minutes else (session.ran(now, clock.uptime()) / 60_000L).toInt().coerceIn(0, session.minutes)
+        val uptime = clock.uptime()
+        var ended: EndedSession? = null
+        runtime.update { state ->
+            val session = state.session ?: return@update state
+            val completed = session.isDue(now, uptime)
+            val worked = if (completed) session.minutes else (session.ran(now, uptime) / 60_000L).toInt().coerceIn(0, session.minutes)
+            val end = EndedSession(session, worked, completed, now)
+            ended = end
+            state.copy(session = null, finishing = state.finishing + end)
+        }
+        return ended?.let { finish(it) }
+    }
+
+    /** Gives the sessions a stop left part-way ([RuntimeState.finishing]) what they're owed: at start-up. */
+    suspend fun finishSessions() {
+        runtime.value.finishing.forEach { finish(it) }
+    }
+
+    /**
+     * Gives [ended] its due, each part once however often this runs: its minutes and step to its
+     * task (which notes the session as counted), its record to the log (unless it's there), and
+     * its free time in the step that takes it off [RuntimeState.finishing]. A finished session
+     * earns free time only on its own day, as the rest of that day's.
+     */
+    private suspend fun finish(ended: EndedSession): SessionRecord {
+        val session = ended.session
         var task: TaskItem? = null
         tasks.update { state ->
             state.copy(
                 tasks = state.tasks.map { t ->
                     if (t.id != session.taskId) return@map t
-                    val stepIndex = if (completed && session.step != null) t.subSteps.indexOfFirst { !it.done && it.title == session.step } else -1
-                    val next = if (stepIndex >= 0) {
-                        t.copy(subSteps = t.subSteps.mapIndexed { i, s -> if (i == stepIndex) s.copy(done = true) else s }, workedMin = t.workedMin + worked)
-                    } else {
-                        t.copy(workedMin = t.workedMin + worked)
-                    }
-                    next.also { task = it }
+                    if (session.startedAt in t.sessionsCounted) return@map t.also { task = it }
+                    val stepIndex = if (ended.completed && session.step != null) t.subSteps.indexOfFirst { !it.done && it.title == session.step } else -1
+                    val steps = if (stepIndex >= 0) t.subSteps.mapIndexed { i, s -> if (i == stepIndex) s.copy(done = true) else s } else t.subSteps
+                    t.copy(
+                        subSteps = steps,
+                        workedMin = t.workedMin + ended.workedMin,
+                        sessionsCounted = (t.sessionsCounted + session.startedAt).takeLast(MAX_COUNTED),
+                    ).also { task = it }
                 },
             )
-        }
-        val today = today(now)
-        val ratio = settings.value.workMinPerFreeMin
-        runtime.update { state ->
-            state.copy(credit = if (completed) state.credit.earn(today, Credit.forSession(session.minutes, ratio)) else state.credit.on(today))
         }
         val record = SessionRecord(
             taskId = session.taskId,
@@ -186,12 +202,27 @@ class Focus(
             className = task?.className,
             label = session.label,
             plannedMin = session.minutes,
-            workedMin = worked,
+            workedMin = ended.workedMin,
             startedAt = session.startedAt,
-            endedAt = now,
-            completed = completed,
+            endedAt = ended.endedAt,
+            completed = ended.completed,
         )
-        log.update { it.copy(sessions = it.sessions + record).trimmed(now) }
+        log.update { state ->
+            if (state.sessions.any { it.taskId == session.taskId && it.startedAt == session.startedAt }) state
+            else state.copy(sessions = state.sessions + record).trimmed(ended.endedAt)
+        }
+        val now = clock.now()
+        val today = today(now)
+        val ratio = settings.value.workMinPerFreeMin
+        runtime.update { state ->
+            // Given already (another caller finished it first): nothing more.
+            if (ended !in state.finishing) return@update state
+            val earns = ended.completed && today(ended.endedAt) == today
+            state.copy(
+                finishing = state.finishing - ended,
+                credit = if (earns) state.credit.earn(today, Credit.forSession(session.minutes, ratio)) else state.credit.on(today),
+            )
+        }
         return record
     }
 
@@ -265,6 +296,9 @@ class Focus(
 
     companion object {
         private const val PLAN_TTL_MS = 60_000L
+
+        /** How many sessions a task remembers counting: far more than one piece of work has. */
+        private const val MAX_COUNTED = 100
 
         /** How long a completion stays in the ledger of those rewarded: far longer than any retry. */
         private const val REWARDED_KEPT_MS = 14 * 24 * 3_600_000L

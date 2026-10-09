@@ -307,7 +307,8 @@ class FocusService : AccessibilityService() {
             ?: windows.mapNotNull { it.root }.firstOrNull { it.packageName == browser }
             ?: return
         val text = root.findAccessibilityNodeInfosByViewId(Blocklist.urlBarId(browser)).firstOrNull()?.text?.toString()
-        val site = graph.focus.siteTarget(browser, text)
+        // No address bar (a video full screen hides it): still the page it last showed.
+        val site = if (text != null) graph.focus.siteTarget(browser, text) else lastSite[browser]
         if (text != null) lastSite[browser] = site
         if (site != null) act(site) else stopSpendingUnlessAside()
     }

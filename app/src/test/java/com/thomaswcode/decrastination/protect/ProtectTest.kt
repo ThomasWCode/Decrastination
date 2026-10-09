@@ -351,6 +351,13 @@ class ProtectionCheckTest {
     }
 
     @Test
+    fun `protection alerts switched off are a problem once armed`() {
+        val report = ProtectionCheck.Report(serviceEnabled = true, accessibilityOn = true, onShortcuts = emptyList(), adminActive = true, canRepair = true, alertsShown = false)
+        assertEquals(listOf("Protection alerts are off: allow this app's notifications, and its Protection channel"), ProtectionCheck.problems(report, armed = true))
+        assertEquals(emptyList(), ProtectionCheck.problems(report, armed = false))
+    }
+
+    @Test
     fun `armed without self-repair is a problem`() {
         val report = ProtectionCheck.Report(serviceEnabled = true, accessibilityOn = true, onShortcuts = emptyList(), adminActive = true, canRepair = false)
         assertEquals(listOf("Self-repair isn't granted: the service switched off would stay off"), ProtectionCheck.problems(report, armed = true))
