@@ -161,6 +161,8 @@ class EventAnswerReceiver : BroadcastReceiver() {
                 AppGraph.get(context).runtime.update { it.copy(eventAnswers = it.eventAnswers + (key to answer)) }
                 CalendarTime.cancelQuestion(context, key)
                 CalendarTime.refresh(context)
+                // Today's plan as the briefing recorded it may have changed with the answer.
+                Briefing.replanToday(context)
             } finally {
                 pending.finish()
             }

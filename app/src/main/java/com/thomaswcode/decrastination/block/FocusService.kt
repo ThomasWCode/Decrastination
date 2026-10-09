@@ -87,9 +87,9 @@ class FocusService : AccessibilityService() {
 
     /**
      * The blocked site each checked browser last showed in front (null: a page that isn't), for
-     * when Android hides its address (picture-in-picture, a video full screen). The blocked ones are
-     * loaded from the store when the service connects, so they outlive a restart; a browser not in
-     * it hasn't been read since then.
+     * when Android hides its address (picture-in-picture, a video full screen). Only what this
+     * connection has seen: while no service watched, any browser may have moved on, blocked page or
+     * not, so a browser not in it isn't known.
      */
     private val lastSite = mutableMapOf<String, Focus.Target.Site?>()
 
@@ -99,11 +99,9 @@ class FocusService : AccessibilityService() {
     /** The site [browser] last showed, while it's still blocked as the settings now say. */
     private fun remembered(browser: String): Focus.Target.Site? = lastSite[browser]?.takeIf(::stillBlocked)
 
-    /** Notes what [browser] shows, in memory and, when it's changed, in the store. */
+    /** Notes what [browser] shows. */
     private fun rememberSite(browser: String, site: Focus.Target.Site?) {
-        if (browser in lastSite && lastSite[browser] == site) return
         lastSite[browser] = site
-        scope.launch { graph.runtime.update { it.copy(browserSites = it.browserSites + (browser to site?.name)) } }
     }
 
     // The settings guard's pacing, as Phase 0 tuned it.
@@ -162,12 +160,10 @@ class FocusService : AccessibilityService() {
             },
             ContextCompat.RECEIVER_NOT_EXPORTED,
         )
-        // What each browser last showed, as saved, so a page whose address is hidden can still be
-        // judged: only the blocked ones. While no service watched, a browser may have moved on
-        // from a page that wasn't, unseen, so that one isn't known any more.
+        // Nothing known of what browsers show: while no service watched, any may have moved on,
+        // to a blocked page or from one. One hiding its address is looked at afresh.
         lastSite.clear()
         lookedFor.clear()
-        graph.runtime.value.browserSites.forEach { (browser, site) -> if (site != null) lastSite[browser] = Focus.Target.Site(site, browser) }
         // Connected (or restarted) while the phone is already unlocked and in use: the unlock it
         // missed counts, so the first-unlock Teams sync can still be offered.
         val power = getSystemService(PowerManager::class.java)
@@ -347,13 +343,17 @@ class FocusService : AccessibilityService() {
      * [browser] is in front with its address hidden (a video full screen) and no page of it seen
      * since the service connected, so what it shows isn't known. While anything is blocked: Back,
      * once per browser per connection, to leave full screen, so the address shows and is read. One
-     * that still hides it is left unknown, as not blocked. Says whether it pressed Back.
+     * that still hides it is left unknown, as not blocked: Back again and again would make a
+     * browser whose address bar can't be read at all (a new version) unusable. Says whether it
+     * pressed Back.
      */
     private fun lookForAddress(browser: String): Boolean {
         if (browser in lookedFor || graph.focus.verdict() is BlockPolicy.Verdict.Allow) return false
+        // Refused (Android can): not counted, so the next look tries again.
+        if (!performGlobalAction(GLOBAL_ACTION_BACK)) return false
         lookedFor += browser
         Log.i(TAG, "$browser hides its address, and no page of it has been seen since connecting: Back, to see it")
-        return performGlobalAction(GLOBAL_ACTION_BACK)
+        return true
     }
 
     // --- Windows other than the one in use ---
