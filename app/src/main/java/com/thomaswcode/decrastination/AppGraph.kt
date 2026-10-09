@@ -1,6 +1,7 @@
 package com.thomaswcode.decrastination
 
 import android.annotation.SuppressLint
+import android.app.admin.DevicePolicyManager
 import android.content.Context
 import android.database.ContentObserver
 import android.os.Handler
@@ -22,6 +23,7 @@ import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.data.TaskState
 import com.thomaswcode.decrastination.net.UrlConnectionHttp
 import com.thomaswcode.decrastination.protect.SettingsChanges
+import com.thomaswcode.decrastination.protect.Watchdog
 import com.thomaswcode.decrastination.sources.anki.AnkiSource
 import com.thomaswcode.decrastination.sources.gmail.GmailSource
 import com.thomaswcode.decrastination.sources.powerplanner.PowerPlannerApi
@@ -40,7 +42,9 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -194,6 +198,13 @@ class AppGraph private constructor(context: Context) {
     private val teamsChanged = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
 
     init {
+        // Disarmed (once the wait is over, or at once by a parent's code): the device admin goes
+        // too, so uninstalling is allowed again, as the protection screen says.
+        scope.launch {
+            settings.state.map { it.armed }.distinctUntilChanged().drop(1).collect { armed ->
+                if (!armed) runCatching { app.getSystemService(DevicePolicyManager::class.java)?.removeActiveAdmin(Watchdog.admin(app)) }
+            }
+        }
         // Work a source confirms done earns free time and is logged.
         // A session on a task the sync found done ends with it, and so do its notification and alarm.
         syncer.addListener { if (focus.rewardCompletions()) Sessions.clear(app) }
