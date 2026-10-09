@@ -25,6 +25,12 @@ data class RuntimeState(
     val pending: List<PendingChange> = emptyList(),
     /** A parent code unblocked everything until then. */
     val overrideUntil: Long? = null,
+    /**
+     * The blocked site each checked browser last showed in front (null: a page that isn't), kept
+     * so a service started afresh can judge a page whose address bar is hidden (a video full
+     * screen). A browser not in it hasn't been read.
+     */
+    val browserSites: Map<String, String?> = emptyMap(),
     val codeLock: CodeLock = CodeLock(),
     val teamsAuto: TeamsAutoSync.State = TeamsAutoSync.State(),
     val protection: ProtectionState = ProtectionState(),

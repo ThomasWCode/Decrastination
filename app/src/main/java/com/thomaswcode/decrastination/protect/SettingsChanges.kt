@@ -5,6 +5,7 @@ import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.data.Window
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
@@ -108,6 +109,9 @@ object SettingsChanges {
         "checkInMin" to "Sunday check-in",
     )
 
+    /** The settings that are lists of what's blocked or checked. */
+    private val LISTS = setOf("blockedApps", "blockedSites", "checkedBrowsers", "blockedBrowsers")
+
     /** [new] has a minute of the day that [old] hasn't. */
     private fun adds(old: Window, new: Window): Boolean = (0 until 24 * 60).any { it in new && it !in old }
 
@@ -137,6 +141,35 @@ object SettingsChanges {
             if (asked[field] == value) continue
             waiting.removeAll { it.field == field }
             if (old[field] == value) continue
+            // A list (what's blocked): what's added applies at once, and only what's taken off
+            // waits, as one change to the whole list. Taking off what was already waiting to go
+            // keeps its wait, so adding something meanwhile doesn't start it again.
+            if (current.armed && field in LISTS) {
+                val was = (old[field] as JsonArray).toList()
+                val will = (value as JsonArray).toList()
+                val removed = was.filterNot { it in will }
+                if (removed.isNotEmpty()) {
+                    val added = will.filterNot { it in was }
+                    val withAdded = JsonArray(was + added)
+                    if (added.isNotEmpty()) applied = JsonObject(applied + (field to withAdded))
+                    val previous = pending.firstOrNull { it.field == field }
+                    val sameRemovals = previous != null && was.filterNot { it in (previous.value as JsonArray) } == removed
+                    val description = describe(field, decode(JsonObject(old + (field to withAdded))), decode(JsonObject(old + (field to value))))
+                    waiting += if (previous != null && sameRemovals) {
+                        previous.copy(value = value, description = description)
+                    } else {
+                        PendingChange(
+                            id = newId(),
+                            field = field,
+                            value = value,
+                            description = description,
+                            requestedAt = now,
+                            applyAt = now + current.loosenDelayHours * 3_600_000L,
+                        )
+                    }
+                    continue
+                }
+            }
             val single = decode(JsonObject(old + (field to value)))
             if (current.armed && loosens(field, current, single)) {
                 waiting += PendingChange(
