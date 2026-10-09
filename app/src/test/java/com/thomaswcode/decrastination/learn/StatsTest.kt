@@ -82,6 +82,16 @@ class StatsTest {
     }
 
     @Test
+    fun `a session across midnight counts on each day only its own minutes`() {
+        // 23:30 to 02:30: 30 minutes on the 7th, 150 on the 8th.
+        val log = ActivityLog(sessions = listOf(session("2026-10-07T23:30", 180, completed = true)))
+        val summary = Stats.summary(log, now, LONDON)
+        assertEquals(30, summary.days.single { it.date.toString() == "2026-10-07" }.focusMin)
+        assertEquals(150, summary.days.single { it.date.toString() == "2026-10-08" }.focusMin)
+        assertEquals(180, summary.focusMin)
+    }
+
+    @Test
     fun `the calibration in words`() {
         val calibration = Calibration(
             multipliers = mapOf("Homework|Physics" to 1.34, "Homework|" to 1.1),

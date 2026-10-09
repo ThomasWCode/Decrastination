@@ -35,6 +35,7 @@ import com.thomaswcode.decrastination.enrich.ModelHold
 import com.thomaswcode.decrastination.enrich.PhotoChecker
 import com.thomaswcode.decrastination.enrich.RuleEnricher
 import com.thomaswcode.decrastination.learn.Assessment
+import com.thomaswcode.decrastination.learn.Briefing
 import com.thomaswcode.decrastination.learn.CalendarTime
 import com.thomaswcode.decrastination.learn.Daily
 import com.thomaswcode.decrastination.net.UrlConnectionHttp
@@ -358,10 +359,13 @@ class AppGraph private constructor(context: Context) {
         Backup(
             exportedAt = clock.now(),
             versionName = BuildConfig.VERSION_NAME,
-            settings = settings.value,
+            // As asked for: a change still waiting its delay is in it, and restored goes through
+            // the same wait (or, restored here, keeps waiting) rather than being lost.
+            settings = SettingsChanges.requested(settings.value, runtime.value.pending),
             log = log.value,
             calibration = runtime.value.calibration,
             eventAnswers = runtime.value.eventAnswers,
+            aiUsage = runtime.value.aiUsage,
         ),
     )
 
@@ -374,6 +378,9 @@ class AppGraph private constructor(context: Context) {
         val backup = Backups.decode(text) ?: return "That isn't a Decrastination backup (or it's from a newer version)."
         val armed = settings.value.armed
         changeSettings { Backups.importedSettings(it, backup) }
+        // This month's spend on Claude, armed or not: it can only rise, so the cap isn't given again.
+        val month = AiUsage.monthOf(clock.now(), clock.zone())
+        runtime.update { it.copy(aiUsage = Backups.mergeUsage(it.aiUsage, backup.aiUsage, month)) }
         // The reminders' alarms at the restored times, as a save in Settings sets them.
         Daily.schedule(app)
         val waiting = runtime.value.pending.size
@@ -382,7 +389,11 @@ class AppGraph private constructor(context: Context) {
         log.update { Backups.mergeLog(it, backup.log, clock.now()) }
         // Your answers on this phone win over the backup's.
         runtime.update { it.copy(calibration = backup.calibration, eventAnswers = backup.eventAnswers + it.eventAnswers) }
-        scope.launch { CalendarTime.refresh(app) }
+        // Read with the restored answers, and today's record made again, as an answer given here does.
+        scope.launch {
+            CalendarTime.refresh(app)
+            Briefing.replanToday(app)
+        }
         return "Restored the settings, ${backup.log.completions.size} completions and ${backup.log.sessions.size} sessions, what the app had learned, and your calendar answers.$waits"
     }
 
@@ -392,7 +403,6 @@ class AppGraph private constructor(context: Context) {
     /** The model's weekly review, while Claude is switched on and has its key; else null. */
     fun modelReviewer(): ClaudeReviewer? = claudeKey()?.let(::ClaudeReviewer)
 
-    /** The model, while it's switched on and has its key; else null. */
     /** Claude's API key, while Claude is switched on and the key is in use; else null. */
     fun claudeKey(): String? {
         val s = settings.value

@@ -1,10 +1,11 @@
 package com.thomaswcode.decrastination.data
 
 import com.thomaswcode.decrastination.core.Calibration
-import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.Json
+import com.thomaswcode.decrastination.enrich.AiUsage
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
 
 /**
  * What a backup keeps (PLAN.md Phase 6): the settings, the activity log, what the app has learned,
@@ -23,6 +24,8 @@ data class Backup(
     val log: ActivityLog,
     val calibration: Calibration = Calibration(),
     val eventAnswers: Map<String, String> = emptyMap(),
+    /** What Claude has cost this month, so a restore onto a fresh install doesn't give the month's cap again. */
+    val aiUsage: AiUsage = AiUsage(),
 ) {
     companion object {
         const val APP = "Decrastination"
@@ -67,6 +70,22 @@ object Backups {
      */
     fun importedSettings(asked: Settings, backup: Backup): Settings =
         backup.settings.copy(armed = asked.armed, aiKeyActive = asked.aiKeyActive)
+
+    /**
+     * [current]'s usage with [imported]'s for the same month taken in: the higher of each count, so
+     * a restore never lowers what's been spent (nor raises it past what either phone saw). Another
+     * month's is nothing to this one.
+     */
+    fun mergeUsage(current: AiUsage, imported: AiUsage, month: String): AiUsage {
+        val here = current.forMonth(month)
+        if (imported.month != month) return here
+        return here.copy(
+            spentUsd = maxOf(here.spentUsd, imported.spentUsd),
+            calls = maxOf(here.calls, imported.calls),
+            refused = maxOf(here.refused, imported.refused),
+            failed = maxOf(here.failed, imported.failed),
+        )
+    }
 
     /**
      * [current] with [imported]'s records added. One already here (the same moment and task, the

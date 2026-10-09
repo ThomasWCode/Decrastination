@@ -4,6 +4,7 @@ import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.core.Calibration
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.Source
+import com.thomaswcode.decrastination.enrich.AiUsage
 import java.io.ByteArrayInputStream
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -59,6 +60,18 @@ class BackupTest {
         assertEquals(true, imported.armed)
         assertEquals(false, imported.aiKeyActive)
         assertEquals(30, imported.boxMin)
+    }
+
+    @Test
+    fun `a restore takes in the month's spend on Claude, never lowering it`() {
+        val month = "2026-10"
+        val here = AiUsage(month = month, spentUsd = 3.0, calls = 10)
+        val merged = Backups.mergeUsage(here, AiUsage(month = month, spentUsd = 40.0, calls = 90), month)
+        assertEquals(40.0, merged.spentUsd)
+        assertEquals(90, merged.calls)
+        // A smaller one, or last month's, lowers nothing.
+        assertEquals(here, Backups.mergeUsage(here, AiUsage(month = month, spentUsd = 1.0, calls = 2), month))
+        assertEquals(here, Backups.mergeUsage(here, AiUsage(month = "2026-09", spentUsd = 99.0), month))
     }
 
     @Test
