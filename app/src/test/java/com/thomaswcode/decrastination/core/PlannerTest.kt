@@ -180,10 +180,42 @@ class PlannerTest {
     }
 
     @Test
+    fun `minutes of a session stopped early come off the next steps`() {
+        val steps = listOf(SubStep("A", 30), SubStep("B", 30))
+        val plan = plan(listOf(task("t", Fixtures.at("2026-10-20T09:00"), steps = steps, worked = 20)), "2026-10-08T17:00")
+        assertEquals(listOf(10, 30), plan.chunksOf("teams:t").map { it.minutes })
+    }
+
+    @Test
     fun `sub-steps are the chunks, done ones skipped`() {
         val steps = listOf(SubStep("Q1-8", 25, done = true), SubStep("Q9-16", 25), SubStep("mark", 10))
         val plan = plan(listOf(task("t", Fixtures.at("2026-10-20T09:00"), steps = steps)), "2026-10-08T17:00")
         assertEquals(listOf("Q9-16", "mark"), plan.chunksOf("teams:t").map { it.step })
+    }
+
+    @Test
+    fun `a vocabulary step is left out where an Anki deck task holds its sections, and planned where none does`() {
+        val steps = listOf(SubStep("Learn vocabulary 2.2", 20, ankiSections = listOf("2.2")), SubStep("Exercise 4", 25))
+        val homework = task("t", Fixtures.at("2026-10-20T09:00"), steps = steps)
+        assertEquals(listOf("Learn vocabulary 2.2", "Exercise 4"), plan(listOf(homework), "2026-10-08T17:00").chunksOf("teams:t").map { it.step })
+        val deck = TaskItem(
+            id = "anki:deck:1",
+            source = Source.Anki,
+            sourceId = "deck:1",
+            title = "Learn Anki deck 2.2",
+            kind = Kind.Homework,
+            derived = true,
+            firstSeenAt = Fixtures.at("2026-10-07T12:00"),
+            lastSeenAt = Fixtures.at("2026-10-07T12:00"),
+            extra = mapOf("deckName" to "Textbook 1::2.2", "for" to "teams:t"),
+        )
+        assertEquals(listOf("Exercise 4"), plan(listOf(homework, deck), "2026-10-08T17:00").chunksOf("teams:t").map { it.step })
+        // Another textbook's deck holds nothing for this one.
+        val oldBook = deck.copy(extra = mapOf("deckName" to "Textbook 2::2.2", "for" to "teams:t"))
+        assertEquals(listOf("Learn vocabulary 2.2", "Exercise 4"), plan(listOf(homework, oldBook), "2026-10-08T17:00").chunksOf("teams:t").map { it.step })
+        // A deck task missed (the deck gone) holds nothing: the step is planned again.
+        val missed = deck.copy(status = Status.Missed)
+        assertEquals(listOf("Learn vocabulary 2.2", "Exercise 4"), plan(listOf(homework, missed), "2026-10-08T17:00").chunksOf("teams:t").map { it.step })
     }
 
     @Test

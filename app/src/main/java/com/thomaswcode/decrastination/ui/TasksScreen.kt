@@ -23,9 +23,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.thomaswcode.decrastination.AppGraph
+import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.data.SourceStatus
+import com.thomaswcode.decrastination.enrich.RuleEnricher
 import com.thomaswcode.decrastination.sources.gmail.GmailThreads
 
 /** Every task each source lists, with its raw detail: the debug view PLAN.md's Phase 1 asks for. */
@@ -92,7 +94,9 @@ private fun TaskRow(task: TaskItem, now: Long, zone: java.time.ZoneId) {
             Text("Hidden from the plan until ${Format.at(it, now, zone)}", style = MaterialTheme.typography.bodySmall)
         }
         if (expanded) {
-            task.extra[GmailThreads.EXTRA_NEXT_STEP]?.let { Text("Next: $it", style = MaterialTheme.typography.bodySmall) }
+            // The enrichment's step only while it's of the email as it is: a new message's own rules' step otherwise.
+            (Enrichments.current(task)?.nextStep ?: task.extra[GmailThreads.EXTRA_NEXT_STEP])?.let { Text("Next: $it", style = MaterialTheme.typography.bodySmall) }
+            task.enrichment?.takeIf { it.by != RuleEnricher.BY }?.let { Text("Steps and estimate by Claude", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             task.subSteps.forEach { Text("• ${it.title} (${Format.minutes(it.minutes)})${if (it.done) " ✓" else ""}", style = MaterialTheme.typography.bodySmall) }
             if (task.detail.isNotBlank()) Text(task.detail, style = MaterialTheme.typography.bodySmall)
         }

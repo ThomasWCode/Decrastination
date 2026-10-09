@@ -36,9 +36,12 @@ import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.data.Secret
 import com.thomaswcode.decrastination.data.SourceStatus
+import com.thomaswcode.decrastination.enrich.AiUsage
+import com.thomaswcode.decrastination.enrich.EnrichWorker
 import com.thomaswcode.decrastination.protect.ProtectionActivity
 import com.thomaswcode.decrastination.sources.anki.AnkiProvider
 import com.thomaswcode.decrastination.sync.SyncWorker
+import java.util.Locale
 import kotlinx.coroutines.launch
 
 /** The setup checklist (PLAN.md Phase 1): what each part of the app needs, and whether it has it. */
@@ -51,6 +54,7 @@ fun SetupScreen(graph: AppGraph, activity: Activity) {
     val scope = rememberCoroutineScope()
     var refresh by remember { mutableIntStateOf(0) }
     var editing by remember { mutableStateOf<Credential?>(null) }
+    var enteringKey by remember { mutableStateOf(false) }
     val requestAnki = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         refresh++
         if (granted) SyncWorker.syncNow(activity, setOf(Source.Anki))
@@ -81,12 +85,47 @@ fun SetupScreen(graph: AppGraph, activity: Activity) {
             detail = sourceDetail(state.status(Source.Gmail), if (Secret.GmailAppPassword in secrets) "Saved." else "Not saved. Read-only: nothing is ever sent or changed."),
             action = "Enter" to { editing = Credential.Gmail },
         )
+        val usage = runtime.aiUsage.forMonth(AiUsage.monthOf(graph.clock.now(), graph.clock.zone()))
+        SetupItem(
+            title = "Claude",
+            done = settings.aiEnabled && settings.aiKeyActive && Secret.AnthropicApiKey in secrets && usage.lastError == null,
+            detail = when {
+                Secret.AnthropicApiKey !in secrets -> "No API key: the rules do what they can, and nothing is sent to Claude."
+                !settings.aiKeyActive -> "Key saved; it waits like switching Claude on (Settings lists when it applies), so nothing is sent yet."
+                !settings.aiEnabled -> "Key saved; switched off in Settings, so nothing is sent."
+                // Its calls failing (a bad key, no connection): said, so it can be put right.
+                usage.lastError != null -> "On, but its last call failed (${usage.lastError.take(80)}): the rules stand in, and it's tried again after an hour."
+                else -> "On: £%.2f of £%d this month.".format(Locale.UK, usage.spentGbp(settings.usdToGbp), settings.aiMonthlyCapGbp)
+            },
+            action = "Enter key" to { enteringKey = true },
+        )
+        SetupItem(
+            title = "Settings",
+            done = null,
+            detail = "Hours, planning, Anki, what's blocked, and Claude.",
+            action = "Open" to { activity.startActivity(Intent(activity, SettingsActivity::class.java)) },
+        )
         SetupItem(
             title = "Blocking and protection",
             done = runtime.protection.problems.isEmpty() && runtime.protection.checkedAt != null,
             detail = runtime.protection.problems.firstOrNull() ?: if (settings.armed) "Armed." else "Blocking works; protection isn't armed.",
             action = "Open" to { activity.startActivity(Intent(activity, ProtectionActivity::class.java)) },
         )
+    }
+
+    if (enteringKey) {
+        KeyDialog(onDismiss = { enteringKey = false }) { key ->
+            enteringKey = false
+            scope.launch {
+                graph.secrets.put(Secret.AnthropicApiKey, key)
+                // The last key's failure isn't this one's: it's tried at once, not after the rest.
+                graph.runtime.update { it.copy(aiUsage = it.aiUsage.copy(lastError = null)) }
+                // Put to use as switching Claude on is: at once unarmed, after the wait armed.
+                graph.changeSettings { it.copy(aiKeyActive = true) }
+                // A new key for one already in use: straight to work.
+                if (graph.claudeKey() != null) EnrichWorker.enqueue(activity)
+            }
+        }
     }
 
     editing?.let { credential ->
@@ -136,6 +175,31 @@ private fun CredentialDialog(credential: Credential, onDismiss: () -> Unit, onSa
                 onSave(mapOf(credential.user to user.trim(), credential.password to password))
             }) { Text("Save") }
         },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}
+
+/** The Claude API key: one field, stored encrypted and never shown again. */
+@Composable
+private fun KeyDialog(onDismiss: () -> Unit, onSave: (String) -> Unit) {
+    var key by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Claude API key") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    key,
+                    { key = it },
+                    label = { Text("Key (sk-ant-…)") },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                )
+                Text("Stored encrypted on this phone. Claude is used only once it's switched on in Settings, and never past the monthly cap.", style = MaterialTheme.typography.bodySmall)
+            }
+        },
+        confirmButton = { TextButton(enabled = key.isNotBlank(), onClick = { onSave(key.trim()) }) { Text("Save") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
 }

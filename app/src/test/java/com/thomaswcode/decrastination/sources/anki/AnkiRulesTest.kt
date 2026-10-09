@@ -80,6 +80,15 @@ class AnkiRulesTest {
     }
 
     @Test
+    fun `a deadline before Anki's day turns over is that night's, after midnight`() {
+        // Cards due by 01:00: the Anki day of the 8th runs to 04:00 on the 9th.
+        val (evening, _) = AnkiRules.quota(decks, 1, null, Fixtures.at("2026-10-08T20:00"), LONDON, 60) { it.new }
+        assertEquals(Fixtures.at("2026-10-09T01:00"), evening!!.dueAt)
+        val (late, _) = AnkiRules.quota(decks, 1, null, Fixtures.at("2026-10-09T02:00"), LONDON, 60) { it.new }
+        assertEquals(Fixtures.at("2026-10-09T01:00"), late!!.dueAt)
+    }
+
+    @Test
     fun `the quota deck stays fixed for the day once chosen`() {
         val studied = decks.map { if (it.id == 12L) it.copy(new = 0) else it }
         val (task, day) = quota(studied, previous = AnkiDay("2026-10-08", 12, "Textbook 1::1.2"))
@@ -204,6 +213,18 @@ class AnkiRulesTest {
         val studied = decks.map { if (it.id == 12L) it.copy(new = 0) else it }
         val waiting = AnkiRules.homeworkDecks(studied, 1, homework, unseen = { 45 }, now = NOW, zone = LONDON).single()
         assertEquals(listOf("20 new cards", "20 new cards", "5 new cards"), waiting.subSteps!!.map { it.title })
+    }
+
+    @Test
+    fun `sections the enrichment read link decks when the pattern finds none, and never beat it`() {
+        // "Revise the family topic" names no section the pattern can see; the enrichment read 1.2.
+        val unread = assignment("Familie", "Revise the family topic for Monday's test", Fixtures.at("2026-10-12T08:30"))
+        val enriched = unread.copy(enrichment = com.thomaswcode.decrastination.core.Enrichment(com.thomaswcode.decrastination.core.Enrichments.inputHash(unread), "claude-opus-5-5", 0, ankiSections = listOf("1.2")))
+        assertEquals(emptyList(), AnkiRules.homeworkDecks(decks, 1, listOf(unread), unseen = { 25 }, now = NOW, zone = LONDON).map { it.sourceId })
+        assertEquals(listOf("deck:12"), AnkiRules.homeworkDecks(decks, 1, listOf(enriched), unseen = { 25 }, now = NOW, zone = LONDON).map { it.sourceId })
+        // Where the pattern finds a section, it wins over the enrichment's.
+        val named = assignment("Familie", "Learn vocabulary 1.3", Fixtures.at("2026-10-12T08:30")).copy(enrichment = enriched.enrichment)
+        assertEquals(listOf("deck:13"), AnkiRules.homeworkDecks(decks, 1, listOf(named), unseen = { 25 }, now = NOW, zone = LONDON).map { it.sourceId })
     }
 
     @Test

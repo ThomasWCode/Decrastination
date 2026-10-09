@@ -9,21 +9,30 @@ import android.os.Looper
 import android.util.Log
 import com.thomaswcode.decrastination.block.Focus
 import com.thomaswcode.decrastination.block.Sessions
+import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.Planner
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.WallClock
+import com.thomaswcode.decrastination.core.withEnrichment
 import com.thomaswcode.decrastination.data.ActivityLog
 import com.thomaswcode.decrastination.data.DeviceClock
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.KeystoreCipher
 import com.thomaswcode.decrastination.data.RuntimeState
+import com.thomaswcode.decrastination.data.Secret
 import com.thomaswcode.decrastination.data.SecretStore
 import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.data.TaskState
+import com.thomaswcode.decrastination.enrich.AiUsage
+import com.thomaswcode.decrastination.enrich.ClaudeEnricher
+import com.thomaswcode.decrastination.enrich.EnrichWorker
+import com.thomaswcode.decrastination.enrich.Enricher
+import com.thomaswcode.decrastination.enrich.RuleEnricher
 import com.thomaswcode.decrastination.net.UrlConnectionHttp
 import com.thomaswcode.decrastination.protect.SettingsChanges
 import com.thomaswcode.decrastination.protect.Watchdog
+import com.thomaswcode.decrastination.sources.anki.AnkiRules
 import com.thomaswcode.decrastination.sources.anki.AnkiSource
 import com.thomaswcode.decrastination.sources.gmail.GmailSource
 import com.thomaswcode.decrastination.sources.powerplanner.PowerPlannerApi
@@ -222,6 +231,26 @@ class AppGraph private constructor(context: Context) {
             focus.finishSessions()
             if (focus.rewardCompletions()) Sessions.clear(app)
         }
+        // What's new or changed, even in place, is enriched.
+        syncer.addAfterEverySync {
+            val modelOn = modelAvailable()
+            val modelOff = claudeKey() == null
+            if (tasks.value.tasks.any { Enrichments.jobFor(it) != null && Enrichments.stale(it, modelOn, RuleEnricher.BY, modelOff) }) EnrichWorker.enqueue(app)
+        }
+        // Anki's deadline or textbook changed (saved, or a waiting change fallen due): its tasks are
+        // made with them, so it's read again now.
+        scope.launch {
+            settings.state.map { it.ankiDeadlineMin to it.ankiTextbook }.distinctUntilChanged().drop(1).collect { SyncWorker.syncNow(app, setOf(Source.Anki)) }
+        }
+        // Switched off: the rules go over what the model read, as its reading goes with it.
+        scope.launch {
+            settings.state.map { it.aiEnabled && it.aiKeyActive }.distinctUntilChanged().drop(1).collect { on -> if (!on) EnrichWorker.enqueue(app) }
+        }
+        // Able to be asked again (switched on, its key put to use, a higher cap or another exchange
+        // rate saved, its rest after a failure over), the model goes over what only the rules have seen.
+        scope.launch {
+            combine(settings.state, runtime.state) { _, _ -> modelAvailable() }.distinctUntilChanged().drop(1).collect { on -> if (on) EnrichWorker.enqueue(app) }
+        }
         runCatching {
             app.contentResolver.registerContentObserver(
                 TeamsProvider.root,
@@ -244,6 +273,105 @@ class AppGraph private constructor(context: Context) {
         }
     }
 
+    /** The rules' enrichment: always there, and the fallback for the model. */
+    private val rules = RuleEnricher()
+
+    /** The model, while it's switched on and has its key; else null. */
+    /** Claude's API key, while Claude is switched on and the key is in use; else null. */
+    fun claudeKey(): String? {
+        val s = settings.value
+        if (!s.aiEnabled || !s.aiKeyActive) return null
+        return secrets[Secret.AnthropicApiKey]?.takeIf { it.isNotBlank() }
+    }
+
+    fun modelEnricher(): Enricher? = claudeKey()?.let { ClaudeEnricher(it, clock.zone()) }
+
+    /**
+     * Whether the model can be asked now: on with its key in use, not resting after a failed call,
+     * and with room under this month's cap for another. When it can't, what only the rules have
+     * seen isn't due for it, so it isn't redone every sync while the cap is used up.
+     */
+    fun modelAvailable(): Boolean {
+        if (claudeKey() == null) return false
+        val now = clock.now()
+        val usage = runtime.value.aiUsage
+        if (usage.lastError != null && now - (usage.lastCallAt ?: 0L) < MODEL_REST_MS) return false
+        val s = settings.value
+        return usage.forMonth(AiUsage.monthOf(now, clock.zone())).allows(s.aiMonthlyCapGbp, s.usdToGbp)
+    }
+
+    /**
+     * Enriches every task that's new or changed since it was last enriched, and, while the model is
+     * on, those only the rules have seen; soonest due first. The model does it while it's on and
+     * the month's spend leaves room under the cap, at most [MAX_MODEL_CALLS] a run; the rules do
+     * the rest, and stand in for a call that fails (the model is then left alone for the run) or
+     * that the model declines (recorded as the model's, so it isn't asked again).
+     */
+    suspend fun enrichNow(model: Enricher? = modelEnricher()) {
+        // Not while it rests after a failed call (no network, a bad key), nor with no room under the
+        // cap: then what only the rules have seen isn't due for it.
+        var enricher = model.takeIf { modelAvailable() }
+        var calls = 0
+        var decksChanged = false
+        val candidates = tasks.value.tasks
+            .mapNotNull { task -> Enrichments.jobFor(task)?.let { task to it } }
+            .filter { (task, _) -> Enrichments.stale(task, enricher != null, RuleEnricher.BY, modelOff = claudeKey() == null) }
+            .sortedBy { (task, _) -> task.dueAt ?: Long.MAX_VALUE }
+        for ((snapshot, _) in candidates) {
+            // Read afresh: a sync since the run began may have closed or changed it.
+            val task = tasks.value.tasks.firstOrNull { it.id == snapshot.id } ?: continue
+            // Being worked on in a focus session: its steps stay till the session ends, or the
+            // step it's on would be gone when it does. It's done at the next run after.
+            if (focus.session?.taskId == task.id) continue
+            val job = Enrichments.jobFor(task) ?: continue
+            if (!Enrichments.stale(task, enricher != null, RuleEnricher.BY, modelOff = claudeKey() == null)) continue
+            val now = clock.now()
+            val month = AiUsage.monthOf(now, clock.zone())
+            val s = settings.value
+            // Switched off (or its key removed) while this runs: nothing more is sent.
+            if (claudeKey() == null) enricher = null
+            val useModel = enricher != null && calls < MAX_MODEL_CALLS && runtime.value.aiUsage.forMonth(month).allows(s.aiMonthlyCapGbp, s.usdToGbp)
+            var enrichment = if (useModel) {
+                calls++
+                val result = runCatching { enricher!!.enrich(task, job, now) }
+                    .onFailure { error ->
+                        Log.w(TAG, "The model's enrichment failed; the rules stand in", error)
+                        runtime.update { it.copy(aiUsage = it.aiUsage.forMonth(month).failure(error.message ?: error.javaClass.simpleName, now)) }
+                        enricher = null
+                    }
+                    .getOrNull()
+                result?.let { r -> runtime.update { it.copy(aiUsage = it.aiUsage.forMonth(month).record(r.costUsd, r.refused, now)) } }
+                when {
+                    result?.enrichment != null -> result.enrichment
+                    // Declined, or no answer it could read: the rules' say, under the model's name.
+                    result != null -> rules.enrich(task, job, now).enrichment?.copy(by = enricher?.by ?: RuleEnricher.BY)
+                    else -> null
+                }
+            } else {
+                null
+            }
+            if (enrichment == null) enrichment = rules.enrich(task, job, now).enrichment
+            val made = enrichment ?: continue
+            // Laid only over the task as it was read (changed during the call, the next run does it),
+            // and not over one a session started on during the call: its steps stay till it ends.
+            var laid = false
+            tasks.update { state ->
+                state.copy(
+                    tasks = state.tasks.map {
+                        if (it.id == task.id && Enrichments.inputHash(it) == made.inputHash && focus.session?.taskId != task.id) it.withEnrichment(made).also { laid = true } else it
+                    },
+                )
+            }
+            if (!laid) continue
+            // Its deck tasks take their sections and due date from it.
+            val after = task.withEnrichment(made)
+            val sections = AnkiRules.sectionsOf(after)
+            if (sections != AnkiRules.sectionsOf(task) || (sections.isNotEmpty() && after.dueAt != task.dueAt)) decksChanged = true
+        }
+        // Sections the deck pattern missed, or a deadline moved: their deck tasks come from reading Anki again, now.
+        if (decksChanged) SyncWorker.syncNow(app, setOf(Source.Anki))
+    }
+
     companion object {
         const val TAG = "Decrastination"
 
@@ -253,6 +381,12 @@ class AppGraph private constructor(context: Context) {
         /** The widget sends a change for each step of a sync; read once they've stopped. */
         private const val TEAMS_QUIET_MS = 5_000L
         private const val WIDGET_DEBOUNCE_MS = 1_000L
+
+        /** After a failed call, the model is left alone this long. */
+        private const val MODEL_REST_MS = 3_600_000L
+
+        /** The most model calls one enrichment run makes: the rest wait for the next. */
+        const val MAX_MODEL_CALLS = 20
 
         // It holds only the application context, which lives as long as the process anyway.
         @SuppressLint("StaticFieldLeak")

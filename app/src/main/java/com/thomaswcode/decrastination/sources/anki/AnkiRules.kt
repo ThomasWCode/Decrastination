@@ -1,16 +1,18 @@
 package com.thomaswcode.decrastination.sources.anki
 
+import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.core.Fetched
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.Source
+import com.thomaswcode.decrastination.core.Status
 import com.thomaswcode.decrastination.core.SubStep
 import com.thomaswcode.decrastination.core.TaskItem
-import kotlinx.serialization.Serializable
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
 import kotlin.math.ceil
+import kotlinx.serialization.Serializable
 
 /** One AnkiDroid deck with today's counts (`deck_count` is `[learn, review, new]`). */
 data class Deck(val id: Long, val name: String, val learn: Int, val review: Int, val new: Int) {
@@ -60,6 +62,15 @@ object AnkiRules {
     private val SECTION_IN_TEXT = Regex("""(?<![\d.])([1-9])\.([1-9])(?![\d.])""")
     private val VOCABULARY = Regex("""vocab|vokabel|wortschatz|anki""", RegexOption.IGNORE_CASE)
 
+    /** A page reference ("p46", "pp. 12", "S. 30"): numbers, like the sections, not work. */
+    private val PAGES = Regex("""\b(pp?|s|pages?|seiten?)\.?\s*\d+""", RegexOption.IGNORE_CASE)
+
+    /** What an instruction that's only about learning words is made of, besides numbers. */
+    private val VOCABULARY_WORDS = Regex(
+        """\b(learn|learning|lerne|lernen|revise|revision|study|memori[sz]e|vocab\w*|vokabel\w*|wortschatz|anki|decks?|cards?|words?|column|sections?|test|quiz|both|ways|the|a|and|und|for|of|on|in|from|to|with|using)\b""",
+        RegexOption.IGNORE_CASE,
+    )
+
     fun ankiDay(now: Long, zone: ZoneId): LocalDate =
         Instant.ofEpochMilli(now).atZone(zone).minusHours(ROLLOVER_HOUR).toLocalDate()
 
@@ -85,11 +96,51 @@ object AnkiRules {
             .firstOrNull { (deck, _) -> deck.new > 0 || unseen(deck) > 0 }
             ?.first
 
+    /**
+     * Whether [text] asks only for learning vocabulary ("Learn vocabulary p46-47/ 2.2/2.3 (vocabulary
+     * test!)"): a vocabulary word, numbers, and nothing but words like those. Anything else in it,
+     * understood or not ("…and complete exercises 3–5", "…and revise the grammar"), is other work,
+     * so the step stays planned whole, deck or not.
+     */
+    fun vocabularyOnly(text: String): Boolean =
+        VOCABULARY.containsMatchIn(text) && text.replace(PAGES, " ").replace(VOCABULARY_WORDS, " ").none { it.isLetter() }
+
     /** The sections a piece of vocabulary homework names, in order, without repeats. */
     fun linkedSections(text: String): List<Pair<Int, Int>> {
         if (!VOCABULARY.containsMatchIn(text)) return emptyList()
         return SECTION_IN_TEXT.findAll(text).map { it.groupValues[1].toInt() to it.groupValues[2].toInt() }.distinct().toList()
     }
+
+    /** The vocabulary sections the enrichment read in [task] ("1.2"). */
+    fun enrichedSections(task: TaskItem): List<Pair<Int, Int>> =
+        // Only an enrichment of the task as it is: one of content since changed names old sections.
+        Enrichments.current(task)?.ankiSections.orEmpty().mapNotNull { section ->
+            section.split('.').takeIf { it.size == 2 }?.let { (major, minor) -> major.toIntOrNull()?.let { a -> minor.toIntOrNull()?.let { b -> a to b } } }
+        }.distinct()
+
+    /** The vocabulary sections [task] asks for: the deck pattern wins when it finds anything; else the sections the enrichment read. */
+    fun sectionsOf(task: TaskItem): List<Pair<Int, Int>> = linkedSections(task.title + "\n" + task.detail).ifEmpty { enrichedSections(task) }
+
+    /**
+     * For each assignment, the vocabulary sections ("1.2") its deck tasks from the current
+     * [textbook] hold, open or finished. A missed one holds none, nor does another textbook's.
+     */
+    fun heldSections(tasks: List<TaskItem>, textbook: Int): Map<String, Set<String>> = heldDecks(tasks, textbook).mapValues { it.value.keys }
+
+    /**
+     * For each assignment, the deck tasks [heldSections] counts, by the section each holds; with
+     * [missed], those since missed too (a deck dropped as its assignment closed), for the work they
+     * had.
+     */
+    fun heldDecks(tasks: List<TaskItem>, textbook: Int, missed: Boolean = false): Map<String, Map<String, TaskItem>> = tasks
+        .filter { it.source == Source.Anki && it.sourceId.startsWith(DECK_PREFIX) && (missed || it.status != Status.Missed) }
+        .flatMap { deck ->
+            val name = deck.extra[EXTRA_DECK_NAME]?.takeIf { it.startsWith("Textbook $textbook${Deck.SEPARATOR}") } ?: return@flatMap emptyList()
+            val section = name.substringAfterLast(Deck.SEPARATOR)
+            deck.extra[EXTRA_FOR].orEmpty().split(',').filter { it.isNotEmpty() }.map { Triple(it, section, deck) }
+        }
+        .groupBy({ it.first }, { it.second to it.third })
+        .mapValues { it.value.toMap() }
 
     fun deckName(textbook: Int, section: Pair<Int, Int>): String = "Textbook $textbook::${section.first}.${section.second}"
 
@@ -124,7 +175,10 @@ object AnkiRules {
             if (reviews > 0) add("$reviews review${if (reviews == 1) "" else "s"}")
             if (newLeft > 0) add("$newLeft new${shortName?.let { " ($it)" } ?: ""}")
         }
-        val dueAt = day.atTime(LocalTime.of(deadlineMin / 60, deadlineMin % 60)).atZone(zone).toInstant().toEpochMilli()
+        // A deadline before Anki's day turns over (01:00) is that night's, after midnight: the
+        // next calendar date, still within the Anki day.
+        val date = if (deadlineMin < ROLLOVER_HOUR * 60) day.plusDays(1) else day
+        val dueAt = date.atTime(LocalTime.of(deadlineMin / 60, deadlineMin % 60)).atZone(zone).toInstant().toEpochMilli()
         val fetched = Fetched(
             sourceId = QUOTA_PREFIX + day,
             title = if (parts.isEmpty()) "Anki: today's cards" else "Anki: ${parts.joinToString(" + ")}",
@@ -163,7 +217,7 @@ object AnkiRules {
         val wanted = LinkedHashMap<Deck, MutableList<TaskItem>>()
         for (task in assignments) {
             if (!task.isOpen || task.source == Source.Anki) continue
-            for (section in linkedSections(task.title + "\n" + task.detail)) {
+            for (section in sectionsOf(task)) {
                 val deck = byName[deckName(textbook, section)] ?: continue
                 wanted.getOrPut(deck) { mutableListOf() } += task
             }

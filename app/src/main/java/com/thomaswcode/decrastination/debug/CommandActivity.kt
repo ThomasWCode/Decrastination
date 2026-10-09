@@ -9,15 +9,21 @@ import androidx.core.app.NotificationManagerCompat
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.block.FocusService
 import com.thomaswcode.decrastination.block.TeamsAutoSync
+import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.data.Secret
+import com.thomaswcode.decrastination.enrich.ClaudeEnricher
+import com.thomaswcode.decrastination.enrich.Prompts
 import com.thomaswcode.decrastination.protect.Watchdog
 import com.thomaswcode.decrastination.sync.SyncWorker
 import com.thomaswcode.decrastination.ui.OpenTaskActivity
+import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.io.File
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 
 /**
  * Commands for setting up and testing the app from a PC, over adb:
@@ -34,6 +40,14 @@ import java.io.File
  * - `force-block --ei minutes 10`: blocking hours apply for that long, whatever the time, for
  *   testing at night; 0 ends it. It can only tighten: quiet and school hours stop protecting.
  * - `protection [--ez repair true]`: runs the watchdog and logs what it found.
+ * - `enrich`: enriches what's new or changed now (the rules, or the model if it's on) and logs
+ *   who enriched what.
+ * - `ai-prompts --ei count 6`: writes `files/ai-prompts.json`, the exact prompts and schemas the
+ *   model would get for up to that many tasks per job, for trying them out without the API (the
+ *   file holds your tasks' text: pull it into the git-ignored `private/`, then delete it).
+ * - `ai-check --es base http://127.0.0.1:8089`: one model call per job through the real client
+ *   to a stand-in server (`adb reverse` to the PC), with a dummy key, logging what it reads back.
+ *   Nothing reaches Anthropic and nothing is stored: it checks the client works on the phone.
  * - Test hooks: `test-arm`, `test-disarm` (at once, unlike the app's own disarming), `remove-admin`,
  *   `clear-parent-code`, `offer-teams-sync` (the countdown banner now, whatever the rules), and
  *   `clean-up` (this app's notifications, a delayed Teams sync, forced blocking hours and the
@@ -105,6 +119,46 @@ class CommandActivity : Activity() {
             "protection" -> {
                 Watchdog.check(this, repair = intent.getBooleanExtra("repair", false))
                 Log.i(TAG, "Protection: ${Watchdog.report(this)}; problems ${graph.runtime.value.protection.problems}")
+            }
+            "enrich" -> {
+                graph.enrichNow()
+                val open = graph.tasks.value.tasks.filter { Enrichments.jobFor(it) != null }
+                Log.i(TAG, "Enriched: " + open.groupingBy { it.enrichment?.by ?: "nothing" }.eachCount())
+                open.filter { it.subSteps.isNotEmpty() && it.enrichment?.subSteps != null }
+                    .forEach { Log.i(TAG, "  ${it.title}: ${it.subSteps.joinToString(" | ") { s -> "${s.title} (${s.minutes})" }}") }
+            }
+            "ai-prompts" -> {
+                val count = intent.getIntExtra("count", 6)
+                val now = graph.clock.now()
+                val items = Enrichments.Job.entries.flatMap { job ->
+                    graph.tasks.value.tasks.filter { Enrichments.jobFor(it) == job }.take(count).map { task ->
+                        JsonObject(
+                            mapOf(
+                                "id" to JsonPrimitive(task.id),
+                                "job" to JsonPrimitive(job.name),
+                                "system" to JsonPrimitive(Prompts.system(job)),
+                                "user" to JsonPrimitive(Prompts.describe(task, job, now, graph.clock.zone())),
+                                "schema" to Prompts.schemaJson(job),
+                            ),
+                        )
+                    }
+                }
+                File(filesDir, "ai-prompts.json").writeText(JsonArray(items).toString())
+                Log.i(TAG, "Wrote ${items.size} prompts to files/ai-prompts.json")
+            }
+            "ai-check" -> {
+                val base = intent.getStringExtra("base")
+                if (base == null) {
+                    Log.w(TAG, "ai-check needs --es base <url>")
+                } else {
+                    val model = ClaudeEnricher("dummy-key-for-a-stand-in", graph.clock.zone(), endpoint = base)
+                    for (job in Enrichments.Job.entries) {
+                        val task = graph.tasks.value.tasks.firstOrNull { Enrichments.jobFor(it) == job } ?: continue
+                        val result = runCatching { model.enrich(task, job, graph.clock.now()) }
+                        val said = result.fold({ "${it.enrichment} (cost ${"%.4f".format(it.costUsd)} USD, refused ${it.refused})" }, { "failed: $it" })
+                        Log.i(TAG, "ai-check $job on '${task.title}': $said")
+                    }
+                }
             }
             else -> Log.w(TAG, "Unknown command $command")
         }

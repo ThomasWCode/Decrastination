@@ -33,6 +33,16 @@ class FormatTest {
     }
 
     @Test
+    fun `times are typed as 16 45 or 1645, and nonsense is refused`() {
+        assertEquals(16 * 60 + 45, parseTime("16:45"))
+        assertEquals(16 * 60 + 45, parseTime("1645"))
+        assertEquals(7 * 60, parseTime("7:00"))
+        assertEquals(null, parseTime("24:00"))
+        assertEquals(null, parseTime("16:75"))
+        assertEquals(null, parseTime("soon"))
+    }
+
+    @Test
     fun `a day's load says what's left free, or how far over`() {
         assertEquals("1 h planned, 4 h 15 min free", Format.load(60, 315))
         assertEquals("7 h planned, 1 h 45 min over", Format.load(420, 315))

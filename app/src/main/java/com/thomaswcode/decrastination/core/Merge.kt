@@ -4,7 +4,8 @@ package com.thomaswcode.decrastination.core
  * Applies one source's fresh list to the stored tasks. Pure, so the rules are tested directly.
  *
  * - A task the source lists is updated from it, keeping this app's own bookkeeping (first seen,
- *   minutes worked, sub-steps, estimates). One the source lists as finished becomes [Status.Done].
+ *   minutes worked, sub-steps, estimates, the enrichment, laid over the fresh values again). One the
+ *   source lists as finished becomes [Status.Done].
  * - An open task the source no longer lists is done: handed in, ticked, archived, or snoozed out
  *   of the inbox (PLAN.md §1). A [TaskItem.derived] one (the Anki quota) was missed instead: only
  *   its counts can say it's done.
@@ -44,7 +45,9 @@ object Merge {
             if (!listed.add(id)) continue
             val old = byId[id]
             if (old == null) {
-                if (f.done) continue
+                // Finished before it was ever seen: nothing to do, so it isn't added. A derived
+                // task is kept, as done: a deck already studied still stands for its sections.
+                if (f.done && !f.derived) continue
                 val task = TaskItem(
                     id = id,
                     source = source,
@@ -66,7 +69,12 @@ object Merge {
                     firstSeenAt = now,
                     lastSeenAt = now,
                     extra = f.extra,
-                )
+                    sourceValues = SourceValues(f.kind, f.dueAt, f.availableFrom),
+                ).let { if (f.done) it.copy(status = Status.Done, doneAt = now) else it }
+                if (f.done) {
+                    fresh[id] = task
+                    continue
+                }
                 added += task
                 fresh[id] = task
                 continue
@@ -90,7 +98,8 @@ object Merge {
                 derived = f.derived,
                 lastSeenAt = now,
                 extra = f.extra,
-            )
+                sourceValues = SourceValues(f.kind, f.dueAt, f.availableFrom),
+            ).enriched()
             val next = when {
                 // Reported as it stood before it finished (see completion()).
                 old.status == Status.Open && f.done -> updated.copy(status = Status.Done, doneAt = now).also { completed += completion(old, it) }

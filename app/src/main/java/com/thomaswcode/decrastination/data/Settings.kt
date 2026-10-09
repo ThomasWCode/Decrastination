@@ -50,6 +50,21 @@ data class Settings(
     val teamsFirstUnlockMin: Int = 16 * 60 + 45,
     val teamsSyncEveryMin: Int = 180,
 
+    /**
+     * Claude for email triage, assignment steps and estimates (docs/data-sources.md §5): built, but
+     * off until you switch it on and give it an API key. Without it, the rules do what they can.
+     */
+    val aiEnabled: Boolean = false,
+    /**
+     * Whether the saved API key may be used: set when a key is saved, and, once armed, after the
+     * same wait as switching Claude on, so a key can't switch on triage that's already on.
+     */
+    val aiKeyActive: Boolean = false,
+    /** The most the model may cost in a calendar month, in pounds. */
+    val aiMonthlyCapGbp: Int = 200,
+    /** Pounds to the US dollar, to turn the API's dollar prices into pounds against the cap. */
+    val usdToGbp: Double = 0.79,
+
     /** Anti-tamper (docs/scheduler.md §6) is built but off until you arm it (Q20). */
     val armed: Boolean = false,
     /** How long a change that loosens blocking waits, once armed. */
