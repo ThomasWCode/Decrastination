@@ -229,8 +229,10 @@ object Answers {
                 val checked = trusted(steps(t.blocks, now, zone, vocabulary = false, maxMinutes = MAX_EFFORT, dueBy = deadline ?: sourceDue(task), opens = opens, noun = "block"), t.effortMin, t.blocks.size)
                 val blocks = checked.steps
                 base.copy(
-                    // Blocks of work make it something to do, whatever else it says.
-                    kind = if (blocks != null) Kind.Admin else Kind.entries.firstOrNull { it.name == t.kind && it in setOf(Kind.Admin, Kind.Event, Kind.Info) },
+                    // Blocks of work make it something to do, whatever else it says: the ones given,
+                    // trusted or not. Dropped, its whole estimate is planned instead, and its warning
+                    // shows; an email hidden as only to read would hide both (BUG-P2-004).
+                    kind = if (t.blocks.isNotEmpty()) Kind.Admin else Kind.entries.firstOrNull { it.name == t.kind && it in setOf(Kind.Admin, Kind.Event, Kind.Info) },
                     actionableFrom = opens,
                     deadline = deadline,
                     effortMin = blocks?.sumOf { it.minutes } ?: total,

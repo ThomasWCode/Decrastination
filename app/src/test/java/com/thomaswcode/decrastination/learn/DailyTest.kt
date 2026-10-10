@@ -135,6 +135,19 @@ class ReviewInputTest {
     }
 
     @Test
+    fun `a week of long notes and answers stays within a call's size, the answers kept`() {
+        val long = "x".repeat(5_000)
+        val log = ActivityLog(
+            completions = (1..200).map { CompletionRecord("teams:$it", long, Source.Teams, Kind.Homework, long, 20, 20, null, 0, Fixtures.at("2026-10-06T08:00") + it * 60_000L, note = long) },
+            checkIns = listOf(CheckIn("2026-10-05", Fixtures.at("2026-10-11T19:40"), 3, long, long, long, long)),
+        )
+        val text = ReviewInput.describe(log, Calibration(), Settings(), Fixtures.at("2026-10-12T10:00"), LONDON, week = "2026-10-05")
+        assertTrue(text.length <= com.thomaswcode.decrastination.enrich.Pricing.MAX_INPUT_CHARS, "${text.length}")
+        assertTrue("Their Sunday answers" in text)
+        assertTrue("and 160 more before those" in text)
+    }
+
+    @Test
     fun `a daily alarm that failed is tried again, three times, then left to its next time`() {
         var retries = emptyMap<String, DailyRetry>()
         repeat(Daily.RETRIES) { retries = Daily.failed(retries, Daily.ACTION_BRIEFING, Fixtures.at("2026-10-12T07:00")) }

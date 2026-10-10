@@ -19,7 +19,8 @@ import java.time.Duration
  */
 class ClaudeReviewer(apiKey: String, endpoint: String? = null, val model: String = ClaudeEnricher.MODEL) {
 
-    data class Result(val answer: ReviewInput.Answer?, val costUsd: Double, val refused: Boolean = false)
+    /** [model]: the model that answered, a fallback's if one did. */
+    data class Result(val answer: ReviewInput.Answer?, val costUsd: Double, val refused: Boolean = false, val model: String? = null)
 
     private val client: AnthropicClient = AnthropicOkHttpClient.builder()
         .apiKey(apiKey)
@@ -36,7 +37,7 @@ class ClaudeReviewer(apiKey: String, endpoint: String? = null, val model: String
             .model(model)
             .maxTokens(ClaudeEnricher.MAX_TOKENS)
             .system(ReviewInput.SYSTEM)
-            .addUserMessage(week)
+            .addUserMessage(week.take(Pricing.MAX_INPUT_CHARS))
             .outputConfig(OutputConfig.builder().effort(OutputConfig.Effort.HIGH).format(JsonOutputFormat.builder().schema(schema).build()).build())
             .putAdditionalHeader("anthropic-beta", ClaudeEnricher.FALLBACK_BETA)
             .putAdditionalBodyProperty("fallbacks", JsonValue.from("default"))
@@ -51,6 +52,6 @@ class ClaudeReviewer(apiKey: String, endpoint: String? = null, val model: String
         val text = message.content().mapNotNull { it.text().orElse(null)?.text() }.joinToString("")
         val answer = runCatching { json.decodeFromString(ReviewInput.Answer.serializer(), text) }.getOrNull()
             ?.let { it.copy(note = it.note.map(String::trim).filter(String::isNotEmpty).take(ReviewInput.MAX_NOTE)) }
-        return Result(answer, cost)
+        return Result(answer, cost, model = message.model().asString().ifBlank { null })
     }
 }

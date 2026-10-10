@@ -43,7 +43,7 @@ class ClaudeEnricher(
             .model(model)
             .maxTokens(MAX_TOKENS)
             .system(Prompts.system(job))
-            .addUserMessage(Prompts.describe(task, job, now, zone))
+            .addUserMessage(Prompts.describe(task, job, now, zone).take(Pricing.MAX_INPUT_CHARS))
             .outputConfig(
                 OutputConfig.builder()
                     .effort(OutputConfig.Effort.HIGH)
@@ -63,7 +63,9 @@ class ClaudeEnricher(
             else -> Unit
         }
         val text = message.content().mapNotNull { block -> block.text().orElse(null)?.text() }.joinToString("")
-        return Enricher.Result(Answers.parse(job, text, task, by, now, zone), cost)
+        // By the model that answered: a fallback's answer isn't the asked-for model's (BUG-P3-001).
+        val answeredBy = message.model().asString().ifBlank { by }
+        return Enricher.Result(Answers.parse(job, text, task, answeredBy, now, zone), cost)
     }
 
     private fun schema(map: Map<String, Any>): JsonOutputFormat.Schema =
@@ -88,16 +90,23 @@ object Pricing {
     /** A token is at least a byte, and a character at most three bytes of UTF-8 (a four-byte one is two characters). */
     private const val TOKENS_PER_CHAR = 3
 
-    /** The instructions, the schema, and the message's other lines (a long subject among them). */
+    /** The instructions, the schema, and a photo check's picture (no more than 1 568 pixels a side, about 3 300 tokens). */
     private const val PROMPT_TOKENS = 4_000
 
     /**
-     * The most one call can cost, at the dearer rates: the longest text the model reads in
-     * ([Prompts.MAX_TEXT] characters at [TOKENS_PER_CHAR] tokens each, and [PROMPT_TOKENS] more),
-     * and all of [ClaudeEnricher.MAX_TOKENS] out. $0.66.
+     * The most text any call sends, every call's cut to it: room for an email's [Prompts.MAX_TEXT]
+     * characters and its lines, an instruction's open tasks and fortnight of events, a week's record.
+     */
+    const val MAX_INPUT_CHARS = 40_000
+
+    /**
+     * The most one call can cost, at the dearer rates: the longest text any call sends
+     * ([MAX_INPUT_CHARS] at [TOKENS_PER_CHAR] tokens each, and [PROMPT_TOKENS] more), and all of
+     * [ClaudeEnricher.MAX_TOKENS] out. $1.02. Every job's input is held to it, not only an email's
+     * (BUG-P2-015), so a cap is never passed by a call it let through.
      */
     val WORST_CALL_USD: Double =
-        ((Prompts.MAX_TEXT.toLong() * TOKENS_PER_CHAR + PROMPT_TOKENS) * OLDER_OPUS.input + ClaudeEnricher.MAX_TOKENS * OLDER_OPUS.output) / 1_000_000.0
+        ((MAX_INPUT_CHARS.toLong() * TOKENS_PER_CHAR + PROMPT_TOKENS) * OLDER_OPUS.input + ClaudeEnricher.MAX_TOKENS * OLDER_OPUS.output) / 1_000_000.0
 
     fun rates(model: String): Rates = if (model.startsWith(ClaudeEnricher.MODEL)) OPUS_5_5 else OLDER_OPUS
 

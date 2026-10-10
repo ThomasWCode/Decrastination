@@ -7,8 +7,11 @@ import java.util.Base64
 /** The bits of MIME (RFCs 2045–2047) that reading a message's text needs. Pure, for the tests. */
 object Mime {
 
-    /** Where a message's readable text is, from its BODYSTRUCTURE: the part to fetch and how to decode it. */
-    data class TextPart(val section: String, val subtype: String, val encoding: String, val charset: String?)
+    /**
+     * Where a message's readable text is, from its BODYSTRUCTURE: the part to fetch and how to decode
+     * it, and its [size] in bytes as sent, where given.
+     */
+    data class TextPart(val section: String, val subtype: String, val encoding: String, val charset: String?, val size: Long? = null)
 
     /**
      * The first `text/plain` part, else the first `text/html`, skipping attachments. Part numbers
@@ -43,7 +46,7 @@ object Mime {
         // then, if sent, MD5 and the disposition. An "attachment" isn't the message's text.
         val disposition = items.getOrNull(9)?.list?.firstOrNull()?.string
         if (disposition.equals("attachment", ignoreCase = true)) return
-        out += TextPart(prefix.ifEmpty { "1" }, subtype, encoding, charset)
+        out += TextPart(prefix.ifEmpty { "1" }, subtype, encoding, charset, items.getOrNull(6)?.string?.toLongOrNull())
     }
 
     /** Decodes a part's bytes, which may be cut short by a partial fetch. */

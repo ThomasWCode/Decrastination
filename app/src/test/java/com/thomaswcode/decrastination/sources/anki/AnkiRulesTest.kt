@@ -63,6 +63,68 @@ class AnkiRulesTest {
         assertEquals(LocalDate.of(2026, 10, 9), AnkiRules.ankiDay(Fixtures.at("2026-10-09T04:00"), LONDON))
     }
 
+    @Test
+    fun `the Anki day turns at four on the clock, on the mornings the clocks change too`() {
+        // The clocks go back at 02:00 on 25 Oct: 03:30 is still the 24th's Anki day.
+        assertEquals(LocalDate.of(2026, 10, 24), AnkiRules.ankiDay(Fixtures.at("2026-10-25T03:30"), LONDON))
+        assertEquals(LocalDate.of(2026, 10, 25), AnkiRules.ankiDay(Fixtures.at("2026-10-25T04:00"), LONDON))
+        // They go forward at 01:00 on 28 Mar 2027: 04:30 is the 28th's, and the next turn is the 29th's 04:00.
+        val spring = Fixtures.at("2027-03-28T04:30")
+        assertEquals(LocalDate.of(2027, 3, 28), AnkiRules.ankiDay(spring, LONDON))
+        assertEquals(Fixtures.at("2027-03-29T04:00"), AnkiRules.nextRollover(spring, LONDON))
+    }
+
+    @Test
+    fun `a deck's own new cards a day make its steps`() {
+        val homework = listOf(assignment("Familie und Ehe", "Learn vocabulary column 1.2", Fixtures.at("2026-10-20T09:00")))
+        // 40 a day in AnkiDroid's options: 100 cards are 40, 40 and 20.
+        val forty = decks.map { if (it.id == 12L) it.copy(new = 40, newPerDay = 40) else it }
+        assertEquals(listOf("40 new cards", "40 new cards", "20 new cards"), AnkiRules.homeworkDecks(forty, 1, homework, unseen = { 100 }, now = NOW, zone = LONDON).single().subSteps!!.map { it.title })
+    }
+
+    @Test
+    fun `a deck whose options allow no new cards a day is one step, not waiting, and never the quota's`() {
+        val homework = listOf(assignment("Familie und Ehe", "Learn vocabulary column 1.2", Fixtures.at("2026-10-20T09:00")))
+        val none = decks.map { if (it.id == 12L) it.copy(new = 0, newPerDay = 0) else it }
+        val deck = AnkiRules.homeworkDecks(none, 1, homework, unseen = { 100 }, now = NOW, zone = LONDON).single()
+        assertEquals(listOf("100 new cards"), deck.subSteps!!.map { it.title })
+        assertNull(deck.notBefore)
+        assertTrue("New cards/day in AnkiDroid is 0" in deck.detail)
+        // The quota passes it by for the next deck with cards to give.
+        assertTrue(AnkiRules.quotaDeck(none.filter { it.id != 11L }, 1) { 40 }?.id != 12L)
+        // A limit of 0 is read as one; options that can't be read as the default.
+        assertEquals(0, AnkiProvider.newPerDay("""{"new":{"perDay":0}}"""))
+        assertEquals(AnkiRules.NEW_PER_DAY, AnkiProvider.newPerDay("not json"))
+        assertEquals(40, AnkiProvider.newPerDay("""{"new":{"perDay":40}}"""))
+    }
+
+    @Test
+    fun `homework's vocabulary due by tomorrow leaves the quota its reviews alone, for the rest of the day`() {
+        val (task, day) = AnkiRules.quota(decks, 1, null, NOW, LONDON, 21 * 60 + 30, reviewsOnly = true) { it.new }
+        assertEquals("Anki: 10 reviews", task!!.title)
+        assertTrue("No new cards today" in task.detail)
+        assertTrue(day.reviewsOnly)
+        // Later that day, the homework gone: still the reviews alone.
+        val (later, _) = AnkiRules.quota(decks, 1, day, NOW + 3_600_000L, LONDON, 21 * 60 + 30, reviewsOnly = false) { it.new }
+        assertEquals("Anki: 10 reviews", later!!.title)
+        // With no reviews, no quota rather than one done without its new cards.
+        val (none, _) = AnkiRules.quota(decks.map { it.copy(review = 0, learn = 0) }, 1, day, NOW, LONDON, 21 * 60 + 30) { it.new }
+        assertNull(none)
+        // The next day chooses afresh.
+        val (tomorrow, next) = AnkiRules.quota(decks, 1, day, Fixtures.at("2026-10-09T17:00"), LONDON, 21 * 60 + 30) { it.new }
+        assertTrue("new" in tomorrow!!.title)
+        assertTrue(!next.reviewsOnly)
+    }
+
+    @Test
+    fun `homework's vocabulary is due soon when a deck still to learn is due by tomorrow, or overdue`() {
+        fun deck(due: String, done: Boolean = false) = com.thomaswcode.decrastination.core.Fetched("deck:1", "Learn Anki deck 1.2", Kind.Homework, dueAt = Fixtures.at(due), done = done, derived = true)
+        assertTrue(AnkiRules.homeworkDueSoon(listOf(deck("2026-10-09T08:30")), NOW, LONDON))
+        assertTrue(AnkiRules.homeworkDueSoon(listOf(deck("2026-10-01T08:30")), NOW, LONDON))
+        assertTrue(!AnkiRules.homeworkDueSoon(listOf(deck("2026-10-10T08:30")), NOW, LONDON))
+        assertTrue(!AnkiRules.homeworkDueSoon(listOf(deck("2026-10-09T08:30", done = true)), NOW, LONDON))
+    }
+
     private fun quota(decks: List<Deck>, previous: AnkiDay? = null, at: String = "2026-10-08T17:00") =
         AnkiRules.quota(decks, 1, previous, Fixtures.at(at), LONDON, 21 * 60 + 30) { it.new }
 
