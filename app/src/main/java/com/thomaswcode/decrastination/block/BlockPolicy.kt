@@ -102,11 +102,16 @@ data class FocusSession(
     val box: Int? = null,
     /** False when its chunk was longer than a session can run: finished, it adds its minutes, not its step done. */
     val whole: Boolean = true,
+    /** Its step's place in its task's list ([com.thomaswcode.decrastination.core.Chunk.stepIndex]); null from before this was kept. */
+    val stepIndex: Int? = null,
 ) {
     val endsAt: Long get() = startedAt + minutes * 60_000L
 
     /** How long it has run: by the uptime clock where it can say (the same start of the phone), else the wall clock. */
     fun ran(now: Long, uptime: Uptime?): Long = uptime?.since(startedUptime) ?: (now - startedAt)
+
+    /** How long it has to run, by the clock that ends it ([ran]): a countdown agrees with when it ends, the date set or not. */
+    fun leftMs(now: Long, uptime: Uptime?): Long = (minutes * 60_000L - ran(now, uptime)).coerceAtLeast(0)
 
     /**
      * Its time is up. By the uptime clock where it can say, so setting the date either way neither

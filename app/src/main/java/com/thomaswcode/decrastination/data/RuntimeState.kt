@@ -150,6 +150,8 @@ data class CompletionRecord(
     val note: String? = null,
     /** Some of it ticked off by hand: its minutes aren't a measure of how long it took. */
     val byHand: Boolean = false,
+    /** Some of it found done by a photo check: untimed, so its minutes aren't a measure of how long it took either. */
+    val photo: Boolean = false,
 )
 
 /** The Sunday review: what changed, in a few lines, and who wrote it (the rules or the model). */
@@ -176,7 +178,15 @@ data class Rewarded(val taskId: String, val doneAt: Long)
 
 /** A piece a photo check found done: what it's owed, saved before any of it is given (`Focus.photoChecked`). */
 @Serializable
-data class PhotoDone(val id: String, val taskId: String, val step: String?, val minutes: Int, val at: Long)
+data class PhotoDone(
+    val id: String,
+    val taskId: String,
+    val step: String?,
+    val minutes: Int,
+    val at: Long,
+    /** Its step's place in its task's list; null from before this was kept. */
+    val stepIndex: Int? = null,
+)
 
 /** A daily alarm's run that failed: tried again [at], this being try [tries] (`Daily.failed`). */
 @Serializable
