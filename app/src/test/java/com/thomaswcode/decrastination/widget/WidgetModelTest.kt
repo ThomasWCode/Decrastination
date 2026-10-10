@@ -50,6 +50,7 @@ class WidgetModelTest {
         )
         // Work due later today before the overdue Statics: those deadlines can still be met.
         assertEquals("Do: Essay", model.headline)
+        assertEquals("Essay", model.label)
         assertEquals("Due 21:00", model.badge)
         assertTrue(model.urgent)
         assertEquals("20 min", model.minutes)
@@ -60,6 +61,15 @@ class WidgetModelTest {
         // Each row opens its own task.
         assertEquals(listOf("teams:Statics"), model.list.map { it.taskId })
         assertEquals("teams:Essay", model.taskId)
+        assertEquals(0, model.more)
+    }
+
+    @Test
+    fun `a long day's list says how many more the app has`() {
+        val tasks = (1..34).map { task("t$it", "2026-10-09T23:00", effort = 5) }
+        val model = model(tasks)
+        assertEquals(30, model.list.size)
+        assertEquals(2, model.more)
     }
 
     @Test
@@ -95,6 +105,7 @@ class WidgetModelTest {
     fun `with nothing planned it says so`() {
         val model = model(emptyList())
         assertEquals("Nothing due", model.headline)
+        assertNull(model.label)
         assertEquals("Nothing due today or tomorrow", model.summary)
         assertNull(model.badge)
         assertFalse(model.urgent)
@@ -118,9 +129,14 @@ class WidgetModelTest {
 }
 
 class WidgetLayoutTest {
+    /** A next thing with all its parts: a badge, minutes, a "Then:" line and the label. */
+    private fun next(warning: Boolean) = WidgetLayout.Parts(warning, badge = "Overdue", minutes = "40 min", then = true, label = true)
+
     @Test
     fun `a 2x1 shows the next thing, centred, without the refresh button`() {
-        val layout = WidgetLayout.of(width = 160f, height = 60f, hasWarning = true)
+        val layout = WidgetLayout.of(width = 160f, height = 60f, next(warning = true))
+        assertFalse(layout.roomy)
+        assertFalse(layout.label)
         assertEquals(1, layout.headlineLines)
         assertFalse(layout.refresh)
         assertFalse(layout.then)
@@ -131,19 +147,72 @@ class WidgetLayoutTest {
 
     @Test
     fun `a 4x1 on a phone with tall rows fits the then line and refresh`() {
-        val layout = WidgetLayout.of(width = 360f, height = 82f, hasWarning = false)
+        val layout = WidgetLayout.of(width = 360f, height = 82f, next(warning = false))
         assertTrue(layout.refresh)
         assertTrue(layout.then)
         assertFalse(layout.summary)
+        assertFalse(layout.roomy)
+    }
+
+    @Test
+    fun `a 4x2 is one card, labelled, with the warning and the day's count`() {
+        val layout = WidgetLayout.of(width = 360f, height = 180f, next(warning = true))
+        assertFalse(layout.roomy)
+        assertTrue(layout.label && layout.then && layout.warning && layout.summary)
+        assertEquals(0, layout.listLines)
+        assertTrue(layout.centred)
+    }
+
+    @Test
+    fun `the list comes once two of its rows fit under the card`() {
+        assertFalse(WidgetLayout.of(width = 360f, height = 230f, next(warning = true)).roomy)
+        assertTrue(WidgetLayout.of(width = 360f, height = 230f, next(warning = false)).roomy)
+        assertEquals(2, WidgetLayout.of(width = 360f, height = 212f, next(warning = false)).listLines)
     }
 
     @Test
     fun `a whole page fills with today's list`() {
-        val layout = WidgetLayout.of(width = 360f, height = 430f, hasWarning = true)
+        val layout = WidgetLayout.of(width = 360f, height = 430f, next(warning = true))
+        assertTrue(layout.roomy)
         assertEquals(2, layout.headlineLines)
-        assertTrue(layout.summary && layout.warning)
-        assertTrue(layout.listLines >= 12)
+        assertTrue(layout.label && layout.summary && layout.warning)
+        assertTrue(layout.listLines >= 6)
         assertFalse(layout.centred)
+    }
+
+    @Test
+    fun `with nothing planned, the rows that aren't there leave room for the warning`() {
+        // "Nothing due" alone: no pills, no "Then:" line, no label.
+        val layout = WidgetLayout.of(width = 360f, height = 120f, WidgetLayout.Parts(warning = true))
+        assertTrue(layout.warning)
+        assertFalse(layout.then || layout.label)
+        assertFalse(layout.roomy)
+    }
+
+    @Test
+    fun `pills too wide to sit side by side are stacked, or plain where there's no height`() {
+        val parts = WidgetLayout.Parts(badge = "Waiting a week", minutes = "1 h 20 min")
+        assertEquals(WidgetLayout.Pills.Row, WidgetLayout.of(width = 360f, height = 60f, parts).pills)
+        assertEquals(WidgetLayout.Pills.Plain, WidgetLayout.of(width = 160f, height = 60f, parts).pills)
+        assertEquals(WidgetLayout.Pills.Stacked, WidgetLayout.of(width = 160f, height = 120f, parts).pills)
+        // Roomy, inset in the widget, they stack where they would have fitted the small card.
+        assertEquals(WidgetLayout.Pills.Row, WidgetLayout.of(width = 280f, height = 60f, parts).pills)
+        val roomy = WidgetLayout.of(width = 280f, height = 400f, parts)
+        assertTrue(roomy.roomy)
+        assertEquals(WidgetLayout.Pills.Stacked, roomy.pills)
+        assertEquals(WidgetLayout.Pills.Row, WidgetLayout.of(width = 360f, height = 400f, parts).pills)
+    }
+
+    @Test
+    fun `larger text is allowed for`() {
+        val parts = WidgetLayout.Parts(badge = "Waiting a week", minutes = "1 h 20 min")
+        // Side by side at the default size; at 1.3 times, too wide, and stacked.
+        assertEquals(WidgetLayout.Pills.Row, WidgetLayout.of(width = 280f, height = 120f, parts).pills)
+        assertEquals(WidgetLayout.Pills.Stacked, WidgetLayout.of(width = 280f, height = 120f, parts, fontScale = 1.3f).pills)
+        // Lines grow too: what fits at 82 dp at the default size doesn't at 1.3 times.
+        val next = WidgetLayout.Parts(badge = "Overdue", minutes = "40 min", then = true, label = true)
+        assertTrue(WidgetLayout.of(width = 360f, height = 82f, next).then)
+        assertFalse(WidgetLayout.of(width = 360f, height = 82f, next, fontScale = 1.3f).then)
     }
 }
 

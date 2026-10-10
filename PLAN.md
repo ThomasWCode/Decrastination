@@ -197,6 +197,10 @@ Phase 0 also built what Phase 1 would have scaffolded: the Gradle setup, the sha
 
 *Built 9 Oct 2026, your ask: write an instruction about a task (from Tasks), a calendar event or a day (from a new Calendar page), or nothing in particular (Instructions, in the ⋮ menu). Claude reads it into changes of seven kinds: not a task; can't start before a date; waits for another task; due by a date; how much of your time an event takes; at most so many minutes of work on a date or weekday; busy times. You check its reading and apply or discard it; taking one back undoes it. Your calls on protection: while armed, applying or taking back a change of due date needs your dad's code; everything else applies when you tap Apply.*
 
+### 1.6.0: the widget's look
+
+*Built 10 Oct 2026, your ask: the widget laid out as the app now is. The next thing in a "DO NOW" card of the accent colour, its due date and minutes as pills (the due date red when urgent); the rest of the day as tiles with a red edge for urgent work, under the day's count as a heading; trouble as a red strip at the top. Small, the widget is the card itself. Nothing taken away: a list longer than 30 ends "N more in the app", and the heading and warning open the app.*
+
 ## 6. Verification
 
 - **Unit tests (JVM):** `Planner` bucket allocation and ordering against `fixtures/` (expected buckets for tonight are written out in `docs/scheduler.md` §3); `BlockPolicy` strict/earned/quiet transitions; pending-change timing across midnight and reboot; source parsers against recorded JSON; deck-regex mapping against the real assignment texts; calibration maths; enrichment cache.
