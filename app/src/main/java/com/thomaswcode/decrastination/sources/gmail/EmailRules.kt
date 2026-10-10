@@ -84,7 +84,7 @@ object EmailRules {
         val today = Instant.ofEpochMilli(now).atZone(zone).toLocalDate()
         if (ACTION.containsMatchIn(text)) {
             // Due by the first date written just after a "by", if there is one.
-            val by = BY.findAll(text).firstNotNullOfOrNull { futureDates(text.substring(it.range.last + 1).take(BY_REACH), today).firstOrNull() }
+            val by = BY.findAll(text).firstNotNullOfOrNull { firstDate(text.substring(it.range.last + 1).take(BY_REACH), today) }
             return Triage(Kind.Admin, Kind.Admin.defaultEffortMin, "Do what it asks", dueAt = by?.atTime(23, 59)?.atZone(zone)?.toInstant()?.toEpochMilli())
         }
         if (EVENT_WORDS.containsMatchIn(text)) {
@@ -119,8 +119,18 @@ object EmailRules {
      * year is this year's, unless that was over [PAST_WINDOW_DAYS] ago, when it's next year's: an
      * email from last month saying "booked on 1 October" means this October, now past.
      */
-    fun futureDates(text: String, today: LocalDate): List<LocalDate> {
-        val found = mutableListOf<LocalDate>()
+    fun futureDates(text: String, today: LocalDate): List<LocalDate> = dated(text, today).map { it.second }.distinct().sorted()
+
+    /**
+     * The first date written in [text] from [today] on, by where it's written, not the earliest:
+     * "by 20 Oct; the portal opens 12 Oct" is due on the 20th.
+     */
+    fun firstDate(text: String, today: LocalDate): LocalDate? = dated(text, today).minByOrNull { it.first }?.second
+
+    /** The dates [futureDates] finds, each with where in [text] it's written. */
+    private fun dated(text: String, today: LocalDate): List<Pair<Int, LocalDate>> {
+        val found = mutableListOf<Pair<Int, LocalDate>>()
+        var at = 0
         fun add(day: Int, month: Month?, year: Int?) {
             month ?: return
             val date = runCatching {
@@ -130,14 +140,21 @@ object EmailRules {
                     LocalDate.of(today.year, month, day).let { if (it < today.minusDays(PAST_WINDOW_DAYS)) it.plusYears(1) else it }
                 }
             }.getOrNull() ?: return
-            if (date >= today && date <= today.plusYears(1)) found += date
+            if (date >= today && date <= today.plusYears(1)) found += at to date
         }
-        DAY_MONTH.findAll(text).forEach { add(it.groupValues[1].toInt(), MONTHS[it.groupValues[2].lowercase()], it.groupValues[3].toIntOrNull()) }
-        MONTH_DAY.findAll(text).forEach { add(it.groupValues[2].toInt(), MONTHS[it.groupValues[1].lowercase()], it.groupValues[3].toIntOrNull()) }
+        DAY_MONTH.findAll(text).forEach {
+            at = it.range.first
+            add(it.groupValues[1].toInt(), MONTHS[it.groupValues[2].lowercase()], it.groupValues[3].toIntOrNull())
+        }
+        MONTH_DAY.findAll(text).forEach {
+            at = it.range.first
+            add(it.groupValues[2].toInt(), MONTHS[it.groupValues[1].lowercase()], it.groupValues[3].toIntOrNull())
+        }
         NUMERIC.findAll(text).forEach { match ->
+            at = match.range.first
             val year = match.groupValues[3].toInt().let { if (it < 100) 2000 + it else it }
             add(match.groupValues[1].toInt(), Month.entries.getOrNull(match.groupValues[2].toInt() - 1), year)
         }
-        return found.distinct().sorted()
+        return found
     }
 }

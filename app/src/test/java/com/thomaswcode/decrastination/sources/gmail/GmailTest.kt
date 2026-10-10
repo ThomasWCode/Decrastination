@@ -50,6 +50,8 @@ class GmailTest {
         val consent = email("Trip consent", from = "noreply@school.example", body = "Please return the consent form tomorrow.")
         assertEquals(Kind.Admin, consent.kind)
         assertNull(consent.dueAt)
+        // Due by the date written after "by", not the earliest near it.
+        assertEquals(Fixtures.at("2026-10-20T23:59"), email("Registration", body = "Please complete registration by 20 Oct 2026; the portal opens 12 Oct.").dueAt)
         assertEquals(Kind.Admin, email("Action required: your application", from = "updates@ucas.example").kind)
         assertEquals(Kind.Admin, email("Forms", from = "office@school.example", body = "Reply to this email by Friday 16 October with your choices.").kind)
     }
