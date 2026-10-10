@@ -139,3 +139,17 @@ Still waiting for you:
   - **Trouble** (protection off, a source that can't be read, Teams not synced) is a red strip at the top, as the app puts it first. Tapping it, or the day's count, opens the app.
   - **Nothing taken away**: a list longer than 30 ends *N more in the app*.
 - **Tried on the phone, 10 Oct, with you**: on the 4th screen at 4×2 (401 × 226 dp: the card, the day's count and two tiles), 4×3, 4×5 (13 tiles), 4×1 (the card alone, with its label and *Then:* line) and 2×1 (188 dp wide: the pills stacked beside ↻, the name cut short). It's back at 4×2. In light mode the minutes pill all but vanished into the pale card, so **1.6.1** puts the plain pills in the surface colour: white in light mode, near-black in dark, clear on the card and the tiles in both. The app itself was fine in light mode (Plan, Tasks, Stats).
+
+## 1.7.0: fixes from the repository review
+
+- **What it is**: the 33 bugs and inconsistencies in the review of 1.6.0 (`docs/review/BUGS-AND-INCONSISTENCIES.md`, #20), each checked against the code. 31 are fixed in #21–#24; the other two are below. The improvements list (`docs/review/IMPROVEMENTS.md`) waits, as you asked.
+- **What you'll notice**:
+  - **Anki is counted in cards, not words** (your answer: your decks go both ways, two cards a word). Deck 1.2 is 144 cards, not 72; a deck's steps go by its own *New cards/day* in AnkiDroid (40 on every deck now, as you'd set).
+  - **On a day homework vocabulary is due by tomorrow (or overdue), the daily quota is reviews only**, for the rest of that day (your call). Right now that's every day until the three overdue German assignments are handed in.
+  - **An email that asks you to do something** ("please complete…", "return the form by…", "action required") is work under the rules even from a no-reply address, due by the date after "by". With Claude on, its reading still replaces the rules'.
+  - **Backups keep your instructions in use**, and a file holding what the app never writes is refused whole.
+  - **Settings, an instruction being written, the parent-code QR and a photo check survive a turn of the phone**; Settings saves only what you changed.
+- **Left as they are** (with you):
+  - **BUG-P2-008, the fixtures**: real teacher and class names and an Isaac Science link stay in the public fixtures: you said they're fine to be public. Only the capture script changed (BUG-P2-026): it pulls into `private/` now, and checks the signing key itself.
+  - **BUG-P2-025, tests of the blocker on a device or emulator**: not added. It's a test harness, not a fix (an emulator matrix and a coordinator pulled out of the focus service); the blocker is still checked by hand on the phone. Worth weighing with the improvements.
+- **Tried on the phone, 10 Oct**: see #22 (Anki counts, a sync) and #23 (screens).
