@@ -156,7 +156,7 @@ class BlockedActivity : ComponentActivity() {
                 Text("Not now", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.SemiBold)
                 Text("${targetLabel()} is blocked. ${verdict.reason.headline}.", style = MaterialTheme.typography.bodyLarge)
                 if (session != null) {
-                    val left = ((session.endsAt - now) / 1000).coerceAtLeast(0)
+                    val left = session.leftMs(now, graph.clock.uptime()) / 1000
                     Text(
                         "Focus: ${session.label}, %d:%02d left".format(left / 60, left % 60),
                         style = MaterialTheme.typography.titleMedium,
@@ -174,7 +174,7 @@ class BlockedActivity : ComponentActivity() {
                         if (session == null) {
                             // Not before it's available (an Anki deck's next cards at 04:00).
                             FilledTonalButton(enabled = next.startable(plan.now) && !checking, onClick = {
-                                scope.launch { Sessions.start(this@BlockedActivity, next.taskId, next.label, next.step, next.minutes, next.box) }
+                                scope.launch { Sessions.start(this@BlockedActivity, next.taskId, next.label, next.step, next.minutes, next.box, next.stepIndex) }
                             }) { Text("Start ${Format.minutes(minOf(next.minutes, Focus.MAX_SESSION_MIN))}") }
                         } else {
                             OutlinedButton(onClick = { scope.launch { Sessions.end(this@BlockedActivity, early = true) } }) { Text("Stop session") }

@@ -663,4 +663,45 @@ class PlannerTest {
         assertEquals(listOf("teams:a" to 1, "teams:b" to 1, "teams:b" to 2), first)
         assertEquals(first, second)
     }
+
+    @Test
+    fun `a source's progress counts once its task has steps, as it does without them`() {
+        // A 60-minute Power Planner item at 50 %, in two 30-minute blocks: 30 minutes are left either way.
+        val item = task("pp", Fixtures.at("2026-10-20T09:00"), effort = 60, steps = listOf(SubStep("Part A", 30), SubStep("Part B", 30)))
+            .copy(sourceProgress = 0.5, firstProgress = 0.0)
+        assertEquals(30, plan(listOf(item), "2026-10-08T17:00").ordered.sumOf { it.minutes })
+        assertEquals(30, plan(listOf(item.copy(subSteps = emptyList())), "2026-10-08T17:00").ordered.sumOf { it.minutes })
+        // Progress and the sessions that made it are the same work: not taken off twice.
+        assertEquals(30, plan(listOf(item.copy(workedMin = 30)), "2026-10-08T17:00").ordered.sumOf { it.minutes })
+        // Without progress, the steps stand as they are.
+        assertEquals(listOf(30, 30), plan(listOf(item.copy(sourceProgress = 0.0)), "2026-10-08T17:00").ordered.map { it.minutes })
+    }
+
+    @Test
+    fun `a box is cut to fit days you've limited to less than one`() {
+        // An hour's work due in ten days, and every day limited to 20 minutes: three pieces of 20,
+        // rather than two of 30 that no day holds, and nothing planned.
+        val today = LocalDate.parse("2026-10-08")
+        val caps = (0L..30).associate { today.plusDays(it) to 20 }
+        val input = Planner.Input(listOf(task("t", Fixtures.at("2026-10-18T09:00"), effort = 60)), Fixtures.at("2026-10-08T17:00"), LONDON, settings, dayCaps = caps)
+        val plan = Planner.plan(input)
+        assertEquals(listOf(20, 20, 20), plan.chunksOf("teams:t").map { it.minutes })
+        assertTrue(plan.buckets.all { b -> b.chunks.sumOf { it.minutes } <= 20 })
+        // A limit on only some days leaves the box as it is: the others hold it.
+        val someDays = Planner.plan(input.copy(dayCaps = mapOf(today.plusDays(2) to 20)))
+        assertEquals(listOf(30, 30), someDays.chunksOf("teams:t").map { it.minutes })
+        // Limited only up to its deadline, roomy after: boxes that fit before it, not after it, behind.
+        val toDeadline = Planner.plan(input.copy(dayCaps = (0L..10).associate { today.plusDays(it) to 20 }))
+        val chunks = toDeadline.chunksOf("teams:t")
+        assertEquals(listOf(20, 20, 20), chunks.map { it.minutes })
+        assertTrue(chunks.none { it.behind })
+        assertTrue(toDeadline.buckets.filter { b -> b.chunks.any { it.taskId == "teams:t" } }.all { it.date <= LocalDate.parse("2026-10-17") })
+    }
+
+    @Test
+    fun `each piece knows its step's place in the list`() {
+        val steps = listOf(SubStep("Practice", 30, done = true), SubStep("Practice", 30), SubStep("Write up", 20))
+        val chunks = plan(listOf(task("t", Fixtures.at("2026-10-20T09:00"), steps = steps)), "2026-10-08T17:00").chunksOf("teams:t")
+        assertEquals(listOf(1, 2), chunks.map { it.stepIndex })
+    }
 }

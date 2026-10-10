@@ -111,6 +111,13 @@ data class TaskItem(
     /** The photo checks counted in [photoMin], by id, with the minutes each was given, so each is counted once. */
     val photosCounted: Map<String, Int> = emptyMap(),
     val subSteps: List<SubStep> = emptyList(),
+    /**
+     * Of [workedMin] and [photoMin], the minutes the source's own steps already leave out: an Anki
+     * deck's cards studied in sessions are gone from the steps its next read gives, so those
+     * minutes aren't taken off what's left of them again. Set when the source's steps replace the
+     * ones kept here.
+     */
+    val stepsWorkedMin: Int = 0,
     /** At most this many of its sub-steps can be done in a day: an Anki deck releases 20 new cards a day. */
     val stepsPerDay: Int? = null,
     /**

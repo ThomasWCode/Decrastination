@@ -27,8 +27,8 @@ object Sessions {
     const val ACTION_END = "com.thomaswcode.decrastination.action.SESSION_END"
     const val ACTION_STOP = "com.thomaswcode.decrastination.action.SESSION_STOP"
 
-    suspend fun start(context: Context, taskId: String, label: String, step: String?, minutes: Int, box: Int? = null) {
-        val session = AppGraph.get(context).focus.startSession(taskId, label, step, minutes, box)
+    suspend fun start(context: Context, taskId: String, label: String, step: String?, minutes: Int, box: Int? = null, stepIndex: Int? = null) {
+        val session = AppGraph.get(context).focus.startSession(taskId, label, step, minutes, box, stepIndex)
         showOngoing(context, session)
         scheduleEnd(context, session)
     }
@@ -89,6 +89,11 @@ object Sessions {
     }
 
     private fun showOngoing(context: Context, session: FocusSession) {
+        // Its end as the clock that ends it says ([FocusSession.leftMs]), shown on the wall clock's
+        // face: the date set since the start doesn't move the countdown.
+        val clock = AppGraph.get(context).clock
+        val now = clock.now()
+        val endsAt = now + session.leftMs(now, clock.uptime())
         val stop = PendingIntent.getBroadcast(
             context,
             1,
@@ -102,7 +107,7 @@ object Sessions {
                 .setSmallIcon(R.drawable.ic_focus)
                 .setContentTitle("Focus: ${session.label}")
                 .setContentText("${session.minutes} min. Blocked apps stay blocked until it ends.")
-                .setWhen(session.endsAt)
+                .setWhen(endsAt)
                 .setShowWhen(true)
                 .setUsesChronometer(true)
                 .setChronometerCountDown(true)

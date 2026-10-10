@@ -3,6 +3,7 @@ package com.thomaswcode.decrastination.widget
 import com.thomaswcode.decrastination.core.Chunk
 import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.Source
+import com.thomaswcode.decrastination.core.Uptime
 import com.thomaswcode.decrastination.data.RuntimeState
 import com.thomaswcode.decrastination.data.TaskState
 import com.thomaswcode.decrastination.ui.Format
@@ -44,10 +45,12 @@ data class WidgetModel(
 
         /**
          * [runtime] and [armed] add the blocker's side: protection trouble comes first among the
-         * warnings, a running focus session replaces the day's count, and free time is shown.
+         * warnings, a running focus session replaces the day's count, and free time is shown. A
+         * session's time left is by [uptime], the clock that ends it.
          */
-        fun from(plan: Plan, state: TaskState, zone: ZoneId, runtime: RuntimeState = RuntimeState(), armed: Boolean = false): WidgetModel {
+        fun from(plan: Plan, state: TaskState, zone: ZoneId, runtime: RuntimeState = RuntimeState(), armed: Boolean = false, uptime: Uptime? = null): WidgetModel {
             val now = plan.now
+            val sessionLeft = runtime.session?.leftMs(now, uptime)
             val next = plan.next
             val today = plan.todayBucket?.chunks.orEmpty()
             val tomorrow = plan.tomorrowBucket?.chunks.orEmpty()
@@ -61,8 +64,8 @@ data class WidgetModel(
                 minutes = next?.let { Format.minutes(it.minutes) },
                 then = plan.then?.let { "Then: ${it.label}" },
                 summary = when {
-                    runtime.session != null && now < runtime.session.endsAt ->
-                        "Focus: ${runtime.session.label}, ${Format.minutes(((runtime.session.endsAt - now) / 60_000L).toInt().coerceAtLeast(1))} left"
+                    runtime.session != null && sessionLeft != null && sessionLeft > 0 ->
+                        "Focus: ${runtime.session.label}, ${Format.minutes((sessionLeft / 60_000L).toInt().coerceAtLeast(1))} left"
                     today.isEmpty() && tomorrow.isEmpty() -> runtime.credit.on(plan.today).leftMs.takeIf { it > 0 }
                         ?.let { "Nothing due soon · ${Format.minutes((it / 60_000L).toInt())} of free time" }
                         ?: "Nothing due today or tomorrow"

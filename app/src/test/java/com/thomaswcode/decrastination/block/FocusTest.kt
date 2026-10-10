@@ -562,4 +562,85 @@ class FocusTest {
         assertEquals(Focus.Target.Site("youtube.com", "com.android.chrome"), focus.siteTarget("com.android.chrome", "m.youtube.com/shorts/x"))
         assertNull(focus.siteTarget("com.android.chrome", "bbc.co.uk/bitesize"))
     }
+
+    @Test
+    fun `a session on the second of two steps of one name ticks that one`() = runTest {
+        tasks.update { it.copy(tasks = listOf(task("t", steps = listOf(SubStep("Practice", 30), SubStep("Practice", 60))))) }
+        focus.startSession("teams:t", "t: Practice", "Practice", 60, stepIndex = 1)
+        clock.time += 60 * 60_000L
+        focus.stopSession()
+        assertEquals(listOf(false, true), tasks.value.tasks.single().subSteps.map { it.done })
+    }
+
+    @Test
+    fun `a session whose step has moved ticks no other step, and keeps its minutes`() = runTest {
+        tasks.update { it.copy(tasks = listOf(task("t", steps = listOf(SubStep("A", 30), SubStep("B", 30))))) }
+        focus.startSession("teams:t", "t: B", "B", 30, stepIndex = 1)
+        // The steps changed meanwhile: B is first now, and another took its place.
+        tasks.update { s -> s.copy(tasks = s.tasks.map { it.copy(subSteps = listOf(SubStep("B", 30), SubStep("C", 30))) }) }
+        clock.time += 30 * 60_000L
+        focus.stopSession()
+        val task = tasks.value.tasks.single()
+        assertEquals(listOf(false, false), task.subSteps.map { it.done })
+        assertEquals(30, task.workedMin)
+    }
+
+    @Test
+    fun `a photo check ticks the step it was of, not the first of that name`() = runTest {
+        tasks.update { it.copy(tasks = listOf(task("hw", steps = listOf(SubStep("Q1-8", 30), SubStep("Q1-8", 30))))) }
+        assertTrue(focus.photoChecked("teams:hw", "Q1-8", 30, stepIndex = 1))
+        assertEquals(listOf(false, true), tasks.value.tasks.single().subSteps.map { it.done })
+    }
+
+    @Test
+    fun `two starts at once end the one between them with its record`() = runBlocking {
+        tasks.update { it.copy(tasks = listOf(task("a"), task("b"))) }
+        // The store held mid-write, so both starts wait for it together.
+        val entered = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val holder = thread { runBlocking { runtime.update { entered.countDown(); release.await(); it } } }
+        entered.await()
+        val scope = CoroutineScope(Dispatchers.Default)
+        val starts = listOf(scope.async { focus.startSession("teams:a", "a", null, 30) }, scope.async { focus.startSession("teams:b", "b", null, 30) })
+        Thread.sleep(200)
+        release.countDown()
+        val started = starts.awaitAll()
+        holder.join()
+        // One runs; the other was ended by it, with its record, not lost.
+        val running = runtime.value.session!!
+        assertTrue(running in started)
+        assertEquals(listOf(started.single { it != running }.taskId), log.value.sessions.map { it.taskId })
+        assertTrue(runtime.value.finishing.isEmpty())
+    }
+
+    @Test
+    fun `a session started in the same millisecond as the one it ends is told apart from it`() = runTest {
+        tasks.update { it.copy(tasks = listOf(task("t"))) }
+        val first = focus.startSession("teams:t", "t", null, 30)
+        val second = focus.startSession("teams:t", "t", null, 30)
+        assertTrue(second.startedAt > first.startedAt)
+        clock.time += 30 * 60_000L
+        focus.stopSession()
+        // Both recorded, and the second's minutes counted, not taken for the first's.
+        assertEquals(2, log.value.sessions.size)
+        assertEquals(30, tasks.value.tasks.single().workedMin)
+    }
+
+    @Test
+    fun `a completion with work a photo check found done is marked so`() = runTest {
+        tasks.update { it.copy(tasks = listOf(task("hw", effort = 40))) }
+        focus.photoChecked("teams:hw", null, 20)
+        focus.onCompleted(listOf(tasks.value.tasks.single().copy(status = Status.Done, doneAt = clock.time)))
+        assertTrue(log.value.completions.single().photo)
+    }
+
+    @Test
+    fun `a session's time left is by the clock that ends it`() {
+        val session = FocusSession("teams:t", "t", null, 30, startedAt = clock.time, startedUptime = Uptime(1, 0))
+        // Two minutes in by the uptime clock, though the date was set half an hour on.
+        assertEquals(28 * 60_000L, session.leftMs(clock.time + 32 * 60_000L, Uptime(1, 2 * 60_000L)))
+        assertEquals(0L, session.leftMs(clock.time + 40 * 60_000L, Uptime(1, 40 * 60_000L)))
+        // Across a restart, by the wall clock.
+        assertEquals(20 * 60_000L, session.leftMs(clock.time + 10 * 60_000L, Uptime(2, 1_000L)))
+    }
 }

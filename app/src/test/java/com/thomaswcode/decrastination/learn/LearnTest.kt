@@ -34,6 +34,16 @@ class CalibratorTest {
         val ticked = done("a", estimate = 30, worked = 10).copy(byHand = true)
         assertEquals(emptyMap(), Calibrator.multipliers(listOf(ticked)))
     }
+    @Test
+    fun `a completion partly found done by a photo check teaches no times`() {
+        // 5 timed minutes of 40: the rest was photographed, not timed, so 5 isn't how long it took.
+        val photographed = done("a", estimate = 40, worked = 5).copy(photo = true)
+        assertEquals(emptyMap(), Calibrator.multipliers(listOf(photographed)))
+        // Its "harder" still counts, as an answer alone does.
+        val harder = photographed.copy(assessment = Calibrator.HARDER)
+        assertEquals(1.1, Calibrator.multipliers(listOf(harder)).getValue("Homework|12.1 Physics"), 1e-9)
+    }
+
 
     @Test
     fun `timed work moves the multiplier towards actual over estimate, within bounds`() {

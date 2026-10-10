@@ -41,6 +41,8 @@ data class Chunk(
     val availableAt: Long? = null,
     /** The box length that cut it, when its task was split into boxes; null for a step or a task in one piece. */
     val box: Int? = null,
+    /** Its sub-step's place in its task's list, so finishing it ticks that one, not another of the same title. */
+    val stepIndex: Int? = null,
 ) {
     val label: String get() = step?.let { "$title: $it" } ?: title
 
