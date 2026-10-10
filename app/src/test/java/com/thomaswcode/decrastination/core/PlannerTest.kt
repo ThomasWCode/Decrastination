@@ -690,6 +690,12 @@ class PlannerTest {
         // A limit on only some days leaves the box as it is: the others hold it.
         val someDays = Planner.plan(input.copy(dayCaps = mapOf(today.plusDays(2) to 20)))
         assertEquals(listOf(30, 30), someDays.chunksOf("teams:t").map { it.minutes })
+        // Limited only up to its deadline, roomy after: boxes that fit before it, not after it, behind.
+        val toDeadline = Planner.plan(input.copy(dayCaps = (0L..10).associate { today.plusDays(it) to 20 }))
+        val chunks = toDeadline.chunksOf("teams:t")
+        assertEquals(listOf(20, 20, 20), chunks.map { it.minutes })
+        assertTrue(chunks.none { it.behind })
+        assertTrue(toDeadline.buckets.filter { b -> b.chunks.any { it.taskId == "teams:t" } }.all { it.date <= LocalDate.parse("2026-10-17") })
     }
 
     @Test
