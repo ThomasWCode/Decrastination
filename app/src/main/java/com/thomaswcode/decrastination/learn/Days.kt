@@ -127,6 +127,6 @@ object Days {
         val full = judged.count { it.full == true }
         if (full >= FULL_SHARE * judged.size) return null
         return "Only $full of the last ${judged.size} days' plans were done in full: the hours in Settings may be more than the evenings hold. " +
-            "Planning with fewer would put less on each day, and less would show as behind."
+            "Planning with the hours you really have puts less on each day, so each day's plan can be done; what doesn't fit before its deadline then shows as behind, early enough to do something about it."
     }
 }

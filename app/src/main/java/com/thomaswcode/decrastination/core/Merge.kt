@@ -92,6 +92,9 @@ object Merge {
                 fresh[id] = task
                 continue
             }
+            // The source's steps, unless they're the same as before: then the ones kept here, with
+            // what a session ticked off, until the source's counts catch up (Anki's cards).
+            val sourceSteps = f.subSteps?.takeIf { new -> new.map { it.title } != old.subSteps.map { it.title } }
             val updated = old.copy(
                 title = f.title,
                 detail = f.detail,
@@ -103,9 +106,9 @@ object Merge {
                 sourceProgress = f.sourceProgress,
                 firstProgress = old.firstProgress ?: old.sourceProgress,
                 peakEffortMin = listOfNotNull(old.peakEffortMin, old.sourceEffortMin, f.sourceEffortMin).maxOrNull(),
-                // The source's steps, unless they're the same as before: then the ones kept here,
-                // with what a session ticked off, until the source's counts catch up (Anki's cards).
-                subSteps = f.subSteps?.takeIf { new -> new.map { it.title } != old.subSteps.map { it.title } } ?: old.subSteps,
+                subSteps = sourceSteps ?: old.subSteps,
+                // Fresh steps from the source's counts already leave out the work done so far.
+                stepsWorkedMin = if (sourceSteps != null) old.workedMin + old.photoMin else old.stepsWorkedMin,
                 stepsPerDay = f.stepsPerDay,
                 notBefore = f.notBefore,
                 derived = f.derived,
@@ -127,6 +130,7 @@ object Merge {
                     doneAt = null,
                     workedMin = 0,
                     photoMin = 0,
+                    stepsWorkedMin = 0,
                     firstProgress = f.sourceProgress,
                     subSteps = updated.subSteps.map { it.copy(done = false, byHand = false, timedMin = 0) },
                 ).also { reopened += it }

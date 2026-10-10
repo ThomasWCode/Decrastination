@@ -6,6 +6,7 @@ import com.thomaswcode.decrastination.core.Planner
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Status
 import com.thomaswcode.decrastination.core.TaskItem
+import com.thomaswcode.decrastination.core.Uptime
 import com.thomaswcode.decrastination.core.WallClock
 import com.thomaswcode.decrastination.data.ActivityLog
 import com.thomaswcode.decrastination.data.BlockRecord
@@ -158,11 +159,35 @@ class Focus(
      * length that cut the chunk ([com.thomaswcode.decrastination.core.Chunk.box]): only those
      * sessions go to the box experiment, as a task done in one piece wasn't shaped by it.
      */
-    suspend fun startSession(taskId: String, label: String, step: String?, minutes: Int, box: Int? = null): FocusSession {
-        stopSession()
-        val session = FocusSession(taskId, label, step, minutes.coerceIn(1, MAX_SESSION_MIN), clock.now(), clock.uptime(), box, whole = minutes <= MAX_SESSION_MIN)
-        runtime.update { it.copy(session = session) }
-        return session
+    suspend fun startSession(taskId: String, label: String, step: String?, minutes: Int, box: Int? = null, stepIndex: Int? = null): FocusSession {
+        val now = clock.now()
+        val uptime = clock.uptime()
+        // The one running ended and this one begun in the same step: two starts at once can't both
+        // find none running and each save theirs, losing one without its record.
+        var ended: EndedSession? = null
+        var session: FocusSession? = null
+        runtime.update { state ->
+            val running = state.session
+            // Its start told apart from the one it ends, even begun in the same millisecond: a
+            // session is known by its start ([TaskItem.sessionsCounted], the log), and two alike
+            // would have the second's minutes taken as counted already.
+            val at = if (running != null && running.startedAt >= now) running.startedAt + 1 else now
+            val begun = FocusSession(taskId, label, step, minutes.coerceIn(1, MAX_SESSION_MIN), at, uptime, box, whole = minutes <= MAX_SESSION_MIN, stepIndex = stepIndex)
+            session = begun
+            ended = running?.let { ending(it, now, uptime) }
+            state.copy(session = begun, finishing = state.finishing + listOfNotNull(ended))
+        }
+        ended?.let { finish(it) }
+        return session!!
+    }
+
+    /** [session] ended [now]: run its full time (its minutes all worked), or stopped early with what it ran. */
+    private fun ending(session: FocusSession, now: Long, uptime: Uptime?): EndedSession {
+        val completed = session.isDue(now, uptime)
+        val worked = if (completed) session.minutes else (session.ran(now, uptime) / 60_000L).toInt().coerceIn(0, session.minutes)
+        // A finished session ended when it was due, not when this ran (the phone off at its
+        // alarm, on again after midnight): its free time is that day's.
+        return EndedSession(session, worked, completed, if (completed) minOf(now, session.endsAt) else now)
     }
 
     /**
@@ -181,15 +206,23 @@ class Focus(
         runtime.update { state ->
             val session = state.session ?: return@update state
             if (expected != null && session != expected) return@update state
-            val completed = session.isDue(now, uptime)
-            val worked = if (completed) session.minutes else (session.ran(now, uptime) / 60_000L).toInt().coerceIn(0, session.minutes)
-            // A finished session ended when it was due, not when this ran (the phone off at its
-            // alarm, on again after midnight): its free time is that day's.
-            val end = EndedSession(session, worked, completed, if (completed) minOf(now, session.endsAt) else now)
+            val end = ending(session, now, uptime)
             ended = end
             state.copy(session = null, finishing = state.finishing + end)
         }
         return ended?.let { finish(it) }
+    }
+
+    /**
+     * Where in [task]'s list the step a session or photo check was on is, to tick: the one at [index]
+     * if it's still that step and still to do; none if the list has changed under it, rather than
+     * another of the same [title]. With no index (one saved before they were kept), the first still
+     * to do of that title. -1 for none.
+     */
+    private fun stepAt(task: TaskItem, index: Int?, title: String): Int {
+        if (index == null) return task.subSteps.indexOfFirst { !it.done && it.title == title }
+        val step = task.subSteps.getOrNull(index) ?: return -1
+        return if (!step.done && step.title == title) index else -1
     }
 
     /** Gives the sessions a stop left part-way ([RuntimeState.finishing]) what they're owed: at start-up. */
@@ -213,7 +246,7 @@ class Focus(
                     if (session.startedAt in t.sessionsCounted) return@map t.also { task = it }
                     // A step longer than the session ran (cut to the most a session can be) isn't done:
                     // its minutes count, and the planner takes them off what's left of it.
-                    val stepIndex = if (ended.completed && session.step != null && session.whole) t.subSteps.indexOfFirst { !it.done && it.title == session.step } else -1
+                    val stepIndex = if (ended.completed && session.step != null && session.whole) stepAt(t, session.stepIndex, session.step) else -1
                     val steps = if (stepIndex >= 0) t.subSteps.mapIndexed { i, s -> if (i == stepIndex) s.copy(done = true) else s } else t.subSteps
                     t.copy(
                         subSteps = steps,
@@ -266,8 +299,8 @@ class Focus(
      * its step is ticked (or its minutes added to the task's) and its share of free time earned.
      * Saved first ([RuntimeState.photosDone]), so a stop part-way is finished at start-up.
      */
-    suspend fun photoChecked(taskId: String, step: String?, minutes: Int): Boolean {
-        val done = PhotoDone(UUID.randomUUID().toString(), taskId, step, minutes, clock.now())
+    suspend fun photoChecked(taskId: String, step: String?, minutes: Int, stepIndex: Int? = null): Boolean {
+        val done = PhotoDone(UUID.randomUUID().toString(), taskId, step, minutes, clock.now(), stepIndex)
         runtime.update { it.copy(photosDone = it.photosDone + done) }
         return finishPhoto(done)
     }
@@ -292,7 +325,7 @@ class Focus(
                     // taken off the next step as well.
                     val multiplier = runtime.value.calibration.multiplier(t.kind, t.className)
                     val taken = t.subSteps.filter { it.done }.sumOf { if (it.byHand) it.timedMin.toDouble() else it.minutes * multiplier }
-                    val spare = (t.workedMin + t.photoMin - taken).roundToInt().coerceAtLeast(0)
+                    val spare = (t.workedMin + t.photoMin - t.stepsWorkedMin - taken).roundToInt().coerceAtLeast(0)
                     val kept = minOf(spare, (step.minutes * multiplier).roundToInt())
                     t.copy(subSteps = t.subSteps.mapIndexed { j, s -> if (j == index) s.copy(done = true, byHand = true, timedMin = kept) else s })
                 },
@@ -328,7 +361,7 @@ class Focus(
                     fun counted(minutes: Int) = (t.photosCounted + (done.id to minutes)).entries.toList().takeLast(MAX_COUNTED).associate { it.key to it.value }
                     // One of its own steps: ticked, once.
                     if (done.step != null && t.subSteps.any { it.title == done.step }) {
-                        val i = t.subSteps.indexOfFirst { !it.done && it.title == done.step }
+                        val i = stepAt(t, done.stepIndex, done.step)
                         if (i < 0) return@map t
                         credited = done.minutes
                         return@map t.copy(
@@ -419,6 +452,8 @@ class Focus(
         val decks = AnkiRules.heldDecks(tasks.value.tasks, settings.value.ankiTextbook, missed = true)
         // Blocks you ticked off by hand: done, but not timed, so the completion's no measure of time.
         fun handMinutes(task: TaskItem): Int = tasks.value.tasks.firstOrNull { it.id == task.id && it.doneAt == task.doneAt }?.handMin ?: task.handMin
+        // Nor is work a photo check found done: its minutes weren't timed.
+        fun photoMinutes(task: TaskItem): Int = tasks.value.tasks.firstOrNull { it.id == task.id && it.doneAt == task.doneAt }?.photoMin ?: task.photoMin
         // Its vocabulary steps its decks hold: their work is the decks', and learned from theirs.
         fun deckMinutes(task: TaskItem): Int = task.subSteps
             .filter { step -> step.ankiSections.isNotEmpty() && step.ankiSections.all { decks[task.id]?.containsKey(it) == true } }
@@ -478,6 +513,7 @@ class Focus(
                         firstSeenAt = task.firstSeenAt,
                         doneAt = task.doneAt ?: now,
                         byHand = handMinutes(task) > 0,
+                        photo = photoMinutes(task) > 0,
                     )
                 },
             ).trimmed(now)

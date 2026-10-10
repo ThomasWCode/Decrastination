@@ -62,8 +62,9 @@ object Calibrator {
             if (record.estimateMin <= 0) continue
             for (key in listOf(Calibration.key(record.kind, record.className), Calibration.key(record.kind, null)).distinct()) {
                 var m = result[key] ?: 1.0
-                // Timed, and all of it: with blocks ticked by hand, its minutes aren't how long it took.
-                val timed = record.workedMin > 0 && !record.byHand
+                // Timed, and all of it: with blocks ticked by hand, or work a photo check found done,
+                // its minutes aren't how long it took.
+                val timed = record.workedMin > 0 && !record.byHand && !record.photo
                 if (timed) m = (1 - WEIGHT) * m + WEIGHT * (record.workedMin.toDouble() / record.estimateMin)
                 val nudge = if (timed) NUDGE_WITH_TIME else NUDGE_ALONE
                 when (record.assessment) {
