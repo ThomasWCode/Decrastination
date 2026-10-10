@@ -76,6 +76,8 @@ dependencies {
     implementation(libs.androidx.glance.material3)
     implementation(libs.zxing.core)
     implementation(libs.anthropic.java)
+    // Every Jackson module the SDK brings at one patched version (gradle/libs.versions.toml).
+    implementation(platform(libs.jackson.bom))
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlin.test.junit)
