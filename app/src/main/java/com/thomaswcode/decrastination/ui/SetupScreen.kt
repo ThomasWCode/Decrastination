@@ -70,18 +70,32 @@ fun SetupScreen(graph: AppGraph, activity: Activity) {
     var refresh by remember { mutableIntStateOf(0) }
     var editing by remember { mutableStateOf<Credential?>(null) }
     var enteringKey by remember { mutableStateOf(false) }
-    val requestAnki = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { refresh++ }
+    // Given here: what needs it reads now, from the answer itself, which comes back even to this
+    // screen made afresh meanwhile (when the change below wouldn't see a change).
+    var hadAnki by remember { mutableStateOf(AnkiProvider.hasPermission(activity)) }
+    var hadCalendar by remember { mutableStateOf(CalendarTime.allowed(activity)) }
+    val requestAnki = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        refresh++
+        if (granted) {
+            hadAnki = true
+            SyncWorker.syncNow(activity, setOf(Source.Anki))
+        }
+    }
     val ankiAllowed = remember(refresh) { AnkiProvider.hasPermission(activity) }
-    val requestCalendar = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { refresh++ }
+    val requestCalendar = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        refresh++
+        if (granted) {
+            hadCalendar = true
+            scope.launch { CalendarTime.refresh(activity) }
+        }
+    }
     val calendarAllowed = remember(refresh) { CalendarTime.allowed(activity) }
     // Looked at again on coming back, so one given in Android's settings shows at once (BUG-P2-023).
     LifecycleResumeEffect(Unit) {
         refresh++
         onPauseOrDispose { }
     }
-    // Given, here or there: what needs it reads now.
-    var hadAnki by remember { mutableStateOf(ankiAllowed) }
-    var hadCalendar by remember { mutableStateOf(calendarAllowed) }
+    // Given there: what needs it reads once this screen sees it.
     LaunchedEffect(ankiAllowed, calendarAllowed) {
         if (ankiAllowed && !hadAnki) SyncWorker.syncNow(activity, setOf(Source.Anki))
         if (calendarAllowed && !hadCalendar) CalendarTime.refresh(activity)
@@ -184,7 +198,7 @@ fun SetupScreen(graph: AppGraph, activity: Activity) {
             SetupItem(
                 title = "Restore",
                 done = null,
-                detail = restoreNote ?: "From a backup. Once protection is armed, only the settings, and one that loosens blocking waits.",
+                detail = restoreNote ?: "From a backup. Once protection is armed, only the settings (one that loosens blocking waits) and your instructions (one changing a due date waits for your dad's code).",
                 action = "Import" to { importer.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) },
             )
         }

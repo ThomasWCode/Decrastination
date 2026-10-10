@@ -474,12 +474,12 @@ class AppGraph private constructor(context: Context) {
         Backups.problem(backup)?.let { return "Nothing was restored: $it." }
         val armed = settings.value.armed
         changeSettings { Backups.importedSettings(it, backup) }
-        val (restored, held) = restoreInstructions(backup.instructions)
-        val told = when {
-            restored + held == 0 -> ""
-            held == 0 -> " $restored instruction${if (restored == 1) "" else "s"} restored."
-            else -> " $restored instruction${if (restored == 1) "" else "s"} restored, and $held that change${if (held == 1) "s" else ""} a due date waiting in Instructions for your dad's code."
-        }
+        val (restored, held, unclear) = restoreInstructions(backup.instructions)
+        val told = buildList {
+            if (restored > 0) add("$restored instruction${if (restored == 1) "" else "s"} restored")
+            if (held > 0) add("$held that change${if (held == 1) "s" else ""} a due date waiting in Instructions for your dad's code")
+            if (unclear > 0) add("$unclear left unapplied in Instructions, as ${if (unclear == 1) "it" else "they"} would have tasks wait for each other in a circle")
+        }.takeIf { it.isNotEmpty() }?.joinToString(", ", prefix = " ", postfix = ".") ?: ""
         // This month's spend on Claude, armed or not: it can only rise, so the cap isn't given again.
         val month = AiUsage.monthOf(clock.now(), clock.zone())
         runtime.update { it.copy(aiUsage = Backups.mergeUsage(it.aiUsage, backup.aiUsage, month)) }
@@ -504,14 +504,14 @@ class AppGraph private constructor(context: Context) {
      * applying it here would go: one already here is left as it is; one that changes a due date,
      * once armed, comes back read and waiting for your dad's code ([instructionNeedsCode]); one that
      * would have tasks wait for each other in a circle with those here comes back unclear, saying
-     * so. The rest are applied. Says how many were applied, and how many wait.
+     * so. The rest are applied. Says how many were applied, how many wait, and how many are unclear.
      */
-    private suspend fun restoreInstructions(backed: List<Instruction>): Pair<Int, Int> = applying.withLock {
+    private suspend fun restoreInstructions(backed: List<Instruction>): Triple<Int, Int, Int> = applying.withLock {
         val added = Backups.restoredInstructions(backed, instructions.value.instructions, settings.value.armed)
         instructions.update { state -> state.copy(instructions = state.instructions + added.filter { a -> state.instructions.none { it.id == a.id } }) }
         val applied = added.count { it.state == InstructionStatus.Applied }
         if (applied > 0) layInstructions()
-        applied to added.count { it.state == InstructionStatus.Understood }
+        Triple(applied, added.count { it.state == InstructionStatus.Understood }, added.count { it.state == InstructionStatus.Unclear })
     }
 
     /**
