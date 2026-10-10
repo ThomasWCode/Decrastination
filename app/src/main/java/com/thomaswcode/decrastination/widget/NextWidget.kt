@@ -67,7 +67,7 @@ class NextWidget : GlanceAppWidget() {
             val tasks by graph.tasks.state.collectAsState()
             val settings by graph.settings.state.collectAsState()
             val runtime by graph.runtime.state.collectAsState()
-            val model = WidgetModel.from(graph.plan(tasks, settings), tasks, graph.clock.zone(), runtime, settings.armed)
+            val model = WidgetModel.from(graph.plan(tasks, settings), tasks, graph.clock.zone(), runtime, settings.armed, graph.clock.uptime())
             GlanceTheme { Content(model) }
         }
     }
