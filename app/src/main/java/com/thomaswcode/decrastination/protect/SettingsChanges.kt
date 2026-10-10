@@ -124,6 +124,17 @@ object SettingsChanges {
     fun requested(current: Settings, pending: List<PendingChange>): Settings = pending.fold(current, ::apply)
 
     /**
+     * [latest] with what [draft] changed from [base] (the settings as a screen showed them when the
+     * edit began) laid over it, field by field: a change made elsewhere meanwhile to a field the
+     * edit didn't touch stands, rather than an old copy putting it back (BUG-P2-014).
+     */
+    fun edited(base: Settings, draft: Settings, latest: Settings): Settings {
+        val before = encode(base)
+        val after = encode(draft)
+        return decode(JsonObject(encode(latest) + after.filter { (field, value) -> before[field] != value }))
+    }
+
+    /**
      * Applies what may apply now of the move to [proposed], and returns the rest as pending
      * changes, added to [pending]. [proposed] is read against what's been asked for ([requested]):
      * a field left as asked keeps its pending change and its wait; one set back to its current

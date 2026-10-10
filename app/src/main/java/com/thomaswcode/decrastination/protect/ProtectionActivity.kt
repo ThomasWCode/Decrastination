@@ -312,7 +312,9 @@ class ProtectionActivity : ComponentActivity() {
     /** Shows a new secret as a QR code for your dad's authenticator; saved once a code from it checks out. */
     @Composable
     private fun ParentCodeDialog(graph: AppGraph, onDone: () -> Unit, onCancel: () -> Unit) {
-        val secret = remember { Totp.newSecret() }
+        // Kept through the screen being made again (a turn of the phone): a new one would leave the
+        // QR code your dad scanned matching nothing (BUG-P2-012). It's only saved once a code checks out.
+        val secret = rememberSaveable { Totp.newSecret() }
         val qr = remember(secret) { qrBitmap(Totp.uri(secret), 720) }
         var code by remember { mutableStateOf("") }
         var error by remember { mutableStateOf<String?>(null) }

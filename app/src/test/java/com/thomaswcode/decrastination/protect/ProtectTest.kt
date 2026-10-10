@@ -92,6 +92,21 @@ class SettingsChangesTest {
     private fun newId() = "c${++ids}"
 
     @Test
+    fun `an edit saved goes over what's asked for now, only where it changed something`() {
+        // Settings opened; Setup then put a key to use; the box was edited and saved.
+        val began = Settings()
+        val draft = began.copy(boxMin = 30)
+        val latest = began.copy(aiKeyActive = true)
+        val saved = SettingsChanges.edited(began, draft, latest)
+        assertEquals(30, saved.boxMin)
+        assertEquals(true, saved.aiKeyActive)
+        // A field you changed wins over its change elsewhere.
+        assertEquals(30, SettingsChanges.edited(began, draft, latest.copy(boxMin = 60)).boxMin)
+        // Nothing changed: what's asked for stands.
+        assertEquals(latest, SettingsChanges.edited(began, began, latest))
+    }
+
+    @Test
     fun `every setting has a loosening rule`() {
         assertEquals(Settings.serializer().descriptor.elementNames.toSet(), SettingsChanges.fields)
     }

@@ -51,9 +51,11 @@ fun TasksScreen(graph: AppGraph, activity: Activity) {
     val zone = graph.clock.zone()
     val scope = rememberCoroutineScope()
     val tick = { task: TaskItem, index: Int, title: String -> scope.launch { graph.focus.tickBlock(task.id, index, title) }; Unit }
-    var writingAbout by remember { mutableStateOf<TaskItem?>(null) }
+    // The task an instruction is being written about, by id: kept, with the words, through the
+    // screen being made again (BUG-P2-013).
+    var writingAbout by rememberSaveable { mutableStateOf<String?>(null) }
     val titles = state.tasks.associate { it.id to it.title }
-    val actions = TileActions(tick, { writingAbout = it }, titles, state.tasks.associateBy { it.id })
+    val actions = TileActions(tick, { writingAbout = it.id }, titles, state.tasks.associateBy { it.id })
     // Sources open, the finished folded, till you say otherwise.
     var folded by rememberSaveable { mutableStateOf(listOf(FINISHED, NOT_TASKS)) }
     val toggle = { key: String -> folded = if (key in folded) folded - key else folded + key }
@@ -80,7 +82,7 @@ fun TasksScreen(graph: AppGraph, activity: Activity) {
             if (expanded) itemsIndexed(finished, key = { _, it -> "done-" + it.id }) { index, task -> TaskTile(task, index, finished.size, now, zone, actions) }
         }
     }
-    writingAbout?.let { task ->
+    writingAbout?.let { id -> state.tasks.firstOrNull { it.id == id } }?.let { task ->
         InstructionDialog("About “${task.title}”", onDismiss = { writingAbout = null }) { text ->
             writingAbout = null
             sendInstruction(activity, graph, text, About(taskId = task.id, taskTitle = task.title))
