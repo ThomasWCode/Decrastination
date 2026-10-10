@@ -92,7 +92,7 @@ Live check on 7 Oct: `POST /LoginWeb` with a nonsense username returned HTTP 200
 
 ## 3. AnkiDroid (`com.ichi2.anki` 2.25.1)
 
-**Access method: the official content provider**, authority `com.ichi2.anki.flashcards` (`CardContentProvider`). Contract source: `api/src/main/java/com/ichi2/anki/FlashCardsContract.kt`. Library: JitPack `com.github.ankidroid:Anki-Android:api-v1.1.0` (confirmed resolvable). The dependency merges `<uses-permission android:name="com.ichi2.anki.permission.READ_WRITE_DATABASE"/>` into the manifest; it is `dangerous`, so request it at runtime once.
+**Access method: the official content provider**, authority `com.ichi2.anki.flashcards` (`CardContentProvider`). Contract source: `api/src/main/java/com/ichi2/anki/FlashCardsContract.kt`. Library: JitPack `com.github.ankidroid:Anki-Android:api-v1.1.0` (confirmed resolvable). The dependency merges `<uses-permission android:name="com.ichi2.anki.permission.READ_WRITE_DATABASE"/>` into the manifest; it is `dangerous`, so request it at runtime once. (As built, the app doesn't use the library: it queries the provider's URIs itself, `sources/anki/AnkiSource.kt`, and declares the permission in its own manifest.)
 
 | URI | Use |
 |---|---|
@@ -109,11 +109,11 @@ Querying from `adb shell` fails with `Permission not granted for: CardContentPro
 
 **Linking homework to decks.** German instructions seen on 7 Oct: "Learn vocabulary column 1.2 Familie und Ehe", "Learn vocabulary p46-47/ 2.2/2.3", "Learn vocabulary - verschiedene Familienformen". Regex `\b([1-9]\.[1-9])\b` over the instructions finds the section, but sections repeat across `Textbook 1` and `Textbook 2`, so it maps to `Textbook N::x.y` for the current textbook, a setting that starts at Textbook 1 (Q18, decided 8 Oct). The enrichment reads section numbers the regex misses in wordier instructions, and the regex result always wins when present. A topic named without its number ("verschiedene Familienformen") can't be matched: the decks are named by number only, and the app doesn't have the textbook's section titles (tried 9 Oct).
 
-**Task derivation.**
+**Task derivation** (as planned on 7 Oct; *Built in Phase 1* below and `sources/anki/AnkiRules.kt` are what the app does: the quota is due at 21:30, a setting).
 - *Daily quota task* (every day): "Anki: N reviews due + M new" with deadline 21:00. Effort ≈ reviews × 8 s + new × 25 s. Quota (your answer, 7 Oct): all due reviews plus 20 new cards from the lowest-numbered deck that still has new cards, plus any deck a German assignment names.
 - *Homework deck task*: for each assignment with linked decks, "Learn deck 1.2 (k cards still new)", deadline = assignment due time (or the test date if the instructions name one), effort = new cards × 25 s + due × 8 s.
 
-**Completion test.** For a deck task: `new + learn + review == 0` for that deck. For the daily quota: all review/learn counts zero and new cards introduced ≥ quota (new-introduced-today is derived as `min(quota, newAtStartOfDay − newNow)`).
+**Completion test** (as planned; as built, a deck task is done once Anki has no card in it never studied, and the quota once nothing is due and its deck has no new cards left today). As planned: for a deck task: `new + learn + review == 0` for that deck. For the daily quota: all review/learn counts zero and new cards introduced ≥ quota (new-introduced-today is derived as `min(quota, newAtStartOfDay − newNow)`).
 
 **Opening a deck.** `update(selected_deck, deck_id)` then start `com.ichi2.anki/.Reviewer`, which is exported and opens on the selected deck (checked on the phone on 9 Oct: deck 1.2's first new card). The daily quota spans every deck, so it opens the deck list instead, with its deck highlighted.
 
@@ -161,7 +161,7 @@ Library: `jakarta.mail` works on Android with the `android-mail`/`android-activa
 
 **Alternative not taken: Gmail API (OAuth).** Cleaner scopes, proper message ids and deep links, labels; cost is a Google Cloud project, consent screen, and either 7-day token expiry in "Testing" or publishing unverified. You chose IMAP (Q2, 7 Oct).
 
-**Sending, for the parent-held override only.** The app sends two kinds of email, both to `richard.white@lshtm.ac.uk`: a pending-change notice carrying a one-time code, and a "protection off for over an hour" alert. They go over SMTP (`smtp.gmail.com:465`, implicit TLS, `AUTH PLAIN`) from a **dedicated mailbox whose credentials your dad enters at setup**, not from your own account, because a code sent from your Gmail would be readable in your Sent folder. The same hand-rolled client approach works for SMTP (`EHLO`, `AUTH`, `MAIL FROM`, `RCPT TO`, `DATA`); messages are plain text with the request description, the code, and when the change would apply on its own. Design and the authenticator-app alternative: `docs/scheduler.md` §6.
+**Sending, for the parent-held override only (as planned on 7 Oct; not built).** On 9 Oct you chose an authenticator app on your dad's phone instead (Q17, `docs/scheduler.md` §6): the app sends no email and holds no mailbox's password. The plan was: the app sends two kinds of email, both to `richard.white@lshtm.ac.uk`: a pending-change notice carrying a one-time code, and a "protection off for over an hour" alert. They go over SMTP (`smtp.gmail.com:465`, implicit TLS, `AUTH PLAIN`) from a **dedicated mailbox whose credentials your dad enters at setup**, not from your own account, because a code sent from your Gmail would be readable in your Sent folder. The same hand-rolled client approach works for SMTP (`EHLO`, `AUTH`, `MAIL FROM`, `RCPT TO`, `DATA`); messages are plain text with the request description, the code, and when the change would apply on its own. Design and the authenticator-app alternative: `docs/scheduler.md` §6.
 
 ## 5. The LLM enrichment
 
