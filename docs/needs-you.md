@@ -138,4 +138,4 @@ Still waiting for you:
   - **Taller** (about 4×3 up), the card sits over the day's count, which heads the rest of the day as tiles. Urgent ones have a red edge. Each shows its minutes in a pill and opens its task.
   - **Trouble** (protection off, a source that can't be read, Teams not synced) is a red strip at the top, as the app puts it first. Tapping it, or the day's count, opens the app.
   - **Nothing taken away**: a list longer than 30 ends *N more in the app*.
-- **Not tried on the phone yet**: it wasn't on adb. Light mode especially wants a look, as the tiles' shade comes from your wallpaper's colours.
+- **Tried on the phone, 10 Oct, with you**: on the 4th screen at 4×2 (401 × 226 dp: the card, the day's count and two tiles), 4×3, 4×5 (13 tiles), 4×1 (the card alone, with its label and *Then:* line) and 2×1 (188 dp wide: the pills stacked beside ↻, the name cut short). It's back at 4×2. In light mode the minutes pill all but vanished into the pale card, so **1.6.1** puts the plain pills in the surface colour: white in light mode, near-black in dark, clear on the card and the tiles in both. The app itself was fine in light mode (Plan, Tasks, Stats).
