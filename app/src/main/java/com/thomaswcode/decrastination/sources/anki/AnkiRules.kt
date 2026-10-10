@@ -111,7 +111,8 @@ object AnkiRules {
      * [unseen] is asked about those.
      */
     fun quotaDeck(decks: List<Deck>, textbook: Int, homework: Set<Long> = emptySet(), unseen: (Deck) -> Int): Deck? =
-        decks.filter { it.id !in homework }
+        // Not one whose options allow no new cards a day: it never shows any.
+        decks.filter { it.id !in homework && it.newPerDay > 0 }
             .mapNotNull { deck -> section(deck)?.let { deck to it } }
             .sortedWith(compareBy({ it.second.first != textbook }, { it.second.first }, { it.second.second }, { it.second.third }))
             .firstOrNull { (deck, _) -> deck.new > 0 || unseen(deck) > 0 }
@@ -285,15 +286,20 @@ object AnkiRules {
         return finishing + wanted.map { (deck, linked) ->
             val first = linked.minWith(compareBy(nullsLast()) { it.dueAt })
             val left = unseen(deck)
+            // Its options allow no new cards a day: Anki's next day brings none either, so nothing
+            // waits for it. All its cards are one step, for a custom study session (or the limit
+            // raised), and the task says so.
+            val none = deck.newPerDay == 0
             // Today's new cards for this deck are studied: the rest wait for Anki's next day,
             // whatever reviews it has (those are the daily quota's).
-            val waits = deck.new == 0 && left > 0
+            val waits = deck.new == 0 && left > 0 && !none
             val section = deck.name.substringAfterLast(Deck.SEPARATOR)
             Fetched(
                 sourceId = DECK_PREFIX + deck.id,
                 title = "Learn Anki deck $section",
                 kind = Kind.Homework,
-                detail = "$left cards never studied. For: " + linked.joinToString("; ") { it.title },
+                detail = "$left cards never studied. For: " + linked.joinToString("; ") { it.title } +
+                    if (none) ". Its New cards/day in AnkiDroid is 0, so Anki shows none of them: raise it, or use Custom study." else "",
                 className = first.className,
                 dueAt = first.dueAt,
                 sourceEffortMin = effortMin(0, left).coerceAtLeast(1),
@@ -319,7 +325,8 @@ object AnkiRules {
      */
     private fun newCardSteps(unseen: Int, today: Int, perDay: Int): List<SubStep> {
         if (unseen <= 0) return emptyList()
-        val daily = perDay.coerceAtLeast(1)
+        // None a day: all of them, as one step (see homeworkDecks).
+        val daily = if (perDay <= 0) unseen else perDay
         val first = minOf(unseen, if (today > 0) today else daily)
         val sizes = listOf(first) + (first until unseen step daily).map { minOf(daily, unseen - it) }
         return sizes.map { cards -> SubStep("$cards new cards", effortMin(0, cards).coerceAtLeast(1)) }
