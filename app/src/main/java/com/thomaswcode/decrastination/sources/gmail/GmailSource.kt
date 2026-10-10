@@ -193,10 +193,7 @@ class GmailSource(private val secrets: SecretStore) : TaskSource {
         val password = secrets[Secret.GmailAppPassword]
         if (address.isNullOrBlank() || password.isNullOrBlank()) throw SourceUnavailable("No Gmail address and app password saved")
         val known = GmailThreads.knownBodies(context.known)
-        // Texts are fetched until then: the rest wait for the reads after, as those past MAX_BODIES
-        // do, so a slow connection still gets somewhere rather than running out of the sync's time
-        // with nothing saved (BUG-P2-019).
-        val textsUntil = System.nanoTime() + TEXTS_FOR_NS
+        val started = System.nanoTime()
         val socket = connect()
         // A read the sync has given up on mustn't hold the connection open: closing the socket,
         // from another thread, ends whichever blocking read is under way.
@@ -218,9 +215,14 @@ class GmailSource(private val secrets: SecretStore) : TaskSource {
                     imap.uidFetch(batch, "UID INTERNALDATE X-GM-MSGID X-GM-THRID X-GM-LABELS ENVELOPE").mapNotNull(GmailThreads::message)
                 }
                 if (messages.size < uids.size) throw IOException("Gmail listed ${uids.size} messages but described ${messages.size}")
+                // Texts are fetched for up to [TEXTS_FOR_NS] from here, but never past [TEXTS_BY_NS]
+                // into the read, leaving the sync's 90 s room to log out and return; and always one,
+                // so a read slow to list still gets somewhere. The rest wait for the reads after, as
+                // those past MAX_BODIES do (BUG-P2-019).
+                val textsUntil = minOf(System.nanoTime() + TEXTS_FOR_NS, started + TEXTS_BY_NS)
                 val read = LinkedHashMap<String, String?>()
                 for (message in GmailThreads.toRead(messages, known, MAX_BODIES)) {
-                    if (System.nanoTime() > textsUntil) break
+                    if (read.isNotEmpty() && System.nanoTime() > textsUntil) break
                     read[message.messageId] = text(imap, message.uid)
                 }
                 val bodies = GmailThreads.withRead(known, read)
@@ -289,7 +291,10 @@ class GmailSource(private val secrets: SecretStore) : TaskSource {
         /** Said at the end of a text whose part ran past [MAX_PART_BYTES]. */
         const val CUT = "[The rest of this email is too long to be read here.]"
 
-        /** How long a read spends fetching texts: half the sync's 90 s wait, leaving the rest for listing and logging out. */
+        /** How long a read spends fetching texts, once the inbox is listed: half the sync's 90 s wait. */
         const val TEXTS_FOR_NS = 45_000_000_000L
+
+        /** How far into the read texts may go, however long listing took: room left within the sync's 90 s to log out and return. */
+        const val TEXTS_BY_NS = 70_000_000_000L
     }
 }
