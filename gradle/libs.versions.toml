@@ -14,7 +14,10 @@ work = "2.11.2"
 coroutines = "1.10.2"
 serialization = "1.9.0"
 zxing = "3.5.4"
-anthropic = "2.34.0"
+anthropic = "2.71.0"
+# The SDK's own Jackson (2.19.4) matches published advisories (OSV, 10 Oct 2026); 2.21.7 matches
+# none, and the SDK takes any 2.x from 2.19 on.
+jackson = "2.21.7"
 okhttp = "4.12.0"
 junit = "4.13.2"
 
@@ -35,6 +38,7 @@ kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-cor
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "serialization" }
 zxing-core = { group = "com.google.zxing", name = "core", version.ref = "zxing" }
 anthropic-java = { group = "com.anthropic", name = "anthropic-java", version.ref = "anthropic" }
+jackson-bom = { group = "com.fasterxml.jackson", name = "jackson-bom", version.ref = "jackson" }
 okhttp-mockwebserver = { group = "com.squareup.okhttp3", name = "mockwebserver", version.ref = "okhttp" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 kotlin-test-junit = { group = "org.jetbrains.kotlin", name = "kotlin-test-junit", version.ref = "kotlin" }
