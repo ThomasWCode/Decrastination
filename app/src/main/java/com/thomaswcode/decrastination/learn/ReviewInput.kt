@@ -33,6 +33,14 @@ object ReviewInput {
 
     const val MAX_NOTE = 5
 
+    /** The finished work listed, the latest: more is a busy week, not more to learn from. */
+    const val MAX_LISTED = 40
+    private const val MAX_TITLE = 100
+
+    /** A note on a finished task, and a check-in answer, as far as each is read. */
+    private const val MAX_NOTE_CHARS = 300
+    private const val MAX_ANSWER = 600
+
     val SYSTEM = """
         You review a UK sixth-form student's week (Year 12) for the planner app that schedules their homework and blocks distracting apps until it's done. You get the week's finished work (estimates against the minutes timed in focus sessions, and the student's own "harder/as expected/easier"), the sessions by hour, how often the blocker stopped them, their Sunday answers, and the current settings and calibration.
 
@@ -74,12 +82,16 @@ object ReviewInput {
         val end = minOf(monday.plusDays(7).atStartOfDay(zone).toInstant().toEpochMilli(), now + 1)
         fun inWeek(time: Long) = time in start until end
         fun at(time: Long) = Instant.ofEpochMilli(time).atZone(zone).format(WHEN)
+        // Each piece of free text, and the list, kept to a length: a week's record stays a call's
+        // size ([com.thomaswcode.decrastination.enrich.Pricing.MAX_INPUT_CHARS], BUG-P2-015).
         appendLine("Finished this week:")
-        log.completions.filter { inWeek(it.doneAt) }.ifEmpty { null }?.forEach { c ->
+        val finished = log.completions.filter { inWeek(it.doneAt) }
+        finished.takeLast(MAX_LISTED).ifEmpty { null }?.forEach { c ->
             val due = c.dueAt?.let { " due ${at(it)}," }.orEmpty()
-            val answer = c.assessment?.let { " felt $it" }.orEmpty() + c.note?.let { " (\"$it\")" }.orEmpty()
-            appendLine("- ${c.title} [${c.kind.label}${c.className?.let { ", $it" }.orEmpty()}]:$due done ${at(c.doneAt)}, estimate ${c.estimateMin} min, timed ${c.workedMin} min${if (c.byHand) " (some ticked off by hand)" else ""}${if (c.photo) " (some found done by a photo check)" else ""}.$answer")
+            val answer = c.assessment?.let { " felt $it" }.orEmpty() + c.note?.let { " (\"${it.take(MAX_NOTE_CHARS)}\")" }.orEmpty()
+            appendLine("- ${c.title.take(MAX_TITLE)} [${c.kind.label}${c.className?.let { ", ${it.take(MAX_TITLE)}" }.orEmpty()}]:$due done ${at(c.doneAt)}, estimate ${c.estimateMin} min, timed ${c.workedMin} min${if (c.byHand) " (some ticked off by hand)" else ""}${if (c.photo) " (some found done by a photo check)" else ""}.$answer")
         } ?: appendLine("- nothing")
+        if (finished.size > MAX_LISTED) appendLine("- and ${finished.size - MAX_LISTED} more before those")
         // A session across the week's start or end: only its minutes within the week.
         fun minutes(session: SessionRecord) = Days.minutesIn(session, start, end)
         val sessions = log.sessions.filter { !it.photo && (inWeek(it.startedAt) || minutes(it) > 0) }
@@ -93,7 +105,8 @@ object ReviewInput {
         // The reviewed week's answers only: last week's, answered late, aren't this week's.
         log.checkIns.filter { it.weekOf == week }.maxByOrNull { it.at }?.let { c ->
             appendLine()
-            appendLine("Their Sunday answers: the week felt ${c.feel}/5. Avoided: ${c.avoided.ifBlank { "-" }}. In the way: ${c.inTheWay.ifBlank { "-" }}. Would change: ${c.change.ifBlank { "-" }}. Most energy: ${c.energy.ifBlank { "-" }}.")
+            fun said(text: String) = text.ifBlank { "-" }.take(MAX_ANSWER)
+            appendLine("Their Sunday answers: the week felt ${c.feel}/5. Avoided: ${said(c.avoided)}. In the way: ${said(c.inTheWay)}. Would change: ${said(c.change)}. Most energy: ${said(c.energy)}.")
         }
         appendLine()
         appendLine("Settings: boxMin ${settings.boxMin}, marginDays ${settings.marginDays}, softMinPerDay ${settings.softMinPerDay}, workMinPerFreeMin ${settings.workMinPerFreeMin}.")

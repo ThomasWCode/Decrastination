@@ -41,6 +41,9 @@ object InstructionPrompts {
     const val MAX_EVENTS = 60
     private const val MAX_DETAIL = 1_500
 
+    /** A task's or an event's title, as far as it's read: a whole note can sit in an event's title. */
+    private const val MAX_TITLE = 100
+
     // Before the schemas that use it: an object's properties are made in order.
     private val STRING = mapOf("type" to "string")
 
@@ -106,7 +109,7 @@ object InstructionPrompts {
                 task.detail.trim().takeIf { it.isNotEmpty() }?.let { appendLine("  Details: " + it.take(MAX_DETAIL).replace("\n", "\n    ")) }
             }
             about.eventKey != null -> appendLine(
-                "About the calendar event \"${about.eventTitle ?: about.eventKey}\" (eventKey: ${about.eventKey})" +
+                "About the calendar event \"${(about.eventTitle ?: about.eventKey).take(MAX_TITLE)}\" (eventKey: ${about.eventKey})" +
                     (about.eventStart?.let { ", on ${at(it)}" } ?: ""),
             )
             about.day != null -> appendLine("About the day: " + (runCatching { LocalDate.parse(about.day).format(DAY) }.getOrNull() ?: about.day))
@@ -115,14 +118,14 @@ object InstructionPrompts {
         appendLine()
         appendLine("Open tasks (id | title | from | due):")
         tasks.filter { it.isOpen }.sortedBy { it.dueAt ?: Long.MAX_VALUE }.take(MAX_TASKS).forEach { t ->
-            appendLine("- ${t.id} | ${t.title.take(100)} | ${t.source.label} | ${t.dueAt?.let(::at) ?: "no date"}")
+            appendLine("- ${t.id} | ${t.title.take(MAX_TITLE)} | ${t.source.label} | ${t.dueAt?.let(::at) ?: "no date"}")
         }
         appendLine()
         appendLine("Calendar events in the next fortnight (eventKey | title | when):")
         if (events.isEmpty()) appendLine("(none)")
         events.sortedBy { it.start }.take(MAX_EVENTS).forEach { e ->
             val time = if (e.allDay) "all day " + Instant.ofEpochMilli(e.start).atZone(ZoneId.of("UTC")).toLocalDate().format(DAY) else "${at(e.start)} to ${at(e.end)}"
-            appendLine("- ${EventJudge.key(e)} | ${e.title} | $time")
+            appendLine("- ${EventJudge.key(e)} | ${e.title.take(MAX_TITLE)} | $time")
         }
     }.trimEnd()
 
@@ -273,7 +276,7 @@ class InstructionReader(apiKey: String, private val zone: ZoneId, endpoint: Stri
             .model(model)
             .maxTokens(ClaudeEnricher.MAX_TOKENS)
             .system(InstructionPrompts.SYSTEM)
-            .addUserMessage(InstructionPrompts.describe(instruction, tasks, events, now, zone))
+            .addUserMessage(InstructionPrompts.describe(instruction, tasks, events, now, zone).take(Pricing.MAX_INPUT_CHARS))
             .outputConfig(OutputConfig.builder().effort(OutputConfig.Effort.HIGH).format(JsonOutputFormat.builder().schema(schema).build()).build())
             .putAdditionalHeader("anthropic-beta", ClaudeEnricher.FALLBACK_BETA)
             .putAdditionalBodyProperty("fallbacks", JsonValue.from("default"))

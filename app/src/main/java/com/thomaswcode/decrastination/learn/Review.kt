@@ -104,7 +104,7 @@ object Review {
         // Laid over what's been asked for, so a change waiting elsewhere keeps its wait.
         if (changes.isNotEmpty()) graph.changeSettings { ReviewInput.apply(it, changes) }
         val note = answer.note.ifEmpty { listOf("No note this week.") }
-        return Outcome(WeeklyReview(now, note + changeLines(changes, graph.settings.value), by = reviewer.model))
+        return Outcome(WeeklyReview(now, note + changeLines(changes, graph.settings.value), by = result.model ?: reviewer.model))
     }
 
     /** Why the model didn't review the week, in words. */
