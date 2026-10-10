@@ -61,7 +61,7 @@ Still waiting for you:
 ## Phase 6: stats, backup, version 1.0.0
 
 - **A Stats tab** (after Tasks): the last fortnight's finished work (and how much of it with a deadline was done by it), your focus sessions, how often the blocker stopped you and on what, and what protection found; day by day below. Then today's free time, what the app has learned about your estimates in plain words, and Claude's month. Most of it fills in as you use the app; tonight it shows the testing.
-- **Back up and Restore** (Setup): *Export* saves the settings, the activity log, what the app has learned and your calendar answers to a file you choose (it never includes passwords or keys, which stay encrypted on the phone). *Import* reads one back. The settings go through the same waiting as any change once protection is armed, and this phone's own protection and Claude key stay as they are; once armed, the log and what the app learned aren't restored, so an edited file can't teach the planner to plan less.
+- **Back up and Restore** (Setup): *Export* saves the settings, the activity log, what the app has learned and your calendar answers to a file you choose (it never includes passwords or keys, which stay encrypted on the phone). *Import* reads one back. The settings go through the same waiting as any change once protection is armed, and this phone's own protection and Claude key stay as they are; once armed, the log and what the app learned aren't restored, so an edited file can't teach the planner to plan less. **Since 1.7.0** (from the review): a backup also keeps your instructions in use, and restoring brings each back as applying it here would (days, times, hide and hold at once; once armed, a due-date change waits in Instructions for your dad's code); and a file holding what the app never writes (negative minutes, a setting out of the screen's range) is refused whole, with nothing restored.
 - **Tried on the phone**: the Stats tab, and a backup saved to Downloads through Android's file picker (12 KB; the format has no place for passwords or keys; I deleted it afterwards). Restoring one was tried on 9 Oct, evening, with you, before arming: a backup exported and imported again changed nothing, as it should ("Restored the settings, 25 completions and 2 sessions, what the app had learned, and your calendar answers").
 
 ## 1.1.0: blocks (Q12)
@@ -128,7 +128,7 @@ Still waiting for you:
   - "make me do more maths": unclear, with why.
 
   I applied Saturday's and took it back (the Calendar page showed it in between), then discarded them all: nothing of the tests is left.
-- **Not done**: instructions aren't in backups yet. And an email Claude hid as only to read can't be brought back by an instruction, as it isn't listed anywhere to write one about.
+- **Not done**: instructions aren't in backups yet (they are since 1.7.0). And an email Claude hid as only to read can't be brought back by an instruction, as it isn't listed anywhere to write one about.
 
 ## 1.6.0: the widget's look
 

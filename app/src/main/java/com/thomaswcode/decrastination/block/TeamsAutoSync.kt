@@ -68,6 +68,13 @@ object TeamsAutoSync {
         return if (stale && notLately) Trigger.Every3Hours else null
     }
 
+    /**
+     * Whether an offer made a moment ago still stands when its banner runs out: automatic syncs
+     * still on, and not into quiet hours since. (Outside the usual hours it may be, as a morning
+     * offer or a delayed one is.)
+     */
+    fun stillWanted(now: Long, zone: ZoneId, settings: Settings): Boolean = settings.teamsAutoSync && !BlockPolicy.isQuiet(now, zone, settings)
+
     /** Within the hours automatic syncs may happen. */
     fun allowed(now: Long, zone: ZoneId, settings: Settings): Boolean {
         if (BlockPolicy.isQuiet(now, zone, settings)) return false

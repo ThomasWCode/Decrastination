@@ -26,6 +26,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -36,6 +37,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.core.Source
@@ -68,16 +70,38 @@ fun SetupScreen(graph: AppGraph, activity: Activity) {
     var refresh by remember { mutableIntStateOf(0) }
     var editing by remember { mutableStateOf<Credential?>(null) }
     var enteringKey by remember { mutableStateOf(false) }
+    // Given here: what needs it reads now, from the answer itself, which comes back even to this
+    // screen made afresh meanwhile (when the change below wouldn't see a change).
+    var hadAnki by remember { mutableStateOf(AnkiProvider.hasPermission(activity)) }
+    var hadCalendar by remember { mutableStateOf(CalendarTime.allowed(activity)) }
     val requestAnki = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         refresh++
-        if (granted) SyncWorker.syncNow(activity, setOf(Source.Anki))
+        if (granted) {
+            hadAnki = true
+            SyncWorker.syncNow(activity, setOf(Source.Anki))
+        }
     }
     val ankiAllowed = remember(refresh) { AnkiProvider.hasPermission(activity) }
     val requestCalendar = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         refresh++
-        if (granted) scope.launch { CalendarTime.refresh(activity) }
+        if (granted) {
+            hadCalendar = true
+            scope.launch { CalendarTime.refresh(activity) }
+        }
     }
     val calendarAllowed = remember(refresh) { CalendarTime.allowed(activity) }
+    // Looked at again on coming back, so one given in Android's settings shows at once (BUG-P2-023).
+    LifecycleResumeEffect(Unit) {
+        refresh++
+        onPauseOrDispose { }
+    }
+    // Given there: what needs it reads once this screen sees it.
+    LaunchedEffect(ankiAllowed, calendarAllowed) {
+        if (ankiAllowed && !hadAnki) SyncWorker.syncNow(activity, setOf(Source.Anki))
+        if (calendarAllowed && !hadCalendar) CalendarTime.refresh(activity)
+        hadAnki = ankiAllowed
+        hadCalendar = calendarAllowed
+    }
     var backupNote by remember { mutableStateOf<String?>(null) }
     var restoreNote by remember { mutableStateOf<String?>(null) }
     val exporter = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
@@ -89,7 +113,7 @@ fun SetupScreen(graph: AppGraph, activity: Activity) {
                     val out = requireNotNull(activity.contentResolver.openOutputStream(uri, "wt")) { "no file to write" }
                     out.use { it.write(text.toByteArray()) }
                 }
-                "Saved: the settings, the log, what the app has learned and your calendar answers. No passwords or keys."
+                "Saved: the settings, the log, what the app has learned, your calendar answers and your instructions in use. No passwords or keys."
             }.getOrElse { "Couldn't save it: ${it.message}" }
         }
     }
@@ -168,13 +192,13 @@ fun SetupScreen(graph: AppGraph, activity: Activity) {
             SetupItem(
                 title = "Back up",
                 done = null,
-                detail = backupNote ?: "The settings, the log, what the app has learned and your calendar answers, to a file you choose. No passwords or keys.",
+                detail = backupNote ?: "The settings, the log, what the app has learned, your calendar answers and your instructions in use, to a file you choose. No passwords or keys.",
                 action = "Export" to { exporter.launch("decrastination-backup.json") },
             )
             SetupItem(
                 title = "Restore",
                 done = null,
-                detail = restoreNote ?: "From a backup. Once protection is armed, only the settings, and one that loosens blocking waits.",
+                detail = restoreNote ?: "From a backup. Once protection is armed, only the settings (one that loosens blocking waits) and your instructions (one changing a due date waits for your dad's code).",
                 action = "Import" to { importer.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) },
             )
         }

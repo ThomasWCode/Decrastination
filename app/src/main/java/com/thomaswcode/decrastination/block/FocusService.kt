@@ -633,10 +633,7 @@ class FocusService : AccessibilityService() {
     /** The automatic Teams sync (Q21), when due, while the phone is unlocked and in use; with [force], now (a test hook). */
     private fun offerTeamsSync(force: Boolean = false) {
         if (banner.isShowing) return
-        val power = getSystemService(PowerManager::class.java)
-        val keyguard = getSystemService(android.app.KeyguardManager::class.java)
-        if (power?.isInteractive != true || keyguard?.isKeyguardLocked == true) return
-        if (getSystemService(AudioManager::class.java)?.mode != AudioManager.MODE_NORMAL) return
+        if (!inUse()) return
         val runtime = graph.runtime.value
         val trigger = TeamsAutoSync.due(
             now = graph.clock.now(),
@@ -654,6 +651,17 @@ class FocusService : AccessibilityService() {
             onDelay = { scope.launch { graph.runtime.update { it.copy(teamsAuto = TeamsAutoSync.delayed(it.teamsAuto, graph.clock.now())) } } },
             onTimeout = {
                 scope.launch {
+                    // Ten seconds on, is it still a moment to take the screen? A call begun, or the
+                    // phone locked: offered again in five minutes, as Delay does. Quiet hours begun, or
+                    // automatic syncs switched off meanwhile: not now, as a Cancel is (BUG-P2-010).
+                    if (!inUse()) {
+                        graph.runtime.update { it.copy(teamsAuto = TeamsAutoSync.delayed(it.teamsAuto, graph.clock.now())) }
+                        return@launch
+                    }
+                    if (!force && !TeamsAutoSync.stillWanted(graph.clock.now(), graph.clock.zone(), graph.settings.value)) {
+                        recordOffer()
+                        return@launch
+                    }
                     // Counted as offered first, so the next look doesn't offer it again meanwhile.
                     val before = graph.runtime.value.teamsAuto
                     recordOffer()
@@ -666,6 +674,14 @@ class FocusService : AccessibilityService() {
                 }
             },
         )
+    }
+
+    /** The phone on, unlocked, and not in a call: a moment the Teams sync may take the screen. */
+    private fun inUse(): Boolean {
+        val power = getSystemService(PowerManager::class.java)
+        val keyguard = getSystemService(android.app.KeyguardManager::class.java)
+        if (power?.isInteractive != true || keyguard?.isKeyguardLocked == true) return false
+        return getSystemService(AudioManager::class.java)?.mode == AudioManager.MODE_NORMAL
     }
 
     private suspend fun recordOffer() {

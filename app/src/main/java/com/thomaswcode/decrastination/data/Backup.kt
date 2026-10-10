@@ -1,6 +1,13 @@
 package com.thomaswcode.decrastination.data
 
 import com.thomaswcode.decrastination.core.Calibration
+import com.thomaswcode.decrastination.core.Change
+import com.thomaswcode.decrastination.core.ChangeType
+import com.thomaswcode.decrastination.core.Instruction
+import com.thomaswcode.decrastination.core.InstructionState
+import com.thomaswcode.decrastination.core.InstructionStatus
+import com.thomaswcode.decrastination.core.Instructions
+import com.thomaswcode.decrastination.learn.Calibrator
 import com.thomaswcode.decrastination.enrich.AiUsage
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
@@ -9,9 +16,9 @@ import kotlinx.serialization.json.Json
 
 /**
  * What a backup keeps (PLAN.md Phase 6): the settings, the activity log, what the app has learned,
- * and your answers about calendar events: what the sources can't give back. Never the passwords
- * or keys, which stay in this phone's encrypted store, nor the tasks, which the next sync reads
- * again.
+ * your answers about calendar events and, since 1.7.0, your instructions in use: what the sources
+ * can't give back. Never the passwords or keys, which stay in this phone's encrypted store, nor the
+ * tasks, which the next sync reads again.
  */
 @Serializable
 data class Backup(
@@ -26,6 +33,8 @@ data class Backup(
     val eventAnswers: Map<String, String> = emptyMap(),
     /** What Claude has cost this month, so a restore onto a fresh install doesn't give the month's cap again. */
     val aiUsage: AiUsage = AiUsage(),
+    /** Your instructions in use (applied), in the order they were: none in a backup from before 1.7.0. */
+    val instructions: List<Instruction> = emptyList(),
 ) {
     companion object {
         const val APP = "Decrastination"
@@ -49,6 +58,89 @@ object Backups {
     /** [text] as one of this app's backups, or null: not JSON, not this app's, or a newer format than this version reads. */
     fun decode(text: String): Backup? = runCatching { json.decodeFromString(Backup.serializer(), text) }.getOrNull()
         ?.takeIf { it.app == Backup.APP && it.format <= Backup.FORMAT }
+
+    /**
+     * What's wrong with [backup] as this app's state, in words, or null if nothing is: JSON of the
+     * right shape can still hold what the app never writes (negative minutes, a multiplier past its
+     * bounds, a setting the screen wouldn't take), and restoring that could break planning or the
+     * stats (BUG-P2-002). Checked whole before anything is restored, so nothing is half done.
+     */
+    fun problem(backup: Backup): String? {
+        val bad = buildList {
+            addAll(SettingsLimits.problems(backup.settings))
+            val log = backup.log
+            if (log.sessions.any { it.workedMin !in 0..DAY_MIN || it.plannedMin !in 0..DAY_MIN || it.startedAt < 0 }) add("a focus session's minutes")
+            if (log.completions.any { it.estimateMin < 0 || it.workedMin < 0 }) add("a finished task's minutes")
+            if (log.days.any { it.plannedMin < 0 || (it.doneMin ?: 0) < 0 || runCatching { java.time.LocalDate.parse(it.date) }.isFailure }) add("a day's plan")
+            if (log.checkIns.any { it.feel !in 1..5 }) add("a check-in's answer")
+            val calibration = backup.calibration
+            if (calibration.multipliers.values.any { !it.isFinite() || it !in Calibrator.MIN_MULTIPLIER..Calibrator.MAX_MULTIPLIER }) add("what the app learned about estimates")
+            if (calibration.marginDays.values.any { it !in SettingsLimits.MARGIN_DAYS }) add("what the app learned about margins")
+            if (calibration.boxMin.values.any { it !in SettingsLimits.BOX_MIN }) add("what the app learned about box lengths")
+            if (backup.eventAnswers.values.any { !answer(it) }) add("a calendar answer")
+            if (!backup.aiUsage.spentUsd.isFinite() || backup.aiUsage.spentUsd < 0 || backup.aiUsage.calls < 0) add("Claude's spending")
+            if (backup.instructions.any { !wellFormed(it, backup.exportedAt) }) add("an instruction")
+        }
+        return bad.takeIf { it.isNotEmpty() }?.let { "it holds what this app never writes (${it.joinToString(", ")})" }
+    }
+
+    private const val DAY_MIN = 24 * 60
+    private const val DAY_MS = 24 * 3_600_000L
+
+    /** The most changes one instruction holds, as Claude's reading of one is held to. */
+    private const val MAX_CHANGES = 40
+
+    /**
+     * Whether [instruction] is one this app could have made: an id, and each change of its kind with
+     * what it needs, in range (times within a day, a weekday 1 to 7, a date that reads, a date and
+     * time within a couple of years of [exportedAt]). The tasks and events it names aren't checked:
+     * on a phone just set up, their sources haven't been read yet.
+     */
+    private fun wellFormed(instruction: Instruction, exportedAt: Long): Boolean {
+        if (instruction.id.isBlank() || instruction.changes.size > MAX_CHANGES) return false
+        fun named(id: String?) = !id.isNullOrBlank()
+        fun day(change: Change) = when {
+            change.date != null -> change.weekday == null && runCatching { java.time.LocalDate.parse(change.date) }.isSuccess
+            else -> change.weekday in 1..7
+        }
+        fun time(at: Long?) = at != null && at in (exportedAt - 730 * DAY_MS)..(exportedAt + 400 * DAY_MS)
+        return instruction.changes.all { change ->
+            when (change.type) {
+                ChangeType.NotATask -> named(change.taskId)
+                ChangeType.StartFrom, ChangeType.DueBy -> named(change.taskId) && time(change.time)
+                ChangeType.After -> named(change.taskId) && named(change.afterTaskId) && change.afterTaskId != change.taskId
+                ChangeType.EventTime -> named(change.eventKey) && change.eventAnswer?.let(::answer) == true
+                ChangeType.DayLimit -> change.freeMin in 0..DAY_MIN && day(change)
+                ChangeType.BusyTime -> change.startMin in 0 until DAY_MIN && (change.endMin ?: -1) in ((change.startMin ?: DAY_MIN) + 1)..DAY_MIN && day(change)
+            }
+        }
+    }
+
+    /** A calendar answer as they're kept: "free", "busy", or "load:<minutes>" within a day. */
+    private fun answer(value: String): Boolean =
+        value == "free" || value == "busy" || value.removePrefix("load:").takeIf { it != value }?.toIntOrNull()?.let { it in 0..DAY_MIN } == true
+
+    /**
+     * The instructions to add from a backup's ([backed], those in use), beside those [here], each as
+     * applying it here would go, in the order they were applied: one already here isn't added; one
+     * that changes a due date, once [armed], comes back read, waiting for your dad's code; one that
+     * would have tasks wait for each other in a circle comes back unclear, saying so. The rest are
+     * in use at once.
+     */
+    fun restoredInstructions(backed: List<Instruction>, here: List<Instruction>, armed: Boolean): List<Instruction> {
+        val added = mutableListOf<Instruction>()
+        for (instruction in backed.filter { it.state == InstructionStatus.Applied }.sortedBy { it.appliedAt ?: it.at }) {
+            if ((here + added).any { it.id == instruction.id }) continue
+            val inUse = InstructionState(here + added).applied
+            added += when {
+                Instructions.makesCircle(instruction.changes, inUse) ->
+                    instruction.copy(state = InstructionStatus.Unclear, appliedAt = null, note = "It would have tasks wait for each other in a circle with those here, so it wasn't applied")
+                armed && Instructions.needsCode(instruction.changes) -> instruction.copy(state = InstructionStatus.Understood, appliedAt = null)
+                else -> instruction
+            }
+        }
+        return added
+    }
 
     /** [input] whole, or null if it's over [cap] bytes. */
     fun read(input: InputStream, cap: Int = MAX_BYTES): ByteArray? {

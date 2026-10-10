@@ -21,6 +21,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -53,7 +54,8 @@ const val INSTRUCTION_EXAMPLES = "For example: “I can't do anything on Saturda
  */
 @Composable
 fun InstructionDialog(what: String, initial: String = "", onDismiss: () -> Unit, onSend: (String) -> Unit) {
-    var text by remember { mutableStateOf(initial) }
+    // Kept through the screen being made again (a turn of the phone), as a long one can be.
+    var text by rememberSaveable { mutableStateOf(initial) }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Instruction") },
@@ -133,7 +135,7 @@ fun aboutLine(about: About, now: Long, zone: ZoneId): String = when {
 fun InstructionContent(graph: AppGraph, instruction: Instruction, tasks: Map<String, TaskItem>, now: Long, zone: ZoneId) {
     val scope = rememberCoroutineScope()
     var codeFor by remember { mutableStateOf<String?>(null) }
-    var rewriting by remember { mutableStateOf(false) }
+    var rewriting by rememberSaveable { mutableStateOf(false) }
     Text(aboutLine(instruction.about, now, zone), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
     Text("“${instruction.text}”", style = MaterialTheme.typography.bodyLarge, fontStyle = FontStyle.Italic, modifier = Modifier.padding(top = 2.dp))
     when (instruction.state) {
