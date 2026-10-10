@@ -61,11 +61,11 @@ object AnkiProvider {
 
     /**
      * The new cards a day a deck's options allow (AnkiDroid's "New cards/day", `new.perDay` in the
-     * options it gives), or the default where they can't be read.
+     * options it gives): 0 is a real limit, none; the default only where they can't be read.
      */
     fun newPerDay(options: String?): Int = runCatching {
         Json.parseToJsonElement(options!!).jsonObject["new"]!!.jsonObject["perDay"]!!.jsonPrimitive.int
-    }.getOrNull()?.takeIf { it in 1..MAX_PER_DAY } ?: AnkiRules.NEW_PER_DAY
+    }.getOrNull()?.takeIf { it in 0..MAX_PER_DAY } ?: AnkiRules.NEW_PER_DAY
 
     private const val MAX_PER_DAY = 9_999
 
