@@ -1,6 +1,8 @@
 package com.thomaswcode.decrastination.core
 
+import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.sources.gmail.GmailThreads
+import java.time.ZoneId
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -8,6 +10,10 @@ import kotlin.test.assertTrue
 class MergeTest {
     private val t0 = 1_000_000L
     private val later = t0 + 60_000
+    private companion object {
+        const val DAY = 24 * 3_600_000L
+    }
+
 
     // Read as far as reads go, as an email's text is once fetched (see GmailThreads.textRead).
     private fun fetched(id: String, title: String = id, done: Boolean = false, derived: Boolean = false, dueAt: Long? = null) =
@@ -231,5 +237,26 @@ class MergeTest {
     fun `a repeated id counts once`() {
         val result = Merge.apply(emptyList(), Source.Teams, listOf(fetched("a", title = "one"), fetched("a", title = "two")), t0)
         assertEquals(listOf("one"), result.tasks.map { it.title })
+    }
+
+    @Test
+    fun `a deck's fresh steps aren't cut again by the minutes that studied their cards`() {
+        // 45 cards: 20, 20 and 5 (9, 9 and 3 minutes). A 9-minute session studies the first 20, then
+        // the deck is read again with 25 left: 20 and 5, 12 minutes, not 12 less the session's 9.
+        fun deck(vararg steps: Pair<String, Int>) =
+            Fetched(sourceId = "deck:1", title = "Deck", kind = Kind.Homework, derived = true, dueAt = t0 + 10 * DAY, subSteps = steps.map { SubStep(it.first, it.second) })
+        fun planned(task: TaskItem) = Planner.plan(Planner.Input(listOf(task), t0 + 2, ZoneId.of("Europe/London"), Settings())).ordered.sumOf { it.minutes }
+        val stored = Merge.apply(emptyList(), Source.Anki, listOf(deck("20 new cards" to 9, "20 new cards" to 9, "5 new cards" to 3)), t0).tasks
+        val studied = stored.map { t -> t.copy(workedMin = 9, subSteps = t.subSteps.mapIndexed { i, s -> if (i == 0) s.copy(done = true) else s }) }
+        val read = Merge.apply(studied, Source.Anki, listOf(deck("20 new cards" to 9, "5 new cards" to 3)), t0 + 1).tasks.single()
+        assertEquals(9, read.stepsWorkedMin)
+        assertEquals(12, planned(read))
+        // A session stopped early on the new steps still comes off them.
+        assertEquals(8, planned(read.copy(workedMin = 13)))
+        // Done and then listed again (a task a source can reopen), a new round starts from nothing.
+        val reopenable = read.copy(derived = false, status = Status.Done, doneAt = t0 + 3)
+        val again = Merge.apply(listOf(reopenable), Source.Anki, listOf(deck("20 new cards" to 9).copy(derived = false)), t0 + 4).tasks.single()
+        assertEquals(Status.Open, again.status)
+        assertEquals(0, again.stepsWorkedMin)
     }
 }
