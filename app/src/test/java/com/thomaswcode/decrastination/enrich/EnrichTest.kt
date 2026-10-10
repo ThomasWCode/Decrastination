@@ -278,10 +278,13 @@ class AnswersTest {
         assertEquals(Fixtures.at("2026-10-30T00:00"), blocks[0].from)
         assertEquals(Fixtures.at("2026-11-20T23:59"), blocks[0].dueAt)
         assertNull(blocks[1].from)
-        // A block that opens after it's due isn't to be trusted: the triage stands without them.
+        // A block that opens after it's due isn't to be trusted: the triage stands without them, its
+        // whole estimate planned and the drop said, so it's still something to do, not hidden.
         val muddled = parse(Enrichments.Job.Email, calendar.replace("2026-11-20", "2026-10-29"))!!
         assertNull(muddled.subSteps)
-        assertEquals(Kind.Info, muddled.kind)
+        assertEquals(Kind.Admin, muddled.kind)
+        assertEquals(90, muddled.effortMin)
+        assertEquals("a block starts after it's due", muddled.dropped)
     }
 
     @Test
@@ -436,12 +439,14 @@ class AiUsageTest {
     }
 
     @Test
-    fun `a call's dearest case covers the longest text the model reads`() {
-        // Every character three tokens, a long subject's worth more, and all the output, at the
-        // dearer rates of a fallback's older Opus.
-        val longest = Pricing.costUsd("claude-opus-4-8", input = 3L * Prompts.MAX_TEXT + 2_000, output = ClaudeEnricher.MAX_TOKENS)
+    fun `a call's dearest case covers the longest text any call sends`() {
+        // Every character three tokens, the instructions' worth more, and all the output, at the
+        // dearer rates of a fallback's older Opus. Every call's input is cut to the most it covers,
+        // and an email's text is well within it.
+        val longest = Pricing.costUsd("claude-opus-4-8", input = 3L * Pricing.MAX_INPUT_CHARS + 4_000, output = ClaudeEnricher.MAX_TOKENS)
         assertTrue(longest <= Pricing.WORST_CALL_USD, "$longest > ${Pricing.WORST_CALL_USD}")
-        assertEquals(0.66, Pricing.WORST_CALL_USD, 1e-9)
+        assertEquals(1.02, Pricing.WORST_CALL_USD, 1e-9)
+        assertTrue(Prompts.MAX_TEXT + 1_000 < Pricing.MAX_INPUT_CHARS)
     }
 
     @Test
@@ -609,6 +614,8 @@ class ClaudeEnricherTest {
         val result = enricher().enrich(item, Enrichments.Job.Effort, NOW)
         assertEquals(30, result.enrichment!!.effortMin)
         assertEquals(0.0135, result.costUsd, 1e-9)
+        // And recorded as the fallback's, not the model asked for.
+        assertEquals("claude-opus-4-8", result.enrichment!!.by)
     }
 }
 

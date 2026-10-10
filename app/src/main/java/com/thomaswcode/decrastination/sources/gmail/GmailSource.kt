@@ -16,6 +16,7 @@ import kotlinx.coroutines.withContext
 import java.io.IOException
 import java.net.InetSocketAddress
 import java.net.Socket
+import java.net.SocketTimeoutException
 import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
@@ -193,6 +194,7 @@ class GmailSource(private val secrets: SecretStore) : TaskSource {
         val password = secrets[Secret.GmailAppPassword]
         if (address.isNullOrBlank() || password.isNullOrBlank()) throw SourceUnavailable("No Gmail address and app password saved")
         val known = GmailThreads.knownBodies(context.known)
+        val started = System.nanoTime()
         val socket = connect()
         // A read the sync has given up on mustn't hold the connection open: closing the socket,
         // from another thread, ends whichever blocking read is under way.
@@ -214,9 +216,32 @@ class GmailSource(private val secrets: SecretStore) : TaskSource {
                     imap.uidFetch(batch, "UID INTERNALDATE X-GM-MSGID X-GM-THRID X-GM-LABELS ENVELOPE").mapNotNull(GmailThreads::message)
                 }
                 if (messages.size < uids.size) throw IOException("Gmail listed ${uids.size} messages but described ${messages.size}")
-                val read = GmailThreads.toRead(messages, known, MAX_BODIES).associate { it.messageId to text(imap, it.uid) }
+                // Texts are fetched for up to [TEXTS_FOR_NS] from here, but never past [TEXTS_BY_NS]
+                // into the read; and one even then, so a read slow to list still gets somewhere, up to
+                // [LAST_TEXT_BY_NS], each answer waited for no longer than that leaves, so none runs
+                // past the sync's 90 s. The rest wait for the reads after, as those past MAX_BODIES do
+                // (BUG-P2-019).
+                val textsUntil = minOf(System.nanoTime() + TEXTS_FOR_NS, started + TEXTS_BY_NS)
+                val lastBy = started + LAST_TEXT_BY_NS
+                val read = LinkedHashMap<String, String?>()
+                var cut = false
+                for (message in GmailThreads.toRead(messages, known, MAX_BODIES)) {
+                    val now = System.nanoTime()
+                    if (now > lastBy || (read.isNotEmpty() && now > textsUntil)) break
+                    socket.soTimeout = ((lastBy - now) / 1_000_000).toInt().coerceIn(1, TIMEOUT_MS)
+                    read[message.messageId] = try {
+                        text(imap, message.uid)
+                    } catch (e: SocketTimeoutException) {
+                        // Out of time mid-answer: the connection's spent, but what's read stands.
+                        cut = true
+                        break
+                    }
+                }
                 val bodies = GmailThreads.withRead(known, read)
-                imap.logout()
+                if (!cut) {
+                    socket.soTimeout = LOGOUT_MS
+                    runCatching { imap.logout() }
+                }
                 SourceRead(GmailThreads.fetched(messages, bodies, context.now, context.zone))
             }
         } finally {
@@ -236,22 +261,33 @@ class GmailSource(private val secrets: SecretStore) : TaskSource {
         val response = imap.uidFetch(listOf(uid), "UID BODY.PEEK[${part.section}]<0.$MAX_PART_BYTES>").firstOrNull() ?: return null
         val body = response.entries.firstOrNull { it.key.startsWith("BODY[") }?.value ?: return null
         // NIL: a part with nothing in it.
-        return (body as? ImapValue.Str)?.let { Mime.tidy(Mime.decode(it.bytes, part), GmailThreads.MAX_BODY_CHARS) }.orEmpty()
+        val text = (body as? ImapValue.Str)?.let { Mime.tidy(Mime.decode(it.bytes, part), GmailThreads.MAX_BODY_CHARS) }.orEmpty()
+        // A part longer than a read takes, its text short of the most kept: the rest wasn't read
+        // (styles can fill the part's start), and the model and you are told (BUG-P2-022).
+        return if ((part.size ?: 0) > MAX_PART_BYTES && text.length < GmailThreads.MAX_BODY_CHARS) (text + "\n\n" + CUT).trim() else text
     }
 
-    /** TLS to Gmail, with the host name checked against its certificate. */
+    /**
+     * TLS to Gmail, with the host name checked against its certificate. Closed on any failure before
+     * it's handed over, the TLS layer and the socket under it (BUG-P2-021): the caller's `use` only
+     * begins once it is.
+     */
     private fun connect(): SSLSocket {
         val plain = Socket()
-        plain.connect(InetSocketAddress(HOST, PORT), TIMEOUT_MS)
-        val socket = (SSLSocketFactory.getDefault() as SSLSocketFactory).createSocket(plain, HOST, PORT, true) as SSLSocket
-        socket.soTimeout = TIMEOUT_MS
-        socket.sslParameters = socket.sslParameters.apply { endpointIdentificationAlgorithm = "HTTPS" }
-        socket.startHandshake()
-        if (!HttpsURLConnection.getDefaultHostnameVerifier().verify(HOST, socket.session)) {
-            socket.close()
-            throw IOException("Gmail's certificate doesn't match $HOST")
+        var socket: SSLSocket? = null
+        try {
+            plain.connect(InetSocketAddress(HOST, PORT), TIMEOUT_MS)
+            socket = (SSLSocketFactory.getDefault() as SSLSocketFactory).createSocket(plain, HOST, PORT, true) as SSLSocket
+            socket.soTimeout = TIMEOUT_MS
+            socket.sslParameters = socket.sslParameters.apply { endpointIdentificationAlgorithm = "HTTPS" }
+            socket.startHandshake()
+            if (!HttpsURLConnection.getDefaultHostnameVerifier().verify(HOST, socket.session)) throw IOException("Gmail's certificate doesn't match $HOST")
+            return socket
+        } catch (e: Throwable) {
+            runCatching { socket?.close() }
+            runCatching { plain.close() }
+            throw e
         }
-        return socket
     }
 
     private companion object {
@@ -266,5 +302,20 @@ class GmailSource(private val secrets: SecretStore) : TaskSource {
          * takes nine bytes for a three-byte UTF-8 character), and for HTML's markup before its text.
          */
         const val MAX_PART_BYTES = 200_000
+
+        /** Said at the end of a text whose part ran past [MAX_PART_BYTES]. */
+        const val CUT = "[The rest of this email is too long to be read here.]"
+
+        /** How long a read spends fetching texts, once the inbox is listed: half the sync's 90 s wait. */
+        const val TEXTS_FOR_NS = 45_000_000_000L
+
+        /** How far into the read texts may go, however long listing took: room left within the sync's 90 s to log out and return. */
+        const val TEXTS_BY_NS = 70_000_000_000L
+
+        /** The last moment the one text a slow listing still gets may take, answer included. */
+        const val LAST_TEXT_BY_NS = 82_000_000_000L
+
+        /** How long logging out is waited for: the snapshot is read, so it's only good manners. */
+        const val LOGOUT_MS = 3_000
     }
 }

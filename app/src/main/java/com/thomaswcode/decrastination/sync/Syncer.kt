@@ -10,10 +10,12 @@ import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.data.SourceStatus
 import com.thomaswcode.decrastination.data.TaskState
 import com.thomaswcode.decrastination.sources.ReadContext
+import com.thomaswcode.decrastination.sources.SourceRead
 import com.thomaswcode.decrastination.sources.TaskSource
 import kotlin.coroutines.CoroutineContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.TimeoutCancellationException
@@ -48,7 +50,9 @@ data class SyncReport(
  * Sources read with blocking calls (a socket, an HTTP connection, another app's provider), which
  * a coroutine timeout can't interrupt. So each read runs on its own, outside the sync, which waits
  * for it no longer than [timeoutMs]: a read that overruns is cancelled and left to wind down (Gmail
- * closes its socket when cancelled), and its answer, if it ever comes, is ignored.
+ * closes its socket when cancelled), and its answer, if it ever comes, is ignored. Until it has
+ * wound down, no other read of that source starts beside it: a provider stuck for good holds one
+ * read, not one a sync (BUG-P2-020).
  */
 class Syncer(
     private val tasks: JsonStore<TaskState>,
@@ -66,6 +70,9 @@ class Syncer(
     private val readers = CoroutineScope(SupervisorJob() + readContext)
     private val lock = Mutex()
     private val listeners = mutableListOf<suspend (SyncReport) -> Unit>()
+
+    /** Each source's latest read, one given up on included: touched only under [lock]. */
+    private val reads = HashMap<Source, Deferred<SourceRead>>()
     private val afterEvery = mutableListOf<suspend () -> Unit>()
 
     /** Called after each sync that changed anything, in the order added. */
@@ -95,7 +102,10 @@ class Syncer(
         val startedAt = clock.now()
         val state = tasks.value
         val context = ReadContext(startedAt, clock.zone(), settings.value, state.tasks, state.ankiDay)
+        // The last read given up on, still stuck in a call that can't be stopped: not another.
+        if (reads[source.source]?.isCompleted == false) return failed(source.source, startedAt, "Still waiting for the last read, which hasn't answered")
         val reading = readers.async { source.read(context) }
+        reads[source.source] = reading
         val read = try {
             withTimeout(timeoutMs) { reading.await() }
         } catch (e: TimeoutCancellationException) {

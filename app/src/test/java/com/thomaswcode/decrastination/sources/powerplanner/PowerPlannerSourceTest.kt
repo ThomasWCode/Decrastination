@@ -17,6 +17,7 @@ import java.io.File
 import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 
 /** The source against a fake web API: two accounts, each with its own semester. */
 class PowerPlannerSourceTest {
@@ -30,6 +31,8 @@ class PowerPlannerSourceTest {
     private class FakeApi : Http {
         val calls = mutableListOf<String>()
         var expired = mutableSetOf<String>()
+        /** GetAgenda's answer, where a test gives one. */
+        var agenda: String? = null
 
         override fun post(url: String, headers: Map<String, String>, body: String): HttpResponse {
             val endpoint = url.substringAfterLast('/')
@@ -49,7 +52,7 @@ class PowerPlannerSourceTest {
                     }
                     "GetSelectedSemesterId" -> """{"SelectedSemesterId":"semester-$account"}"""
                     "GetClassesAndSchedules" -> """{"WeekOneStartsOn":"2026-08-24T00:00:00","Classes":[]}"""
-                    "GetAgenda" -> """{"Items":[{"Identifier":"item-$account","Name":"Task","Date":"2026-10-14T16:00:04","ClassIdentifier":"semester-$account","ItemType":5}]}"""
+                    "GetAgenda" -> agenda ?: """{"Items":[{"Identifier":"item-$account","Name":"Task","Date":"2026-10-14T16:00:04","ClassIdentifier":"semester-$account","ItemType":5}]}"""
                     else -> """{"Error":"Unknown"}"""
                 },
             )
@@ -89,5 +92,16 @@ class PowerPlannerSourceTest {
         api.calls.clear()
         runCatching { source.read(context) }
         assertEquals("LoginWeb", api.calls[1].substringBefore(':'))
+    }
+
+    @Test
+    fun `an agenda answer without its items fails the read, while an empty list is an empty agenda`() = runTest {
+        secrets.put(mapOf(Secret.PowerPlannerUsername to "a", Secret.PowerPlannerPassword to "pw"))
+        api.agenda = """{"Error":null}"""
+        assertFailsWith<PowerPlannerApi.ApiError> { source.read(context) }
+        api.agenda = """{"Items":null}"""
+        assertFailsWith<PowerPlannerApi.ApiError> { source.read(context) }
+        api.agenda = """{"Items":[],"Error":null}"""
+        assertEquals(emptyList(), source.read(context).items)
     }
 }
