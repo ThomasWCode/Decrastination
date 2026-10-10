@@ -6,6 +6,7 @@ import android.content.Intent
 import android.os.Bundle
 import android.util.Log
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.net.toUri
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.block.FocusService
 import com.thomaswcode.decrastination.block.TeamsAutoSync
@@ -27,6 +28,8 @@ import com.thomaswcode.decrastination.learn.CheckIns
 import com.thomaswcode.decrastination.learn.EventJudge
 import com.thomaswcode.decrastination.learn.Review
 import com.thomaswcode.decrastination.protect.Watchdog
+import com.thomaswcode.decrastination.sources.anki.AnkiProvider
+import com.thomaswcode.decrastination.sources.anki.AnkiRules
 import com.thomaswcode.decrastination.sync.SyncWorker
 import com.thomaswcode.decrastination.ui.OpenTaskActivity
 import java.io.File
@@ -92,6 +95,18 @@ class CommandActivity : Activity() {
         }
     }
 
+    /**
+     * Read-only: each section deck's counts as the Anki source reads them, its words still new
+     * (notes) beside its cards (one a side), and its new cards a day.
+     */
+    private suspend fun logAnkiCounts() = withContext(Dispatchers.IO) {
+        val resolver = contentResolver
+        for (deck in AnkiProvider.decks(resolver).filter { AnkiRules.section(it) != null }) {
+            val words = resolver.query("content://com.ichi2.anki.flashcards/notes".toUri(), arrayOf("_id"), "deck:\"${deck.name}\" is:new", null, null)?.use { it.count } ?: 0
+            Log.i(TAG, "anki-counts ${deck.name}: today learn ${deck.learn} review ${deck.review} new ${deck.new}; ${deck.newPerDay} new a day; $words words and ${AnkiProvider.unseenCards(resolver, deck.name)} cards never studied")
+        }
+    }
+
     private suspend fun run(graph: AppGraph, command: String) {
         when (command) {
             "import-credentials" -> importCredentials(graph)
@@ -104,6 +119,7 @@ class CommandActivity : Activity() {
                 Log.i(TAG, "Sync asked for; the worker logs what it found")
             }
             "state" -> logState(graph)
+            "anki-counts" -> logAnkiCounts()
             "force-block" -> {
                 // Testing at night: blocking hours apply for this many minutes (tightening only).
                 val minutes = intent.getIntExtra("minutes", 10).coerceIn(0, 120)
