@@ -18,7 +18,9 @@ import kotlin.math.roundToInt
  *    already gone today and what the calendar takes.
  * 2. A task is cut into chunks: its sub-steps, or its remaining time in even boxes of about
  *    `boxMin`. Remaining time is the estimate × your calibration multiplier × (1 − progress), less
- *    the minutes already worked, and never under 5 ("finish and hand in").
+ *    the minutes already worked, and never under 5 ("finish and hand in"). Sub-steps still to do
+ *    go the same way: the minutes worked past the steps ticked off, or the source's progress
+ *    where that leaves less, come off the next ones.
  * 3. Work due later today or tomorrow comes first, as its deadlines can still be met: it takes
  *    today's time before work already past its deadline. A task with some brings its overdue
  *    blocks along, ahead of it in their order. Then overdue work goes straight into today, oldest
@@ -35,7 +37,9 @@ import kotlin.math.roundToInt
  * 7. An email that's just an email ([TaskItem.justAnEmail]: only to read, or about an event) isn't
  *    planned, nor reminded of; nor is a task you've said isn't one, or one you've said waits for
  *    another still open ([Instructions]).
- * 8. A day you've limited ([Input.dayCaps]) holds no more work than that.
+ * 8. A day you've limited ([Input.dayCaps]) holds no more work than that, and a box is never longer
+ *    than the most any day its task can go on holds, so a task isn't left off for want of a day
+ *    big enough for one box.
  *
  * Placing backwards means today's bucket holds exactly what must happen today for every deadline
  * to be met; placing everything early would put every task in today and the block would never lift.
@@ -90,9 +94,10 @@ object Planner {
 
     /**
      * A sub-step, or (with [step] null and a [box]) a box of time, labelled by its place in the day
-     * order. [from] and [due]: a block's own dates, where it has them.
+     * order. [from] and [due]: a block's own dates, where it has them. [index]: the sub-step's place
+     * in its task's list, so finishing it ticks that one, whatever else shares its title.
      */
-    private class Piece(val step: String?, val minutes: Int, val box: Int? = null, val from: Long? = null, val due: Long? = null)
+    private class Piece(val step: String?, val minutes: Int, val box: Int? = null, val from: Long? = null, val due: Long? = null, val index: Int? = null)
 
     /**
      * [task]'s pieces as the planner places them: one item, or, where its blocks have dates of
@@ -237,6 +242,7 @@ object Planner {
                 taskMinutes = item.taskMinutes,
                 availableAt = item.notBefore?.takeIf { it > input.now },
                 box = piece.box,
+                stepIndex = piece.index,
             )
         }
 
@@ -464,25 +470,43 @@ object Planner {
     private fun pieces(task: TaskItem, input: Input, held: Set<String>): List<Piece> {
         val multiplier = input.calibration.multiplier(task.kind, task.className)
         if (task.subSteps.isNotEmpty()) {
-            val left = task.subSteps.filterNot { it.done || (it.ankiSections.isNotEmpty() && held.containsAll(it.ankiSections)) }
+            // Its own steps, by their place in its list: not those its deck tasks hold.
+            val own = task.subSteps.withIndex().filterNot { (_, step) -> step.ankiSections.isNotEmpty() && held.containsAll(step.ankiSections) }
+            val left = own.filterNot { it.value.done }
             // All done: an assignment is still to hand in; an email's blocks done, nothing is left of it.
             if (left.isEmpty()) return if (task.source == Source.Gmail) emptyList() else listOf(Piece("finish and hand in", MIN_CHUNK))
             // Minutes worked beyond the steps ticked off (a session stopped early) come off the
             // next steps in order, each kept to at least a last few minutes, as it isn't done.
             // Steps ticked by hand take back only the timed minutes they kept when ticked (work on them
-            // before the tick), the rest none: what's left goes to the next steps.
-            var spare = (task.workedMin + task.photoMin - task.subSteps.filter { it.done }.sumOf { if (it.byHand) it.timedMin.toDouble() else it.minutes * multiplier })
+            // before the tick), the rest none: what's left goes to the next steps. Minutes the
+            // source's own steps already leave out ([TaskItem.stepsWorkedMin]) come off none.
+            var spare = (task.workedMin + task.photoMin - task.stepsWorkedMin - task.subSteps.filter { it.done }.sumOf { if (it.byHand) it.timedMin.toDouble() else it.minutes * multiplier })
                 .roundToInt().coerceAtLeast(0)
-            return left.map { step ->
+            val pieces = left.map { (index, step) ->
                 val full = (step.minutes * multiplier).roundToInt().coerceAtLeast(1)
                 val off = minOf(spare, (full - MIN_CHUNK).coerceAtLeast(0))
                 spare -= off
-                Piece(step.title, full - off, from = step.from, due = step.dueAt)
+                Piece(step.title, full - off, from = step.from, due = step.dueAt, index = index)
+            }
+            // The source's own progress counts too (Power Planner's percentage): what it leaves is that
+            // share of all the steps. Where that's less than the steps still to do, the difference
+            // comes off them in order, as minutes worked do. The smaller of the two, as for a task
+            // without steps ([remaining]): the same work isn't taken off twice.
+            if (task.sourceProgress <= 0.0) return pieces
+            val bySource = (own.sumOf { it.value.minutes * multiplier } * (1 - task.sourceProgress.coerceAtMost(1.0))).roundToInt()
+            var over = pieces.sumOf { it.minutes } - bySource
+            return pieces.map { piece ->
+                val off = minOf(over, (piece.minutes - MIN_CHUNK).coerceAtLeast(0)).coerceAtLeast(0)
+                over -= off
+                if (off == 0) piece else Piece(piece.step, piece.minutes - off, from = piece.from, due = piece.due, index = piece.index)
             }
         }
         if (task.effortMin <= 0) return emptyList()
         val remaining = remaining(task, multiplier).roundToInt().coerceAtLeast(minOf(MIN_CHUNK, task.effortMin))
         val box = (input.calibration.boxMin[task.kind] ?: input.settings.boxMin).coerceAtLeast(MIN_CHUNK)
+            // No longer than the most time any day it can go on holds, where you've limited days: a
+            // box too long for all of them would be planned on none.
+            .let { box -> roomiest(task, input)?.takeIf { it in MIN_CHUNK until box } ?: box }
         val count = ceil(remaining / box.toDouble()).toInt().coerceAtLeast(1)
         return (0 until count).map { i ->
             // Even boxes: 100 minutes is 34, 33 and 33, not 45, 45 and a stray 10.
@@ -490,6 +514,19 @@ object Planner {
             // The box only where it cut the task: in one piece, its length was the task's own.
             Piece(null, minutes, box = box.takeIf { count > 1 })
         }
+    }
+
+    /**
+     * Where your instructions limit days (a day's limit, busy times): the most time any day [task]
+     * can be worked on holds, from when it can start to its deadline or the plan's least reach.
+     * Null where nothing's limited.
+     */
+    private fun roomiest(task: TaskItem, input: Input): Int? {
+        if (input.dayCaps.isEmpty() && input.hardBusy.isEmpty()) return null
+        val today = date(input.now, input.zone)
+        val from = task.notBefore?.let { date(it, input.zone) }?.takeIf { it > today } ?: today
+        val until = minOf(maxOf(task.dueAt?.let { date(it, input.zone) } ?: today, today.plusDays(MIN_HORIZON_DAYS)), today.plusDays(MAX_HORIZON_DAYS))
+        return generateSequence(from) { it.plusDays(1) }.takeWhile { it <= until }.maxOfOrNull { capacity(it, input) }
     }
 
     /**
