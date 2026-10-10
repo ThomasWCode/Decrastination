@@ -52,7 +52,8 @@ class PhotoChecker(apiKey: String, endpoint: String? = null, val model: String =
             .addUserMessageOfBlockParams(
                 listOf(
                     ContentBlockParam.ofImage(image),
-                    ContentBlockParam.ofText(TextBlockParam.builder().text("The piece of work: $piece").build()),
+                    // Cut to the most text a call is costed for ([Pricing.WORST_CALL_USD]): a source's title can be long.
+                    ContentBlockParam.ofText(TextBlockParam.builder().text("The piece of work: $piece".take(Pricing.MAX_INPUT_CHARS)).build()),
                 ),
             )
             .outputConfig(OutputConfig.builder().effort(OutputConfig.Effort.HIGH).format(JsonOutputFormat.builder().schema(schema).build()).build())

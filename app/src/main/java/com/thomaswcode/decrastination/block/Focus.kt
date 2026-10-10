@@ -162,16 +162,23 @@ class Focus(
     suspend fun startSession(taskId: String, label: String, step: String?, minutes: Int, box: Int? = null, stepIndex: Int? = null): FocusSession {
         val now = clock.now()
         val uptime = clock.uptime()
-        val session = FocusSession(taskId, label, step, minutes.coerceIn(1, MAX_SESSION_MIN), now, uptime, box, whole = minutes <= MAX_SESSION_MIN, stepIndex = stepIndex)
         // The one running ended and this one begun in the same step: two starts at once can't both
         // find none running and each save theirs, losing one without its record.
         var ended: EndedSession? = null
+        var session: FocusSession? = null
         runtime.update { state ->
-            ended = state.session?.let { ending(it, now, uptime) }
-            state.copy(session = session, finishing = state.finishing + listOfNotNull(ended))
+            val running = state.session
+            // Its start told apart from the one it ends, even begun in the same millisecond: a
+            // session is known by its start ([TaskItem.sessionsCounted], the log), and two alike
+            // would have the second's minutes taken as counted already.
+            val at = if (running != null && running.startedAt >= now) running.startedAt + 1 else now
+            val begun = FocusSession(taskId, label, step, minutes.coerceIn(1, MAX_SESSION_MIN), at, uptime, box, whole = minutes <= MAX_SESSION_MIN, stepIndex = stepIndex)
+            session = begun
+            ended = running?.let { ending(it, now, uptime) }
+            state.copy(session = begun, finishing = state.finishing + listOfNotNull(ended))
         }
         ended?.let { finish(it) }
-        return session
+        return session!!
     }
 
     /** [session] ended [now]: run its full time (its minutes all worked), or stopped early with what it ran. */
