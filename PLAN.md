@@ -199,7 +199,7 @@ Phase 0 also built what Phase 1 would have scaffolded: the Gradle setup, the sha
 
 ### 1.6.0: the widget's look
 
-*Built 10 Oct 2026, your ask: the widget laid out as the app now is. The next thing in a "DO NOW" card of the accent colour, its due date and minutes as pills (the due date red when urgent); the rest of the day as tiles with a red edge for urgent work, under the day's count as a heading; trouble as a red strip at the top. Small, the widget is the card itself. Nothing taken away: a list longer than 30 ends "N more in the app", and the heading and warning open the app.*
+*Built 10 Oct 2026, your ask: the widget laid out as the app now is. The next thing in a "DO NOW" card of the accent colour, its due date and minutes as pills (the due date red when urgent); the rest of the day as tiles with a red edge for urgent work, under the day's count as a heading; trouble as a red strip at the top. Small, the widget is the card itself. Nothing taken away: a list longer than 30 ends "N more in the app", and the heading and warning open the app.* *1.6.1 (10 Oct): the plain pills in the surface colour, after a look in light mode on the phone.*
 
 ## 6. Verification
 

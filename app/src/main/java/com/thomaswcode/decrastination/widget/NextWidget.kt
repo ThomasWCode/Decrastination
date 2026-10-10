@@ -217,17 +217,21 @@ class NextWidget : GlanceAppWidget() {
         }
     }
 
-    /** A short value set apart, as the app's pills are; [urgent] in the error colours. */
+    /**
+     * A short value set apart, as the app's pills are; [urgent] in the error colours. The others
+     * are in the surface colour, which stands apart from both the card and the tiles in light
+     * mode as in dark (the widget's secondary container is barely a shade off its pale card).
+     */
     @Composable
     private fun Pill(text: String, urgent: Boolean = false) {
         Text(
             text,
             maxLines = 1,
             modifier = GlanceModifier.cornerRadius(10.dp)
-                .background(if (urgent) GlanceTheme.colors.errorContainer else GlanceTheme.colors.secondaryContainer)
+                .background(if (urgent) GlanceTheme.colors.errorContainer else GlanceTheme.colors.surface)
                 .padding(horizontal = 8.dp, vertical = 2.dp),
             style = TextStyle(
-                color = if (urgent) GlanceTheme.colors.onErrorContainer else GlanceTheme.colors.onSecondaryContainer,
+                color = if (urgent) GlanceTheme.colors.onErrorContainer else GlanceTheme.colors.onSurface,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Medium,
             ),
