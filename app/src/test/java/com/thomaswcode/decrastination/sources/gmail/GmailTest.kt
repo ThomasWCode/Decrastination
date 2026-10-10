@@ -41,6 +41,26 @@ class GmailTest {
     }
 
     @Test
+    fun `an email that asks for something is work, whoever sent it and whatever else it says`() {
+        // A registration with a date: not an event, and due by the date after "by".
+        val registration = email("Registration required", from = "admissions@example.com", body = "Please complete registration by 12 October 2026.")
+        assertEquals(Kind.Admin, registration.kind)
+        assertEquals(Fixtures.at("2026-10-12T23:59"), registration.dueAt)
+        // From a no-reply address: not a notification.
+        val consent = email("Trip consent", from = "noreply@school.example", body = "Please return the consent form tomorrow.")
+        assertEquals(Kind.Admin, consent.kind)
+        assertNull(consent.dueAt)
+        assertEquals(Kind.Admin, email("Action required: your application", from = "updates@ucas.example").kind)
+        assertEquals(Kind.Admin, email("Forms", from = "office@school.example", body = "Reply to this email by Friday 16 October with your choices.").kind)
+    }
+
+    @Test
+    fun `asking for nothing, a notification stays one and a booking an event`() {
+        assertEquals(Kind.Info, email("Your receipt", from = "noreply@shop.example", body = "Please do not reply to this email. To unsubscribe click here.").kind)
+        assertEquals(Kind.Event, email("Your e-tickets", from = "tickets@venue.example", body = "See you on 25 October. Please do not reply.").kind)
+    }
+
+    @Test
     fun `a booking with a date ahead is an event that appears the day before`() {
         val triage = email("Essential information ahead of our Open Day", from = "opendays@warwick.ac.uk", body = "We look forward to seeing you on Saturday 10 October.")
         assertEquals(Kind.Event, triage.kind)
