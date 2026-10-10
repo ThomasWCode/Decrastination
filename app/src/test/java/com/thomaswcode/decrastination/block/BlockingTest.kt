@@ -7,6 +7,7 @@ import com.thomaswcode.decrastination.data.Settings
 import java.time.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 import kotlin.test.assertIs
 import kotlin.test.assertNull
 
@@ -157,6 +158,15 @@ class TeamsAutoSyncTest {
 
     private fun due(at: String, state: TeamsAutoSync.State = TeamsAutoSync.State(), syncedAt: String? = "2026-10-09T07:00", unlocked: Boolean = false) =
         TeamsAutoSync.due(Fixtures.at(at), LONDON, settings, state, syncedAt?.let(Fixtures::at), unlocked)
+
+    @Test
+    fun `an offer's banner running into quiet hours, or syncs switched off meanwhile, starts nothing`() {
+        assertTrue(TeamsAutoSync.stillWanted(Fixtures.at("2026-10-09T22:29"), LONDON, settings))
+        assertTrue(!TeamsAutoSync.stillWanted(Fixtures.at("2026-10-09T22:30"), LONDON, settings))
+        assertTrue(!TeamsAutoSync.stillWanted(Fixtures.at("2026-10-09T18:00"), LONDON, settings.copy(teamsAutoSync = false)))
+        // A morning one, before blocking's hours, still goes.
+        assertTrue(TeamsAutoSync.stillWanted(Fixtures.at("2026-10-09T07:30"), LONDON, settings))
+    }
 
     @Test
     fun `the first unlock after 16 45 syncs`() {

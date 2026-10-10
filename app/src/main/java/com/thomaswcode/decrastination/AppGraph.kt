@@ -458,18 +458,28 @@ class AppGraph private constructor(context: Context) {
             calibration = runtime.value.calibration,
             eventAnswers = runtime.value.eventAnswers,
             aiUsage = runtime.value.aiUsage,
+            instructions = instructions.value.applied,
         ),
     )
 
     /**
-     * Restores the backup [text] and says what happened. The settings go through [changeSettings],
-     * so once armed a loosening one waits. The log, the calibration and the calendar answers are
-     * restored only while unarmed: armed, an edited file could teach the planner to plan less.
+     * Restores the backup [text] and says what happened. Nothing is restored from one that holds
+     * what the app never writes ([Backups.problem]). The settings go through [changeSettings], so
+     * once armed a loosening one waits; the instructions as applying each here would go
+     * ([restoreInstructions]). The log, the calibration and the calendar answers are restored only
+     * while unarmed: armed, an edited file could teach the planner to plan less.
      */
     suspend fun importBackup(text: String): String {
         val backup = Backups.decode(text) ?: return "That isn't a Decrastination backup (or it's from a newer version)."
+        Backups.problem(backup)?.let { return "Nothing was restored: $it." }
         val armed = settings.value.armed
         changeSettings { Backups.importedSettings(it, backup) }
+        val (restored, held, unclear) = restoreInstructions(backup.instructions)
+        val told = buildList {
+            if (restored > 0) add("$restored instruction${if (restored == 1) "" else "s"} restored")
+            if (held > 0) add("$held that change${if (held == 1) "s" else ""} a due date waiting in Instructions for your dad's code")
+            if (unclear > 0) add("$unclear left unapplied in Instructions, as ${if (unclear == 1) "it" else "they"} would have tasks wait for each other in a circle")
+        }.takeIf { it.isNotEmpty() }?.joinToString(", ", prefix = " ", postfix = ".") ?: ""
         // This month's spend on Claude, armed or not: it can only rise, so the cap isn't given again.
         val month = AiUsage.monthOf(clock.now(), clock.zone())
         runtime.update { it.copy(aiUsage = Backups.mergeUsage(it.aiUsage, backup.aiUsage, month)) }
@@ -477,7 +487,7 @@ class AppGraph private constructor(context: Context) {
         Daily.schedule(app)
         val waiting = runtime.value.pending.size
         val waits = if (waiting > 0) " $waiting change${if (waiting == 1) "" else "s"} that loosen blocking wait ${settings.value.loosenDelayHours} hours." else ""
-        if (armed) return "Settings restored.$waits Protection is armed, so the log and what the app learned were left as they are."
+        if (armed) return "Settings restored.$waits$told Protection is armed, so the log and what the app learned were left as they are."
         log.update { Backups.mergeLog(it, backup.log, clock.now()) }
         // Your answers on this phone win over the backup's.
         runtime.update { it.copy(calibration = backup.calibration, eventAnswers = backup.eventAnswers + it.eventAnswers) }
@@ -486,7 +496,22 @@ class AppGraph private constructor(context: Context) {
             CalendarTime.refresh(app)
             Briefing.replanToday(app)
         }
-        return "Restored the settings, ${backup.log.completions.size} completions and ${backup.log.sessions.size} sessions, what the app had learned, and your calendar answers.$waits"
+        return "Restored the settings, ${backup.log.completions.size} completions and ${backup.log.sessions.size} sessions, what the app had learned, and your calendar answers.$waits$told"
+    }
+
+    /**
+     * A backup's instructions in use ([backed]) taken in, in the order they were applied, each as
+     * applying it here would go: one already here is left as it is; one that changes a due date,
+     * once armed, comes back read and waiting for your dad's code ([instructionNeedsCode]); one that
+     * would have tasks wait for each other in a circle with those here comes back unclear, saying
+     * so. The rest are applied. Says how many were applied, how many wait, and how many are unclear.
+     */
+    private suspend fun restoreInstructions(backed: List<Instruction>): Triple<Int, Int, Int> = applying.withLock {
+        val added = Backups.restoredInstructions(backed, instructions.value.instructions, settings.value.armed)
+        instructions.update { state -> state.copy(instructions = state.instructions + added.filter { a -> state.instructions.none { it.id == a.id } }) }
+        val applied = added.count { it.state == InstructionStatus.Applied }
+        if (applied > 0) layInstructions()
+        Triple(applied, added.count { it.state == InstructionStatus.Understood }, added.count { it.state == InstructionStatus.Unclear })
     }
 
     /**
