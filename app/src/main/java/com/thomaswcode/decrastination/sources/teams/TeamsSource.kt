@@ -72,7 +72,8 @@ object TeamsRows {
     const val EXTRA_DUE_TEXT = "dueText"
 
     fun fetched(row: Map<String, Any?>): Fetched? {
-        val key = row["key"] as? String ?: return null
+        // A blank key is no identity: every such row would be the same task.
+        val key = (row["key"] as? String)?.takeIf { it.isNotBlank() } ?: return null
         return Fetched(
             sourceId = key,
             title = (row["title"] as? String).orEmpty().ifBlank { "Untitled assignment" },

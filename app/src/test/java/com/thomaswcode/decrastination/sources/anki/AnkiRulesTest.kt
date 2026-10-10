@@ -83,6 +83,22 @@ class AnkiRulesTest {
     }
 
     @Test
+    fun `a deck whose options allow no new cards a day is one step, not waiting, and never the quota's`() {
+        val homework = listOf(assignment("Familie und Ehe", "Learn vocabulary column 1.2", Fixtures.at("2026-10-20T09:00")))
+        val none = decks.map { if (it.id == 12L) it.copy(new = 0, newPerDay = 0) else it }
+        val deck = AnkiRules.homeworkDecks(none, 1, homework, unseen = { 100 }, now = NOW, zone = LONDON).single()
+        assertEquals(listOf("100 new cards"), deck.subSteps!!.map { it.title })
+        assertNull(deck.notBefore)
+        assertTrue("New cards/day in AnkiDroid is 0" in deck.detail)
+        // The quota passes it by for the next deck with cards to give.
+        assertTrue(AnkiRules.quotaDeck(none.filter { it.id != 11L }, 1) { 40 }?.id != 12L)
+        // A limit of 0 is read as one; options that can't be read as the default.
+        assertEquals(0, AnkiProvider.newPerDay("""{"new":{"perDay":0}}"""))
+        assertEquals(AnkiRules.NEW_PER_DAY, AnkiProvider.newPerDay("not json"))
+        assertEquals(40, AnkiProvider.newPerDay("""{"new":{"perDay":40}}"""))
+    }
+
+    @Test
     fun `homework's vocabulary due by tomorrow leaves the quota its reviews alone, for the rest of the day`() {
         val (task, day) = AnkiRules.quota(decks, 1, null, NOW, LONDON, 21 * 60 + 30, reviewsOnly = true) { it.new }
         assertEquals("Anki: 10 reviews", task!!.title)
