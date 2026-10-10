@@ -14,8 +14,10 @@ import java.time.ZoneId
  * due/behind badge, minutes, "then:" line, ↻; tap opens the task).
  */
 data class WidgetModel(
-    /** "Do: Statics Prep", or "Nothing due" when the plan is empty. */
+    /** "Do: Statics Prep", or "Nothing due" when the plan is empty: for a size with no "DO NOW" label. */
     val headline: String,
+    /** "Statics Prep" alone, under a "DO NOW" label; null when nothing's planned. */
+    val label: String?,
     val badge: String?,
     /** The badge is bad news: overdue, due today, behind. */
     val urgent: Boolean,
@@ -25,6 +27,8 @@ data class WidgetModel(
     val summary: String,
     /** The rest of today's work (or tomorrow's, if today's is done), for the largest size. */
     val list: List<Line>,
+    /** How many more of the day's pieces there are than [list] holds: in the app. */
+    val more: Int,
     /** What's wrong, worst first: a source that can't be read, Teams not synced for a day. */
     val warning: String?,
     /** The task a tap opens, if any. */
@@ -47,9 +51,11 @@ data class WidgetModel(
             val next = plan.next
             val today = plan.todayBucket?.chunks.orEmpty()
             val tomorrow = plan.tomorrowBucket?.chunks.orEmpty()
-            val shown = today.ifEmpty { tomorrow }
+            // After the next and the one after it, which have lines of their own.
+            val rest = today.ifEmpty { tomorrow }.filterNot { it === next || it === plan.then }
             return WidgetModel(
                 headline = next?.let { "Do: ${it.label}" } ?: "Nothing due",
+                label = next?.label,
                 badge = next?.let { badge(it, now, zone) },
                 urgent = next?.urgent == true,
                 minutes = next?.let { Format.minutes(it.minutes) },
@@ -65,9 +71,8 @@ data class WidgetModel(
                         tomorrow.size.takeIf { it > 0 }?.let { "$it tomorrow" },
                     ).joinToString(" · ")
                 },
-                // After the next and the one after it, which have lines of their own.
-                list = shown.filterNot { it === next || it === plan.then }.take(LIST_MAX)
-                    .map { Line(it.label, Format.minutes(it.minutes), it.urgent, it.taskId) },
+                list = rest.take(LIST_MAX).map { Line(it.label, Format.minutes(it.minutes), it.urgent, it.taskId) },
+                more = (rest.size - LIST_MAX).coerceAtLeast(0),
                 warning = protection(runtime, armed) ?: warning(state, now),
                 taskId = next?.taskId,
             )

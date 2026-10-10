@@ -129,3 +129,13 @@ Still waiting for you:
 
   I applied Saturday's and took it back (the Calendar page showed it in between), then discarded them all: nothing of the tests is left.
 - **Not done**: instructions aren't in backups yet. And an email Claude hid as only to read can't be brought back by an instruction, as it isn't listed anywhere to write one about.
+
+## 1.6.0: the widget's look
+
+- **Your ask, 10 Oct**: the widget cleaned up as the app was.
+  - **The next thing** is a card in the accent colour: *DO NOW* over its name, its due date and minutes as pills (the due date in red when it's urgent), then the *Then:* line, and ↻.
+  - **Small** (one row high, up to about 4×2), the whole widget is that card. As it gets taller, it adds the *Then:* line, the *DO NOW* label, a warning, the day's count, and a second line for the name.
+  - **Taller** (about 4×3 up), the card sits over the day's count, which heads the rest of the day as tiles. Urgent ones have a red edge. Each shows its minutes in a pill and opens its task.
+  - **Trouble** (protection off, a source that can't be read, Teams not synced) is a red strip at the top, as the app puts it first. Tapping it, or the day's count, opens the app.
+  - **Nothing taken away**: a list longer than 30 ends *N more in the app*.
+- **Not tried on the phone yet**: it wasn't on adb. Light mode especially wants a look, as the tiles' shade comes from your wallpaper's colours.
