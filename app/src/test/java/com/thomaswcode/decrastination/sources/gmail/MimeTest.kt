@@ -13,7 +13,8 @@ class MimeTest {
     @Test
     fun `a single-part message's text is part 1`() {
         val part = Mime.textPart(structure("(\"TEXT\" \"PLAIN\" (\"CHARSET\" \"utf-8\") NIL NIL \"QUOTED-PRINTABLE\" 120 4 NIL NIL NIL)"))
-        assertEquals(Mime.TextPart("1", "plain", "quoted-printable", "utf-8"), part)
+        // Its size as sent too, so a part longer than a read takes is known to be cut.
+        assertEquals(Mime.TextPart("1", "plain", "quoted-printable", "utf-8", size = 120), part)
     }
 
     @Test
@@ -25,7 +26,7 @@ class MimeTest {
                     "(\"APPLICATION\" \"PDF\" (\"NAME\" \"ticket.pdf\") NIL NIL \"BASE64\" 5000 NIL (\"ATTACHMENT\" (\"FILENAME\" \"ticket.pdf\")) NIL) \"MIXED\" (\"BOUNDARY\" \"b0\") NIL NIL)",
             ),
         )
-        assertEquals(Mime.TextPart("1.2", "plain", "7bit", "iso-8859-1"), part)
+        assertEquals(Mime.TextPart("1.2", "plain", "7bit", "iso-8859-1", size = 300), part)
     }
 
     @Test
