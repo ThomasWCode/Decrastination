@@ -14,6 +14,10 @@ import java.util.Locale
  *
  * - A note you sent yourself (Gmail labels it `\Sent`): something to deal with, 10 minutes.
  * - A shared document: open it, 5 minutes.
+ * - One that asks you to do something ("please complete", "return the form by…", "action
+ *   required"): something to do, whoever sent it and whatever else it says, 15 minutes, due by the
+ *   date it names after "by", if any. A registration or a form from a no-reply address is still
+ *   work, so it isn't hidden as an event or a notification (the review's BUG-P1-003).
  * - Notifications and newsletters (no-reply senders, LinkedIn, an unsubscribe link): read and
  *   archive, 2 minutes.
  * - A ticket, booking or open day with a date ahead: an event. It appears the day before, and
@@ -44,6 +48,9 @@ object EmailRules {
 
     private const val PAST_WINDOW_DAYS = 120L
 
+    /** How far after a "by" its date can be: "by Friday 12 October 2026". */
+    private const val BY_REACH = 40
+
     private val SHARED_DOCUMENT = Regex("""drive-shares|docs\.google\.com|shared with you""", RegexOption.IGNORE_CASE)
     private val NO_REPLY = Regex("""no-?reply|do-?not-?reply|notifications?@|newsletter|news@|marketing|mailer@|updates@|info@""", RegexOption.IGNORE_CASE)
     private val NOISE_DOMAINS = Regex("""@(.+\.)?(linkedin\.com|facebookmail\.com|instagram\.com|twitter\.com|x\.com|medium\.com|substack\.com|sportograf\.com)$""", RegexOption.IGNORE_CASE)
@@ -52,14 +59,35 @@ object EmailRules {
         """\b(e-?tickets?|tickets?|booking|booked|reservation|reserved|open day|appointment|registered|registration|admission|boarding pass)\b""",
         RegexOption.IGNORE_CASE,
     )
+    /**
+     * Asked to do something: "please complete / return / sign / fill in…" (not "please do not
+     * reply"), "action required", "must be returned", "reply by". An event's or a notification's
+     * words don't make that nothing to do.
+     */
+    private val ACTION = Regex(
+        """\b(?:please|kindly)\s+(?!do\s+not\b|don'?t\b)(?:\w+\s+){0,2}?(?:complete|return|sign|fill\s+(?:in|out)|submit|reply|respond|confirm|register|pay|send|bring|upload)\b""" +
+            """|\baction\s+(?:required|needed)\b""" +
+            """|\b(?:must|needs?\s+to)\s+be\s+(?:completed|returned|signed|submitted|paid|filled)\b""" +
+            """|\b(?:reply|respond|register|sign\s+up|apply|submit|return|complete)\s+(?:\w+\s+){0,3}?by\b""",
+        RegexOption.IGNORE_CASE,
+    )
+
+    /** "by" before a date: where an email that asks for something says when by. */
+    private val BY = Regex("""\bby\b""", RegexOption.IGNORE_CASE)
+
 
     fun triage(email: Email, now: Long, zone: ZoneId): Triage {
         val address = email.fromAddress.orEmpty()
         val text = email.subject + "\n" + email.body
         if (email.sent) return Triage(Kind.Admin, 10, "Deal with your note")
         if (SHARED_DOCUMENT.containsMatchIn(address + " " + email.subject)) return Triage(Kind.Admin, 5, "Open the shared document")
+        val today = Instant.ofEpochMilli(now).atZone(zone).toLocalDate()
+        if (ACTION.containsMatchIn(text)) {
+            // Due by the first date written just after a "by", if there is one.
+            val by = BY.findAll(text).firstNotNullOfOrNull { futureDates(text.substring(it.range.last + 1).take(BY_REACH), today).firstOrNull() }
+            return Triage(Kind.Admin, Kind.Admin.defaultEffortMin, "Do what it asks", dueAt = by?.atTime(23, 59)?.atZone(zone)?.toInstant()?.toEpochMilli())
+        }
         if (EVENT_WORDS.containsMatchIn(text)) {
-            val today = Instant.ofEpochMilli(now).atZone(zone).toLocalDate()
             futureDates(text, today).firstOrNull()?.let { day ->
                 // Calendar days, not 24-hour steps: the clocks change in October and March.
                 return Triage(
