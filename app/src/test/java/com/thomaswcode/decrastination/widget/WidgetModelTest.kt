@@ -129,9 +129,12 @@ class WidgetModelTest {
 }
 
 class WidgetLayoutTest {
+    /** A next thing with all its parts: a badge, minutes, a "Then:" line and the label. */
+    private fun next(warning: Boolean) = WidgetLayout.Parts(warning, badge = "Overdue", minutes = "40 min", then = true, label = true)
+
     @Test
     fun `a 2x1 shows the next thing, centred, without the refresh button`() {
-        val layout = WidgetLayout.of(width = 160f, height = 60f, hasWarning = true)
+        val layout = WidgetLayout.of(width = 160f, height = 60f, next(warning = true))
         assertFalse(layout.roomy)
         assertFalse(layout.label)
         assertEquals(1, layout.headlineLines)
@@ -144,7 +147,7 @@ class WidgetLayoutTest {
 
     @Test
     fun `a 4x1 on a phone with tall rows fits the then line and refresh`() {
-        val layout = WidgetLayout.of(width = 360f, height = 82f, hasWarning = false)
+        val layout = WidgetLayout.of(width = 360f, height = 82f, next(warning = false))
         assertTrue(layout.refresh)
         assertTrue(layout.then)
         assertFalse(layout.summary)
@@ -153,7 +156,7 @@ class WidgetLayoutTest {
 
     @Test
     fun `a 4x2 is one card, labelled, with the warning and the day's count`() {
-        val layout = WidgetLayout.of(width = 360f, height = 180f, hasWarning = true)
+        val layout = WidgetLayout.of(width = 360f, height = 180f, next(warning = true))
         assertFalse(layout.roomy)
         assertTrue(layout.label && layout.then && layout.warning && layout.summary)
         assertEquals(0, layout.listLines)
@@ -162,19 +165,42 @@ class WidgetLayoutTest {
 
     @Test
     fun `the list comes once two of its rows fit under the card`() {
-        assertFalse(WidgetLayout.of(width = 360f, height = 230f, hasWarning = true).roomy)
-        assertTrue(WidgetLayout.of(width = 360f, height = 230f, hasWarning = false).roomy)
-        assertEquals(2, WidgetLayout.of(width = 360f, height = 212f, hasWarning = false).listLines)
+        assertFalse(WidgetLayout.of(width = 360f, height = 230f, next(warning = true)).roomy)
+        assertTrue(WidgetLayout.of(width = 360f, height = 230f, next(warning = false)).roomy)
+        assertEquals(2, WidgetLayout.of(width = 360f, height = 212f, next(warning = false)).listLines)
     }
 
     @Test
     fun `a whole page fills with today's list`() {
-        val layout = WidgetLayout.of(width = 360f, height = 430f, hasWarning = true)
+        val layout = WidgetLayout.of(width = 360f, height = 430f, next(warning = true))
         assertTrue(layout.roomy)
         assertEquals(2, layout.headlineLines)
         assertTrue(layout.label && layout.summary && layout.warning)
         assertTrue(layout.listLines >= 6)
         assertFalse(layout.centred)
+    }
+
+    @Test
+    fun `with nothing planned, the rows that aren't there leave room for the warning`() {
+        // "Nothing due" alone: no pills, no "Then:" line, no label.
+        val layout = WidgetLayout.of(width = 360f, height = 120f, WidgetLayout.Parts(warning = true))
+        assertTrue(layout.warning)
+        assertFalse(layout.then || layout.label)
+        assertFalse(layout.roomy)
+    }
+
+    @Test
+    fun `pills too wide to sit side by side are stacked, or plain where there's no height`() {
+        val parts = WidgetLayout.Parts(badge = "Waiting a week", minutes = "1 h 20 min")
+        assertEquals(WidgetLayout.Pills.Row, WidgetLayout.of(width = 360f, height = 60f, parts).pills)
+        assertEquals(WidgetLayout.Pills.Plain, WidgetLayout.of(width = 160f, height = 60f, parts).pills)
+        assertEquals(WidgetLayout.Pills.Stacked, WidgetLayout.of(width = 160f, height = 120f, parts).pills)
+        // Roomy, inset in the widget, they stack where they would have fitted the small card.
+        assertEquals(WidgetLayout.Pills.Row, WidgetLayout.of(width = 280f, height = 60f, parts).pills)
+        val roomy = WidgetLayout.of(width = 280f, height = 400f, parts)
+        assertTrue(roomy.roomy)
+        assertEquals(WidgetLayout.Pills.Stacked, roomy.pills)
+        assertEquals(WidgetLayout.Pills.Row, WidgetLayout.of(width = 360f, height = 400f, parts).pills)
     }
 }
 

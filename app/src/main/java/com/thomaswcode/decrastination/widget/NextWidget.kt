@@ -83,7 +83,7 @@ class NextWidget : GlanceAppWidget() {
     private fun Content(model: WidgetModel) {
         val context = LocalContext.current
         val size = LocalSize.current
-        val layout = WidgetLayout.of(size.width.value, size.height.value, model.warning != null)
+        val layout = WidgetLayout.of(size.width.value, size.height.value, WidgetLayout.Parts.of(model))
         val app = actionStartActivity(Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         if (!layout.roomy) {
             Column(
@@ -155,10 +155,26 @@ class NextWidget : GlanceAppWidget() {
                     style = TextStyle(color = GlanceTheme.colors.onPrimaryContainer, fontSize = 17.sp, fontWeight = FontWeight.Bold),
                 )
                 if (model.badge != null || model.minutes != null) {
-                    Row(GlanceModifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                        model.badge?.let { Pill(it, urgent = model.urgent) }
-                        if (model.badge != null && model.minutes != null) Spacer(GlanceModifier.width(6.dp))
-                        model.minutes?.let { Pill(it) }
+                    when (layout.pills) {
+                        WidgetLayout.Pills.Row -> Row(GlanceModifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                            model.badge?.let { Pill(it, urgent = model.urgent) }
+                            if (model.badge != null && model.minutes != null) Spacer(GlanceModifier.width(6.dp))
+                            model.minutes?.let { Pill(it) }
+                        }
+                        WidgetLayout.Pills.Stacked -> {
+                            model.badge?.let { Box(GlanceModifier.padding(top = 4.dp)) { Pill(it, urgent = model.urgent) } }
+                            model.minutes?.let { Box(GlanceModifier.padding(top = 4.dp)) { Pill(it) } }
+                        }
+                        WidgetLayout.Pills.Plain -> Text(
+                            listOfNotNull(model.badge, model.minutes).joinToString(" · "),
+                            maxLines = 1,
+                            modifier = GlanceModifier.padding(top = 2.dp),
+                            style = TextStyle(
+                                color = if (model.urgent) GlanceTheme.colors.error else GlanceTheme.colors.onPrimaryContainer,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Medium,
+                            ),
+                        )
                     }
                 }
                 if (layout.then) {
@@ -234,11 +250,12 @@ class NextWidget : GlanceAppWidget() {
 }
 
 /**
- * What fits at a widget's size, in dp (Glance gives the exact size): pure, so each size is tested.
- * Small, the widget is a card holding the next thing and its pills, then as there's height the
- * "Then:" line, the "DO NOW" label, any warning, the day's count, and a second line for the
- * name. Once two rows of the list fit under the whole card, it's [roomy]: the card, the day's
- * count as the list's heading, and as much of today's list as fits.
+ * What fits at a widget's size, in dp (Glance gives the exact size), of what there is to show:
+ * pure, so each size is tested. Small, the widget is a card holding the next thing and its
+ * pills, then as there's height the "Then:" line, the "DO NOW" label, any warning, the day's
+ * count, and a second line for the name; a row with nothing to show takes no room. Once two
+ * rows of the list fit under the whole card, it's [roomy]: the card, the day's count as the
+ * list's heading, and as much of today's list as fits.
  */
 data class WidgetLayout(
     /** The card over the list, rather than the widget as the card. */
@@ -247,6 +264,8 @@ data class WidgetLayout(
     /** "DO NOW" over the next thing's name, rather than "Do:" before it. */
     val label: Boolean,
     val refresh: Boolean,
+    /** How the badge and minutes are set out, as the width allows. */
+    val pills: Pills,
     val then: Boolean,
     val summary: Boolean,
     val warning: Boolean,
@@ -254,6 +273,25 @@ data class WidgetLayout(
     /** A short widget sits in the middle of its row; a tall one reads from the top. */
     val centred: Boolean,
 ) {
+    /**
+     * Side by side; one over the other where they won't fit side by side; or, where there's no
+     * height for that either, as plain words without the pills' padding, as narrow as they go.
+     */
+    enum class Pills { Row, Stacked, Plain }
+
+    /** What there is to show, as far as the layout's concerned. */
+    data class Parts(
+        val warning: Boolean = false,
+        val badge: String? = null,
+        val minutes: String? = null,
+        val then: Boolean = false,
+        val label: Boolean = false,
+    ) {
+        companion object {
+            fun of(model: WidgetModel) = Parts(model.warning != null, model.badge, model.minutes, model.then != null, model.label != null)
+        }
+    }
+
     companion object {
         private const val PADDING = 12f
         private const val ROOMY_PADDING = 40f
@@ -266,23 +304,47 @@ data class WidgetLayout(
         private const val HEADING = 30f
         private const val LINE = 30f
 
-        fun of(width: Float, height: Float, hasWarning: Boolean): WidgetLayout {
+        // Widths: a pill's 12 sp character (generously), its padding, the gap between two, the
+        // card's padding either side (and the widget's, around the card when roomy), and ↻.
+        private const val CHAR = 7f
+        private const val PILL = 16f
+        private const val GAP = 6f
+        private const val SIDES = 28f
+        private const val ROOMY_SIDES = 44f
+        private const val REFRESH = 36f
+
+        fun of(width: Float, height: Float, parts: Parts): WidgetLayout {
             val refresh = width >= 180
-            val card = ROOMY_PADDING + LABEL + HEADLINE + PILLS + THEN + (if (hasWarning) WARNING else 0f) + HEADING
+            val values = listOfNotNull(parts.badge, parts.minutes)
+            val pillsHigh = if (values.isEmpty()) 0f else PILLS
+            fun sideBySide(sides: Float) =
+                values.sumOf { it.length * CHAR + PILL.toDouble() } + GAP * (values.size - 1) <= width - sides - (if (refresh) REFRESH else 0f)
+
+            val roomyPills = if (sideBySide(ROOMY_SIDES)) Pills.Row else Pills.Stacked
+            val card = ROOMY_PADDING + (if (parts.label) LABEL else 0f) + HEADLINE + pillsHigh * (if (roomyPills == Pills.Stacked) 2 else 1) +
+                (if (parts.then) THEN else 0f) + (if (parts.warning) WARNING else 0f) + HEADING
             if (height >= card + 2 * LINE) {
                 val headlineLines = if (height >= 320) 2 else 1
                 val listLines = ((height - card - HEADLINE * (headlineLines - 1)) / LINE).toInt().coerceIn(0, 12)
-                return WidgetLayout(true, headlineLines, label = true, refresh, then = true, summary = true, warning = hasWarning, listLines, centred = false)
+                return WidgetLayout(
+                    true, headlineLines, label = parts.label, refresh, roomyPills, then = parts.then,
+                    summary = true, warning = parts.warning, listLines, centred = false,
+                )
             }
-            // Each in turn, as long as it fits.
-            var used = PADDING + HEADLINE + PILLS
+            // Each in turn, as long as it fits; what isn't there takes no room.
+            var used = PADDING + HEADLINE + pillsHigh
             fun fits(extra: Float) = (height >= used + extra).also { if (it) used += extra }
-            val then = fits(THEN)
-            val label = fits(LABEL)
-            val warning = hasWarning && fits(WARNING)
+            val pills = when {
+                sideBySide(SIDES) -> Pills.Row
+                fits(PILLS) -> Pills.Stacked
+                else -> Pills.Plain
+            }
+            val then = parts.then && fits(THEN)
+            val label = parts.label && fits(LABEL)
+            val warning = parts.warning && fits(WARNING)
             val summary = fits(SUMMARY)
             val headlineLines = if (fits(HEADLINE)) 2 else 1
-            return WidgetLayout(false, headlineLines, label, refresh, then, summary, warning, listLines = 0, centred = true)
+            return WidgetLayout(false, headlineLines, label, refresh, pills, then, summary, warning, listLines = 0, centred = true)
         }
     }
 }
