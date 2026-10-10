@@ -16,6 +16,7 @@ import kotlinx.coroutines.withContext
 import java.io.IOException
 import java.net.InetSocketAddress
 import java.net.Socket
+import java.net.SocketTimeoutException
 import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
@@ -216,17 +217,31 @@ class GmailSource(private val secrets: SecretStore) : TaskSource {
                 }
                 if (messages.size < uids.size) throw IOException("Gmail listed ${uids.size} messages but described ${messages.size}")
                 // Texts are fetched for up to [TEXTS_FOR_NS] from here, but never past [TEXTS_BY_NS]
-                // into the read, leaving the sync's 90 s room to log out and return; and always one,
-                // so a read slow to list still gets somewhere. The rest wait for the reads after, as
-                // those past MAX_BODIES do (BUG-P2-019).
+                // into the read; and one even then, so a read slow to list still gets somewhere, up to
+                // [LAST_TEXT_BY_NS], each answer waited for no longer than that leaves, so none runs
+                // past the sync's 90 s. The rest wait for the reads after, as those past MAX_BODIES do
+                // (BUG-P2-019).
                 val textsUntil = minOf(System.nanoTime() + TEXTS_FOR_NS, started + TEXTS_BY_NS)
+                val lastBy = started + LAST_TEXT_BY_NS
                 val read = LinkedHashMap<String, String?>()
+                var cut = false
                 for (message in GmailThreads.toRead(messages, known, MAX_BODIES)) {
-                    if (read.isNotEmpty() && System.nanoTime() > textsUntil) break
-                    read[message.messageId] = text(imap, message.uid)
+                    val now = System.nanoTime()
+                    if (now > lastBy || (read.isNotEmpty() && now > textsUntil)) break
+                    socket.soTimeout = ((lastBy - now) / 1_000_000).toInt().coerceIn(1, TIMEOUT_MS)
+                    read[message.messageId] = try {
+                        text(imap, message.uid)
+                    } catch (e: SocketTimeoutException) {
+                        // Out of time mid-answer: the connection's spent, but what's read stands.
+                        cut = true
+                        break
+                    }
                 }
                 val bodies = GmailThreads.withRead(known, read)
-                imap.logout()
+                if (!cut) {
+                    socket.soTimeout = LOGOUT_MS
+                    runCatching { imap.logout() }
+                }
                 SourceRead(GmailThreads.fetched(messages, bodies, context.now, context.zone))
             }
         } finally {
@@ -296,5 +311,11 @@ class GmailSource(private val secrets: SecretStore) : TaskSource {
 
         /** How far into the read texts may go, however long listing took: room left within the sync's 90 s to log out and return. */
         const val TEXTS_BY_NS = 70_000_000_000L
+
+        /** The last moment the one text a slow listing still gets may take, answer included. */
+        const val LAST_TEXT_BY_NS = 82_000_000_000L
+
+        /** How long logging out is waited for: the snapshot is read, so it's only good manners. */
+        const val LOGOUT_MS = 3_000
     }
 }
