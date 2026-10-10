@@ -614,6 +614,19 @@ class FocusTest {
     }
 
     @Test
+    fun `a session started in the same millisecond as the one it ends is told apart from it`() = runTest {
+        tasks.update { it.copy(tasks = listOf(task("t"))) }
+        val first = focus.startSession("teams:t", "t", null, 30)
+        val second = focus.startSession("teams:t", "t", null, 30)
+        assertTrue(second.startedAt > first.startedAt)
+        clock.time += 30 * 60_000L
+        focus.stopSession()
+        // Both recorded, and the second's minutes counted, not taken for the first's.
+        assertEquals(2, log.value.sessions.size)
+        assertEquals(30, tasks.value.tasks.single().workedMin)
+    }
+
+    @Test
     fun `a completion with work a photo check found done is marked so`() = runTest {
         tasks.update { it.copy(tasks = listOf(task("hw", effort = 40))) }
         focus.photoChecked("teams:hw", null, 20)
