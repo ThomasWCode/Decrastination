@@ -440,9 +440,11 @@ object Planner {
     )
 
     /** The deadline's day less the margin; with no margin, a morning deadline's day is never usable. */
-    private fun lastUsableDay(item: Item, input: Input): LocalDate {
-        val due = Instant.ofEpochMilli(item.deadline).atZone(input.zone)
-        val margin = input.calibration.marginDays[item.task.kind] ?: input.settings.marginDays
+    private fun lastUsableDay(item: Item, input: Input): LocalDate = lastUsableDay(item.deadline, item.task.kind, input)
+
+    private fun lastUsableDay(deadline: Long, kind: Kind, input: Input): LocalDate {
+        val due = Instant.ofEpochMilli(deadline).atZone(input.zone)
+        val margin = input.calibration.marginDays[kind] ?: input.settings.marginDays
         val last = due.toLocalDate().minusDays(margin.toLong())
         return if (margin == 0 && due.toLocalTime() < NOON) last.minusDays(1) else last
     }
@@ -517,16 +519,23 @@ object Planner {
     }
 
     /**
-     * Where your instructions limit days (a day's limit, busy times): the most time any day [task]
-     * can be worked on holds, from when it can start to its deadline or the plan's least reach.
-     * Null where nothing's limited.
+     * Where your instructions limit days (a day's limit, busy times): the most time a day [task]
+     * can be worked on holds, from when it can start to its last usable day (its deadline's, or for
+     * undated work its soft deadline's), so its boxes fit before it, not only on a roomier day after
+     * it. Where none of those days holds any (or it's overdue), the days on to the plan's least
+     * reach, which it carries on into. Null where nothing's limited.
      */
     private fun roomiest(task: TaskItem, input: Input): Int? {
         if (input.dayCaps.isEmpty() && input.hardBusy.isEmpty()) return null
-        val today = date(input.now, input.zone)
-        val from = task.notBefore?.let { date(it, input.zone) }?.takeIf { it > today } ?: today
-        val until = minOf(maxOf(task.dueAt?.let { date(it, input.zone) } ?: today, today.plusDays(MIN_HORIZON_DAYS)), today.plusDays(MAX_HORIZON_DAYS))
-        return generateSequence(from) { it.plusDays(1) }.takeWhile { it <= until }.maxOfOrNull { capacity(it, input) }
+        val zone = input.zone
+        val today = date(input.now, zone)
+        val from = task.notBefore?.let { date(it, zone) }?.takeIf { it > today } ?: today
+        fun most(until: LocalDate) = generateSequence(from) { it.plusDays(1) }.takeWhile { it <= until }.maxOfOrNull { capacity(it, input) } ?: 0
+        val deadline = task.dueAt ?: Instant.ofEpochMilli(task.firstSeenAt).atZone(zone).plusDays(input.settings.softDeadlineDays.toLong()).toInstant().toEpochMilli()
+        val lastUsable = lastUsableDay(deadline, task.kind, input)
+        val before = most(lastUsable)
+        if (before >= MIN_CHUNK) return before
+        return most(minOf(maxOf(lastUsable, today.plusDays(MIN_HORIZON_DAYS)), today.plusDays(MAX_HORIZON_DAYS)))
     }
 
     /**
