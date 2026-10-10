@@ -106,7 +106,7 @@ object Days {
         if (session.photo) return if (session.startedAt in start until end) session.workedMin else 0
         val from = maxOf(session.startedAt, start)
         val to = minOf(session.startedAt + session.workedMin * 60_000L, end)
-        return ((to - from) / 60_000L).toInt().coerceIn(0, session.workedMin)
+        return ((to - from) / 60_000L).toInt().coerceIn(0, session.workedMin.coerceAtLeast(0))
     }
 
     /** At least this many finished days before the check says anything. */
