@@ -83,7 +83,7 @@ class NextWidget : GlanceAppWidget() {
     private fun Content(model: WidgetModel) {
         val context = LocalContext.current
         val size = LocalSize.current
-        val layout = WidgetLayout.of(size.width.value, size.height.value, WidgetLayout.Parts.of(model))
+        val layout = WidgetLayout.of(size.width.value, size.height.value, WidgetLayout.Parts.of(model), context.resources.configuration.fontScale)
         val app = actionStartActivity(Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         if (!layout.roomy) {
             Column(
@@ -293,6 +293,8 @@ data class WidgetLayout(
     }
 
     companion object {
+        // Heights: the card's padding (and, roomy, the widget's), then each line's at the default
+        // text size.
         private const val PADDING = 12f
         private const val ROOMY_PADDING = 40f
         private const val HEADLINE = 22f
@@ -304,8 +306,9 @@ data class WidgetLayout(
         private const val HEADING = 30f
         private const val LINE = 30f
 
-        // Widths: a pill's 12 sp character (generously), its padding, the gap between two, the
-        // card's padding either side (and the widget's, around the card when roomy), and ↻.
+        // Widths: a pill's 12 sp character (generously, at the default text size), its padding,
+        // the gap between two, the card's padding either side (and the widget's, around the card
+        // when roomy), and ↻.
         private const val CHAR = 7f
         private const val PILL = 16f
         private const val GAP = 6f
@@ -313,37 +316,39 @@ data class WidgetLayout(
         private const val ROOMY_SIDES = 44f
         private const val REFRESH = 36f
 
-        fun of(width: Float, height: Float, parts: Parts): WidgetLayout {
+        /** [fontScale]: the phone's text size, which the text's sizes (at the default, below) grow with. */
+        fun of(width: Float, height: Float, parts: Parts, fontScale: Float = 1f): WidgetLayout {
+            fun t(atDefault: Float) = atDefault * fontScale
             val refresh = width >= 180
             val values = listOfNotNull(parts.badge, parts.minutes)
-            val pillsHigh = if (values.isEmpty()) 0f else PILLS
+            val pillsHigh = if (values.isEmpty()) 0f else t(PILLS)
             fun sideBySide(sides: Float) =
-                values.sumOf { it.length * CHAR + PILL.toDouble() } + GAP * (values.size - 1) <= width - sides - (if (refresh) REFRESH else 0f)
+                values.sumOf { it.length * t(CHAR) + PILL.toDouble() } + GAP * (values.size - 1) <= width - sides - (if (refresh) REFRESH else 0f)
 
             val roomyPills = if (sideBySide(ROOMY_SIDES)) Pills.Row else Pills.Stacked
-            val card = ROOMY_PADDING + (if (parts.label) LABEL else 0f) + HEADLINE + pillsHigh * (if (roomyPills == Pills.Stacked) 2 else 1) +
-                (if (parts.then) THEN else 0f) + (if (parts.warning) WARNING else 0f) + HEADING
-            if (height >= card + 2 * LINE) {
+            val card = ROOMY_PADDING + (if (parts.label) t(LABEL) else 0f) + t(HEADLINE) + pillsHigh * (if (roomyPills == Pills.Stacked) 2 else 1) +
+                (if (parts.then) t(THEN) else 0f) + (if (parts.warning) t(WARNING) else 0f) + t(HEADING)
+            if (height >= card + 2 * t(LINE)) {
                 val headlineLines = if (height >= 320) 2 else 1
-                val listLines = ((height - card - HEADLINE * (headlineLines - 1)) / LINE).toInt().coerceIn(0, 12)
+                val listLines = ((height - card - t(HEADLINE) * (headlineLines - 1)) / t(LINE)).toInt().coerceIn(0, 12)
                 return WidgetLayout(
                     true, headlineLines, label = parts.label, refresh, roomyPills, then = parts.then,
                     summary = true, warning = parts.warning, listLines, centred = false,
                 )
             }
             // Each in turn, as long as it fits; what isn't there takes no room.
-            var used = PADDING + HEADLINE + pillsHigh
+            var used = PADDING + t(HEADLINE) + pillsHigh
             fun fits(extra: Float) = (height >= used + extra).also { if (it) used += extra }
             val pills = when {
                 sideBySide(SIDES) -> Pills.Row
-                fits(PILLS) -> Pills.Stacked
+                fits(t(PILLS)) -> Pills.Stacked
                 else -> Pills.Plain
             }
-            val then = parts.then && fits(THEN)
-            val label = parts.label && fits(LABEL)
-            val warning = parts.warning && fits(WARNING)
-            val summary = fits(SUMMARY)
-            val headlineLines = if (fits(HEADLINE)) 2 else 1
+            val then = parts.then && fits(t(THEN))
+            val label = parts.label && fits(t(LABEL))
+            val warning = parts.warning && fits(t(WARNING))
+            val summary = fits(t(SUMMARY))
+            val headlineLines = if (fits(t(HEADLINE))) 2 else 1
             return WidgetLayout(false, headlineLines, label, refresh, pills, then, summary, warning, listLines = 0, centred = true)
         }
     }

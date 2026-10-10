@@ -202,6 +202,18 @@ class WidgetLayoutTest {
         assertEquals(WidgetLayout.Pills.Stacked, roomy.pills)
         assertEquals(WidgetLayout.Pills.Row, WidgetLayout.of(width = 360f, height = 400f, parts).pills)
     }
+
+    @Test
+    fun `larger text is allowed for`() {
+        val parts = WidgetLayout.Parts(badge = "Waiting a week", minutes = "1 h 20 min")
+        // Side by side at the default size; at 1.3 times, too wide, and stacked.
+        assertEquals(WidgetLayout.Pills.Row, WidgetLayout.of(width = 280f, height = 120f, parts).pills)
+        assertEquals(WidgetLayout.Pills.Stacked, WidgetLayout.of(width = 280f, height = 120f, parts, fontScale = 1.3f).pills)
+        // Lines grow too: what fits at 82 dp at the default size doesn't at 1.3 times.
+        val next = WidgetLayout.Parts(badge = "Overdue", minutes = "40 min", then = true, label = true)
+        assertTrue(WidgetLayout.of(width = 360f, height = 82f, next).then)
+        assertFalse(WidgetLayout.of(width = 360f, height = 82f, next, fontScale = 1.3f).then)
+    }
 }
 
 class WidgetRedrawTest {
