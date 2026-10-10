@@ -79,6 +79,25 @@ class SyncerTest {
     }
 
     @Test
+    fun `a read given up on and still stuck isn't joined by another`() = runTest {
+        val release = java.util.concurrent.CountDownLatch(1)
+        val stuck = FakeSource(Source.Anki) {
+            release.await()
+            items("late")
+        }
+        val syncer = Syncer(tasks, settings, listOf(stuck), FixedClock(clock.time), timeoutMs = 200)
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { syncer.sync() }
+        val again = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { syncer.sync() }
+        assertEquals("Still waiting for the last read, which hasn't answered", again.failures[Source.Anki])
+        assertEquals(1, stuck.seen.size)
+        // Once it has wound down, the next sync reads again.
+        release.countDown()
+        Thread.sleep(300)
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { syncer.sync() }
+        assertEquals(2, stuck.seen.size)
+    }
+
+    @Test
     fun `a source that hangs times out as a failure`() = runTest {
         val slow = FakeSource(Source.PowerPlanner) { awaitCancellation() }
         val report = syncer(listOf(slow), timeoutMs = 1_000).sync()

@@ -12,6 +12,7 @@ import com.thomaswcode.decrastination.sources.SourceRead
 import com.thomaswcode.decrastination.sources.SourceUnavailable
 import com.thomaswcode.decrastination.sources.TaskSource
 import kotlinx.coroutines.Dispatchers
+import java.io.IOException
 import kotlinx.coroutines.withContext
 
 /**
@@ -86,6 +87,13 @@ object TeamsRows {
         )
     }
 
+    /**
+     * Every row as a task. A row without its key is a broken read, not one to skip: skipped, its
+     * assignment would be taken as handed in (BUG-P2-007).
+     */
+    fun all(rows: List<Map<String, Any?>>): List<Fetched> =
+        rows.map { row -> fetched(row) ?: throw IOException("The Teams widget listed an assignment without its key") }
+
     /** A line about the widget's own state worth showing, or null when all is well. */
     fun note(state: Map<String, Any?>): String? {
         val status = state["status"] as? String
@@ -106,7 +114,7 @@ class TeamsSource(private val resolver: ContentResolver) : TaskSource {
         val rows = TeamsProvider.assignments(resolver)
         val state = TeamsProvider.state(resolver)
         SourceRead(
-            items = rows.mapNotNull(TeamsRows::fetched),
+            items = TeamsRows.all(rows),
             dataAsOf = state["last_success_at"] as? Long,
             note = TeamsRows.note(state),
         )

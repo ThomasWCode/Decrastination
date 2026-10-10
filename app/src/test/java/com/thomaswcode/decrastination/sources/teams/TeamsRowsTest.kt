@@ -44,6 +44,9 @@ class TeamsRowsTest {
     @Test
     fun `a row without a key is skipped, a blank title named`() {
         assertNull(TeamsRows.fetched(mapOf("title" to "x")))
+        // In a read, a row without its key fails it: skipped, its assignment would look handed in.
+        kotlin.test.assertFailsWith<java.io.IOException> { TeamsRows.all(listOf(mapOf("key" to "k", "title" to "a"), mapOf("title" to "x"))) }
+        assertEquals(listOf("k"), TeamsRows.all(listOf(mapOf("key" to "k", "title" to "a"))).map { it.sourceId })
         assertEquals("Untitled assignment", TeamsRows.fetched(mapOf("key" to "k", "title" to " "))!!.title)
     }
 

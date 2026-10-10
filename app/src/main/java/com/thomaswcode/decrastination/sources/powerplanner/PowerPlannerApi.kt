@@ -42,6 +42,11 @@ class PowerPlannerApi(private val http: Http) {
         return response.selectedSemesterId ?: throw ApiError("GetSelectedSemesterId", response.error ?: "no semester selected")
     }
 
+    /**
+     * The agenda's items. An answer without them is a failed read, not an empty agenda: an empty one
+     * comes as `"Items":[]` (checked on 10 Oct), and a missing list taken as empty would finish every
+     * stored item (BUG-P2-007).
+     */
     fun agenda(login: Login, semesterId: String, nowIso: String): List<PpItem> =
         call(
             "GetAgenda",
@@ -50,7 +55,7 @@ class PowerPlannerApi(private val http: Http) {
                 put("CurrentTime", nowIso)
             },
             AgendaResponse.serializer(),
-        ).items.orEmpty()
+        ).items ?: throw ApiError("GetAgenda", "the answer had no list of items")
 
     fun classes(login: Login, semesterId: String): Timetable {
         val response = call(
