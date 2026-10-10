@@ -108,6 +108,19 @@ class BackupTest {
     }
 
     @Test
+    fun `a backup with an instruction the app couldn't have made is refused whole`() {
+        fun with(vararg changes: Change) = backup().copy(instructions = listOf(Instruction("i", "i", at = now, state = InstructionStatus.Applied, changes = changes.toList(), appliedAt = now)))
+        assertNull(Backups.problem(with(Change(ChangeType.BusyTime, weekday = 2, startMin = 16 * 60, endMin = 18 * 60))))
+        assertNull(Backups.problem(with(Change(ChangeType.DueBy, taskId = "teams:a", time = now + 86_400_000L))))
+        // A busy time past midnight, a weekday 8, a start ten years on, a wait on itself, an answer of no kind.
+        assertNotNull(Backups.problem(with(Change(ChangeType.BusyTime, weekday = 2, startMin = 16 * 60, endMin = 25 * 60))))
+        assertNotNull(Backups.problem(with(Change(ChangeType.DayLimit, weekday = 8, freeMin = 60))))
+        assertNotNull(Backups.problem(with(Change(ChangeType.StartFrom, taskId = "teams:a", time = now + 3650 * 86_400_000L))))
+        assertNotNull(Backups.problem(with(Change(ChangeType.After, taskId = "teams:a", afterTaskId = "teams:a"))))
+        assertNotNull(Backups.problem(with(Change(ChangeType.EventTime, eventKey = "Trip", eventAnswer = "sometimes"))))
+    }
+
+    @Test
     fun `a backup keeps the instructions in use`() {
         val applied = Instruction("i1", "I can't do anything on Saturday", at = now, state = InstructionStatus.Applied, changes = listOf(Change(ChangeType.DayLimit, weekday = 6, freeMin = 0)), appliedAt = now)
         val read = Backups.decode(Backups.encode(backup().copy(instructions = listOf(applied))))!!

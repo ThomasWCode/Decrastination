@@ -1,6 +1,8 @@
 package com.thomaswcode.decrastination.data
 
 import com.thomaswcode.decrastination.core.Calibration
+import com.thomaswcode.decrastination.core.Change
+import com.thomaswcode.decrastination.core.ChangeType
 import com.thomaswcode.decrastination.core.Instruction
 import com.thomaswcode.decrastination.core.InstructionState
 import com.thomaswcode.decrastination.core.InstructionStatus
@@ -77,11 +79,42 @@ object Backups {
             if (calibration.boxMin.values.any { it !in SettingsLimits.BOX_MIN }) add("what the app learned about box lengths")
             if (backup.eventAnswers.values.any { !answer(it) }) add("a calendar answer")
             if (!backup.aiUsage.spentUsd.isFinite() || backup.aiUsage.spentUsd < 0 || backup.aiUsage.calls < 0) add("Claude's spending")
+            if (backup.instructions.any { !wellFormed(it, backup.exportedAt) }) add("an instruction")
         }
         return bad.takeIf { it.isNotEmpty() }?.let { "it holds what this app never writes (${it.joinToString(", ")})" }
     }
 
     private const val DAY_MIN = 24 * 60
+    private const val DAY_MS = 24 * 3_600_000L
+
+    /** The most changes one instruction holds, as Claude's reading of one is held to. */
+    private const val MAX_CHANGES = 40
+
+    /**
+     * Whether [instruction] is one this app could have made: an id, and each change of its kind with
+     * what it needs, in range (times within a day, a weekday 1 to 7, a date that reads, a date and
+     * time within a couple of years of [exportedAt]). The tasks and events it names aren't checked:
+     * on a phone just set up, their sources haven't been read yet.
+     */
+    private fun wellFormed(instruction: Instruction, exportedAt: Long): Boolean {
+        if (instruction.id.isBlank() || instruction.changes.size > MAX_CHANGES) return false
+        fun named(id: String?) = !id.isNullOrBlank()
+        fun day(change: Change) = when {
+            change.date != null -> change.weekday == null && runCatching { java.time.LocalDate.parse(change.date) }.isSuccess
+            else -> change.weekday in 1..7
+        }
+        fun time(at: Long?) = at != null && at in (exportedAt - 730 * DAY_MS)..(exportedAt + 400 * DAY_MS)
+        return instruction.changes.all { change ->
+            when (change.type) {
+                ChangeType.NotATask -> named(change.taskId)
+                ChangeType.StartFrom, ChangeType.DueBy -> named(change.taskId) && time(change.time)
+                ChangeType.After -> named(change.taskId) && named(change.afterTaskId) && change.afterTaskId != change.taskId
+                ChangeType.EventTime -> named(change.eventKey) && change.eventAnswer?.let(::answer) == true
+                ChangeType.DayLimit -> change.freeMin in 0..DAY_MIN && day(change)
+                ChangeType.BusyTime -> change.startMin in 0 until DAY_MIN && (change.endMin ?: -1) in ((change.startMin ?: DAY_MIN) + 1)..DAY_MIN && day(change)
+            }
+        }
+    }
 
     /** A calendar answer as they're kept: "free", "busy", or "load:<minutes>" within a day. */
     private fun answer(value: String): Boolean =
