@@ -20,6 +20,10 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.Saver
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -31,6 +35,7 @@ import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.core.About
 import com.thomaswcode.decrastination.core.ChangeType
 import com.thomaswcode.decrastination.core.Instructions
+import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.learn.CalendarEvent
 import com.thomaswcode.decrastination.learn.CalendarTime
 import com.thomaswcode.decrastination.learn.EventJudge
@@ -38,6 +43,7 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import kotlinx.coroutines.launch
 
 /**
  * The fortnight's calendar as the plan counts it: each day's events and how much of your time each
@@ -69,8 +75,17 @@ class CalendarActivity : ComponentActivity() {
         val answers = runtime.eventAnswers + yours
         val today = dayOf(now, zone)
         val days = (0L until DAYS).map { today.plusDays(it) }
-        val allowed = remember { CalendarTime.allowed(this) }
-        var writing by remember { mutableStateOf<Writing?>(null) }
+        // Allowed in Android's settings meanwhile: shown, and read, on coming back (BUG-P2-023).
+        var allowed by remember { mutableStateOf(CalendarTime.allowed(this)) }
+        val scope = rememberCoroutineScope()
+        LifecycleResumeEffect(Unit) {
+            val now = CalendarTime.allowed(this@CalendarActivity)
+            if (now && !allowed) scope.launch { CalendarTime.refresh(applicationContext) }
+            allowed = now
+            onPauseOrDispose { }
+        }
+        // An instruction being written, kept through the screen being made again (BUG-P2-013).
+        var writing by rememberSaveable(stateSaver = WRITING) { mutableStateOf<Writing?>(null) }
 
         Scaffold(topBar = { BackBar("Calendar", this) }) { padding ->
             LazyColumn(Modifier.padding(padding).fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
@@ -157,6 +172,12 @@ class CalendarActivity : ComponentActivity() {
         if (event.allDay) "All day" else "${Format.at(event.start, now, zone)} to ${Format.at(event.end, now, zone).substringAfterLast(' ')}"
 
     private companion object {
+        /** What an instruction being written is about, as JSON, and its line, apart. */
+        val WRITING = Saver<Writing?, ArrayList<String>>(
+            save = { w -> w?.let { arrayListOf(JsonStore.json.encodeToString(About.serializer(), it.about), it.what) } },
+            restore = { (about, what) -> Writing(JsonStore.json.decodeFromString(About.serializer(), about), what) },
+        )
+
         const val DAYS = 14L
         val DAY: DateTimeFormatter = DateTimeFormatter.ofPattern("EEEE d MMMM", Locale.UK)
     }

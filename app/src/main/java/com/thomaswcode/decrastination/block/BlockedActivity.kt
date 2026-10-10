@@ -35,6 +35,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.Saver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -127,14 +129,24 @@ class BlockedActivity : ComponentActivity() {
         val photoChecker = remember(settings.aiEnabled, settings.aiKeyActive) { graph.photoChecker() }
         val photoFile = remember { File(cacheDir, "photos/check.jpg").also { it.parentFile?.mkdirs() } }
         val photoUri = remember { FileProvider.getUriForFile(this, "$packageName.photos", photoFile) }
-        var photoFor by remember { mutableStateOf<Chunk?>(null) }
+        // The piece being photographed, as its task, step and place: kept through this screen being
+        // made again while the camera is open (a turn of the phone, Android needing the memory), and
+        // found again in the plan when the photo comes back (BUG-P2-011).
+        var photoFor by rememberSaveable(stateSaver = PIECE) { mutableStateOf<PhotoPiece?>(null) }
         // A photo being checked: no session is started meanwhile, as both would count the piece.
         var checking by remember { mutableStateOf(false) }
         val takePhoto = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { taken ->
-            val piece = photoFor
-            if (!taken || piece == null || photoChecker == null) {
-                // Not to be checked (cancelled, or this screen made afresh meanwhile): not kept either.
+            val wanted = photoFor
+            photoFor = null
+            if (!taken || wanted == null || photoChecker == null) {
+                // Not to be checked (cancelled): not kept either.
                 photoFile.delete()
+                return@rememberLauncherForActivityResult
+            }
+            val piece = plan.chunksOf(wanted.taskId).firstOrNull { it.stepIndex == wanted.stepIndex && it.step == wanted.step }
+            if (piece == null) {
+                photoFile.delete()
+                message = "That piece has changed since the photo was taken (done, or planned again), so it wasn't checked."
                 return@rememberLauncherForActivityResult
             }
             message = "Checking the photo…"
@@ -201,7 +213,7 @@ class BlockedActivity : ComponentActivity() {
                         // during a session: the two would count the same piece twice.
                         if (photoChecker != null && session == null && next.photoCheckable) {
                             OutlinedButton(enabled = !checking, onClick = {
-                                photoFor = next
+                                photoFor = PhotoPiece(next.taskId, next.stepIndex, next.step)
                                 takePhoto.launch(photoUri)
                             }) { Text("Photo check") }
                         }
@@ -256,7 +268,15 @@ class BlockedActivity : ComponentActivity() {
         }
     }
 
+    /** A piece of the plan being photographed: its task, and its step's place and name (or "part 1 of 2"). */
+    private data class PhotoPiece(val taskId: String, val stepIndex: Int?, val step: String?)
+
     companion object {
+        private val PIECE = Saver<PhotoPiece?, ArrayList<String?>>(
+            save = { p -> p?.let { arrayListOf(it.taskId, it.stepIndex?.toString(), it.step) } },
+            restore = { (taskId, index, step) -> PhotoPiece(taskId!!, index?.toInt(), step) },
+        )
+
         private const val EXTRA_TARGET = "target"
         private const val EXTRA_KIND = "kind"
         private const val EXTRA_REASON = "reason"
