@@ -10,6 +10,7 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -57,8 +58,15 @@ fun rememberPhotoCheck(graph: AppGraph, activity: Activity, plan: Plan, say: (ta
     val file = remember { File(activity.cacheDir, "photos/check.jpg").also { it.parentFile?.mkdirs() } }
     val uri = remember { FileProvider.getUriForFile(activity, "${activity.packageName}.photos", file) }
     var photoFor by rememberSaveable(stateSaver = PIECE) { mutableStateOf<PhotoPiece?>(null) }
-    var checking by remember { mutableStateOf(false) }
-    val scope = rememberCoroutineScope()
+    // App-wide, not this screen's: a check runs on when the screen goes (a tab changed), and its
+    // outcome is shown on whichever screen is there, or the next.
+    val running by PhotoChecks.running.collectAsStateWithLifecycle()
+    val unseen by PhotoChecks.unseen.collectAsStateWithLifecycle()
+    LaunchedEffect(unseen) {
+        val (taskId, text) = unseen ?: return@LaunchedEffect
+        PhotoChecks.unseen.value = null
+        say(taskId, text)
+    }
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { taken ->
         val wanted = photoFor
         photoFor = null
@@ -74,16 +82,16 @@ fun rememberPhotoCheck(graph: AppGraph, activity: Activity, plan: Plan, say: (ta
             return@rememberLauncherForActivityResult
         }
         say(piece.taskId, "Checking the photo…")
-        checking = true
-        scope.launch {
+        PhotoChecks.running.value = piece.taskId
+        graph.scope.launch {
             try {
-                say(piece.taskId, PhotoChecks.check(activity, graph, file, piece))
+                PhotoChecks.unseen.value = piece.taskId to PhotoChecks.check(activity.applicationContext, graph, file, piece)
             } finally {
-                checking = false
+                PhotoChecks.running.value = null
             }
         }
     }
-    return PhotoCheck(checker != null, checking) { piece ->
+    return PhotoCheck(checker != null, running != null) { piece ->
         photoFor = PhotoPiece(piece.taskId, piece.stepIndex, piece.step)
         launcher.launch(uri)
     }
