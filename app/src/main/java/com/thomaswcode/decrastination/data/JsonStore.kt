@@ -70,7 +70,12 @@ class JsonStore<T>(
         val aside = setAside(file, clock())
         val salvaged = text?.let(::salvage)
         problem = Unreadable(file.name, aside?.name, kept = salvaged != null, at = clock())
-        return onLoad(salvaged ?: unreadable())
+        val state = salvaged ?: unreadable()
+        // What was kept replaces it, once it's safe beside it: read again at the next start, it would
+        // be found unreadable again, and said again, however often you'd seen it. Not if the copy
+        // failed: then the bad file is all there is of it.
+        if (aside != null) runCatching { write(state) }
+        return onLoad(state)
     }
 
     /**
