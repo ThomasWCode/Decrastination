@@ -171,4 +171,23 @@ Still waiting for you:
   - **Arm now?** lists anything in *What's in place* that isn't (it arms all the same).
 - **Free time** (#26): while earned free time is spent on a blocked app, a silent notification counts it down, and a heads-up comes a minute before it's covered. *Back to work* opens the Plan. Neither grants time.
 - **The weekly review's changes apply at once**, armed or not (your call): box length, safety margin, undated minutes a day and work minutes per free minute, each within its bounds. The review says what changed. A change of yours waiting for one of those settings is replaced by the review's; every other waiting change keeps its 24 hours.
+- **Learning, settings, notifications, photos** (#27):
+  - **Learned estimates rest on evidence** (your call): a class's own multiplier counts once it has three timed pieces; until then its kind's figure stands, so one long evening can't set it. Stats says what each figure rests on ("from 4 timed pieces", "from your answers", "2 timed pieces so far").
+  - **Four notification channels** where one carried four things (your call): *Morning briefing*, *How it went*, *Calendar questions*, *Weekly check-in and review*. Each starts as the old one was set (importance, sound, vibration, light), so a silenced one stays silenced; the old one goes once nothing's left on it, so a question still showing isn't lost.
+  - **Settings: blocked apps first, then a search box** (your call) over the rest of the installed apps.
+  - **Photo checks the right way up**: a portrait page stored as landscape with a note to turn it (EXIF) is turned before it's sent.
+  - **The Gradle wrapper checks the distribution's SHA-256** when it downloads it.
+- **The evaluation set** (#27, your call): your real emails and assignments with the right answers (you checked the labels, 11 Oct), kept in `private/eval/` and never committed; `docs/eval.md` says how to run it. Opus answers through Claude Code, so it costs nothing on the API.
+- **Tried on the phone, 11 Oct** (1.8.0 installed over 1.7.0):
+  - the Plan's DO NOW card and a piece's sheet (*Check it's done* answered for its own task only);
+  - *Due on…* through the parent-code step, cancelled, nothing kept; *Can't start before…* applied, then taken back in Instructions;
+  - the Calendar's answer buttons and *Keep it*;
+  - Settings' *Find an app* ("tube": YouTube, blocked, first);
+  - the four new notification channels, with the old one's importance, and the old one gone;
+  - no false address-bar alarm while you used Chrome;
+  - and, with your go-ahead, the protection fix for real: `settings.json` with one field that can't be read stayed armed, with the device admin still on and Claude still on, and the incident showed on the Plan and in Setup; your file was then put back byte for byte. Not done whole-file junk: falling back to every default would have switched Claude off, and the rules would have read over Claude's readings.
+- **Not tried on the phone**: arming again with the authenticator kept, and *Arm now?*'s list (they need protection disarmed, so your dad); the free-time countdown (it needs a day with nothing due); the widget's red ! (it needs the widget made 2×1); the review's at-once changes (tonight's review, at 21:00).
+- **Waiting for you: what the first evaluation run found** (11 of 13 pass):
+  - **The German assessment's plan is thrown away.** Claude split *Prep and Assessment preparation* into nine sensible steps, but one ("revise using the marked sheet", from 9 Oct) starts after the Teams due date (8 Oct, the hand-in) though the assessment is on 12 Oct. The app's checks then drop the whole split and plan 3½ hours as one block, already overdue. Either the prompt tells Claude no step can start after the due date, or the checks drop only that step.
+  - **A note to self holding a recording** ("Imperial Physics Talk", a link to the talk's audio) is read as only to read (2 min); you labelled it something to do. The prompt could say a note to self that keeps something to go back to is something to do.
 

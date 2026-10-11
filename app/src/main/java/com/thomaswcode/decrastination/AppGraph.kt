@@ -50,6 +50,7 @@ import com.thomaswcode.decrastination.enrich.PhotoChecker
 import com.thomaswcode.decrastination.enrich.RuleEnricher
 import com.thomaswcode.decrastination.learn.Assessment
 import com.thomaswcode.decrastination.learn.Briefing
+import com.thomaswcode.decrastination.learn.Calibrator
 import com.thomaswcode.decrastination.learn.CalendarTime
 import com.thomaswcode.decrastination.learn.Daily
 import com.thomaswcode.decrastination.net.UrlConnectionHttp
@@ -122,6 +123,11 @@ class AppGraph private constructor(context: Context) {
                 }.onSuccess { listOf(tasks, settings, runtime, log, instructions).forEach { it.keepRecovered() } }
                     .onFailure { Log.w(TAG, "Couldn't keep what was found unreadable", it) }
             }
+        }
+        // A calibration from before 1.8.0, kept by a class's first timed piece: under its rule now
+        // (IMP-P2-016), not only from the next weekly review.
+        if (Calibrator.upgraded(runtime.value.calibration, log.value.completions) != null) {
+            scope.launch { runtime.update { state -> Calibrator.upgraded(state.calibration, log.value.completions)?.let { state.copy(calibration = it) } ?: state } }
         }
     }
 
@@ -529,7 +535,9 @@ class AppGraph private constructor(context: Context) {
         if (armed) return "Settings restored.$waits$told Protection is armed, so the log and what the app learned were left as they are."
         log.update { Backups.mergeLog(it, backup.log, clock.now()) }
         // Your answers on this phone win over the backup's.
-        runtime.update { it.copy(calibration = backup.calibration, eventAnswers = backup.eventAnswers + it.eventAnswers) }
+        // One from before 1.8.0 under its rule now, as at a start, from the log as merged.
+        val calibration = Calibrator.upgraded(backup.calibration, log.value.completions) ?: backup.calibration
+        runtime.update { it.copy(calibration = calibration, eventAnswers = backup.eventAnswers + it.eventAnswers) }
         // Read with the restored answers, and today's record made again, as an answer given here does.
         scope.launch {
             CalendarTime.refresh(app)

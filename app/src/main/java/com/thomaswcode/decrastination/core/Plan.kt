@@ -146,6 +146,14 @@ data class Calibration(
     val marginDays: Map<Kind, Int> = emptyMap(),
     /** Box length in minutes, per kind. */
     val boxMin: Map<Kind, Int> = emptyMap(),
+    /** How many timed pieces each multiplier's key has had (IMP-P2-016), a class's below the bar included: what Stats says it rests on. */
+    val timed: Map<String, Int> = emptyMap(),
+    /**
+     * Learned since 1.8.0, with [timed] kept and its rule for a class's own multiplier: false for one
+     * from before, made again under it ([com.thomaswcode.decrastination.learn.Calibrator.upgraded]).
+     * Kept, not read from an empty [timed]: a review from your answers alone has none either.
+     */
+    val counted: Boolean = false,
 ) {
     fun multiplier(kind: Kind, className: String?): Double =
         multipliers["${kind.name}|${className.orEmpty()}"] ?: multipliers["${kind.name}|"] ?: 1.0

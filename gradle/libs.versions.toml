@@ -14,6 +14,8 @@ work = "2.11.2"
 coroutines = "1.10.2"
 serialization = "1.9.0"
 zxing = "3.5.4"
+# The photo check's orientation: AndroidX's, as lint asks (the platform's has had security bugs).
+exifinterface = "1.4.2"
 anthropic = "2.71.0"
 # The SDK's own Jackson (2.19.4) matches published advisories (OSV, 10 Oct 2026); 2.21.7 matches
 # none, and the SDK takes any 2.x from 2.19 on.
@@ -23,6 +25,7 @@ junit = "4.13.2"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
+androidx-exifinterface = { group = "androidx.exifinterface", name = "exifinterface", version.ref = "exifinterface" }
 androidx-activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "activityCompose" }
 androidx-lifecycle-runtime-compose = { group = "androidx.lifecycle", name = "lifecycle-runtime-compose", version.ref = "lifecycle" }
 androidx-compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "composeBom" }

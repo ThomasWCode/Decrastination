@@ -94,14 +94,17 @@ class StatsTest {
     @Test
     fun `the calibration in words`() {
         val calibration = Calibration(
-            multipliers = mapOf("Homework|Physics" to 1.34, "Homework|" to 1.1),
+            multipliers = mapOf("Homework|Physics" to 1.34, "Homework|" to 1.1, "Revision|" to 0.9),
             marginDays = mapOf(Kind.Revision to 2),
             boxMin = mapOf(Kind.Homework to 45),
+            timed = mapOf("Homework|Physics" to 4, "Homework|" to 6, "Homework|German" to 2),
         )
         assertEquals(
             listOf(
-                "Homework: takes 1.1× the estimate",
-                "Homework, Physics: takes 1.3× the estimate",
+                "Homework: takes 1.1× the estimate (from 6 timed pieces)",
+                "Homework, Physics: takes 1.3× the estimate (from 4 timed pieces)",
+                "Revision: takes 0.9× the estimate (from your answers)",
+                "Homework, German: 2 timed pieces so far; its own figure counts from 3",
                 "Revision: finished 2 days before the deadline",
                 "Homework: cut into 45-minute pieces",
             ),

@@ -7,6 +7,7 @@ import com.thomaswcode.decrastination.core.Instruction
 import com.thomaswcode.decrastination.core.InstructionState
 import com.thomaswcode.decrastination.core.InstructionStatus
 import com.thomaswcode.decrastination.core.Instructions
+import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.learn.Calibrator
 import com.thomaswcode.decrastination.enrich.AiUsage
 import java.io.ByteArrayOutputStream
@@ -77,11 +78,23 @@ object Backups {
             if (calibration.multipliers.values.any { !it.isFinite() || it !in Calibrator.MIN_MULTIPLIER..Calibrator.MAX_MULTIPLIER }) add("what the app learned about estimates")
             if (calibration.marginDays.values.any { it !in SettingsLimits.MARGIN_DAYS }) add("what the app learned about margins")
             if (calibration.boxMin.values.any { it !in SettingsLimits.BOX_MIN }) add("what the app learned about box lengths")
+            if (!evidence(calibration)) add("what the app learned's evidence")
             if (backup.eventAnswers.values.any { !answer(it) }) add("a calendar answer")
             if (!backup.aiUsage.spentUsd.isFinite() || backup.aiUsage.spentUsd < 0 || backup.aiUsage.calls < 0) add("Claude's spending")
             if (backup.instructions.any { !wellFormed(it, backup.exportedAt) }) add("an instruction")
         }
         return bad.takeIf { it.isNotEmpty() }?.let { "it holds what this app never writes (${it.joinToString(", ")})" }
+    }
+
+    /**
+     * Whether [calibration]'s timed counts are ones the app could have kept: each for a kind it knows,
+     * at least one; and, kept since 1.8.0, a class's own multiplier only on its [Calibrator.MIN_CLASS_TIMED].
+     */
+    private fun evidence(calibration: Calibration): Boolean {
+        fun known(key: String) = '|' in key && Kind.entries.any { it.name == key.substringBefore('|') }
+        if (calibration.timed.any { (key, n) -> !known(key) || n < 1 }) return false
+        if (!calibration.counted) return true
+        return calibration.multipliers.keys.all { key -> key.substringAfter('|').isEmpty() || (calibration.timed[key] ?: 0) >= Calibrator.MIN_CLASS_TIMED }
     }
 
     private const val DAY_MIN = 24 * 60
