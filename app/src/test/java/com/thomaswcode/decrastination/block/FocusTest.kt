@@ -564,6 +564,17 @@ class FocusTest {
     }
 
     @Test
+    fun `a browser whose address can't be read is said till something covers it`() = runTest {
+        val chrome = setOf("com.android.chrome")
+        assertEquals(listOf("com.android.chrome"), focus.uncovered(chrome))
+        // Blocked outright (Settings' fix): covered at once, though still on the checked list (armed,
+        // its taking off waits as a loosening does).
+        settings.update { it.copy(blockedBrowsers = it.blockedBrowsers + "com.android.chrome") }
+        assertTrue(focus.isCheckedBrowser("com.android.chrome"))
+        assertTrue(focus.uncovered(chrome).isEmpty())
+    }
+
+    @Test
     fun `a session on the second of two steps of one name ticks that one`() = runTest {
         tasks.update { it.copy(tasks = listOf(task("t", steps = listOf(SubStep("Practice", 30), SubStep("Practice", 60))))) }
         focus.startSession("teams:t", "t: Practice", "Practice", 60, stepIndex = 1)

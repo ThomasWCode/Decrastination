@@ -112,6 +112,13 @@ class Focus(
 
     fun isCheckedBrowser(pkg: String): Boolean = pkg in settings.value.checkedBrowsers
 
+    /**
+     * Of [browsers] whose address bar can't be read, those that leaves uncovered: read for sites, and
+     * not covered outright. One blocked outright (Settings' fix) is covered at once, though its taking
+     * off the checked list waits while armed, as a loosening does.
+     */
+    fun uncovered(browsers: Set<String>): List<String> = browsers.filter { isCheckedBrowser(it) && target(it) == null }
+
     /** The blocked site a checked browser's address bar shows, if any. */
     fun siteTarget(browser: String, addressBar: String?): Target.Site? {
         val address = addressBar?.let(Blocklist::address) ?: return null

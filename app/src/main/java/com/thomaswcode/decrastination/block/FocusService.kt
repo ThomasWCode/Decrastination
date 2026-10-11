@@ -22,6 +22,7 @@ import com.thomaswcode.decrastination.R
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.protect.GuardRules
 import com.thomaswcode.decrastination.protect.Watchdog
+import kotlin.math.abs
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -81,6 +82,9 @@ class FocusService : AccessibilityService() {
 
     /** A blocked app allowed on earned time, and since when (elapsed realtime). */
     private var spending: Pair<Focus.Target, Long>? = null
+
+    /** When the countdown shown says free time runs out (the wall clock), or 0 for none shown. */
+    private var shownEndsAt = 0L
 
     private var lastUrlCheckAt = 0L
     private var urlCheckPending: String? = null
@@ -285,9 +289,21 @@ class FocusService : AccessibilityService() {
         handler.removeCallbacks(creditCheck)
         val left = graph.focus.creditLeftMs()
         handler.postDelayed(creditCheck, left.coerceIn(1_000L, SPEND_TICK_MS))
-        // Counted down where it can be seen, and a heads-up a minute before the end (IMP-P2-011).
-        val what = labelOf(target)
-        FreeTimeNotice.show(this, what, graph.clock.now() + left)
+        shownEndsAt = 0L
+        countdown(target, left)
+    }
+
+    /**
+     * Counted down where it can be seen, and a heads-up a minute before the end (IMP-P2-011), for free
+     * time running out in [left]. Shown again when that end moves by more than a moment (credit
+     * earned meanwhile, work a sync found done), so it reaches zero, and warns, when the app is
+     * really covered.
+     */
+    private fun countdown(target: Focus.Target, left: Long) {
+        val endsAt = graph.clock.now() + left
+        if (abs(endsAt - shownEndsAt) < COUNTDOWN_SLACK_MS) return
+        shownEndsAt = endsAt
+        FreeTimeNotice.show(this, labelOf(target), endsAt)
         handler.removeCallbacks(warnEnding)
         if (left > FreeTimeNotice.WARN_MS) handler.postDelayed(warnEnding, left - FreeTimeNotice.WARN_MS)
     }
@@ -298,12 +314,18 @@ class FocusService : AccessibilityService() {
         spending = null
         handler.removeCallbacks(creditCheck)
         handler.removeCallbacks(warnEnding)
+        shownEndsAt = 0L
         if (was) FreeTimeNotice.cancel(this)
     }
 
-    /** A minute of free time left, while it's still being spent: said once. */
+    /** A minute of free time left, while it's still being spent: said once. More earned since, it's set again for the new end instead. */
     private val warnEnding: Runnable = Runnable {
-        val (target, _) = spending ?: return@Runnable
+        val (target, since) = spending ?: return@Runnable
+        val left = graph.focus.creditLeftMs() - (SystemClock.elapsedRealtime() - since)
+        if (left > FreeTimeNotice.WARN_MS + COUNTDOWN_SLACK_MS) {
+            shownEndsAt = 0L
+            return@Runnable countdown(target, left)
+        }
         FreeTimeNotice.warn(this, labelOf(target))
     }
 
@@ -350,6 +372,7 @@ class FocusService : AccessibilityService() {
             // check's worth is lost, not all of it since spending began.
             commitSpending()
             handler.postDelayed(creditCheck, left.coerceIn(1_000L, SPEND_TICK_MS))
+            countdown(target, left)
         } else {
             // Spent first, so the policy now says blocked: each is covered where it is (in front,
             // in the corner, beside another app).
@@ -774,6 +797,9 @@ class FocusService : AccessibilityService() {
         private const val PIP_RELAUNCH_GAP_MS = 2_000L
         private const val URL_CHECK_MS = 400L
         private const val SPEND_TICK_MS = 30_000L
+
+        /** How far the end of free time can move before its countdown is shown again: clocks' drift, not credit. */
+        private const val COUNTDOWN_SLACK_MS = 2_000L
         private const val GUARD_INTERVAL_MS = 250L
         private const val BACK_COOLDOWN_MS = 1_000L
         private const val MAX_EMPTY_LOOKS = 4

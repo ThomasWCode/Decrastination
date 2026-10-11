@@ -21,7 +21,7 @@ class StoresTest {
     }
 
     @Test
-    fun `an unreadable file is set aside and the state starts afresh`() {
+    fun `an unreadable file is set aside and the state starts afresh`() = runTest {
         val file = File(dir, "tasks.json").apply { writeText("{not json") }
         val store = JsonStore(file, TaskState.serializer(), ::TaskState, clock = { AT })
         assertEquals(TaskState(), store.value)
@@ -29,15 +29,18 @@ class StoresTest {
         assertEquals("tasks.json.unreadable-20261011-083000", problem.copy)
         assertEquals("{not json", File(dir, problem.copy!!).readText())
         assertFalse(problem.kept)
-        // What it started from is the file now: the next start reads it, with nothing to say.
-        assertNull(JsonStore(file, TaskState.serializer(), ::TaskState, clock = { AT + 1000 }).problem)
+        // Not replaced till it's on record: a start cut short before then finds it again, with the same copy.
+        assertEquals(problem.copy, JsonStore(file, TaskState.serializer(), ::TaskState, clock = { AT + 1000 }).problem?.copy)
+        // On record: what it started from is the file now, and the next start reads it, with nothing to say.
+        store.keepRecovered()
+        assertNull(JsonStore(file, TaskState.serializer(), ::TaskState, clock = { AT + 2000 }).problem)
         assertEquals(1, dir.listFiles { f -> f.name.startsWith("tasks.json.unreadable-") }!!.size)
         // A file that reads is no problem.
         assertNull(JsonStore(File(dir, "other.json").apply { writeText("{}") }, TaskState.serializer(), ::TaskState).problem)
     }
 
     @Test
-    fun `of a file that doesn't read whole, each field that reads on its own is kept`() {
+    fun `of a file that doesn't read whole, each field that reads on its own is kept`() = runTest {
         // An app update that can no longer read one field (here, a list that isn't one) loses only it:
         // protection stays armed, the textbook stays 3.
         val file = File(dir, "settings.json").apply { writeText("""{"armed": true, "ankiTextbook": 3, "blockedApps": "not a list"}""") }
@@ -46,7 +49,8 @@ class StoresTest {
         assertEquals(3, store.value.ankiTextbook)
         assertEquals(Settings().blockedApps, store.value.blockedApps)
         assertTrue(store.problem!!.kept)
-        // Kept, and written back: still armed at the next start, and nothing more to say.
+        // Kept, and written back once on record: still armed at the next start, and nothing more to say.
+        store.keepRecovered()
         val again = JsonStore(file, Settings.serializer(), ::Settings, clock = { AT + 1000 })
         assertTrue(again.value.armed)
         assertNull(again.problem)
@@ -71,6 +75,16 @@ class StoresTest {
         val copies = dir.listFiles { f -> f.name.startsWith("log.json.unreadable-") }.orEmpty().map { it.name }.sorted()
         assertEquals(JsonStore.COPIES_KEPT, copies.size)
         assertEquals("bad 4", File(dir, copies.last()).readText())
+    }
+
+    @Test
+    fun `a copy just made is kept, whatever the clock said of the others`() {
+        val file = File(dir, "log.json").apply { writeText("bad now") }
+        // Three from a clock that was ahead: by name, each newer than this one.
+        listOf("20270101-000000", "20270102-000000", "20270103-000000").forEach { File(dir, "log.json.unreadable-$it").writeText("bad then") }
+        val store = JsonStore(file, ActivityLog.serializer(), ::ActivityLog, clock = { AT })
+        assertEquals("bad now", File(dir, store.problem!!.copy!!).readText())
+        assertEquals(JsonStore.COPIES_KEPT, dir.listFiles { f -> f.name.startsWith("log.json.unreadable-") }!!.size)
     }
 
     @Test
