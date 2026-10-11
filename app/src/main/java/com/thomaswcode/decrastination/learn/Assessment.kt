@@ -73,7 +73,7 @@ object Assessment {
             .filterNot { t -> answered.any { it.taskId == t.id && it.doneAt == t.doneAt } }
             .map { AssessLater(it.id, it.title, it.doneAt) }
         if (asks.isEmpty()) return
-        if (!Notify.shown(context, Channels.DAILY)) {
+        if (!Notify.shown(context, Channels.HOW_IT_WENT)) {
             AppGraph.get(context).runtime.update { it.copy(assessLater = (it.assessLater + asks).distinctBy { a -> a.taskId to a.doneAt }.takeLast(MAX_LATER)) }
             return
         }
@@ -84,7 +84,7 @@ object Assessment {
     suspend fun askLater(context: Context) {
         val graph = AppGraph.get(context)
         val waiting = graph.runtime.value.assessLater
-        if (waiting.isEmpty() || !Notify.shown(context, Channels.DAILY)) return
+        if (waiting.isEmpty() || !Notify.shown(context, Channels.HOW_IT_WENT)) return
         waiting.forEach { post(context, it) }
         graph.runtime.update { it.copy(assessLater = it.assessLater - waiting.toSet()) }
     }
@@ -92,7 +92,7 @@ object Assessment {
     private const val MAX_LATER = 20
 
     private fun post(context: Context, ask: AssessLater) {
-        val builder = NotificationCompat.Builder(context, Channels.DAILY)
+        val builder = NotificationCompat.Builder(context, Channels.HOW_IT_WENT)
             .setSmallIcon(R.drawable.ic_focus)
             .setContentTitle("Done: ${ask.title}")
             .setContentText("How was it?")
