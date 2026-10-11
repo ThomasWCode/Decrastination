@@ -72,9 +72,11 @@ class JsonStore<T>(
         problem = Unreadable(file.name, aside?.name, kept = salvaged != null, at = clock())
         val state = salvaged ?: unreadable()
         // What was kept replaces it, once it's safe beside it: read again at the next start, it would
-        // be found unreadable again, and said again, however often you'd seen it. Not if the copy
-        // failed: then the bad file is all there is of it.
-        if (aside != null) runCatching { write(state) }
+        // be found unreadable again, and said again, however often you'd seen it. Only where it was
+        // read and couldn't be decoded, which would happen again: not where reading it failed (that
+        // can pass, and the file is then still good), nor where the copy failed (then the bad file is
+        // all there is of it).
+        if (text != null && aside != null) runCatching { write(state) }
         return onLoad(state)
     }
 
@@ -147,6 +149,14 @@ class JsonStore<T>(
 
         /** Copies set aside of each file: the newest so many. */
         const val COPIES_KEPT = 3
+
+        /** A copy set aside of [file] that holds just what it holds now, if there's one: it's been kept, and said, already. */
+        fun alreadyAside(file: File): File? {
+            val dir = file.absoluteFile.parentFile ?: return null
+            val bytes = runCatching { file.readBytes() }.getOrNull() ?: return null
+            return dir.listFiles { f -> f.name.startsWith("${file.name}.unreadable-") }.orEmpty()
+                .firstOrNull { copy -> runCatching { copy.readBytes().contentEquals(bytes) }.getOrDefault(false) }
+        }
 
         /**
          * [file] copied to `<name>.unreadable-<when>` beside it, keeping the newest [COPIES_KEPT] of
