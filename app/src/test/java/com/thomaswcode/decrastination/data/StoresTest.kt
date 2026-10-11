@@ -105,15 +105,47 @@ class StoresTest {
             override fun encrypt(plain: ByteArray) = plain
             override fun decrypt(sealed: ByteArray): ByteArray = throw javax.crypto.AEADBadTagException()
         }
-        val store = SecretStore(file, broken) { AT }
+        val store = SecretStore(file, broken, { AT }, retryWaitMs = 0)
         assertTrue(store.present.value.isEmpty())
-        // Told apart from none saved, and set aside before a save can overwrite it.
+        // Told apart from none saved, and a copy set aside before a save can overwrite it.
         assertEquals("secrets.bin.unreadable-20261011-083000", store.problem!!.copy)
         assertTrue(File(dir, "secrets.bin.unreadable-20261011-083000").readBytes().contentEquals(byteArrayOf(1, 2, 3)))
-        // Moved aside, not left to be found again at the next start.
-        assertFalse(file.exists())
-        assertNull(SecretStore(file, broken) { AT + 1000 }.problem)
+        // Left where it is, for a keystore that comes back; said once, not again at the next start.
+        assertTrue(file.exists())
+        assertNull(SecretStore(file, broken, { AT + 1000 }, retryWaitMs = 0).problem)
+        assertEquals(1, dir.listFiles { f -> f.name.startsWith("secrets.bin.unreadable-") }!!.size)
         assertNull(SecretStore(File(dir, "none.bin"), broken).problem)
+    }
+
+    @Test
+    fun `a keystore that fails for a moment loses nothing`() = runTest {
+        val file = File(dir, "secrets.bin")
+        SecretStore(file, Reverse).put(Secret.GmailAppPassword, "abcd efgh")
+        // Fails once, then works: read on the second try, nothing set aside, nothing said.
+        var calls = 0
+        val flaky = object : SecretCipher {
+            override fun encrypt(plain: ByteArray) = Reverse.encrypt(plain)
+            override fun decrypt(sealed: ByteArray): ByteArray = if (calls++ == 0) throw java.security.KeyStoreException("busy") else Reverse.decrypt(sealed)
+        }
+        val store = SecretStore(file, flaky, retryWaitMs = 0)
+        assertEquals("abcd efgh", store[Secret.GmailAppPassword])
+        assertNull(store.problem)
+        // Failing at every try that start, then back: the file was left, so the next start reads it all.
+        val down = object : SecretCipher {
+            override fun encrypt(plain: ByteArray) = Reverse.encrypt(plain)
+            override fun decrypt(sealed: ByteArray): ByteArray = throw java.security.KeyStoreException("down")
+        }
+        assertTrue(SecretStore(file, down, retryWaitMs = 0).present.value.isEmpty())
+        assertEquals("abcd efgh", SecretStore(file, Reverse)[Secret.GmailAppPassword])
+    }
+
+    @Test
+    fun `a file that can't be read at all, rather than decoded, isn't written over`() {
+        // A directory where the file should be: reading it fails, as an I/O error would.
+        val file = File(dir, "runtime.json").apply { mkdirs() }
+        val store = JsonStore(file, Settings.serializer(), ::Settings, clock = { AT })
+        assertEquals(Settings(), store.value)
+        assertTrue(file.isDirectory)
     }
 
     private companion object {
