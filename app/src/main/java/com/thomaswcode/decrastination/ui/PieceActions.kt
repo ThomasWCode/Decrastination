@@ -109,6 +109,9 @@ fun PieceActions(graph: AppGraph, activity: Activity, piece: Chunk, now: Long, p
     val runtime by graph.runtime.state.collectAsStateWithLifecycle()
     val session = runtime.session
     val scope = rememberCoroutineScope()
+    // Tapped: off till the session it starts is shown (a second tap would end it and start another).
+    var starting by remember { mutableStateOf(false) }
+    LaunchedEffect(session) { starting = false }
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Button(onClick = {
             tasks.tasks.firstOrNull { it.id == piece.taskId }?.let { task ->
@@ -117,8 +120,12 @@ fun PieceActions(graph: AppGraph, activity: Activity, piece: Chunk, now: Long, p
         }) { Text("Open") }
         if (session == null) {
             // Not before it's available (an Anki deck's next cards at 04:00).
-            FilledTonalButton(enabled = piece.startable(now) && !photo.checking, onClick = {
-                scope.launch { Sessions.start(activity, piece.taskId, piece.label, piece.step, piece.minutes, piece.box, piece.stepIndex) }
+            FilledTonalButton(enabled = piece.startable(now) && !photo.checking && !starting, onClick = {
+                starting = true
+                scope.launch {
+                    runCatching { Sessions.start(activity, piece.taskId, piece.label, piece.step, piece.minutes, piece.box, piece.stepIndex) }
+                        .onFailure { starting = false }.getOrThrow()
+                }
             }) { Text("Start ${Format.minutes(minOf(piece.minutes, Focus.MAX_SESSION_MIN))}") }
         } else {
             OutlinedButton(onClick = { scope.launch { Sessions.end(activity, early = true) } }) { Text("Stop session") }

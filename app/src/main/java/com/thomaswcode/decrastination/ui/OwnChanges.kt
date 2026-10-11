@@ -10,6 +10,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberCoroutineScope
@@ -17,6 +18,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.core.About
 import com.thomaswcode.decrastination.core.Change
@@ -31,7 +33,9 @@ import java.time.ZoneId
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 /** A change you can make to a task yourself, with no Claude (IMP-P2-001). */
 enum class OwnChange(val label: String) {
@@ -50,15 +54,29 @@ enum class OwnChange(val label: String) {
 fun OwnChangeDialog(graph: AppGraph, task: TaskItem, what: OwnChange, onClose: () -> Unit) {
     val zone = graph.clock.zone()
     val scope = rememberCoroutineScope()
-    // Made, and waiting for a parent code, by its id: kept through the screen being made again.
+    // The change, by the id it's saved under, given before it's saved: a screen made again meanwhile
+    // (turned) finds it, applied (and closes) or waiting for a parent code (and asks for it).
+    var made by rememberSaveable { mutableStateOf<String?>(null) }
     var waiting by rememberSaveable { mutableStateOf<String?>(null) }
     val about = About(taskId = task.id, taskTitle = task.title)
+    val instructions by graph.instructions.state.collectAsStateWithLifecycle()
+    // Armed, a due date waits for your dad's code, as an instruction's does.
+    val needsCode = what == OwnChange.DueOn && graph.settings.value.armed
 
     fun make(change: Change, text: String) {
+        // Once: a second tap before the first is through makes nothing more.
+        if (made != null) return
+        val id = java.util.UUID.randomUUID().toString()
+        made = id
+        if (needsCode) waiting = id
         scope.launch {
-            val (id, applied) = graph.addOwnChange(text, about, change)
-            if (applied) onClose() else waiting = id
+            if (graph.addOwnChange(id, text, about, change)) onClose() else waiting = id
         }
+    }
+
+    if (made != null && waiting == null && instructions.instructions.any { it.id == made && it.state == InstructionStatus.Applied }) {
+        LaunchedEffect(made) { onClose() }
+        return
     }
 
     waiting?.let { id ->
@@ -67,8 +85,10 @@ fun OwnChangeDialog(graph: AppGraph, task: TaskItem, what: OwnChange, onClose: (
         ParentCodeDialog(
             what = "It applies: $lines.",
             onClose = {
-                // Not applied (cancelled): not kept either, so nothing waits unseen in Instructions.
+                // Not applied (cancelled): not kept either, so nothing waits unseen in Instructions. Once
+                // it's saved, if it's still being saved (cancelled at once).
                 scope.launch {
+                    withTimeoutOrNull(SAVING_MS) { graph.instructions.state.first { s -> s.instructions.any { it.id == id } } }
                     if (graph.instructions.value.instructions.firstOrNull { it.id == id }?.state == InstructionStatus.Understood) graph.deleteInstruction(id)
                     onClose()
                 }
@@ -82,7 +102,7 @@ fun OwnChangeDialog(graph: AppGraph, task: TaskItem, what: OwnChange, onClose: (
             onDismissRequest = onClose,
             title = { Text("Not a task?") },
             text = { Text("“${task.title}” comes off the plan and the list, as an email that's only to read does. It's listed under Not tasks, and taken back in Instructions.") },
-            confirmButton = { TextButton(onClick = { make(Change(ChangeType.NotATask, taskId = task.id), "Not a task (set in Tasks)") }) { Text("Not a task") } },
+            confirmButton = { TextButton(enabled = made == null, onClick = { make(Change(ChangeType.NotATask, taskId = task.id), "Not a task (set in Tasks)") }) { Text("Not a task") } },
             dismissButton = { TextButton(onClick = onClose) { Text("Cancel") } },
         )
         OwnChange.StartFrom, OwnChange.DueOn -> {
@@ -100,11 +120,11 @@ fun OwnChangeDialog(graph: AppGraph, task: TaskItem, what: OwnChange, onClose: (
             DatePickerDialog(
                 onDismissRequest = onClose,
                 confirmButton = {
-                    TextButton(enabled = state.selectedDateMillis != null, onClick = {
+                    TextButton(enabled = state.selectedDateMillis != null && made == null, onClick = {
                         val day = Instant.ofEpochMilli(state.selectedDateMillis!!).atZone(ZoneOffset.UTC).toLocalDate()
                         val (change, text) = ownChange(task, what, day, zone)
                         make(change, text)
-                    }) { Text(if (what == OwnChange.DueOn && graph.settings.value.armed) "Next: parent code" else "Apply") }
+                    }) { Text(if (needsCode) "Next: parent code" else "Apply") }
                 },
                 dismissButton = { TextButton(onClick = onClose) { Text("Cancel") } },
             ) {
@@ -123,6 +143,9 @@ fun OwnChangeDialog(graph: AppGraph, task: TaskItem, what: OwnChange, onClose: (
         }
     }
 }
+
+/** How long a cancelled change waits to be saved before it's taken back: a moment, at most. */
+private const val SAVING_MS = 2_000L
 
 private val DAY = DateTimeFormatter.ofPattern("EEE d MMM", Locale.UK)
 private val DAY_TIME = DateTimeFormatter.ofPattern("EEE d MMM HH:mm", Locale.UK)

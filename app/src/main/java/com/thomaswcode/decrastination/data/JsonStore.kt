@@ -46,6 +46,12 @@ class JsonStore<T>(
     var problem: Unreadable? = null
         private set
 
+    /**
+     * What was kept of a file that didn't read whole is still to replace it ([keepRecovered]). Before
+     * the state below, as loading it sets this.
+     */
+    private var unsaved = false
+
     private val _state = MutableStateFlow(load())
     val state: StateFlow<T> = _state.asStateFlow()
 
@@ -57,8 +63,21 @@ class JsonStore<T>(
         if (next != _state.value) {
             withContext(Dispatchers.IO) { write(next) }
             _state.value = next
+            unsaved = false
         }
         next
+    }
+
+    /**
+     * Writes what was kept of a file that didn't read whole over it, now that its [problem] is on
+     * record: read again at the next start, it would be found unreadable again, and said again,
+     * however often you'd seen it. Till then it's left as it was, so a start cut short first finds
+     * it, and says it, again.
+     */
+    suspend fun keepRecovered() {
+        mutex.withLock {
+            if (unsaved && withContext(Dispatchers.IO) { runCatching { write(_state.value) } }.isSuccess) unsaved = false
+        }
     }
 
     private fun load(): T {
@@ -66,18 +85,17 @@ class JsonStore<T>(
         val text = runCatching { file.readText() }.getOrNull()
         val loaded = text?.let { runCatching { json.decodeFromString(serializer, it) }.getOrNull() }
         if (loaded != null) return onLoad(loaded)
-        // Set aside under its own name, so a second time can't overwrite the first.
-        val aside = setAside(file, clock())
+        // Set aside under its own name, so a second time can't overwrite the first; not again where
+        // it's there already as it is (a start cut short before it was said).
+        val aside = alreadyAside(file) ?: setAside(file, clock())
         val salvaged = text?.let(::salvage)
         problem = Unreadable(file.name, aside?.name, kept = salvaged != null, at = clock())
-        val state = salvaged ?: unreadable()
-        // What was kept replaces it, once it's safe beside it: read again at the next start, it would
-        // be found unreadable again, and said again, however often you'd seen it. Only where it was
-        // read and couldn't be decoded, which would happen again: not where reading it failed (that
-        // can pass, and the file is then still good), nor where the copy failed (then the bad file is
-        // all there is of it).
-        if (text != null && aside != null) runCatching { write(state) }
-        return onLoad(state)
+        // What was kept replaces it once it's safe beside it, and said ([keepRecovered]). Only where it
+        // was read and couldn't be decoded, which would happen again: not where reading it failed
+        // (that can pass, and the file is then still good), nor where the copy failed (then the bad
+        // file is all there is of it).
+        unsaved = text != null && aside != null
+        return onLoad(salvaged ?: unreadable())
     }
 
     /**
@@ -169,8 +187,10 @@ class JsonStore<T>(
             var n = 1
             while (copy.exists()) copy = File(dir, "${file.name}.unreadable-$stamp-${n++}")
             if (runCatching { file.copyTo(copy) }.isFailure) return null
-            dir.listFiles { f -> f.name.startsWith("${file.name}.unreadable-") }.orEmpty()
-                .sortedByDescending { it.name }.drop(COPIES_KEPT).forEach { it.delete() }
+            // This one always kept, and the newest of the others: by name, which a clock set back
+            // would put this one behind.
+            dir.listFiles { f -> f.name.startsWith("${file.name}.unreadable-") && f.name != copy.name }.orEmpty()
+                .sortedByDescending { it.name }.drop(COPIES_KEPT - 1).forEach { it.delete() }
             return copy
         }
 
