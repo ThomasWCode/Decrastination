@@ -289,6 +289,7 @@ class ProtectionActivity : ComponentActivity() {
                     // What isn't in place yet (IMP-P1-006): it arms all the same, but you know what you're arming.
                     val missing = buildList {
                         if (!report.serviceEnabled || !report.accessibilityOn) add("The focus service is off: nothing is blocked till it's on")
+                        else if (!report.serviceRunning) add("The focus service is on but has stopped: nothing is blocked till it runs again")
                         if (!report.canRepair) add("Self-repair isn't granted: the service switched off would stay off")
                         if (!Notify.shown(this@ProtectionActivity, Channels.PROTECTION)) add("Protection alerts are off: you wouldn't be told if it stopped")
                         if (getSystemService(PowerManager::class.java)?.isIgnoringBatteryOptimizations(packageName) != true) add("Battery isn't unrestricted: One UI may stop the app")
