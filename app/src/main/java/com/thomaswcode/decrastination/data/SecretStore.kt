@@ -47,10 +47,16 @@ interface SecretCipher {
  * The secrets, encrypted as one file under a key that never leaves the Android Keystore. It
  * replaces EncryptedSharedPreferences (planned, now deprecated) with the same idea and no
  * dependency. A file that can't be decrypted (the key lost with a reinstall) reads as empty, and
- * the setup checklist shows which credentials need entering again.
+ * the setup checklist shows which credentials need entering again; it's set aside first, so the
+ * next save can't overwrite it, and [problem] says so (IMP-P1-003): told apart from none saved.
  */
-class SecretStore(private val file: File, private val cipher: SecretCipher) {
+class SecretStore(private val file: File, private val cipher: SecretCipher, private val clock: () -> Long = System::currentTimeMillis) {
     private val mutex = Mutex()
+
+    /** Why the secrets couldn't be read at start, and where they were set aside; null if they could. */
+    var problem: JsonStore.Unreadable? = null
+        private set
+
     private val _values = MutableStateFlow(load())
 
     /** Which secrets are set, for the setup checklist. Never the values. */
@@ -83,7 +89,10 @@ class SecretStore(private val file: File, private val cipher: SecretCipher) {
             JsonStore.json.decodeFromString(serializer, plain)
                 .mapNotNull { (key, value) -> Secret.entries.firstOrNull { it.name == key }?.let { it to value } }
                 .toMap()
-        }.getOrDefault(emptyMap())
+        }.getOrElse {
+            problem = JsonStore.Unreadable(file.name, JsonStore.setAside(file, clock())?.name, kept = false, at = clock())
+            emptyMap()
+        }
     }
 
     private fun write(values: Map<Secret, String>) {

@@ -131,6 +131,19 @@ fun SetupScreen(graph: AppGraph, activity: Activity) {
     }
 
     Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
+        // A saved file that couldn't be read whole at a start (IMP-P1-003), till you've seen it.
+        if (runtime.unreadable.isNotEmpty()) {
+            Group("Saved data") {
+                runtime.unreadable.forEach { found ->
+                    SetupItem(
+                        title = "Found unreadable " + Format.at(found.at, graph.clock.now(), graph.clock.zone()),
+                        done = false,
+                        detail = found.says,
+                        action = "Got it" to { scope.launch { graph.forgetUnreadable(found) } },
+                    )
+                }
+            }
+        }
         Group("Sources") {
             SetupItem(
                 title = "Teams Assignments widget",

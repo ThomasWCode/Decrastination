@@ -97,13 +97,27 @@ class AppGraph private constructor(context: Context) {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default + CoroutineExceptionHandler { _, error -> Log.e(TAG, "Background work failed", error) })
 
     val tasks = JsonStore(File(app.filesDir, "tasks.json"), TaskState.serializer(), ::TaskState)
-    val settings = JsonStore(File(app.filesDir, "settings.json"), Settings.serializer(), ::Settings)
+    // A file that can't be read at all starts armed while the device admin is on, as only arming
+    // turns it on: a bad file never disarms protection (IMP-P1-003).
+    val settings = JsonStore(File(app.filesDir, "settings.json"), Settings.serializer(), ::Settings, unreadable = { Settings(armed = Watchdog.isAdminActive(app)) })
     val secrets = SecretStore(File(app.filesDir, "secrets.bin"), KeystoreCipher())
     val runtime = JsonStore(File(app.filesDir, "runtime.json"), RuntimeState.serializer(), ::RuntimeState)
     val log = JsonStore(File(app.filesDir, "log.json"), ActivityLog.serializer(), ::ActivityLog)
 
     /** Your instructions about tasks, events and days, and what Claude read them as ([Instructions]). */
     val instructions = JsonStore(File(app.filesDir, "instructions.json"), InstructionState.serializer(), ::InstructionState)
+
+    init {
+        // Files that couldn't be read whole at this start: kept for Setup to say, till you've seen them.
+        val found = listOfNotNull(tasks.problem, settings.problem, secrets.problem, runtime.problem, log.problem, instructions.problem)
+        if (found.isNotEmpty()) {
+            found.forEach { Log.w(TAG, "${it.file} couldn't be read whole; set aside as ${it.copy}") }
+            scope.launch { runtime.update { it.copy(unreadable = (it.unreadable + found).takeLast(MAX_UNREADABLE)) } }
+        }
+    }
+
+    /** Takes [seen] off Setup's list of files found unreadable. */
+    suspend fun forgetUnreadable(seen: JsonStore.Unreadable) = runtime.update { it.copy(unreadable = it.unreadable - seen) }
 
     val syncer = Syncer(
         tasks = tasks,
@@ -934,6 +948,9 @@ class AppGraph private constructor(context: Context) {
         private const val CALENDAR_QUIET_MS = 5_000L
 
         /** After a failed call, the model is left alone this long. */
+
+        /** Unreadable files Setup lists at most: the latest. */
+        private const val MAX_UNREADABLE = 10
 
         /** The most model calls one enrichment run makes: the rest wait for the next. */
         const val MAX_MODEL_CALLS = 20

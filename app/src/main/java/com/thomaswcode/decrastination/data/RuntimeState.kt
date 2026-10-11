@@ -58,6 +58,8 @@ data class RuntimeState(
     val assessLater: List<AssessLater> = emptyList(),
     /** Completions whose free time has been given, so each is given once (`Focus.onCompleted`); kept a fortnight. */
     val rewarded: List<Rewarded> = emptyList(),
+    /** Saved files found unreadable at a start (IMP-P1-003), till you've seen them in Setup. */
+    val unreadable: List<JsonStore.Unreadable> = emptyList(),
 )
 
 /** The watchdog's last finding. */
