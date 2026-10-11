@@ -51,13 +51,16 @@ class CalibratorTest {
         val one = listOf(done("a", worked = 64))
         val old = Calibration(multipliers = mapOf("Homework|" to 1.18, "Homework|12.1 Physics" to 1.18), marginDays = mapOf(Kind.Homework to 2))
         val now = Calibrator.upgraded(old, one)!!
+        assertTrue(now.counted)
         assertNull(now.multipliers["Homework|12.1 Physics"])
         assertEquals(1.18, now.multipliers.getValue("Homework|"), 1e-9)
         assertEquals(1, now.timed["Homework|12.1 Physics"])
         assertEquals(mapOf(Kind.Homework to 2), now.marginDays)
-        // One made since: left as it is.
+        // One made since: left as it is, even from your answers alone, with no timed pieces to count.
         assertNull(Calibrator.upgraded(now, one))
+        assertNull(Calibrator.upgraded(Calibration(multipliers = mapOf("Homework|" to 1.1), counted = true), one))
         assertNull(Calibrator.upgraded(Calibration(), one))
+        assertTrue(Calibrator.learn(ActivityLog(), Calibration(), 25, week = 0).calibration.counted)
     }
 
     @Test

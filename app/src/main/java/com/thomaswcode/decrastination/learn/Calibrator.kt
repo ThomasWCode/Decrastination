@@ -53,7 +53,7 @@ object Calibrator {
         val multipliers = multipliers(log.completions)
         val margins = margins(log.completions, defaultMargin)
         val boxes = boxes(log, defaultBox, week)
-        val next = Calibration(multipliers = multipliers, marginDays = margins, boxMin = boxes, timed = timed(log.completions))
+        val next = Calibration(multipliers = multipliers, marginDays = margins, boxMin = boxes, timed = timed(log.completions), counted = true)
         return Learned(next, describe(previous, next, defaultMargin, defaultBox))
     }
 
@@ -72,11 +72,11 @@ object Calibrator {
      * A calibration from before 1.8.0, which counted no timed pieces: its multipliers made again from
      * [completions] as the next review would make them, so a class's own needs its [MIN_CLASS_TIMED]
      * timed pieces from now, and Stats can say what each rests on. Its margins and boxes stand. Null
-     * for one that isn't.
+     * for one that isn't ([Calibration.counted]), or has no multipliers to make again.
      */
     fun upgraded(calibration: Calibration, completions: List<CompletionRecord>): Calibration? {
-        if (calibration.timed.isNotEmpty() || calibration.multipliers.isEmpty()) return null
-        return calibration.copy(multipliers = multipliers(completions), timed = timed(completions)).takeIf { it != calibration }
+        if (calibration.counted || calibration.multipliers.isEmpty()) return null
+        return calibration.copy(multipliers = multipliers(completions), timed = timed(completions), counted = true)
     }
 
     /** Whether [record]'s minutes are how long it took: timed, and all of it (no blocks ticked by hand, no photo check). */
