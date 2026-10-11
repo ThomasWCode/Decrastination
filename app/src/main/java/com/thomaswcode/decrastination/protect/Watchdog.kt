@@ -36,6 +36,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /**
  * Layer 5 of the anti-tamper (docs/scheduler.md §6): checks that the focus service is on, on no
@@ -155,7 +157,16 @@ object Watchdog {
      * Checks, repairs if armed (and [repair] and able), restarts a stopped service (if [repair]
      * and able), records the finding, and says so in a notification while anything is wrong.
      */
-    suspend fun check(context: Context, repair: Boolean) {
+    suspend fun check(context: Context, repair: Boolean) = checking.withLock { checkNow(context, repair) }
+
+    /**
+     * One at a time: each reads what's so as it starts and saves what it found, so the last to run
+     * says what's so now (a browser's address read again just after it wasn't), and none saves over
+     * another's restart count.
+     */
+    private val checking = Mutex()
+
+    private suspend fun checkNow(context: Context, repair: Boolean) {
         val graph = AppGraph.get(context)
         val armed = graph.settings.value.armed
         var report = report(context)

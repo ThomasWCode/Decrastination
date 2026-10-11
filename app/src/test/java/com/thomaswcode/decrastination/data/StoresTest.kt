@@ -124,10 +124,17 @@ class StoresTest {
         // Told apart from none saved, and a copy set aside before a save can overwrite it.
         assertEquals("secrets.bin.unreadable-20261011-083000", store.problem!!.copy)
         assertTrue(File(dir, "secrets.bin.unreadable-20261011-083000").readBytes().contentEquals(byteArrayOf(1, 2, 3)))
-        // Left where it is, for a keystore that comes back; said once, not again at the next start.
+        // Left where it is, for a keystore that comes back; found again at the next start, with the
+        // same copy, not another.
         assertTrue(file.exists())
-        assertNull(SecretStore(file, broken, { AT + 1000 }, retryWaitMs = 0).problem)
+        val again = SecretStore(file, broken, { AT + 1000 }, retryWaitMs = 0).problem!!
+        assertEquals(store.problem!!.copy, again.copy)
         assertEquals(1, dir.listFiles { f -> f.name.startsWith("secrets.bin.unreadable-") }!!.size)
+        // Said till it's on record, once, and not after you've seen it.
+        val listed = RuntimeState().withUnreadable(listOf(store.problem!!)).withUnreadable(listOf(again))
+        assertEquals(1, listed.unreadable.size)
+        val seen = listed.seenUnreadable(listed.unreadable.single())
+        assertTrue(seen.withUnreadable(listOf(again)).unreadable.isEmpty())
         assertNull(SecretStore(File(dir, "none.bin"), broken).problem)
     }
 
