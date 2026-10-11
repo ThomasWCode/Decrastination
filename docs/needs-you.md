@@ -173,7 +173,7 @@ Still waiting for you:
 - **The weekly review's changes apply at once**, armed or not (your call): box length, safety margin, undated minutes a day and work minutes per free minute, each within its bounds. The review says what changed. A change of yours waiting for one of those settings is replaced by the review's; every other waiting change keeps its 24 hours.
 - **Learning, settings, notifications, photos** (#27):
   - **Learned estimates rest on evidence** (your call): a class's own multiplier counts once it has three timed pieces; until then its kind's figure stands, so one long evening can't set it. Stats says what each figure rests on ("from 4 timed pieces", "from your answers", "2 timed pieces so far").
-  - **Four notification channels** where one carried four things (your call): *Morning briefing*, *How it went*, *Calendar questions*, *Weekly check-in and review*. Each starts as the old one was set, so a silenced one stays silenced; the old one goes once nothing's left on it, so a question still showing isn't lost.
+  - **Four notification channels** where one carried four things (your call): *Morning briefing*, *How it went*, *Calendar questions*, *Weekly check-in and review*. Each starts as the old one was set (importance, sound, vibration, light), so a silenced one stays silenced; the old one goes once nothing's left on it, so a question still showing isn't lost.
   - **Settings: blocked apps first, then a search box** (your call) over the rest of the installed apps.
   - **Photo checks the right way up**: a portrait page stored as landscape with a note to turn it (EXIF) is turned before it's sent.
   - **The Gradle wrapper checks the distribution's SHA-256** when it downloads it.
