@@ -782,6 +782,24 @@ class PlannerTest {
     }
 
     @Test
+    fun `a deck another assignment keeps on the plan isn't counted again in a waiting one's gap`() {
+        // The deck is for both: the open one keeps it on the plan, so the waiting one's gap is the rest.
+        val steps = listOf(SubStep("Learn vocabulary 1.2", 40, ankiSections = listOf("1.2")), SubStep("Write it up", 30))
+        val first = task("first", Fixtures.at("2026-10-12T09:00"))
+        val vocab = task("vocab", Fixtures.at("2026-10-13T09:00"), steps = steps).copy(userAfter = "teams:first")
+        val other = task("other", Fixtures.at("2026-10-14T09:00"), steps = listOf(SubStep("Learn vocabulary 1.2", 40, ankiSections = listOf("1.2"))))
+        val deck = TaskItem(
+            id = "anki:deck", source = Source.Anki, sourceId = AnkiRules.DECK_PREFIX + "1", title = "Anki: Textbook 1::1.2", dueAt = Fixtures.at("2026-10-13T09:00"),
+            kind = Kind.Revision, sourceEffortMin = 40, derived = true, subSteps = listOf(SubStep("20 new cards", 9)),
+            extra = mapOf(AnkiRules.EXTRA_FOR to "teams:vocab,teams:other", AnkiRules.EXTRA_DECK_NAME to "Textbook 1::1.2"),
+            firstSeenAt = Fixtures.at("2026-10-07T12:00"), lastSeenAt = Fixtures.at("2026-10-07T12:00"),
+        )
+        val plan = plan(listOf(first, vocab, other, deck), "2026-10-08T17:00")
+        assertTrue(plan.chunksOf("anki:deck").isNotEmpty())
+        assertEquals(30, plan.unplanned.single { it.taskId == "teams:vocab" }.minutes)
+    }
+
+    @Test
     fun `a task you said isn't one, an email only to read, and an event aren't listed as left out`() {
         val notATask = task("not", Fixtures.at("2026-10-20T09:00"), available = Fixtures.at("2026-10-15T00:00")).copy(userNotATask = true)
         val event = task("event", Fixtures.at("2026-10-20T09:00"), kind = Kind.Event, available = Fixtures.at("2026-10-15T00:00"))

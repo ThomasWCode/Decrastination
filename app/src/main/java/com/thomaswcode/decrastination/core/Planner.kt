@@ -169,10 +169,13 @@ object Planner {
         // Off the plan as you said: a task you said isn't one, or waits for another; and a deck task
         // whose every assignment is, as its vocabulary is theirs.
         fun heldBack(task: TaskItem) = task.hidden || Instructions.waiting(task, byId)
+        /** A deck task stays on the plan while any of its assignments does. */
+        fun keptOn(task: TaskItem) = linked(task).let { a -> a.isEmpty() || !a.all(::heldBack) }
         val (events, work) = input.tasks
-            .filter { it.isOpen && it.isAvailable(input.now) && !heldBack(it) && linked(it).let { a -> a.isEmpty() || !a.all(::heldBack) } }
+            .filter { it.isOpen && it.isAvailable(input.now) && !heldBack(it) && keptOn(it) }
             .partition { it.kind == Kind.Event }
-        val held = AnkiRules.heldSections(input.tasks, input.settings.ankiTextbook)
+        val decks = AnkiRules.heldDecks(input.tasks, input.settings.ankiTextbook)
+        val held = decks.mapValues { it.value.keys }
         // What's left out is said, with why (IMP-P1-002): first the work that can't start yet, as
         // its source says or as you said (waiting for another task). Not a deck task, whose
         // assignments say it; nor one you said isn't a task, or an email that's only to read.
@@ -185,9 +188,10 @@ object Planner {
                 else -> continue
             }
             // Waiting, its deck tasks wait with it (they're its vocabulary): its gap keeps those sections,
-            // rather than losing the cards from both the plan and the list. Not open yet, its decks
-            // are planned as ever, and hold them.
-            val keep = if (reason == Unplanned.Reason.Waits) emptySet() else held[task.id].orEmpty()
+            // rather than losing the cards from both the plan and the list. Not one another assignment
+            // keeps on the plan: that holds its section, as a deck does for one not open yet, so its
+            // cards aren't counted twice.
+            val keep = if (reason == Unplanned.Reason.Waits) decks[task.id].orEmpty().filterValues(::keptOn).keys else held[task.id].orEmpty()
             val left = pieces(task, input, keep).takeIf { it.isNotEmpty() } ?: continue
             unplanned += Unplanned(
                 task.id, task.source, task.title, left.sumOf { it.minutes }, left.size, reason,
