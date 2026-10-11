@@ -765,7 +765,8 @@ class PlannerTest {
 
     @Test
     fun `a waiting assignment's gap keeps the vocabulary its deck would hold`() {
-        // Its vocabulary is a deck's, and the deck waits with it: the gap is that work, not 5 minutes.
+        // Its vocabulary is a deck's, and the deck waits with it: the gap is the deck's cards (9 minutes)
+        // and handing it in (5), not 5 minutes alone.
         val steps = listOf(SubStep("Learn vocabulary 1.2", 40, ankiSections = listOf("1.2")))
         val first = task("first", Fixtures.at("2026-10-12T09:00"))
         val vocab = task("vocab", Fixtures.at("2026-10-13T09:00"), steps = steps).copy(userAfter = "teams:first")
@@ -777,8 +778,28 @@ class PlannerTest {
         )
         val plan = plan(listOf(first, vocab, deck), "2026-10-08T17:00")
         val gap = plan.unplanned.single { it.taskId == "teams:vocab" }
-        assertEquals(40, gap.minutes)
+        assertEquals(14, gap.minutes)
         assertTrue(plan.chunksOf("anki:deck").isEmpty())
+    }
+
+    @Test
+    fun `a waiting assignment's gap counts only the decks that wait with it`() {
+        // One step for two sections: 1.2's deck is also another, open assignment's, and stays on the
+        // plan; 1.3's is this one's alone, and waits. The gap is the writing and 1.3's cards.
+        fun deck(section: String, forTasks: String) = TaskItem(
+            id = "anki:$section", source = Source.Anki, sourceId = AnkiRules.DECK_PREFIX + section, title = "Anki: Textbook 1::$section",
+            dueAt = Fixtures.at("2026-10-13T09:00"), kind = Kind.Revision, sourceEffortMin = 40, derived = true, subSteps = listOf(SubStep("20 new cards", 9)),
+            extra = mapOf(AnkiRules.EXTRA_FOR to forTasks, AnkiRules.EXTRA_DECK_NAME to "Textbook 1::$section"),
+            firstSeenAt = Fixtures.at("2026-10-07T12:00"), lastSeenAt = Fixtures.at("2026-10-07T12:00"),
+        )
+        val steps = listOf(SubStep("Learn vocabulary 1.2 and 1.3", 60, ankiSections = listOf("1.2", "1.3")), SubStep("Write it up", 30))
+        val first = task("first", Fixtures.at("2026-10-12T09:00"))
+        val vocab = task("vocab", Fixtures.at("2026-10-13T09:00"), steps = steps).copy(userAfter = "teams:first")
+        val other = task("other", Fixtures.at("2026-10-14T09:00"), steps = listOf(SubStep("Learn vocabulary 1.2", 40, ankiSections = listOf("1.2"))))
+        val plan = plan(listOf(first, vocab, other, deck("1.2", "teams:vocab,teams:other"), deck("1.3", "teams:vocab")), "2026-10-08T17:00")
+        assertTrue(plan.chunksOf("anki:1.2").isNotEmpty())
+        assertTrue(plan.chunksOf("anki:1.3").isEmpty())
+        assertEquals(30 + 9, plan.unplanned.single { it.taskId == "teams:vocab" }.minutes)
     }
 
     @Test
