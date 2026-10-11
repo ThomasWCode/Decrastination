@@ -3,6 +3,7 @@ package com.thomaswcode.decrastination.protect
 import com.thomaswcode.decrastination.core.Uptime
 import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.data.Window
+import com.thomaswcode.decrastination.learn.ReviewInput
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -104,6 +105,27 @@ class SettingsChangesTest {
         assertEquals(30, SettingsChanges.edited(began, draft, latest.copy(boxMin = 60)).boxMin)
         // Nothing changed: what's asked for stands.
         assertEquals(latest, SettingsChanges.edited(began, began, latest))
+    }
+
+    @Test
+    fun `the weekly review's changes apply at once while armed, replacing a wait on the same setting only`() {
+        val armed = Settings(armed = true, workMinPerFreeMin = 3, boxMin = 45)
+        // Waiting: your own looser ratio, and a removed app.
+        val waiting = SettingsChanges.propose(armed, armed.copy(workMinPerFreeMin = 2, blockedApps = armed.blockedApps.drop(1)), emptyList(), now, ::newId).pending
+        assertEquals(setOf("workMinPerFreeMin", "blockedApps"), waiting.map { it.field }.toSet())
+        // The review loosens the ratio and the box: both at once, its ratio over the one waiting.
+        val review = listOf(ReviewInput.Change("workMinPerFreeMin", 4, ""), ReviewInput.Change("boxMin", 30, ""))
+        val outcome = SettingsChanges.atOnce(armed, waiting, setOf("workMinPerFreeMin", "boxMin")) { ReviewInput.apply(it, review) }
+        assertEquals(4, outcome.settings.workMinPerFreeMin)
+        assertEquals(30, outcome.settings.boxMin)
+        // The app's removal keeps its wait; nothing else moves.
+        assertEquals(listOf("blockedApps"), outcome.pending.map { it.field })
+        assertEquals(armed.blockedApps, outcome.settings.blockedApps)
+        assertTrue(outcome.settings.armed)
+        // The review agreeing with your waiting ratio of 2: it applies now, not after the wait.
+        val agreed = SettingsChanges.atOnce(armed, waiting, setOf("workMinPerFreeMin")) { ReviewInput.apply(it, listOf(ReviewInput.Change("workMinPerFreeMin", 2, ""))) }
+        assertEquals(2, agreed.settings.workMinPerFreeMin)
+        assertEquals(listOf("blockedApps"), agreed.pending.map { it.field })
     }
 
     @Test
@@ -409,6 +431,16 @@ class ProtectionCheckTest {
         assertEquals(listOf("The focus service has stopped: nothing is blocked"), ProtectionCheck.problems(crashed, armed = true))
         // Switched off says off, whether or not it's running.
         assertEquals(listOf("The focus service is off: nothing is blocked"), ProtectionCheck.problems(crashed.copy(serviceEnabled = false), armed = false))
+    }
+
+    @Test
+    fun `a browser whose address bar can't be read is a problem, armed or not`() {
+        val fine = ProtectionCheck.Report(serviceEnabled = true, accessibilityOn = true, onShortcuts = emptyList(), adminActive = true, canRepair = true)
+        val chrome = fine.copy(unreadableBrowsers = listOf("Chrome"))
+        val said = "Chrome's address bar can't be read: blocked sites in Chrome aren't covered (Settings can block Chrome outright)"
+        assertEquals(listOf(said), ProtectionCheck.problems(chrome, armed = false))
+        assertEquals(listOf(said), ProtectionCheck.problems(chrome, armed = true))
+        assertTrue(ProtectionCheck.problems(fine, armed = true).isEmpty())
     }
 
     @Test

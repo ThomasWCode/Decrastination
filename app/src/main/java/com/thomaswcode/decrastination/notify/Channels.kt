@@ -11,6 +11,8 @@ object Channels {
     const val PROTECTION = "protection"
     const val DAILY = "daily"
     const val MODEL = "model"
+    const val FREE_TIME = "free-time"
+    const val FREE_TIME_ENDING = "free-time-ending"
 
     fun create(context: Context) {
         val manager = context.getSystemService(NotificationManager::class.java) ?: return
@@ -30,6 +32,13 @@ object Channels {
                 },
                 NotificationChannel(MODEL, "Claude", NotificationManager.IMPORTANCE_DEFAULT).apply {
                     description = "When Claude's plan for a task is dropped, or its API key stops working"
+                },
+                // Silent, while it's spent (IMP-P2-011); and once, loud enough to see, a minute before it runs out.
+                NotificationChannel(FREE_TIME, "Free time", NotificationManager.IMPORTANCE_LOW).apply {
+                    description = "Your earned free time counting down while a blocked app uses it"
+                },
+                NotificationChannel(FREE_TIME_ENDING, "Free time running out", NotificationManager.IMPORTANCE_HIGH).apply {
+                    description = "A minute before your free time runs out and the app is covered"
                 },
             ),
         )

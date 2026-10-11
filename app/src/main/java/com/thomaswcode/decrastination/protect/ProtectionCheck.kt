@@ -68,6 +68,8 @@ object ProtectionCheck {
         val serviceRunning: Boolean = true,
         /** Whether protection alerts reach the screen: notifications allowed and their channel on. */
         val alertsShown: Boolean = true,
+        /** Checked browsers, by name, whose address bar the focus service can't read (IMP-P1-005). */
+        val unreadableBrowsers: List<String> = emptyList(),
     )
 
     /** Switched on in the settings but not running. */
@@ -77,6 +79,8 @@ object ProtectionCheck {
     fun problems(report: Report, armed: Boolean): List<String> = buildList {
         if (!report.serviceEnabled || !report.accessibilityOn) add("The focus service is off: nothing is blocked")
         else if (!report.serviceRunning) add("The focus service has stopped: nothing is blocked")
+        // As much about blocking working as the service being on, so armed or not.
+        report.unreadableBrowsers.forEach { add("$it's address bar can't be read: blocked sites in $it aren't covered (Settings can block $it outright)") }
         if (!armed) return@buildList
         if (report.onShortcuts.isNotEmpty()) add("The focus service is on an accessibility shortcut")
         if (!report.canRepair) add("Self-repair isn't granted: the service switched off would stay off")

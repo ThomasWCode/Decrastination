@@ -18,8 +18,8 @@ import kotlinx.coroutines.sync.withLock
 /**
  * The weekly review (docs/scheduler.md §5, item 7): on Sunday evening, after the check-in (or
  * without it), the calibration is learned afresh from the log, the capacity checked, and, once
- * Claude is on, the week goes to the model for a note and bounded changes, which go through the
- * same pending-change path as yours. Until then the note is the rules': what changed, in words.
+ * Claude is on, the week goes to the model for a note and bounded changes, which apply at once,
+ * armed or not (your call, 11 Oct). Until then the note is the rules': what changed, in words.
  */
 object Review {
     private const val ID = 4003
@@ -78,7 +78,7 @@ object Review {
 
     /**
      * The model's review, while Claude is on and under its cap: a note and bounded changes, the
-     * changes applied through [AppGraph.changeSettings]. Otherwise why it couldn't be had.
+     * changes applied through [AppGraph.applyReviewChanges]. Otherwise why it couldn't be had.
      */
     private suspend fun modelReview(graph: AppGraph, now: Long, week: String): Outcome {
         val reviewer = graph.modelReviewer() ?: return Outcome(why = because(ModelHold.Off))
@@ -101,8 +101,9 @@ object Review {
         }
         val answer = result.answer ?: return Outcome(why = if (result.refused) "Claude declined to review it" else "Claude's answer couldn't be used")
         val changes = answer.changes.filter(ReviewInput::allowed)
-        // Laid over what's been asked for, so a change waiting elsewhere keeps its wait.
-        if (changes.isNotEmpty()) graph.changeSettings { ReviewInput.apply(it, changes) }
+        // At once, armed or not (your call, 11 Oct); laid over what's been asked for, so a change
+        // waiting for another setting keeps its wait.
+        if (changes.isNotEmpty()) graph.applyReviewChanges(changes)
         val note = answer.note.ifEmpty { listOf("No note this week.") }
         return Outcome(WeeklyReview(now, note + changeLines(changes, graph.settings.value), by = result.model ?: reviewer.model))
     }

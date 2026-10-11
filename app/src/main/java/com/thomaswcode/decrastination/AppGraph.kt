@@ -81,6 +81,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -98,13 +99,34 @@ class AppGraph private constructor(context: Context) {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default + CoroutineExceptionHandler { _, error -> Log.e(TAG, "Background work failed", error) })
 
     val tasks = JsonStore(File(app.filesDir, "tasks.json"), TaskState.serializer(), ::TaskState)
-    val settings = JsonStore(File(app.filesDir, "settings.json"), Settings.serializer(), ::Settings)
+    // A file that can't be read at all starts armed while the device admin is on, as only arming
+    // turns it on: a bad file never disarms protection (IMP-P1-003).
+    val settings = JsonStore(File(app.filesDir, "settings.json"), Settings.serializer(), ::Settings, unreadable = { Settings(armed = Watchdog.isAdminActive(app)) })
     val secrets = SecretStore(File(app.filesDir, "secrets.bin"), KeystoreCipher())
     val runtime = JsonStore(File(app.filesDir, "runtime.json"), RuntimeState.serializer(), ::RuntimeState)
     val log = JsonStore(File(app.filesDir, "log.json"), ActivityLog.serializer(), ::ActivityLog)
 
     /** Your instructions about tasks, events and days, and what Claude read them as ([Instructions]). */
     val instructions = JsonStore(File(app.filesDir, "instructions.json"), InstructionState.serializer(), ::InstructionState)
+
+    init {
+        // Files that couldn't be read whole at this start: kept for Setup to say, till you've seen them.
+        // On record before anything else runs, and only then is a bad file replaced by what was kept
+        // of it: a start cut short before then finds it again, and says it (once: its copy is the same).
+        val found = listOfNotNull(tasks.problem, settings.problem, secrets.problem, runtime.problem, log.problem, instructions.problem)
+        if (found.isNotEmpty()) {
+            found.forEach { Log.w(TAG, "${it.file} couldn't be read whole; set aside as ${it.copy}") }
+            runBlocking {
+                runCatching {
+                    runtime.update { it.withUnreadable(found) }
+                }.onSuccess { listOf(tasks, settings, runtime, log, instructions).forEach { it.keepRecovered() } }
+                    .onFailure { Log.w(TAG, "Couldn't keep what was found unreadable", it) }
+            }
+        }
+    }
+
+    /** Takes [seen] off Setup's list of files found unreadable. */
+    suspend fun forgetUnreadable(seen: JsonStore.Unreadable) = runtime.update { it.seenUnreadable(seen) }
 
     val syncer = Syncer(
         tasks = tasks,
@@ -202,6 +224,21 @@ class AppGraph private constructor(context: Context) {
         // The pending list first: stopped between the two, what applies now is lost (and seen to
         // be), but a waiting change this one replaced can't come back.
         runtime.update { it.copy(pending = outcome.pending, uptimeMark = if (outcome.pending.isEmpty()) null else mark) }
+        settings.update { outcome.settings }
+    }
+
+    /**
+     * The weekly review's [changes] to the planner's numbers, within their bounds, applied at once,
+     * armed or not: you said they needn't wait (11 Oct, IMP-P2-015). Only the fields
+     * [ReviewInput.apply] sets can change this way; everything else waits as ever.
+     */
+    suspend fun applyReviewChanges(changes: List<com.thomaswcode.decrastination.learn.ReviewInput.Change>) = changing.withLock {
+        applyDue(force = true)
+        val state = runtime.value
+        // The settings it names: one it sets to the value already asked for applies now all the same.
+        val fields = changes.map { it.setting }.filter { it in com.thomaswcode.decrastination.learn.ReviewInput.BOUNDS }.toSet()
+        val outcome = SettingsChanges.atOnce(settings.value, state.pending, fields) { com.thomaswcode.decrastination.learn.ReviewInput.apply(it, changes) }
+        runtime.update { it.copy(pending = outcome.pending, uptimeMark = if (outcome.pending.isEmpty()) null else it.uptimeMark) }
         settings.update { outcome.settings }
     }
 
@@ -935,6 +972,8 @@ class AppGraph private constructor(context: Context) {
         private const val CALENDAR_QUIET_MS = 5_000L
 
         /** After a failed call, the model is left alone this long. */
+
+        /** Unreadable files Setup lists at most: the latest. */
 
         /** The most model calls one enrichment run makes: the rest wait for the next. */
         const val MAX_MODEL_CALLS = 20
