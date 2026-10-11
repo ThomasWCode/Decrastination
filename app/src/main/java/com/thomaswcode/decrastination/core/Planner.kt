@@ -173,6 +173,24 @@ object Planner {
             .filter { it.isOpen && it.isAvailable(input.now) && !heldBack(it) && linked(it).let { a -> a.isEmpty() || !a.all(::heldBack) } }
             .partition { it.kind == Kind.Event }
         val held = AnkiRules.heldSections(input.tasks, input.settings.ankiTextbook)
+        // What's left out is said, with why (IMP-P1-002): first the work that can't start yet, as
+        // its source says or as you said (waiting for another task). Not a deck task, whose
+        // assignments say it; nor one you said isn't a task, or an email that's only to read.
+        val unplanned = mutableListOf<Unplanned>()
+        for (task in input.tasks) {
+            if (!task.isOpen || task.kind == Kind.Event || task.hidden || task.derived) continue
+            val reason = when {
+                Instructions.waiting(task, byId) -> Unplanned.Reason.Waits
+                !task.isAvailable(input.now) -> Unplanned.Reason.NotOpen
+                else -> continue
+            }
+            val left = pieces(task, input, held[task.id].orEmpty()).takeIf { it.isNotEmpty() } ?: continue
+            unplanned += Unplanned(
+                task.id, task.source, task.title, left.sumOf { it.minutes }, left.size, reason,
+                at = task.availableFrom.takeIf { reason == Unplanned.Reason.NotOpen },
+                after = task.userAfter?.takeIf { reason == Unplanned.Reason.Waits }?.let { byId[it]?.title ?: it },
+            )
+        }
         // A start you gave (an instruction) places the work from then on, as a deck's next cards do;
         // a deck task's, from the earliest its assignments can start, where they all have one.
         fun startOf(task: TaskItem): Long? = task.userFrom ?: linked(task).takeIf { a -> a.isNotEmpty() && a.all { it.userFrom != null } }?.minOf { it.userFrom!! }
@@ -297,10 +315,16 @@ object Planner {
         fun note(item: Item, assigned: Array<LocalDate?>) {
             val days = assigned.filterNotNull()
             if (item.windowed && days.isNotEmpty()) runDays.getOrPut(item.task.id) { HashMap() }[item.run] = days.min() to days.max()
+            // Pieces with no day: there was no room for them by the plan's last day.
+            val left = item.chunks.indices.filter { assigned[it] == null }
+            if (left.isNotEmpty()) unplanned += Unplanned(item.task.id, item.task.source, item.task.title, left.sumOf { item.chunks[it].minutes }, left.size, Unplanned.Reason.NoRoom)
         }
 
         // A block whose window opens past the plan's reach waits to be planned until it's within it.
         val placeable = items.filter { item -> item.notBefore?.let { date(it, zone) <= horizon } ?: true }
+        (items - placeable.toSet()).forEach { item ->
+            unplanned += Unplanned(item.task.id, item.task.source, item.task.title, item.minutes, item.chunks.size, Unplanned.Reason.OpensLater, at = item.notBefore)
+        }
         val (urgent, later) = placeable.partition { date(it.deadline, zone) <= today }
 
         // Due by today (overdue, or later today): into today, from the first day it can be.
@@ -411,7 +435,11 @@ object Planner {
         later.filterNot(::soon).sortedWith(order).forEach(::placeBack)
 
         val buckets = days.map { DayBucket(it, capacity.getValue(it), placed.getValue(it).sortedWith(ORDER)) }
-        return Plan(input.now, today, buckets, events.sortedWith(compareBy(nullsLast()) { it.dueAt }))
+        // A task's runs left out for the same reason are one line: their pieces and minutes together, the soonest opening.
+        val gaps = unplanned.groupBy { it.taskId to it.reason }.values.map { same ->
+            same.first().copy(minutes = same.sumOf { it.minutes }, pieces = same.sumOf { it.pieces }, at = same.mapNotNull { it.at }.minOrNull())
+        }.sortedWith(compareBy({ it.reason.ordinal }, { it.at ?: Long.MAX_VALUE }, { it.title }, { it.taskId }))
+        return Plan(input.now, today, buckets, events.sortedWith(compareBy(nullsLast()) { it.dueAt }), gaps)
     }
 
     /**
