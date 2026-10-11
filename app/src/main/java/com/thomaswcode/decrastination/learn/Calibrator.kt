@@ -19,6 +19,12 @@ object Calibrator {
     /** How much each new completion moves a multiplier. */
     const val WEIGHT = 0.3
 
+    /**
+     * Timed pieces a class needs before its own multiplier is used (IMP-P2-016, your call): until
+     * then its kind's, so one long evening can't set a new class's figure.
+     */
+    const val MIN_CLASS_TIMED = 3
+
     /** A self-assessment nudges the multiplier: more when there are no timed minutes to go on. */
     private const val NUDGE_WITH_TIME = 0.05
     private const val NUDGE_ALONE = 0.10
@@ -47,16 +53,31 @@ object Calibrator {
         val multipliers = multipliers(log.completions)
         val margins = margins(log.completions, defaultMargin)
         val boxes = boxes(log, defaultBox, week)
-        val next = Calibration(multipliers = multipliers, marginDays = margins, boxMin = boxes)
+        val next = Calibration(multipliers = multipliers, marginDays = margins, boxMin = boxes, timed = timed(log.completions))
         return Learned(next, describe(previous, next, defaultMargin, defaultBox))
     }
 
     /**
      * Effort multipliers per kind and class (and per kind, for classes not yet seen): a moving
      * average of actual over estimated minutes, from completions with timed minutes, nudged by
-     * "harder" and "easier".
+     * "harder" and "easier". A class's own is kept only once it has [MIN_CLASS_TIMED] timed pieces;
+     * its kind's, which learns from every piece, stands for it till then.
      */
     fun multipliers(completions: List<CompletionRecord>): Map<String, Double> {
+        val counts = timed(completions)
+        return learnedMultipliers(completions).filterKeys { key -> key.substringAfter('|').isEmpty() || (counts[key] ?: 0) >= MIN_CLASS_TIMED }
+    }
+
+    /** Whether [record]'s minutes are how long it took: timed, and all of it (no blocks ticked by hand, no photo check). */
+    private fun isTimed(record: CompletionRecord) = record.estimateMin > 0 && record.workedMin > 0 && !record.byHand && !record.photo
+
+    /** Timed pieces per multiplier key: each class's, and each kind's. */
+    fun timed(completions: List<CompletionRecord>): Map<String, Int> =
+        completions.filter(::isTimed)
+            .flatMap { listOf(Calibration.key(it.kind, it.className), Calibration.key(it.kind, null)).distinct() }
+            .groupingBy { it }.eachCount()
+
+    private fun learnedMultipliers(completions: List<CompletionRecord>): Map<String, Double> {
         val result = HashMap<String, Double>()
         for (record in completions.sortedBy { it.doneAt }) {
             if (record.estimateMin <= 0) continue
@@ -64,7 +85,7 @@ object Calibrator {
                 var m = result[key] ?: 1.0
                 // Timed, and all of it: with blocks ticked by hand, or work a photo check found done,
                 // its minutes aren't how long it took.
-                val timed = record.workedMin > 0 && !record.byHand && !record.photo
+                val timed = isTimed(record)
                 if (timed) m = (1 - WEIGHT) * m + WEIGHT * (record.workedMin.toDouble() / record.estimateMin)
                 val nudge = if (timed) NUDGE_WITH_TIME else NUDGE_ALONE
                 when (record.assessment) {

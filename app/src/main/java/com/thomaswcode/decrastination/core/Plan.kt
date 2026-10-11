@@ -139,6 +139,8 @@ data class Calibration(
     val marginDays: Map<Kind, Int> = emptyMap(),
     /** Box length in minutes, per kind. */
     val boxMin: Map<Kind, Int> = emptyMap(),
+    /** How many timed pieces each multiplier's key has had (IMP-P2-016), a class's below the bar included: what Stats says it rests on. */
+    val timed: Map<String, Int> = emptyMap(),
 ) {
     fun multiplier(kind: Kind, className: String?): Double =
         multipliers["${kind.name}|${className.orEmpty()}"] ?: multipliers["${kind.name}|"] ?: 1.0

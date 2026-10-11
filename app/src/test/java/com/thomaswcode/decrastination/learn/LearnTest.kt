@@ -39,27 +39,29 @@ class CalibratorTest {
         // 5 timed minutes of 40: the rest was photographed, not timed, so 5 isn't how long it took.
         val photographed = done("a", estimate = 40, worked = 5).copy(photo = true)
         assertEquals(emptyMap(), Calibrator.multipliers(listOf(photographed)))
-        // Its "harder" still counts, as an answer alone does.
+        // Its "harder" still counts, as an answer alone does: for the kind, as the class has no timed pieces.
         val harder = photographed.copy(assessment = Calibrator.HARDER)
-        assertEquals(1.1, Calibrator.multipliers(listOf(harder)).getValue("Homework|12.1 Physics"), 1e-9)
+        assertEquals(1.1, Calibrator.multipliers(listOf(harder)).getValue("Homework|"), 1e-9)
     }
 
 
     @Test
     fun `timed work moves the multiplier towards actual over estimate, within bounds`() {
         val m = Calibrator.multipliers(listOf(done("a", worked = 64), done("b", worked = 64, doneAt = Fixtures.at("2026-10-19T19:00"))))
-        // 1.6× twice, at a weight of 0.3: 1 → 1.18 → 1.306.
-        assertEquals(1.306, m.getValue("Homework|12.1 Physics"), 1e-9)
-        // The kind as a whole learns too, for classes not yet seen.
+        // 1.6× twice, at a weight of 0.3: 1 → 1.18 → 1.306, for the kind as a whole...
         assertEquals(1.306, m.getValue("Homework|"), 1e-9)
+        // ...and, from its third timed piece, for the class itself (IMP-P2-016).
+        assertNull(m["Homework|12.1 Physics"])
+        val three = Calibrator.multipliers((1..3).map { done("t$it", worked = 64, doneAt = Fixtures.at("2026-10-17T19:00") + it * DAY) })
+        assertEquals(1.0 + 0.6 * (1 - 0.7 * 0.7 * 0.7), three.getValue("Homework|12.1 Physics"), 1e-9)
         val wild = Calibrator.multipliers((1..20).map { done("t$it", worked = 600, doneAt = Fixtures.at("2026-10-01T19:00") + it * DAY) })
         assertEquals(Calibrator.MAX_MULTIPLIER, wild.getValue("Homework|12.1 Physics"))
     }
 
     @Test
     fun `harder and easier nudge it, more with no timed minutes to go on`() {
-        assertEquals(1.10, Calibrator.multipliers(listOf(done("a", assessment = Calibrator.HARDER))).getValue("Homework|12.1 Physics"), 1e-9)
-        assertEquals(0.90, Calibrator.multipliers(listOf(done("a", assessment = Calibrator.EASIER))).getValue("Homework|12.1 Physics"), 1e-9)
+        assertEquals(1.10, Calibrator.multipliers(listOf(done("a", assessment = Calibrator.HARDER))).getValue("Homework|"), 1e-9)
+        assertEquals(0.90, Calibrator.multipliers(listOf(done("a", assessment = Calibrator.EASIER))).getValue("Homework|"), 1e-9)
         // No minutes and no answer: nothing learned.
         assertEquals(emptyMap(), Calibrator.multipliers(listOf(done("a"))))
     }
@@ -167,7 +169,9 @@ class CalibratorTest {
     @Test
     fun `what changed is said in words`() {
         val learned = Calibrator.learn(ActivityLog(completions = listOf(done("a", worked = 80))), Calibration(), defaultBox = 45, week = 1)
-        assertTrue(learned.changes.any { "Homework in 12.1 Physics takes ×1.30" in it }, learned.changes.toString())
+        // One timed piece: the kind's figure, not yet the class's own (IMP-P2-016).
+        assertTrue(learned.changes.any { "Homework, any class takes ×1.30" in it }, learned.changes.toString())
+        assertTrue(learned.changes.none { "12.1 Physics" in it }, learned.changes.toString())
     }
 }
 
@@ -318,5 +322,19 @@ class DaysTest {
         val old = (1..20).map { DayRecord("2026-08-%02d".format(it), 60, emptyList(), doneMin = 0, full = false) }
         val recent = (10..14).map { DayRecord("2026-10-%02d".format(it), 60, emptyList(), doneMin = 60, full = true) }
         assertNull(Days.capacityAdvice(old + recent, today))
+    }
+}
+
+class EvidenceTest {
+    @Test
+    fun `one long evening can't set a new class's figure, and the timed pieces are counted`() {
+        // A first German homework that took four times its estimate.
+        val first = done("a", className = "12.1 German", worked = 160)
+        val m = Calibrator.multipliers(listOf(first))
+        assertNull(m["Homework|12.1 German"])
+        assertEquals(1.9, m.getValue("Homework|"), 1e-9)
+        assertEquals(mapOf("Homework|12.1 German" to 1, "Homework|" to 1), Calibrator.timed(listOf(first)))
+        // Ticked by hand, or found done by a photo, isn't a timed piece.
+        assertEquals(emptyMap(), Calibrator.timed(listOf(first.copy(byHand = true), first.copy(photo = true))))
     }
 }
