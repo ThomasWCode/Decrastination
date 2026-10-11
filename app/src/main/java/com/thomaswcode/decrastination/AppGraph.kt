@@ -119,10 +119,7 @@ class AppGraph private constructor(context: Context) {
             found.forEach { Log.w(TAG, "${it.file} couldn't be read whole; set aside as ${it.copy}") }
             runBlocking {
                 runCatching {
-                    runtime.update { state ->
-                        val new = found.filterNot { f -> state.unreadable.any { it.file == f.file && it.copy == f.copy } }
-                        state.copy(unreadable = (state.unreadable + new).takeLast(MAX_UNREADABLE))
-                    }
+                    runtime.update { it.withUnreadable(found) }
                 }.onSuccess { listOf(tasks, settings, runtime, log, instructions).forEach { it.keepRecovered() } }
                     .onFailure { Log.w(TAG, "Couldn't keep what was found unreadable", it) }
             }
@@ -135,7 +132,7 @@ class AppGraph private constructor(context: Context) {
     }
 
     /** Takes [seen] off Setup's list of files found unreadable. */
-    suspend fun forgetUnreadable(seen: JsonStore.Unreadable) = runtime.update { it.copy(unreadable = it.unreadable - seen) }
+    suspend fun forgetUnreadable(seen: JsonStore.Unreadable) = runtime.update { it.seenUnreadable(seen) }
 
     val syncer = Syncer(
         tasks = tasks,
@@ -985,7 +982,6 @@ class AppGraph private constructor(context: Context) {
         /** After a failed call, the model is left alone this long. */
 
         /** Unreadable files Setup lists at most: the latest. */
-        private const val MAX_UNREADABLE = 10
 
         /** The most model calls one enrichment run makes: the rest wait for the next. */
         const val MAX_MODEL_CALLS = 20

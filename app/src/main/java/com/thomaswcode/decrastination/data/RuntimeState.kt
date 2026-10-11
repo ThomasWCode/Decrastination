@@ -60,7 +60,29 @@ data class RuntimeState(
     val rewarded: List<Rewarded> = emptyList(),
     /** Saved files found unreadable at a start (IMP-P1-003), till you've seen them in Setup. */
     val unreadable: List<JsonStore.Unreadable> = emptyList(),
-)
+    /**
+     * The copies set aside of those you've seen: one still found at a start (secrets left in place
+     * for a keystore that may come back) isn't said again.
+     */
+    val unreadableSeen: List<String> = emptyList(),
+) {
+    /** With [found] (this start's) on Setup's list: each once, and none you've seen. */
+    fun withUnreadable(found: List<JsonStore.Unreadable>): RuntimeState {
+        val new = found.filterNot { f -> unreadable.any { it.file == f.file && it.copy == f.copy } || (f.copy != null && f.copy in unreadableSeen) }
+        return copy(unreadable = (unreadable + new).takeLast(MAX_UNREADABLE))
+    }
+
+    /** [seen] off Setup's list, and not said again while its copy is what's found. */
+    fun seenUnreadable(seen: JsonStore.Unreadable): RuntimeState =
+        copy(unreadable = unreadable - seen, unreadableSeen = (unreadableSeen + listOfNotNull(seen.copy)).distinct().takeLast(MAX_UNREADABLE_SEEN))
+
+    companion object {
+        const val MAX_UNREADABLE = 10
+
+        /** Three copies kept of each of six files, with room. */
+        const val MAX_UNREADABLE_SEEN = 24
+    }
+}
 
 /** The watchdog's last finding. */
 @Serializable

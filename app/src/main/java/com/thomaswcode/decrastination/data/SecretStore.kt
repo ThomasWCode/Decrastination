@@ -104,11 +104,11 @@ class SecretStore(
             Thread.sleep(retryWaitMs)
         }
         // Left where it is: a failure that passes (the keystore back) reads it again at the next start,
-        // with nothing lost. A copy is kept beside it, and it's said, once: not again at each start
-        // while it stays as it is.
-        if (JsonStore.alreadyAside(file) == null) {
-            problem = JsonStore.Unreadable(file.name, JsonStore.setAside(file, clock())?.name, kept = false, at = clock())
-        }
+        // with nothing lost. A copy is kept beside it, once, and each start that finds it says so:
+        // till it's on record, which counts it once, and not after you've seen it
+        // ([RuntimeState.withUnreadable]).
+        val aside = JsonStore.alreadyAside(file) ?: JsonStore.setAside(file, clock())
+        problem = JsonStore.Unreadable(file.name, aside?.name, kept = false, at = clock())
         return emptyMap()
     }
 
