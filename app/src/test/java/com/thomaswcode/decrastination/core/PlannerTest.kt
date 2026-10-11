@@ -3,6 +3,7 @@ package com.thomaswcode.decrastination.core
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.Fixtures.LONDON
 import com.thomaswcode.decrastination.data.Settings
+import com.thomaswcode.decrastination.sources.anki.AnkiRules
 import com.thomaswcode.decrastination.sources.powerplanner.ClassesResponse
 import com.thomaswcode.decrastination.sources.powerplanner.AgendaResponse
 import com.thomaswcode.decrastination.sources.powerplanner.PowerPlannerItems
@@ -704,4 +705,126 @@ class PlannerTest {
         val chunks = plan(listOf(task("t", Fixtures.at("2026-10-20T09:00"), steps = steps)), "2026-10-08T17:00").chunksOf("teams:t")
         assertEquals(listOf(1, 2), chunks.map { it.stepIndex })
     }
+
+    // --- What's left out, and why (IMP-P1-002) ---
+
+    @Test
+    fun `work that can't start yet is listed with why, not dropped without a word`() {
+        // Not open till the 15th at its source; and one you said waits for another, still open.
+        val later = task("later", Fixtures.at("2026-10-20T09:00"), available = Fixtures.at("2026-10-15T00:00"))
+        val first = task("first", Fixtures.at("2026-10-12T09:00"))
+        val second = task("second", Fixtures.at("2026-10-13T09:00")).copy(userAfter = "teams:first")
+        val plan = plan(listOf(later, first, second), "2026-10-08T17:00")
+        assertEquals(listOf(Unplanned.Reason.NotOpen to "later", Unplanned.Reason.Waits to "second"), plan.unplanned.map { it.reason to it.title })
+        assertEquals(Fixtures.at("2026-10-15T00:00"), plan.unplanned[0].at)
+        assertEquals(40, plan.unplanned[0].minutes)
+        assertEquals("first", plan.unplanned[1].after)
+        // What's planned isn't listed.
+        assertTrue(plan.chunksOf("teams:first").isNotEmpty())
+        // Once what it waits for is done, it's planned, not listed.
+        val done = plan(listOf(first.copy(status = Status.Done), second), "2026-10-08T17:00")
+        assertTrue(done.unplanned.isEmpty())
+        assertTrue(done.chunksOf("teams:second").isNotEmpty())
+    }
+
+    @Test
+    fun `steps a day's limit can't fit by the plan's last day are listed as having no room`() {
+        // 95 steps of a deck that goes a step a day, overdue: the plan's 91 days hold 91 of them.
+        val deck = task("deck", Fixtures.at("2026-10-01T08:30"), steps = (1..95).map { SubStep("5 new cards", 5) }).copy(stepsPerDay = 1)
+        val plan = plan(listOf(deck), "2026-10-08T17:00")
+        assertEquals(91, plan.chunksOf("teams:deck").size)
+        val gap = plan.unplanned.single()
+        assertEquals(Unplanned.Reason.NoRoom, gap.reason)
+        assertEquals(4, gap.pieces)
+        assertEquals(20, gap.minutes)
+    }
+
+    @Test
+    fun `a run of blocks opening past the plan's reach is listed with when it opens`() {
+        val steps = listOf(
+            SubStep("Reply", 10),
+            SubStep("Apply", 60, from = Fixtures.at("2027-02-01T00:00"), dueAt = Fixtures.at("2027-03-01T09:00")),
+        )
+        val email = task("email", null, kind = Kind.Admin, steps = steps)
+        val plan = plan(listOf(email), "2026-10-08T17:00")
+        assertEquals(1, plan.chunksOf("teams:email").size)
+        val gap = plan.unplanned.single()
+        assertEquals(Unplanned.Reason.OpensLater, gap.reason)
+        assertEquals(Fixtures.at("2027-02-01T00:00"), gap.at)
+        assertEquals(60, gap.minutes)
+    }
+
+    @Test
+    fun `a session's piece is its own step, not its task's first`() {
+        val steps = listOf(SubStep("Read", 20), SubStep("Write", 30))
+        val plan = plan(listOf(task("t", Fixtures.at("2026-10-20T09:00"), steps = steps)), "2026-10-08T17:00")
+        assertEquals("Write", plan.pieceOf("teams:t", 1, "Write")?.step)
+        // Its step gone from the plan (ticked meanwhile): the task's first.
+        assertEquals("Read", plan.pieceOf("teams:t", 7, "Gone")?.step)
+    }
+
+    @Test
+    fun `a waiting assignment's gap keeps the vocabulary its deck would hold`() {
+        // Its vocabulary is a deck's, and the deck waits with it: the gap is the deck's cards (9 minutes)
+        // and handing it in (5), not 5 minutes alone.
+        val steps = listOf(SubStep("Learn vocabulary 1.2", 40, ankiSections = listOf("1.2")))
+        val first = task("first", Fixtures.at("2026-10-12T09:00"))
+        val vocab = task("vocab", Fixtures.at("2026-10-13T09:00"), steps = steps).copy(userAfter = "teams:first")
+        val deck = TaskItem(
+            id = "anki:deck", source = Source.Anki, sourceId = AnkiRules.DECK_PREFIX + "1", title = "Anki: Textbook 1::1.2", dueAt = Fixtures.at("2026-10-13T09:00"),
+            kind = Kind.Revision, sourceEffortMin = 40, derived = true, subSteps = listOf(SubStep("20 new cards", 9)),
+            extra = mapOf(AnkiRules.EXTRA_FOR to "teams:vocab", AnkiRules.EXTRA_DECK_NAME to "Textbook 1::1.2"),
+            firstSeenAt = Fixtures.at("2026-10-07T12:00"), lastSeenAt = Fixtures.at("2026-10-07T12:00"),
+        )
+        val plan = plan(listOf(first, vocab, deck), "2026-10-08T17:00")
+        val gap = plan.unplanned.single { it.taskId == "teams:vocab" }
+        assertEquals(14, gap.minutes)
+        assertTrue(plan.chunksOf("anki:deck").isEmpty())
+    }
+
+    @Test
+    fun `a waiting assignment's gap counts only the decks that wait with it`() {
+        // One step for two sections: 1.2's deck is also another, open assignment's, and stays on the
+        // plan; 1.3's is this one's alone, and waits. The gap is the writing and 1.3's cards.
+        fun deck(section: String, forTasks: String) = TaskItem(
+            id = "anki:$section", source = Source.Anki, sourceId = AnkiRules.DECK_PREFIX + section, title = "Anki: Textbook 1::$section",
+            dueAt = Fixtures.at("2026-10-13T09:00"), kind = Kind.Revision, sourceEffortMin = 40, derived = true, subSteps = listOf(SubStep("20 new cards", 9)),
+            extra = mapOf(AnkiRules.EXTRA_FOR to forTasks, AnkiRules.EXTRA_DECK_NAME to "Textbook 1::$section"),
+            firstSeenAt = Fixtures.at("2026-10-07T12:00"), lastSeenAt = Fixtures.at("2026-10-07T12:00"),
+        )
+        val steps = listOf(SubStep("Learn vocabulary 1.2 and 1.3", 60, ankiSections = listOf("1.2", "1.3")), SubStep("Write it up", 30))
+        val first = task("first", Fixtures.at("2026-10-12T09:00"))
+        val vocab = task("vocab", Fixtures.at("2026-10-13T09:00"), steps = steps).copy(userAfter = "teams:first")
+        val other = task("other", Fixtures.at("2026-10-14T09:00"), steps = listOf(SubStep("Learn vocabulary 1.2", 40, ankiSections = listOf("1.2"))))
+        val plan = plan(listOf(first, vocab, other, deck("1.2", "teams:vocab,teams:other"), deck("1.3", "teams:vocab")), "2026-10-08T17:00")
+        assertTrue(plan.chunksOf("anki:1.2").isNotEmpty())
+        assertTrue(plan.chunksOf("anki:1.3").isEmpty())
+        assertEquals(30 + 9, plan.unplanned.single { it.taskId == "teams:vocab" }.minutes)
+    }
+
+    @Test
+    fun `a deck another assignment keeps on the plan isn't counted again in a waiting one's gap`() {
+        // The deck is for both: the open one keeps it on the plan, so the waiting one's gap is the rest.
+        val steps = listOf(SubStep("Learn vocabulary 1.2", 40, ankiSections = listOf("1.2")), SubStep("Write it up", 30))
+        val first = task("first", Fixtures.at("2026-10-12T09:00"))
+        val vocab = task("vocab", Fixtures.at("2026-10-13T09:00"), steps = steps).copy(userAfter = "teams:first")
+        val other = task("other", Fixtures.at("2026-10-14T09:00"), steps = listOf(SubStep("Learn vocabulary 1.2", 40, ankiSections = listOf("1.2"))))
+        val deck = TaskItem(
+            id = "anki:deck", source = Source.Anki, sourceId = AnkiRules.DECK_PREFIX + "1", title = "Anki: Textbook 1::1.2", dueAt = Fixtures.at("2026-10-13T09:00"),
+            kind = Kind.Revision, sourceEffortMin = 40, derived = true, subSteps = listOf(SubStep("20 new cards", 9)),
+            extra = mapOf(AnkiRules.EXTRA_FOR to "teams:vocab,teams:other", AnkiRules.EXTRA_DECK_NAME to "Textbook 1::1.2"),
+            firstSeenAt = Fixtures.at("2026-10-07T12:00"), lastSeenAt = Fixtures.at("2026-10-07T12:00"),
+        )
+        val plan = plan(listOf(first, vocab, other, deck), "2026-10-08T17:00")
+        assertTrue(plan.chunksOf("anki:deck").isNotEmpty())
+        assertEquals(30, plan.unplanned.single { it.taskId == "teams:vocab" }.minutes)
+    }
+
+    @Test
+    fun `a task you said isn't one, an email only to read, and an event aren't listed as left out`() {
+        val notATask = task("not", Fixtures.at("2026-10-20T09:00"), available = Fixtures.at("2026-10-15T00:00")).copy(userNotATask = true)
+        val event = task("event", Fixtures.at("2026-10-20T09:00"), kind = Kind.Event, available = Fixtures.at("2026-10-15T00:00"))
+        assertTrue(plan(listOf(notATask, event), "2026-10-08T17:00").unplanned.isEmpty())
+    }
 }
+
