@@ -3,6 +3,8 @@ package com.thomaswcode.decrastination.block
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Matrix
+import android.media.ExifInterface
 import android.util.Log
 import androidx.core.graphics.scale
 import com.thomaswcode.decrastination.AppGraph
@@ -62,7 +64,11 @@ object PhotoChecks {
         return "Done: ${verdict.reason}"
     }
 
-    /** The photo as a JPEG no bigger than [PhotoChecker.MAX_SIDE] on its long side. */
+    /**
+     * The photo as a JPEG no bigger than [PhotoChecker.MAX_SIDE] on its long side, the right way up:
+     * a camera can store a portrait page as landscape pixels with a note to turn them (EXIF), which
+     * decoding doesn't read, so the page went sideways (IMP-P2-014).
+     */
     private fun shrink(photo: File): ByteArray? {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeFile(photo.path, bounds)
@@ -71,10 +77,20 @@ object PhotoChecks {
         while (long / (sample * 2) >= PhotoChecker.MAX_SIDE) sample *= 2
         val bitmap = BitmapFactory.decodeFile(photo.path, BitmapFactory.Options().apply { inSampleSize = sample }) ?: return null
         val scale = PhotoChecker.MAX_SIDE.toDouble() / maxOf(bitmap.width, bitmap.height)
-        val sized = if (scale < 1) bitmap.scale((bitmap.width * scale).toInt(), (bitmap.height * scale).toInt()) else bitmap
+        val scaled = if (scale < 1) bitmap.scale((bitmap.width * scale).toInt(), (bitmap.height * scale).toInt()) else bitmap
+        val turn = runCatching { turnOf(ExifInterface(photo.path).getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)) }.getOrDefault(0)
+        val sized = if (turn == 0) scaled else Bitmap.createBitmap(scaled, 0, 0, scaled.width, scaled.height, Matrix().apply { postRotate(turn.toFloat()) }, true)
         return ByteArrayOutputStream().use { out ->
             sized.compress(Bitmap.CompressFormat.JPEG, 85, out)
             out.toByteArray()
         }
+    }
+
+    /** The degrees clockwise an EXIF orientation says to turn the pixels: 0 for none, or a mirrored one (not from a phone's camera). */
+    fun turnOf(orientation: Int): Int = when (orientation) {
+        ExifInterface.ORIENTATION_ROTATE_90 -> 90
+        ExifInterface.ORIENTATION_ROTATE_180 -> 180
+        ExifInterface.ORIENTATION_ROTATE_270 -> 270
+        else -> 0
     }
 }
