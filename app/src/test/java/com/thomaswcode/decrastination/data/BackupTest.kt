@@ -103,6 +103,13 @@ class BackupTest {
         assertNotNull(Backups.problem(backup(settings = Settings(boxMin = 5))))
         assertNotNull(Backups.problem(backup(settings = Settings(weekdayHours = Window(22 * 60, 16 * 60)))))
         assertNotNull(Backups.problem(backup(calibration = Calibration(multipliers = mapOf("Homework|" to 99.0)))))
+        // Evidence it couldn't have counted: a negative count, a kind it doesn't know, a class's own
+        // figure on fewer than its three timed pieces. One from before 1.8.0 kept none, which is fine.
+        assertNotNull(Backups.problem(backup(calibration = Calibration(timed = mapOf("Homework|" to -1), counted = true))))
+        assertNotNull(Backups.problem(backup(calibration = Calibration(timed = mapOf("Chores|" to 2), counted = true))))
+        assertNotNull(Backups.problem(backup(calibration = Calibration(multipliers = mapOf("Homework|12.1 Physics" to 1.2), timed = mapOf("Homework|12.1 Physics" to 1), counted = true))))
+        assertNull(Backups.problem(backup(calibration = Calibration(multipliers = mapOf("Homework|12.1 Physics" to 1.2), timed = mapOf("Homework|12.1 Physics" to 3), counted = true))))
+        assertNull(Backups.problem(backup(calibration = Calibration(multipliers = mapOf("Homework|12.1 Physics" to 1.2)))))
         assertNotNull(Backups.problem(backup(answers = mapOf("Trip" to "load:-5"))))
         assertNull(Backups.problem(backup(answers = mapOf("Trip" to "load:180", "Open Day" to "busy"))))
     }

@@ -538,7 +538,9 @@ class AppGraph private constructor(context: Context) {
         if (armed) return "Settings restored.$waits$told Protection is armed, so the log and what the app learned were left as they are."
         log.update { Backups.mergeLog(it, backup.log, clock.now()) }
         // Your answers on this phone win over the backup's.
-        runtime.update { it.copy(calibration = backup.calibration, eventAnswers = backup.eventAnswers + it.eventAnswers) }
+        // One from before 1.8.0 under its rule now, as at a start, from the log as merged.
+        val calibration = Calibrator.upgraded(backup.calibration, log.value.completions) ?: backup.calibration
+        runtime.update { it.copy(calibration = calibration, eventAnswers = backup.eventAnswers + it.eventAnswers) }
         // Read with the restored answers, and today's record made again, as an answer given here does.
         scope.launch {
             CalendarTime.refresh(app)

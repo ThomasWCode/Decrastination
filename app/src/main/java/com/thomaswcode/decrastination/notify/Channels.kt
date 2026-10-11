@@ -25,21 +25,34 @@ object Channels {
         val manager = context.getSystemService(NotificationManager::class.java) ?: return
         // The four that were one start as you'd set it (silenced, say): Android keeps a channel's
         // settings once it's made, so this is their one chance.
-        val was = manager.getNotificationChannel(DAILY)?.importance ?: NotificationManager.IMPORTANCE_DEFAULT
+        val old = manager.getNotificationChannel(DAILY)
+        val was = old?.importance ?: NotificationManager.IMPORTANCE_DEFAULT
+        // Its sound (or none), vibration, light, badge and lock-screen showing too: each is a setting
+        // of its own, so a quiet one isn't made to ring or buzz.
+        fun NotificationChannel.asWas() = apply {
+            old ?: return@apply
+            setSound(old.sound, old.audioAttributes)
+            enableVibration(old.shouldVibrate())
+            vibrationPattern = old.vibrationPattern
+            enableLights(old.shouldShowLights())
+            lightColor = old.lightColor
+            setShowBadge(old.canShowBadge())
+            lockscreenVisibility = old.lockscreenVisibility
+        }
         manager.createNotificationChannels(
             listOf(
                 NotificationChannel(BRIEFING, "Morning briefing", was).apply {
                     description = "Today's plan, each morning"
-                },
+                }.asWas(),
                 NotificationChannel(HOW_IT_WENT, "How it went", was).apply {
                     description = "After finished homework or revision: harder, as expected or easier"
-                },
+                }.asWas(),
                 NotificationChannel(CALENDAR, "Calendar questions", was).apply {
                     description = "How much of its day an event the plan can't judge takes"
-                },
+                }.asWas(),
                 NotificationChannel(WEEKLY, "Weekly check-in and review", was).apply {
                     description = "The Sunday check-in, and the week's review"
-                },
+                }.asWas(),
             ),
         )
         // The old one goes once nothing's left on it: deleting a channel takes its notifications with
