@@ -4,9 +4,9 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Matrix
-import android.media.ExifInterface
 import android.util.Log
 import androidx.core.graphics.scale
+import androidx.exifinterface.media.ExifInterface
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.core.Chunk
 import com.thomaswcode.decrastination.enrich.AiUsage
