@@ -99,6 +99,11 @@ data class WidgetModel(
         private fun warning(state: TaskState, now: Long): String? {
             val failing = Source.entries.firstOrNull { state.status(it).error != null }
             if (failing != null) return "Can't read ${failing.label}"
+            return teamsWarning(state, now)
+        }
+
+        /** What's wrong with Teams' data, if anything: also the Plan's (IMP-P1-007). */
+        fun teamsWarning(state: TaskState, now: Long): String? {
             // The Teams widget's own trouble (its sync service off, its last sync failed), which
             // also explains a ↻ that didn't sync Teams.
             state.status(Source.Teams).note?.let { return it }
