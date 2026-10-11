@@ -23,9 +23,47 @@ class StoresTest {
     @Test
     fun `an unreadable file is set aside and the state starts afresh`() {
         val file = File(dir, "tasks.json").apply { writeText("{not json") }
-        val store = JsonStore(file, TaskState.serializer(), ::TaskState)
+        val store = JsonStore(file, TaskState.serializer(), ::TaskState, clock = { AT })
         assertEquals(TaskState(), store.value)
-        assertTrue(File(dir, "tasks.json.unreadable").exists())
+        val problem = store.problem!!
+        assertEquals("tasks.json.unreadable-20261011-083000", problem.copy)
+        assertEquals("{not json", File(dir, problem.copy!!).readText())
+        assertFalse(problem.kept)
+        // A file that reads is no problem.
+        assertNull(JsonStore(File(dir, "other.json").apply { writeText("{}") }, TaskState.serializer(), ::TaskState).problem)
+    }
+
+    @Test
+    fun `of a file that doesn't read whole, each field that reads on its own is kept`() {
+        // An app update that can no longer read one field (here, a list that isn't one) loses only it:
+        // protection stays armed, the textbook stays 3.
+        val file = File(dir, "settings.json").apply { writeText("""{"armed": true, "ankiTextbook": 3, "blockedApps": "not a list"}""") }
+        val store = JsonStore(file, Settings.serializer(), ::Settings, clock = { AT })
+        assertTrue(store.value.armed)
+        assertEquals(3, store.value.ankiTextbook)
+        assertEquals(Settings().blockedApps, store.value.blockedApps)
+        assertTrue(store.problem!!.kept)
+    }
+
+    @Test
+    fun `a file that can't be read at all starts from what's safer, where that's given`() {
+        val file = File(dir, "settings.json").apply { writeText("garbage") }
+        val store = JsonStore(file, Settings.serializer(), ::Settings, unreadable = { Settings(armed = true) }, clock = { AT })
+        assertTrue(store.value.armed)
+        // A file that's simply not there yet is the default, as ever.
+        assertFalse(JsonStore(File(dir, "new.json"), Settings.serializer(), ::Settings, unreadable = { Settings(armed = true) }).value.armed)
+    }
+
+    @Test
+    fun `a second unreadable file doesn't overwrite the first, and only the newest few are kept`() {
+        val file = File(dir, "log.json")
+        for (i in 0 until 5) {
+            file.writeText("bad $i")
+            JsonStore(file, ActivityLog.serializer(), ::ActivityLog, clock = { AT + i * 1000L })
+        }
+        val copies = dir.listFiles { f -> f.name.startsWith("log.json.unreadable-") }.orEmpty().map { it.name }.sorted()
+        assertEquals(JsonStore.COPIES_KEPT, copies.size)
+        assertEquals("bad 4", File(dir, copies.last()).readText())
     }
 
     @Test
@@ -60,6 +98,16 @@ class StoresTest {
             override fun encrypt(plain: ByteArray) = plain
             override fun decrypt(sealed: ByteArray): ByteArray = throw javax.crypto.AEADBadTagException()
         }
-        assertTrue(SecretStore(file, broken).present.value.isEmpty())
+        val store = SecretStore(file, broken) { AT }
+        assertTrue(store.present.value.isEmpty())
+        // Told apart from none saved, and set aside before a save can overwrite it.
+        assertEquals("secrets.bin.unreadable-20261011-083000", store.problem!!.copy)
+        assertTrue(File(dir, "secrets.bin.unreadable-20261011-083000").readBytes().contentEquals(byteArrayOf(1, 2, 3)))
+        assertNull(SecretStore(File(dir, "none.bin"), broken).problem)
+    }
+
+    private companion object {
+        /** 11 Oct 2026, 08:30 UTC. */
+        val AT = java.time.Instant.parse("2026-10-11T08:30:00Z").toEpochMilli()
     }
 }

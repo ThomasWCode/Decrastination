@@ -97,10 +97,10 @@ class MainActivity : ComponentActivity() {
         val tasks by graph.tasks.state.collectAsStateWithLifecycle()
         val runtime by graph.runtime.state.collectAsStateWithLifecycle()
         val settings by graph.settings.state.collectAsStateWithLifecycle()
-        // What Setup would show in red, as a dot on the menu: a source failing, Claude's key, protection.
+        // What Setup would show in red, as a dot on the menu: a source failing, Claude's key, protection, a file unreadable.
         val attention = Source.entries.any { tasks.status(it).error != null } ||
             (runtime.aiUsage.keyProblem != null && settings.aiEnabled && settings.aiKeyActive) ||
-            runtime.protection.problems.isNotEmpty()
+            runtime.protection.problems.isNotEmpty() || runtime.unreadable.isNotEmpty()
         var menu by remember { mutableStateOf(false) }
         Scaffold(
             topBar = {
