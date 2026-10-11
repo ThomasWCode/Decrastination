@@ -153,3 +153,15 @@ Still waiting for you:
   - **BUG-P2-008, the fixtures**: real teacher and class names and an Isaac Science link stay in the public fixtures: you said they're fine to be public. Only the capture script changed (BUG-P2-026): it pulls into `private/` now, and checks the signing key itself.
   - **BUG-P2-025, tests of the blocker on a device or emulator**: not added. It's a test harness, not a fix (an emulator matrix and a coordinator pulled out of the focus service); the blocker is still checked by hand on the phone. Worth weighing with the improvements.
 - **Tried on the phone, 10 Oct**: see #22 (Anki counts, a sync) and #23 (screens).
+
+## 1.8.0: improvements from the review
+
+- **What it is**: the 36 improvements in `docs/review/IMPROVEMENTS.md`, each checked against 1.7.0; what each came to, and why, is in `docs/review/IMPROVEMENTS-EVALUATED.md`. Nine needed no decision; ten were yours to call (11 Oct); seventeen aren't worth it here, each with its reason.
+- **The Plan** (#25):
+  - **Start, Check it's done and Photo check on the Plan**, not only on the block screen: the DO NOW card has the block screen's buttons, and tapping any other piece opens them in a sheet. Earning free time before 16:45 no longer means opening a blocked app first. A session under way shows on the card, counting down, with *Stop session*.
+  - **Needs a look**: a red card at the top of the Plan when a source can't be read, Teams hasn't synced for a day, or protection is off, with the way to put it right (*Open Setup*, *Protection*, *Sync Teams*). *Nothing to do* says when that's because a source hasn't been read yet.
+  - **Not planned**: folded at the foot of the Plan, the open work it leaves out, each with why: not open yet (its source's date), waiting for another task (as you said), opening after the plan's last day, or no room for it by then. Before, these just weren't there.
+  - **The widget's red !**: at sizes too small for the red warning strip (2×1, 4×1), a red ! by ↻ says something's wrong; a tap opens the app.
+- **Calendar questions answered on the Calendar page** (#25): an event the plan can't judge shows *All of it / A few hours / None* where it's listed, so a dismissed notification no longer loses the question; your answer can be changed there too. An answer still holds for every event of that name.
+- **Quick changes in Tasks** (#25), with no Claude: on an open task, *Not a task*, *Can't start before…* and *Due on…* (a date picker; the time of day it's due stays). Each is kept as an instruction, listed in Instructions and taken back there; a due date needs your dad's code while armed, as an instruction's does, and isn't kept if the code isn't given.
+
