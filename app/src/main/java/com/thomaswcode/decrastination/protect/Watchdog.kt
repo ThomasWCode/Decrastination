@@ -21,6 +21,7 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.R
+import com.thomaswcode.decrastination.block.Blocklist
 import com.thomaswcode.decrastination.block.FocusService
 import com.thomaswcode.decrastination.block.Sessions
 import com.thomaswcode.decrastination.data.ProtectionRecord
@@ -100,6 +101,7 @@ object Watchdog {
             canRepair = canRepair(context),
             serviceRunning = FocusService.isRunning(context),
             alertsShown = Notify.shown(context, Channels.PROTECTION),
+            unreadableBrowsers = FocusService.unreadableBrowsers.value.map { Blocklist.NAMES[it] ?: it }.sorted(),
         )
     }
 
