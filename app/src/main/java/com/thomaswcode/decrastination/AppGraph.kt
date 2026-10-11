@@ -226,7 +226,9 @@ class AppGraph private constructor(context: Context) {
     suspend fun applyReviewChanges(changes: List<com.thomaswcode.decrastination.learn.ReviewInput.Change>) = changing.withLock {
         applyDue(force = true)
         val state = runtime.value
-        val outcome = SettingsChanges.atOnce(settings.value, state.pending) { com.thomaswcode.decrastination.learn.ReviewInput.apply(it, changes) }
+        // The settings it names: one it sets to the value already asked for applies now all the same.
+        val fields = changes.map { it.setting }.filter { it in com.thomaswcode.decrastination.learn.ReviewInput.BOUNDS }.toSet()
+        val outcome = SettingsChanges.atOnce(settings.value, state.pending, fields) { com.thomaswcode.decrastination.learn.ReviewInput.apply(it, changes) }
         runtime.update { it.copy(pending = outcome.pending, uptimeMark = if (outcome.pending.isEmpty()) null else it.uptimeMark) }
         settings.update { outcome.settings }
     }

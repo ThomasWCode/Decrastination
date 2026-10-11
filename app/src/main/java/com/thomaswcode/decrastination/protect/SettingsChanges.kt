@@ -135,17 +135,14 @@ object SettingsChanges {
     }
 
     /**
-     * [change] made at once, armed or not, with no wait: read from what's been asked for, as a change
-     * of yours is, and laid over [current] field by field. A change waiting for a field it sets is
-     * replaced by it; the others keep their wait. For the weekly review's bounded changes, which you
-     * said needn't wait (11 Oct, IMP-P2-015).
+     * [change] to [fields] made at once, armed or not, with no wait: read from what's been asked for,
+     * as a change of yours is, and those fields laid over [current]. A change waiting for one of them
+     * is replaced by it, even one asking for the same value, which now applies; the others keep their
+     * wait. For the weekly review's bounded changes, which you said needn't wait (11 Oct, IMP-P2-015).
      */
-    fun atOnce(current: Settings, pending: List<PendingChange>, change: (Settings) -> Settings): Outcome {
-        val asked = requested(current, pending)
-        val wanted = change(asked)
-        val before = encode(asked)
-        val fields = encode(wanted).filter { (field, value) -> before[field] != value }.keys
-        return Outcome(edited(asked, wanted, current), pending.filterNot { it.field in fields })
+    fun atOnce(current: Settings, pending: List<PendingChange>, fields: Set<String>, change: (Settings) -> Settings): Outcome {
+        val wanted = encode(change(requested(current, pending)))
+        return Outcome(decode(JsonObject(encode(current) + wanted.filterKeys { it in fields })), pending.filterNot { it.field in fields })
     }
 
     /**
