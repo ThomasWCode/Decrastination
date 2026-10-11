@@ -80,6 +80,8 @@ class SettingsActivity : ComponentActivity() {
         var invalid by rememberSaveable(stateSaver = KEYS) { mutableStateOf(emptySet<String>()) }
         var message by remember { mutableStateOf<String?>(null) }
         var apps by remember { mutableStateOf(emptyList<App>()) }
+        // The apps list's search (IMP-P2-009), kept through a turn of the phone.
+        var find by rememberSaveable { mutableStateOf("") }
         val scope = rememberCoroutineScope()
         LaunchedEffect(Unit) { apps = withContext(Dispatchers.IO) { launchableApps() } }
         // A change made elsewhere meanwhile (Setup putting a key to use) shows at once, your edits
@@ -214,7 +216,21 @@ class SettingsActivity : ComponentActivity() {
                 val listed = (Blocklist.APPS + asked.blockedApps + draft.blockedApps).distinct()
                     .filter { pkg -> apps.none { it.packageName == pkg } && pkg !in shownBrowsers }
                     .map { App("${Blocklist.NAMES[it] ?: it} (not installed)", it) }
-                items(listed + apps.filter { it.packageName != packageName && it.packageName !in shownBrowsers }, key = { it.packageName }) { app ->
+                // Blocked ones first (as the screen opened or was last saved, so a row doesn't jump as
+                // it's switched), then the rest; the search finds one by name (IMP-P2-009).
+                val all = (listed + apps.filter { it.packageName != packageName && it.packageName !in shownBrowsers })
+                    .sortedWith(compareBy({ it.packageName !in base.blockedApps }, { it.label.lowercase() }))
+                val query = find.trim().lowercase()
+                item {
+                    OutlinedTextField(
+                        value = find,
+                        onValueChange = { find = it },
+                        label = { Text("Find an app") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                    )
+                }
+                items(all.filter { query.isEmpty() || query in it.label.lowercase() || query in it.packageName }, key = { it.packageName }) { app ->
                     SwitchRow(app.label, app.packageName in draft.blockedApps) { on ->
                         draft = draft.copy(blockedApps = if (on) (draft.blockedApps + app.packageName).distinct() else draft.blockedApps - app.packageName)
                     }
