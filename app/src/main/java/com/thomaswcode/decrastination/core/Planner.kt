@@ -184,7 +184,11 @@ object Planner {
                 !task.isAvailable(input.now) -> Unplanned.Reason.NotOpen
                 else -> continue
             }
-            val left = pieces(task, input, held[task.id].orEmpty()).takeIf { it.isNotEmpty() } ?: continue
+            // Waiting, its deck tasks wait with it (they're its vocabulary): its gap keeps those sections,
+            // rather than losing the cards from both the plan and the list. Not open yet, its decks
+            // are planned as ever, and hold them.
+            val keep = if (reason == Unplanned.Reason.Waits) emptySet() else held[task.id].orEmpty()
+            val left = pieces(task, input, keep).takeIf { it.isNotEmpty() } ?: continue
             unplanned += Unplanned(
                 task.id, task.source, task.title, left.sumOf { it.minutes }, left.size, reason,
                 at = task.availableFrom.takeIf { reason == Unplanned.Reason.NotOpen },
