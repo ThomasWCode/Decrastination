@@ -1,0 +1,144 @@
+package com.thomaswcode.decrastination.enrich
+
+import com.thomaswcode.decrastination.core.Enrichments
+import com.thomaswcode.decrastination.core.Planner
+import com.thomaswcode.decrastination.core.TaskItem
+import com.thomaswcode.decrastination.core.withEnrichment
+import com.thomaswcode.decrastination.data.JsonStore
+import com.thomaswcode.decrastination.data.Settings
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import org.junit.Assume.assumeTrue
+import java.io.File
+import java.time.Instant
+import java.time.LocalDateTime
+import java.time.ZoneId
+import kotlin.test.Test
+
+/**
+ * The private evaluation set (IMP-P1-004, docs/eval.md): a dozen of your real emails and
+ * assignments, each with the right answer, in `private/eval/` (never committed). Run only where
+ * that folder is, so on this PC; skipped everywhere else, CI included.
+ *
+ * 1. `dump` writes each case's request as the app makes it ([Prompts.system], [Prompts.describe],
+ *    [Prompts.schemaJson]) to `private/eval/prompts/<id>.txt`, email addresses redacted.
+ * 2. Opus, through Claude Code, answers each into `private/eval/answers/<id>-<run>.json`: no API
+ *    spend.
+ * 3. `score` puts every answer through the app's own checks ([Answers.parse]) and the planner, as
+ *    the app would, and writes `private/eval/report.md`: each case's kind, deadline, minutes,
+ *    must-mention items, blocks and sections against its labels.
+ */
+class EvalSetTest {
+    private val dir = listOf(File("../private/eval"), File("private/eval")).firstOrNull { File(it, "cases.json").exists() }
+    private val zone: ZoneId = ZoneId.of("Europe/London")
+
+    /** One case: the task as stored, when it's asked about, and what a right answer has. */
+    @Serializable
+    data class Case(val id: String, val job: Enrichments.Job, val now: String, val task: TaskItem, val expect: Expect, val note: String = "")
+
+    /**
+     * What a right answer has; null where it doesn't matter. [deadline] "none" for no deadline.
+     * [mentions]: what some step, block or the next step must each hold, case aside; parts joined
+     * by `+` must all be in the same one ("Imperial+Work Experience": not met by a STEM Potential block).
+     */
+    @Serializable
+    data class Expect(
+        val kind: String? = null,
+        val deadline: String? = null,
+        val effortMin: List<Int>? = null,
+        val mentions: List<String> = emptyList(),
+        val blocksAtLeast: Int? = null,
+        val ankiSections: List<String>? = null,
+        val testDate: String? = null,
+    )
+
+    private fun cases(): List<Case> {
+        assumeTrue("No private/eval/cases.json: nothing to evaluate here", dir != null)
+        return JsonStore.json.decodeFromString(ListSerializer(Case.serializer()), File(dir, "cases.json").readText())
+    }
+
+    private fun nowOf(case: Case): Long = LocalDateTime.parse(case.now).atZone(zone).toInstant().toEpochMilli()
+
+    @Test
+    fun dump() {
+        val cases = cases()
+        val out = File(dir!!, "prompts").apply { mkdirs() }
+        for (case in cases) {
+            val user = Prompts.describe(case.task, case.job, nowOf(case), zone).take(Pricing.MAX_INPUT_CHARS)
+            File(out, "${case.id}.txt").writeText(
+                buildString {
+                    appendLine("=== SYSTEM ===")
+                    appendLine(Prompts.system(case.job))
+                    appendLine()
+                    appendLine("=== USER ===")
+                    appendLine(redact(user))
+                    appendLine()
+                    appendLine("=== ANSWER: one JSON object matching this schema, nothing else ===")
+                    appendLine(Prompts.schemaJson(case.job).toString())
+                },
+            )
+        }
+    }
+
+    @Test
+    fun score() {
+        val cases = cases()
+        val answers = File(dir!!, "answers").listFiles { f -> f.extension == "json" }.orEmpty().sortedBy { it.name }
+        assumeTrue("No answers in private/eval/answers yet", answers.isNotEmpty())
+        val rows = mutableListOf<String>()
+        var passed = 0
+        for (file in answers) {
+            val case = cases.firstOrNull { file.name.startsWith(it.id + "-") } ?: continue
+            val now = nowOf(case)
+            val text = file.readText().trim().removePrefix("```json").removePrefix("```").removeSuffix("```").trim()
+            val enrichment = Answers.parse(case.job, text, case.task, "eval", now, zone)
+            val checks = if (enrichment == null) listOf("unreadable" to false) else check(case, case.task.withEnrichment(enrichment), enrichment, now, text)
+            val ok = checks.all { it.second }
+            if (ok) passed++
+            rows += "| ${file.nameWithoutExtension} | ${if (ok) "pass" else "**fail**"} | " + checks.joinToString("; ") { (what, good) -> if (good) what else "**$what**" } + " |"
+        }
+        File(dir!!, "report.md").writeText(
+            buildString {
+                appendLine("# Evaluation report")
+                appendLine()
+                appendLine("$passed of ${rows.size} answers pass every check.")
+                appendLine()
+                appendLine("| Answer | Result | Checks (failed in bold) |")
+                appendLine("|---|---|---|")
+                rows.forEach(::appendLine)
+            },
+        )
+    }
+
+    /** Each label of [case]'s against what the app made of the answer ([made]: the task as enriched). */
+    private fun check(case: Case, made: TaskItem, e: com.thomaswcode.decrastination.core.Enrichment, now: Long, answer: String): List<Pair<String, Boolean>> = buildList {
+        val expect = case.expect
+        fun day(time: Long?) = time?.let { Instant.ofEpochMilli(it).atZone(zone).toLocalDate().toString() } ?: "none"
+        expect.kind?.let { add("kind ${e.kind?.name ?: "-"} (want $it)" to (e.kind?.name == it)) }
+        expect.deadline?.let { add("deadline ${day(e.deadline)} (want $it)" to (day(e.deadline) == it)) }
+        expect.testDate?.let { add("test ${day(e.testDate)} (want $it)" to (day(e.testDate) == it)) }
+        expect.effortMin?.let { (lo, hi) -> add("${made.effortMin} min (want $lo–$hi)" to (made.effortMin in lo..hi)) }
+        // The steps given, kept or dropped: what the model saw is checked apart from whether the app kept it.
+        val titles = (listOfNotNull(e.nextStep) + (e.subSteps?.map { it.title } ?: given(answer))).map { it.lowercase() }
+        expect.mentions.forEach { m -> add("mentions $m" to titles.any { title -> m.lowercase().split('+').all { it.trim() in title } }) }
+        expect.blocksAtLeast?.let { add("${e.subSteps?.size ?: 0} blocks (want ≥$it)" to ((e.subSteps?.size ?: 0) >= it)) }
+        expect.ankiSections?.let { add("sections ${e.ankiSections} (want $it)" to (e.ankiSections.toSet() == it.toSet())) }
+        add(("plan kept" + (e.dropped?.let { ": dropped, $it" } ?: "")) to (e.dropped == null))
+        // As the app would plan it: something placed or said, nothing lost.
+        val plan = Planner.plan(Planner.Input(listOf(made), now, zone, Settings()))
+        val placed = plan.ordered.size + plan.unplanned.size
+        if (made.kind.name != "Info" && made.kind.name != "Event") add("planned ($placed pieces)" to (placed > 0))
+    }
+
+    /** The titles of the blocks or steps [answer] gives, whether or not the app kept them. */
+    private fun given(answer: String): List<String> = runCatching {
+        val root = JsonStore.json.parseToJsonElement(answer).jsonObject
+        listOf("blocks", "subSteps").flatMap { key -> root[key]?.jsonArray.orEmpty().mapNotNull { it.jsonObject["title"]?.jsonPrimitive?.content } }
+    }.getOrDefault(emptyList())
+
+    /** Email addresses out of what's handed to Opus here (names stay): the app itself sends them. */
+    private fun redact(text: String): String = text.replace(Regex("[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}"), "<address>")
+}
