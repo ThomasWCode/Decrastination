@@ -219,6 +219,19 @@ class AppGraph private constructor(context: Context) {
     }
 
     /**
+     * The weekly review's [changes] to the planner's numbers, within their bounds, applied at once,
+     * armed or not: you said they needn't wait (11 Oct, IMP-P2-015). Only the fields
+     * [ReviewInput.apply] sets can change this way; everything else waits as ever.
+     */
+    suspend fun applyReviewChanges(changes: List<com.thomaswcode.decrastination.learn.ReviewInput.Change>) = changing.withLock {
+        applyDue(force = true)
+        val state = runtime.value
+        val outcome = SettingsChanges.atOnce(settings.value, state.pending) { com.thomaswcode.decrastination.learn.ReviewInput.apply(it, changes) }
+        runtime.update { it.copy(pending = outcome.pending, uptimeMark = if (outcome.pending.isEmpty()) null else it.uptimeMark) }
+        settings.update { outcome.settings }
+    }
+
+    /**
      * Counts the uptime since the last count towards the pending changes and applies those whose
      * wait is over. Called every half minute; it writes (and so counts) only every few minutes, or
      * when a change falls due, unless [force]d.
