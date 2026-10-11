@@ -101,7 +101,9 @@ object Watchdog {
             canRepair = canRepair(context),
             serviceRunning = FocusService.isRunning(context),
             alertsShown = Notify.shown(context, Channels.PROTECTION),
-            unreadableBrowsers = FocusService.unreadableBrowsers.value.map { Blocklist.NAMES[it] ?: it }.sorted(),
+            // Only those still read for sites: one since blocked outright (the fix it suggests) is covered.
+            unreadableBrowsers = FocusService.unreadableBrowsers.value.filter { it in AppGraph.get(context).settings.value.checkedBrowsers }
+                .map { Blocklist.NAMES[it] ?: it }.sorted(),
         )
     }
 
