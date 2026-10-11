@@ -95,18 +95,27 @@ object Stats {
 
     /** The calibration in words, a line a value: what the planner now assumes about your work. */
     fun calibrationLines(calibration: Calibration): List<String> {
-        val multipliers = calibration.multipliers.entries.sortedBy { it.key }.map { (key, value) ->
+        fun what(key: String): String {
             val kind = key.substringBefore('|')
             val className = key.substringAfter('|', "")
             val label = Kind.entries.firstOrNull { it.name == kind }?.label ?: kind
-            val what = if (className.isEmpty()) label else "$label, $className"
-            "$what: takes %.1f× the estimate".format(Locale.UK, value)
+            return if (className.isEmpty()) label else "$label, $className"
         }
+        // What each figure rests on (IMP-P2-016): its timed pieces, or only your answers.
+        fun pieces(n: Int) = "$n timed piece${if (n == 1) "" else "s"}"
+        val multipliers = calibration.multipliers.entries.sortedBy { it.key }.map { (key, value) ->
+            val n = calibration.timed[key] ?: 0
+            "${what(key)}: takes %.1f× the estimate".format(Locale.UK, value) + if (n > 0) " (from ${pieces(n)})" else " (from your answers)"
+        }
+        // A class with some timed pieces, not yet enough for its own figure.
+        val coming = calibration.timed.entries.filter { (key, n) -> key.substringAfter('|').isNotEmpty() && key !in calibration.multipliers && n > 0 }
+            .sortedBy { it.key }
+            .map { (key, n) -> "${what(key)}: ${pieces(n)} so far; its own figure counts from ${Calibrator.MIN_CLASS_TIMED}" }
         val margins = calibration.marginDays.entries.sortedBy { it.key.ordinal }.map { (kind, days) ->
             "${kind.label}: finished $days day${if (days == 1) "" else "s"} before the deadline"
         }
         val boxes = calibration.boxMin.entries.sortedBy { it.key.ordinal }.map { (kind, minutes) -> "${kind.label}: cut into $minutes-minute pieces" }
-        return multipliers + margins + boxes
+        return multipliers + coming + margins + boxes
     }
 
     private const val TOP = 5
