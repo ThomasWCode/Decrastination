@@ -178,4 +178,16 @@ Still waiting for you:
   - **Photo checks the right way up**: a portrait page stored as landscape with a note to turn it (EXIF) is turned before it's sent.
   - **The Gradle wrapper checks the distribution's SHA-256** when it downloads it.
 - **The evaluation set** (#27, your call): your real emails and assignments with the right answers (you checked the labels, 11 Oct), kept in `private/eval/` and never committed; `docs/eval.md` says how to run it. Opus answers through Claude Code, so it costs nothing on the API.
+- **Tried on the phone, 11 Oct** (1.8.0 installed over 1.7.0):
+  - the Plan's DO NOW card and a piece's sheet (*Check it's done* answered for its own task only);
+  - *Due on…* through the parent-code step, cancelled, nothing kept; *Can't start before…* applied, then taken back in Instructions;
+  - the Calendar's answer buttons and *Keep it*;
+  - Settings' *Find an app* ("tube": YouTube, blocked, first);
+  - the four new notification channels, with the old one's importance, and the old one gone;
+  - no false address-bar alarm while you used Chrome;
+  - and, with your go-ahead, the protection fix for real: `settings.json` with one field that can't be read stayed armed, with the device admin still on and Claude still on, and the incident showed on the Plan and in Setup; your file was then put back byte for byte. Not done whole-file junk: falling back to every default would have switched Claude off, and the rules would have read over Claude's readings.
+- **Not tried on the phone**: arming again with the authenticator kept, and *Arm now?*'s list (they need protection disarmed, so your dad); the free-time countdown (it needs a day with nothing due); the widget's red ! (it needs the widget made 2×1); the review's at-once changes (tonight's review, at 21:00).
+- **Waiting for you: what the first evaluation run found** (11 of 13 pass):
+  - **The German assessment's plan is thrown away.** Claude split *Prep and Assessment preparation* into nine sensible steps, but one ("revise using the marked sheet", from 9 Oct) starts after the Teams due date (8 Oct, the hand-in) though the assessment is on 12 Oct. The app's checks then drop the whole split and plan 3½ hours as one block, already overdue. Either the prompt tells Claude no step can start after the due date, or the checks drop only that step.
+  - **A note to self holding a recording** ("Imperial Physics Talk", a link to the talk's audio) is read as only to read (2 min); you labelled it something to do. The prompt could say a note to self that keeps something to go back to is something to do.
 
