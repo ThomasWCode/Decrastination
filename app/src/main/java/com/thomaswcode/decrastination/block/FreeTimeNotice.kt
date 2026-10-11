@@ -37,6 +37,8 @@ object FreeTimeNotice {
                 .setChronometerCountDown(true)
                 .setOngoing(true)
                 .setSilent(true)
+                // Shown again as its end moves: never a sound or a buzz for that.
+                .setOnlyAlertOnce(true)
                 .setContentIntent(backToWork(context))
                 .addAction(0, "Back to work", backToWork(context))
                 .build(),
