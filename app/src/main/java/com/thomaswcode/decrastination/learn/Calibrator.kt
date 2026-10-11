@@ -68,6 +68,17 @@ object Calibrator {
         return learnedMultipliers(completions).filterKeys { key -> key.substringAfter('|').isEmpty() || (counts[key] ?: 0) >= MIN_CLASS_TIMED }
     }
 
+    /**
+     * A calibration from before 1.8.0, which counted no timed pieces: its multipliers made again from
+     * [completions] as the next review would make them, so a class's own needs its [MIN_CLASS_TIMED]
+     * timed pieces from now, and Stats can say what each rests on. Its margins and boxes stand. Null
+     * for one that isn't.
+     */
+    fun upgraded(calibration: Calibration, completions: List<CompletionRecord>): Calibration? {
+        if (calibration.timed.isNotEmpty() || calibration.multipliers.isEmpty()) return null
+        return calibration.copy(multipliers = multipliers(completions), timed = timed(completions)).takeIf { it != calibration }
+    }
+
     /** Whether [record]'s minutes are how long it took: timed, and all of it (no blocks ticked by hand, no photo check). */
     private fun isTimed(record: CompletionRecord) = record.estimateMin > 0 && record.workedMin > 0 && !record.byHand && !record.photo
 

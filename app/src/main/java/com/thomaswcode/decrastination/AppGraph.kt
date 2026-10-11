@@ -50,6 +50,7 @@ import com.thomaswcode.decrastination.enrich.PhotoChecker
 import com.thomaswcode.decrastination.enrich.RuleEnricher
 import com.thomaswcode.decrastination.learn.Assessment
 import com.thomaswcode.decrastination.learn.Briefing
+import com.thomaswcode.decrastination.learn.Calibrator
 import com.thomaswcode.decrastination.learn.CalendarTime
 import com.thomaswcode.decrastination.learn.Daily
 import com.thomaswcode.decrastination.net.UrlConnectionHttp
@@ -125,6 +126,11 @@ class AppGraph private constructor(context: Context) {
                 }.onSuccess { listOf(tasks, settings, runtime, log, instructions).forEach { it.keepRecovered() } }
                     .onFailure { Log.w(TAG, "Couldn't keep what was found unreadable", it) }
             }
+        }
+        // A calibration from before 1.8.0, kept by a class's first timed piece: under its rule now
+        // (IMP-P2-016), not only from the next weekly review.
+        if (Calibrator.upgraded(runtime.value.calibration, log.value.completions) != null) {
+            scope.launch { runtime.update { state -> Calibrator.upgraded(state.calibration, log.value.completions)?.let { state.copy(calibration = it) } ?: state } }
         }
     }
 

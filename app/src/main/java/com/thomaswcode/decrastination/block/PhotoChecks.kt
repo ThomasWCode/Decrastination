@@ -89,19 +89,37 @@ object PhotoChecks {
         val bitmap = BitmapFactory.decodeFile(photo.path, BitmapFactory.Options().apply { inSampleSize = sample }) ?: return null
         val scale = PhotoChecker.MAX_SIDE.toDouble() / maxOf(bitmap.width, bitmap.height)
         val scaled = if (scale < 1) bitmap.scale((bitmap.width * scale).toInt(), (bitmap.height * scale).toInt()) else bitmap
-        val turn = runCatching { turnOf(ExifInterface(photo.path).getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)) }.getOrDefault(0)
-        val sized = if (turn == 0) scaled else Bitmap.createBitmap(scaled, 0, 0, scaled.width, scaled.height, Matrix().apply { postRotate(turn.toFloat()) }, true)
+        val turn = runCatching { turnOf(ExifInterface(photo.path).getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)) }.getOrDefault(Turn.NONE)
+        val matrix = Matrix().apply {
+            if (turn.mirrored) postScale(-1f, 1f)
+            postRotate(turn.degrees.toFloat())
+        }
+        val sized = if (turn == Turn.NONE) scaled else Bitmap.createBitmap(scaled, 0, 0, scaled.width, scaled.height, matrix, true)
         return ByteArrayOutputStream().use { out ->
             sized.compress(Bitmap.CompressFormat.JPEG, 85, out)
             out.toByteArray()
         }
     }
 
-    /** The degrees clockwise an EXIF orientation says to turn the pixels: 0 for none, or a mirrored one (not from a phone's camera). */
-    fun turnOf(orientation: Int): Int = when (orientation) {
-        ExifInterface.ORIENTATION_ROTATE_90 -> 90
-        ExifInterface.ORIENTATION_ROTATE_180 -> 180
-        ExifInterface.ORIENTATION_ROTATE_270 -> 270
-        else -> 0
+    /** What to do to a photo's pixels to stand it upright: mirror them left to right (first), then turn them [degrees] clockwise. */
+    data class Turn(val degrees: Int, val mirrored: Boolean) {
+        companion object {
+            val NONE = Turn(0, false)
+        }
+    }
+
+    /**
+     * What an EXIF orientation says to do, all eight of them: the camera that took it is whichever
+     * app answers, and a front camera's can be mirrored.
+     */
+    fun turnOf(orientation: Int): Turn = when (orientation) {
+        ExifInterface.ORIENTATION_FLIP_HORIZONTAL -> Turn(0, true)
+        ExifInterface.ORIENTATION_ROTATE_180 -> Turn(180, false)
+        ExifInterface.ORIENTATION_FLIP_VERTICAL -> Turn(180, true)
+        ExifInterface.ORIENTATION_TRANSPOSE -> Turn(270, true)
+        ExifInterface.ORIENTATION_ROTATE_90 -> Turn(90, false)
+        ExifInterface.ORIENTATION_TRANSVERSE -> Turn(90, true)
+        ExifInterface.ORIENTATION_ROTATE_270 -> Turn(270, false)
+        else -> Turn.NONE
     }
 }
