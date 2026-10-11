@@ -187,12 +187,14 @@ object Planner {
                 !task.isAvailable(input.now) -> Unplanned.Reason.NotOpen
                 else -> continue
             }
-            // Waiting, its deck tasks wait with it (they're its vocabulary): its gap keeps those sections,
-            // rather than losing the cards from both the plan and the list. Not one another assignment
-            // keeps on the plan: that holds its section, as a deck does for one not open yet, so its
-            // cards aren't counted twice.
-            val keep = if (reason == Unplanned.Reason.Waits) decks[task.id].orEmpty().filterValues(::keptOn).keys else held[task.id].orEmpty()
-            val left = pieces(task, input, keep).takeIf { it.isNotEmpty() } ?: continue
+            // Its own work as the plan would have it: a vocabulary step its decks hold is their cards.
+            // Waiting, the decks no assignment still on the plan keeps there wait with it, and their
+            // cards are counted here, rather than lost from both the plan and the list: once, under
+            // the first of their assignments that waits. A deck another assignment keeps on the plan
+            // is counted there, not again here.
+            val waitingDecks = if (reason != Unplanned.Reason.Waits) emptyList() else decks[task.id].orEmpty().values.distinctBy { it.id }
+                .filter { deck -> deck.isOpen && !keptOn(deck) && linked(deck).firstOrNull { !it.hidden && Instructions.waiting(it, byId) }?.id == task.id }
+            val left = (pieces(task, input, held[task.id].orEmpty()) + waitingDecks.flatMap { pieces(it, input, emptySet()) }).takeIf { it.isNotEmpty() } ?: continue
             unplanned += Unplanned(
                 task.id, task.source, task.title, left.sumOf { it.minutes }, left.size, reason,
                 at = task.availableFrom.takeIf { reason == Unplanned.Reason.NotOpen },
