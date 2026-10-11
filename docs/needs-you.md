@@ -171,4 +171,11 @@ Still waiting for you:
   - **Arm now?** lists anything in *What's in place* that isn't (it arms all the same).
 - **Free time** (#26): while earned free time is spent on a blocked app, a silent notification counts it down, and a heads-up comes a minute before it's covered. *Back to work* opens the Plan. Neither grants time.
 - **The weekly review's changes apply at once**, armed or not (your call): box length, safety margin, undated minutes a day and work minutes per free minute, each within its bounds. The review says what changed. A change of yours waiting for one of those settings is replaced by the review's; every other waiting change keeps its 24 hours.
+- **Learning, settings, notifications, photos** (#27):
+  - **Learned estimates rest on evidence** (your call): a class's own multiplier counts once it has three timed pieces; until then its kind's figure stands, so one long evening can't set it. Stats says what each figure rests on ("from 4 timed pieces", "from your answers", "2 timed pieces so far").
+  - **Four notification channels** where one carried four things (your call): *Morning briefing*, *How it went*, *Calendar questions*, *Weekly check-in and review*. Each starts as the old one was set, so a silenced one stays silenced; the old one is gone.
+  - **Settings: blocked apps first, then a search box** (your call) over the rest of the installed apps.
+  - **Photo checks the right way up**: a portrait page stored as landscape with a note to turn it (EXIF) is turned before it's sent.
+  - **The Gradle wrapper checks the distribution's SHA-256** when it downloads it.
+- **The evaluation set** (#27, your call): your real emails and assignments with the right answers (you checked the labels, 11 Oct), kept in `private/eval/` and never committed; `docs/eval.md` says how to run it. Opus answers through Claude Code, so it costs nothing on the API.
 
