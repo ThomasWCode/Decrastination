@@ -126,7 +126,7 @@ object CalendarTime {
         // Not at night: they're asked at the first look after quiet hours. Nor while the question
         // couldn't be seen (notifications off): it's asked once it can be, not marked asked unseen.
         val quiet = BlockPolicy.isQuiet(now, graph.clock.zone(), graph.settings.value)
-        val toAsk = if (quiet || !Notify.shown(context, Channels.DAILY)) emptyList() else questions(time.toAsk, graph.runtime.value.eventsAsked, now)
+        val toAsk = if (quiet || !Notify.shown(context, Channels.CALENDAR)) emptyList() else questions(time.toAsk, graph.runtime.value.eventsAsked, now)
         if (toAsk.isNotEmpty()) {
             toAsk.forEach { ask(context, it, graph.clock.zone()) }
             graph.runtime.update { it.copy(eventsAsked = it.eventsAsked + toAsk.map(EventJudge::key)) }
@@ -150,7 +150,7 @@ object CalendarTime {
         // data: no two questions can share either.
         val tag = TAG_PREFIX + key
         val day = questionDay(event, zone)
-        val builder = NotificationCompat.Builder(context, Channels.DAILY)
+        val builder = NotificationCompat.Builder(context, Channels.CALENDAR)
             .setSmallIcon(R.drawable.ic_focus)
             .setContentTitle("${event.title}, $day")
             .setContentText("How much of the day does it take? The plan leaves you that much less time.")
