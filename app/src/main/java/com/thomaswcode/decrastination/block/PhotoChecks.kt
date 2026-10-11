@@ -13,6 +13,7 @@ import com.thomaswcode.decrastination.enrich.PhotoChecker
 import java.io.ByteArrayOutputStream
 import java.io.File
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -20,6 +21,16 @@ import kotlinx.coroutines.withContext
 /** A photo of written work, checked by the model and, if it's done, the piece ticked off. */
 object PhotoChecks {
     private const val OFF = "Claude is off: the timer or the source will have to do."
+
+    /**
+     * The task a photo check is under way for, if one is: app-wide, so a screen made again, or
+     * another one, knows (no session is started meanwhile). The check runs in the app's scope, so
+     * changing tab or screen doesn't cancel a call already paid for.
+     */
+    val running = MutableStateFlow<String?>(null)
+
+    /** The last check's outcome, by task, until a screen has shown it: one left while it ran shows it on coming back. */
+    val unseen = MutableStateFlow<Pair<String, String>?>(null)
 
     /** Checks [photo] against [piece], records the cost, and says how it went. The photo is deleted, whatever happens. */
     suspend fun check(context: Context, graph: AppGraph, photo: File, piece: Chunk): String {

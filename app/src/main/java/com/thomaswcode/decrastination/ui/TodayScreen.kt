@@ -284,7 +284,7 @@ private fun NextCard(
     empty: String,
 ) {
     // A session under way: the piece it's on, as the block screen shows it.
-    val next = session?.let { plan.chunksOf(it.taskId).firstOrNull() } ?: plan.next
+    val next = session?.let { plan.pieceOf(it.taskId, it.stepIndex, it.step) } ?: plan.next
     val message = messageOf(next?.taskId.orEmpty(), true)
     Card(
         modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 12.dp),
