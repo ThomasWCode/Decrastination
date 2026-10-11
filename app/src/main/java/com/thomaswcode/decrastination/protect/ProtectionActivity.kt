@@ -285,7 +285,23 @@ class ProtectionActivity : ComponentActivity() {
             Step.Confirm -> AlertDialog(
                 onDismissRequest = { abandon() },
                 title = { Text("Arm now?") },
-                text = { Text(if (hasParentCode) "Your dad's code is set." else "No parent code: loosening will always wait the full ${settings.loosenDelayHours} hours.") },
+                text = {
+                    // What isn't in place yet (IMP-P1-006): it arms all the same, but you know what you're arming.
+                    val missing = buildList {
+                        if (!report.serviceEnabled || !report.accessibilityOn) add("The focus service is off: nothing is blocked till it's on")
+                        else if (!report.serviceRunning) add("The focus service is on but has stopped: nothing is blocked till it runs again")
+                        if (!report.canRepair) add("Self-repair isn't granted: the service switched off would stay off")
+                        if (!Notify.shown(this@ProtectionActivity, Channels.PROTECTION)) add("Protection alerts are off: you wouldn't be told if it stopped")
+                        if (getSystemService(PowerManager::class.java)?.isIgnoringBatteryOptimizations(packageName) != true) add("Battery isn't unrestricted: One UI may stop the app")
+                    }
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(if (hasParentCode) "Your dad's code is set." else "No parent code: loosening will always wait the full ${settings.loosenDelayHours} hours.")
+                        if (missing.isNotEmpty()) {
+                            Text("Not in place yet (it arms all the same; What's in place has each):", fontWeight = FontWeight.Medium)
+                            missing.forEach { Text("• $it", color = MaterialTheme.colorScheme.error) }
+                        }
+                    }
+                },
                 confirmButton = {
                     TextButton(onClick = {
                         step = Step.None
@@ -309,9 +325,65 @@ class ProtectionActivity : ComponentActivity() {
         data object Unblock : CodeTarget
     }
 
-    /** Shows a new secret as a QR code for your dad's authenticator; saved once a code from it checks out. */
+    /**
+     * Your dad's authenticator, for arming: one already set (from arming before) is kept with a code
+     * from it, rather than scanned again (IMP-P2-012), unless a new one or none is asked for.
+     */
     @Composable
     private fun ParentCodeDialog(graph: AppGraph, onDone: () -> Unit, onCancel: () -> Unit) {
+        var fresh by rememberSaveable { mutableStateOf(!graph.secrets.has(Secret.TotpSecret)) }
+        val scope = rememberCoroutineScope()
+        if (fresh) {
+            NewParentCodeDialog(graph, onDone, onCancel)
+        } else {
+            KeepParentCodeDialog(
+                graph,
+                onKept = onDone,
+                onNew = { fresh = true },
+                // No parent code means none: the one kept would still unblock.
+                onNone = { scope.launch { graph.secrets.put(Secret.TotpSecret, null); onDone() } },
+                onCancel = onCancel,
+            )
+        }
+    }
+
+    /** The authenticator set already, kept once your dad types a code from it, seeing this. */
+    @Composable
+    private fun KeepParentCodeDialog(graph: AppGraph, onKept: () -> Unit, onNew: () -> Unit, onNone: () -> Unit, onCancel: () -> Unit) {
+        var code by remember { mutableStateOf("") }
+        var error by remember { mutableStateOf<String?>(null) }
+        val scope = rememberCoroutineScope()
+        AlertDialog(
+            onDismissRequest = onCancel,
+            title = { Text("Your dad's authenticator") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("It's set up already, from arming before. To keep it, he types the code his app shows now, seeing this.", style = MaterialTheme.typography.bodyMedium)
+                    OutlinedTextField(
+                        code,
+                        { code = it.filter(Char::isDigit).take(Totp.DIGITS); error = null },
+                        label = { Text("The code his app shows") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    )
+                    error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                    TextButton(onClick = onNew) { Text("Set up a new one instead") }
+                    TextButton(onClick = onNone) { Text("Skip: no parent code") }
+                }
+            },
+            confirmButton = {
+                TextButton(enabled = code.length == Totp.DIGITS, onClick = {
+                    // Checked, and used up, as any parent code is.
+                    scope.launch { graph.useParentCode(code)?.let { error = it } ?: onKept() }
+                }) { Text("Keep it") }
+            },
+            dismissButton = { TextButton(onClick = onCancel) { Text("Cancel") } },
+        )
+    }
+
+    /** Shows a new secret as a QR code for your dad's authenticator; saved once a code from it checks out. */
+    @Composable
+    private fun NewParentCodeDialog(graph: AppGraph, onDone: () -> Unit, onCancel: () -> Unit) {
         // Kept through the screen being made again (a turn of the phone): a new one would leave the
         // QR code your dad scanned matching nothing (BUG-P2-012). It's only saved once a code checks out.
         val secret = rememberSaveable { Totp.newSecret() }

@@ -47,10 +47,22 @@ interface SecretCipher {
  * The secrets, encrypted as one file under a key that never leaves the Android Keystore. It
  * replaces EncryptedSharedPreferences (planned, now deprecated) with the same idea and no
  * dependency. A file that can't be decrypted (the key lost with a reinstall) reads as empty, and
- * the setup checklist shows which credentials need entering again.
+ * the setup checklist shows which credentials need entering again; it's set aside first, so the
+ * next save can't overwrite it, and [problem] says so (IMP-P1-003): told apart from none saved.
  */
-class SecretStore(private val file: File, private val cipher: SecretCipher) {
+class SecretStore(
+    private val file: File,
+    private val cipher: SecretCipher,
+    private val clock: () -> Long = System::currentTimeMillis,
+    /** Between tries to decrypt: the keystore can fail for a moment. */
+    private val retryWaitMs: Long = RETRY_WAIT_MS,
+) {
     private val mutex = Mutex()
+
+    /** Why the secrets couldn't be read at start, and where they were set aside; null if they could. */
+    var problem: JsonStore.Unreadable? = null
+        private set
+
     private val _values = MutableStateFlow(load())
 
     /** Which secrets are set, for the setup checklist. Never the values. */
@@ -78,12 +90,26 @@ class SecretStore(private val file: File, private val cipher: SecretCipher) {
 
     private fun load(): Map<Secret, String> {
         if (!file.exists()) return emptyMap()
-        return runCatching {
-            val plain = cipher.decrypt(file.readBytes()).decodeToString()
-            JsonStore.json.decodeFromString(serializer, plain)
-                .mapNotNull { (key, value) -> Secret.entries.firstOrNull { it.name == key }?.let { it to value } }
-                .toMap()
-        }.getOrDefault(emptyMap())
+        // Tried again, briefly: the keystore can fail for a moment.
+        var tries = 0
+        while (true) {
+            val read = runCatching {
+                val plain = cipher.decrypt(file.readBytes()).decodeToString()
+                JsonStore.json.decodeFromString(serializer, plain)
+                    .mapNotNull { (key, value) -> Secret.entries.firstOrNull { it.name == key }?.let { it to value } }
+                    .toMap()
+            }
+            read.getOrNull()?.let { return it }
+            if (++tries >= DECRYPT_TRIES) break
+            Thread.sleep(retryWaitMs)
+        }
+        // Left where it is: a failure that passes (the keystore back) reads it again at the next start,
+        // with nothing lost. A copy is kept beside it, once, and each start that finds it says so:
+        // till it's on record, which counts it once, and not after you've seen it
+        // ([RuntimeState.withUnreadable]).
+        val aside = JsonStore.alreadyAside(file) ?: JsonStore.setAside(file, clock())
+        problem = JsonStore.Unreadable(file.name, aside?.name, kept = false, at = clock())
+        return emptyMap()
     }
 
     private fun write(values: Map<Secret, String>) {
@@ -101,6 +127,8 @@ class SecretStore(private val file: File, private val cipher: SecretCipher) {
 
     private companion object {
         val serializer = MapSerializer(String.serializer(), String.serializer())
+        const val DECRYPT_TRIES = 3
+        const val RETRY_WAIT_MS = 200L
     }
 }
 

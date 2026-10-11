@@ -135,6 +135,17 @@ object SettingsChanges {
     }
 
     /**
+     * [change] to [fields] made at once, armed or not, with no wait: read from what's been asked for,
+     * as a change of yours is, and those fields laid over [current]. A change waiting for one of them
+     * is replaced by it, even one asking for the same value, which now applies; the others keep their
+     * wait. For the weekly review's bounded changes, which you said needn't wait (11 Oct, IMP-P2-015).
+     */
+    fun atOnce(current: Settings, pending: List<PendingChange>, fields: Set<String>, change: (Settings) -> Settings): Outcome {
+        val wanted = encode(change(requested(current, pending)))
+        return Outcome(decode(JsonObject(encode(current) + wanted.filterKeys { it in fields })), pending.filterNot { it.field in fields })
+    }
+
+    /**
      * Applies what may apply now of the move to [proposed], and returns the rest as pending
      * changes, added to [pending]. [proposed] is read against what's been asked for ([requested]):
      * a field left as asked keeps its pending change and its wait; one set back to its current
