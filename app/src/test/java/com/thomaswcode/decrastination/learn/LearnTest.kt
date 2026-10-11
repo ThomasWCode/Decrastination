@@ -46,6 +46,21 @@ class CalibratorTest {
 
 
     @Test
+    fun `a calibration from before evidence was counted is made again under its rule`() {
+        // Learned before 1.8.0: the class's own from one timed piece, and no counts kept.
+        val one = listOf(done("a", worked = 64))
+        val old = Calibration(multipliers = mapOf("Homework|" to 1.18, "Homework|12.1 Physics" to 1.18), marginDays = mapOf(Kind.Homework to 2))
+        val now = Calibrator.upgraded(old, one)!!
+        assertNull(now.multipliers["Homework|12.1 Physics"])
+        assertEquals(1.18, now.multipliers.getValue("Homework|"), 1e-9)
+        assertEquals(1, now.timed["Homework|12.1 Physics"])
+        assertEquals(mapOf(Kind.Homework to 2), now.marginDays)
+        // One made since: left as it is.
+        assertNull(Calibrator.upgraded(now, one))
+        assertNull(Calibrator.upgraded(Calibration(), one))
+    }
+
+    @Test
     fun `timed work moves the multiplier towards actual over estimate, within bounds`() {
         val m = Calibrator.multipliers(listOf(done("a", worked = 64), done("b", worked = 64, doneAt = Fixtures.at("2026-10-19T19:00"))))
         // 1.6× twice, at a weight of 0.3: 1 → 1.18 → 1.306, for the kind as a whole...

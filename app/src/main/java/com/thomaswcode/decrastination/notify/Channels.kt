@@ -9,7 +9,7 @@ object Channels {
     const val SYNC = "sync"
     const val SESSION = "session"
     const val PROTECTION = "protection"
-    /** The one channel the next four were (before 1.8.0): taken over by them, then deleted. */
+    /** The one channel the next four were (before 1.8.0): taken over by them, then deleted once nothing's left on it. */
     private const val DAILY = "daily"
 
     // Each its own purpose (IMP-P2-019), so a routine one can be silenced and a question kept.
@@ -24,7 +24,7 @@ object Channels {
     fun create(context: Context) {
         val manager = context.getSystemService(NotificationManager::class.java) ?: return
         // The four that were one start as you'd set it (silenced, say): Android keeps a channel's
-        // settings once it's made, so this is their one chance. The old one goes once they exist.
+        // settings once it's made, so this is their one chance.
         val was = manager.getNotificationChannel(DAILY)?.importance ?: NotificationManager.IMPORTANCE_DEFAULT
         manager.createNotificationChannels(
             listOf(
@@ -42,7 +42,12 @@ object Channels {
                 },
             ),
         )
-        manager.deleteNotificationChannel(DAILY)
+        // The old one goes once nothing's left on it: deleting a channel takes its notifications with
+        // it (a calendar question, a "How was it?"), and nothing would post them again. Till then
+        // it's kept, with nothing new on it, and a later start deletes it.
+        if (manager.getNotificationChannel(DAILY) != null && manager.activeNotifications.none { it.notification.channelId == DAILY }) {
+            manager.deleteNotificationChannel(DAILY)
+        }
         manager.createNotificationChannels(
             listOf(
                 NotificationChannel(SYNC, "Reading your tasks", NotificationManager.IMPORTANCE_MIN).apply {

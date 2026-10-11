@@ -88,17 +88,32 @@ class EvalSetTest {
         val cases = cases()
         val answers = File(dir!!, "answers").listFiles { f -> f.extension == "json" }.orEmpty().sortedBy { it.name }
         assumeTrue("No answers in private/eval/answers yet", answers.isNotEmpty())
+        val byId = cases.associateBy { it.id }
         val rows = mutableListOf<String>()
         var passed = 0
-        for (file in answers) {
-            val case = cases.firstOrNull { file.name.startsWith(it.id + "-") } ?: continue
-            val now = nowOf(case)
-            val text = file.readText().trim().removePrefix("```json").removePrefix("```").removeSuffix("```").trim()
-            val enrichment = Answers.parse(case.job, text, case.task, "eval", now, zone)
-            val checks = if (enrichment == null) listOf("unreadable" to false) else check(case, case.task.withEnrichment(enrichment), enrichment, now, text)
-            val ok = checks.all { it.second }
-            if (ok) passed++
-            rows += "| ${file.nameWithoutExtension} | ${if (ok) "pass" else "**fail**"} | " + checks.joinToString("; ") { (what, good) -> if (good) what else "**$what**" } + " |"
+        fun failed(name: String, why: String) {
+            rows += "| $name | **fail** | **$why** |"
+        }
+        // Named <case>-<run>.json: the case is everything before the last '-', matched whole.
+        for ((run, files) in answers.groupBy { it.nameWithoutExtension.substringAfterLast('-') }.toSortedMap()) {
+            val answered = mutableSetOf<String>()
+            for (file in files) {
+                val case = byId[file.nameWithoutExtension.substringBeforeLast('-')]
+                if (case == null) {
+                    failed(file.nameWithoutExtension, "no such case")
+                    continue
+                }
+                answered += case.id
+                val now = nowOf(case)
+                val text = file.readText().trim().removePrefix("```json").removePrefix("```").removeSuffix("```").trim()
+                val enrichment = Answers.parse(case.job, text, case.task, "eval", now, zone)
+                val checks = if (enrichment == null) listOf("unreadable" to false) else check(case, case.task.withEnrichment(enrichment), enrichment, now, text)
+                val ok = checks.all { it.second }
+                if (ok) passed++
+                rows += "| ${file.nameWithoutExtension} | ${if (ok) "pass" else "**fail**"} | " + checks.joinToString("; ") { (what, good) -> if (good) what else "**$what**" } + " |"
+            }
+            // Every case in every round: one with no answer fails, rather than leaving a smaller round that passes.
+            cases.filter { it.id !in answered }.forEach { failed("${it.id}-$run", "no answer") }
         }
         File(dir!!, "report.md").writeText(
             buildString {
