@@ -79,16 +79,23 @@ fun TodayScreen(graph: AppGraph, activity: Activity) {
     val plan = remember(tasks, settings, now, instructions, calendar) { graph.plan(tasks, settings, now) }
     val zone = graph.clock.zone()
     val scope = rememberCoroutineScope()
-    // How the last action went (asking a source, a photo check): on the card, and in a piece's sheet.
+    // How the last action went (asking a source, a photo check), and the task it's about: shown
+    // with that task, on the card or in its sheet; one about none (a Teams sync) on the card.
     var message by rememberSaveable { mutableStateOf<String?>(null) }
+    var messageFor by rememberSaveable { mutableStateOf<String?>(null) }
     LaunchedEffect(message) {
         if (message != null) {
             delay(MESSAGE_MS)
             message = null
         }
     }
-    val say = { text: String -> message = text }
+    val say = { taskId: String?, text: String ->
+        messageFor = taskId
+        message = text
+    }
     val photo = rememberPhotoCheck(graph, activity, plan, say)
+    /** The message about [taskId], or one about no task, where [general]. */
+    fun messageOf(taskId: String, general: Boolean = false): String? = message?.takeIf { messageFor == taskId || (general && messageFor == null) }
     // A piece whose actions are open in a sheet (IMP-P1-001), by its key.
     var sheetFor by rememberSaveable { mutableStateOf<String?>(null) }
     val trouble = trouble(tasks, runtime, now)
@@ -114,14 +121,14 @@ fun TodayScreen(graph: AppGraph, activity: Activity) {
                     trouble,
                     onSetup = { activity.startActivity(Intent(activity, SetupActivity::class.java)) },
                     onProtection = { activity.startActivity(Intent(activity, ProtectionActivity::class.java)) },
-                    onTeams = { scope.launch { say(graph.requestTeamsSync() ?: "The Teams widget is syncing Teams") } },
+                    onTeams = { scope.launch { say(null, graph.requestTeamsSync() ?: "The Teams widget is syncing Teams") } },
                 )
             }
         }
         item(key = "next") {
             val unread = Source.entries.filter { tasks.status(it).lastSuccessAt == null }
             NextCard(
-                graph, activity, plan, runtime.session, zone, photo, message, say,
+                graph, activity, plan, runtime.session, zone, photo, ::messageOf, say,
                 empty = when {
                     unread.isNotEmpty() -> "Nothing planned yet: ${unread.joinToString { it.label }} not read yet."
                     trouble.isNotEmpty() -> "Nothing planned, but not every source is up to date (above): there may be more."
@@ -185,7 +192,7 @@ fun TodayScreen(graph: AppGraph, activity: Activity) {
                 val lastDay = plan.buckets.lastOrNull()?.date ?: plan.today
                 itemsIndexed(plan.unplanned, key = { _, it -> "unplanned-${it.taskId}-${it.reason}" }) { index, gap ->
                     UnplannedTile(gap, index, plan.unplanned.size, lastDay, plan.now, zone) {
-                        tasks.tasks.firstOrNull { it.id == gap.taskId }?.let { task -> scope.launch { TaskOpener.open(activity, task)?.let(say) } }
+                        tasks.tasks.firstOrNull { it.id == gap.taskId }?.let { task -> scope.launch { TaskOpener.open(activity, task)?.let { say(null, it) } } }
                     }
                 }
             }
@@ -199,7 +206,7 @@ fun TodayScreen(graph: AppGraph, activity: Activity) {
             // Done, or planned again: nothing to act on.
             LaunchedEffect(key) { sheetFor = null }
         } else {
-            PieceSheet(graph, activity, chunk, plan.now, zone, photo, message, say) { sheetFor = null }
+            PieceSheet(graph, activity, chunk, plan.now, zone, photo, messageOf(chunk.taskId), { say(chunk.taskId, it) }) { sheetFor = null }
         }
     }
 }
@@ -272,12 +279,13 @@ private fun NextCard(
     session: FocusSession?,
     zone: ZoneId,
     photo: PhotoCheck,
-    message: String?,
-    say: (String) -> Unit,
+    messageOf: (taskId: String, general: Boolean) -> String?,
+    say: (taskId: String?, text: String) -> Unit,
     empty: String,
 ) {
     // A session under way: the piece it's on, as the block screen shows it.
     val next = session?.let { plan.chunksOf(it.taskId).firstOrNull() } ?: plan.next
+    val message = messageOf(next?.taskId.orEmpty(), true)
     Card(
         modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 12.dp),
         shape = RoundedCornerShape(24.dp),
@@ -295,7 +303,7 @@ private fun NextCard(
             Text(next.label, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
             Badges(next, plan.now, zone)
             plan.then?.takeIf { session == null }?.let { Text("Then: ${it.label}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onPrimaryContainer) }
-            PieceActions(graph, activity, next, plan.now, photo, say)
+            PieceActions(graph, activity, next, plan.now, photo) { say(next.taskId, it) }
             message?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onPrimaryContainer) }
         }
     }

@@ -156,7 +156,10 @@ class CalendarActivity : ComponentActivity() {
                                         }) { Text(label) }
                                     }
                                 }
-                                Text("For every event of that name.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text("For every event of that name.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+                                    if (changing) TextButton(onClick = { changingAnswers = changingAnswers - key }) { Text("Keep it") }
+                                }
                             } else if (key in runtime.eventAnswers && key !in yours) {
                                 TextButton(onClick = { changingAnswers = changingAnswers + key }) { Text("Change your answer") }
                             }

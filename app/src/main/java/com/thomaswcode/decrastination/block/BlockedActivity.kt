@@ -115,7 +115,7 @@ class BlockedActivity : ComponentActivity() {
         }
         val next = if (session != null) plan.chunksOf(session.taskId).firstOrNull() ?: plan.next else plan.next
         // Shared with the Plan (IMP-P1-001): the same actions, the same rules.
-        val photo = rememberPhotoCheck(graph, this, plan) { message = it }
+        val photo = rememberPhotoCheck(graph, this, plan) { _, text -> message = text }
 
         Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
             Column(
