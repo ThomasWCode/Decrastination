@@ -40,6 +40,8 @@ import androidx.glance.layout.height
 import androidx.glance.layout.padding
 import androidx.glance.layout.size
 import androidx.glance.layout.width
+import androidx.glance.semantics.contentDescription
+import androidx.glance.semantics.semantics
 import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
@@ -183,6 +185,10 @@ class NextWidget : GlanceAppWidget() {
                     }
                 }
             }
+            if (layout.cue) {
+                Spacer(GlanceModifier.width(6.dp))
+                Cue(model.warning.orEmpty())
+            }
             if (layout.refresh) {
                 Spacer(GlanceModifier.width(8.dp))
                 Image(
@@ -238,6 +244,20 @@ class NextWidget : GlanceAppWidget() {
         )
     }
 
+    /** A warning with no room to be said: a red ! that opens the app, where it is, read out as the warning itself. */
+    @Composable
+    private fun Cue(warning: String) {
+        val context = LocalContext.current
+        val app = actionStartActivity(Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        Box(
+            GlanceModifier.size(22.dp).cornerRadius(11.dp).background(GlanceTheme.colors.error).clickable(app)
+                .semantics { contentDescription = warning },
+            contentAlignment = Alignment.Center,
+        ) {
+            Text("!", style = TextStyle(color = GlanceTheme.colors.onError, fontSize = 14.sp, fontWeight = FontWeight.Bold))
+        }
+    }
+
     /** What's wrong, set apart in the error colours, first; a tap opens the app, whose ⋮ menu leads to the fix. */
     @Composable
     private fun Warning(text: String, app: Action) {
@@ -276,6 +296,11 @@ data class WidgetLayout(
     val listLines: Int,
     /** A short widget sits in the middle of its row; a tall one reads from the top. */
     val centred: Boolean,
+    /**
+     * A warning there's no room to say: a red ! beside the card's name instead, so no size shows
+     * all well while something isn't (IMP-P1-007). It opens the app, which says what.
+     */
+    val cue: Boolean = false,
 ) {
     /**
      * Side by side; one over the other where they won't fit side by side; or, where there's no
@@ -319,6 +344,7 @@ data class WidgetLayout(
         private const val SIDES = 28f
         private const val ROOMY_SIDES = 44f
         private const val REFRESH = 36f
+        private const val CUE = 28f
 
         /** [fontScale]: the phone's text size, which the text's sizes (at the default, below) grow with. */
         fun of(width: Float, height: Float, parts: Parts, fontScale: Float = 1f): WidgetLayout {
@@ -326,8 +352,10 @@ data class WidgetLayout(
             val refresh = width >= 180
             val values = listOfNotNull(parts.badge, parts.minutes)
             val pillsHigh = if (values.isEmpty()) 0f else t(PILLS)
+            // A warning keeps room for its cue beside the pills, in case its strip doesn't fit.
+            val cueRoom = if (parts.warning) CUE else 0f
             fun sideBySide(sides: Float) =
-                values.sumOf { it.length * t(CHAR) + PILL.toDouble() } + GAP * (values.size - 1) <= width - sides - (if (refresh) REFRESH else 0f)
+                values.sumOf { it.length * t(CHAR) + PILL.toDouble() } + GAP * (values.size - 1) <= width - sides - (if (refresh) REFRESH else 0f) - cueRoom
 
             val roomyPills = if (sideBySide(ROOMY_SIDES)) Pills.Row else Pills.Stacked
             val card = ROOMY_PADDING + (if (parts.label) t(LABEL) else 0f) + t(HEADLINE) + pillsHigh * (if (roomyPills == Pills.Stacked) 2 else 1) +
@@ -353,7 +381,7 @@ data class WidgetLayout(
             val warning = parts.warning && fits(t(WARNING))
             val summary = fits(t(SUMMARY))
             val headlineLines = if (fits(t(HEADLINE))) 2 else 1
-            return WidgetLayout(false, headlineLines, label, refresh, pills, then, summary, warning, listLines = 0, centred = true)
+            return WidgetLayout(false, headlineLines, label, refresh, pills, then, summary, warning, listLines = 0, centred = true, cue = parts.warning && !warning)
         }
     }
 }
