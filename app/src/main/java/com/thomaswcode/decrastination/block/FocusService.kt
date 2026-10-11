@@ -106,6 +106,9 @@ class FocusService : AccessibilityService() {
     /** Browsers brought forward this connection, from beside another app, to be looked at ([bringForward]). */
     private val broughtForward = mutableSetOf<String>()
 
+    /** Whether each checked browser's address bar can still be read ([AddressHealth]). */
+    private val addresses = AddressHealth()
+
     /** The site [browser] last showed, while it's still blocked as the settings now say. */
     private fun remembered(browser: String): Focus.Target.Site? = lastSite[browser]?.takeIf(::stillBlocked)
 
@@ -176,6 +179,8 @@ class FocusService : AccessibilityService() {
         pipSite.clear()
         lookedFor.clear()
         broughtForward.clear()
+        addresses.clear()
+        _unreadableBrowsers.value = emptySet()
         // Connected (or restarted) while the phone is already unlocked and in use: the unlock it
         // missed counts, so the first-unlock Teams sync can still be offered.
         val power = getSystemService(PowerManager::class.java)
@@ -201,6 +206,13 @@ class FocusService : AccessibilityService() {
             AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> {
                 val pkg = event.packageName?.toString() ?: return
                 if (pkg == packageName) return
+                // A checked browser's own window changed (brought to the front, a new page of it): a
+                // visit, for whether its address can be read. Not another app's window over it (a
+                // notification, the keyboard), which doesn't change what it shows.
+                if (graph.focus.isCheckedBrowser(pkg) && graph.focus.target(pkg) == null) {
+                    addresses.visit(pkg)
+                    noteAddresses()
+                }
                 // A blocked app's late events can come after it has gone (Phase 0): judge what's in front.
                 val front = frontPackage()
                 onFront(if (front != null && front != pkg) front else pkg, firstLook = true)
@@ -269,13 +281,34 @@ class FocusService : AccessibilityService() {
         spending = target to SystemClock.elapsedRealtime()
         // Block again the moment it runs out.
         handler.removeCallbacks(creditCheck)
-        handler.postDelayed(creditCheck, graph.focus.creditLeftMs().coerceIn(1_000L, SPEND_TICK_MS))
+        val left = graph.focus.creditLeftMs()
+        handler.postDelayed(creditCheck, left.coerceIn(1_000L, SPEND_TICK_MS))
+        // Counted down where it can be seen, and a heads-up a minute before the end (IMP-P2-011).
+        val what = labelOf(target)
+        FreeTimeNotice.show(this, what, graph.clock.now() + left)
+        handler.removeCallbacks(warnEnding)
+        if (left > FreeTimeNotice.WARN_MS) handler.postDelayed(warnEnding, left - FreeTimeNotice.WARN_MS)
     }
 
     private fun stopSpending() {
+        val was = spending != null
         commitSpending()
         spending = null
         handler.removeCallbacks(creditCheck)
+        handler.removeCallbacks(warnEnding)
+        if (was) FreeTimeNotice.cancel(this)
+    }
+
+    /** A minute of free time left, while it's still being spent: said once. */
+    private val warnEnding: Runnable = Runnable {
+        val (target, _) = spending ?: return@Runnable
+        FreeTimeNotice.warn(this, labelOf(target))
+    }
+
+    /** [target] in words: the app's name, or the site. */
+    private fun labelOf(target: Focus.Target): String = when (target) {
+        is Focus.Target.Site -> target.name
+        else -> runCatching { packageManager.getApplicationLabel(packageManager.getApplicationInfo(target.name, 0)).toString() }.getOrDefault(target.name)
     }
 
     /**
@@ -342,6 +375,10 @@ class FocusService : AccessibilityService() {
             ?: windows.mapNotNull { it.root }.firstOrNull { it.packageName == browser }
             ?: return
         val text = root.findAccessibilityNodeInfosByViewId(Blocklist.urlBarId(browser)).firstOrNull()?.text?.toString()
+        if (text != null) {
+            addresses.read(browser)
+            noteAddresses()
+        }
         // Its address hidden, and no page of it seen since the service connected: Back, once, to
         // leave full screen so it shows.
         if (text == null && browser !in lastSite && lookForAddress(browser)) return
@@ -366,6 +403,16 @@ class FocusService : AccessibilityService() {
         lookedFor += browser
         Log.i(TAG, "$browser hides its address, and no page of it has been seen since connecting: Back, to see it")
         return true
+    }
+
+    /** A browser's address bar found unreadable, or readable again: the watchdog says so now. */
+    private fun noteAddresses() {
+        val now = addresses.unreadable
+        if (now == _unreadableBrowsers.value) return
+        _unreadableBrowsers.value = now
+        Log.w(TAG, "Browsers whose address bar can't be read: $now")
+        val app = applicationContext
+        graph.scope.launch { Watchdog.check(app, repair = true) }
     }
 
     // --- Windows other than the one in use ---
@@ -705,6 +752,7 @@ class FocusService : AccessibilityService() {
         if (!active) return
         active = false
         commitSpending()
+        if (spending != null) FreeTimeNotice.cancel(this)
         spending = null
         handler.removeCallbacksAndMessages(null)
         runCatching { unregisterReceiver(screenReceiver) }
@@ -735,6 +783,11 @@ class FocusService : AccessibilityService() {
         const val ACTION_OFFER_TEAMS_SYNC = "com.thomaswcode.decrastination.action.OFFER_TEAMS_SYNC"
 
         private val _connected = MutableStateFlow(false)
+
+        private val _unreadableBrowsers = MutableStateFlow<Set<String>>(emptySet())
+
+        /** Checked browsers whose address bar this connection can't read ([AddressHealth]): their blocked sites go uncovered. */
+        val unreadableBrowsers: StateFlow<Set<String>> = _unreadableBrowsers.asStateFlow()
 
         /** This process's instance has a working connection: events reach it. */
         val connected: StateFlow<Boolean> = _connected.asStateFlow()
