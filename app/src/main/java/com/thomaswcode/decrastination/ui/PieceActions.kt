@@ -48,10 +48,10 @@ private val PIECE = Saver<PhotoPiece?, ArrayList<String?>>(
 /**
  * The screen's photo check. The piece being photographed is kept through the screen being made
  * again while the camera is open (a turn of the phone, Android needing the memory), and found again
- * in [plan] when the photo comes back (BUG-P2-011). [say] gives how it went.
+ * in [plan] when the photo comes back (BUG-P2-011). [say] gives how it went, and for which task.
  */
 @Composable
-fun rememberPhotoCheck(graph: AppGraph, activity: Activity, plan: Plan, say: (String) -> Unit): PhotoCheck {
+fun rememberPhotoCheck(graph: AppGraph, activity: Activity, plan: Plan, say: (taskId: String, text: String) -> Unit): PhotoCheck {
     val settings by graph.settings.state.collectAsStateWithLifecycle()
     val checker = remember(settings.aiEnabled, settings.aiKeyActive) { graph.photoChecker() }
     val file = remember { File(activity.cacheDir, "photos/check.jpg").also { it.parentFile?.mkdirs() } }
@@ -70,14 +70,14 @@ fun rememberPhotoCheck(graph: AppGraph, activity: Activity, plan: Plan, say: (St
         val piece = plan.chunksOf(wanted.taskId).firstOrNull { it.stepIndex == wanted.stepIndex && it.step == wanted.step }
         if (piece == null) {
             file.delete()
-            say("That piece has changed since the photo was taken (done, or planned again), so it wasn't checked.")
+            say(wanted.taskId, "That piece has changed since the photo was taken (done, or planned again), so it wasn't checked.")
             return@rememberLauncherForActivityResult
         }
-        say("Checking the photo…")
+        say(piece.taskId, "Checking the photo…")
         checking = true
         scope.launch {
             try {
-                say(PhotoChecks.check(activity, graph, file, piece))
+                say(piece.taskId, PhotoChecks.check(activity, graph, file, piece))
             } finally {
                 checking = false
             }

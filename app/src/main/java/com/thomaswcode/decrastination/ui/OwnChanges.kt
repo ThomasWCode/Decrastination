@@ -1,5 +1,6 @@
 package com.thomaswcode.decrastination.ui
 
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
@@ -14,6 +15,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.core.About
 import com.thomaswcode.decrastination.core.Change
@@ -107,7 +110,13 @@ fun OwnChangeDialog(graph: AppGraph, task: TaskItem, what: OwnChange, onClose: (
             ) {
                 DatePicker(
                     state,
-                    title = { Text(if (what == OwnChange.DueOn) "  Due on" else "  Can't be started before", maxLines = 1) },
+                    title = {
+                        Text(
+                            if (what == OwnChange.DueOn) "Due on" else "Can't be started before",
+                            maxLines = 1,
+                            modifier = Modifier.padding(start = 24.dp, end = 12.dp, top = 16.dp),
+                        )
+                    },
                     showModeToggle = false,
                 )
             }
