@@ -10,6 +10,7 @@ import android.util.Log
 import com.thomaswcode.decrastination.block.Focus
 import com.thomaswcode.decrastination.block.Sessions
 import com.thomaswcode.decrastination.core.About
+import com.thomaswcode.decrastination.core.Change
 import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.core.Instruction
 import com.thomaswcode.decrastination.core.InstructionState
@@ -715,6 +716,19 @@ class AppGraph private constructor(context: Context) {
         instructions.update { it.copy(instructions = it.instructions + Instruction(id, text.trim().take(InstructionPrompts.MAX_TEXT), about, clock.now())) }
         scope.launch { readInstructions() }
         return id
+    }
+
+    /**
+     * A change you made yourself, with no Claude (IMP-P2-001: a task isn't one, can't start before
+     * a day, is due on another): kept as an instruction already read, [text] its words, and applied
+     * as you'd apply one, through the same gates. Returns its id, and false where it waits for a
+     * parent code ([applyInstructionWithCode]), as a due date does once armed.
+     */
+    suspend fun addOwnChange(text: String, about: About, change: Change): Pair<String, Boolean> {
+        val id = java.util.UUID.randomUUID().toString()
+        val instruction = Instruction(id, text, about, clock.now(), state = InstructionStatus.Understood, changes = listOf(change))
+        instructions.update { it.copy(instructions = it.instructions + instruction) }
+        return id to applyInstruction(id)
     }
 
     /** Has Claude read [id] again (written again, or after it found it unclear). */

@@ -54,8 +54,10 @@ fun TasksScreen(graph: AppGraph, activity: Activity) {
     // The task an instruction is being written about, by id: kept, with the words, through the
     // screen being made again (BUG-P2-013).
     var writingAbout by rememberSaveable { mutableStateOf<String?>(null) }
+    // A change being made yourself (IMP-P2-001), as "<what>|<task id>", kept likewise.
+    var owning by rememberSaveable { mutableStateOf<String?>(null) }
     val titles = state.tasks.associate { it.id to it.title }
-    val actions = TileActions(tick, { writingAbout = it.id }, titles, state.tasks.associateBy { it.id })
+    val actions = TileActions(tick, { writingAbout = it.id }, { task, what -> owning = "${what.name}|${task.id}" }, titles, state.tasks.associateBy { it.id })
     // Sources open, the finished folded, till you say otherwise.
     var folded by rememberSaveable { mutableStateOf(listOf(FINISHED, NOT_TASKS)) }
     val toggle = { key: String -> folded = if (key in folded) folded - key else folded + key }
@@ -82,6 +84,11 @@ fun TasksScreen(graph: AppGraph, activity: Activity) {
             if (expanded) itemsIndexed(finished, key = { _, it -> "done-" + it.id }) { index, task -> TaskTile(task, index, finished.size, now, zone, actions) }
         }
     }
+    owning?.split('|', limit = 2)?.let { (what, id) ->
+        val task = state.tasks.firstOrNull { it.id == id }
+        val change = OwnChange.entries.firstOrNull { it.name == what }
+        if (task == null || change == null) owning = null else OwnChangeDialog(graph, task, change) { owning = null }
+    }
     writingAbout?.let { id -> state.tasks.firstOrNull { it.id == id } }?.let { task ->
         InstructionDialog("About “${task.title}”", onDismiss = { writingAbout = null }) { text ->
             writingAbout = null
@@ -94,6 +101,7 @@ fun TasksScreen(graph: AppGraph, activity: Activity) {
 private class TileActions(
     val tick: (TaskItem, Int, String) -> Unit,
     val instruct: (TaskItem) -> Unit,
+    val own: (TaskItem, OwnChange) -> Unit,
     val titles: Map<String, String>,
     val byId: Map<String, TaskItem>,
 )
@@ -195,7 +203,17 @@ private fun TaskTile(task: TaskItem, index: Int, count: Int, now: Long, zone: ja
                     }
                 }
                 if (task.detail.isNotBlank()) Detail(task.detail)
-                if (task.isOpen) TextButton(onClick = { actions.instruct(task) }) { Text("Add an instruction") }
+                if (task.isOpen) {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        TextButton(onClick = { actions.instruct(task) }) { Text("Add an instruction") }
+                        // Without Claude (IMP-P2-001); not on a deck's task, which Anki makes afresh.
+                        if (!task.derived) {
+                            OwnChange.entries.filter { it != OwnChange.NotATask || !task.userNotATask }.forEach { what ->
+                                TextButton(onClick = { actions.own(task, what) }) { Text(what.label) }
+                            }
+                        }
+                    }
+                }
             }
         }
     }
