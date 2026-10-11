@@ -141,8 +141,19 @@ class WidgetLayoutTest {
         assertFalse(layout.refresh)
         assertFalse(layout.then)
         assertFalse(layout.warning)
+        // No room for the warning's strip: its red ! instead.
+        assertTrue(layout.cue)
         assertEquals(0, layout.listLines)
         assertTrue(layout.centred)
+    }
+
+    @Test
+    fun `at every size a warning is the strip or the red !, never neither nor both`() {
+        for (width in 110..420 step 10) for (height in 40..520 step 10) for (scale in listOf(1f, 1.3f)) {
+            val warned = WidgetLayout.of(width.toFloat(), height.toFloat(), next(warning = true), scale)
+            assertTrue(warned.warning != warned.cue, "${width}x$height at $scale")
+            assertFalse(WidgetLayout.of(width.toFloat(), height.toFloat(), next(warning = false), scale).cue, "${width}x$height at $scale")
+        }
     }
 
     @Test

@@ -4,6 +4,8 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -12,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -86,6 +89,8 @@ class CalendarActivity : ComponentActivity() {
         }
         // An instruction being written, kept through the screen being made again (BUG-P2-013).
         var writing by rememberSaveable(stateSaver = WRITING) { mutableStateOf<Writing?>(null) }
+        // Events whose answer you're changing, by name.
+        var changingAnswers by rememberSaveable { mutableStateOf(emptyList<String>()) }
 
         Scaffold(topBar = { BackBar("Calendar", this) }) { padding ->
             LazyColumn(Modifier.padding(padding).fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
@@ -127,12 +132,37 @@ class CalendarActivity : ComponentActivity() {
                             // A long title (a whole note in it) cut to two lines: the event's own app has the rest.
                             Text(event.title.ifBlank { "(no title)" }, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium, maxLines = 2, overflow = TextOverflow.Ellipsis)
                             Text(span(event, now, zone), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            val judgement = EventJudge.judge(event, answers)
                             val by = when (key) {
                                 in yours -> " (your instruction)"
                                 in runtime.eventAnswers -> " (your answer)"
                                 else -> ""
                             }
-                            Text(counted(EventJudge.judge(event, answers)) + by, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
+                            val line = if (judgement == EventJudge.Judgement.Ask) {
+                                // Asked, its notification dismissed: still to be answered, here (IMP-P2-007).
+                                if (key in runtime.eventsAsked) "Asked, not answered yet: how much of its day does it take?" else "Not known yet: how much of its day does it take?"
+                            } else {
+                                counted(judgement) + by
+                            }
+                            Text(line, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
+                            // Unanswered, or your answer to change; an instruction's is taken back in Instructions.
+                            val changing = key in changingAnswers
+                            if (key !in yours && (judgement == EventJudge.Judgement.Ask || changing)) {
+                                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    CalendarTime.ANSWERS.forEach { (label, answer) ->
+                                        OutlinedButton(onClick = {
+                                            changingAnswers = changingAnswers - key
+                                            graph.scope.launch { CalendarTime.answer(applicationContext, key, answer) }
+                                        }) { Text(label) }
+                                    }
+                                }
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text("For every event of that name.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+                                    if (changing) TextButton(onClick = { changingAnswers = changingAnswers - key }) { Text("Keep it") }
+                                }
+                            } else if (key in runtime.eventAnswers && key !in yours) {
+                                TextButton(onClick = { changingAnswers = changingAnswers + key }) { Text("Change your answer") }
+                            }
                         }
                     }
                 }
@@ -165,7 +195,7 @@ class CalendarActivity : ComponentActivity() {
         EventJudge.Judgement.Free -> "You can work through it"
         EventJudge.Judgement.Busy -> "Takes all its time"
         is EventJudge.Judgement.Load -> "Takes ${Format.minutes(judgement.minutes)} of its day"
-        EventJudge.Judgement.Ask -> "Not known yet: you'll be asked in the week before it"
+        EventJudge.Judgement.Ask -> "Not known yet"
     }
 
     private fun span(event: CalendarEvent, now: Long, zone: ZoneId): String =

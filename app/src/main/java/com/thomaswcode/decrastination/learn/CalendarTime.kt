@@ -45,6 +45,24 @@ object CalendarTime {
 
     fun allowed(context: Context): Boolean = context.checkSelfPermission(PERMISSION) == PackageManager.PERMISSION_GRANTED
 
+    /** The answers a question offers, in words and as they're kept: in its notification and on the Calendar page. */
+    val ANSWERS: List<Pair<String, String>> = listOf(
+        "All of it" to EventJudge.Judgement.Busy,
+        "A few hours" to EventJudge.Judgement.Load(EventJudge.FEW_HOURS_MIN),
+        "None" to EventJudge.Judgement.Free,
+    ).map { (label, judgement) -> label to EventJudge.store(judgement)!! }
+
+    /**
+     * Your [answer] about every event named [key] (null: forgotten, for the rules to judge again):
+     * kept, its question withdrawn, the plan redone, and today's as the briefing recorded it.
+     */
+    suspend fun answer(context: Context, key: String, answer: String?) {
+        AppGraph.get(context).runtime.update { it.copy(eventAnswers = if (answer == null) it.eventAnswers - key else it.eventAnswers + (key to answer)) }
+        cancelQuestion(context, key)
+        refresh(context)
+        Briefing.replanToday(context)
+    }
+
     /** The events between [from] and [to], the ones you've declined left out. */
     fun read(context: Context, from: Long, to: Long): List<CalendarEvent> {
         val uri = CalendarContract.Instances.CONTENT_URI.buildUpon().also {
@@ -137,12 +155,7 @@ object CalendarTime {
             .setContentTitle("${event.title}, $day")
             .setContentText("How much of the day does it take? The plan leaves you that much less time.")
             .setAutoCancel(true)
-        val answers = listOf(
-            "All of it" to EventJudge.store(EventJudge.Judgement.Busy),
-            "A few hours" to EventJudge.store(EventJudge.Judgement.Load(EventJudge.FEW_HOURS_MIN)),
-            "None" to EventJudge.store(EventJudge.Judgement.Free),
-        )
-        answers.forEachIndexed { i, (label, answer) ->
+        ANSWERS.forEachIndexed { i, (label, answer) ->
             val tap = PendingIntent.getBroadcast(
                 context,
                 i,
@@ -171,11 +184,7 @@ class EventAnswerReceiver : BroadcastReceiver() {
         val pending = goAsync()
         CoroutineScope(Dispatchers.Default).launch {
             try {
-                AppGraph.get(context).runtime.update { it.copy(eventAnswers = it.eventAnswers + (key to answer)) }
-                CalendarTime.cancelQuestion(context, key)
-                CalendarTime.refresh(context)
-                // Today's plan as the briefing recorded it may have changed with the answer.
-                Briefing.replanToday(context)
+                CalendarTime.answer(context, key, answer)
             } finally {
                 pending.finish()
             }

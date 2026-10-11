@@ -59,6 +59,38 @@ data class DayBucket(val date: LocalDate, val capacityMin: Int, val chunks: List
     val plannedMin: Int get() = chunks.sumOf { it.minutes }
 }
 
+/**
+ * Open work the plan leaves out, and why (IMP-P1-002): it can't start yet, waits for another
+ * task, opens past the plan's reach, or has no room in it. [pieces] and [minutes] are of what's
+ * left out, all its runs' together.
+ */
+data class Unplanned(
+    val taskId: String,
+    val source: Source,
+    val title: String,
+    val minutes: Int,
+    val pieces: Int,
+    val reason: Reason,
+    /** When it opens: [Reason.NotOpen]'s and [Reason.OpensLater]'s. */
+    val at: Long? = null,
+    /** The task it waits for, by title: [Reason.Waits]'. */
+    val after: String? = null,
+) {
+    enum class Reason {
+        /** Its source (or Claude's reading of it) says it can't be started yet. */
+        NotOpen,
+
+        /** You said it waits until another task is done. */
+        Waits,
+
+        /** It, or a run of its blocks, opens after the plan's last day. */
+        OpensLater,
+
+        /** There's no room for it by the plan's last day, within each day's limits. */
+        NoRoom,
+    }
+}
+
 /** The plan at [now]: one bucket per study day from today, each with the chunks placed on it. */
 data class Plan(
     val now: Long,
@@ -66,6 +98,8 @@ data class Plan(
     val buckets: List<DayBucket>,
     /** Events (a call, an open day): reminders, not work to place. */
     val events: List<TaskItem>,
+    /** Open work that isn't in [buckets], with why: it doesn't vanish without a word. */
+    val unplanned: List<Unplanned> = emptyList(),
 ) {
     fun bucket(date: LocalDate): DayBucket? = buckets.firstOrNull { it.date == date }
 
@@ -91,6 +125,13 @@ data class Plan(
     val then: Chunk? get() = next?.let { first -> ordered.filter { it !== first }.let { rest -> rest.firstOrNull { it.startable(now) } ?: rest.firstOrNull() } }
 
     fun chunksOf(taskId: String): List<Chunk> = ordered.filter { it.taskId == taskId }
+
+    /**
+     * The piece of [taskId] whose step is [stepIndex] and [step] (a focus session's), or, where the
+     * plan has moved on under it (a step ticked meanwhile), the task's first.
+     */
+    fun pieceOf(taskId: String, stepIndex: Int?, step: String?): Chunk? =
+        chunksOf(taskId).let { pieces -> pieces.firstOrNull { it.stepIndex == stepIndex && it.step == step } ?: pieces.firstOrNull() }
 }
 
 /**
