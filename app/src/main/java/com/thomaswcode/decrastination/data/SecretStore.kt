@@ -90,7 +90,10 @@ class SecretStore(private val file: File, private val cipher: SecretCipher, priv
                 .mapNotNull { (key, value) -> Secret.entries.firstOrNull { it.name == key }?.let { it to value } }
                 .toMap()
         }.getOrElse {
-            problem = JsonStore.Unreadable(file.name, JsonStore.setAside(file, clock())?.name, kept = false, at = clock())
+            val aside = JsonStore.setAside(file, clock())
+            problem = JsonStore.Unreadable(file.name, aside?.name, kept = false, at = clock())
+            // Gone from its place once it's safe beside it, so the next start doesn't find it again.
+            if (aside != null) file.delete()
             emptyMap()
         }
     }

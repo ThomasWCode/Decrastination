@@ -29,6 +29,9 @@ class StoresTest {
         assertEquals("tasks.json.unreadable-20261011-083000", problem.copy)
         assertEquals("{not json", File(dir, problem.copy!!).readText())
         assertFalse(problem.kept)
+        // What it started from is the file now: the next start reads it, with nothing to say.
+        assertNull(JsonStore(file, TaskState.serializer(), ::TaskState, clock = { AT + 1000 }).problem)
+        assertEquals(1, dir.listFiles { f -> f.name.startsWith("tasks.json.unreadable-") }!!.size)
         // A file that reads is no problem.
         assertNull(JsonStore(File(dir, "other.json").apply { writeText("{}") }, TaskState.serializer(), ::TaskState).problem)
     }
@@ -43,6 +46,10 @@ class StoresTest {
         assertEquals(3, store.value.ankiTextbook)
         assertEquals(Settings().blockedApps, store.value.blockedApps)
         assertTrue(store.problem!!.kept)
+        // Kept, and written back: still armed at the next start, and nothing more to say.
+        val again = JsonStore(file, Settings.serializer(), ::Settings, clock = { AT + 1000 })
+        assertTrue(again.value.armed)
+        assertNull(again.problem)
     }
 
     @Test
@@ -103,6 +110,9 @@ class StoresTest {
         // Told apart from none saved, and set aside before a save can overwrite it.
         assertEquals("secrets.bin.unreadable-20261011-083000", store.problem!!.copy)
         assertTrue(File(dir, "secrets.bin.unreadable-20261011-083000").readBytes().contentEquals(byteArrayOf(1, 2, 3)))
+        // Moved aside, not left to be found again at the next start.
+        assertFalse(file.exists())
+        assertNull(SecretStore(file, broken) { AT + 1000 }.problem)
         assertNull(SecretStore(File(dir, "none.bin"), broken).problem)
     }
 

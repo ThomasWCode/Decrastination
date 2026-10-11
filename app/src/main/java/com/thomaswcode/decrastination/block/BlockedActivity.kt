@@ -113,7 +113,7 @@ class BlockedActivity : ComponentActivity() {
             // blocked and no session holds it.
             if (!targetBlocked || (verdict !is BlockPolicy.Verdict.Block && session == null)) finish()
         }
-        val next = if (session != null) plan.chunksOf(session.taskId).firstOrNull() ?: plan.next else plan.next
+        val next = if (session != null) plan.pieceOf(session.taskId, session.stepIndex, session.step) ?: plan.next else plan.next
         // Shared with the Plan (IMP-P1-001): the same actions, the same rules.
         val photo = rememberPhotoCheck(graph, this, plan) { _, text -> message = text }
 

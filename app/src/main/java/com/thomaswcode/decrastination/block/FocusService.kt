@@ -181,6 +181,8 @@ class FocusService : AccessibilityService() {
         broughtForward.clear()
         addresses.clear()
         _unreadableBrowsers.value = emptySet()
+        // Nothing is being spent yet: a countdown left by an instance that died spending goes.
+        FreeTimeNotice.cancel(this)
         // Connected (or restarted) while the phone is already unlocked and in use: the unlock it
         // missed counts, so the first-unlock Teams sync can still be offered.
         val power = getSystemService(PowerManager::class.java)
@@ -206,15 +208,15 @@ class FocusService : AccessibilityService() {
             AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> {
                 val pkg = event.packageName?.toString() ?: return
                 if (pkg == packageName) return
-                // A checked browser's own window changed (brought to the front, a new page of it): a
-                // visit, for whether its address can be read. Not another app's window over it (a
-                // notification, the keyboard), which doesn't change what it shows.
-                if (graph.focus.isCheckedBrowser(pkg) && graph.focus.target(pkg) == null) {
+                // A blocked app's late events can come after it has gone (Phase 0): judge what's in front.
+                val front = frontPackage()
+                // A checked browser's own window changed while it's in front (brought there, a new page
+                // of it): a visit, for whether its address can be read. Not another app's window over it
+                // (a notification, the keyboard), nor its own event arriving late, once it's gone.
+                if (front == pkg && graph.focus.isCheckedBrowser(pkg) && graph.focus.target(pkg) == null) {
                     addresses.visit(pkg)
                     noteAddresses()
                 }
-                // A blocked app's late events can come after it has gone (Phase 0): judge what's in front.
-                val front = frontPackage()
                 onFront(if (front != null && front != pkg) front else pkg, firstLook = true)
             }
             AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED -> {

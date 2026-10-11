@@ -3,6 +3,7 @@ package com.thomaswcode.decrastination.core
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.Fixtures.LONDON
 import com.thomaswcode.decrastination.data.Settings
+import com.thomaswcode.decrastination.sources.anki.AnkiRules
 import com.thomaswcode.decrastination.sources.powerplanner.ClassesResponse
 import com.thomaswcode.decrastination.sources.powerplanner.AgendaResponse
 import com.thomaswcode.decrastination.sources.powerplanner.PowerPlannerItems
@@ -751,6 +752,33 @@ class PlannerTest {
         assertEquals(Unplanned.Reason.OpensLater, gap.reason)
         assertEquals(Fixtures.at("2027-02-01T00:00"), gap.at)
         assertEquals(60, gap.minutes)
+    }
+
+    @Test
+    fun `a session's piece is its own step, not its task's first`() {
+        val steps = listOf(SubStep("Read", 20), SubStep("Write", 30))
+        val plan = plan(listOf(task("t", Fixtures.at("2026-10-20T09:00"), steps = steps)), "2026-10-08T17:00")
+        assertEquals("Write", plan.pieceOf("teams:t", 1, "Write")?.step)
+        // Its step gone from the plan (ticked meanwhile): the task's first.
+        assertEquals("Read", plan.pieceOf("teams:t", 7, "Gone")?.step)
+    }
+
+    @Test
+    fun `a waiting assignment's gap keeps the vocabulary its deck would hold`() {
+        // Its vocabulary is a deck's, and the deck waits with it: the gap is that work, not 5 minutes.
+        val steps = listOf(SubStep("Learn vocabulary 1.2", 40, ankiSections = listOf("1.2")))
+        val first = task("first", Fixtures.at("2026-10-12T09:00"))
+        val vocab = task("vocab", Fixtures.at("2026-10-13T09:00"), steps = steps).copy(userAfter = "teams:first")
+        val deck = TaskItem(
+            id = "anki:deck", source = Source.Anki, sourceId = AnkiRules.DECK_PREFIX + "1", title = "Anki: Textbook 1::1.2", dueAt = Fixtures.at("2026-10-13T09:00"),
+            kind = Kind.Revision, sourceEffortMin = 40, derived = true, subSteps = listOf(SubStep("20 new cards", 9)),
+            extra = mapOf(AnkiRules.EXTRA_FOR to "teams:vocab", AnkiRules.EXTRA_DECK_NAME to "Textbook 1::1.2"),
+            firstSeenAt = Fixtures.at("2026-10-07T12:00"), lastSeenAt = Fixtures.at("2026-10-07T12:00"),
+        )
+        val plan = plan(listOf(first, vocab, deck), "2026-10-08T17:00")
+        val gap = plan.unplanned.single { it.taskId == "teams:vocab" }
+        assertEquals(40, gap.minutes)
+        assertTrue(plan.chunksOf("anki:deck").isEmpty())
     }
 
     @Test
