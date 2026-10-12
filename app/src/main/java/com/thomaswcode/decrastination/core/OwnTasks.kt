@@ -100,6 +100,22 @@ object OwnTasks {
         return task.copy(status = Status.Open, doneAt = null, subSteps = steps)
     }
 
+    /**
+     * [current] with only the fields changes of [types] make (due date, start, minutes) put back as
+     * they were in [was]: a later change to another field stands. A step's minutes come back only
+     * while the steps are the same ones.
+     */
+    fun restored(current: OwnTask, was: OwnTask, types: Set<ChangeType>): OwnTask {
+        var d = current
+        if (ChangeType.DueBy in types) d = d.copy(dueAt = was.dueAt)
+        if (ChangeType.StartFrom in types) d = d.copy(startFrom = was.startFrom)
+        if (ChangeType.Minutes in types) {
+            d = d.copy(minutes = was.minutes)
+            if (was.steps.map { it.title } == d.steps.map { it.title }) d = d.copy(steps = d.steps.mapIndexed { i, s -> s.copy(minutes = was.steps[i].minutes) })
+        }
+        return d
+    }
+
     /** The changes an instruction makes to one of your own that are made on it, not laid over it. */
     val MADE_ON_IT = setOf(ChangeType.DueBy, ChangeType.StartFrom, ChangeType.Minutes)
 

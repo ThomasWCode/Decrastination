@@ -113,6 +113,16 @@ class OwnTasksTest {
     }
 
     @Test
+    fun `undoing a card puts back only what it changed`() {
+        val was = OwnTask(title = "Essay", dueAt = Fixtures.at("2026-10-16T17:00"), minutes = 60)
+        // Since the card moved the due date, another changed the minutes.
+        val now = was.copy(dueAt = Fixtures.at("2026-10-20T17:00"), minutes = 90)
+        val back = OwnTasks.restored(now, was, setOf(ChangeType.DueBy))
+        assertEquals(Fixtures.at("2026-10-16T17:00"), back.dueAt)
+        assertEquals(90, back.minutes)
+    }
+
+    @Test
     fun `steps of the same name keep their own ticks through an edit`() {
         val task = own(steps = listOf(OwnStep("Review", 20), OwnStep("Write", 30), OwnStep("Review", 20)))
         val firstDone = task.copy(subSteps = task.subSteps.mapIndexed { i, s -> if (i == 0) s.copy(done = true) else s })
