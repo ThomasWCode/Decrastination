@@ -215,11 +215,16 @@ class AskActivity : ComponentActivity() {
                         now = now,
                         zone = zone,
                     ) {
+                        // Kept whatever the screen does meanwhile (Back at once): sent from the app's scope, the
+                        // box cleared at once and filled again only if one of yours still waits.
                         val text = draft
-                        scope.launch {
-                            if (graph.ask(text, about.value)) {
-                                draft = ""
-                                about.value = About()
+                        val subject = about.value
+                        draft = ""
+                        about.value = About()
+                        graph.scope.launch {
+                            if (!graph.ask(text, subject)) {
+                                draft = text
+                                about.value = subject
                             }
                         }
                     }
