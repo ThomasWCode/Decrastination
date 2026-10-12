@@ -1,5 +1,7 @@
 package com.thomaswcode.decrastination.core
 
+import kotlin.math.floor
+import kotlin.math.roundToInt
 import kotlinx.serialization.Serializable
 
 /**
@@ -204,6 +206,28 @@ data class TaskItem(
             val steps = subSteps.sumOf { it.minutes }
             return if (steps > 0) mine.toDouble() / steps else 1.0
         }
+
+    /**
+     * Each step's minutes as the plan takes them, by [multiplier] (the calibration's, for the app's
+     * estimate). Where you gave the whole task's minutes, they're shared out in whole minutes that
+     * add up to exactly yours, the odd minutes going to the steps with most left over (each at
+     * least one, so fewer minutes than steps comes to a minute each).
+     */
+    fun plannedStepMinutes(multiplier: Double): List<Int> {
+        val steps = subSteps.map { it.minutes }
+        val total = steps.sum()
+        val mine = userEffortMin
+        if (mine == null || total <= 0) return steps.map { (it * multiplier).roundToInt().coerceAtLeast(1) }
+        val exact = steps.map { it.toDouble() * mine / total }
+        val whole = exact.map { floor(it).toInt() }.toMutableList()
+        var odd = mine - whole.sum()
+        for (i in exact.indices.sortedByDescending { exact[it] - whole[it] }) {
+            if (odd <= 0) break
+            whole[i]++
+            odd--
+        }
+        return whole.map { it.coerceAtLeast(1) }
+    }
 
     fun isAvailable(now: Long): Boolean = availableFrom == null || availableFrom <= now
 
