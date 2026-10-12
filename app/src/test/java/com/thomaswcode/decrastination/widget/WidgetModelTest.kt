@@ -65,6 +65,16 @@ class WidgetModelTest {
     }
 
     @Test
+    fun `the day's list is a line a task, with its pieces counted, and the count is of tasks`() {
+        // Over three hours due tonight in 45-minute boxes: five pieces of one task, and an essay.
+        val model = model(listOf(task("Essay", "2026-10-09T23:59", effort = 20), task("Statics", "2026-10-09T23:00", effort = 200)))
+        assertEquals("2 today", model.summary)
+        // What the next and the one after leave of Statics is one line, its pieces counted.
+        val statics = model.list.single { it.taskId == "teams:Statics" }
+        assertTrue(Regex("Statics · [2-5] pieces").matches(statics.text), statics.text)
+    }
+
+    @Test
     fun `a long day's list says how many more the app has`() {
         val tasks = (1..34).map { task("t$it", "2026-10-09T23:00", effort = 5) }
         val model = model(tasks)

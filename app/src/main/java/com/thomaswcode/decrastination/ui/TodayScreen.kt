@@ -3,6 +3,7 @@ package com.thomaswcode.decrastination.ui
 import android.app.Activity
 import android.content.Intent
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,6 +13,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -20,10 +22,12 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -36,12 +40,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.thomaswcode.decrastination.AppGraph
+import com.thomaswcode.decrastination.R
 import com.thomaswcode.decrastination.block.FocusSession
 import com.thomaswcode.decrastination.core.Chunk
 import com.thomaswcode.decrastination.core.DayBucket
@@ -98,6 +105,10 @@ fun TodayScreen(graph: AppGraph, activity: Activity) {
     fun messageOf(taskId: String, general: Boolean = false): String? = message?.takeIf { messageFor == taskId || (general && messageFor == null) }
     // A piece whose actions are open in a sheet (IMP-P1-001), by its key.
     var sheetFor by rememberSaveable { mutableStateOf<String?>(null) }
+    // A task open to change (2.0.0), by id, from its piece's sheet.
+    var changing by rememberSaveable { mutableStateOf<String?>(null) }
+    // The tasks opened into their pieces, as "<day>|<task id>" (Q31).
+    var opened by rememberSaveable { mutableStateOf(emptyList<String>()) }
     val trouble = trouble(tasks, runtime, now)
 
     // Today and tomorrow open; later days folded to their heading, which still says their load.
@@ -126,7 +137,7 @@ fun TodayScreen(graph: AppGraph, activity: Activity) {
             }
         }
         item(key = "next") {
-            val unread = Source.entries.filter { tasks.status(it).lastSuccessAt == null }
+            val unread = Source.SYNCED.filter { tasks.status(it).lastSuccessAt == null }
             NextCard(
                 graph, activity, plan, runtime.session, zone, photo, ::messageOf, say,
                 empty = when {
@@ -149,17 +160,24 @@ fun TodayScreen(graph: AppGraph, activity: Activity) {
             if (bucket.chunks.isEmpty()) {
                 item(key = "empty-$day") { ListTile(0, 1) { Text("Nothing planned.", style = MaterialTheme.typography.bodyMedium) } }
             }
-            val more = bucket.chunks.size > PER_DAY
-            val shown = if (more && day !in whole) bucket.chunks.take(PER_DAY) else bucket.chunks
+            // A task once a day, opening into its pieces that day (Q31).
+            val rows = Groups.byTask(bucket.chunks)
+            val more = rows.size > PER_DAY
+            val shown = if (more && day !in whole) rows.take(PER_DAY) else rows
             val tiles = shown.size + if (more) 1 else 0
-            itemsIndexed(shown, key = { _, it -> "$day-${it.taskId}-${it.part}" }) { index, chunk ->
-                ChunkTile(chunk, index, tiles, plan.now, zone) { sheetFor = keyOf(chunk) }
+            itemsIndexed(shown, key = { _, it -> "$day-${it.taskId}" }) { index, row ->
+                if (row.pieces.size == 1) {
+                    ChunkTile(row.first, index, tiles, plan.now, zone) { sheetFor = keyOf(row.first) }
+                } else {
+                    val key = "$day|${row.taskId}"
+                    TaskRowTile(row, index, tiles, plan.now, zone, key in opened, { opened = opened.toggle(key) }) { sheetFor = keyOf(it) }
+                }
             }
             if (more) {
                 item(key = "more-$day") {
                     ListTile(tiles - 1, tiles, onClick = { whole = whole.toggle(day) }) {
                         Text(
-                            if (day in whole) "Show the first $PER_DAY only" else "Show ${bucket.chunks.size - PER_DAY} more",
+                            if (day in whole) "Show the first $PER_DAY only" else "Show ${rows.size - PER_DAY} more",
                             style = MaterialTheme.typography.labelLarge,
                             color = MaterialTheme.colorScheme.primary,
                         )
@@ -206,9 +224,13 @@ fun TodayScreen(graph: AppGraph, activity: Activity) {
             // Done, or planned again: nothing to act on.
             LaunchedEffect(key) { sheetFor = null }
         } else {
-            PieceSheet(graph, activity, chunk, plan.now, zone, photo, messageOf(chunk.taskId), { say(chunk.taskId, it) }) { sheetFor = null }
+            PieceSheet(graph, activity, chunk, plan.now, zone, photo, messageOf(chunk.taskId), { say(chunk.taskId, it) }, onChange = {
+                sheetFor = null
+                changing = chunk.taskId
+            }) { sheetFor = null }
         }
     }
+    changing?.let { id -> TaskSheetHost(graph, activity, id) { changing = null } }
 }
 
 private const val MESSAGE_MS = 20_000L
@@ -226,7 +248,7 @@ private data class Trouble(val text: String, val fix: Fix) {
 private fun trouble(tasks: TaskState, runtime: RuntimeState, now: Long): List<Trouble> = buildList {
     runtime.protection.problems.forEach { add(Trouble(it, Trouble.Fix.Protection)) }
     if (runtime.unreadable.isNotEmpty()) add(Trouble("A saved file couldn't be read: Setup says what was kept", Trouble.Fix.Setup))
-    Source.entries.forEach { source -> tasks.status(source).error?.let { add(Trouble("Can't read ${source.label}: $it", Trouble.Fix.Setup)) } }
+    Source.SYNCED.forEach { source -> tasks.status(source).error?.let { add(Trouble("Can't read ${source.label}: $it", Trouble.Fix.Setup)) } }
     WidgetModel.teamsWarning(tasks, now)?.let { add(Trouble(it, Trouble.Fix.Teams)) }
 }
 
@@ -351,6 +373,7 @@ private fun PieceSheet(
     photo: PhotoCheck,
     message: String?,
     say: (String) -> Unit,
+    onChange: () -> Unit,
     onClose: () -> Unit,
 ) {
     ModalBottomSheet(onDismissRequest = onClose) {
@@ -362,6 +385,8 @@ private fun PieceSheet(
                 color = if (chunk.urgent) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
             )
             PieceActions(graph, activity, chunk, now, photo, say)
+            // Its due date, minutes or start: on the task's own sheet (2.0.0).
+            TextButton(onClick = onChange) { Text("Change its due date, minutes…") }
             message?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.secondary) }
         }
     }
@@ -397,14 +422,69 @@ private fun DayHeader(bucket: DayBucket, today: LocalDate, expanded: Boolean, on
         today.plusDays(1) -> "Tomorrow"
         else -> bucket.date.format(DAY)
     }
+    // Tasks, as the day lists them (Q31).
+    val tasks = bucket.chunks.map { it.taskId }.distinct().size
     FoldingHeading(
         title = name,
         expanded = expanded,
         onToggle = onToggle,
-        summary = "${bucket.chunks.size} piece${if (bucket.chunks.size == 1) "" else "s"}",
+        summary = "$tasks task${if (tasks == 1) "" else "s"}",
         detail = Format.load(bucket.plannedMin, bucket.capacityMin),
         detailColor = if (bucket.plannedMin > bucket.capacityMin) MaterialTheme.colorScheme.error else Color.Unspecified,
     )
+}
+
+/**
+ * A task with more than one piece on the day (Q31): its name, how many pieces and their minutes
+ * together, opening ([expanded]) into the pieces, each of which opens its actions ([onPiece]).
+ */
+@Composable
+private fun TaskRowTile(row: TaskRow, index: Int, count: Int, now: Long, zone: ZoneId, expanded: Boolean, onToggle: () -> Unit, onPiece: (Chunk) -> Unit) {
+    val first = row.first
+    ListTile(index, count, onToggle) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Box(
+                Modifier.width(4.dp).height(36.dp).clip(RoundedCornerShape(2.dp))
+                    .background(if (row.urgent) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.outlineVariant),
+            )
+            Column(Modifier.weight(1f)) {
+                Text(first.title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(
+                    "${row.pieces.size} pieces · ${WidgetModel.badge(first, now, zone)} · ${first.source.label}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (row.urgent) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Pill(Format.minutes(row.minutes))
+            Icon(
+                painterResource(R.drawable.ic_expand_more),
+                contentDescription = if (expanded) "Fold" else "Show its pieces",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(24.dp).rotate(if (expanded) 180f else 0f),
+            )
+        }
+        if (expanded) {
+            Column(Modifier.padding(start = 16.dp, top = 8.dp)) {
+                row.pieces.forEach { piece ->
+                    Row(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).clickable { onPiece(piece) }.padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Text(
+                            piece.step ?: "Part ${piece.part} of ${piece.parts}",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = if (piece.urgent) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.weight(1f),
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(Format.minutes(piece.minutes), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+        }
+    }
 }
 
 @Composable

@@ -7,6 +7,8 @@ import com.thomaswcode.decrastination.core.ChangeType
 import com.thomaswcode.decrastination.core.Instruction
 import com.thomaswcode.decrastination.core.InstructionStatus
 import com.thomaswcode.decrastination.core.Kind
+import com.thomaswcode.decrastination.core.OwnTask
+import com.thomaswcode.decrastination.core.OwnTasks
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.enrich.AiUsage
 import java.io.ByteArrayInputStream
@@ -46,7 +48,9 @@ class BackupTest {
     fun `what isn't one of this app's backups, or is from a newer one, isn't read`() {
         assertNull(Backups.decode("not json"))
         assertNull(Backups.decode("""{"app":"Something else","format":1,"exportedAt":0,"settings":{},"log":{}}"""))
-        assertNull(Backups.decode("""{"app":"Decrastination","format":2,"exportedAt":0,"settings":{},"log":{}}"""))
+        assertNull(Backups.decode("""{"app":"Decrastination","format":${Backup.FORMAT + 1},"exportedAt":0,"settings":{},"log":{}}"""))
+        assertNotNull(Backups.decode("""{"app":"Decrastination","format":${Backup.FORMAT},"exportedAt":0,"settings":{},"log":{}}"""))
+        // One from before 2.0.0 (format 1, no tasks of your own) is still read.
         assertNotNull(Backups.decode("""{"app":"Decrastination","format":1,"exportedAt":0,"settings":{},"log":{}}"""))
     }
 
@@ -125,6 +129,39 @@ class BackupTest {
         assertNotNull(Backups.problem(with(Change(ChangeType.StartFrom, taskId = "teams:a", time = now + 3650 * 86_400_000L))))
         assertNotNull(Backups.problem(with(Change(ChangeType.After, taskId = "teams:a", afterTaskId = "teams:a"))))
         assertNotNull(Backups.problem(with(Change(ChangeType.EventTime, eventKey = "Trip", eventAnswer = "sometimes"))))
+    }
+
+    @Test
+    fun `a backup keeps your own tasks, and a restore adds those not here`() {
+        val mine = OwnTasks.create(OwnTask(title = "UCAS statement", dueAt = now + 86_400_000L, minutes = 120), "u1", now)
+        val read = Backups.decode(Backups.encode(backup().copy(ownTasks = listOf(mine))))!!
+        assertEquals(listOf(mine), read.ownTasks)
+        assertNull(Backups.problem(read))
+        // One here already is the newer: it stays as it is.
+        val here = mine.copy(title = "Personal statement")
+        assertEquals(emptyList(), Backups.restoredOwnTasks(read.ownTasks, listOf(here)))
+        assertEquals(listOf(mine), Backups.restoredOwnTasks(read.ownTasks, emptyList()))
+        // One the form wouldn't take, or a source's task posing as yours, isn't restored.
+        assertNotNull(Backups.problem(backup().copy(ownTasks = listOf(mine.copy(title = " ")))))
+        assertNotNull(Backups.problem(backup().copy(ownTasks = listOf(mine.copy(source = Source.Teams)))))
+        // Bookkeeping the app never writes: refused. What instructions laid over one isn't restored.
+        assertNotNull(Backups.problem(backup().copy(ownTasks = listOf(mine.copy(userEffortMin = -1)))))
+        assertNotNull(Backups.problem(backup().copy(ownTasks = listOf(mine.copy(workedMin = -5)))))
+        assertNotNull(Backups.problem(backup().copy(ownTasks = listOf(mine.copy(sourceProgress = 1.0)))))
+        assertNotNull(Backups.problem(backup().copy(ownTasks = listOf(mine.copy(sourceValues = mine.sourceValues!!.copy(availableFrom = now + 86_400_000L))))))
+        // What only a source gives: an Anki deck's cards a day (0 would divide by nothing), a derived count, extras.
+        assertNotNull(Backups.problem(backup().copy(ownTasks = listOf(mine.copy(stepsPerDay = 0)))))
+        assertNotNull(Backups.problem(backup().copy(ownTasks = listOf(mine.copy(derived = true)))))
+        assertNotNull(Backups.problem(backup().copy(ownTasks = listOf(mine.copy(extra = mapOf("from" to "x"))))))
+        // A backup of this version is one an older version refuses whole, not one it restores without them.
+        assertEquals(2, Backup.FORMAT)
+        val laid = mine.copy(userDueAt = now + 3 * 86_400_000L, userNotATask = true).let { it.copy(dueAt = it.userDueAt) }
+        val restored = Backups.restoredOwnTasks(listOf(laid), emptyList()).single()
+        assertNull(restored.userDueAt)
+        assertEquals(mine.dueAt, restored.dueAt)
+        assertEquals(false, restored.userNotATask)
+        // A backup from before 2.0.0 has none.
+        assertEquals(emptyList(), Backups.decode(Backups.encode(backup()).replace("\"ownTasks\"", "\"ignored\""))!!.ownTasks)
     }
 
     @Test

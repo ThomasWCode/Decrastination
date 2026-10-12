@@ -1,0 +1,224 @@
+package com.thomaswcode.decrastination.ui
+
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import com.thomaswcode.decrastination.AppGraph
+import com.thomaswcode.decrastination.R
+import com.thomaswcode.decrastination.core.Kind
+import com.thomaswcode.decrastination.core.OwnTask
+import com.thomaswcode.decrastination.core.OwnTasks
+import com.thomaswcode.decrastination.core.TaskItem
+import java.time.Instant
+import java.time.LocalTime
+import java.util.UUID
+import kotlinx.coroutines.launch
+
+/**
+ * The form for a task of your own (2.0.0, Q28): a new one, or [editing] one. Saved under an id
+ * chosen as it opens ([AppGraph.saveOwnTask]), so a second tap, or the form made again after a
+ * turn of the phone, changes the one task. Every field is kept through a turn too.
+ */
+@Composable
+fun OwnTaskForm(graph: AppGraph, editing: TaskItem?, onClose: () -> Unit) {
+    val zone = graph.clock.zone()
+    val now = graph.clock.now()
+    val today = Instant.ofEpochMilli(now).atZone(zone).toLocalDate()
+    val start = editing?.let(OwnTasks::draftOf) ?: OwnTask(title = "")
+    val id = rememberSaveable { editing?.sourceId ?: UUID.randomUUID().toString() }
+    var title by rememberSaveable { mutableStateOf(start.title) }
+    var notes by rememberSaveable { mutableStateOf(start.notes) }
+    var kind by rememberSaveable { mutableStateOf(start.kind.name) }
+    var subject by rememberSaveable { mutableStateOf(start.className.orEmpty()) }
+    var due by rememberSaveable { mutableStateOf(start.dueAt) }
+    var from by rememberSaveable { mutableStateOf(start.startFrom) }
+    var hours by rememberSaveable { mutableStateOf((start.minutes / 60).toString()) }
+    var minutes by rememberSaveable { mutableStateOf((start.minutes % 60).toString()) }
+    var picking by rememberSaveable { mutableStateOf<String?>(null) }
+    var problem by rememberSaveable { mutableStateOf<String?>(null) }
+    var saving by rememberSaveable { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val chosen = Kind.valueOf(kind)
+    val event = chosen == Kind.Event
+
+    fun draft() = start.copy(
+        title = title,
+        notes = notes,
+        kind = chosen,
+        className = subject,
+        dueAt = due,
+        startFrom = from.takeUnless { event },
+        minutes = (hours.toIntOrNull() ?: 0) * 60 + (minutes.toIntOrNull() ?: 0),
+    )
+
+    Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
+        Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
+            Column(Modifier.fillMaxSize().safeDrawingPadding().imePadding()) {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = onClose) { Icon(painterResource(R.drawable.ic_close), contentDescription = "Close") }
+                    Text(
+                        if (editing == null) "New task" else "Edit task",
+                        style = MaterialTheme.typography.titleLarge,
+                        modifier = Modifier.weight(1f),
+                    )
+                    TextButton(enabled = !saving, onClick = {
+                        val made = draft()
+                        problem = OwnTasks.problem(made)
+                        if (problem == null) {
+                            saving = true
+                            scope.launch {
+                                if (graph.saveOwnTask(id, made)) onClose() else saving = false
+                            }
+                        }
+                    }) { Text("Save", fontWeight = FontWeight.Bold) }
+                }
+                Column(
+                    Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp),
+                ) {
+                    OutlinedTextField(
+                        title,
+                        { title = it.take(OwnTasks.MAX_TITLE) },
+                        label = { Text("What it is") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OwnTasks.KINDS.forEach { k -> FilterChip(selected = chosen == k, onClick = { kind = k.name }, label = { Text(k.label) }) }
+                    }
+                    OutlinedTextField(
+                        subject,
+                        { subject = it.take(OwnTasks.MAX_CLASS) },
+                        label = { Text("Subject (if any)") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Choice(
+                        if (event) "When" else "Due",
+                        due?.let { Format.at(it, now, zone) } ?: if (event) "Pick a time" else "No due date",
+                        onPick = { picking = "due" },
+                        onClear = if (due != null && !event) ({ due = null }) else null,
+                    )
+                    if (!event) {
+                        if (start.steps.isEmpty()) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                OutlinedTextField(
+                                    hours,
+                                    { hours = it.filter(Char::isDigit).take(2) },
+                                    label = { Text("Hours") },
+                                    singleLine = true,
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    modifier = Modifier.weight(1f),
+                                )
+                                OutlinedTextField(
+                                    minutes,
+                                    { minutes = it.filter(Char::isDigit).take(2) },
+                                    label = { Text("Minutes") },
+                                    singleLine = true,
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    modifier = Modifier.weight(1f),
+                                )
+                            }
+                            Text("How long it takes in all.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        } else {
+                            Text(
+                                "${start.steps.size} steps, ${Format.minutes(start.steps.sumOf { it.minutes })} in all: its page changes their minutes together.",
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                        }
+                        Choice(
+                            "Can't start before",
+                            from?.let { Format.at(it, now, zone) } ?: "Any time",
+                            onPick = { picking = "from" },
+                            onClear = if (from != null) ({ from = null }) else null,
+                        )
+                    }
+                    OutlinedTextField(
+                        notes,
+                        { notes = it.take(OwnTasks.MAX_NOTES) },
+                        label = { Text("Notes") },
+                        minLines = 3,
+                        keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    problem?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
+                    Text(
+                        "It's planned and blocks like any task. Done, on its page, finishes it but earns no free time; focus sessions on it earn theirs.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+    }
+
+    when (picking) {
+        "due" -> DateTimeDialog(
+            title = if (event) "When" else "Due",
+            initialDay = due?.let { Instant.ofEpochMilli(it).atZone(zone).toLocalDate() }?.takeIf { it >= today } ?: today,
+            initialTime = due?.let { Instant.ofEpochMilli(it).atZone(zone).toLocalTime() } ?: if (event) LocalTime.of(16, 0) else LocalTime.of(23, 59),
+            earliest = today,
+            onClose = { picking = null },
+        ) { day, time ->
+            picking = null
+            due = day.atTime(time!!).atZone(zone).toInstant().toEpochMilli()
+        }
+        "from" -> DateTimeDialog(
+            title = "Can't be started before",
+            initialDay = from?.let { Instant.ofEpochMilli(it).atZone(zone).toLocalDate() } ?: today.plusDays(1),
+            initialTime = null,
+            earliest = today,
+            onClose = { picking = null },
+        ) { day, _ ->
+            picking = null
+            from = day.atStartOfDay(zone).toInstant().toEpochMilli()
+        }
+    }
+}
+
+/** A value picked in a dialog: [label], what it is, and the buttons to pick it and to clear it. */
+@Composable
+private fun Choice(label: String, value: String, onPick: () -> Unit, onClear: (() -> Unit)?) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(value, style = MaterialTheme.typography.bodyLarge)
+        }
+        onClear?.let { TextButton(onClick = it) { Text("Clear") } }
+        TextButton(onClick = onPick) { Text("Change") }
+    }
+}

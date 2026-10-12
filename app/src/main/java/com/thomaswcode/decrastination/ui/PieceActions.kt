@@ -100,7 +100,7 @@ fun rememberPhotoCheck(graph: AppGraph, activity: Activity, plan: Plan, say: (ta
 /**
  * What can be done with [piece], wherever it's shown (the Plan, the block screen): **Open** goes to
  * the task; **Start** runs a focus session on it (**Stop** ends the one running); **Check it's done**
- * asks its source; **Refresh Teams** asks the Teams widget to sync; **Photo check** sends a photo
+ * asks its source (**Done**, for one of your own, is your say); **Refresh Teams** asks the Teams widget to sync; **Photo check** sends a photo
  * of written work. [say] gives how each went.
  */
 @Composable
@@ -130,7 +130,15 @@ fun PieceActions(graph: AppGraph, activity: Activity, piece: Chunk, now: Long, p
         } else {
             OutlinedButton(onClick = { scope.launch { Sessions.end(activity, early = true) } }) { Text("Stop session") }
         }
-        OutlinedButton(onClick = {
+        if (piece.source == Source.Own) {
+            // Yours: nothing to ask, so done is your say (2.0.0), earning no free time.
+            OutlinedButton(onClick = {
+                scope.launch {
+                    graph.finishOwnTask(piece.taskId)
+                    say("Done. It earns no free time; its sessions earned theirs.")
+                }
+            }) { Text("Done") }
+        } else OutlinedButton(onClick = {
             val task = tasks.tasks.firstOrNull { it.id == piece.taskId } ?: return@OutlinedButton
             say("Asking ${task.source.label}…")
             scope.launch {

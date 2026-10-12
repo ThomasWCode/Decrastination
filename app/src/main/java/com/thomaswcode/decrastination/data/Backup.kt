@@ -8,6 +8,10 @@ import com.thomaswcode.decrastination.core.InstructionState
 import com.thomaswcode.decrastination.core.InstructionStatus
 import com.thomaswcode.decrastination.core.Instructions
 import com.thomaswcode.decrastination.core.Kind
+import com.thomaswcode.decrastination.core.OwnTasks
+import com.thomaswcode.decrastination.core.Source
+import com.thomaswcode.decrastination.core.TaskItem
+import com.thomaswcode.decrastination.core.enriched
 import com.thomaswcode.decrastination.learn.Calibrator
 import com.thomaswcode.decrastination.enrich.AiUsage
 import java.io.ByteArrayOutputStream
@@ -36,10 +40,16 @@ data class Backup(
     val aiUsage: AiUsage = AiUsage(),
     /** Your instructions in use (applied), in the order they were: none in a backup from before 1.7.0. */
     val instructions: List<Instruction> = emptyList(),
+    /** Your own tasks (2.0.0), open or lately done: no source can give them back. */
+    val ownTasks: List<TaskItem> = emptyList(),
 ) {
     companion object {
         const val APP = "Decrastination"
-        const val FORMAT = 1
+        /**
+         * 2 since 2.0.0, which keeps your own tasks: an older version, which would restore the rest
+         * and quietly lose them, refuses it whole as from a newer one.
+         */
+        const val FORMAT = 2
     }
 }
 
@@ -82,6 +92,7 @@ object Backups {
             if (backup.eventAnswers.values.any { !answer(it) }) add("a calendar answer")
             if (!backup.aiUsage.spentUsd.isFinite() || backup.aiUsage.spentUsd < 0 || backup.aiUsage.calls < 0) add("Claude's spending")
             if (backup.instructions.any { !wellFormed(it, backup.exportedAt) }) add("an instruction")
+            if (backup.ownTasks.any { !wellFormed(it) } || backup.ownTasks.map { it.id }.toSet().size != backup.ownTasks.size) add("a task of your own")
         }
         return bad.takeIf { it.isNotEmpty() }?.let { "it holds what this app never writes (${it.joinToString(", ")})" }
     }
@@ -99,6 +110,39 @@ object Backups {
 
     private const val DAY_MIN = 24 * 60
     private const val DAY_MS = 24 * 3_600_000L
+
+    /**
+     * Whether [task] is one of your own as the app makes them: under its id, as the form would take
+     * it, and its own bookkeeping such as the app keeps (minutes worked and ticked, never below
+     * nothing nor past a day's; an estimate of yours in range). What instructions laid over it isn't
+     * restored, but laid again from those here ([restoredOwnTasks]).
+     */
+    private fun wellFormed(task: TaskItem): Boolean {
+        val minutes = 0..OwnTasks.MINUTES.last
+        return task.source == Source.Own && task.id == TaskItem.id(Source.Own, task.sourceId) &&
+            task.workedMin in minutes && task.photoMin in minutes && task.stepsWorkedMin in minutes &&
+            (task.userEffortMin == null || task.userEffortMin in OwnTasks.MINUTES) &&
+            (task.peakEffortMin == null || task.peakEffortMin in minutes) &&
+            // No source to say how far it is: yours are done or not, never part way. Nor to hide it
+            // till a day: a start of yours is when its work is planned from (notBefore).
+            task.sourceProgress == 0.0 && (task.firstProgress ?: 0.0) == 0.0 &&
+            task.availableFrom == null && task.sourceValues?.availableFrom == null &&
+            // Nor anything else only a source gives (an Anki deck's day's cards, the enrichment's
+            // estimate, a source's extras), nor a miss, which only a source's counts can make.
+            task.stepsPerDay == null && !task.derived && task.extra.isEmpty() && task.aiEffortMin == null &&
+            task.status != com.thomaswcode.decrastination.core.Status.Missed && task.photosCounted.values.all { it in minutes } &&
+            task.subSteps.all { it.timedMin in minutes } &&
+            task.enrichment == null &&
+            OwnTasks.problem(OwnTasks.draftOf(task)) == null
+    }
+
+    /**
+     * The tasks of your own to add from a backup's ([backed]), beside those [here]: those not here
+     * already, as they were, but for what instructions laid over them, which is laid again from the
+     * instructions here. One here wins: it's the newer.
+     */
+    fun restoredOwnTasks(backed: List<TaskItem>, here: List<TaskItem>): List<TaskItem> = backed.filter { b -> here.none { it.id == b.id } }
+        .map { it.copy(userNotATask = false, userFrom = null, userAfter = null, userDueAt = null, userEffortMin = null).enriched() }
 
     /** The most changes one instruction holds, as Claude's reading of one is held to. */
     private const val MAX_CHANGES = 40
@@ -121,6 +165,7 @@ object Backups {
             when (change.type) {
                 ChangeType.NotATask -> named(change.taskId)
                 ChangeType.StartFrom, ChangeType.DueBy -> named(change.taskId) && time(change.time)
+                ChangeType.Minutes -> named(change.taskId) && change.minutes in OwnTasks.MINUTES
                 ChangeType.After -> named(change.taskId) && named(change.afterTaskId) && change.afterTaskId != change.taskId
                 ChangeType.EventTime -> named(change.eventKey) && change.eventAnswer?.let(::answer) == true
                 ChangeType.DayLimit -> change.freeMin in 0..DAY_MIN && day(change)
