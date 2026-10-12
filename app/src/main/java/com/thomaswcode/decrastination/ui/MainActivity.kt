@@ -168,7 +168,7 @@ class MainActivity : ComponentActivity() {
         private val MENU = listOf(
             "Setup" to SetupActivity::class.java,
             "Settings" to SettingsActivity::class.java,
-            "Instructions" to InstructionsActivity::class.java,
+            "Ask Claude" to AskActivity::class.java,
             "Calendar" to CalendarActivity::class.java,
             "Blocking and protection" to ProtectionActivity::class.java,
             "This week" to CheckInActivity::class.java,

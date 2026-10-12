@@ -3,6 +3,7 @@ package com.thomaswcode.decrastination.ui
 import android.app.Activity
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -14,6 +15,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -82,7 +84,7 @@ fun TasksScreen(graph: AppGraph, activity: Activity, opening: String? = null, on
                 item(key = "group-${group.name}") { FoldingHeading(group.title, expanded, { toggle(group.name) }, summary = "${tasks.size}") }
                 if (expanded) itemsIndexed(tasks, key = { _, it -> it.id }) { index, task -> TaskTile(task, index, tasks.size, now, zone, byId) { sheetFor = task.id } }
             }
-            // Tasks you've said aren't: kept, off the plan, and here to check (taken back in Instructions).
+            // Tasks you've said aren't: kept, off the plan, and here to check (taken back in Ask Claude).
             val notTasks = state.tasks.filter { it.isOpen && it.userNotATask }.sortedWith(compareBy(nullsLast()) { it.dueAt })
             if (notTasks.isNotEmpty()) {
                 val expanded = NOT_TASKS !in folded
@@ -112,12 +114,17 @@ fun TasksScreen(graph: AppGraph, activity: Activity, opening: String? = null, on
                 }
             }
         }
-        ExtendedFloatingActionButton(
-            onClick = { making = true },
-            icon = { Icon(painterResource(R.drawable.ic_add), contentDescription = null) },
-            text = { Text("New task") },
-            modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
-        )
+        Column(Modifier.align(Alignment.BottomEnd).padding(16.dp), horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            // Or say it to Claude, who makes the card (Q29).
+            SmallFloatingActionButton(onClick = { activity.startActivity(AskActivity.intent(activity)) }) {
+                Icon(painterResource(R.drawable.ic_chat), contentDescription = "Ask Claude")
+            }
+            ExtendedFloatingActionButton(
+                onClick = { making = true },
+                icon = { Icon(painterResource(R.drawable.ic_add), contentDescription = null) },
+                text = { Text("New task") },
+            )
+        }
     }
     sheetFor?.let { id -> TaskSheetHost(graph, activity, id) { sheetFor = null } }
     if (making) OwnTaskForm(graph, editing = null) { making = false }

@@ -137,10 +137,12 @@ fun InstructionContent(graph: AppGraph, instruction: Instruction, tasks: Map<Str
     }
 }
 
-/** Writes an instruction about [about] and opens the instructions page, where Claude's reading shows. */
-fun sendInstruction(activity: Activity, graph: AppGraph, text: String, about: About) {
-    graph.scope.launch { graph.addInstruction(text, about) }
-    activity.startActivity(Intent(activity, InstructionsActivity::class.java))
+/**
+ * Your words about [about] said to Claude, in the chat (2.0.0, Q29), which opens: Claude answers
+ * there, with cards to apply. If a message of yours still waits for its answer, they go in the box.
+ */
+fun sendInstruction(activity: Activity, text: String, about: About) {
+    activity.startActivity(AskActivity.intent(activity, about, text))
 }
 
 /** [time] as a day, where you are. */
