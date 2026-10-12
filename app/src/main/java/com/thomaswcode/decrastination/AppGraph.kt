@@ -544,9 +544,11 @@ class AppGraph private constructor(context: Context) {
         Backups.problem(backup)?.let { return "Nothing was restored: $it." }
         changeSettings { Backups.importedSettings(it, backup) }
         val (restored, unclear) = restoreInstructions(backup.instructions)
-        // Your own tasks not here already: no source can give them back.
+        // Your own tasks not here already: no source can give them back. The instructions' say is laid
+        // over them afresh, from those in use here.
         val ownAdded = Backups.restoredOwnTasks(backup.ownTasks, tasks.value.tasks).map { it.id }.toSet()
         tasks.update { state -> state.copy(tasks = state.tasks + Backups.restoredOwnTasks(backup.ownTasks, state.tasks)) }
+        if (ownAdded.isNotEmpty()) layTaskOverrides()
         val own = ownAdded.size
         val told = buildList {
             if (own > 0) add("$own task${if (own == 1) "" else "s"} of your own")
@@ -822,8 +824,12 @@ class AppGraph private constructor(context: Context) {
         layInstructions()
     }
 
-    /** Whether one of your quick changes of [type] to [taskId] is in use. */
-    fun hasQuick(taskId: String, type: ChangeType): Boolean = instructions.value.applied.any { isQuick(it, taskId, type) }
+    /**
+     * Whether what's in force for [taskId]'s [type] is a quick change of yours: the last applied
+     * instruction that changes it. One of Claude's applied since wins, and *Undo* would take back
+     * nothing you'd see.
+     */
+    fun quickInForce(taskId: String, type: ChangeType): Boolean = Instructions.quickInForce(instructions.value.applied, taskId, type)
 
     /**
      * Keeps [task] as one of your own (2.0.0, Q28) under [sourceId]: made, or changed if it's there
@@ -863,11 +869,12 @@ class AppGraph private constructor(context: Context) {
 
     /**
      * Your own task [taskId], done, open again (done by mistake): its minutes worked stay, and so does
-     * its record in the log, as a source's reopening leaves it.
+     * its record in the log, as a source's reopening leaves it. One with every step ticked has its
+     * last step open again: something's left, or it would be finished again at once.
      */
     suspend fun reopenOwnTask(taskId: String) {
         tasks.update { state ->
-            state.copy(tasks = state.tasks.map { if (it.id == taskId && it.source == Source.Own && !it.isOpen) it.copy(status = Status.Open, doneAt = null) else it })
+            state.copy(tasks = state.tasks.map { t -> if (t.id == taskId && t.source == Source.Own && !t.isOpen) OwnTasks.reopened(t) else t })
         }
     }
 
@@ -1124,7 +1131,20 @@ class AppGraph private constructor(context: Context) {
     suspend fun applyInstruction(id: String): Unit = applying.withLock {
         val instruction = instructions.value.instructions.firstOrNull { it.id == id && it.state == InstructionStatus.Understood } ?: return@withLock
         if (refuseCircle(instruction)) return@withLock
+        if (refuseOnOwnTasks(instruction)) return@withLock
         setApplied(id)
+    }
+
+    /**
+     * [instruction] would leave one of your own tasks as the form wouldn't take it (a start after its
+     * due date): it's marked unclear, saying why, rather than applied, as nothing of it would be.
+     */
+    private suspend fun refuseOnOwnTasks(instruction: Instruction): Boolean {
+        val problem = OwnTasks.problemWith(tasks.value.tasks, instruction.changes) ?: return false
+        instructions.update { state ->
+            state.copy(instructions = state.instructions.map { if (it.id == instruction.id) it.copy(state = InstructionStatus.Unclear, note = problem) else it })
+        }
+        return true
     }
 
     /**
@@ -1158,10 +1178,13 @@ class AppGraph private constructor(context: Context) {
      */
     private suspend fun makeOnOwnTasks(id: String) {
         val instruction = instructions.value.instructions.firstOrNull { it.id == id } ?: return
-        val own = tasks.value.tasks.filter { it.source == Source.Own }.map { it.id }.toSet()
-        val made = instruction.changes.filter { it.type in OwnTasks.MADE_ON_IT && it.taskId in own }
+        // Each task's together, as one draft: only those the form would take are made (a restored
+        // instruction's others stay in it, laid over the task as any instruction is).
+        val made = OwnTasks.madeOn(tasks.value.tasks, instruction.changes)
         if (made.isEmpty()) return
-        tasks.update { state -> state.copy(tasks = state.tasks.map { t -> made.filter { it.taskId == t.id }.fold(t, OwnTasks::changed) }) }
+        tasks.update { state ->
+            state.copy(tasks = state.tasks.map { t -> made.filter { it.taskId == t.id }.takeIf { it.isNotEmpty() }?.let { OwnTasks.draftWithAll(t, it) }?.let { OwnTasks.edited(t, it) } ?: t })
+        }
         instructions.update { state ->
             state.copy(
                 instructions = state.instructions.mapNotNull { i ->

@@ -99,7 +99,8 @@ fun TaskSheet(graph: AppGraph, activity: Activity, taskId: String, onClose: () -
     val own = task.source == Source.Own
     val changeable = task.isOpen && !task.derived
     val byId = state.tasks.associateBy { it.id }
-    fun quick(type: ChangeType) = instructions.applied.any { it.quick && it.changes.singleOrNull()?.let { c -> c.type == type && c.taskId == task.id } == true }
+    // Undo only where a quick change of yours is what's in force: one of Claude's since wins.
+    fun quick(type: ChangeType) = Instructions.quickInForce(instructions.applied, task.id, type)
 
     /** Your own task changed as [change] says, or a source's given it as a quick change. */
     fun make(change: Change, text: String) {

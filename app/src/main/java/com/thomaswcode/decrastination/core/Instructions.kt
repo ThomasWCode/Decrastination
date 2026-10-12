@@ -134,6 +134,13 @@ data class TaskOverrides(val notATask: Boolean = false, val from: Long? = null, 
 object Instructions {
 
     /**
+     * Whether what's in force for [taskId]'s [type] comes from a quick change ([Instruction.quick]):
+     * the last of [applied] (in the order they were applied) to change it.
+     */
+    fun quickInForce(applied: List<Instruction>, taskId: String, type: ChangeType): Boolean =
+        applied.lastOrNull { i -> i.changes.any { it.type == type && it.taskId == taskId } }?.let { it.quick && it.changes.size == 1 } == true
+
+    /**
      * Whether [task] waits, as you said, for another still open ([byId]: every task). Never for one
      * that, along its own waits, comes back to it: tasks waiting on each other in a circle would
      * never be planned, so neither waits.

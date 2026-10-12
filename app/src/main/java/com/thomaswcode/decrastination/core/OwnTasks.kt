@@ -87,6 +87,19 @@ object OwnTasks {
         steps = task.subSteps.map { OwnStep(it.title, it.minutes, it.from, it.dueAt) },
     )
 
+    /**
+     * [task], done, open again: its minutes worked stay. One with every step ticked has its last open
+     * again: something's left, or it would be finished again at once.
+     */
+    fun reopened(task: TaskItem): TaskItem {
+        val steps = if (task.subSteps.isNotEmpty() && task.subSteps.all { it.done }) {
+            task.subSteps.mapIndexed { i, s -> if (i == task.subSteps.lastIndex) s.copy(done = false, byHand = false, timedMin = 0) else s }
+        } else {
+            task.subSteps
+        }
+        return task.copy(status = Status.Open, doneAt = null, subSteps = steps)
+    }
+
     /** The changes an instruction makes to one of your own that are made on it, not laid over it. */
     val MADE_ON_IT = setOf(ChangeType.DueBy, ChangeType.StartFrom, ChangeType.Minutes)
 
@@ -102,8 +115,39 @@ object OwnTasks {
      * [task] as the form would have it with [change] made ([MADE_ON_IT]; a null time clears it), to
      * check ([problem]) and save; null for a change of another kind.
      */
-    fun draftWith(task: TaskItem, change: Change): OwnTask? {
-        val draft = draftOf(task)
+    fun draftWith(task: TaskItem, change: Change): OwnTask? = with(draftOf(task), change)
+
+    /**
+     * [task] with all of [changes] made at once, in order, as one draft: checked as a whole, so a
+     * start and a due date moved later together aren't refused for the start coming first. Null if
+     * one is of a kind not made on a task ([MADE_ON_IT]).
+     */
+    fun draftWithAll(task: TaskItem, changes: List<Change>): OwnTask? =
+        changes.fold(draftOf(task) as OwnTask?) { draft, change -> draft?.let { with(it, change) } }
+
+    /**
+     * Of [changes], those made on tasks of your own (in [tasks]) that the form would take, each
+     * task's together ([draftWithAll]).
+     */
+    fun madeOn(tasks: List<TaskItem>, changes: List<Change>): List<Change> {
+        val own = tasks.filter { it.source == Source.Own }.associateBy { it.id }
+        return changes.filter { it.type in MADE_ON_IT && it.taskId in own }.groupBy { it.taskId!! }
+            .filter { (id, group) -> draftWithAll(own.getValue(id), group)?.let(::problem) == null }
+            .values.flatten()
+    }
+
+    /** Why [changes] can't be made on a task of your own in [tasks], in words; null if they can (or touch none). */
+    fun problemWith(tasks: List<TaskItem>, changes: List<Change>): String? {
+        val own = tasks.filter { it.source == Source.Own }.associateBy { it.id }
+        for ((id, group) in changes.filter { it.type in MADE_ON_IT && it.taskId in own }.groupBy { it.taskId!! }) {
+            val task = own.getValue(id)
+            val problem = draftWithAll(task, group)?.let(::problem) ?: continue
+            return "It would leave “${task.title}” as it can't be: ${problem.replaceFirstChar(Char::lowercase)}"
+        }
+        return null
+    }
+
+    private fun with(draft: OwnTask, change: Change): OwnTask? {
         return when (change.type) {
             ChangeType.DueBy -> draft.copy(dueAt = change.time)
             ChangeType.StartFrom -> draft.copy(startFrom = change.time)

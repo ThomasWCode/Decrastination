@@ -170,6 +170,16 @@ class FocusTest {
     }
 
     @Test
+    fun `with your minutes raised and a step ticked, each estimate takes off its own share`() = runTest {
+        // Two 30-minute steps, raised to two hours, one ticked off by hand.
+        val steps = listOf(SubStep("Q1-8", 30, done = true, byHand = true), SubStep("Q9-16", 30))
+        val raised = task("hw", effort = 60, steps = steps).copy(userEffortMin = 120, status = Status.Done, doneAt = clock.time)
+        focus.onCompleted(listOf(raised))
+        // By the app's estimate, 30 of its 60 minutes were left: a third of them.
+        assertEquals(10 * 60_000L, focus.creditLeftMs())
+    }
+
+    @Test
     fun `a step of your own task is ticked off by hand, as an email's is`() = runTest {
         val own = task("mine", steps = listOf(SubStep("Draft", 30), SubStep("Redraft", 30))).copy(id = "own:mine", source = Source.Own, sourceId = "mine")
         tasks.update { it.copy(tasks = listOf(own, task("hw", steps = listOf(SubStep("Q1", 20))))) }
