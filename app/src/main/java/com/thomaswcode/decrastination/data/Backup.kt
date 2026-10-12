@@ -123,8 +123,10 @@ object Backups {
             task.workedMin in minutes && task.photoMin in minutes && task.stepsWorkedMin in minutes &&
             (task.userEffortMin == null || task.userEffortMin in OwnTasks.MINUTES) &&
             (task.peakEffortMin == null || task.peakEffortMin in minutes) &&
-            // No source to say how far it is: yours are done or not, never part way.
+            // No source to say how far it is: yours are done or not, never part way. Nor to hide it
+            // till a day: a start of yours is when its work is planned from (notBefore).
             task.sourceProgress == 0.0 && (task.firstProgress ?: 0.0) == 0.0 &&
+            task.availableFrom == null && task.sourceValues?.availableFrom == null &&
             task.subSteps.all { it.timedMin in minutes } &&
             task.enrichment == null &&
             OwnTasks.problem(OwnTasks.draftOf(task)) == null
