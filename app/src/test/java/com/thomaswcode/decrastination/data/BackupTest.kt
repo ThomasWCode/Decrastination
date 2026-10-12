@@ -145,12 +145,9 @@ class BackupTest {
         // Here already: A waits for B.
         val aAfterB = instruction("a-after-b", now - 5_000, Change(ChangeType.After, taskId = "teams:a", afterTaskId = "teams:b"))
         val backed = listOf(bAfterA, dueFriday, saturday, aAfterB)
-        val unarmed = Backups.restoredInstructions(backed, here = listOf(aAfterB), armed = false)
-        assertEquals(listOf("saturday" to InstructionStatus.Applied, "due" to InstructionStatus.Applied, "b-after-a" to InstructionStatus.Unclear), unarmed.map { it.id to it.state })
-        // Armed, a due date waits for your dad's code; the rest are as unarmed.
-        val armed = Backups.restoredInstructions(backed, here = listOf(aAfterB), armed = true)
-        assertEquals(InstructionStatus.Understood, armed.single { it.id == "due" }.state)
-        assertNull(armed.single { it.id == "due" }.appliedAt)
-        assertEquals(InstructionStatus.Applied, armed.single { it.id == "saturday" }.state)
+        // A due date too, armed or not: the work is yours to change (12 Oct).
+        val restored = Backups.restoredInstructions(backed, here = listOf(aAfterB))
+        assertEquals(listOf("saturday" to InstructionStatus.Applied, "due" to InstructionStatus.Applied, "b-after-a" to InstructionStatus.Unclear), restored.map { it.id to it.state })
+        assertEquals(dueFriday.appliedAt, restored.single { it.id == "due" }.appliedAt)
     }
 }
