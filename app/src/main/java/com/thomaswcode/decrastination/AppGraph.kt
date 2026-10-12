@@ -1045,20 +1045,30 @@ class AppGraph private constructor(context: Context) {
      * instruction in the words that asked for them, so they're listed with the rest and taken back
      * there too. Says what went wrong on the card, if anything did.
      */
-    suspend fun applyProposal(messageId: String, proposalId: String, edited: OwnTask? = null): Unit = withContext(NonCancellable) {
+    suspend fun applyProposal(messageId: String, proposalId: String, edited: OwnTask? = null): Unit = withContext(NonCancellable) { proposing.withLock { apply(messageId, proposalId, edited) } }
+
+    /** Held while a card is made, undone or set aside, so a second tap finds it as the first left it. */
+    private val proposing = Mutex()
+
+    private suspend fun apply(messageId: String, proposalId: String, edited: OwnTask?) {
         val messages = chat.value.messages
-        val message = messages.firstOrNull { it.id == messageId } ?: return@withContext
-        val proposal = message.proposals.firstOrNull { it.id == proposalId && it.state != ProposalState.Applied } ?: return@withContext
+        val message = messages.firstOrNull { it.id == messageId } ?: return
+        val proposal = message.proposals.firstOrNull { it.id == proposalId && it.state != ProposalState.Applied } ?: return
         // The message of yours it answered: its words name the instruction.
         val asked = messages.take(messages.indexOf(message)).lastOrNull { it.from == Speaker.You }
         var made: String? = null
         var note: String? = null
+        var before = emptyMap<String, OwnTask>()
         val task = edited ?: proposal.task
         if (task != null) {
             val id = java.util.UUID.randomUUID().toString()
             if (saveOwnTask(id, task)) made = TaskItem.id(Source.Own, id) else note = OwnTasks.problem(task) ?: "It couldn't be added"
         } else if (proposal.changes.isNotEmpty()) {
             val id = java.util.UUID.randomUUID().toString()
+            // Your own tasks it changes, as they are: made on them, the changes are undone by putting them back.
+            val own = tasks.value.tasks.filter { it.source == Source.Own }.associateBy { it.id }
+            before = proposal.changes.filter { it.type in OwnTasks.MADE_ON_IT }.mapNotNull { it.taskId }.distinct()
+                .mapNotNull { tid -> own[tid]?.let { tid to OwnTasks.draftOf(it) } }.toMap()
             val instruction = Instruction(id, asked?.text ?: message.text, asked?.about ?: About(), clock.now(), state = InstructionStatus.Understood, changes = proposal.changes)
             instructions.update { it.copy(instructions = it.instructions + instruction) }
             applyInstruction(id)
@@ -1069,6 +1079,7 @@ class AppGraph private constructor(context: Context) {
                 after.state == InstructionStatus.Applied -> made = id
                 else -> {
                     note = after.note ?: "It couldn't be applied"
+                    before = emptyMap()
                     deleteInstruction(id)
                 }
             }
@@ -1077,7 +1088,7 @@ class AppGraph private constructor(context: Context) {
             s.copy(
                 messages = s.messages.map { m ->
                     if (m.id != messageId) m else m.copy(proposals = m.proposals.map { p ->
-                        if (p.id != proposalId) p else if (note == null) p.copy(state = ProposalState.Applied, made = made, note = null) else p.copy(note = note)
+                        if (p.id != proposalId) p else if (note == null) p.copy(state = ProposalState.Applied, made = made, before = before, note = null) else p.copy(note = note)
                     })
                 },
             )
@@ -1088,20 +1099,23 @@ class AppGraph private constructor(context: Context) {
      * Card [proposalId] undone: the task it added deleted, or its changes taken back. One whose
      * changes were made on tasks of your own can't be (they're changed on the tasks' pages).
      */
-    suspend fun undoProposal(messageId: String, proposalId: String) {
-        val proposal = chat.value.messages.firstOrNull { it.id == messageId }?.proposals?.firstOrNull { it.id == proposalId && it.state == ProposalState.Applied } ?: return
-        val made = proposal.made ?: return
+    suspend fun undoProposal(messageId: String, proposalId: String): Unit = proposing.withLock {
+        val proposal = chat.value.messages.firstOrNull { it.id == messageId }?.proposals?.firstOrNull { it.id == proposalId && it.state == ProposalState.Applied } ?: return@withLock
+        val made = proposal.made
+        if (made == null && proposal.before.isEmpty()) return@withLock
         val note = if (proposal.task != null) {
-            if (deleteOwnTask(made)) null else "Stop its focus session first"
+            if (made == null || deleteOwnTask(made)) null else "Stop its focus session first"
         } else {
-            deleteInstruction(made)
-            instructions.value.instructions.firstOrNull { it.id == made }?.note
+            made?.let { deleteInstruction(it) }
+            // Your own tasks it changed put back as they were: no instruction held those changes.
+            proposal.before.forEach { (id, draft) -> tasks.value.tasks.firstOrNull { it.id == id }?.let { saveOwnTask(it.sourceId, draft) } }
+            made?.let { m -> instructions.value.instructions.firstOrNull { it.id == m }?.note }
         }
         chat.update { s ->
             s.copy(
                 messages = s.messages.map { m ->
                     if (m.id != messageId) m else m.copy(proposals = m.proposals.map { p ->
-                        if (p.id != proposalId) p else if (note == null) p.copy(state = ProposalState.Proposed, made = null) else p.copy(note = note)
+                        if (p.id != proposalId) p else if (note == null) p.copy(state = ProposalState.Proposed, made = null, before = emptyMap()) else p.copy(note = note)
                     })
                 },
             )
@@ -1109,7 +1123,7 @@ class AppGraph private constructor(context: Context) {
     }
 
     /** Card [proposalId] set aside (or, [discarded] false, brought back). */
-    suspend fun discardProposal(messageId: String, proposalId: String, discarded: Boolean = true) {
+    suspend fun discardProposal(messageId: String, proposalId: String, discarded: Boolean = true): Unit = proposing.withLock {
         chat.update { s ->
             s.copy(
                 messages = s.messages.map { m ->

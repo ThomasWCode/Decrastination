@@ -99,24 +99,39 @@ object ChatPrompts {
     /**
      * The conversation as it's sent: the last [HISTORY] messages, starting with one of yours, each
      * of Claude's with what it suggested and what became of it; your newest carries what the app
-     * knows now ([context]).
+     * knows now ([context]). All of it within [budget] characters, as every call's input is held
+     * to ([Pricing.MAX_INPUT_CHARS], which the cap's worst case assumes): your newest words whole;
+     * the turns before them, newest first, in up to a quarter of what's left (a follow-up needs its
+     * question); then the context, its end cut if it must be.
      */
-    fun turns(messages: List<ChatMessage>, context: String, tasks: Map<String, TaskItem>, zone: ZoneId): List<Pair<Speaker, String>> {
+    fun turns(messages: List<ChatMessage>, context: String, tasks: Map<String, TaskItem>, zone: ZoneId, budget: Int = Pricing.MAX_INPUT_CHARS): List<Pair<Speaker, String>> {
         val recent = messages.takeLast(HISTORY).dropWhile { it.from != Speaker.You }
-        return recent.mapIndexed { i, m ->
-            val text = when (m.from) {
-                Speaker.You -> (if (i == recent.lastIndex) "$context\n\n" else "") + aboutLine(m.about) + m.text.trim().take(MAX_TEXT)
-                Speaker.Claude -> m.text + m.proposals.joinToString("") { p ->
-                    val what = p.task?.let { "add the task “${it.title}”" } ?: p.changes.joinToString("; ") { Instructions.describe(it, tasks, zone) }
-                    val became = when (p.state) {
-                        ProposalState.Proposed -> "not acted on yet"
-                        ProposalState.Applied -> "the student applied it"
-                        ProposalState.Discarded -> "the student discarded it"
-                    }
-                    "\n[Suggested: $what — $became]"
-                }
+        if (recent.isEmpty()) return emptyList()
+        val texts = recent.map { m -> m.from to text(m, tasks, zone) }
+        val newest = texts.last().second.take(budget)
+        // The turns before it, newest first, while they fit their share, starting again with one of yours.
+        var left = (budget - newest.length) / 4
+        val earlier = texts.dropLast(1).reversed().takeWhile { (_, t) -> (t.length <= left).also { if (it) left -= t.length } }.reversed()
+            .dropWhile { it.first != Speaker.You }
+        // The context in the rest, beside your newest words.
+        val room = budget - newest.length - 2 - earlier.sumOf { it.second.length }
+        return earlier + (Speaker.You to context.take(room.coerceAtLeast(0)) + "\n\n" + newest)
+    }
+
+    /** One message as it's sent: yours with what it was about; Claude's with its cards and what became of them. */
+    private fun text(m: ChatMessage, tasks: Map<String, TaskItem>, zone: ZoneId): String = when (m.from) {
+        Speaker.You -> aboutLine(m.about) + m.text.trim().take(MAX_TEXT)
+        Speaker.Claude -> m.text + m.proposals.joinToString("") { p ->
+            // In the words it was proposed in, where they're kept: made, a task's estimate is the new one.
+            val what = p.task?.let { "add the task “${it.title}”" }
+                ?: p.lines.takeIf { it.size == p.changes.size }?.joinToString("; ")
+                ?: p.changes.joinToString("; ") { Instructions.describe(it, tasks, zone) }
+            val became = when (p.state) {
+                ProposalState.Proposed -> "not acted on yet"
+                ProposalState.Applied -> "the student applied it"
+                ProposalState.Discarded -> "the student discarded it"
             }
-            m.from to text
+            "\n[Suggested: $what — $became]"
         }
     }
 
@@ -133,12 +148,12 @@ object ChatPrompts {
         val byId = tasks.associateBy { it.id }
         appendLine("Today: ${Instant.ofEpochMilli(now).atZone(zone).format(TODAY)} (${zone.id})")
         appendLine()
-        appendLine("Open tasks (id | title | from | kind | due | minutes in all | can't start before):")
+        appendLine("Open tasks (id | title | from | kind | due | minutes in all | minutes worked so far | can't start before):")
         val open = tasks.filter { it.isOpen && !it.hidden }.sortedBy { it.dueAt ?: Long.MAX_VALUE }
         if (open.isEmpty()) appendLine("(none)")
         open.take(InstructionPrompts.MAX_TASKS).forEach { t ->
             val start = listOfNotNull(t.availableFrom, t.userFrom, t.notBefore).maxOrNull()?.takeIf { it > now }
-            appendLine("- ${t.id} | ${t.title.take(MAX_TITLE)} | ${t.source.label} | ${t.kind.label} | ${t.dueAt?.let(::at) ?: "no date"} | ${t.effortMin} | ${start?.let(::at) ?: "-"}")
+            appendLine("- ${t.id} | ${t.title.take(MAX_TITLE)} | ${t.source.label} | ${t.kind.label} | ${t.dueAt?.let(::at) ?: "no date"} | ${t.effortMin} | ${t.workedMin + t.photoMin} | ${start?.let(::at) ?: "-"}")
         }
         appendLine()
         appendLine("Calendar events in the next fortnight (eventKey | title | when):")
@@ -219,7 +234,6 @@ object ChatAnswers {
         val kind = OwnTasks.KINDS.firstOrNull { it.name == n.kind } ?: Kind.Homework
         val due = n.dueDate?.let { at(it, n.dueTime, if (kind == Kind.Event) LocalTime.of(9, 0) else LocalTime.of(23, 59), zone) ?: return null }
         val start = n.startDate?.let { at(it, null, LocalTime.MIDNIGHT, zone) ?: return null }
-        if (listOfNotNull(due, start).any { it !in (now - 31 * DAY_MS)..(now + 400 * DAY_MS) }) return null
         val steps = n.steps.map { s ->
             OwnStep(
                 title = s.title.trim(),
@@ -228,6 +242,9 @@ object ChatAnswers {
                 dueAt = s.dueDate?.let { at(it, null, LocalTime.of(23, 59), zone) ?: return null },
             )
         }
+        // Every date in it, its steps' too, within a month back and a year and a bit ahead.
+        val dates = listOfNotNull(due, start) + steps.flatMap { listOfNotNull(it.from, it.dueAt) }
+        if (dates.any { it !in (now - 31 * DAY_MS)..(now + 400 * DAY_MS) }) return null
         return OwnTask(
             title = n.title.trim(),
             notes = n.notes?.trim().orEmpty(),
@@ -271,7 +288,7 @@ class ChatReader(apiKey: String, private val zone: ZoneId, endpoint: String? = n
             .putAdditionalHeader("anthropic-beta", ClaudeEnricher.FALLBACK_BETA)
             .putAdditionalBodyProperty("fallbacks", JsonValue.from("default"))
         ChatPrompts.turns(messages, context, tasks.associateBy { it.id }, zone).forEach { (from, text) ->
-            if (from == Speaker.You) builder.addUserMessage(text.take(Pricing.MAX_INPUT_CHARS)) else builder.addAssistantMessage(text)
+            if (from == Speaker.You) builder.addUserMessage(text) else builder.addAssistantMessage(text)
         }
         val message = withContext(Dispatchers.IO) { client.messages().create(builder.build()) }
         val cost = Pricing.costUsd(message)
