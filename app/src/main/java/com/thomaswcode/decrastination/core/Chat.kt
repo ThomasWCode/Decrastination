@@ -31,6 +31,12 @@ data class ChatMessage(
     val answeredAt: Long? = null,
     /** Yours, while it waits: why (Claude off, resting, a failed call). Claude's: what it suggested that the app couldn't use. */
     val note: String? = null,
+    /**
+     * Yours: Claude answered it, but with nothing the app could use (it declined, was cut off, or
+     * couldn't be read). Each try is paid for, so it's asked again only when you tap *Try again*,
+     * never by itself.
+     */
+    val stuck: Boolean = false,
 )
 
 /**
