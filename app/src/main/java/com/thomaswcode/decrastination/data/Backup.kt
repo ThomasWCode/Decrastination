@@ -45,7 +45,11 @@ data class Backup(
 ) {
     companion object {
         const val APP = "Decrastination"
-        const val FORMAT = 1
+        /**
+         * 2 since 2.0.0, which keeps your own tasks: an older version, which would restore the rest
+         * and quietly lose them, refuses it whole as from a newer one.
+         */
+        const val FORMAT = 2
     }
 }
 
@@ -119,6 +123,8 @@ object Backups {
             task.workedMin in minutes && task.photoMin in minutes && task.stepsWorkedMin in minutes &&
             (task.userEffortMin == null || task.userEffortMin in OwnTasks.MINUTES) &&
             (task.peakEffortMin == null || task.peakEffortMin in minutes) &&
+            // No source to say how far it is: yours are done or not, never part way.
+            task.sourceProgress == 0.0 && (task.firstProgress ?: 0.0) == 0.0 &&
             task.subSteps.all { it.timedMin in minutes } &&
             task.enrichment == null &&
             OwnTasks.problem(OwnTasks.draftOf(task)) == null
