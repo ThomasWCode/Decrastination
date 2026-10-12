@@ -101,17 +101,20 @@ object OwnTasks {
     }
 
     /**
-     * [current] with only the fields changes of [types] make (due date, start, minutes) put back as
-     * they were in [was]: a later change to another field stands. A step's minutes come back only
-     * while the steps are the same ones.
+     * [current] with what [changes] made (a due date, a start, minutes) put back as it was in [was]:
+     * only a field that still holds what they set, so a later change to it, or to another field,
+     * stands. A step's minutes come back only while the steps are the same ones.
      */
-    fun restored(current: OwnTask, was: OwnTask, types: Set<ChangeType>): OwnTask {
+    fun restored(current: OwnTask, was: OwnTask, changes: List<Change>): OwnTask {
         var d = current
-        if (ChangeType.DueBy in types) d = d.copy(dueAt = was.dueAt)
-        if (ChangeType.StartFrom in types) d = d.copy(startFrom = was.startFrom)
-        if (ChangeType.Minutes in types) {
-            d = d.copy(minutes = was.minutes)
-            if (was.steps.map { it.title } == d.steps.map { it.title }) d = d.copy(steps = d.steps.mapIndexed { i, s -> s.copy(minutes = was.steps[i].minutes) })
+        changes.lastOrNull { it.type == ChangeType.DueBy }?.let { c -> if (d.dueAt == c.time) d = d.copy(dueAt = was.dueAt) }
+        changes.lastOrNull { it.type == ChangeType.StartFrom }?.let { c -> if (d.startFrom == c.time) d = d.copy(startFrom = was.startFrom) }
+        changes.lastOrNull { it.type == ChangeType.Minutes }?.let { c ->
+            val total = if (d.steps.isEmpty()) d.minutes else d.steps.sumOf { it.minutes }
+            if (total == c.minutes) {
+                d = d.copy(minutes = was.minutes)
+                if (was.steps.map { it.title } == d.steps.map { it.title }) d = d.copy(steps = d.steps.mapIndexed { i, s -> s.copy(minutes = was.steps[i].minutes) })
+            }
         }
         return d
     }

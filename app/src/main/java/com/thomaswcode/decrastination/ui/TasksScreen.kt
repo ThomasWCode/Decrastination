@@ -75,7 +75,8 @@ fun TasksScreen(graph: AppGraph, activity: Activity, opening: String? = null, on
     var folded by rememberSaveable { mutableStateOf(listOf(FINISHED, NOT_TASKS, SOURCES)) }
     val toggle = { key: String -> folded = if (key in folded) folded - key else folded + key }
     Box(Modifier.fillMaxSize()) {
-        LazyColumn(Modifier.fillMaxWidth(), contentPadding = PaddingValues(bottom = 96.dp)) {
+        // Room at the foot for both buttons (the chat's over New task), so the last row scrolls clear.
+        LazyColumn(Modifier.fillMaxWidth(), contentPadding = PaddingValues(bottom = 160.dp)) {
             // Emails that are just emails aren't tasks (your call, 9 Oct); those you said aren't are below.
             val open = state.tasks.filter { it.isOpen && !it.hidden }
             if (open.isEmpty()) {

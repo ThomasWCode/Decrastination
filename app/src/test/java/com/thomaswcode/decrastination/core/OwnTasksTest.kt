@@ -116,10 +116,14 @@ class OwnTasksTest {
     fun `undoing a card puts back only what it changed`() {
         val was = OwnTask(title = "Essay", dueAt = Fixtures.at("2026-10-16T17:00"), minutes = 60)
         // Since the card moved the due date, another changed the minutes.
+        val moved = Change(ChangeType.DueBy, taskId = "own:u1", time = Fixtures.at("2026-10-20T17:00"))
         val now = was.copy(dueAt = Fixtures.at("2026-10-20T17:00"), minutes = 90)
-        val back = OwnTasks.restored(now, was, setOf(ChangeType.DueBy))
+        val back = OwnTasks.restored(now, was, listOf(moved))
         assertEquals(Fixtures.at("2026-10-16T17:00"), back.dueAt)
         assertEquals(90, back.minutes)
+        // Moved again since, by you: your date stands.
+        val again = now.copy(dueAt = Fixtures.at("2026-10-21T17:00"))
+        assertEquals(Fixtures.at("2026-10-21T17:00"), OwnTasks.restored(again, was, listOf(moved)).dueAt)
     }
 
     @Test
