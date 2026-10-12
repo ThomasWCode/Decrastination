@@ -148,6 +148,7 @@ class BackupTest {
         assertNotNull(Backups.problem(backup().copy(ownTasks = listOf(mine.copy(userEffortMin = -1)))))
         assertNotNull(Backups.problem(backup().copy(ownTasks = listOf(mine.copy(workedMin = -5)))))
         assertNotNull(Backups.problem(backup().copy(ownTasks = listOf(mine.copy(sourceProgress = 1.0)))))
+        assertNotNull(Backups.problem(backup().copy(ownTasks = listOf(mine.copy(sourceValues = mine.sourceValues!!.copy(availableFrom = now + 86_400_000L))))))
         // A backup of this version is one an older version refuses whole, not one it restores without them.
         assertEquals(2, Backup.FORMAT)
         val laid = mine.copy(userDueAt = now + 3 * 86_400_000L, userNotATask = true).let { it.copy(dueAt = it.userDueAt) }

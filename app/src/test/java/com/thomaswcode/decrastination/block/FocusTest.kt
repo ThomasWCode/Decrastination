@@ -189,6 +189,18 @@ class FocusTest {
     }
 
     @Test
+    fun `a photo of a step whose minutes you raised keeps only what it credits`() = runTest {
+        val steps = listOf(SubStep("Q1-8", 30), SubStep("Q9-16", 30))
+        tasks.update { it.copy(tasks = listOf(task("hw", effort = 60, steps = steps).copy(userEffortMin = 300))) }
+        // The step as planned is 150 of your minutes; the app's estimate makes it 30.
+        assertTrue(focus.photoChecked("teams:hw", "Q1-8", 150, stepIndex = 0))
+        focus.finishPhotos()
+        val t = tasks.value.tasks.single()
+        assertEquals(30, t.photoMin)
+        assertEquals(listOf(30), t.photosCounted.values.toList())
+    }
+
+    @Test
     fun `a step of your own task is ticked off by hand, as an email's is`() = runTest {
         val own = task("mine", steps = listOf(SubStep("Draft", 30), SubStep("Redraft", 30))).copy(id = "own:mine", source = Source.Own, sourceId = "mine")
         tasks.update { it.copy(tasks = listOf(own, task("hw", steps = listOf(SubStep("Q1", 20))))) }
