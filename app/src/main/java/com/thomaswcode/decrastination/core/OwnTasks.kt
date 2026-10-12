@@ -38,6 +38,12 @@ object OwnTasks {
     /** A minute to sixty hours: a term's project, not a year's. */
     val MINUTES = 1..60 * 60
 
+    /**
+     * The minutes [task] can be given in all: at least a minute for each of its steps, so yours,
+     * shared out over them ([shareOut]), add up to exactly what you gave.
+     */
+    fun minutesFor(task: TaskItem): IntRange = maxOf(1, task.subSteps.size)..MINUTES.last
+
     /** The kinds one can be: work of three sorts, or an event (a reminder at its time, not work to plan). */
     val KINDS = listOf(Kind.Homework, Kind.Revision, Kind.Admin, Kind.Event)
 
@@ -151,7 +157,7 @@ object OwnTasks {
     fun madeOn(tasks: List<TaskItem>, changes: List<Change>): List<Change> {
         val own = tasks.filter { it.source == Source.Own }.associateBy { it.id }
         return changes.filter { it.type in MADE_ON_IT && it.taskId in own }.groupBy { it.taskId!! }
-            .filter { (id, group) -> draftWithAll(own.getValue(id), group)?.let(::problem) == null }
+            .filter { (id, group) -> problemOf(own.getValue(id), group) == null }
             .values.flatten()
     }
 
@@ -160,10 +166,18 @@ object OwnTasks {
         val own = tasks.filter { it.source == Source.Own }.associateBy { it.id }
         for ((id, group) in changes.filter { it.type in MADE_ON_IT && it.taskId in own }.groupBy { it.taskId!! }) {
             val task = own.getValue(id)
-            val problem = draftWithAll(task, group)?.let(::problem) ?: continue
+            val problem = problemOf(task, group) ?: continue
             return "It would leave “${task.title}” as it can't be: ${problem.replaceFirstChar(Char::lowercase)}"
         }
         return null
+    }
+
+    /** What's wrong with [task] after [changes], in words; null if the form would take it. */
+    private fun problemOf(task: TaskItem, changes: List<Change>): String? {
+        val least = minutesFor(task).first
+        changes.firstOrNull { it.type == ChangeType.Minutes && (it.minutes ?: 0) < least }?.let { return "its $least steps need at least a minute each" }
+        val draft = draftWithAll(task, changes) ?: return "it's not a change that can be made on it"
+        return problem(draft)
     }
 
     private fun with(draft: OwnTask, change: Change): OwnTask? {
@@ -171,7 +185,8 @@ object OwnTasks {
             ChangeType.DueBy -> draft.copy(dueAt = change.time)
             ChangeType.StartFrom -> draft.copy(startFrom = change.time)
             ChangeType.Minutes -> {
-                val minutes = change.minutes ?: return null
+                // Fewer than its steps: they couldn't add up to it ([minutesFor]).
+                val minutes = change.minutes?.takeIf { it >= maxOf(1, draft.steps.size) } ?: return null
                 if (draft.steps.isNotEmpty()) {
                     // Shared out to add up to exactly yours, as the plan shares them.
                     val shares = shareOut(minutes, draft.steps.map { it.minutes })
