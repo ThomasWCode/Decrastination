@@ -149,6 +149,10 @@ class BackupTest {
         assertNotNull(Backups.problem(backup().copy(ownTasks = listOf(mine.copy(workedMin = -5)))))
         assertNotNull(Backups.problem(backup().copy(ownTasks = listOf(mine.copy(sourceProgress = 1.0)))))
         assertNotNull(Backups.problem(backup().copy(ownTasks = listOf(mine.copy(sourceValues = mine.sourceValues!!.copy(availableFrom = now + 86_400_000L))))))
+        // What only a source gives: an Anki deck's cards a day (0 would divide by nothing), a derived count, extras.
+        assertNotNull(Backups.problem(backup().copy(ownTasks = listOf(mine.copy(stepsPerDay = 0)))))
+        assertNotNull(Backups.problem(backup().copy(ownTasks = listOf(mine.copy(derived = true)))))
+        assertNotNull(Backups.problem(backup().copy(ownTasks = listOf(mine.copy(extra = mapOf("from" to "x"))))))
         // A backup of this version is one an older version refuses whole, not one it restores without them.
         assertEquals(2, Backup.FORMAT)
         val laid = mine.copy(userDueAt = now + 3 * 86_400_000L, userNotATask = true).let { it.copy(dueAt = it.userDueAt) }
