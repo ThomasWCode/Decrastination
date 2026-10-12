@@ -470,8 +470,12 @@ class AppGraph private constructor(context: Context) {
         scope.launch {
             layTaskOverrides()
             readInstructions()
-            // A question of yours the app stopped before answering.
-            answerChat()
+            // A question of yours the app stopped before answering, once the calendar's read, as it's
+            // told the fortnight's events.
+            if (chat.value.unanswered != null) {
+                runCatching { CalendarTime.refresh(app) }.onFailure { Log.w(TAG, "Reading the calendar failed", it) }
+                answerChat()
+            }
         }
         runCatching {
             app.contentResolver.registerContentObserver(
@@ -886,6 +890,12 @@ class AppGraph private constructor(context: Context) {
     suspend fun deleteOwnTask(taskId: String): Boolean {
         if (focus.session?.taskId == taskId) return false
         tasks.update { state -> state.copy(tasks = state.tasks.filterNot { it.id == taskId && it.source == Source.Own }) }
+        // A chat card that added it says so no more: it can be added again.
+        if (chat.value.messages.any { m -> m.proposals.any { it.made == taskId } }) {
+            chat.update { s ->
+                s.copy(messages = s.messages.map { m -> m.copy(proposals = m.proposals.map { p -> if (p.made == taskId) p.copy(state = ProposalState.Proposed, made = null) else p }) })
+            }
+        }
         return true
     }
 
@@ -1122,16 +1132,20 @@ class AppGraph private constructor(context: Context) {
         val note = if (proposal.task != null) {
             if (made == null || deleteOwnTask(made)) null else "Stop its focus session first"
         } else {
-            made?.let { deleteInstruction(it) }
-            // What it changed on your own tasks put back as it was (no instruction held those changes),
-            // only what it changed: a later change to another of their fields stands.
-            proposal.before.forEach { (id, was) ->
-                tasks.value.tasks.firstOrNull { it.id == id }?.let { t ->
-                    val types = proposal.changes.filter { it.taskId == id }.map { it.type }.toSet()
-                    saveOwnTask(t.sourceId, OwnTasks.restored(OwnTasks.draftOf(t), was, types))
-                }
+            // What it changed on your own tasks put back as it was (no instruction held those changes):
+            // only the fields that still hold what it set, so a later change of yours stands. One that
+            // can't be (the form wouldn't take it now) keeps the card applied, saying why.
+            val stuck = proposal.before.mapNotNull { (id, was) ->
+                val t = tasks.value.tasks.firstOrNull { it.id == id } ?: return@mapNotNull null
+                val back = OwnTasks.restored(OwnTasks.draftOf(t), was, proposal.changes.filter { it.taskId == id })
+                if (back == OwnTasks.draftOf(t) || saveOwnTask(t.sourceId, back)) null else "“${t.title}” can't go back: ${OwnTasks.problem(back)?.replaceFirstChar(Char::lowercase)}"
             }
-            made?.let { m -> instructions.value.instructions.firstOrNull { it.id == m }?.note }
+            if (stuck.isNotEmpty()) {
+                stuck.joinToString("; ")
+            } else {
+                made?.let { deleteInstruction(it) }
+                made?.let { m -> instructions.value.instructions.firstOrNull { it.id == m }?.note }
+            }
         }
         chat.update { s ->
             s.copy(
