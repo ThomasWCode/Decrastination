@@ -87,6 +87,9 @@ class OwnTasksTest {
         val longer = OwnTasks.changed(stepped, Change(ChangeType.Minutes, taskId = stepped.id, minutes = 180))
         assertEquals(listOf(120, 60), longer.subSteps.map { it.minutes })
         assertEquals(180, longer.effortMin)
+        // Minutes that don't divide evenly still come to exactly yours.
+        val three = own(steps = listOf(OwnStep("a", 10), OwnStep("b", 10), OwnStep("c", 10)))
+        assertEquals(100, OwnTasks.changed(three, Change(ChangeType.Minutes, taskId = three.id, minutes = 100)).effortMin)
         val started = OwnTasks.changed(stepped, Change(ChangeType.StartFrom, taskId = stepped.id, time = Fixtures.at("2026-10-14T00:00")))
         assertEquals(Fixtures.at("2026-10-14T00:00"), started.notBefore)
         // Starting after it's due isn't made: the task is as it was.
@@ -107,6 +110,14 @@ class OwnTasksTest {
         val stepped = own(steps = listOf(OwnStep("Draft", 60)))
         val done = stepped.copy(subSteps = stepped.subSteps.map { it.copy(done = true) })
         assertTrue(plan(listOf(done)).ordered.none { it.taskId == done.id })
+    }
+
+    @Test
+    fun `steps of the same name keep their own ticks through an edit`() {
+        val task = own(steps = listOf(OwnStep("Review", 20), OwnStep("Write", 30), OwnStep("Review", 20)))
+        val firstDone = task.copy(subSteps = task.subSteps.mapIndexed { i, s -> if (i == 0) s.copy(done = true) else s })
+        val edited = OwnTasks.edited(firstDone, OwnTasks.draftOf(firstDone).copy(title = "Essay"))
+        assertEquals(listOf(true, false, false), edited.subSteps.map { it.done })
     }
 
     @Test

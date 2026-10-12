@@ -48,7 +48,9 @@ class BackupTest {
     fun `what isn't one of this app's backups, or is from a newer one, isn't read`() {
         assertNull(Backups.decode("not json"))
         assertNull(Backups.decode("""{"app":"Something else","format":1,"exportedAt":0,"settings":{},"log":{}}"""))
-        assertNull(Backups.decode("""{"app":"Decrastination","format":2,"exportedAt":0,"settings":{},"log":{}}"""))
+        assertNull(Backups.decode("""{"app":"Decrastination","format":${Backup.FORMAT + 1},"exportedAt":0,"settings":{},"log":{}}"""))
+        assertNotNull(Backups.decode("""{"app":"Decrastination","format":${Backup.FORMAT},"exportedAt":0,"settings":{},"log":{}}"""))
+        // One from before 2.0.0 (format 1, no tasks of your own) is still read.
         assertNotNull(Backups.decode("""{"app":"Decrastination","format":1,"exportedAt":0,"settings":{},"log":{}}"""))
     }
 
@@ -145,6 +147,9 @@ class BackupTest {
         // Bookkeeping the app never writes: refused. What instructions laid over one isn't restored.
         assertNotNull(Backups.problem(backup().copy(ownTasks = listOf(mine.copy(userEffortMin = -1)))))
         assertNotNull(Backups.problem(backup().copy(ownTasks = listOf(mine.copy(workedMin = -5)))))
+        assertNotNull(Backups.problem(backup().copy(ownTasks = listOf(mine.copy(sourceProgress = 1.0)))))
+        // A backup of this version is one an older version refuses whole, not one it restores without them.
+        assertEquals(2, Backup.FORMAT)
         val laid = mine.copy(userDueAt = now + 3 * 86_400_000L, userNotATask = true).let { it.copy(dueAt = it.userDueAt) }
         val restored = Backups.restoredOwnTasks(listOf(laid), emptyList()).single()
         assertNull(restored.userDueAt)
