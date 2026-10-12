@@ -55,6 +55,15 @@ class ChatTest {
     }
 
     @Test
+    fun `a task's total is Claude's, shared over steps that don't come to it`() {
+        val reading = parse("""{"reply":"I'd add 8 hours of it.","newTasks":[{"title":"Statement","kind":"Admin","subject":null,"dueDate":"2026-12-01","dueTime":null,"startDate":null,"minutes":480,"notes":null,
+            "steps":[{"title":"Draft","minutes":240,"startDate":null,"dueDate":null},{"title":"Redraft","minutes":180,"startDate":null,"dueDate":null}]}],$none}""")!!
+        val task = reading.tasks.single()
+        assertEquals(480, task.steps.sumOf { it.minutes })
+        assertEquals(listOf(274, 206), task.steps.map { it.minutes })
+    }
+
+    @Test
     fun `an event of yours is at its time, or nine in the morning`() {
         val reading = parse("""{"reply":"I'd add it.","newTasks":[{"title":"Dentist","kind":"Event","subject":null,"dueDate":"2026-10-14","dueTime":"16:20","startDate":null,"minutes":0,"notes":null,"steps":[]}],$none}""")!!
         assertEquals(Fixtures.at("2026-10-14T16:20"), reading.tasks.single().dueAt)

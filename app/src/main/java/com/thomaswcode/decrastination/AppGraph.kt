@@ -890,13 +890,16 @@ class AppGraph private constructor(context: Context) {
     suspend fun deleteOwnTask(taskId: String): Boolean {
         if (focus.session?.taskId == taskId) return false
         tasks.update { state -> state.copy(tasks = state.tasks.filterNot { it.id == taskId && it.source == Source.Own }) }
-        // A chat card that added it says so no more: it can be added again.
-        if (chat.value.messages.any { m -> m.proposals.any { it.made == taskId } }) {
-            chat.update { s ->
-                s.copy(messages = s.messages.map { m -> m.copy(proposals = m.proposals.map { p -> if (p.made == taskId) p.copy(state = ProposalState.Proposed, made = null) else p }) })
-            }
-        }
+        forgetCards(setOf(taskId))
         return true
+    }
+
+    /** Chat cards that added the tasks [gone] say so no more: they can be added again. */
+    private suspend fun forgetCards(gone: Set<String>) {
+        if (chat.value.messages.none { m -> m.proposals.any { it.made in gone } }) return
+        chat.update { s ->
+            s.copy(messages = s.messages.map { m -> m.copy(proposals = m.proposals.map { p -> if (p.made in gone) p.copy(state = ProposalState.Proposed, made = null) else p }) })
+        }
     }
 
     /**
@@ -906,8 +909,10 @@ class AppGraph private constructor(context: Context) {
     private suspend fun pruneOwn() {
         val now = clock.now()
         fun old(t: TaskItem) = t.source == Source.Own && !t.isOpen && now - (t.doneAt ?: t.lastSeenAt) >= com.thomaswcode.decrastination.core.Merge.KEEP_FINISHED_MS
-        if (tasks.value.tasks.none(::old)) return
+        val gone = tasks.value.tasks.filter(::old).map { it.id }.toSet()
+        if (gone.isEmpty()) return
         tasks.update { state -> state.copy(tasks = state.tasks.filterNot(::old)) }
+        forgetCards(gone)
     }
 
     /** Has Claude read [id] again (written again, or after it found it unclear). */
@@ -1147,7 +1152,10 @@ class AppGraph private constructor(context: Context) {
                 val back = OwnTasks.restored(OwnTasks.draftOf(t), was, proposal.changes.filter { it.taskId == id })
                 (t to back).takeIf { back != OwnTasks.draftOf(t) }
             }
-            val stuck = backs.mapNotNull { (t, back) -> OwnTasks.problem(back)?.let { "“${t.title}” can't go back: ${it.replaceFirstChar(Char::lowercase)}" } }
+            val stuck = backs.mapNotNull { (t, back) -> OwnTasks.problem(back)?.let { "“${t.title}” can't go back: ${it.replaceFirstChar(Char::lowercase)}" } } +
+                // And its instruction, which taking back mustn't leave tasks waiting for each other in a circle.
+                listOfNotNull(made?.takeIf { m -> Instructions.makesCircle(emptyList(), instructions.value.applied.filterNot { it.id == m }) }
+                    ?.let { "taking its changes back would bring back an earlier instruction that has tasks waiting for each other in a circle" })
             if (stuck.isNotEmpty()) {
                 stuck.joinToString("; ")
             } else {
@@ -1158,10 +1166,11 @@ class AppGraph private constructor(context: Context) {
         }
         chat.update { s ->
             s.copy(
+                // Every message's cards: a later one may be in a later reply.
                 messages = s.messages.map { m ->
-                    if (m.id != messageId) m else m.copy(proposals = m.proposals.map { p ->
+                    m.copy(proposals = m.proposals.map { p ->
                         when {
-                            p.id == proposalId -> if (note == null) p.copy(state = ProposalState.Proposed, made = null, before = emptyMap()) else p.copy(note = note)
+                            m.id == messageId && p.id == proposalId -> if (note == null) p.copy(state = ProposalState.Proposed, made = null, before = emptyMap()) else p.copy(note = note)
                             // Undone, its values are gone from the tasks: a card applied after it, which
                             // replaced them, puts back what this one replaced instead, if it's undone too.
                             note == null && p.state == ProposalState.Applied && p.before.keys.any { it in proposal.before } ->

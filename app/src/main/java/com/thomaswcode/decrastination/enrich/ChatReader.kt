@@ -19,6 +19,7 @@ import com.thomaswcode.decrastination.core.OwnTasks
 import com.thomaswcode.decrastination.core.ProposalState
 import com.thomaswcode.decrastination.core.Speaker
 import com.thomaswcode.decrastination.core.TaskItem
+import com.thomaswcode.decrastination.core.shareOut
 import com.thomaswcode.decrastination.learn.CalendarEvent
 import com.thomaswcode.decrastination.learn.EventJudge
 import java.time.Duration
@@ -243,6 +244,13 @@ object ChatAnswers {
                 dueAt = s.dueDate?.let { at(it, null, LocalTime.of(23, 59), zone) ?: return null },
             )
         }
+            .let { given ->
+                // The task's minutes as Claude gave them, shared over its steps where theirs don't come to
+                // the same: its total is what it said (and what the reply says), its steps the shape.
+                val total = n.minutes.takeIf { it >= maxOf(1, given.size) && it in OwnTasks.MINUTES }
+                if (given.isEmpty() || total == null || given.sumOf { it.minutes } == total || given.any { it.minutes <= 0 }) given
+                else shareOut(total, given.map { it.minutes }).let { shares -> given.mapIndexed { i, s -> s.copy(minutes = shares[i]) } }
+            }
         // Every date in it, its steps' too, within a month back and a year and a bit ahead.
         val dates = listOfNotNull(due, start) + steps.flatMap { listOfNotNull(it.from, it.dueAt) }
         if (dates.any { it !in (now - 31 * DAY_MS)..(now + 400 * DAY_MS) }) return null
