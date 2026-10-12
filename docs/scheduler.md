@@ -13,6 +13,8 @@ All four are pure Kotlin with an injected `Clock`, no Android types, unit-tested
 
 `remainingMin = effortMin × multiplier(kind, class) × (1 − progress)`, floored at 5. Effort comes from, in order: your override, the LLM estimate, a per-kind default (Homework 40, Admin 15, Event 0, Anki from card counts: reviews × 8 s, new × 25 s).
 
+*As built since 2.0.0:* your override is a **Minutes** change (a quick change from a task's sheet, or an instruction Claude reads), the whole task's minutes as you reckon them. Your minutes, and a task of your own's, are planned as you gave them: the learned multiplier corrects the app's estimates, not yours, so it isn't laid over them (`Calibration.multiplierFor`). A task with steps has them scaled to add up to your minutes (`TaskItem.stepScale`). A task of your own (Q28) is planned like any: its *can't start before* is a start the work is planned from (`notBefore`), not a date it's hidden till; one whose steps are all done is finished.
+
 ## 3. Day-bucket allocation
 
 The planner builds one bucket per study day from today to the furthest deadline, each with its capacity in minutes, then places every task's remaining work into buckets. **What lands in today's and tomorrow's buckets is, by definition, "due today or tomorrow"**, which is what the block policy reads.
@@ -70,7 +72,7 @@ shouldBlock(now) = !quiet && ( pressure || credit <= 0 )
 - quiet hours (22:30–07:00) and, on weekdays, school hours (before 16:45, Q6b) never block;
 - then pressure blocks strictly, and with no pressure earned time is spent.
 
-Earned time: a finished focus session earns a third of its minutes (Q22). A task its source confirms done earns a third of what no session counted, up to 30 minutes, with **no floor** and nothing for reading or archiving an email or an event passing: with the 10-minute floor, archiving a pile of emails would have earned time. Blocked apps and sites are in `block/Blocklist.kt` (Q8). Chrome's and Brave's address bars are read (`<browser>:id/url_bar`), so a blocked site is covered as soon as its address is typed, before it loads; Firefox and Tor are covered outright.
+Earned time: a finished focus session earns a third of its minutes (Q22). A task its source confirms done earns a third of what no session counted, up to 30 minutes, with **no floor** and nothing for reading or archiving an email or an event passing: with the 10-minute floor, archiving a pile of emails would have earned time. *Since 2.0.0:* a task of your own you say is done (*Done*, Q28) earns nothing, as nothing but you confirms it; its sessions earn theirs. And a completion earns by your minutes or the app's estimate, whichever is less (`Focus.onCompleted`): raising a task's minutes plans more time for it, but can't make finishing it earn more. Blocked apps and sites are in `block/Blocklist.kt` (Q8). Chrome's and Brave's address bars are read (`<browser>:id/url_bar`), so a blocked site is covered as soon as its address is typed, before it loads; Firefox and Tor are covered outright.
 
 **Chunk completion.** The final state of a task is always source-verified (hand in, tick, archive, deck count). A *chunk* of a bigger task cannot be verified at the source, so a chunk completes in one of two ways:
 
@@ -81,7 +83,7 @@ Earned time: a finished focus session earns a third of its minutes (Q22). A task
 
 Everything the app learns is a number you can see in Settings, and every parameter has bounds. The record per task: estimate, actual minutes (sum of sessions until verified done), kind, class, hour each session started, blocks triggered before the first session ("resistance"), whether the deadline was met, how many days before the deadline it was finished.
 
-1. **Effort multipliers**, per (kind, class): exponentially weighted mean of `actual / estimate`, clamp 0.5–3.0. Applied in §2. Physics preps taking 1.6× the LLM's guess is the kind of thing this catches in a week.
+1. **Effort multipliers**, per (kind, class): exponentially weighted mean of `actual / estimate`, clamp 0.5–3.0. Applied in §2. Physics preps taking 1.6× the LLM's guess is the kind of thing this catches in a week. *Since 2.0.0* a completion planned by your own minutes (`CompletionRecord.yourEstimate`) teaches it nothing: the multiplier corrects the app's estimates, which yours aren't.
 2. **Safety margin**, per kind: starts at 1 day; rises by 1 (max 3) when two tasks of that kind in a row finished within an hour of the deadline or missed it; falls back when five in a row finished early. Pulls chunks earlier for the kinds you leave late.
 3. **Box length**, per kind: an experiment over {25, 45, 60} minutes, epsilon-greedy with reward "session completed and the task's verified completion came within its deadline"; locks in after 20 samples, re-opens if completion rate drops.
 4. **Capacity reality check.** If today's bucket is completed in full on fewer than 40 % of days over two weeks, the template capacity is overstated; the app proposes lowering it (you confirm) because the alternative is a plan that is always `behind`.

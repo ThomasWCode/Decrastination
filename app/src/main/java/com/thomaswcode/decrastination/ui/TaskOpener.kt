@@ -41,6 +41,16 @@ object TaskOpener {
         }
         Source.Gmail -> openGmail(context, task)
         Source.PowerPlanner -> if (launch(context, POWER_PLANNER)) null else "Power Planner isn't installed"
+        // Yours: nothing else holds it, so it opens in Tasks.
+        Source.Own -> {
+            val intent = Intent(context, MainActivity::class.java)
+                .putExtra(MainActivity.EXTRA_TAB, MainActivity.TAB_TASKS)
+                .putExtra(MainActivity.EXTRA_TASK, task.id)
+                .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            if (context !is android.app.Activity) intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            context.startActivity(intent)
+            null
+        }
     }
 
     private suspend fun openTeams(context: Context, task: TaskItem): String? {

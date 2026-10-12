@@ -7,6 +7,7 @@ import com.thomaswcode.decrastination.core.Uptime
 import com.thomaswcode.decrastination.data.RuntimeState
 import com.thomaswcode.decrastination.data.TaskState
 import com.thomaswcode.decrastination.ui.Format
+import com.thomaswcode.decrastination.ui.Groups
 import java.time.ZoneId
 
 /**
@@ -26,9 +27,9 @@ data class WidgetModel(
     val then: String?,
     /** "3 due today · 1 tomorrow". */
     val summary: String,
-    /** The rest of today's work (or tomorrow's, if today's is done), for the largest size. */
+    /** The rest of today's work (or tomorrow's, if today's is done), a line a task (Q31), for the largest size. */
     val list: List<Line>,
-    /** How many more of the day's pieces there are than [list] holds: in the app. */
+    /** How many more of the day's tasks there are than [list] holds: in the app. */
     val more: Int,
     /** What's wrong, worst first: a source that can't be read, Teams not synced for a day. */
     val warning: String?,
@@ -54,8 +55,9 @@ data class WidgetModel(
             val next = plan.next
             val today = plan.todayBucket?.chunks.orEmpty()
             val tomorrow = plan.tomorrowBucket?.chunks.orEmpty()
-            // After the next and the one after it, which have lines of their own.
-            val rest = today.ifEmpty { tomorrow }.filterNot { it === next || it === plan.then }
+            // After the next and the one after it, which have lines of their own; a task's pieces as one line (Q31).
+            val rest = Groups.byTask(today.ifEmpty { tomorrow }.filterNot { it === next || it === plan.then })
+            fun tasks(chunks: List<Chunk>) = chunks.map { it.taskId }.distinct().size
             return WidgetModel(
                 headline = next?.let { "Do: ${it.label}" } ?: "Nothing due",
                 label = next?.label,
@@ -70,11 +72,14 @@ data class WidgetModel(
                         ?.let { "Nothing due soon · ${Format.minutes((it / 60_000L).toInt())} of free time" }
                         ?: "Nothing due today or tomorrow"
                     else -> listOfNotNull(
-                        today.size.takeIf { it > 0 }?.let { "$it today" },
-                        tomorrow.size.takeIf { it > 0 }?.let { "$it tomorrow" },
+                        tasks(today).takeIf { it > 0 }?.let { "$it today" },
+                        tasks(tomorrow).takeIf { it > 0 }?.let { "$it tomorrow" },
                     ).joinToString(" · ")
                 },
-                list = rest.take(LIST_MAX).map { Line(it.label, Format.minutes(it.minutes), it.urgent, it.taskId) },
+                list = rest.take(LIST_MAX).map { row ->
+                    val text = if (row.pieces.size == 1) row.first.label else "${row.first.title} · ${row.pieces.size} pieces"
+                    Line(text, Format.minutes(row.minutes), row.urgent, row.taskId)
+                },
                 more = (rest.size - LIST_MAX).coerceAtLeast(0),
                 warning = protection(runtime, armed) ?: warning(state, now),
                 taskId = next?.taskId,
@@ -97,7 +102,7 @@ data class WidgetModel(
             runtime.protection.problems.firstOrNull()?.let { if (armed) "PROTECTION OFF: $it" else it }
 
         private fun warning(state: TaskState, now: Long): String? {
-            val failing = Source.entries.firstOrNull { state.status(it).error != null }
+            val failing = Source.SYNCED.firstOrNull { state.status(it).error != null }
             if (failing != null) return "Can't read ${failing.label}"
             return teamsWarning(state, now)
         }
