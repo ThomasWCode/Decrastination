@@ -47,16 +47,17 @@ import java.util.UUID
 import kotlinx.coroutines.launch
 
 /**
- * The form for a task of your own (2.0.0, Q28): a new one, or [editing] one. Saved under an id
- * chosen as it opens ([AppGraph.saveOwnTask]), so a second tap, or the form made again after a
- * turn of the phone, changes the one task. Every field is kept through a turn too.
+ * The form for a task of your own (2.0.0, Q28): a new one (from [initial], Claude's, if given), or
+ * [editing] one. Saved under an id chosen as it opens ([AppGraph.saveOwnTask]), so a second tap, or
+ * the form made again after a turn of the phone, changes the one task; or, given [onSave], handed
+ * to that (a card of Claude's, added as you've changed it). Every field is kept through a turn too.
  */
 @Composable
-fun OwnTaskForm(graph: AppGraph, editing: TaskItem?, onClose: () -> Unit) {
+fun OwnTaskForm(graph: AppGraph, editing: TaskItem?, initial: OwnTask? = null, onSave: (suspend (OwnTask) -> Boolean)? = null, onClose: () -> Unit) {
     val zone = graph.clock.zone()
     val now = graph.clock.now()
     val today = Instant.ofEpochMilli(now).atZone(zone).toLocalDate()
-    val start = editing?.let(OwnTasks::draftOf) ?: OwnTask(title = "")
+    val start = editing?.let(OwnTasks::draftOf) ?: initial ?: OwnTask(title = "")
     val id = rememberSaveable { editing?.sourceId ?: UUID.randomUUID().toString() }
     var title by rememberSaveable { mutableStateOf(start.title) }
     var notes by rememberSaveable { mutableStateOf(start.notes) }
@@ -99,7 +100,7 @@ fun OwnTaskForm(graph: AppGraph, editing: TaskItem?, onClose: () -> Unit) {
                         if (problem == null) {
                             saving = true
                             scope.launch {
-                                if (graph.saveOwnTask(id, made)) onClose() else saving = false
+                                if (onSave?.invoke(made) ?: graph.saveOwnTask(id, made)) onClose() else saving = false
                             }
                         }
                     }) { Text("Save", fontWeight = FontWeight.Bold) }
