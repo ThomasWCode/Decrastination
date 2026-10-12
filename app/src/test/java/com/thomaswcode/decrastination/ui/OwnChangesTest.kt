@@ -46,6 +46,19 @@ class OwnChangesTest {
     }
 
     @Test
+    fun `a due date and time picked, and minutes, are the changes their sheet makes`() {
+        val task = task(Fixtures.at("2026-10-12T08:30"))
+        assertEquals(java.time.LocalTime.of(8, 30), dueTimeOf(task, LONDON))
+        val (due, text) = dueChange(task, java.time.LocalDateTime.parse("2026-10-16T17:15"), LONDON)
+        assertEquals(Fixtures.at("2026-10-16T17:15"), due.time)
+        assertEquals("Due Fri 16 Oct 17:15 (set in Tasks)", text)
+        val (minutes, words) = minutesChange(task, 90)
+        assertEquals(ChangeType.Minutes, minutes.type)
+        assertEquals(90, minutes.minutes)
+        assertEquals("Takes 1 h 30 min in all (set in Tasks)", words)
+    }
+
+    @Test
     fun `not a task is the change an instruction makes`() {
         val (change, _) = ownChange(task(null), OwnChange.NotATask, LocalDate.parse("2026-10-16"), LONDON)
         assertEquals(ChangeType.NotATask, change.type)
