@@ -100,9 +100,31 @@ class AskActivity : ComponentActivity() {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         val graph = AppGraph.get(this)
-        if (savedInstanceState == null) take(intent)
+        // Made again (turned, or brought back): what it's about kept, the words handed in already sent.
+        if (savedInstanceState == null) take(intent) else about.value = aboutFrom(savedInstanceState)
         setContent { AppTheme { Screen(graph) } }
     }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        val a = about.value
+        outState.putString(EXTRA_TASK, a.taskId)
+        outState.putString(EXTRA_TASK_TITLE, a.taskTitle)
+        outState.putString(EXTRA_EVENT, a.eventKey)
+        outState.putString(EXTRA_EVENT_TITLE, a.eventTitle)
+        outState.putLong(EXTRA_EVENT_START, a.eventStart ?: 0L)
+        outState.putString(EXTRA_DAY, a.day)
+    }
+
+    /** What a message is about, from an intent's extras or a saved state's. */
+    private fun aboutFrom(b: Bundle?): About = About(
+        taskId = b?.getString(EXTRA_TASK),
+        taskTitle = b?.getString(EXTRA_TASK_TITLE),
+        eventKey = b?.getString(EXTRA_EVENT),
+        eventTitle = b?.getString(EXTRA_EVENT_TITLE),
+        eventStart = b?.getLong(EXTRA_EVENT_START, 0L)?.takeIf { it != 0L },
+        day = b?.getString(EXTRA_DAY),
+    )
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
@@ -110,14 +132,7 @@ class AskActivity : ComponentActivity() {
     }
 
     private fun take(intent: Intent) {
-        about.value = About(
-            taskId = intent.getStringExtra(EXTRA_TASK),
-            taskTitle = intent.getStringExtra(EXTRA_TASK_TITLE),
-            eventKey = intent.getStringExtra(EXTRA_EVENT),
-            eventTitle = intent.getStringExtra(EXTRA_EVENT_TITLE),
-            eventStart = intent.getLongExtra(EXTRA_EVENT_START, 0L).takeIf { it != 0L },
-            day = intent.getStringExtra(EXTRA_DAY),
-        )
+        about.value = aboutFrom(intent.extras)
         handed.value = intent.getStringExtra(EXTRA_TEXT)
     }
 
@@ -195,7 +210,8 @@ class AskActivity : ComponentActivity() {
                         onDraft = { draft = it },
                         about = about.value,
                         onForget = { about.value = About() },
-                        enabled = claudeOn && chat.unanswered == null,
+                        // Off, it's kept and waits, saying so, till Claude can be asked.
+                        enabled = chat.unanswered == null,
                         now = now,
                         zone = zone,
                     ) {
@@ -312,7 +328,7 @@ private fun androidx.compose.foundation.layout.ColumnScope.Chat(
             Column(Modifier.padding(horizontal = 4.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 if (!claudeOn) {
                     Text(
-                        "Claude is off, or has no key: switch it on in Settings (its key goes in Setup). Meanwhile, New task in Tasks adds one with the form.",
+                        "Claude is off, or has no key: switch it on in Settings (its key goes in Setup). What you write here waits for it; meanwhile, New task in Tasks adds one with the form.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.error,
                     )
@@ -409,7 +425,7 @@ private fun ProposalCard(graph: AppGraph, messageId: String, proposal: Proposal,
                 when {
                     applied -> {
                         Text(if (task != null) "Added" else "Applied", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.align(Alignment.CenterVertically))
-                        if (proposal.made != null) TextButton(onClick = { scope.launch { graph.undoProposal(messageId, proposal.id) } }) { Text("Undo") }
+                        if (proposal.made != null || proposal.before.isNotEmpty()) TextButton(onClick = { scope.launch { graph.undoProposal(messageId, proposal.id) } }) { Text("Undo") }
                     }
                     discarded -> {
                         Text("Set aside", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.align(Alignment.CenterVertically))

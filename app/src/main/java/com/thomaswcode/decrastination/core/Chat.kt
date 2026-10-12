@@ -49,6 +49,11 @@ data class Proposal(
     val lines: List<String> = emptyList(),
     val state: ProposalState = ProposalState.Proposed,
     val made: String? = null,
+    /**
+     * Your own tasks its changes were made on, by id, as they were before: what *Undo* puts back, as
+     * no instruction holds those changes to take back.
+     */
+    val before: Map<String, OwnTask> = emptyMap(),
     /** Why applying it didn't work, if it didn't. */
     val note: String? = null,
 )

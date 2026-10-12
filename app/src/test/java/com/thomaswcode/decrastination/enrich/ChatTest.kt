@@ -105,10 +105,36 @@ class ChatTest {
     }
 
     @Test
-    fun `the context lists the open tasks with their ids, minutes and dates, and the changes in use`() {
-        val context = ChatPrompts.context(listOf(bridge), emptyList(), emptyList(), now, LONDON)
+    fun `the whole conversation keeps to one budget, the oldest going first and never your newest words`() {
+        fun you(id: String, text: String) = ChatMessage(id, Speaker.You, text, now, answeredAt = now)
+        val messages = listOf(
+            you("y1", "a".repeat(300)),
+            ChatMessage("c1", Speaker.Claude, "b".repeat(300), now),
+            you("y2", "c".repeat(100)),
+            ChatMessage("c2", Speaker.Claude, "d".repeat(100), now),
+            ChatMessage("y3", Speaker.You, "the question", now),
+        )
+        val turns = ChatPrompts.turns(messages, "x".repeat(2_000), emptyMap(), LONDON, budget = 1_000)
+        // The first exchange didn't fit history's share; the context was cut beside the question, which is whole.
+        assertEquals(listOf(Speaker.You, Speaker.Claude, Speaker.You), turns.map { it.first })
+        assertEquals(1_000, turns.sumOf { it.second.length })
+        assertTrue(turns.last().second.endsWith("\n\nthe question"))
+        assertEquals("c".repeat(100), turns.first().second)
+    }
+
+    @Test
+    fun `a step dated out of range leaves its task out`() {
+        val reading = parse("""{"reply":"I'd add it.","newTasks":[{"title":"Project","kind":"Homework","subject":null,"dueDate":"2026-11-30","dueTime":null,"startDate":null,"minutes":120,"notes":null,
+            "steps":[{"title":"Plan","minutes":60,"startDate":"2019-01-01","dueDate":null},{"title":"Write","minutes":60,"startDate":null,"dueDate":null}]}],$none}""")!!
+        assertTrue(reading.tasks.isEmpty())
+        assertEquals(1, reading.leftOut.size)
+    }
+
+    @Test
+    fun `the context lists the open tasks with their ids, minutes, minutes worked and dates, and the changes in use`() {
+        val context = ChatPrompts.context(listOf(bridge.copy(workedMin = 25)), emptyList(), emptyList(), now, LONDON)
         assertTrue(context.startsWith("Today: Monday 12 October 2026, 22:45 (Europe/London)"))
-        assertTrue("- teams:bridge | Bridge and Balances Beam Q's | Teams | Homework | Tue 13 Oct 2026 08:30 | 100 | -" in context)
+        assertTrue("- teams:bridge | Bridge and Balances Beam Q's | Teams | Homework | Tue 13 Oct 2026 08:30 | 100 | 25 | -" in context, context)
         assertFalse("Changes already in use" in context)
     }
 
