@@ -370,7 +370,7 @@ private fun Yours(graph: AppGraph, message: ChatMessage, now: Long, zone: ZoneId
             } else {
                 Text(message.note, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 6.dp))
                 Row {
-                    TextButton(onClick = { graph.scope.launch { graph.answerChat() } }) { Text("Try again") }
+                    TextButton(onClick = { graph.scope.launch { graph.answerChat(retry = true) } }) { Text("Try again") }
                     TextButton(onClick = { scope.launch { graph.withdrawQuestion() } }) { Text("Take back") }
                 }
             }

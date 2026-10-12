@@ -999,15 +999,18 @@ class AppGraph private constructor(context: Context) {
      * cap and resting after a failure. While Claude can't be asked, your message says why, and it's
      * answered once it can be (the chat opened again, *Try again*, or Claude back from its rest).
      */
-    suspend fun answerChat(): Unit = answering.withLock {
+    suspend fun answerChat(retry: Boolean = false): Unit = answering.withLock {
         val waiting = chat.value.unanswered ?: return@withLock
+        // Answered with nothing usable, it waits for your Try again ([retry]): never asked by itself.
+        if (waiting.stuck && !retry) return@withLock
+        var stuck = false
         val note = modelCalls.withLock call@{
             // Taken back (or the chat cleared) while this waited its turn: nothing to ask.
             if (chat.value.unanswered?.id != waiting.id) return@withLock
             modelHold()?.let { return@call because(it) }
             val key = claudeKey() ?: return@call because(ModelHold.Off)
             // Being asked now: whatever it said before (a failed call) is gone.
-            chat.update { s -> s.copy(messages = s.messages.map { if (it.id == waiting.id) it.copy(note = null) else it }) }
+            chat.update { s -> s.copy(messages = s.messages.map { if (it.id == waiting.id) it.copy(note = null, stuck = false) else it }) }
             val at = clock.now()
             val month = AiUsage.monthOf(at, clock.zone())
             val result = runCatching { ChatReader(key, clock.zone(), endpoint()).answer(chat.value.messages, tasks.value.tasks, calendarTime.events, instructions.value.applied, at) }
@@ -1017,7 +1020,10 @@ class AppGraph private constructor(context: Context) {
                 }
                 .getOrNull() ?: return@call "Claude's call failed: it's tried again within the hour, or now with Try again"
             modelWorked(result.costUsd, result.refused, month, at)
-            val reading = result.reading ?: return@call if (result.refused) "Claude declined to answer that" else "Claude's answer couldn't be read: Try again"
+            val reading = result.reading ?: run {
+                stuck = true
+                return@call if (result.refused) "Claude declined to answer that: Try again, or put it another way" else "Claude's answer couldn't be read: Try again"
+            }
             val reply = ChatMessage(
                 id = java.util.UUID.randomUUID().toString(),
                 from = Speaker.Claude,
@@ -1043,8 +1049,8 @@ class AppGraph private constructor(context: Context) {
             null
         }
         // Why it waits, said once: written only when it changes, as this runs after every sync.
-        if (note != null && chat.value.unanswered?.let { it.id == waiting.id && it.note != note } == true) {
-            chat.update { s -> s.copy(messages = s.messages.map { if (it.id == waiting.id && it.answeredAt == null) it.copy(note = note) else it }) }
+        if (note != null && chat.value.unanswered?.let { it.id == waiting.id && (it.note != note || it.stuck != stuck) } == true) {
+            chat.update { s -> s.copy(messages = s.messages.map { if (it.id == waiting.id && it.answeredAt == null) it.copy(note = note, stuck = stuck) else it }) }
         }
     }
 
@@ -1135,14 +1141,17 @@ class AppGraph private constructor(context: Context) {
             // What it changed on your own tasks put back as it was (no instruction held those changes):
             // only the fields that still hold what it set, so a later change of yours stands. One that
             // can't be (the form wouldn't take it now) keeps the card applied, saying why.
-            val stuck = proposal.before.mapNotNull { (id, was) ->
+            // Every one checked before any is saved: all go back, or none and the card says why.
+            val backs = proposal.before.mapNotNull { (id, was) ->
                 val t = tasks.value.tasks.firstOrNull { it.id == id } ?: return@mapNotNull null
                 val back = OwnTasks.restored(OwnTasks.draftOf(t), was, proposal.changes.filter { it.taskId == id })
-                if (back == OwnTasks.draftOf(t) || saveOwnTask(t.sourceId, back)) null else "“${t.title}” can't go back: ${OwnTasks.problem(back)?.replaceFirstChar(Char::lowercase)}"
+                (t to back).takeIf { back != OwnTasks.draftOf(t) }
             }
+            val stuck = backs.mapNotNull { (t, back) -> OwnTasks.problem(back)?.let { "“${t.title}” can't go back: ${it.replaceFirstChar(Char::lowercase)}" } }
             if (stuck.isNotEmpty()) {
                 stuck.joinToString("; ")
             } else {
+                backs.forEach { (t, back) -> saveOwnTask(t.sourceId, back) }
                 made?.let { deleteInstruction(it) }
                 made?.let { m -> instructions.value.instructions.firstOrNull { it.id == m }?.note }
             }
@@ -1151,7 +1160,14 @@ class AppGraph private constructor(context: Context) {
             s.copy(
                 messages = s.messages.map { m ->
                     if (m.id != messageId) m else m.copy(proposals = m.proposals.map { p ->
-                        if (p.id != proposalId) p else if (note == null) p.copy(state = ProposalState.Proposed, made = null, before = emptyMap()) else p.copy(note = note)
+                        when {
+                            p.id == proposalId -> if (note == null) p.copy(state = ProposalState.Proposed, made = null, before = emptyMap()) else p.copy(note = note)
+                            // Undone, its values are gone from the tasks: a card applied after it, which
+                            // replaced them, puts back what this one replaced instead, if it's undone too.
+                            note == null && p.state == ProposalState.Applied && p.before.keys.any { it in proposal.before } ->
+                                p.copy(before = p.before.mapValues { (id, was) -> proposal.before[id]?.let { OwnTasks.relayered(was, proposal.changes.filter { it.taskId == id }, it) } ?: was })
+                            else -> p
+                        }
                     })
                 },
             )

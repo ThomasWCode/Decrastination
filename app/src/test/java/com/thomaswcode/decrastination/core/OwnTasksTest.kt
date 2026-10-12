@@ -127,6 +127,21 @@ class OwnTasksTest {
     }
 
     @Test
+    fun `undoing two cards in the opposite order leaves neither's value`() {
+        val friday = OwnTask(title = "Essay", dueAt = Fixtures.at("2026-10-16T17:00"))
+        val toSunday = Change(ChangeType.DueBy, taskId = "own:u1", time = Fixtures.at("2026-10-18T17:00"))
+        val toMonday = Change(ChangeType.DueBy, taskId = "own:u1", time = Fixtures.at("2026-10-19T17:00"))
+        val sunday = friday.copy(dueAt = toSunday.time)
+        val monday = friday.copy(dueAt = toMonday.time)
+        // Card A (Friday to Sunday) undone first: Monday stands, and B now replaced Friday.
+        assertEquals(monday, OwnTasks.restored(monday, friday, listOf(toSunday)))
+        val bWas = OwnTasks.relayered(sunday, listOf(toSunday), friday)
+        assertEquals(friday.dueAt, bWas.dueAt)
+        // Then card B: back to Friday, not A's Sunday.
+        assertEquals(friday.dueAt, OwnTasks.restored(monday, bWas, listOf(toMonday)).dueAt)
+    }
+
+    @Test
     fun `fewer minutes than one of yours has steps is refused, saying why`() {
         val three = own(steps = listOf(OwnStep("a", 10), OwnStep("b", 10), OwnStep("c", 10)))
         val two = listOf(Change(ChangeType.Minutes, taskId = three.id, minutes = 2))

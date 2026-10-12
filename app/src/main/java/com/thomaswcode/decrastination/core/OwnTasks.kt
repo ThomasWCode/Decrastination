@@ -125,6 +125,25 @@ object OwnTasks {
         return d
     }
 
+    /**
+     * A later card's [laterWas] (what it replaced) once a card whose [undone] changes set those values,
+     * and which replaced [undoneWas], is undone: a value of the undone card's becomes what it replaced,
+     * so undoing the later card doesn't bring the undone one's back.
+     */
+    fun relayered(laterWas: OwnTask, undone: List<Change>, undoneWas: OwnTask): OwnTask {
+        var d = laterWas
+        undone.lastOrNull { it.type == ChangeType.DueBy }?.let { c -> if (d.dueAt == c.time) d = d.copy(dueAt = undoneWas.dueAt) }
+        undone.lastOrNull { it.type == ChangeType.StartFrom }?.let { c -> if (d.startFrom == c.time) d = d.copy(startFrom = undoneWas.startFrom) }
+        undone.lastOrNull { it.type == ChangeType.Minutes }?.let { c ->
+            val total = if (d.steps.isEmpty()) d.minutes else d.steps.sumOf { it.minutes }
+            if (total == c.minutes) {
+                d = d.copy(minutes = undoneWas.minutes)
+                if (undoneWas.steps.map { it.title } == d.steps.map { it.title }) d = d.copy(steps = d.steps.mapIndexed { i, s -> s.copy(minutes = undoneWas.steps[i].minutes) })
+            }
+        }
+        return d
+    }
+
     /** The changes an instruction makes to one of your own that are made on it, not laid over it. */
     val MADE_ON_IT = setOf(ChangeType.DueBy, ChangeType.StartFrom, ChangeType.Minutes)
 
