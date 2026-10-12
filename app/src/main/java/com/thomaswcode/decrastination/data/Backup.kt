@@ -11,6 +11,7 @@ import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.OwnTasks
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
+import com.thomaswcode.decrastination.core.enriched
 import com.thomaswcode.decrastination.learn.Calibrator
 import com.thomaswcode.decrastination.enrich.AiUsage
 import java.io.ByteArrayOutputStream
@@ -106,16 +107,30 @@ object Backups {
     private const val DAY_MIN = 24 * 60
     private const val DAY_MS = 24 * 3_600_000L
 
-    /** Whether [task] is one of your own as the app makes them: under its id, and as the form would take it. */
-    private fun wellFormed(task: TaskItem): Boolean =
-        task.source == Source.Own && task.id == TaskItem.id(Source.Own, task.sourceId) && task.workedMin >= 0 && task.photoMin >= 0 &&
+    /**
+     * Whether [task] is one of your own as the app makes them: under its id, as the form would take
+     * it, and its own bookkeeping such as the app keeps (minutes worked and ticked, never below
+     * nothing nor past a day's; an estimate of yours in range). What instructions laid over it isn't
+     * restored, but laid again from those here ([restoredOwnTasks]).
+     */
+    private fun wellFormed(task: TaskItem): Boolean {
+        val minutes = 0..OwnTasks.MINUTES.last
+        return task.source == Source.Own && task.id == TaskItem.id(Source.Own, task.sourceId) &&
+            task.workedMin in minutes && task.photoMin in minutes && task.stepsWorkedMin in minutes &&
+            (task.userEffortMin == null || task.userEffortMin in OwnTasks.MINUTES) &&
+            (task.peakEffortMin == null || task.peakEffortMin in minutes) &&
+            task.subSteps.all { it.timedMin in minutes } &&
+            task.enrichment == null &&
             OwnTasks.problem(OwnTasks.draftOf(task)) == null
+    }
 
     /**
      * The tasks of your own to add from a backup's ([backed]), beside those [here]: those not here
-     * already, as they were. One here wins: it's the newer.
+     * already, as they were, but for what instructions laid over them, which is laid again from the
+     * instructions here. One here wins: it's the newer.
      */
     fun restoredOwnTasks(backed: List<TaskItem>, here: List<TaskItem>): List<TaskItem> = backed.filter { b -> here.none { it.id == b.id } }
+        .map { it.copy(userNotATask = false, userFrom = null, userAfter = null, userDueAt = null, userEffortMin = null).enriched() }
 
     /** The most changes one instruction holds, as Claude's reading of one is held to. */
     private const val MAX_CHANGES = 40

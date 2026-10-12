@@ -9,6 +9,7 @@ import com.thomaswcode.decrastination.ui.Groups
 import java.time.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertSame
@@ -108,6 +109,47 @@ class OwnTasksTest {
         assertTrue(plan(listOf(done)).ordered.none { it.taskId == done.id })
     }
 
+    @Test
+    fun `one of yours with every step ticked opens again with its last step to do`() {
+        val stepped = own(steps = listOf(OwnStep("Draft", 60), OwnStep("Redraft", 30)))
+        val done = stepped.copy(status = Status.Done, doneAt = now, workedMin = 70, subSteps = stepped.subSteps.map { it.copy(done = true, byHand = true) })
+        val again = OwnTasks.reopened(done)
+        assertTrue(again.isOpen)
+        assertEquals(listOf(true, false), again.subSteps.map { it.done })
+        assertEquals(70, again.workedMin)
+        // One without steps is just open again.
+        assertEquals(Status.Open, OwnTasks.reopened(own().copy(status = Status.Done, doneAt = now)).status)
+    }
+
+    @Test
+    fun `an instruction's changes to one of yours are made together, or not at all with why`() {
+        val task = own(due = "2026-10-16T17:00")
+        // A start and a due date both later: the start alone would be after the old due date.
+        val later = listOf(
+            Change(ChangeType.StartFrom, taskId = task.id, time = Fixtures.at("2026-10-20T00:00")),
+            Change(ChangeType.DueBy, taskId = task.id, time = Fixtures.at("2026-10-25T17:00")),
+        )
+        assertNull(OwnTasks.problemWith(listOf(task), later))
+        assertEquals(later, OwnTasks.madeOn(listOf(task), later))
+        val made = OwnTasks.edited(task, OwnTasks.draftWithAll(task, later)!!)
+        assertEquals(Fixtures.at("2026-10-20T00:00"), made.notBefore)
+        assertEquals(Fixtures.at("2026-10-25T17:00"), made.dueAt)
+        // A start after its due date isn't, and says why; another task's changes aren't touched.
+        val after = listOf(Change(ChangeType.StartFrom, taskId = task.id, time = Fixtures.at("2026-10-20T00:00")))
+        assertEquals("It would leave “UCAS statement” as it can't be: it can't start after it's due", OwnTasks.problemWith(listOf(task), after))
+        assertEquals(emptyList(), OwnTasks.madeOn(listOf(task), after))
+        assertNull(OwnTasks.problemWith(listOf(task), listOf(Change(ChangeType.DueBy, taskId = "teams:essay", time = now))))
+    }
+
+    @Test
+    fun `undo is offered only where your quick change is what's in force`() {
+        val quick = Instruction("q", "Takes 1 h in all (set in Tasks)", at = now, state = InstructionStatus.Applied, changes = listOf(Change(ChangeType.Minutes, taskId = "teams:essay", minutes = 60)), appliedAt = now, quick = true)
+        val claudes = Instruction("c", "it takes 2 hours", at = now, state = InstructionStatus.Applied, changes = listOf(Change(ChangeType.Minutes, taskId = "teams:essay", minutes = 120)), appliedAt = now + 1)
+        assertTrue(Instructions.quickInForce(listOf(quick), "teams:essay", ChangeType.Minutes))
+        assertFalse(Instructions.quickInForce(listOf(quick, claudes), "teams:essay", ChangeType.Minutes))
+        assertFalse(Instructions.quickInForce(listOf(quick), "teams:essay", ChangeType.DueBy))
+    }
+
     // --- Your minutes for any task ---
 
     @Test
@@ -136,6 +178,16 @@ class OwnTasksTest {
         val pieces = plan(listOf(mine)).chunksOf(mine.id)
         assertEquals(listOf("Q1-8", "Q9-16"), pieces.map { it.step })
         assertEquals(listOf(60, 60), pieces.map { it.minutes })
+    }
+
+    @Test
+    fun `your minutes shared over steps add up to exactly yours`() {
+        val steps = listOf(SubStep("a", 10), SubStep("b", 10), SubStep("c", 10))
+        val mine = teams("prep", "2026-10-30T09:00", steps = steps).copy(userEffortMin = 100)
+        assertEquals(listOf(34, 33, 33), mine.plannedStepMinutes(1.0))
+        assertEquals(100, plan(listOf(mine)).chunksOf(mine.id).sumOf { it.minutes })
+        // Fewer minutes than steps: a minute each.
+        assertEquals(listOf(1, 1, 1), mine.copy(userEffortMin = 2).plannedStepMinutes(1.0))
     }
 
     @Test

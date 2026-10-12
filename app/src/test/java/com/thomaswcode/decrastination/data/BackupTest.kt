@@ -142,6 +142,14 @@ class BackupTest {
         // One the form wouldn't take, or a source's task posing as yours, isn't restored.
         assertNotNull(Backups.problem(backup().copy(ownTasks = listOf(mine.copy(title = " ")))))
         assertNotNull(Backups.problem(backup().copy(ownTasks = listOf(mine.copy(source = Source.Teams)))))
+        // Bookkeeping the app never writes: refused. What instructions laid over one isn't restored.
+        assertNotNull(Backups.problem(backup().copy(ownTasks = listOf(mine.copy(userEffortMin = -1)))))
+        assertNotNull(Backups.problem(backup().copy(ownTasks = listOf(mine.copy(workedMin = -5)))))
+        val laid = mine.copy(userDueAt = now + 3 * 86_400_000L, userNotATask = true).let { it.copy(dueAt = it.userDueAt) }
+        val restored = Backups.restoredOwnTasks(listOf(laid), emptyList()).single()
+        assertNull(restored.userDueAt)
+        assertEquals(mine.dueAt, restored.dueAt)
+        assertEquals(false, restored.userNotATask)
         // A backup from before 2.0.0 has none.
         assertEquals(emptyList(), Backups.decode(Backups.encode(backup()).replace("\"ownTasks\"", "\"ignored\""))!!.ownTasks)
     }

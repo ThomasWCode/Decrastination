@@ -21,6 +21,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -40,6 +41,7 @@ import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.data.SourceStatus
 import com.thomaswcode.decrastination.sources.gmail.GmailThreads
+import kotlinx.coroutines.delay
 
 /**
  * Every task, by when it's due (2.0.0, Q30): Overdue, Today, Tomorrow, This week, Later, No due
@@ -50,7 +52,13 @@ import com.thomaswcode.decrastination.sources.gmail.GmailThreads
 @Composable
 fun TasksScreen(graph: AppGraph, activity: Activity, opening: String? = null, onOpened: () -> Unit = {}) {
     val state by graph.tasks.state.collectAsStateWithLifecycle()
-    val now = graph.clock.now()
+    // The sections move with the clock as well as the data: deadlines pass, and midnight.
+    val now by produceState(graph.clock.now()) {
+        while (true) {
+            delay(60_000)
+            value = graph.clock.now()
+        }
+    }
     val zone = graph.clock.zone()
     // The task open in its sheet, by id, and the form for a new one: kept through a turn of the phone.
     var sheetFor by rememberSaveable { mutableStateOf<String?>(null) }

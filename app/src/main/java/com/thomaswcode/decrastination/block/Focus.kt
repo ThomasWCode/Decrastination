@@ -473,34 +473,39 @@ class Focus(
             // Nor is a task of your own you said is done: no source confirms it (your call, 12 Oct); its
             // sessions earned their time.
             val earned = fresh.filter { it.kind != Kind.Info && it.kind != Kind.Event && it.source != Source.Own && today(it.doneAt ?: now) == today }.sumOf { task ->
-                // In the plan's units, as its sessions earned theirs: the estimate as calibrated.
-                val multiplier = state.calibration.stepMultiplierFor(task)
-                // Vocabulary its deck tasks hold earns its time through them, not again here: all of
-                // it once they're done, else as far as their sessions and photo checks went. No more,
-                // as a deck left unfinished when the work closes is dropped, and mustn't take that
-                // time with it.
-                val delegated = task.subSteps.filter { it.ankiSections.isNotEmpty() }.sumOf { step ->
-                    val holding = step.ankiSections.mapNotNull { decks[task.id]?.get(it) }
-                    when {
-                        holding.size < step.ankiSections.size -> 0.0
-                        holding.all { it.status == Status.Done } -> step.minutes * multiplier
-                        else -> minOf(step.minutes * multiplier, holding.sumOf { it.workedMin + it.photoMin }.toDouble())
-                    }
-                }
                 // Less what sessions and photo checks already earned time for: as stored while it's still
                 // this completion, as the completion had it once the task has reopened.
                 val stored = tasks.value.tasks.firstOrNull { it.id == task.id && it.doneAt == task.doneAt }
                 val photos = stored?.photoMin ?: task.photoMin
-                // Nor for blocks you ticked off by hand: done, but not timed or checked (bar what was
-                // timed on them first, which counts as worked).
-                val hand = (stored ?: task).subSteps.filter { it.done && it.byHand }.sumOf { (it.minutes * multiplier - it.timedMin).coerceAtLeast(0.0) }
-                // What was left by your minutes or by the app's estimate, the less: raising a task's
-                // minutes plans more time for it, but can't make finishing it earn more.
                 val counted = task.copy(workedMin = worked(task), photoMin = photos)
-                val remaining = minOf(
-                    Planner.remaining(counted, state.calibration.multiplierFor(counted)),
-                    counted.copy(userEffortMin = null).let { Planner.remaining(it, state.calibration.multiplierFor(it)) },
-                ) - delegated - hand
+
+                /**
+                 * What's owed for [t]: what was left of it, less what its decks and your ticks account
+                 * for, all in the plan's units (the estimate as calibrated, its steps as scaled), as its
+                 * sessions earned theirs.
+                 */
+                fun owed(t: TaskItem): Double {
+                    val multiplier = state.calibration.stepMultiplierFor(t)
+                    // Vocabulary its deck tasks hold earns its time through them, not again here: all
+                    // of it once they're done, else as far as their sessions and photo checks went. No
+                    // more, as a deck left unfinished when the work closes is dropped, and mustn't take
+                    // that time with it.
+                    val delegated = t.subSteps.filter { it.ankiSections.isNotEmpty() }.sumOf { step ->
+                        val holding = step.ankiSections.mapNotNull { decks[t.id]?.get(it) }
+                        when {
+                            holding.size < step.ankiSections.size -> 0.0
+                            holding.all { it.status == Status.Done } -> step.minutes * multiplier
+                            else -> minOf(step.minutes * multiplier, holding.sumOf { it.workedMin + it.photoMin }.toDouble())
+                        }
+                    }
+                    // Nor for blocks you ticked off by hand: done, but not timed or checked (bar what
+                    // was timed on them first, which counts as worked).
+                    val hand = (stored?.subSteps ?: t.subSteps).filter { it.done && it.byHand }.sumOf { (it.minutes * multiplier - it.timedMin).coerceAtLeast(0.0) }
+                    return Planner.remaining(t, state.calibration.multiplierFor(t)) - delegated - hand
+                }
+                // By your minutes or by the app's estimate, each in its own scale, the less: raising a
+                // task's minutes plans more time for it, but can't make finishing it earn more.
+                val remaining = minOf(owed(counted), owed(counted.copy(userEffortMin = null)))
                 Credit.forCompletion(remaining.roundToInt().coerceAtLeast(0), ratio)
             }
             state.copy(
