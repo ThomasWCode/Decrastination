@@ -508,22 +508,25 @@ object Planner {
      * tasks hold ([held]) isn't among them: the decks' cards are that work.
      */
     private fun pieces(task: TaskItem, input: Input, held: Set<String>): List<Piece> {
-        val multiplier = input.calibration.multiplier(task.kind, task.className)
+        val multiplier = input.calibration.multiplierFor(task)
         if (task.subSteps.isNotEmpty()) {
+            // Where you gave the whole task's minutes, its steps are scaled to add up to them.
+            val stepMultiplier = input.calibration.stepMultiplierFor(task)
             // Its own steps, by their place in its list: not those its deck tasks hold.
             val own = task.subSteps.withIndex().filterNot { (_, step) -> step.ankiSections.isNotEmpty() && held.containsAll(step.ankiSections) }
             val left = own.filterNot { it.value.done }
             // All done: an assignment is still to hand in; an email's blocks done, nothing is left of it.
-            if (left.isEmpty()) return if (task.source == Source.Gmail) emptyList() else listOf(Piece("finish and hand in", MIN_CHUNK))
+            // One of your own is finished when its steps are (AppGraph sees to it).
+            if (left.isEmpty()) return if (task.source == Source.Gmail || task.source == Source.Own) emptyList() else listOf(Piece("finish and hand in", MIN_CHUNK))
             // Minutes worked beyond the steps ticked off (a session stopped early) come off the
             // next steps in order, each kept to at least a last few minutes, as it isn't done.
             // Steps ticked by hand take back only the timed minutes they kept when ticked (work on them
             // before the tick), the rest none: what's left goes to the next steps. Minutes the
             // source's own steps already leave out ([TaskItem.stepsWorkedMin]) come off none.
-            var spare = (task.workedMin + task.photoMin - task.stepsWorkedMin - task.subSteps.filter { it.done }.sumOf { if (it.byHand) it.timedMin.toDouble() else it.minutes * multiplier })
+            var spare = (task.workedMin + task.photoMin - task.stepsWorkedMin - task.subSteps.filter { it.done }.sumOf { if (it.byHand) it.timedMin.toDouble() else it.minutes * stepMultiplier })
                 .roundToInt().coerceAtLeast(0)
             val pieces = left.map { (index, step) ->
-                val full = (step.minutes * multiplier).roundToInt().coerceAtLeast(1)
+                val full = (step.minutes * stepMultiplier).roundToInt().coerceAtLeast(1)
                 val off = minOf(spare, (full - MIN_CHUNK).coerceAtLeast(0))
                 spare -= off
                 Piece(step.title, full - off, from = step.from, due = step.dueAt, index = index)
@@ -533,7 +536,7 @@ object Planner {
             // comes off them in order, as minutes worked do. The smaller of the two, as for a task
             // without steps ([remaining]): the same work isn't taken off twice.
             if (task.sourceProgress <= 0.0) return pieces
-            val bySource = (own.sumOf { it.value.minutes * multiplier } * (1 - task.sourceProgress.coerceAtMost(1.0))).roundToInt()
+            val bySource = (own.sumOf { it.value.minutes * stepMultiplier } * (1 - task.sourceProgress.coerceAtMost(1.0))).roundToInt()
             var over = pieces.sumOf { it.minutes } - bySource
             return pieces.map { piece ->
                 val off = minOf(over, (piece.minutes - MIN_CHUNK).coerceAtLeast(0)).coerceAtLeast(0)

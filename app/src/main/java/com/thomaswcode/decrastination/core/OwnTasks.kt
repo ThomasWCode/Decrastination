@@ -1,0 +1,147 @@
+package com.thomaswcode.decrastination.core
+
+import kotlinx.serialization.Serializable
+
+/**
+ * A task of your own as you give it (2.0.0, Q28), with the form or by asking Claude: what a source
+ * would say of a task. [startFrom]: it can't be started before then, though it's due as ever, and
+ * is planned from then on. [steps]: its parts, each with its minutes (and its own dates, where it
+ * has them); with steps, its minutes are theirs together.
+ */
+@Serializable
+data class OwnTask(
+    val title: String,
+    val notes: String = "",
+    val kind: Kind = Kind.Homework,
+    val className: String? = null,
+    val dueAt: Long? = null,
+    val startFrom: Long? = null,
+    val minutes: Int = Kind.Homework.defaultEffortMin,
+    val steps: List<OwnStep> = emptyList(),
+)
+
+@Serializable
+data class OwnStep(val title: String, val minutes: Int, val from: Long? = null, val dueAt: Long? = null)
+
+/**
+ * Your own tasks (2.0.0, Q28). You're their source: what you give is kept as a source's values are
+ * ([TaskItem.sourceValues]), so an instruction laid over one can be taken back, and only you change
+ * it. Nothing reads them, so no sync touches them; one is done when you say so, which earns no free
+ * time (your call, 12 Oct): focus sessions on it earn theirs. Pure.
+ */
+object OwnTasks {
+    const val MAX_TITLE = 200
+    const val MAX_NOTES = 4_000
+    const val MAX_CLASS = 60
+    const val MAX_STEPS = 30
+
+    /** A minute to sixty hours: a term's project, not a year's. */
+    val MINUTES = 1..60 * 60
+
+    /** The kinds one can be: work of three sorts, or an event (a reminder at its time, not work to plan). */
+    val KINDS = listOf(Kind.Homework, Kind.Revision, Kind.Admin, Kind.Event)
+
+    /** What's wrong with [task], in words, or null if it can be kept. */
+    fun problem(task: OwnTask): String? = when {
+        task.title.isBlank() -> "It needs a name"
+        task.kind !in KINDS -> "It can't be of that kind"
+        task.kind == Kind.Event && task.dueAt == null -> "An event needs its date and time"
+        task.kind != Kind.Event && task.steps.isEmpty() && task.minutes !in MINUTES -> "Its minutes must be from 1 to ${MINUTES.last / 60} hours"
+        task.steps.size > MAX_STEPS -> "At most $MAX_STEPS steps"
+        task.steps.any { it.title.isBlank() || it.minutes !in MINUTES } -> "Each step needs a name and from 1 minute to ${MINUTES.last / 60} hours"
+        task.steps.sumOf { it.minutes } > MINUTES.last -> "Its steps come to more than ${MINUTES.last / 60} hours"
+        task.startFrom != null && task.dueAt != null && task.startFrom > task.dueAt -> "It can't start after it's due"
+        task.steps.any { s -> s.from != null && s.dueAt != null && s.from > s.dueAt } -> "A step can't start after it's due"
+        else -> null
+    }
+
+    /** [task] made, under [id], first seen [now]. */
+    fun create(task: OwnTask, id: String, now: Long): TaskItem = apply(
+        TaskItem(
+            id = TaskItem.id(Source.Own, id),
+            source = Source.Own,
+            sourceId = id,
+            title = "",
+            kind = task.kind,
+            firstSeenAt = now,
+            lastSeenAt = now,
+        ),
+        task,
+    ).let { it.copy(peakEffortMin = it.sourceEffortMin, firstProgress = 0.0) }
+
+    /**
+     * [old] as you've changed it to [task]. Its steps are made again where you've changed them,
+     * keeping those done under the same name; the minutes worked on it stay.
+     */
+    fun edited(old: TaskItem, task: OwnTask): TaskItem = apply(old, task)
+
+    /** [task] as the form shows it, to change. */
+    fun draftOf(task: TaskItem): OwnTask = OwnTask(
+        title = task.title,
+        notes = task.detail,
+        kind = task.sourceValues?.kind ?: task.kind,
+        className = task.className,
+        dueAt = task.sourceValues?.dueAt ?: task.dueAt,
+        startFrom = task.notBefore,
+        minutes = task.sourceEffortMin ?: task.kind.defaultEffortMin,
+        steps = task.subSteps.map { OwnStep(it.title, it.minutes, it.from, it.dueAt) },
+    )
+
+    /** The changes an instruction makes to one of your own that are made on it, not laid over it. */
+    val MADE_ON_IT = setOf(ChangeType.DueBy, ChangeType.StartFrom, ChangeType.Minutes)
+
+    /**
+     * [change] (a due date, a start, or minutes: [MADE_ON_IT]) made on your own [task] itself, as
+     * the form would make it: with no source behind it there's nothing for an override to come back
+     * to, and the form can change it again. Minutes for one with steps scale them to match. [task]
+     * as it was, if the change would leave it what the form wouldn't take.
+     */
+    fun changed(task: TaskItem, change: Change): TaskItem = draftWith(task, change)?.takeIf { problem(it) == null }?.let { edited(task, it) } ?: task
+
+    /**
+     * [task] as the form would have it with [change] made ([MADE_ON_IT]; a null time clears it), to
+     * check ([problem]) and save; null for a change of another kind.
+     */
+    fun draftWith(task: TaskItem, change: Change): OwnTask? {
+        val draft = draftOf(task)
+        return when (change.type) {
+            ChangeType.DueBy -> draft.copy(dueAt = change.time)
+            ChangeType.StartFrom -> draft.copy(startFrom = change.time)
+            ChangeType.Minutes -> {
+                val minutes = change.minutes ?: return null
+                val steps = draft.steps.sumOf { it.minutes }
+                if (steps > 0) {
+                    draft.copy(steps = draft.steps.map { it.copy(minutes = (it.minutes.toLong() * minutes / steps).toInt().coerceAtLeast(1)) })
+                } else {
+                    draft.copy(minutes = minutes)
+                }
+            }
+            else -> null
+        }
+    }
+
+    private fun apply(old: TaskItem, task: OwnTask): TaskItem {
+        val event = task.kind == Kind.Event
+        val steps = if (event) emptyList() else task.steps.take(MAX_STEPS).map { s ->
+            val was = old.subSteps.firstOrNull { it.title == s.title.trim() }
+            SubStep(s.title.trim().take(MAX_TITLE), s.minutes, done = was?.done == true, byHand = was?.byHand == true, timedMin = was?.timedMin ?: 0, from = s.from, dueAt = s.dueAt)
+        }
+        val minutes = when {
+            event -> 0
+            steps.isNotEmpty() -> steps.sumOf { it.minutes }
+            else -> task.minutes
+        }
+        return old.copy(
+            title = task.title.trim().take(MAX_TITLE),
+            detail = task.notes.trim().take(MAX_NOTES),
+            className = task.className?.trim()?.take(MAX_CLASS)?.takeIf { it.isNotEmpty() },
+            kind = task.kind,
+            dueAt = task.dueAt,
+            notBefore = task.startFrom,
+            sourceEffortMin = minutes,
+            subSteps = steps,
+            // As a source's: what an instruction is laid over, and taking one back comes back to.
+            sourceValues = SourceValues(task.kind, task.dueAt, null),
+        ).enriched()
+    }
+}

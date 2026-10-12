@@ -147,6 +147,39 @@ class FocusTest {
     }
 
     @Test
+    fun `one of your own you say is done is logged but earns nothing`() = runTest {
+        val own = task("mine", effort = 45).copy(id = "own:mine", source = Source.Own, sourceId = "mine", status = Status.Done, doneAt = clock.time)
+        focus.onCompleted(listOf(own))
+        assertEquals(0L, focus.creditLeftMs())
+        val record = log.value.completions.single()
+        assertEquals("own:mine", record.taskId)
+        // Your minutes, not the app's estimate: nothing for the calibration to learn from.
+        assertTrue(record.yourEstimate)
+    }
+
+    @Test
+    fun `minutes you raise plan more time, but finishing earns no more than the app's estimate`() = runTest {
+        val raised = task("hw", effort = 30).copy(userEffortMin = 300, status = Status.Done, doneAt = clock.time)
+        focus.onCompleted(listOf(raised))
+        // 30 minutes of the app's estimate, a third of it: not 30 minutes of credit for 300.
+        assertEquals(10 * 60_000L, focus.creditLeftMs())
+        // Lowered, it earns by yours.
+        val lowered = task("other", effort = 30).copy(userEffortMin = 15, status = Status.Done, doneAt = clock.time)
+        focus.onCompleted(listOf(lowered))
+        assertEquals(15 * 60_000L, focus.creditLeftMs())
+    }
+
+    @Test
+    fun `a step of your own task is ticked off by hand, as an email's is`() = runTest {
+        val own = task("mine", steps = listOf(SubStep("Draft", 30), SubStep("Redraft", 30))).copy(id = "own:mine", source = Source.Own, sourceId = "mine")
+        tasks.update { it.copy(tasks = listOf(own, task("hw", steps = listOf(SubStep("Q1", 20))))) }
+        assertTrue(focus.tickBlock("own:mine", 0, "Draft"))
+        assertTrue(tasks.value.tasks.first { it.id == "own:mine" }.subSteps[0].byHand)
+        // A Teams assignment's steps aren't yours to tick: its source says when it's done.
+        assertFalse(focus.tickBlock("teams:hw", 0, "Q1"))
+    }
+
+    @Test
     fun `with nothing due soon, earned time is spent while a blocked app is in front`() = runTest {
         tasks.update { it.copy(tasks = listOf(task("later", due = "2026-10-30T09:00"))) }
         focus.onCompleted(listOf(task("hw", effort = 30).copy(status = Status.Done, doneAt = clock.time)))

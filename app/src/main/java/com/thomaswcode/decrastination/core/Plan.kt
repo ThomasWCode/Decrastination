@@ -158,6 +158,15 @@ data class Calibration(
     fun multiplier(kind: Kind, className: String?): Double =
         multipliers["${kind.name}|${className.orEmpty()}"] ?: multipliers["${kind.name}|"] ?: 1.0
 
+    /**
+     * What [task]'s estimate is multiplied by: what's been learned of the app's estimates for its
+     * kind and class; your own minutes ([TaskItem.yourMinutes]) as they are, as you meant them.
+     */
+    fun multiplierFor(task: TaskItem): Double = if (task.yourMinutes) 1.0 else multiplier(task.kind, task.className)
+
+    /** What each of [task]'s steps' minutes is multiplied by: [multiplierFor], with its steps scaled to your minutes. */
+    fun stepMultiplierFor(task: TaskItem): Double = multiplierFor(task) * task.stepScale
+
     companion object {
         fun key(kind: Kind, className: String?): String = "${kind.name}|${className.orEmpty()}"
     }
