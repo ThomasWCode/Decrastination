@@ -263,7 +263,7 @@ class AppGraph private constructor(context: Context) {
         val state = runtime.value
         if (state.pending.isEmpty()) return
         val uptime = clock.uptime()
-        val elapsed = SettingsChanges.counting(state.pending, state.uptimeMark, uptime, force) ?: return
+        val elapsed = SettingsChanges.counting(state.pending, state.uptimeMark, uptime, force, settings.value) ?: return
         val outcome = SettingsChanges.applyDue(settings.value, state.pending, clock.now(), elapsed)
         val waiting = outcome.pending.map { it.id }.toSet()
         val due = state.pending.filter { it.id !in waiting }
@@ -510,19 +510,18 @@ class AppGraph private constructor(context: Context) {
     /**
      * Restores the backup [text] and says what happened. Nothing is restored from one that holds
      * what the app never writes ([Backups.problem]). The settings go through [changeSettings], so
-     * once armed a loosening one waits; the instructions as applying each here would go
-     * ([restoreInstructions]). The log, the calibration and the calendar answers are restored only
-     * while unarmed: armed, an edited file could teach the planner to plan less.
+     * once armed one that loosens blocking waits; the instructions as applying each here would go
+     * ([restoreInstructions]); the log, the calibration and the calendar answers armed or not. They
+     * were kept back while armed, as an edited file could teach the planner to plan less; but the
+     * plan is yours to change at once now (12 Oct), and free time is earned in a ledger no backup holds.
      */
     suspend fun importBackup(text: String): String {
         val backup = Backups.decode(text) ?: return "That isn't a Decrastination backup (or it's from a newer version)."
         Backups.problem(backup)?.let { return "Nothing was restored: $it." }
-        val armed = settings.value.armed
         changeSettings { Backups.importedSettings(it, backup) }
-        val (restored, held, unclear) = restoreInstructions(backup.instructions)
+        val (restored, unclear) = restoreInstructions(backup.instructions)
         val told = buildList {
             if (restored > 0) add("$restored instruction${if (restored == 1) "" else "s"} restored")
-            if (held > 0) add("$held that change${if (held == 1) "s" else ""} a due date waiting in Instructions for your dad's code")
             if (unclear > 0) add("$unclear left unapplied in Instructions, as ${if (unclear == 1) "it" else "they"} would have tasks wait for each other in a circle")
         }.takeIf { it.isNotEmpty() }?.joinToString(", ", prefix = " ", postfix = ".") ?: ""
         // This month's spend on Claude, armed or not: it can only rise, so the cap isn't given again.
@@ -532,7 +531,6 @@ class AppGraph private constructor(context: Context) {
         Daily.schedule(app)
         val waiting = runtime.value.pending.size
         val waits = if (waiting > 0) " $waiting change${if (waiting == 1) "" else "s"} that loosen blocking wait ${settings.value.loosenDelayHours} hours." else ""
-        if (armed) return "Settings restored.$waits$told Protection is armed, so the log and what the app learned were left as they are."
         log.update { Backups.mergeLog(it, backup.log, clock.now()) }
         // Your answers on this phone win over the backup's.
         // One from before 1.8.0 under its rule now, as at a start, from the log as merged.
@@ -548,17 +546,17 @@ class AppGraph private constructor(context: Context) {
 
     /**
      * A backup's instructions in use ([backed]) taken in, in the order they were applied, each as
-     * applying it here would go: one already here is left as it is; one that changes a due date,
-     * once armed, comes back read and waiting for your dad's code ([instructionNeedsCode]); one that
-     * would have tasks wait for each other in a circle with those here comes back unclear, saying
-     * so. The rest are applied. Says how many were applied, how many wait, and how many are unclear.
+     * applying it here would go: one already here is left as it is; one that would have tasks wait
+     * for each other in a circle with those here comes back unclear, saying so. The rest are
+     * applied, due dates too (yours to change, 12 Oct). Says how many were applied, and how many
+     * are unclear.
      */
-    private suspend fun restoreInstructions(backed: List<Instruction>): Triple<Int, Int, Int> = applying.withLock {
-        val added = Backups.restoredInstructions(backed, instructions.value.instructions, settings.value.armed)
+    private suspend fun restoreInstructions(backed: List<Instruction>): Pair<Int, Int> = applying.withLock {
+        val added = Backups.restoredInstructions(backed, instructions.value.instructions)
         instructions.update { state -> state.copy(instructions = state.instructions + added.filter { a -> state.instructions.none { it.id == a.id } }) }
         val applied = added.count { it.state == InstructionStatus.Applied }
         if (applied > 0) layInstructions()
-        Triple(applied, added.count { it.state == InstructionStatus.Understood }, added.count { it.state == InstructionStatus.Unclear })
+        applied to added.count { it.state == InstructionStatus.Unclear }
     }
 
     /**
@@ -767,11 +765,10 @@ class AppGraph private constructor(context: Context) {
     /**
      * A change you made yourself, with no Claude (IMP-P2-001: a task isn't one, can't start before
      * a day, is due on another): kept as an instruction already read, [text] its words, and applied
-     * as you'd apply one, through the same gates, under [id]. False where it waits for a parent
-     * code ([applyInstructionWithCode]), as a due date does once armed. Saved and applied together:
-     * the screen that asked going meanwhile (turned, closed) can't leave it saved and not applied.
+     * as you'd apply one, under [id]. Saved and applied together: the screen that asked going
+     * meanwhile (turned, closed) can't leave it saved and not applied.
      */
-    suspend fun addOwnChange(id: String, text: String, about: About, change: Change): Boolean = withContext(NonCancellable) {
+    suspend fun addOwnChange(id: String, text: String, about: About, change: Change): Unit = withContext(NonCancellable) {
         val instruction = Instruction(id, text, about, clock.now(), state = InstructionStatus.Understood, changes = listOf(change))
         instructions.update { it.copy(instructions = it.instructions + instruction) }
         applyInstruction(id)
@@ -838,27 +835,17 @@ class AppGraph private constructor(context: Context) {
 
     private fun instructionReader(): InstructionReader? = claudeKey()?.let { InstructionReader(it, clock.zone(), endpoint()) }
 
-    /** Whether applying (or taking back) [instruction] needs a parent code now: armed, and it changes a due date. */
-    fun instructionNeedsCode(instruction: Instruction): Boolean = settings.value.armed && Instructions.needsCode(instruction.changes)
-
     /** Held from checking an instruction to applying it, so two applied at once can't both pass the check. */
     private val applying = Mutex()
 
-    /** Applies [id], read and checked by you. False if it needs a parent code ([applyInstructionWithCode]). */
-    suspend fun applyInstruction(id: String): Boolean = applying.withLock {
-        val instruction = instructions.value.instructions.firstOrNull { it.id == id && it.state == InstructionStatus.Understood } ?: return@withLock true
-        if (refuseCircle(instruction)) return@withLock true
-        if (instructionNeedsCode(instruction)) return@withLock false
+    /**
+     * Applies [id], read and checked by you, at once, armed or not: what an instruction changes is
+     * the work, yours to change (12 Oct), never the blocker.
+     */
+    suspend fun applyInstruction(id: String): Unit = applying.withLock {
+        val instruction = instructions.value.instructions.firstOrNull { it.id == id && it.state == InstructionStatus.Understood } ?: return@withLock
+        if (refuseCircle(instruction)) return@withLock
         setApplied(id)
-        true
-    }
-
-    /** Applies [id] with a parent [code]. Returns what went wrong, or null. */
-    suspend fun applyInstructionWithCode(id: String, code: String): String? = applying.withLock {
-        instructions.value.instructions.firstOrNull { it.id == id }?.let { if (refuseCircle(it)) return@withLock null }
-        useParentCode(code)?.let { return@withLock it }
-        setApplied(id)
-        null
     }
 
     /**
@@ -884,24 +871,11 @@ class AppGraph private constructor(context: Context) {
         layInstructions()
     }
 
-    /**
-     * Deletes [id]: discarded if it wasn't applied, taken back if it was. False if taking it back
-     * needs a parent code ([deleteInstructionWithCode]): armed, and it changed a due date, which
-     * taking back changes again.
-     */
-    suspend fun deleteInstruction(id: String): Boolean = applying.withLock {
-        val instruction = instructions.value.instructions.firstOrNull { it.id == id } ?: return@withLock true
-        if (instruction.state == InstructionStatus.Applied && refuseTakingBack(instruction)) return@withLock true
-        if (instruction.state == InstructionStatus.Applied && instructionNeedsCode(instruction)) return@withLock false
+    /** Deletes [id]: discarded if it wasn't applied, taken back if it was. */
+    suspend fun deleteInstruction(id: String): Unit = applying.withLock {
+        val instruction = instructions.value.instructions.firstOrNull { it.id == id } ?: return@withLock
+        if (instruction.state == InstructionStatus.Applied && refuseTakingBack(instruction)) return@withLock
         remove(id)
-        true
-    }
-
-    suspend fun deleteInstructionWithCode(id: String, code: String): String? = applying.withLock {
-        instructions.value.instructions.firstOrNull { it.id == id }?.let { if (refuseTakingBack(it)) return@withLock null }
-        useParentCode(code)?.let { return@withLock it }
-        remove(id)
-        null
     }
 
     /**

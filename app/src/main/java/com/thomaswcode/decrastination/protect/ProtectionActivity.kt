@@ -139,7 +139,8 @@ class ProtectionActivity : ComponentActivity() {
                         Text(if (settings.armed) "Armed" else "Not armed", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
                         Text(
                             if (settings.armed) {
-                                "Changes that loosen blocking wait ${settings.loosenDelayHours} hours. The app's own pages in Settings are guarded, " +
+                                "Changes that loosen blocking itself wait ${settings.loosenDelayHours} hours; your work (due dates, minutes, " +
+                                    "working hours, the plan) changes at once. The app's own pages in Settings are guarded, " +
                                     "and switching the focus service off puts it straight back on."
                             } else {
                                 "Blocking works, but nothing stops it being switched off or changed. Arm it when you're ready."
@@ -255,7 +256,9 @@ class ProtectionActivity : ComponentActivity() {
                 text = {
                     Text(
                         "Once armed:\n" +
-                            "• Changes that loosen blocking (removing an app, longer quiet hours, disarming) wait ${settings.loosenDelayHours} hours.\n" +
+                            "• Changes that loosen blocking itself (taking an app, site or browser off, longer quiet hours, a later start on " +
+                            "school days, more free time for your work, disarming) wait ${settings.loosenDelayHours} hours. " +
+                            "Your work, its due dates, minutes and hours included, is yours to change at once.\n" +
                             "• Settings backs out of this app's pages: its accessibility switch, App info, storage, device admin and uninstall.\n" +
                             "• The device admin stops it being uninstalled.\n" +
                             "• The watchdog switches the focus service back on.\n\n" +

@@ -3,14 +3,12 @@ package com.thomaswcode.decrastination.ui
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.Fixtures.LONDON
 import com.thomaswcode.decrastination.core.ChangeType
-import com.thomaswcode.decrastination.core.Instructions
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
 import java.time.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertTrue
 
 class OwnChangesTest {
     private fun task(dueAt: Long?) = TaskItem(
@@ -30,8 +28,6 @@ class OwnChangesTest {
         assertEquals(ChangeType.DueBy, change.type)
         assertEquals(Fixtures.at("2026-10-16T08:30"), change.time)
         assertEquals("Due Fri 16 Oct 08:30 (set in Tasks)", text)
-        // Once armed, it's the kind of change that needs a parent code.
-        assertTrue(Instructions.needsCode(listOf(change)))
     }
 
     @Test
@@ -47,7 +43,6 @@ class OwnChangesTest {
         assertEquals(ChangeType.StartFrom, change.type)
         assertEquals(Fixtures.at("2026-10-26T00:00"), change.time)
         assertEquals("Can't be started before Mon 26 Oct (set in Tasks)", text)
-        assertTrue(!Instructions.needsCode(listOf(change)))
     }
 
     @Test

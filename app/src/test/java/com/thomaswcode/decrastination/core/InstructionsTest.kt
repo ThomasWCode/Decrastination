@@ -288,12 +288,6 @@ class InstructionsTest {
     }
 
     @Test
-    fun `only a change of due date needs a parent code`() {
-        assertTrue(Instructions.needsCode(listOf(Change(ChangeType.NotATask, taskId = "a"), Change(ChangeType.DueBy, taskId = "a", time = 1))))
-        assertFalse(Instructions.needsCode(listOf(Change(ChangeType.NotATask, taskId = "a"), Change(ChangeType.DayLimit, date = "2026-10-10", freeMin = 0), Change(ChangeType.StartFrom, taskId = "a", time = 1))))
-    }
-
-    @Test
     fun `changes read in words`() {
         val essay = task("Essay", "2026-10-12T09:00")
         val tasks = mapOf(essay.id to essay)

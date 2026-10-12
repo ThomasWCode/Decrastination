@@ -123,9 +123,6 @@ data class TaskOverrides(val notATask: Boolean = false, val from: Long? = null, 
  */
 object Instructions {
 
-    /** A change of a task's due date: once protection is armed, it needs a parent code to apply, or to take back. */
-    fun needsCode(changes: List<Change>): Boolean = changes.any { it.type == ChangeType.DueBy }
-
     /**
      * Whether [task] waits, as you said, for another still open ([byId]: every task). Never for one
      * that, along its own waits, comes back to it: tasks waiting on each other in a circle would

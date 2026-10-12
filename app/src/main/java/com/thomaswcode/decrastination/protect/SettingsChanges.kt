@@ -10,7 +10,7 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
 
-/** A change that loosens blocking, waiting its 24 hours (docs/scheduler.md §6, layer 4). */
+/** A change that loosens blocking itself, waiting its 24 hours (docs/scheduler.md §6, layer 4). */
 @Serializable
 data class PendingChange(
     val id: String,
@@ -38,22 +38,26 @@ data class PendingChange(
  */
 object SettingsChanges {
 
-    /** For each setting, whether a new value loosens blocking compared with the old. */
+    /** A setting about the work, not the blocker: it never waits. */
+    private val NEVER: (Settings, Settings) -> Boolean = { _, _ -> false }
+
+    /**
+     * For each setting, whether a new value loosens blocking compared with the old. Only the
+     * blocker's own settings can (your call, 12 Oct): what's blocked, when, how free time is earned,
+     * and protection itself. Everything about the work (when you work, how it's cut up and spread,
+     * Anki, the Teams syncs, Claude, the reminders) is yours to change at once, as due dates and
+     * minutes are, though moving work off today and tomorrow can lift the pressure: blocked apps
+     * still need earned free time then.
+     */
     private val LOOSER: Map<String, (Settings, Settings) -> Boolean> = mapOf(
-        // Another textbook's decks: the old one's deck tasks can go, and with them their pressure.
-        "ankiTextbook" to { old, new -> new.ankiTextbook != old.ankiTextbook },
-        "ankiDeadlineMin" to { old, new -> new.ankiDeadlineMin > old.ankiDeadlineMin },
-        // Any change to when you work can move work off today and tomorrow: more time spreads it
-        // out, and less can carry a piece that won't fit (an Anki deck's day of cards) past them.
-        "weekdayHours" to { old, new -> new.weekdayHours != old.weekdayHours },
-        "weekendHours" to { old, new -> new.weekendHours != old.weekendHours },
-        // Bigger pieces or smaller, either can move work off today and tomorrow (smaller ones fit
-        // into later days' gaps), so either waits.
-        "boxMin" to { old, new -> new.boxMin != old.boxMin },
-        "marginDays" to { old, new -> new.marginDays < old.marginDays },
-        "softDeadlineDays" to { old, new -> new.softDeadlineDays > old.softDeadlineDays },
-        // Less a day can push overdue undated work out of today and tomorrow, lifting the pressure.
-        "softMinPerDay" to { old, new -> new.softMinPerDay < old.softMinPerDay },
+        "ankiTextbook" to NEVER,
+        "ankiDeadlineMin" to NEVER,
+        "weekdayHours" to NEVER,
+        "weekendHours" to NEVER,
+        "boxMin" to NEVER,
+        "marginDays" to NEVER,
+        "softDeadlineDays" to NEVER,
+        "softMinPerDay" to NEVER,
         "blockedApps" to { old, new -> !new.blockedApps.containsAll(old.blockedApps) },
         "blockedSites" to { old, new -> !new.blockedSites.containsAll(old.blockedSites) },
         "checkedBrowsers" to { old, new -> !new.checkedBrowsers.containsAll(old.checkedBrowsers) },
@@ -61,21 +65,17 @@ object SettingsChanges {
         "quietHours" to { old, new -> adds(old.quietHours, new.quietHours) },
         "weekdayBlockFromMin" to { old, new -> new.weekdayBlockFromMin > old.weekdayBlockFromMin },
         "workMinPerFreeMin" to { old, new -> new.workMinPerFreeMin < old.workMinPerFreeMin },
-        // The automatic syncs are how new Teams work arrives: fewer or later ones can hide it.
-        "teamsAutoSync" to { old, new -> old.teamsAutoSync && !new.teamsAutoSync },
-        "teamsFirstUnlockMin" to { old, new -> new.teamsFirstUnlockMin > old.teamsFirstUnlockMin },
-        "teamsSyncEveryMin" to { old, new -> new.teamsSyncEveryMin > old.teamsSyncEveryMin },
+        "teamsAutoSync" to NEVER,
+        "teamsFirstUnlockMin" to NEVER,
+        "teamsSyncEveryMin" to NEVER,
         "armed" to { old, new -> old.armed && !new.armed },
         "loosenDelayHours" to { old, new -> new.loosenDelayHours < old.loosenDelayHours },
-        // The model's triage can put an email off or call it an event, lifting pressure: switching
-        // it on, or letting it spend more, waits.
-        "aiEnabled" to { old, new -> !old.aiEnabled && new.aiEnabled },
-        "aiKeyActive" to { old, new -> !old.aiKeyActive && new.aiKeyActive },
-        "aiMonthlyCapUsd" to { old, new -> old.aiMonthlyCapUsd != null && (new.aiMonthlyCapUsd == null || new.aiMonthlyCapUsd > old.aiMonthlyCapUsd) },
-        // Reminders' times: nothing is blocked by them.
-        "briefingWeekdayMin" to { _, _ -> false },
-        "briefingWeekendMin" to { _, _ -> false },
-        "checkInMin" to { _, _ -> false },
+        "aiEnabled" to NEVER,
+        "aiKeyActive" to NEVER,
+        "aiMonthlyCapUsd" to NEVER,
+        "briefingWeekdayMin" to NEVER,
+        "briefingWeekendMin" to NEVER,
+        "checkInMin" to NEVER,
     )
 
     private val LABELS = mapOf(
@@ -210,16 +210,24 @@ object SettingsChanges {
     /**
      * Counts [elapsedMs] of uptime towards every pending change, moving its shown time to match,
      * and applies those that have waited long enough. Uptime, not the wall clock: setting the date
-     * forward a day mustn't skip the wait (and the time the phone is off doesn't count).
+     * forward a day mustn't skip the wait (and the time the phone is off doesn't count). One that no
+     * longer loosens blocking ([stillWaits]) applies now, whatever its wait.
      */
     fun applyDue(settings: Settings, pending: List<PendingChange>, now: Long, elapsedMs: Long): Outcome {
         val counted = pending.map { change ->
             val waited = change.waitedMs + elapsedMs.coerceAtLeast(0)
             change.copy(waitedMs = waited, applyAt = now + (change.waitMs - waited).coerceAtLeast(0))
         }
-        val (due, waiting) = counted.partition { it.waitedMs >= it.waitMs }
+        val (due, waiting) = counted.partition { it.waitedMs >= it.waitMs || !stillWaits(settings, it) }
         return Outcome(due.fold(settings, ::apply), waiting)
     }
+
+    /**
+     * Whether [change] still loosens blocking from [settings]: one asked for before a setting stopped
+     * waiting (the work's settings, from 2.0.0), or since made no looser (what it takes off a list
+     * added back), needn't wait any more.
+     */
+    fun stillWaits(settings: Settings, change: PendingChange): Boolean = loosens(change.field, settings, apply(settings, change))
 
     /** How often the uptime is counted (and saved) while nothing falls due. */
     const val COUNT_EVERY_MS = 5 * 60_000L
@@ -228,12 +236,13 @@ object SettingsChanges {
      * How much uptime to count towards [pending] now, from [mark] to [uptime]; null when it can
      * wait (little time, nothing due). A gap that can't be measured (a restart) counts nothing but
      * is never left waiting: the count starts again from now, so it can't freeze. Where restarts
-     * can't be told apart, what's sure to have passed is counted, never more.
+     * can't be told apart, what's sure to have passed is counted, never more. Given the [settings],
+     * a change that no longer loosens them is due too.
      */
-    fun counting(pending: List<PendingChange>, mark: Uptime?, uptime: Uptime?, force: Boolean): Long? {
+    fun counting(pending: List<PendingChange>, mark: Uptime?, uptime: Uptime?, force: Boolean, settings: Settings? = null): Long? {
         val since = uptime?.atLeastSince(mark)
         val elapsed = since ?: 0L
-        val due = pending.any { it.waitedMs + elapsed >= it.waitMs }
+        val due = pending.any { it.waitedMs + elapsed >= it.waitMs || (settings != null && !stillWaits(settings, it)) }
         if (!force && !due && since != null && since < COUNT_EVERY_MS) return null
         return elapsed
     }
