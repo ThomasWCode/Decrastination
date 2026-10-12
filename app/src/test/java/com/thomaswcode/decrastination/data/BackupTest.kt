@@ -7,6 +7,8 @@ import com.thomaswcode.decrastination.core.ChangeType
 import com.thomaswcode.decrastination.core.Instruction
 import com.thomaswcode.decrastination.core.InstructionStatus
 import com.thomaswcode.decrastination.core.Kind
+import com.thomaswcode.decrastination.core.OwnTask
+import com.thomaswcode.decrastination.core.OwnTasks
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.enrich.AiUsage
 import java.io.ByteArrayInputStream
@@ -125,6 +127,23 @@ class BackupTest {
         assertNotNull(Backups.problem(with(Change(ChangeType.StartFrom, taskId = "teams:a", time = now + 3650 * 86_400_000L))))
         assertNotNull(Backups.problem(with(Change(ChangeType.After, taskId = "teams:a", afterTaskId = "teams:a"))))
         assertNotNull(Backups.problem(with(Change(ChangeType.EventTime, eventKey = "Trip", eventAnswer = "sometimes"))))
+    }
+
+    @Test
+    fun `a backup keeps your own tasks, and a restore adds those not here`() {
+        val mine = OwnTasks.create(OwnTask(title = "UCAS statement", dueAt = now + 86_400_000L, minutes = 120), "u1", now)
+        val read = Backups.decode(Backups.encode(backup().copy(ownTasks = listOf(mine))))!!
+        assertEquals(listOf(mine), read.ownTasks)
+        assertNull(Backups.problem(read))
+        // One here already is the newer: it stays as it is.
+        val here = mine.copy(title = "Personal statement")
+        assertEquals(emptyList(), Backups.restoredOwnTasks(read.ownTasks, listOf(here)))
+        assertEquals(listOf(mine), Backups.restoredOwnTasks(read.ownTasks, emptyList()))
+        // One the form wouldn't take, or a source's task posing as yours, isn't restored.
+        assertNotNull(Backups.problem(backup().copy(ownTasks = listOf(mine.copy(title = " ")))))
+        assertNotNull(Backups.problem(backup().copy(ownTasks = listOf(mine.copy(source = Source.Teams)))))
+        // A backup from before 2.0.0 has none.
+        assertEquals(emptyList(), Backups.decode(Backups.encode(backup()).replace("\"ownTasks\"", "\"ignored\""))!!.ownTasks)
     }
 
     @Test

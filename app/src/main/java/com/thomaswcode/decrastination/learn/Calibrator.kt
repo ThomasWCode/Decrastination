@@ -80,7 +80,7 @@ object Calibrator {
     }
 
     /** Whether [record]'s minutes are how long it took: timed, and all of it (no blocks ticked by hand, no photo check). */
-    private fun isTimed(record: CompletionRecord) = record.estimateMin > 0 && record.workedMin > 0 && !record.byHand && !record.photo
+    private fun isTimed(record: CompletionRecord) = record.estimateMin > 0 && record.workedMin > 0 && !record.byHand && !record.photo && !record.yourEstimate
 
     /** Timed pieces per multiplier key: each class's, and each kind's. */
     fun timed(completions: List<CompletionRecord>): Map<String, Int> =
@@ -91,7 +91,8 @@ object Calibrator {
     private fun learnedMultipliers(completions: List<CompletionRecord>): Map<String, Double> {
         val result = HashMap<String, Double>()
         for (record in completions.sortedBy { it.doneAt }) {
-            if (record.estimateMin <= 0) continue
+            // Planned by your own minutes: a multiplier corrects the app's estimates, not yours, which it isn't laid over.
+            if (record.estimateMin <= 0 || record.yourEstimate) continue
             for (key in listOf(Calibration.key(record.kind, record.className), Calibration.key(record.kind, null)).distinct()) {
                 var m = result[key] ?: 1.0
                 // Timed, and all of it: with blocks ticked by hand, or work a photo check found done,

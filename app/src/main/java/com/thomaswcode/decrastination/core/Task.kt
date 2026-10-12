@@ -2,13 +2,25 @@ package com.thomaswcode.decrastination.core
 
 import kotlinx.serialization.Serializable
 
-/** Where a task comes from. Each source is the only judge of whether its tasks are done. */
+/**
+ * Where a task comes from. Each source is the only judge of whether its tasks are done; [Own] is
+ * you ([OwnTasks]), with nothing to read: [synced] says which are read.
+ */
 @Serializable
-enum class Source(val label: String) {
+enum class Source(val label: String, val synced: Boolean = true) {
     Teams("Teams"),
     PowerPlanner("Power Planner"),
     Anki("Anki"),
     Gmail("Gmail"),
+
+    /** Your own tasks, made in the app (2.0.0, Q28). */
+    Own("Yours", synced = false),
+    ;
+
+    companion object {
+        /** The sources the app reads, each with its own status. */
+        val SYNCED: List<Source> = entries.filter { it.synced }
+    }
 }
 
 /**
@@ -84,7 +96,7 @@ data class TaskItem(
     val sourceEffortMin: Int? = null,
     /** The enrichment's estimate (Phase 4). */
     val aiEffortMin: Int? = null,
-    /** Your own estimate, which beats every other. */
+    /** Your estimate of the whole task, from an instruction ([ChangeType.Minutes]), which beats every other. */
     val userEffortMin: Int? = null,
     /** How far the source says it is (Power Planner's percent complete), 0 to 1. */
     val sourceProgress: Double = 0.0,
@@ -163,7 +175,6 @@ data class TaskItem(
     /** Not work to plan: an email that's just an email, or one you've said isn't a task. */
     val hidden: Boolean get() = justAnEmail || userNotATask
 
-    /** Your estimate, else the enrichment's, else the source's or rules', else the kind's default. */
     /**
      * Minutes of blocks you ticked off by hand in Tasks: done, but neither timed nor checked, so
      * they earn no free time when the task completes and teach the calibration nothing. From the
@@ -171,7 +182,28 @@ data class TaskItem(
      */
     val handMin: Int get() = subSteps.filter { it.done && it.byHand }.sumOf { it.minutes }
 
+    /** Your estimate, else the enrichment's, else the source's or rules', else the kind's default. */
     val effortMin: Int get() = userEffortMin ?: aiEffortMin ?: sourceEffortMin ?: kind.defaultEffortMin
+
+    /** The estimate as the app has it, without yours: what free time for finishing it goes by, at most. */
+    val appEffortMin: Int get() = aiEffortMin ?: sourceEffortMin ?: kind.defaultEffortMin
+
+    /**
+     * Its minutes are yours (an instruction's, or a task of your own): planned as you gave them,
+     * not scaled by what the app has learned of its own estimates.
+     */
+    val yourMinutes: Boolean get() = userEffortMin != null || source == Source.Own
+
+    /**
+     * What each of its steps' minutes counts as: where you gave the whole task's minutes, its steps
+     * are scaled to add up to them.
+     */
+    val stepScale: Double
+        get() {
+            val mine = userEffortMin ?: return 1.0
+            val steps = subSteps.sumOf { it.minutes }
+            return if (steps > 0) mine.toDouble() / steps else 1.0
+        }
 
     fun isAvailable(now: Long): Boolean = availableFrom == null || availableFrom <= now
 

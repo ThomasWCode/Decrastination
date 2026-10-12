@@ -176,6 +176,11 @@ data class CompletionRecord(
     val byHand: Boolean = false,
     /** Some of it found done by a photo check: untimed, so its minutes aren't a measure of how long it took either. */
     val photo: Boolean = false,
+    /**
+     * Planned with your own minutes (an instruction's, or a task of your own): not the app's
+     * estimate, so it teaches nothing about how far off the app's estimates are (2.0.0).
+     */
+    val yourEstimate: Boolean = false,
 )
 
 /** The Sunday review: what changed, in a few lines, and who wrote it (the rules or the model). */
