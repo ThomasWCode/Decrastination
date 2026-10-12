@@ -11,6 +11,7 @@ import com.thomaswcode.decrastination.core.Change
 import com.thomaswcode.decrastination.core.ChangeType
 import com.thomaswcode.decrastination.core.Instruction
 import com.thomaswcode.decrastination.core.Instructions
+import com.thomaswcode.decrastination.core.OwnTasks
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.learn.CalendarEvent
 import com.thomaswcode.decrastination.learn.EventJudge
@@ -55,6 +56,7 @@ object InstructionPrompts {
         - StartFrom: the task can't be started before a date. Needs taskId, date, and time if it gives one (else null: the start of that day).
         - After: the task can't be started until another listed task is done. Needs taskId and afterTaskId.
         - DueBy: the task's deadline is a different date. Needs taskId, date, and time if it gives one (else null: the end of that day).
+        - Minutes: how long the whole task takes, as the student reckons it. Needs taskId and minutes (the whole task's: where they say how much more it needs, add the minutes already worked on it).
         - EventTime: how much of the student's time a calendar event takes, for every event of that name. Needs eventKey and eventTime: "free" (they can work through it), "busy" (it takes all its time; for an all-day event, the whole day), or "hours" with minutes (it takes that many minutes of its day, at no set time).
         - DayLimit: the most minutes of work the student can do on a day: minutes (0 for none at all), and date (one day) or weekday (every such day).
         - BusyTime: a stretch of time the student can't work: time (its start, HH:MM) and endTime (HH:MM), and date or weekday.
@@ -105,6 +107,7 @@ object InstructionPrompts {
                 task.className?.let { appendLine("  Class: $it") }
                 // As it is now, an earlier instruction's date included, so "two days later" counts from it.
                 appendLine("  Due: " + (task.dueAt?.let(::at) ?: "no date") + (if (task.userDueAt != null) " (set by an earlier instruction)" else ""))
+                appendLine("  Takes: ${task.effortMin} min in all" + (if (task.userEffortMin != null) " (set by an earlier instruction)" else "") + "; ${task.workedMin} min worked on it so far")
                 listOfNotNull(task.availableFrom, task.userFrom).maxOrNull()?.let { appendLine("  Can't start before: ${at(it)}") }
                 task.detail.trim().takeIf { it.isNotEmpty() }?.let { appendLine("  Details: " + it.take(MAX_DETAIL).replace("\n", "\n    ")) }
             }
@@ -202,6 +205,8 @@ object InstructionAnswers {
             ChangeType.NotATask -> task?.let { Change(type, taskId = it) }
             ChangeType.StartFrom -> task?.let { id -> at(g.date, g.time, LocalTime.MIDNIGHT, zone)?.takeIf { plausible(it, now) }?.let { Change(type, taskId = id, time = it) } }
             ChangeType.DueBy -> task?.let { id -> at(g.date, g.time, LocalTime.of(23, 59), zone)?.takeIf { plausible(it, now) }?.let { Change(type, taskId = id, time = it) } }
+            // At least a minute for each of its steps, as yours are shared out over them.
+            ChangeType.Minutes -> task?.let { id -> g.minutes?.takeIf { it in OwnTasks.minutesFor(tasks.getValue(id)) }?.let { Change(type, taskId = id, minutes = it) } }
             ChangeType.After -> task?.let { id -> g.afterTaskId?.takeIf { it in tasks && it != id }?.let { Change(type, taskId = id, afterTaskId = it) } }
             ChangeType.EventTime -> g.eventKey?.takeIf { it in events }?.let { key ->
                 val answer = when (g.eventTime) {
@@ -227,7 +232,7 @@ object InstructionAnswers {
     /** Why [g] couldn't be used, in words. */
     private fun problem(g: Given, tasks: Map<String, TaskItem>, events: Map<String, String>): String = when {
         ChangeType.entries.none { it.name == g.type } -> "a change of a kind the app doesn't make"
-        g.type in setOf("NotATask", "StartFrom", "DueBy", "After") && g.taskId !in tasks -> "it names a task that isn't listed"
+        g.type in setOf("NotATask", "StartFrom", "DueBy", "Minutes", "After") && g.taskId !in tasks -> "it names a task that isn't listed"
         g.type == "After" -> "it waits on a task that isn't listed"
         g.type == "EventTime" && g.eventKey !in events -> "it names an event that isn't in the calendar"
         else -> "a date, time or number in it is out of range"

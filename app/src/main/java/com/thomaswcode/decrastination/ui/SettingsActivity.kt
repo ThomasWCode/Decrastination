@@ -112,7 +112,7 @@ class SettingsActivity : ComponentActivity() {
                                 message = if (waiting.isEmpty()) {
                                     "Saved."
                                 } else {
-                                    "Saved. ${waiting.size} change${if (waiting.size == 1) "" else "s"} loosening blocking wait ${graph.settings.value.loosenDelayHours} hours, shown below."
+                                    "Saved. ${waiting.size} change${if (waiting.size == 1) " loosening blocking waits" else "s loosening blocking wait"} ${graph.settings.value.loosenDelayHours} hours, shown below."
                                 }
                                 val now = SettingsChanges.requested(graph.settings.value, waiting)
                                 base = now

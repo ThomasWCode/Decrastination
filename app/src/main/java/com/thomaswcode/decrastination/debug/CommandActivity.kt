@@ -11,11 +11,15 @@ import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.block.FocusService
 import com.thomaswcode.decrastination.block.TeamsAutoSync
 import com.thomaswcode.decrastination.core.About
+import com.thomaswcode.decrastination.core.ChangeType
 import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.core.InstructionStatus
 import com.thomaswcode.decrastination.core.Instructions
 import com.thomaswcode.decrastination.core.Kind
+import com.thomaswcode.decrastination.core.OwnTask
+import com.thomaswcode.decrastination.core.OwnTasks
 import com.thomaswcode.decrastination.core.Source
+import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.withoutEnrichment
 import com.thomaswcode.decrastination.data.Secret
 import com.thomaswcode.decrastination.enrich.ClaudeEnricher
@@ -71,6 +75,11 @@ import kotlinx.serialization.json.JsonPrimitive
  *   YYYY-MM-DD`, or none): an instruction written as on the phone, read by Claude (a paid call)
  *   and left for you to apply; `instructions` logs them all with Claude's reading, and
  *   `instruction-discard --es id <id|all>` discards those not applied.
+ * - Your own tasks (2.0.0): `own-add --es title "<name>"` (with `--es due 2026-10-16T17:00`,
+ *   `--ei minutes 45`, `--es kind Revision`), logging its id; `own-done`, `own-reopen` and
+ *   `own-delete --es task <id>`; and `quick-minutes --es task <id> --ei minutes N` (`--ei minutes 0`
+ *   takes it back), a task's minutes as its sheet sets them. `forget-task --es task own:<id>` leaves no
+ *   trace of a test's task of your own: gone, and its completions, sessions and question with it.
  * - Test hooks: `test-arm`, `test-disarm` (at once, unlike the app's own disarming), `remove-admin`,
  *   `clear-parent-code`, `offer-teams-sync` (the countdown banner now, whatever the rules), and
  *   `clean-up` (this app's notifications, a delayed Teams sync, forced blocking hours, the
@@ -259,6 +268,49 @@ class CommandActivity : Activity() {
                 val ids = graph.instructions.value.instructions.filter { it.state != InstructionStatus.Applied && (which == "all" || it.id == which) }.map { it.id }
                 ids.forEach { graph.deleteInstruction(it) }
                 Log.i(TAG, "instruction-discard: ${ids.size} discarded")
+            }
+            "own-add" -> {
+                val title = intent.getStringExtra("title")
+                val zone = graph.clock.zone()
+                val due = intent.getStringExtra("due")?.let { runCatching { java.time.LocalDateTime.parse(it).atZone(zone).toInstant().toEpochMilli() }.getOrNull() }
+                val kind = intent.getStringExtra("kind")?.let { k -> Kind.entries.firstOrNull { it.name.equals(k, ignoreCase = true) } } ?: Kind.Homework
+                val task = OwnTask(title = title.orEmpty(), kind = kind, dueAt = due, minutes = intent.getIntExtra("minutes", kind.defaultEffortMin))
+                val problem = OwnTasks.problem(task)
+                if (problem != null) {
+                    Log.w(TAG, "own-add: $problem")
+                } else {
+                    val id = java.util.UUID.randomUUID().toString()
+                    graph.saveOwnTask(id, task)
+                    Log.i(TAG, "own-add: ${TaskItem.id(Source.Own, id)}")
+                }
+            }
+            "own-done" -> intent.getStringExtra("task")?.let { graph.finishOwnTask(it) }.also { Log.i(TAG, "own-done") }
+            "own-reopen" -> intent.getStringExtra("task")?.let { graph.reopenOwnTask(it) }.also { Log.i(TAG, "own-reopen") }
+            "own-delete" -> intent.getStringExtra("task")?.let { graph.deleteOwnTask(it) }.also { Log.i(TAG, "own-delete: $it") }
+            "forget-task" -> {
+                val id = intent.getStringExtra("task")?.takeIf { it.startsWith("own:") }
+                if (id == null) {
+                    Log.w(TAG, "forget-task needs --es task own:<id>: only a task of your own, never a source's record")
+                } else {
+                    graph.log.value.completions.filter { it.taskId == id }.forEach { Assessment.withdraw(this, id, it.doneAt) }
+                    graph.log.update { log -> log.copy(completions = log.completions.filterNot { it.taskId == id }, sessions = log.sessions.filterNot { it.taskId == id }) }
+                    graph.deleteOwnTask(id)
+                    Log.i(TAG, "forget-task: $id gone, with its log")
+                }
+            }
+            "quick-minutes" -> {
+                val task = intent.getStringExtra("task")?.let { id -> graph.tasks.value.tasks.firstOrNull { it.id == id } }
+                val minutes = intent.getIntExtra("minutes", -1)
+                when {
+                    task == null -> Log.w(TAG, "quick-minutes needs --es task <id>")
+                    minutes == 0 -> graph.takeBackQuick(task.id, ChangeType.Minutes).also { Log.i(TAG, "quick-minutes: taken back") }
+                    minutes in OwnTasks.MINUTES -> {
+                        val (change, text) = com.thomaswcode.decrastination.ui.minutesChange(task, minutes)
+                        graph.addOwnChange(java.util.UUID.randomUUID().toString(), text, About(taskId = task.id, taskTitle = task.title), change)
+                        Log.i(TAG, "quick-minutes: ${task.title} takes $minutes min")
+                    }
+                    else -> Log.w(TAG, "quick-minutes needs --ei minutes 1..${OwnTasks.MINUTES.last} (0 takes it back)")
+                }
             }
             "instructions" -> {
                 val tasks = graph.tasks.value.tasks.associateBy { it.id }

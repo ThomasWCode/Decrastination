@@ -26,6 +26,11 @@ data class Instruction(
     /** Why it's waiting to be read, why it couldn't be, or what Claude found unclear. */
     val note: String? = null,
     val appliedAt: Long? = null,
+    /**
+     * A quick change made on a task, with no Claude ([com.thomaswcode.decrastination.ui.OwnChange]):
+     * a newer one of the same kind for the same task replaces it, so they don't pile up.
+     */
+    val quick: Boolean = false,
 )
 
 @Serializable
@@ -70,6 +75,9 @@ enum class ChangeType {
     /** The task is due by [Change.time] instead. */
     DueBy,
 
+    /** The whole task takes [Change.minutes], as you reckon it (2.0.0). */
+    Minutes,
+
     /** Every event named [Change.eventKey] takes [Change.eventAnswer] of your time ("free", "busy", "load:<minutes>"). */
     EventTime,
 
@@ -97,6 +105,8 @@ data class Change(
     /** Every such day, 1 (Monday) to 7 (Sunday). */
     val weekday: Int? = null,
     val freeMin: Int? = null,
+    /** [ChangeType.Minutes]'s estimate of the whole task. */
+    val minutes: Int? = null,
     /** Minutes after midnight. */
     val startMin: Int? = null,
     val endMin: Int? = null,
@@ -110,7 +120,7 @@ data class InstructionState(val instructions: List<Instruction> = emptyList()) {
 }
 
 /** What applied instructions say about one task. */
-data class TaskOverrides(val notATask: Boolean = false, val from: Long? = null, val after: String? = null, val dueAt: Long? = null) {
+data class TaskOverrides(val notATask: Boolean = false, val from: Long? = null, val after: String? = null, val dueAt: Long? = null, val minutes: Int? = null) {
     companion object {
         val NONE = TaskOverrides()
     }
@@ -122,6 +132,13 @@ data class TaskOverrides(val notATask: Boolean = false, val from: Long? = null, 
  * with the planner's capacity. Pure.
  */
 object Instructions {
+
+    /**
+     * Whether what's in force for [taskId]'s [type] comes from a quick change ([Instruction.quick]):
+     * the last of [applied] (in the order they were applied) to change it.
+     */
+    fun quickInForce(applied: List<Instruction>, taskId: String, type: ChangeType): Boolean =
+        applied.lastOrNull { i -> i.changes.any { it.type == type && it.taskId == taskId } }?.let { it.quick && it.changes.size == 1 } == true
 
     /**
      * Whether [task] waits, as you said, for another still open ([byId]: every task). Never for one
@@ -172,6 +189,7 @@ object Instructions {
                 ChangeType.StartFrom -> o.copy(from = change.time)
                 ChangeType.After -> o.copy(after = change.afterTaskId)
                 ChangeType.DueBy -> o.copy(dueAt = change.time)
+                ChangeType.Minutes -> o.copy(minutes = change.minutes)
                 else -> o
             }
         }
@@ -255,6 +273,18 @@ object Instructions {
                         else -> " (now ${at(was)!!.format(DAY_TIME)})"
                     }
             }
+            ChangeType.Minutes -> {
+                val task = change.taskId?.let { tasks[it] }
+                // Against the estimate as it is now; once this is the one in use, against the app's own.
+                val inUse = task?.userEffortMin != null && task.userEffortMin == change.minutes
+                val was = if (inUse) task?.appEffortMin else task?.effortMin
+                "${title(change.taskId)}: takes ${hours(change.minutes ?: 0)} in all" +
+                    when {
+                        was == null -> ""
+                        inUse -> " (the app's estimate: ${hours(was)})"
+                        else -> " (now ${hours(was)})"
+                    }
+            }
             ChangeType.EventTime -> {
                 val name = "“" + (change.eventTitle ?: change.eventKey ?: "an event") + "”"
                 when {
@@ -280,6 +310,9 @@ object Instructions {
     private fun date(text: String?): LocalDate? = text?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
 }
 
+/** What [task]'s instructions say of it now, as [TaskOverrides] holds it. */
+fun TaskItem.overrides(): TaskOverrides = TaskOverrides(userNotATask, userFrom, userAfter, userDueAt, userEffortMin)
+
 /**
  * The task with [o] as its instructions' say: kept on it, and laid over what the source and the
  * enrichment say at every merge ([enriched]). The source's own values are kept first, if they
@@ -292,4 +325,5 @@ fun TaskItem.withOverrides(o: TaskOverrides): TaskItem =
         userFrom = o.from,
         userAfter = o.after,
         userDueAt = o.dueAt,
+        userEffortMin = o.minutes,
     ).enriched()

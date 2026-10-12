@@ -30,6 +30,14 @@ private fun done(
 
 class CalibratorTest {
     @Test
+    fun `a completion planned by your own minutes teaches nothing of the app's estimates`() {
+        // Timed, and twice its estimate: but the estimate was yours, which no multiplier is laid over.
+        val yours = done("a", estimate = 30, worked = 60).copy(yourEstimate = true, assessment = Calibrator.HARDER)
+        assertEquals(emptyMap(), Calibrator.multipliers(listOf(yours)))
+        assertEquals(emptyMap(), Calibrator.timed(listOf(yours)))
+    }
+
+    @Test
     fun `a completion with blocks ticked by hand teaches no times`() {
         val ticked = done("a", estimate = 30, worked = 10).copy(byHand = true)
         assertEquals(emptyMap(), Calibrator.multipliers(listOf(ticked)))

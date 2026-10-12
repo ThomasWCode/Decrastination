@@ -1,14 +1,28 @@
 package com.thomaswcode.decrastination.core
 
+import kotlin.math.floor
+import kotlin.math.roundToInt
 import kotlinx.serialization.Serializable
 
-/** Where a task comes from. Each source is the only judge of whether its tasks are done. */
+/**
+ * Where a task comes from. Each source is the only judge of whether its tasks are done; [Own] is
+ * you ([OwnTasks]), with nothing to read: [synced] says which are read.
+ */
 @Serializable
-enum class Source(val label: String) {
+enum class Source(val label: String, val synced: Boolean = true) {
     Teams("Teams"),
     PowerPlanner("Power Planner"),
     Anki("Anki"),
     Gmail("Gmail"),
+
+    /** Your own tasks, made in the app (2.0.0, Q28). */
+    Own("Yours", synced = false),
+    ;
+
+    companion object {
+        /** The sources the app reads, each with its own status. */
+        val SYNCED: List<Source> = entries.filter { it.synced }
+    }
 }
 
 /**
@@ -84,7 +98,7 @@ data class TaskItem(
     val sourceEffortMin: Int? = null,
     /** The enrichment's estimate (Phase 4). */
     val aiEffortMin: Int? = null,
-    /** Your own estimate, which beats every other. */
+    /** Your estimate of the whole task, from an instruction ([ChangeType.Minutes]), which beats every other. */
     val userEffortMin: Int? = null,
     /** How far the source says it is (Power Planner's percent complete), 0 to 1. */
     val sourceProgress: Double = 0.0,
@@ -163,7 +177,6 @@ data class TaskItem(
     /** Not work to plan: an email that's just an email, or one you've said isn't a task. */
     val hidden: Boolean get() = justAnEmail || userNotATask
 
-    /** Your estimate, else the enrichment's, else the source's or rules', else the kind's default. */
     /**
      * Minutes of blocks you ticked off by hand in Tasks: done, but neither timed nor checked, so
      * they earn no free time when the task completes and teach the calibration nothing. From the
@@ -171,13 +184,67 @@ data class TaskItem(
      */
     val handMin: Int get() = subSteps.filter { it.done && it.byHand }.sumOf { it.minutes }
 
+    /** Your estimate, else the enrichment's, else the source's or rules', else the kind's default. */
     val effortMin: Int get() = userEffortMin ?: aiEffortMin ?: sourceEffortMin ?: kind.defaultEffortMin
+
+    /** The estimate as the app has it, without yours: what free time for finishing it goes by, at most. */
+    val appEffortMin: Int get() = aiEffortMin ?: sourceEffortMin ?: kind.defaultEffortMin
+
+    /**
+     * Its minutes are yours (an instruction's, or a task of your own): planned as you gave them,
+     * not scaled by what the app has learned of its own estimates.
+     */
+    val yourMinutes: Boolean get() = userEffortMin != null || source == Source.Own
+
+    /**
+     * What each of its steps' minutes counts as: where you gave the whole task's minutes, its steps
+     * are scaled to add up to them.
+     */
+    val stepScale: Double
+        get() {
+            val mine = userEffortMin ?: return 1.0
+            val steps = subSteps.sumOf { it.minutes }
+            return if (steps > 0) mine.toDouble() / steps else 1.0
+        }
+
+    /**
+     * Each step's minutes as the plan takes them, by [multiplier] (the calibration's, for the app's
+     * estimate). Where you gave the whole task's minutes, they're shared out in whole minutes that
+     * add up to exactly yours, the odd minutes going to the steps with most left over (each at
+     * least one, so fewer minutes than steps comes to a minute each).
+     */
+    fun plannedStepMinutes(multiplier: Double): List<Int> {
+        val steps = subSteps.map { it.minutes }
+        val mine = userEffortMin
+        if (mine == null || steps.sum() <= 0) return steps.map { (it * multiplier).roundToInt().coerceAtLeast(1) }
+        return shareOut(mine, steps)
+    }
 
     fun isAvailable(now: Long): Boolean = availableFrom == null || availableFrom <= now
 
     companion object {
         fun id(source: Source, sourceId: String): String = "${source.name.lowercase()}:$sourceId"
     }
+}
+
+/**
+ * [total] minutes shared over [parts] in proportion, in whole minutes that add up to exactly
+ * [total]: the odd minutes go to the parts with most left over. Each gets at least one, so a total
+ * smaller than the parts' number would come to more than it: it's refused where it's given
+ * ([OwnTasks.minutesFor]). Your minutes over a task's steps.
+ */
+fun shareOut(total: Int, parts: List<Int>): List<Int> {
+    val sum = parts.sum()
+    if (sum <= 0) return parts.map { 1 }
+    val exact = parts.map { it.toDouble() * total / sum }
+    val whole = exact.map { floor(it).toInt() }.toMutableList()
+    var odd = total - whole.sum()
+    for (i in exact.indices.sortedByDescending { exact[it] - whole[it] }) {
+        if (odd <= 0) break
+        whole[i]++
+        odd--
+    }
+    return whole.map { it.coerceAtLeast(1) }
 }
 
 /** What a source said about a task's kind, deadline and start, kept so an overlay can be redone. */

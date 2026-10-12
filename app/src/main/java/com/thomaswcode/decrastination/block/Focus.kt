@@ -313,24 +313,24 @@ class Focus(
     }
 
     /**
-     * The block of an email at [index] you've done, ticked off in Tasks (still [title], so a list
-     * changed meanwhile ticks nothing): an email is yours to say, as archiving it is. Marked as
-     * ticked by hand, so it earns no free time (that's for timed or photographed work). Says
-     * whether it was ticked.
+     * The block of an email or a task of your own at [index] you've done, ticked off in Tasks (still
+     * [title], so a list changed meanwhile ticks nothing): either is yours to say, as archiving an
+     * email is. Marked as ticked by hand, so it earns no free time (that's for timed or photographed
+     * work). Says whether it was ticked.
      */
     suspend fun tickBlock(taskId: String, index: Int, title: String): Boolean {
         var ticked = false
         tasks.update { state ->
             state.copy(
                 tasks = state.tasks.map { t ->
-                    if (t.id != taskId || t.source != Source.Gmail || !t.isOpen) return@map t
+                    if (t.id != taskId || !Focus.tickable(t) || !t.isOpen) return@map t
                     val step = t.subSteps.getOrNull(index)
                     if (step == null || step.done || step.title != title) return@map t
                     ticked = true
                     // The timed minutes not yet taken up by its other steps were worked on this one
                     // (stopped early, then ticked): it keeps them, up to its length, so they aren't
                     // taken off the next step as well.
-                    val multiplier = runtime.value.calibration.multiplier(t.kind, t.className)
+                    val multiplier = runtime.value.calibration.stepMultiplierFor(t)
                     val taken = t.subSteps.filter { it.done }.sumOf { if (it.byHand) it.timedMin.toDouble() else it.minutes * multiplier }
                     val spare = (t.workedMin + t.photoMin - t.stepsWorkedMin - taken).roundToInt().coerceAtLeast(0)
                     val kept = minOf(spare, (step.minutes * multiplier).roundToInt())
@@ -367,20 +367,25 @@ class Focus(
                     if (!t.isOpen) return@map t
                     fun counted(minutes: Int) = (t.photosCounted + (done.id to minutes)).entries.toList().takeLast(MAX_COUNTED).associate { it.key to it.value }
                     // One of its own steps: ticked, once.
+                    // By your minutes or the app's estimate, the less, as a completion is: raising a
+                    // task's minutes plans more time for it, but can't make a photo earn more.
+                    val calibration = runtime.value.calibration
+                    val theApps = t.copy(userEffortMin = null)
                     if (done.step != null && t.subSteps.any { it.title == done.step }) {
                         val i = stepAt(t, done.stepIndex, done.step)
                         if (i < 0) return@map t
-                        credited = done.minutes
+                        credited = minOf(done.minutes, (t.subSteps[i].minutes * calibration.stepMultiplierFor(theApps)).roundToInt().coerceAtLeast(1))
+                        // What's kept is what's credited: a retry after a stop gives no more.
                         return@map t.copy(
                             subSteps = t.subSteps.mapIndexed { j, s -> if (j == i) s.copy(done = true) else s },
-                            photoMin = t.photoMin + done.minutes,
-                            photosCounted = counted(done.minutes),
+                            photoMin = t.photoMin + credited,
+                            photosCounted = counted(credited),
                         )
                     }
                     // A piece of time (the whole task, or a part the planner cut it into): counted
                     // against what's left of it as the plan measures it (calibrated), so the same
                     // work can't be counted past it.
-                    val left = Planner.remaining(t, runtime.value.calibration.multiplier(t.kind, t.className)).roundToInt()
+                    val left = minOf(Planner.remaining(t, calibration.multiplierFor(t)), Planner.remaining(theApps, calibration.multiplierFor(theApps))).roundToInt()
                     if (left <= 0) return@map t
                     credited = minOf(done.minutes, left)
                     t.copy(photoMin = t.photoMin + credited, photosCounted = counted(credited))
@@ -470,29 +475,42 @@ class Focus(
             // Reading or archiving an email, or an event passing, isn't work that earns time. Free
             // time is for the day the work was confirmed: given late (the app stopped first), after
             // that day is over, it has gone as the rest of that day's has.
-            val earned = fresh.filter { it.kind != Kind.Info && it.kind != Kind.Event && today(it.doneAt ?: now) == today }.sumOf { task ->
-                // In the plan's units, as its sessions earned theirs: the estimate as calibrated.
-                val multiplier = state.calibration.multiplier(task.kind, task.className)
-                // Vocabulary its deck tasks hold earns its time through them, not again here: all of
-                // it once they're done, else as far as their sessions and photo checks went. No more,
-                // as a deck left unfinished when the work closes is dropped, and mustn't take that
-                // time with it.
-                val delegated = task.subSteps.filter { it.ankiSections.isNotEmpty() }.sumOf { step ->
-                    val holding = step.ankiSections.mapNotNull { decks[task.id]?.get(it) }
-                    when {
-                        holding.size < step.ankiSections.size -> 0.0
-                        holding.all { it.status == Status.Done } -> step.minutes * multiplier
-                        else -> minOf(step.minutes * multiplier, holding.sumOf { it.workedMin + it.photoMin }.toDouble())
-                    }
-                }
+            // Nor is a task of your own you said is done: no source confirms it (your call, 12 Oct); its
+            // sessions earned their time.
+            val earned = fresh.filter { it.kind != Kind.Info && it.kind != Kind.Event && it.source != Source.Own && today(it.doneAt ?: now) == today }.sumOf { task ->
                 // Less what sessions and photo checks already earned time for: as stored while it's still
                 // this completion, as the completion had it once the task has reopened.
                 val stored = tasks.value.tasks.firstOrNull { it.id == task.id && it.doneAt == task.doneAt }
                 val photos = stored?.photoMin ?: task.photoMin
-                // Nor for blocks you ticked off by hand: done, but not timed or checked (bar what was
-                // timed on them first, which counts as worked).
-                val hand = (stored ?: task).subSteps.filter { it.done && it.byHand }.sumOf { (it.minutes * multiplier - it.timedMin).coerceAtLeast(0.0) }
-                val remaining = Planner.remaining(task.copy(workedMin = worked(task), photoMin = photos), multiplier) - delegated - hand
+                val counted = task.copy(workedMin = worked(task), photoMin = photos)
+
+                /**
+                 * What's owed for [t]: what was left of it, less what its decks and your ticks account
+                 * for, all in the plan's units (the estimate as calibrated, its steps as scaled), as its
+                 * sessions earned theirs.
+                 */
+                fun owed(t: TaskItem): Double {
+                    val multiplier = state.calibration.stepMultiplierFor(t)
+                    // Vocabulary its deck tasks hold earns its time through them, not again here: all
+                    // of it once they're done, else as far as their sessions and photo checks went. No
+                    // more, as a deck left unfinished when the work closes is dropped, and mustn't take
+                    // that time with it.
+                    val delegated = t.subSteps.filter { it.ankiSections.isNotEmpty() }.sumOf { step ->
+                        val holding = step.ankiSections.mapNotNull { decks[t.id]?.get(it) }
+                        when {
+                            holding.size < step.ankiSections.size -> 0.0
+                            holding.all { it.status == Status.Done } -> step.minutes * multiplier
+                            else -> minOf(step.minutes * multiplier, holding.sumOf { it.workedMin + it.photoMin }.toDouble())
+                        }
+                    }
+                    // Nor for blocks you ticked off by hand: done, but not timed or checked (bar what
+                    // was timed on them first, which counts as worked).
+                    val hand = (stored?.subSteps ?: t.subSteps).filter { it.done && it.byHand }.sumOf { (it.minutes * multiplier - it.timedMin).coerceAtLeast(0.0) }
+                    return Planner.remaining(t, state.calibration.multiplierFor(t)) - delegated - hand
+                }
+                // By your minutes or by the app's estimate, each in its own scale, the less: raising a
+                // task's minutes plans more time for it, but can't make finishing it earn more.
+                val remaining = minOf(owed(counted), owed(counted.copy(userEffortMin = null)))
                 Credit.forCompletion(remaining.roundToInt().coerceAtLeast(0), ratio)
             }
             state.copy(
@@ -521,6 +539,7 @@ class Focus(
                         doneAt = task.doneAt ?: now,
                         byHand = handMinutes(task) > 0,
                         photo = photoMinutes(task) > 0,
+                        yourEstimate = task.yourMinutes,
                     )
                 },
             ).trimmed(now)
@@ -530,6 +549,9 @@ class Focus(
 
     companion object {
         private const val PLAN_TTL_MS = 60_000L
+
+        /** Whether [task]'s blocks can be ticked off by hand: an email's, or one of your own's, which are yours to say. */
+        fun tickable(task: TaskItem): Boolean = task.source == Source.Gmail || task.source == Source.Own
 
         /** How many sessions a task remembers counting: far more than one piece of work has. */
         private const val MAX_COUNTED = 100

@@ -53,11 +53,17 @@ class MainActivity : ComponentActivity() {
     /** A tab asked for by an intent that reached this activity already open (it's singleTop). */
     private val askedTab = mutableStateOf<Int?>(null)
 
+    /** A task to open in Tasks ([EXTRA_TASK]), till Tasks has opened it. */
+    private val askedTask = mutableStateOf<String?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         val graph = AppGraph.get(this)
-        if (savedInstanceState == null) openSetupIfAsked(intent)
+        if (savedInstanceState == null) {
+            openSetupIfAsked(intent)
+            askedTask.value = intent.getStringExtra(EXTRA_TASK)
+        }
         setContent { AppTheme { Main(graph) } }
     }
 
@@ -79,6 +85,7 @@ class MainActivity : ComponentActivity() {
         setIntent(intent)
         openSetupIfAsked(intent)
         if (intent.hasExtra(EXTRA_TAB)) askedTab.value = intent.getIntExtra(EXTRA_TAB, 0)
+        intent.getStringExtra(EXTRA_TASK)?.let { askedTask.value = it }
     }
 
     @OptIn(ExperimentalMaterial3Api::class)
@@ -98,7 +105,7 @@ class MainActivity : ComponentActivity() {
         val runtime by graph.runtime.state.collectAsStateWithLifecycle()
         val settings by graph.settings.state.collectAsStateWithLifecycle()
         // What Setup would show in red, as a dot on the menu: a source failing, Claude's key, protection, a file unreadable.
-        val attention = Source.entries.any { tasks.status(it).error != null } ||
+        val attention = Source.SYNCED.any { tasks.status(it).error != null } ||
             (runtime.aiUsage.keyProblem != null && settings.aiEnabled && settings.aiKeyActive) ||
             runtime.protection.problems.isNotEmpty() || runtime.unreadable.isNotEmpty()
         var menu by remember { mutableStateOf(false) }
@@ -140,7 +147,7 @@ class MainActivity : ComponentActivity() {
                 }
                 when (tab) {
                     0 -> TodayScreen(graph, this@MainActivity)
-                    1 -> TasksScreen(graph, this@MainActivity)
+                    1 -> TasksScreen(graph, this@MainActivity, askedTask.value) { askedTask.value = null }
                     else -> StatsScreen(graph)
                 }
             }
@@ -150,6 +157,9 @@ class MainActivity : ComponentActivity() {
     companion object {
         /** The tab to open on: [TAB_TASKS] from a dropped plan's alert; or [OPEN_SETUP], Setup over the plan, from a protection or key alert. */
         const val EXTRA_TAB = "tab"
+
+        /** A task to open in Tasks, by id: one of your own's Open (2.0.0). */
+        const val EXTRA_TASK = "task"
         const val TAB_TASKS = 1
         const val OPEN_SETUP = 3
         private val TABS = listOf("Plan", "Tasks", "Stats")
