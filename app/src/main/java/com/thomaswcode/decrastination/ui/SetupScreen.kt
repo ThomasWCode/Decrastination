@@ -176,7 +176,7 @@ fun SetupScreen(graph: AppGraph, activity: Activity) {
                 done = settings.aiEnabled && settings.aiKeyActive && Secret.AnthropicApiKey in secrets && usage.lastError == null && usage.keyProblem == null,
                 detail = when {
                     Secret.AnthropicApiKey !in secrets -> "No API key: the rules do what they can, and nothing is sent to Claude."
-                    !settings.aiKeyActive -> "Key saved; it waits like switching Claude on (Settings lists when it applies), so nothing is sent yet."
+                    !settings.aiKeyActive -> "Key saved, not in use yet: enter it again to use it."
                     !settings.aiEnabled -> "Key saved; switched off in Settings, so nothing is sent."
                     // The key or its account can't be used: said with what puts it right.
                     usage.keyProblem != null -> "${usage.keyProblem.says}. ${usage.keyProblem.fix}: the rules stand in, and it's tried again an hour after each failed try."
@@ -211,7 +211,7 @@ fun SetupScreen(graph: AppGraph, activity: Activity) {
             SetupItem(
                 title = "Restore",
                 done = null,
-                detail = restoreNote ?: "From a backup. Once protection is armed, only the settings (one that loosens blocking waits) and your instructions (one changing a due date waits for your dad's code).",
+                detail = restoreNote ?: "From a backup. Once protection is armed, a setting that loosens blocking waits, as one changed in Settings does.",
                 action = "Import" to { importer.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) },
             )
         }
@@ -226,7 +226,7 @@ fun SetupScreen(graph: AppGraph, activity: Activity) {
                 // its alert goes.
                 graph.runtime.update { it.copy(aiUsage = it.aiUsage.newKey()) }
                 ModelAlerts.keyFixed(activity)
-                // Put to use as switching Claude on is: at once unarmed, after the wait armed.
+                // Put to use at once, armed or not: Claude works on the plan, not the blocker (12 Oct).
                 graph.changeSettings { it.copy(aiKeyActive = true) }
                 // A new key for one already in use: straight to work.
                 if (graph.claudeKey() != null) EnrichWorker.enqueue(activity)

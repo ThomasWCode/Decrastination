@@ -136,20 +136,18 @@ object Backups {
     /**
      * The instructions to add from a backup's ([backed], those in use), beside those [here], each as
      * applying it here would go, in the order they were applied: one already here isn't added; one
-     * that changes a due date, once [armed], comes back read, waiting for your dad's code; one that
-     * would have tasks wait for each other in a circle comes back unclear, saying so. The rest are
-     * in use at once.
+     * that would have tasks wait for each other in a circle comes back unclear, saying so. The rest,
+     * due dates as well, armed or not (12 Oct), are in use at once.
      */
-    fun restoredInstructions(backed: List<Instruction>, here: List<Instruction>, armed: Boolean): List<Instruction> {
+    fun restoredInstructions(backed: List<Instruction>, here: List<Instruction>): List<Instruction> {
         val added = mutableListOf<Instruction>()
         for (instruction in backed.filter { it.state == InstructionStatus.Applied }.sortedBy { it.appliedAt ?: it.at }) {
             if ((here + added).any { it.id == instruction.id }) continue
             val inUse = InstructionState(here + added).applied
-            added += when {
-                Instructions.makesCircle(instruction.changes, inUse) ->
-                    instruction.copy(state = InstructionStatus.Unclear, appliedAt = null, note = "It would have tasks wait for each other in a circle with those here, so it wasn't applied")
-                armed && Instructions.needsCode(instruction.changes) -> instruction.copy(state = InstructionStatus.Understood, appliedAt = null)
-                else -> instruction
+            added += if (Instructions.makesCircle(instruction.changes, inUse)) {
+                instruction.copy(state = InstructionStatus.Unclear, appliedAt = null, note = "It would have tasks wait for each other in a circle with those here, so it wasn't applied")
+            } else {
+                instruction
             }
         }
         return added
