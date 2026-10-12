@@ -12,6 +12,8 @@ import com.thomaswcode.decrastination.block.Sessions
 import com.thomaswcode.decrastination.core.About
 import com.thomaswcode.decrastination.core.Change
 import com.thomaswcode.decrastination.core.ChangeType
+import com.thomaswcode.decrastination.core.ChatMessage
+import com.thomaswcode.decrastination.core.ChatState
 import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.core.Instruction
 import com.thomaswcode.decrastination.core.InstructionState
@@ -20,6 +22,9 @@ import com.thomaswcode.decrastination.core.Instructions
 import com.thomaswcode.decrastination.core.OwnTask
 import com.thomaswcode.decrastination.core.OwnTasks
 import com.thomaswcode.decrastination.core.Plan
+import com.thomaswcode.decrastination.core.Proposal
+import com.thomaswcode.decrastination.core.ProposalState
+import com.thomaswcode.decrastination.core.Speaker
 import com.thomaswcode.decrastination.core.Planner
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Status
@@ -41,6 +46,8 @@ import com.thomaswcode.decrastination.data.SecretStore
 import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.data.TaskState
 import com.thomaswcode.decrastination.enrich.AiUsage
+import com.thomaswcode.decrastination.enrich.ChatPrompts
+import com.thomaswcode.decrastination.enrich.ChatReader
 import com.thomaswcode.decrastination.enrich.ClaudeEnricher
 import com.thomaswcode.decrastination.enrich.ClaudeReviewer
 import com.thomaswcode.decrastination.enrich.EnrichWorker
@@ -115,17 +122,20 @@ class AppGraph private constructor(context: Context) {
     /** Your instructions about tasks, events and days, and what Claude read them as ([Instructions]). */
     val instructions = JsonStore(File(app.filesDir, "instructions.json"), InstructionState.serializer(), ::InstructionState)
 
+    /** Your chat with Claude (2.0.0, Q29): what you said, its answers, and what became of its cards. */
+    val chat = JsonStore(File(app.filesDir, "chat.json"), ChatState.serializer(), ::ChatState)
+
     init {
         // Files that couldn't be read whole at this start: kept for Setup to say, till you've seen them.
         // On record before anything else runs, and only then is a bad file replaced by what was kept
         // of it: a start cut short before then finds it again, and says it (once: its copy is the same).
-        val found = listOfNotNull(tasks.problem, settings.problem, secrets.problem, runtime.problem, log.problem, instructions.problem)
+        val found = listOfNotNull(tasks.problem, settings.problem, secrets.problem, runtime.problem, log.problem, instructions.problem, chat.problem)
         if (found.isNotEmpty()) {
             found.forEach { Log.w(TAG, "${it.file} couldn't be read whole; set aside as ${it.copy}") }
             runBlocking {
                 runCatching {
                     runtime.update { it.withUnreadable(found) }
-                }.onSuccess { listOf(tasks, settings, runtime, log, instructions).forEach { it.keepRecovered() } }
+                }.onSuccess { listOf(tasks, settings, runtime, log, instructions, chat).forEach { it.keepRecovered() } }
                     .onFailure { Log.w(TAG, "Couldn't keep what was found unreadable", it) }
             }
         }
@@ -417,6 +427,8 @@ class AppGraph private constructor(context: Context) {
         syncer.addAfterEverySync { layTaskOverrides() }
         // Your own tasks long done go, as a source's do.
         syncer.addAfterEverySync { pruneOwn() }
+        // A question of yours still waiting (Claude was off, resting, or the app stopped): tried again.
+        syncer.addAfterEverySync { if (chat.value.unanswered != null) answerChat() }
         // One of your own whose steps are all done (ticked, or worked through in sessions) is finished.
         scope.launch {
             tasks.state.map { s -> s.tasks.filter { it.source == Source.Own && it.isOpen && it.subSteps.isNotEmpty() && it.subSteps.all { st -> st.done } }.map { it.id } }
@@ -449,6 +461,7 @@ class AppGraph private constructor(context: Context) {
                 if (on) {
                     EnrichWorker.enqueue(app)
                     readInstructions()
+                    answerChat()
                 }
             }
         }
@@ -457,6 +470,12 @@ class AppGraph private constructor(context: Context) {
         scope.launch {
             layTaskOverrides()
             readInstructions()
+            // A question of yours the app stopped before answering, once the calendar's read, as it's
+            // told the fortnight's events.
+            if (chat.value.unanswered != null) {
+                runCatching { CalendarTime.refresh(app) }.onFailure { Log.w(TAG, "Reading the calendar failed", it) }
+                answerChat()
+            }
         }
         runCatching {
             app.contentResolver.registerContentObserver(
@@ -542,7 +561,7 @@ class AppGraph private constructor(context: Context) {
         val told = buildList {
             if (own > 0) add("$own task${if (own == 1) "" else "s"} of your own")
             if (restored > 0) add("$restored instruction${if (restored == 1) "" else "s"} restored")
-            if (unclear > 0) add("$unclear left unapplied in Instructions, as ${if (unclear == 1) "it" else "they"} would have tasks wait for each other in a circle")
+            if (unclear > 0) add("$unclear left unapplied under Ask Claude's Your changes, as ${if (unclear == 1) "it" else "they"} would have tasks wait for each other in a circle")
         }.takeIf { it.isNotEmpty() }?.joinToString(", ", prefix = " ", postfix = ".") ?: ""
         // This month's spend on Claude, armed or not: it can only rise, so the cap isn't given again.
         val month = AiUsage.monthOf(clock.now(), clock.zone())
@@ -871,7 +890,16 @@ class AppGraph private constructor(context: Context) {
     suspend fun deleteOwnTask(taskId: String): Boolean {
         if (focus.session?.taskId == taskId) return false
         tasks.update { state -> state.copy(tasks = state.tasks.filterNot { it.id == taskId && it.source == Source.Own }) }
+        forgetCards(setOf(taskId))
         return true
+    }
+
+    /** Chat cards that added the tasks [gone] say so no more: they can be added again. */
+    private suspend fun forgetCards(gone: Set<String>) {
+        if (chat.value.messages.none { m -> m.proposals.any { it.made in gone } }) return
+        chat.update { s ->
+            s.copy(messages = s.messages.map { m -> m.copy(proposals = m.proposals.map { p -> if (p.made in gone) p.copy(state = ProposalState.Proposed, made = null) else p }) })
+        }
     }
 
     /**
@@ -881,8 +909,10 @@ class AppGraph private constructor(context: Context) {
     private suspend fun pruneOwn() {
         val now = clock.now()
         fun old(t: TaskItem) = t.source == Source.Own && !t.isOpen && now - (t.doneAt ?: t.lastSeenAt) >= com.thomaswcode.decrastination.core.Merge.KEEP_FINISHED_MS
-        if (tasks.value.tasks.none(::old)) return
+        val gone = tasks.value.tasks.filter(::old).map { it.id }.toSet()
+        if (gone.isEmpty()) return
         tasks.update { state -> state.copy(tasks = state.tasks.filterNot(::old)) }
+        forgetCards(gone)
     }
 
     /** Has Claude read [id] again (written again, or after it found it unclear). */
@@ -945,6 +975,226 @@ class AppGraph private constructor(context: Context) {
     }
 
     private fun instructionReader(): InstructionReader? = claudeKey()?.let { InstructionReader(it, clock.zone(), endpoint()) }
+
+    /** Held while the chat is answered, so each message is answered once. */
+    private val answering = Mutex()
+
+    /**
+     * Your [text] to Claude about [about] (2.0.0, Q29): kept, then answered ([answerChat]). Not while
+     * one of yours still waits for its answer: false then, and nothing's kept.
+     */
+    suspend fun ask(text: String, about: About = About()): Boolean {
+        val words = text.trim().take(ChatPrompts.MAX_TEXT)
+        if (words.isEmpty()) return false
+        var added = false
+        chat.update { state ->
+            if (state.unanswered != null) {
+                state
+            } else {
+                added = true
+                state.copy(messages = (state.messages + ChatMessage(java.util.UUID.randomUUID().toString(), Speaker.You, words, clock.now(), about)).takeLast(MAX_CHAT))
+            }
+        }
+        if (added) scope.launch { answerChat() }
+        return added
+    }
+
+    /**
+     * Claude's answer to your message waiting for one: a call made as the enrichment's are, under the
+     * cap and resting after a failure. While Claude can't be asked, your message says why, and it's
+     * answered once it can be (the chat opened again, *Try again*, or Claude back from its rest).
+     */
+    suspend fun answerChat(retry: Boolean = false): Unit = answering.withLock {
+        val waiting = chat.value.unanswered ?: return@withLock
+        // Answered with nothing usable, it waits for your Try again ([retry]): never asked by itself.
+        if (waiting.stuck && !retry) return@withLock
+        var stuck = false
+        val note = modelCalls.withLock call@{
+            // Taken back (or the chat cleared) while this waited its turn: nothing to ask.
+            if (chat.value.unanswered?.id != waiting.id) return@withLock
+            modelHold()?.let { return@call because(it) }
+            val key = claudeKey() ?: return@call because(ModelHold.Off)
+            // Being asked now: whatever it said before (a failed call) is gone.
+            chat.update { s -> s.copy(messages = s.messages.map { if (it.id == waiting.id) it.copy(note = null, stuck = false) else it }) }
+            val at = clock.now()
+            val month = AiUsage.monthOf(at, clock.zone())
+            val result = runCatching { ChatReader(key, clock.zone(), endpoint()).answer(chat.value.messages, tasks.value.tasks, calendarTime.events, instructions.value.applied, at) }
+                .onFailure { error ->
+                    Log.w(TAG, "Claude's answer in the chat failed", error)
+                    modelFailed(error, month, at)
+                }
+                .getOrNull() ?: return@call "Claude's call failed: it's tried again within the hour, or now with Try again"
+            modelWorked(result.costUsd, result.refused, month, at)
+            val reading = result.reading ?: run {
+                stuck = true
+                return@call if (result.refused) "Claude declined to answer that: Try again, or put it another way" else "Claude's answer couldn't be read: Try again"
+            }
+            val reply = ChatMessage(
+                id = java.util.UUID.randomUUID().toString(),
+                from = Speaker.Claude,
+                text = reading.reply,
+                at = clock.now(),
+                proposals = reading.tasks.map { Proposal(java.util.UUID.randomUUID().toString(), task = it) } +
+                    listOfNotNull(
+                        reading.changes.takeIf { it.isNotEmpty() }?.let { changes ->
+                            val byId = tasks.value.tasks.associateBy { it.id }
+                            Proposal(java.util.UUID.randomUUID().toString(), changes = changes, lines = changes.map { Instructions.describe(it, byId, clock.zone()) })
+                        },
+                    ),
+                note = reading.leftOut.takeIf { it.isNotEmpty() }?.let { "Left out, as the app can't use it: ${it.joinToString("; ")}" },
+            )
+            chat.update { s ->
+                // Only while it's still the one waiting: taken back meanwhile, the answer goes with it.
+                if (s.unanswered?.id != waiting.id) {
+                    s
+                } else {
+                    s.copy(messages = (s.messages.map { if (it.id == waiting.id) it.copy(answeredAt = reply.at, note = null) else it } + reply).takeLast(MAX_CHAT))
+                }
+            }
+            null
+        }
+        // Why it waits, said once: written only when it changes, as this runs after every sync.
+        if (note != null && chat.value.unanswered?.let { it.id == waiting.id && (it.note != note || it.stuck != stuck) } == true) {
+            chat.update { s -> s.copy(messages = s.messages.map { if (it.id == waiting.id && it.answeredAt == null) it.copy(note = note, stuck = stuck) else it }) }
+        }
+    }
+
+    /** Your message still waiting for Claude taken back, unanswered. */
+    suspend fun withdrawQuestion() {
+        chat.update { s -> s.unanswered?.let { w -> s.copy(messages = s.messages.filterNot { it.id == w.id }) } ?: s }
+    }
+
+    /** The chat cleared. What its cards made (your tasks, changes in use) stays. */
+    suspend fun clearChat() {
+        chat.update { ChatState() }
+    }
+
+    /**
+     * Card [proposalId] of Claude's message [messageId] made, at once, armed or not (2.0.0): a task
+     * of your own added (as [edited] if you changed it first), or its changes applied as an
+     * instruction in the words that asked for them, so they're listed with the rest and taken back
+     * there too. Says what went wrong on the card, if anything did.
+     */
+    suspend fun applyProposal(messageId: String, proposalId: String, edited: OwnTask? = null): Unit = withContext(NonCancellable) { proposing.withLock { apply(messageId, proposalId, edited) } }
+
+    /** Held while a card is made, undone or set aside, so a second tap finds it as the first left it. */
+    private val proposing = Mutex()
+
+    private suspend fun apply(messageId: String, proposalId: String, edited: OwnTask?) {
+        val messages = chat.value.messages
+        val message = messages.firstOrNull { it.id == messageId } ?: return
+        val proposal = message.proposals.firstOrNull { it.id == proposalId && it.state != ProposalState.Applied } ?: return
+        // The message of yours it answered: its words name the instruction.
+        val asked = messages.take(messages.indexOf(message)).lastOrNull { it.from == Speaker.You }
+        var made: String? = null
+        var note: String? = null
+        var before = emptyMap<String, OwnTask>()
+        val task = edited ?: proposal.task
+        if (task != null) {
+            val id = java.util.UUID.randomUUID().toString()
+            if (saveOwnTask(id, task)) made = TaskItem.id(Source.Own, id) else note = OwnTasks.problem(task) ?: "It couldn't be added"
+        } else if (proposal.changes.isNotEmpty()) {
+            val id = java.util.UUID.randomUUID().toString()
+            // Your own tasks it changes, as they are: made on them, the changes are undone by putting them back.
+            val own = tasks.value.tasks.filter { it.source == Source.Own }.associateBy { it.id }
+            before = proposal.changes.filter { it.type in OwnTasks.MADE_ON_IT }.mapNotNull { it.taskId }.distinct()
+                .mapNotNull { tid -> own[tid]?.let { tid to OwnTasks.draftOf(it) } }.toMap()
+            val instruction = Instruction(id, asked?.text ?: message.text, asked?.about ?: About(), clock.now(), state = InstructionStatus.Understood, changes = proposal.changes)
+            instructions.update { it.copy(instructions = it.instructions + instruction) }
+            applyInstruction(id)
+            val after = instructions.value.instructions.firstOrNull { it.id == id }
+            when {
+                // All made on tasks of your own, so there's nothing left of it to keep.
+                after == null -> made = null
+                after.state == InstructionStatus.Applied -> made = id
+                else -> {
+                    note = after.note ?: "It couldn't be applied"
+                    before = emptyMap()
+                    deleteInstruction(id)
+                }
+            }
+        }
+        chat.update { s ->
+            s.copy(
+                messages = s.messages.map { m ->
+                    if (m.id != messageId) m else m.copy(proposals = m.proposals.map { p ->
+                        if (p.id != proposalId) {
+                            p
+                        } else if (note == null) {
+                            // As added: changed first, it's yours that the card shows and the chat recalls.
+                            p.copy(state = ProposalState.Applied, made = made, before = before, note = null, task = task ?: p.task)
+                        } else {
+                            p.copy(note = note)
+                        }
+                    })
+                },
+            )
+        }
+    }
+
+    /**
+     * Card [proposalId] undone: the task it added deleted, or its changes taken back. One whose
+     * changes were made on tasks of your own can't be (they're changed on the tasks' pages).
+     */
+    suspend fun undoProposal(messageId: String, proposalId: String): Unit = proposing.withLock {
+        val proposal = chat.value.messages.firstOrNull { it.id == messageId }?.proposals?.firstOrNull { it.id == proposalId && it.state == ProposalState.Applied } ?: return@withLock
+        val made = proposal.made
+        if (made == null && proposal.before.isEmpty()) return@withLock
+        val note = if (proposal.task != null) {
+            if (made == null || deleteOwnTask(made)) null else "Stop its focus session first"
+        } else {
+            // What it changed on your own tasks put back as it was (no instruction held those changes):
+            // only the fields that still hold what it set, so a later change of yours stands. One that
+            // can't be (the form wouldn't take it now) keeps the card applied, saying why.
+            // Every one checked before any is saved: all go back, or none and the card says why.
+            val backs = proposal.before.mapNotNull { (id, was) ->
+                val t = tasks.value.tasks.firstOrNull { it.id == id } ?: return@mapNotNull null
+                val back = OwnTasks.restored(OwnTasks.draftOf(t), was, proposal.changes.filter { it.taskId == id })
+                (t to back).takeIf { back != OwnTasks.draftOf(t) }
+            }
+            val stuck = backs.mapNotNull { (t, back) -> OwnTasks.problem(back)?.let { "“${t.title}” can't go back: ${it.replaceFirstChar(Char::lowercase)}" } } +
+                // And its instruction, which taking back mustn't leave tasks waiting for each other in a circle.
+                listOfNotNull(made?.takeIf { m -> Instructions.makesCircle(emptyList(), instructions.value.applied.filterNot { it.id == m }) }
+                    ?.let { "taking its changes back would bring back an earlier instruction that has tasks waiting for each other in a circle" })
+            if (stuck.isNotEmpty()) {
+                stuck.joinToString("; ")
+            } else {
+                backs.forEach { (t, back) -> saveOwnTask(t.sourceId, back) }
+                made?.let { deleteInstruction(it) }
+                made?.let { m -> instructions.value.instructions.firstOrNull { it.id == m }?.note }
+            }
+        }
+        chat.update { s ->
+            s.copy(
+                // Every message's cards: a later one may be in a later reply.
+                messages = s.messages.map { m ->
+                    m.copy(proposals = m.proposals.map { p ->
+                        when {
+                            m.id == messageId && p.id == proposalId -> if (note == null) p.copy(state = ProposalState.Proposed, made = null, before = emptyMap()) else p.copy(note = note)
+                            // Undone, its values are gone from the tasks: a card applied after it, which
+                            // replaced them, puts back what this one replaced instead, if it's undone too.
+                            note == null && p.state == ProposalState.Applied && p.before.keys.any { it in proposal.before } ->
+                                p.copy(before = p.before.mapValues { (id, was) -> proposal.before[id]?.let { OwnTasks.relayered(was, proposal.changes.filter { it.taskId == id }, it) } ?: was })
+                            else -> p
+                        }
+                    })
+                },
+            )
+        }
+    }
+
+    /** Card [proposalId] set aside (or, [discarded] false, brought back). */
+    suspend fun discardProposal(messageId: String, proposalId: String, discarded: Boolean = true): Unit = proposing.withLock {
+        chat.update { s ->
+            s.copy(
+                messages = s.messages.map { m ->
+                    if (m.id != messageId) m else m.copy(proposals = m.proposals.map { p ->
+                        if (p.id != proposalId || p.state == ProposalState.Applied) p else p.copy(state = if (discarded) ProposalState.Discarded else ProposalState.Proposed)
+                    })
+                },
+            )
+        }
+    }
 
     /** Held from checking an instruction to applying it, so two applied at once can't both pass the check. */
     private val applying = Mutex()
@@ -1047,6 +1297,23 @@ class AppGraph private constructor(context: Context) {
         val was = instructions.value.instructions.firstOrNull { it.id == id }
         instructions.update { state -> state.copy(instructions = state.instructions.filterNot { it.id == id }) }
         if (was?.state == InstructionStatus.Applied) layInstructions()
+        // A chat card that made it, taken back here (under Your changes): the card says so, and the chat
+        // recalls it. What it made on your own tasks stands, still undone from the card.
+        if (chat.value.messages.any { m -> m.proposals.any { it.made == id } }) {
+            chat.update { s ->
+                s.copy(
+                    messages = s.messages.map { m ->
+                        m.copy(proposals = m.proposals.map { p ->
+                            when {
+                                p.made != id -> p
+                                p.before.isEmpty() -> p.copy(state = ProposalState.Proposed, made = null)
+                                else -> p.copy(made = null)
+                            }
+                        })
+                    },
+                )
+            }
+        }
     }
 
     /**
@@ -1107,6 +1374,9 @@ class AppGraph private constructor(context: Context) {
 
         /** The most model calls one enrichment run makes: the rest wait for the next. */
         const val MAX_MODEL_CALLS = 20
+
+        /** The chat's messages kept: the newest. */
+        private const val MAX_CHAT = 200
 
         // It holds only the application context, which lives as long as the process anyway.
         @SuppressLint("StaticFieldLeak")

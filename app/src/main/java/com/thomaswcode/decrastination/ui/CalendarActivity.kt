@@ -145,7 +145,7 @@ class CalendarActivity : ComponentActivity() {
                                 counted(judgement) + by
                             }
                             Text(line, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
-                            // Unanswered, or your answer to change; an instruction's is taken back in Instructions.
+                            // Unanswered, or your answer to change; an instruction's is taken back in Ask Claude, under Your changes.
                             val changing = key in changingAnswers
                             if (key !in yours && (judgement == EventJudge.Judgement.Ask || changing)) {
                                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -171,7 +171,7 @@ class CalendarActivity : ComponentActivity() {
         writing?.let { w ->
             InstructionDialog(w.what, onDismiss = { writing = null }) { text ->
                 writing = null
-                sendInstruction(this, graph, text, w.about)
+                sendInstruction(this, text, w.about)
             }
         }
     }

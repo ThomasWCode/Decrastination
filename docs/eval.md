@@ -29,3 +29,20 @@ Elsewhere (CI, another PC) the two tests find no `private/eval` and are skipped.
 ## Labels
 
 The labels are yours: they were checked with you on 11 Oct (the work-experience email must name STEM Potential, Rosalind Franklin and Imperial Work Experience among its blocks). Change one in `make_cases.py` and run it again; keep held-out cases aside if a prompt is being tuned against these.
+
+## The chat (2.0.0)
+
+Ten messages to *Ask Claude*, sent as the app sends them: the exact system prompt, schema and turns built from the phone's `tasks.json` and `instructions.json` (pulled into `private/eval-chat/`, addresses redacted) by a throwaway JVM test kept out of the repo, each answered by an Opus subagent, and each answer put through `ChatAnswers.parse`. 12 Oct, against `ChatPrompts` as committed in #30: all ten read, and each did what was asked.
+
+| Message | What came back |
+|---|---|
+| "I need to write my UCAS personal statement by 1 December, it'll take about 8 hours" | a task due 1 Dec 23:59, 8 h in four steps |
+| "the bridge and balances physics will take 90 minutes" | Minutes: 1 h 30 min (now 1 h 40 min) |
+| "move the German vocabulary and translation to Thursday" | due Thu 15 Oct 23:59 |
+| "I'm out on Saturday evening from 7" | Sat 17 Oct, 19:00–23:59 busy |
+| "remind me to buy mum a birthday present before Sunday" | an Admin task due Sat 23:59, 1 h, the guess said |
+| "I've got a test soon" | a question back (which subject, which day), nothing to apply |
+| "what's due tomorrow?" | the answer from the list, nothing to apply |
+| "this will take 45 min" (about *Call with Jags after school*) | Minutes: 45 min (now 5 min); an instruction it couldn't read before |
+| "I've got a test soon" → "When is it…?" → "Friday, maths mechanics, about 3 hours of revision" | a Revision task (Maths), 3 h, due Thu |
+| "I can't do any work on Wednesday" | Wed 14 Oct: no work |

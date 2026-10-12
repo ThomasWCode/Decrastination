@@ -46,12 +46,10 @@ object InstructionPrompts {
     private const val MAX_TITLE = 100
 
     // Before the schemas that use it: an object's properties are made in order.
-    private val STRING = mapOf("type" to "string")
+    internal val STRING = mapOf("type" to "string")
 
-    val SYSTEM = """
-        You turn one instruction from a UK sixth-form student (Year 12) into changes for their planner app. The app plans their homework and other tasks into the evenings before each is due, counts their calendar's events as time they can't work, and blocks distracting apps while work is due. The student writes the instruction about one task, one calendar event, one day, or nothing in particular, and checks your reading before it's applied.
-
-        Give only the changes the instruction asks for. The types:
+    /** The changes Claude can make, and how it reads dates for them: an instruction's and the chat's. */
+    internal val CHANGE_TYPES = """
         - NotATask: the task isn't work to plan (an email that only needs reading, something already dealt with). Needs taskId.
         - StartFrom: the task can't be started before a date. Needs taskId, date, and time if it gives one (else null: the start of that day).
         - After: the task can't be started until another listed task is done. Needs taskId and afterTaskId.
@@ -61,12 +59,23 @@ object InstructionPrompts {
         - DayLimit: the most minutes of work the student can do on a day: minutes (0 for none at all), and date (one day) or weekday (every such day).
         - BusyTime: a stretch of time the student can't work: time (its start, HH:MM) and endTime (HH:MM), and date or weekday.
 
-        Use the ids and event keys exactly as listed. Work out relative dates ("next Friday", "the weekend") from today; a weekday named alone ("on Saturday") means the next one, and only "every Saturday" or "on Saturdays" means each week. A stretch of days ("20 to 25 October", "this weekend") is one change per day. When the instruction is about the given task, event or day, the change is to it unless the instruction clearly names another. Leave every field a change type doesn't use null.
-
-        If the instruction can't be turned into these changes, or it's unclear which task, event or date it means, set understood to false, give no changes, and in question say in one short sentence what's unclear or what the app can't do. Otherwise understood is true and question is null.
+        Use the ids and event keys exactly as listed. Work out relative dates ("next Friday", "the weekend") from today; a weekday named alone ("on Saturday") means the next one, and only "every Saturday" or "on Saturdays" means each week. A stretch of days ("20 to 25 October", "this weekend") is one change per day. Leave every field a change type doesn't use null.
     """.trimIndent()
 
-    private val CHANGE = obj(
+    val SYSTEM = (
+        """
+        You turn one instruction from a UK sixth-form student (Year 12) into changes for their planner app. The app plans their homework and other tasks into the evenings before each is due, counts their calendar's events as time they can't work, and blocks distracting apps while work is due. The student writes the instruction about one task, one calendar event, one day, or nothing in particular, and checks your reading before it's applied.
+
+        Give only the changes the instruction asks for. The types:
+""" + CHANGE_TYPES.prependIndent("        ") + """
+
+        When the instruction is about the given task, event or day, the change is to it unless the instruction clearly names another.
+
+        If the instruction can't be turned into these changes, or it's unclear which task, event or date it means, set understood to false, give no changes, and in question say in one short sentence what's unclear or what the app can't do. Otherwise understood is true and question is null.
+    """
+        ).trimIndent()
+
+    internal val CHANGE = obj(
         "type" to mapOf("type" to "string", "enum" to ChangeType.entries.map { it.name }),
         "taskId" to nullable(STRING),
         "afterTaskId" to nullable(STRING),
@@ -132,14 +141,14 @@ object InstructionPrompts {
         }
     }.trimEnd()
 
-    private fun obj(vararg properties: Pair<String, Any>): Map<String, Any> = mapOf(
+    internal fun obj(vararg properties: Pair<String, Any>): Map<String, Any> = mapOf(
         "type" to "object",
         "properties" to properties.toMap(),
         "required" to properties.map { it.first },
         "additionalProperties" to false,
     )
 
-    private fun nullable(schema: Map<String, Any>): Map<String, Any> = mapOf("anyOf" to listOf(schema, mapOf("type" to "null")))
+    internal fun nullable(schema: Map<String, Any>): Map<String, Any> = mapOf("anyOf" to listOf(schema, mapOf("type" to "null")))
 }
 
 /** Claude's reading of an instruction, checked: changes the app can make, or why there are none. */
@@ -155,8 +164,9 @@ object InstructionAnswers {
     @Serializable
     private data class Answer(val understood: Boolean, val question: String? = null, val changes: List<Given> = emptyList())
 
+    /** One change as Claude gives it, before it's checked ([change]). */
     @Serializable
-    private data class Given(
+    internal data class Given(
         val type: String,
         val taskId: String? = null,
         val afterTaskId: String? = null,
@@ -198,7 +208,8 @@ object InstructionAnswers {
         return Reading.Changes(changes)
     }
 
-    private fun change(g: Given, tasks: Map<String, TaskItem>, events: Map<String, String>, now: Long, zone: ZoneId): Change? {
+    /** [g] as a change the app can make, checked against the [tasks] and [events] there are; null if it can't be. */
+    internal fun change(g: Given, tasks: Map<String, TaskItem>, events: Map<String, String>, now: Long, zone: ZoneId): Change? {
         val type = ChangeType.entries.firstOrNull { it.name == g.type } ?: return null
         val task = g.taskId?.takeIf { it in tasks }
         return when (type) {
@@ -230,7 +241,7 @@ object InstructionAnswers {
     }
 
     /** Why [g] couldn't be used, in words. */
-    private fun problem(g: Given, tasks: Map<String, TaskItem>, events: Map<String, String>): String = when {
+    internal fun problem(g: Given, tasks: Map<String, TaskItem>, events: Map<String, String>): String = when {
         ChangeType.entries.none { it.name == g.type } -> "a change of a kind the app doesn't make"
         g.type in setOf("NotATask", "StartFrom", "DueBy", "Minutes", "After") && g.taskId !in tasks -> "it names a task that isn't listed"
         g.type == "After" -> "it waits on a task that isn't listed"

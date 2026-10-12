@@ -86,9 +86,10 @@
             android:taskAffinity="com.thomaswcode.decrastination.blocked" />
 
         <activity
-            android:name=".ui.InstructionsActivity"
+            android:name=".ui.AskActivity"
             android:exported="false"
-            android:label="Instructions"
+            android:label="Ask Claude"
+            android:launchMode="singleTop"
             android:windowSoftInputMode="adjustResize" />
         <activity
             android:name=".ui.CalendarActivity"
