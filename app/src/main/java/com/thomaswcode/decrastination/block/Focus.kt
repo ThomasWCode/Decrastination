@@ -367,10 +367,14 @@ class Focus(
                     if (!t.isOpen) return@map t
                     fun counted(minutes: Int) = (t.photosCounted + (done.id to minutes)).entries.toList().takeLast(MAX_COUNTED).associate { it.key to it.value }
                     // One of its own steps: ticked, once.
+                    // By your minutes or the app's estimate, the less, as a completion is: raising a
+                    // task's minutes plans more time for it, but can't make a photo earn more.
+                    val calibration = runtime.value.calibration
+                    val theApps = t.copy(userEffortMin = null)
                     if (done.step != null && t.subSteps.any { it.title == done.step }) {
                         val i = stepAt(t, done.stepIndex, done.step)
                         if (i < 0) return@map t
-                        credited = done.minutes
+                        credited = minOf(done.minutes, (t.subSteps[i].minutes * calibration.stepMultiplierFor(theApps)).roundToInt().coerceAtLeast(1))
                         return@map t.copy(
                             subSteps = t.subSteps.mapIndexed { j, s -> if (j == i) s.copy(done = true) else s },
                             photoMin = t.photoMin + done.minutes,
@@ -380,7 +384,7 @@ class Focus(
                     // A piece of time (the whole task, or a part the planner cut it into): counted
                     // against what's left of it as the plan measures it (calibrated), so the same
                     // work can't be counted past it.
-                    val left = Planner.remaining(t, runtime.value.calibration.multiplierFor(t)).roundToInt()
+                    val left = minOf(Planner.remaining(t, calibration.multiplierFor(t)), Planner.remaining(theApps, calibration.multiplierFor(theApps))).roundToInt()
                     if (left <= 0) return@map t
                     credited = minOf(done.minutes, left)
                     t.copy(photoMin = t.photoMin + credited, photosCounted = counted(credited))
