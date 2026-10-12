@@ -117,7 +117,7 @@ Still waiting for you:
   - a day (or every such weekday) holds at most so many minutes of work, or none;
   - you're busy at set times (once, or every week).
 - **You check first**: Instructions shows Claude's reading ("Sat 10 Oct: no work"), with *Apply* and *Discard*. One it can't make into changes says why, with *Write again*. One in use can be taken back, which undoes it.
-- **Protection** (your calls): while armed, applying or taking back a **change of due date** needs your dad's code (taking one back changes the date again). Days, times, events, hiding a task and holding one back apply when you tap Apply.
+- **Protection** (your calls): while armed, applying or taking back a **change of due date** needs your dad's code (taking one back changes the date again). Days, times, events, hiding a task and holding one back apply when you tap Apply. *Changed in 2.0.0: no change to the work needs his code.*
 - **Cost**: one Claude call per instruction, a few cents. With Claude off, resting or capped, it waits and says so.
 - **Tried on the phone, 9 Oct**: six instructions read through the real path. Claude read each one right:
   - "this cannot be done until the Prep… review is done" on Statics Prep;
@@ -163,7 +163,7 @@ Still waiting for you:
   - **Not planned**: folded at the foot of the Plan, the open work it leaves out, each with why: not open yet (its source's date), waiting for another task (as you said), opening after the plan's last day, or no room for it by then. Before, these just weren't there.
   - **The widget's red !**: at sizes too small for the red warning strip (2×1, 4×1), a red ! by ↻ says something's wrong; a tap opens the app.
 - **Calendar questions answered on the Calendar page** (#25): an event the plan can't judge shows *All of it / A few hours / None* where it's listed, so a dismissed notification no longer loses the question; your answer can be changed there too. An answer still holds for every event of that name.
-- **Quick changes in Tasks** (#25), with no Claude: on an open task, *Not a task*, *Can't start before…* and *Due on…* (a date picker; the time of day it's due stays). Each is kept as an instruction, listed in Instructions and taken back there; a due date needs your dad's code while armed, as an instruction's does, and isn't kept if the code isn't given.
+- **Quick changes in Tasks** (#25), with no Claude: on an open task, *Not a task*, *Can't start before…* and *Due on…* (a date picker; the time of day it's due stays). Each is kept as an instruction, listed in Instructions and taken back there; a due date needs your dad's code while armed, as an instruction's does, and isn't kept if the code isn't given. *Since 2.0.0 it applies at once.*
 - **Protection** (#26):
   - **A saved file that can't be read no longer disarms protection.** Before, a `settings.json` that failed to load (after an app update, say) started from the defaults, unarmed, and the app then took the device admin away. Now a file that can't be read whole keeps every part that still reads, settings that can't be read at all stay armed while the device admin is on, the bad file is kept, and Setup (and the Plan's *Needs a look*) says what happened until you tap *Got it*. Saved passwords and keys that can't be decrypted are told apart from none saved.
   - **Chrome's or Brave's address bar going unreadable is a protection problem**: if an update renamed it, blocked sites in that browser would go uncovered while all looked well. Ten visits running without the address read, and it's reported (the alert, the widget, *What's in place*), with the fix: block that browser outright in Settings.
@@ -191,3 +191,13 @@ Still waiting for you:
   - **The German assessment's plan is thrown away.** Claude split *Prep and Assessment preparation* into nine sensible steps, but one ("revise using the marked sheet", from 9 Oct) starts after the Teams due date (8 Oct, the hand-in) though the assessment is on 12 Oct. The app's checks then drop the whole split and plan 3½ hours as one block, already overdue. Either the prompt tells Claude no step can start after the due date, or the checks drop only that step.
   - **A note to self holding a recording** ("Imperial Physics Talk", a link to the talk's audio) is read as only to read (2 min); you labelled it something to do. The prompt could say a note to self that keeps something to go back to is something to do.
 
+
+## 2.0.0: an organiser first
+
+- **Your ask, 12 Oct**: much more an organiser than a blocker. Blocked apps stay blocked and free time is still earned, but nothing about the work is held back any more. Your answers are Q26 to Q31 in `docs/open-questions.md`.
+- **Only blocking waits** (#28). Once armed, the 24 hours and your dad's code guard only what would switch blocking off: taking an app, site or browser off its list, longer quiet hours, a later start on school days, more free time for your work, disarming, and the delay itself. Everything else applies when you save or tap *Apply*, armed or not:
+  - due dates, from an instruction, *Due on…* or a restored backup (no parent code any more);
+  - working hours, box length, safety margin, undated work, Anki's textbook and deadline;
+  - the Teams syncs, Claude (on, its key, its cap), and the reminders' times;
+  - a backup's log, what the app learned and your calendar answers (before, only while unarmed).
+- **What that leaves of the blocker**: moving work off today and tomorrow can lift the strict mode, but a blocked app then costs earned free time, and free time still comes only from focus sessions, photo checks and work its source says is done.

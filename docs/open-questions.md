@@ -41,6 +41,17 @@
 | Q24 | Testing on the phone | The widget goes on the 4th (last) home page, where there's room to try every size. Stay awake stays on; tests can run overnight. I may ask the Teams widget to sync at any hour when a test needs fresh data: the allowed hours govern only the app's own automatic syncs. |
 | Q25 | Credentials | Loaded from this PC's user environment into the app over adb (`scripts/load_credentials.py`): into its private storage, then its encrypted store, then the file is deleted. Never printed or committed. |
 
+## Answered 12 Oct 2026
+
+| # | Question | Decision |
+|---|---|---|
+| Q26 | An organiser first (2.0.0) | **Keep blocking and earned free time; never restrict the work.** Armed, only the blocker's own settings wait 24 hours or need your dad's code (what's blocked, quiet hours, school-day blocking's start, the free-time rate, disarming, the delay). Due dates, minutes, working hours, the planning numbers, Anki, the Teams syncs and Claude change at once. This replaces the 1.5.0 call that a due-date change needs his code. |
+| Q27 | Ticking a task off by hand | **No** for a task a source lists: its source still says when it's done. |
+| Q28 | Your own tasks | **Yes, in the app**, made with a form or by asking Claude. Finished with a *Done* button (only on your own tasks), which earns no free time; focus sessions on them earn as any do. |
+| Q29 | Asking Claude | **One chat** for everything about your work: it adds tasks and makes changes (minutes, due dates, days off…), asks when something's missing, and puts each on a card you apply. It replaces the Instructions page. |
+| Q30 | The Tasks tab | **By due date** (Overdue, Today, Tomorrow, This week, Later, No date), the source as a tag; a tap opens the task to change. |
+| Q31 | The Plan | **A task once a day**, opening into its pieces, rather than every piece in the list. |
+
 ## Answered 9 Oct 2026
 
 | # | Question | Decision |

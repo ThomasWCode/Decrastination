@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -20,7 +19,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -28,7 +26,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.core.About
@@ -36,7 +33,6 @@ import com.thomaswcode.decrastination.core.Instruction
 import com.thomaswcode.decrastination.core.InstructionStatus
 import com.thomaswcode.decrastination.core.Instructions
 import com.thomaswcode.decrastination.core.TaskItem
-import com.thomaswcode.decrastination.protect.Totp
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -75,48 +71,6 @@ fun InstructionDialog(what: String, initial: String = "", onDismiss: () -> Unit,
     )
 }
 
-/**
- * A code from your dad's authenticator for what [what] says, seen by him as he types it.
- * [onSubmit] checks it and does it, returning what went wrong, or null.
- */
-@Composable
-fun ParentCodeDialog(what: String, onClose: () -> Unit, onSubmit: suspend (String) -> String?) {
-    var code by remember { mutableStateOf("") }
-    var message by remember { mutableStateOf<String?>(null) }
-    val scope = rememberCoroutineScope()
-    AlertDialog(
-        onDismissRequest = onClose,
-        title = { Text("Parent code") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                // What the code will do, in full: a code can't say what it was given for.
-                Text(what, style = MaterialTheme.typography.bodyLarge)
-                Text(
-                    "Protection is armed, so a change to a due date needs a code from your dad's authenticator, typed in by him, seeing this.",
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-                OutlinedTextField(
-                    code,
-                    { code = it.filter(Char::isDigit).take(Totp.DIGITS) },
-                    label = { Text("Code") },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                )
-                message?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-            }
-        },
-        confirmButton = {
-            TextButton(enabled = code.length == Totp.DIGITS, onClick = {
-                scope.launch {
-                    val result = onSubmit(code)
-                    if (result == null) onClose() else message = result
-                }
-            }) { Text("Confirm") }
-        },
-        dismissButton = { TextButton(onClick = onClose) { Text("Cancel") } },
-    )
-}
-
 private val DAY = DateTimeFormatter.ofPattern("EEEE d MMMM", Locale.UK)
 
 /** What an instruction is about, in words. */
@@ -134,7 +88,6 @@ fun aboutLine(about: About, now: Long, zone: ZoneId): String = when {
 @Composable
 fun InstructionContent(graph: AppGraph, instruction: Instruction, tasks: Map<String, TaskItem>, now: Long, zone: ZoneId) {
     val scope = rememberCoroutineScope()
-    var codeFor by remember { mutableStateOf<String?>(null) }
     var rewriting by rememberSaveable { mutableStateOf(false) }
     Text(aboutLine(instruction.about, now, zone), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
     Text("“${instruction.text}”", style = MaterialTheme.typography.bodyLarge, fontStyle = FontStyle.Italic, modifier = Modifier.padding(top = 2.dp))
@@ -162,13 +115,10 @@ fun InstructionContent(graph: AppGraph, instruction: Instruction, tasks: Map<Str
             }
         }
     }
-    val needsCode = graph.instructionNeedsCode(instruction)
     Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         when (instruction.state) {
             InstructionStatus.Understood -> {
-                Button(onClick = { scope.launch { if (!graph.applyInstruction(instruction.id)) codeFor = "apply" } }) {
-                    Text(if (needsCode) "Apply with parent code" else "Apply")
-                }
+                Button(onClick = { scope.launch { graph.applyInstruction(instruction.id) } }) { Text("Apply") }
                 OutlinedButton(onClick = { scope.launch { graph.deleteInstruction(instruction.id) } }) { Text("Discard") }
             }
             InstructionStatus.Unclear -> {
@@ -176,17 +126,8 @@ fun InstructionContent(graph: AppGraph, instruction: Instruction, tasks: Map<Str
                 OutlinedButton(onClick = { scope.launch { graph.deleteInstruction(instruction.id) } }) { Text("Discard") }
             }
             InstructionStatus.Reading -> OutlinedButton(onClick = { scope.launch { graph.deleteInstruction(instruction.id) } }) { Text("Discard") }
-            InstructionStatus.Applied -> OutlinedButton(onClick = { scope.launch { if (!graph.deleteInstruction(instruction.id)) codeFor = "delete" } }) {
-                Text(if (needsCode) "Take back with parent code" else "Take back")
-            }
+            InstructionStatus.Applied -> OutlinedButton(onClick = { scope.launch { graph.deleteInstruction(instruction.id) } }) { Text("Take back") }
         }
-    }
-    codeFor?.let { action ->
-        val lines = instruction.changes.joinToString("; ") { Instructions.describe(it, tasks, zone) }
-        ParentCodeDialog(
-            what = if (action == "apply") "It applies: $lines." else "It takes back: $lines.",
-            onClose = { codeFor = null },
-        ) { code -> if (action == "apply") graph.applyInstructionWithCode(instruction.id, code) else graph.deleteInstructionWithCode(instruction.id, code) }
     }
     if (rewriting) {
         InstructionDialog(aboutLine(instruction.about, now, zone), initial = instruction.text, onDismiss = { rewriting = false }) { text ->
