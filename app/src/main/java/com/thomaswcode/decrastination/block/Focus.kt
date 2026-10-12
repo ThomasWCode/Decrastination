@@ -375,10 +375,11 @@ class Focus(
                         val i = stepAt(t, done.stepIndex, done.step)
                         if (i < 0) return@map t
                         credited = minOf(done.minutes, (t.subSteps[i].minutes * calibration.stepMultiplierFor(theApps)).roundToInt().coerceAtLeast(1))
+                        // What's kept is what's credited: a retry after a stop gives no more.
                         return@map t.copy(
                             subSteps = t.subSteps.mapIndexed { j, s -> if (j == i) s.copy(done = true) else s },
-                            photoMin = t.photoMin + done.minutes,
-                            photosCounted = counted(done.minutes),
+                            photoMin = t.photoMin + credited,
+                            photosCounted = counted(credited),
                         )
                     }
                     // A piece of time (the whole task, or a part the planner cut it into): counted

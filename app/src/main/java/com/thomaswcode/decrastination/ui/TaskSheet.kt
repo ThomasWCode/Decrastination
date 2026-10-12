@@ -318,11 +318,12 @@ private fun Notes(task: TaskItem, now: Long, zone: java.time.ZoneId, byId: Map<S
 private fun Steps(graph: AppGraph, task: TaskItem, now: Long, zone: java.time.ZoneId) {
     if (task.subSteps.isEmpty()) return
     val scope = rememberCoroutineScope()
-    val scale = task.stepScale
+    // As the plan shares them: your minutes over its steps add up to exactly yours.
+    val planned = task.plannedStepMinutes(1.0)
     Text("Steps", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     task.subSteps.forEachIndexed { index, step ->
         val dates = listOfNotNull(step.from?.let { "from " + Format.at(it, now, zone) }, step.dueAt?.let { Format.due(it, now, zone) }).joinToString(", ")
-        val minutes = Format.minutes((step.minutes * scale).toInt().coerceAtLeast(1))
+        val minutes = Format.minutes(planned[index])
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 "• ${step.title} ($minutes${if (dates.isEmpty()) "" else "; $dates"})${if (step.done) " ✓" else ""}",
