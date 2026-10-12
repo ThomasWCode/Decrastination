@@ -128,6 +128,9 @@ object Assessment {
     }
 
     /** Records [answer] (and [note]) on the completion of [taskId] done at [doneAt] (0: its latest, for older questions). */
+    /** The question about [taskId]'s completion at [doneAt] taken back unasked: the completion is gone (debug `forget-task`). */
+    fun withdraw(context: Context, taskId: String, doneAt: Long) = Notify.cancel(context, tag(taskId, doneAt.takeIf { it != 0L }), BASE_ID)
+
     suspend fun record(context: Context, taskId: String, doneAt: Long, answer: String, note: String? = null) {
         AppGraph.get(context).log.update { answered(it, taskId, doneAt, answer, note) }
         Notify.cancel(context, tag(taskId, doneAt.takeIf { it != 0L }), BASE_ID)

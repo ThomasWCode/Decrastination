@@ -206,6 +206,7 @@ Phase 0 also built what Phase 1 would have scaffolded: the Gradle setup, the sha
 *Your ask, 12 Oct 2026 (Q26–Q31): much more an organiser than a blocker. Blocked apps stay blocked and free time is still earned, but nothing about the work is held back.*
 
 - **Only the blocker waits** (#28): armed, the 24-hour delay and the parent code guard only what's blocked, quiet hours, school-day blocking's start, the free-time rate, protection and the delay itself. Due dates (instructions, quick changes, restored backups), working hours, the planning numbers, Anki, the Teams syncs and Claude change at once; a backup's log and calibration are restored armed or not.
+- **An organiser** (#29): your own tasks (`Source.Own`, `core/OwnTasks.kt`), made with a form and finished with *Done*, which earns nothing; every task's page to change its due date and time, minutes and start at once (a *Minutes* change, which Claude can read too); Tasks by due date; the Plan and the widget a task at a time. Your minutes are planned as given and teach the calibration nothing; finishing earns by the lower of yours and the app's.
 
 ## 6. Verification
 

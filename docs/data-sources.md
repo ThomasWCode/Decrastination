@@ -217,3 +217,7 @@ Cost at list price ($4 / $20 per million tokens in/out): an email with a 4 000-c
 ## 7. Optional: device calendar
 
 `CalendarContract.Instances` with `READ_CALENDAR` gives busy blocks (Open Day 10 Oct, "Call with Jags" 14 Oct 16:00 if it is also in Calendar). Subtracted from the availability template when computing slack. Q7.
+
+## 8. Your own tasks (2.0.0)
+
+Not read from anywhere: you're their source (Q28). Made with *New task* in Tasks (or, from #30, by asking Claude), kept in `tasks.json` as `own:<uuid>` with `Source.Own`, and backed up with the settings and the log, as no source can give them back. What you give (name, kind, subject, due date and time, minutes, can't start before, notes, steps) is kept as a source's values are (`sourceValues`), so instructions are laid over them as over any task; an instruction's due date, start or minutes for one of yours is made on it instead (`OwnTasks.changed`), as the form would. No sync touches them. One is done when you tap *Done* (on its sheet, the Plan's card or the block screen), which earns no free time; *Not done* opens it again; *Delete* removes it; one done a fortnight ago goes, as a source's do. `core/OwnTasks.kt`.
