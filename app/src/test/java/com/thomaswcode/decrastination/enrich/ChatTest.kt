@@ -79,6 +79,14 @@ class ChatTest {
     }
 
     @Test
+    fun `changes past the most taken at once are said, not dropped quietly`() {
+        val one = """{"type":"DayLimit","taskId":null,"afterTaskId":null,"eventKey":null,"eventTime":null,"minutes":0,"date":"2026-10-14","weekday":null,"time":null,"endTime":null}"""
+        val reading = parse("""{"reply":"Here.","newTasks":[],"changes":[${List(ChatAnswers.MAX_CHANGES + 3) { one }.joinToString(",")}]}""")!!
+        assertEquals(ChatAnswers.MAX_CHANGES, reading.changes.size)
+        assertEquals(listOf("3 more changes than the app takes at once"), reading.leftOut)
+    }
+
+    @Test
     fun `an answer with no reply, or not an answer, can't be read`() {
         assertNull(parse("""{"reply":" ","newTasks":[],$none}"""))
         assertNull(parse("I'd add it"))

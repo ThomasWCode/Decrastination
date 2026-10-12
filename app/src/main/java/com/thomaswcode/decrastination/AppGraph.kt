@@ -427,6 +427,8 @@ class AppGraph private constructor(context: Context) {
         syncer.addAfterEverySync { layTaskOverrides() }
         // Your own tasks long done go, as a source's do.
         syncer.addAfterEverySync { pruneOwn() }
+        // A question of yours still waiting (Claude was off, resting, or the app stopped): tried again.
+        syncer.addAfterEverySync { if (chat.value.unanswered != null) answerChat() }
         // One of your own whose steps are all done (ticked, or worked through in sessions) is finished.
         scope.launch {
             tasks.state.map { s -> s.tasks.filter { it.source == Source.Own && it.isOpen && it.subSteps.isNotEmpty() && it.subSteps.all { st -> st.done } }.map { it.id } }
@@ -468,6 +470,8 @@ class AppGraph private constructor(context: Context) {
         scope.launch {
             layTaskOverrides()
             readInstructions()
+            // A question of yours the app stopped before answering.
+            answerChat()
         }
         runCatching {
             app.contentResolver.registerContentObserver(
@@ -988,6 +992,8 @@ class AppGraph private constructor(context: Context) {
     suspend fun answerChat(): Unit = answering.withLock {
         val waiting = chat.value.unanswered ?: return@withLock
         val note = modelCalls.withLock call@{
+            // Taken back (or the chat cleared) while this waited its turn: nothing to ask.
+            if (chat.value.unanswered?.id != waiting.id) return@withLock
             modelHold()?.let { return@call because(it) }
             val key = claudeKey() ?: return@call because(ModelHold.Off)
             // Being asked now: whatever it said before (a failed call) is gone.
@@ -1026,7 +1032,10 @@ class AppGraph private constructor(context: Context) {
             }
             null
         }
-        if (note != null) chat.update { s -> s.copy(messages = s.messages.map { if (it.id == waiting.id && it.answeredAt == null) it.copy(note = note) else it }) }
+        // Why it waits, said once: written only when it changes, as this runs after every sync.
+        if (note != null && chat.value.unanswered?.let { it.id == waiting.id && it.note != note } == true) {
+            chat.update { s -> s.copy(messages = s.messages.map { if (it.id == waiting.id && it.answeredAt == null) it.copy(note = note) else it }) }
+        }
     }
 
     /** Your message still waiting for Claude taken back, unanswered. */
@@ -1088,7 +1097,14 @@ class AppGraph private constructor(context: Context) {
             s.copy(
                 messages = s.messages.map { m ->
                     if (m.id != messageId) m else m.copy(proposals = m.proposals.map { p ->
-                        if (p.id != proposalId) p else if (note == null) p.copy(state = ProposalState.Applied, made = made, before = before, note = null) else p.copy(note = note)
+                        if (p.id != proposalId) {
+                            p
+                        } else if (note == null) {
+                            // As added: changed first, it's yours that the card shows and the chat recalls.
+                            p.copy(state = ProposalState.Applied, made = made, before = before, note = null, task = task ?: p.task)
+                        } else {
+                            p.copy(note = note)
+                        }
                     })
                 },
             )
@@ -1107,8 +1123,14 @@ class AppGraph private constructor(context: Context) {
             if (made == null || deleteOwnTask(made)) null else "Stop its focus session first"
         } else {
             made?.let { deleteInstruction(it) }
-            // Your own tasks it changed put back as they were: no instruction held those changes.
-            proposal.before.forEach { (id, draft) -> tasks.value.tasks.firstOrNull { it.id == id }?.let { saveOwnTask(it.sourceId, draft) } }
+            // What it changed on your own tasks put back as it was (no instruction held those changes),
+            // only what it changed: a later change to another of their fields stands.
+            proposal.before.forEach { (id, was) ->
+                tasks.value.tasks.firstOrNull { it.id == id }?.let { t ->
+                    val types = proposal.changes.filter { it.taskId == id }.map { it.type }.toSet()
+                    saveOwnTask(t.sourceId, OwnTasks.restored(OwnTasks.draftOf(t), was, types))
+                }
+            }
             made?.let { m -> instructions.value.instructions.firstOrNull { it.id == m }?.note }
         }
         chat.update { s ->
@@ -1236,6 +1258,23 @@ class AppGraph private constructor(context: Context) {
         val was = instructions.value.instructions.firstOrNull { it.id == id }
         instructions.update { state -> state.copy(instructions = state.instructions.filterNot { it.id == id }) }
         if (was?.state == InstructionStatus.Applied) layInstructions()
+        // A chat card that made it, taken back here (under Your changes): the card says so, and the chat
+        // recalls it. What it made on your own tasks stands, still undone from the card.
+        if (chat.value.messages.any { m -> m.proposals.any { it.made == id } }) {
+            chat.update { s ->
+                s.copy(
+                    messages = s.messages.map { m ->
+                        m.copy(proposals = m.proposals.map { p ->
+                            when {
+                                p.made != id -> p
+                                p.before.isEmpty() -> p.copy(state = ProposalState.Proposed, made = null)
+                                else -> p.copy(made = null)
+                            }
+                        })
+                    },
+                )
+            }
+        }
     }
 
     /**

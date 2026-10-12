@@ -223,6 +223,7 @@ object ChatAnswers {
         var changes = answer.changes.take(MAX_CHANGES).mapNotNull { g ->
             InstructionAnswers.change(g, byId, titles, now, zone).also { if (it == null) leftOut += "a change (${InstructionAnswers.problem(g, byId, titles)})" }
         }
+        if (answer.changes.size > MAX_CHANGES) leftOut += "${answer.changes.size - MAX_CHANGES} more changes than the app takes at once"
         if (Instructions.makesCircle(changes, emptyList())) {
             leftOut += "changes that would have tasks wait for each other in a circle"
             changes = emptyList()
