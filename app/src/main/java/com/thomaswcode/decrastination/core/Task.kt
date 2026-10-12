@@ -215,18 +215,9 @@ data class TaskItem(
      */
     fun plannedStepMinutes(multiplier: Double): List<Int> {
         val steps = subSteps.map { it.minutes }
-        val total = steps.sum()
         val mine = userEffortMin
-        if (mine == null || total <= 0) return steps.map { (it * multiplier).roundToInt().coerceAtLeast(1) }
-        val exact = steps.map { it.toDouble() * mine / total }
-        val whole = exact.map { floor(it).toInt() }.toMutableList()
-        var odd = mine - whole.sum()
-        for (i in exact.indices.sortedByDescending { exact[it] - whole[it] }) {
-            if (odd <= 0) break
-            whole[i]++
-            odd--
-        }
-        return whole.map { it.coerceAtLeast(1) }
+        if (mine == null || steps.sum() <= 0) return steps.map { (it * multiplier).roundToInt().coerceAtLeast(1) }
+        return shareOut(mine, steps)
     }
 
     fun isAvailable(now: Long): Boolean = availableFrom == null || availableFrom <= now
@@ -234,6 +225,25 @@ data class TaskItem(
     companion object {
         fun id(source: Source, sourceId: String): String = "${source.name.lowercase()}:$sourceId"
     }
+}
+
+/**
+ * [total] minutes shared over [parts] in proportion, in whole minutes that add up to exactly
+ * [total]: the odd minutes go to the parts with most left over, and each gets at least one (so a
+ * total smaller than the parts' number comes to a minute each). Your minutes over a task's steps.
+ */
+fun shareOut(total: Int, parts: List<Int>): List<Int> {
+    val sum = parts.sum()
+    if (sum <= 0) return parts.map { 1 }
+    val exact = parts.map { it.toDouble() * total / sum }
+    val whole = exact.map { floor(it).toInt() }.toMutableList()
+    var odd = total - whole.sum()
+    for (i in exact.indices.sortedByDescending { exact[it] - whole[it] }) {
+        if (odd <= 0) break
+        whole[i]++
+        odd--
+    }
+    return whole.map { it.coerceAtLeast(1) }
 }
 
 /** What a source said about a task's kind, deadline and start, kept so an overlay can be redone. */

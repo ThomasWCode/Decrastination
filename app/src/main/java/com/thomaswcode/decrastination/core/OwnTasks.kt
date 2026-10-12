@@ -153,9 +153,10 @@ object OwnTasks {
             ChangeType.StartFrom -> draft.copy(startFrom = change.time)
             ChangeType.Minutes -> {
                 val minutes = change.minutes ?: return null
-                val steps = draft.steps.sumOf { it.minutes }
-                if (steps > 0) {
-                    draft.copy(steps = draft.steps.map { it.copy(minutes = (it.minutes.toLong() * minutes / steps).toInt().coerceAtLeast(1)) })
+                if (draft.steps.isNotEmpty()) {
+                    // Shared out to add up to exactly yours, as the plan shares them.
+                    val shares = shareOut(minutes, draft.steps.map { it.minutes })
+                    draft.copy(steps = draft.steps.mapIndexed { i, s -> s.copy(minutes = shares[i]) })
                 } else {
                     draft.copy(minutes = minutes)
                 }
@@ -166,8 +167,12 @@ object OwnTasks {
 
     private fun apply(old: TaskItem, task: OwnTask): TaskItem {
         val event = task.kind == Kind.Event
+        // Each step matched to the one it was by name, a repeated name by its turn (the second
+        // "Review" to the second), so a step done stays done and one to do stays to do.
+        val seen = HashMap<String, Int>()
         val steps = if (event) emptyList() else task.steps.take(MAX_STEPS).map { s ->
-            val was = old.subSteps.firstOrNull { it.title == s.title.trim() }
+            val turn = seen.merge(s.title.trim(), 1, Int::plus)!! - 1
+            val was = old.subSteps.filter { it.title == s.title.trim() }.getOrNull(turn)
             SubStep(s.title.trim().take(MAX_TITLE), s.minutes, done = was?.done == true, byHand = was?.byHand == true, timedMin = was?.timedMin ?: 0, from = s.from, dueAt = s.dueAt)
         }
         val minutes = when {
