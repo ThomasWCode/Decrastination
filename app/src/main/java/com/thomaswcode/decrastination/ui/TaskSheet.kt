@@ -243,7 +243,8 @@ fun TaskSheet(graph: AppGraph, activity: Activity, taskId: String, onClose: () -
         OwnChange.Minutes -> MinutesDialog(
             title = "How long it takes in all",
             initial = task.effortMin,
-            note = "The whole task, worked or not" + if (task.subSteps.isNotEmpty()) ": its steps are scaled to match." else ".",
+            note = "The whole task, worked or not" + if (task.subSteps.isNotEmpty()) ": its steps are scaled to match, a minute each at least." else ".",
+            least = OwnTasks.minutesFor(task).first,
             onClose = { picking = null },
         ) { minutes ->
             picking = null

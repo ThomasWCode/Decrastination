@@ -229,8 +229,9 @@ data class TaskItem(
 
 /**
  * [total] minutes shared over [parts] in proportion, in whole minutes that add up to exactly
- * [total]: the odd minutes go to the parts with most left over, and each gets at least one (so a
- * total smaller than the parts' number comes to a minute each). Your minutes over a task's steps.
+ * [total]: the odd minutes go to the parts with most left over. Each gets at least one, so a total
+ * smaller than the parts' number would come to more than it: it's refused where it's given
+ * ([OwnTasks.minutesFor]). Your minutes over a task's steps.
  */
 fun shareOut(total: Int, parts: List<Int>): List<Int> {
     val sum = parts.sum()

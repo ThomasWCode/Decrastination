@@ -331,6 +331,16 @@ class InstructionsTest {
     }
 
     @Test
+    fun `minutes fewer than a task's steps aren't taken from Claude`() {
+        val stepped = essay.copy(subSteps = listOf(SubStep("a", 20), SubStep("b", 20), SubStep("c", 20)))
+        val reading = InstructionAnswers.parse(
+            """{"understood":true,"question":null,"changes":[{"type":"Minutes","taskId":"teams:essay","afterTaskId":null,"eventKey":null,"eventTime":null,"minutes":2,"date":null,"weekday":null,"time":null,"endTime":null}]}""",
+            listOf(stepped, prep), listOf(drums), About(), now, LONDON,
+        )
+        assertIs<InstructionAnswers.Reading.Unclear>(reading)
+    }
+
+    @Test
     fun `one change that can't be made and none are, with why`() {
         val unknown = parse("""{"understood":true,"question":null,"changes":[{"type":"NotATask","taskId":"teams:nope","afterTaskId":null,"eventKey":null,"eventTime":null,"minutes":null,"date":null,"weekday":null,"time":null,"endTime":null}]}""")
         assertEquals("Claude's reading couldn't be used: it names a task that isn't listed", assertIs<InstructionAnswers.Reading.Unclear>(unknown).why)

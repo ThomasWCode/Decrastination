@@ -113,6 +113,15 @@ class OwnTasksTest {
     }
 
     @Test
+    fun `fewer minutes than one of yours has steps is refused, saying why`() {
+        val three = own(steps = listOf(OwnStep("a", 10), OwnStep("b", 10), OwnStep("c", 10)))
+        val two = listOf(Change(ChangeType.Minutes, taskId = three.id, minutes = 2))
+        assertEquals("It would leave “UCAS statement” as it can't be: its 3 steps need at least a minute each", OwnTasks.problemWith(listOf(three), two))
+        assertEquals(emptyList(), OwnTasks.madeOn(listOf(three), two))
+        assertSame(three, OwnTasks.changed(three, two.single()))
+    }
+
+    @Test
     fun `steps of the same name keep their own ticks through an edit`() {
         val task = own(steps = listOf(OwnStep("Review", 20), OwnStep("Write", 30), OwnStep("Review", 20)))
         val firstDone = task.copy(subSteps = task.subSteps.mapIndexed { i, s -> if (i == 0) s.copy(done = true) else s })
@@ -197,8 +206,8 @@ class OwnTasksTest {
         val mine = teams("prep", "2026-10-30T09:00", steps = steps).copy(userEffortMin = 100)
         assertEquals(listOf(34, 33, 33), mine.plannedStepMinutes(1.0))
         assertEquals(100, plan(listOf(mine)).chunksOf(mine.id).sumOf { it.minutes })
-        // Fewer minutes than steps: a minute each.
-        assertEquals(listOf(1, 1, 1), mine.copy(userEffortMin = 2).plannedStepMinutes(1.0))
+        // Fewer minutes than steps can't be given: they couldn't add up to it.
+        assertEquals(3..OwnTasks.MINUTES.last, OwnTasks.minutesFor(mine))
     }
 
     @Test

@@ -205,7 +205,8 @@ object InstructionAnswers {
             ChangeType.NotATask -> task?.let { Change(type, taskId = it) }
             ChangeType.StartFrom -> task?.let { id -> at(g.date, g.time, LocalTime.MIDNIGHT, zone)?.takeIf { plausible(it, now) }?.let { Change(type, taskId = id, time = it) } }
             ChangeType.DueBy -> task?.let { id -> at(g.date, g.time, LocalTime.of(23, 59), zone)?.takeIf { plausible(it, now) }?.let { Change(type, taskId = id, time = it) } }
-            ChangeType.Minutes -> task?.let { id -> g.minutes?.takeIf { it in OwnTasks.MINUTES }?.let { Change(type, taskId = id, minutes = it) } }
+            // At least a minute for each of its steps, as yours are shared out over them.
+            ChangeType.Minutes -> task?.let { id -> g.minutes?.takeIf { it in OwnTasks.minutesFor(tasks.getValue(id)) }?.let { Change(type, taskId = id, minutes = it) } }
             ChangeType.After -> task?.let { id -> g.afterTaskId?.takeIf { it in tasks && it != id }?.let { Change(type, taskId = id, afterTaskId = it) } }
             ChangeType.EventTime -> g.eventKey?.takeIf { it in events }?.let { key ->
                 val answer = when (g.eventTime) {
