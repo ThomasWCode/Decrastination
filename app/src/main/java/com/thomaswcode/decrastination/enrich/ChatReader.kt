@@ -7,18 +7,22 @@ import com.anthropic.models.messages.JsonOutputFormat
 import com.anthropic.models.messages.MessageCreateParams
 import com.anthropic.models.messages.OutputConfig
 import com.anthropic.models.messages.StopReason
+import com.thomaswcode.decrastination.block.FocusSession
 import com.thomaswcode.decrastination.core.About
 import com.thomaswcode.decrastination.core.Change
 import com.thomaswcode.decrastination.core.ChatMessage
+import com.thomaswcode.decrastination.core.Chunk
 import com.thomaswcode.decrastination.core.Instruction
 import com.thomaswcode.decrastination.core.Instructions
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.OwnStep
 import com.thomaswcode.decrastination.core.OwnTask
 import com.thomaswcode.decrastination.core.OwnTasks
+import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.ProposalState
 import com.thomaswcode.decrastination.core.Speaker
 import com.thomaswcode.decrastination.core.TaskItem
+import com.thomaswcode.decrastination.core.Unplanned
 import com.thomaswcode.decrastination.core.shareOut
 import com.thomaswcode.decrastination.learn.CalendarEvent
 import com.thomaswcode.decrastination.learn.EventJudge
@@ -52,6 +56,7 @@ object ChatPrompts {
     private val WHEN = DateTimeFormatter.ofPattern("EEE d MMM yyyy HH:mm", Locale.UK)
     private val TODAY = DateTimeFormatter.ofPattern("EEEE d MMMM yyyy, HH:mm", Locale.UK)
     private val DAY = DateTimeFormatter.ofPattern("EEEE d MMMM yyyy", Locale.UK)
+    private val CLOCK = DateTimeFormatter.ofPattern("HH:mm", Locale.UK)
 
     val SYSTEM = (
         """
@@ -61,9 +66,9 @@ object ChatPrompts {
         1. Add tasks of their own (newTasks): something to do that isn't listed ("write my UCAS statement by 1 December", "buy mum a present before Sunday"). Give a short title in their words; kind: Homework, Revision, Admin, or Event for something that happens at a time (an appointment, a match); subject if it's for one; dueDate and dueTime if they gave them (an event's start; no time means the end of that day); minutes for the whole thing (your best estimate if they didn't say, and say so in your reply); startDate if it can't be started before a day; notes only for something worth keeping; and steps only for a big task worth splitting, each with minutes (adding up to the task's) and its own dates where it has them.
         2. Change their tasks and days (changes), with these:
 """ + InstructionPrompts.CHANGE_TYPES.prependIndent("        ") + """
-        3. Answer questions about their work from the lists you're given, briefly.
+        3. Answer questions about their work from what you're given, briefly: what's due when from the task list; what's on a day, how full it is, what to do next and why something isn't planned from the plan. The plan is what the app has them do and shows them, so say what it says rather than planning the work again yourself.
 
-        Reply in one to three short sentences of plain UK English. Nothing you suggest happens until the student taps Add or Apply on it, so never say you've done it: say what you'd do ("I'd add…", "I'd move…"). If what you need is missing or unclear (which task they mean, or when), ask one short question and suggest nothing. Don't add a task that's already listed: change it instead. When their message is about a given task, event or day, it's about that unless they clearly name another. Suggest only what they asked for, and leave every field you don't use null.
+        Reply in one to three short sentences of plain UK English (asked what's on, a short list instead, a line a task).Nothing you suggest happens until the student taps Add or Apply on it, so never say you've done it: say what you'd do ("I'd add…", "I'd move…"). If what you need is missing or unclear (which task they mean, or when), ask one short question and suggest nothing. Don't add a task that's already listed: change it instead. When their message is about a given task, event or day, it's about that unless they clearly name another. Suggest only what they asked for, and leave every field you don't use null.
     """
         ).trimIndent()
 
@@ -103,9 +108,11 @@ object ChatPrompts {
      * knows now ([context]). All of it within [budget] characters, as every call's input is held
      * to ([Pricing.MAX_INPUT_CHARS], which the cap's worst case assumes): your newest words whole;
      * the turns before them, newest first, in up to a quarter of what's left (a follow-up needs its
-     * question); then the context, its end cut if it must be.
+     * question); then the context, its end cut if it must be, and after it the [plan] ([ChatPrompts.plan]).
+     * Where both can't be whole, the plan keeps at least a third of their room (its near days first),
+     * so a long list of tasks can't push it out: the list loses its end, and the plan its far days.
      */
-    fun turns(messages: List<ChatMessage>, context: String, tasks: Map<String, TaskItem>, zone: ZoneId, budget: Int = Pricing.MAX_INPUT_CHARS): List<Pair<Speaker, String>> {
+    fun turns(messages: List<ChatMessage>, context: String, tasks: Map<String, TaskItem>, zone: ZoneId, budget: Int = Pricing.MAX_INPUT_CHARS, plan: String = ""): List<Pair<Speaker, String>> {
         val recent = messages.takeLast(HISTORY).dropWhile { it.from != Speaker.You }
         if (recent.isEmpty()) return emptyList()
         val texts = recent.map { m -> m.from to text(m, tasks, zone) }
@@ -114,9 +121,25 @@ object ChatPrompts {
         var left = (budget - newest.length) / 4
         val earlier = texts.dropLast(1).reversed().takeWhile { (_, t) -> (t.length <= left).also { if (it) left -= t.length } }.reversed()
             .dropWhile { it.first != Speaker.You }
-        // The context in the rest, beside your newest words.
-        val room = budget - newest.length - 2 - earlier.sumOf { it.second.length }
-        return earlier + (Speaker.You to context.take(room.coerceAtLeast(0)) + "\n\n" + newest)
+        // The context and the plan in the rest, beside your newest words.
+        val room = (budget - newest.length - 2 - earlier.sumOf { it.second.length }).coerceAtLeast(0)
+        val known = when {
+            plan.isEmpty() || room <= PLAN_GAP.length -> context.take(room)
+            context.length + PLAN_GAP.length + plan.length <= room -> context + PLAN_GAP + plan
+            else -> {
+                val planRoom = maxOf(room - PLAN_GAP.length - context.length, minOf(plan.length, room / 3))
+                context.take(room - PLAN_GAP.length - planRoom) + PLAN_GAP + plan.take(planRoom)
+            }
+        }
+        return earlier + (Speaker.You to known + "\n\n" + newest)
+    }
+
+    private const val PLAN_GAP = "\n\n"
+
+    /** What the app knows, as the chat sends it: [known] ([context]), then the [plan] ([plan]), each with its share of the room ([turns]). */
+    data class Context(val known: String, val plan: String) {
+        /** All of it, as it's sent when there's room. */
+        val whole: String get() = if (plan.isEmpty()) known else known + PLAN_GAP + plan
     }
 
     /** One message as it's sent: yours with what it was about; Claude's with its cards and what became of them. */
@@ -143,7 +166,7 @@ object ChatPrompts {
         else -> ""
     }
 
-    /** What the app knows now: today, the open tasks, the fortnight's events, and the changes in use. */
+    /** What the app knows now: today, the open tasks, the fortnight's events, and the changes in use. The plan's sent beside it ([plan], [turns]). */
     fun context(tasks: List<TaskItem>, events: List<CalendarEvent>, applied: List<Instruction>, now: Long, zone: ZoneId): String = buildString {
         fun at(time: Long) = Instant.ofEpochMilli(time).atZone(zone).format(WHEN)
         val byId = tasks.associateBy { it.id }
@@ -170,6 +193,110 @@ object ChatPrompts {
             inUse.take(InstructionPrompts.MAX_TASKS).forEach { appendLine("- " + Instructions.describe(it, byId, zone)) }
         }
     }.trimEnd()
+
+    /** The plan's days sent in full: a fortnight, as the calendar's events are. */
+    const val PLAN_DAYS = 14
+
+    /**
+     * [plan] as the Plan tab shows it, for questions about a day ("what's on tomorrow?"): the next
+     * thing to do, as its *Do now* card has it ([session]'s piece while one runs, [sessionLeftMin]
+     * left); the open work it leaves out, with why; the other events coming up; what's planned after
+     * the fortnight, in a line naming its tasks; then each of the next [PLAN_DAYS] days, its minutes
+     * against its working time, its work a task a line with the pieces that day, and its events from
+     * *Coming up*. The days go last, the nearest first, so a plan cut to fit ([turns]) loses only its
+     * far days; each summary is at most [PLAN_LIST] lines.
+     */
+    fun plan(plan: Plan, zone: ZoneId, session: FocusSession? = null, sessionLeftMin: Int? = null): String = buildString {
+        fun at(time: Long) = Instant.ofEpochMilli(time).atZone(zone).format(WHEN)
+        fun piece(chunk: Chunk) = "${chunk.label.take(MAX_TITLE)} (${chunk.minutes} min)"
+        fun event(task: TaskItem) = "${task.id} | ${task.title.take(MAX_TITLE)} | ${task.source.label}"
+        appendLine(
+            "The plan: the work the app has them do each day so every deadline is met, as its Plan tab shows it. Its minutes are the app's, " +
+                "from what it's learned of how long things take them, so they can differ from the task list's. While anything's planned for " +
+                "today or tomorrow, blocked apps stay blocked in blocking hours; otherwise they cost free time earned by working.",
+        )
+        // As the Do now card: in a focus session, its piece and no "then".
+        val doing = session?.let { plan.pieceOf(it.taskId, it.stepIndex, it.step) }
+        val left = sessionLeftMin?.let { ", $it min left" }.orEmpty()
+        when {
+            doing != null -> appendLine("Doing now, in a focus session: ${piece(doing)}$left")
+            session != null -> {
+                appendLine("In a focus session now: ${session.label.take(MAX_TITLE)}$left")
+                plan.next?.let { appendLine("Next to do: ${piece(it)}") }
+            }
+            else -> plan.next?.let { next -> appendLine("Next to do: ${piece(next)}" + plan.then?.let { "; then ${piece(it)}" }.orEmpty()) }
+        }
+        val last = plan.today.plusDays(PLAN_DAYS - 1L)
+        fun day(time: Long): LocalDate = Instant.ofEpochMilli(time).atZone(zone).toLocalDate()
+        /** At most [PLAN_LIST] of [lines], and how many more. */
+        fun list(lines: List<String>) {
+            lines.take(PLAN_LIST).forEach { appendLine("- $it") }
+            if (lines.size > PLAN_LIST) appendLine("- …and ${lines.size - PLAN_LIST} more")
+        }
+        // The summaries before the days: a plan cut to fit loses its far days, never why something isn't planned.
+        if (plan.unplanned.isNotEmpty()) {
+            val end = (plan.buckets.lastOrNull()?.date ?: plan.today).format(DAY)
+            appendLine("Not planned (open work the plan leaves out, and why):")
+            list(
+                plan.unplanned.map { gap ->
+                    val why = when (gap.reason) {
+                        Unplanned.Reason.NotOpen -> "can't be started before ${gap.at?.let(::at) ?: "later"}, its source says"
+                        Unplanned.Reason.Waits -> "waits until “${gap.after?.take(MAX_TITLE) ?: "another task"}” is done, as they said"
+                        Unplanned.Reason.OpensLater -> "opens ${gap.at?.let(::at) ?: "later"}, after the plan's last day ($end): planned once it's within reach"
+                        Unplanned.Reason.NoRoom -> "no room for it by $end, the plan's last day, within each day's limits"
+                    }
+                    val pieces = if (gap.pieces == 1) "1 piece" else "${gap.pieces} pieces"
+                    "${gap.taskId} | ${gap.title.take(MAX_TITLE)} | $pieces, ${gap.minutes} min | $why"
+                },
+            )
+        }
+        // The rest of *Coming up*: past, after the fortnight, or with no date.
+        val others = plan.events.filter { e -> e.dueAt?.let { day(it) !in plan.today..last } ?: true }
+        if (others.isNotEmpty()) {
+            appendLine("Events on the Plan other than those under their days below (past, after ${last.format(DAY)}, or with no date):")
+            list(others.map { "${event(it)} | ${it.dueAt?.let(::at) ?: "no date"}" })
+        }
+        val after = plan.buckets.filter { it.date > last && it.chunks.isNotEmpty() }
+        if (after.isNotEmpty()) {
+            val days = if (after.size == 1) "1 more day" else "${after.size} more days"
+            // Which tasks, so that's said rather than guessed.
+            val ids = after.flatMap { it.chunks }.distinctBy { it.taskId }
+            val tasks = ids.take(PLAN_LIST).joinToString("; ") { "${it.taskId} | ${it.title.take(MAX_TITLE)}" } +
+                if (ids.size > PLAN_LIST) "; …and ${ids.size - PLAN_LIST} more" else ""
+            appendLine("Planned after ${last.format(DAY)}: ${after.sumOf { it.plannedMin }} min on $days, the last ${after.last().date.format(DAY)}, of: $tasks")
+        }
+        // Then the days, the nearest first. Events (an appointment in Power Planner, one of yours) under their day, as *Coming up* lists them.
+        appendLine("Day by day:")
+        val eventsOn = plan.events.filter { it.dueAt != null }.groupBy { day(it.dueAt!!) }.filterKeys { it in plan.today..last }
+        plan.buckets.filter { it.date <= last }.forEach { bucket ->
+            val name = when (bucket.date) {
+                plan.today -> "Today, "
+                plan.today.plusDays(1) -> "Tomorrow, "
+                else -> ""
+            } + bucket.date.format(DAY)
+            val time = "${bucket.capacityMin} min of working time" + if (bucket.date == plan.today) " left" else ""
+            val over = (bucket.plannedMin - bucket.capacityMin).takeIf { it > 0 }?.let { ", over by $it min" }.orEmpty()
+            appendLine(if (bucket.chunks.isEmpty()) "- $name: nothing planned ($time)" else "- $name: ${bucket.plannedMin} min planned of $time$over")
+            eventsOn[bucket.date].orEmpty().forEach { appendLine("  - event at ${Instant.ofEpochMilli(it.dueAt!!).atZone(zone).format(CLOCK)}: ${event(it)}") }
+            // A task a line, as the Plan lists them (Q31), its pieces that day in their order.
+            bucket.chunks.groupBy { it.taskId }.forEach { (id, pieces) ->
+                val first = pieces.first()
+                // Undated work's deadline is the app's own (a week after it was first seen): none to be late for.
+                val dated = first.dueAt != null
+                val flags = listOfNotNull(
+                    first.dueAt?.let { "due ${at(it)}" } ?: "no due date",
+                    "overdue".takeIf { dated && pieces.any { it.overdue } },
+                    "won't fit before its deadline".takeIf { dated && pieces.any { it.behind } },
+                    pieces.mapNotNull { it.availableAt }.minOrNull()?.let { "can't start before ${at(it)}" },
+                )
+                val parts = pieces.joinToString { "${it.step?.take(MAX_TITLE) ?: "all of it"} (${it.minutes} min)" }
+                appendLine("  - $id | ${first.title.take(MAX_TITLE)} | ${pieces.sumOf { it.minutes }} min: $parts | ${flags.joinToString(" | ")}")
+            }
+        }
+    }.trimEnd()
+
+    /** The most lines in each of the plan's summaries (what isn't planned, other events, later tasks), so they leave the days room. */
+    const val PLAN_LIST = 20
 }
 
 /** Claude's answer in the chat, checked: its reply, the tasks and changes the app can make, and what it left out. */
@@ -285,10 +412,9 @@ class ChatReader(apiKey: String, private val zone: ZoneId, endpoint: String? = n
         .maxRetries(2)
         .build()
 
-    /** Claude's answer to the last of [messages] (yours), with what the app knows now. */
-    suspend fun answer(messages: List<ChatMessage>, tasks: List<TaskItem>, events: List<CalendarEvent>, applied: List<Instruction>, now: Long): Result {
+    /** Claude's answer to the last of [messages] (yours), with what the app knows now ([context]: [ChatPrompts.context] and [ChatPrompts.plan]). */
+    suspend fun answer(messages: List<ChatMessage>, tasks: List<TaskItem>, events: List<CalendarEvent>, context: ChatPrompts.Context, now: Long): Result {
         val schema = JsonOutputFormat.Schema.builder().apply { ChatPrompts.SCHEMA.forEach { (k, v) -> putAdditionalProperty(k, JsonValue.from(v)) } }.build()
-        val context = ChatPrompts.context(tasks, events, applied, now, zone)
         val builder = MessageCreateParams.builder()
             .model(model)
             .maxTokens(ClaudeEnricher.MAX_TOKENS)
@@ -296,7 +422,7 @@ class ChatReader(apiKey: String, private val zone: ZoneId, endpoint: String? = n
             .outputConfig(OutputConfig.builder().effort(OutputConfig.Effort.HIGH).format(JsonOutputFormat.builder().schema(schema).build()).build())
             .putAdditionalHeader("anthropic-beta", ClaudeEnricher.FALLBACK_BETA)
             .putAdditionalBodyProperty("fallbacks", JsonValue.from("default"))
-        ChatPrompts.turns(messages, context, tasks.associateBy { it.id }, zone).forEach { (from, text) ->
+        ChatPrompts.turns(messages, context.known, tasks.associateBy { it.id }, zone, plan = context.plan).forEach { (from, text) ->
             if (from == Speaker.You) builder.addUserMessage(text) else builder.addAssistantMessage(text)
         }
         val message = withContext(Dispatchers.IO) { client.messages().create(builder.build()) }
