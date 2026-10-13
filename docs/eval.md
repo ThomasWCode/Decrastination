@@ -46,3 +46,20 @@ Ten messages to *Ask Claude*, sent as the app sends them: the exact system promp
 | "this will take 45 min" (about *Call with Jags after school*) | Minutes: 45 min (now 5 min); an instruction it couldn't read before |
 | "I've got a test soon" → "When is it…?" → "Friday, maths mechanics, about 3 hours of revision" | a Revision task (Maths), 3 h, due Thu |
 | "I can't do any work on Wednesday" | Wed 14 Oct: no work |
+
+### With the plan (#31)
+
+Ten more, with the context the phone itself sends: written there by the debug command `chat-context` (the tasks, the calendar, the changes in use and the plan) and pulled into `private/eval-chat-plan/`, so the plan is the phone's own, calendar and instructions included. As before, the cases were built by a throwaway JVM test, answered by Opus subagents and put through `ChatAnswers.parse`. 13 Oct, at 06:47 on a Tuesday with tonight's plan 710 minutes over: all ten read, and each answered from the right list.
+
+| Message | What came back |
+|---|---|
+| "what's on tomorrow?" | tomorrow's four tasks from the plan, with their minutes and the day's 102 of 300 |
+| "what's due tomorrow?" | from the list, not the plan: the one thing due (the call with Jags), and the next homework after it |
+| "what should I do first tonight?" | the plan's next piece and the one after; but it said Bridge "was due" at 08:30 when it was 06:47 |
+| "how busy is Saturday?" | 110 of 630 minutes, its three tasks, around that day's events |
+| "why is today so full?" | the overdue work and the two tasks that won't fit before their deadlines, 1025 against 315, and an offer to move or drop what's done |
+| "when am I doing the chapter 18 prep?" | its pieces Wednesday to Sunday, day by day |
+| "what's on this week?" | a line a day, today's overload said |
+| "I'm out on Thursday evening, what happens to the work planned then?" | Thursday's 138 minutes, none due before Monday, and a question back: out from when till when? |
+| "is there anything the plan has left out?" | nothing; at first it guessed which tasks made up the 850 minutes after the fortnight, so that line now names them, and the rerun didn't guess |
+| "what's on tomorrow?" → (the answer) → "move the profile picture to the weekend" | can't start before Sat 17 Oct and due Sun 18 Oct, on one card |
