@@ -2,6 +2,7 @@ package com.thomaswcode.decrastination.enrich
 
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.Fixtures.LONDON
+import com.thomaswcode.decrastination.block.FocusSession
 import com.thomaswcode.decrastination.core.About
 import com.thomaswcode.decrastination.core.Change
 import com.thomaswcode.decrastination.core.ChangeType
@@ -182,7 +183,11 @@ class ChatTest {
             }
             DayBucket(date, if (day == 0L) 0 else 315, chunks)
         },
-        events = emptyList(),
+        // An appointment tomorrow, under its day; a match after the fortnight, in the rest of Coming up.
+        events = listOf(
+            bridge.copy(id = "powerplanner:dentist", source = Source.PowerPlanner, sourceId = "dentist", title = "Dentist", kind = Kind.Event, dueAt = Fixtures.at("2026-10-13T16:20")),
+            bridge.copy(id = "own:match", source = Source.Own, sourceId = "match", title = "Match", kind = Kind.Event, dueAt = Fixtures.at("2026-11-01T09:00")),
+        ),
         unplanned = listOf(Unplanned("powerplanner:pg", Source.PowerPlanner, "Pg 60&61", 30, 1, Unplanned.Reason.Waits, after = bridge.title)),
     )
 
@@ -197,7 +202,8 @@ class ChatTest {
             "\n  - teams:bridge | Bridge and Balances Beam Q's | 100 min: part 1 of 3 (34 min), part 2 of 3 (33 min), part 3 of 3 (33 min) | due Tue 13 Oct 2026 08:30 | won't fit before its deadline\n" in text,
             text,
         )
-        assertTrue("\n- Tomorrow, Tuesday 13 October 2026: nothing planned (315 min of working time)\n" in text, text)
+        assertTrue("\n- Tomorrow, Tuesday 13 October 2026: nothing planned (315 min of working time)\n  - event at 16:20: powerplanner:dentist | Dentist | Power Planner\n" in text, text)
+        assertTrue("\nOther events on the Plan (past, after Sunday 25 October 2026, or with no date):\n- own:match | Match | Yours | Sun 1 Nov 2026 09:00\n" in text, text)
         // Undated work behind only its soft deadline, the app's own: not said to be late.
         assertTrue(
             "\n- Wednesday 14 October 2026: 60 min planned of 315 min of working time\n  - own:essay | Essay | 40 min: Draft (40 min) | due Fri 30 Oct 2026 17:00\n" +
@@ -212,11 +218,28 @@ class ChatTest {
     }
 
     @Test
-    fun `the context ends with the plan, so a cut takes its far days rather than the tasks`() {
-        val context = ChatPrompts.context(listOf(bridge), emptyList(), emptyList(), now, LONDON, plan)
-        assertTrue(context.endsWith(ChatPrompts.plan(plan, LONDON)), context)
-        assertTrue(context.indexOf("Open tasks") < context.indexOf("The plan:"))
-        assertFalse("The plan:" in ChatPrompts.context(listOf(bridge), emptyList(), emptyList(), now, LONDON))
+    fun `in a focus session, the next thing is its piece, as the Do now card has it`() {
+        val session = FocusSession(taskId = bridge.id, label = "Bridge and Balances Beam Q's: part 2 of 3", step = "part 2 of 3", minutes = 33, startedAt = now)
+        val text = ChatPrompts.plan(plan, LONDON, session, 20)
+        assertTrue("\nDoing now, in a focus session: Bridge and Balances Beam Q's: part 2 of 3 (33 min), 20 min left\n" in text, text)
+        assertFalse("Next to do" in text, text)
+        // On a task the plan no longer has: said, then the plan's next, with no "then".
+        val gone = ChatPrompts.plan(plan, LONDON, session.copy(taskId = "teams:gone", label = "Gone"), 5)
+        assertTrue("\nIn a focus session now: Gone, 5 min left\nNext to do: Bridge and Balances Beam Q's: part 1 of 3 (34 min)\n" in gone, gone)
+    }
+
+    @Test
+    fun `the plan follows the list and keeps a third of the room from a long one, its near days first`() {
+        val messages = listOf(ChatMessage("y", Speaker.You, "what's on tomorrow?", now))
+        val whole = ChatPrompts.turns(messages, "LIST", emptyMap(), LONDON, plan = "PLAN").single().second
+        assertEquals("LIST\n\nPLAN\n\nwhat's on tomorrow?", whole)
+        // A long list is cut at its end; the plan keeps a third of the room, cut at its end.
+        val room = 1_000 - "what's on tomorrow?".length - 2
+        val cut = ChatPrompts.turns(messages, "l".repeat(5_000), emptyMap(), LONDON, budget = 1_000, plan = "p".repeat(800)).single().second
+        assertEquals("l".repeat(room - 2 - room / 3) + "\n\n" + "p".repeat(room / 3) + "\n\nwhat's on tomorrow?", cut)
+        // A short list leaves the plan the rest.
+        val short = ChatPrompts.turns(messages, "LIST", emptyMap(), LONDON, budget = 1_000, plan = "p".repeat(5_000)).single().second
+        assertEquals("LIST\n\n" + "p".repeat(room - 6) + "\n\nwhat's on tomorrow?", short)
     }
 
     @Test

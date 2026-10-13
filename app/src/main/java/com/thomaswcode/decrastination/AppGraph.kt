@@ -1001,10 +1001,17 @@ class AppGraph private constructor(context: Context) {
 
     /**
      * What the chat tells Claude the app knows at [now] ([ChatPrompts.context]): the open tasks, the
-     * calendar, the changes in use, and the plan as the Plan tab shows it then.
+     * calendar and the changes in use; and beside them the plan as the Plan tab shows it then, a focus
+     * session under way included ([ChatPrompts.plan]).
      */
-    fun chatContext(now: Long = clock.now()): String =
-        ChatPrompts.context(tasks.value.tasks, calendarTime.events, instructions.value.applied, now, clock.zone(), plan(now = now))
+    fun chatContext(now: Long = clock.now()): ChatPrompts.Context {
+        val session = focus.session
+        val left = session?.let { kotlin.math.ceil(it.leftMs(now, clock.uptime()) / 60_000.0).toInt() }
+        return ChatPrompts.Context(
+            known = ChatPrompts.context(tasks.value.tasks, calendarTime.events, instructions.value.applied, now, clock.zone()),
+            plan = ChatPrompts.plan(plan(now = now), clock.zone(), session, left),
+        )
+    }
 
     /**
      * Claude's answer to your message waiting for one: a call made as the enrichment's are, under the

@@ -7,6 +7,7 @@ import com.anthropic.models.messages.JsonOutputFormat
 import com.anthropic.models.messages.MessageCreateParams
 import com.anthropic.models.messages.OutputConfig
 import com.anthropic.models.messages.StopReason
+import com.thomaswcode.decrastination.block.FocusSession
 import com.thomaswcode.decrastination.core.About
 import com.thomaswcode.decrastination.core.Change
 import com.thomaswcode.decrastination.core.ChatMessage
@@ -55,6 +56,7 @@ object ChatPrompts {
     private val WHEN = DateTimeFormatter.ofPattern("EEE d MMM yyyy HH:mm", Locale.UK)
     private val TODAY = DateTimeFormatter.ofPattern("EEEE d MMMM yyyy, HH:mm", Locale.UK)
     private val DAY = DateTimeFormatter.ofPattern("EEEE d MMMM yyyy", Locale.UK)
+    private val CLOCK = DateTimeFormatter.ofPattern("HH:mm", Locale.UK)
 
     val SYSTEM = (
         """
@@ -106,9 +108,11 @@ object ChatPrompts {
      * knows now ([context]). All of it within [budget] characters, as every call's input is held
      * to ([Pricing.MAX_INPUT_CHARS], which the cap's worst case assumes): your newest words whole;
      * the turns before them, newest first, in up to a quarter of what's left (a follow-up needs its
-     * question); then the context, its end cut if it must be.
+     * question); then the context, its end cut if it must be, and after it the [plan] ([ChatPrompts.plan]).
+     * Where both can't be whole, the plan keeps at least a third of their room (its near days first),
+     * so a long list of tasks can't push it out: the list loses its end, and the plan its far days.
      */
-    fun turns(messages: List<ChatMessage>, context: String, tasks: Map<String, TaskItem>, zone: ZoneId, budget: Int = Pricing.MAX_INPUT_CHARS): List<Pair<Speaker, String>> {
+    fun turns(messages: List<ChatMessage>, context: String, tasks: Map<String, TaskItem>, zone: ZoneId, budget: Int = Pricing.MAX_INPUT_CHARS, plan: String = ""): List<Pair<Speaker, String>> {
         val recent = messages.takeLast(HISTORY).dropWhile { it.from != Speaker.You }
         if (recent.isEmpty()) return emptyList()
         val texts = recent.map { m -> m.from to text(m, tasks, zone) }
@@ -117,9 +121,25 @@ object ChatPrompts {
         var left = (budget - newest.length) / 4
         val earlier = texts.dropLast(1).reversed().takeWhile { (_, t) -> (t.length <= left).also { if (it) left -= t.length } }.reversed()
             .dropWhile { it.first != Speaker.You }
-        // The context in the rest, beside your newest words.
-        val room = budget - newest.length - 2 - earlier.sumOf { it.second.length }
-        return earlier + (Speaker.You to context.take(room.coerceAtLeast(0)) + "\n\n" + newest)
+        // The context and the plan in the rest, beside your newest words.
+        val room = (budget - newest.length - 2 - earlier.sumOf { it.second.length }).coerceAtLeast(0)
+        val known = when {
+            plan.isEmpty() || room <= PLAN_GAP.length -> context.take(room)
+            context.length + PLAN_GAP.length + plan.length <= room -> context + PLAN_GAP + plan
+            else -> {
+                val planRoom = maxOf(room - PLAN_GAP.length - context.length, minOf(plan.length, room / 3))
+                context.take(room - PLAN_GAP.length - planRoom) + PLAN_GAP + plan.take(planRoom)
+            }
+        }
+        return earlier + (Speaker.You to known + "\n\n" + newest)
+    }
+
+    private const val PLAN_GAP = "\n\n"
+
+    /** What the app knows, as the chat sends it: [known] ([context]), then the [plan] ([plan]), each with its share of the room ([turns]). */
+    data class Context(val known: String, val plan: String) {
+        /** All of it, as it's sent when there's room. */
+        val whole: String get() = if (plan.isEmpty()) known else known + PLAN_GAP + plan
     }
 
     /** One message as it's sent: yours with what it was about; Claude's with its cards and what became of them. */
@@ -146,12 +166,8 @@ object ChatPrompts {
         else -> ""
     }
 
-    /**
-     * What the app knows now: today, the open tasks, the fortnight's events, the changes in use, and
-     * the [plan]. The plan goes last: a context too long for the budget loses its far days, not the
-     * tasks and changes a suggestion needs.
-     */
-    fun context(tasks: List<TaskItem>, events: List<CalendarEvent>, applied: List<Instruction>, now: Long, zone: ZoneId, plan: Plan? = null): String = buildString {
+    /** What the app knows now: today, the open tasks, the fortnight's events, and the changes in use. The plan's sent beside it ([plan], [turns]). */
+    fun context(tasks: List<TaskItem>, events: List<CalendarEvent>, applied: List<Instruction>, now: Long, zone: ZoneId): String = buildString {
         fun at(time: Long) = Instant.ofEpochMilli(time).atZone(zone).format(WHEN)
         val byId = tasks.associateBy { it.id }
         appendLine("Today: ${Instant.ofEpochMilli(now).atZone(zone).format(TODAY)} (${zone.id})")
@@ -176,10 +192,6 @@ object ChatPrompts {
             appendLine("Changes already in use:")
             inUse.take(InstructionPrompts.MAX_TASKS).forEach { appendLine("- " + Instructions.describe(it, byId, zone)) }
         }
-        if (plan != null) {
-            appendLine()
-            appendLine(ChatPrompts.plan(plan, zone))
-        }
     }.trimEnd()
 
     /** The plan's days sent in full: a fortnight, as the calendar's events are. */
@@ -187,20 +199,35 @@ object ChatPrompts {
 
     /**
      * [plan] as the Plan tab shows it, for questions about a day ("what's on tomorrow?"): the next
-     * thing to do; each of the next [PLAN_DAYS] days, its minutes against its working time and its
-     * work a task a line, with the pieces that day; what's planned after them, in a line naming its
-     * tasks; and the open work it leaves out, with why.
+     * thing to do, as its *Do now* card has it ([session]'s piece while one runs, [sessionLeftMin]
+     * left); each of the next [PLAN_DAYS] days, its minutes against its working time, its work a task
+     * a line with the pieces that day, and its events from *Coming up*; what's planned after them, in
+     * a line naming its tasks; the other events coming up; and the open work it leaves out, with why.
      */
-    fun plan(plan: Plan, zone: ZoneId): String = buildString {
+    fun plan(plan: Plan, zone: ZoneId, session: FocusSession? = null, sessionLeftMin: Int? = null): String = buildString {
         fun at(time: Long) = Instant.ofEpochMilli(time).atZone(zone).format(WHEN)
         fun piece(chunk: Chunk) = "${chunk.label.take(MAX_TITLE)} (${chunk.minutes} min)"
+        fun event(task: TaskItem) = "${task.id} | ${task.title.take(MAX_TITLE)} | ${task.source.label}"
         appendLine(
             "The plan: the work the app has them do each day so every deadline is met, as its Plan tab shows it. Its minutes are the app's, " +
                 "from what it's learned of how long things take them, so they can differ from the task list's. While anything's planned for " +
                 "today or tomorrow, blocked apps stay blocked in blocking hours; otherwise they cost free time earned by working.",
         )
-        plan.next?.let { next -> appendLine("Next to do: ${piece(next)}" + plan.then?.let { "; then ${piece(it)}" }.orEmpty()) }
+        // As the Do now card: in a focus session, its piece and no "then".
+        val doing = session?.let { plan.pieceOf(it.taskId, it.stepIndex, it.step) }
+        val left = sessionLeftMin?.let { ", $it min left" }.orEmpty()
+        when {
+            doing != null -> appendLine("Doing now, in a focus session: ${piece(doing)}$left")
+            session != null -> {
+                appendLine("In a focus session now: ${session.label.take(MAX_TITLE)}$left")
+                plan.next?.let { appendLine("Next to do: ${piece(it)}") }
+            }
+            else -> plan.next?.let { next -> appendLine("Next to do: ${piece(next)}" + plan.then?.let { "; then ${piece(it)}" }.orEmpty()) }
+        }
         val last = plan.today.plusDays(PLAN_DAYS - 1L)
+        // Events (an appointment in Power Planner, one of yours): under their day, as *Coming up* lists them.
+        fun day(time: Long): LocalDate = Instant.ofEpochMilli(time).atZone(zone).toLocalDate()
+        val eventsOn = plan.events.filter { it.dueAt != null }.groupBy { day(it.dueAt!!) }.filterKeys { it in plan.today..last }
         plan.buckets.filter { it.date <= last }.forEach { bucket ->
             val name = when (bucket.date) {
                 plan.today -> "Today, "
@@ -208,12 +235,9 @@ object ChatPrompts {
                 else -> ""
             } + bucket.date.format(DAY)
             val time = "${bucket.capacityMin} min of working time" + if (bucket.date == plan.today) " left" else ""
-            if (bucket.chunks.isEmpty()) {
-                appendLine("- $name: nothing planned ($time)")
-                return@forEach
-            }
             val over = (bucket.plannedMin - bucket.capacityMin).takeIf { it > 0 }?.let { ", over by $it min" }.orEmpty()
-            appendLine("- $name: ${bucket.plannedMin} min planned of $time$over")
+            appendLine(if (bucket.chunks.isEmpty()) "- $name: nothing planned ($time)" else "- $name: ${bucket.plannedMin} min planned of $time$over")
+            eventsOn[bucket.date].orEmpty().forEach { appendLine("  - event at ${Instant.ofEpochMilli(it.dueAt!!).atZone(zone).format(CLOCK)}: ${event(it)}") }
             // A task a line, as the Plan lists them (Q31), its pieces that day in their order.
             bucket.chunks.groupBy { it.taskId }.forEach { (id, pieces) ->
                 val first = pieces.first()
@@ -235,6 +259,12 @@ object ChatPrompts {
             // Which tasks, so that's said rather than guessed.
             val tasks = after.flatMap { it.chunks }.distinctBy { it.taskId }.joinToString("; ") { "${it.taskId} | ${it.title.take(MAX_TITLE)}" }
             appendLine("- After ${last.format(DAY)}: ${after.sumOf { it.plannedMin }} min on $days, the last ${after.last().date.format(DAY)}, of: $tasks")
+        }
+        // The rest of *Coming up*: past, after the fortnight, or with no date.
+        val others = plan.events.filter { e -> e.dueAt?.let { day(it) !in plan.today..last } ?: true }
+        if (others.isNotEmpty()) {
+            appendLine("Other events on the Plan (past, after ${last.format(DAY)}, or with no date):")
+            others.forEach { appendLine("- ${event(it)} | ${it.dueAt?.let(::at) ?: "no date"}") }
         }
         if (plan.unplanned.isNotEmpty()) {
             val end = (plan.buckets.lastOrNull()?.date ?: plan.today).format(DAY)
@@ -366,8 +396,8 @@ class ChatReader(apiKey: String, private val zone: ZoneId, endpoint: String? = n
         .maxRetries(2)
         .build()
 
-    /** Claude's answer to the last of [messages] (yours), with what the app knows now ([context], from [ChatPrompts.context]). */
-    suspend fun answer(messages: List<ChatMessage>, tasks: List<TaskItem>, events: List<CalendarEvent>, context: String, now: Long): Result {
+    /** Claude's answer to the last of [messages] (yours), with what the app knows now ([context]: [ChatPrompts.context] and [ChatPrompts.plan]). */
+    suspend fun answer(messages: List<ChatMessage>, tasks: List<TaskItem>, events: List<CalendarEvent>, context: ChatPrompts.Context, now: Long): Result {
         val schema = JsonOutputFormat.Schema.builder().apply { ChatPrompts.SCHEMA.forEach { (k, v) -> putAdditionalProperty(k, JsonValue.from(v)) } }.build()
         val builder = MessageCreateParams.builder()
             .model(model)
@@ -376,7 +406,7 @@ class ChatReader(apiKey: String, private val zone: ZoneId, endpoint: String? = n
             .outputConfig(OutputConfig.builder().effort(OutputConfig.Effort.HIGH).format(JsonOutputFormat.builder().schema(schema).build()).build())
             .putAdditionalHeader("anthropic-beta", ClaudeEnricher.FALLBACK_BETA)
             .putAdditionalBodyProperty("fallbacks", JsonValue.from("default"))
-        ChatPrompts.turns(messages, context, tasks.associateBy { it.id }, zone).forEach { (from, text) ->
+        ChatPrompts.turns(messages, context.known, tasks.associateBy { it.id }, zone, plan = context.plan).forEach { (from, text) ->
             if (from == Speaker.You) builder.addUserMessage(text) else builder.addAssistantMessage(text)
         }
         val message = withContext(Dispatchers.IO) { client.messages().create(builder.build()) }
