@@ -4,38 +4,42 @@ Each question is a decision the review can't make for you: it changes what the s
 
 Answer in any form (a number per question is enough, with notes where you disagree); I'll then adjust the documents to match.
 
-| Q | Decision | Depends on it | My recommendation |
-|---|---|---|---|
-| Q-01 | Salvage a split with one bad date, or prompt-only | AI-01 | Salvage |
-| Q-02 | What goes in the student profile sent with every call | AI-05, AI-06, AI-21, DX-15 | Subjects, codes, hours, textbook, year; your lines optional |
-| Q-03 | Unsure emails: tag only, or tag and notify | AI-10 | Tag only |
-| Q-04 | A hidden-emails section with "It's a task" | AI-11, UI-10 | Yes, folded |
-| Q-05 | Soft dates for invented "quick action" deadlines | AI-12 | Yes |
-| Q-06 | Which chat actions Claude may propose | AI-14, AI-19 | Tick step, start session, steps; not mark-done |
-| Q-07 | "Help me start" micro-plans | AI-15 | Yes |
-| Q-08 | Several photos and partial credit on a photo check | AI-17 | Several photos yes; partial credit no |
-| Q-09 | Remembered facts about the student | AI-21 | Not yet |
-| Q-10 | Effort and model per job | AC-02, AC-03 | Effort table yes; Sonnet for Email only if the eval says so |
-| Q-11 | Sender rules | AC-09, DX-05 | Yes, suggested never automatic |
-| Q-12 | Use the Power Planner timetable | DX-09 | Later |
-| Q-13 | Link duplicates across sources | DX-15 | Yes, by tap |
-| Q-14 | Spread revision as soft pieces | PL-01 | Yes |
-| Q-15 | An evening-start preference | PL-03 | No |
-| Q-16 | A most-per-day, and a learned yield | PL-05, PL-06 | Day max yes (180/300); yield later |
-| Q-17 | Swipe to start/tick, and move-by-hand | UI-03, UI-04 | Swipe yes; move with limits |
-| Q-18 | Loosen the block: today-only pressure, weekend start, empty days | BL-01, BL-02, BL-07 | All three |
-| Q-19 | Bank free time; study use of blocked sites | BL-05, BL-06 | Bank no; study use no |
-| Q-20 | An evening nudge | LR-03 | Try it for a month |
-| Q-21 | A Claude line in the briefing | LR-04 | Try it for a month |
-| Q-22 | Photo of a worksheet becomes a task | NF-01 | Yes |
-| Q-23 | Anki time counted automatically | NF-03 | Yes, counts-checked |
-| Q-24 | What you see: weekly summary, calendar write | NF-02, NF-07 | Summary he sends; no calendar write |
-| Q-25 | Streaks and a weekly target | NF-08 | A streak only, no target |
-| Q-26 | A paid eval task | AR-02 | Yes, capped at $2 a run |
-| Q-27 | Exams page; recurring work and weekly goals | NF-04, NF-05 | Both, exams first, before January mocks |
+| Q | Decision | Depends on it | My recommendation | Answer |
+|---|---|---|---|---|
+| Q-01 | Salvage a split with one bad date, or prompt-only | AI-01 | Salvage |  Salvage but first attempt to reprompt the AI with the caught issue. If still fails, salvage.|
+| Q-02 | What goes in the student profile sent with every call | AI-05, AI-06, AI-21, DX-15 | Subjects, codes, hours, textbook, year; your lines optional |  |
+| Q-03 | Unsure emails: tag only, or tag and notify | AI-10 | Tag only |  Tag and notification|
+| Q-04 | A hidden-emails section with "It's a task" | AI-11, UI-10 | Yes, folded |Implement a change on how emails are read in: only read in starred emails, but also treat all starred emails as things I have marked as tasks (they cannot be dropped as info).  |
+| Q-05 | Soft dates for invented "quick action" deadlines | AI-12 | Yes |  |
+| Q-06 | Which chat actions Claude may propose | AI-14, AI-19 | Tick step, start session, steps; not mark-done |Keep recomendation but no start session.  |
+| Q-07 | "Help me start" micro-plans | AI-15 | Yes |Yes  |
+| Q-08 | Several photos and partial credit on a photo check | AI-17 | Several photos yes; partial credit no |  Keep recomendation|
+| Q-09 | Remembered facts about the student | AI-21 | Not yet |  |
+| Q-10 | Effort and model per job | AC-02, AC-03 | Effort table yes; Sonnet for Email only if the eval says so |This can be your call. Models and efforts can be different for different jobs but optimise only for intelligence and speed, not cost as that is basically unlimited.  |
+| Q-11 | Sender rules | AC-09, DX-05 | Yes, suggested never automatic |No longer important after response to Q4  |
+| Q-12 | Use the Power Planner timetable | DX-09 | Later |Yes, now. Timetable is kept up to date when looking at powerplanner and google calendar combined.  |
+| Q-13 | Link duplicates across sources | DX-15 | Yes, by tap |Keep recomendation  |
+| Q-14 | Spread revision as soft pieces | PL-01 | Yes |  |
+| Q-15 | An evening-start preference | PL-03 | No |  |
+| Q-16 | A most-per-day, and a learned yield | PL-05, PL-06 | Day max yes (180/300); yield later |  |
+| Q-17 | Swipe to start/tick, and move-by-hand | UI-03, UI-04 | Swipe yes; move with limits |  |
+| Q-18 | Loosen the block: today-only pressure, weekend start, empty days | BL-01, BL-02, BL-07 | All three |  |
+| Q-19 | Bank free time; study use of blocked sites | BL-05, BL-06 | Bank no; study use no |  |
+| Q-20 | An evening nudge | LR-03 | Try it for a month |  |
+| Q-21 | A Claude line in the briefing | LR-04 | Try it for a month |  |
+| Q-22 | Photo of a worksheet becomes a task | NF-01 | Yes |  |
+| Q-23 | Anki time counted automatically | NF-03 | Yes, counts-checked |  |
+| Q-24 | What you see: weekly summary, calendar write | NF-02, NF-07 | Summary he sends; no calendar write |  |
+| Q-25 | Streaks and a weekly target | NF-08 | A streak only, no target |  |
+| Q-26 | A paid eval task | AR-02 | Yes, capped at $2 a run |  |
+| Q-27 | Exams page; recurring work and weekly goals | NF-04, NF-05 | Both, exams first, before January mocks |  |
 
----
+**Extra notes from me:**
 
+- Remove the sessions feature as it is not used. I read the job from the app and do it, instead of clicking start and end for the session.
+
+- Assign every task a specific time in my day. Add this to my google calendar. Adjust live.
+- Looking at my powerplanner calander, you will see that I have break, lunch, and study periods. On days that they are not blocked out, allow scheduling tasks in those slots. That will involve relaxing previous school-time restrictions.
 ## Q-01 Salvage a split with one bad date, or prompt-only
 
 **Context.** A step dated after the task's deadline drops Claude's whole split (`Prompts.kt:321`); the German assessment lost nine good steps to one. AI-01 proposes telling the model the rule *and* keeping the split with the offending step's dates removed.
