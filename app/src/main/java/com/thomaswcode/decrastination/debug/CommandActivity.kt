@@ -71,6 +71,8 @@ import kotlinx.serialization.json.JsonPrimitive
  * - `chat-context`: writes `files/chat-context.txt`, what the chat would send Claude with a message
  *   now (the tasks, the calendar, the changes in use and the plan), for the chat's eval; it too
  *   holds your tasks' text, to pull into `private/` and delete.
+ * - `chat-ask --es text "<words>"`: a message to *Ask Claude*, as sent on the phone (a paid call),
+ *   logging Claude's reply; `chat-clear` empties the chat, as its menu's *Clear the chat* does.
  * - `ai-check --es base http://127.0.0.1:8089`: one model call per job through the real client
  *   to a stand-in server (`adb reverse` to the PC), with a dummy key, logging what it reads back.
  *   Nothing reaches Anthropic and nothing is stored: it checks the client works on the phone.
@@ -227,6 +229,19 @@ class CommandActivity : Activity() {
                 File(filesDir, "chat-context.txt").writeText(graph.chatContext())
                 Log.i(TAG, "Wrote the chat's context to files/chat-context.txt")
             }
+            "chat-ask" -> {
+                // --es text "<words>": sent to the chat as on the phone (a paid call); Claude's reply logged.
+                val text = intent.getStringExtra("text")
+                if (text.isNullOrBlank() || !graph.ask(text)) {
+                    Log.w(TAG, "chat-ask needs --es text <words>, and no message of yours still waiting")
+                } else {
+                    // Waits its turn behind the answer ask started, or answers it itself.
+                    graph.answerChat()
+                    val last = graph.chat.value.messages.last()
+                    Log.i(TAG, "chat-ask: ${last.from}: ${last.text}${last.note?.let { " [$it]" }.orEmpty()}; ${last.proposals.size} cards")
+                }
+            }
+            "chat-clear" -> graph.clearChat().also { Log.i(TAG, "Chat cleared") }
             "ai-endpoint" -> {
                 // --es base <url> sends the model's calls to a stand-in till the app restarts; none, to Anthropic again.
                 graph.modelEndpoint = intent.getStringExtra("base")
