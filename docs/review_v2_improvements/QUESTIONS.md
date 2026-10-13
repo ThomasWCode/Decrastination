@@ -4,47 +4,57 @@ Each question is a decision the review can't make for you: it changes what the s
 
 Answer in any form (a number per question is enough, with notes where you disagree); I'll then adjust the documents to match.
 
-| Q | Decision | Depends on it | My recommendation | Answer |
-|---|---|---|---|---|
-| Q-01 | Salvage a split with one bad date, or prompt-only | AI-01 | Salvage |  Salvage but first attempt to reprompt the AI with the caught issue. If still fails, salvage.|
-| Q-02 | What goes in the student profile sent with every call | AI-05, AI-06, AI-21, DX-15 | Subjects, codes, hours, textbook, year; your lines optional |  |
-| Q-03 | Unsure emails: tag only, or tag and notify | AI-10 | Tag only |  Tag and notification|
-| Q-04 | A hidden-emails section with "It's a task" | AI-11, UI-10 | Yes, folded |Implement a change on how emails are read in: only read in starred emails, but also treat all starred emails as things I have marked as tasks (they cannot be dropped as info).  |
-| Q-05 | Soft dates for invented "quick action" deadlines | AI-12 | Yes |  |
-| Q-06 | Which chat actions Claude may propose | AI-14, AI-19 | Tick step, start session, steps; not mark-done |Keep recomendation but no start session.  |
-| Q-07 | "Help me start" micro-plans | AI-15 | Yes |Yes  |
-| Q-08 | Several photos and partial credit on a photo check | AI-17 | Several photos yes; partial credit no |  Keep recomendation|
-| Q-09 | Remembered facts about the student | AI-21 | Not yet |  |
-| Q-10 | Effort and model per job | AC-02, AC-03 | Effort table yes; Sonnet for Email only if the eval says so |This can be your call. Models and efforts can be different for different jobs but optimise only for intelligence and speed, not cost as that is basically unlimited.  |
-| Q-11 | Sender rules | AC-09, DX-05 | Yes, suggested never automatic |No longer important after response to Q4  |
-| Q-12 | Use the Power Planner timetable | DX-09 | Later |Yes, now. Timetable is kept up to date when looking at powerplanner and google calendar combined.  |
-| Q-13 | Link duplicates across sources | DX-15 | Yes, by tap |Keep recomendation  |
-| Q-14 | Spread revision as soft pieces | PL-01 | Yes |  |
-| Q-15 | An evening-start preference | PL-03 | No |  |
-| Q-16 | A most-per-day, and a learned yield | PL-05, PL-06 | Day max yes (180/300); yield later |  |
-| Q-17 | Swipe to start/tick, and move-by-hand | UI-03, UI-04 | Swipe yes; move with limits |  |
-| Q-18 | Loosen the block: today-only pressure, weekend start, empty days | BL-01, BL-02, BL-07 | All three |  |
-| Q-19 | Bank free time; study use of blocked sites | BL-05, BL-06 | Bank no; study use no |  |
-| Q-20 | An evening nudge | LR-03 | Try it for a month |  |
-| Q-21 | A Claude line in the briefing | LR-04 | Try it for a month |  |
-| Q-22 | Photo of a worksheet becomes a task | NF-01 | Yes |  |
-| Q-23 | Anki time counted automatically | NF-03 | Yes, counts-checked |  |
-| Q-24 | What you see: weekly summary, calendar write | NF-02, NF-07 | Summary he sends; no calendar write |  |
-| Q-25 | Streaks and a weekly target | NF-08 | A streak only, no target |  |
-| Q-26 | A paid eval task | AR-02 | Yes, capped at $2 a run |  |
-| Q-27 | Exams page; recurring work and weekly goals | NF-04, NF-05 | Both, exams first, before January mocks |  |
+| Q    | Decision                                                         | Depends on it              | My recommendation                                           | Answer                                                                                                                                                                                                                           |
+| ---- | ---------------------------------------------------------------- | -------------------------- | ----------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Q-01 | Salvage a split with one bad date, or prompt-only                | AI-01                      | Salvage                                                     | Salvage but first attempt to reprompt the AI with the caught issue. If still fails, salvage.                                                                                                                                     |
+| Q-02 | What goes in the student profile sent with every call            | AI-05, AI-06, AI-21, DX-15 | Subjects, codes, hours, textbook, year; your lines optional | Everything that could be useful, not going beyond the point where context is overclogged. This could be all 3.                                                                                                                   |
+| Q-03 | Unsure emails: tag only, or tag and notify                       | AI-10                      | Tag only                                                    | Tag and notification                                                                                                                                                                                                             |
+| Q-04 | A hidden-emails section with "It's a task"                       | AI-11, UI-10               | Yes, folded                                                 | Implement a change on how emails are read in: only read in starred emails, but also treat all starred emails as things I have marked as tasks (they cannot be dropped as info).                                                  |
+| Q-05 | Soft dates for invented "quick action" deadlines                 | AI-12                      | Yes                                                         | Keep recomendation                                                                                                                                                                                                               |
+| Q-06 | Which chat actions Claude may propose                            | AI-14, AI-19               | Tick step, start session, steps; not mark-done              | Keep recomendation but no start session.                                                                                                                                                                                         |
+| Q-07 | "Help me start" micro-plans                                      | AI-15                      | Yes                                                         | Yes                                                                                                                                                                                                                              |
+| Q-08 | Several photos and partial credit on a photo check               | AI-17                      | Several photos yes; partial credit no                       | Keep recomendation                                                                                                                                                                                                               |
+| Q-09 | Remembered facts about the student                               | AI-21                      | Not yet                                                     | Yes, with a higher cap than 10 lines and can be overwritten to be updated so is not frozen once cap is reaeched.                                                                                                                |
+| Q-10 | Effort and model per job                                         | AC-02, AC-03               | Effort table yes; Sonnet for Email only if the eval says so | This can be your call. Models and efforts can be different for different jobs but optimise only for intelligence and speed, not cost as that is basically unlimited.                                                             |
+| Q-11 | Sender rules                                                     | AC-09, DX-05               | Yes, suggested never automatic                              | No longer important after response to Q4                                                                                                                                                                                         |
+| Q-12 | Use the Power Planner timetable                                  | DX-09                      | Later                                                       | Yes, now. Timetable is kept up to date when looking at powerplanner and google calendar combined.                                                                                                                                |
+| Q-13 | Link duplicates across sources                                   | DX-15                      | Yes, by tap                                                 | Keep recomendation                                                                                                                                                                                                               |
+| Q-14 | Spread revision as soft pieces                                   | PL-01                      | Yes                                                         | Keep recomendation                                                                                                                                                                                                               |
+| Q-15 | An evening-start preference                                      | PL-03                      | No                                                          | No                                                                                                                                                                                                                               |
+| Q-16 | A most-per-day, and a learned yield                              | PL-05, PL-06               | Day max yes (180/300); yield later                          | Day max should just be the amount of time available in that day: anything not due today or tomorrow should be spread evenly out across days until the deadline, not piled onto first available day. Implement the learned yield. |
+| Q-17 | Swipe to start/tick, and move-by-hand                            | UI-03, UI-04               | Swipe yes; move with limits                                 | Swipe and move yes. No limits on number of moves per day but cannot move items when the move would clash with the due date.                                                                                                      |
+| Q-18 | Loosen the block: today-only pressure, weekend start, empty days | BL-01, BL-02, BL-07        | All three                                                   | Keep recomendation                                                                                                                                                                                                               |
+| Q-19 | Bank free time; study use of blocked sites                       | BL-05, BL-06               | Bank no; study use no                                       | Keep recomendation                                                                                                                                                                                                               |
+| Q-20 | An evening nudge                                                 | LR-03                      | Try it for a month                                          | Yes                                                                                                                                                                                                                              |
+| Q-21 | A Claude line in the briefing                                    | LR-04                      | Try it for a month                                          | Yes                                                                                                                                                                                                                              |
+| Q-22 | Photo of a worksheet becomes a task                              | NF-01                      | Yes                                                         | Yes, including being able context to an existing task (e.g. recent physics tasks have been allocated 2h when if it saw the worksheet it would have set 30min).                                                                   |
+| Q-23 | Anki time counted automatically                                  | NF-03                      | Yes, counts-checked                                         | Yes                                                                                                                                                                                                                              |
+| Q-24 | What you see: weekly summary, calendar write                     | NF-02, NF-07               | Summary he sends; no calendar write                         | Option to generate and send summary to dad's email.                                                                                                                                                                              |
+| Q-25 | Streaks and a weekly target                                      | NF-08                      | A streak only, no target                                    | No                                                                                                                                                                                                                               |
+| Q-26 | A paid eval task                                                 | AR-02                      | Yes, capped at $2 a run                                     | Yes                                                                                                                                                                                                                              |
+| Q-27 | Exams page; recurring work and weekly goals                      | NF-04, NF-05               | Both, exams first, before January mocks                     | Not yet                                                                                                                                                                                                                          |
+
+---
 
 **Extra notes from me:**
 
-- Remove the sessions feature as it is not used. I read the job from the app and do it, instead of clicking start and end for the session.
+- Remove the sessions feature as it is not used. I read the job from the app and do it; I don't click start and end for a session. I use the app to figure out what to do, not to do it.
+- Assign every task a specific time in my day. Add this to my google calendar. Adjust live. Looking at my powerplanner calander/timetable, you will see that I have break, lunch, and study periods. On days that they are not blocked out by another item (either in powerplanner or google calandar), allow scheduling tasks in those slots. That will involve relaxing previous school-time restrictions.
+- Ensure that tasks are allocated by the time left in a day, while overdue items and items due today/tomorrow are not affected. Spread items out across the days before the deadline, ensuring they all get done. Ensure that later deadline tasks are not infinitely pushed back until they suddenly come around and I have loads to do.
+- Instead of tasks going overdue, make the app reorganise and restructure every time to keep fitting everything in allocated time. This only applies to subtasks in a task and items where the app set a deadline instead of the deadline being sourced. Other items should still be reorganised and restructured if overdue, but should still display as overdue.
+- Make the whole app have the colour scheme of the logo. My phone has a dark theme so still honour that but adjust some items and areas with the new colour scheme.
+- Make substantial improvement to feel like I am being nagged by a person, not an app. Notifications should include claude generated nags and I can respond. A notification may ask why I haven't started yet and I can respond and we can have a conversation about it. Add the chat button in the bottom right to all screens. Other improvements to this goal too.
+- Add an easy reset for the stats and app learned notes.
+- Clean up the UI again: one-time items and items of less importance likes setup, blocking and protection and settings should be lower in the menu and bundled under one. The difference between Plan, Tasks and Calendar is not clear; it seems like there are three screens with much overlap but some differences. Merge these into one or two screens and make them more obvious.
 
-- Assign every task a specific time in my day. Add this to my google calendar. Adjust live.
-- Looking at my powerplanner calander, you will see that I have break, lunch, and study periods. On days that they are not blocked out, allow scheduling tasks in those slots. That will involve relaxing previous school-time restrictions.
+---
+
 ## Q-01 Salvage a split with one bad date, or prompt-only
 
 **Context.** A step dated after the task's deadline drops Claude's whole split (`Prompts.kt:321`); the German assessment lost nine good steps to one. AI-01 proposes telling the model the rule *and* keeping the split with the offending step's dates removed.
 
 **Options.**
+
 1. Prompt only: the rule in the system prompt and the field description; the check stays strict.
 2. Prompt and salvage: as 1, plus the check keeps the split and drops only the bad step's dates, telling the student.
 
@@ -57,6 +67,7 @@ Answer in any form (a number per question is enough, with notes where you disagr
 **Context.** AI-05 proposes a short stable block (under 600 characters) sent with every job and the chat: subjects and class codes, year group, hours, textbook, and optionally lines you write.
 
 **Options.**
+
 1. Derived facts only (subjects, codes, year, hours, textbook): nothing typed, nothing personal beyond what the emails already carry.
 2. Derived facts plus your lines ("finds German vocab slow", "football Tuesdays").
 3. Also the student's remembered facts (Q-09).
@@ -70,6 +81,7 @@ Answer in any form (a number per question is enough, with notes where you disagr
 **Context.** AI-10 lets the model say it isn't sure and ask one question. The email stays visible as Admin with a "Check" tag.
 
 **Options.**
+
 1. Tag only; the student meets it on the list.
 2. Tag and a notification per unsure email with the question and two answers.
 
@@ -82,6 +94,7 @@ Answer in any form (a number per question is enough, with notes where you disagr
 **Context.** Emails Claude reads as Info are hidden everywhere; there's no way back (AI-11). The 1.3.0 decision was to hide them; this adds a folded list at the foot of Tasks with a one-tap return.
 
 **Options.**
+
 1. Yes, folded by default with a count.
 2. No list; only a notification when Claude hides something (noisy).
 3. Neither; rely on starring in Gmail (DX-03) to bring an email back.
@@ -95,6 +108,7 @@ Answer in any form (a number per question is enough, with notes where you disagr
 **Context.** The Email prompt tells the model to date quick actions within two weeks; the app shows that date as hard ("Overdue"). AI-12 marks such dates soft.
 
 **Options.**
+
 1. Soft dates: ordering keeps them; "Overdue" doesn't apply; never ranked above a real deadline.
 2. Drop the two-week rule: undated blocks fall under the task's soft week.
 
@@ -117,6 +131,7 @@ Answer in any form (a number per question is enough, with notes where you disagr
 **Context.** AI-15: one call per piece for a first action under two minutes, two next actions and a "done when". A few cents per piece.
 
 **Options.**
+
 1. Yes, on the DO NOW card and the session view.
 2. No.
 
@@ -139,6 +154,7 @@ Answer in any form (a number per question is enough, with notes where you disagr
 **Context.** AI-21: a `remember` card type; facts join the profile block.
 
 **Options.**
+
 1. Yes, capped at ten lines, listed in Settings.
 2. Not yet.
 
@@ -151,6 +167,7 @@ Answer in any form (a number per question is enough, with notes where you disagr
 **Context.** AC-02 (effort per job) and AC-03 (Sonnet 5.5 for email triage, decided by the eval set). Your v1 position was "cheaper models only with an eval set"; the set exists but is small.
 
 **Options.**
+
 1. Keep Opus HIGH everywhere (simple; costs more; slower chat).
 2. Effort table (MEDIUM for Effort, Photo, Chat) with Opus everywhere.
 3. 2 plus Sonnet 5.5 for Email if the eval score matches.
@@ -164,6 +181,7 @@ Answer in any form (a number per question is enough, with notes where you disagr
 **Context.** AC-09 and DX-05: per-sender "always Info" rules, suggested after three Not-a-task marks or set in the chat, applied without a model call.
 
 **Options.**
+
 1. Yes, suggested and confirmed by the student, listed and deletable.
 2. Yes, automatic after three marks.
 3. No.
@@ -187,6 +205,7 @@ Answer in any form (a number per question is enough, with notes where you disagr
 **Context.** DX-15: the same work from Teams and Power Planner, or an email about it, linked by one tap so it's planned once.
 
 **Options.**
+
 1. Yes, suggested by a match, linked by tap.
 2. No; the student archives or marks the extra one Not a task.
 
@@ -199,6 +218,7 @@ Answer in any form (a number per question is enough, with notes where you disagr
 **Context.** PL-01: revision for a test placed across the days before it as soft work until its backwards-placed day, instead of as late as possible.
 
 **Options.**
+
 1. Yes, default on, per-task override.
 2. Yes, off by default.
 3. No.
@@ -220,6 +240,7 @@ Answer in any form (a number per question is enough, with notes where you disagr
 **Context.** PL-05 (a weekday and weekend maximum, suggested 180 and 300 minutes, as default day caps) and PL-06 (plan with window × a learned done/planned ratio).
 
 **Options.**
+
 1. Day max only.
 2. Day max and yield.
 3. Neither; keep `capacityAdvice`'s sentence.
@@ -233,6 +254,7 @@ Answer in any form (a number per question is enough, with notes where you disagr
 **Context.** UI-03 (swipe right to start, left to tick a step) and UI-04 (drag a piece to a day, a Tomorrow button). Moving is the one that can be used to avoid.
 
 **Options.**
+
 1. Swipe yes, move no (moves stay with Claude, where they're logged and reasoned).
 2. Swipe yes, move yes with limits (not for work due tomorrow or earlier; two a day; logged).
 3. Both no.
@@ -246,6 +268,7 @@ Answer in any form (a number per question is enough, with notes where you disagr
 **Context.** BL-01 (free time spendable once today's bucket is done, not today and tomorrow), BL-02 (a weekend "block from" time), BL-07 (an allowance on a day with nothing planned). Each is a loosening; each goes through the 24-hour delay.
 
 **Options** (independent):
+
 - BL-01: yes / no.
 - BL-02: yes, at HH:MM / no.
 - BL-07: yes, N minutes / no.
@@ -299,6 +322,7 @@ Answer in any form (a number per question is enough, with notes where you disagr
 **Context.** NF-02 (a weekly summary he sends you, or the app sends) and NF-07 (planned pieces written to a shared calendar).
 
 **Options.**
+
 1. Summary he sends, nothing automatic; no calendar write.
 2. Summary sent automatically to your address, visible to him in Settings.
 3. 2 plus calendar write.
@@ -328,6 +352,7 @@ Answer in any form (a number per question is enough, with notes where you disagr
 **Context.** NF-04 (exam dates and topics generate spread revision tasks) and NF-05 (weekly-minutes goals and recurring own tasks).
 
 **Options.**
+
 1. Both; exams first.
 2. NF-05 only (small).
 3. Neither.
