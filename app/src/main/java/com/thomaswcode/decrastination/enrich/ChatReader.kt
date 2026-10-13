@@ -10,15 +10,18 @@ import com.anthropic.models.messages.StopReason
 import com.thomaswcode.decrastination.core.About
 import com.thomaswcode.decrastination.core.Change
 import com.thomaswcode.decrastination.core.ChatMessage
+import com.thomaswcode.decrastination.core.Chunk
 import com.thomaswcode.decrastination.core.Instruction
 import com.thomaswcode.decrastination.core.Instructions
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.OwnStep
 import com.thomaswcode.decrastination.core.OwnTask
 import com.thomaswcode.decrastination.core.OwnTasks
+import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.ProposalState
 import com.thomaswcode.decrastination.core.Speaker
 import com.thomaswcode.decrastination.core.TaskItem
+import com.thomaswcode.decrastination.core.Unplanned
 import com.thomaswcode.decrastination.core.shareOut
 import com.thomaswcode.decrastination.learn.CalendarEvent
 import com.thomaswcode.decrastination.learn.EventJudge
@@ -61,9 +64,9 @@ object ChatPrompts {
         1. Add tasks of their own (newTasks): something to do that isn't listed ("write my UCAS statement by 1 December", "buy mum a present before Sunday"). Give a short title in their words; kind: Homework, Revision, Admin, or Event for something that happens at a time (an appointment, a match); subject if it's for one; dueDate and dueTime if they gave them (an event's start; no time means the end of that day); minutes for the whole thing (your best estimate if they didn't say, and say so in your reply); startDate if it can't be started before a day; notes only for something worth keeping; and steps only for a big task worth splitting, each with minutes (adding up to the task's) and its own dates where it has them.
         2. Change their tasks and days (changes), with these:
 """ + InstructionPrompts.CHANGE_TYPES.prependIndent("        ") + """
-        3. Answer questions about their work from the lists you're given, briefly.
+        3. Answer questions about their work from what you're given, briefly: what's due when from the task list; what's on a day, how full it is, what to do next and why something isn't planned from the plan. The plan is what the app has them do and shows them, so say what it says rather than planning the work again yourself.
 
-        Reply in one to three short sentences of plain UK English. Nothing you suggest happens until the student taps Add or Apply on it, so never say you've done it: say what you'd do ("I'd add…", "I'd move…"). If what you need is missing or unclear (which task they mean, or when), ask one short question and suggest nothing. Don't add a task that's already listed: change it instead. When their message is about a given task, event or day, it's about that unless they clearly name another. Suggest only what they asked for, and leave every field you don't use null.
+        Reply in one to three short sentences of plain UK English (asked what's on, a short list instead, a line a task).Nothing you suggest happens until the student taps Add or Apply on it, so never say you've done it: say what you'd do ("I'd add…", "I'd move…"). If what you need is missing or unclear (which task they mean, or when), ask one short question and suggest nothing. Don't add a task that's already listed: change it instead. When their message is about a given task, event or day, it's about that unless they clearly name another. Suggest only what they asked for, and leave every field you don't use null.
     """
         ).trimIndent()
 
@@ -143,8 +146,12 @@ object ChatPrompts {
         else -> ""
     }
 
-    /** What the app knows now: today, the open tasks, the fortnight's events, and the changes in use. */
-    fun context(tasks: List<TaskItem>, events: List<CalendarEvent>, applied: List<Instruction>, now: Long, zone: ZoneId): String = buildString {
+    /**
+     * What the app knows now: today, the open tasks, the fortnight's events, the changes in use, and
+     * the [plan]. The plan goes last: a context too long for the budget loses its far days, not the
+     * tasks and changes a suggestion needs.
+     */
+    fun context(tasks: List<TaskItem>, events: List<CalendarEvent>, applied: List<Instruction>, now: Long, zone: ZoneId, plan: Plan? = null): String = buildString {
         fun at(time: Long) = Instant.ofEpochMilli(time).atZone(zone).format(WHEN)
         val byId = tasks.associateBy { it.id }
         appendLine("Today: ${Instant.ofEpochMilli(now).atZone(zone).format(TODAY)} (${zone.id})")
@@ -168,6 +175,78 @@ object ChatPrompts {
             appendLine()
             appendLine("Changes already in use:")
             inUse.take(InstructionPrompts.MAX_TASKS).forEach { appendLine("- " + Instructions.describe(it, byId, zone)) }
+        }
+        if (plan != null) {
+            appendLine()
+            appendLine(ChatPrompts.plan(plan, zone))
+        }
+    }.trimEnd()
+
+    /** The plan's days sent in full: a fortnight, as the calendar's events are. */
+    const val PLAN_DAYS = 14
+
+    /**
+     * [plan] as the Plan tab shows it, for questions about a day ("what's on tomorrow?"): the next
+     * thing to do; each of the next [PLAN_DAYS] days, its minutes against its working time and its
+     * work a task a line, with the pieces that day; what's planned after them, in a line; and the
+     * open work it leaves out, with why.
+     */
+    fun plan(plan: Plan, zone: ZoneId): String = buildString {
+        fun at(time: Long) = Instant.ofEpochMilli(time).atZone(zone).format(WHEN)
+        fun piece(chunk: Chunk) = "${chunk.label.take(MAX_TITLE)} (${chunk.minutes} min)"
+        appendLine(
+            "The plan: the work the app has them do each day so every deadline is met, as its Plan tab shows it. Its minutes are the app's, " +
+                "from what it's learned of how long things take them, so they can differ from the task list's. While anything's planned for " +
+                "today or tomorrow, blocked apps stay blocked in blocking hours; otherwise they cost free time earned by working.",
+        )
+        plan.next?.let { next -> appendLine("Next to do: ${piece(next)}" + plan.then?.let { "; then ${piece(it)}" }.orEmpty()) }
+        val last = plan.today.plusDays(PLAN_DAYS - 1L)
+        plan.buckets.filter { it.date <= last }.forEach { bucket ->
+            val name = when (bucket.date) {
+                plan.today -> "Today, "
+                plan.today.plusDays(1) -> "Tomorrow, "
+                else -> ""
+            } + bucket.date.format(DAY)
+            val time = "${bucket.capacityMin} min of working time" + if (bucket.date == plan.today) " left" else ""
+            if (bucket.chunks.isEmpty()) {
+                appendLine("- $name: nothing planned ($time)")
+                return@forEach
+            }
+            val over = (bucket.plannedMin - bucket.capacityMin).takeIf { it > 0 }?.let { ", over by $it min" }.orEmpty()
+            appendLine("- $name: ${bucket.plannedMin} min planned of $time$over")
+            // A task a line, as the Plan lists them (Q31), its pieces that day in their order.
+            bucket.chunks.groupBy { it.taskId }.forEach { (id, pieces) ->
+                val first = pieces.first()
+                // Undated work's deadline is the app's own (a week after it was first seen): none to be late for.
+                val dated = first.dueAt != null
+                val flags = listOfNotNull(
+                    first.dueAt?.let { "due ${at(it)}" } ?: "no due date",
+                    "overdue".takeIf { dated && pieces.any { it.overdue } },
+                    "won't fit before its deadline".takeIf { dated && pieces.any { it.behind } },
+                    pieces.mapNotNull { it.availableAt }.minOrNull()?.let { "can't start before ${at(it)}" },
+                )
+                val parts = pieces.joinToString { "${it.step?.take(MAX_TITLE) ?: "all of it"} (${it.minutes} min)" }
+                appendLine("  - $id | ${first.title.take(MAX_TITLE)} | ${pieces.sumOf { it.minutes }} min: $parts | ${flags.joinToString(" | ")}")
+            }
+        }
+        val after = plan.buckets.filter { it.date > last && it.chunks.isNotEmpty() }
+        if (after.isNotEmpty()) {
+            val days = if (after.size == 1) "1 more day" else "${after.size} more days"
+            appendLine("- After ${last.format(DAY)}: ${after.sumOf { it.plannedMin }} min on $days, the last ${after.last().date.format(DAY)}")
+        }
+        if (plan.unplanned.isNotEmpty()) {
+            val end = (plan.buckets.lastOrNull()?.date ?: plan.today).format(DAY)
+            appendLine("Not planned (open work the plan leaves out, and why):")
+            plan.unplanned.forEach { gap ->
+                val why = when (gap.reason) {
+                    Unplanned.Reason.NotOpen -> "can't be started before ${gap.at?.let(::at) ?: "later"}, its source says"
+                    Unplanned.Reason.Waits -> "waits until “${gap.after?.take(MAX_TITLE) ?: "another task"}” is done, as they said"
+                    Unplanned.Reason.OpensLater -> "opens ${gap.at?.let(::at) ?: "later"}, after the plan's last day ($end): planned once it's within reach"
+                    Unplanned.Reason.NoRoom -> "no room for it by $end, the plan's last day, within each day's limits"
+                }
+                val pieces = if (gap.pieces == 1) "1 piece" else "${gap.pieces} pieces"
+                appendLine("- ${gap.taskId} | ${gap.title.take(MAX_TITLE)} | $pieces, ${gap.minutes} min | $why")
+            }
         }
     }.trimEnd()
 }
@@ -285,10 +364,9 @@ class ChatReader(apiKey: String, private val zone: ZoneId, endpoint: String? = n
         .maxRetries(2)
         .build()
 
-    /** Claude's answer to the last of [messages] (yours), with what the app knows now. */
-    suspend fun answer(messages: List<ChatMessage>, tasks: List<TaskItem>, events: List<CalendarEvent>, applied: List<Instruction>, now: Long): Result {
+    /** Claude's answer to the last of [messages] (yours), with what the app knows now ([context], from [ChatPrompts.context]). */
+    suspend fun answer(messages: List<ChatMessage>, tasks: List<TaskItem>, events: List<CalendarEvent>, context: String, now: Long): Result {
         val schema = JsonOutputFormat.Schema.builder().apply { ChatPrompts.SCHEMA.forEach { (k, v) -> putAdditionalProperty(k, JsonValue.from(v)) } }.build()
-        val context = ChatPrompts.context(tasks, events, applied, now, zone)
         val builder = MessageCreateParams.builder()
             .model(model)
             .maxTokens(ClaudeEnricher.MAX_TOKENS)
