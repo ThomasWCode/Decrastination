@@ -179,11 +179,17 @@ class AppGraph private constructor(context: Context) {
     /** [calendarTime] as it changes, for a screen open while the calendar is read again. */
     val calendarState = kotlinx.coroutines.flow.MutableStateFlow(calendarTime)
 
-    fun plan(state: TaskState = tasks.value, settings: Settings = this.settings.value, now: Long = clock.now()): Plan {
+    /** The plan at [now], of [state] with [applied] instructions and the calendar's [time]: as they are, or a snapshot of them taken once ([chatContext]). */
+    fun plan(
+        state: TaskState = tasks.value,
+        settings: Settings = this.settings.value,
+        now: Long = clock.now(),
+        applied: List<Instruction> = instructions.value.applied,
+        time: com.thomaswcode.decrastination.learn.EventJudge.Time = calendarTime,
+    ): Plan {
         val zone = clock.zone()
         // Your instructions' days and times, over as far as the plan can reach.
         val today = java.time.Instant.ofEpochMilli(now).atZone(zone).toLocalDate()
-        val applied = instructions.value.applied
         val reach = today.plusDays(PLAN_REACH_DAYS)
         // Each task as its instructions say, whatever the task file (a stop between writing the two,
         // not yet put right): the instructions are what's kept.
@@ -199,9 +205,9 @@ class AppGraph private constructor(context: Context) {
                 zone = zone,
                 settings = settings,
                 calibration = runtime.value.calibration,
-                busy = calendarTime.busy,
+                busy = time.busy,
                 hardBusy = Instructions.busy(applied, zone, today, reach),
-                dayLoads = calendarTime.dayLoads,
+                dayLoads = time.dayLoads,
                 dayCaps = Instructions.dayCaps(applied, today, reach),
                 workedTodayMin = workedToday(now, zone),
             ),
@@ -1002,14 +1008,21 @@ class AppGraph private constructor(context: Context) {
     /**
      * What the chat tells Claude the app knows at [now] ([ChatPrompts.context]): the open tasks, the
      * calendar and the changes in use; and beside them the plan as the Plan tab shows it then, a focus
-     * session under way included ([ChatPrompts.plan]).
+     * session under way included ([ChatPrompts.plan]). All of one [state], calendar [time] and
+     * [applied] instructions, so the list and the plan agree, and with the answer's checks where the
+     * caller passes it the same ones.
      */
-    fun chatContext(now: Long = clock.now()): ChatPrompts.Context {
+    fun chatContext(
+        now: Long = clock.now(),
+        state: TaskState = tasks.value,
+        time: com.thomaswcode.decrastination.learn.EventJudge.Time = calendarTime,
+        applied: List<Instruction> = instructions.value.applied,
+    ): ChatPrompts.Context {
         val session = focus.session
         val left = session?.let { kotlin.math.ceil(it.leftMs(now, clock.uptime()) / 60_000.0).toInt() }
         return ChatPrompts.Context(
-            known = ChatPrompts.context(tasks.value.tasks, calendarTime.events, instructions.value.applied, now, clock.zone()),
-            plan = ChatPrompts.plan(plan(now = now), clock.zone(), session, left),
+            known = ChatPrompts.context(state.tasks, time.events, applied, now, clock.zone()),
+            plan = ChatPrompts.plan(plan(state, now = now, applied = applied, time = time), clock.zone(), session, left),
         )
     }
 
@@ -1032,7 +1045,12 @@ class AppGraph private constructor(context: Context) {
             chat.update { s -> s.copy(messages = s.messages.map { if (it.id == waiting.id) it.copy(note = null, stuck = false) else it }) }
             val at = clock.now()
             val month = AiUsage.monthOf(at, clock.zone())
-            val result = runCatching { ChatReader(key, clock.zone(), endpoint()).answer(chat.value.messages, tasks.value.tasks, calendarTime.events, chatContext(at), at) }
+            // One snapshot of the tasks, the calendar and your changes: what Claude's shown is what its answer's checked against.
+            val state = tasks.value
+            val time = calendarTime
+            val result = runCatching {
+                ChatReader(key, clock.zone(), endpoint()).answer(chat.value.messages, state.tasks, time.events, chatContext(at, state, time, instructions.value.applied), at)
+            }
                 .onFailure { error ->
                     Log.w(TAG, "Claude's answer in the chat failed", error)
                     modelFailed(error, month, at)

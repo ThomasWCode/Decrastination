@@ -203,7 +203,7 @@ class ChatTest {
             text,
         )
         assertTrue("\n- Tomorrow, Tuesday 13 October 2026: nothing planned (315 min of working time)\n  - event at 16:20: powerplanner:dentist | Dentist | Power Planner\n" in text, text)
-        assertTrue("\nOther events on the Plan (past, after Sunday 25 October 2026, or with no date):\n- own:match | Match | Yours | Sun 1 Nov 2026 09:00\n" in text, text)
+        assertTrue("\nEvents on the Plan other than those under their days below (past, after Sunday 25 October 2026, or with no date):\n- own:match | Match | Yours | Sun 1 Nov 2026 09:00\n" in text, text)
         // Undated work behind only its soft deadline, the app's own: not said to be late.
         assertTrue(
             "\n- Wednesday 14 October 2026: 60 min planned of 315 min of working time\n  - own:essay | Essay | 40 min: Draft (40 min) | due Fri 30 Oct 2026 17:00\n" +
@@ -213,8 +213,19 @@ class ChatTest {
         // The fortnight in full, then a line for the rest.
         assertTrue("\n- Sunday 25 October 2026: nothing planned" in text, text)
         assertFalse("Monday 26 October 2026:" in text, text)
-        assertTrue("\n- After Sunday 25 October 2026: 20 min on 1 more day, the last Monday 26 October 2026, of: own:essay | Essay\n" in text, text)
-        assertTrue(text.endsWith("Not planned (open work the plan leaves out, and why):\n- powerplanner:pg | Pg 60&61 | 1 piece, 30 min | waits until “Bridge and Balances Beam Q's” is done, as they said"), text)
+        assertTrue("\nPlanned after Sunday 25 October 2026: 20 min on 1 more day, the last Monday 26 October 2026, of: own:essay | Essay\n" in text, text)
+        assertTrue("\nNot planned (open work the plan leaves out, and why):\n- powerplanner:pg | Pg 60&61 | 1 piece, 30 min | waits until “Bridge and Balances Beam Q's” is done, as they said\n" in text, text)
+        // The summaries before the days, and the days last, the nearest first: a plan cut to fit loses its far days, not why something isn't planned.
+        assertTrue(text.indexOf("Not planned") < text.indexOf("\nDay by day:\n- Today, "), text)
+        assertTrue(text.endsWith("\n- Sunday 25 October 2026: nothing planned (315 min of working time)"), text)
+    }
+
+    @Test
+    fun `the plan's summaries are kept short, saying how many more`() {
+        val gaps = (1..25).map { Unplanned("own:t$it", Source.Own, "Task $it", 30, 1, Unplanned.Reason.NoRoom) }
+        val text = ChatPrompts.plan(plan.copy(unplanned = gaps), LONDON)
+        assertTrue("\n- own:t20 | Task 20 | 1 piece, 30 min | no room for it by Monday 26 October 2026, the plan's last day, within each day's limits\n- …and 5 more\nEvents on the Plan" in text, text)
+        assertFalse("own:t21" in text, text)
     }
 
     @Test
