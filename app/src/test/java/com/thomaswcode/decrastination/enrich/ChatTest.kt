@@ -207,7 +207,7 @@ class ChatTest {
         // The fortnight in full, then a line for the rest.
         assertTrue("\n- Sunday 25 October 2026: nothing planned" in text, text)
         assertFalse("Monday 26 October 2026:" in text, text)
-        assertTrue("\n- After Sunday 25 October 2026: 20 min on 1 more day, the last Monday 26 October 2026\n" in text, text)
+        assertTrue("\n- After Sunday 25 October 2026: 20 min on 1 more day, the last Monday 26 October 2026, of: own:essay | Essay\n" in text, text)
         assertTrue(text.endsWith("Not planned (open work the plan leaves out, and why):\n- powerplanner:pg | Pg 60&61 | 1 piece, 30 min | waits until “Bridge and Balances Beam Q's” is done, as they said"), text)
     }
 

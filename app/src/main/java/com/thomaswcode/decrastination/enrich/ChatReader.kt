@@ -188,8 +188,8 @@ object ChatPrompts {
     /**
      * [plan] as the Plan tab shows it, for questions about a day ("what's on tomorrow?"): the next
      * thing to do; each of the next [PLAN_DAYS] days, its minutes against its working time and its
-     * work a task a line, with the pieces that day; what's planned after them, in a line; and the
-     * open work it leaves out, with why.
+     * work a task a line, with the pieces that day; what's planned after them, in a line naming its
+     * tasks; and the open work it leaves out, with why.
      */
     fun plan(plan: Plan, zone: ZoneId): String = buildString {
         fun at(time: Long) = Instant.ofEpochMilli(time).atZone(zone).format(WHEN)
@@ -232,7 +232,9 @@ object ChatPrompts {
         val after = plan.buckets.filter { it.date > last && it.chunks.isNotEmpty() }
         if (after.isNotEmpty()) {
             val days = if (after.size == 1) "1 more day" else "${after.size} more days"
-            appendLine("- After ${last.format(DAY)}: ${after.sumOf { it.plannedMin }} min on $days, the last ${after.last().date.format(DAY)}")
+            // Which tasks, so that's said rather than guessed.
+            val tasks = after.flatMap { it.chunks }.distinctBy { it.taskId }.joinToString("; ") { "${it.taskId} | ${it.title.take(MAX_TITLE)}" }
+            appendLine("- After ${last.format(DAY)}: ${after.sumOf { it.plannedMin }} min on $days, the last ${after.last().date.format(DAY)}, of: $tasks")
         }
         if (plan.unplanned.isNotEmpty()) {
             val end = (plan.buckets.lastOrNull()?.date ?: plan.today).format(DAY)
