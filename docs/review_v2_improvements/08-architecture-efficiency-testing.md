@@ -1,113 +1,116 @@
 # 8. Architecture, efficiency and testing
 
-The code's shape is good: a pure core with tests, Android at the edges, JSON stores written atomically, one graph. The v1 review's rewrites were declined and nothing here reopens them. These are the gaps that make the next change riskier than it needs to be, and the debugging that still needs a cable.
+The code's shape is good: a pure core with tests, Android at the edges, JSON stores written atomically, one graph. Nothing here reopens the v1 rewrites. Revised for the changes your answers bring: removing sessions (AR-09), spreading and slots (AR-04's invariants), the flows worth screen tests.
 
 ## Summary
 
-| ID | Improvement | Priority | Effort | Decision |
+| ID | Improvement | Priority | Effort | Status |
 |---|---|---|---|---|
 | AR-01 | Golden files for the prompts and schemas in CI | P1 | S | – |
-| AR-02 | A scored eval run as a Gradle task, with a budget | P2 | M | Q-26 |
+| AR-02 | A scored eval run as a Gradle task, with a budget | P2 | M | – (Q-26 yes) |
 | AR-03 | The debug commands as a page in the debug build | P2 | S | – |
-| AR-04 | Property tests for the planner's invariants | P1 | M | – |
-| AR-05 | Screen tests for the three flows that matter | P2 | M | – |
+| AR-04 | Property tests for the planner's invariants: spread, slots, stability | P1 | M | Changed |
+| AR-05 | Screen tests for the flows that matter | P2 | M | Changed |
 | AR-06 | A crash record you can read on the phone | P2 | S | – |
 | AR-07 | A nightly backup to a folder of your choosing | P2 | M | – |
 | AR-08 | Trim the work a sync does when nothing changed | P3 | S | – |
+| AR-09 | Removing sessions safely | P1 | M | New (note 1) |
 
 ---
 
 ## AR-01 Golden files for the prompts and schemas in CI
 
-**Now.** The prompts are Kotlin string templates (`enrich/Prompts.kt`, `ChatReader.kt`, `InstructionReader.kt`, `PhotoChecker.kt`, `ReviewInput.kt`); a change to one is reviewed as a diff of Kotlin, and nothing ties it to a version (AC-06) or to the eval set.
+**Now.** The prompts are Kotlin string templates; a change is reviewed as a Kotlin diff and nothing ties it to a version.
 
-**Proposal.** A unit test that renders every system prompt and JSON schema (with a fixed date, zone and settings) and compares them to `app/src/test/resources/prompts/<job>.txt` and `<job>.schema.json`, failing on any difference with the diff printed. Updating is a flag (`-PupdateGolden`) that rewrites the files, so the change shows as a text diff in the PR beside the version bump. The same test asserts the limits paragraph (AI-03) matches the constants.
-
-**Final state.** A prompt change is a readable diff in review, the version bump can't be forgotten (the test checks `Prompts.VERSION` changed when a golden file did), and the eval set can be tied to a version.
-
-**Caveats.** Rendering the chat's context needs fixtures (a few tasks, a plan); `Fixtures.kt` in the tests already has them.
+**Proposal.** A test that renders every system prompt and schema (fixed date, zone, settings, profile) to `app/src/test/resources/prompts/<job>.txt` and `.schema.json`, failing on any difference; `-PupdateGolden` rewrites them; the test checks `Prompts.VERSION` changed when a golden file did. The nag prompt (AI-22) and the profile block (AI-05) included.
 
 **Effort.** S.
 
 ## AR-02 A scored eval run as a Gradle task, with a budget
 
-**Now.** `EvalSetTest.dump` writes the cases and `score` reads answers back (`app/src/test/.../enrich/EvalSetTest.kt:66`, `:87`); the answering is done by hand through Claude Code subagents (`docs/eval.md`). It works and keeps the API key out of the loop, at the cost of being a manual afternoon.
+**Now.** `EvalSetTest.dump` and `score` (`app/src/test/.../enrich/EvalSetTest.kt:66`, `:87`); the answering is manual.
 
-**Proposal.** A `./gradlew evalScore -Pjob=Email -Pmodel=claude-opus-5-5 -Peffort=high` task that calls the API directly with a key from the environment, caps spend per run (counting the response usage; stops at, say, $2), writes the per-case results and the score to `private/eval/runs/<date>-<job>-<model>-<effort>.md`, and prints the cases that changed since the last run. Not in CI (the set is private and the key shouldn't be there); run before a prompt-affecting merge.
-
-**Final state.** AC-02 and AC-03 become one command each; a prompt change is scored in ten minutes.
-
-**Caveats.** Each run costs real money (a few dollars at HIGH on the full set); the cap is the guard. The cases must stay private (`private/` is ignored), and the task must refuse to run if the directory isn't there.
-
-**Effort.** M. **Decision.** Q-26.
-
-## AR-03 The debug commands as a page in the debug build
-
-**Now.** `debug/CommandActivity` takes adb intents (`ai-prompts`, `chat-context`, `chat-ask`, `ai-endpoint`, `enrich-task`, and the rest): useful, cable-bound.
-
-**Proposal.** A *Debug* page in the menu of debug builds only: the recent calls (AC-07), the rendered prompt for a chosen task (what `ai-prompts` prints), the chat context as sent, store sizes and ages, the last sync's timings per source, the watchdog's last findings, and buttons for the commands that are safe without arguments. Everything copyable.
-
-**Caveats.** Debug build only (`BuildConfig.DEBUG`), and the student's phone runs the release. It's for your phone and the emulator.
-
-**Effort.** S.
-
-## AR-04 Property tests for the planner's invariants
-
-**Now.** `PlannerTest` is example-based (this input gives that plan), which is right for the behaviour described in `docs/scheduler.md`, and the planner's header comment states eight rules. The rules are the kind of thing a random generator checks better than examples: capacity never exceeded except by chunks flagged behind, every dated chunk on or before its last usable day or flagged, per-day limits never broken, soft work never displacing dated work, the plan a pure function of its input (same input, same plan), and a tiny change in the input (one minute worked) moving at most one chunk.
-
-**Proposal.** A seeded random test: generate 1–40 tasks with random kinds, deadlines, estimates, steps, per-day limits, calendar busy time and day caps; run the planner; assert the invariants; print the seed on failure. A few hundred iterations per CI run, bounded by time. Plain Kotlin and `kotlin.random.Random(seed)` are enough; no new library needed.
-
-**Final state.** Changes like PL-01 (spread revision) and PL-05 (day max) are made with a net under them.
-
-**Caveats.** Invariants must be stated carefully or they'll fail on legitimate cases (a task that can't fit anywhere *is* allowed to exceed capacity, flagged). Expect the first run to find an edge case or two; that's the point.
+**Proposal.** `./gradlew evalScore -Pjob=Email -Peffort=high` calling the API with a key from the environment, a spend cap per run ($2, your answer to Q-26), results to `private/eval/runs/<date>-<job>-<effort>.md`, changed cases printed. Not in CI. Used for AC-02's effort table and after any prompt change. The Email set loses its Info cases (AI-02); the slot-era cases (nags, micro-plans) get sets of their own once there's real data.
 
 **Effort.** M.
 
-## AR-05 Screen tests for the three flows that matter
+## AR-03 The debug commands as a page in the debug build
 
-**Now.** Tests cover the core, sources, learning, formatting and the widget model (29 files); nothing exercises a Compose screen. The three flows a student meets most are untested end to end: the block screen's Start, the chat's card applied, the sheet's Not a task.
+**Now.** `debug/CommandActivity` takes adb intents.
 
-**Proposal.** Compose UI tests with Robolectric (`androidx.compose.ui.test.junit4` on the JVM, no device) for those three: given a plan, the block screen shows the next piece and Start starts a session; given a chat answer with a change card, Apply writes the instruction and the plan moves; given a task, Not a task hides it and the undo returns it. Three tests, one fixture each.
+**Proposal.** A *Debug* page in debug builds: recent calls (AC-07), the rendered prompt for a task, the chat context, the nags queued and sent, store sizes and ages, the last sync's timings, the watchdog's findings; everything copyable.
 
-**Caveats.** Robolectric with Compose adds a minute to the test run and a dependency; keep it to the flows that would embarrass the app if broken.
+**Effort.** S.
+
+## AR-04 Property tests for the planner's invariants: spread, slots, stability
+
+**Now.** `PlannerTest` is example-based. The new placement (PL-01), slotting (PL-12) and live re-slotting (PL-13) are rules a random generator checks better than examples.
+
+**Proposal.** A seeded random test over 1–40 tasks with random kinds, deadlines, estimates, steps, windows, calendar busy time and instructions; assert, per run:
+
+- capacity: no day over its free time × yield, except by overdue and due-today work and by chunks flagged as unable to fit;
+- deadlines: every chunk of a dated task on or before its last usable day, or flagged;
+- spread: a task with a window of seven days or more has a chunk in every seven-day stretch of it (the minimum-touch rule, Q-32);
+- slots: no two overlap, each inside a window, breaks kept, pinned slots where pinned, "home" pieces never in school windows;
+- determinism: the same input gives the same plan;
+- stability: after one change (a tick, a new event, one minute passing) at most the affected pieces move, and none moves without a reason the `why` field names.
+
+Print the seed on failure. Plain Kotlin and `kotlin.random.Random(seed)`.
+
+**Effort.** M. Do it before PL-01.
+
+## AR-05 Screen tests for the flows that matter
+
+**Now.** Nothing exercises a Compose screen.
+
+**Proposal.** Compose UI tests with Robolectric for: the Day timeline's now card ticks a slot and the next shows; a nag's reply produces a reply notification whose button applies the move; the sheet's Not a task hides and undo returns; drag past the due date is refused with the reason.
 
 **Effort.** M.
 
 ## AR-06 A crash record you can read on the phone
 
-**Now.** No `UncaughtExceptionHandler` is set; a crash is in logcat only. There's no crash reporter, rightly (a private app shouldn't send its stack traces anywhere).
+**Now.** No `UncaughtExceptionHandler`; a crash is in logcat only.
 
-**Proposal.** A handler that writes the last three crashes (time, thread, stack trace, app version) to the app's files directory, shown under Setup as "Last crash: 12 Oct 21:14, NullPointerException in TaskSheet" with Copy. Nothing leaves the phone.
-
-**Caveats.** The handler must chain to the default one so Android still shows the crash dialog and restarts what it should.
+**Proposal.** A handler that writes the last three crashes to the files directory, shown under Settings with Copy, chaining to the default handler. Nothing leaves the phone.
 
 **Effort.** S.
 
 ## AR-07 A nightly backup to a folder of your choosing
 
-**Now.** `data/Backup` encodes and restores the stores on demand (`Backup.encode`, `data/Backup.kt:67`), with careful checks on what's restored. It runs when asked.
+**Now.** `data/Backup` encodes and restores on demand (`data/Backup.kt:67`).
 
-**Proposal.** A folder picked once through the Storage Access Framework (a Drive or OneDrive folder on the phone, or Downloads), and a nightly WorkManager job that writes `decrastination-<date>.json` there, keeping the last 14. Setup shows "Last backup: last night, 410 KB". A lost or wiped phone then costs a day, not a term.
-
-**Caveats.** The backup holds the task titles and the activity log; the folder's own sync carries it off the phone, which is the point and the exposure. The JSON is the same as the manual backup, so the restore path is unchanged.
+**Proposal.** A folder picked once through the Storage Access Framework and a nightly job writing `decrastination-<date>.json`, keeping 14. Also the backup LR-08 writes before a reset.
 
 **Effort.** M.
 
 ## AR-08 Trim the work a sync does when nothing changed
 
-**Now.** A sync reads every source, merges, enriches, replans and updates the widget. Gmail's listing is the heavy part (DX-07). The Anki read runs up to four `notes` queries per vocabulary deck (`AnkiSource.unseenCards`, `AnkiSource.kt:54`) every sync.
+**Now.** A sync reads every source, merges, enriches, replans, re-slots, writes the calendar and updates the widget. With DX-03 Gmail is light; the Anki read runs up to four `notes` queries per vocabulary deck (`AnkiSource.kt:54`).
 
-**Proposal.** Skip the per-deck unseen-card queries when the deck's counts and options haven't changed since the last read (keep a small cache keyed by deck id and counts). Skip the replan and widget update when the merged task list's hash is unchanged. Small, measurable from the sync's timings (AR-03 shows them).
-
-**Caveats.** The planner is cheap; this is for battery and the sync's 90-second budget, not correctness. Do it after DX-07, which is the real saving.
+**Proposal.** Skip the per-deck queries when counts and options are unchanged; skip the replan, the calendar write and the widget when the merged list's hash is unchanged; batch calendar writes per replan (PL-13).
 
 **Effort.** S.
+
+## AR-09 Removing sessions safely
+
+**Now.** Sessions run through `block/Sessions.kt`, `FocusSession`, `Focus.startSession`/`stopSession`/`ending`, the session notification and its alarm, `BlockPolicy`'s session clause, `Credit.forSession`, the box experiment (`Calibrator.BOXES`), `Stats`' focus tiles, the widget's and block screen's Start, `PieceActions`, the chat's and widget's session text, and the tests `FocusTest`, `BlockingTest`, `PhotoTurnTest` in part, `StatsTest`, `WidgetModelTest`.
+
+**Proposal.** One change, in this order, so the app never ships half-way:
+
+1. Add the slot machinery (PL-12, LR-09) and the credit rule (BL-08) beside sessions, behind a `slots` flag off by default; tests for both.
+2. Switch the flag on; the session paths are unreachable; run a week.
+3. Delete: `Sessions`, `FocusSession` and its runtime field (a migration that ends a running session on first start after the update, recording it), the session notification and alarm (the alarm is reused for slot ends), the session clause in `BlockPolicy.decide`, `Credit.forSession` (replaced by the slot's credit), the box experiment, Start everywhere, `MAX_SESSION_MIN`. Keep `SessionRecord` in the log as history (old stats still read), renamed in the docs as the slot record.
+4. Update `docs/scheduler.md` §4–5 and the tests.
+
+**Caveats.** The photo check's cap and `Focus.remaining` read sessions' minutes; they read slot minutes after. The Anki auto-count (NF-03) was a session in the first version; it's a counts reading now (DX-11).
+
+**Effort.** M.
 
 ---
 
 ## What I looked at and left alone
 
-- **The store design** (JSON files, atomic writes, salvage on a bad file): right for the size; a database would be more code for no gain.
-- **`AppGraph`** as the one wiring point: large, but readable, and the v1 call to leave it stands.
-- **CI** (`testDebugUnitTest lintDebug assembleDebug`): right; AR-01 and AR-04 add tests, not steps. A formatter (ktlint) isn't proposed: the code's style is consistent and deliberate, and a formatter would fight the comments.
-- **Dependencies**: current (AGP 9.0.1, Anthropic SDK 2.71.0); nothing to change.
+- **The store design** (JSON files, atomic writes, salvage): right for the size.
+- **`AppGraph`** as the one wiring point: large, readable; stays.
+- **CI** (`testDebugUnitTest lintDebug assembleDebug`): right; AR-01 and AR-04 add tests, not steps. No formatter: the code's style is consistent and deliberate.
+- **Dependencies**: current; nothing to change. Writing to the calendar needs `WRITE_CALENDAR` in the manifest (NF-07).

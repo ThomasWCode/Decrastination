@@ -1,154 +1,186 @@
 # 4. Planner and analysis
 
-The pure core (`core/Planner.kt`, `core/Plan.kt`), what it could place better, what it could tell the student about its choices, and what the Stats tab could show from the activity log it already keeps (`learn/Stats.kt`, `learn/Days.kt`, `learn/Calibrator.kt`).
+The pure core (`core/Planner.kt`, `core/Plan.kt`), what it could place better, what it could tell you about its choices, and what Stats could show (`learn/Stats.kt`, `learn/Days.kt`, `learn/Calibrator.kt`).
 
-The planner's design is sound and the v1 review's architecture proposals were rightly declined; nothing here changes the backwards-from-deadline rule. These are additions around it.
+Revised after your answers and notes. The first version kept the planner's backwards-from-deadline rule and added around it. Your answer to Q-16 and notes 2–4 change the rule itself: work not due today or tomorrow is spread evenly over the days to its deadline by the time each day really has; every piece gets a time of day, written to your Google Calendar and adjusted live; dates the app or Claude set never go "overdue", they're re-fitted; only a source's deadline can be overdue, and even then the work is re-fitted around it. PL-01, PL-12, PL-13, PL-14 and PL-15 are that design. The planner stays pure and deterministic; what changes is the placement.
 
 ## Summary
 
-| ID | Improvement | Priority | Effort | Decision |
+| ID | Improvement | Priority | Effort | Status |
 |---|---|---|---|---|
-| PL-01 | Spread revision for a test across the days before it | P1 | M | Q-14 |
-| PL-02 | Say when today can't hold what's in it, and what gives | P1 | M | – |
-| PL-03 | A preference for how an evening starts | P3 | S | Q-15 |
-| PL-04 | "On Thursday": one change that pins work to a day | P2 | S | – |
-| PL-05 | A most-per-day, apart from the hours | P1 | S | Q-16 |
-| PL-06 | Plan with the hours the evenings really hold | P2 | M | Q-16 |
+| PL-01 | Spread every later task evenly to its deadline, by the time each day has | P1 | L | Changed (Q-16, note 3) |
+| PL-02 | Say early when a source deadline can't be met, and what gives | P1 | M | Changed |
+| PL-03 | A preference for how an evening starts | – | – | Withdrawn (Q-15) |
+| PL-04 | "On Thursday" and "at 19:30": pin work to a day or a time | P2 | S | Changed |
+| PL-05 | A most-per-day, apart from the hours | – | – | Withdrawn (Q-16) |
+| PL-06 | Plan with the hours the days really hold: a learned yield | P1 | M | Changed (Q-16) |
 | PL-07 | Each piece says why it's where it is | P2 | S | – |
 | PL-08 | Stats by subject, with estimate accuracy | P2 | M | – |
-| PL-09 | When the work actually happens | P3 | S | – |
+| PL-09 | When the work actually happens | P3 | S | Changed |
 | PL-10 | A term's view, not a fortnight's | P3 | M | – |
 | PL-11 | Export the log as CSV | P2 | S | – |
+| PL-12 | Every piece gets a time: slots in the day's free windows | P1 | L | New (note 2) |
+| PL-13 | Adjust live: slots move when the day does | P1 | M | New (note 2) |
+| PL-14 | Dates the app set are elastic; only a source's deadline is overdue | P1 | M | New (note 4) |
+| PL-15 | School free periods as planning windows | P1 | M | New (note 2) |
 
 ---
 
-## PL-01 Spread revision for a test across the days before it
+## PL-01 Spread every later task evenly to its deadline, by the time each day has
 
-**Now.** Every dated task is placed backwards from its last usable day (`placeBack`, `Planner.kt:369`): one chunk a day, as late as the margin allows. For homework that's right. For revision it's the opposite of what the evidence says works: the steps Claude writes for "revise for the test on the 12th" land on the last evenings before the 12th, which is massed practice.
+**Now.** Every dated task is placed backwards from its last usable day (`placeBack`, `Planner.kt:369`): one chunk a day, as late as the margin allows. The header comment explains why: placing everything early would put every task in today and the block would never lift. The cost is the one you describe in note 3: a task with a far deadline gets nothing until its last days, then arrives all at once with everything else.
 
-**Why.** Distributed practice is one of the two best-supported study techniques: Cepeda, Pashler, Vul, Wixted and Rohrer (2006, *Psychological Bulletin* 132(3), 354–380) found spaced practice beat massed practice in the large majority of the 254 studies they reviewed, and Dunlosky, Rawson, Marsh, Nathan and Willingham (2013, *Psychological Science in the Public Interest* 14(1), 4–58) rate it "high utility". The app already knows which steps are revision: the Assignment job returns `testDate`, and `Kind.Revision` exists.
+**Proposal.** A third placement between "due now" and "undated":
 
-**Proposal.** For a task with a test date (or of kind Revision), a second placement: the first step on the earliest day it can go, the last on the last usable day, the rest spread evenly between with at least a day's gap; a step that can't fit its day moves to the nearest free day. To stop spreading from making every day "under pressure" (a spread chunk on today's bucket would turn strict blocking on), spread chunks are placed as **soft** (like undated work: they fill spare time, don't count toward `pressure`, and can slip) until they reach the day backwards placement would have given them, when they become ordinary chunks. A `spreadRevision` setting, default on, and a `DayLimit`-style instruction to override per task ("do all the German revision on Sunday").
+1. Overdue work and work due today or tomorrow are placed first, as now (`placeNow`): they take today's time before anything else and nothing below touches them.
+2. Each day's capacity is the time it really has: its windows (evening hours; school free periods, PL-15) less calendar busy time and hard busy instructions, times the learned yield (PL-06). No fixed maximum (your answer to Q-16).
+3. Every other dated task, in deadline order, is spread over its window (its first possible day to its last usable day, margin included): its remaining chunks go to days in proportion to the free time those days have left, so the task progresses every week of its window rather than waiting for its end. A day that's full passes the chunk to the nearest day in the window with room, earlier preferred, so the task still finishes. A task with a window of a week or more gets at least one chunk a week (the rule that stops a far task vanishing until it's urgent; its exact form is Q-32).
+4. Revision for a test keeps its own rule: steps at least a day apart (the spaced-practice evidence from the first version: Cepeda et al., 2006, *Psychological Bulletin* 132(3), 354–380; Dunlosky et al., 2013, *Psychological Science in the Public Interest* 14(1), 4–58).
+5. Undated and app-dated work (PL-14) fills what's left, as now, up to `softMinPerDay`.
 
-**Final state.** Revision for the 12th appears from the 5th as "if you have time" pieces at the bottom of each day, becoming "due" on the last evenings. The Today screen's soft section already shows such work.
+Pressure, and so the block, is today's bucket: the chunks the spread gave today (BL-01). That is what makes spreading safe where "everything early" wasn't: today holds a share of the week, not the week.
 
-**Caveats.** It changes how the plan looks for revision tasks, which the student has learnt to read; the soft marking keeps the block rule as it is. The margin and calibration still apply. The eval set has few revision cases, so test with the planner's own tests first (`PlannerTest`).
+**Final state.** A Physics booklet due in twelve days with six chunks is on Tuesday, Thursday, Saturday, Monday, Wednesday and the Thursday before, not on the last six evenings. Today's list is a fair day's work, every day, and the block lifts when it's done.
 
-**Effort.** M. **Decision.** Q-14.
+**Caveats.** More pieces per day, each shorter; the chunk size (`boxMin`, 45 by default) becomes the piece length and may want to be smaller (Q-32). A single-chunk task has no "even": it goes to the day in its window with the most free time, earlier on a tie (Q-32). The spread changes with every change in capacity (a new calendar event), which is why PL-13's stability rule matters. The planner tests (`PlannerTest`) that encode backwards placement change; AR-04's property tests should go in first.
 
-## PL-02 Say when today can't hold what's in it, and what gives
+**Effort.** L. **Decision.** Q-32 for the details.
 
-**Now.** A chunk that fits nowhere before its deadline goes into today "flagged behind" (planner item 4), so today's bucket can hold more than today's capacity. The Today screen lists it all; the student can see a long list but not that it's impossible, nor which pieces are the ones that won't fit. `Days.capacityAdvice` (`Days.kt:121`) speaks only after ten such days.
+## PL-02 Say early when a source deadline can't be met, and what gives
 
-**Proposal.** Three small things on the same data:
+**Now.** A chunk that fits nowhere before its deadline goes into today "flagged behind"; today's list can hold more than today's capacity; nothing says it's impossible until `Days.capacityAdvice` speaks after ten bad days (`Days.kt:121`).
 
-- `DayBucket` already has `capacity`; add `overflowMin` and mark the chunks past it (`Chunk.wontFit`). On Today: a line under the day header, "3 h 15 free, 4 h 30 planned: the last two pieces won't fit tonight", the pieces greyed.
-- A *What gives?* button on that line that opens the chat with "Tonight can't hold everything. What should I shorten, move or ask for more time on?" prefilled; Claude already knows the plan and can propose `Minutes`, `StartFrom` and `DueBy` changes as cards.
-- The same sum for the next seven days ("12 h planned, 14 h free; Thursday is over") as a tile on Stats and a line in the briefing when any day is over.
-
-**Final state.** An impossible evening is named as such at 16:45, not discovered at 22:00; the fix is a conversation, not a scroll.
-
-**Caveats.** "Won't fit" depends on the hours in Settings being right (PL-05, PL-06). A student who learns that "what gives?" always moves things will use it to move things; the moves are instructions, logged, and visible to you (NF-02).
+**Proposal.** With spreading, "can't fit" means the whole window is short: the spread finds the task's remaining minutes exceed the free time in its window. Say it the day it becomes true: a line on the Day view ("Physics coursework: 6 h left, 4 h 10 free before Friday"), a nag (LR-03) and a *What gives?* button that opens the chat prefilled ("This week can't hold the Physics coursework by Friday. What should I shorten, move or ask for more time on?"). For app-set dates (PL-14) there's no such state: they're re-fitted.
 
 **Effort.** M.
 
-## PL-03 A preference for how an evening starts
+## PL-03 Withdrawn
 
-**Now.** Within a day, after urgency, pieces are ordered homework before revision before admin, then the shorter task first (`ORDER`, `Planner.kt:462`). That's deliberate (no flicker) and sensible, and it's the same for every student.
+An evening-start preference (quickest / hardest / Anki first): your answer to Q-15, no.
 
-**Proposal.** A setting, `eveningStart: Quickest | Hardest | Anki | Default`, used only as the tie-break after urgency: Quickest puts the shortest piece first (a five-minute win to get going), Hardest the longest or the subject with the lowest completion rate, Anki the deck pieces. Default keeps today's order.
+## PL-04 "On Thursday" and "at 19:30": pin work to a day or a time
 
-**Caveats.** It's a preference, not a scheduling rule, and only reorders within a day; it can't move work between days. Honest doubt: the DO NOW card already shows one piece, so the gain is small; P3.
+**Now.** Pinning a task to a day takes two instructions' worth of change; pinning to a time isn't possible.
 
-**Effort.** S. **Decision.** Q-15.
-
-## PL-04 "On Thursday": one change that pins work to a day
-
-**Now.** Pinning a task to a day takes two instructions' worth of change (`StartFrom` the day and `DueBy` its end), and Claude has to work that out from "do the German on Thursday".
-
-**Proposal.** `ChangeType.OnDay(date)`, applied as the floor and the ceiling together, listed in the instruction and chat prompts as one change ("OnDay: all of it on that day"). Pairs with drag-to-day on the Today screen (UI-04), which would write the same change without Claude.
-
-**Caveats.** A day with no room makes the task "behind" on that day; the card should say so before it's applied (the chat's cards could show the plan's answer, as the proposal card already previews changes).
+**Proposal.** `ChangeType.OnDay(date)` and `ChangeType.AtTime(date, minuteOfDay)`: the first floors and ceilings the task to a day, the second gives a piece a fixed slot (PL-12) the planner builds around like a calendar event. Both in the instruction and chat prompts, both written by drag on the Day view (UI-04) without a call. A move that would clash with the task's due date is refused with the reason (your answer to Q-17).
 
 **Effort.** S.
 
-## PL-05 A most-per-day, apart from the hours
+## PL-05 Withdrawn
 
-**Now.** A day's capacity is the hours window less busy time (`capacity`, `Planner.kt:587`): 5 h 15 on a weekday, 14 h on a weekend day. The planner will put six hours of a big project on a Saturday if that's what backwards placement gives, and the day-limit instruction (`dayCaps`) is per day, by hand.
+A fixed weekday/weekend maximum: your answer to Q-16 is that a day's maximum is the time it has. That's PL-01's capacity rule with PL-06's yield.
 
-**Proposal.** Two settings, `weekdayMaxMin` and `weekendMaxMin` (suggested defaults 180 and 300), applied as a default `dayCap` where no instruction sets one. The window still says *when*; the max says *how much*. Work that then doesn't fit before its deadline shows as behind earlier, which is the planner's own argument in `capacityAdvice`.
+## PL-06 Plan with the hours the days really hold: a learned yield
 
-**Caveats.** Any cap makes "behind" more common for big tasks, which is honest but can look alarming; the briefing should say "this week needs more than your usual evenings; the weekend's cap is 5 h" rather than just flagging. The defaults are your call.
+**Now.** `DayRecord` keeps each day's planned and done minutes; `capacityAdvice` turns ten bad days into a sentence; the planner keeps planning the full window.
 
-**Effort.** S. **Decision.** Q-16.
+**Proposal.** A learned *yield* in `Calibrator`: the median of done ÷ planned over the last 14 days with work in them, clamped to 0.5–1.0, from 7 days on; the planner's capacity is the day's free time × yield. Done minutes come from slot outcomes (LR-09) now that sessions go. Shown on Stats: "Your days hold about 70 % of the free time in them". The weekly review may change the hours themselves within bounds, as it may the box and margin today.
 
-## PL-06 Plan with the hours the evenings really hold
+**Caveats.** The feedback loop (less planned, less done, less planned) is bounded by the clamp and reverses as soon as you do what's planned. Show the number beside the hours so a settings problem isn't hidden behind it.
 
-**Now.** `DayRecord` keeps each day's planned and done minutes and whether the plan was done in full; `capacityAdvice` turns ten bad days into a sentence. The planner keeps planning the full window.
-
-**Proposal.** A learned *yield* in `Calibrator`: the median of done ÷ planned over the last 14 days with work in them, clamped to 0.5–1.0, needing at least 7 days; the planner's capacity becomes window × yield (before the day cap, PL-05). Shown on Stats: "Your evenings hold about 70 % of the hours in Settings". The weekly review may be allowed to change the hours themselves, within bounds, as it may the box and margin today (a new bounded change in `ReviewInput`).
-
-**Caveats.** Feedback loops: less planned → less done → less planned. The clamp and the minimum days limit it, and planning less than is done raises yield again. It also hides a settings problem (hours set too long) behind a number; show both.
-
-**Effort.** M. **Decision.** Q-16.
+**Effort.** M.
 
 ## PL-07 Each piece says why it's where it is
 
-**Now.** A piece's sheet shows the task, the step and the minutes. Why it's today (due tomorrow; the margin; a chunk that fits nowhere else; undated filler) is in the planner's head only.
+**Now.** A piece's sheet shows the task, the step and the minutes; why it's today is in the planner's head.
 
-**Proposal.** A `Chunk.why` enum set during placement: `DueSoon`, `Overdue`, `LastUsableDay(margin)`, `SpreadBack(from deadline)`, `WontFitLater`, `Soft`, `PerDayLimit`, `Spread` (PL-01). One line on the piece's sheet ("Today because it's due Thursday morning and your Physics margin is 1 day") and in the chat's plan context, which lets Claude explain the plan correctly instead of guessing.
-
-**Caveats.** It's a string more per chunk in a structure rebuilt on every change; negligible. The wording must stay short.
+**Proposal.** `Chunk.why`: `DueSoon`, `Overdue`, `Spread(of N, to deadline)`, `MinimumTouch`, `Soft`, `PerDayLimit`, `Pinned`, `Refitted(from when)`. One line on the sheet and in the chat's plan context, so Claude explains the plan rather than guessing at it.
 
 **Effort.** S.
 
 ## PL-08 Stats by subject, with estimate accuracy
 
-**Now.** Stats shows a fortnight: finished, on time, focus minutes, blocks, free time, and a row per day (`ui/StatsScreen.kt:77`). The calibration's multipliers are per kind and class (`Calibrator.multipliers`, `Calibrator.kt:66`) and are described in words on the Setup page, not as numbers by subject.
+**Now.** Stats shows a fortnight: finished, on time, focus minutes, blocks, free time, a row per day (`ui/StatsScreen.kt:77`). The calibration's multipliers are per kind and class (`Calibrator.multipliers`) and shown in words only.
 
-**Proposal.** A *By subject* section: for each class in the period, minutes worked, pieces finished, on-time share, and the ratio of worked to estimated minutes ("Physics: 2.1× Claude's estimate, from 4 tasks"). Sorted by minutes. The same table in the weekly review's input (AI-18) so it can comment on it.
-
-**Final state.** You and the student can see that Physics takes twice the estimate and German is on time, which is the conversation the app exists to inform.
-
-**Caveats.** Needs the class on each completion record (`Completion.className`; check it's stored, else add it). Small samples lie: show the task count beside every ratio and nothing under two tasks.
+**Proposal.** A *By subject* section: per class, minutes done (from slot outcomes), pieces finished, on-time share, and actual ÷ estimated ("Physics: 2.1× Claude's estimate, from 4 tasks"); task counts beside every ratio, nothing under two. The same table in the review's input (AI-18).
 
 **Effort.** M.
 
 ## PL-09 When the work actually happens
 
-**Now.** Sessions by hour are computed for the weekly review (`ReviewInput.describe`) and not shown. The hours in Settings are a guess at when the student works.
+**Now.** Sessions by hour are computed for the review and not shown; sessions go.
 
-**Proposal.** A small 7 × 24 heat grid (day of week × hour) of focus minutes over the last 8 weeks on Stats, and a line "Most work: 17:00–19:00 on weekdays; Sunday mornings". A tap offers to set the hours from it.
-
-**Caveats.** Only sessions count; untimed work isn't seen. Eight weeks of sessions is a few hundred rows, trivial.
+**Proposal.** A 7 × 24 grid of slots kept (done in their slot) against slots missed over 8 weeks; "Most kept: 17:00–19:00 weekdays; Tuesday study periods". A tap offers to set the hours from it.
 
 **Effort.** S.
 
 ## PL-10 A term's view, not a fortnight's
 
-**Now.** `Stats.DAYS` is 14; the runtime keeps 120 days of records (`RuntimeState.KEEP_DAYS`, `RuntimeState.kt:133`).
+**Now.** `Stats.DAYS` is 14; the runtime keeps 120 days (`RuntimeState.KEEP_DAYS`).
 
-**Proposal.** A period picker (2 weeks, half term, term) and weekly rollups kept forever (one row a week: minutes, finished, on time, blocks, full days), so the log can stay at 120 days without losing the trend. A sparkline of weekly minutes and full-day share.
-
-**Caveats.** The rollup is new data to migrate and back up; it belongs in the activity log's file with its own version. P3 until a term's worth exists to look at.
+**Proposal.** A period picker and weekly rollups kept forever (one row a week), with a sparkline of weekly minutes and full-day share. P3 until a term exists to look at.
 
 **Effort.** M.
 
 ## PL-11 Export the log as CSV
 
-**Now.** `data/Backup` exports the stores as JSON for restore. There's no form you can open in R or a spreadsheet.
+**Now.** `data/Backup` exports JSON for restore; nothing opens in R or a spreadsheet.
 
-**Proposal.** Settings → Stats → Export: `completions.csv`, `sessions.csv`, `days.csv`, `blocks.csv`, `calibration.csv`, zipped and handed to the share sheet (email it to yourself). One row per record with ISO dates, the class, kind, source, estimate, worked, due, done-at.
-
-**Caveats.** The export holds task titles; it leaves the phone only by the student's share. No Claude text is in it.
+**Proposal.** Settings → Stats → Export: `completions.csv`, `slots.csv`, `days.csv`, `blocks.csv`, `calibration.csv`, zipped to the share sheet. Also what the weekly summary (NF-02) attaches.
 
 **Effort.** S.
+
+## PL-12 Every piece gets a time: slots in the day's free windows
+
+**Now.** A day's plan is an ordered list; when in the day a piece happens is up to you. Your note 2: assign every task a specific time, put it in Google Calendar, adjust live, and use the school's free periods.
+
+**Proposal.** After the day buckets are made (PL-01), a slotting pass per day:
+
+- The day's windows: the evening hours (weekday or weekend), plus the school free periods (PL-15) on school days; minus calendar busy events, hard busy instructions and pinned slots (`AtTime`).
+- Pieces are laid into the windows in the day's order (`ORDER`, `Planner.kt:462`: due-soon first, then deadline, then kind), each slot the piece's minutes, with a short break between slots (5 min) and a longer one after 90 minutes of work (both settings; Q-32). A piece that doesn't fit the window's remainder goes to the next window; today's first slot starts no earlier than now.
+- Each slot is `Slot(piece, start, end, window: Evening | School, pinned)`, on the `DayBucket`. The Day view (UI-17) shows them as a timeline with the calendar's events; NF-07 writes them to the calendar; AI-15's micro-plan is attached to each; LR-03's nags fire from them.
+
+**Final state.** Tuesday reads: 10:50–11:20 German vocab (study period); 16:45–17:30 Statics Prep; 17:35–17:55 Reply to Mr Peters; 19:00–19:45 Statics Prep 2 of 3. The same on your phone's calendar.
+
+**Caveats.** A plan with times is a plan that's visibly wrong more often (you're late, the bus is late); PL-13 is what makes that tolerable, and the tone of the nags (AI-22) is what makes it a person's reminder rather than an app's accusation. Slotting is deterministic given the buckets, so the planner's purity and tests hold; it's new code in `Planner` (or beside it) with its own invariants (AR-04): no overlap, inside windows, breaks kept.
+
+**Effort.** L.
+
+## PL-13 Adjust live: slots move when the day does
+
+**Now.** The plan re-runs on every change (sync, instruction, calendar answer), but there's no notion of a slot being missed or kept.
+
+**Proposal.** Events and rules:
+
+- **Slot kept** (you ticked the piece, or the photo check passed): recorded as done with its minutes (LR-09). The following slots keep their times; the gap is yours. A *Pull the next forward* button on the Day view moves the rest up if you'd rather.
+- **Slot missed** (its end passed with no tick, after a 10-minute grace): the piece is re-slotted into the next free time today after the current slots, pushing later pieces back within today's windows; what no longer fits today goes to tomorrow's spare time and the rest of its task is re-spread (PL-01). The piece is never "overdue" unless its source deadline has passed (PL-14). A nag goes out (LR-03).
+- **The day changes** (a calendar event appears, an instruction lands, a task arrives): re-slot the affected day with a stability rule: a piece keeps its slot unless something now overlaps it, and moved pieces move as little as possible. Without this the timeline would reshuffle itself every sync and you'd stop trusting it.
+- **Triggers.** An alarm at each slot's end (exact alarms are already used for sessions' ends; reuse), the app opening, a calendar change (`watchCalendar` exists), a sync.
+
+**Final state.** At 17:40, having not started the statics at 16:45, the timeline shows it at 17:45 and the reply at 18:35; the calendar matches; a message asks what happened.
+
+**Caveats.** The stability rule is the hard part to get right; write its invariants first (AR-04). Re-slotting writes to the calendar often (NF-07); batch the writes per replan.
+
+**Effort.** M (given PL-12).
+
+## PL-14 Dates the app set are elastic; only a source's deadline is overdue
+
+**Now.** Every due date is hard: a step's `from`/`due` from Claude, a quick action's invented two weeks, the undated week, all show "Overdue" when passed and rank ahead of real work.
+
+**Proposal.** Your note 4, read as: a date set by the app or by Claude (a step's dates, a quick-action date, the soft week, a spread day, a slot) is a plan, not a deadline. When it passes, the work is re-fitted (PL-13) and nothing is labelled overdue. A date from a source (Teams, Power Planner, an email's own words, `deadlineQuoted` in AI-12) is a deadline: the work is still re-fitted around it, placed first today as now, but the task shows "Overdue" from the moment it passes, in red, as it does today. I've read "subtasks in a task" as a task's steps and "items where the app set a deadline" as everything the model or the app dated; confirm in Q-40.
+
+**Final state.** The only red on the screen is a real deadline missed. Everything else moves.
+
+**Caveats.** Soft dates still order the work, so the model's step dates still matter; they just can't shame you. Stats' "on time" keeps counting source deadlines only.
+
+**Effort.** M.
+
+## PL-15 School free periods as planning windows
+
+**Now.** Work is planned in the evening window only (`weekdayHours`, 16:45–22:00); school hours are a planning no-go and a blocking allow (`BlockPolicy.isSchoolHours`). Your note 2: the timetable has break, lunch and study periods; when nothing else is in them, plan into them.
+
+**Proposal.** From the timetable (DX-09): the entries whose names mark free time (Q-30: which names) on each school day become windows, minus any calendar event that overlaps them and minus a buffer at each end (5 minutes to get somewhere and sit down). Only pieces that can be done there are placed in them: the model marks a step `where: "anywhere" | "home"` (a booklet is anywhere; a Teams upload or a long essay is home), and Anki pieces are always anywhere. The windows are shown on the Day timeline in their own colour. Blocking during these windows is a separate question (Q-29; BL-09): the planning restriction is relaxed, the phone's rules at school are yours to set.
+
+**Final state.** A Wednesday with two study periods holds the vocab and the short admin before the evening, and the evening holds the long work.
+
+**Caveats.** Free periods vanish (a cover lesson, a trip) without the calendar knowing; a missed school slot is re-fitted like any other (PL-13), and the yield (PL-06) can be learned per window kind so school windows that rarely get used count for less.
+
+**Effort.** M.
 
 ---
 
 ## What I looked at and left alone
 
-- **The backwards placement and the pressure rule** (`Plan.pressure`, `Plan.kt:113`): the design's centre and right; PL-01 works around it with soft chunks rather than changing it. The spendable-credit question it raises is in [06-blocking-and-focus.md](06-blocking-and-focus.md), BL-01.
-- **The 90-day horizon, the 14-day minimum, the 5-minute minimum chunk**: fine.
-- **Undated work's soft week and 60 minutes a day**: fine; the review can change the minutes.
-- **The v1 proposals for a constraint solver or a different allocation model** (IMP-P2-023/024): declined by you, and I agree.
+- **The planner's purity** (everything through `Input`, deterministic): kept; slots and spreading are more of the same.
+- **The horizon** (90 days), the 5-minute minimum chunk, the margin and calibration: kept.
+- **The v1 proposals for a solver** (IMP-P2-023/024): still not needed; proportional spreading and greedy slotting are enough and explainable.
