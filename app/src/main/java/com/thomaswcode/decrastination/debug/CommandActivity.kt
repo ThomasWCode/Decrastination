@@ -226,7 +226,7 @@ class CommandActivity : Activity() {
             }
             "chat-context" -> {
                 // What the chat sends Claude with your newest message now, the plan included.
-                File(filesDir, "chat-context.txt").writeText(graph.chatContext())
+                File(filesDir, "chat-context.txt").writeText(graph.chatContext().whole)
                 Log.i(TAG, "Wrote the chat's context to files/chat-context.txt")
             }
             "chat-ask" -> {
