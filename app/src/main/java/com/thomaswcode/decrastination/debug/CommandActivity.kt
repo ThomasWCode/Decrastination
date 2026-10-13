@@ -68,6 +68,9 @@ import kotlinx.serialization.json.JsonPrimitive
  * - `ai-prompts --ei count 6`: writes `files/ai-prompts.json`, the exact prompts and schemas the
  *   model would get for up to that many tasks per job, for trying them out without the API (the
  *   file holds your tasks' text: pull it into the git-ignored `private/`, then delete it).
+ * - `chat-context`: writes `files/chat-context.txt`, what the chat would send Claude with a message
+ *   now (the tasks, the calendar, the changes in use and the plan), for the chat's eval; it too
+ *   holds your tasks' text, to pull into `private/` and delete.
  * - `ai-check --es base http://127.0.0.1:8089`: one model call per job through the real client
  *   to a stand-in server (`adb reverse` to the PC), with a dummy key, logging what it reads back.
  *   Nothing reaches Anthropic and nothing is stored: it checks the client works on the phone.
@@ -218,6 +221,11 @@ class CommandActivity : Activity() {
                 }
                 File(filesDir, "ai-prompts.json").writeText(JsonArray(items).toString())
                 Log.i(TAG, "Wrote ${items.size} prompts to files/ai-prompts.json")
+            }
+            "chat-context" -> {
+                // What the chat sends Claude with your newest message now, the plan included.
+                File(filesDir, "chat-context.txt").writeText(graph.chatContext())
+                Log.i(TAG, "Wrote the chat's context to files/chat-context.txt")
             }
             "ai-endpoint" -> {
                 // --es base <url> sends the model's calls to a stand-in till the app restarts; none, to Anthropic again.

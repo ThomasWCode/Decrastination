@@ -1000,6 +1000,13 @@ class AppGraph private constructor(context: Context) {
     }
 
     /**
+     * What the chat tells Claude the app knows at [now] ([ChatPrompts.context]): the open tasks, the
+     * calendar, the changes in use, and the plan as the Plan tab shows it then.
+     */
+    fun chatContext(now: Long = clock.now()): String =
+        ChatPrompts.context(tasks.value.tasks, calendarTime.events, instructions.value.applied, now, clock.zone(), plan(now = now))
+
+    /**
      * Claude's answer to your message waiting for one: a call made as the enrichment's are, under the
      * cap and resting after a failure. While Claude can't be asked, your message says why, and it's
      * answered once it can be (the chat opened again, *Try again*, or Claude back from its rest).
@@ -1018,7 +1025,7 @@ class AppGraph private constructor(context: Context) {
             chat.update { s -> s.copy(messages = s.messages.map { if (it.id == waiting.id) it.copy(note = null, stuck = false) else it }) }
             val at = clock.now()
             val month = AiUsage.monthOf(at, clock.zone())
-            val result = runCatching { ChatReader(key, clock.zone(), endpoint()).answer(chat.value.messages, tasks.value.tasks, calendarTime.events, instructions.value.applied, at) }
+            val result = runCatching { ChatReader(key, clock.zone(), endpoint()).answer(chat.value.messages, tasks.value.tasks, calendarTime.events, chatContext(at), at) }
                 .onFailure { error ->
                     Log.w(TAG, "Claude's answer in the chat failed", error)
                     modelFailed(error, month, at)
