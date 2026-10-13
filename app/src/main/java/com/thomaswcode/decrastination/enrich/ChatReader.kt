@@ -200,9 +200,11 @@ object ChatPrompts {
     /**
      * [plan] as the Plan tab shows it, for questions about a day ("what's on tomorrow?"): the next
      * thing to do, as its *Do now* card has it ([session]'s piece while one runs, [sessionLeftMin]
-     * left); each of the next [PLAN_DAYS] days, its minutes against its working time, its work a task
-     * a line with the pieces that day, and its events from *Coming up*; what's planned after them, in
-     * a line naming its tasks; the other events coming up; and the open work it leaves out, with why.
+     * left); the open work it leaves out, with why; the other events coming up; what's planned after
+     * the fortnight, in a line naming its tasks; then each of the next [PLAN_DAYS] days, its minutes
+     * against its working time, its work a task a line with the pieces that day, and its events from
+     * *Coming up*. The days go last, the nearest first, so a plan cut to fit ([turns]) loses only its
+     * far days; each summary is at most [PLAN_LIST] lines.
      */
     fun plan(plan: Plan, zone: ZoneId, session: FocusSession? = null, sessionLeftMin: Int? = null): String = buildString {
         fun at(time: Long) = Instant.ofEpochMilli(time).atZone(zone).format(WHEN)
@@ -225,8 +227,46 @@ object ChatPrompts {
             else -> plan.next?.let { next -> appendLine("Next to do: ${piece(next)}" + plan.then?.let { "; then ${piece(it)}" }.orEmpty()) }
         }
         val last = plan.today.plusDays(PLAN_DAYS - 1L)
-        // Events (an appointment in Power Planner, one of yours): under their day, as *Coming up* lists them.
         fun day(time: Long): LocalDate = Instant.ofEpochMilli(time).atZone(zone).toLocalDate()
+        /** At most [PLAN_LIST] of [lines], and how many more. */
+        fun list(lines: List<String>) {
+            lines.take(PLAN_LIST).forEach { appendLine("- $it") }
+            if (lines.size > PLAN_LIST) appendLine("- …and ${lines.size - PLAN_LIST} more")
+        }
+        // The summaries before the days: a plan cut to fit loses its far days, never why something isn't planned.
+        if (plan.unplanned.isNotEmpty()) {
+            val end = (plan.buckets.lastOrNull()?.date ?: plan.today).format(DAY)
+            appendLine("Not planned (open work the plan leaves out, and why):")
+            list(
+                plan.unplanned.map { gap ->
+                    val why = when (gap.reason) {
+                        Unplanned.Reason.NotOpen -> "can't be started before ${gap.at?.let(::at) ?: "later"}, its source says"
+                        Unplanned.Reason.Waits -> "waits until “${gap.after?.take(MAX_TITLE) ?: "another task"}” is done, as they said"
+                        Unplanned.Reason.OpensLater -> "opens ${gap.at?.let(::at) ?: "later"}, after the plan's last day ($end): planned once it's within reach"
+                        Unplanned.Reason.NoRoom -> "no room for it by $end, the plan's last day, within each day's limits"
+                    }
+                    val pieces = if (gap.pieces == 1) "1 piece" else "${gap.pieces} pieces"
+                    "${gap.taskId} | ${gap.title.take(MAX_TITLE)} | $pieces, ${gap.minutes} min | $why"
+                },
+            )
+        }
+        // The rest of *Coming up*: past, after the fortnight, or with no date.
+        val others = plan.events.filter { e -> e.dueAt?.let { day(it) !in plan.today..last } ?: true }
+        if (others.isNotEmpty()) {
+            appendLine("Events on the Plan other than those under their days below (past, after ${last.format(DAY)}, or with no date):")
+            list(others.map { "${event(it)} | ${it.dueAt?.let(::at) ?: "no date"}" })
+        }
+        val after = plan.buckets.filter { it.date > last && it.chunks.isNotEmpty() }
+        if (after.isNotEmpty()) {
+            val days = if (after.size == 1) "1 more day" else "${after.size} more days"
+            // Which tasks, so that's said rather than guessed.
+            val ids = after.flatMap { it.chunks }.distinctBy { it.taskId }
+            val tasks = ids.take(PLAN_LIST).joinToString("; ") { "${it.taskId} | ${it.title.take(MAX_TITLE)}" } +
+                if (ids.size > PLAN_LIST) "; …and ${ids.size - PLAN_LIST} more" else ""
+            appendLine("Planned after ${last.format(DAY)}: ${after.sumOf { it.plannedMin }} min on $days, the last ${after.last().date.format(DAY)}, of: $tasks")
+        }
+        // Then the days, the nearest first. Events (an appointment in Power Planner, one of yours) under their day, as *Coming up* lists them.
+        appendLine("Day by day:")
         val eventsOn = plan.events.filter { it.dueAt != null }.groupBy { day(it.dueAt!!) }.filterKeys { it in plan.today..last }
         plan.buckets.filter { it.date <= last }.forEach { bucket ->
             val name = when (bucket.date) {
@@ -253,34 +293,10 @@ object ChatPrompts {
                 appendLine("  - $id | ${first.title.take(MAX_TITLE)} | ${pieces.sumOf { it.minutes }} min: $parts | ${flags.joinToString(" | ")}")
             }
         }
-        val after = plan.buckets.filter { it.date > last && it.chunks.isNotEmpty() }
-        if (after.isNotEmpty()) {
-            val days = if (after.size == 1) "1 more day" else "${after.size} more days"
-            // Which tasks, so that's said rather than guessed.
-            val tasks = after.flatMap { it.chunks }.distinctBy { it.taskId }.joinToString("; ") { "${it.taskId} | ${it.title.take(MAX_TITLE)}" }
-            appendLine("- After ${last.format(DAY)}: ${after.sumOf { it.plannedMin }} min on $days, the last ${after.last().date.format(DAY)}, of: $tasks")
-        }
-        // The rest of *Coming up*: past, after the fortnight, or with no date.
-        val others = plan.events.filter { e -> e.dueAt?.let { day(it) !in plan.today..last } ?: true }
-        if (others.isNotEmpty()) {
-            appendLine("Other events on the Plan (past, after ${last.format(DAY)}, or with no date):")
-            others.forEach { appendLine("- ${event(it)} | ${it.dueAt?.let(::at) ?: "no date"}") }
-        }
-        if (plan.unplanned.isNotEmpty()) {
-            val end = (plan.buckets.lastOrNull()?.date ?: plan.today).format(DAY)
-            appendLine("Not planned (open work the plan leaves out, and why):")
-            plan.unplanned.forEach { gap ->
-                val why = when (gap.reason) {
-                    Unplanned.Reason.NotOpen -> "can't be started before ${gap.at?.let(::at) ?: "later"}, its source says"
-                    Unplanned.Reason.Waits -> "waits until “${gap.after?.take(MAX_TITLE) ?: "another task"}” is done, as they said"
-                    Unplanned.Reason.OpensLater -> "opens ${gap.at?.let(::at) ?: "later"}, after the plan's last day ($end): planned once it's within reach"
-                    Unplanned.Reason.NoRoom -> "no room for it by $end, the plan's last day, within each day's limits"
-                }
-                val pieces = if (gap.pieces == 1) "1 piece" else "${gap.pieces} pieces"
-                appendLine("- ${gap.taskId} | ${gap.title.take(MAX_TITLE)} | $pieces, ${gap.minutes} min | $why")
-            }
-        }
     }.trimEnd()
+
+    /** The most lines in each of the plan's summaries (what isn't planned, other events, later tasks), so they leave the days room. */
+    const val PLAN_LIST = 20
 }
 
 /** Claude's answer in the chat, checked: its reply, the tasks and changes the app can make, and what it left out. */
