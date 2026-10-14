@@ -84,7 +84,7 @@ Items: LR-01, LR-02, LR-06, LR-08, PL-08, PL-09, PL-10, PL-11, NF-02, AC-06, AC-
 
 ## NF-02 The weekly summary
 
-**Files.** New `learn/Summary.kt`, new `enrich/SummaryPrompts.kt`, `learn/Felix.kt`, `ui/SettingsActivity.kt` (Summary section), `data/Settings.kt` (`summaryEmail: String = ""`).
+**Files.** New `learn/Summary.kt`, new `enrich/SummaryPrompts.kt`, `learn/Felix.kt`, `ui/SettingsActivity.kt` (Summary section), `data/Settings.kt` (`summaryEmail: String = "richard.white@lshtm.ac.uk"`, the owner's dad; editable in Settings).
 
 **Steps.** `Summary.input(log, reviews, felix, week)`: the numbers (minutes, pieces, on time, days done, slots kept/missed, free time), the review's note and changes, the week's nags and how they went, the moves and instructions. `SummaryPrompts.SYSTEM`: "Write the student's weekly summary for their dad, in the student's voice, first person, plainly, no excuses and no spin: what got done, what didn't and why, what changed. Short paragraphs and one small table. Under 300 words."; effort `Summary`. Sunday: Felix (reason `Summary`) posts "The week's summary is ready; send it?" with an action that opens the email: `Intent(ACTION_SENDTO, Uri.parse("mailto:$summaryEmail")).putExtra(EXTRA_SUBJECT, "Week of …").putExtra(EXTRA_TEXT, text)`. The same text on the Reviews page. Settings → Summary: the address and a "Send this week's summary" button.
 
@@ -104,7 +104,7 @@ Items: LR-01, LR-02, LR-06, LR-08, PL-08, PL-09, PL-10, PL-11, NF-02, AC-06, AC-
 
 **Files.** `app/src/test/.../enrich/EvalRunTest.kt`, `build.gradle.kts`, `docs/eval.md`.
 
-**Steps.** A JUnit test gated by `System.getenv("EVAL_API_KEY")` (skipped otherwise): for each case in `private/eval/cases.json`, call the real `ClaudeEnricher` with the key, effort from `-Peffort`, write the answer to `private/eval/answers/<id>-<run>.json`, then run the existing `score` logic; stop when the summed cost passes `EVAL_BUDGET_USD` (default 2). Run with `EVAL_API_KEY=… ./gradlew :app:testDebugUnitTest --tests '*EvalRunTest*'`. Document in `docs/eval.md`. Never in CI.
+**Steps.** A JUnit test gated by `System.getenv("CLAUDE_DECRASTINATION_API_KEY")` (skipped otherwise; the owner sets it on the machine the session runs on): for each case in `private/eval/cases.json`, call the real `ClaudeEnricher` with the key, effort from `-Peffort`, write the answer to `private/eval/answers/<id>-<run>.json`, then run the existing `score` logic; stop when the summed cost passes `EVAL_BUDGET_USD` (default 2). Run with `./gradlew :app:testDebugUnitTest --tests '*EvalRunTest*'` with the variable in the environment (Gradle test tasks inherit it; if not, pass it through `systemProperty` as the golden-file flag is). Document in `docs/eval.md`. Never in CI.
 
 ---
 
@@ -128,7 +128,7 @@ Items: LR-01, LR-02, LR-06, LR-08, PL-08, PL-09, PL-10, PL-11, NF-02, AC-06, AC-
 
 **Files.** New `data/BackupWorker.kt`, `ui/SettingsActivity.kt`, `data/Settings.kt` (`backupFolder: String? = null`, a persisted SAF tree URI).
 
-**Steps.** Settings → Backup: "Choose a folder" (`ActivityResultContracts.OpenDocumentTree`, `takePersistableUriPermission`), "Last backup: …". `BackupWorker` (periodic, 24 h, `ExistingPeriodicWorkPolicy.KEEP`) writes `decrastination-<date>.json` via `DocumentFile`, deletes beyond 14, records `runtime.lastBackupAt`. `LR-08` writes there first. `Backup` covers every store: tasks' own tasks, settings, log, calibration, event answers, usage, instructions, school, memory, Felix state, slot state (FORMAT 5).
+**Steps.** Settings → Backup: "Choose a folder" (`ActivityResultContracts.OpenDocumentTree`, `takePersistableUriPermission`), "Last backup: …". The owner will choose the folder later; with none chosen no backup job runs and the row says so. `BackupWorker` (periodic, 24 h, `ExistingPeriodicWorkPolicy.KEEP`) writes `decrastination-<date>.json` via `DocumentFile`, deletes beyond 14, records `runtime.lastBackupAt`. `LR-08` writes there first. `Backup` covers every store: tasks' own tasks, settings, log, calibration, event answers, usage, instructions, school, memory, Felix state, slot state (FORMAT 5).
 
 ---
 

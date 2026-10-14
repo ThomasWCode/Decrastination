@@ -37,10 +37,26 @@ A phase is done when every item in it says so by its own **Done when** list, and
 
 JDK 17. The debug APK's keystore (`app/debug.keystore`) is committed on purpose: the Teams widget's signature permission depends on it. Never regenerate it.
 
+## Facts the owner has settled
+
+- Backwards compatibility between app versions isn't required: the owner is the only user. Data on the phone must still survive each upgrade (see `00-conventions.md`); nothing else needs to keep working with older data or older builds.
+- The owner has starred every email he wants as a task, so DX-03 needs no grace period.
+- His Power Planner timetable has the free periods entered as classes named "Study Period".
+- The Google calendar "Decrastination" exists and is synced to the phone; the app picks it in Settings (NF-07). Grant the write permission over adb: `adb shell pm grant com.thomaswcode.decrastination android.permission.WRITE_CALENDAR`.
+- The Claude API key is in the environment variable `CLAUDE_DECRASTINATION_API_KEY` on the machine the session runs on (for the eval task, AR-02); on the phone it's in the app's secret store already.
+- The weekly summary goes to `richard.white@lshtm.ac.uk` (NF-02's default).
+- The nightly backup folder (AR-07) will be chosen later; until then no backup job runs.
+- Don't change settings of apps that aren't this one (Google Calendar, Gmail, AnkiDroid, the Teams widget, Power Planner) on the phone; the app's own settings, and the phone's (accessibility, rotation, permissions) are yours to set.
+
+## The Teams widget
+
+Two items (DX-08, NF-06) need the Teams widget's content provider to expose data it doesn't today. The widget is the owner's other project, `ThomasWCode/TeamsAssignmentsWidget` (`com.teamsassignments.widget`); its provider's contract is `provider/AssignmentsContract.kt` and it exposes `key, title, class_name, description, due_text, due_at, tab, detail_read_at, last_synced_at` (see `docs/data-sources.md` §1 here). It syncs by reading the Teams app's screens through an accessibility service, so anything new must come from what those screens show. When you reach those items: find the widget's checkout beside this repository (ask the owner for the path once if it isn't there), and change it under the same rules as here: a branch from its `main`, one commit per item, its own tests and CI green, a pull request against its `main` titled `Expose <what> for Decrastination (DX-08)` or `(NF-06)`, and no further action on that PR unless told. The widget's signature permission and keystore don't change. Decrastination's side reads the new columns when present and does nothing when they're absent, so the two PRs can merge in either order.
+
 ## What the agent must not do
 
 - Don't implement anything the review withdrew or deferred (listed in `../README.md`): sessions stay removed, no streaks, no exams page, no sender rules, no two weekend windows.
 - Don't change the planner's purity: everything it depends on goes in through `Planner.Input`.
 - Don't add Claude attribution, session links or co-author trailers to commits (the owner's rule).
 - Don't commit anything from `private/` (git-ignored real data).
+- After opening a phase's pull request, take no further action on it unless told: the owner merges.
 - Don't ask the owner questions that `../QUESTIONS.md` already answers; where a phase file says "decide", decide and record the decision in `PROGRESS.md`.

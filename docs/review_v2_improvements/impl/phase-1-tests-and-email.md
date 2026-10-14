@@ -37,23 +37,23 @@ Items: AR-04, DX-03, DX-07, AI-02, DX-06, DX-01, AI-04. No dependency on other p
 
 ## DX-03 Read only starred emails; every starred email is a task
 
-**Change.** `GmailSource` reads the Starred mailbox instead of the inbox; a thread is a task while any message of it is starred; unstarring finishes it. A seven-day grace keeps existing unstarred email tasks open with a visible line.
+**Change.** `GmailSource` reads the Starred mailbox instead of the inbox; a thread is a task while any message of it is starred; unstarring finishes it. The owner has already starred every email he wants to keep, so there's no grace period: unstarred email tasks finish at the first starred-only sync.
 
-**Files.** `sources/gmail/Imap.kt`, `sources/gmail/GmailSource.kt`, `sources/TaskSource.kt` (no change needed; see step 4), `data/Settings.kt`, `protect/SettingsChanges.kt`, `ui/TasksScreen.kt`, `ui/SetupScreen.kt`, `docs/data-sources.md` §4.
+**Files.** `sources/gmail/Imap.kt`, `sources/gmail/GmailSource.kt`, `ui/SetupScreen.kt`, `docs/data-sources.md` §4.
 
 **Steps.**
 
 1. `ImapClient.list(): List<Mailbox>` where `data class Mailbox(val name: String, val attributes: Set<String>)`: runs `LIST "" "*"` through the existing `run(command, "LIST")`, parses each untagged line `* LIST (<attrs>) "<delim>" <name>`; attributes are the atoms in the first list (keep their backslash, lower-cased); the name is the last value's string (quoted or literal). Unit test in `ImapTest` with a captured Gmail `LIST` response (write it from RFC 3501 §7.2.2 and Gmail's known output: `* LIST (\HasNoChildren \Flagged) "/" "[Gmail]/Starred"`).
 2. `GmailSource.read`: after `imap.login`, `val starred = imap.list().firstOrNull { "\\flagged" in it.attributes }?.name ?: imap.list().firstOrNull { it.name.endsWith("/Starred", ignoreCase = true) }?.name ?: throw SourceUnavailable("Gmail has no Starred folder")`. Call `list()` once, not twice. Then `imap.examine(starred)` instead of `examine("INBOX")`. The rest of the read (UID SEARCH ALL, envelope fetch in batches, texts) is unchanged: the folder is small.
 3. Finishing: nothing to change in `Merge.apply`: a thread absent from the read is finished as an archived one is today. Verify with the existing `MergeTest` and add one test in `GmailTest`: a thread listed in the last read and absent from this one comes back `completed`.
-4. Grace for the switch. Add `Settings.gmailStarredSince: Long? = null` (LOOSER `NEVER`, LABELS "Gmail reads starred mail since", not shown in the Settings screen). In `GmailSource.read`, after the starred list is known: `val since = context.settings.gmailStarredSince`; if null, the source can't write settings (it's pure), so return `SourceRead(items, note = NOTE_STARRED_FIRST)` and let `AppGraph` set the setting: in the `syncer.addListener` block, when `tasks.status(Source.Gmail).note == NOTE_STARRED_FIRST && settings.value.gmailStarredSince == null`, `changeSettings { it.copy(gmailStarredSince = clock.now()) }`. While `since == null || now < since + GRACE_MS` (7 days): for every known open Gmail task (`context.known.filter { it.source == Source.Gmail && it.isOpen }`) whose `sourceId` isn't among the starred threads, re-emit a `Fetched` built from the task's stored fields (`sourceId`, `title`, `kind`, `detail`, `dueAt`, `availableFrom`, `sourceEffortMin`, `extra + (EXTRA_UNSTARRED to "true")`). After the grace they're not re-emitted and the merge finishes them.
-5. `GmailThreads.EXTRA_UNSTARRED = "unstarred"`. In `TasksScreen`, a folded section "Not starred: star them in Gmail to keep them" listing open Gmail tasks with that extra (above "Not tasks, as you said"). After phase 6 this moves into the Work view's foot.
+4. No grace: the owner has starred what he wants; the merge finishes the rest at the first starred-only sync. Nothing to add.
+5. Nothing to show for unstarred tasks: they're finished tasks like any other.
 6. `SetupScreen`'s Gmail section text: "The app reads your starred emails only. Star an email in Gmail to make it a task; unstar it when it's done." Keep the app-password instructions.
 7. `docs/data-sources.md` §4: replace the inbox description with the Starred-folder one; note the `\Flagged` special-use lookup and the fallback name.
 
-**Tests.** `ImapTest`: `list` parsing. `GmailTest`: `fetched` of a starred-only read; grace re-emits an unstarred known task within 7 days and not after; `toRead`/`knownBodies` unchanged. `MergeTest`: unchanged behaviour covers finishing.
+**Tests.** `ImapTest`: `list` parsing. `GmailTest`: `fetched` of a starred-only read; `toRead`/`knownBodies` unchanged. `MergeTest`: unchanged behaviour covers finishing.
 
-**Done when.** A sync against a Gmail account lists only starred threads (check with `scripts/gmail_probe.py` extended with `--starred`, or by hand); unstarring a thread finishes its task at the next sync; the grace section shows and then empties.
+**Done when.** A sync against a Gmail account lists only starred threads (check with `scripts/gmail_probe.py` extended with `--starred`, or by hand); unstarring a thread finishes its task at the next sync.
 
 ---
 
@@ -100,7 +100,7 @@ Items: AR-04, DX-03, DX-07, AI-02, DX-06, DX-01, AI-04. No dependency on other p
 
 **Tests.** `EnrichTest`: an Email answer with `kind: "Info"` is unreadable; the rules' triage of a newsletter is Admin 5 min. Existing tests expecting Info change accordingly.
 
-**Done when.** No code path makes a new Gmail task of kind Info; old Info tasks still load and still count as `justAnEmail` (hidden) until they finish.
+**Done when.** No code path makes a new Gmail task of kind Info; `Kind.Info` stays in the enum so the existing task file loads, and such tasks finish at the first starred-only sync.
 
 ---
 
