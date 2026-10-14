@@ -2,7 +2,7 @@
 
 An improvements-only review of Decrastination 2.0.0 (October 2026), revised after five rounds of your answers and notes in [QUESTIONS.md](QUESTIONS.md). Nothing here is a bug report (those are in `docs/review/`), nothing is implemented, and nothing you declined in v1 (`docs/review/IMPROVEMENTS-EVALUATED.md`) is proposed again.
 
-**Start with [PLAN-OVERVIEW.md](PLAN-OVERVIEW.md)**, the whole design walked through a school day, a weekend day and a week, with the gaps it found; then [QUESTIONS.md](QUESTIONS.md), where all three rounds are recorded with how each answer was applied, with every question answered and applied; nothing is open. Everything else can be read as needed.
+**For the agent implementing this: start at [impl/README.md](impl/README.md).** The `impl/` files state each change, how to make it (files, types, signatures, prompt text, tests) and when it's done, in eight phases. The documents below are the reasons and the decisions behind them: [PLAN-OVERVIEW.md](PLAN-OVERVIEW.md) walks the design through a school day, a weekend day and a week; [QUESTIONS.md](QUESTIONS.md) records all five rounds of decisions with how each answer was applied; nothing is open.
 
 ## What the review now proposes
 
@@ -30,12 +30,13 @@ Plus: the logo's colours (UI-12), Day and Work screens with a shorter menu (UI-1
 | [09-new-features.md](09-new-features.md) | Photo-to-task, the weekly summary, Anki counts, the calendar write | NF-01 … NF-08 |
 | [PLAN-OVERVIEW.md](PLAN-OVERVIEW.md) | The design end to end: a school day, a weekend day, a week; assumptions; the gaps found | – |
 | [QUESTIONS.md](QUESTIONS.md) | All five rounds answered and applied; nothing open | Q-01 … Q-57 |
+| [impl/](impl/README.md) | The implementation plan for the agent: conventions and eight phase files with exact methods | – |
 
 Every item has the same shape: **Now** (what the code does, with `file:line`), **Why**, **Proposal**, **Final state**, **Caveats**, **Effort** (S: hours; M: a day; L: several days), and a **Status** in the summary table: unchanged, Changed (with the question or note that changed it), New, Withdrawn, Deferred, or settled by a round-two answer. Withdrawn items keep a line saying why. 121 items in all, 13 withdrawn, 2 deferred.
 
 ## The order to build it in
 
-Dependencies, not priorities.
+Dependencies, not priorities; the `impl/` phase files follow this order and carry the detail.
 
 1. **Property tests first** (AR-04), because every step below changes the planner.
 2. **Starred-only email** (DX-03, DX-07, AI-02): small, independent, and it simplifies the model's job before anything else touches the prompts.

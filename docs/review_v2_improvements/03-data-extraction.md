@@ -104,7 +104,7 @@ Sender rules were for inbox noise (your answer to Q-11: no longer important).
 
 **Proposal.** Your answer to Q-12: now. Four uses:
 
-- **Windows (PL-15).** The timetable's "Study Period" entries, with break (10:45–11:15) and lunch (13:15–14:35 less 13:40–13:50 for eating) at their fixed times on every school day (your answer to Q-30), minus calendar events, become planning windows the slots (PL-12) can fill, alongside the evening.
+- **Windows (PL-15).** The timetable's "Study Period" entries, with break (10:45–11:15) and lunch (13:15–14:35 less 13:40–13:55 for eating) at their fixed times on every school day (your answer to Q-30), minus calendar events, become planning windows the slots (PL-12) can fill, alongside the evening.
 - **Order.** Among work due the same day, the subject with the earlier lesson first; work for tomorrow's lessons ahead of work for Thursday's.
 - **The voice.** The briefing and the nags know "Physics P1 tomorrow".
 - **The profile (AI-05).** Lessons by day and school end, so Claude's estimates and the chat know the shape of your week.
