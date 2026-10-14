@@ -106,11 +106,14 @@ data class Plan(
     val todayBucket: DayBucket? get() = bucket(today)
     val tomorrowBucket: DayBucket? get() = bucket(today.plusDays(1))
 
-    /** What must happen today or tomorrow for every deadline to be met: by definition, what's due soon. */
+    /** What's planned today and tomorrow: what the next two days hold, for ordering and the briefing. */
     val dueSoon: List<Chunk> get() = todayBucket?.chunks.orEmpty() + tomorrowBucket?.chunks.orEmpty()
 
-    /** Something is due today or tomorrow: blocking is strict (docs/scheduler.md §4). */
-    val pressure: Boolean get() = dueSoon.isNotEmpty()
+    /**
+     * Something is planned today: blocking is strict (docs/scheduler.md §4). Today's bucket alone,
+     * since later work is spread over its window (PL-01) and tomorrow always holds a share of it.
+     */
+    val pressure: Boolean get() = todayBucket?.chunks.orEmpty().isNotEmpty()
 
     /** Every chunk in the order it's meant to be done. */
     val ordered: List<Chunk> get() = buckets.flatMap { it.chunks }

@@ -17,13 +17,20 @@ All four are pure Kotlin with an injected `Clock`, no Android types, unit-tested
 
 ## 3. Day-bucket allocation
 
-The planner builds one bucket per study day from today to the furthest deadline, each with its capacity in minutes, then places every task's remaining work into buckets. **What lands in today's and tomorrow's buckets is, by definition, "due today or tomorrow"**, which is what the block policy reads.
+The planner builds one bucket per study day from today to the furthest deadline, each with its capacity in minutes, then places every task's remaining work into buckets. **Since review v2 (PL-01), today's bucket is a fair share of every task's days**, and it alone is what the block policy reads (§4).
 
 Placement, tasks taken in deadline order (earliest first; overdue and no-deadline tasks handled below):
 
 1. The last usable day is `dueDay − margin` (margin **1 day** by default, longer for kinds you tend to leave late, §5). If `dueAt` is in the morning (before 12:00) the due day itself is never usable.
 2. The task is cut into chunks: its sub-steps if it has them, otherwise boxes of `boxMin` (**ASSUMED 45**, Q6), last one shorter.
-3. Chunks are placed **backwards from the last usable day**, filling each day up to its remaining capacity, one chunk per day where possible so a task is spread rather than dumped on one evening. A chunk that cannot fit anywhere before the deadline is placed in today's bucket and flagged `behind`.
+3. **Spread over its window** (review v2, PL-01; until then, backwards from the last usable day). Work with a deadline that isn't due by tomorrow, its last usable day first, is spread from the first day it can be done to its last usable day:
+   1. Each piece goes to the day where its share of the window's free time falls: six pieces over twelve even evenings are a piece every second day, not the last six evenings; a day with a busy evening takes a smaller share.
+   2. In order: never before the piece before it, and never on a day past which the pieces after it can't follow (a big last piece only a weekend holds keeps the ones before it from passing that weekend).
+   3. Over a window of a week or more, within a week of the piece before, where a day in that week has room (the minimum touch, Q-32), so a far task moves on every week.
+   4. Revision, or work for a test, a day after the piece before where a later day has room (spaced practice).
+   5. A single piece goes to the day with most room, the earlier of two.
+   6. A day without room passes its piece to the nearest that has some, earlier first.
+   7. What its window can't hold in order at all is placed backwards from the last usable day, as all dated work once was; a chunk that cannot fit anywhere before the deadline is placed in today's bucket and flagged `behind`.
 4. Overdue tasks and tasks due today go straight into today's bucket, oldest deadline first; they are placed before step 3 runs so they consume today's capacity first. **Changed 9 Oct (your call): work due later today or tomorrow comes before overdue work**, as its deadlines can still be met: it's placed first, taking today's time before anything already past its deadline, and a task with some brings its own overdue blocks along, ahead of it in their order, ranked by the task's soonest deadline to come rather than their own long gone (so an email's September reply, brought along by tomorrow's application, doesn't go ahead of homework due tonight); every other block ranks by its own deadline, so a task's block due tomorrow doesn't go ahead of other work due tonight either. Then overdue work, oldest deadline first; then the rest as in step 3.
 5. The **daily Anki quota** (all due reviews + 20 new from the lowest unfinished deck + any deck named by German homework) is a fixed chunk in today's bucket, deadline 21:00 (**ASSUMED**; could be 22:00 given the weekday window). Homework-linked deck tasks are ordinary tasks with the assignment's deadline.
 6. Emails that are just emails (only to read, or about an event; 9 Oct) aren't planned at all, nor reminded of. Nor is a task you've said isn't one, or one waiting, as you said, for another still open; and a day you've limited holds no more work than you said (1.5.0, instructions). Tasks with no deadline (self-sent emails, Power Planner items with no date) get a soft deadline of `firstSeenAt + 7 days` and are placed last, so they fill free capacity rather than displace homework.
@@ -35,9 +42,7 @@ Placement, tasks taken in deadline order (earliest first; overdue and no-deadlin
 9. **1.8.0 (11 Oct): what's left out is said** (`Plan.unplanned`, IMP-P1-002). Open work that isn't in any bucket is listed with its reason, folded under *Not planned* at the foot of the Plan: it can't be started yet (its source's `availableFrom`, or Claude's reading), it waits, as you said, for another task still open, it (or a run of its blocks) opens after the plan's last day, or there's no room for it by that day within each day's limits (a deck past its 90 days of steps, undated work past its daily allowance). A task's runs left out for the same reason are one line. Hidden tasks (only to read, or not a task, as you said), events and Anki's own tasks aren't listed; their reasons are elsewhere. The list only explains: it changes neither the buckets nor blocking.
 
 
-Why backwards from the deadline rather than "everything as early as possible": placing early would put every open task into today's bucket and the block would never lift, which turns the app into a wall you learn to ignore. Backward placement means today's bucket contains exactly the work that must happen today for every deadline to be met, given the days left and their capacity. The margin and the per-kind calibration are what stop this from being a last-minute planner: a kind you habitually leave late gets a bigger margin, which pulls its chunks earlier.
-
-Why spread one chunk per day: a 90-minute physics prep due Monday becomes Thu/Fri/Sat chunks instead of one Sunday-night block, which is both easier to start and makes "due tomorrow" chunks appear a few days ahead, exactly as you asked.
+Why spread rather than backwards (review v2, your note 3): placing backwards made today's bucket exactly what had to happen today for every deadline to be met, but a far task got nothing until its last days, then arrived all at once with everything else. Spreading gives every day a share of each task's window in proportion to the time it has, so the work moves on every week. Placing everything as early as possible would still put every open task into today and the block would never lift; spreading doesn't, because today holds a share of the days to each deadline, not all of them, and the block reads today's bucket alone (§4), so it lifts when today's share is done.
 
 **Within a bucket**, order is (since 9 Oct): due later today or tomorrow (a task's overdue blocks before its own due-soon ones) → overdue → `behind` chunks → ascending deadline → kind weight (Homework > Revision > Admin > Event prep) → shorter first. Ties broken by title so the widget never flickers.
 
@@ -54,8 +59,9 @@ Today's bucket is hopelessly over capacity, so everything in it is `behind` and 
 ## 4. Block policy
 
 ```
-dueSoon  = today's bucket ∪ tomorrow's bucket (chunks, not whole tasks)
-pressure = dueSoon is non-empty
+today    = today's bucket (chunks, not whole tasks)
+pressure = today is non-empty            ──since review v2 (PL-01): later work is spread, so
+                                           tomorrow always holds some; before, today ∪ tomorrow
 quiet    = now in [22:30, 07:00)        ──your sleep window (7 Oct)
 
 shouldBlock(now) = !quiet && ( pressure || credit <= 0 )
