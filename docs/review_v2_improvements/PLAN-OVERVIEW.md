@@ -22,7 +22,7 @@ The whole design in one place, after five rounds of answers, walked through a sc
 
 - **07:00** Felix's morning message: two sentences on the day's shape, then the list (LR-04). Written a few minutes before (AC-10).
 - **10:45–11:15, break.** A slot of German vocab, "anywhere" work. The micro-plan on its card and in the message (AI-15). You do it in AnkiDroid; the deck's counts falling while AnkiDroid is in front count the work (NF-03, DX-11). Under 20 minutes, so the tick earns free time (BL-08). The phone's rules at school are unchanged (BL-09).
-- **13:50–14:20, lunch (after eating).** A short admin piece from a starred email. Ticked; earned.
+- **13:55–14:25, lunch (after eating).** A short admin piece from a starred email. Ticked; earned.
 - **15:30, school ends.** Nothing scheduled, so Felix is quiet (LR-03).
 - **16:45–17:15, evening.** Statics Prep 1 of 4. At 16:55, no activity: "You put the statics at a quarter to. p.7, Q1 is two minutes. Going?" with quick replies; your reply "give me 15" moves it to 17:10 at once and he says when he'll check (AI-22, AI-24, LR-03). At 17:40 he asks: "Done? Pic of the page and the 10 minutes are yours." You tick and photograph; the slot is kept and earns (BL-08, LR-09). If you tick without a photo it's kept, not earned; a photo later today earns.
 - **17:45–18:35, a gap.** Free time earned so far is spendable until the next slot starts, when the block returns (BL-10).
