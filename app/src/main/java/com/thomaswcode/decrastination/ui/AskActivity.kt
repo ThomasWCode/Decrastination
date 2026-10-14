@@ -414,7 +414,7 @@ private fun ProposalCard(graph: AppGraph, messageId: String, proposal: Proposal,
                 Text(taskLine(task, now, zone), style = MaterialTheme.typography.bodyMedium)
                 if (task.steps.isNotEmpty()) {
                     task.steps.forEach { s ->
-                        val dates = listOfNotNull(s.from?.let { "from " + Format.at(it, now, zone) }, s.dueAt?.let { Format.due(it, now, zone) }).joinToString(", ")
+                        val dates = listOfNotNull(s.from?.let { "from " + Format.at(it, now, zone) }, s.dueAt?.let { Format.due(it, hard = false, now, zone) }).joinToString(", ")
                         Text("• ${s.title} (${Format.minutes(s.minutes)}${if (dates.isEmpty()) "" else "; $dates"})", style = MaterialTheme.typography.bodySmall)
                     }
                 }
@@ -451,7 +451,8 @@ private fun ProposalCard(graph: AppGraph, messageId: String, proposal: Proposal,
 private fun taskLine(task: OwnTask, now: Long, zone: ZoneId): String = listOfNotNull(
     task.kind.label,
     task.className,
-    task.dueAt?.let { if (task.kind == Kind.Event) Format.at(it, now, zone) else Format.due(it, now, zone) } ?: "No due date",
+    // Your own task's date is yours, so a real deadline.
+    task.dueAt?.let { if (task.kind == Kind.Event) Format.at(it, now, zone) else Format.due(it, hard = true, now, zone) } ?: "No due date",
     task.startFrom?.let { "not before " + Format.at(it, now, zone) },
     if (task.kind == Kind.Event) null else Format.minutes(if (task.steps.isEmpty()) task.minutes else task.steps.sumOf { it.minutes }),
 ).joinToString(" · ")

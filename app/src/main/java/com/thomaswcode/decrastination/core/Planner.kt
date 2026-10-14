@@ -47,6 +47,10 @@ import kotlin.math.roundToInt
  * 9. Every piece says why it's on its day ([Chunk.why], PL-07), set as it's placed: due soon,
  *    overdue, spread, kept within a week, a day apart, the day with most room, undated, packed
  *    late, or behind with no room.
+ * 10. Only a real deadline ([TaskItem.hardDeadline]: a source's, yours, an email's quoted) is ever
+ *    overdue (PL-14). A date the app or Claude set is a plan: gone by, its work is undated again,
+ *    its week counted on from that date, and a step's own dates gone by are dropped; undated work's
+ *    week, ended undone, is followed by the next.
  *
  * Spreading means today's bucket holds a fair share of every task's days, not the whole of a far
  * task's work in its last ones; placing everything early would put every task in today and the
@@ -84,6 +88,8 @@ object Planner {
         val deadline: Long,
         val soft: Boolean,
         val chunks: List<Piece>,
+        /** Its deadline is a real one, which can be missed (PL-14): the task's own, where it's hard. */
+        val hard: Boolean = false,
         /** Not before then: the task's own start, or its blocks'. */
         val notBefore: Long? = task.notBefore,
         /** The real deadline its chunks show: the task's, or its blocks' own. */
@@ -105,7 +111,10 @@ object Planner {
      * order. [from] and [due]: a block's own dates, where it has them. [index]: the sub-step's place
      * in its task's list, so finishing it ticks that one, whatever else shares its title.
      */
-    private class Piece(val step: String?, val minutes: Int, val box: Int? = null, val from: Long? = null, val due: Long? = null, val index: Int? = null)
+    private class Piece(val step: String?, val minutes: Int, val box: Int? = null, val from: Long? = null, val due: Long? = null, val index: Int? = null) {
+        /** Without its own dates: a step's dates gone by were a plan's (PL-14), so it's done with its task's own. */
+        fun undated() = Piece(step, minutes, box, index = index)
+    }
 
     /**
      * [task]'s pieces as the planner places them: one item, or, where its blocks have dates of
@@ -113,10 +122,11 @@ object Planner {
      * in its own window: not before its `from`, and by its own deadline, never after the task's.
      * The windows keep the list's order: no run starts before the one before it, none is planned
      * to finish after a later one is due, and without a real deadline a run's soft one
-     * ([softFrom], counted from when it opens) is no earlier than the run before it's.
+     * ([softFrom], counted from when it opens) is no earlier than the run before it's. A run is
+     * [hard] where its deadline is the task's own, hard one: a step's own date is a plan (PL-14).
      */
-    private fun windows(task: TaskItem, deadline: Long, soft: Boolean, pieces: List<Piece>, softFrom: (Long) -> Long): List<Item> {
-        if (pieces.all { it.from == null && it.due == null }) return listOf(Item(task, deadline, soft, pieces))
+    private fun windows(task: TaskItem, deadline: Long, soft: Boolean, hard: Boolean, pieces: List<Piece>, softFrom: (Long) -> Long): List<Item> {
+        if (pieces.all { it.from == null && it.due == null }) return listOf(Item(task, deadline, soft, pieces, hard = hard))
         val runs = mutableListOf<MutableList<Piece>>()
         for (piece in pieces) {
             val last = runs.lastOrNull()?.last()
@@ -154,6 +164,7 @@ object Planner {
                 deadline = window.end,
                 soft = window.soft,
                 chunks = run,
+                hard = hard && window.real == task.dueAt,
                 // Never opening after a real deadline: a start past it is held to it. A soft one is
                 // the app's own, so a later start stands, and the plan's reach defers it.
                 notBefore = listOfNotNull(task.notBefore, window.from?.let { f -> if (window.soft) f else minOf(f, window.end) }).maxOrNull(),
@@ -216,13 +227,14 @@ object Planner {
         fun dueOf(task: TaskItem): Long? = linked(task).filterNot(::heldBack).mapNotNull { it.dueAt }.minOrNull() ?: task.dueAt
         val items = work.map { t -> startOf(t)?.let { from -> t.copy(notBefore = listOfNotNull(t.notBefore, from).maxOrNull()) } ?: t }
             .map { t -> if (linked(t).isEmpty()) t else t.copy(dueAt = dueOf(t)) }.flatMap { task ->
-            val soft = task.dueAt == null
-            // Calendar days where you are, so a week is a week across the clocks changing.
-            val deadline = task.dueAt
-                ?: Instant.ofEpochMilli(task.firstSeenAt).atZone(zone).plusDays(input.settings.softDeadlineDays.toLong()).toInstant().toEpochMilli()
-            windows(task, deadline, soft, pieces(task, input, held[task.id].orEmpty())) { start ->
-                Instant.ofEpochMilli(start).atZone(zone).plusDays(input.settings.softDeadlineDays.toLong()).toInstant().toEpochMilli()
-            }
+            // A date the app or Claude set is a plan (PL-14): once it has passed, the work is undated
+            // again, its week counted on from that date, so it's planned within the next week rather
+            // than overdue. Only a real deadline gone by is overdue.
+            val due = plannedDue(task, input)
+            val planned = if (due == task.dueAt) task else task.copy(dueAt = null)
+            // A step's own dates gone by were a plan's too: it's done with its task's own.
+            val pieces = pieces(task, input, held[task.id].orEmpty()).map { p -> if (p.due != null && p.due < input.now) p.undated() else p }
+            windows(planned, deadlineOf(task, input), soft = due == null, hard = due != null && task.hardDeadline, pieces) { start -> softWeek(start, input) }
         }.filter { it.chunks.isNotEmpty() }
 
         val lastDeadline = items.maxOfOrNull { date(it.deadline, zone) } ?: today
@@ -261,7 +273,8 @@ object Planner {
         fun chunk(item: Item, index: Int, behind: Boolean, why: Why): Chunk {
             val piece = item.chunks[index]
             val part = item.offset + index + 1
-            val overdue = item.deadline < input.now
+            // Only a real deadline can be missed (PL-14): the app's own dates move on instead.
+            val overdue = item.hard && item.deadline < input.now
             return Chunk(
                 taskId = item.task.id,
                 source = item.task.source,
@@ -273,7 +286,7 @@ object Planner {
                 deadline = item.deadline,
                 soft = item.soft,
                 overdue = overdue,
-                dueToday = !overdue && date(item.deadline, zone) == today,
+                dueToday = item.hard && !overdue && date(item.deadline, zone) == today,
                 dueSoon = soon(item),
                 rankedBy = rankedBy(item),
                 behind = behind && !overdue,
@@ -373,7 +386,7 @@ object Planner {
                 take(item, day, item.chunks[i].minutes)
                 // Due today but only possible from a later day (a deck whose next cards come
                 // tomorrow): it misses its deadline, so it's behind.
-                val why = if (item.deadline < input.now) Why.Overdue else if (item.soft) Why.Soft else Why.DueSoon
+                val why = if (item.hard && item.deadline < input.now) Why.Overdue else if (item.soft) Why.Soft else Why.DueSoon
                 placed.getValue(day) += chunk(item, i, behind = day > date(item.deadline, zone), why = why)
             }
             note(item, assigned)
@@ -705,11 +718,33 @@ object Planner {
         val today = date(input.now, zone)
         val from = task.notBefore?.let { date(it, zone) }?.takeIf { it > today } ?: today
         fun most(until: LocalDate) = generateSequence(from) { it.plusDays(1) }.takeWhile { it <= until }.maxOfOrNull { capacity(it, input) } ?: 0
-        val deadline = task.dueAt ?: Instant.ofEpochMilli(task.firstSeenAt).atZone(zone).plusDays(input.settings.softDeadlineDays.toLong()).toInstant().toEpochMilli()
-        val lastUsable = lastUsableDay(deadline, task.kind, input)
+        val lastUsable = lastUsableDay(deadlineOf(task, input), task.kind, input)
         val before = most(lastUsable)
         if (before >= MIN_CHUNK) return before
         return most(minOf(maxOf(lastUsable, today.plusDays(MIN_HORIZON_DAYS)), today.plusDays(MAX_HORIZON_DAYS)))
+    }
+
+    /**
+     * [task]'s deadline as the plan holds it (PL-14): a real one, even gone by; a date the app or
+     * Claude set while it's still to come; else none, and the work is undated.
+     */
+    private fun plannedDue(task: TaskItem, input: Input): Long? = task.dueAt?.takeIf { task.hardDeadline || it >= input.now }
+
+    /** The deadline [task] is planned against: [plannedDue], or for undated work its soft week's end. */
+    private fun deadlineOf(task: TaskItem, input: Input): Long = plannedDue(task, input) ?: softWeek(task.dueAt ?: task.firstSeenAt, input)
+
+    /**
+     * A soft deadline: `softDeadlineDays` on from [from], in calendar days where you are (so a week
+     * is a week across the clocks changing), and a week more at a time until it's still to come.
+     * Undated work's week, gone by undone, is followed by the next rather than overdue (PL-14); it
+     * doesn't move a day at a time, so it still comes round by its week's end.
+     */
+    private fun softWeek(from: Long, input: Input): Long {
+        val start = Instant.ofEpochMilli(from).atZone(input.zone)
+        val days = input.settings.softDeadlineDays.toLong()
+        var weeks = 1L
+        while (start.plusDays(weeks * days).toInstant().toEpochMilli() < input.now) weeks++
+        return start.plusDays(weeks * days).toInstant().toEpochMilli()
     }
 
     /**

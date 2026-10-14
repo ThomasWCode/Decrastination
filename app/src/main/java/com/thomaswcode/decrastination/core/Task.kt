@@ -178,6 +178,22 @@ data class TaskItem(
     val hidden: Boolean get() = justAnEmail || userNotATask
 
     /**
+     * Its deadline is a real one (PL-14): its source's, yours, or an email's own words as Claude
+     * read them (AI-12). A date the app or Claude set (a guess from an email's words, a test date
+     * its source doesn't give) is a plan: it orders the work, it's never overdue, and once it has
+     * passed the work is planned again ([Planner]).
+     */
+    val hardDeadline: Boolean
+        get() = dueAt != null && (
+            userDueAt != null || when (source) {
+                // The rules' date is a guess from its words, and Claude's is only a quote where it says so.
+                Source.Gmail -> enrichment?.let { it.deadlineQuoted && it.deadline == dueAt } == true
+                // Your own task's date is yours; a source's, its own (one kept from before Phase 4 has no source values).
+                else -> (if (sourceValues != null) sourceValues.dueAt else dueAt) != null
+            }
+        )
+
+    /**
      * Minutes of blocks you ticked off by hand in Tasks: done, but neither timed nor checked, so
      * they earn no free time when the task completes and teach the calibration nothing. From the
      * blocks themselves, so a block re-estimated since counts at its minutes now.

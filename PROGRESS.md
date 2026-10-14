@@ -26,15 +26,16 @@ The implementation of `docs/review_v2_improvements/impl/` on branch `v3`. Delete
 
 - PL-01 later work spread over its window: 7dd37e6. 2 000 property seeds in 3.3 s; 50 000 pass locally.
 - PL-07 each piece says why it's on its day: eeb92c3. 50 000 property seeds pass (28 s).
-- AI-12 the Email job says whether its deadline is the email's own: this commit.
+- AI-12 the Email job says whether its deadline is the email's own: 632e591.
+- PL-14 only a real deadline is overdue; the app's dates move on: this commit. 50 000 property seeds pass (25 s), with past dates and quoted and guessed email dates now drawn.
 
 ## Current
 
-Phase 2: PL-14 next (it reads AI-12's flag).
+Phase 2: PL-06 next.
 
 ## Outstanding
 
-- Phase 2: PL-14, PL-06, DX-14, PL-02; an eval round after AI-12 (it also covers phase 1's last prompt wording); the phone; the docs; the pull request.
+- Phase 2: PL-06, DX-14, PL-02; an eval round after AI-12 (it also covers phase 1's last prompt wording); the phone; the docs; the pull request.
 - Phases 3 to 8.
 
 ## For the owner (deferred: you weren't live)
@@ -61,6 +62,11 @@ Phase 2: PL-14 next (it reads AI-12's flag).
 - **"Planned for today", not "due today or tomorrow".** With pressure today's bucket alone (PL-01 step 4), the block screen's *Why am I blocked?* lists today's pieces, and its and the policy's wording say "planned for today"; the widget's "Nothing due today or tomorrow" stays, as it says what the two buckets hold.
 - **PL-07's reasons, one more than planned: `Packed`.** A task whose window can't hold it in order is placed backwards (PL-01's fallback); calling that "spread" would be wrong and "no room" is for what's behind, so its pieces say "Its days before the deadline are tight: as late as they allow". Behind wins over what placed a piece ("Couldn't fit before its deadline"), but for overdue work, which says since when, and undated work, whose deadline is the app's own. Undated work placed into today (its soft week ending today) says it's undated, not "Due today". `whyLine` takes today's date as well as the zone, as "Spread over the 12 days to its deadline" counts from it. The chat's plan explains the codes once, and its blocking sentence says "planned for today" (PL-01's pressure, missed there).
 - **AI-12: a missing `deadlineQuoted` is false, not unreadable.** The phase file's step 2 gives the answer a default and its test line says an answer without the field is unreadable; as built the default holds, as a missing flag can only make a date soft (never hard by accident), the API's closed schema always sends it, and the eval's earlier answers still score. A day the email only suggests for doing it stays its deadline, not quoted, so it orders the work as a plan; the prompt says the app plans an undated quick action "within the week" (its soft week is 7 days), not "within a fortnight".
+- **PL-14: an email's date is real only where Claude quoted it.** The phase file's `hardDeadline` counts any source date, and Gmail's "source" date is the rules' guess from its words; so for an email it's `deadlineQuoted` on the reading whose date the task has (or a date you gave), nothing else. Your own tasks' dates, Teams', Power Planner's and Anki's are real.
+- **PL-14: a soft week goes by a week at a time, from its own date.** The phase file counts a passed plan's week from `now`; at every replan that's a week away, and undated work, placed backwards from it, would never come round. As built, the week runs from the date that passed (from first seen, for undated work), a week more at a time while it's past: the work comes round by its week's end, then moves a week if it's still undone. Noted in the phase file.
+- **PL-14: work dated today by a plan still goes into today, not red.** `dueToday` is for real deadlines only, as the phase file says; such work is still placed today (its date is today), so the property test's capacity rule allows today's work dated by today, real or not, as it allowed due-today work before. The widget's "Waiting a week" badge went with overdue undated work. The Tasks tile and sheet say "Planned again: its date was …" of a plan's date gone by; the chat's task list marks such a date "(a plan)", so Claude doesn't call it overdue.
+- **PL-14: email dates on the phone are plans until their emails are read again.** Readings made before AI-12 have no `deadlineQuoted`, so none of their dates is real; phase 8's prompt version reads them again, and until then `enrich-task` does it by hand (done for the dated ones at the phase's phone check).
+- **PL-14: the property test draws more.** Past due dates (15 %) and Gmail readings quoted or not, so "overdue only on a real deadline gone by" (`checkOverdue`) has work to check; the stability check leaves out a minute in which a plan's date passes (its work is planned again then, by design).
 - **No version bump.** The plan names none; the build stays `2.0.0` (code 16) until the owner says otherwise. Installs are over the top with `-r`.
 - **A Windows-only test flake, left alone.** `PowerPlannerSourceTest` (and once `StoresTest`) sometimes fails on this PC with `AccessDeniedException` renaming `secrets.bin.tmp` in `%TEMP%` (something scanning the file mid-rename; 2 runs in about 10); re-runs pass, and neither CI's Linux nor the phone can see it. Not this plan's to fix.
 - **Prompt changes before phase 8's `Prompts.VERSION`:** (recorded here until phase 8 adds the version) the Email job's system prompt and schema changed in AI-02, DX-06 and AI-04, and again with the round 2 fixes; in phase 2, AI-12 (`deadlineQuoted`, quick actions undated).

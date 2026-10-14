@@ -24,14 +24,16 @@ object Groups {
 
     /**
      * [tasks] under their [DueGroup]s, each soonest due first (then by name), the sections in order
-     * and none empty. Due earlier today and not done is overdue; this week runs to Sunday.
+     * and none empty. A real deadline earlier today and not done is overdue; a date the app or
+     * Claude set that has gone by was a plan, and the work is planned again, so it's today's (PL-14).
+     * This week runs to Sunday.
      */
     fun byDue(tasks: List<TaskItem>, now: Long, zone: ZoneId): List<Pair<DueGroup, List<TaskItem>>> {
         val today = Instant.ofEpochMilli(now).atZone(zone).toLocalDate()
         val sunday = today.with(TemporalAdjusters.nextOrSame(DayOfWeek.SUNDAY))
         fun group(task: TaskItem): DueGroup {
             val due = task.dueAt ?: return DueGroup.NoDate
-            if (due < now) return DueGroup.Overdue
+            if (due < now) return if (task.hardDeadline) DueGroup.Overdue else DueGroup.Today
             val day = Instant.ofEpochMilli(due).atZone(zone).toLocalDate()
             return when {
                 day == today -> DueGroup.Today
