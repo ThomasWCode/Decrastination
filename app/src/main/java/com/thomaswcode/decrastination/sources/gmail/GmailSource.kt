@@ -126,6 +126,12 @@ object GmailThreads {
      */
     const val MAX_CONVERSATION_CHARS = 16_000
 
+    /**
+     * Said at the end of a message whose quotes of earlier messages, or signature, were cut (DX-06):
+     * the conversation's own earlier messages are in it anyway, and what else was quoted isn't new.
+     */
+    const val CUT_QUOTED = "[Quoted text or a signature left out: %d characters.]"
+
     /** The least of an older message worth keeping when it's cut to fit; with less room, it's left out. */
     private const val LEAST_CUT = 400
 
@@ -515,10 +521,12 @@ class GmailSource(private val secrets: SecretStore) : TaskSource {
         val response = imap.uidFetch(listOf(uid), "UID BODY.PEEK[${part.section}]<0.$MAX_PART_BYTES>").firstOrNull() ?: return null
         val body = response.entries.firstOrNull { it.key.startsWith("BODY[") }?.value ?: return null
         // NIL: a part with nothing in it.
-        val text = (body as? ImapValue.Str)?.let { Mime.tidy(Mime.decode(it.bytes, part), GmailThreads.MAX_BODY_CHARS) }.orEmpty()
+        val read = (body as? ImapValue.Str)?.let { Mime.readable(it.bytes, part, GmailThreads.MAX_BODY_CHARS) }
+        // What it quotes and its signature left out, and said (DX-06).
+        val text = read?.let { if (it.cutChars > 0) (it.text + "\n\n" + GmailThreads.CUT_QUOTED.format(Locale.UK, it.cutChars)).trim() else it.text }.orEmpty()
         // A part longer than a read takes, its text short of the most kept: the rest wasn't read
         // (styles can fill the part's start), and the model and you are told (BUG-P2-022).
-        return if ((part.size ?: 0) > MAX_PART_BYTES && text.length < GmailThreads.MAX_BODY_CHARS) (text + "\n\n" + CUT).trim() else text
+        return if ((part.size ?: 0) > MAX_PART_BYTES && (read?.text?.length ?: 0) < GmailThreads.MAX_BODY_CHARS) (text + "\n\n" + CUT).trim() else text
     }
 
     /**

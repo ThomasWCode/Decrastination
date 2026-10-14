@@ -51,14 +51,135 @@ object Mime {
 
     /** Decodes a part's bytes, which may be cut short by a partial fetch. */
     fun decode(bytes: ByteArray, part: TextPart): String {
+        val text = decodeRaw(bytes, part)
+        return if (part.subtype == "html") htmlToText(text) else text
+    }
+
+    /** A part's bytes as the text they encode, HTML still HTML. */
+    private fun decodeRaw(bytes: ByteArray, part: TextPart): String {
         val raw = when (part.encoding) {
             "base64" -> base64(bytes)
             "quoted-printable" -> quotedPrintable(bytes)
             else -> bytes
         }
-        val text = raw.toString(charset(part.charset))
-        return if (part.subtype == "html") htmlToText(text) else text
+        return raw.toString(charset(part.charset))
     }
+
+    /** A text with what it quotes, or its signature, cut (DX-06), and how many characters of text that was, spaces collapsed. */
+    data class Cut(val text: String, val cutChars: Int)
+
+    /**
+     * A part's text as a task and the model have it: decoded, flattened, its quotes and signature
+     * cut ([cutQuoted]: HTML's before it's flattened, then plain text's), and tidied to [max].
+     */
+    fun readable(bytes: ByteArray, part: TextPart, max: Int): Cut {
+        val raw = decodeRaw(bytes, part)
+        val html = if (part.subtype == "html") cutQuoted(raw, html = true) else null
+        val plain = cutQuoted(html?.let { htmlToText(it.text) } ?: raw, html = false)
+        return Cut(tidy(plain.text, max), plain.cutChars + (html?.cutChars ?: 0))
+    }
+
+    /**
+     * [text] without the earlier messages it quotes, or its signature (DX-06): what the model reads
+     * should be what's new in it, not a request quoted from further down. [html]: every
+     * `<blockquote>` and every `gmail_quote` div goes whole, nested ones matched by depth; a forward
+     * is Gmail's `gmail_quote` div too, so one that begins with the forward marker stays, and the
+     * quotes inside it go. Plain: cut from the first line that starts a quote (an `On … wrote:`
+     * line, perhaps wrapped onto the next; `-----Original Message-----`; a `From:` line with
+     * `Sent:` or `To:` within three lines) or a signature (`-- `); after a forward's marker its own
+     * header is its message's, so the cut is at the marker after that.
+     */
+    fun cutQuoted(text: String, html: Boolean): Cut {
+        if (html) {
+            val removed = mutableListOf<String>()
+            val kept = cutHtml(text, removed)
+            return Cut(kept, removed.sumOf { tidy(htmlToText(it), Int.MAX_VALUE).length })
+        }
+        val lines = text.lines()
+        var forward = false
+        for (i in lines.indices) {
+            val line = lines[i].trim()
+            if (FORWARD.matches(line)) {
+                forward = true
+                continue
+            }
+            val header = FROM_HEADER.matches(line) && lines.drop(i + 1).take(3).any { SENT_OR_TO.containsMatchIn(it.trim()) }
+            val quote = header || wrote(line, lines.getOrNull(i + 1)) || ORIGINAL.matches(line) || lines[i].trimEnd('\r') == "-- " || line == "--"
+            if (!quote) continue
+            // A forward's own header, the first after its marker: its message follows.
+            if (forward && header) {
+                forward = false
+                continue
+            }
+            // Outlook rules a line of underscores above its header: it goes with the quote.
+            val from = if (i > 0 && RULE.matches(lines[i - 1].trim())) i - 1 else i
+            val cut = lines.drop(from).joinToString("\n")
+            return Cut(lines.take(from).joinToString("\n").trimEnd(), tidy(cut, Int.MAX_VALUE).length)
+        }
+        return Cut(text, 0)
+    }
+
+    /** An `On … wrote:` attribution, written with a date or time in it, on one line or wrapped onto [next]. */
+    private fun wrote(line: String, next: String?): Boolean {
+        if (!line.startsWith("On ")) return false
+        return WROTE.matches(line) || (next != null && WROTE.matches(line + " " + next.trim()))
+    }
+
+    /** [html] without its quoting subtrees, each whole, added to [removed]; a forward's kept, what it quotes cut. */
+    private fun cutHtml(html: String, removed: MutableList<String>): String {
+        val out = StringBuilder()
+        var at = 0
+        while (true) {
+            val open = QUOTE_OPEN.find(html, at) ?: break
+            out.append(html, at, open.range.first)
+            val tag = open.groupValues[1].ifEmpty { open.groupValues[2] }.lowercase()
+            val (closeStart, closeEnd) = closeOf(html, open.range.last + 1, tag)
+            val whole = html.substring(open.range.first, closeEnd)
+            if (tag == "div" && FORWARD_TEXT.containsMatchIn(tidy(htmlToText(whole), 200).lineSequence().firstOrNull().orEmpty())) {
+                out.append(html, open.range.first, open.range.last + 1)
+                out.append(cutHtml(html.substring(open.range.last + 1, closeStart), removed))
+                out.append(html, closeStart, closeEnd)
+            } else {
+                removed += whole
+            }
+            at = closeEnd
+        }
+        out.append(html, at, html.length)
+        return out.toString()
+    }
+
+    /**
+     * Where the [tag] opened just before [from] closes: the closing tag's start and end, counting the
+     * same tags opened inside it. One a partial fetch cut off runs to the end.
+     */
+    private fun closeOf(html: String, from: Int, tag: String): Pair<Int, Int> {
+        var depth = 1
+        for (match in Regex("""<(/?)$tag\b[^>]*>""", RegexOption.IGNORE_CASE).findAll(html, from)) {
+            when {
+                match.groupValues[1] == "/" -> depth--
+                !match.value.endsWith("/>") -> depth++
+            }
+            if (depth == 0) return match.range.first to match.range.last + 1
+        }
+        return html.length to html.length
+    }
+
+    /** A quote's start in HTML: a blockquote, or a div of Gmail's `gmail_quote` class; the tag is whichever group matched. */
+    private val QUOTE_OPEN = Regex(
+        """<(blockquote)\b[^>]*>|<(div)\b[^>]*?\bclass\s*=\s*(["'])[^"']*?\bgmail_quote\b[^"']*?\3[^>]*>""",
+        RegexOption.IGNORE_CASE,
+    )
+
+    /** "On Thu, 8 Oct 2026 at 18:02, Dad <dad@…> wrote:": a date or a time in it, so "On Monday Sir wrote:" in a message isn't taken for one. */
+    private val WROTE = Regex("""^On .{0,200}\d.{0,200} wrote:$""")
+    private val ORIGINAL = Regex("""^-{2,}\s*Original Message\s*-{2,}$""", RegexOption.IGNORE_CASE)
+    private val FROM_HEADER = Regex("""^From: .+$""")
+    private val SENT_OR_TO = Regex("""^(Sent|To): """)
+    private val RULE = Regex("""^[_-]{10,}$""")
+
+    /** A forward's marker, Gmail's ("---------- Forwarded message ---------") or Apple Mail's. */
+    private val FORWARD = Regex("""^-{2,}\s*Forwarded message\s*-{2,}$|^Begin forwarded message:$""", RegexOption.IGNORE_CASE)
+    private val FORWARD_TEXT = Regex("""^-{2,}\s*Forwarded message|^Begin forwarded message""", RegexOption.IGNORE_CASE)
 
     fun charset(name: String?): Charset = runCatching { Charset.forName(name ?: "UTF-8") }.getOrDefault(Charsets.UTF_8)
 
