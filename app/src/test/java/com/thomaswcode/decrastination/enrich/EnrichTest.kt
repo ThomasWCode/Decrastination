@@ -147,6 +147,19 @@ class PromptsTest {
     }
 
     @Test
+    fun `the email job is told it sees the whole conversation, quotes cut and attachments by name`() {
+        val system = Prompts.system(Enrichments.Job.Email)
+        // Starred, it's always something to do (AI-02).
+        assertTrue("Every email you see was starred by the student: it is something to do." in system, system)
+        assertTrue("Info" !in system, system)
+        // What it sees, and what to do when it can't see what's asked (AI-04, DX-06).
+        assertTrue("You see the whole conversation the starred message is in, oldest message first" in system, system)
+        assertTrue("Quoted text inside a message, and its signature, are left out and marked in square brackets" in system, system)
+        assertTrue("You don't see attachments, only their names. If the email refers to an attachment, or to an earlier message you can't see, don't guess what it asked: make nextStep \"Read the attachment/earlier message and decide\" and effortMin 10." in system, system)
+        assertTrue("from when the message saying them was sent" in system, system)
+    }
+
+    @Test
     fun `a conversation says it's all shown, and its attachments are named`() {
         val files = """[{"name":"consent-form.pdf","type":"application/pdf","size":112639},{"name":"itinerary.docx","type":"application/msword"}]"""
         val text = Prompts.describe(email().copy(extra = email().extra + mapOf(GmailThreads.EXTRA_MESSAGES to "3", GmailThreads.EXTRA_ATTACHMENTS to files)), Enrichments.Job.Email, NOW, LONDON)

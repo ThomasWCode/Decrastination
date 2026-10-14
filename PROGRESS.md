@@ -8,15 +8,16 @@ The implementation of `docs/review_v2_improvements/impl/` on branch `v3`. Delete
 - DX-03, DX-07 starred conversations from All Mail, known ones not fetched again: 0a51652. Unit-tested against a scripted IMAP server; the phone check is with the phase's install.
 - AI-02 the Email job without Info: a78911b. The eval set's three Info cases (dell, linkedin, talk-summary) are retired; 8 of the other 10 pass on the old answers (the two known findings: german-assess's dropped split, talk-note's old Info answer); a fresh round follows AI-04.
 - DX-06 quoted text and signatures cut: 13e0f6a. Its eval check (a reply case's dump showing the marker) is done with DX-01's, on cases re-read through the new pipeline.
-- DX-01 attachment names and types: this commit.
+- DX-01 attachment names and types: 28452a2.
+- AI-04 the model told what it sees: this commit.
 
 ## Current
 
-Phase 1 (`impl/phase-1-tests-and-email.md`): AI-04 next.
+Phase 1: the eval cases' emails re-read through the new pipeline, and an eval round on the new Email prompt; then the phone.
 
 ## Outstanding
 
-- Phase 1: AI-04; the eval cases' emails re-read through the new pipeline and an eval round on the new Email prompt; then the phone checks, the docs, the pull request.
+- Phase 1: the eval round; the phone checks (install, sync, Gmail commands in the log, unstar a thread, the sheet's attachments, Setup's text); `assembleDebug` and `lintDebug`; README's status; the pull request.
 - Phases 2 to 8.
 
 ## Decisions made
