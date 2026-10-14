@@ -324,6 +324,20 @@ class GmailTest {
     }
 
     @Test
+    fun `a text made by earlier rules is read again, once`() {
+        // Stored by a build that cut texts otherwise: read afresh, and not asked about till it is.
+        val hi = message(1, "t1", 1, "Hi", null, "a@b.c")
+        val (conversation, _) = read(hi)
+        val task = stored(hi)
+        val older = task.copy(extra = task.extra - GmailThreads.EXTRA_TEXT_RULES)
+        assertEquals(listOf(conversation), GmailThreads.toRead(listOf(conversation), GmailThreads.knownBodies(listOf(older)), 60))
+        assertEquals(false, GmailThreads.textRead(older))
+        // Made by today's rules, it stands.
+        assertEquals("${GmailThreads.TEXT_RULES}", task.extra[GmailThreads.EXTRA_TEXT_RULES])
+        assertEquals(emptyList(), GmailThreads.toRead(listOf(conversation), GmailThreads.knownBodies(listOf(task)), 60))
+    }
+
+    @Test
     fun `a conversation listed in the last read and absent from this one comes back completed`() {
         // Unstarred: its only starred message isn't any more, so it isn't listed.
         val task = stored(message(1, "t1", 1, "Hi", null, "a@b.c"))

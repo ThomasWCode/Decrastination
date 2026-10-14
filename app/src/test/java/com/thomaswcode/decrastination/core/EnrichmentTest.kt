@@ -15,7 +15,7 @@ class EnrichmentTest {
     private fun email(detail: String = "Please sign the trip form.") = TaskItem(
         id = "gmail:t1", source = Source.Gmail, sourceId = "t1", title = "Trip to Berlin", detail = detail,
         kind = Kind.Admin, sourceEffortMin = 15, firstSeenAt = t0, lastSeenAt = t0,
-        extra = mapOf(GmailThreads.EXTRA_TEXT_READ_TO to "${GmailThreads.MAX_BODY_CHARS}"),
+        extra = mapOf(GmailThreads.EXTRA_TEXT_READ_TO to "${GmailThreads.MAX_BODY_CHARS}", GmailThreads.EXTRA_TEXT_RULES to "${GmailThreads.TEXT_RULES}"),
     )
 
     private fun assignment(dueAt: Long? = Fixtures.at("2026-10-16T08:30")) = TaskItem(

@@ -149,14 +149,24 @@ object GmailThreads {
     private val json = Json { ignoreUnknownKeys = true }
     private val ATTACHMENTS = ListSerializer(Mime.Attachment.serializer())
 
-    /** A conversation's text, how far it was read ([EXTRA_TEXT_READ_TO]), and what's attached to it. */
-    data class Body(val text: String, val readTo: Int = MAX_BODY_CHARS, val attachments: List<Mime.Attachment> = emptyList()) {
-        /** All there is, or as much as a read takes now: reading it again would add nothing. */
-        val whole: Boolean get() = text.length < readTo || readTo >= MAX_BODY_CHARS
+    /**
+     * Which rules a stored text was made by ([EXTRA_TEXT_RULES]): raised whenever what's kept of a
+     * message changes (what's cut, how a conversation is put together), so a text made by older
+     * ones is read again, once, as one cut shorter than reads now go is. 1: review v2's (whole
+     * conversations; the later messages' quotes cut, the oldest read whole; attachments named).
+     */
+    const val TEXT_RULES = 1
+    const val EXTRA_TEXT_RULES = "textRules"
+
+    /** A conversation's text, how far it was read ([EXTRA_TEXT_READ_TO]), what's attached to it, and by which [rules]. */
+    data class Body(val text: String, val readTo: Int = MAX_BODY_CHARS, val attachments: List<Mime.Attachment> = emptyList(), val rules: Int = TEXT_RULES) {
+        /** All there is, or as much as a read takes now, made as reads make it now: reading it again would add nothing. */
+        val whole: Boolean get() = (text.length < readTo || readTo >= MAX_BODY_CHARS) && rules >= TEXT_RULES
     }
 
-    /** [task]'s stored text, and how far it was read: stored before that was kept, nowhere near far enough. */
-    fun bodyOf(task: TaskItem): Body = Body(task.detail, task.extra[EXTRA_TEXT_READ_TO]?.toIntOrNull() ?: 0, attachmentsOf(task))
+    /** [task]'s stored text, how far it was read, and by which rules: stored before those were kept, by none. */
+    fun bodyOf(task: TaskItem): Body =
+        Body(task.detail, task.extra[EXTRA_TEXT_READ_TO]?.toIntOrNull() ?: 0, attachmentsOf(task), task.extra[EXTRA_TEXT_RULES]?.toIntOrNull() ?: 0)
 
     /** What's attached to [task]'s conversation, as stored; none for a task from before attachments were kept. */
     fun attachmentsOf(task: TaskItem): List<Mime.Attachment> =
@@ -319,7 +329,12 @@ object GmailThreads {
                     if (from.isNotEmpty()) put(EXTRA_FROM, from)
                     conversation.fromName?.let { put(EXTRA_FROM_NAME, it) }
                     conversation.fromAddress?.let { put(EXTRA_FROM_ADDRESS, it) }
-                    if (body == null) put(EXTRA_TEXT_PENDING, "true") else put(EXTRA_TEXT_READ_TO, body.readTo.toString())
+                    if (body == null) {
+                        put(EXTRA_TEXT_PENDING, "true")
+                    } else {
+                        put(EXTRA_TEXT_READ_TO, body.readTo.toString())
+                        put(EXTRA_TEXT_RULES, body.rules.toString())
+                    }
                     body?.attachments?.takeIf { it.isNotEmpty() }?.let { put(EXTRA_ATTACHMENTS, json.encodeToString(ATTACHMENTS, it)) }
                 },
             )
