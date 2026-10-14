@@ -61,12 +61,24 @@ class EnrichmentTest {
     @Test
     fun `a sync keeps the enrichment and lays it over the fresh values`() {
         val task = email()
-        val stored = task.copy(enrichment = enrichment(task).copy(kind = Kind.Info, effortMin = 2)).enriched()
+        val stored = task.copy(enrichment = enrichment(task).copy(kind = Kind.Event, effortMin = 2)).enriched()
         val fetched = Fetched("t1", "Trip to Berlin", Kind.Admin, detail = task.detail, sourceEffortMin = 15)
         val merged = Merge.apply(listOf(stored), Source.Gmail, listOf(fetched), t0 + 60_000L).tasks.single()
-        assertEquals(Kind.Info, merged.kind)
+        assertEquals(Kind.Event, merged.kind)
         assertEquals(2, merged.effortMin)
         assertEquals(stored.enrichment, merged.enrichment)
+    }
+
+    @Test
+    fun `an email read as only to read before starred-only reading isn't hidden, and is read again`() {
+        // Starred, it's always something to do (AI-02): the old Info reading gives way to the rules' kind.
+        val task = email()
+        val old = task.copy(enrichment = enrichment(task).copy(kind = Kind.Info, effortMin = 2)).enriched()
+        assertEquals(Kind.Admin, old.kind)
+        assertFalse(old.hidden)
+        assertTrue(Enrichments.stale(old, modelOn = true, rules = "rules"))
+        // A reading that says Admin isn't read again for that.
+        assertFalse(Enrichments.stale(task.copy(enrichment = enrichment(task).copy(kind = Kind.Admin)), modelOn = true, rules = "rules"))
     }
 
     @Test
