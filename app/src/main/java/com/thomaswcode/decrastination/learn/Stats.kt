@@ -116,7 +116,12 @@ object Stats {
             "${kind.label}: finished $days day${if (days == 1) "" else "s"} before the deadline"
         }
         val boxes = calibration.boxMin.entries.sortedBy { it.key.ordinal }.map { (kind, minutes) -> "${kind.label}: cut into $minutes-minute pieces" }
-        return multipliers + coming + margins + boxes
+        // How much of each kind of day's free time is used (PL-06), and the days it rests on.
+        val yields = calibration.yields.entries.sortedBy { it.key.ordinal }.map { (kind, share) ->
+            val n = calibration.yieldDays[kind] ?: 0
+            "${kind.label}: about ${kotlin.math.round(share * 100).toInt()} % of the free time used" + if (n > 0) " (from $n days)" else ""
+        }
+        return multipliers + coming + margins + boxes + yields
     }
 
     private const val TOP = 5

@@ -3,6 +3,7 @@ package com.thomaswcode.decrastination.learn
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.Fixtures.LONDON
 import com.thomaswcode.decrastination.core.Calibration
+import com.thomaswcode.decrastination.core.DayKind
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.data.ActivityLog
@@ -68,7 +69,7 @@ class CalibratorTest {
         assertNull(Calibrator.upgraded(now, one))
         assertNull(Calibrator.upgraded(Calibration(multipliers = mapOf("Homework|" to 1.1), counted = true), one))
         assertNull(Calibrator.upgraded(Calibration(), one))
-        assertTrue(Calibrator.learn(ActivityLog(), Calibration(), 25, week = 0).calibration.counted)
+        assertTrue(Calibrator.learn(ActivityLog(), Calibration(), 25, week = 0, today = LocalDate.parse("2026-10-11")).calibration.counted)
     }
 
     @Test
@@ -163,7 +164,7 @@ class CalibratorTest {
     @Test
     fun `a multiplier gone back to its fallback is said`() {
         val previous = Calibration(multipliers = mapOf("Homework|12.1 Physics" to 1.5))
-        val learned = Calibrator.learn(ActivityLog(), previous, defaultBox = 45, week = 1)
+        val learned = Calibrator.learn(ActivityLog(), previous, defaultBox = 45, week = 1, today = LocalDate.parse("2026-10-11"))
         assertTrue(learned.changes.any { "Homework in 12.1 Physics takes ×1.00" in it }, learned.changes.toString())
     }
 
@@ -188,16 +189,74 @@ class CalibratorTest {
     @Test
     fun `a box length gone back to the default is said`() {
         val previous = Calibration(boxMin = mapOf(Kind.Homework to 25))
-        val learned = Calibrator.learn(ActivityLog(), previous, defaultBox = 45, week = 1)
+        val learned = Calibrator.learn(ActivityLog(), previous, defaultBox = 45, week = 1, today = LocalDate.parse("2026-10-11"))
         assertTrue(learned.changes.any { "Homework: pieces of 45 minutes" in it }, learned.changes.toString())
     }
 
     @Test
     fun `what changed is said in words`() {
-        val learned = Calibrator.learn(ActivityLog(completions = listOf(done("a", worked = 80))), Calibration(), defaultBox = 45, week = 1)
+        val learned = Calibrator.learn(ActivityLog(completions = listOf(done("a", worked = 80))), Calibration(), defaultBox = 45, week = 1, today = LocalDate.parse("2026-10-11"))
         // One timed piece: the kind's figure, not yet the class's own (IMP-P2-016).
         assertTrue(learned.changes.any { "Homework, any class takes ×1.30" in it }, learned.changes.toString())
         assertTrue(learned.changes.none { "12.1 Physics" in it }, learned.changes.toString())
+    }
+}
+
+/** How much of each kind of day's free time is used (PL-06), from the days' records. */
+class YieldTest {
+    private val sunday = LocalDate.parse("2026-10-18")
+
+    /** [date]'s record: [planned] minutes, [done] of them by the day's end. */
+    private fun day(date: String, planned: Int, done: Int?) = DayRecord(date, planned, emptyList(), doneMin = done, full = done?.let { it >= planned })
+
+    /** The [n] weekend days back from [sunday], each with [done] of 100 minutes done. */
+    private fun weekends(n: Int, done: (Int) -> Int): List<DayRecord> =
+        generateSequence(sunday) { it.minusDays(1) }.filter { DayKind.of(it) == DayKind.Weekend }.take(n).mapIndexed { i, d -> day(d.toString(), 100, done(i)) }.toList()
+
+    @Test
+    fun `a kind of day's yield is the median of done over planned, once it has seven days`() {
+        // Six weekend days aren't enough; a seventh gives the median of the seven: 60 %.
+        val shares = listOf(90, 40, 60, 100, 55, 70, 50)
+        assertNull(Calibrator.yields(weekends(6) { shares[it] }, sunday)[DayKind.Weekend])
+        assertEquals(0.6, Calibrator.yields(weekends(7) { shares[it] }, sunday)[DayKind.Weekend]!!, 1e-9)
+        assertEquals(7, Calibrator.yieldDays(weekends(7) { shares[it] }, sunday)[DayKind.Weekend])
+        // A day with nothing planned, or not yet finished, isn't one to judge by.
+        val idle = weekends(6) { shares[it] } + day("2026-10-03", 0, 0) + day("2026-09-27", 100, null)
+        assertNull(Calibrator.yields(idle, sunday)[DayKind.Weekend])
+        // Only the last fourteen of a kind count: older days are left out.
+        val old = weekends(14) { 100 } + weekends(30) { 20 }.drop(14)
+        assertEquals(1.0, Calibrator.yields(old, sunday)[DayKind.Weekend]!!, 1e-9)
+    }
+
+    @Test
+    fun `a yield is kept between a half and the whole of a day's free time`() {
+        // Seven weekends at 40 %: half their time (PL-06's Done when); doing more than planned is all of it.
+        assertEquals(Calibrator.MIN_YIELD, Calibrator.yields(weekends(7) { 40 }, sunday)[DayKind.Weekend]!!, 1e-9)
+        assertEquals(Calibrator.MAX_YIELD, Calibrator.yields(weekends(7) { 130 }, sunday)[DayKind.Weekend]!!, 1e-9)
+    }
+
+    @Test
+    fun `each kind of day learns its own, so bad Saturdays don't move the weekdays`() {
+        val weekdays = generateSequence(LocalDate.parse("2026-10-16")) { it.minusDays(1) }.filter { DayKind.of(it) == DayKind.Weekday }.take(7)
+            .map { day(it.toString(), 100, 100) }.toList()
+        val yields = Calibrator.yields(weekends(7) { 30 } + weekdays, sunday)
+        assertEquals(0.5, yields[DayKind.Weekend]!!, 1e-9)
+        assertEquals(1.0, yields[DayKind.Weekday]!!, 1e-9)
+        // A record kept before kinds were is told by its date; one saying its kind is taken at its word.
+        assertEquals(DayKind.Weekend, DayKind.of(LocalDate.parse("2026-10-17")))
+        val said = weekdays.map { it.copy(kind = DayKind.Weekend) }
+        assertNull(Calibrator.yields(said, sunday)[DayKind.Weekday])
+    }
+
+    @Test
+    fun `the review says when a kind of day's yield moves`() {
+        val log = ActivityLog(days = weekends(7) { 40 })
+        val learned = Calibrator.learn(log, Calibration(), defaultBox = 45, week = 1, today = sunday)
+        assertEquals(0.5, learned.calibration.yieldFor(DayKind.Weekend), 1e-9)
+        assertEquals(1.0, learned.calibration.yieldFor(DayKind.Weekday), 1e-9)
+        assertTrue("Weekends hold about 50 % of their free time now (was 100 %)" in learned.changes, "${learned.changes}")
+        // Learned again from the same days: nothing to say.
+        assertTrue(Calibrator.learn(log, learned.calibration, defaultBox = 45, week = 1, today = sunday).changes.none { "free time" in it })
     }
 }
 

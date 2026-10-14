@@ -91,6 +91,8 @@ class PlannerPropertyTest {
             dayLoads = List(random.nextInt(2)) { day() to random.nextInt(241) }.toMap(),
             dayCaps = List(random.nextInt(3)) { day() to random.nextInt(301) }.toMap(),
             hardBusy = List(random.nextInt(3)) { busy() },
+            // Kinds of day found to use only part of their free time (PL-06).
+            calibration = Calibration(yields = DayKind.entries.filter { chance(25) }.associateWith { 0.5 + random.nextInt(51) / 100.0 }),
         )
     }
 

@@ -1,6 +1,7 @@
 package com.thomaswcode.decrastination.core
 
 import kotlinx.serialization.Serializable
+import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -212,6 +213,13 @@ data class Plan(
  */
 @Serializable
 data class Calibration(
+    /**
+     * The share of a day's free time that's used, per kind of day (PL-06): learned from the days'
+     * records, between a half and all of it. None for a kind with too few days yet: all of it.
+     */
+    val yields: Map<DayKind, Double> = emptyMap(),
+    /** How many days each of [yields] rests on, for Stats. */
+    val yieldDays: Map<DayKind, Int> = emptyMap(),
     /** `actual / estimate` per kind and class, keyed `Kind|class` (or `Kind|` for the whole kind). */
     val multipliers: Map<String, Double> = emptyMap(),
     /** Safety margin in days, per kind. */
@@ -230,6 +238,9 @@ data class Calibration(
     fun multiplier(kind: Kind, className: String?): Double =
         multipliers["${kind.name}|${className.orEmpty()}"] ?: multipliers["${kind.name}|"] ?: 1.0
 
+    /** What a day of [kind] holds of its free time, as learned (PL-06). */
+    fun yieldFor(kind: DayKind): Double = yields[kind] ?: 1.0
+
     /**
      * What [task]'s estimate is multiplied by: what's been learned of the app's estimates for its
      * kind and class; your own minutes ([TaskItem.yourMinutes]) as they are, as you meant them.
@@ -241,6 +252,25 @@ data class Calibration(
 
     companion object {
         fun key(kind: Kind, className: String?): String = "${kind.name}|${className.orEmpty()}"
+    }
+}
+
+/** The kinds of day that each learn how much of their free time is used (PL-06). */
+@Serializable
+enum class DayKind(val label: String) {
+    /** A school day's evening. */
+    Weekday("Weekday evenings"),
+
+    /** Saturday and Sunday (phase 3: a day off school too). */
+    Weekend("Weekends"),
+
+    /** A school day's windows in the day (phase 3): no records of its own until phase 4's slots. */
+    School("School windows"),
+    ;
+
+    companion object {
+        /** [date]'s kind by the calendar: Saturday and Sunday are the weekend. */
+        fun of(date: LocalDate): DayKind = if (date.dayOfWeek == DayOfWeek.SATURDAY || date.dayOfWeek == DayOfWeek.SUNDAY) Weekend else Weekday
     }
 }
 

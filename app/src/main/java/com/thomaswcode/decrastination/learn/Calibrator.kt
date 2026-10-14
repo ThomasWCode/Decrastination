@@ -1,10 +1,12 @@
 package com.thomaswcode.decrastination.learn
 
 import com.thomaswcode.decrastination.core.Calibration
+import com.thomaswcode.decrastination.core.DayKind
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.data.ActivityLog
 import com.thomaswcode.decrastination.data.CompletionRecord
 import com.thomaswcode.decrastination.data.SessionRecord
+import java.time.LocalDate
 import kotlin.random.Random
 
 /**
@@ -42,6 +44,12 @@ object Calibrator {
     const val BOX_SETTLED = 20
     private const val EXPLORE = 0.2
 
+    /** A kind of day's yield (PL-06): from its last [YIELD_LOOK_BACK] finished days with work, once it has [YIELD_DAYS]. */
+    const val YIELD_DAYS = 7
+    private const val YIELD_LOOK_BACK = 14
+    const val MIN_YIELD = 0.5
+    const val MAX_YIELD = 1.0
+
     const val HARDER = "harder"
     const val AS_EXPECTED = "as expected"
     const val EASIER = "easier"
@@ -49,13 +57,44 @@ object Calibrator {
     /** The calibration the log teaches, and what changed from [previous], in words. */
     data class Learned(val calibration: Calibration, val changes: List<String>)
 
-    fun learn(log: ActivityLog, previous: Calibration, defaultBox: Int, week: Long, defaultMargin: Int = MIN_MARGIN): Learned {
+    fun learn(log: ActivityLog, previous: Calibration, defaultBox: Int, week: Long, today: LocalDate, defaultMargin: Int = MIN_MARGIN): Learned {
         val multipliers = multipliers(log.completions)
         val margins = margins(log.completions, defaultMargin)
         val boxes = boxes(log, defaultBox, week)
-        val next = Calibration(multipliers = multipliers, marginDays = margins, boxMin = boxes, timed = timed(log.completions), counted = true)
+        val next = Calibration(
+            yields = yields(log.days, today),
+            yieldDays = yieldDays(log.days, today),
+            multipliers = multipliers,
+            marginDays = margins,
+            boxMin = boxes,
+            timed = timed(log.completions),
+            counted = true,
+        )
         return Learned(next, describe(previous, next, defaultMargin, defaultBox))
     }
+
+    /**
+     * How much of each kind of day's free time is used (PL-06): the median of done over planned on
+     * its last [YIELD_LOOK_BACK] finished days with work planned, between [MIN_YIELD] and
+     * [MAX_YIELD]; none for a kind with fewer than [YIELD_DAYS] such days. Each kind on its own
+     * days, so a run of bad Saturdays doesn't move the weekdays.
+     */
+    fun yields(days: List<DayRecord>, today: LocalDate): Map<DayKind, Double> = judgedDays(days, today).mapValues { (_, judged) ->
+        val ratios = judged.map { it.doneMin!!.toDouble() / it.plannedMin }.sorted()
+        val mid = ratios.size / 2
+        val median = if (ratios.size % 2 == 1) ratios[mid] else (ratios[mid - 1] + ratios[mid]) / 2
+        median.coerceIn(MIN_YIELD, MAX_YIELD)
+    }
+
+    /** How many days each of [yields] rests on. */
+    fun yieldDays(days: List<DayRecord>, today: LocalDate): Map<DayKind, Int> = judgedDays(days, today).mapValues { it.value.size }
+
+    /** Each kind's last finished days with work planned, where it has enough; an older record's kind by its date. */
+    private fun judgedDays(days: List<DayRecord>, today: LocalDate): Map<DayKind, List<DayRecord>> =
+        days.filter { it.plannedMin > 0 && it.doneMin != null && LocalDate.parse(it.date) <= today }
+            .groupBy { it.kind ?: DayKind.of(LocalDate.parse(it.date)) }
+            .mapValues { (_, records) -> records.sortedBy { it.date }.takeLast(YIELD_LOOK_BACK) }
+            .filterValues { it.size >= YIELD_DAYS }
 
     /**
      * Effort multipliers per kind and class (and per kind, for classes not yet seen): a moving
@@ -190,6 +229,11 @@ object Calibrator {
     }
 
     private fun describe(previous: Calibration, next: Calibration, defaultMargin: Int, defaultBox: Int): List<String> = buildList {
+        for (kind in DayKind.entries) {
+            val before = previous.yieldFor(kind)
+            val after = next.yieldFor(kind)
+            if (kotlin.math.abs(after - before) >= 0.05) add("${kind.label} hold about ${percent(after)} % of their free time now (was ${percent(before)} %)")
+        }
         // Every key either has, so one whose last completion aged out of the log is said to be back
         // to what it falls back on (the kind's, or the estimate itself).
         for (key in (previous.multipliers.keys + next.multipliers.keys).toSortedSet()) {
@@ -220,4 +264,6 @@ object Calibrator {
     }
 
     private fun days(n: Int) = if (n == 1) "a day" else "$n days"
+
+    private fun percent(share: Double) = kotlin.math.round(share * 100).toInt()
 }
