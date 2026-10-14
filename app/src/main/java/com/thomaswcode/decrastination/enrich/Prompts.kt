@@ -44,13 +44,13 @@ object Prompts {
 
     fun system(job: Enrichments.Job): String = when (job) {
         Enrichments.Job.Email -> """
-            You triage one email for a planner app used by $STUDENT. The planner turns each obligation into scheduled work and blocks distracting apps until it's done, so overstating the work costs the student free time and understating it lets work slip. An email the student sent themselves is a note of something they mean to do.
+            You triage one email for a planner app used by $STUDENT. The planner turns each obligation into scheduled work and blocks distracting apps until it's done, so overstating the work costs the student free time and understating it lets work slip. Every email you see was starred by the student: it is something to do. An email the student sent themselves is a note of something they mean to do.
 
             Decide, from the email:
-            - kind: "Admin" if it asks the student to do something (reply, sign, pay, fill in a form, bring or prepare something); "Event" if it's about something happening at a set time that needs nothing beyond turning up (a trip, a call, an open evening); "Info" if it only needs reading (newsletters, notifications, receipts, marketing, automatic messages, or a message forwarded or copied to the student that asks them nothing).
+            - kind: "Admin" if it asks the student to do something (reply, sign, pay, fill in a form, bring or prepare something), or if it's information they starred to come back to (then the task is to read it and decide, and nextStep says what to decide); "Event" if it's about something happening at a set time that needs nothing beyond turning up (a trip, a call, an open evening).
             - actionableFrom: the date (YYYY-MM-DD) before which nothing can be done, if the email says so (a form that opens next week); otherwise null.
             - deadline: when it must be done by, only if the email states or clearly implies one (a day it suggests for doing it counts); for an Event, when it starts; otherwise null. Never invent one. Write it as a local date and time (YYYY-MM-DDTHH:MM), or the date alone (YYYY-MM-DD) if it gives no time.
-            - effortMin: the minutes of the student's own work it needs, reading included: about 2 for Info.
+            - effortMin: the minutes of the student's own work it needs, reading included: at least 5 for something only to read and decide.
             - nextStep: the one concrete next action, as an instruction under 12 words ("Reply to Mr Hughes confirming the trip").
             - blocks: when the email holds more than one piece of work for the student, or dated items (a calendar of deadlines, an application that opens on a date), the pieces of work in order, each with its minutes (10 to 60 where the work allows: a long piece of work, like writing a proposal, is several blocks with the same dates; at most $MAX_BLOCKS blocks, longer ones if there's more work than that), from (the date before which it can't be done, or null) and due (when it must be done by, written as for deadline). A window the email gives only roughly ("applications open in December") runs from its first day to its last. A quick action with no date of its own that's best done soon (signing up, replying, asking someone) is due within the next two weeks. Leave due null only for a block that can wait for the email's own deadline. The planner schedules each block in its own window, so one email can become work spread over months, kept after the email is archived. An email with blocks is Admin, and its effortMin is their total. Otherwise an empty list.
 
@@ -76,7 +76,7 @@ object Prompts {
     /** The schema for [job]'s answer, as the API takes it: every object closed, every field required, optional ones nullable. */
     fun schema(job: Enrichments.Job): Map<String, Any> = when (job) {
         Enrichments.Job.Email -> obj(
-            "kind" to mapOf("type" to "string", "enum" to listOf("Admin", "Event", "Info")),
+            "kind" to mapOf("type" to "string", "enum" to listOf("Admin", "Event")),
             "actionableFrom" to nullable(mapOf("type" to "string", "format" to "date")),
             "deadline" to nullable(LOCAL_TIME),
             "effortMin" to mapOf("type" to "integer"),
@@ -184,6 +184,9 @@ object Answers {
 
     private const val MAX_EFFORT = 600
 
+    /** The Email job's kinds (AI-02): Info, only to read, isn't one since only starred emails are read. */
+    private val EMAIL_KINDS = mapOf("Admin" to Kind.Admin, "Event" to Kind.Event)
+
     /**
      * The most an email or planner item in blocks is taken to be: twenty hours, as one email can
      * hold months of applications (a calendar of five months' came to 13). Past it, an estimate
@@ -221,6 +224,9 @@ object Answers {
         val base = Enrichment(inputHash = Enrichments.inputHash(task), by = by, at = now)
         when (job) {
             Enrichments.Job.Email -> json.decodeFromString(Triage.serializer(), text).let { t ->
+                // Starred, an email is always something to do (AI-02): Admin, or an Event. Any other
+                // kind is no answer at all, and the rules' reading stands.
+                val kind = EMAIL_KINDS[t.kind] ?: return@runCatching null
                 val total = effort(t.effortMin)
                 val deadline = t.deadline?.let { dateTime(it, zone) }?.takeIf { plausible(it, now) }
                 val opens = t.actionableFrom?.let { date(it, zone, LocalTime.MIDNIGHT) }?.takeIf { plausible(it, now) }
@@ -231,8 +237,8 @@ object Answers {
                 base.copy(
                     // Blocks of work make it something to do, whatever else it says: the ones given,
                     // trusted or not. Dropped, its whole estimate is planned instead, and its warning
-                    // shows; an email hidden as only to read would hide both (BUG-P2-004).
-                    kind = if (t.blocks.isNotEmpty()) Kind.Admin else Kind.entries.firstOrNull { it.name == t.kind && it in setOf(Kind.Admin, Kind.Event, Kind.Info) },
+                    // shows; an email hidden as an event would hide both (BUG-P2-004).
+                    kind = if (t.blocks.isNotEmpty()) Kind.Admin else kind,
                     actionableFrom = opens,
                     deadline = deadline,
                     effortMin = blocks?.sumOf { it.minutes } ?: total,

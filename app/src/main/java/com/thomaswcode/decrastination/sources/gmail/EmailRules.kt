@@ -9,8 +9,8 @@ import java.time.format.TextStyle
 import java.util.Locale
 
 /**
- * The rules that triage an inbox thread when the AI is off (docs/data-sources.md §4): what kind
- * of task it is, roughly how long it takes, and when it becomes relevant. Pure, for the tests.
+ * The rules that triage a starred conversation when the AI is off (docs/data-sources.md §4): what
+ * kind of task it is, roughly how long it takes, and when it becomes relevant. Pure, for the tests.
  *
  * - A note you sent yourself (Gmail labels it `\Sent`): something to deal with, 10 minutes.
  * - A shared document: open it, 5 minutes.
@@ -18,10 +18,10 @@ import java.util.Locale
  *   required"): something to do, whoever sent it and whatever else it says, 15 minutes, due by the
  *   date it names after "by", if any. A registration or a form from a no-reply address is still
  *   work, so it isn't hidden as an event or a notification (the review's BUG-P1-003).
- * - Notifications and newsletters (no-reply senders, LinkedIn, an unsubscribe link): read and
- *   archive, 2 minutes.
+ * - Notifications and newsletters (no-reply senders, LinkedIn, an unsubscribe link): read it and
+ *   decide, 5 minutes. Starred, nothing is only to read (AI-02).
  * - A ticket, booking or open day with a date ahead: an event. It appears the day before, and
- *   wants archiving by the day after.
+ *   wants unstarring by the day after.
  * - Anything else: read it and decide, 15 minutes.
  *
  * The enrichment (Phase 4) does this better when it's on; these are the floor.
@@ -47,6 +47,9 @@ object EmailRules {
     )
 
     private const val PAST_WINDOW_DAYS = 120L
+
+    /** A notification or newsletter you starred: to read and decide what it means for you (AI-02). */
+    private const val READ_AND_DECIDE_MIN = 5
 
     /** How far after a "by" its date can be: "by Friday 12 October 2026". */
     private const val BY_REACH = 40
@@ -100,7 +103,7 @@ object EmailRules {
             }
         }
         if (NO_REPLY.containsMatchIn(address) || NOISE_DOMAINS.containsMatchIn(address) || UNSUBSCRIBE.containsMatchIn(email.body)) {
-            return Triage(Kind.Info, Kind.Info.defaultEffortMin, "Read and archive")
+            return Triage(Kind.Admin, READ_AND_DECIDE_MIN, "Read it and decide")
         }
         return Triage(Kind.Admin, Kind.Admin.defaultEffortMin, "Read it and decide")
     }

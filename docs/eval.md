@@ -5,7 +5,7 @@ A small set of your real emails and assignments, each with the right answer, to 
 ## What's where
 
 - `private/eval/cases.json`: each case, as `EvalSetTest.Case`: an id, the job (`Email`, `Assignment` or `Effort`), when it's asked about, the task as the app stores it (from the phone's `tasks.json`, its old enrichment taken off), and what a right answer has (`expect`):
-  - `kind`: `Admin`, `Event` or `Info` (emails);
+  - `kind`: `Admin` or `Event` (emails). A case labelled `Info` is retired, since a starred email is never only to read (AI-02): `talk-summary`, `dell` and `linkedin` are listed as retired in the report, not scored;
   - `deadline`: its day (`YYYY-MM-DD`), or `none`;
   - `testDate`: an assignment's test day;
   - `effortMin`: the range its minutes must fall in, as the app plans them;

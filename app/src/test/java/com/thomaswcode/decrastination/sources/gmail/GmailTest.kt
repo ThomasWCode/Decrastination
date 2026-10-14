@@ -35,10 +35,14 @@ class GmailTest {
     }
 
     @Test
-    fun `notifications are read and archived`() {
-        assertEquals(Kind.Info, email("I want to connect", from = "invitations@linkedin.com").kind)
-        assertEquals(Kind.Info, email("Your photos are online", from = "info@sportograf.com").kind)
-        assertEquals(Kind.Info, email("Offers", body = "To unsubscribe click here").kind)
+    fun `a notification you starred is read and decided, five minutes`() {
+        // Starred, nothing is only to read (AI-02).
+        val linkedIn = email("I want to connect", from = "invitations@linkedin.com")
+        assertEquals(Kind.Admin, linkedIn.kind)
+        assertEquals(5, linkedIn.effortMin)
+        assertEquals("Read it and decide", linkedIn.nextStep)
+        assertEquals(Kind.Admin, email("Your photos are online", from = "info@sportograf.com").kind)
+        assertEquals(Kind.Admin, email("Offers", body = "To unsubscribe click here").kind)
     }
 
     @Test
@@ -58,8 +62,8 @@ class GmailTest {
     }
 
     @Test
-    fun `asking for nothing, a notification stays one and a booking an event`() {
-        assertEquals(Kind.Info, email("Your receipt", from = "noreply@shop.example", body = "Please do not reply to this email. To unsubscribe click here.").kind)
+    fun `asking for nothing, a notification is to read and decide and a booking an event`() {
+        assertEquals(5, email("Your receipt", from = "noreply@shop.example", body = "Please do not reply to this email. To unsubscribe click here.").effortMin)
         assertEquals(Kind.Event, email("Your e-tickets", from = "tickets@venue.example", body = "See you on 25 October. Please do not reply.").kind)
     }
 
