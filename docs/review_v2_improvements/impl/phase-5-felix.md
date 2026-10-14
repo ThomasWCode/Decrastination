@@ -108,7 +108,7 @@ Settings added (all `NEVER` in LOOSER unless said):
    @Serializable data class Given(val topic: String, val text: String? = null, val kind: String = "fact")  // kind "fact" | "rule"; text null drops
    ```
    `apply`: a fact with an existing topic (trimmed, ignore case) replaces it; null text drops; a rule is appended unless an equal one exists (null drops the matching one); facts over the budget drop oldest-first; rules over `RULE_MAX` refuse the newest with a line "Too many standing instructions; drop one first".
-2. `AppGraph.memory = JsonStore(File(app.filesDir, "memory.json"), MemoryState.serializer(), ::MemoryState)`. `Backup.memory: MemoryState = MemoryState()` (FORMAT 4; accept 2–4).
+2. `AppGraph.memory = JsonStore(File(app.filesDir, "memory.json"), MemoryState.serializer(), ::MemoryState)`. `Backup.memory: MemoryState = MemoryState()` (FORMAT 4; older formats refused).
 3. Chat schema (`ChatPrompts.SCHEMA`) gains `"memories" to mapOf("type" to "array", "items" to obj("topic" to STRING, "text" to nullable(STRING), "kind" to mapOf("type" to "string", "enum" to listOf("fact", "rule"))))`; `ChatAnswers.Reading.memories: List<Given>`; `ChatPrompts.SYSTEM` adds:
    ```
    4. Remember (memories): a fact about the student worth keeping for later (a preference, a pattern, something about their week: "football is on Tuesdays"), with a short topic so a newer fact on the same topic replaces it; or, kind "rule", a standing instruction about how you should behave ("don't message before 8", "be blunter"). Give text null to forget one. Busy times, limits and holidays are changes, not memories.

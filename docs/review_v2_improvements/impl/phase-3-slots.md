@@ -24,7 +24,7 @@ Settings added in this phase (all `NEVER` in `SettingsChanges.LOOSER`, each with
 
 ## DX-09 The timetable: cached, and read for study periods
 
-**Change.** Keep the last good timetable in the task state; expose which classes meet on a date and when the study periods are.
+**Change.** Keep the last good timetable in the task state; expose which classes meet on a date and when the study periods are. The owner has confirmed his timetable holds the free periods as classes named "Study Period".
 
 **Files.** `sources/powerplanner/PowerPlannerApi.kt`, `sources/powerplanner/PowerPlannerItems.kt`, `sources/powerplanner/PowerPlannerSource.kt`, `sources/TaskSource.kt`, `data/TaskState.kt`, `sync/Syncer.kt`.
 
@@ -69,7 +69,7 @@ Settings added in this phase (all `NEVER` in `SettingsChanges.LOOSER`, each with
    `InstructionPrompts.CHANGE` schema: add `"endDate" to nullable(DATE)`. `InstructionAnswers.parse`: `NoSchool` needs `date` (and `endDate ≥ date`, defaulting to `date`); `HalfDay` needs `date` and `endTime` → `endMin`. Both within the usual plausible range.
 4. Applying: in `AppGraph.setApplied`, before `makeOnOwnTasks`, `makeOnSchool(id)`: for each NoSchool/HalfDay change, `school.update { it.with(...) }`, then remove those changes from the instruction as `makeOnOwnTasks` does (an instruction left with no changes is deleted). Undo is deleting the entry in Settings.
 5. `Instructions.describe`: "No school from Mon 26 Oct to Fri 30 Oct", "Half-day on Fri 17 Oct, ends 12:30".
-6. `Backup`: `school: SchoolCalendar = SchoolCalendar()`, `FORMAT = 3`; `Backups.problem` accepts formats 2 and 3; export/import carry it.
+6. `Backup`: `school: SchoolCalendar = SchoolCalendar()`, `FORMAT = 3`; `Backups.problem` refuses older formats with a message (importing an old backup isn't needed); export/import carry it.
 7. Settings → a "School" section: the list of entries with a delete icon each; "Add days off" (two date pickers + label) and "Add a half-day" (date picker + time picker) using `Pickers.DateTimeDialog`.
 
 **Tests.** `InstructionsTest`: parse and describe both types; `with` merges overlaps. `BackupTest`: format 3 round-trips; format 2 imports with an empty school calendar.
@@ -222,8 +222,8 @@ Settings added in this phase (all `NEVER` in `SettingsChanges.LOOSER`, each with
 
 **Steps.**
 
-1. Manifest: `android.permission.WRITE_CALENDAR`. Setup asks for it with `READ_CALENDAR`.
-2. **Why the student creates the calendar.** A calendar an app creates locally on a Google account is not uploaded by Google's sync adapter: it stays on the phone. So the app writes into a calendar that exists on the account. Setup → Calendar: "Create a calendar called Decrastination at calendar.google.com (Settings → Add calendar → Create new calendar), wait a minute for it to appear below, then pick it." Below, a list of writable calendars (`CalendarContract.Calendars.CONTENT_URI`, projection `_ID, CALENDAR_DISPLAY_NAME, ACCOUNT_NAME, CALENDAR_ACCESS_LEVEL`, filter `CALENDAR_ACCESS_LEVEL >= CAL_ACCESS_CONTRIBUTOR`), saving `settings.calendarWriteId`. Turn that calendar's notifications off in Google Calendar (say so in the text); the events are written with `HAS_ALARM = 0`.
+1. Manifest: `android.permission.WRITE_CALENDAR`. Setup asks for it with `READ_CALENDAR` on a fresh install; on the owner's phone grant it over adb: `adb shell pm grant com.thomaswcode.decrastination android.permission.WRITE_CALENDAR`.
+2. **Why the student creates the calendar.** A calendar an app creates locally on a Google account is not uploaded by Google's sync adapter: it stays on the phone. So the app writes into a calendar that exists on the account. The owner has created "Decrastination" at calendar.google.com and it's synced to the phone. Setup → Calendar: "Create a calendar called Decrastination at calendar.google.com (Settings → Add calendar → Create new calendar), wait a minute for it to appear below, then pick it. If Google Calendar gives it default notifications, turn them off there: the app's events carry none." Below, a list of writable calendars (`CalendarContract.Calendars.CONTENT_URI`, projection `_ID, CALENDAR_DISPLAY_NAME, ACCOUNT_NAME, CALENDAR_ACCESS_LEVEL`, filter `CALENDAR_ACCESS_LEVEL >= CAL_ACCESS_CONTRIBUTOR`), saving `settings.calendarWriteId`. On the owner's phone pick "Decrastination" there as part of this item's phone check. Don't change Google Calendar's own settings on the phone (the owner's rule); the events are written with `HAS_ALARM = 0`.
 3. `SlotCalendar.write(context, plan, zone, written: Map<String, Long>): Map<String, Long>`: no-op when `calendarWriteId == null` or the permission is missing. For the days `today..today+6`: desired events, one per `Slot`:
    - `CUSTOM_APP_PACKAGE = context.packageName`, `CUSTOM_APP_URI = "decrastination://slot/<date>/<slot.key>"`;
    - `TITLE` = the chunk's `label` (or "Outside"), `DESCRIPTION` = (phase 5 adds the micro-plan) the task's source and `why` line, `DTSTART`/`DTEND` = the slot's times, `EVENT_TIMEZONE = zone.id`, `AVAILABILITY = AVAILABILITY_FREE`, `HAS_ALARM = 0`, `CALENDAR_ID = calendarWriteId`.

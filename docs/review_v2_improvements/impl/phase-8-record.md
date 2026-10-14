@@ -64,7 +64,7 @@ Items: LR-01, LR-02, LR-06, LR-08, PL-08, PL-09, PL-10, PL-11, NF-02, AC-06, AC-
 
 **Files.** `ui/SettingsActivity.kt` (Reset section), `AppGraph.kt`.
 
-**Steps.** Rows: Stats (the activity log: `log.update { ActivityLog() }`; the calibration follows at the next review; also `runtime.calibration = Calibration()` now), Calibration only (`Calibration.learnFrom: Long = now` stored and honoured by `Calibrator.learn`, which ignores records before it), Memories and profile lines (`memory.update { MemoryState() }`, `profileLines = emptyList()`), Chat and Felix history (`clearChat()`, `runtime.felix = FelixState()`, `log.felix = emptyList()`), Instructions (lists what would go, then `instructions.update { InstructionState() }` and `layInstructions()`), Everything learned (all five). Each: an `AlertDialog` naming what's lost; before it, `exportBackup()` written to the backup folder (AR-07) or `filesDir/backups/reset-<date>.json`. No parent code.
+**Steps.** Rows: Stats (the activity log: `log.update { ActivityLog() }`; the calibration follows at the next review; also `runtime.calibration = Calibration()` now), Calibration only (`Calibration.learnFrom: Long = now` stored and honoured by `Calibrator.learn`, which ignores records before it), Memories and profile lines (`memory.update { MemoryState() }`, `profileLines = emptyList()`), Chat and Felix history (`clearChat()`, `runtime.felix = FelixState()`, `log.felix = emptyList()`), Instructions (lists what would go, then `instructions.update { InstructionState() }` and `layInstructions()`), Everything learned (all five). Each: an `AlertDialog` naming what's lost; before it, `exportBackup()` written as `reset-<date>.json` to `Documents/Decrastination` through `BackupFolder.write` (the writer AR-07 below specifies: build `data/BackupFolder.kt` here, AR-07 adds the worker), and to `filesDir/backups/` when that write fails. No parent code.
 
 ---
 
@@ -84,7 +84,7 @@ Items: LR-01, LR-02, LR-06, LR-08, PL-08, PL-09, PL-10, PL-11, NF-02, AC-06, AC-
 
 ## NF-02 The weekly summary
 
-**Files.** New `learn/Summary.kt`, new `enrich/SummaryPrompts.kt`, `learn/Felix.kt`, `ui/SettingsActivity.kt` (Summary section), `data/Settings.kt` (`summaryEmail: String = ""`).
+**Files.** New `learn/Summary.kt`, new `enrich/SummaryPrompts.kt`, `learn/Felix.kt`, `ui/SettingsActivity.kt` (Summary section), `data/Settings.kt` (`summaryEmail: String = "richard.white@lshtm.ac.uk"`, the owner's dad; editable in Settings).
 
 **Steps.** `Summary.input(log, reviews, felix, week)`: the numbers (minutes, pieces, on time, days done, slots kept/missed, free time), the review's note and changes, the week's nags and how they went, the moves and instructions. `SummaryPrompts.SYSTEM`: "Write the student's weekly summary for their dad, in the student's voice, first person, plainly, no excuses and no spin: what got done, what didn't and why, what changed. Short paragraphs and one small table. Under 300 words."; effort `Summary`. Sunday: Felix (reason `Summary`) posts "The week's summary is ready; send it?" with an action that opens the email: `Intent(ACTION_SENDTO, Uri.parse("mailto:$summaryEmail")).putExtra(EXTRA_SUBJECT, "Week of …").putExtra(EXTRA_TEXT, text)`. The same text on the Reviews page. Settings → Summary: the address and a "Send this week's summary" button.
 
@@ -104,7 +104,7 @@ Items: LR-01, LR-02, LR-06, LR-08, PL-08, PL-09, PL-10, PL-11, NF-02, AC-06, AC-
 
 **Files.** `app/src/test/.../enrich/EvalRunTest.kt`, `build.gradle.kts`, `docs/eval.md`.
 
-**Steps.** A JUnit test gated by `System.getenv("EVAL_API_KEY")` (skipped otherwise): for each case in `private/eval/cases.json`, call the real `ClaudeEnricher` with the key, effort from `-Peffort`, write the answer to `private/eval/answers/<id>-<run>.json`, then run the existing `score` logic; stop when the summed cost passes `EVAL_BUDGET_USD` (default 2). Run with `EVAL_API_KEY=… ./gradlew :app:testDebugUnitTest --tests '*EvalRunTest*'`. Document in `docs/eval.md`. Never in CI.
+**Steps.** A JUnit test gated by `System.getenv("CLAUDE_DECRASTINATION_API_KEY")` (skipped otherwise; the owner sets it on the machine the session runs on): for each case in `private/eval/cases.json`, call the real `ClaudeEnricher` with the key, effort from `-Peffort`, write the answer to `private/eval/answers/<id>-<run>.json`, then run the existing `score` logic; stop when the summed cost passes `EVAL_BUDGET_USD` (default 2). Run with `./gradlew :app:testDebugUnitTest --tests '*EvalRunTest*'` with the variable in the environment (Gradle test tasks inherit it; if not, pass it through `systemProperty` as the golden-file flag is). Document in `docs/eval.md`. Never in CI.
 
 ---
 
@@ -126,9 +126,13 @@ Items: LR-01, LR-02, LR-06, LR-08, PL-08, PL-09, PL-10, PL-11, NF-02, AC-06, AC-
 
 ## AR-07 A nightly backup
 
-**Files.** New `data/BackupWorker.kt`, `ui/SettingsActivity.kt`, `data/Settings.kt` (`backupFolder: String? = null`, a persisted SAF tree URI).
+**Files.** New `data/BackupFolder.kt` (built under LR-08 above), new `data/BackupWorker.kt`, `ui/SettingsActivity.kt`, `debug/CommandActivity.kt`, `AppGraph.kt`.
 
-**Steps.** Settings → Backup: "Choose a folder" (`ActivityResultContracts.OpenDocumentTree`, `takePersistableUriPermission`), "Last backup: …". `BackupWorker` (periodic, 24 h, `ExistingPeriodicWorkPolicy.KEEP`) writes `decrastination-<date>.json` via `DocumentFile`, deletes beyond 14, records `runtime.lastBackupAt`. `LR-08` writes there first. `Backup` covers every store: tasks' own tasks, settings, log, calibration, event answers, usage, instructions, school, memory, Felix state, slot state (FORMAT 5).
+**Steps.** The folder is fixed: `Documents/Decrastination` on the phone's shared storage, reached through `MediaStore`, so there is no folder picker, no permission, no setting and nothing for the owner to do. `BackupFolder` (Android, thin): `write(resolver, name, text)` inserts into `MediaStore.Files.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)` with `DISPLAY_NAME`, `MIME_TYPE = "application/json"`, `RELATIVE_PATH = "Documents/Decrastination/"` and `IS_PENDING = 1`, writes through `openOutputStream`, then clears `IS_PENDING` (the folder is made by the first insert); a name `list` already finds is overwritten in place (`openOutputStream(uri, "wt")`), since a second insert of the same name would be renamed `… (1).json` by MediaStore; `list(resolver)` queries that collection for `RELATIVE_PATH = 'Documents/Decrastination/'`, returning `(name, uri)` by `DATE_ADDED` (an app sees the files it made there without any permission, and keeps them through a clear of its data; files from before a fresh install it can't see, and the app is never installed fresh); `delete(resolver, uri)`. Guarded by `Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q` (minSdk is 26): below it nothing runs and the Settings row says the backup needs Android 10. The pruning rule is pure: `BackupFolder.toPrune(names: List<String>, keep: Int = 14): List<String>`, the oldest of the `decrastination-<date>.json` names beyond `keep`, by the date in the name; `reset-*` files are never pruned. `BackupWorker` (periodic, 24 h, `ExistingPeriodicWorkPolicy.KEEP`, enqueued at app start beside the sync) writes `decrastination-<date>.json` through `BackupFolder.write`, deletes what `toPrune` names, records `runtime.lastBackupAt`. Settings → Backup: "Nightly backup: Documents/Decrastination", "Last backup: …" (or "not yet"), with Export and Import as today; Import can open those files through Android's file picker as it does any. A `backup-now` debug command runs the worker's work once. `Backup` covers every store: tasks' own tasks, settings, log, calibration, event answers, usage, instructions, school, memory, Felix state, slot state (FORMAT 5).
+
+**Tests.** `BackupFolderTest`: `toPrune` keeps the newest 14 by the date in the name, never names a `reset-*` file, and names nothing at 14 or fewer. `BackupTest`: FORMAT 5 round trip, an older format refused.
+
+**Done when.** `backup-now` leaves `decrastination-<today>.json` under `/sdcard/Documents/Decrastination` (`adb shell ls`), a second run the same day replaces it rather than adding a copy, Import of that file from Setup restores it, and Settings → Backup shows the time. Keeping a copy off the phone is the owner's own doing and not this item's (Google Drive and OneDrive offer no folder to Android's folder picker; a sync app mirroring the folder, or Export by hand, does it).
 
 ---
 
