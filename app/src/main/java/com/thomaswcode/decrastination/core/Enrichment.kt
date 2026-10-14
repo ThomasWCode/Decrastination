@@ -76,7 +76,9 @@ private fun TaskItem.enrichedOnly(): TaskItem {
     // A start after the deadline would hide the work until it's overdue: it's dropped.
     val from = e.actionableFrom?.takeIf { due == null || it <= due }
     return copy(
-        kind = if (source == Source.Gmail) e.kind ?: base.kind else base.kind,
+        // A reading from before starred-only reading may say an email is only to read; starred, it
+        // never is (AI-02): the rules' kind stands until it's read again ([Enrichments.stale]).
+        kind = if (source == Source.Gmail) e.kind?.takeIf { it != Kind.Info } ?: base.kind else base.kind,
         dueAt = due,
         // An email the model has read (it gives a kind): its start replaces the rules' guess, as its
         // deadline does. Otherwise the later of the two.
@@ -138,9 +140,10 @@ object Enrichments {
     /**
      * A hash of everything the enrichment reads, so a change in any of it makes it out of date. The
      * source's deadline, not the one the enrichment lays over it, which would make it out of date itself.
+     * An email's attachments only where it has some (DX-01), so a task without any keeps the hash it had.
      */
     fun inputHash(task: TaskItem): String {
-        val text = listOf(
+        val text = (listOf(
             task.source.name,
             task.title,
             task.detail,
@@ -150,7 +153,7 @@ object Enrichments {
             (if (task.sourceValues != null) task.sourceValues.dueAt else task.dueAt)?.toString().orEmpty(),
             task.extra["from"].orEmpty(),
             task.extra["received"].orEmpty(),
-        ).joinToString("\n")
+        ) + listOfNotNull(task.extra[GmailThreads.EXTRA_ATTACHMENTS])).joinToString("\n")
         val digest = MessageDigest.getInstance("SHA-256").digest(text.toByteArray(Charsets.UTF_8))
         return digest.take(8).joinToString("") { "%02x".format(it) }
     }
@@ -161,10 +164,12 @@ object Enrichments {
     /**
      * Whether [task] needs enriching again: never done, changed since, done by the rules when the
      * model is now on, or done by the model when it's now switched off ([modelOff]: what it read goes
-     * with it, and the rules' reading stands instead).
+     * with it, and the rules' reading stands instead); or an email read, before starred-only reading,
+     * as only to read (AI-02), which a starred one never is.
      */
     fun stale(task: TaskItem, modelOn: Boolean, rules: String, modelOff: Boolean = false): Boolean {
         val e = task.enrichment ?: return true
-        return e.inputHash != inputHash(task) || (modelOn && e.by == rules) || (modelOff && e.by != rules)
+        return e.inputHash != inputHash(task) || (modelOn && e.by == rules) || (modelOff && e.by != rules) ||
+            (task.source == Source.Gmail && e.kind == Kind.Info)
     }
 }

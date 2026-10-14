@@ -55,10 +55,15 @@ class EvalSetTest {
         val testDate: String? = null,
     )
 
-    private fun cases(): List<Case> {
+    private fun allCases(): List<Case> {
         assumeTrue("No private/eval/cases.json: nothing to evaluate here", dir != null)
         return JsonStore.json.decodeFromString(ListSerializer(Case.serializer()), File(dir, "cases.json").readText())
     }
+
+    /** The cases a right answer can pass: one labelled Info can't, since starred emails are never only to read (AI-02). */
+    private fun cases(): List<Case> = allCases().filterNot(::retired)
+
+    private fun retired(case: Case) = case.expect.kind == "Info"
 
     private fun nowOf(case: Case): Long = LocalDateTime.parse(case.now).atZone(zone).toInstant().toEpochMilli()
 
@@ -86,7 +91,10 @@ class EvalSetTest {
     @Test
     fun score() {
         val cases = cases()
+        val retired = allCases().filter(::retired).map { it.id }.toSet()
+        // A retired case's answers from earlier rounds aren't scored, nor counted as no case's.
         val answers = File(dir!!, "answers").listFiles { f -> f.extension == "json" }.orEmpty().sortedBy { it.name }
+            .filterNot { it.nameWithoutExtension.substringBeforeLast('-') in retired }
         assumeTrue("No answers in private/eval/answers yet", answers.isNotEmpty())
         val byId = cases.associateBy { it.id }
         val rows = mutableListOf<String>()
@@ -121,6 +129,10 @@ class EvalSetTest {
                 appendLine()
                 appendLine("$passed of ${rows.size} answers pass every check.")
                 appendLine()
+                if (retired.isNotEmpty()) {
+                    appendLine("Retired: ${retired.sorted().joinToString(", ")} (Info isn't an answer since starred-only reading, AI-02).")
+                    appendLine()
+                }
                 appendLine("| Answer | Result | Checks (failed in bold) |")
                 appendLine("|---|---|---|")
                 rows.forEach(::appendLine)

@@ -13,9 +13,9 @@ The model-side settings (effort, model per job, caching, retries) are in [02-ai-
 | ID | Improvement | Priority | Effort | Status |
 |---|---|---|---|---|
 | AI-01 | One repair round, then salvage a split with one bad date | P1 | M | Changed (Q-01) |
-| AI-02 | The Email job after starred-only reading: no Info, always a next step | P1 | S | Changed (Q-04) |
+| AI-02 | The Email job after starred-only reading: no Info, always a next step | P1 | S | Changed (Q-04); Implemented (v3 phase 1) |
 | AI-03 | Tell the model the hard limits the checks enforce | P1 | S | – |
-| AI-04 | Tell the model it sees only the newest message of a thread, and what's attached | P1 | S | – |
+| AI-04 | Tell the model it sees only the newest message of a thread, and what's attached | P1 | S | Implemented (v3 phase 1, as the whole conversation) |
 | AI-05 | A stable "about me" block: subjects, class codes, year, timetable, your lines, memories | P1 | M | Changed (Q-02) |
 | AI-06 | Stop hard-coding "Year 12" | P1 | S | – |
 | AI-07 | Worked examples in each system prompt | P2 | M | – |
