@@ -260,11 +260,11 @@ Q-47: 1 Q-48: 1 Q-49: 3 Q-50: Keep recomendation Q-51: Yes, no cap, does nto rep
 
 ## Round five
 
-| Q | Decision | Depends on it | My recommendation |
-|---|---|---|---|
-| Q-52 | Same-day deadlines usable in the school windows before them; margins unchanged | PL-15 | Yes to both |
-| Q-56 | The yield learned per kind of day (weekday evening, weekend, school windows), clamped 0.5–1.0, 1.0 until seven days of that kind exist | PL-06 | Yes |
-| Q-57 | My reading of your Q-53 note: an event you add displaces the slot it overlaps; a deleted slot event is written back only if its time is still free | PL-13, NF-07 | Yes |
+| Q    | Decision                                                                                                                                           | Depends on it | My recommendation |
+| ---- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ------------- | ----------------- |
+| Q-52 | Same-day deadlines usable in the school windows before them; margins unchanged                                                                     | PL-15         | Yes to both       |
+| Q-56 | The yield learned per kind of day (weekday evening, weekend, school windows), clamped 0.5–1.0, 1.0 until seven days of that kind exist            | PL-06         | Yes               |
+| Q-57 | My reading of your Q-53 note: an event you add displaces the slot it overlaps; a deleted slot event is written back only if its time is still free | PL-13, NF-07  | Yes               |
 
 ### Q-52 Same-day deadlines and margins
 
@@ -289,5 +289,5 @@ Q-47: 1 Q-48: 1 Q-49: 3 Q-50: Keep recomendation Q-51: Yes, no cap, does nto rep
 ## Answer sheet (round five)
 
 ```
-Q-52:   Q-56:   Q-57:
+Q-52: Yes Q-56: Yes, separate kind of days. Q-57: Yes
 ```
