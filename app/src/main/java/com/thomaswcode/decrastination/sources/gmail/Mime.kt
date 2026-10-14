@@ -54,8 +54,12 @@ object Mime {
     /** A file attached to a message (DX-01): its name, type (`application/pdf`) and size in bytes, where given. */
     @Serializable
     data class Attachment(val name: String, val type: String, val size: Long? = null) {
-        /** "consent-form.pdf (110 KB)": as Tasks shows it and the model reads it. */
-        val label: String get() = name + (size?.let { " (${sizeLabel(it)})" }.orEmpty())
+        /** "consent-form.pdf (110 KB)", or an attached email's "Trip details (an email, 16 KB)": as the sheet shows it and the model reads it. */
+        val label: String
+            get() {
+                val about = listOfNotNull("an email".takeIf { type == "message/rfc822" }, size?.let(::sizeLabel)).joinToString(", ")
+                return if (about.isEmpty()) name else "$name ($about)"
+            }
     }
 
     /** Bytes as the sheet says them: whole kilobytes, or megabytes to one place past a thousand of them. */
@@ -103,7 +107,9 @@ object Mime {
         }
         if (!attached) return
         val size = items.getOrNull(6)?.string?.toLongOrNull()?.let { if (items.getOrNull(5)?.string.equals("base64", ignoreCase = true)) it * 3 / 4 else it }
-        out += Attachment(name ?: if (type == "message") "an attached email" else "unnamed $type/$subtype", "$type/$subtype", size)
+        // An attached email with no file name goes by its own subject, from its envelope.
+        val subject = if (type == "message" && subtype == "rfc822") items.getOrNull(7)?.list?.getOrNull(1)?.string?.let(::decodeHeader)?.trim()?.takeIf { it.isNotEmpty() } else null
+        out += Attachment(name ?: subject ?: if (type == "message") "an attached email" else "unnamed $type/$subtype", "$type/$subtype", size)
     }
 
     /**
@@ -163,32 +169,41 @@ object Mime {
     /**
      * A part's text as a task and the model have it: decoded, flattened, its quotes and signature
      * cut ([cutQuoted]: HTML's before it's flattened, then plain text's), and tidied to [max].
+     * [forwarded]: its message's subject says it's a forward ([isForward]).
      */
-    fun readable(bytes: ByteArray, part: TextPart, max: Int): Cut {
+    fun readable(bytes: ByteArray, part: TextPart, max: Int, forwarded: Boolean = false): Cut {
         val raw = decodeRaw(bytes, part)
-        val html = if (part.subtype == "html") cutQuoted(raw, html = true) else null
-        val plain = cutQuoted(html?.let { htmlToText(it.text) } ?: raw, html = false)
+        val html = if (part.subtype == "html") cutQuoted(raw, html = true, forwarded) else null
+        val plain = cutQuoted(html?.let { htmlToText(it.text) } ?: raw, html = false, forwarded)
         return Cut(tidy(plain.text, max), plain.cutChars + (html?.cutChars ?: 0))
     }
+
+    private val FORWARD_SUBJECT = Regex("""^\s*fwd?\s*:""", RegexOption.IGNORE_CASE)
+
+    /** A subject that says its message is a forward ("Fw: …", "Fwd: …"), not a reply to one ("Re: Fw: …"). */
+    fun isForward(subject: String): Boolean = FORWARD_SUBJECT.containsMatchIn(subject)
 
     /**
      * [text] without the earlier messages it quotes, or its signature (DX-06): what the model reads
      * should be what's new in it, not a request quoted from further down. [html]: every
      * `<blockquote>` and every `gmail_quote` div goes whole, nested ones matched by depth; a forward
-     * is Gmail's `gmail_quote` div too, so one that begins with the forward marker stays, and the
-     * quotes inside it go. Plain: cut from the first line that starts a quote (an `On … wrote:`
-     * line, perhaps wrapped onto the next; `-----Original Message-----`; a `From:` line with
-     * `Sent:` or `To:` within three lines) or a signature (`-- `); after a forward's marker its own
-     * header is its message's, so the cut is at the marker after that.
+     * is in one too (Gmail's div, Apple Mail's blockquote), so one that begins with the forward
+     * marker stays, and the quotes inside it go. Plain: cut from the first line that starts a quote
+     * (an `On … wrote:` line, perhaps wrapped onto the next; `-----Original Message-----`; a `From:`
+     * line with `Sent:` or `To:` within three lines) or a signature (`-- `); after a forward's
+     * marker its own header is its message's, so the cut is at the marker after that.
+     * [forwarded]: the message is a forward by its subject, as Outlook's are, with no marker but
+     * a header like a reply's: its first header block, and its first quoting subtree, are what it
+     * forwards, kept.
      */
-    fun cutQuoted(text: String, html: Boolean): Cut {
+    fun cutQuoted(text: String, html: Boolean, forwarded: Boolean = false): Cut {
         if (html) {
             val removed = mutableListOf<String>()
-            val kept = cutHtml(text, removed)
+            val kept = cutHtml(text, removed, keepFirst = forwarded)
             return Cut(kept, removed.sumOf { tidy(htmlToText(it), Int.MAX_VALUE).length })
         }
         val lines = text.lines()
-        var forward = false
+        var forward = forwarded
         for (i in lines.indices) {
             val line = lines[i].trim()
             if (FORWARD.matches(line)) {
@@ -217,17 +232,23 @@ object Mime {
         return WROTE.matches(line) || (next != null && WROTE.matches(line + " " + next.trim()))
     }
 
-    /** [html] without its quoting subtrees, each whole, added to [removed]; a forward's kept, what it quotes cut. */
-    private fun cutHtml(html: String, removed: MutableList<String>): String {
+    /**
+     * [html] without its quoting subtrees, each whole, added to [removed]; a forward's kept, what it
+     * quotes cut: one beginning with the forward marker, or with [keepFirst] the first of them.
+     */
+    private fun cutHtml(html: String, removed: MutableList<String>, keepFirst: Boolean = false): String {
         val out = StringBuilder()
         var at = 0
+        var first = keepFirst
         while (true) {
             val open = QUOTE_OPEN.find(html, at) ?: break
             out.append(html, at, open.range.first)
             val tag = open.groupValues[1].ifEmpty { open.groupValues[2] }.lowercase()
             val (closeStart, closeEnd) = closeOf(html, open.range.last + 1, tag)
             val whole = html.substring(open.range.first, closeEnd)
-            if (tag == "div" && FORWARD_TEXT.containsMatchIn(tidy(htmlToText(whole), 200).lineSequence().firstOrNull().orEmpty())) {
+            val forward = first || FORWARD_TEXT.containsMatchIn(tidy(htmlToText(whole), 200).lineSequence().firstOrNull().orEmpty())
+            first = false
+            if (forward) {
                 out.append(html, open.range.first, open.range.last + 1)
                 out.append(cutHtml(html.substring(open.range.last + 1, closeStart), removed))
                 out.append(html, closeStart, closeEnd)

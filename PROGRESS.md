@@ -9,7 +9,8 @@ The implementation of `docs/review_v2_improvements/impl/` on branch `v3`. Delete
 - AI-02 the Email job without Info: a78911b. The eval set's three Info cases (dell, linkedin, talk-summary) are retired; 8 of the other 10 pass on the old answers (the two known findings: german-assess's dropped split, talk-note's old Info answer); a fresh round follows AI-04.
 - DX-06 quoted text and signatures cut: 13e0f6a. Its eval check (a reply case's dump showing the marker) is done with DX-01's, on cases re-read through the new pipeline.
 - DX-01 attachment names and types: 28452a2.
-- AI-04 the model told what it sees: this commit.
+- AI-04 the model told what it sees: bc35abd.
+- DX-06, DX-01 fixes from the eval set's real emails, re-read through the new pipeline: this commit. An Outlook forward (subject `Fw:`) lost everything it forwarded; an attached email had no name. The eval checks pass on the dump: the `help` reply shows the marker and no quoted thread (DX-06), `zip-card`'s PDF is named (DX-01), the system prompt has AI-04's paragraph.
 
 ## Current
 
