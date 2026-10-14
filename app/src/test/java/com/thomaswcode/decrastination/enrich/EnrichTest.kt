@@ -9,6 +9,7 @@ import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.SourceValues
 import com.thomaswcode.decrastination.core.Status
 import com.thomaswcode.decrastination.core.TaskItem
+import com.thomaswcode.decrastination.core.withEnrichment
 import com.thomaswcode.decrastination.sources.anki.AnkiRules
 import com.thomaswcode.decrastination.sources.gmail.GmailThreads
 import kotlin.test.AfterTest
@@ -195,6 +196,25 @@ class AnswersTest {
         assertEquals(Enrichments.inputHash(email()), e.inputHash)
         // A date alone means the end of that day.
         assertEquals(Fixtures.at("2026-10-12T23:59"), parse(Enrichments.Job.Email, """{"kind":"Admin","actionableFrom":null,"deadline":"2026-10-12","effortMin":10,"nextStep":"x"}""")!!.deadline)
+    }
+
+    @Test
+    fun `whether an email's deadline is its own words is read and kept (AI-12)`() {
+        val quoted = parse(Enrichments.Job.Email, """{"kind":"Admin","actionableFrom":null,"deadline":"2026-10-16","deadlineQuoted":true,"effortMin":10,"nextStep":"Hand in the form","blocks":[]}""")!!
+        assertTrue(quoted.deadlineQuoted)
+        assertEquals(true, email().withEnrichment(quoted).enrichment?.deadlineQuoted)
+        // A day it only suggests: the date stands, as a plan.
+        val suggested = parse(Enrichments.Job.Email, """{"kind":"Admin","actionableFrom":null,"deadline":"2026-10-16","deadlineQuoted":false,"effortMin":10,"nextStep":"Reply","blocks":[]}""")!!
+        assertEquals(Fixtures.at("2026-10-16T23:59"), suggested.deadline)
+        assertFalse(suggested.deadlineQuoted)
+        // Without the flag, or of a deadline dropped as out of range, nothing is quoted: never hard by accident.
+        assertFalse(parse(Enrichments.Job.Email, """{"kind":"Admin","actionableFrom":null,"deadline":"2026-10-16","effortMin":10,"nextStep":"x"}""")!!.deadlineQuoted)
+        assertFalse(parse(Enrichments.Job.Email, """{"kind":"Admin","actionableFrom":null,"deadline":"2031-01-01","deadlineQuoted":true,"effortMin":10,"nextStep":"x"}""")!!.deadlineQuoted)
+        // Asked for, and told when it's true; the quick action's two weeks are gone.
+        val system = Prompts.system(Enrichments.Job.Email)
+        assertTrue("deadlineQuoted: true when deadline is a date the email itself gives" in system, system)
+        assertFalse("within the next two weeks" in system, system)
+        assertEquals("boolean", Prompts.schemaJson(Enrichments.Job.Email).jsonObject["properties"]!!.jsonObject["deadlineQuoted"]!!.jsonObject["type"]!!.jsonPrimitive.content)
     }
 
     @Test
@@ -600,7 +620,7 @@ class ClaudeEnricherTest {
         assertEquals("high", config["effort"]!!.jsonPrimitive.content)
         val format = config["format"]!!.jsonObject
         assertEquals("json_schema", format["type"]!!.jsonPrimitive.content)
-        assertEquals(listOf("kind", "actionableFrom", "deadline", "effortMin", "nextStep", "blocks"), format["schema"]!!.jsonObject["required"]!!.jsonArray.map { it.jsonPrimitive.content })
+        assertEquals(listOf("kind", "actionableFrom", "deadline", "deadlineQuoted", "effortMin", "nextStep", "blocks"), format["schema"]!!.jsonObject["required"]!!.jsonArray.map { it.jsonPrimitive.content })
         assertTrue("triage one email" in body["system"].toString(), body["system"].toString().take(120))
         assertTrue("Subject: Berlin trip form" in body["messages"].toString())
         // No thinking setting: Opus 5.5 always thinks, and rejects one that turns it off.

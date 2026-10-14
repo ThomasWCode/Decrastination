@@ -114,11 +114,11 @@ Existing `PlannerTest` tests that encode backwards placement for dated work chan
 
 **Steps.**
 
-1. `Prompts.schema(Email)`: add `"deadlineQuoted" to mapOf("type" to "boolean")`. Prompt bullet: "deadline: only a date the email itself gives or clearly implies; deadlineQuoted true then. A quick action with no date of its own: deadline null (the app plans it within a fortnight)." Remove the old "due within the next two weeks" sentence from the blocks bullet; blocks' `due` stays only where the email gives one.
+1. `Prompts.schema(Email)`: add `"deadlineQuoted" to mapOf("type" to "boolean")`. Prompt bullet: "deadline: only a date the email itself gives or clearly implies; deadlineQuoted true then. A quick action with no date of its own: deadline null (the app plans it within a fortnight)." *(As built: "within the week", as step 2's soft week is 7 days; and a day the email only suggests stays its deadline, `deadlineQuoted` false, so it's a plan.)* Remove the old "due within the next two weeks" sentence from the blocks bullet; blocks' `due` stays only where the email gives one.
 2. `Answers.Triage` gets `deadlineQuoted: Boolean = false`; `Enrichment.deadlineQuoted: Boolean = false`; `parse` copies it. The undated quick action's "fortnight" is the planner's soft week (`softDeadlineDays`, 7) applied from first seen; raise nothing.
 3. `Enrichment.inputHash` unchanged (prompt change → re-enrichment happens through the prompt version in phase 8; until then, `enrich-task` by hand).
 
-**Tests.** `EnrichTest`: `deadlineQuoted` parsed and stored; an answer without the field is unreadable (schema is closed; the eval set's old answers will need the field added when re-scored).
+**Tests.** `EnrichTest`: `deadlineQuoted` parsed and stored; an answer without the field is unreadable (schema is closed; the eval set's old answers will need the field added when re-scored). *(As built: step 2's default holds, so an answer without it reads as not quoted: a missing flag can only make a date soft, and the API's closed schema always sends it.)*
 
 **Done when.** New email enrichments carry the flag and PL-14 uses it.
 
