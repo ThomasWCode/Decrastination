@@ -14,8 +14,9 @@ import kotlinx.serialization.Serializable
  * 1. A focus session you started blocks throughout, whatever the hour.
  * 2. A parent-approved unblock (the override) lets everything through until it ends.
  * 3. Sleep (22:30–07:00) is never blocked, and nor are school hours: before 16:45 on a weekday.
- * 4. Otherwise: while anything is due today or tomorrow, blocking is strict.
- * 5. With nothing due soon, earned free time is spent while a blocked app is in front; with none
+ * 4. Otherwise: while anything is planned for today, blocking is strict (since PL-01 spreads later
+ *    work over its window, today's bucket alone, not tomorrow's too).
+ * 5. With nothing planned today, earned free time is spent while a blocked app is in front; with none
  *    left, it's blocked until more is earned.
  */
 object BlockPolicy {
@@ -37,7 +38,7 @@ object BlockPolicy {
 
     enum class Reason(val headline: String) {
         Session("You're in a focus session"),
-        DueSoon("Work is due today or tomorrow"),
+        DueSoon("Work is planned for today"),
         NoFreeTime("No free time left today"),
         Quiet("Quiet hours"),
         SchoolHours("School hours"),

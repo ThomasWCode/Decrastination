@@ -144,7 +144,7 @@ class BlockedActivity : ComponentActivity() {
                     Text("Free time left today: ${Format.minutes((credit / 60_000).toInt())}", style = MaterialTheme.typography.bodyMedium)
                 }
                 TextButton(onClick = { why = !why }) { Text(if (why) "Hide why" else "Why am I blocked?") }
-                AnimatedVisibility(why) { Why(verdict.reason, plan.dueSoon, settings.workMinPerFreeMin) }
+                AnimatedVisibility(why) { Why(verdict.reason, plan.todayBucket?.chunks.orEmpty(), settings.workMinPerFreeMin) }
                 OutlinedButton(onClick = ::goHome, modifier = Modifier.fillMaxWidth()) { Text("Go to the home screen") }
             }
         }
@@ -166,16 +166,16 @@ class BlockedActivity : ComponentActivity() {
     }
 
     @Composable
-    private fun Why(reason: BlockPolicy.Reason, dueSoon: List<Chunk>, ratio: Int) {
+    private fun Why(reason: BlockPolicy.Reason, today: List<Chunk>, ratio: Int) {
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             when (reason) {
                 BlockPolicy.Reason.DueSoon -> {
-                    Text("While anything is due today or tomorrow, blocking is strict. Due soon:", style = MaterialTheme.typography.bodyMedium)
-                    dueSoon.take(12).forEach { Text("• ${it.label} (${Format.minutes(it.minutes)})", style = MaterialTheme.typography.bodySmall) }
-                    if (dueSoon.size > 12) Text("and ${dueSoon.size - 12} more", style = MaterialTheme.typography.bodySmall)
+                    Text("While anything is planned for today, blocking is strict. Today:", style = MaterialTheme.typography.bodyMedium)
+                    today.take(12).forEach { Text("• ${it.label} (${Format.minutes(it.minutes)})", style = MaterialTheme.typography.bodySmall) }
+                    if (today.size > 12) Text("and ${today.size - 12} more", style = MaterialTheme.typography.bodySmall)
                 }
                 BlockPolicy.Reason.NoFreeTime -> Text(
-                    "Nothing is due soon, but there's no free time left today. Every $ratio minutes of work earns a minute; it's gone at midnight.",
+                    "Nothing is planned for today, but there's no free time left. Every $ratio minutes of work earns a minute; it's gone at midnight.",
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 BlockPolicy.Reason.Session -> Text("You started a focus session: blocked apps stay blocked until it ends.", style = MaterialTheme.typography.bodyMedium)

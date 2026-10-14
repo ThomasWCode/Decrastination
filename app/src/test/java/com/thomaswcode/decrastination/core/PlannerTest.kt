@@ -3,6 +3,7 @@ package com.thomaswcode.decrastination.core
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.Fixtures.LONDON
 import com.thomaswcode.decrastination.data.Settings
+import com.thomaswcode.decrastination.data.Window
 import com.thomaswcode.decrastination.sources.anki.AnkiRules
 import com.thomaswcode.decrastination.sources.powerplanner.ClassesResponse
 import com.thomaswcode.decrastination.sources.powerplanner.AgendaResponse
@@ -175,26 +176,28 @@ class PlannerTest {
     }
 
     @Test
-    fun `later deadlines sit on their last usable day`() {
-        // Friday 08:30 → Thursday; the test Monday 11:00 → Sunday; PREP 2 Tuesday 08:00 → Monday;
-        // the call Wednesday 14 Oct 16:00 → Tuesday.
+    fun `later deadlines take the day with most room before them`() {
+        // Spread (PL-01): a single piece goes to the roomiest day of its window. Friday 08:30's last
+        // usable day is Thursday, the only one with time; the test Monday 11:00 gets Saturday, the
+        // first of the weekend; PREP 2 (Tuesday 08:00) Sunday, Saturday having less now; the call
+        // (Wednesday 16:00) Saturday, roomier than any weekday still.
         assertTrue("Gefahren im Internet. Wie kann man sich schuetzen? Verbot?" in tonight.titlesOn("2026-10-08"))
-        assertEquals(listOf("Test"), tonight.titlesOn("2026-10-11"))
-        assertEquals(listOf("PREP 2"), tonight.titlesOn("2026-10-12"))
-        assertEquals(listOf("Call with a friend after school."), tonight.titlesOn("2026-10-13"))
+        assertEquals(listOf("Test", "Call with a friend after school."), tonight.titlesOn("2026-10-10"))
+        assertEquals(listOf("PREP 2"), tonight.titlesOn("2026-10-11"))
     }
 
     // --- The rules, one at a time. ---
 
     @Test
-    fun `a big task spreads one chunk per evening, backwards from its last usable day`() {
-        // 135 minutes due Monday 09:00: three 45s on Friday, Saturday and Sunday.
+    fun `a big task spreads over its window by each day's free time`() {
+        // 135 minutes due Monday 09:00, Thursday 17:00: three 45s where its shares of the window's
+        // time fall, Thursday's 300 minutes, Friday's 315 and the weekend's 840 each: Friday,
+        // Saturday and Sunday.
         val plan = plan(listOf(task("big", Fixtures.at("2026-10-12T09:00"), effort = 135)), "2026-10-08T17:00")
         assertEquals(listOf("2026-10-09", "2026-10-10", "2026-10-11").map(LocalDate::parse), plan.dayOf("big"))
         assertEquals(listOf(1, 2, 3), plan.chunksOf("teams:big").map { it.part })
-        // Its first evening is tomorrow, so it's already due soon: spreading is what makes a
-        // Monday deadline press on Thursday.
-        assertTrue(plan.pressure)
+        // Nothing of it is today's, so today isn't strict for it: pressure is today's bucket alone.
+        assertFalse(plan.pressure)
         assertEquals(listOf("part 1 of 3"), plan.dueSoon.map { it.step })
     }
 
@@ -229,8 +232,9 @@ class PlannerTest {
         )
         val plan = plan(listOf(task("e", dueAt = null, steps = steps)), "2026-10-08T17:00")
         fun dayOf(step: String) = plan.buckets.first { b -> b.chunks.any { it.step == step } }.date
-        assertTrue(dayOf("Draft") < dayOf("Final"), "draft ${dayOf("Draft")}, final ${dayOf("Final")}")
-        assertEquals(listOf(1, 2), plan.chunksOf("teams:e").map { it.part }.sorted())
+        // Saturday holds both now (840 minutes): the draft first in the day, as it's first in order.
+        assertTrue(dayOf("Draft") <= dayOf("Final"), "draft ${dayOf("Draft")}, final ${dayOf("Final")}")
+        assertEquals(listOf(1, 2), plan.chunksOf("teams:e").map { it.part })
         assertEquals(setOf(2), plan.chunksOf("teams:e").map { it.parts }.toSet())
     }
 
@@ -572,13 +576,14 @@ class PlannerTest {
     @Test
     fun `work whose last usable day comes first is placed first`() {
         // The essay is due later but has a three-day margin, so its last usable day (Wednesday)
-        // comes before the other's (Friday): it gets Wednesday, its own last usable day.
+        // comes before the other's (Friday): it claims its days first, Tuesday the earlier of its
+        // two equal evenings, and the form's three pieces fit after it.
         val margins = Calibration(marginDays = mapOf(Kind.Admin to 0, Kind.Homework to 3))
         val admin = task("form", Fixtures.at("2026-10-16T23:00"), kind = Kind.Admin, steps = listOf(SubStep("a", 310), SubStep("b", 310), SubStep("c", 310)))
         val essay = task("essay", Fixtures.at("2026-10-17T09:00"), steps = listOf(SubStep("all", 310)))
         val input = Planner.Input(listOf(admin, essay), Fixtures.at("2026-10-13T16:45"), LONDON, settings, calibration = margins)
         val plan = Planner.plan(input)
-        assertEquals(listOf(LocalDate.parse("2026-10-14")), plan.dayOf("essay"))
+        assertEquals(listOf(LocalDate.parse("2026-10-13")), plan.dayOf("essay"))
         assertTrue(plan.ordered.none { it.behind })
     }
 
@@ -631,14 +636,17 @@ class PlannerTest {
 
     @Test
     fun `with no margin, a morning deadline's own day is never usable`() {
+        // Due Sunday 09:00 with no margin, Friday 17:00, Saturday mostly taken: Sunday would be the
+        // roomiest day, but a morning deadline's own day isn't one to work on. Friday has most.
         val noMargin = Planner.Input(
-            listOf(task("t", Fixtures.at("2026-10-12T09:00"))),
-            Fixtures.at("2026-10-08T17:00"),
+            listOf(task("t", Fixtures.at("2026-10-11T09:00"))),
+            Fixtures.at("2026-10-09T17:00"),
             LONDON,
             settings,
             calibration = Calibration(marginDays = mapOf(Kind.Homework to 0)),
+            dayLoads = mapOf(LocalDate.parse("2026-10-10") to 600),
         )
-        assertEquals(LocalDate.parse("2026-10-11"), Planner.plan(noMargin).buckets.single { it.chunks.isNotEmpty() }.date)
+        assertEquals(LocalDate.parse("2026-10-09"), Planner.plan(noMargin).buckets.single { it.chunks.isNotEmpty() }.date)
     }
 
     @Test
@@ -704,6 +712,90 @@ class PlannerTest {
         val steps = listOf(SubStep("Practice", 30, done = true), SubStep("Practice", 30), SubStep("Write up", 20))
         val chunks = plan(listOf(task("t", Fixtures.at("2026-10-20T09:00"), steps = steps)), "2026-10-08T17:00").chunksOf("teams:t")
         assertEquals(listOf(1, 2), chunks.map { it.stepIndex })
+    }
+
+
+    // --- Spreading later work over its window (PL-01) ---
+
+    /** Every day 17:00 to 21:00, weekday or weekend: four hours, so shares are even. */
+    private val evenings = Settings(weekdayHours = Window(17 * 60, 21 * 60), weekendHours = Window(17 * 60, 21 * 60), boxMin = 30)
+
+    private fun spread(tasks: List<TaskItem>, at: String, busy: List<Busy> = emptyList(), with: Settings = evenings) =
+        Planner.plan(Planner.Input(tasks, Fixtures.at(at), LONDON, with, busy = busy))
+
+    @Test
+    fun `a task due in 12 days with 6 pieces gets one every second day, not the last six evenings`() {
+        // Monday 08:00, due Saturday week (its last usable day the Thursday before): twelve evenings alike.
+        val plan = spread(listOf(task("booklet", Fixtures.at("2026-10-24T23:59"), effort = 180)), "2026-10-12T08:00")
+        assertEquals(listOf("2026-10-12", "2026-10-14", "2026-10-16", "2026-10-18", "2026-10-20", "2026-10-22").map(LocalDate::parse), plan.dayOf("booklet"))
+        assertTrue(plan.ordered.none { it.behind })
+    }
+
+    @Test
+    fun `spreading follows free time, a day with a busy evening takes a smaller share`() {
+        // Four pieces over four evenings, the last two three-quarters taken: they hold one piece between them.
+        val busy = listOf("2026-10-14", "2026-10-15").map { Busy(Fixtures.at("${it}T17:00"), Fixtures.at("${it}T20:00")) }
+        val plan = spread(listOf(task("t", Fixtures.at("2026-10-16T23:59"), effort = 120)), "2026-10-12T08:00", busy)
+        val days = plan.dayOf("t")
+        assertEquals(4, plan.chunksOf("teams:t").size)
+        assertEquals(1, days.count { it >= LocalDate.parse("2026-10-14") })
+        assertEquals(LocalDate.parse("2026-10-14"), days.last())
+    }
+
+    @Test
+    fun `a task with a three-week window is touched at least once a week`() {
+        // Two pieces over 21 even evenings: shares would fall ten days apart; the second comes within the week.
+        val plan = spread(listOf(task("t", Fixtures.at("2026-11-02T23:59"), effort = 60)), "2026-10-12T08:00")
+        val days = plan.dayOf("t")
+        assertEquals(2, days.size)
+        assertTrue(java.time.temporal.ChronoUnit.DAYS.between(days[0], days[1]) in 1..7, "$days")
+    }
+
+    @Test
+    fun `revision pieces are at least a day apart`() {
+        // Saturday 08:00, three pieces due Tuesday night: Saturday's and Sunday's 840 minutes would
+        // take two on Sunday; revision goes on to Monday instead.
+        fun pieces(kind: Kind) = plan(listOf(task("t", Fixtures.at("2026-10-20T23:59"), effort = 135, kind = kind)), "2026-10-17T08:00").let { p ->
+            p.buckets.flatMap { b -> b.chunks.filter { it.taskId == "teams:t" }.map { b.date.toString() } }
+        }
+        assertEquals(listOf("2026-10-17", "2026-10-18", "2026-10-18"), pieces(Kind.Homework))
+        assertEquals(listOf("2026-10-17", "2026-10-18", "2026-10-19"), pieces(Kind.Revision))
+    }
+
+    @Test
+    fun `a single piece goes to the day with most room, the earlier on a tie`() {
+        // Thursday 17:00, due Tuesday 08:30: Saturday and Sunday tie at 840 minutes, Saturday first.
+        val due = Fixtures.at("2026-10-13T08:30")
+        assertEquals(listOf(LocalDate.parse("2026-10-10")), plan(listOf(task("t", due)), "2026-10-08T17:00").dayOf("t"))
+        // Saturday mostly taken: Sunday.
+        assertEquals(listOf(LocalDate.parse("2026-10-11")), plan(listOf(task("t", due)), "2026-10-08T17:00", loads = mapOf(LocalDate.parse("2026-10-10") to 600)).dayOf("t"))
+    }
+
+    @Test
+    fun `work due tomorrow is still placed first and takes today's time`() {
+        // Thursday 17:00: tomorrow night's essay is today's (its last usable day), before any spreading.
+        val essay = task("essay", Fixtures.at("2026-10-09T23:59"), effort = 60)
+        val far = task("far", Fixtures.at("2026-10-30T23:59"), effort = 300)
+        val plan = plan(listOf(far, essay), "2026-10-08T17:00")
+        assertEquals(listOf(LocalDate.parse("2026-10-08")), plan.dayOf("essay"))
+        assertEquals("teams:essay", plan.todayBucket!!.chunks.first().taskId)
+        assertTrue(plan.chunksOf("teams:essay").all { it.dueSoon })
+    }
+
+    @Test
+    fun `undated work still fills from its soft week backwards`() {
+        // First seen now: its soft deadline is a week on (15 Oct), and it sits on its last usable day.
+        val email = task("email", null, effort = 15, kind = Kind.Admin, firstSeen = Fixtures.at("2026-10-08T17:00"))
+        assertEquals(listOf(LocalDate.parse("2026-10-14")), plan(listOf(email), "2026-10-08T17:00").dayOf("email"))
+    }
+
+    @Test
+    fun `today's bucket alone is pressure`() {
+        // Due Saturday morning, Thursday 22:10: tonight's hours are gone, so it's Friday's, not today's.
+        val tomorrow = plan(listOf(task("t", Fixtures.at("2026-10-10T09:00"), effort = 30)), "2026-10-08T22:10")
+        assertTrue(tomorrow.todayBucket!!.chunks.isEmpty() && tomorrow.tomorrowBucket!!.chunks.isNotEmpty())
+        assertFalse(tomorrow.pressure)
+        assertTrue(plan(listOf(task("t", Fixtures.at("2026-10-08T21:00"), effort = 30)), "2026-10-08T17:00").pressure)
     }
 
     // --- What's left out, and why (IMP-P1-002) ---

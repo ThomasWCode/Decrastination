@@ -25,10 +25,14 @@ import kotlin.math.roundToInt
  *    today's time before work already past its deadline. A task with some brings its overdue
  *    blocks along, ahead of it in their order. Then overdue work goes straight into today, oldest
  *    deadline first.
- * 4. Everything else, in deadline order, is placed backwards from its last usable day (the
- *    deadline's day less the safety margin; a morning deadline's day is never usable), one chunk
- *    per day while days allow, so a big task spreads over several evenings. A chunk that fits
- *    nowhere before its deadline goes into today, flagged behind.
+ * 4. Everything else with a deadline, its last usable day first (PL-01), is spread over its window,
+ *    from the first day it can be done to its last usable day (the deadline's day less the safety
+ *    margin; a morning deadline's day is never usable): each piece where its share of the window's
+ *    free time falls, in order, within a week of the one before over a window of a week or more,
+ *    revision a day apart, a single piece on the day with most room, and never on a day past which
+ *    the pieces after it can't follow. What its window can't hold in order is placed backwards from
+ *    its last usable day, as all dated work once was; a chunk that fits nowhere before its deadline
+ *    goes into today, flagged behind.
  * 5. Undated work gets a soft deadline a week after it was first seen, and is placed after
  *    everything with a real deadline, so it fills spare time rather than displacing homework; at
  *    most `softMinPerDay` of it a day, so the whole inbox, first seen at once, spreads over the week.
@@ -41,8 +45,9 @@ import kotlin.math.roundToInt
  *    than the most any day its task can go on holds, so a task isn't left off for want of a day
  *    big enough for one box.
  *
- * Placing backwards means today's bucket holds exactly what must happen today for every deadline
- * to be met; placing everything early would put every task in today and the block would never lift.
+ * Spreading means today's bucket holds a fair share of every task's days, not the whole of a far
+ * task's work in its last ones; placing everything early would put every task in today and the
+ * block, which reads today's bucket alone, would never lift.
  */
 object Planner {
 
@@ -429,20 +434,128 @@ object Planner {
             note(item, assigned)
         }
 
+        // Dated work not due by tomorrow (PL-01): its pieces spread over its window, from the first day
+        // it can be done to its last usable day, each where its share of the window's free time falls,
+        // so a far task moves on every week rather than arriving at once at its end. A single piece
+        // goes to the day with most room (the earlier of two). In order, never before the piece before
+        // it; and where there's room, within a week of it over a window of a week or more (the
+        // minimum touch, Q-32), and a day after it for revision (spaced practice). A day without
+        // room passes its piece to the nearest that has some, earlier first, but never to one past
+        // which the pieces after it can't follow. Where the window can't hold the task in order at
+        // all, it's placed backwards as before, behind where it must be.
+        fun placeSpread(item: Item) {
+            val earliest = maxOf(firstDay(item), floorOf(item) ?: today)
+            val last = maxOf(earliest, minOf(horizon, lastUsableDay(item, input), ceilingOf(item) ?: horizon))
+            val window = generateSequence(earliest) { it.plusDays(1) }.takeWhile { it <= last }.toList()
+            val n = item.chunks.size
+            // Each day's share: the free time it has left, none where a limit you set is reached.
+            val weight = window.map { day -> if (capped(day, MIN_CHUNK)) 0 else free.getValue(day).coerceAtLeast(0) }
+            val total = weight.sum()
+            val perDay = item.task.stepsPerDay
+            val spaced = item.task.kind == Kind.Revision || item.task.enrichment?.testDate != null
+            val weekly = window.size >= 7
+            val assigned = arrayOfNulls<LocalDate>(n)
+            fun fits(day: Int, i: Int) =
+                room(item, window[day]) >= item.chunks[i].minutes && (perDay == null || countOn(assigned, window[day]) < perDay)
+            // Where piece [i]'s share falls: the first day whose running total of free time reaches it.
+            fun target(i: Int): Int {
+                if (n == 1) return weight.indices.maxByOrNull { weight[it] } ?: 0
+                if (total == 0) return i * window.size / n
+                val goal = (i + 0.5) / n * total
+                var sum = 0
+                for (day in window.indices) {
+                    sum += weight[day]
+                    if (sum >= goal) return day
+                }
+                return window.lastIndex
+            }
+            // Whether pieces [i] on can still follow in order from day [from], each on the first day
+            // with room for it: tried by placing them, then taken back.
+            fun restFollows(from: Int, i: Int): Boolean {
+                val tried = mutableListOf<Pair<Int, Int>>()
+                var day = from
+                var follows = true
+                for (k in i until n) {
+                    while (day <= window.lastIndex && !fits(day, k)) day++
+                    if (day > window.lastIndex) {
+                        follows = false
+                        break
+                    }
+                    assigned[k] = window[day]
+                    take(item, window[day], item.chunks[k].minutes)
+                    tried += day to k
+                }
+                tried.forEach { (d, k) ->
+                    give(item, window[d], item.chunks[k].minutes)
+                    assigned[k] = null
+                }
+                return follows
+            }
+            // Whether piece [i] can go on [day] with the pieces after it still to follow in order: a
+            // big last piece that only a weekend holds keeps the ones before it from passing it.
+            fun usable(day: Int, i: Int): Boolean {
+                if (!fits(day, i)) return false
+                assigned[i] = window[day]
+                take(item, window[day], item.chunks[i].minutes)
+                val follows = restFollows(day, i + 1)
+                give(item, window[day], item.chunks[i].minutes)
+                assigned[i] = null
+                return follows
+            }
+            // The nearest usable day to [at] for piece [i], between [lo] and [hi], earlier first.
+            fun nearest(at: Int, lo: Int, hi: Int, i: Int): Int? {
+                if (lo > hi) return null
+                val start = at.coerceIn(lo, hi)
+                for (step in 0..(hi - lo)) {
+                    val earlier = start - step
+                    if (earlier >= lo && usable(earlier, i)) return earlier
+                    val later = start + step
+                    if (step > 0 && later <= hi && usable(later, i)) return later
+                }
+                return null
+            }
+            var previous = -1
+            for (i in 0 until n) {
+                val from = maxOf(previous, 0)
+                val apart = if (spaced && previous >= 0) previous + 1 else from
+                val within = if (weekly && previous >= 0) minOf(window.lastIndex, previous + 7) else window.lastIndex
+                val at = target(i)
+                // The gap and the week kept where there's room; then the week given up; then the gap.
+                val day = nearest(minOf(at, within), apart, within, i) ?: nearest(at, apart, window.lastIndex, i) ?: nearest(at, from, window.lastIndex, i)
+                if (day == null) {
+                    // No day for it with the rest to follow: the window can't hold the task in order
+                    // (only ever its first piece, as each piece's day was taken with the rest able to follow).
+                    for (k in 0 until i) give(item, assigned[k]!!, item.chunks[k].minutes)
+                    placeBack(item)
+                    return
+                }
+                assigned[i] = window[day]
+                take(item, window[day], item.chunks[i].minutes)
+                previous = day
+            }
+            // Behind only where it can't start before its last usable day is past (a start after it).
+            val dueBy = lastUsableDay(item, input)
+            item.chunks.indices.forEach { i -> placed.getValue(assigned[i]!!) += chunk(item, i, behind = assigned[i]!! > dueBy) }
+            note(item, assigned)
+        }
+
         // Real deadlines before undated work, then the oldest first (work due soon by its task's
         // soonest deadline to come, a task's own runs in their order).
         val byDeadline = compareBy<Item>({ it.soft }, { rankedBy(it) }, { it.deadline })
-        // Earliest last usable day first, so the most constrained work reserves its days first (a
+        // Earliest last usable day first, so the most constrained work claims its days first (a
         // later deadline with a bigger safety margin can be the more urgent).
-        // A task's later runs of blocks first among equals: placed backwards, they leave the earlier
-        // runs the days before them, so the order holds.
+        // A task's later runs of blocks first among equals: they leave the earlier runs the days
+        // before them, so the order holds.
         val order = compareBy<Item>({ it.soft }, { lastUsableDay(it, input) }, { it.deadline }, { if (it.windowed) it.task.id else "" }, { -it.run })
         // Work due soon takes today's time first: what's due by today (a soon task's overdue blocks
-        // among it), then what's due tomorrow; then what's overdue; then the rest.
+        // among it), then what's due tomorrow; then what's overdue; then dated work spread over its
+        // window; then undated work, backwards from its soft week.
         urgent.filter(::soon).sortedWith(byDeadline).forEach(::placeNow)
         later.filter(::soon).sortedWith(order).forEach(::placeBack)
         urgent.filterNot(::soon).sortedWith(byDeadline).forEach(::placeNow)
-        later.filterNot(::soon).sortedWith(order).forEach(::placeBack)
+        val (undated, dated) = later.filterNot(::soon).partition { it.soft }
+        dated.sortedWith(order).forEach(::placeSpread)
+        undated.sortedWith(order).forEach(::placeBack)
 
         val buckets = days.map { DayBucket(it, capacity.getValue(it), placed.getValue(it).sortedWith(ORDER)) }
         // A task's runs left out for the same reason are one line: their pieces and minutes together, the soonest opening.

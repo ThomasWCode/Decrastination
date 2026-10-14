@@ -102,6 +102,8 @@ class PlannerPropertyTest {
         checkCompleteness(seed, plan, input)
         checkDeterminism(seed, plan, input)
         checkStability(seed, plan, input)
+        checkMinimumTouch(seed, plan, input)
+        checkRevisionGap(seed, plan, input)
     }
 
     /** No day holds more than its time, but for overdue and due-today work, which may, and work flagged behind. */
@@ -177,6 +179,65 @@ class PlannerPropertyTest {
         val next = after(Planner.plan(later))
         for ((piece, day) in before) {
             assertTrue(next[piece] == day, "seed=$seed: ${piece.first} part ${piece.second} moved from $day to ${next[piece]} as a minute passed")
+        }
+    }
+
+    /**
+     * The days a task spread over its window (PL-01) had, and its pieces by day: dated work due after
+     * tomorrow, all of it placed and none of it behind (where the window couldn't hold it, it's placed
+     * backwards instead, and may leave some out).
+     */
+    private class Spread(val task: TaskItem, val window: List<LocalDate>, val pieces: List<Pair<LocalDate, Chunk>>)
+
+    private fun spreads(plan: Plan, input: Planner.Input): List<Spread> {
+        val zone = input.zone
+        val today = Planner.date(input.now, zone)
+        val placed = plan.buckets.flatMap { b -> b.chunks.map { b.date to it } }.groupBy { it.second.taskId }
+        val leftOut = plan.unplanned.map { it.taskId }.toSet()
+        return input.tasks.mapNotNull { task ->
+            val due = task.dueAt?.takeIf { task.id !in leftOut } ?: return@mapNotNull null
+            val pieces = placed[task.id].orEmpty()
+            if (pieces.isEmpty() || pieces.any { (_, c) -> c.soft || c.behind || c.overdue || c.dueToday || c.dueSoon }) return@mapNotNull null
+            val first = task.notBefore?.takeIf { it > input.now }?.let { maxOf(today, Planner.date(it, zone)) } ?: today
+            val dueAt = java.time.Instant.ofEpochMilli(due).atZone(zone)
+            val margin = input.settings.marginDays.toLong()
+            val last = dueAt.toLocalDate().minusDays(margin).let { if (margin == 0L && dueAt.toLocalTime() < LocalTime.NOON) it.minusDays(1) else it }
+            Spread(task, generateSequence(first) { it.plusDays(1) }.takeWhile { it <= last }.toList(), pieces.sortedWith(compareBy({ it.first }, { it.second.part })))
+        }
+    }
+
+    /** Whether a day had room left for [chunk] of [task] once all was planned: then it had at its turn too. */
+    private fun hadRoom(plan: Plan, input: Planner.Input, task: TaskItem, day: LocalDate, chunk: Chunk): Boolean {
+        val bucket = plan.bucket(day) ?: return false
+        if (task.notBefore?.let { it > input.now && Planner.date(it, input.zone) == day } == true) return false
+        if (task.stepsPerDay?.let { limit -> bucket.chunks.count { it.taskId == task.id } >= limit } == true) return false
+        return bucket.capacityMin - bucket.plannedMin >= chunk.minutes
+    }
+
+    /** Over a window of a week or more, no gap of more than a week between pieces where a day within it had room. */
+    private fun checkMinimumTouch(seed: Long, plan: Plan, input: Planner.Input) {
+        for (spread in spreads(plan, input).filter { it.window.size >= 7 }) {
+            for (i in 1 until spread.pieces.size) {
+                val (before, _) = spread.pieces[i - 1]
+                val (day, chunk) = spread.pieces[i]
+                if (java.time.temporal.ChronoUnit.DAYS.between(before, day) <= 7) continue
+                val week = generateSequence(before.plusDays(1)) { it.plusDays(1) }.take(7).filter { it in spread.window }
+                assertTrue(week.none { hadRoom(plan, input, spread.task, it, chunk) }, "seed=$seed: ${spread.task.id} part ${chunk.part} on $day, more than a week after $before, with room in between")
+            }
+        }
+    }
+
+    /**
+     * Revision's last piece isn't on the day of the one before where a later day in its window had
+     * room. Only the last: an earlier piece may rightly keep to its day so the ones after it can follow.
+     */
+    private fun checkRevisionGap(seed: Long, plan: Plan, input: Planner.Input) {
+        for (spread in spreads(plan, input).filter { it.task.kind == Kind.Revision && it.pieces.size >= 2 }) {
+            val (before, _) = spread.pieces[spread.pieces.lastIndex - 1]
+            val (day, chunk) = spread.pieces.last()
+            if (day != before) continue
+            val later = spread.window.filter { it > day }
+            assertTrue(later.none { hadRoom(plan, input, spread.task, it, chunk) }, "seed=$seed: ${spread.task.id} part ${chunk.part} on $day with the piece before it, a later day having room")
         }
     }
 
