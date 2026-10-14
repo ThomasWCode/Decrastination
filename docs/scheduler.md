@@ -112,13 +112,13 @@ Everything the app learns is a number you can see in Settings, and every paramet
   - The rules' part always runs: the calibration learned afresh, what changed in words, and the capacity advice. The advice no longer promises that fewer hours means less behind (it means more, as less fits before each deadline): it says the hours you really have give plans that can be done, and show what won't fit early enough to act on.
   - With Claude on, the week also goes to the model (`enrich/ClaudeReviewer.kt`). It writes a note of up to five lines and may change four settings within bounds: box length 25–60 minutes, safety margin 0–3 days, undated work 30–120 minutes a day, and work minutes per free minute 2–5. It can't touch blocking, protection or hours. Since 1.8.0 its changes apply at once, armed or not (your call, 11 Oct): `AppGraph.applyReviewChanges` lays them over what's been asked for, a change of yours waiting for one of those four settings is replaced by it, and every other waiting change keeps its wait.
 - **The morning briefing** (`learn/Briefing.kt`, Q13): at 07:00 on school days and 08:30 at weekends, today's plan in a notification. An unlock within 90 minutes of it brings the Teams sync offer. The times are in Settings.
-- **The calendar** (`learn/CalendarTime.kt`, `learn/EventJudge.kt`, Q7) reads the next fortnight's events and judges them one by one:
+- **The calendar** (`learn/CalendarTime.kt`, `learn/EventJudge.kt`, Q7) reads the events as far ahead as the plan reaches (90 days since review v2, DX-14; the fortnight before) and judges them one by one:
   - a declined event is left out;
   - an event marked free, one in a holidays or birthdays calendar, or travel (a train, a coach, a flight) is time you can work;
   - a timed event under four hours takes its slot;
-  - an all-day event, or a timed one of four hours or more, is asked about once in the week before it, never in quiet hours: *Free*, *Busy*, or *A few hours* (three hours of that day, at no set time).
+  - an all-day event, or a timed one of four hours or more, is asked about once in the week before it, never in quiet hours: *Free*, *Busy*, or *A few hours* (three hours of that day, at no set time). Until it's within that week (DX-14), it counts as a few hours of its day, so a trip in the plan's third week takes room out of the spread before it's asked about.
 
-  Your answer holds for every event of that name, and the calendar is read again whenever it changes.
+  Your answer holds for every event of that name, and the calendar is read again whenever it changes. The chat and your instructions are still told of the fortnight's events only.
 - **The photo check** (`enrich/PhotoChecker.kt`, `block/PhotoChecks.kt`, Q16): once Claude is on, *Photo check* on the block screen (or, since 1.8.0, on the Plan) photographs written work for the piece shown.
   - The photo is sent shrunk to 1 568 pixels on its long side.
   - A "done" with confidence 0.7 or more ticks the piece as a finished session would, earning its share of free time.

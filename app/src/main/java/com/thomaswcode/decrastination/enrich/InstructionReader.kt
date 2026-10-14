@@ -40,6 +40,9 @@ object InstructionPrompts {
     /** The open tasks and events listed for it to choose from, at most. */
     const val MAX_TASKS = 80
     const val MAX_EVENTS = 60
+
+    /** The events listed are the fortnight's: the calendar's read further, as far as the plan reaches (DX-14). */
+    const val EVENTS_AHEAD_MS = 14 * 24 * 3_600_000L
     private const val MAX_DETAIL = 1_500
 
     /** A task's or an event's title, as far as it's read: a whole note can sit in an event's title. */
@@ -134,8 +137,9 @@ object InstructionPrompts {
         }
         appendLine()
         appendLine("Calendar events in the next fortnight (eventKey | title | when):")
-        if (events.isEmpty()) appendLine("(none)")
-        events.sortedBy { it.start }.take(MAX_EVENTS).forEach { e ->
+        val fortnight = events.filter { it.start < now + EVENTS_AHEAD_MS }
+        if (fortnight.isEmpty()) appendLine("(none)")
+        fortnight.sortedBy { it.start }.take(MAX_EVENTS).forEach { e ->
             val time = if (e.allDay) "all day " + Instant.ofEpochMilli(e.start).atZone(ZoneId.of("UTC")).toLocalDate().format(DAY) else "${at(e.start)} to ${at(e.end)}"
             appendLine("- ${EventJudge.key(e)} | ${e.title.take(MAX_TITLE)} | $time")
         }

@@ -28,15 +28,16 @@ The implementation of `docs/review_v2_improvements/impl/` on branch `v3`. Delete
 - PL-07 each piece says why it's on its day: eeb92c3. 50 000 property seeds pass (28 s).
 - AI-12 the Email job says whether its deadline is the email's own: 632e591.
 - PL-14 only a real deadline is overdue; the app's dates move on: 2c30e87. 50 000 property seeds pass (25 s), with past dates and quoted and guessed email dates now drawn.
-- PL-06 a learned yield per kind of day: this commit. 50 000 property seeds pass (24 s), with yields drawn.
+- PL-06 a learned yield per kind of day: 0be81c0. 50 000 property seeds pass (24 s), with yields drawn.
+- DX-14 the calendar read to the plan's reach: this commit.
 
 ## Current
 
-Phase 2: DX-14 next.
+Phase 2: PL-02 next.
 
 ## Outstanding
 
-- Phase 2: DX-14, PL-02; an eval round after AI-12 (it also covers phase 1's last prompt wording); the phone; the docs; the pull request.
+- Phase 2: PL-02; an eval round after AI-12 (it also covers phase 1's last prompt wording); the phone; the docs; the pull request.
 - Phases 3 to 8.
 
 ## For the owner (deferred: you weren't live)
@@ -69,6 +70,7 @@ Phase 2: DX-14 next.
 - **PL-14: email dates on the phone are plans until their emails are read again.** Readings made before AI-12 have no `deadlineQuoted`, so none of their dates is real; phase 8's prompt version reads them again, and until then `enrich-task` does it by hand (done for the dated ones at the phase's phone check).
 - **PL-14: the property test draws more.** Past due dates (15 %) and Gmail readings quoted or not, so "overdue only on a real deadline gone by" (`checkOverdue`) has work to check; the stability check leaves out a minute in which a plan's date passes (its work is planned again then, by design).
 - **PL-06: what a yield rests on is kept, and an old day's kind is its date's.** Stats' "a line per yield with the day count" needs the count, so `Calibration.yieldDays` keeps it beside `yields`, as `timed` does for the multipliers. Day records from before have no kind; their dates tell it (a weekend or not), so the phone's days so far count. `Calibrator.learn` takes today's date, as the yields count back from it. The phase file's example "about 45 %" can't happen: yields are kept to a half or more.
+- **DX-14: the chat and instructions still see the fortnight.** The phase file says nothing else reads the events by range, but the chat's context and the instruction reader list "calendar events in the next fortnight" from what's read; read to 90 days, they'd have listed months of events under that heading (and paid for them). Both now list the fortnight's. `EventJudge.time` takes `askUntil` only: the phase file's `now` beside it had no use.
 - **No version bump.** The plan names none; the build stays `2.0.0` (code 16) until the owner says otherwise. Installs are over the top with `-r`.
 - **A Windows-only test flake, left alone.** `PowerPlannerSourceTest` (and once `StoresTest`) sometimes fails on this PC with `AccessDeniedException` renaming `secrets.bin.tmp` in `%TEMP%` (something scanning the file mid-rename; 2 runs in about 10); re-runs pass, and neither CI's Linux nor the phone can see it. Not this plan's to fix.
 - **Prompt changes before phase 8's `Prompts.VERSION`:** (recorded here until phase 8 adds the version) the Email job's system prompt and schema changed in AI-02, DX-06 and AI-04, and again with the round 2 fixes; in phase 2, AI-12 (`deadlineQuoted`, quick actions undated).

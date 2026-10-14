@@ -15,6 +15,7 @@ import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.R
 import com.thomaswcode.decrastination.block.BlockPolicy
 import com.thomaswcode.decrastination.core.Instructions
+import com.thomaswcode.decrastination.core.Planner
 import com.thomaswcode.decrastination.notify.Channels
 import com.thomaswcode.decrastination.notify.Notify
 import com.thomaswcode.decrastination.widget.WidgetUpdater
@@ -40,7 +41,8 @@ object CalendarTime {
     const val EXTRA_ANSWER = "answer"
     private const val BASE_ID = 4200
     private const val DAY_MS = 24 * 3_600_000L
-    private const val LOOK_AHEAD_MS = 14 * DAY_MS
+    /** As far as the plan reaches (DX-14), so a trip in its third week takes its day's hours out of the spread. */
+    private const val LOOK_AHEAD_MS = Planner.MAX_HORIZON_DAYS * DAY_MS
     private const val ASK_AHEAD_MS = 7 * DAY_MS
 
     fun allowed(context: Context): Boolean = context.checkSelfPermission(PERMISSION) == PackageManager.PERMISSION_GRANTED
@@ -114,14 +116,14 @@ object CalendarTime {
             .getOrNull() ?: run {
             // Not read this time: the events last read, judged again with the answers as they are
             // now, so an instruction applied or taken back counts all the same.
-            graph.calendarTime = EventJudge.time(graph.calendarTime.events, graph.runtime.value.eventAnswers + yours, graph.clock.zone())
+            graph.calendarTime = EventJudge.time(graph.calendarTime.events, graph.runtime.value.eventAnswers + yours, graph.clock.zone(), askUntil = now + ASK_AHEAD_MS)
             return
         }
         yours.keys.forEach { cancelQuestion(context, it) }
         // Not counted as asked: taken back, the instruction leaves it to be asked again.
         if (graph.runtime.value.eventsAsked.any { it in yours }) graph.runtime.update { it.copy(eventsAsked = it.eventsAsked - yours.keys) }
         val answers = graph.runtime.value.eventAnswers + yours
-        val time = EventJudge.time(events, answers, graph.clock.zone())
+        val time = EventJudge.time(events, answers, graph.clock.zone(), askUntil = now + ASK_AHEAD_MS)
         graph.calendarTime = time
         // Not at night: they're asked at the first look after quiet hours. Nor while the question
         // couldn't be seen (notifications off): it's asked once it can be, not marked asked unseen.

@@ -183,8 +183,10 @@ object ChatPrompts {
         }
         appendLine()
         appendLine("Calendar events in the next fortnight (eventKey | title | when):")
-        if (events.isEmpty()) appendLine("(none)")
-        events.sortedBy { it.start }.take(InstructionPrompts.MAX_EVENTS).forEach { e ->
+        // The calendar's read as far as the plan reaches (DX-14); the chat is told of the fortnight's.
+        val fortnight = events.filter { it.start < now + InstructionPrompts.EVENTS_AHEAD_MS }
+        if (fortnight.isEmpty()) appendLine("(none)")
+        fortnight.sortedBy { it.start }.take(InstructionPrompts.MAX_EVENTS).forEach { e ->
             val time = if (e.allDay) "all day " + Instant.ofEpochMilli(e.start).atZone(ZoneId.of("UTC")).toLocalDate().format(DAY) else "${at(e.start)} to ${at(e.end)}"
             appendLine("- ${EventJudge.key(e)} | ${e.title.take(MAX_TITLE)} | $time")
         }
