@@ -5,15 +5,16 @@ The implementation of `docs/review_v2_improvements/impl/` on branch `v3`. Delete
 ## Done
 
 - AR-04 property tests for the planner (`PlannerPropertyTest`): 825256e. 300 seeds in 1.3 s; 50 000 pass locally (21 s).
-- DX-03, DX-07 starred conversations from All Mail, known ones not fetched again: this commit. Unit-tested against a scripted IMAP server; the phone check is with the phase's install.
+- DX-03, DX-07 starred conversations from All Mail, known ones not fetched again: 0a51652. Unit-tested against a scripted IMAP server; the phone check is with the phase's install.
+- AI-02 the Email job without Info: this commit. The eval set's three Info cases (dell, linkedin, talk-summary) are retired; 8 of the other 10 pass on the old answers (the two known findings: german-assess's dropped split, talk-note's old Info answer); a fresh round follows AI-04.
 
 ## Current
 
-Phase 1 (`impl/phase-1-tests-and-email.md`): AI-02 next.
+Phase 1 (`impl/phase-1-tests-and-email.md`): DX-06 next.
 
 ## Outstanding
 
-- Phase 1: AI-02, DX-06, DX-01, AI-04; then the phone checks, the docs, the pull request.
+- Phase 1: DX-06, DX-01, AI-04; an eval round on the new Email prompt; then the phone checks, the docs, the pull request.
 - Phases 2 to 8.
 
 ## Decisions made

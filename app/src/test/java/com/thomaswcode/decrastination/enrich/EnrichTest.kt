@@ -173,13 +173,22 @@ class AnswersTest {
 
     @Test
     fun `what's out of range is dropped rather than trusted`() {
-        val e = parse(Enrichments.Job.Email, """{"kind":"Homework","actionableFrom":"1999-01-01","deadline":"2031-01-01T09:00","effortMin":5000,"nextStep":"  "}""")!!
-        assertNull(e.kind)
+        val e = parse(Enrichments.Job.Email, """{"kind":"Admin","actionableFrom":"1999-01-01","deadline":"2031-01-01T09:00","effortMin":5000,"nextStep":"  "}""")!!
+        assertEquals(Kind.Admin, e.kind)
         assertNull(e.actionableFrom)
         assertNull(e.deadline)
         assertNull(e.effortMin)
         assertNull(e.nextStep)
         assertNull(parse(Enrichments.Job.Email, "not json"))
+    }
+
+    @Test
+    fun `a starred email read as only to read, or as any kind but Admin or Event, is no answer`() {
+        // Starred, it's always something to do (AI-02): an Info answer is unreadable, and the rules stand.
+        assertNull(parse(Enrichments.Job.Email, """{"kind":"Info","actionableFrom":null,"deadline":null,"effortMin":2,"nextStep":"Read and archive","blocks":[]}"""))
+        assertNull(parse(Enrichments.Job.Email, """{"kind":"Homework","actionableFrom":null,"deadline":null,"effortMin":20,"nextStep":"Do it","blocks":[]}"""))
+        assertEquals(Kind.Event, parse(Enrichments.Job.Email, """{"kind":"Event","actionableFrom":null,"deadline":"2026-10-17T10:00","effortMin":5,"nextStep":"Go to the open day","blocks":[]}""")!!.kind)
+        assertEquals(listOf("Admin", "Event"), Prompts.schemaJson(Enrichments.Job.Email).jsonObject["properties"]!!.jsonObject["kind"]!!.jsonObject["enum"]!!.jsonArray.map { it.jsonPrimitive.content })
     }
 
     @Test
@@ -270,7 +279,7 @@ class AnswersTest {
 
     @Test
     fun `an email can come back in dated blocks, and is then something to do`() {
-        val calendar = """{"kind":"Info","actionableFrom":null,"deadline":null,"effortMin":90,"nextStep":"Note the dates","blocks":[{"title":"Apply to STEM Potential","minutes":60,"from":"2026-10-30","due":"2026-11-20"},{"title":"Apply to RAL","minutes":30,"from":null,"due":"2027-01-15"}]}"""
+        val calendar = """{"kind":"Event","actionableFrom":null,"deadline":null,"effortMin":90,"nextStep":"Note the dates","blocks":[{"title":"Apply to STEM Potential","minutes":60,"from":"2026-10-30","due":"2026-11-20"},{"title":"Apply to RAL","minutes":30,"from":null,"due":"2027-01-15"}]}"""
         val e = parse(Enrichments.Job.Email, calendar)!!
         assertEquals(Kind.Admin, e.kind)
         assertEquals(90, e.effortMin)
