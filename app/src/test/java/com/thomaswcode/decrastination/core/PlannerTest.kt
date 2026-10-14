@@ -410,12 +410,14 @@ class PlannerTest {
 
     @Test
     fun `undated work has a soft deadline a week on, and goes after real deadlines`() {
-        val email = task("email", null, effort = 15, kind = Kind.Admin, firstSeen = Fixtures.at("2026-10-01T09:00"))
+        val email = task("email", null, effort = 15, kind = Kind.Admin, firstSeen = Fixtures.at("2026-10-02T09:00"))
         val homework = task("hw", Fixtures.at("2026-10-08T21:00"), effort = 30)
         val plan = plan(listOf(email, homework), "2026-10-08T17:00")
-        // The email's soft deadline (8 Oct 09:00) has passed: it's overdue, but still after the homework.
+        // The email's soft deadline is tomorrow morning, a week after it was first seen: it's
+        // today's, but after the homework.
         assertEquals(listOf("teams:hw", "teams:email"), plan.todayBucket!!.chunks.map { it.taskId })
         assertTrue(plan.todayBucket!!.chunks.last().soft)
+        assertEquals(Fixtures.at("2026-10-09T09:00"), plan.todayBucket!!.chunks.last().deadline)
     }
 
     @Test
@@ -459,10 +461,68 @@ class PlannerTest {
     }
 
     @Test
-    fun `overdue undated work waits for a day with time, not tonight after its hours`() {
-        // Its soft deadline passed a week ago; at 22:10 tonight's hours are gone: tomorrow.
+    fun `undated work whose week has gone by is planned within the next, never overdue`() {
+        // First seen 24 Sep 09:00: its week ended on 1 Oct, the next on 8 Oct at 09:00. At 22:10 that
+        // night it's in its third, to 15 Oct 09:00 (PL-14): planned by then, not tonight after its
+        // hours, and not overdue.
         val email = task("email", null, effort = 15, kind = Kind.Admin, firstSeen = Fixtures.at("2026-09-24T09:00"))
-        assertEquals(listOf(LocalDate.parse("2026-10-09")), plan(listOf(email), "2026-10-08T22:10").dayOf("email"))
+        val plan = plan(listOf(email), "2026-10-08T22:10")
+        val chunk = plan.ordered.single()
+        assertEquals(Fixtures.at("2026-10-15T09:00"), chunk.deadline)
+        assertFalse(chunk.overdue)
+        assertEquals(Why.Soft, chunk.why)
+        assertTrue(plan.dayOf("email").single() in LocalDate.parse("2026-10-09")..LocalDate.parse("2026-10-14"), "${plan.dayOf("email")}")
+    }
+
+    // --- Dates the app set are elastic; only a real deadline is overdue (PL-14) ---
+
+    @Test
+    fun `a step whose date has passed is re-fitted, not overdue`() {
+        // Claude's blocks: the reply's date went by on Monday, the form's is next Friday, and the
+        // task (from Teams) is due the Friday after. The reply is done with the task's own, before
+        // the form, not overdue into today.
+        val steps = listOf(SubStep("Reply", 20, dueAt = Fixtures.at("2026-10-05T23:59")), SubStep("Form", 30, dueAt = Fixtures.at("2026-10-16T23:59")))
+        val plan = plan(listOf(task("e", dueAt = Fixtures.at("2026-10-23T23:59"), steps = steps)), "2026-10-08T17:00")
+        fun piece(step: String) = plan.chunksOf("teams:e").single { it.step == step }
+        fun dayOf(step: String) = plan.buckets.first { b -> b.chunks.any { it.step == step } }.date
+        assertFalse(piece("Reply").overdue)
+        assertEquals(Fixtures.at("2026-10-23T23:59"), piece("Reply").dueAt)
+        assertTrue(dayOf("Reply") <= dayOf("Form"), "reply ${dayOf("Reply")}, form ${dayOf("Form")}")
+        assertTrue(plan.ordered.none { it.overdue })
+    }
+
+    @Test
+    fun `an email deadline the model guessed never shows overdue and is re-planned within a week when it passes`() {
+        // Claude read Monday into it without quoting the email: a plan. Monday gone, it's undated
+        // again, to the Monday after, and planned in that week.
+        val guessed = Fixtures.at("2026-10-05T23:59")
+        val reading = Enrichment(inputHash = "", by = "claude", at = Fixtures.at("2026-10-01T12:00"), kind = Kind.Admin, deadline = guessed, deadlineQuoted = false)
+        val email = task("e", dueAt = guessed, kind = Kind.Admin, effort = 15).copy(id = "gmail:e", source = Source.Gmail, enrichment = reading)
+        assertFalse(email.hardDeadline)
+        val plan = plan(listOf(email), "2026-10-08T17:00")
+        val chunk = plan.ordered.single()
+        assertFalse(chunk.overdue)
+        assertTrue(chunk.soft)
+        assertEquals(Fixtures.at("2026-10-12T23:59"), chunk.deadline)
+        val day = plan.buckets.single { b -> b.chunks.isNotEmpty() }.date
+        assertTrue(day in LocalDate.parse("2026-10-08")..LocalDate.parse("2026-10-12"), "$day")
+        // The same date quoted from the email is a deadline: overdue, and today's.
+        val quoted = email.copy(enrichment = reading.copy(deadlineQuoted = true))
+        assertTrue(quoted.hardDeadline)
+        val late = plan(listOf(quoted), "2026-10-08T17:00").ordered.single()
+        assertTrue(late.overdue)
+        assertEquals(Why.Overdue, late.why)
+    }
+
+    @Test
+    fun `a Teams deadline passed is overdue and placed first`() {
+        val late = task("late", Fixtures.at("2026-10-05T23:59"), effort = 30)
+        val later = task("later", Fixtures.at("2026-10-20T23:59"), effort = 30)
+        assertTrue(late.hardDeadline)
+        val plan = plan(listOf(later, late), "2026-10-08T17:00")
+        assertEquals("teams:late", plan.next!!.taskId)
+        assertTrue(plan.chunksOf("teams:late").all { it.overdue && it.why == Why.Overdue })
+        assertEquals(listOf(LocalDate.parse("2026-10-08")), plan.dayOf("late"))
     }
 
     @Test

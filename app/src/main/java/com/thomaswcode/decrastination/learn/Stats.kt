@@ -30,7 +30,7 @@ object Stats {
         /** Newest first, today included. */
         val days: List<Day>,
         val completions: Int,
-        /** Completions that had a deadline, and of them, those confirmed done by it. */
+        /** Completions that had a real deadline (PL-14: not a date the app or Claude set), and of them, those confirmed done by it. */
         val dated: Int,
         val onTime: Int,
         val sessions: Int,
@@ -73,7 +73,8 @@ object Stats {
                 planDone = plans[date.toString()]?.full,
             )
         }
-        val dated = completions.filter { it.dueAt != null }
+        // Only real deadlines are met or missed (PL-14): a date the app or Claude set was a plan.
+        val dated = completions.filter { it.dueAt != null && it.hardDeadline }
         return Summary(
             days = perDay,
             completions = completions.size,

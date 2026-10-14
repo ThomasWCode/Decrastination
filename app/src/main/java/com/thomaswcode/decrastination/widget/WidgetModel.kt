@@ -89,7 +89,6 @@ data class WidgetModel(
         /** "From 04:00" (it can't be started yet), "Overdue", "Due 23:59" (today), "Behind", or when it's due. */
         fun badge(chunk: Chunk, now: Long, zone: ZoneId): String = when {
             !chunk.startable(now) -> "From " + Format.at(chunk.availableAt!!, now, zone).removePrefix("today ")
-            chunk.overdue && chunk.soft -> "Waiting a week"
             chunk.overdue -> "Overdue"
             chunk.dueToday -> "Due " + Format.at(chunk.deadline, now, zone).removePrefix("today ")
             chunk.behind -> "Behind"

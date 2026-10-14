@@ -289,6 +289,15 @@ class OwnTasksTest {
     }
 
     @Test
+    fun `a date the app or Claude set that has gone by is today's, not overdue`() {
+        // Claude's reading of an email, not quoting it, gave this morning (PL-14): a plan, planned again.
+        val reading = Enrichment(inputHash = "", by = "claude", at = now, kind = Kind.Admin, deadline = Fixtures.at("2026-10-12T09:00"))
+        val email = teams("email", "2026-10-12T09:00").copy(id = "gmail:email", source = Source.Gmail, enrichment = reading)
+        val groups = Groups.byDue(listOf(teams("late", "2026-10-12T09:00"), email), now, LONDON)
+        assertEquals(listOf(DueGroup.Overdue to listOf("late"), DueGroup.Today to listOf("email")), groups.map { (g, ts) -> g to ts.map { it.title } })
+    }
+
+    @Test
     fun `a day's pieces are a row a task, where its first piece comes, its pieces in order`() {
         fun chunk(task: String, part: Int) = Chunk(
             taskId = task, source = Source.Teams, kind = Kind.Homework, title = task, step = "part $part", minutes = 30,

@@ -172,12 +172,14 @@ object ChatPrompts {
         val byId = tasks.associateBy { it.id }
         appendLine("Today: ${Instant.ofEpochMilli(now).atZone(zone).format(TODAY)} (${zone.id})")
         appendLine()
-        appendLine("Open tasks (id | title | from | kind | due | minutes in all | minutes worked so far | can't start before):")
+        appendLine("Open tasks (id | title | from | kind | due, a real deadline unless marked a plan, which is never overdue and moves on once it passes | minutes in all | minutes worked so far | can't start before):")
         val open = tasks.filter { it.isOpen && !it.hidden }.sortedBy { it.dueAt ?: Long.MAX_VALUE }
         if (open.isEmpty()) appendLine("(none)")
         open.take(InstructionPrompts.MAX_TASKS).forEach { t ->
             val start = listOfNotNull(t.availableFrom, t.userFrom, t.notBefore).maxOrNull()?.takeIf { it > now }
-            appendLine("- ${t.id} | ${t.title.take(MAX_TITLE)} | ${t.source.label} | ${t.kind.label} | ${t.dueAt?.let(::at) ?: "no date"} | ${t.effortMin} | ${t.workedMin + t.photoMin} | ${start?.let(::at) ?: "-"}")
+            // A date the app or Claude set is a plan, not a deadline (PL-14): said, so it's not called overdue.
+            val due = t.dueAt?.let { at(it) + if (t.hardDeadline) "" else " (a plan)" } ?: "no date"
+            appendLine("- ${t.id} | ${t.title.take(MAX_TITLE)} | ${t.source.label} | ${t.kind.label} | $due | ${t.effortMin} | ${t.workedMin + t.photoMin} | ${start?.let(::at) ?: "-"}")
         }
         appendLine()
         appendLine("Calendar events in the next fortnight (eventKey | title | when):")

@@ -9,6 +9,7 @@ import com.thomaswcode.decrastination.core.ChangeType
 import com.thomaswcode.decrastination.core.ChatMessage
 import com.thomaswcode.decrastination.core.ChatState
 import com.thomaswcode.decrastination.core.Chunk
+import com.thomaswcode.decrastination.core.Enrichment
 import com.thomaswcode.decrastination.core.DayBucket
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.Plan
@@ -160,6 +161,12 @@ class ChatTest {
         assertTrue(context.startsWith("Today: Monday 12 October 2026, 22:45 (Europe/London)"))
         assertTrue("- teams:bridge | Bridge and Balances Beam Q's | Teams | Homework | Tue 13 Oct 2026 08:30 | 100 | 25 | -" in context, context)
         assertFalse("Changes already in use" in context)
+        // An email's date Claude didn't quote is a plan, and said to be (PL-14).
+        val reading = Enrichment(inputHash = "", by = "claude", at = now, kind = Kind.Admin, deadline = Fixtures.at("2026-10-14T23:59"))
+        val email = bridge.copy(id = "gmail:form", source = Source.Gmail, title = "Form", dueAt = Fixtures.at("2026-10-14T23:59"), enrichment = reading)
+        val withEmail = ChatPrompts.context(listOf(email), emptyList(), emptyList(), now, LONDON)
+        assertTrue("| Gmail | Homework | Wed 14 Oct 2026 23:59 (a plan) |" in withEmail, withEmail)
+        assertFalse("(a plan)" in ChatPrompts.context(listOf(email.copy(enrichment = reading.copy(deadlineQuoted = true))), emptyList(), emptyList(), now, LONDON))
     }
 
     /** A piece of [taskId] as the planner gives one. */

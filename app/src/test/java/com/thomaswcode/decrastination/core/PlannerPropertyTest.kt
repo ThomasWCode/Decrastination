@@ -37,12 +37,21 @@ class PlannerPropertyTest {
             val steps = minOf(random.nextInt(7), effort).let { count ->
                 shareOut(effort, List(count) { 1 + random.nextInt(10) }).mapIndexed { i, minutes -> SubStep("step ${i + 1}", minutes) }
             }
+            // Undated; due in the next month; or due a few days back, or today (PL-14's hard and soft dates gone by).
+            val dueAt = when {
+                chance(20) -> null
+                chance(15) -> at(today.minusDays(random.nextLong(6)), pick(LocalTime.of(8, 30), LocalTime.of(23, 59)))
+                else -> at(today.plusDays(1L + random.nextInt(30)), pick(LocalTime.of(8, 30), LocalTime.of(23, 59)))
+            }
+            // An email's date is a real deadline only where Claude quoted it (AI-12).
+            val reading = if (source == Source.Gmail && dueAt != null) Enrichment(inputHash = "", by = "test", at = now, deadline = dueAt, deadlineQuoted = chance(50)) else null
             return TaskItem(
                 id = TaskItem.id(source, "t$index"),
                 source = source,
                 sourceId = "t$index",
                 title = "t$index",
-                dueAt = if (chance(20)) null else at(today.plusDays(1L + random.nextInt(30)), pick(LocalTime.of(8, 30), LocalTime.of(23, 59))),
+                dueAt = dueAt,
+                enrichment = reading,
                 availableFrom = if (chance(10)) now + HOUR + random.nextLong(10 * DAY) else null,
                 kind = pick(Kind.Homework, Kind.Revision, Kind.Admin),
                 sourceEffortMin = effort,
@@ -105,12 +114,17 @@ class PlannerPropertyTest {
         checkMinimumTouch(seed, plan, input)
         checkRevisionGap(seed, plan, input)
         checkWhy(seed, plan)
+        checkOverdue(seed, plan, input)
     }
 
-    /** No day holds more than its time, but for overdue and due-today work, which may, and work flagged behind. */
+    /**
+     * No day holds more than its time, but for overdue work and today's work dated by today (a real
+     * deadline or a plan's date: PL-14), which may, and work flagged behind.
+     */
     private fun checkCapacity(seed: Long, plan: Plan) {
         for (bucket in plan.buckets) {
-            val held = bucket.chunks.filter { !it.behind && !it.overdue && !it.dueToday }.sumOf { it.minutes }
+            val byToday = { c: Chunk -> bucket.date == plan.today && !c.soft && Planner.date(c.deadline, LONDON) <= plan.today }
+            val held = bucket.chunks.filter { !it.behind && !it.overdue && !byToday(it) }.sumOf { it.minutes }
             assertTrue(held <= bucket.capacityMin, "seed=$seed: ${bucket.date} holds $held minutes of its ${bucket.capacityMin}")
         }
     }
@@ -175,9 +189,13 @@ class PlannerPropertyTest {
         val later = input.copy(now = input.now + MINUTE)
         val today = Planner.date(input.now, input.zone)
         if (Planner.capacity(today, later) != Planner.capacity(today, input)) return
+        val laterPlan = Planner.plan(later)
+        // A date the app set passing in that minute plans its work again (PL-14): things move then.
+        fun deadlines(p: Plan) = p.ordered.map { it.taskId to it.deadline }.toSet()
+        if (deadlines(laterPlan) != deadlines(plan)) return
         fun after(p: Plan) = p.buckets.filter { it.date > today }.flatMap { b -> b.chunks.map { (it.taskId to it.part) to b.date } }.toMap()
         val before = after(plan)
-        val next = after(Planner.plan(later))
+        val next = after(laterPlan)
         for ((piece, day) in before) {
             assertTrue(next[piece] == day, "seed=$seed: ${piece.first} part ${piece.second} moved from $day to ${next[piece]} as a minute passed")
         }
@@ -257,6 +275,15 @@ class PlannerPropertyTest {
             }
             assertTrue(chunk.why in allowed, "seed=$seed: ${chunk.taskId} part ${chunk.part} says ${chunk.why}, not one of $allowed")
             assertTrue(chunk.why != Why.MostRoom || chunk.parts == 1, "seed=$seed: ${chunk.taskId} part ${chunk.part} of ${chunk.parts} says MostRoom")
+        }
+    }
+
+    /** Only a real deadline gone by is overdue (PL-14): never a date the app or Claude set. */
+    private fun checkOverdue(seed: Long, plan: Plan, input: Planner.Input) {
+        val byId = input.tasks.associateBy { it.id }
+        for (chunk in plan.ordered.filter { it.overdue }) {
+            val task = byId.getValue(chunk.taskId)
+            assertTrue(task.hardDeadline && task.dueAt!! < input.now, "seed=$seed: ${chunk.taskId} part ${chunk.part} overdue, its deadline ${task.dueAt} ${if (task.hardDeadline) "real" else "a plan"}")
         }
     }
 

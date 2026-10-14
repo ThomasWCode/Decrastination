@@ -96,7 +96,7 @@ data class Chunk(
         val due = Planner.date(deadline, zone)
         val days = ChronoUnit.DAYS.between(today, due)
         return when (why) {
-            Why.DueSoon -> if (dueToday) "Due today" else "Due tomorrow"
+            Why.DueSoon -> if (due == today) "Due today" else "Due tomorrow"
             Why.Overdue -> "Overdue since ${due.format(DAY)}"
             Why.Spread -> "Spread over the $days days to its deadline"
             Why.MinimumTouch -> "Kept within a week of its last piece"

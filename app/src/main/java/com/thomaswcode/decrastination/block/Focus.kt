@@ -535,6 +535,8 @@ class Focus(
                         workedMin = worked(task),
                         // Its own deadline; one split into dated blocks with none of its own, its last block's.
                         dueAt = task.dueAt ?: task.subSteps.mapNotNull { it.dueAt }.maxOrNull(),
+                        // A step's date is a plan's, never a deadline to meet.
+                        hardDeadline = task.hardDeadline,
                         firstSeenAt = task.firstSeenAt,
                         doneAt = task.doneAt ?: now,
                         byHand = handMinutes(task) > 0,
