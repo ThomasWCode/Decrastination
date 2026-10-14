@@ -50,10 +50,11 @@ object Prompts {
             Decide, from the email:
             - kind: "Admin" if it asks the student to do something (reply, sign, pay, fill in a form, bring or prepare something), or if it's information they starred to come back to (then the task is to read it and decide, and nextStep says what to decide); "Event" if it's about something happening at a set time that needs nothing beyond turning up (a trip, a call, an open evening).
             - actionableFrom: the date (YYYY-MM-DD) before which nothing can be done, if the email says so (a form that opens next week); otherwise null.
-            - deadline: when it must be done by, only if the email states or clearly implies one (a day it suggests for doing it counts); for an Event, when it starts; otherwise null. Never invent one. Write it as a local date and time (YYYY-MM-DDTHH:MM), or the date alone (YYYY-MM-DD) if it gives no time.
+            - deadline: when it must be done by, only if the email states or clearly implies one (a day it suggests for doing it counts); for an Event, when it starts; otherwise null. Never invent one: a quick action with no date of its own (signing up, replying, asking someone) has deadline null, and the app plans it within the week. Write it as a local date and time (YYYY-MM-DDTHH:MM), or the date alone (YYYY-MM-DD) if it gives no time.
+            - deadlineQuoted: true when deadline is a date the email itself gives or clearly implies as when it must be done by, or an Event's start; false when it's only a day the email suggests for doing it, and when deadline is null. Only a quoted deadline is shown as missed once it passes; any other date is a plan, moved when it passes.
             - effortMin: the minutes of the student's own work it needs, reading included: at least 5 for something only to read and decide.
             - nextStep: the one concrete next action, as an instruction under 12 words ("Reply to Mr Hughes confirming the trip").
-            - blocks: when the email holds more than one piece of work for the student, or dated items (a calendar of deadlines, an application that opens on a date), the pieces of work in order, each with its minutes (10 to 60 where the work allows: a long piece of work, like writing a proposal, is several blocks with the same dates; at most $MAX_BLOCKS blocks, longer ones if there's more work than that), from (the date before which it can't be done, or null) and due (when it must be done by, written as for deadline). A window the email gives only roughly ("applications open in December") runs from its first day to its last. A quick action with no date of its own that's best done soon (signing up, replying, asking someone) is due within the next two weeks. Leave due null only for a block that can wait for the email's own deadline. The planner schedules each block in its own window, so one email can become work spread over months, kept after the email is archived. An email with blocks is Admin, and its effortMin is their total. Otherwise an empty list.
+            - blocks: when the email holds more than one piece of work for the student, or dated items (a calendar of deadlines, an application that opens on a date), the pieces of work in order, each with its minutes (10 to 60 where the work allows: a long piece of work, like writing a proposal, is several blocks with the same dates; at most $MAX_BLOCKS blocks, longer ones if there's more work than that), from (the date before which it can't be done, or null) and due (when it must be done by, written as for deadline, only where the email gives one; otherwise null, and the block waits for the email's own deadline, or with none is planned within the week). A window the email gives only roughly ("applications open in December") runs from its first day to its last. The planner schedules each block in its own window, so one email can become work spread over months, kept after the email is archived. An email with blocks is Admin, and its effortMin is their total. Otherwise an empty list.
 
             You see the conversation the starred message is in, oldest message first (where a long one's earlier messages had to be cut short or left out, it says so); when there's more than one, each is headed by who sent it and when ("From you" for the student's own). The first message shown keeps what it quotes from earlier (cut short too, where it had to be); in the ones after it, quoted text and signatures are left out and marked in square brackets, as what they quote is shown above them. You don't see attachments, only their names (an attached email goes by its subject). Where what the email asks turns on an attachment or an earlier message you can't see, and its name doesn't tell you, don't guess what it asked: make nextStep say to read it first, naming it ("Read the attached consent form and decide"), and effortMin 10.
 
@@ -82,6 +83,7 @@ object Prompts {
             "kind" to mapOf("type" to "string", "enum" to listOf("Admin", "Event")),
             "actionableFrom" to nullable(mapOf("type" to "string", "format" to "date")),
             "deadline" to nullable(LOCAL_TIME),
+            "deadlineQuoted" to mapOf("type" to "boolean"),
             "effortMin" to mapOf("type" to "integer"),
             "nextStep" to mapOf("type" to "string"),
             "blocks" to mapOf("type" to "array", "items" to block(vocabulary = false)),
@@ -175,6 +177,8 @@ object Answers {
         val kind: String,
         val actionableFrom: String? = null,
         val deadline: String? = null,
+        /** Whether [deadline] is the email's own words (AI-12): missing, it isn't, so it's never taken as hard. */
+        val deadlineQuoted: Boolean = false,
         val effortMin: Int,
         val nextStep: String,
         val blocks: List<Step> = emptyList(),
@@ -248,6 +252,8 @@ object Answers {
                     kind = if (t.blocks.isNotEmpty()) Kind.Admin else kind,
                     actionableFrom = opens,
                     deadline = deadline,
+                    // Quoted only of a deadline kept: one dropped as out of range quotes nothing.
+                    deadlineQuoted = t.deadlineQuoted && deadline != null,
                     effortMin = blocks?.sumOf { it.minutes } ?: total,
                     nextStep = t.nextStep.trim().takeIf { it.isNotEmpty() }?.take(MAX_NEXT_STEP),
                     subSteps = blocks,
