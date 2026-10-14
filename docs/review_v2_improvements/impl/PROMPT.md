@@ -8,14 +8,14 @@ You are implementing review v2 of Decrastination, an Android app (Kotlin, Compos
 
 ## Where everything is
 
-- The plan: `docs/review_v2_improvements/impl/README.md` on branch `ccr-ddd35a13-8tl04l`. Read it first, then `impl/00-conventions.md`, then the phase file you're on. The phase files state each change, the files and types to touch, the signatures, the prompt text, the tests and when the item is done. Follow them; they're written for you.
+- The plan: `docs/review_v2_improvements/impl/README.md` on `main`. Read it first, then `impl/00-conventions.md`, then the phase file you're on. The phase files state each change, the files and types to touch, the signatures, the prompt text, the tests and when the item is done. Follow them; they're written for you.
 - The reasons behind every item: `docs/review_v2_improvements/01-…09-*.md`, the walkthrough `PLAN-OVERVIEW.md`, and `QUESTIONS.md`, where every decision was made over five rounds. Don't reopen a decision recorded there; don't implement anything marked Withdrawn or Deferred.
 - The app's own docs: `README.md`, `docs/scheduler.md`, `docs/data-sources.md`, `docs/eval.md`, `PLAN.md`. They describe the app as it is today; the conventions file says which sections you must update as you go.
 - `private/` is git-ignored real data (credentials, the eval set). Use it; never commit it; never print a credential.
 
 ## Git
 
-1. Branch `v3` from `main`, merge `ccr-ddd35a13-8tl04l` into it (it carries only docs), and work on `v3`.
+1. Branch `v3` from the tip of `main` and work on it.
 2. One commit per item or small group, message in the imperative with the item ids first (`Spread later work evenly to its deadline (PL-01, PL-07)`). No attribution footers, co-author trailers or session links, ever.
 3. At the end of each phase: `./gradlew testDebugUnitTest lintDebug assembleDebug` green, the phase's "Done when" checks passed on the phone, the docs updated, then push `v3` and open a pull request for the phase against `main` titled `v3 phase N: <what it delivers>`. [Merge it yourself when CI is green and the phone checks pass / Wait for me to merge.]
 4. Keep `PROGRESS.md` at the repository root current (done, current, outstanding, decisions made); delete it with the last phase.
