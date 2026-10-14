@@ -80,7 +80,8 @@ object Planner {
 
     private const val MIN_CHUNK = 5
     private const val MIN_HORIZON_DAYS = 14L
-    private const val MAX_HORIZON_DAYS = 90L
+    /** The furthest the plan reaches, in days: the calendar is read as far (DX-14). */
+    const val MAX_HORIZON_DAYS = 90L
     private val NOON: LocalTime = LocalTime.NOON
 
     private class Item(

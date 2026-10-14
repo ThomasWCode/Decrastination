@@ -22,6 +22,7 @@ import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.OwnTask
 import com.thomaswcode.decrastination.core.Unplanned
 import com.thomaswcode.decrastination.core.Why
+import com.thomaswcode.decrastination.learn.CalendarEvent
 import java.time.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -167,6 +168,12 @@ class ChatTest {
         val withEmail = ChatPrompts.context(listOf(email), emptyList(), emptyList(), now, LONDON)
         assertTrue("| Gmail | Homework | Wed 14 Oct 2026 23:59 (a plan) |" in withEmail, withEmail)
         assertFalse("(a plan)" in ChatPrompts.context(listOf(email.copy(enrichment = reading.copy(deadlineQuoted = true))), emptyList(), emptyList(), now, LONDON))
+        // The calendar's read as far as the plan reaches (DX-14); the chat's told of the fortnight's events.
+        val drums = CalendarEvent(1, "Drums", Fixtures.at("2026-10-15T18:00"), Fixtures.at("2026-10-15T19:00"), allDay = false)
+        val trip = CalendarEvent(2, "Trip", Fixtures.at("2026-11-02T08:00"), Fixtures.at("2026-11-02T18:00"), allDay = false)
+        val withEvents = ChatPrompts.context(emptyList(), listOf(drums, trip), emptyList(), now, LONDON)
+        assertTrue("| Drums |" in withEvents, withEvents)
+        assertFalse("| Trip |" in withEvents, withEvents)
     }
 
     /** A piece of [taskId] as the planner gives one. */

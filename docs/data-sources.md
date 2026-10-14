@@ -226,7 +226,7 @@ Cost at list price ($4 / $20 per million tokens in/out): an email with a 4 000-c
 
 ## 7. Optional: device calendar
 
-`CalendarContract.Instances` with `READ_CALENDAR` gives busy blocks (Open Day 10 Oct, "Call with Jags" 14 Oct 16:00 if it is also in Calendar). Subtracted from the availability template when computing slack. Q7.
+`CalendarContract.Instances` with `READ_CALENDAR` gives busy blocks (Open Day 10 Oct, "Call with Jags" 14 Oct 16:00 if it is also in Calendar). Subtracted from the availability template when computing slack. Q7. Since review v2 (DX-14) it's read as far ahead as the plan reaches (`Planner.MAX_HORIZON_DAYS`, 90 days); questions keep to the week ahead, and a long event further off counts as a few hours of its day until then (docs/scheduler.md §5).
 
 ## 8. Your own tasks (2.0.0)
 
