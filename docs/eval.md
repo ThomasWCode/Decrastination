@@ -5,7 +5,7 @@ A small set of your real emails and assignments, each with the right answer, to 
 ## What's where
 
 - `private/eval/cases.json`: each case, as `EvalSetTest.Case`: an id, the job (`Email`, `Assignment` or `Effort`), when it's asked about, the task as the app stores it (from the phone's `tasks.json`, its old enrichment taken off), and what a right answer has (`expect`):
-  - `kind`: `Admin`, `Event` or `Info` (emails);
+  - `kind`: `Admin` or `Event` (emails). A case labelled `Info` is retired, since a starred email is never only to read (AI-02): `talk-summary`, `dell` and `linkedin` are listed as retired in the report, not scored;
   - `deadline`: its day (`YYYY-MM-DD`), or `none`;
   - `testDate`: an assignment's test day;
   - `effortMin`: the range its minutes must fall in, as the app plans them;
@@ -29,6 +29,18 @@ Elsewhere (CI, another PC) the two tests find no `private/eval` and are skipped.
 ## Labels
 
 The labels are yours: they were checked with you on 11 Oct (the work-experience email must name STEM Potential, Rosalind Franklin and Imperial Work Experience among its blocks). Change one in `make_cases.py` and run it again; keep held-out cases aside if a prompt is being tuned against these.
+
+## Review v2, phase 1 (14 Oct): starred conversations
+
+The Email job changed (AI-02, AI-04, DX-06, DX-01), and with it what the app stores: so the email cases' tasks were read again from Gmail, read-only, through the app's own `ImapClient`, `Mime.readable` and `GmailThreads.conversationText` (a throwaway JVM test, kept out of the repo, by each case's thread id), so each holds what a starred read now stores: the whole conversation, quotes cut but the oldest message's, attachments named. The cases as they were are kept in `private/eval/cases-2026-10-11.json`. The three labelled Info (`dell`, `linkedin`, `talk-summary`) are retired: a starred email is never only to read.
+
+| Round | Prompt | Passed | What failed |
+|---|---|---|---|
+| 1 (11 Oct) | 1.8.0's | 11 of 13 | `german-assess` (a step dated after the task is due), `talk-note` (read as Info) |
+| 2 | phase 1 as planned | 5 of 10 | `help`: the quote cut was John's question, which the student never had, so "read the earlier message"; `zip-card`, `dad-apply`: AI-04's fixed next step ("Read the attachment and decide") over the prompt's own "one concrete action", and over attachment names that say what they are; `german-assess` again |
+| 3 | as built: the oldest message read whole; the fallback names what to read | 10 of 10 | none (`german-assess` passing is the model's luck; its dated step is AI-01's, phase 7) |
+
+Re-reading also found two faults the round couldn't have: an Outlook forward (subject `Fw:`, no forward marker) lost all 8 600 characters it forwarded (`open-day`), and an attached email had no name (`dad-apply`'s three, now named by their subjects).
 
 ## The chat (2.0.0)
 

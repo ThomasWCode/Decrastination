@@ -1,8 +1,10 @@
 package com.thomaswcode.decrastination.sources.gmail
 
+import kotlinx.serialization.Serializable
 import java.io.ByteArrayOutputStream
 import java.nio.charset.Charset
 import java.util.Base64
+import java.util.Locale
 
 /** The bits of MIME (RFCs 2045–2047) that reading a message's text needs. Pure, for the tests. */
 object Mime {
@@ -49,16 +51,266 @@ object Mime {
         out += TextPart(prefix.ifEmpty { "1" }, subtype, encoding, charset, items.getOrNull(6)?.string?.toLongOrNull())
     }
 
+    /** A file attached to a message (DX-01): its name, type (`application/pdf`) and size in bytes, where given. */
+    @Serializable
+    data class Attachment(val name: String, val type: String, val size: Long? = null) {
+        /** "consent-form.pdf (110 KB)", or an attached email's "Trip details (an email, 16 KB)": as the sheet shows it and the model reads it. */
+        val label: String
+            get() {
+                val about = listOfNotNull("an email".takeIf { type == "message/rfc822" }, size?.let(::sizeLabel)).joinToString(", ")
+                return if (about.isEmpty()) name else "$name ($about)"
+            }
+    }
+
+    /** Bytes as the sheet says them: whole kilobytes, or megabytes to one place past a thousand of them. */
+    private fun sizeLabel(bytes: Long): String {
+        val kb = maxOf(1L, (bytes + 512) / 1024)
+        return if (kb < 1024) "$kb KB" else "%.1f MB".format(Locale.UK, bytes / (1024.0 * 1024.0))
+    }
+
+    /**
+     * Every file attached to a message, from its BODYSTRUCTURE, walked as [textPart] walks it: a
+     * part whose disposition is `attachment`, or one that isn't text and has a name, by its
+     * disposition's `filename` or its own `name`. An inline image isn't one, named or not: a
+     * signature's logo is an inline `image001.png`. Where a part's disposition is depends on its
+     * type (RFC 3501 §7.4.2): after a text part's line count, a basic part's MD5, or an attached
+     * message's envelope, body and lines. Sizes are of the part as sent: base64's are cut by a
+     * quarter to the file's.
+     */
+    fun attachments(structure: ImapValue): List<Attachment> {
+        val out = mutableListOf<Attachment>()
+        collectAttachments(structure, out)
+        return out
+    }
+
+    private fun collectAttachments(node: ImapValue, out: MutableList<Attachment>) {
+        val items = node.list
+        if (items.isEmpty()) return
+        if (items.first() is ImapValue.Items) {
+            items.takeWhile { it is ImapValue.Items }.forEach { collectAttachments(it, out) }
+            return
+        }
+        val type = items.getOrNull(0)?.string?.lowercase() ?: return
+        val subtype = items.getOrNull(1)?.string?.lowercase() ?: return
+        val dispositionAt = when {
+            type == "text" -> 9
+            type == "message" && subtype == "rfc822" -> 11
+            else -> 8
+        }
+        val disposition = items.getOrNull(dispositionAt)?.list.orEmpty()
+        val how = disposition.firstOrNull()?.string?.lowercase()
+        val name = parameter(disposition.getOrNull(1), "filename") ?: parameter(items.getOrNull(2), "name")
+        val attached = when {
+            how == "attachment" -> true
+            type == "image" && how == "inline" -> false
+            else -> type != "text" && name != null
+        }
+        if (!attached) return
+        val size = items.getOrNull(6)?.string?.toLongOrNull()?.let { if (items.getOrNull(5)?.string.equals("base64", ignoreCase = true)) it * 3 / 4 else it }
+        // An attached email with no file name goes by its own subject, from its envelope.
+        val subject = if (type == "message" && subtype == "rfc822") items.getOrNull(7)?.list?.getOrNull(1)?.string?.let(::decodeHeader)?.trim()?.takeIf { it.isNotEmpty() } else null
+        out += Attachment(name ?: subject ?: if (type == "message") "an attached email" else "unnamed $type/$subtype", "$type/$subtype", size)
+    }
+
+    /**
+     * A body or disposition parameter's value, by [key], as a name may be written, the fullest form
+     * first: RFC 2231's `key*` (`utf-8''consent%20form.pdf`), or its continuations (`key*0*`,
+     * `key*1*`, … percent-encoded, or `key*0`, `key*1`, … plain), joined; else the plain `key`,
+     * perhaps as encoded words (RFC 2047), which a client sends beside the others for older readers.
+     */
+    private fun parameter(list: ImapValue?, key: String): String? {
+        val params = list?.list.orEmpty()
+        val values = HashMap<String, String>()
+        for (i in 0 until params.size - 1 step 2) {
+            val name = params[i].string?.lowercase() ?: continue
+            val value = params[i + 1].string ?: continue
+            values.putIfAbsent(name, value)
+        }
+        values["$key*"]?.let { extended(listOf(true to it)) }?.trim()?.takeIf { it.isNotEmpty() }?.let { return it }
+        val continued = generateSequence(0) { it + 1 }
+            .map { n -> values["$key*$n*"]?.let { true to it } ?: values["$key*$n"]?.let { false to it } }
+            .takeWhile { it != null }.filterNotNull().toList()
+        if (continued.isNotEmpty()) extended(continued).trim().takeIf { it.isNotEmpty() }?.let { return it }
+        return values[key]?.let { decodeHeader(it).trim() }?.takeIf { it.isNotEmpty() }
+    }
+
+    /**
+     * RFC 2231's value from its pieces, in order, each percent-encoded (true) or plain: the first
+     * encoded one starts `charset'language'`, which says how the bytes read.
+     */
+    private fun extended(pieces: List<Pair<Boolean, String>>): String {
+        val bytes = ByteArrayOutputStream()
+        var named: String? = null
+        pieces.forEachIndexed { index, (encoded, value) ->
+            if (!encoded) {
+                bytes.write(value.toByteArray(Charsets.UTF_8))
+                return@forEachIndexed
+            }
+            val split = if (index == 0) value.split('\'', limit = 3) else emptyList()
+            val text = if (split.size == 3) split[2].also { named = split[0].ifEmpty { null } } else value
+            var i = 0
+            while (i < text.length) {
+                val hex = if (text[i] == '%' && i + 2 < text.length) text.substring(i + 1, i + 3).toIntOrNull(16) else null
+                if (hex != null) {
+                    bytes.write(hex)
+                    i += 3
+                } else {
+                    bytes.write(text[i].code)
+                    i++
+                }
+            }
+        }
+        return bytes.toByteArray().toString(charset(named))
+    }
+
     /** Decodes a part's bytes, which may be cut short by a partial fetch. */
     fun decode(bytes: ByteArray, part: TextPart): String {
+        val text = decodeRaw(bytes, part)
+        return if (part.subtype == "html") htmlToText(text) else text
+    }
+
+    /** A part's bytes as the text they encode, HTML still HTML. */
+    private fun decodeRaw(bytes: ByteArray, part: TextPart): String {
         val raw = when (part.encoding) {
             "base64" -> base64(bytes)
             "quoted-printable" -> quotedPrintable(bytes)
             else -> bytes
         }
-        val text = raw.toString(charset(part.charset))
-        return if (part.subtype == "html") htmlToText(text) else text
+        return raw.toString(charset(part.charset))
     }
+
+    /** A text with what it quotes, or its signature, cut (DX-06), and how many characters of text that was, spaces collapsed. */
+    data class Cut(val text: String, val cutChars: Int)
+
+    /**
+     * A part's text as a task and the model have it: decoded, flattened, its quotes and signature
+     * cut ([cutQuoted]: HTML's before it's flattened, then plain text's), and tidied to [max].
+     * [forwarded]: its message's subject says it's a forward ([isForward]). [cut] false: read whole,
+     * as the oldest message of a conversation is, what it quotes being from before it.
+     */
+    fun readable(bytes: ByteArray, part: TextPart, max: Int, forwarded: Boolean = false, cut: Boolean = true): Cut {
+        if (!cut) return Cut(tidy(decode(bytes, part), max), 0)
+        val raw = decodeRaw(bytes, part)
+        val html = if (part.subtype == "html") cutQuoted(raw, html = true, forwarded) else null
+        val plain = cutQuoted(html?.let { htmlToText(it.text) } ?: raw, html = false, forwarded)
+        return Cut(tidy(plain.text, max), plain.cutChars + (html?.cutChars ?: 0))
+    }
+
+    private val FORWARD_SUBJECT = Regex("""^\s*fwd?\s*:""", RegexOption.IGNORE_CASE)
+
+    /** A subject that says its message is a forward ("Fw: …", "Fwd: …"), not a reply to one ("Re: Fw: …"). */
+    fun isForward(subject: String): Boolean = FORWARD_SUBJECT.containsMatchIn(subject)
+
+    /**
+     * [text] without the earlier messages it quotes, or its signature (DX-06): what the model reads
+     * should be what's new in it, not a request quoted from further down. [html]: every
+     * `<blockquote>` and every `gmail_quote` div goes whole, nested ones matched by depth; a forward
+     * is in one too (Gmail's div, Apple Mail's blockquote), so one that begins with the forward
+     * marker stays, and the quotes inside it go. Plain: cut from the first line that starts a quote
+     * (an `On … wrote:` line, perhaps wrapped onto the next; `-----Original Message-----`; a `From:`
+     * line with `Sent:` or `To:` within three lines) or a signature (`-- `); after a forward's
+     * marker its own header is its message's, so the cut is at the marker after that.
+     * [forwarded]: the message is a forward by its subject, as Outlook's are, with no marker but
+     * a header like a reply's: its first header block, and its first quoting subtree, are what it
+     * forwards, kept.
+     */
+    fun cutQuoted(text: String, html: Boolean, forwarded: Boolean = false): Cut {
+        if (html) {
+            val removed = mutableListOf<String>()
+            val kept = cutHtml(text, removed, keepFirst = forwarded)
+            return Cut(kept, removed.sumOf { tidy(htmlToText(it), Int.MAX_VALUE).length })
+        }
+        val lines = text.lines()
+        var forward = forwarded
+        for (i in lines.indices) {
+            val line = lines[i].trim()
+            if (FORWARD.matches(line)) {
+                forward = true
+                continue
+            }
+            val header = FROM_HEADER.matches(line) && lines.drop(i + 1).take(3).any { SENT_OR_TO.containsMatchIn(it.trim()) }
+            val quote = header || wrote(line, lines.getOrNull(i + 1)) || ORIGINAL.matches(line) || lines[i].trimEnd('\r') == "-- " || line == "--"
+            if (!quote) continue
+            // A forward's own header, the first after its marker: its message follows.
+            if (forward && header) {
+                forward = false
+                continue
+            }
+            // Outlook rules a line of underscores above its header: it goes with the quote.
+            val from = if (i > 0 && RULE.matches(lines[i - 1].trim())) i - 1 else i
+            val cut = lines.drop(from).joinToString("\n")
+            return Cut(lines.take(from).joinToString("\n").trimEnd(), tidy(cut, Int.MAX_VALUE).length)
+        }
+        return Cut(text, 0)
+    }
+
+    /** An `On … wrote:` attribution, written with a date or time in it, on one line or wrapped onto [next]. */
+    private fun wrote(line: String, next: String?): Boolean {
+        if (!line.startsWith("On ")) return false
+        return WROTE.matches(line) || (next != null && WROTE.matches(line + " " + next.trim()))
+    }
+
+    /**
+     * [html] without its quoting subtrees, each whole, added to [removed]; a forward's kept, what it
+     * quotes cut: one beginning with the forward marker, or with [keepFirst] the first of them.
+     */
+    private fun cutHtml(html: String, removed: MutableList<String>, keepFirst: Boolean = false): String {
+        val out = StringBuilder()
+        var at = 0
+        var first = keepFirst
+        while (true) {
+            val open = QUOTE_OPEN.find(html, at) ?: break
+            out.append(html, at, open.range.first)
+            val tag = open.groupValues[1].ifEmpty { open.groupValues[2] }.lowercase()
+            val (closeStart, closeEnd) = closeOf(html, open.range.last + 1, tag)
+            val whole = html.substring(open.range.first, closeEnd)
+            val forward = first || FORWARD_TEXT.containsMatchIn(tidy(htmlToText(whole), 200).lineSequence().firstOrNull().orEmpty())
+            first = false
+            if (forward) {
+                out.append(html, open.range.first, open.range.last + 1)
+                out.append(cutHtml(html.substring(open.range.last + 1, closeStart), removed))
+                out.append(html, closeStart, closeEnd)
+            } else {
+                removed += whole
+            }
+            at = closeEnd
+        }
+        out.append(html, at, html.length)
+        return out.toString()
+    }
+
+    /**
+     * Where the [tag] opened just before [from] closes: the closing tag's start and end, counting the
+     * same tags opened inside it. One a partial fetch cut off runs to the end.
+     */
+    private fun closeOf(html: String, from: Int, tag: String): Pair<Int, Int> {
+        var depth = 1
+        for (match in Regex("""<(/?)$tag\b[^>]*>""", RegexOption.IGNORE_CASE).findAll(html, from)) {
+            when {
+                match.groupValues[1] == "/" -> depth--
+                !match.value.endsWith("/>") -> depth++
+            }
+            if (depth == 0) return match.range.first to match.range.last + 1
+        }
+        return html.length to html.length
+    }
+
+    /** A quote's start in HTML: a blockquote, or a div of Gmail's `gmail_quote` class; the tag is whichever group matched. */
+    private val QUOTE_OPEN = Regex(
+        """<(blockquote)\b[^>]*>|<(div)\b[^>]*?\bclass\s*=\s*(["'])[^"']*?\bgmail_quote\b[^"']*?\3[^>]*>""",
+        RegexOption.IGNORE_CASE,
+    )
+
+    /** "On Thu, 8 Oct 2026 at 18:02, Dad <dad@…> wrote:": a date or a time in it, so "On Monday Sir wrote:" in a message isn't taken for one. */
+    private val WROTE = Regex("""^On .{0,200}\d.{0,200} wrote:$""")
+    private val ORIGINAL = Regex("""^-{2,}\s*Original Message\s*-{2,}$""", RegexOption.IGNORE_CASE)
+    private val FROM_HEADER = Regex("""^From: .+$""")
+    private val SENT_OR_TO = Regex("""^(Sent|To): """)
+    private val RULE = Regex("""^[_-]{10,}$""")
+
+    /** A forward's marker, Gmail's ("---------- Forwarded message ---------") or Apple Mail's. */
+    private val FORWARD = Regex("""^-{2,}\s*Forwarded message\s*-{2,}$|^Begin forwarded message:$""", RegexOption.IGNORE_CASE)
+    private val FORWARD_TEXT = Regex("""^-{2,}\s*Forwarded message|^Begin forwarded message""", RegexOption.IGNORE_CASE)
 
     fun charset(name: String?): Charset = runCatching { Charset.forName(name ?: "UTF-8") }.getOrDefault(Charsets.UTF_8)
 

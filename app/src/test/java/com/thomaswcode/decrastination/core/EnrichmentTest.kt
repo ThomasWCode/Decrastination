@@ -15,7 +15,7 @@ class EnrichmentTest {
     private fun email(detail: String = "Please sign the trip form.") = TaskItem(
         id = "gmail:t1", source = Source.Gmail, sourceId = "t1", title = "Trip to Berlin", detail = detail,
         kind = Kind.Admin, sourceEffortMin = 15, firstSeenAt = t0, lastSeenAt = t0,
-        extra = mapOf(GmailThreads.EXTRA_TEXT_READ_TO to "${GmailThreads.MAX_BODY_CHARS}"),
+        extra = mapOf(GmailThreads.EXTRA_TEXT_READ_TO to "${GmailThreads.MAX_BODY_CHARS}", GmailThreads.EXTRA_TEXT_RULES to "${GmailThreads.TEXT_RULES}"),
     )
 
     private fun assignment(dueAt: Long? = Fixtures.at("2026-10-16T08:30")) = TaskItem(
@@ -61,12 +61,33 @@ class EnrichmentTest {
     @Test
     fun `a sync keeps the enrichment and lays it over the fresh values`() {
         val task = email()
-        val stored = task.copy(enrichment = enrichment(task).copy(kind = Kind.Info, effortMin = 2)).enriched()
+        val stored = task.copy(enrichment = enrichment(task).copy(kind = Kind.Event, effortMin = 2)).enriched()
         val fetched = Fetched("t1", "Trip to Berlin", Kind.Admin, detail = task.detail, sourceEffortMin = 15)
         val merged = Merge.apply(listOf(stored), Source.Gmail, listOf(fetched), t0 + 60_000L).tasks.single()
-        assertEquals(Kind.Info, merged.kind)
+        assertEquals(Kind.Event, merged.kind)
         assertEquals(2, merged.effortMin)
         assertEquals(stored.enrichment, merged.enrichment)
+    }
+
+    @Test
+    fun `an email's attachments are part of what its reading is of`() {
+        // Named once the conversation is read again (DX-01): a reading from before them is out of date.
+        val task = email()
+        val withFiles = task.copy(extra = task.extra + (GmailThreads.EXTRA_ATTACHMENTS to """[{"name":"a.pdf","type":"application/pdf"}]"""))
+        assertNotEquals(Enrichments.inputHash(task), Enrichments.inputHash(withFiles))
+        assertNull(Enrichments.current(withFiles.copy(enrichment = enrichment(task))))
+    }
+
+    @Test
+    fun `an email read as only to read before starred-only reading isn't hidden, and is read again`() {
+        // Starred, it's always something to do (AI-02): the old Info reading gives way to the rules' kind.
+        val task = email()
+        val old = task.copy(enrichment = enrichment(task).copy(kind = Kind.Info, effortMin = 2)).enriched()
+        assertEquals(Kind.Admin, old.kind)
+        assertFalse(old.hidden)
+        assertTrue(Enrichments.stale(old, modelOn = true, rules = "rules"))
+        // A reading that says Admin isn't read again for that.
+        assertFalse(Enrichments.stale(task.copy(enrichment = enrichment(task).copy(kind = Kind.Admin)), modelOn = true, rules = "rules"))
     }
 
     @Test

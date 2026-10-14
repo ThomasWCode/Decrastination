@@ -10,6 +10,7 @@ import com.thomaswcode.decrastination.core.SourceValues
 import com.thomaswcode.decrastination.core.Status
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.sources.anki.AnkiRules
+import com.thomaswcode.decrastination.sources.gmail.GmailThreads
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -146,6 +147,31 @@ class PromptsTest {
     }
 
     @Test
+    fun `the email job is told it sees the whole conversation, quotes cut and attachments by name`() {
+        val system = Prompts.system(Enrichments.Job.Email)
+        // Starred, it's always something to do (AI-02).
+        assertTrue("Every email you see was starred by the student: it is something to do." in system, system)
+        assertTrue("Info" !in system, system)
+        // What it sees, and what to do when it can't see what's asked (AI-04, DX-06).
+        assertTrue("You see the conversation the starred message is in, oldest message first (where a long one's earlier messages had to be cut short or left out, it says so)" in system, system)
+        assertTrue("The first message shown keeps what it quotes from earlier (cut short too, where it had to be); in the ones after it, quoted text and signatures are left out and marked in square brackets" in system, system)
+        assertTrue("You don't see attachments, only their names (an attached email goes by its subject). Where what the email asks turns on an attachment or an earlier message you can't see, and its name doesn't tell you, don't guess what it asked: make nextStep say to read it first, naming it" in system, system)
+        assertTrue("and effortMin 10." in system, system)
+        assertTrue("from when the message saying them was sent" in system, system)
+    }
+
+    @Test
+    fun `a conversation says it's all shown, and its attachments are named`() {
+        val files = """[{"name":"consent-form.pdf","type":"application/pdf","size":112639},{"name":"itinerary.docx","type":"application/msword"}]"""
+        val text = Prompts.describe(email().copy(extra = email().extra + mapOf(GmailThreads.EXTRA_MESSAGES to "3", GmailThreads.EXTRA_ATTACHMENTS to files)), Enrichments.Job.Email, NOW, LONDON)
+        assertTrue("Messages in this conversation: 3, oldest first" in text, text)
+        assertTrue("Attachments: consent-form.pdf (110 KB), itinerary.docx" in text, text)
+        // One message, nothing attached: neither line.
+        val single = Prompts.describe(email(), Enrichments.Job.Email, NOW, LONDON)
+        assertTrue("Messages in this conversation" !in single && "Attachments" !in single, single)
+    }
+
+    @Test
     fun `an assignment gives its class and due time, no multiplier, and a long text says it's cut`() {
         val text = Prompts.describe(assignment("x".repeat(Prompts.MAX_TEXT + 10)), Enrichments.Job.Assignment, NOW, LONDON)
         assertTrue("Class: 12.1 German 2026-27" in text, text)
@@ -173,13 +199,22 @@ class AnswersTest {
 
     @Test
     fun `what's out of range is dropped rather than trusted`() {
-        val e = parse(Enrichments.Job.Email, """{"kind":"Homework","actionableFrom":"1999-01-01","deadline":"2031-01-01T09:00","effortMin":5000,"nextStep":"  "}""")!!
-        assertNull(e.kind)
+        val e = parse(Enrichments.Job.Email, """{"kind":"Admin","actionableFrom":"1999-01-01","deadline":"2031-01-01T09:00","effortMin":5000,"nextStep":"  "}""")!!
+        assertEquals(Kind.Admin, e.kind)
         assertNull(e.actionableFrom)
         assertNull(e.deadline)
         assertNull(e.effortMin)
         assertNull(e.nextStep)
         assertNull(parse(Enrichments.Job.Email, "not json"))
+    }
+
+    @Test
+    fun `a starred email read as only to read, or as any kind but Admin or Event, is no answer`() {
+        // Starred, it's always something to do (AI-02): an Info answer is unreadable, and the rules stand.
+        assertNull(parse(Enrichments.Job.Email, """{"kind":"Info","actionableFrom":null,"deadline":null,"effortMin":2,"nextStep":"Read and archive","blocks":[]}"""))
+        assertNull(parse(Enrichments.Job.Email, """{"kind":"Homework","actionableFrom":null,"deadline":null,"effortMin":20,"nextStep":"Do it","blocks":[]}"""))
+        assertEquals(Kind.Event, parse(Enrichments.Job.Email, """{"kind":"Event","actionableFrom":null,"deadline":"2026-10-17T10:00","effortMin":5,"nextStep":"Go to the open day","blocks":[]}""")!!.kind)
+        assertEquals(listOf("Admin", "Event"), Prompts.schemaJson(Enrichments.Job.Email).jsonObject["properties"]!!.jsonObject["kind"]!!.jsonObject["enum"]!!.jsonArray.map { it.jsonPrimitive.content })
     }
 
     @Test
@@ -270,7 +305,7 @@ class AnswersTest {
 
     @Test
     fun `an email can come back in dated blocks, and is then something to do`() {
-        val calendar = """{"kind":"Info","actionableFrom":null,"deadline":null,"effortMin":90,"nextStep":"Note the dates","blocks":[{"title":"Apply to STEM Potential","minutes":60,"from":"2026-10-30","due":"2026-11-20"},{"title":"Apply to RAL","minutes":30,"from":null,"due":"2027-01-15"}]}"""
+        val calendar = """{"kind":"Event","actionableFrom":null,"deadline":null,"effortMin":90,"nextStep":"Note the dates","blocks":[{"title":"Apply to STEM Potential","minutes":60,"from":"2026-10-30","due":"2026-11-20"},{"title":"Apply to RAL","minutes":30,"from":null,"due":"2027-01-15"}]}"""
         val e = parse(Enrichments.Job.Email, calendar)!!
         assertEquals(Kind.Admin, e.kind)
         assertEquals(90, e.effortMin)

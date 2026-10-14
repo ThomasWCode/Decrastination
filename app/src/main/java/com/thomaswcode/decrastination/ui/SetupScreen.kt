@@ -165,7 +165,9 @@ fun SetupScreen(graph: AppGraph, activity: Activity) {
             SetupItem(
                 title = "Gmail app password",
                 done = Secret.GmailAppPassword in secrets && state.status(Source.Gmail).works,
-                detail = sourceDetail(state.status(Source.Gmail), if (Secret.GmailAppPassword in secrets) "Saved." else "Not saved. Read-only: nothing is ever sent or changed."),
+                // The star is the decision (DX-03): said where the account is set up.
+                detail = sourceDetail(state.status(Source.Gmail), if (Secret.GmailAppPassword in secrets) "Saved." else "Not saved. Read-only: nothing is ever sent or changed.") +
+                    " The app reads your starred emails only, each with its whole conversation. Star an email in Gmail to make it a task; unstar it when it's done.",
                 action = "Enter" to { editing = Credential.Gmail },
             )
         }
