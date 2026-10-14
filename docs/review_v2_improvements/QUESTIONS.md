@@ -1,6 +1,6 @@
 # Questions for you
 
-Five rounds. **Rounds one to four** are answered: your answers and notes are kept below as you wrote them, with a line per question on how each was applied. **Round five** is the one question you left blank (Q-52) and two confirmations of how I read round four. An answer sheet for it is at the foot.
+Five rounds, all answered. Your answers and notes are kept below as you wrote them, with a line per question on how each was applied. Nothing is open; the documents reflect every answer.
 
 ---
 
@@ -251,14 +251,14 @@ Q-47: 1 Q-48: 1 Q-49: 3 Q-50: Keep recomendation Q-51: Yes, no cap, does nto rep
 - **Q-49** (option 3) PL-17 withdrawn: the weekend keeps its one window. Since the yield is now the only thing that corrects the weekend's share, PL-06 learns it per kind of day (weekday evenings, weekend and no-school days, school windows), and says honestly that the first few weekends will be over-planned until it does. Q-56 confirms that form.
 - **Q-50** PL-16 settled: a no-school day takes the weekend's hours, outside breaks and block-from time; a half-day's evening starts at the early finish.
 - **Q-51** AI-21 settled: no cap; a budget; Felix tidies weekly, shown as a diff with undo on the Reviews page; the pruning is never yours.
-- **Q-52** left blank. PL-15 keeps my recommendation meanwhile (same-day slots allowed before a deadline; margins unchanged) and the question is asked again below.
+- **Q-52** left blank in round four; answered in round five.
 - **Q-53** NF-07 and PL-13: a hand move pins; an event you add in Google Calendar that overlaps a slot displaces it and the piece is re-fitted around it; a slot event you deleted comes back only if its time is still free, so an event of yours in its place keeps it. Q-57 confirms that reading of your second sentence.
 - **Q-54** LR-03 settled: Felix messages around school slots.
 - **Q-55** settled: Felix everywhere except Settings; "Claude" names the model there.
 
 ---
 
-## Round five
+## Round five: answered
 
 | Q    | Decision                                                                                                                                           | Depends on it | My recommendation |
 | ---- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ------------- | ----------------- |
@@ -286,8 +286,18 @@ Q-47: 1 Q-48: 1 Q-49: 3 Q-50: Keep recomendation Q-51: Yes, no cap, does nto rep
 
 ---
 
-## Answer sheet (round five)
+**Your answers, as written:**
 
 ```
 Q-52: Yes Q-56: Yes, separate kind of days. Q-57: Yes
 ```
+
+### How each round-five answer was applied
+
+- **Q-52** PL-15 settled: a deadline later the same day is usable in the school windows before it; the calibrated margins are unchanged.
+- **Q-56** PL-06 settled: the yield is learned per kind of day (weekday evenings; weekend and no-school days; school windows), clamped 0.5–1.0, 1.0 until seven days of that kind exist. You didn't ask for a lower weekend floor, so 0.5 stays for every kind.
+- **Q-57** PL-13 and NF-07 settled: an event you add in Google Calendar displaces the slot it overlaps; a slot event you deleted is written back only if its time is still free.
+
+---
+
+No questions are open.

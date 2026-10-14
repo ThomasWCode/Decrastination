@@ -111,7 +111,7 @@ Sender rules were for inbox noise (your answer to Q-11: no longer important).
 
 **Final state.** A Tuesday with a double study period in the morning has thirty minutes of German vocab in it, on the calendar, before the evening starts.
 
-**Caveats.** Depends on the timetable staying right in Power Planner, which you say it does; the last good read is cached so a failed sync doesn't lose the windows. Days without school, and half-days, come from the school calendar (PL-16), not the timetable. Two-week timetables are handled already (`scheduleWeek`). Work that needs a laptop or home (a Teams upload, a long essay) shouldn't land in a 30-minute break: the model marks a step `where: "anywhere" | "home"` (my recommendation in Q-30, which you didn't contradict; Q-43 to confirm).
+**Caveats.** Depends on the timetable staying right in Power Planner, which you say it does; the last good read is cached so a failed sync doesn't lose the windows. Days without school, and half-days, come from the school calendar (PL-16), not the timetable. Two-week timetables are handled already (`scheduleWeek`). Work that needs a laptop or home (a Teams upload, a long essay) shouldn't land in a 30-minute break: the model marks a step `where: "anywhere" | "home"` (confirmed in Q-43).
 
 **Effort.** M.
 
