@@ -8,7 +8,7 @@ Revised after your answers and notes. The first version kept the planner's backw
 
 | ID | Improvement | Priority | Effort | Status |
 |---|---|---|---|---|
-| PL-01 | Spread every later task evenly to its deadline, by the time each day has | P1 | L | Changed (Q-16, note 3) |
+| PL-01 | Spread every later task evenly to its deadline, by the time each day has | P1 | L | Changed (Q-16, note 3); details confirmed (Q-32) |
 | PL-02 | Say early when a source deadline can't be met, and what gives | P1 | M | Changed |
 | PL-03 | A preference for how an evening starts | – | – | Withdrawn (Q-15) |
 | PL-04 | "On Thursday" and "at 19:30": pin work to a day or a time | P2 | S | Changed |
@@ -19,10 +19,10 @@ Revised after your answers and notes. The first version kept the planner's backw
 | PL-09 | When the work actually happens | P3 | S | Changed |
 | PL-10 | A term's view, not a fortnight's | P3 | M | – |
 | PL-11 | Export the log as CSV | P2 | S | – |
-| PL-12 | Every piece gets a time: slots in the day's free windows | P1 | L | New (note 2) |
+| PL-12 | Every piece gets a time: slots in the day's free windows, and outside breaks at weekends | P1 | L | New (note 2, Q-32) |
 | PL-13 | Adjust live: slots move when the day does | P1 | M | New (note 2) |
 | PL-14 | Dates the app set are elastic; only a source's deadline is overdue | P1 | M | New (note 4) |
-| PL-15 | School free periods as planning windows | P1 | M | New (note 2) |
+| PL-15 | Study periods, break and lunch as planning windows | P1 | M | New (note 2, Q-30) |
 
 ---
 
@@ -34,7 +34,7 @@ Revised after your answers and notes. The first version kept the planner's backw
 
 1. Overdue work and work due today or tomorrow are placed first, as now (`placeNow`): they take today's time before anything else and nothing below touches them.
 2. Each day's capacity is the time it really has: its windows (evening hours; school free periods, PL-15) less calendar busy time and hard busy instructions, times the learned yield (PL-06). No fixed maximum (your answer to Q-16).
-3. Every other dated task, in deadline order, is spread over its window (its first possible day to its last usable day, margin included): its remaining chunks go to days in proportion to the free time those days have left, so the task progresses every week of its window rather than waiting for its end. A day that's full passes the chunk to the nearest day in the window with room, earlier preferred, so the task still finishes. A task with a window of a week or more gets at least one chunk a week (the rule that stops a far task vanishing until it's urgent; its exact form is Q-32).
+3. Every other dated task, in deadline order, is spread over its window (its first possible day to its last usable day, margin included): its remaining chunks go to days in proportion to the free time those days have left, so the task progresses every week of its window rather than waiting for its end. A day that's full passes the chunk to the nearest day in the window with room, earlier preferred, so the task still finishes. A task with a window of a week or more gets at least one chunk a week (the rule that stops a far task vanishing until it's urgent; confirmed in Q-32).
 4. Revision for a test keeps its own rule: steps at least a day apart (the spaced-practice evidence from the first version: Cepeda et al., 2006, *Psychological Bulletin* 132(3), 354–380; Dunlosky et al., 2013, *Psychological Science in the Public Interest* 14(1), 4–58).
 5. Undated and app-dated work (PL-14) fills what's left, as now, up to `softMinPerDay`.
 
@@ -42,9 +42,9 @@ Pressure, and so the block, is today's bucket: the chunks the spread gave today 
 
 **Final state.** A Physics booklet due in twelve days with six chunks is on Tuesday, Thursday, Saturday, Monday, Wednesday and the Thursday before, not on the last six evenings. Today's list is a fair day's work, every day, and the block lifts when it's done.
 
-**Caveats.** More pieces per day, each shorter; the chunk size (`boxMin`, 45 by default) becomes the piece length and may want to be smaller (Q-32). A single-chunk task has no "even": it goes to the day in its window with the most free time, earlier on a tie (Q-32). The spread changes with every change in capacity (a new calendar event), which is why PL-13's stability rule matters. The planner tests (`PlannerTest`) that encode backwards placement change; AR-04's property tests should go in first.
+**Caveats.** More pieces per day, each shorter; the chunk size (`boxMin`) becomes the piece length, 30 minutes by default (Q-32). A single-chunk task has no "even": it goes to the day in its window with the most free time, earlier on a tie (Q-32). The spread changes with every change in capacity (a new calendar event), which is why PL-13's stability rule matters. The planner tests (`PlannerTest`) that encode backwards placement change; AR-04's property tests should go in first.
 
-**Effort.** L. **Decision.** Q-32 for the details.
+**Effort.** L. The details (proportional spread, one touch a week, the most-free day for a single piece, 30-minute pieces) were confirmed in Q-32.
 
 ## PL-02 Say early when a source deadline can't be met, and what gives
 
@@ -120,19 +120,20 @@ A fixed weekday/weekend maximum: your answer to Q-16 is that a day's maximum is 
 
 **Effort.** S.
 
-## PL-12 Every piece gets a time: slots in the day's free windows
+## PL-12 Every piece gets a time: slots in the day's free windows, and outside breaks at weekends
 
 **Now.** A day's plan is an ordered list; when in the day a piece happens is up to you. Your note 2: assign every task a specific time, put it in Google Calendar, adjust live, and use the school's free periods.
 
-**Proposal.** After the day buckets are made (PL-01), a slotting pass per day:
+**Proposal.** After the day buckets are made (PL-01), a slotting pass per day, with the details you confirmed in Q-32:
 
-- The day's windows: the evening hours (weekday or weekend), plus the school free periods (PL-15) on school days; minus calendar busy events, hard busy instructions and pinned slots (`AtTime`).
-- Pieces are laid into the windows in the day's order (`ORDER`, `Planner.kt:462`: due-soon first, then deadline, then kind), each slot the piece's minutes, with a short break between slots (5 min) and a longer one after 90 minutes of work (both settings; Q-32). A piece that doesn't fit the window's remainder goes to the next window; today's first slot starts no earlier than now.
-- Each slot is `Slot(piece, start, end, window: Evening | School, pinned)`, on the `DayBucket`. The Day view (UI-17) shows them as a timeline with the calendar's events; NF-07 writes them to the calendar; AI-15's micro-plan is attached to each; LR-03's nags fire from them.
+- The day's windows: the evening hours (weekday or weekend), plus the school windows (PL-15) on school days; minus calendar busy events, hard busy instructions and pinned slots (`AtTime`).
+- Pieces are 30 minutes by default (`boxMin` 45 → 30) and are laid into the windows in the day's order (`ORDER`, `Planner.kt:462`: due-soon first, then deadline, then kind), each slot the piece's minutes, with a 5-minute break between slots and a 15-minute one after 90 minutes of work (both settings). A piece that doesn't fit the window's remainder goes to the next window; the first evening slot starts at the window's start; today's first slot starts no earlier than now.
+- **Outside breaks (Q-32).** On a weekend day, three 20-minute *Outside* slots are laid in first, spread over the day's windows (morning, midday, afternoon), before the work is placed. They aren't work: they earn nothing, they don't count toward pressure, and they're on the calendar like everything else. When the day's work doesn't fit its free time with all three, they're dropped one at a time (three, two, one, none) until it does; their length never changes. Q-41 asks whether "three in weekends" means per day or per weekend, where in the day you want them, and which goes first.
+- Each slot is `Slot(piece | Outside, start, end, window: Evening | School, pinned)`, on the `DayBucket`. The Day view (UI-17) shows them as a timeline with the calendar's events; NF-07 writes them to the calendar; AI-15's micro-plan is attached to each work slot; Felix's messages (LR-03) fire from them.
 
-**Final state.** Tuesday reads: 10:50–11:20 German vocab (study period); 16:45–17:30 Statics Prep; 17:35–17:55 Reply to Mr Peters; 19:00–19:45 Statics Prep 2 of 3. The same on your phone's calendar.
+**Final state.** Tuesday reads: 10:45–11:15 German vocab (break); 13:50–14:20 Reply to Mr Peters (lunch); 16:45–17:15 Statics Prep; 17:20–17:50 Statics Prep 2 of 4. Saturday has three *Outside* cards between the work. The same on your phone's calendar.
 
-**Caveats.** A plan with times is a plan that's visibly wrong more often (you're late, the bus is late); PL-13 is what makes that tolerable, and the tone of the nags (AI-22) is what makes it a person's reminder rather than an app's accusation. Slotting is deterministic given the buckets, so the planner's purity and tests hold; it's new code in `Planner` (or beside it) with its own invariants (AR-04): no overlap, inside windows, breaks kept.
+**Caveats.** A plan with times is a plan that's visibly wrong more often (you're late, the bus is late); PL-13 is what makes that tolerable, and Felix's tone (AI-22) is what makes it a friend's reminder rather than an app's accusation. Slotting is deterministic given the buckets, so the planner's purity and tests hold; it's new code with its own invariants (AR-04): no overlap, inside windows, breaks kept, outside slots dropped in order.
 
 **Effort.** L.
 
@@ -165,15 +166,21 @@ A fixed weekday/weekend maximum: your answer to Q-16 is that a day's maximum is 
 
 **Effort.** M.
 
-## PL-15 School free periods as planning windows
+## PL-15 Study periods, break and lunch as planning windows
 
-**Now.** Work is planned in the evening window only (`weekdayHours`, 16:45–22:00); school hours are a planning no-go and a blocking allow (`BlockPolicy.isSchoolHours`). Your note 2: the timetable has break, lunch and study periods; when nothing else is in them, plan into them.
+**Now.** Work is planned in the evening window only (`weekdayHours`, 16:45–22:00); school hours are a planning no-go and a blocking allow (`BlockPolicy.isSchoolHours`). Your note 2 and your answer to Q-30: the timetable has study periods; break and lunch are at fixed times every day.
 
-**Proposal.** From the timetable (DX-09): the entries whose names mark free time (Q-30: which names) on each school day become windows, minus any calendar event that overlaps them and minus a buffer at each end (5 minutes to get somewhere and sit down). Only pieces that can be done there are placed in them: the model marks a step `where: "anywhere" | "home"` (a booklet is anywhere; a Teams upload or a long essay is home), and Anki pieces are always anywhere. The windows are shown on the Day timeline in their own colour. Blocking during these windows is a separate question (Q-29; BL-09): the planning restriction is relaxed, the phone's rules at school are yours to set.
+**Proposal.** On each school day, three kinds of window, no buffer at their ends (Q-30):
 
-**Final state.** A Wednesday with two study periods holds the vocab and the short admin before the evening, and the evening holds the long work.
+- **Study periods**: the timetable's entries named "Study Period" (DX-09), at their times that day (two-week timetables handled).
+- **Break**: 10:45–11:15, every school day.
+- **Lunch**: 13:15–13:40 and 13:50–14:35, every school day; 13:40–13:50 is eating and never planned.
 
-**Caveats.** Free periods vanish (a cover lesson, a trip) without the calendar knowing; a missed school slot is re-fitted like any other (PL-13), and the yield (PL-06) can be learned per window kind so school windows that rarely get used count for less.
+Break and lunch are settings with those defaults, since the timetable may not carry them; a study period comes from the timetable alone. Any calendar event overlapping a window takes its time out of it. A window shorter than 15 minutes after that isn't used (my recommendation in Q-30; Q-43 to confirm). Only pieces that can be done there are placed in them: the model marks a step `where: "anywhere" | "home"` (a booklet is anywhere; a Teams upload or a long essay is home; Anki is always anywhere), and you can override on the sheet. The windows are shown on the Day timeline in their own colour. The phone's rules at school are unchanged (your answer to Q-29; BL-09): a school slot is done with the booklet or the laptop and ticked after.
+
+**Final state.** A Wednesday with a study period holds the vocab at break, the short admin at lunch, and the study period's half hour of physics, before the evening starts.
+
+**Caveats.** Free periods vanish (a cover lesson, a trip) without the calendar knowing; a missed school slot is re-fitted like any other (PL-13), and the yield (PL-06) can be learned per window kind so school windows that rarely get used count for less. An early finish or an off-timetable day needs a calendar event to say so, or lunch will be planned.
 
 **Effort.** M.
 

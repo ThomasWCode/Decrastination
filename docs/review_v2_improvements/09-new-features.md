@@ -7,12 +7,12 @@ Things the app doesn't do that would be useful, judged against what it's for: a 
 | ID | Feature | Priority | Effort | Status |
 |---|---|---|---|---|
 | NF-01 | A photo of a worksheet or the board becomes a task, or informs one | P1 | M | Changed (Q-22) |
-| NF-02 | A weekly summary, generated and sent to your dad's email | P1 | M | Changed (Q-24) |
+| NF-02 | A weekly summary in the email itself, sent to your dad, with a Sunday reminder | P1 | M | Changed (Q-24, Q-33) |
 | NF-03 | Anki work counted from the deck's counts, without pressing anything | P2 | M | Changed (Q-23, note 1) |
 | NF-04 | Exam season: revision plans per subject from the exam dates | – | L | Deferred (Q-27) |
 | NF-05 | Recurring work and weekly-minutes goals | – | M | Deferred (Q-27) |
 | NF-06 | Returned work with feedback becomes a short task | P2 | S | – |
-| NF-07 | Every slot written to your Google Calendar, adjusted live | P1 | M | Changed (note 2) |
+| NF-07 | Every slot written to your Google Calendar, adjusted live | P1 | M | Changed (note 2); confirmed (Q-39) |
 | NF-08 | Streaks and a weekly target | – | – | Withdrawn (Q-25) |
 
 ---
@@ -29,13 +29,13 @@ Things the app doesn't do that would be useful, judged against what it's for: a 
 
 **Effort.** M.
 
-## NF-02 A weekly summary, generated and sent to your dad's email
+## NF-02 A weekly summary in the email itself, sent to your dad, with a Sunday reminder
 
-**Now.** The log knows the week: minutes, pieces, on time, days done in full, slots kept and missed, blocks, free time, instructions given, nags and replies.
+**Now.** The log knows the week: minutes, pieces, on time, days done in full, slots kept and missed, blocks, free time, instructions given, Felix's messages and your replies.
 
-**Proposal.** Your answer to Q-24: an option to generate and send. Settings → Summary: an address (your dad's), *Send this week's summary* as a button that composes the text and the CSV (PL-11) and hands them to the phone's email app (`ACTION_SENDTO`, no credentials held), and, if you want it, *Every Sunday at 20:00* as a schedule that does the same through a background send (which then needs the email app's share or an SMTP setting; the simpler route is to post a notification "Summary ready: send" that opens the composed email). Contents: the numbers, the review's note and changes, the week's nags and how they went, the moves you made. The text is also readable in the Reviews page (LR-01). What exactly is in it, and whether the schedule exists, is Q-33.
+**Proposal.** Your answers to Q-24 and Q-33. Settings → Summary: your dad's address, and *Send this week's summary*, which composes the email and hands it to the phone's email app (`ACTION_SENDTO`, no credentials held). On Sunday evening Felix reminds you ("Summary's ready; send it?") with a notification that opens the composed email; nothing is sent by itself. Everything goes in the body, no attachments: the numbers (minutes, pieces, on time, days done, slots kept and missed, free time), the review's note and changes, how the week's nags went, the moves and instructions, as short paragraphs and one small table. Written in your voice ("I kept 14 of 19 slots this week"). The same text is readable in the Reviews page (LR-01).
 
-**Caveats.** Written in your voice ("I kept 14 of 19 slots") or the app's? Yours, I'd say; it's your report. The background send is the only part with a real design question (how to send without the email app), which is why the notification route is proposed.
+**Caveats.** An email body is the right form for a reader who won't open a CSV; the CSV (PL-11) stays for you. The voice is yours, so Felix's drafting prompt for it is "write as the student, plainly, no excuses and no spin", and you can edit before sending.
 
 **Effort.** M.
 
@@ -69,7 +69,7 @@ Recurring work and weekly-minutes goals: not yet (Q-27).
 
 **Now.** The app reads the calendar (`READ_CALENDAR`); it doesn't write. Your note 2: every task gets a time, in Google Calendar, adjusted live.
 
-**Proposal.** `WRITE_CALENDAR`, and a calendar of the app's own on your Google account ("Decrastination", created once through `CalendarContract.Calendars` as a local-sync calendar on the account, or picked from the existing ones; Q-39). After each replan (PL-12, PL-13) the slots for today and the next six days are written as events (title the piece, description the micro-plan AI-15 and the task's source link, colour the pink, availability free so the read-back never counts them as busy), diffed against what's there by a stable id in the event's `SYNC_DATA` so unchanged slots aren't rewritten; the app's own calendar is excluded from reading (DX-13). Events further out are written weekly. Moving an event in Google Calendar by hand is read back as an `AtTime` change (the event's time differs from the slot's: the planner takes it as pinned), so the calendar is a second place to drag.
+**Proposal.** `WRITE_CALENDAR`, and a calendar of the app's own on your Google account ("Decrastination", created once through `CalendarContract.Calendars` as a local-sync calendar on the account, or picked from the existing ones; Q-39). After each replan (PL-12, PL-13) the slots for today and the next six days are written as events (title the piece, description the micro-plan AI-15 and the task's source link, colour the pink, availability free so the read-back never counts them as busy), diffed against what's there by a stable id in the event's `SYNC_DATA` so unchanged slots aren't rewritten; the app's own calendar is excluded from reading (DX-13). Events further out are written weekly. Moving an event in Google Calendar by hand is read back as an `AtTime` change (the event's time differs from the slot's: the planner takes it as pinned), so the calendar is a second place to drag. School slots and the weekend's outside breaks are written too. Confirmed in Q-39.
 
 **Final state.** Your Google Calendar shows the week as it will go: lessons, events, and the work between them, each with its first two minutes in the description.
 

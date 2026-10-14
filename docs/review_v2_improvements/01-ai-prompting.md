@@ -1,6 +1,6 @@
 # 1. AI prompting
 
-What Claude is asked, how its answers are checked, and where better wording or a little more context would give better readings. Covers the enrichment jobs (`enrich/Prompts.kt`), the chat (`enrich/ChatReader.kt`), instructions (`enrich/InstructionReader.kt`), the photo check (`enrich/PhotoChecker.kt`), the weekly review (`learn/ReviewInput.kt`), and two prompts that don't exist yet: the nags (AI-22) and the photo-as-context reading (AI-23).
+What Claude is asked, how its answers are checked, and where better wording or a little more context would give better readings. Covers the enrichment jobs (`enrich/Prompts.kt`), the chat (`enrich/ChatReader.kt`), instructions (`enrich/InstructionReader.kt`), the photo check (`enrich/PhotoChecker.kt`), the weekly review (`learn/ReviewInput.kt`), and two prompts that don't exist yet: Felix's messages (AI-22) and the photo-as-context reading (AI-23).
 
 Revised after your answers in [QUESTIONS.md](QUESTIONS.md). Items marked **Changed** differ from the first version; **Withdrawn** items are kept as a line so the record shows why.
 
@@ -32,10 +32,10 @@ The model-side settings (effort, model per job, caching, retries) are in [02-ai-
 | AI-18 | The weekly review should see last week's review, the day records and the slots kept | P2 | S | Changed |
 | AI-19 | A "Steps" change, so Claude can split or re-split a task of your own | P2 | M | – |
 | AI-20 | Schema descriptions as a steering channel | P2 | S | – |
-| AI-21 | Remembered facts, updatable, with a higher cap | P1 | M | Changed (Q-09) |
-| AI-22 | The nag prompt: a person's message, not an app's | P1 | M | New (note 6) |
+| AI-21 | Remembered facts, updatable on their own, cap 40 | P1 | M | Changed (Q-09, Q-36) |
+| AI-22 | The voice: Felix, a strict friend | P1 | M | New (note 6, Q-31) |
 | AI-23 | A photo as context for an existing task | P2 | M | New (Q-22) |
-| AI-24 | Replies to a notification continue in the chat | P1 | M | New (note 6) |
+| AI-24 | Replies continue in the chat; small changes apply at once | P1 | M | New (note 6, Q-31) |
 
 ---
 
@@ -144,9 +144,9 @@ Budget: 2,000 characters (about 500 tokens), the memories cut oldest-first when 
 
 **Now.** The schemas force an answer; the model can't say "I can't tell the deadline from this" or "the sheet in the photo may be the wrong one".
 
-**Proposal.** Add `question: string | null` to the Email, Assignment and photo-to-task schemas: *"rarely: the one question that would settle a reading the text can't (which Friday; whether the test is the 12th or the 19th)"*. A question becomes a notification with a reply field (AI-24), and a line on the task's sheet until answered; the answer is fed back as an instruction on the task, which re-enriches it with the answer in the text ("The student says: the test is the 19th"). With starred-only reading the question is never "is this a task?", which you've answered with the star.
+**Proposal.** Add `question: string | null` to the Email, Assignment and photo-to-task schemas: *"rarely: the one question that would settle a reading the text can't (which Friday; whether the test is the 12th or the 19th)"*. A question is put to you by Felix (AI-22) as a notification with a reply field (AI-24), and sits on the task's sheet until answered; the answer is fed back as an instruction on the task, which re-enriches it with the answer in the text ("The student says: the test is the 19th"). With starred-only reading the question is never "is this a task?", which you've answered with the star.
 
-**Final state.** A reading the model can't make is a question to you, not a guess.
+**Final state.** A reading the model can't make is a question to you, in Felix's words, not a guess.
 
 **Caveats.** Over-use: cap it in the prompt ("rarely") and watch the rate in the eval set.
 
@@ -236,25 +236,25 @@ A "this email is a task" override is unnecessary once only starred emails are re
 
 **Effort.** S.
 
-## AI-21 Remembered facts, updatable, with a higher cap
+## AI-21 Remembered facts, updatable on their own, cap 40
 
 **Now.** The chat sends the last twelve messages and the current state; what you said once is gone unless it became an instruction.
 
-**Proposal.** Per your answer to Q-09: a `remember` card type (and `forget`). A memory is `{topic, text, at}`; a new memory on the same topic replaces the old one, so the list updates rather than freezes; the cap is 40 lines (Q-36 to confirm), oldest dropped first when full; the whole list is in Settings, editable, with a reset (LR-08). Memories join the profile block (AI-05) on every call, including nags, which is where they earn their keep ("you said last week the bus is no good for German"). The prompt says what belongs in memory (preferences, patterns, facts about you) and what doesn't (busy times and limits are instructions).
+**Proposal.** Per your answers to Q-09 and Q-36: a memory is `{topic, text, at}`; the cap is 40; a new memory on the same topic replaces the old one, so the list updates rather than freezes, and the oldest goes when the cap is reached. Claude writes, updates and drops memories on its own, without a card: the chat's and Felix's schemas get `memories: [{topic, text | null}]` (null drops), applied as the answer is read. The thread shows a one-line "Remembered: football is Tuesdays" so you see what was kept (Q-46), and the whole list is in Settings, editable, with a reset (LR-08). Memories come from the chat and from replies to Felix alike (Q-36). They join the profile block (AI-05) on every call, including Felix's, which is where they earn their keep ("you said last week the bus is no good for German"). The prompt says what belongs in memory (preferences, patterns, facts about you) and what doesn't (busy times and limits are instructions).
 
-**Caveats.** Claude proposes; you confirm with the card. A memory that's really an excuse steers the nags, not the plan: the planner stays deterministic.
+**Caveats.** Silent updates mean a misheard reply can become a fact; the "Remembered:" line and the list in Settings are the check. Memories steer Felix and the estimates, never the planner directly.
 
 **Effort.** M.
 
-## AI-22 The nag prompt: a person's message, not an app's
+## AI-22 The voice: Felix, a strict friend
 
-**Now.** Notifications are computed strings (the briefing's list, "N min left"). Your note: they should feel like a person nagging you, and you should be able to answer.
+**Now.** Notifications are computed strings (the briefing's list, "N min left"). Your note: they should feel like a person nagging you, and you should be able to answer. Your answer to Q-31: a strict friend, named Felix, who decides for himself when to check again.
 
-**Proposal.** A `NagPrompts` job. Input: the trigger (a slot started ten minutes ago with no tick; a slot ended without a tick; the evening with pieces left; the morning), the slot and its task, today's plan and what's been done, the profile and memories, the last few nags and your replies (so it doesn't repeat itself and can hold you to what you said), the time. Output, as structured JSON: `message` (one or two sentences, the voice of someone who knows you and your week), `replies` (up to three short quick replies), `question` (optional). Rules in the system prompt: concrete (name the piece and the first action from AI-15), never guilt-tripping, never more than two sentences, no emojis unless you've asked for them, and no promise the app can't keep. A tone setting ("friend" / "coach" / "blunt") and a name for the voice are yours to pick (Q-31). The mechanism (when it fires, how you reply) is LR-03.
+**Proposal.** A `FelixPrompts` job used for every message in the voice: nags, the morning message (LR-04), the slot-end question (LR-09), the day-done line, questions (AI-10), the Sunday reminder (NF-02). Input: the reason (a slot started with no activity; a slot ended without a tick; a kept slot; the day done; the morning; a question to put), the slot and its task with its micro-plan (AI-15), today's plan and what's been done, the profile and memories, the last few messages and your replies (so he doesn't repeat himself and can hold you to what you said), the time. Output as structured JSON: `message` (one or two sentences), `replies` (up to three short quick replies), `nextCheckMin` (when he wants to check again; 20 when he gives none, Q-31), `memories` (AI-21). System prompt: *"You are Felix: a strict friend who knows the student's week and wants the work done. Be concrete: name the piece and its first action. Two sentences at most. No guilt, no sarcasm, no emojis, no promise the app can't keep. When you want a reply, offer the replies you'd accept. Say when you'll check again, and mean it."* No tone setting: Felix is the voice; his name and the one line that describes him are editable in Settings for the day you want him different.
 
-**Final state.** 17:12: "You said you'd do the statics at five. It's twelve past; the booklet's p.7, Q1 is two minutes. Starting?" with *Starting now* / *Give me 15* / *Not tonight, because…*.
+**Final state.** 17:12: "You put the statics at five. It's twelve past; p.7, Q1 is two minutes. Starting?" with *Starting now* / *Give me 15* / *Not tonight, because…*. He checks again when he said he would.
 
-**Caveats.** A model writing to you several times a day is a model that will sometimes misjudge tone; the history in the prompt and the tone setting are the controls. Cost per nag is cents (Q-10: not the constraint).
+**Caveats.** A model writing to you several times a day will sometimes misjudge; the history in the prompt and the state check before sending (LR-03) are the controls, and AC-07's log shows every message. The chat is Felix too (Q-44 to confirm), so one persona runs through the app.
 
 **Effort.** M.
 
@@ -270,13 +270,18 @@ A "this email is a task" override is unnecessary once only starred emails are re
 
 **Effort.** M.
 
-## AI-24 Replies to a notification continue in the chat
+## AI-24 Replies continue in the chat; small changes apply at once
 
 **Now.** A notification's actions are fixed buttons; the chat is a screen.
 
-**Proposal.** Nags (AI-22), questions (AI-10) and the briefing carry an inline reply (`RemoteInput`). A reply is a chat turn: the nag is a Claude message in the thread, your reply the next, and `ChatReader` answers with the normal schema (reply, changes, actions). The answer comes back as a notification with the reply text and up to two buttons for its proposals ("Move Statics to 19:30", "Open chat"); nothing is applied without a tap. The chat screen shows the whole thread, so a conversation started from a notification can be continued there.
+**Proposal.** Felix's messages, questions (AI-10) and the morning message carry an inline reply (`RemoteInput`). A reply is a chat turn: Felix's message is the previous turn, your reply the next, and `ChatReader` answers with the normal schema (reply, changes, actions, memories). Per your answer to Q-31, what the reply asks for is applied at once when it's small, and offered as a button when it's big:
 
-**Caveats.** The reply notification can't show cards; two buttons and "Open chat" cover it. The model lock (AC-05) matters here: a reply must not wait behind a background enrichment.
+- **Applied at once:** moving a piece within its due date (`AtTime`, `OnDay`, later today), changing a piece's minutes, "took longer by N" (LR-09), a busy time for today, ticking a step you said you did, memories.
+- **A button first:** a new task or event, a busy time beyond today, a deadline change (`DueBy`), not-a-task, replacing a task's steps.
+
+The answer comes back as a notification in Felix's words saying what he did ("Moved it to 17:27 and the reply to Mr Peters to 18:15") or offering the button. The chat screen shows the whole thread, so a conversation begun from a notification continues there. The line between small and big is mine; Q-42 asks you to confirm it.
+
+**Caveats.** Applied-at-once means a misread reply moves something; every applied change is an instruction, listed and undoable from the chat ("undo that"). The model lock (AC-05) matters here: a reply must not wait behind a background enrichment.
 
 **Effort.** M.
 

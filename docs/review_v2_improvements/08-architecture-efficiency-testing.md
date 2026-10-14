@@ -22,7 +22,7 @@ The code's shape is good: a pure core with tests, Android at the edges, JSON sto
 
 **Now.** The prompts are Kotlin string templates; a change is reviewed as a Kotlin diff and nothing ties it to a version.
 
-**Proposal.** A test that renders every system prompt and schema (fixed date, zone, settings, profile) to `app/src/test/resources/prompts/<job>.txt` and `.schema.json`, failing on any difference; `-PupdateGolden` rewrites them; the test checks `Prompts.VERSION` changed when a golden file did. The nag prompt (AI-22) and the profile block (AI-05) included.
+**Proposal.** A test that renders every system prompt and schema (fixed date, zone, settings, profile) to `app/src/test/resources/prompts/<job>.txt` and `.schema.json`, failing on any difference; `-PupdateGolden` rewrites them; the test checks `Prompts.VERSION` changed when a golden file did. Felix's prompt (AI-22) and the profile block (AI-05) included.
 
 **Effort.** S.
 
@@ -51,7 +51,7 @@ The code's shape is good: a pure core with tests, Android at the edges, JSON sto
 - capacity: no day over its free time × yield, except by overdue and due-today work and by chunks flagged as unable to fit;
 - deadlines: every chunk of a dated task on or before its last usable day, or flagged;
 - spread: a task with a window of seven days or more has a chunk in every seven-day stretch of it (the minimum-touch rule, Q-32);
-- slots: no two overlap, each inside a window, breaks kept, pinned slots where pinned, "home" pieces never in school windows;
+- slots: no two overlap, each inside a window, breaks kept, pinned slots where pinned, "home" pieces never in school windows, outside breaks present on weekends unless the day's work needed their time, dropped in order;
 - determinism: the same input gives the same plan;
 - stability: after one change (a tick, a new event, one minute passing) at most the affected pieces move, and none moves without a reason the `why` field names.
 
@@ -63,7 +63,7 @@ Print the seed on failure. Plain Kotlin and `kotlin.random.Random(seed)`.
 
 **Now.** Nothing exercises a Compose screen.
 
-**Proposal.** Compose UI tests with Robolectric for: the Day timeline's now card ticks a slot and the next shows; a nag's reply produces a reply notification whose button applies the move; the sheet's Not a task hides and undo returns; drag past the due date is refused with the reason.
+**Proposal.** Compose UI tests with Robolectric for: the Day timeline's now card ticks a slot and the next shows; a reply to Felix applies a small move at once and offers a button for a big one (AI-24); the sheet's Not a task hides and undo returns; drag past the due date is refused with the reason.
 
 **Effort.** M.
 
