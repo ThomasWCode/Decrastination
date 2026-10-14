@@ -207,7 +207,7 @@ class GmailTest {
         assertTrue(text.endsWith(" message 6"))
         assertTrue(" message 5" in text)
         // The one too long for what's left is cut, those before it said to be left out.
-        assertTrue(text.startsWith("[2 earlier messages left out: 10020 characters.]"), text.take(80))
+        assertTrue(text.startsWith("[2 earlier messages left out.]"), text.take(80))
         assertTrue("[…]" in text)
         assertTrue(GmailThreads.MAX_CONVERSATION_CHARS <= Prompts.MAX_TEXT)
     }
@@ -362,6 +362,26 @@ class GmailTest {
         // What it quotes came before you were in the conversation: Dad's reply quoting John's question.
         val messages = listOf(message(9, "t", 300, "Re: Help", "Tom", "tom@example.com", sent = true), message(4, "t", 100, "RE: Help!", "Dad", "dad@example.com"), message(7, "t", 200, "Re: Help", "John", "john@example.com"))
         assertEquals(4L, GmailThreads.oldest(messages).uid)
+    }
+
+    @Test
+    fun `a read takes a long conversation's newest messages, and says the rest are left out`() {
+        // Too long to read whole in a sync's time, it would be started again at every sync.
+        val messages = (1L..25).map { message(it, "t", it * 1_000, "Re: Long", "Dad", "dad@example.com") }
+        val reading = GmailThreads.reading(messages)
+        assertEquals((6L..25).toList(), reading.map { it.uid })
+        val conversation = GmailThreads.conversation(messages, 11)
+        assertEquals(listOf(conversation), GmailThreads.toRead(listOf(conversation), emptyMap(), GmailThreads.MAX_MESSAGES_READ))
+        val text = GmailThreads.conversationText(reading.map { it to "Message ${it.uid}" }, LONDON, notRead = 5)
+        assertTrue(text.startsWith("[5 earlier messages left out.]"), text.take(60))
+        assertTrue(text.endsWith("Message 25"))
+    }
+
+    @Test
+    fun `a file attached again later is listed once, two alike in one message both`() {
+        val form = Mime.Attachment("form.pdf", "application/pdf", 1_000)
+        val photo = Mime.Attachment("photo.jpg", "image/jpeg", 2_000)
+        assertEquals(listOf(form, form, photo), GmailThreads.attachments(listOf(listOf(form, form), listOf(form, photo), listOf(photo))))
     }
 
     @Test

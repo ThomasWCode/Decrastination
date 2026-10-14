@@ -113,38 +113,54 @@ object Mime {
     }
 
     /**
-     * A body or disposition parameter's value, by [key], as a name may be written: plain, as encoded
-     * words (RFC 2047), or as RFC 2231's `key*` (`utf-8''consent%20form.pdf`).
+     * A body or disposition parameter's value, by [key], as a name may be written, the fullest form
+     * first: RFC 2231's `key*` (`utf-8''consent%20form.pdf`), or its continuations (`key*0*`,
+     * `key*1*`, … percent-encoded, or `key*0`, `key*1`, … plain), joined; else the plain `key`,
+     * perhaps as encoded words (RFC 2047), which a client sends beside the others for older readers.
      */
     private fun parameter(list: ImapValue?, key: String): String? {
         val params = list?.list.orEmpty()
+        val values = HashMap<String, String>()
         for (i in 0 until params.size - 1 step 2) {
             val name = params[i].string?.lowercase() ?: continue
             val value = params[i + 1].string ?: continue
-            if (name == key) return decodeHeader(value).trim().takeIf { it.isNotEmpty() }
-            if (name == "$key*") return extended(value)?.trim()?.takeIf { it.isNotEmpty() }
+            values.putIfAbsent(name, value)
         }
-        return null
+        values["$key*"]?.let { extended(listOf(true to it)) }?.trim()?.takeIf { it.isNotEmpty() }?.let { return it }
+        val continued = generateSequence(0) { it + 1 }
+            .map { n -> values["$key*$n*"]?.let { true to it } ?: values["$key*$n"]?.let { false to it } }
+            .takeWhile { it != null }.filterNotNull().toList()
+        if (continued.isNotEmpty()) extended(continued).trim().takeIf { it.isNotEmpty() }?.let { return it }
+        return values[key]?.let { decodeHeader(it).trim() }?.takeIf { it.isNotEmpty() }
     }
 
-    /** RFC 2231's `charset'language'percent-encoded` value. */
-    private fun extended(value: String): String? {
-        val parts = value.split('\'', limit = 3)
-        if (parts.size != 3) return value
-        val text = parts[2]
+    /**
+     * RFC 2231's value from its pieces, in order, each percent-encoded (true) or plain: the first
+     * encoded one starts `charset'language'`, which says how the bytes read.
+     */
+    private fun extended(pieces: List<Pair<Boolean, String>>): String {
         val bytes = ByteArrayOutputStream()
-        var i = 0
-        while (i < text.length) {
-            val hex = if (text[i] == '%' && i + 2 < text.length) text.substring(i + 1, i + 3).toIntOrNull(16) else null
-            if (hex != null) {
-                bytes.write(hex)
-                i += 3
-            } else {
-                bytes.write(text[i].code)
-                i++
+        var named: String? = null
+        pieces.forEachIndexed { index, (encoded, value) ->
+            if (!encoded) {
+                bytes.write(value.toByteArray(Charsets.UTF_8))
+                return@forEachIndexed
+            }
+            val split = if (index == 0) value.split('\'', limit = 3) else emptyList()
+            val text = if (split.size == 3) split[2].also { named = split[0].ifEmpty { null } } else value
+            var i = 0
+            while (i < text.length) {
+                val hex = if (text[i] == '%' && i + 2 < text.length) text.substring(i + 1, i + 3).toIntOrNull(16) else null
+                if (hex != null) {
+                    bytes.write(hex)
+                    i += 3
+                } else {
+                    bytes.write(text[i].code)
+                    i++
+                }
             }
         }
-        return bytes.toByteArray().toString(charset(parts[0].ifEmpty { null }))
+        return bytes.toByteArray().toString(charset(named))
     }
 
     /** Decodes a part's bytes, which may be cut short by a partial fetch. */

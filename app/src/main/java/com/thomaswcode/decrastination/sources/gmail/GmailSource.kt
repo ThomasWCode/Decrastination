@@ -134,6 +134,14 @@ object GmailThreads {
      */
     const val CUT_QUOTED = "[Quoted text or a signature left out: %d characters.]"
 
+    /**
+     * The most of a conversation's messages a read takes, its newest: a conversation too long to
+     * read whole within a sync's time would otherwise be started again at every sync, never
+     * finished, and keep every other from being read. The text keeps its newest messages first
+     * anyway; those not read are said to be left out.
+     */
+    const val MAX_MESSAGES_READ = 20
+
     /** The least of an older message worth keeping when it's cut to fit; with less room, it's left out. */
     private const val LEAST_CUT = 400
 
@@ -189,6 +197,24 @@ object GmailThreads {
      * it's read whole, where the later messages' quotes are of messages shown above them (DX-06).
      */
     fun oldest(messages: List<MailMessage>): MailMessage = messages.minWith(NEWEST)
+
+    /** Which of a conversation's [messages] a read takes: its newest [MAX_MESSAGES_READ], oldest first. */
+    fun reading(messages: List<MailMessage>): List<MailMessage> = messages.sortedWith(NEWEST).takeLast(MAX_MESSAGES_READ)
+
+    /**
+     * A conversation's attachments, from each message's ([perMessage], oldest first): a file a later
+     * message attaches again (a reply quoting it, a forward) is listed once, by its name, type and
+     * size; two alike in one message are two files, and both stay.
+     */
+    fun attachments(perMessage: List<List<Mime.Attachment>>): List<Mime.Attachment> {
+        val out = mutableListOf<Mime.Attachment>()
+        val earlier = HashSet<Mime.Attachment>()
+        for (files in perMessage) {
+            out += files.filterNot { it in earlier }
+            earlier += files
+        }
+        return out
+    }
 
     /**
      * [messages], every message of one conversation, as its task is made from: named by its newest;
@@ -261,9 +287,9 @@ object GmailThreads {
      * long for the room left is cut to it, and those before it are left out, said at the top. The
      * time is written as numbers, so the rules' dates aren't read from a header.
      */
-    fun conversationText(messages: List<Pair<MailMessage, String>>, zone: ZoneId): String {
+    fun conversationText(messages: List<Pair<MailMessage, String>>, zone: ZoneId, notRead: Int = 0): String {
         val ordered = messages.sortedWith(compareBy(NEWEST) { it.first })
-        if (ordered.size == 1) return ordered.single().second
+        if (ordered.size == 1 && notRead == 0) return ordered.single().second
         val parts = ordered.map { (message, text) ->
             val from = if (message.sent) "you" else listOfNotNull(message.fromName, message.fromAddress?.let { "<$it>" }).joinToString(" ").ifEmpty { "someone" }
             "--- From $from, ${Instant.ofEpochMilli(message.receivedAt).atZone(zone).format(HEADER_TIME)} ---\n" + text.trim()
@@ -272,7 +298,6 @@ object GmailThreads {
         // Room for the line saying what's left out, and a blank line between messages.
         var room = MAX_CONVERSATION_CHARS - LEFT_OUT_ROOM
         var leftOut = 0
-        var leftChars = 0
         for (i in parts.indices.reversed()) {
             val part = parts[i]
             when {
@@ -285,13 +310,12 @@ object GmailThreads {
                     room = 0
                     leftOut = -1
                 }
-                else -> {
-                    leftOut = maxOf(leftOut, 0) + 1
-                    leftChars += ordered[i].second.length
-                }
+                else -> leftOut = maxOf(leftOut, 0) + 1
             }
         }
-        if (leftOut > 0) kept.addFirst("[${if (leftOut == 1) "An earlier message" else "$leftOut earlier messages"} left out: $leftChars characters.]")
+        // The older messages a read didn't take ([notRead]) are left out too.
+        val out = maxOf(leftOut, 0) + notRead
+        if (out > 0) kept.addFirst("[${if (out == 1) "An earlier message" else "$out earlier messages"} left out.]")
         return kept.joinToString("\n\n")
     }
 
@@ -359,9 +383,10 @@ object GmailThreads {
         var messages = 0
         for (conversation in conversations.sortedByDescending { it.receivedAt }) {
             if (known[conversation.version]?.whole == true) continue
-            if (out.isNotEmpty() && messages + conversation.uids.size > max) break
+            val reads = minOf(conversation.uids.size, MAX_MESSAGES_READ)
+            if (out.isNotEmpty() && messages + reads > max) break
             out += conversation
-            messages += conversation.uids.size
+            messages += reads
         }
         return out
     }
@@ -514,11 +539,13 @@ class GmailSource(private val secrets: SecretStore) : TaskSource {
                 conversations@ for (conversation in GmailThreads.toRead(conversations, stored, MAX_BODIES)) {
                     if (System.nanoTime() > lastBy || (read.isNotEmpty() && System.nanoTime() > textsUntil)) break
                     val texts = mutableListOf<Pair<MailMessage, String>>()
-                    val attachments = mutableListOf<Mime.Attachment>()
+                    val attachments = mutableListOf<List<Mime.Attachment>>()
                     // What the oldest message quotes came before the conversation reached you, so
                     // it's read whole; the later ones' quotes are of messages shown above them (DX-06).
-                    val oldest = GmailThreads.oldest(conversation.uids.map(envelopes::getValue))
-                    for (uid in conversation.uids) {
+                    val messages = conversation.uids.map(envelopes::getValue)
+                    val oldest = GmailThreads.oldest(messages)
+                    val reading = GmailThreads.reading(messages)
+                    for (uid in reading.map { it.uid }) {
                         val now = System.nanoTime()
                         if (now > lastBy) break@conversations
                         socket.soTimeout = ((lastBy - now) / 1_000_000).toInt().coerceIn(1, TIMEOUT_MS)
@@ -537,7 +564,10 @@ class GmailSource(private val secrets: SecretStore) : TaskSource {
                         texts += envelopes.getValue(uid) to text
                         attachments += attached
                     }
-                    read[conversation.version] = GmailThreads.Body(GmailThreads.conversationText(texts, context.zone), attachments = attachments.distinct())
+                    read[conversation.version] = GmailThreads.Body(
+                        GmailThreads.conversationText(texts, context.zone, notRead = messages.size - reading.size),
+                        attachments = GmailThreads.attachments(attachments),
+                    )
                 }
                 val bodies = GmailThreads.withRead(stored, read)
                 if (!cut) {

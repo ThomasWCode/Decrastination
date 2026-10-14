@@ -153,7 +153,7 @@ class PromptsTest {
         assertTrue("Every email you see was starred by the student: it is something to do." in system, system)
         assertTrue("Info" !in system, system)
         // What it sees, and what to do when it can't see what's asked (AI-04, DX-06).
-        assertTrue("You see the whole conversation the starred message is in, oldest message first" in system, system)
+        assertTrue("You see the conversation the starred message is in, oldest message first (where a long one's earlier messages had to be cut short or left out, it says so)" in system, system)
         assertTrue("The oldest message is shown whole, with whatever it quotes from before; in the later ones, quoted text and signatures are left out and marked in square brackets" in system, system)
         assertTrue("You don't see attachments, only their names (an attached email goes by its subject). Where what the email asks turns on an attachment or an earlier message you can't see, and its name doesn't tell you, don't guess what it asked: make nextStep say to read it first, naming it" in system, system)
         assertTrue("and effortMin 10." in system, system)
@@ -164,7 +164,7 @@ class PromptsTest {
     fun `a conversation says it's all shown, and its attachments are named`() {
         val files = """[{"name":"consent-form.pdf","type":"application/pdf","size":112639},{"name":"itinerary.docx","type":"application/msword"}]"""
         val text = Prompts.describe(email().copy(extra = email().extra + mapOf(GmailThreads.EXTRA_MESSAGES to "3", GmailThreads.EXTRA_ATTACHMENTS to files)), Enrichments.Job.Email, NOW, LONDON)
-        assertTrue("Messages in this conversation: 3, all shown, oldest first" in text, text)
+        assertTrue("Messages in this conversation: 3, oldest first" in text, text)
         assertTrue("Attachments: consent-form.pdf (110 KB), itinerary.docx" in text, text)
         // One message, nothing attached: neither line.
         val single = Prompts.describe(email(), Enrichments.Job.Email, NOW, LONDON)
