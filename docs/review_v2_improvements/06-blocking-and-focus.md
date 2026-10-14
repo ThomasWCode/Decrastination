@@ -17,8 +17,8 @@ Revised after your notes and both rounds of answers. Sessions go (note 1): you r
 | BL-07 | A day with nothing to do | P2 | S | – (Q-18 yes) |
 | BL-08 | Without sessions: a tick keeps a short slot; a long one needs a photo to earn | P1 | M | New (note 1); settled (Q-28) |
 | BL-09 | The phone at school while a slot is scheduled there | P2 | S | New (note 2); settled (Q-29) |
-| BL-10 | Free time between today's slots | P1 | S | New; Q-47 |
-| BL-11 | A missed slot, or a moved one, and today's block | P1 | S | New; Q-48 |
+| BL-10 | Free time between today's slots | P1 | S | New; settled (Q-47) |
+| BL-11 | A missed slot, or a moved one, and today's block | P1 | S | New; settled (Q-48) |
 
 ---
 
@@ -100,11 +100,11 @@ A per-session allowance for a blocked site: no (Q-19), and there are no sessions
 1. Spend in the gaps: once the slot before a gap is kept, earned free time is spendable until the next slot's start, when the block returns. The countdown exists (`FocusService.startSpending`); its end becomes the earlier of the credit's end and the next slot's start.
 2. As BL-01 alone: nothing until the day's slots are all kept.
 
-**Recommendation.** 1. The reward lands when the work does, which is the point, and the next slot takes the phone back.
+**Decision.** Option 1 (your answer to Q-47): spend in the gaps. The reward lands when the work does, and the next slot takes the phone back.
 
 **Caveats.** A gap that's really the time you'd have used to start the next piece early is phone time instead; the slot times are the contract, and Felix can say so ("you've 40 minutes; the reply would take 10").
 
-**Effort.** S. **Decision.** Q-47.
+**Effort.** S.
 
 ## BL-11 A missed slot, or a moved one, and today's block
 
@@ -115,9 +115,9 @@ A per-session allowance for a blocked site: no (Q-19), and there are no sessions
 2. Missed and moved pieces both keep today's pressure until the hours end.
 3. Neither: whatever is in today's list is what gates the block.
 
-**Recommendation.** 1. Missing a slot shouldn't open the phone; choosing to move it is your call and your record (the summary shows the moves).
+**Decision.** Option 1 (your answer to Q-48): a missed slot keeps today's pressure until the hours end; a deliberate move lifts it and is your record (the summary shows the moves).
 
-**Effort.** S. **Decision.** Q-48.
+**Effort.** S.
 
 ---
 

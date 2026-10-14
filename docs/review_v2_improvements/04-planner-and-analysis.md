@@ -13,7 +13,7 @@ Revised after your answers and notes. The first version kept the planner's backw
 | PL-03 | A preference for how an evening starts | – | – | Withdrawn (Q-15) |
 | PL-04 | "On Thursday" and "at 19:30": pin work to a day or a time | P2 | S | Changed |
 | PL-05 | A most-per-day, apart from the hours | – | – | Withdrawn (Q-16) |
-| PL-06 | Plan with the hours the days really hold: a learned yield | P1 | M | Changed (Q-16) |
+| PL-06 | Plan with the hours the days really hold: a learned yield, per kind of day | P1 | M | Changed (Q-16, Q-49) |
 | PL-07 | Each piece says why it's where it is | P2 | S | – |
 | PL-08 | Stats by subject, with estimate accuracy | P2 | M | – |
 | PL-09 | When the work actually happens | P3 | S | Changed |
@@ -22,9 +22,9 @@ Revised after your answers and notes. The first version kept the planner's backw
 | PL-12 | Every piece gets a time: slots in the day's free windows, and outside breaks at weekends | P1 | L | New (note 2, Q-32) |
 | PL-13 | Adjust live: slots move when the day does | P1 | M | New (note 2) |
 | PL-14 | Dates the app set are elastic; only a source's deadline is overdue | P1 | M | New (note 4) |
-| PL-15 | Study periods, break and lunch as planning windows | P1 | M | New (note 2, Q-30); Q-52 |
-| PL-16 | The school calendar: holidays, half-days, INSET days | P1 | M | New (Q-43); Q-50 |
-| PL-17 | Weekend windows: two a day, and the share weekends take | P1 | S | New; Q-49 |
+| PL-15 | Study periods, break and lunch as planning windows | P1 | M | New (note 2, Q-30); Q-52 still open |
+| PL-16 | The school calendar: holidays, half-days, INSET days | P1 | M | New (Q-43); settled (Q-50) |
+| PL-17 | Weekend windows: two a day | – | – | Withdrawn (Q-49) |
 
 ---
 
@@ -72,13 +72,15 @@ An evening-start preference (quickest / hardest / Anki first): your answer to Q-
 
 A fixed weekday/weekend maximum: your answer to Q-16 is that a day's maximum is the time it has. That's PL-01's capacity rule with PL-06's yield.
 
-## PL-06 Plan with the hours the days really hold: a learned yield
+## PL-06 Plan with the hours the days really hold: a learned yield, per kind of day
 
 **Now.** `DayRecord` keeps each day's planned and done minutes; `capacityAdvice` turns ten bad days into a sentence; the planner keeps planning the full window.
 
-**Proposal.** A learned *yield* in `Calibrator`: the median of done ÷ planned over the last 14 days with work in them, clamped to 0.5–1.0, from 7 days on; the planner's capacity is the day's free time × yield. Done minutes come from slot outcomes (LR-09) now that sessions go. Shown on Stats: "Your days hold about 70 % of the free time in them". The weekly review may change the hours themselves within bounds, as it may the box and margin today.
+**Proposal.** A learned *yield* in `Calibrator`, per kind of day and window, since your answer to Q-49 makes it the only thing that corrects the weekend's share: one yield for weekday evenings, one for weekend days (and no-school days, PL-16), one for school windows (PL-15). Each is the median of done ÷ planned over that kind's last 14 days with work in them, clamped to 0.5–1.0, used from 7 such days on and 1.0 until then. A day's capacity is its free time × its kind's yield; done minutes come from slot outcomes (LR-09). Shown on Stats: "Weekday evenings hold about 85 % of their free time; weekends about 45 %". The weekly review may change the hours themselves within bounds, as it may the box and margin today.
 
-**Caveats.** The feedback loop (less planned, less done, less planned) is bounded by the clamp and reverses as soon as you do what's planned. Show the number beside the hours so a settings problem isn't hidden behind it.
+**Final state.** After a few weekends the spread stops putting three times a weekday's share on a Saturday, because Saturdays have shown what they deliver.
+
+**Caveats.** Honest about Q-49's option 3: for the first few weekends the fourteen-hour window is planned near-full and under-delivered, and the missed slots re-fit into the week (PL-13); the per-kind yield then corrects it, and the clamp at 0.5 means a Saturday is never planned at less than seven hours of a fourteen-hour window. Narrowing the weekend hours in Settings remains the direct fix if that's still too much. The feedback loop (less planned, less done, less planned) is bounded by the clamp and reverses as soon as you do what's planned. Q-56 confirms the per-kind form.
 
 **Effort.** M.
 
@@ -148,6 +150,7 @@ A fixed weekday/weekend maximum: your answer to Q-16 is that a day's maximum is 
 - **Slot kept** (you ticked the piece, or the photo check passed): recorded as done with its minutes (LR-09). The following slots keep their times; the gap is yours. A *Pull the next forward* button on the Day view moves the rest up if you'd rather.
 - **Slot missed** (its end passed with no tick, after a 10-minute grace): the piece is re-slotted into the next free time today after the current slots, pushing later pieces back within today's windows; what no longer fits today goes to tomorrow's spare time and the rest of its task is re-spread (PL-01). The piece is never "overdue" unless its source deadline has passed (PL-14). A nag goes out (LR-03).
 - **What a missed slot does to the block** is BL-11 (Q-48): re-slotting the piece to tomorrow must not be a way of opening the phone tonight.
+- **An event you add** in Google Calendar (or any calendar the app reads) that overlaps a slot takes the time: the slot is re-fitted around it at the next replan, like any other change to the day. A slot event you deleted there is written back only if its time is still free; with an event of yours in its place, the piece moves (your answer to Q-53; Q-57 confirms the reading).
 - **The day changes** (a calendar event appears, an instruction lands, a task arrives): re-slot the affected day with a stability rule: a piece keeps its slot unless something now overlaps it, and moved pieces move as little as possible. Without this the timeline would reshuffle itself every sync and you'd stop trusting it.
 - **Triggers.** An alarm at each slot's end (exact alarms are already used for sessions' ends; reuse), the app opening, a calendar change (`watchCalendar` exists), a sync.
 
@@ -191,21 +194,15 @@ Break and lunch are settings with those defaults, since the timetable may not ca
 
 **Now.** The app knows weekdays and weekends; it doesn't know term dates. A school holiday is planned as a school day (study-period windows that don't exist, the weekday hours), and the blocker allows blocked apps all morning as "school hours".
 
-**Proposal.** Your answer to Q-43: you tell Felix about holidays and half-days. A `SchoolCalendar` store with `NoSchool(from, to, label)` (holidays, INSET days) and `HalfDay(date, endsAt)`, told to Felix or the chat ("half term is 26 to 30 Oct", "Friday finishes at 12:30"), which makes the entry as a button-first change (Q-42: it's new data), or typed in Settings → School. Effects, to confirm in Q-50: a no-school day has no school windows and takes the weekend's hours (PL-17), outside breaks (PL-12) and block-from time (BL-02); a half-day's school windows end at the time given and the evening window starts then; the spread (PL-01) sees the extra time at once; Felix knows ("half term next week: I've spread the German over it"). The week strip (UI-17) shows no-school days with the weekend's shape.
+**Proposal.** Your answer to Q-43: you tell Felix about holidays and half-days. A `SchoolCalendar` store with `NoSchool(from, to, label)` (holidays, INSET days) and `HalfDay(date, endsAt)`, told to Felix or the chat ("half term is 26 to 30 Oct", "Friday finishes at 12:30"), which makes the entry as a button-first change (Q-42: it's new data), or typed in Settings → School. Effects (confirmed in Q-50): a no-school day has no school windows and takes the weekend's hours, outside breaks (PL-12) and block-from time (BL-02); a half-day's school windows end at the time given and the evening window starts then; the spread (PL-01) sees the extra time at once; Felix knows ("half term next week: I've spread the German over it"). The week strip (UI-17) shows no-school days with the weekend's shape.
 
 **Caveats.** Power Planner's semester has start and end dates but no holidays, so this stays typed or told. A holiday told wrongly plans a school day as free; the week strip shows it and the entry is editable.
 
-**Effort.** M. **Decision.** Q-50.
+**Effort.** M.
 
-## PL-17 Weekend windows: two a day, and the share weekends take
+## PL-17 Withdrawn
 
-**Now.** `weekendHours` is one window, 08:30–22:30: fourteen hours. Proportional spreading (PL-01, Q-32) gives each day a share of a task in proportion to its free time, so a Saturday with fourteen free hours takes nearly three times a weekday evening's share, and the yield (PL-06) only corrects that after weeks of Saturdays not delivering it.
-
-**Proposal.** Weekend hours as a list of windows (two by default, say 10:00–13:00 and 15:00–19:00; yours to set, with the pickers of UI-01), the outside breaks (PL-12) laid into them. The spread then sees a weekend day of six or seven hours. The same list shape serves no-school days (PL-16). If you'd rather keep one long window, a `weekendShare` setting (a weekend day counts as at most N hours in the spread) does the same job more crudely.
-
-**Caveats.** One more thing in Settings; the alternative (learning that weekends under-deliver) takes weeks, with the plan wrong meanwhile.
-
-**Effort.** S. **Decision.** Q-49.
+Two weekend windows, or a share cap on the weekend: your answer to Q-49, no. The weekend keeps its one window and the yield learns what weekends deliver, per kind of day (PL-06).
 
 ---
 
