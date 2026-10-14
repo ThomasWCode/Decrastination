@@ -16,9 +16,11 @@ Phase 1 (`impl/phase-1-tests-and-email.md`), with the owner's change of 14 Oct (
 - Phone (14 Oct, 22:51 and 23:07, over 2.0.0 with its data): the first starred-only sync added 7 conversations and finished the 18 unstarred inbox tasks; 17 starred conversations open, kinds only Admin and Event, Claude's readings under the new prompt; a sync with nothing new sends `LIST`, `EXAMINE`, two `UID SEARCH`es and `LOGOUT`, no `FETCH`; the Zip card sheet names its PDF, the tap opens Gmail; Setup's Gmail text; screenshots light and dark in `private/screens/phase1/`; protection armed, the six accessibility services as found, no PiP.
 - Eval (`docs/eval.md`): the email cases re-read through the new pipeline; round 3 on the prompt as built, 10 of 10.
 
+- Pull request #35: Codex round 1 (5 P2: the input hash without attachments, "all shown", a long conversation never finishing, RFC 2231 names, alike attachments merged) fixed in 88afeab; round 2 (1 P2: the prompt claimed the oldest message is shown whole) fixed in this commit, with the first message read (not the conversation's first) keeping its quotes. One P2 or fewer: the loop ends.
+
 ## Current
 
-Phase 1's pull request and its Codex review loop.
+Phase 1: CI on #35, the final build on the phone, the merge.
 
 ## Outstanding
 
