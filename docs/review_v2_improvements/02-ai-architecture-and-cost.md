@@ -9,7 +9,7 @@ Facts used: Opus 5.5 is $4 in / $20 out per million tokens (cache reads $0.20); 
 | ID | Improvement | Priority | Effort | Status |
 |---|---|---|---|---|
 | AC-01 | Cache the stable prefix of each job | P3 | S | – |
-| AC-02 | Effort per job: HIGH for readings, MEDIUM where you're waiting | P1 | S | Changed (Q-10, Q-37) |
+| AC-02 | Effort per job: HIGH for readings, MEDIUM where you're waiting | P1 | S | Changed (Q-10); confirmed (Q-37) |
 | AC-03 | A cheaper model for email triage | – | – | Withdrawn (Q-10) |
 | AC-04 | Rest by what failed, not a flat hour for everything | P1 | M | – |
 | AC-05 | Interactive calls shouldn't queue behind enrichment | P1 | S | – |
@@ -45,7 +45,7 @@ Facts used: Opus 5.5 is $4 in / $20 out per million tokens (cache reads $0.20); 
 | Nags (AI-22), micro-plans (AI-15) | MEDIUM | short text, generated ahead (AC-10) |
 | Photo check | MEDIUM | a yes/no with a picture |
 
-If a MEDIUM chat ever gives a worse reading of an instruction than HIGH did, the instruction path (which stays HIGH) is where changes are actually made. Confirm the table in Q-37.
+If a MEDIUM chat ever gives a worse reading of an instruction than HIGH did, the instruction path (which stays HIGH) is where changes are actually made. Confirmed in Q-37.
 
 **Caveats.** Effort also affects how carefully the model follows the schema's rules; AI-01's repair round catches the misses.
 
@@ -115,7 +115,7 @@ Sender rules to skip the model were for inbox noise. With starred-only reading (
 
 **Now.** Every call happens when something asks for it: a sync enriches, a tap asks. The micro-plans (AI-15) and nags (AI-22) would each be a wait if made on demand.
 
-**Proposal.** A planning pass after each replan (the plan is deterministic, so it's cheap to know what's coming): make the micro-plan for every slot in today's and tomorrow's plan that doesn't have one; draft the next nag's text for the next slot a few minutes before it's due (the trigger decides whether to send it); pre-warm nothing else. Results keyed by piece and plan version, thrown away when the plan changes under them. The 20-calls-a-run cap applies per pass; the monthly cap stays as the safety net.
+**Proposal.** A planning pass after each replan (the plan is deterministic, so it's cheap to know what's coming): make the micro-plan for every slot in today's and tomorrow's plan that doesn't have one; draft Felix's next message (AI-22) a few minutes before its time, which is the time his last message named as its next check, or 20 minutes after it when it named none (Q-31); the trigger decides whether to send it; pre-warm nothing else. Results keyed by piece and plan version, thrown away when the plan changes under them. The 20-calls-a-run cap applies per pass; the monthly cap stays as the safety net.
 
 **Final state.** A nag arrives at 17:12 written at 17:09 with the plan as it was; a micro-plan is on the card before you look.
 

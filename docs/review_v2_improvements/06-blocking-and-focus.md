@@ -2,7 +2,7 @@
 
 The incentive system: when blocked apps are blocked (`block/BlockPolicy.kt`), how free time is earned and spent (`block/Credit.kt`, `block/Focus.kt`), and the blocker itself (`block/FocusService.kt`). The anti-tamper side (protection, the watchdog, the delayed loosening, the parent code) was reviewed in v1 and is left alone.
 
-Revised after your notes. Sessions go (note 1): you read the job and do it; the app is for knowing what to do, not for doing it. That removes the timed session, its notification, its Start, the box experiment that depended on it, and the main way free time was earned (`Credit.forSession`). BL-08 is the question that opens: what counts as done, and what earns free time, without sessions. The loosening answers (Q-18) stand.
+Revised after your notes and both rounds of answers. Sessions go (note 1): you read the job and do it; the app is for knowing what to do, not for doing it. That removes the timed session, its notification, its Start, the box experiment that depended on it, and the main way free time was earned (`Credit.forSession`). BL-08 is what replaces it, settled by Q-28. The loosening answers (Q-18) and the school rule (Q-29) stand.
 
 ## Summary
 
@@ -15,8 +15,8 @@ Revised after your notes. Sessions go (note 1): you read the job and do it; the 
 | BL-05 | Bank free time toward the weekend | – | – | Withdrawn (Q-19) |
 | BL-06 | Study use of a blocked app during a session | – | – | Withdrawn (Q-19, note 1) |
 | BL-07 | A day with nothing to do | P2 | S | – (Q-18 yes) |
-| BL-08 | Without sessions: what is done, and what earns free time | P1 | M | New (note 1) |
-| BL-09 | The phone at school while a slot is scheduled there | P2 | S | New (note 2) |
+| BL-08 | Without sessions: a tick keeps a short slot; a long one needs a photo to earn | P1 | M | New (note 1); settled (Q-28) |
+| BL-09 | The phone at school while a slot is scheduled there | P2 | S | New (note 2); settled (Q-29) |
 
 ---
 
@@ -26,7 +26,7 @@ Revised after your notes. Sessions go (note 1): you read the job and do it; the 
 
 **Proposal.** `pressure` = today's slots have pieces still to do. With even spreading (PL-01) today always holds a fair share, so "today done" means a real day's work done, every day; tomorrow's bucket keeps its place in the ordering but stops gating the block. The rule is shown wherever the block is felt (BL-04). Your answer to Q-18: yes.
 
-**Caveats.** With ticks as the measure of done (BL-08), the honesty of a tick is the honesty of the system; that's your choice to make for yourself, and the nags (LR-03) are the lever rather than policing.
+**Caveats.** With ticks as the measure of done (BL-08), the honesty of a tick is the honesty of the system; the photo rule for long pieces (Q-28) and Felix (LR-03) are the levers rather than policing.
 
 **Effort.** S.
 
@@ -46,7 +46,7 @@ Short starts, extensions and done-early were session mechanics. Without sessions
 
 **Now.** The block screen explains why and shows the next piece (`block/BlockedActivity.kt:47`); it doesn't say what finishing earns.
 
-**Proposal.** One computed line in four places: the block screen ("Finish today's 2 slots (50 min) → 25 min free tonight"), the Day view's now card, the widget (UI-05), and the end-of-day message (LR-03's voice: "Done. 25 minutes are yours."), with an *Open Instagram* action that opens the app last blocked. Computed from `BlockPolicy` and `Credit`, never a fixed string.
+**Proposal.** One computed line in four places: the block screen ("Finish today's 2 slots (50 min) → 25 min free tonight; the statics needs a photo to count"), the Day view's now card, the widget (UI-05), and Felix's day-done message ("Done. 25 minutes are yours."), with an *Open Instagram* action that opens the app last blocked. Computed from `BlockPolicy` and `Credit`, never a fixed string.
 
 **Effort.** S.
 
@@ -66,30 +66,29 @@ A per-session allowance for a blocked site: no (Q-19), and there are no sessions
 
 **Effort.** S.
 
-## BL-08 Without sessions: what is done, and what earns free time
+## BL-08 Without sessions: a tick keeps a short slot; a long one needs a photo to earn
 
-**Now.** Done is: a source says so (Teams turned in, Power Planner complete, an email archived or, after DX-03, unstarred, an Anki deck's counts at zero), a step ticked (emails and own tasks only, `Focus.tickable`, `block/Focus.kt:554`), or a photo check passed. Free time is earned by a finished session (`Credit.forSession`, a third of its minutes), a source-confirmed completion (`forCompletion`, up to 30 minutes' worth) and photo-checked minutes; a tick earns nothing. Sessions were the one measure of work that was both timed and hard to fake.
+**Now.** Done is: a source says so (Teams turned in, Power Planner complete, an email unstarred after DX-03, an Anki deck's counts at zero), a step ticked (emails and own tasks only, `Focus.tickable`, `block/Focus.kt:554`), or a photo check passed. Free time is earned by a finished session (`Credit.forSession`, a third of its minutes), a source-confirmed completion (`forCompletion`, up to 30 minutes' worth) and photo-checked minutes; a tick earns nothing. Sessions were the one measure of work that was both timed and hard to fake.
 
-**Proposal.** With sessions gone, the slot (PL-12) is the unit: a slot is kept when its piece is ticked (any task, including a source's steps; the source's "done" still ends the task) or its photo check passes; the day is done when its slots are. Credit: a kept slot earns its minutes at the usual rate (a third), capped per day at the day's planned minutes so ticking can't mint time; source completion and photo credit as now. The slot's end asks "Done? Not yet / Took longer" (LR-09), which is both the tick and the calibration's signal.
+**Proposal.** The slot (PL-12) is the unit. Your answer to Q-28 (option 2):
 
-**Options for you (Q-28).**
-1. Ticks earn free time (above). Simplest; trusts you; the nags and your dad's summary are the audit.
-2. Ticks earn for pieces under 20 minutes; longer pieces earn only with a photo. Keeps the photo check in the loop where it matters.
-3. Ticks earn nothing; only source completion and photos do (today's rule). Honest but harsh: most evenings would earn little.
+- **Done.** A slot is kept when its piece is ticked (any task, including a source's steps; the source's "done" still ends the task) or its photo check passes. The day is done when its slots are. A tick keeps a slot whatever its length; the plan moves on.
+- **Free time.** A kept slot of a piece planned at under 20 minutes earns its minutes at the usual rate (a third). A kept slot of a longer piece earns only when its photo check passes (AI-16, AI-17): a tick alone keeps it done but earns nothing. Source completion and photo credit as now. Credit is capped per day at the day's planned minutes, so ticking can't mint time.
+- **The ask.** At the end of a slot over 20 minutes Felix asks for the photo with the Done question (LR-09): "Done? Send me a pic of it and the 15 minutes are yours." The sheet shows which slots earned and which were kept without earning. Q-45 confirms the flow.
 
-**Recommendation.** 1. The app is your own tool now, not a cage; a reward you can grant yourself with a lie is a reward you'll grant yourself honestly most of the time, and the summary shows the pattern if not.
+**Final state.** Short admin and vocab earn on a tick; the statics earns when the booklet's page is photographed; the day's free time opens when today's slots are all kept, earned or not.
 
-**Caveats.** The calibration loses its timed minutes (the multipliers rested on them, `Calibrator.MIN_CLASS_TIMED`); LR-09 replaces them with slot outcomes and "took longer by N". The box experiment (`Calibrator.BOXES`) retires. Stats' Focus tile becomes "Slots kept".
+**Caveats.** The calibration loses its timed minutes (the multipliers rested on them, `Calibrator.MIN_CLASS_TIMED`); LR-09 replaces them with slot outcomes and "took longer by N". The box experiment (`Calibrator.BOXES`) retires. Stats' Focus tile becomes "Slots kept" with "earned" beside it. The 20-minute line is by the piece's planned minutes, not the time taken.
 
 **Effort.** M.
 
 ## BL-09 The phone at school while a slot is scheduled there
 
-**Now.** School hours (a weekday before `weekdayBlockFromMin`) allow blocked apps (`BlockPolicy.isSchoolHours`). PL-15 puts work into study periods; your note says relaxing "previous school-time restrictions".
+**Now.** School hours (a weekday before `weekdayBlockFromMin`) allow blocked apps (`BlockPolicy.isSchoolHours`). PL-15 puts work into study periods, break and lunch.
 
-**Proposal.** I've read the relaxation as the planner's (it may now plan into school free periods), not the blocker's: the phone's rules at school stay as they are, and a study-period slot is done with the booklet or the laptop, ticked afterwards. If you meant the blocker too, the alternative is: during a school-window slot, pressure applies as in the evening (blocked apps blocked until the slot's piece is ticked), which is one condition in `decide`. Q-29.
+**Proposal.** Your answer to Q-29 (option 1): the blocker's rules at school are unchanged; the planner may plan into the school windows; a school slot is done with the booklet or the laptop and ticked after, and earns under BL-08 like any other. Nothing to build here beyond keeping `isSchoolHours` as it is while PL-15 lands.
 
-**Effort.** S either way.
+**Effort.** None.
 
 ---
 
@@ -98,4 +97,4 @@ A per-session allowance for a blocked site: no (Q-19), and there are no sessions
 - **The policy's order** (override > quiet and school hours > pressure > credit): right, minus the session clause.
 - **The credit rate** (3 minutes of work per minute free) and the 30-minute ceiling on completion credit: fine.
 - **The blocker's mechanics** (30-second tick, one block per burst, picture-in-picture handling, address checks): solid.
-- **Protection, the watchdog, the delayed loosening, the parent code**: unchanged; the new settings that take the delay are BL-02, BL-07 and, if you choose it, BL-08's credit rule.
+- **Protection, the watchdog, the delayed loosening, the parent code**: unchanged; the new settings that take the delay are BL-02, BL-07 and BL-08's credit rule.

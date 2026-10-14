@@ -1,6 +1,6 @@
 # Questions for you
 
-Two rounds. **Round one** is answered: your answers and notes are kept below as you wrote them, with a line per question on how it was applied. **Round two** (Q-28 to Q-40) is what the notes opened up; each has options and a recommendation. An answer sheet for round two is at the foot.
+Three rounds. **Rounds one and two** are answered: your answers and notes are kept below as you wrote them, with a line per question on how each was applied. **Round three** (Q-41 to Q-46) is short: confirmations of the few lines I drew where round two left room. An answer sheet for it is at the foot.
 
 ---
 
@@ -47,20 +47,20 @@ Two rounds. **Round one** is answered: your answers and notes are kept below as 
 - Add an easy reset for the stats and app learned notes.
 - Clean up the UI again: one-time items and items of less importance likes setup, blocking and protection and settings should be lower in the menu and bundled under one. The difference between Plan, Tasks and Calendar is not clear; it seems like there are three screens with much overlap but some differences. Merge these into one or two screens and make them more obvious.
 
-### How each answer was applied
+### How each round-one answer was applied
 
 - **Q-01** AI-01: one repair call with the exact complaint, then salvage, then drop.
 - **Q-02** AI-05: derived facts, your lines and the memories, under a 2,000-character budget.
-- **Q-03** AI-10: the model's question becomes a notification with a reply (AI-24).
+- **Q-03** AI-10: the model's question becomes a message from Felix with a reply (AI-24).
 - **Q-04** DX-03: only the Starred folder is read; a starred email is always a task; AI-02 removes Info from the Email job; AI-11, DX-04, DX-05 and AC-09 withdrawn; UI-10's hidden list shrinks.
 - **Q-05** AI-12, widened by note 4 into PL-14: every date the model or the app sets is soft.
 - **Q-06** AI-14: tick, steps, open, and the new `AtTime` move; no start, no mark-done.
 - **Q-07** AI-15: micro-plans for every slot, generated ahead (AC-10).
 - **Q-08** AI-17: several photos; no partial credit.
-- **Q-09** AI-21: memories with a topic, replaced on update, cap 40 (Q-36 to confirm), reset in LR-08.
-- **Q-10** AC-02: Opus 5.5 everywhere; HIGH for readings, MEDIUM where you wait (Q-37 to confirm); AC-03 withdrawn; AC-01 kept as P3 for latency only.
+- **Q-09** AI-21: memories with a topic, replaced on update; cap and updating settled in Q-36.
+- **Q-10** AC-02: Opus 5.5 everywhere; HIGH for readings, MEDIUM where you wait (confirmed Q-37); AC-03 withdrawn; AC-01 kept as P3 for latency only.
 - **Q-11** AC-09 and DX-05 withdrawn.
-- **Q-12** DX-09 now P1: free periods as windows (PL-15), lessons for order and the voice, the timetable in the profile.
+- **Q-12** DX-09 now P1: study periods, break and lunch as windows (PL-15), lessons for order and the voice, the timetable in the profile.
 - **Q-13** DX-15 as proposed.
 - **Q-14** PL-01: revision keeps its day-apart rule inside the general spread.
 - **Q-15** PL-03 withdrawn.
@@ -68,26 +68,26 @@ Two rounds. **Round one** is answered: your answers and notes are kept below as 
 - **Q-17** UI-03 (swipe: done / later today), UI-04 (drag to a time or day; no count limit; refused past the due date).
 - **Q-18** BL-01, BL-02, BL-07 as proposed.
 - **Q-19** BL-05, BL-06 withdrawn.
-- **Q-20** LR-03, now the whole nag mechanism.
-- **Q-21** LR-04: the briefing in the voice.
+- **Q-20** LR-03, now the whole of Felix.
+- **Q-21** LR-04: the morning message from Felix.
 - **Q-22** NF-01 creates or attaches; AI-23 re-reads a task from its photo.
 - **Q-23** NF-03 from the deck's counts (DX-11), no session.
-- **Q-24** NF-02: a button and an optional schedule to your dad's address (Q-33); NF-07 is yes by note 2.
+- **Q-24** NF-02: a button and a Sunday reminder, to your dad's address (settled in Q-33); NF-07 is yes by note 2.
 - **Q-25** NF-08 withdrawn.
 - **Q-26** AR-02 at $2 a run.
 - **Q-27** NF-04, NF-05 deferred.
-- **Note 1** AR-09 (removing sessions), LR-09 (slot outcomes), BL-08 (done and free time without sessions, Q-28); BL-03, UI-14 withdrawn.
-- **Note 2** PL-12 (slots), PL-13 (live), PL-15 (school windows, Q-29/Q-30), NF-07 (Google Calendar, Q-39).
-- **Note 3** PL-01 (even spread by the time each day has; minimum touch, Q-32), PL-02 (early warning for a source deadline).
-- **Note 4** PL-14 (elastic app-set dates, overdue only from a source; confirm the reading in Q-40).
-- **Note 5** UI-12 (the logo's pink, black and white, light and dark; Q-35).
-- **Note 6** LR-03, AI-22, AI-24, UI-16, LR-04, UI-06 (quick replies on nags).
-- **Note 7** LR-08.
-- **Note 8** UI-17 (Day and Work), UI-18 (the menu), UI-11 (the Calendar page absorbed); Q-38.
+- **Note 1** AR-09 (removing sessions), LR-09 (slot outcomes), BL-08 (done and free time without sessions, settled in Q-28); BL-03, UI-14 withdrawn.
+- **Note 2** PL-12 (slots), PL-13 (live), PL-15 (school windows, settled in Q-29/Q-30), NF-07 (Google Calendar, settled in Q-39).
+- **Note 3** PL-01 (even spread by the time each day has; details settled in Q-32), PL-02 (early warning for a source deadline).
+- **Note 4** PL-14 (elastic app-set dates, overdue only from a source; confirmed in Q-40).
+- **Note 5** UI-12 (the logo's pink, black and white, light and dark; confirmed in Q-35).
+- **Note 6** LR-03, AI-22, AI-24, UI-16, LR-04, UI-06 (quick replies on Felix's messages).
+- **Note 7** LR-08 (settled in Q-34).
+- **Note 8** UI-17 (Day and Work), UI-18 (the menu), UI-11 (the Calendar page absorbed); confirmed in Q-38.
 
 ---
 
-## Round two
+## Round two: answered
 
 | Q    | Decision                                                                   | Depends on it              | My recommendation                                                                   |
 | ---- | -------------------------------------------------------------------------- | -------------------------- | ----------------------------------------------------------------------------------- |
@@ -105,188 +105,92 @@ Two rounds. **Round one** is answered: your answers and notes are kept below as 
 | Q-39 | The calendar the app writes to                                             | NF-07, DX-13               | Its own calendar on your Google account; a week ahead; moves in Google pin          |
 | Q-40 | My readings of your notes, to confirm                                      | PL-14, PL-15, NF-03, UI-17 | Four readings, each yes/no                                                          |
 
-### Q-28 Without sessions: what is done, and what earns free time
-
-**Context.** Sessions were the timed, hard-to-fake measure of work and the main source of free time (`Credit.forSession`). Without them the unit is the slot (PL-12): a slot is kept when its piece is ticked or its photo check passes (BL-08).
-
-**Options.**
-
-1. A kept slot earns its minutes at the usual rate (a third), capped per day at the day's planned minutes; source completion and photo credit as now.
-2. As 1 for pieces under 20 minutes; longer pieces earn only with a photo.
-3. Ticks earn nothing; only source completion and photos do (today's rule for ticks).
-
-**Recommendation.** 1. The app is your own tool; the nags and the summary are the audit, not the blocker.
-
-**Depends.** BL-08, BL-01, BL-04, LR-09.
-
-### Q-29 The phone during a slot in a school free period
-
-**Context.** Note 2 says planning into school free periods "will involve relaxing previous school-time restrictions". The planner's restriction (evening only) is relaxed by PL-15. The blocker's school-hours allowance (`BlockPolicy.isSchoolHours`) is a separate rule.
-
-**Options.**
-
-1. Blocking unchanged: the phone is free at school as now; a school slot is done with the booklet or laptop and ticked after.
-2. During a school-window slot, pressure applies: blocked apps blocked until the slot's piece is ticked.
-
-**Recommendation.** 1, unless school phone rules make 2 moot anyway.
-
-**Depends.** BL-09, PL-15.
-
-### Q-30 Which timetable entries are free periods; the smallest slot; "home" pieces
-
-**Context.** PL-15 takes the free periods from the Power Planner timetable by their names, and only places pieces that can be done at school.
-
-**Questions.**
-
-- Which entries count: the exact names in your timetable (Break? Lunch? Study? Free? Anything else?).
-- The smallest window worth using (a 20-minute break less 5 minutes each end is 10 minutes).
-- A buffer at each end (5 minutes?).
-- Whether Claude should mark steps `anywhere` or `home` (a Teams upload, a long essay) so only portable work lands at school, or whether you'd rather mark tasks yourself.
-
-**Recommendation.** Break, Lunch and Study; 15 minutes minimum after a 5-minute buffer each end; the model marks `where` and you can override on the sheet.
-
-**Depends.** PL-15, DX-09, AI-05.
-
-### Q-31 The voice: cadence, where it may speak, tone, what a reply may do
-
-**Context.** LR-03 nags from slot events; AI-22 writes them; AI-24 handles replies; LR-09's slot-end question rides on the same notifications.
-
-**Questions.**
-
-- A daily ceiling for the voice (8?), and the minimum gap (20 minutes?).
-- Where it stays quiet: quiet hours (yes); during calendar events marked busy (yes?); at school except for school-window slots (yes?); weekends before the weekend block-from time?
-- Tone: "friend" / "coach" / "blunt", and a name for it, or none.
-- Whether a reply may apply a change without a tap ("give me 15" moving the slot at once), or always as a button in the reply notification.
-- Whether every slot's end should ask Done / Not yet / Took longer (that's several notifications a day on top of the nags; the alternative is asking only when nothing was ticked).
-
-**Recommendation.** 8 and 20 minutes; quiet in quiet hours, busy events and school outside school slots; "friend", no name; nothing applied without a tap for the first month, then revisit; the slot-end question only when nothing was ticked by the end.
-
-**Depends.** LR-03, AI-22, AI-24, LR-09, LR-07.
-
-### Q-32 Spreading and slotting details
-
-**Context.** PL-01 spreads each later task over its window; PL-12 lays pieces into slots.
-
-**Questions.**
-
-- Spread in proportion to each day's free time (a free Saturday takes more) or equally across days?
-- The minimum touch: at least one piece a week for any task with a window of a week or more?
-- A single-piece task: the day in its window with the most free time, or the earliest, or the middle?
-- The piece length (`boxMin` is 45): keep, or 30 now that pieces have times and more of them land per day?
-- Breaks: 5 minutes between slots, 15 after 90 minutes of work?
-- Should the first evening slot start at the window's start (16:45) or after a settling gap (17:00)?
-
-**Recommendation.** Proportional; one a week; most free time, earliest on a tie; 30; 5 and 15; the window's start, since the window is yours to set.
-
-**Depends.** PL-01, PL-12.
-
-### Q-33 The weekly summary: on demand, scheduled, what's in it
-
-**Context.** NF-02 sends to your dad's address.
-
-**Questions.**
-
-- A button only, or also a Sunday schedule (which, without an email app in the loop, needs either a "Summary ready: send" notification or an SMTP setting with a password)?
-- Contents: the numbers (minutes, pieces, on time, days done, slots kept/missed, free time), the review's note and changes, the nags and how they went, the moves and instructions, the CSV? Anything you'd rather keep out?
-- Written in your voice ("I kept 14 of 19 slots") or the app's?
-
-**Recommendation.** Button plus an optional Sunday notification that opens the composed email; everything listed; your voice.
-
-**Depends.** NF-02, PL-11.
-
-### Q-34 Reset: what's included, how it's confirmed
-
-**Context.** LR-08 proposes five separate rows: the activity log (stats and, with it, the calibration), the calibration only, memories and profile lines, chat and nag history, instructions.
-
-**Questions.**
-
-- Those five, or fewer, or one "everything learned" button as well?
-- Confirmation: a dialog naming what's lost, or typing RESET?
-- A backup written first (yes?), and whether the parent code should be required for any of them (none is a loosening; I'd say no).
-
-**Recommendation.** The five plus an "everything learned" row; a dialog; backup first; no code.
-
-**Depends.** LR-08, AR-07.
-
-### Q-35 The palette from the logo
-
-**Context.** UI-12 draws a scheme from the icon: pink `#FFAAAA` as primary, near-black line colour, off-white face; dark mode near-black surfaces with the same pink as the accent; the standard red kept for overdue.
-
-**Questions.**
-
-- That palette, or do you have exact values from the logo's source file?
-- Dynamic colour (wallpaper matching) dropped entirely, or kept as an option?
-- The widget, the block screen and the notification accent in pink too?
-
-**Recommendation.** As drawn; dropped; yes.
-
-**Depends.** UI-12.
-
-### Q-36 Memories: cap and how they update
-
-**Context.** AI-21: memories with a topic; a new one on the same topic replaces the old; the whole list in Settings.
-
-**Questions.**
-
-- The cap: 40 lines?
-- May Claude update or drop a memory on its own when you contradict it in chat, or always through a card you tap?
-- Should memories from nag replies ("not tonight, because football") be proposed as memories at all, or only from the chat?
-
-**Recommendation.** 40; always a card; from both, since the replies are where the useful facts come out.
-
-**Depends.** AI-21, AI-05, AI-22.
-
-### Q-37 The effort table
-
-**Context.** AC-02, left to me by Q-10 with "intelligence and speed, not cost": Opus 5.5 everywhere; HIGH for Email, Assignment, Effort, Instruction, Review, photo-to-task and photo-as-context; MEDIUM for the chat, notification replies, nags, micro-plans and the photo check.
-
-**Question.** Confirm, or name any job you'd rather have at HIGH regardless of the wait (the chat is the one that trades speed for depth).
-
-**Depends.** AC-02, AC-10.
-
-### Q-38 The screens: Day, Work, Stats, and one Settings entry
-
-**Context.** UI-17 merges Plan and Calendar into a Day timeline and keeps a Work view of every open task; Stats stays a tab; UI-18 puts Setup, Settings, Blocking and protection, Calendar and Reset under one Settings entry, with Reviews and This week beside it; Ask Claude becomes the button on every screen.
-
-**Questions.**
-
-- Two work tabs (Day, Work) plus Stats, or would you rather Stats went under the menu too, leaving two tabs?
-- Should the Day view open on today's timeline or on the week strip?
-- Anything from the current Plan, Tasks or Calendar screens you want kept exactly as it is?
-
-**Recommendation.** Three tabs; today's timeline, scrolled to now; keep the DO NOW card as the timeline's now card.
-
-**Depends.** UI-17, UI-18.
-
-### Q-39 The calendar the app writes to
-
-**Context.** NF-07 writes slots as events.
-
-**Questions.**
-
-- A calendar of the app's own on your Google account (created by the app, named "Decrastination"), or one you create in Google Calendar and pick in Settings?
-- How far ahead to write: a week, two, the horizon?
-- If you move an event in Google Calendar, should the planner take it as pinned (`AtTime`), or ignore hand moves there?
-- School-window slots on the calendar too?
-
-**Recommendation.** Its own, created once; a week ahead in detail and the rest weekly; pinned; yes.
-
-**Depends.** NF-07, DX-13, PL-13.
-
-### Q-40 My readings of your notes, to confirm
-
-Each a yes or a correction.
-
-1. **Overdue** (note 4): a task's steps' dates and any date the app or Claude set never show "overdue" and are re-fitted; a source's deadline (Teams, Power Planner, an email's own stated date) shows "Overdue" once passed, and its work is still re-fitted around it, placed first (PL-14).
-2. **School time** (note 2): "relaxing previous school-time restrictions" means the planner may now plan into free periods; the blocker's rules at school are Q-29 (PL-15, BL-09).
-3. **Anki** (Q-23): with no sessions, Anki work is counted from the deck's counts while AnkiDroid is in front during the deck's slot or between syncs, and credited under Q-28's rule (NF-03, DX-11).
-4. **Screens** (note 8): the Calendar page disappears into the Day timeline (events as the background, slots as the foreground), and the Plan tab becomes that timeline; Tasks becomes Work (UI-17).
-
----
-
-## Answer sheet (round two)
+**Your answers, as written:**
 
 ```
 Q-28: 2 Q-29: 1 Q-30: Free periods are called 'Study Period'. Break runs from 10:45-11:15 every day, no buffer required. Lunch runs from 13:15-14:35 every day, with 13:40-13:50 spent eating lunch so cannot be worked in. Q-31: It should stay quiet at times where no work is scheduled. Tone: strick friend - Name: Felix. Yes, no button required unless big change like adding a new event. Slot's ends can also notify - alter the existing notification that asks how a task when when it is competed to also be the friend. No daily ceiling for now - the gap should be dynamically set by the AI: when it recomends the next check if. If not, set then 20min. Q-32: Keep recomendation. Add 3 20min slots in weekends for going outside - these can be decreased (in number, not duration) if there is little available time. Q-33: Button + notification to remind on sunday. Everything listed but all in email, no attachments: dad will not read a csv. My voice. Q-34: Keep recomendation.
 Q-35: Keep recomendation. Q-36: cap 40, may update on its own, memories from nag replies as well. Q-37: Keep recomendation. Q-38: Keep recomendation. Q-39: Keep recomendation. Q-40 (1-4): All good.
+```
+
+### How each round-two answer was applied
+
+- **Q-28** (option 2) BL-08: a tick keeps any slot; a piece under 20 minutes earns on the tick; a longer piece earns only when its photo check passes; Felix asks for the photo at the slot's end (LR-09); the daily cap stays. BL-04's line says which slots need a photo.
+- **Q-29** (option 1) BL-09 settled: the blocker's rules at school don't change; PL-15 is planning only.
+- **Q-30** PL-15 and DX-09: windows are the timetable's "Study Period" entries, break 10:45–11:15, and lunch 13:15–13:40 and 13:50–14:35, every school day, no buffer; break and lunch as settings with those defaults. You didn't answer the smallest slot or the `where` marking, so my recommendations (15 minutes; the model marks `anywhere`/`home`) stand; Q-43 confirms them.
+- **Q-31** AI-22, LR-03, LR-05, LR-07, AI-24: the voice is Felix, a strict friend, no tone setting; he speaks only around scheduled work; no daily ceiling for now; each message carries his own next-check time (20 minutes if none); the "how did it go" notification becomes his slot-end question; replies apply small changes at once and offer a button for big ones (the line between them is Q-42).
+- **Q-32** PL-01 and PL-12 confirmed (proportional; one touch a week; most-free day for a single piece; 30-minute pieces; breaks 5 and 15; the evening from its start). Weekends get three 20-minute *Outside* slots laid in before the work, dropped one at a time when the day is short, never shortened (PL-12; the open details are Q-41).
+- **Q-33** NF-02: a button, a Sunday reminder from Felix that opens the composed email, everything in the body, no attachments, your voice.
+- **Q-34** LR-08 settled: five rows plus *Everything learned*; a dialog; backup first; no code.
+- **Q-35** UI-12 settled: the palette as drawn; dynamic colour dropped; widget, block screen and notifications in pink.
+- **Q-36** AI-21: cap 40; Claude updates memories on its own, no card; from the chat and from replies to Felix alike; a "Remembered:" line in the thread so you see it (Q-46 confirms the line).
+- **Q-37** AC-02 settled.
+- **Q-38** UI-17, UI-18 settled: three tabs; today's timeline scrolled to now; the DO NOW card as the now card.
+- **Q-39** NF-07 settled: the app's own calendar on your Google account; a week ahead in detail; hand moves pin; school and outside slots written too.
+- **Q-40** PL-14, PL-15, NF-03, UI-17 confirmed as read.
+
+---
+
+## Round three
+
+Short confirmations. Each can be answered with "yes" or a correction.
+
+| Q | Decision | Depends on it | My recommendation |
+|---|---|---|---|
+| Q-41 | Outside breaks: per weekend day; where in the day; which drops first | PL-12, NF-07 | Three per day; morning, midday, afternoon; the midday one drops first |
+| Q-42 | The line between a reply applied at once and one offered as a button | AI-24, LR-09 | As drawn in AI-24 |
+| Q-43 | School windows: the 15-minute minimum; the model marks `where`; early finishes by calendar event | PL-15, DX-09 | Yes to all three |
+| Q-44 | Felix is the chat too, not only the notifications | AI-22, UI-16 | Yes |
+| Q-45 | The photo flow for long pieces | BL-08, LR-09, AI-16 | Felix asks at the slot's end; a tick without a photo keeps the slot but earns nothing; the photo can come later the same day |
+| Q-46 | Memory updates shown as a "Remembered:" line | AI-21 | Yes |
+
+### Q-41 Outside breaks
+
+**Context.** PL-12: three 20-minute *Outside* slots on weekend days, laid in before the work, dropped one at a time when the day's work doesn't fit, never shortened, written to the calendar.
+
+**Questions.**
+- "Three in weekends": three on each of Saturday and Sunday, or three across the weekend?
+- Where: one in the morning, one around midday, one in the afternoon; or at times you'd rather set?
+- When one has to go, which first: the midday one (lunch is a break anyway), the last, or the first?
+
+**Recommendation.** Three per day; morning, midday, afternoon, each at the start of the nearest free window; the midday one first.
+
+### Q-42 Applied at once, or a button first
+
+**Context.** Your answer to Q-31: a reply needs no button unless it's a big change like adding a new event. AI-24 draws the line as: applied at once for a move within the due date, a change of minutes, "took longer by N", a busy time for today, a tick you report, a memory; a button first for a new task or event, a busy time beyond today, a deadline change, not-a-task, replacing a task's steps.
+
+**Question.** Is that the line? Anything to move across it?
+
+### Q-43 School windows: three details
+
+**Context.** PL-15 as settled by Q-30.
+
+**Questions.**
+- A window shorter than 15 minutes after a calendar event has taken its share isn't used: keep 15?
+- The model marks each step `anywhere` or `home`, and you override on the sheet: yes?
+- An early finish, an off-timetable day or a cancelled study period is told to the app by a calendar event covering the time (there's no other signal): acceptable?
+
+### Q-44 Felix in the chat
+
+**Context.** The chat button is on every screen (UI-16) and the notification thread continues there (AI-24). AI-22 proposes that the chat's own voice is Felix too, so one persona runs through the app and the chat's instructions and answers sound like him.
+
+**Question.** Yes, or keep the chat as the plain assistant it is now and Felix for notifications only?
+
+### Q-45 The photo flow for long pieces
+
+**Context.** Q-28's option 2: a piece planned at 20 minutes or more earns free time only when its photo check passes. BL-08 and LR-09 propose: at the slot's end Felix asks "Done? Send a pic and the minutes are yours"; a tick without a photo keeps the slot (the plan moves on) but earns nothing; the photo can be added from the sheet later the same day and the credit lands then; the 20-minute line is by planned minutes.
+
+**Question.** Is that the flow? In particular, should a photo added later the same day still earn, or only one sent at the slot's end?
+
+### Q-46 Memory updates shown
+
+**Context.** Q-36: Claude updates memories on its own. AI-21 adds a one-line "Remembered: football is Tuesdays" in the chat thread (and in the reply notification when the update came from one) so a wrong memory is seen when it's made.
+
+**Question.** Keep the line, or make updates silent and rely on the list in Settings?
+
+---
+
+## Answer sheet (round three)
+
+```
+Q-41:   Q-42:   Q-43:   Q-44:   Q-45:   Q-46:
 ```

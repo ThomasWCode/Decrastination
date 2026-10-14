@@ -104,14 +104,14 @@ Sender rules were for inbox noise (your answer to Q-11: no longer important).
 
 **Proposal.** Your answer to Q-12: now. Four uses:
 
-- **Windows (PL-15).** The entries that are free time (by name: Break, Lunch, Study, Free; the names to confirm in Q-30), on each school day, minus calendar events, become planning windows the slots (PL-12) can fill, alongside the evening.
+- **Windows (PL-15).** The timetable's "Study Period" entries, with break (10:45–11:15) and lunch (13:15–14:35 less 13:40–13:50 for eating) at their fixed times on every school day (your answer to Q-30), minus calendar events, become planning windows the slots (PL-12) can fill, alongside the evening.
 - **Order.** Among work due the same day, the subject with the earlier lesson first; work for tomorrow's lessons ahead of work for Thursday's.
 - **The voice.** The briefing and the nags know "Physics P1 tomorrow".
 - **The profile (AI-05).** Lessons by day and school end, so Claude's estimates and the chat know the shape of your week.
 
 **Final state.** A Tuesday with a double study period in the morning has thirty minutes of German vocab in it, on the calendar, before the evening starts.
 
-**Caveats.** Depends on the timetable staying right in Power Planner, which you say it does. Two-week timetables are handled already (`scheduleWeek`). Work that needs a laptop or home (a Teams upload, a long essay) shouldn't land in a 20-minute break: the model can mark a step `where: "anywhere" | "home"` (Q-30).
+**Caveats.** Depends on the timetable staying right in Power Planner, which you say it does. Two-week timetables are handled already (`scheduleWeek`). Work that needs a laptop or home (a Teams upload, a long essay) shouldn't land in a 30-minute break: the model marks a step `where: "anywhere" | "home"` (my recommendation in Q-30, which you didn't contradict; Q-43 to confirm).
 
 **Effort.** M.
 
