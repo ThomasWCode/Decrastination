@@ -169,9 +169,11 @@ object Mime {
     /**
      * A part's text as a task and the model have it: decoded, flattened, its quotes and signature
      * cut ([cutQuoted]: HTML's before it's flattened, then plain text's), and tidied to [max].
-     * [forwarded]: its message's subject says it's a forward ([isForward]).
+     * [forwarded]: its message's subject says it's a forward ([isForward]). [cut] false: read whole,
+     * as the oldest message of a conversation is, what it quotes being from before it.
      */
-    fun readable(bytes: ByteArray, part: TextPart, max: Int, forwarded: Boolean = false): Cut {
+    fun readable(bytes: ByteArray, part: TextPart, max: Int, forwarded: Boolean = false, cut: Boolean = true): Cut {
+        if (!cut) return Cut(tidy(decode(bytes, part), max), 0)
         val raw = decodeRaw(bytes, part)
         val html = if (part.subtype == "html") cutQuoted(raw, html = true, forwarded) else null
         val plain = cutQuoted(html?.let { htmlToText(it.text) } ?: raw, html = false, forwarded)
