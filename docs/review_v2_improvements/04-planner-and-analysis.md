@@ -22,7 +22,9 @@ Revised after your answers and notes. The first version kept the planner's backw
 | PL-12 | Every piece gets a time: slots in the day's free windows, and outside breaks at weekends | P1 | L | New (note 2, Q-32) |
 | PL-13 | Adjust live: slots move when the day does | P1 | M | New (note 2) |
 | PL-14 | Dates the app set are elastic; only a source's deadline is overdue | P1 | M | New (note 4) |
-| PL-15 | Study periods, break and lunch as planning windows | P1 | M | New (note 2, Q-30) |
+| PL-15 | Study periods, break and lunch as planning windows | P1 | M | New (note 2, Q-30); Q-52 |
+| PL-16 | The school calendar: holidays, half-days, INSET days | P1 | M | New (Q-43); Q-50 |
+| PL-17 | Weekend windows: two a day, and the share weekends take | P1 | S | New; Q-49 |
 
 ---
 
@@ -128,7 +130,7 @@ A fixed weekday/weekend maximum: your answer to Q-16 is that a day's maximum is 
 
 - The day's windows: the evening hours (weekday or weekend), plus the school windows (PL-15) on school days; minus calendar busy events, hard busy instructions and pinned slots (`AtTime`).
 - Pieces are 30 minutes by default (`boxMin` 45 → 30) and are laid into the windows in the day's order (`ORDER`, `Planner.kt:462`: due-soon first, then deadline, then kind), each slot the piece's minutes, with a 5-minute break between slots and a 15-minute one after 90 minutes of work (both settings). A piece that doesn't fit the window's remainder goes to the next window; the first evening slot starts at the window's start; today's first slot starts no earlier than now.
-- **Outside breaks (Q-32).** On a weekend day, three 20-minute *Outside* slots are laid in first, spread over the day's windows (morning, midday, afternoon), before the work is placed. They aren't work: they earn nothing, they don't count toward pressure, and they're on the calendar like everything else. When the day's work doesn't fit its free time with all three, they're dropped one at a time (three, two, one, none) until it does; their length never changes. Q-41 asks whether "three in weekends" means per day or per weekend, where in the day you want them, and which goes first.
+- **Outside breaks (Q-32).** On a weekend day, three 20-minute *Outside* slots are laid in first, spread over the day's windows (morning, midday, afternoon), before the work is placed. They aren't work: they earn nothing, they don't count toward pressure, and they're on the calendar like everything else. When the day's work doesn't fit its free time with all three, they're dropped one at a time (three, two, one, none) until it does; their length never changes. Three on each of Saturday and Sunday, one each in the morning, around midday and in the afternoon at the start of the nearest free window, the midday one dropped first (Q-41).
 - Each slot is `Slot(piece | Outside, start, end, window: Evening | School, pinned)`, on the `DayBucket`. The Day view (UI-17) shows them as a timeline with the calendar's events; NF-07 writes them to the calendar; AI-15's micro-plan is attached to each work slot; Felix's messages (LR-03) fire from them.
 
 **Final state.** Tuesday reads: 10:45–11:15 German vocab (break); 13:50–14:20 Reply to Mr Peters (lunch); 16:45–17:15 Statics Prep; 17:20–17:50 Statics Prep 2 of 4. Saturday has three *Outside* cards between the work. The same on your phone's calendar.
@@ -145,6 +147,7 @@ A fixed weekday/weekend maximum: your answer to Q-16 is that a day's maximum is 
 
 - **Slot kept** (you ticked the piece, or the photo check passed): recorded as done with its minutes (LR-09). The following slots keep their times; the gap is yours. A *Pull the next forward* button on the Day view moves the rest up if you'd rather.
 - **Slot missed** (its end passed with no tick, after a 10-minute grace): the piece is re-slotted into the next free time today after the current slots, pushing later pieces back within today's windows; what no longer fits today goes to tomorrow's spare time and the rest of its task is re-spread (PL-01). The piece is never "overdue" unless its source deadline has passed (PL-14). A nag goes out (LR-03).
+- **What a missed slot does to the block** is BL-11 (Q-48): re-slotting the piece to tomorrow must not be a way of opening the phone tonight.
 - **The day changes** (a calendar event appears, an instruction lands, a task arrives): re-slot the affected day with a stability rule: a piece keeps its slot unless something now overlaps it, and moved pieces move as little as possible. Without this the timeline would reshuffle itself every sync and you'd stop trusting it.
 - **Triggers.** An alarm at each slot's end (exact alarms are already used for sessions' ends; reuse), the app opening, a calendar change (`watchCalendar` exists), a sync.
 
@@ -176,13 +179,33 @@ A fixed weekday/weekend maximum: your answer to Q-16 is that a day's maximum is 
 - **Break**: 10:45–11:15, every school day.
 - **Lunch**: 13:15–13:40 and 13:50–14:35, every school day; 13:40–13:50 is eating and never planned.
 
-Break and lunch are settings with those defaults, since the timetable may not carry them; a study period comes from the timetable alone. Any calendar event overlapping a window takes its time out of it. A window shorter than 15 minutes after that isn't used (my recommendation in Q-30; Q-43 to confirm). Only pieces that can be done there are placed in them: the model marks a step `where: "anywhere" | "home"` (a booklet is anywhere; a Teams upload or a long essay is home; Anki is always anywhere), and you can override on the sheet. The windows are shown on the Day timeline in their own colour. The phone's rules at school are unchanged (your answer to Q-29; BL-09): a school slot is done with the booklet or the laptop and ticked after.
+Break and lunch are settings with those defaults, since the timetable may not carry them; a study period comes from the timetable alone. None of them exist on a day the school calendar (PL-16) marks as no school, and on a half-day they end at the time given. Any calendar event overlapping a window takes its time out of it. A window shorter than 15 minutes after that isn't used (confirmed in Q-43). Only pieces that can be done there are placed in them: the model marks a step `where: "anywhere" | "home"` (a booklet is anywhere; a Teams upload or a long essay is home; Anki is always anywhere), and you can override on the sheet (confirmed in Q-43). One refinement the windows make possible: a deadline later the same day becomes usable up to its time in the windows before it (a task due at 13:00 can be slotted at break), where today `lastUsableDay` treats a morning deadline's day as unusable; the calibrated margins still apply (Q-52). The windows are shown on the Day timeline in their own colour. The phone's rules at school are unchanged (your answer to Q-29; BL-09): a school slot is done with the booklet or the laptop and ticked after.
 
 **Final state.** A Wednesday with a study period holds the vocab at break, the short admin at lunch, and the study period's half hour of physics, before the evening starts.
 
-**Caveats.** Free periods vanish (a cover lesson, a trip) without the calendar knowing; a missed school slot is re-fitted like any other (PL-13), and the yield (PL-06) can be learned per window kind so school windows that rarely get used count for less. An early finish or an off-timetable day needs a calendar event to say so, or lunch will be planned.
+**Caveats.** Free periods vanish (a cover lesson, a trip) without the calendar knowing; a missed school slot is re-fitted like any other (PL-13), and the yield (PL-06) can be learned per window kind so school windows that rarely get used count for less. A cancelled study period or a trip needs a calendar event to say so (confirmed in Q-43); holidays and half-days are told to Felix instead (PL-16).
 
 **Effort.** M.
+
+## PL-16 The school calendar: holidays, half-days, INSET days
+
+**Now.** The app knows weekdays and weekends; it doesn't know term dates. A school holiday is planned as a school day (study-period windows that don't exist, the weekday hours), and the blocker allows blocked apps all morning as "school hours".
+
+**Proposal.** Your answer to Q-43: you tell Felix about holidays and half-days. A `SchoolCalendar` store with `NoSchool(from, to, label)` (holidays, INSET days) and `HalfDay(date, endsAt)`, told to Felix or the chat ("half term is 26 to 30 Oct", "Friday finishes at 12:30"), which makes the entry as a button-first change (Q-42: it's new data), or typed in Settings → School. Effects, to confirm in Q-50: a no-school day has no school windows and takes the weekend's hours (PL-17), outside breaks (PL-12) and block-from time (BL-02); a half-day's school windows end at the time given and the evening window starts then; the spread (PL-01) sees the extra time at once; Felix knows ("half term next week: I've spread the German over it"). The week strip (UI-17) shows no-school days with the weekend's shape.
+
+**Caveats.** Power Planner's semester has start and end dates but no holidays, so this stays typed or told. A holiday told wrongly plans a school day as free; the week strip shows it and the entry is editable.
+
+**Effort.** M. **Decision.** Q-50.
+
+## PL-17 Weekend windows: two a day, and the share weekends take
+
+**Now.** `weekendHours` is one window, 08:30–22:30: fourteen hours. Proportional spreading (PL-01, Q-32) gives each day a share of a task in proportion to its free time, so a Saturday with fourteen free hours takes nearly three times a weekday evening's share, and the yield (PL-06) only corrects that after weeks of Saturdays not delivering it.
+
+**Proposal.** Weekend hours as a list of windows (two by default, say 10:00–13:00 and 15:00–19:00; yours to set, with the pickers of UI-01), the outside breaks (PL-12) laid into them. The spread then sees a weekend day of six or seven hours. The same list shape serves no-school days (PL-16). If you'd rather keep one long window, a `weekendShare` setting (a weekend day counts as at most N hours in the spread) does the same job more crudely.
+
+**Caveats.** One more thing in Settings; the alternative (learning that weekends under-deliver) takes weeks, with the plan wrong meanwhile.
+
+**Effort.** S. **Decision.** Q-49.
 
 ---
 

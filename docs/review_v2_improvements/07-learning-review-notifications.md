@@ -24,7 +24,7 @@ Revised after your notes and both rounds of answers. Note 6 is the centre of thi
 
 **Now.** The weekly review runs as a job (`learn/Review.kt:28`), posts its note as a notification (`Channels.WEEKLY`) and applies its bounded changes (`AppGraph.applyReviewChanges`, `AppGraph.kt:262`). No screen shows past reviews (`ui/` has none).
 
-**Proposal.** A *Reviews* page in the menu (UI-18): each week's note, its changes ("box 45 → 30", "Physics margin 1 → 2 days", "yield 0.8 → 0.7"), *Undo* per change, a line under the next review on whether the change helped (AI-18), the week's check-in beside it, and the week's summary text (NF-02).
+**Proposal.** A *Reviews* page in the menu (UI-18): each week's note, its changes ("box 45 → 30", "Physics margin 1 → 2 days", "yield 0.8 → 0.7"), *Undo* per change, a line under the next review on whether the change helped (AI-18), the week's check-in beside it, the week's summary text (NF-02), and the memory tidy's before-and-after with undo (AI-21, Q-51).
 
 **Effort.** M.
 
@@ -46,7 +46,8 @@ Revised after your notes and both rounds of answers. Note 6 is the centre of thi
 - **How often.** Each message names when he'll check again (`nextCheckMin`, AI-22), and that's when the next check happens; 20 minutes when he names none. No daily ceiling for now (Q-31); quiet hours and busy calendar events still silence him (LR-07). AC-07's log counts his messages so you can set a ceiling later if you want one.
 - **Text.** Written by Claude ahead of time (AC-10) from the plan, the piece's micro-plan, the profile and memories, and the last few messages and your replies; checked against the state at the moment of sending (if you ticked the piece at 17:11, the 17:12 message isn't sent).
 - **Replies.** Every message has an inline reply and the quick replies Felix offered. A reply goes through the chat (AI-24): "Give me 15" moves the slot at once and he says so; "Not tonight, because football" moves it, remembers football (AI-21) if it's news, and says so; a reply with no action gets a sentence back. Big changes (a new event, a deadline) come back as a button. The thread is in the chat screen.
-- **Character.** Felix, a strict friend; his name and the one line that describes him editable in Settings (AI-22). The chat is Felix too (Q-44).
+- **Character.** Felix, a strict friend; his name, the one line that describes him and your standing instructions (AI-21: "not before 8", "be blunter") in Settings → Felix (AI-22). The chat is Felix too (confirmed in Q-44).
+- **At school.** A school slot is scheduled work, so he messages around it as around any other (your Q-31 rule: quiet only where nothing is scheduled); a standing instruction ("not at school") changes that. Q-54 confirms.
 - **Record.** Messages, replies and the slots then kept or missed are in the log, so the review (AI-18) and the summary (NF-02) can say what worked.
 
 **Final state.** 17:12: "You put the statics at five. Twelve past; p.7, Q1, two minutes. Going?" You: "give me 15". 17:13: "Fine: 17:27, and the reply to Mr Peters is now 18:15. I'll look in at half past." 17:30: nothing, because you ticked it at 17:29. 17:30 for the statics: "Done? Pic of the page and the 15 minutes are yours." 22:00: "Both done. 25 minutes are yours; night."

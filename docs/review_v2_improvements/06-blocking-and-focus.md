@@ -17,6 +17,8 @@ Revised after your notes and both rounds of answers. Sessions go (note 1): you r
 | BL-07 | A day with nothing to do | P2 | S | – (Q-18 yes) |
 | BL-08 | Without sessions: a tick keeps a short slot; a long one needs a photo to earn | P1 | M | New (note 1); settled (Q-28) |
 | BL-09 | The phone at school while a slot is scheduled there | P2 | S | New (note 2); settled (Q-29) |
+| BL-10 | Free time between today's slots | P1 | S | New; Q-47 |
+| BL-11 | A missed slot, or a moved one, and today's block | P1 | S | New; Q-48 |
 
 ---
 
@@ -74,7 +76,7 @@ A per-session allowance for a blocked site: no (Q-19), and there are no sessions
 
 - **Done.** A slot is kept when its piece is ticked (any task, including a source's steps; the source's "done" still ends the task) or its photo check passes. The day is done when its slots are. A tick keeps a slot whatever its length; the plan moves on.
 - **Free time.** A kept slot of a piece planned at under 20 minutes earns its minutes at the usual rate (a third). A kept slot of a longer piece earns only when its photo check passes (AI-16, AI-17): a tick alone keeps it done but earns nothing. Source completion and photo credit as now. Credit is capped per day at the day's planned minutes, so ticking can't mint time.
-- **The ask.** At the end of a slot over 20 minutes Felix asks for the photo with the Done question (LR-09): "Done? Send me a pic of it and the 15 minutes are yours." The sheet shows which slots earned and which were kept without earning. Q-45 confirms the flow.
+- **The ask.** At the end of a slot over 20 minutes Felix asks for the photo with the Done question (LR-09): "Done? Send me a pic of it and the 15 minutes are yours." A tick without a photo keeps the slot but earns nothing; a photo added from the sheet later the same day earns then (confirmed in Q-45). The sheet shows which slots earned and which were kept without earning.
 
 **Final state.** Short admin and vocab earn on a tick; the statics earns when the booklet's page is photographed; the day's free time opens when today's slots are all kept, earned or not.
 
@@ -89,6 +91,33 @@ A per-session allowance for a blocked site: no (Q-19), and there are no sessions
 **Proposal.** Your answer to Q-29 (option 1): the blocker's rules at school are unchanged; the planner may plan into the school windows; a school slot is done with the booklet or the laptop and ticked after, and earns under BL-08 like any other. Nothing to build here beyond keeping `isSchoolHours` as it is while PL-15 lands.
 
 **Effort.** None.
+
+## BL-10 Free time between today's slots
+
+**Now (as proposed).** BL-01 lifts the block when today's slots are all kept. Between slots (the 5-minute break; the gap between a slot kept at 17:50 and the next at 19:00) the phone stays blocked, so free time earned at 17:15 waits until the last slot is kept.
+
+**Proposal.** Two options (Q-47):
+1. Spend in the gaps: once the slot before a gap is kept, earned free time is spendable until the next slot's start, when the block returns. The countdown exists (`FocusService.startSpending`); its end becomes the earlier of the credit's end and the next slot's start.
+2. As BL-01 alone: nothing until the day's slots are all kept.
+
+**Recommendation.** 1. The reward lands when the work does, which is the point, and the next slot takes the phone back.
+
+**Caveats.** A gap that's really the time you'd have used to start the next piece early is phone time instead; the slot times are the contract, and Felix can say so ("you've 40 minutes; the reply would take 10").
+
+**Effort.** S. **Decision.** Q-47.
+
+## BL-11 A missed slot, or a moved one, and today's block
+
+**Now (as proposed).** PL-13 re-slots a missed piece into today's remaining time, and into tomorrow when today is full; UI-04 and Felix (AI-24) move pieces on request with no limit (Q-17); BL-01 lifts the block when today's slots are kept. Together they leave a gap: let every slot lapse until the day is full, or move them all, and today's list empties and the phone opens.
+
+**Proposal.** Three options (Q-48):
+1. A piece missed today and pushed to tomorrow still counts as today's pressure until the hours end: the phone stays blocked for the rest of the evening. A deliberate move (by drag, or by telling Felix) is a plan change you made and lifts it; Felix can push back ("you moved it yesterday too"), but the app applies it.
+2. Missed and moved pieces both keep today's pressure until the hours end.
+3. Neither: whatever is in today's list is what gates the block.
+
+**Recommendation.** 1. Missing a slot shouldn't open the phone; choosing to move it is your call and your record (the summary shows the moves).
+
+**Effort.** S. **Decision.** Q-48.
 
 ---
 
