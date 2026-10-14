@@ -17,7 +17,7 @@ class MergeTest {
 
     // Read as far as reads go, as an email's text is once fetched (see GmailThreads.textRead).
     private fun fetched(id: String, title: String = id, done: Boolean = false, derived: Boolean = false, dueAt: Long? = null) =
-        Fetched(sourceId = id, title = title, kind = Kind.Homework, done = done, derived = derived, dueAt = dueAt, extra = mapOf(GmailThreads.EXTRA_TEXT_READ_TO to "${GmailThreads.MAX_BODY_CHARS}"))
+        Fetched(sourceId = id, title = title, kind = Kind.Homework, done = done, derived = derived, dueAt = dueAt, extra = mapOf(GmailThreads.EXTRA_TEXT_READ_TO to "${GmailThreads.MAX_BODY_CHARS}", GmailThreads.EXTRA_TEXT_RULES to "${GmailThreads.TEXT_RULES}"))
 
     private fun first(vararg items: Fetched) = Merge.apply(emptyList(), Source.Teams, items.toList(), t0).tasks
 

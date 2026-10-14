@@ -12,7 +12,8 @@ The implementation of `docs/review_v2_improvements/impl/` on branch `v3`. Delete
 - AI-04 the model told what it sees: bc35abd.
 - DX-06, DX-01 fixes from the eval set's real emails, re-read through the new pipeline: 20c1887. An Outlook forward (subject `Fw:`) lost everything it forwarded; an attached email had no name. The eval checks pass on the dump: `zip-card`'s PDF is named (DX-01), the system prompt has AI-04's paragraph; the marker shows in a later message of a conversation (`dell`'s second, and the phone's 8- and 9-message conversations).
 - AI-02 fix found on the phone: an old Info reading of a still-starred note hid it: 1e2eb7e.
-- DX-06, AI-04 refinements from eval round 2: this commit. The oldest message of a conversation is read whole (its quotes are from before the student was in it: `help` lost John's question otherwise); AI-04's next step names what to read, and a name that says what an attachment is counts.
+- Texts carry the version of the rules they were made by, so the phone's texts from the interim build are read again once (DX-07): this commit.
+- DX-06, AI-04 refinements from eval round 2: 0eb7708. The oldest message of a conversation is read whole (its quotes are from before the student was in it: `help` lost John's question otherwise); AI-04's next step names what to read, and a name that says what an attachment is counts.
 
 ## Current
 
