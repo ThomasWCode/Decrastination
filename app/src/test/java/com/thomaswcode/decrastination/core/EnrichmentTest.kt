@@ -70,6 +70,15 @@ class EnrichmentTest {
     }
 
     @Test
+    fun `an email's attachments are part of what its reading is of`() {
+        // Named once the conversation is read again (DX-01): a reading from before them is out of date.
+        val task = email()
+        val withFiles = task.copy(extra = task.extra + (GmailThreads.EXTRA_ATTACHMENTS to """[{"name":"a.pdf","type":"application/pdf"}]"""))
+        assertNotEquals(Enrichments.inputHash(task), Enrichments.inputHash(withFiles))
+        assertNull(Enrichments.current(withFiles.copy(enrichment = enrichment(task))))
+    }
+
+    @Test
     fun `an email read as only to read before starred-only reading isn't hidden, and is read again`() {
         // Starred, it's always something to do (AI-02): the old Info reading gives way to the rules' kind.
         val task = email()

@@ -140,9 +140,10 @@ object Enrichments {
     /**
      * A hash of everything the enrichment reads, so a change in any of it makes it out of date. The
      * source's deadline, not the one the enrichment lays over it, which would make it out of date itself.
+     * An email's attachments only where it has some (DX-01), so a task without any keeps the hash it had.
      */
     fun inputHash(task: TaskItem): String {
-        val text = listOf(
+        val text = (listOf(
             task.source.name,
             task.title,
             task.detail,
@@ -152,7 +153,7 @@ object Enrichments {
             (if (task.sourceValues != null) task.sourceValues.dueAt else task.dueAt)?.toString().orEmpty(),
             task.extra["from"].orEmpty(),
             task.extra["received"].orEmpty(),
-        ).joinToString("\n")
+        ) + listOfNotNull(task.extra[GmailThreads.EXTRA_ATTACHMENTS])).joinToString("\n")
         val digest = MessageDigest.getInstance("SHA-256").digest(text.toByteArray(Charsets.UTF_8))
         return digest.take(8).joinToString("") { "%02x".format(it) }
     }

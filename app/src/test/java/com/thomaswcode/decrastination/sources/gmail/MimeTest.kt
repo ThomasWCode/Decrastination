@@ -248,6 +248,18 @@ class MimeTest {
     }
 
     @Test
+    fun `the fullest form of a file's name wins, RFC 2231's or its pieces joined`() {
+        fun named(disposition: String) = Mime.attachments(
+            structure("(\"APPLICATION\" \"PDF\" NIL NIL NIL \"BASE64\" 400 NIL (\"ATTACHMENT\" ($disposition)) NIL NIL)"),
+        ).single().name
+        // Sent with a plain name too, for older readers: the extended one is the file's.
+        assertEquals("résumé.pdf", named("\"FILENAME\" \"resume.pdf\" \"FILENAME*\" \"utf-8''r%C3%A9sum%C3%A9.pdf\""))
+        assertEquals("long name.pdf", named("\"FILENAME*0*\" \"utf-8''long%20\" \"FILENAME*1*\" \"name.pdf\""))
+        assertEquals("part one two.pdf", named("\"FILENAME*0\" \"part one \" \"FILENAME*1\" \"two.pdf\""))
+        assertEquals("plain.pdf", named("\"FILENAME\" \"plain.pdf\""))
+    }
+
+    @Test
     fun `an attached email with no file name goes by its subject`() {
         val files = Mime.attachments(
             structure(
