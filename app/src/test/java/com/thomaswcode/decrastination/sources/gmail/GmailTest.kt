@@ -332,6 +332,18 @@ class GmailTest {
     }
 
     @Test
+    fun `a conversation's attachments are kept with its text, and read back`() {
+        val files = listOf(Mime.Attachment("consent-form.pdf", "application/pdf", 112_639), Mime.Attachment("Trip (final).docx", "application/msword"))
+        val conversation = GmailThreads.conversation(listOf(message(1, "t1", 1, "Trip", "Mr Hughes", "hughes@school.example")), 11)
+        val body = GmailThreads.Body("Sign it", attachments = files)
+        val task = Merge.apply(emptyList(), Source.Gmail, GmailThreads.fetched(listOf(conversation), mapOf(conversation.version to body), now, LONDON), now).tasks.single()
+        assertEquals(files, GmailThreads.attachmentsOf(task))
+        assertEquals(body, GmailThreads.knownBodies(listOf(task))[conversation.version])
+        // None kept, none said.
+        assertNull(stored(message(2, "t2", 1, "Hi", null, "a@b.c")).extra[GmailThreads.EXTRA_ATTACHMENTS])
+    }
+
+    @Test
     fun `conversations are searched for in one command`() {
         assertEquals("X-GM-THRID 1", GmailThreads.anyThread(listOf("1")))
         assertEquals("OR X-GM-THRID 1 OR X-GM-THRID 2 X-GM-THRID 3", GmailThreads.anyThread(listOf("1", "2", "3")))

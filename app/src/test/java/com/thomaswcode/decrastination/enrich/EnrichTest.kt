@@ -10,6 +10,7 @@ import com.thomaswcode.decrastination.core.SourceValues
 import com.thomaswcode.decrastination.core.Status
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.sources.anki.AnkiRules
+import com.thomaswcode.decrastination.sources.gmail.GmailThreads
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -143,6 +144,17 @@ class PromptsTest {
         // A note to self says so, rather than giving your own address.
         val note = Prompts.describe(email().copy(extra = mapOf("sent" to "true", "from" to "Thomas <t@example.com>")), Enrichments.Job.Email, NOW, LONDON)
         assertTrue("From: the student (a note to self)" in note, note)
+    }
+
+    @Test
+    fun `a conversation says it's all shown, and its attachments are named`() {
+        val files = """[{"name":"consent-form.pdf","type":"application/pdf","size":112639},{"name":"itinerary.docx","type":"application/msword"}]"""
+        val text = Prompts.describe(email().copy(extra = email().extra + mapOf(GmailThreads.EXTRA_MESSAGES to "3", GmailThreads.EXTRA_ATTACHMENTS to files)), Enrichments.Job.Email, NOW, LONDON)
+        assertTrue("Messages in this conversation: 3, all shown, oldest first" in text, text)
+        assertTrue("Attachments: consent-form.pdf (110 KB), itinerary.docx" in text, text)
+        // One message, nothing attached: neither line.
+        val single = Prompts.describe(email(), Enrichments.Job.Email, NOW, LONDON)
+        assertTrue("Messages in this conversation" !in single && "Attachments" !in single, single)
     }
 
     @Test

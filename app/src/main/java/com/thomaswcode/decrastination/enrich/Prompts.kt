@@ -7,6 +7,7 @@ import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.SubStep
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.sources.anki.AnkiRules
+import com.thomaswcode.decrastination.sources.gmail.GmailThreads
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -143,6 +144,10 @@ object Prompts {
                 task.extra["received"]?.toLongOrNull()?.let { appendLine("Received: ${at(it).format(DAY_TIME)}") }
                 if (task.extra["sent"] == "true") appendLine("From: the student (a note to self)") else task.extra["from"]?.let { appendLine("From: $it") }
                 appendLine("Subject: ${task.title}")
+                // A conversation is read whole (DX-03), and the model told so; attachments it can't
+                // see are named (DX-01, AI-04).
+                task.extra[GmailThreads.EXTRA_MESSAGES]?.toIntOrNull()?.takeIf { it > 1 }?.let { appendLine("Messages in this conversation: $it, all shown, oldest first") }
+                GmailThreads.attachmentsOf(task).takeIf { it.isNotEmpty() }?.let { files -> appendLine("Attachments: " + files.joinToString(", ") { it.label }) }
             }
             else -> {
                 appendLine("Title: ${task.title}")
