@@ -1,6 +1,6 @@
 # Questions for you
 
-Three rounds. **Rounds one and two** are answered: your answers and notes are kept below as you wrote them, with a line per question on how each was applied. **Round three** (Q-41 to Q-46) is short: confirmations of the few lines I drew where round two left room. An answer sheet for it is at the foot.
+Five rounds. **Rounds one to four** are answered: your answers and notes are kept below as you wrote them, with a line per question on how each was applied. **Round five** is the one question you left blank (Q-52) and two confirmations of how I read round four. An answer sheet for it is at the foot.
 
 ---
 
@@ -158,9 +158,9 @@ Q-41: Keep recomendation. Q-42: Yes, anything that alters existing tasks can be 
 
 ---
 
-## Round four
+## Round four: answered
 
-From the end-to-end walkthrough in [PLAN-OVERVIEW.md](PLAN-OVERVIEW.md). Nine questions; most are a yes.
+From the end-to-end walkthrough in [PLAN-OVERVIEW.md](PLAN-OVERVIEW.md).
 
 | Q    | Decision                                                                         | Depends on it       | My recommendation                                                       |
 | ---- | -------------------------------------------------------------------------------- | ------------------- | ----------------------------------------------------------------------- |
@@ -238,8 +238,56 @@ From the end-to-end walkthrough in [PLAN-OVERVIEW.md](PLAN-OVERVIEW.md). Nine qu
 
 ---
 
-## Answer sheet (round four)
+**Your answers, as written:**
 
 ```
 Q-47: 1 Q-48: 1 Q-49: 3 Q-50: Keep recomendation Q-51: Yes, no cap, does nto reply on my to prune Q-52:  Q-53: Yes, be able to cope with my adding events in at the same time that tasks are already exist: restructure and plan around. If I delete a task and add an event in its place, it cannot be added back into the same place. Q-54: Not quiet at school when things are scheduled. Q-55: Felix except in settings.
+```
+
+### How each round-four answer was applied
+
+- **Q-47** (option 1) BL-10 settled: free time is spendable in the gaps between today's slots, until the next slot starts.
+- **Q-48** (option 1) BL-11 settled: a slot missed and pushed to tomorrow keeps today's pressure until the hours end; a deliberate move (drag, or telling Felix) lifts it.
+- **Q-49** (option 3) PL-17 withdrawn: the weekend keeps its one window. Since the yield is now the only thing that corrects the weekend's share, PL-06 learns it per kind of day (weekday evenings, weekend and no-school days, school windows), and says honestly that the first few weekends will be over-planned until it does. Q-56 confirms that form.
+- **Q-50** PL-16 settled: a no-school day takes the weekend's hours, outside breaks and block-from time; a half-day's evening starts at the early finish.
+- **Q-51** AI-21 settled: no cap; a budget; Felix tidies weekly, shown as a diff with undo on the Reviews page; the pruning is never yours.
+- **Q-52** left blank. PL-15 keeps my recommendation meanwhile (same-day slots allowed before a deadline; margins unchanged) and the question is asked again below.
+- **Q-53** NF-07 and PL-13: a hand move pins; an event you add in Google Calendar that overlaps a slot displaces it and the piece is re-fitted around it; a slot event you deleted comes back only if its time is still free, so an event of yours in its place keeps it. Q-57 confirms that reading of your second sentence.
+- **Q-54** LR-03 settled: Felix messages around school slots.
+- **Q-55** settled: Felix everywhere except Settings; "Claude" names the model there.
+
+---
+
+## Round five
+
+| Q | Decision | Depends on it | My recommendation |
+|---|---|---|---|
+| Q-52 | Same-day deadlines usable in the school windows before them; margins unchanged | PL-15 | Yes to both |
+| Q-56 | The yield learned per kind of day (weekday evening, weekend, school windows), clamped 0.5–1.0, 1.0 until seven days of that kind exist | PL-06 | Yes |
+| Q-57 | My reading of your Q-53 note: an event you add displaces the slot it overlaps; a deleted slot event is written back only if its time is still free | PL-13, NF-07 | Yes |
+
+### Q-52 Same-day deadlines and margins
+
+**Context.** Today a morning deadline's day is never usable (`Planner.lastUsableDay`). With school windows a task due at 13:00 could be slotted at break the same day. The calibrated margins (1–3 days) would still push most work earlier. You left this blank in round four; the documents assume yes meanwhile.
+
+**Question.** Allow same-day slots before a deadline, margins unchanged?
+
+### Q-56 The yield per kind of day
+
+**Context.** Your Q-49 answer leaves the weekend's share to the yield. A single yield across all days would drag weekday evenings down to pay for Saturdays, so PL-06 learns one per kind: weekday evenings; weekend and no-school days; school windows. Each: the median of done ÷ planned over that kind's last 14 days with work, clamped 0.5–1.0, 1.0 until seven such days exist.
+
+**Question.** That form? And is the 0.5 floor right for a fourteen-hour weekend window (it means a Saturday is never planned at under seven hours), or should the weekend's floor be lower (0.25)?
+
+### Q-57 Events you add, and slot events you delete
+
+**Context.** Your Q-53 note: "If I delete a task and add an event in its place, it cannot be added back into the same place." I've read "task" as one of the app's slot events in Google Calendar. The rule as written in PL-13 and NF-07: an event you add that overlaps a slot takes the time and the piece is re-fitted around it at the next replan; a slot event you deleted is written back only if its time is still free, so with your event in its place the piece moves elsewhere.
+
+**Question.** Is that the reading? If "task" meant the task itself (deleted in the app), say so: deleting a task there already removes its slots for good.
+
+---
+
+## Answer sheet (round five)
+
+```
+Q-52:   Q-56:   Q-57:
 ```
