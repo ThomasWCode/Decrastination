@@ -134,20 +134,21 @@ Q-35: Keep recomendation. Q-36: cap 40, may update on its own, memories from nag
 
 Short confirmations. Each can be answered with "yes" or a correction.
 
-| Q | Decision | Depends on it | My recommendation |
-|---|---|---|---|
-| Q-41 | Outside breaks: per weekend day; where in the day; which drops first | PL-12, NF-07 | Three per day; morning, midday, afternoon; the midday one drops first |
-| Q-42 | The line between a reply applied at once and one offered as a button | AI-24, LR-09 | As drawn in AI-24 |
-| Q-43 | School windows: the 15-minute minimum; the model marks `where`; early finishes by calendar event | PL-15, DX-09 | Yes to all three |
-| Q-44 | Felix is the chat too, not only the notifications | AI-22, UI-16 | Yes |
-| Q-45 | The photo flow for long pieces | BL-08, LR-09, AI-16 | Felix asks at the slot's end; a tick without a photo keeps the slot but earns nothing; the photo can come later the same day |
-| Q-46 | Memory updates shown as a "Remembered:" line | AI-21 | Yes |
+| Q    | Decision                                                                                           | Depends on it       | My recommendation                                                                                                            |
+| ---- | -------------------------------------------------------------------------------------------------- | ------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| Q-41 | Outside breaks: per weekend day; where in the day; which drops first                               | PL-12, NF-07        | Three per day; morning, midday, afternoon; the midday one drops first                                                        |
+| Q-42 | The line between a reply applied at once and one offered as a button                               | AI-24, LR-09        | As drawn in AI-24                                                                                                            |
+| Q-43 | School windows: the 15-minute minimum; the model marks `where`; early finishes by calendar event | PL-15, DX-09        | Yes to all three                                                                                                             |
+| Q-44 | Felix is the chat too, not only the notifications                                                  | AI-22, UI-16        | Yes                                                                                                                          |
+| Q-45 | The photo flow for long pieces                                                                     | BL-08, LR-09, AI-16 | Felix asks at the slot's end; a tick without a photo keeps the slot but earns nothing; the photo can come later the same day |
+| Q-46 | Memory updates shown as a "Remembered:" line                                                       | AI-21               | Yes                                                                                                                          |
 
 ### Q-41 Outside breaks
 
 **Context.** PL-12: three 20-minute *Outside* slots on weekend days, laid in before the work, dropped one at a time when the day's work doesn't fit, never shortened, written to the calendar.
 
 **Questions.**
+
 - "Three in weekends": three on each of Saturday and Sunday, or three across the weekend?
 - Where: one in the morning, one around midday, one in the afternoon; or at times you'd rather set?
 - When one has to go, which first: the midday one (lunch is a break anyway), the last, or the first?
@@ -165,6 +166,7 @@ Short confirmations. Each can be answered with "yes" or a correction.
 **Context.** PL-15 as settled by Q-30.
 
 **Questions.**
+
 - A window shorter than 15 minutes after a calendar event has taken its share isn't used: keep 15?
 - The model marks each step `anywhere` or `home`, and you override on the sheet: yes?
 - An early finish, an off-timetable day or a cancelled study period is told to the app by a calendar event covering the time (there's no other signal): acceptable?
@@ -192,5 +194,5 @@ Short confirmations. Each can be answered with "yes" or a correction.
 ## Answer sheet (round three)
 
 ```
-Q-41:   Q-42:   Q-43:   Q-44:   Q-45:   Q-46:
+Q-41: Keep recomendation. Q-42: Yes, anything that alters existing tasks can be instant. Adding new ones should be reviewed because there is more data to get wrong (descriptions, timings, etc.) Q-43: Yes to all: allow me to tell Felix about uncoming changes like holiday dates and half-days. Q-44: Yes, change everything to Felix. Q-45: Yes Q-46: Yes, good. Allow memory also for if I tell felix how to respond or alert me differently. This may required increasing the cap: is there a disadvantage to having no/a very large cap?
 ```
