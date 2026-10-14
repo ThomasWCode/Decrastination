@@ -132,14 +132,14 @@ Q-35: Keep recomendation. Q-36: cap 40, may update on its own, memories from nag
 
 ## Round three: answered
 
-| Q | Decision | Depends on it | My recommendation |
-|---|---|---|---|
-| Q-41 | Outside breaks: per weekend day; where in the day; which drops first | PL-12, NF-07 | Three per day; morning, midday, afternoon; the midday one drops first |
-| Q-42 | The line between a reply applied at once and one offered as a button | AI-24, LR-09 | As drawn in AI-24 |
-| Q-43 | School windows: the 15-minute minimum; the model marks `where`; early finishes by calendar event | PL-15, DX-09 | Yes to all three |
-| Q-44 | Felix is the chat too, not only the notifications | AI-22, UI-16 | Yes |
-| Q-45 | The photo flow for long pieces | BL-08, LR-09, AI-16 | Felix asks at the slot's end; a tick without a photo keeps the slot but earns nothing; the photo can come later the same day |
-| Q-46 | Memory updates shown as a "Remembered:" line | AI-21 | Yes |
+| Q    | Decision                                                                                           | Depends on it       | My recommendation                                                                                                            |
+| ---- | -------------------------------------------------------------------------------------------------- | ------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| Q-41 | Outside breaks: per weekend day; where in the day; which drops first                               | PL-12, NF-07        | Three per day; morning, midday, afternoon; the midday one drops first                                                        |
+| Q-42 | The line between a reply applied at once and one offered as a button                               | AI-24, LR-09        | As drawn in AI-24                                                                                                            |
+| Q-43 | School windows: the 15-minute minimum; the model marks `where`; early finishes by calendar event | PL-15, DX-09        | Yes to all three                                                                                                             |
+| Q-44 | Felix is the chat too, not only the notifications                                                  | AI-22, UI-16        | Yes                                                                                                                          |
+| Q-45 | The photo flow for long pieces                                                                     | BL-08, LR-09, AI-16 | Felix asks at the slot's end; a tick without a photo keeps the slot but earns nothing; the photo can come later the same day |
+| Q-46 | Memory updates shown as a "Remembered:" line                                                       | AI-21               | Yes                                                                                                                          |
 
 **Your answers, as written:**
 
@@ -162,17 +162,17 @@ Q-41: Keep recomendation. Q-42: Yes, anything that alters existing tasks can be 
 
 From the end-to-end walkthrough in [PLAN-OVERVIEW.md](PLAN-OVERVIEW.md). Nine questions; most are a yes.
 
-| Q | Decision | Depends on it | My recommendation |
-|---|---|---|---|
-| Q-47 | Free time spendable in the gaps between today's slots | BL-10, BL-01 | Yes, until the next slot starts |
-| Q-48 | A missed or moved slot and tonight's block | BL-11, PL-13 | Missed keeps the block on; a deliberate move lifts it |
-| Q-49 | Weekend windows: two a day, or one long one with a share cap | PL-17, PL-01 | Two windows, yours to set |
-| Q-50 | What a holiday or half-day changes | PL-16, BL-02, PL-17 | Holiday = the weekend's rules; half-day = evening from the early finish |
-| Q-51 | Memory: a token budget and a weekly tidy shown as a diff | AI-21, LR-01 | Yes |
-| Q-52 | Same-day deadlines usable in the school windows before them; margins unchanged | PL-15 | Yes to both |
-| Q-53 | Hand edits in Google Calendar: moves pin (to another day too); deletions ignored | NF-07 | Yes |
-| Q-54 | Felix messages around school slots | LR-03 | Yes; a standing instruction can stop it |
-| Q-55 | "Felix" wherever you're spoken to; "Claude" for the model in Setup and Settings | AI-22, UI-16, UI-13 | Yes |
+| Q    | Decision                                                                         | Depends on it       | My recommendation                                                       |
+| ---- | -------------------------------------------------------------------------------- | ------------------- | ----------------------------------------------------------------------- |
+| Q-47 | Free time spendable in the gaps between today's slots                            | BL-10, BL-01        | Yes, until the next slot starts                                         |
+| Q-48 | A missed or moved slot and tonight's block                                       | BL-11, PL-13        | Missed keeps the block on; a deliberate move lifts it                   |
+| Q-49 | Weekend windows: two a day, or one long one with a share cap                     | PL-17, PL-01        | Two windows, yours to set                                               |
+| Q-50 | What a holiday or half-day changes                                               | PL-16, BL-02, PL-17 | Holiday = the weekend's rules; half-day = evening from the early finish |
+| Q-51 | Memory: a token budget and a weekly tidy shown as a diff                         | AI-21, LR-01        | Yes                                                                     |
+| Q-52 | Same-day deadlines usable in the school windows before them; margins unchanged   | PL-15               | Yes to both                                                             |
+| Q-53 | Hand edits in Google Calendar: moves pin (to another day too); deletions ignored | NF-07               | Yes                                                                     |
+| Q-54 | Felix messages around school slots                                               | LR-03               | Yes; a standing instruction can stop it                                 |
+| Q-55 | "Felix" wherever you're spoken to; "Claude" for the model in Setup and Settings  | AI-22, UI-16, UI-13 | Yes                                                                     |
 
 ### Q-47 Free time between today's slots
 
@@ -241,5 +241,5 @@ From the end-to-end walkthrough in [PLAN-OVERVIEW.md](PLAN-OVERVIEW.md). Nine qu
 ## Answer sheet (round four)
 
 ```
-Q-47:   Q-48:   Q-49:   Q-50:   Q-51:   Q-52:   Q-53:   Q-54:   Q-55:
+Q-47: 1 Q-48: 1 Q-49: 3 Q-50: Keep recomendation Q-51: Yes, no cap, does nto reply on my to prune Q-52:  Q-53: Yes, be able to cope with my adding events in at the same time that tasks are already exist: restructure and plan around. If I delete a task and add an event in its place, it cannot be added back into the same place. Q-54: Not quiet at school when things are scheduled. Q-55: Felix except in settings.
 ```
