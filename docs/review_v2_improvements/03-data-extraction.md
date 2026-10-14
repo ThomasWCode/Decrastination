@@ -56,7 +56,7 @@ Revised after your answers: Gmail becomes starred-only (Q-04), which removes thr
 - Setup says it plainly: "Star an email in Gmail to make it a task; unstar it when it's done."
 - Notes to self: star them, or a Gmail filter (`from:me to:me` → star) does it for you; no code.
 
-**Migration.** At the first starred-only sync, open email tasks that aren't starred would otherwise end. Better: keep them open for seven days with a line on the Day view ("12 email tasks aren't starred: star the ones you still want"), then finish the rest.
+**Migration.** None needed: you've starred every email you want to keep, so unstarred email tasks finish at the first starred-only sync.
 
 **Final state.** The inbox's noise never reaches the app or the model. The question "is this a task?" is answered by you in Gmail with one tap; the model's job is what, when and how long. The sync's heaviest part (DX-07) shrinks to almost nothing.
 

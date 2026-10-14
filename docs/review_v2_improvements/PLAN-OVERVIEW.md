@@ -15,7 +15,7 @@ The whole design in one place, after five rounds of answers, walked through a sc
 2. Each day's capacity is its windows less calendar busy time, times the learned yield for its kind of day (PL-06). No fixed maximum.
 3. Every other dated task is spread over its window, in proportion to each day's free time, at least one piece a week; revision at least a day apart; single pieces on the day with most room (PL-01). Dates the app or Claude set are soft and re-fitted when missed; only a source's deadline can be overdue (PL-14).
 4. Each day's pieces (30 minutes by default) are laid into its windows as slots with 5-minute breaks and a 15-minute one after 90 minutes; on weekends three 20-minute outside breaks go in first and give way to work when the day is short (PL-12). "Home" pieces never land at school.
-5. The slots are written to the app's own calendar on your Google account a week ahead; a hand move there pins; an event you add displaces the slot it overlaps; a deleted slot event comes back only if its time is still free (NF-07, PL-13).
+5. The slots are written to the Decrastination calendar you created on your Google account a week ahead; a hand move there pins; an event you add displaces the slot it overlaps; a deleted slot event comes back only if its time is still free (NF-07, PL-13).
 6. The plan is pure and deterministic; property tests hold its invariants (AR-04). Each piece can say why it's where it is (PL-07).
 
 ## 3. A school day
