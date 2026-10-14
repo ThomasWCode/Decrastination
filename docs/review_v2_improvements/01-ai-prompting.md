@@ -32,10 +32,10 @@ The model-side settings (effort, model per job, caching, retries) are in [02-ai-
 | AI-18 | The weekly review should see last week's review, the day records and the slots kept | P2 | S | Changed |
 | AI-19 | A "Steps" change, so Claude can split or re-split a task of your own | P2 | M | – |
 | AI-20 | Schema descriptions as a steering channel | P2 | S | – |
-| AI-21 | Remembered facts, updatable on their own, cap 40 | P1 | M | Changed (Q-09, Q-36) |
-| AI-22 | The voice: Felix, a strict friend | P1 | M | New (note 6, Q-31) |
+| AI-21 | Remembered facts and standing instructions, with a budget instead of a cap | P1 | M | Changed (Q-09, Q-36, Q-46) |
+| AI-22 | The voice: Felix, a strict friend, everywhere | P1 | M | New (note 6, Q-31, Q-44) |
 | AI-23 | A photo as context for an existing task | P2 | M | New (Q-22) |
-| AI-24 | Replies continue in the chat; small changes apply at once | P1 | M | New (note 6, Q-31) |
+| AI-24 | Replies continue in the chat; changes to existing tasks apply at once | P1 | M | New (note 6, Q-31, Q-42) |
 
 ---
 
@@ -236,13 +236,20 @@ A "this email is a task" override is unnecessary once only starred emails are re
 
 **Effort.** S.
 
-## AI-21 Remembered facts, updatable on their own, cap 40
+## AI-21 Remembered facts and standing instructions, with a budget instead of a cap
 
 **Now.** The chat sends the last twelve messages and the current state; what you said once is gone unless it became an instruction.
 
-**Proposal.** Per your answers to Q-09 and Q-36: a memory is `{topic, text, at}`; the cap is 40; a new memory on the same topic replaces the old one, so the list updates rather than freezes, and the oldest goes when the cap is reached. Claude writes, updates and drops memories on its own, without a card: the chat's and Felix's schemas get `memories: [{topic, text | null}]` (null drops), applied as the answer is read. The thread shows a one-line "Remembered: football is Tuesdays" so you see what was kept (Q-46), and the whole list is in Settings, editable, with a reset (LR-08). Memories come from the chat and from replies to Felix alike (Q-36). They join the profile block (AI-05) on every call, including Felix's, which is where they earn their keep ("you said last week the bus is no good for German"). The prompt says what belongs in memory (preferences, patterns, facts about you) and what doesn't (busy times and limits are instructions).
+**Proposal.** Two kinds of memory, both written by Claude on his own (Q-36) from the chat and from replies to Felix, each shown as a "Remembered: …" line when made (Q-46), listed and editable in Settings → Felix, reset in LR-08:
 
-**Caveats.** Silent updates mean a misheard reply can become a fact; the "Remembered:" line and the list in Settings are the check. Memories steer Felix and the estimates, never the planner directly.
+- **Facts** `{topic, text, at}`: things about you and your week ("football Tuesdays", "slow at German vocab", "prefers maths before physics"). A new fact on a topic replaces the old one.
+- **Standing instructions** `{text, at}` (your addition in Q-46): how Felix should behave ("don't message me before 8", "be blunter", "ask for the photo once, not twice", "call it the stats booklet"). These go into Felix's system prompt as rules that override his defaults (his quiet times, his tone, his wording) and the chat's. They're never merged away without being shown.
+
+Both go into the profile block (AI-05) on every call. Things that are really plan inputs (busy times, limits, holidays and half-days) are routed to instructions or the school calendar (PL-16), not to memory; the prompt says which is which.
+
+**On the cap** (your question in Q-46). Cost isn't the reason for one; the bill is fine either way. The reasons are these. Every memory is 15–30 tokens the model has to weigh on every call, and a long list of stale, overlapping or contradictory lines makes its readings worse, not better: it will act on a fact you no longer hold, or on the older of two that disagree. A list of 300 lines in Settings is a list nobody audits, so a wrong fact lives forever. And any change to the list invalidates the prompt cache (AC-01), which is minor. A very large cap is therefore safe for the bill and bad for the quality of what Felix knows. So: no hard count; a budget of about 1,500 tokens (roughly 80 lines) for facts and 20 lines for standing instructions; and a weekly tidy with the review (Q-51): Felix rewrites the facts into fewer, current lines (merging, dropping what's stale, keeping the newest on each topic), the before-and-after shown on the Reviews page (LR-01) with undo.
+
+**Caveats.** Silent updates mean a misheard reply can become a fact; the "Remembered:" line and the list are the check. The tidy is a model rewriting its own memory, which can lose a nuance; that's why it's shown as a diff rather than done silently.
 
 **Effort.** M.
 
@@ -254,7 +261,9 @@ A "this email is a task" override is unnecessary once only starred emails are re
 
 **Final state.** 17:12: "You put the statics at five. It's twelve past; p.7, Q1 is two minutes. Starting?" with *Starting now* / *Give me 15* / *Not tonight, because…*. He checks again when he said he would.
 
-**Caveats.** A model writing to you several times a day will sometimes misjudge; the history in the prompt and the state check before sending (LR-03) are the controls, and AC-07's log shows every message. The chat is Felix too (Q-44 to confirm), so one persona runs through the app.
+**Felix everywhere** (Q-44). The chat's system prompt (`ChatPrompts.SYSTEM`) takes the same persona, so questions and instructions in the chat are answered as Felix; the instruction reader's reply text too; the button is "Felix", not "Ask Claude" (UI-16). "Claude" stays the name of the model in Setup and Settings (the key, the cost, the effort table); Felix is the one who talks to you (Q-55).
+
+**Caveats.** A model writing to you several times a day will sometimes misjudge; the history in the prompt, your standing instructions (AI-21) and the state check before sending (LR-03) are the controls, and AC-07's log shows every message.
 
 **Effort.** M.
 
@@ -270,18 +279,18 @@ A "this email is a task" override is unnecessary once only starred emails are re
 
 **Effort.** M.
 
-## AI-24 Replies continue in the chat; small changes apply at once
+## AI-24 Replies continue in the chat; changes to existing tasks apply at once
 
 **Now.** A notification's actions are fixed buttons; the chat is a screen.
 
-**Proposal.** Felix's messages, questions (AI-10) and the morning message carry an inline reply (`RemoteInput`). A reply is a chat turn: Felix's message is the previous turn, your reply the next, and `ChatReader` answers with the normal schema (reply, changes, actions, memories). Per your answer to Q-31, what the reply asks for is applied at once when it's small, and offered as a button when it's big:
+**Proposal.** Felix's messages, questions (AI-10) and the morning message carry an inline reply (`RemoteInput`). A reply is a chat turn: Felix's message is the previous turn, your reply the next, and `ChatReader` answers with the normal schema (reply, changes, actions, memories). Your answer to Q-42 draws the line:
 
-- **Applied at once:** moving a piece within its due date (`AtTime`, `OnDay`, later today), changing a piece's minutes, "took longer by N" (LR-09), a busy time for today, ticking a step you said you did, memories.
-- **A button first:** a new task or event, a busy time beyond today, a deadline change (`DueBy`), not-a-task, replacing a task's steps.
+- **Applied at once:** anything that alters an existing task or piece (moving it within its due date, later today, its minutes, its deadline, its steps, not-a-task, a tick you report, "took longer by N"), a busy time for today, and memories.
+- **A button first:** anything new (a task, an event, a busy time beyond today, a holiday or half-day for the school calendar PL-16), because new things carry descriptions and timings to get wrong.
 
-The answer comes back as a notification in Felix's words saying what he did ("Moved it to 17:27 and the reply to Mr Peters to 18:15") or offering the button. The chat screen shows the whole thread, so a conversation begun from a notification continues there. The line between small and big is mine; Q-42 asks you to confirm it.
+The answer comes back as a notification in Felix's words saying what he did ("Moved it to 17:27 and the reply to Mr Peters to 18:15") or offering the button. The chat screen shows the whole thread, so a conversation begun from a notification continues there.
 
-**Caveats.** Applied-at-once means a misread reply moves something; every applied change is an instruction, listed and undoable from the chat ("undo that"). The model lock (AC-05) matters here: a reply must not wait behind a background enrichment.
+**Caveats.** Applied-at-once means a misread reply moves something; every applied change is an instruction, listed and undoable from the chat ("undo that"). The model lock (AC-05) matters here: a reply must not wait behind a background enrichment. What a move does to today's block is BL-11 (Q-48).
 
 **Effort.** M.
 

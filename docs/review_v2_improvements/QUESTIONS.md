@@ -116,13 +116,13 @@ Q-35: Keep recomendation. Q-36: cap 40, may update on its own, memories from nag
 
 - **Q-28** (option 2) BL-08: a tick keeps any slot; a piece under 20 minutes earns on the tick; a longer piece earns only when its photo check passes; Felix asks for the photo at the slot's end (LR-09); the daily cap stays. BL-04's line says which slots need a photo.
 - **Q-29** (option 1) BL-09 settled: the blocker's rules at school don't change; PL-15 is planning only.
-- **Q-30** PL-15 and DX-09: windows are the timetable's "Study Period" entries, break 10:45–11:15, and lunch 13:15–13:40 and 13:50–14:35, every school day, no buffer; break and lunch as settings with those defaults. You didn't answer the smallest slot or the `where` marking, so my recommendations (15 minutes; the model marks `anywhere`/`home`) stand; Q-43 confirms them.
-- **Q-31** AI-22, LR-03, LR-05, LR-07, AI-24: the voice is Felix, a strict friend, no tone setting; he speaks only around scheduled work; no daily ceiling for now; each message carries his own next-check time (20 minutes if none); the "how did it go" notification becomes his slot-end question; replies apply small changes at once and offer a button for big ones (the line between them is Q-42).
-- **Q-32** PL-01 and PL-12 confirmed (proportional; one touch a week; most-free day for a single piece; 30-minute pieces; breaks 5 and 15; the evening from its start). Weekends get three 20-minute *Outside* slots laid in before the work, dropped one at a time when the day is short, never shortened (PL-12; the open details are Q-41).
+- **Q-30** PL-15 and DX-09: windows are the timetable's "Study Period" entries, break 10:45–11:15, and lunch 13:15–13:40 and 13:50–14:35, every school day, no buffer; break and lunch as settings with those defaults. You didn't answer the smallest slot or the `where` marking, so my recommendations (15 minutes; the model marks `anywhere`/`home`) stand; confirmed in Q-43.
+- **Q-31** AI-22, LR-03, LR-05, LR-07, AI-24: the voice is Felix, a strict friend, no tone setting; he speaks only around scheduled work; no daily ceiling for now; each message carries his own next-check time (20 minutes if none); the "how did it go" notification becomes his slot-end question; replies apply changes to existing tasks at once and offer a button for anything new (the line settled in Q-42).
+- **Q-32** PL-01 and PL-12 confirmed (proportional; one touch a week; most-free day for a single piece; 30-minute pieces; breaks 5 and 15; the evening from its start). Weekends get three 20-minute *Outside* slots laid in before the work, dropped one at a time when the day is short, never shortened (PL-12; the details settled in Q-41).
 - **Q-33** NF-02: a button, a Sunday reminder from Felix that opens the composed email, everything in the body, no attachments, your voice.
 - **Q-34** LR-08 settled: five rows plus *Everything learned*; a dialog; backup first; no code.
 - **Q-35** UI-12 settled: the palette as drawn; dynamic colour dropped; widget, block screen and notifications in pink.
-- **Q-36** AI-21: cap 40; Claude updates memories on its own, no card; from the chat and from replies to Felix alike; a "Remembered:" line in the thread so you see it (Q-46 confirms the line).
+- **Q-36** AI-21: Claude updates memories on its own, no card; from the chat and from replies to Felix alike; a "Remembered:" line in the thread so you see it (confirmed in Q-46). The cap of 40 was replaced by a budget after your Q-46 question (Q-51).
 - **Q-37** AC-02 settled.
 - **Q-38** UI-17, UI-18 settled: three tabs; today's timeline scrolled to now; the DO NOW card as the now card.
 - **Q-39** NF-07 settled: the app's own calendar on your Google account; a week ahead in detail; hand moves pin; school and outside slots written too.
@@ -130,69 +130,116 @@ Q-35: Keep recomendation. Q-36: cap 40, may update on its own, memories from nag
 
 ---
 
-## Round three
+## Round three: answered
 
-Short confirmations. Each can be answered with "yes" or a correction.
+| Q | Decision | Depends on it | My recommendation |
+|---|---|---|---|
+| Q-41 | Outside breaks: per weekend day; where in the day; which drops first | PL-12, NF-07 | Three per day; morning, midday, afternoon; the midday one drops first |
+| Q-42 | The line between a reply applied at once and one offered as a button | AI-24, LR-09 | As drawn in AI-24 |
+| Q-43 | School windows: the 15-minute minimum; the model marks `where`; early finishes by calendar event | PL-15, DX-09 | Yes to all three |
+| Q-44 | Felix is the chat too, not only the notifications | AI-22, UI-16 | Yes |
+| Q-45 | The photo flow for long pieces | BL-08, LR-09, AI-16 | Felix asks at the slot's end; a tick without a photo keeps the slot but earns nothing; the photo can come later the same day |
+| Q-46 | Memory updates shown as a "Remembered:" line | AI-21 | Yes |
 
-| Q    | Decision                                                                                           | Depends on it       | My recommendation                                                                                                            |
-| ---- | -------------------------------------------------------------------------------------------------- | ------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| Q-41 | Outside breaks: per weekend day; where in the day; which drops first                               | PL-12, NF-07        | Three per day; morning, midday, afternoon; the midday one drops first                                                        |
-| Q-42 | The line between a reply applied at once and one offered as a button                               | AI-24, LR-09        | As drawn in AI-24                                                                                                            |
-| Q-43 | School windows: the 15-minute minimum; the model marks `where`; early finishes by calendar event | PL-15, DX-09        | Yes to all three                                                                                                             |
-| Q-44 | Felix is the chat too, not only the notifications                                                  | AI-22, UI-16        | Yes                                                                                                                          |
-| Q-45 | The photo flow for long pieces                                                                     | BL-08, LR-09, AI-16 | Felix asks at the slot's end; a tick without a photo keeps the slot but earns nothing; the photo can come later the same day |
-| Q-46 | Memory updates shown as a "Remembered:" line                                                       | AI-21               | Yes                                                                                                                          |
-
-### Q-41 Outside breaks
-
-**Context.** PL-12: three 20-minute *Outside* slots on weekend days, laid in before the work, dropped one at a time when the day's work doesn't fit, never shortened, written to the calendar.
-
-**Questions.**
-
-- "Three in weekends": three on each of Saturday and Sunday, or three across the weekend?
-- Where: one in the morning, one around midday, one in the afternoon; or at times you'd rather set?
-- When one has to go, which first: the midday one (lunch is a break anyway), the last, or the first?
-
-**Recommendation.** Three per day; morning, midday, afternoon, each at the start of the nearest free window; the midday one first.
-
-### Q-42 Applied at once, or a button first
-
-**Context.** Your answer to Q-31: a reply needs no button unless it's a big change like adding a new event. AI-24 draws the line as: applied at once for a move within the due date, a change of minutes, "took longer by N", a busy time for today, a tick you report, a memory; a button first for a new task or event, a busy time beyond today, a deadline change, not-a-task, replacing a task's steps.
-
-**Question.** Is that the line? Anything to move across it?
-
-### Q-43 School windows: three details
-
-**Context.** PL-15 as settled by Q-30.
-
-**Questions.**
-
-- A window shorter than 15 minutes after a calendar event has taken its share isn't used: keep 15?
-- The model marks each step `anywhere` or `home`, and you override on the sheet: yes?
-- An early finish, an off-timetable day or a cancelled study period is told to the app by a calendar event covering the time (there's no other signal): acceptable?
-
-### Q-44 Felix in the chat
-
-**Context.** The chat button is on every screen (UI-16) and the notification thread continues there (AI-24). AI-22 proposes that the chat's own voice is Felix too, so one persona runs through the app and the chat's instructions and answers sound like him.
-
-**Question.** Yes, or keep the chat as the plain assistant it is now and Felix for notifications only?
-
-### Q-45 The photo flow for long pieces
-
-**Context.** Q-28's option 2: a piece planned at 20 minutes or more earns free time only when its photo check passes. BL-08 and LR-09 propose: at the slot's end Felix asks "Done? Send a pic and the minutes are yours"; a tick without a photo keeps the slot (the plan moves on) but earns nothing; the photo can be added from the sheet later the same day and the credit lands then; the 20-minute line is by planned minutes.
-
-**Question.** Is that the flow? In particular, should a photo added later the same day still earn, or only one sent at the slot's end?
-
-### Q-46 Memory updates shown
-
-**Context.** Q-36: Claude updates memories on its own. AI-21 adds a one-line "Remembered: football is Tuesdays" in the chat thread (and in the reply notification when the update came from one) so a wrong memory is seen when it's made.
-
-**Question.** Keep the line, or make updates silent and rely on the list in Settings?
-
----
-
-## Answer sheet (round three)
+**Your answers, as written:**
 
 ```
 Q-41: Keep recomendation. Q-42: Yes, anything that alters existing tasks can be instant. Adding new ones should be reviewed because there is more data to get wrong (descriptions, timings, etc.) Q-43: Yes to all: allow me to tell Felix about uncoming changes like holiday dates and half-days. Q-44: Yes, change everything to Felix. Q-45: Yes Q-46: Yes, good. Allow memory also for if I tell felix how to respond or alert me differently. This may required increasing the cap: is there a disadvantage to having no/a very large cap?
+```
+
+### How each round-three answer was applied
+
+- **Q-41** PL-12: three outside breaks on each weekend day, morning, midday and afternoon at the start of the nearest free window, the midday one dropped first.
+- **Q-42** AI-24: anything that alters an existing task or piece applies at once (moves, minutes, deadline, steps, not-a-task, ticks, "took longer"), with today's busy times and memories; anything new (a task, an event, a busy time beyond today, a holiday or half-day) comes back as a button.
+- **Q-43** PL-15 confirmed (15-minute minimum; the model marks `where`, overridable on the sheet and in the own-task form UI-15; a cancelled period is a calendar event). Your addition, telling Felix about holidays and half-days, is a new item: PL-16, the school calendar, with its effects to confirm in Q-50.
+- **Q-44** AI-22, UI-16, UI-09, UI-18: Felix is the chat and every reply; "Claude" stays the model's name in Setup and Settings (Q-55 to confirm that split).
+- **Q-45** BL-08, LR-09 confirmed: a tick keeps; a photo earns; later the same day still earns.
+- **Q-46** AI-21: the "Remembered:" line stays; a second kind of memory, standing instructions about how Felix behaves, goes into his system prompt and overrides his defaults. On the cap: the answer is in AI-21. In short, cost isn't the reason for one; a long, stale, contradictory list makes Felix's readings worse and goes unaudited. So no hard count, a budget of about 1,500 tokens for facts and 20 lines of standing instructions, and a weekly tidy by Felix shown as a diff with undo (Q-51).
+
+---
+
+## Round four
+
+From the end-to-end walkthrough in [PLAN-OVERVIEW.md](PLAN-OVERVIEW.md). Nine questions; most are a yes.
+
+| Q | Decision | Depends on it | My recommendation |
+|---|---|---|---|
+| Q-47 | Free time spendable in the gaps between today's slots | BL-10, BL-01 | Yes, until the next slot starts |
+| Q-48 | A missed or moved slot and tonight's block | BL-11, PL-13 | Missed keeps the block on; a deliberate move lifts it |
+| Q-49 | Weekend windows: two a day, or one long one with a share cap | PL-17, PL-01 | Two windows, yours to set |
+| Q-50 | What a holiday or half-day changes | PL-16, BL-02, PL-17 | Holiday = the weekend's rules; half-day = evening from the early finish |
+| Q-51 | Memory: a token budget and a weekly tidy shown as a diff | AI-21, LR-01 | Yes |
+| Q-52 | Same-day deadlines usable in the school windows before them; margins unchanged | PL-15 | Yes to both |
+| Q-53 | Hand edits in Google Calendar: moves pin (to another day too); deletions ignored | NF-07 | Yes |
+| Q-54 | Felix messages around school slots | LR-03 | Yes; a standing instruction can stop it |
+| Q-55 | "Felix" wherever you're spoken to; "Claude" for the model in Setup and Settings | AI-22, UI-16, UI-13 | Yes |
+
+### Q-47 Free time between today's slots
+
+**Context.** BL-01 opens the phone when today's slots are all kept. BL-10 proposes that once the slot before a gap is kept, earned free time is spendable until the next slot's start, when the block returns.
+
+**Options.** 1. Spend in the gaps. 2. Only when the day is done.
+
+**Recommendation.** 1.
+
+### Q-48 A missed or moved slot and tonight's block
+
+**Context.** PL-13 re-slots a missed piece, into tomorrow when today is full; moves are unlimited (Q-17); BL-01 lifts the block when today's list is kept. Without a rule, letting slots lapse or moving them empties today and opens the phone.
+
+**Options.** 1. A piece missed today and pushed to tomorrow keeps today's pressure until the hours end; a deliberate move (drag, or telling Felix) lifts it, with Felix free to push back. 2. Both missed and moved pieces keep today's pressure. 3. Neither.
+
+**Recommendation.** 1.
+
+### Q-49 Weekend windows
+
+**Context.** `weekendHours` is one window of fourteen hours; proportional spreading (Q-32) gives a weekend day nearly three times a weekday's share.
+
+**Options.** 1. Weekend hours as two windows a day (default 10:00–13:00 and 15:00–19:00), yours to set. 2. Keep one window and add a share cap (a weekend day counts as at most N hours in the spread). 3. Leave it: let the yield learn.
+
+**Recommendation.** 1. If 1, your two windows.
+
+### Q-50 What a holiday or half-day changes
+
+**Context.** PL-16: you tell Felix about holidays, INSET days and half-days.
+
+**Proposed effects.** A no-school day: no school windows; the weekend's windows (PL-17), outside breaks (PL-12) and block-from time (BL-02); Felix's morning message says so. A half-day: school windows end at the time given; the evening window starts then.
+
+**Question.** Those effects, or different hours for holidays than for weekends?
+
+### Q-51 Memory: a budget and a weekly tidy
+
+**Context.** AI-21 after your Q-46 question: no hard cap; about 1,500 tokens of facts and 20 standing instructions; each week, with the review, Felix rewrites the facts into fewer current lines, the before-and-after on the Reviews page with undo; standing instructions are merged only when shown.
+
+**Question.** Yes, or a hard cap after all (say 100), or no tidy (the list just grows and you prune it)?
+
+### Q-52 Same-day deadlines and margins
+
+**Context.** Today a morning deadline's day is never usable (`Planner.lastUsableDay`). With school windows a task due at 13:00 could be slotted at break the same day. The calibrated margins (1–3 days) would still push most work earlier.
+
+**Question.** Allow same-day slots before a deadline, margins unchanged?
+
+### Q-53 Hand edits in Google Calendar
+
+**Context.** NF-07: a hand move of one of the app's events pins the piece to that time (and day); past the due date it's refused with a message; a deletion is ignored and the event is written back at the next replan.
+
+**Question.** Yes?
+
+### Q-54 Felix at school
+
+**Context.** You said quiet only where nothing is scheduled; school slots are scheduled, so Felix messages around them (the slot's start, its end, the photo ask). A standing instruction ("not at school") would silence him there.
+
+**Question.** Yes, or quiet at school by default?
+
+### Q-55 "Felix" and "Claude" in the UI
+
+**Context.** Q-44: everything that talks to you is Felix: the chat, the button, "Ask Felix", "Split with Felix", every notification. "Claude" remains in Setup and Settings where the model, its key, its cost and its effort are set, because that's what they are.
+
+**Question.** That split, or Felix everywhere including Settings?
+
+---
+
+## Answer sheet (round four)
+
+```
+Q-47:   Q-48:   Q-49:   Q-50:   Q-51:   Q-52:   Q-53:   Q-54:   Q-55:
 ```

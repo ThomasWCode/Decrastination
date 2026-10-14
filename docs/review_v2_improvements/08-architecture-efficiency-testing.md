@@ -51,7 +51,7 @@ The code's shape is good: a pure core with tests, Android at the edges, JSON sto
 - capacity: no day over its free time × yield, except by overdue and due-today work and by chunks flagged as unable to fit;
 - deadlines: every chunk of a dated task on or before its last usable day, or flagged;
 - spread: a task with a window of seven days or more has a chunk in every seven-day stretch of it (the minimum-touch rule, Q-32);
-- slots: no two overlap, each inside a window, breaks kept, pinned slots where pinned, "home" pieces never in school windows, outside breaks present on weekends unless the day's work needed their time, dropped in order;
+- slots: no two overlap, each inside a window, breaks kept, pinned slots where pinned, "home" pieces never in school windows, no school windows on a no-school day and none after a half-day's end (PL-16), outside breaks present on weekends unless the day's work needed their time, dropped in order;
 - determinism: the same input gives the same plan;
 - stability: after one change (a tick, a new event, one minute passing) at most the affected pieces move, and none moves without a reason the `why` field names.
 
@@ -79,7 +79,7 @@ Print the seed on failure. Plain Kotlin and `kotlin.random.Random(seed)`.
 
 **Now.** `data/Backup` encodes and restores on demand (`data/Backup.kt:67`).
 
-**Proposal.** A folder picked once through the Storage Access Framework and a nightly job writing `decrastination-<date>.json`, keeping 14. Also the backup LR-08 writes before a reset.
+**Proposal.** A folder picked once through the Storage Access Framework and a nightly job writing `decrastination-<date>.json`, keeping 14; the backup grows the new stores (memories and standing instructions, the school calendar, slot outcomes). Also the backup LR-08 writes before a reset.
 
 **Effort.** M.
 
