@@ -192,12 +192,6 @@ object GmailThreads {
 
     private val NEWEST = compareBy<MailMessage>({ it.receivedAt }, { it.uid })
 
-    /**
-     * The first of [messages] to reach you: what it quotes is from before the conversation did, so
-     * it's read whole, where the later messages' quotes are of messages shown above them (DX-06).
-     */
-    fun oldest(messages: List<MailMessage>): MailMessage = messages.minWith(NEWEST)
-
     /** Which of a conversation's [messages] a read takes: its newest [MAX_MESSAGES_READ], oldest first. */
     fun reading(messages: List<MailMessage>): List<MailMessage> = messages.sortedWith(NEWEST).takeLast(MAX_MESSAGES_READ)
 
@@ -540,11 +534,12 @@ class GmailSource(private val secrets: SecretStore) : TaskSource {
                     if (System.nanoTime() > lastBy || (read.isNotEmpty() && System.nanoTime() > textsUntil)) break
                     val texts = mutableListOf<Pair<MailMessage, String>>()
                     val attachments = mutableListOf<List<Mime.Attachment>>()
-                    // What the oldest message quotes came before the conversation reached you, so
-                    // it's read whole; the later ones' quotes are of messages shown above them (DX-06).
+                    // What the first message read quotes isn't shown (it came before the conversation
+                    // reached you, or before the messages a read takes), so it's read whole; the later
+                    // ones' quotes are of messages shown above them (DX-06).
                     val messages = conversation.uids.map(envelopes::getValue)
-                    val oldest = GmailThreads.oldest(messages)
                     val reading = GmailThreads.reading(messages)
+                    val oldest = reading.first()
                     for (uid in reading.map { it.uid }) {
                         val now = System.nanoTime()
                         if (now > lastBy) break@conversations

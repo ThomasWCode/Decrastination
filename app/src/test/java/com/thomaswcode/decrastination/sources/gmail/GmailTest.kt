@@ -358,10 +358,10 @@ class GmailTest {
     }
 
     @Test
-    fun `the oldest message of a conversation is the first to reach you, read whole`() {
-        // What it quotes came before you were in the conversation: Dad's reply quoting John's question.
+    fun `a read takes a conversation's messages oldest first, the first of them read whole`() {
+        // What the first quotes came before you were in the conversation: Dad's reply quoting John's question.
         val messages = listOf(message(9, "t", 300, "Re: Help", "Tom", "tom@example.com", sent = true), message(4, "t", 100, "RE: Help!", "Dad", "dad@example.com"), message(7, "t", 200, "Re: Help", "John", "john@example.com"))
-        assertEquals(4L, GmailThreads.oldest(messages).uid)
+        assertEquals(listOf(4L, 7L, 9L), GmailThreads.reading(messages).map { it.uid })
     }
 
     @Test
