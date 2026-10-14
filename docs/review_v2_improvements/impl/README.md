@@ -45,7 +45,7 @@ JDK 17. The debug APK's keystore (`app/debug.keystore`) is committed on purpose:
 - The Google calendar "Decrastination" exists and is synced to the phone; the app picks it in Settings (NF-07). Grant the write permission over adb: `adb shell pm grant com.thomaswcode.decrastination android.permission.WRITE_CALENDAR`.
 - The Claude API key is in the environment variable `CLAUDE_DECRASTINATION_API_KEY` on the machine the session runs on (for the eval task, AR-02); on the phone it's in the app's secret store already.
 - The weekly summary goes to `richard.white@lshtm.ac.uk` (NF-02's default).
-- The nightly backup folder (AR-07) will be chosen later; until then no backup job runs.
+- The nightly backup (AR-07) writes to `Documents/Decrastination` on the phone's shared storage through `MediaStore`: no folder picker, no permission, nothing for the owner to do. A copy off the phone is the owner's own doing.
 - Don't change settings of apps that aren't this one (Google Calendar, Gmail, AnkiDroid, the Teams widget, Power Planner) on the phone; the app's own settings, and the phone's (accessibility, rotation, permissions) are yours to set.
 
 ## The Teams widget

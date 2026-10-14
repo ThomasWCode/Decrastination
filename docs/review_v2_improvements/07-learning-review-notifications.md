@@ -92,7 +92,7 @@ Revised after your notes and both rounds of answers. Note 6 is the centre of thi
 
 **Now.** Nothing resets short of clearing the app's data, which also clears the key, the sources and the protection state.
 
-**Proposal.** Your note 7, settled in Q-34. Settings → Reset, one row each: the activity log (stats, day records, slot outcomes; the calibration follows, being replayed from the log); the calibration only (a "learn from here on" marker in the log, keeping the history); memories (AI-21) and your profile lines; the chat and Felix's history; instructions (listing what would go, since some are busy times you still want); and *Everything learned*, which is all five. Each with a dialog naming what's lost, a backup written first (`data/Backup`, to the nightly folder if AR-07 exists), no parent code (none is a loosening), and nothing touching the key, the sources or protection.
+**Proposal.** Your note 7, settled in Q-34. Settings → Reset, one row each: the activity log (stats, day records, slot outcomes; the calibration follows, being replayed from the log); the calibration only (a "learn from here on" marker in the log, keeping the history); memories (AI-21) and your profile lines; the chat and Felix's history; instructions (listing what would go, since some are busy times you still want); and *Everything learned*, which is all five. Each with a dialog naming what's lost, a backup written first (`data/Backup`, to `Documents/Decrastination` as AR-07's nightly one), no parent code (none is a loosening), and nothing touching the key, the sources or protection.
 
 **Effort.** S.
 
