@@ -104,6 +104,7 @@ class PlannerPropertyTest {
         checkStability(seed, plan, input)
         checkMinimumTouch(seed, plan, input)
         checkRevisionGap(seed, plan, input)
+        checkWhy(seed, plan)
     }
 
     /** No day holds more than its time, but for overdue and due-today work, which may, and work flagged behind. */
@@ -238,6 +239,24 @@ class PlannerPropertyTest {
             if (day != before) continue
             val later = spread.window.filter { it > day }
             assertTrue(later.none { hadRoom(plan, input, spread.task, it, chunk) }, "seed=$seed: ${spread.task.id} part ${chunk.part} on $day with the piece before it, a later day having room")
+        }
+    }
+
+    /**
+     * Every piece says why it's on its day (PL-07), as its flags do: overdue work is overdue, undated
+     * work soft, work past its deadline short of room, work due soon due soon, the rest spread.
+     */
+    private fun checkWhy(seed: Long, plan: Plan) {
+        for (chunk in plan.ordered) {
+            val allowed = when {
+                chunk.overdue -> setOf(Why.Overdue)
+                chunk.soft -> setOf(Why.Soft)
+                chunk.behind -> setOf(Why.NoRoom)
+                chunk.dueSoon -> setOf(Why.DueSoon)
+                else -> setOf(Why.Spread, Why.MinimumTouch, Why.RevisionGap, Why.MostRoom, Why.Packed)
+            }
+            assertTrue(chunk.why in allowed, "seed=$seed: ${chunk.taskId} part ${chunk.part} says ${chunk.why}, not one of $allowed")
+            assertTrue(chunk.why != Why.MostRoom || chunk.parts == 1, "seed=$seed: ${chunk.taskId} part ${chunk.part} of ${chunk.parts} says MostRoom")
         }
     }
 

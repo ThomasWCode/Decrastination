@@ -20,6 +20,7 @@ import com.thomaswcode.decrastination.core.Speaker
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.OwnTask
 import com.thomaswcode.decrastination.core.Unplanned
+import com.thomaswcode.decrastination.core.Why
 import java.time.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -165,6 +166,11 @@ class ChatTest {
     private fun piece(taskId: String, title: String, step: String?, minutes: Int, part: Int, parts: Int, dueAt: Long?, behind: Boolean = false) = Chunk(
         taskId = taskId, source = Source.Teams, kind = Kind.Homework, title = title, step = step, minutes = minutes, dueAt = dueAt, deadline = dueAt ?: now,
         soft = dueAt == null, overdue = false, dueToday = false, behind = behind, part = part, parts = parts, taskMinutes = minutes,
+        why = when {
+            dueAt == null -> Why.Soft
+            behind -> Why.NoRoom
+            else -> Why.Spread
+        },
     )
 
     private val today = LocalDate.of(2026, 10, 12)
@@ -199,15 +205,15 @@ class ChatTest {
         // Tonight over its time, the physics on one line with its pieces.
         assertTrue("\n- Today, Monday 12 October 2026: 100 min planned of 0 min of working time left, over by 100 min\n" in text, text)
         assertTrue(
-            "\n  - teams:bridge | Bridge and Balances Beam Q's | 100 min: part 1 of 3 (34 min), part 2 of 3 (33 min), part 3 of 3 (33 min) | due Tue 13 Oct 2026 08:30 | won't fit before its deadline\n" in text,
+            "\n  - teams:bridge | Bridge and Balances Beam Q's | 100 min: part 1 of 3 (34 min) [why: noroom], part 2 of 3 (33 min) [why: noroom], part 3 of 3 (33 min) [why: noroom] | due Tue 13 Oct 2026 08:30 | won't fit before its deadline\n" in text,
             text,
         )
         assertTrue("\n- Tomorrow, Tuesday 13 October 2026: nothing planned (315 min of working time)\n  - event at 16:20: powerplanner:dentist | Dentist | Power Planner\n" in text, text)
         assertTrue("\nEvents on the Plan other than those under their days below (past, after Sunday 25 October 2026, or with no date):\n- own:match | Match | Yours | Sun 1 Nov 2026 09:00\n" in text, text)
         // Undated work behind only its soft deadline, the app's own: not said to be late.
         assertTrue(
-            "\n- Wednesday 14 October 2026: 60 min planned of 315 min of working time\n  - own:essay | Essay | 40 min: Draft (40 min) | due Fri 30 Oct 2026 17:00\n" +
-                "  - gmail:zip | Zip card | 20 min: all of it (20 min) | no due date\n" in text,
+            "\n- Wednesday 14 October 2026: 60 min planned of 315 min of working time\n  - own:essay | Essay | 40 min: Draft (40 min) [why: spread] | due Fri 30 Oct 2026 17:00\n" +
+                "  - gmail:zip | Zip card | 20 min: all of it (20 min) [why: soft] | no due date\n" in text,
             text,
         )
         // The fortnight in full, then a line for the rest.

@@ -11,8 +11,8 @@ import kotlin.math.ceil
 import kotlin.math.roundToInt
 
 /**
- * Places every open task's remaining work into day buckets, backwards from its deadline
- * (docs/scheduler.md §3). Pure: everything it depends on comes in through [Input].
+ * Places every open task's remaining work into day buckets (docs/scheduler.md §3). Pure:
+ * everything it depends on comes in through [Input].
  *
  * 1. Each study day from today has a capacity: your hours that day (Settings), less what's
  *    already gone today and what the calendar takes.
@@ -44,6 +44,9 @@ import kotlin.math.roundToInt
  * 8. A day you've limited ([Input.dayCaps]) holds no more work than that, and a box is never longer
  *    than the most any day its task can go on holds, so a task isn't left off for want of a day
  *    big enough for one box.
+ * 9. Every piece says why it's on its day ([Chunk.why], PL-07), set as it's placed: due soon,
+ *    overdue, spread, kept within a week, a day apart, the day with most room, undated, packed
+ *    late, or behind with no room.
  *
  * Spreading means today's bucket holds a fair share of every task's days, not the whole of a far
  * task's work in its last ones; placing everything early would put every task in today and the
@@ -250,8 +253,12 @@ object Planner {
         /** The deadline [item] ranks by: for an overdue run brought along, its task's soonest one to come; else its own. */
         fun rankedBy(item: Item): Long = if (soon(item) && item.deadline < input.now) soonBy.getValue(item.task.id) else item.deadline
 
-        /** Piece [index] of [item]: every task's pieces are placed in order, so it's done ([index] + 1)th. */
-        fun chunk(item: Item, index: Int, behind: Boolean): Chunk {
+        /**
+         * Piece [index] of [item]: every task's pieces are placed in order, so it's done ([index] + 1)th.
+         * [why] it's there (PL-07); behind, with no room before its deadline, whatever placed it, but
+         * undated work, whose deadline is the app's own.
+         */
+        fun chunk(item: Item, index: Int, behind: Boolean, why: Why): Chunk {
             val piece = item.chunks[index]
             val part = item.offset + index + 1
             val overdue = item.deadline < input.now
@@ -276,6 +283,7 @@ object Planner {
                 availableAt = item.notBefore?.takeIf { it > input.now },
                 box = piece.box,
                 stepIndex = piece.index,
+                why = if (behind && !overdue && why != Why.Soft) Why.NoRoom else why,
             )
         }
 
@@ -365,13 +373,14 @@ object Planner {
                 take(item, day, item.chunks[i].minutes)
                 // Due today but only possible from a later day (a deck whose next cards come
                 // tomorrow): it misses its deadline, so it's behind.
-                placed.getValue(day) += chunk(item, i, behind = day > date(item.deadline, zone))
+                val why = if (item.deadline < input.now) Why.Overdue else if (item.soft) Why.Soft else Why.DueSoon
+                placed.getValue(day) += chunk(item, i, behind = day > date(item.deadline, zone), why = why)
             }
             note(item, assigned)
         }
 
         // Due after today: backwards from its last usable day.
-        fun placeBack(item: Item) {
+        fun placeBack(item: Item, why: Why) {
             val earliest = maxOf(firstDay(item), floorOf(item) ?: today)
             // The day it's due by, as calibrated: work after it is behind, even when that day has
             // already gone (a margin longer than the time left).
@@ -429,7 +438,7 @@ object Planner {
             }
             item.chunks.indices.forEach { i ->
                 val day = assigned[i] ?: return@forEach
-                placed.getValue(day) += chunk(item, i, behind = behind[i] || day > dueBy)
+                placed.getValue(day) += chunk(item, i, behind = behind[i] || day > dueBy, why = why)
             }
             note(item, assigned)
         }
@@ -455,6 +464,7 @@ object Planner {
             val spaced = item.task.kind == Kind.Revision || item.task.enrichment?.testDate != null
             val weekly = window.size >= 7
             val assigned = arrayOfNulls<LocalDate>(n)
+            val whys = arrayOfNulls<Why>(n)
             fun fits(day: Int, i: Int) =
                 room(item, window[day]) >= item.chunks[i].minutes && (perDay == null || countOn(assigned, window[day]) < perDay)
             // Where piece [i]'s share falls: the first day whose running total of free time reaches it.
@@ -521,13 +531,23 @@ object Planner {
                 val within = if (weekly && previous >= 0) minOf(window.lastIndex, previous + 7) else window.lastIndex
                 val at = target(i)
                 // The gap and the week kept where there's room; then the week given up; then the gap.
-                val day = nearest(minOf(at, within), apart, within, i) ?: nearest(at, apart, window.lastIndex, i) ?: nearest(at, from, window.lastIndex, i)
+                val kept = nearest(minOf(at, within), apart, within, i) ?: nearest(at, apart, window.lastIndex, i)
+                // Where it would go without them: what tells a piece the week or the gap moved.
+                val bound = apart > from || within < window.lastIndex
+                val loose = if (kept == null || bound) nearest(at, from, window.lastIndex, i) else kept
+                val day = kept ?: loose
                 if (day == null) {
                     // No day for it with the rest to follow: the window can't hold the task in order
                     // (only ever its first piece, as each piece's day was taken with the rest able to follow).
                     for (k in 0 until i) give(item, assigned[k]!!, item.chunks[k].minutes)
-                    placeBack(item)
+                    placeBack(item, Why.Packed)
                     return
+                }
+                whys[i] = when {
+                    n == 1 -> Why.MostRoom
+                    day == loose -> Why.Spread
+                    at > within && day <= within -> Why.MinimumTouch
+                    else -> Why.RevisionGap
                 }
                 assigned[i] = window[day]
                 take(item, window[day], item.chunks[i].minutes)
@@ -535,7 +555,7 @@ object Planner {
             }
             // Behind only where it can't start before its last usable day is past (a start after it).
             val dueBy = lastUsableDay(item, input)
-            item.chunks.indices.forEach { i -> placed.getValue(assigned[i]!!) += chunk(item, i, behind = assigned[i]!! > dueBy) }
+            item.chunks.indices.forEach { i -> placed.getValue(assigned[i]!!) += chunk(item, i, behind = assigned[i]!! > dueBy, why = whys[i]!!) }
             note(item, assigned)
         }
 
@@ -551,11 +571,11 @@ object Planner {
         // among it), then what's due tomorrow; then what's overdue; then dated work spread over its
         // window; then undated work, backwards from its soft week.
         urgent.filter(::soon).sortedWith(byDeadline).forEach(::placeNow)
-        later.filter(::soon).sortedWith(order).forEach(::placeBack)
+        later.filter(::soon).sortedWith(order).forEach { placeBack(it, Why.DueSoon) }
         urgent.filterNot(::soon).sortedWith(byDeadline).forEach(::placeNow)
         val (undated, dated) = later.filterNot(::soon).partition { it.soft }
         dated.sortedWith(order).forEach(::placeSpread)
-        undated.sortedWith(order).forEach(::placeBack)
+        undated.sortedWith(order).forEach { placeBack(it, Why.Soft) }
 
         val buckets = days.map { DayBucket(it, capacity.getValue(it), placed.getValue(it).sortedWith(ORDER)) }
         // A task's runs left out for the same reason are one line: their pieces and minutes together, the soonest opening.

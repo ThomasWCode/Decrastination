@@ -60,6 +60,7 @@ import com.thomaswcode.decrastination.data.TaskState
 import com.thomaswcode.decrastination.enrich.KeyProblem
 import com.thomaswcode.decrastination.protect.ProtectionActivity
 import com.thomaswcode.decrastination.widget.WidgetModel
+import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -384,6 +385,8 @@ private fun PieceSheet(
                 style = MaterialTheme.typography.bodyMedium,
                 color = if (chunk.urgent) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            // Why it's on this day (PL-07).
+            Text(chunk.whyLine(Instant.ofEpochMilli(now).atZone(zone).toLocalDate(), zone), style = MaterialTheme.typography.bodyMedium)
             PieceActions(graph, activity, chunk, now, photo, say)
             // Its due date, minutes or start: on the task's own sheet (2.0.0).
             TextButton(onClick = onChange) { Text("Change its due date, minutes…") }
