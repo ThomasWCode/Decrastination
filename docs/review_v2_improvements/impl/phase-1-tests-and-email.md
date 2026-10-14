@@ -26,7 +26,7 @@ Items: AR-04, DX-03, DX-07, AI-02, DX-06, DX-01, AI-04. No dependency on other p
    - **Order.** Within a task, chunks' `part` numbers are non-decreasing by bucket date.
    - **Completeness.** Every open, available, non-hidden, non-waiting task's remaining pieces appear either as chunks or in `plan.unplanned` (sum of minutes matches `pieces` logic: compare the set of task ids, not minutes, to stay robust).
    - **Determinism.** `Planner.plan(input) == Planner.plan(input)` (data class equality on `Plan`).
-   - **Stability (phase 2 adds the real rule).** For now: adding one minute to `now` moves no chunk whose bucket is after today.
+   - **Stability (phase 2 adds the real rule).** For now: adding one minute to `now` moves no chunk whose bucket is after today. *Found at 10 000 seeds (seed 1702): within today's hours a minute less of a day full to the minute pushes its last piece to tomorrow, which moves tomorrow's (the plan has no memory of the last one until PL-13's `previous`); so the check runs where the minute leaves today's time as it was, 277 of the first 300 seeds.*
 4. Hold the seed list used in CI small (300 iterations run in well under a minute); the env var lets a developer run 10,000.
 
 **Tests.** This item is the test. Also add `PlannerPropertyTest` to the CI's default run (it is, by being under `app/src/test`).
