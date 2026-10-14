@@ -3,6 +3,7 @@ package com.thomaswcode.decrastination.sources.gmail
 import java.io.ByteArrayInputStream
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -211,5 +212,42 @@ class MimeTest {
         assertEquals(listOf("notes.txt"), files.map { it.name })
         assertEquals("scan.pdf (2.4 MB)", Mime.Attachment("scan.pdf", "application/pdf", 2_500_000).label)
         assertEquals("plan.docx", Mime.Attachment("plan.docx", "application/msword").label)
+    }
+
+    @Test
+    fun `an Outlook forward, a forward by its subject alone, keeps what it forwards`() {
+        // Outlook forwards with a header block like a reply's and no marker (the Warwick Open Day email).
+        val forward = "Sent from Outlook for Android\n________________________________\nFrom: Warwick Open Days <opendays@warwick.example>\nSent: Saturday, 10 October 2026 07:03\nTo: Richard White\nSubject: Final Reminder\n\nWe can't wait to meet you at 10:00.\n\nFrom: Thomas\nSent: Friday\nTo: Open Days\nSubject: Question"
+        val cut = Mime.cutQuoted(forward, html = false, forwarded = true)
+        assertTrue("We can't wait to meet you at 10:00." in cut.text, cut.text)
+        assertTrue("Subject: Question" !in cut.text, cut.text)
+        // Read as a reply (its subject says Re:), the header block is a quote, and goes.
+        assertEquals("Sent from Outlook for Android", Mime.cutQuoted(forward, html = false).text)
+        assertTrue(Mime.isForward("Fw: Final Reminder"))
+        assertTrue(Mime.isForward("FWD: x"))
+        assertFalse(Mime.isForward("Re: Fw: Final Reminder"))
+    }
+
+    @Test
+    fun `a forward in a blockquote keeps its content, Apple Mail's by its marker and another by its subject`() {
+        val apple = "<div>FYI</div><blockquote type=\"cite\"><div>Begin forwarded message:</div><div>From: Mr Hughes</div><div>Please sign the form.</div><blockquote>Old reply</blockquote></blockquote>"
+        val kept = Mime.tidy(Mime.htmlToText(Mime.cutQuoted(apple, html = true).text), 1000)
+        assertTrue("Please sign the form." in kept, kept)
+        assertTrue("Old reply" !in kept, kept)
+        val other = "<div>FYI</div><blockquote><div>Please sign the form.</div><blockquote>Old reply</blockquote></blockquote><blockquote>Another</blockquote>"
+        val byItsSubject = Mime.tidy(Mime.htmlToText(Mime.cutQuoted(other, html = true, forwarded = true).text), 1000)
+        assertEquals("FYI\nPlease sign the form.", byItsSubject)
+    }
+
+    @Test
+    fun `an attached email with no file name goes by its subject`() {
+        val files = Mime.attachments(
+            structure(
+                "((\"TEXT\" \"PLAIN\" NIL NIL NIL \"7BIT\" 0 0 NIL NIL NIL)" +
+                    "(\"MESSAGE\" \"RFC822\" NIL NIL NIL \"7BIT\" 16384 (\"Fri, 9 Oct 2026\" \"STEM Potential: how to apply\" NIL NIL NIL NIL NIL NIL NIL \"<x@y>\") (\"TEXT\" \"PLAIN\" NIL NIL NIL \"7BIT\" 100 3 NIL NIL NIL) 300 NIL (\"ATTACHMENT\" NIL) NIL NIL) \"MIXED\" (\"BOUNDARY\" \"b\") NIL NIL)",
+            ),
+        )
+        assertEquals(listOf(Mime.Attachment("STEM Potential: how to apply", "message/rfc822", 16_384)), files)
+        assertEquals("STEM Potential: how to apply (an email, 16 KB)", files.single().label)
     }
 }

@@ -499,7 +499,7 @@ class GmailSource(private val secrets: SecretStore) : TaskSource {
                         if (now > lastBy) break@conversations
                         socket.soTimeout = ((lastBy - now) / 1_000_000).toInt().coerceIn(1, TIMEOUT_MS)
                         val (text, attached) = try {
-                            textAndAttachments(imap, uid)
+                            textAndAttachments(imap, envelopes.getValue(uid))
                         } catch (e: SocketTimeoutException) {
                             // Out of time mid-answer: the connection's spent, but what's read stands.
                             cut = true
@@ -534,18 +534,18 @@ class GmailSource(private val secrets: SecretStore) : TaskSource {
      * part is fetched whole, up to [MAX_PART_BYTES]: HTML's text can come after 50 KB of markup and
      * styles (Warwick's Open Day email's did).
      */
-    private fun textAndAttachments(imap: ImapClient, uid: Long): Pair<String?, List<Mime.Attachment>> {
-        val structure = imap.uidFetch(listOf(uid), "UID BODYSTRUCTURE").firstOrNull()?.get("BODYSTRUCTURE") ?: return null to emptyList()
+    private fun textAndAttachments(imap: ImapClient, message: MailMessage): Pair<String?, List<Mime.Attachment>> {
+        val structure = imap.uidFetch(listOf(message.uid), "UID BODYSTRUCTURE").firstOrNull()?.get("BODYSTRUCTURE") ?: return null to emptyList()
         val attachments = Mime.attachments(structure)
-        return text(imap, uid, structure) to attachments
+        return text(imap, message, structure) to attachments
     }
 
-    private fun text(imap: ImapClient, uid: Long, structure: ImapValue): String? {
+    private fun text(imap: ImapClient, message: MailMessage, structure: ImapValue): String? {
         val part = Mime.textPart(structure) ?: return ""
-        val response = imap.uidFetch(listOf(uid), "UID BODY.PEEK[${part.section}]<0.$MAX_PART_BYTES>").firstOrNull() ?: return null
+        val response = imap.uidFetch(listOf(message.uid), "UID BODY.PEEK[${part.section}]<0.$MAX_PART_BYTES>").firstOrNull() ?: return null
         val body = response.entries.firstOrNull { it.key.startsWith("BODY[") }?.value ?: return null
-        // NIL: a part with nothing in it.
-        val read = (body as? ImapValue.Str)?.let { Mime.readable(it.bytes, part, GmailThreads.MAX_BODY_CHARS) }
+        // NIL: a part with nothing in it. A forward by its subject keeps what it forwards (DX-06).
+        val read = (body as? ImapValue.Str)?.let { Mime.readable(it.bytes, part, GmailThreads.MAX_BODY_CHARS, forwarded = Mime.isForward(message.subject)) }
         // What it quotes and its signature left out, and said (DX-06).
         val text = read?.let { if (it.cutChars > 0) (it.text + "\n\n" + GmailThreads.CUT_QUOTED.format(Locale.UK, it.cutChars)).trim() else it.text }.orEmpty()
         // A part longer than a read takes, its text short of the most kept: the rest wasn't read
