@@ -50,11 +50,13 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.R
 import com.thomaswcode.decrastination.block.FocusSession
+import com.thomaswcode.decrastination.core.About
 import com.thomaswcode.decrastination.core.Chunk
 import com.thomaswcode.decrastination.core.DayBucket
 import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Unplanned
+import com.thomaswcode.decrastination.core.WontFit
 import com.thomaswcode.decrastination.data.RuntimeState
 import com.thomaswcode.decrastination.data.TaskState
 import com.thomaswcode.decrastination.enrich.KeyProblem
@@ -158,6 +160,16 @@ fun TodayScreen(graph: AppGraph, activity: Activity) {
                 }
             }
             if (!expanded) return@forEach
+            // A real deadline the days before it can't hold (PL-02): said under today, with what gives.
+            if (bucket.date == plan.today) {
+                itemsIndexed(plan.wontFit, key = { _, it -> "wontfit-${it.taskId}" }) { index, short ->
+                    WontFitTile(short, index, plan.wontFit.size, plan.now, zone) {
+                        val text = "There isn't time for “${short.title}” by ${byDay(short.deadline, plan.now, zone)}: ${Format.minutes(short.leftMin)} left, " +
+                            "${Format.minutes(short.freeMin)} free. What should I shorten, move or ask for more time on?"
+                        activity.startActivity(AskActivity.intent(activity, About(taskId = short.taskId, taskTitle = short.title), text))
+                    }
+                }
+            }
             if (bucket.chunks.isEmpty()) {
                 item(key = "empty-$day") { ListTile(0, 1) { Text("Nothing planned.", style = MaterialTheme.typography.bodyMedium) } }
             }
@@ -417,6 +429,37 @@ private fun UnplannedTile(gap: Unplanned, index: Int, count: Int, lastDay: Local
 }
 
 private val DAY = DateTimeFormatter.ofPattern("EEEE d MMMM", Locale.UK)
+private val WEEKDAY = DateTimeFormatter.ofPattern("EEEE", Locale.UK)
+
+/** A deadline's day as "before Friday" says it: its weekday within the week, else its date. */
+private fun byDay(deadline: Long, now: Long, zone: ZoneId): String {
+    val day = Instant.ofEpochMilli(deadline).atZone(zone).toLocalDate()
+    val days = java.time.temporal.ChronoUnit.DAYS.between(Instant.ofEpochMilli(now).atZone(zone).toLocalDate(), day)
+    return when (days) {
+        0L -> "today"
+        1L -> "tomorrow"
+        in 2L..6L -> day.format(WEEKDAY)
+        else -> day.format(DAY)
+    }
+}
+
+/** A real deadline that its days can't hold (PL-02): what's left, what was free, and *What gives?* to ask Claude. */
+@Composable
+private fun WontFitTile(short: WontFit, index: Int, count: Int, now: Long, zone: ZoneId, onAsk: () -> Unit) {
+    ListTile(index, count) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(Modifier.weight(1f)) {
+                Text(short.title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(
+                    "${Format.minutes(short.leftMin)} left, ${Format.minutes(short.freeMin)} free before ${byDay(short.deadline, now, zone)}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
+            TextButton(onClick = onAsk) { Text("What gives?") }
+        }
+    }
+}
 
 @Composable
 private fun DayHeader(bucket: DayBucket, today: LocalDate, expanded: Boolean, onToggle: () -> Unit) {

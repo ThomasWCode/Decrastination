@@ -899,6 +899,24 @@ class PlannerTest {
         assertTrue(plan(listOf(task("t", Fixtures.at("2026-10-08T21:00"), effort = 30)), "2026-10-08T17:00").pressure)
     }
 
+    // --- A real deadline its days can't hold, said early (PL-02) ---
+
+    @Test
+    fun `a task its days can't hold before its deadline is said, with the numbers`() {
+        // Thursday 17:00, six hours due Saturday morning: Thursday and Friday have two hours each
+        // once the calendar's taken its share. One line, with what's left and what's free.
+        val loads = mapOf(LocalDate.parse("2026-10-08") to 180, LocalDate.parse("2026-10-09") to 195)
+        val due = Fixtures.at("2026-10-10T09:00")
+        val plan = plan(listOf(task("coursework", due, effort = 360)), "2026-10-08T17:00", loads = loads)
+        assertEquals(listOf(WontFit("teams:coursework", "coursework", 360, 240, due)), plan.wontFit)
+        // Undated work never is: its deadline is the app's own.
+        assertEquals(emptyList(), plan(listOf(task("notes", null, effort = 2000, kind = Kind.Admin)), "2026-10-08T17:00", loads = loads).wontFit)
+        // Nor is work that fits, or a plan's date (an email's Claude didn't quote).
+        assertEquals(emptyList(), plan(listOf(task("short", due, effort = 120)), "2026-10-08T17:00", loads = loads).wontFit)
+        val guessed = task("e", due, effort = 360).copy(id = "gmail:e", source = Source.Gmail, enrichment = Enrichment(inputHash = "", by = "claude", at = 0, deadline = due))
+        assertEquals(emptyList(), plan(listOf(guessed), "2026-10-08T17:00", loads = loads).wontFit)
+    }
+
     // --- What's left out, and why (IMP-P1-002) ---
 
     @Test

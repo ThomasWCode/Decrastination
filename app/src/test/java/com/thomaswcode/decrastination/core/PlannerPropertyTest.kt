@@ -117,6 +117,7 @@ class PlannerPropertyTest {
         checkRevisionGap(seed, plan, input)
         checkWhy(seed, plan)
         checkOverdue(seed, plan, input)
+        checkWontFit(seed, plan, input)
     }
 
     /**
@@ -286,6 +287,18 @@ class PlannerPropertyTest {
         for (chunk in plan.ordered.filter { it.overdue }) {
             val task = byId.getValue(chunk.taskId)
             assertTrue(task.hardDeadline && task.dueAt!! < input.now, "seed=$seed: ${chunk.taskId} part ${chunk.part} overdue, its deadline ${task.dueAt} ${if (task.hardDeadline) "real" else "a plan"}")
+        }
+    }
+
+    /** What's said won't fit (PL-02) has a real deadline, and some of it is behind or left out; once a task. */
+    private fun checkWontFit(seed: Long, plan: Plan, input: Planner.Input) {
+        val byId = input.tasks.associateBy { it.id }
+        assertTrue(plan.wontFit.map { it.taskId }.let { it.size == it.toSet().size }, "seed=$seed: a task said twice not to fit")
+        for (short in plan.wontFit) {
+            val task = byId.getValue(short.taskId)
+            assertTrue(task.hardDeadline, "seed=$seed: ${short.taskId} said not to fit, its deadline the app's")
+            val missed = plan.chunksOf(short.taskId).any { it.behind } || plan.unplanned.any { it.taskId == task.id }
+            assertTrue(missed, "seed=$seed: ${task.id} said not to fit, all of it placed in time")
         }
     }
 

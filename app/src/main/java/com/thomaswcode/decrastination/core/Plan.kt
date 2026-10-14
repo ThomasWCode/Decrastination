@@ -170,6 +170,8 @@ data class Plan(
     val events: List<TaskItem>,
     /** Open work that isn't in [buckets], with why: it doesn't vanish without a word. */
     val unplanned: List<Unplanned> = emptyList(),
+    /** Work with a real deadline that the time before it can't hold (PL-02), one a task. */
+    val wontFit: List<WontFit> = emptyList(),
 ) {
     fun bucket(date: LocalDate): DayBucket? = buckets.firstOrNull { it.date == date }
 
@@ -254,6 +256,12 @@ data class Calibration(
         fun key(kind: Kind, className: String?): String = "${kind.name}|${className.orEmpty()}"
     }
 }
+
+/**
+ * A task with a real deadline its days can't hold (PL-02), said the day it's so: [leftMin] of it
+ * to do, and [freeMin] free in the days it had before [deadline], before it took any.
+ */
+data class WontFit(val taskId: String, val title: String, val leftMin: Int, val freeMin: Int, val deadline: Long)
 
 /** The kinds of day that each learn how much of their free time is used (PL-06). */
 @Serializable
