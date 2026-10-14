@@ -4,15 +4,16 @@ The implementation of `docs/review_v2_improvements/impl/` on branch `v3`. Delete
 
 ## Done
 
-- AR-04 property tests for the planner (`PlannerPropertyTest`): this commit. 300 seeds in 1.3 s; 50 000 pass locally (21 s).
+- AR-04 property tests for the planner (`PlannerPropertyTest`): 825256e. 300 seeds in 1.3 s; 50 000 pass locally (21 s).
+- DX-03, DX-07 starred conversations from All Mail, known ones not fetched again: this commit. Unit-tested against a scripted IMAP server; the phone check is with the phase's install.
 
 ## Current
 
-Phase 1 (`impl/phase-1-tests-and-email.md`): the Gmail items, as amended for whole conversations.
+Phase 1 (`impl/phase-1-tests-and-email.md`): AI-02 next.
 
 ## Outstanding
 
-- Phase 1: DX-03, DX-07, AI-02, DX-06, DX-01, AI-04; then the phone checks, the docs, the pull request.
+- Phase 1: AI-02, DX-06, DX-01, AI-04; then the phone checks, the docs, the pull request.
 - Phases 2 to 8.
 
 ## Decisions made

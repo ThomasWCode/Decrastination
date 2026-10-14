@@ -6,10 +6,11 @@ package com.thomaswcode.decrastination.core
  * - A task the source lists is updated from it, keeping this app's own bookkeeping (first seen,
  *   minutes worked, sub-steps, estimates, the enrichment, laid over the fresh values again). One the
  *   source lists as finished becomes [Status.Done].
- * - An open task the source no longer lists is done: handed in, ticked, archived, or snoozed out
- *   of the inbox (PLAN.md §1). A [TaskItem.derived] one (the Anki quota) was missed instead: only
- *   its counts can say it's done.
- * - A done task the source lists again is open again: a hand-in undone, a snoozed email back.
+ * - An open task the source no longer lists is done: handed in, ticked, or an email unstarred
+ *   (PLAN.md §1; DX-03: the star is the state, so an email's blocks or its reading still to come
+ *   don't keep it). A [TaskItem.derived] one (the Anki quota) was missed instead: only its counts
+ *   can say it's done.
+ * - A done task the source lists again is open again: a hand-in undone, an email starred again.
  *   A derived task once done stays done, even if the counts waver (Anki's learning cards come
  *   back within minutes).
  * - Something the source already lists as finished, never seen open, is not added: it was done
@@ -18,9 +19,6 @@ package com.thomaswcode.decrastination.core
  * Sources throw rather than return a partial list, so "not listed" always means gone.
  */
 object Merge {
-    /** An email kept after it left the inbox, for its blocks still to do. */
-    const val EXTRA_FOLLOW_UP = "followUp"
-
 
     data class Result(
         val tasks: List<TaskItem>,
@@ -34,17 +32,7 @@ object Merge {
     /** How long a finished task stays in the list after it was last seen or finished. */
     const val KEEP_FINISHED_MS = 14 * 24 * 3_600_000L
 
-    /**
-     * [unread]: whether what a task says has yet to be read as it will be (its enrichment to come,
-     * or due again: the rules' reading while the model is on), so an email archived meanwhile waits.
-     */
-    fun apply(
-        tasks: List<TaskItem>,
-        source: Source,
-        fetched: List<Fetched>,
-        now: Long,
-        unread: (TaskItem) -> Boolean = { Enrichments.current(it) == null },
-    ): Result {
+    fun apply(tasks: List<TaskItem>, source: Source, fetched: List<Fetched>, now: Long): Result {
         val byId = tasks.associateBy { it.id }
         val listed = HashSet<String>()
         val completed = mutableListOf<TaskItem>()
@@ -144,16 +132,6 @@ object Merge {
             when {
                 old.status != Status.Open -> old.takeIf { now - (old.doneAt ?: old.lastSeenAt) < KEEP_FINISHED_MS }
                 old.derived -> old.copy(status = Status.Missed).also { missed += it }
-                // An email gone from the inbox before what it says was read as it will be (its
-                // enrichment still to come, perhaps under way, or the model's due over the rules'):
-                // kept as it is till it has been, so blocks found in it aren't lost to the archive;
-                // the next read then decides.
-                old.source == Source.Gmail && Enrichments.jobFor(old) != null && unread(old) -> old
-                // An email whose blocks are still to do, dated by their own dates or by the email's
-                // (applications that open later, work due by its deadline): archived, it stays on the
-                // list, marked as a follow-up, until they're done.
-                old.source == Source.Gmail && old.subSteps.any { !it.done && (it.from != null || it.dueAt != null || old.dueAt != null) } ->
-                    old.copy(extra = old.extra + (EXTRA_FOLLOW_UP to "true"))
                 else -> old.copy(status = Status.Done, doneAt = now).also { completed += completion(old, it) }
             }
         } + fresh.values.filter { it.id !in byId }

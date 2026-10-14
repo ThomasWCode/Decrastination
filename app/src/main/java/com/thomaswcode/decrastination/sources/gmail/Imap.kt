@@ -196,12 +196,19 @@ class ImapReader(input: InputStream) {
     }
 }
 
+/** A mailbox as `LIST` names it, with its attributes lower-cased, backslash kept (`\flagged`, RFC 6154's special uses). */
+data class Mailbox(val name: String, val attributes: Set<String>)
+
+/** A mailbox opened read-only: how many messages it holds, and the `UIDVALIDITY` its UIDs are good for (DX-07). */
+data class Examined(val exists: Int, val uidValidity: Long?)
+
 /**
- * Just enough IMAP4rev1 to read an inbox, plus Gmail's `X-GM-` extensions. Read-only by
+ * Just enough IMAP4rev1 to read a mailbox, plus Gmail's `X-GM-` extensions. Read-only by
  * construction: it opens mailboxes with EXAMINE and fetches bodies with BODY.PEEK, so nothing is
- * marked as read or changed, and it has no command that writes, moves or sends anything.
+ * marked as read or changed, and it has no command that writes, moves or sends anything. Each
+ * command sent is passed to [log], the login's address and password left out.
  */
-class ImapClient(input: InputStream, private val output: OutputStream) : Closeable {
+class ImapClient(input: InputStream, private val output: OutputStream, private val log: (String) -> Unit = {}) : Closeable {
     private val reader = ImapReader(input)
     private var counter = 0
 
@@ -214,14 +221,27 @@ class ImapClient(input: InputStream, private val output: OutputStream) : Closeab
     }
 
     fun login(user: String, password: String) {
-        run("LOGIN ${quote(user)} ${quote(password)}", "LOGIN")
+        run("LOGIN ${quote(user)} ${quote(password)}", "LOGIN", shown = "LOGIN")
     }
 
-    /** Opens [mailbox] read-only. Returns how many messages it holds. */
-    fun examine(mailbox: String): Int =
-        run("EXAMINE ${quote(mailbox)}", "EXAMINE")
-            .firstOrNull { it.values.getOrNull(1)?.string.equals("EXISTS", ignoreCase = true) }
+    /** Every mailbox, with its attributes: where Gmail keeps All Mail and Starred, whatever their names in the account's language. */
+    fun list(): List<Mailbox> =
+        run("LIST \"\" \"*\"", "LIST")
+            .filter { it.values.firstOrNull()?.string.equals("LIST", ignoreCase = true) }
+            .mapNotNull { line ->
+                val name = line.values.lastOrNull()?.string ?: return@mapNotNull null
+                Mailbox(name, line.values.getOrNull(1)?.list.orEmpty().mapNotNull { it.string?.lowercase() }.toSet())
+            }
+
+    /** Opens [mailbox] read-only. */
+    fun examine(mailbox: String): Examined {
+        val lines = run("EXAMINE ${quote(mailbox)}", "EXAMINE")
+        val exists = lines.firstOrNull { it.values.getOrNull(1)?.string.equals("EXISTS", ignoreCase = true) }
             ?.values?.firstOrNull()?.string?.toIntOrNull() ?: 0
+        // "* OK [UIDVALIDITY 11] UIDs valid.": a status line, its code kept in its text.
+        val validity = lines.firstNotNullOfOrNull { line -> line.text?.let { UID_VALIDITY.find(it) }?.groupValues?.get(1)?.toLongOrNull() }
+        return Examined(exists, validity)
+    }
 
     fun uidSearch(criteria: String): List<Long> =
         run("UID SEARCH $criteria", "UID SEARCH")
@@ -247,9 +267,10 @@ class ImapClient(input: InputStream, private val output: OutputStream) : Closeab
         runCatching { output.close() }
     }
 
-    /** Sends one command and collects its untagged responses until its tagged completion. */
-    private fun run(command: String, name: String): List<ImapLine> {
+    /** Sends one command and collects its untagged responses until its tagged completion. [shown]: what [log] is told it was. */
+    private fun run(command: String, name: String, shown: String = command): List<ImapLine> {
         val tag = "d${++counter}"
+        log("$tag $shown")
         output.write("$tag $command\r\n".encodeToByteArray())
         output.flush()
         val untagged = mutableListOf<ImapLine>()
@@ -270,6 +291,8 @@ class ImapClient(input: InputStream, private val output: OutputStream) : Closeab
     }
 
     companion object {
+        private val UID_VALIDITY = Regex("""\[UIDVALIDITY (\d+)]""", RegexOption.IGNORE_CASE)
+
         /** An IMAP quoted string. Passwords may hold anything printable; line breaks can't be sent. */
         fun quote(value: String): String {
             require('\r' !in value && '\n' !in value) { "Line breaks can't be sent in a quoted string" }

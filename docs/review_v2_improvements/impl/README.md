@@ -41,6 +41,7 @@ JDK 17. The debug APK's keystore (`app/debug.keystore`) is committed on purpose:
 
 - Backwards compatibility between app versions isn't required: the owner is the only user. Data on the phone must still survive each upgrade (see `00-conventions.md`); nothing else needs to keep working with older data or older builds.
 - The owner has starred every email he wants as a task, so DX-03 needs no grace period.
+- A starred message brings its whole conversation: every message of it is read, starred or not, his own replies included (the owner, 14 Oct; DX-03 as amended in phase 1).
 - His Power Planner timetable has the free periods entered as classes named "Study Period".
 - The Google calendar "Decrastination" exists and is synced to the phone; the app picks it in Settings (NF-07). Grant the write permission over adb: `adb shell pm grant com.thomaswcode.decrastination android.permission.WRITE_CALENDAR`.
 - The Claude API key is in the environment variable `CLAUDE_DECRASTINATION_API_KEY` on the machine the session runs on (for the eval task, AR-02); on the phone it's in the app's secret store already.

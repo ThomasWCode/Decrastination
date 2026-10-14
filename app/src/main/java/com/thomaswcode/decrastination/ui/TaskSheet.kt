@@ -39,7 +39,6 @@ import com.thomaswcode.decrastination.core.ChangeType
 import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.core.Instructions
 import com.thomaswcode.decrastination.core.Kind
-import com.thomaswcode.decrastination.core.Merge
 import com.thomaswcode.decrastination.core.OwnTasks
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Status
@@ -300,7 +299,6 @@ private fun Notes(task: TaskItem, now: Long, zone: java.time.ZoneId, byId: Map<S
     val lines = buildList {
         task.userAfter?.takeIf { task.isOpen && Instructions.waiting(task, byId) }?.let { add("Waits, as you said, until “${byId[it]?.title ?: it}” is done" to false) }
         if (task.userNotATask) add("You said it isn't a task: take that back in Ask Claude, under Your changes" to false)
-        if (task.isOpen && task.extra[Merge.EXTRA_FOLLOW_UP] == "true") add("Archived in Gmail: kept for its blocks till they're done" to false)
         Enrichments.current(task)?.dropped?.takeIf { task.isOpen }?.let { add("Claude's plan was dropped ($it): planned as one piece" to true) }
         (Enrichments.current(task)?.nextStep ?: task.extra[GmailThreads.EXTRA_NEXT_STEP])?.let { add("Next: $it" to false) }
         task.enrichment?.takeIf { it.by != RuleEnricher.BY }?.let { add("Steps and estimate by Claude" to false) }
