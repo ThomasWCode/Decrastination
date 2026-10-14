@@ -24,15 +24,16 @@ The implementation of `docs/review_v2_improvements/impl/` on branch `v3`. Delete
 
 `impl/phase-2-spread.md`:
 
-- PL-01 later work spread over its window: this commit. 2 000 property seeds in 3.3 s; 50 000 pass locally.
+- PL-01 later work spread over its window: 7dd37e6. 2 000 property seeds in 3.3 s; 50 000 pass locally.
+- PL-07 each piece says why it's on its day: this commit. 50 000 property seeds pass (28 s).
 
 ## Current
 
-Phase 2: PL-07 next.
+Phase 2: PL-14 next.
 
 ## Outstanding
 
-- Phase 2: PL-07, PL-14, AI-12, PL-06, DX-14, PL-02; an eval round after AI-12 (it also covers phase 1's last prompt wording); the phone; the docs; the pull request.
+- Phase 2: PL-14, AI-12, PL-06, DX-14, PL-02; an eval round after AI-12 (it also covers phase 1's last prompt wording); the phone; the docs; the pull request.
 - Phases 3 to 8.
 
 ## For the owner (deferred: you weren't live)
@@ -57,6 +58,7 @@ Phase 2: PL-07 next.
 - **PL-01's rules hold as pieces are placed, not after.** The plan's post-passes (`enforceMinimumTouch`, `enforceRevisionGaps`) move pieces after placing them, which can break their order; here the week and the gap bound each piece's day as it's placed, given up only where no day within them has room. And a piece never takes a day past which the pieces after it can't follow: found by the property test (seed 15: steps of 35, 21, 21 and 62 minutes, the 62 fitting only on a weekend day, so keeping the gap pushed the 21s past it and the task fell back to packing). Tried by placing the rest and taking them back, so `room()`'s rules (a late start's day, a per-day limit) hold. The backwards fallback is left for a window that can't hold the task in order at all.
 - **PlannerPropertyTest's new properties (PL-01):** the minimum touch, checked where a day within the week still had room once all was planned (a day's free time only falls as items are placed, so room then means room at its turn); the revision gap on a task's last piece only, since an earlier piece may rightly keep to its day so the rest can follow. Tasks not wholly placed, or with a piece behind, aren't spreads and aren't checked.
 - **"Planned for today", not "due today or tomorrow".** With pressure today's bucket alone (PL-01 step 4), the block screen's *Why am I blocked?* lists today's pieces, and its and the policy's wording say "planned for today"; the widget's "Nothing due today or tomorrow" stays, as it says what the two buckets hold.
+- **PL-07's reasons, one more than planned: `Packed`.** A task whose window can't hold it in order is placed backwards (PL-01's fallback); calling that "spread" would be wrong and "no room" is for what's behind, so its pieces say "Its days before the deadline are tight: as late as they allow". Behind wins over what placed a piece ("Couldn't fit before its deadline"), but for overdue work, which says since when, and undated work, whose deadline is the app's own. Undated work placed into today (its soft week ending today) says it's undated, not "Due today". `whyLine` takes today's date as well as the zone, as "Spread over the 12 days to its deadline" counts from it. The chat's plan explains the codes once, and its blocking sentence says "planned for today" (PL-01's pressure, missed there).
 - **No version bump.** The plan names none; the build stays `2.0.0` (code 16) until the owner says otherwise. Installs are over the top with `-r`.
 - **A Windows-only test flake, left alone.** `PowerPlannerSourceTest` sometimes fails on this PC with `AccessDeniedException` renaming `secrets.bin.tmp` in `%TEMP%` (something scanning the file mid-rename; 2 runs in about 10); re-runs pass, and neither CI's Linux nor the phone can see it. Not this plan's to fix.
 - **Prompt changes before phase 8's `Prompts.VERSION`:** (recorded here until phase 8 adds the version) the Email job's system prompt and schema changed in AI-02, DX-06 and AI-04, and again with the round 2 fixes.

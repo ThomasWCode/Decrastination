@@ -293,6 +293,7 @@ class OwnTasksTest {
         fun chunk(task: String, part: Int) = Chunk(
             taskId = task, source = Source.Teams, kind = Kind.Homework, title = task, step = "part $part", minutes = 30,
             dueAt = null, deadline = now, soft = false, overdue = false, dueToday = false, behind = false, part = part, parts = 3, taskMinutes = 90,
+            why = Why.Spread,
         )
         val rows = Groups.byTask(listOf(chunk("a", 1), chunk("b", 1), chunk("a", 2), chunk("a", 3)))
         assertEquals(listOf("a", "b"), rows.map { it.taskId })

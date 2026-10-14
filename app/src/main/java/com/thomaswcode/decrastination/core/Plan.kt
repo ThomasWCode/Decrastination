@@ -2,6 +2,49 @@ package com.thomaswcode.decrastination.core
 
 import kotlinx.serialization.Serializable
 import java.time.LocalDate
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.time.temporal.ChronoUnit
+import java.util.Locale
+
+/**
+ * Why a piece is on its day (PL-07), set as it's placed: shown on its sheet, and given to Claude
+ * with the plan so it explains the plan rather than guessing at it.
+ */
+enum class Why {
+    /** Due later today or tomorrow: placed first, in today's time. */
+    DueSoon,
+
+    /** Past a deadline: into today, the oldest first. */
+    Overdue,
+
+    /** Where its share of its window's free time falls (PL-01). */
+    Spread,
+
+    /** Brought within a week of its task's piece before (the minimum touch, Q-32). */
+    MinimumTouch,
+
+    /** Moved a day on from its task's piece before: revision, spaced. */
+    RevisionGap,
+
+    /** A task in one piece: the day of its window with most room. */
+    MostRoom,
+
+    /** Undated: in spare time, backwards from its soft week. */
+    Soft,
+
+    /** Its window couldn't hold it in order: placed as late as its days allow. */
+    Packed,
+
+    /** Where you put it (phase 3). */
+    Pinned,
+
+    /** Moved when its time passed (phase 3). */
+    Refitted,
+
+    /** No room before its deadline: flagged behind. */
+    NoRoom,
+}
 
 /**
  * One piece of a task, placed on one day: a sub-step ("Q1–8"), or a box of the task's remaining
@@ -43,8 +86,34 @@ data class Chunk(
     val box: Int? = null,
     /** Its sub-step's place in its task's list, so finishing it ticks that one, not another of the same title. */
     val stepIndex: Int? = null,
+    /** Why it's on its day (PL-07). */
+    val why: Why,
 ) {
     val label: String get() = step?.let { "$title: $it" } ?: title
+
+    /** [why] as its sheet says it, from [today]: "Spread over the 12 days to its deadline". */
+    fun whyLine(today: LocalDate, zone: ZoneId): String {
+        val due = Planner.date(deadline, zone)
+        val days = ChronoUnit.DAYS.between(today, due)
+        return when (why) {
+            Why.DueSoon -> if (dueToday) "Due today" else "Due tomorrow"
+            Why.Overdue -> "Overdue since ${due.format(DAY)}"
+            Why.Spread -> "Spread over the $days days to its deadline"
+            Why.MinimumTouch -> "Kept within a week of its last piece"
+            Why.RevisionGap -> "A day apart from the last revision piece"
+            Why.MostRoom -> "The day with most room before " + if (days in 1..6) due.format(WEEKDAY) else due.format(DAY)
+            Why.Soft -> "Undated: fills spare time this week"
+            Why.Packed -> "Its days before the deadline are tight: as late as they allow"
+            Why.Pinned -> "Where you put it"
+            Why.Refitted -> "Moved when its time passed"
+            Why.NoRoom -> "Couldn't fit before its deadline"
+        }
+    }
+
+    private companion object {
+        val DAY: DateTimeFormatter = DateTimeFormatter.ofPattern("EEE d MMM", Locale.UK)
+        val WEEKDAY: DateTimeFormatter = DateTimeFormatter.ofPattern("EEEE", Locale.UK)
+    }
 
     /** Bad news, shown in red wherever it appears: overdue, due today, or behind. */
     val urgent: Boolean get() = overdue || dueToday || behind

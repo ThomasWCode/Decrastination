@@ -213,7 +213,11 @@ object ChatPrompts {
         appendLine(
             "The plan: the work the app has them do each day so every deadline is met, as its Plan tab shows it. Its minutes are the app's, " +
                 "from what it's learned of how long things take them, so they can differ from the task list's. While anything's planned for " +
-                "today or tomorrow, blocked apps stay blocked in blocking hours; otherwise they cost free time earned by working.",
+                "today, blocked apps stay blocked in blocking hours; otherwise they cost free time earned by working. Each piece's [why: …] " +
+                "says why it's on its day: duesoon (due today or tomorrow), overdue, spread (its share of the free time to its deadline), " +
+                "minimumtouch (kept within a week of its piece before), revisiongap (a day after its revision piece before), mostroom (a " +
+                "task in one piece, on the roomiest day before its deadline), soft (no due date: spare time this week), packed (its days " +
+                "are too tight to spread it, so as late as they allow), noroom (no room before its deadline).",
         )
         // As the Do now card: in a focus session, its piece and no "then".
         val doing = session?.let { plan.pieceOf(it.taskId, it.stepIndex, it.step) }
@@ -289,7 +293,8 @@ object ChatPrompts {
                     "won't fit before its deadline".takeIf { dated && pieces.any { it.behind } },
                     pieces.mapNotNull { it.availableAt }.minOrNull()?.let { "can't start before ${at(it)}" },
                 )
-                val parts = pieces.joinToString { "${it.step?.take(MAX_TITLE) ?: "all of it"} (${it.minutes} min)" }
+                // Why each piece is on its day, as a short code (PL-07): the sheet's sentence would take the plan's room.
+                val parts = pieces.joinToString { "${it.step?.take(MAX_TITLE) ?: "all of it"} (${it.minutes} min) [why: ${it.why.name.lowercase()}]" }
                 appendLine("  - $id | ${first.title.take(MAX_TITLE)} | ${pieces.sumOf { it.minutes }} min: $parts | ${flags.joinToString(" | ")}")
             }
         }
