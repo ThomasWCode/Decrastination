@@ -158,6 +158,14 @@ class MimeTest {
     }
 
     @Test
+    fun `a part read whole keeps what it quotes`() {
+        val part = Mime.TextPart("1", "plain", "7bit", "utf-8")
+        val reply = "Over to Thomas.\n\nOn Wed, 7 Oct 2026, John <john@example.com> wrote:\n> My computer won't start."
+        assertEquals("Over to Thomas.\n\nOn Wed, 7 Oct 2026, John <john@example.com> wrote:\n> My computer won't start.", Mime.readable(reply.toByteArray(), part, 1000, cut = false).text)
+        assertEquals(Mime.Cut("Over to Thomas.", Mime.tidy("On Wed, 7 Oct 2026, John <john@example.com> wrote:\n> My computer won't start.", 1000).length), Mime.readable(reply.toByteArray(), part, 1000))
+    }
+
+    @Test
     fun `a message with nothing quoted is as it was`() {
         assertEquals(Mime.Cut("Please bring the form.", 0), Mime.cutQuoted("Please bring the form.", html = false))
         assertEquals(Mime.Cut("<p>Hi</p>", 0), Mime.cutQuoted("<p>Hi</p>", html = true))
