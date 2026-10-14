@@ -4,6 +4,7 @@ import java.io.ByteArrayInputStream
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class MimeTest {
 
@@ -90,5 +91,83 @@ class MimeTest {
     fun `decode applies the transfer encoding and charset`() {
         val part = Mime.TextPart("1", "plain", "quoted-printable", "iso-8859-1")
         assertEquals("Grüße", Mime.decode("Gr=FC=DFe".toByteArray(), part))
+    }
+
+    // --- What a message quotes, and its signature, cut (DX-06) ---
+
+    @Test
+    fun `nested blockquotes go whole, and what was cut is counted as text`() {
+        val html = "<p>Yes, Friday works.</p><blockquote>Can you come?<blockquote>Old <b>news</b></blockquote>Thanks</blockquote><p>Tom</p>"
+        val cut = Mime.cutQuoted(html, html = true)
+        assertEquals("<p>Yes, Friday works.</p><p>Tom</p>", cut.text)
+        assertEquals(Mime.tidy(Mime.htmlToText("<blockquote>Can you come?<blockquote>Old <b>news</b></blockquote>Thanks</blockquote>"), 1000).length, cut.cutChars)
+    }
+
+    @Test
+    fun `a Gmail quote div goes whole, nested divs and all`() {
+        val html = """<div dir="ltr">Sounds good</div><br><div class="gmail_quote gmail_quote_container"><div dir="ltr" class="gmail_attr">On Thu, 8 Oct 2026 at 18:02, Dad &lt;dad@example.com&gt; wrote:<br></div><blockquote class="gmail_quote"><div>Please book the train.</div></blockquote></div>"""
+        val cut = Mime.cutQuoted(html, html = true)
+        assertEquals("""<div dir="ltr">Sounds good</div><br>""", cut.text)
+        assertTrue(cut.cutChars > 0)
+    }
+
+    @Test
+    fun `a Gmail forward keeps what it forwards and cuts what that quoted`() {
+        val html = """<div dir="ltr">FYI<br><div class="gmail_quote"><div dir="ltr" class="gmail_attr">---------- Forwarded message ---------<br>From: Mr Hughes &lt;hughes@school.example&gt;<br>Date: Thu, 8 Oct 2026<br>Subject: Trip<br>To: &lt;dad@example.com&gt;<br></div><br><div dir="ltr">Please sign the form by Friday.</div><div class="gmail_quote"><div class="gmail_attr">On Wed, 7 Oct 2026, Dad wrote:</div><blockquote class="gmail_quote">Is there a form?</blockquote></div></div></div>"""
+        val text = Mime.tidy(Mime.htmlToText(Mime.cutQuoted(html, html = true).text), 1000)
+        assertTrue("Please sign the form by Friday." in text, text)
+        assertTrue("Forwarded message" in text, text)
+        assertTrue("Is there a form?" !in text, text)
+    }
+
+    @Test
+    fun `plain text is cut from its attribution line, wrapped or not`() {
+        val reply = "Yes, I'll bring it.\n\nOn Thu, 8 Oct 2026 at 18:02, Mr Hughes <hughes@school.example> wrote:\n> Please bring the form.\n> Thanks"
+        val cut = Mime.cutQuoted(reply, html = false)
+        assertEquals("Yes, I'll bring it.", cut.text)
+        assertEquals(Mime.tidy("On Thu, 8 Oct 2026 at 18:02, Mr Hughes <hughes@school.example> wrote:\n> Please bring the form.\n> Thanks", 1000).length, cut.cutChars)
+        // Gmail wraps a long one onto the next line.
+        assertEquals("Done.", Mime.cutQuoted("Done.\nOn Thu, 8 Oct 2026 at 18:02, Richard White <\nrichard.white@example.com> wrote:\n> Book it", html = false).text)
+        // A line that only says someone wrote, with no date in it, is the message's own.
+        assertEquals("On Monday Sir wrote:\nthe dates on the board.", Mime.cutQuoted("On Monday Sir wrote:\nthe dates on the board.", html = false).text)
+    }
+
+    @Test
+    fun `Outlook's original message and its header block are cut, its rule with them`() {
+        assertEquals("Thanks!", Mime.cutQuoted("Thanks!\n-----Original Message-----\nFrom: A\nSent: Monday", html = false).text)
+        assertEquals("See below.", Mime.cutQuoted("See below.\n________________________________\nFrom: Office <office@school.example>\nSent: 08 October 2026 18:02\nTo: Tom\nSubject: Trip", html = false).text)
+        // A From: line with no Sent: or To: near it is the message's own.
+        assertEquals("From: the office, a reminder.\nBring it Friday.", Mime.cutQuoted("From: the office, a reminder.\nBring it Friday.", html = false).text)
+    }
+
+    @Test
+    fun `a signature is cut`() {
+        val cut = Mime.cutQuoted("See you then.\n-- \nMr Hughes\nHead of Physics", html = false)
+        assertEquals("See you then.", cut.text)
+        assertEquals(Mime.tidy("-- \nMr Hughes\nHead of Physics", 1000).length, cut.cutChars)
+    }
+
+    @Test
+    fun `a plain forward keeps what it forwards and cuts at the quote after it`() {
+        val forward = "FYI\n\n---------- Forwarded message ---------\nFrom: Mr Hughes <hughes@school.example>\nDate: Thu, 8 Oct 2026\nSubject: Trip\nTo: Dad <dad@example.com>\n\nPlease sign the form by Friday.\n\nOn Wed, 7 Oct 2026, Dad <dad@example.com> wrote:\n> Is there a form?"
+        val cut = Mime.cutQuoted(forward, html = false)
+        assertTrue(cut.text.endsWith("Please sign the form by Friday."), cut.text)
+        assertTrue("From: Mr Hughes" in cut.text)
+        assertTrue("Is there a form?" !in cut.text)
+    }
+
+    @Test
+    fun `a message with nothing quoted is as it was`() {
+        assertEquals(Mime.Cut("Please bring the form.", 0), Mime.cutQuoted("Please bring the form.", html = false))
+        assertEquals(Mime.Cut("<p>Hi</p>", 0), Mime.cutQuoted("<p>Hi</p>", html = true))
+    }
+
+    @Test
+    fun `a part's readable text has HTML's quotes cut before it's flattened, then plain text's`() {
+        val part = Mime.TextPart("1", "html", "7bit", "utf-8")
+        val html = "<p>Thanks, done.</p><p>-- </p><p>Tom</p><blockquote>Did you do it?</blockquote>"
+        val read = Mime.readable(html.toByteArray(), part, 1000)
+        assertEquals("Thanks, done.", read.text)
+        assertEquals(Mime.tidy("Did you do it?", 1000).length + Mime.tidy("--\nTom", 1000).length, read.cutChars)
     }
 }
