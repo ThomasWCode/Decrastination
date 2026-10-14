@@ -1,6 +1,6 @@
 # The plan, end to end
 
-The whole design in one place, after four rounds of answers, walked through a school day, a weekend day and a week, each step naming the item that specifies it. Written to find the gaps; the gaps it found were round four in [QUESTIONS.md](QUESTIONS.md) and are settled at the end, bar one.
+The whole design in one place, after five rounds of answers, walked through a school day, a weekend day and a week, each step naming the item that specifies it. Written to find the gaps; the gaps it found were round four in [QUESTIONS.md](QUESTIONS.md) and are all settled at the end.
 
 ## 1. What the app knows
 
@@ -66,14 +66,14 @@ Say so if any is wrong; none has a question.
 - "Open in Teams/Gmail/Power Planner" on the sheet is unchanged.
 - The eval set's Email cases that were Info are retired (AI-02); Felix and the micro-plans get eval sets when there's real data (AR-02).
 
-## 9. The gaps the walkthrough found, and how round four settled them
+## 9. The gaps the walkthrough found, and how rounds four and five settled them
 
 - **Free time between slots** (Q-47, BL-10): spendable in the gaps, until the next slot starts.
 - **A missed or moved slot and tonight's block** (Q-48, BL-11): a missed slot keeps the block on; a deliberate move lifts it.
-- **Weekend load** (Q-49): the one long window stays; the yield learns per kind of day (PL-06; Q-56 confirms that form).
+- **Weekend load** (Q-49, Q-56): the one long window stays; the yield learns per kind of day (PL-06).
 - **What a holiday or half-day changes** (Q-50, PL-16): the weekend's rules; a half-day's evening from the early finish.
 - **Memory** (Q-51, AI-21): no cap; a budget; Felix tidies weekly, shown as a diff; you never have to prune.
-- **Same-day deadlines with school windows** (Q-52, PL-15): unanswered; assumed yes meanwhile, asked again in round five.
-- **Hand edits in Google Calendar** (Q-53, NF-07, PL-13): moves pin; an event you add displaces the slot; a deleted slot event comes back only if its time is still free (Q-57 confirms the reading).
+- **Same-day deadlines with school windows** (Q-52, PL-15): yes; margins unchanged.
+- **Hand edits in Google Calendar** (Q-53, NF-07, PL-13): moves pin; an event you add displaces the slot; a deleted slot event comes back only if its time is still free (Q-57).
 - **Felix at school** (Q-54, LR-03): he messages around school slots.
 - **"Claude" and "Felix"** (Q-55): Felix everywhere except Settings.
