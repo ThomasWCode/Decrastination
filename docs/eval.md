@@ -30,6 +30,18 @@ Elsewhere (CI, another PC) the two tests find no `private/eval` and are skipped.
 
 The labels are yours: they were checked with you on 11 Oct (the work-experience email must name STEM Potential, Rosalind Franklin and Imperial Work Experience among its blocks). Change one in `make_cases.py` and run it again; keep held-out cases aside if a prompt is being tuned against these.
 
+## Review v2, phase 1 (14 Oct): starred conversations
+
+The Email job changed (AI-02, AI-04, DX-06, DX-01), and with it what the app stores: so the email cases' tasks were read again from Gmail, read-only, through the app's own `ImapClient`, `Mime.readable` and `GmailThreads.conversationText` (a throwaway JVM test, kept out of the repo, by each case's thread id), so each holds what a starred read now stores: the whole conversation, quotes cut but the oldest message's, attachments named. The cases as they were are kept in `private/eval/cases-2026-10-11.json`. The three labelled Info (`dell`, `linkedin`, `talk-summary`) are retired: a starred email is never only to read.
+
+| Round | Prompt | Passed | What failed |
+|---|---|---|---|
+| 1 (11 Oct) | 1.8.0's | 11 of 13 | `german-assess` (a step dated after the task is due), `talk-note` (read as Info) |
+| 2 | phase 1 as planned | 5 of 10 | `help`: the quote cut was John's question, which the student never had, so "read the earlier message"; `zip-card`, `dad-apply`: AI-04's fixed next step ("Read the attachment and decide") over the prompt's own "one concrete action", and over attachment names that say what they are; `german-assess` again |
+| 3 | as built: the oldest message read whole; the fallback names what to read | 10 of 10 | none (`german-assess` passing is the model's luck; its dated step is AI-01's, phase 7) |
+
+Re-reading also found two faults the round couldn't have: an Outlook forward (subject `Fw:`, no forward marker) lost all 8 600 characters it forwarded (`open-day`), and an attached email had no name (`dad-apply`'s three, now named by their subjects).
+
 ## The chat (2.0.0)
 
 Ten messages to *Ask Claude*, sent as the app sends them: the exact system prompt, schema and turns built from the phone's `tasks.json` and `instructions.json` (pulled into `private/eval-chat/`, addresses redacted) by a throwaway JVM test kept out of the repo, each answered by an Opus subagent, and each answer put through `ChatAnswers.parse`. 12 Oct, against `ChatPrompts` as committed in #30: all ten read, and each did what was asked.
