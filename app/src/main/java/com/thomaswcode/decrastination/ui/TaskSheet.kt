@@ -1,6 +1,7 @@
 package com.thomaswcode.decrastination.ui
 
 import android.app.Activity
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
@@ -185,7 +186,7 @@ fun TaskSheet(graph: AppGraph, activity: Activity, taskId: String, onClose: () -
                 )
             }
             message?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error) }
-            Notes(task, now, zone, byId)
+            Notes(task, now, zone, byId, onOpen = { scope.launch { TaskOpener.open(activity, task)?.let { message = it } } })
             Steps(graph, task, now, zone)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 when {
@@ -295,7 +296,7 @@ private fun Field(label: String, value: String, note: String? = null, urgent: Bo
 
 /** What's out of the ordinary about [task], and what it says. */
 @Composable
-private fun Notes(task: TaskItem, now: Long, zone: java.time.ZoneId, byId: Map<String, TaskItem>) {
+private fun Notes(task: TaskItem, now: Long, zone: java.time.ZoneId, byId: Map<String, TaskItem>, onOpen: () -> Unit) {
     val lines = buildList {
         task.userAfter?.takeIf { task.isOpen && Instructions.waiting(task, byId) }?.let { add("Waits, as you said, until “${byId[it]?.title ?: it}” is done" to false) }
         if (task.userNotATask) add("You said it isn't a task: take that back in Ask Claude, under Your changes" to false)
@@ -305,6 +306,15 @@ private fun Notes(task: TaskItem, now: Long, zone: java.time.ZoneId, byId: Map<S
     }
     lines.forEach { (text, bad) ->
         Text(text, style = MaterialTheme.typography.bodyMedium, color = if (bad) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface)
+    }
+    // What's attached, which the app can't open: a tap opens Gmail, saying what to look for (DX-01).
+    GmailThreads.attachmentsOf(task).takeIf { it.isNotEmpty() }?.let { files ->
+        Text(
+            "Attachments: " + files.joinToString(", ") { it.label },
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.clickable(onClick = onOpen),
+        )
     }
     if (task.detail.isNotBlank()) Text(task.detail, style = MaterialTheme.typography.bodySmall)
 }

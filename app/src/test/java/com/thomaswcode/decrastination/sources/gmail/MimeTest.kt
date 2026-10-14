@@ -170,4 +170,46 @@ class MimeTest {
         assertEquals("Thanks, done.", read.text)
         assertEquals(Mime.tidy("Did you do it?", 1000).length + Mime.tidy("--\nTom", 1000).length, read.cutChars)
     }
+
+    // --- Attachments (DX-01) ---
+
+    @Test
+    fun `a message's attachments are named, its inline logo and its text not`() {
+        val files = Mime.attachments(
+            structure(
+                "((\"TEXT\" \"PLAIN\" (\"CHARSET\" \"utf-8\") NIL NIL \"7BIT\" 120 4 NIL NIL NIL)" +
+                    "(\"IMAGE\" \"PNG\" (\"NAME\" \"image001.png\") \"<image001.png@01D>\" NIL \"BASE64\" 4000 NIL (\"INLINE\" (\"FILENAME\" \"image001.png\")) NIL NIL)" +
+                    "(\"APPLICATION\" \"PDF\" (\"NAME\" \"consent-form.pdf\") NIL NIL \"BASE64\" 150186 NIL (\"ATTACHMENT\" (\"FILENAME\" \"consent-form.pdf\")) NIL NIL) \"MIXED\" (\"BOUNDARY\" \"b0\") NIL NIL)",
+            ),
+        )
+        // Base64's size cut to the file's: 150 186 bytes sent, 110 KB of PDF.
+        assertEquals(listOf(Mime.Attachment("consent-form.pdf", "application/pdf", 112_639)), files)
+        assertEquals("consent-form.pdf (110 KB)", files.single().label)
+    }
+
+    @Test
+    fun `an attachment is found by its name where it has no disposition, and an encoded name is read`() {
+        val files = Mime.attachments(
+            structure(
+                "((\"TEXT\" \"HTML\" NIL NIL NIL \"7BIT\" 30 1 NIL NIL NIL)" +
+                    "(\"APPLICATION\" \"VND.OPENXMLFORMATS-OFFICEDOCUMENT.WORDPROCESSINGML.DOCUMENT\" (\"NAME\" \"=?UTF-8?Q?Itiner=C3=A4r.docx?=\") NIL NIL \"7BIT\" 2048 NIL NIL NIL NIL)" +
+                    "(\"APPLICATION\" \"PDF\" (\"NAME*\" \"utf-8''trip%20form.pdf\") NIL NIL \"BASE64\" 400 NIL (\"ATTACHMENT\" (\"FILENAME*\" \"utf-8''trip%20form.pdf\")) NIL NIL) \"MIXED\" (\"BOUNDARY\" \"b\") NIL NIL)",
+            ),
+        )
+        assertEquals(listOf("Itinerär.docx", "trip form.pdf"), files.map { it.name })
+        assertEquals("application/vnd.openxmlformats-officedocument.wordprocessingml.document", files.first().type)
+    }
+
+    @Test
+    fun `an attached text file is an attachment, and a size past a thousand kilobytes is in megabytes`() {
+        val files = Mime.attachments(
+            structure(
+                "((\"TEXT\" \"PLAIN\" (\"NAME\" \"notes.txt\") NIL NIL \"BASE64\" 40 1 NIL (\"ATTACHMENT\" (\"FILENAME\" \"notes.txt\")) NIL)" +
+                    "(\"TEXT\" \"HTML\" NIL NIL NIL \"7BIT\" 30 1 NIL NIL NIL) \"MIXED\" (\"BOUNDARY\" \"b\") NIL NIL)",
+            ),
+        )
+        assertEquals(listOf("notes.txt"), files.map { it.name })
+        assertEquals("scan.pdf (2.4 MB)", Mime.Attachment("scan.pdf", "application/pdf", 2_500_000).label)
+        assertEquals("plan.docx", Mime.Attachment("plan.docx", "application/msword").label)
+    }
 }

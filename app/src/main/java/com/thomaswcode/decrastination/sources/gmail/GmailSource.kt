@@ -15,6 +15,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.json.Json
 import java.io.IOException
 import java.net.InetSocketAddress
 import java.net.Socket
@@ -138,14 +140,27 @@ object GmailThreads {
     /** Kept for the line at the top of a conversation saying how many earlier messages were left out. */
     private const val LEFT_OUT_ROOM = 80
 
-    /** A conversation's text, and how far it was read ([EXTRA_TEXT_READ_TO]). */
-    data class Body(val text: String, val readTo: Int = MAX_BODY_CHARS) {
+    /**
+     * Its messages' attachments (DX-01), every message's, each once: a JSON list of [Mime.Attachment],
+     * which reads back whole whatever a file is called.
+     */
+    const val EXTRA_ATTACHMENTS = "attachments"
+
+    private val json = Json { ignoreUnknownKeys = true }
+    private val ATTACHMENTS = ListSerializer(Mime.Attachment.serializer())
+
+    /** A conversation's text, how far it was read ([EXTRA_TEXT_READ_TO]), and what's attached to it. */
+    data class Body(val text: String, val readTo: Int = MAX_BODY_CHARS, val attachments: List<Mime.Attachment> = emptyList()) {
         /** All there is, or as much as a read takes now: reading it again would add nothing. */
         val whole: Boolean get() = text.length < readTo || readTo >= MAX_BODY_CHARS
     }
 
     /** [task]'s stored text, and how far it was read: stored before that was kept, nowhere near far enough. */
-    fun bodyOf(task: TaskItem): Body = Body(task.detail, task.extra[EXTRA_TEXT_READ_TO]?.toIntOrNull() ?: 0)
+    fun bodyOf(task: TaskItem): Body = Body(task.detail, task.extra[EXTRA_TEXT_READ_TO]?.toIntOrNull() ?: 0, attachmentsOf(task))
+
+    /** What's attached to [task]'s conversation, as stored; none for a task from before attachments were kept. */
+    fun attachmentsOf(task: TaskItem): List<Mime.Attachment> =
+        task.extra[EXTRA_ATTACHMENTS]?.let { runCatching { json.decodeFromString(ATTACHMENTS, it) }.getOrNull() }.orEmpty()
 
     /**
      * Whether [task]'s text has been read as far as reads now go: not still to be fetched, nor cut
@@ -299,6 +314,7 @@ object GmailThreads {
                     conversation.fromName?.let { put(EXTRA_FROM_NAME, it) }
                     conversation.fromAddress?.let { put(EXTRA_FROM_ADDRESS, it) }
                     if (body == null) put(EXTRA_TEXT_PENDING, "true") else put(EXTRA_TEXT_READ_TO, body.readTo.toString())
+                    body?.attachments?.takeIf { it.isNotEmpty() }?.let { put(EXTRA_ATTACHMENTS, json.encodeToString(ATTACHMENTS, it)) }
                 },
             )
         }
@@ -477,12 +493,13 @@ class GmailSource(private val secrets: SecretStore) : TaskSource {
                 conversations@ for (conversation in GmailThreads.toRead(conversations, stored, MAX_BODIES)) {
                     if (System.nanoTime() > lastBy || (read.isNotEmpty() && System.nanoTime() > textsUntil)) break
                     val texts = mutableListOf<Pair<MailMessage, String>>()
+                    val attachments = mutableListOf<Mime.Attachment>()
                     for (uid in conversation.uids) {
                         val now = System.nanoTime()
                         if (now > lastBy) break@conversations
                         socket.soTimeout = ((lastBy - now) / 1_000_000).toInt().coerceIn(1, TIMEOUT_MS)
-                        val text = try {
-                            text(imap, uid)
+                        val (text, attached) = try {
+                            textAndAttachments(imap, uid)
                         } catch (e: SocketTimeoutException) {
                             // Out of time mid-answer: the connection's spent, but what's read stands.
                             cut = true
@@ -494,8 +511,9 @@ class GmailSource(private val secrets: SecretStore) : TaskSource {
                             continue@conversations
                         }
                         texts += envelopes.getValue(uid) to text
+                        attachments += attached
                     }
-                    read[conversation.version] = GmailThreads.Body(GmailThreads.conversationText(texts, context.zone))
+                    read[conversation.version] = GmailThreads.Body(GmailThreads.conversationText(texts, context.zone), attachments = attachments.distinct())
                 }
                 val bodies = GmailThreads.withRead(stored, read)
                 if (!cut) {
@@ -512,11 +530,17 @@ class GmailSource(private val secrets: SecretStore) : TaskSource {
     /**
      * The message's readable text, from its first plain (else HTML) part, cut to
      * [GmailThreads.MAX_BODY_CHARS]: empty if it has none, null if it couldn't be read (gone from
-     * the mailbox since it was listed). The part is fetched whole, up to [MAX_PART_BYTES]: HTML's
-     * text can come after 50 KB of markup and styles (Warwick's Open Day email's did).
+     * the mailbox since it was listed); and its attachments, from the same structure (DX-01). The
+     * part is fetched whole, up to [MAX_PART_BYTES]: HTML's text can come after 50 KB of markup and
+     * styles (Warwick's Open Day email's did).
      */
-    private fun text(imap: ImapClient, uid: Long): String? {
-        val structure = imap.uidFetch(listOf(uid), "UID BODYSTRUCTURE").firstOrNull()?.get("BODYSTRUCTURE") ?: return null
+    private fun textAndAttachments(imap: ImapClient, uid: Long): Pair<String?, List<Mime.Attachment>> {
+        val structure = imap.uidFetch(listOf(uid), "UID BODYSTRUCTURE").firstOrNull()?.get("BODYSTRUCTURE") ?: return null to emptyList()
+        val attachments = Mime.attachments(structure)
+        return text(imap, uid, structure) to attachments
+    }
+
+    private fun text(imap: ImapClient, uid: Long, structure: ImapValue): String? {
         val part = Mime.textPart(structure) ?: return ""
         val response = imap.uidFetch(listOf(uid), "UID BODY.PEEK[${part.section}]<0.$MAX_PART_BYTES>").firstOrNull() ?: return null
         val body = response.entries.firstOrNull { it.key.startsWith("BODY[") }?.value ?: return null
