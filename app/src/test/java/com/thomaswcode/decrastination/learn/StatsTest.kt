@@ -3,6 +3,7 @@ package com.thomaswcode.decrastination.learn
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.Fixtures.LONDON
 import com.thomaswcode.decrastination.core.Calibration
+import com.thomaswcode.decrastination.core.DayKind
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.data.ActivityLog
@@ -100,6 +101,8 @@ class StatsTest {
             marginDays = mapOf(Kind.Revision to 2),
             boxMin = mapOf(Kind.Homework to 45),
             timed = mapOf("Homework|Physics" to 4, "Homework|" to 6, "Homework|German" to 2),
+            yields = mapOf(DayKind.Weekend to 0.55),
+            yieldDays = mapOf(DayKind.Weekend to 9),
         )
         assertEquals(
             listOf(
@@ -109,6 +112,7 @@ class StatsTest {
                 "Homework, German: 2 timed pieces so far; its own figure counts from 3",
                 "Revision: finished 2 days before the deadline",
                 "Homework: cut into 45-minute pieces",
+                "Weekends: about 55 % of the free time used (from 9 days)",
             ),
             Stats.calibrationLines(calibration),
         )

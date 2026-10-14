@@ -1,5 +1,6 @@
 package com.thomaswcode.decrastination.learn
 
+import com.thomaswcode.decrastination.core.DayKind
 import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.data.ActivityLog
 import com.thomaswcode.decrastination.data.SessionRecord
@@ -26,6 +27,8 @@ data class DayRecord(
     val full: Boolean? = null,
     /** The time zone it was planned in, so it's finished by that day's own midnight. */
     val zone: String? = null,
+    /** Its kind, for its yield (PL-06); null in a record from before, whose date tells it. */
+    val kind: DayKind? = null,
 )
 
 /** The Sunday check-in (docs/scheduler.md §5, item 6): five questions, a scale or a line each. */
@@ -47,7 +50,7 @@ object Days {
     /** Today's plan as it stands, for the record. */
     fun record(plan: Plan, zone: ZoneId): DayRecord {
         val chunks = plan.todayBucket?.chunks.orEmpty().map { DayChunk(it.taskId, it.minutes) }
-        return DayRecord(plan.today.toString(), chunks.sumOf { it.minutes }, chunks, zone = zone.id)
+        return DayRecord(plan.today.toString(), chunks.sumOf { it.minutes }, chunks, zone = zone.id, kind = DayKind.of(plan.today))
     }
 
     /**

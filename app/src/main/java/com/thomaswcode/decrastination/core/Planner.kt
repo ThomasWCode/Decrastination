@@ -768,7 +768,9 @@ object Planner {
                 reached = to
             }
         }
-        val minutes = ((end - start - taken) / 60_000L).toInt() - (input.dayLoads[day] ?: 0)
+        val free = ((end - start - taken) / 60_000L).toInt() - (input.dayLoads[day] ?: 0)
+        // What a day of its kind holds of its free time, as learned (PL-06); a limit you set is of the work itself, after.
+        val minutes = (free * input.calibration.yieldFor(DayKind.of(day))).roundToInt()
         // A limit is of the whole day's work: what's been done today already comes off it.
         val cap = input.dayCaps[day]?.let { if (day == date(input.now, input.zone)) it - input.workedTodayMin else it } ?: Int.MAX_VALUE
         return minOf(minutes, cap).coerceAtLeast(0)

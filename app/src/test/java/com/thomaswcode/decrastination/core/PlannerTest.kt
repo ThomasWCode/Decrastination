@@ -705,6 +705,24 @@ class PlannerTest {
     }
 
     @Test
+    fun `capacity is scaled by the day's kind's yield`() {
+        // Weekends found to use half their free time (PL-06): Saturday's 840 minutes plan as 420;
+        // Thursday's evening is as it was. A limit you set is of the work, after the yield.
+        val halfWeekends = Calibration(yields = mapOf(DayKind.Weekend to 0.5))
+        fun input(caps: Map<LocalDate, Int> = emptyMap()) = Planner.Input(emptyList(), Fixtures.at("2026-10-08T08:00"), LONDON, settings, calibration = halfWeekends, dayCaps = caps)
+        val thursday = LocalDate.parse("2026-10-08")
+        val saturday = LocalDate.parse("2026-10-10")
+        assertEquals(420, Planner.capacity(saturday, input()))
+        assertEquals(315, Planner.capacity(thursday, input()))
+        assertEquals(300, Planner.capacity(saturday, input(mapOf(saturday to 300))))
+        assertEquals(420, Planner.capacity(saturday, input(mapOf(saturday to 600))))
+        // The plan holds no more than that.
+        val big = task("big", Fixtures.at("2026-10-12T08:30"), effort = 600, steps = listOf(SubStep("all", 600)))
+        val plan = Planner.plan(input().copy(tasks = listOf(big)))
+        assertEquals(420, plan.bucket(saturday)!!.capacityMin)
+    }
+
+    @Test
     fun `with no margin, a morning deadline's own day is never usable`() {
         // Due Sunday 09:00 with no margin, Friday 17:00, Saturday mostly taken: Sunday would be the
         // roomiest day, but a morning deadline's own day isn't one to work on. Friday has most.
