@@ -12,7 +12,7 @@ The code's shape is good: a pure core with tests, Android at the edges, JSON sto
 | AR-04 | Property tests for the planner's invariants: spread, slots, stability | P1 | M | Changed |
 | AR-05 | Screen tests for the flows that matter | P2 | M | Changed |
 | AR-06 | A crash record you can read on the phone | P2 | S | – |
-| AR-07 | A nightly backup to a folder of your choosing | P2 | M | – |
+| AR-07 | A nightly backup to Documents/Decrastination | P2 | M | – |
 | AR-08 | Trim the work a sync does when nothing changed | P3 | S | – |
 | AR-09 | Removing sessions safely | P1 | M | New (note 1) |
 
@@ -75,11 +75,11 @@ Print the seed on failure. Plain Kotlin and `kotlin.random.Random(seed)`.
 
 **Effort.** S.
 
-## AR-07 A nightly backup to a folder of your choosing
+## AR-07 A nightly backup to Documents/Decrastination
 
 **Now.** `data/Backup` encodes and restores on demand (`data/Backup.kt:67`).
 
-**Proposal.** A folder picked once through the Storage Access Framework and a nightly job writing `decrastination-<date>.json`, keeping 14; the backup grows the new stores (memories and standing instructions, the school calendar, slot outcomes). Also the backup LR-08 writes before a reset.
+**Proposal.** A nightly job writing `decrastination-<date>.json` to `Documents/Decrastination` on the phone's shared storage through MediaStore (your call: no folder to pick and no permission, and Google Drive and OneDrive offer no folder to Android's folder picker anyway), keeping 14; the backup grows the new stores (memories and standing instructions, the school calendar, slot outcomes). Also the backup LR-08 writes before a reset. A copy off the phone is yours to arrange: a sync app mirroring the folder, or Export by hand.
 
 **Effort.** M.
 

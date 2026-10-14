@@ -13,7 +13,7 @@ Read before any phase. These are the rules the existing code follows; new code f
 
 ## Stores and migration
 
-- Every store is a `@Serializable data class` read by `JsonStore` with kotlinx serialization. Adding a field **with a default** is backwards compatible; renaming or removing one is not. Old fields that must disappear stay as nullable fields with a default of null for one release, read once at start-up (`AppGraph.init` or a one-off in `DecrastinationApp`), migrated, then cleared.
+- Every store is a `@Serializable data class` read by `JsonStore` with kotlinx serialization (`ignoreUnknownKeys = true`, so a field removed from a class is skipped in an existing file). The owner is the only user and backwards compatibility between app versions isn't required: add fields with defaults, remove or rename old ones outright, keep no deprecated shims, and don't plan for rollback. What must still hold is that the data on the phone survives each upgrade: where a change would make existing data unreadable or lose something the owner uses, migrate it once at start-up in the same release (`AppGraph.init`) and remove the old shape in that release.
 - Never read or write a store's file directly: `store.value`, `store.state` (a `StateFlow`), `store.update { }`.
 - `log.json` (`ActivityLog`) is append-only history trimmed by `trimmed(now)` to `KEEP_DAYS`; new record types go there with their own list and a `trimmed` clause.
 - `runtime.json` (`RuntimeState`) is state that changes often; `settings.json` is what the person set; `tasks.json` is the merged tasks; keep that split.

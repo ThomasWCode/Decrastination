@@ -118,7 +118,10 @@ Items: AI-01, AI-03, AI-07, AI-08, AI-09, AI-13, AI-14, AI-15, AI-16, AI-17, AI-
 
 **Files.** `sources/teams/TeamsSource.kt`.
 
-**Steps.** If the widget's provider exposes `attachments` and `links` columns (check `TeamsProvider`'s cursor columns at runtime with `cursor.columnNames`), read them into `extra["attachments"]`/`extra["links"]` (newline-separated) and show them on the sheet as tappable lines; `Prompts.describe` prints the names. If the columns don't exist, nothing (record in `PROGRESS.md` that the widget needs the change).
+**Steps.**
+
+1. In the Teams widget (see `README.md` § The Teams widget): its sync reads each assignment's detail page in Teams (that's where `description` and `detail_read_at` come from); capture from the same page the attachment names and the link URLs the page shows (reference material and attached files) into the assignment store, and expose them as two new columns on `/assignments`, `attachments` and `links`, each newline-separated, empty when none, in `provider/AssignmentsContract.kt` and `AssignmentsProvider`; a unit test for the parsing, the contract's README updated. One PR there.
+2. Here: `TeamsRows.fetched` reads the two columns when present (`row["attachments"]`, `row["links"]`; absent → nothing) into `extra[EXTRA_ATTACHMENTS]`/`extra[EXTRA_LINKS]`; the sheet shows them as tappable lines (a link opens in the browser; an attachment name opens the assignment in Teams); `Prompts.describe` prints the names for the Assignment job.
 
 ---
 
@@ -154,4 +157,7 @@ Items: AI-01, AI-03, AI-07, AI-08, AI-09, AI-13, AI-14, AI-15, AI-16, AI-17, AI-
 
 **Files.** `sources/teams/TeamsSource.kt`, `core/Merge.kt`.
 
-**Steps.** If the provider exposes a `returned` column (or `status == "returned"`), `TeamsRows.fetched` emits a second `Fetched` for the assignment: `sourceId = "$key:feedback"`, title "Read the feedback on <title>", `Kind.Admin`, `dueAt = returnedAt + 3 days`, `sourceEffortMin = 10`, done when the student ticks it (own-like: `extra["tickDone"] = "true"` → `Focus.keepSlot` finishes it). If the column doesn't exist, nothing.
+**Steps.**
+
+1. In the Teams widget: the provider lists assignments not handed in; returned work appears in Teams' Completed tab with a "Returned" state and the teacher's feedback on its detail page. Have the sync read the Completed tab's returned assignments (the most recent 20 is enough) and expose them on a new path, `/returned`, with `key, title, class_name, returned_at, feedback` (feedback text as the page shows it, empty when none), under the same permission. One PR there.
+2. Here: `TeamsSource.read` queries `/returned` when the provider answers it (an unknown path throws; catch and treat as none) and `TeamsRows.returned(row)` emits a `Fetched` per row: `sourceId = "$key:feedback"`, title "Read the feedback on <title>", `Kind.Admin`, `detail` = the feedback, `dueAt = returned_at + 3 days`, `sourceEffortMin = 10`, `extra["tickDone"] = "true"` so a tick finishes it (`Focus.keepSlot` → done); gone from `/returned` → finished.
