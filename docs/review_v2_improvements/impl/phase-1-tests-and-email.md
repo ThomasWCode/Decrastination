@@ -37,23 +37,25 @@ Items: AR-04, DX-03, DX-07, AI-02, DX-06, DX-01, AI-04. No dependency on other p
 
 ## DX-03 Read only starred emails; every starred email is a task
 
-**Change.** `GmailSource` reads the Starred mailbox instead of the inbox; a thread is a task while any message of it is starred; unstarring finishes it. The owner has already starred every email he wants to keep, so there's no grace period: unstarred email tasks finish at the first starred-only sync.
+> **Changed by the owner, 14 Oct, during the build:** "Ensure to read the entire thread of any starred emails: if the parent is starred, or a reply is starred, read the other emails in the chain, even if they are not starred." So a starred message makes its whole conversation the task and every message of it is read, his own replies included (drafts left out). The Starred folder holds only the starred messages, so the read examines **All Mail** instead and finds the starred ones in it with `UID SEARCH FLAGGED`; steps 2, 3 and 6 below are as amended. Found against the code: `Merge.apply` keeps a Gmail task gone from the listing open while its reading is due or while it has dated blocks left (the follow-up rule), which contradicts "unstarred email tasks finish at the first starred-only sync": both rules go (step 3).
 
-**Files.** `sources/gmail/Imap.kt`, `sources/gmail/GmailSource.kt`, `ui/SetupScreen.kt`, `docs/data-sources.md` §4.
+**Change.** `GmailSource` reads the conversations of the starred messages instead of the inbox; a conversation is a task while any message of it is starred; unstarring finishes it. The owner has already starred every email he wants to keep, so there's no grace period: unstarred email tasks finish at the first starred-only sync.
+
+**Files.** `sources/gmail/Imap.kt`, `sources/gmail/GmailSource.kt`, `core/Merge.kt`, `sync/Syncer.kt`, `AppGraph.kt`, `ui/SetupScreen.kt`, `ui/TaskSheet.kt`, `ui/TasksScreen.kt`, `docs/data-sources.md` §4.
 
 **Steps.**
 
-1. `ImapClient.list(): List<Mailbox>` where `data class Mailbox(val name: String, val attributes: Set<String>)`: runs `LIST "" "*"` through the existing `run(command, "LIST")`, parses each untagged line `* LIST (<attrs>) "<delim>" <name>`; attributes are the atoms in the first list (keep their backslash, lower-cased); the name is the last value's string (quoted or literal). Unit test in `ImapTest` with a captured Gmail `LIST` response (write it from RFC 3501 §7.2.2 and Gmail's known output: `* LIST (\HasNoChildren \Flagged) "/" "[Gmail]/Starred"`).
-2. `GmailSource.read`: after `imap.login`, `val starred = imap.list().firstOrNull { "\\flagged" in it.attributes }?.name ?: imap.list().firstOrNull { it.name.endsWith("/Starred", ignoreCase = true) }?.name ?: throw SourceUnavailable("Gmail has no Starred folder")`. Call `list()` once, not twice. Then `imap.examine(starred)` instead of `examine("INBOX")`. The rest of the read (UID SEARCH ALL, envelope fetch in batches, texts) is unchanged: the folder is small.
-3. Finishing: nothing to change in `Merge.apply`: a thread absent from the read is finished as an archived one is today. Verify with the existing `MergeTest` and add one test in `GmailTest`: a thread listed in the last read and absent from this one comes back `completed`.
+1. `ImapClient.list(): List<Mailbox>` where `data class Mailbox(val name: String, val attributes: Set<String>)`: runs `LIST "" "*"` through the existing `run(command, "LIST")`, parses each untagged line `* LIST (<attrs>) "<delim>" <name>`; attributes are the atoms in the first list (keep their backslash, lower-cased); the name is the last value's string (quoted or literal). Unit test in `ImapTest` with a captured Gmail `LIST` response (write it from RFC 3501 §7.2.2 and Gmail's known output: `* LIST (\HasNoChildren \Flagged) "/" "[Gmail]/Starred"`, `* LIST (\All \HasNoChildren) "/" "[Gmail]/All Mail"`; the owner's account names the bin `[Gmail]/Bin`, so names aren't to be relied on).
+2. `GmailSource.read`: after `imap.login`, one `list()`; All Mail is the mailbox with `\all`, else one whose name ends `/All Mail`, else `SourceUnavailable("Gmail has no All Mail folder")`. `imap.examine(allMail)`; `uidSearch("FLAGGED")` gives the starred messages; their conversations (`X-GM-THRID`, from what's stored for a known message and the envelope for a new one) are searched in one command per 40, `UID SEARCH NOT DRAFT OR X-GM-THRID a OR X-GM-THRID b …` (`GmailThreads.anyThread`), which gives every message of them. A conversation's task is named by its newest message; its sender is its newest message not his, and it's a note to self only when every message is his (`\Sent`). Its text is every message's, oldest first, each headed `--- From <sender>, <yyyy-MM-dd HH:mm> ---` (`From you` for his; ISO dates, so the rules' date patterns don't read a header as a date) once there's more than one, kept within `GmailThreads.MAX_CONVERSATION_CHARS` (16 000, what the model reads) from the newest back: older messages are cut, then left out with a line saying how many.
+3. Finishing: a conversation absent from the read is finished, whatever it holds. `Merge.apply`'s two Gmail rules go: the one keeping an email whose reading was due (and with it `Merge.apply`'s and `Syncer`'s `unread`), and the follow-up rule keeping an archived email with blocks left (`Merge.EXTRA_FOLLOW_UP`, its line on the sheet and its "Archived" pill in Tasks). `MergeTest`'s tests of them become tests that an unstarred email is done, its blocks or its reading notwithstanding; add one test in `GmailTest`: a conversation listed in the last read and absent from this one comes back `completed`.
 4. No grace: the owner has starred what he wants; the merge finishes the rest at the first starred-only sync. Nothing to add.
 5. Nothing to show for unstarred tasks: they're finished tasks like any other.
-6. `SetupScreen`'s Gmail section text: "The app reads your starred emails only. Star an email in Gmail to make it a task; unstar it when it's done." Keep the app-password instructions.
-7. `docs/data-sources.md` §4: replace the inbox description with the Starred-folder one; note the `\Flagged` special-use lookup and the fallback name.
+6. `SetupScreen`'s Gmail section text: "The app reads your starred emails only, each with its whole conversation. Star an email in Gmail to make it a task; unstar it when it's done." Keep the app-password instructions.
+7. `docs/data-sources.md` §4: replace the inbox description with the starred conversations from All Mail; note the special-use lookups (`\All`, and `\Flagged` for the Starred folder, which holds the same starred messages) and the fallback name.
 
-**Tests.** `ImapTest`: `list` parsing. `GmailTest`: `fetched` of a starred-only read; `toRead`/`knownBodies` unchanged. `MergeTest`: unchanged behaviour covers finishing.
+**Tests.** `ImapTest`: `list` parsing. `GmailTest`: `fetched` of a starred-only read, a conversation's sender and note-to-self rule, its text oldest first within the budget; `toRead`/`knownBodies` by conversation. `MergeTest`: an unstarred email finishes.
 
-**Done when.** A sync against a Gmail account lists only starred threads (check with `scripts/gmail_probe.py` extended with `--starred`, or by hand); unstarring a thread finishes its task at the next sync.
+**Done when.** A sync against a Gmail account lists only the starred messages' conversations, whole (check with `scripts/gmail_probe.py --starred`, which prints each conversation with its starred count); unstarring a thread finishes its task at the next sync.
 
 ---
 
@@ -61,16 +63,18 @@ Items: AR-04, DX-03, DX-07, AI-02, DX-06, DX-01, AI-04. No dependency on other p
 
 **Change.** For threads already known, fetch flags and labels only; envelopes and texts only for new UIDs; keep `UIDVALIDITY`.
 
+> **As amended for whole conversations (DX-03, 14 Oct):** the unit is the conversation. One whose messages are all known (the same UIDs as stored, the same `UIDVALIDITY`) and whose text is current is built from what's stored; one with a new or a gone message, or whose text is still to read, has every message's envelope fetched, and its texts read whole.
+
 **Files.** `sources/gmail/Imap.kt`, `sources/gmail/GmailSource.kt`.
 
 **Steps.**
 
 1. `ImapClient.examine` returns `Examined(exists: Int, uidValidity: Long?)`: parse the untagged `* OK [UIDVALIDITY n]` line in the EXAMINE response (`ImapLine.text` holds the bracketed code; parse `UIDVALIDITY (\d+)`).
-2. `GmailThreads` gains `const val EXTRA_UID = "uid"` and `const val EXTRA_UID_VALIDITY = "uidValidity"`, stored in `Fetched.extra` by `fetched`. `knownUids(known: List<TaskItem>, validity: Long?): Map<Long, TaskItem>` returns the known tasks' UIDs when their stored validity equals the mailbox's; otherwise empty (a changed validity means a full read).
-3. In `read`: `val uids = imap.uidSearch("ALL")`; split into `known = uids.filter { it in knownUids }` and `new = uids - known`. For `known`, nothing further is needed (the Starred folder listing already says the thread is still starred); for `new`, the existing envelope fetch. Build `messages` from the known tasks' stored envelope fields (title, from, received, messageId, threadId, sent) plus the new messages' envelopes. The `messages.size < uids.size` check stays, counting both.
-4. Keep `MAX_BODIES`, the time budget and `toRead` as they are.
+2. `GmailThreads` gains `const val EXTRA_UIDS = "uids"` (the conversation's messages, its text read from exactly those unless `EXTRA_TEXT_PENDING`) and `const val EXTRA_UID_VALIDITY = "uidValidity"`, stored in `Fetched.extra` by `fetched`, with the sender's name and address (`EXTRA_FROM_NAME`, `EXTRA_FROM_ADDRESS`) so a known conversation's task can be rebuilt and triaged again. `knownUids(known: List<TaskItem>, validity: Long?): Map<Long, TaskItem>` returns the known tasks' UIDs when their stored validity equals the mailbox's; otherwise empty (a changed validity means a full read).
+3. In `read`: the starred UIDs not known get their envelopes (for their conversation); the conversations' UIDs not known get theirs; a conversation that's unchanged and read is `GmailThreads.stored(task, uids, validity)`, and the rest have their known messages' envelopes fetched too. The "listed N but described M" check stays, on every envelope fetch.
+4. Keep `MAX_BODIES` (now counting messages), the time budget and `toRead` (now by conversation, newest first, whole) as they are; `knownBodies` is keyed by the UIDs a stored text was read from.
 
-**Tests.** `GmailTest`: a read with two known UIDs and one new fetches one envelope (assert on the fake `ImapClient`'s commands if the test has one; else test `knownUids` and the split as pure functions).
+**Tests.** `GmailTest`: `knownUids`, a stored conversation rebuilt, `toRead` by conversation; `ImapTest`: a read with nothing new sends no `FETCH` (the scripted server).
 
 **Done when.** A sync with no new starred mail sends no envelope FETCH (log the IMAP commands at debug level and check once by hand).
 
@@ -116,8 +120,8 @@ Items: AR-04, DX-03, DX-07, AI-02, DX-06, DX-01, AI-04. No dependency on other p
    - HTML (apply before `htmlToText`'s tag stripping): remove every `<blockquote …>…</blockquote>` subtree and every `<div class="gmail_quote"…>…</div>` subtree, matching the closing tag by depth (count nested same-named opening tags). Implement with a small scanner over the string, not regex alone, so nesting is right.
    - Plain text (apply after HTML flattening and to plain parts): cut from the first line matching, trimmed, `^On .{3,200} wrote:$`, `^-----Original Message-----$`, `^From: .+$` when followed within 3 lines by `^Sent: ` or `^To: `, or `^-- $` (signature delimiter). Don't cut at `^---------- Forwarded message ---------$`: a forward's content is below it; cut only at the second quote marker after it.
    - Return the kept text and the number of characters cut.
-2. `GmailThreads.CUT_QUOTED = "[Earlier messages in this thread were left out: %d characters.]"`. In `GmailSource.text()`, after decoding and before `take(MAX_BODY_CHARS)`, apply `cutQuoted`; append the marker line when `cutChars > 0`. The stored `detail` is the cut text with the marker (the full text isn't stored; "Open in Gmail" has it).
-3. `Prompts.describe` needs no change: the marker is in the text. Add to `Prompts.system(Email)`: "A line in square brackets at the end saying earlier messages were left out means the email is a reply or a forward whose history you can't see."
+2. `GmailThreads.CUT_QUOTED = "[Quoted text or a signature left out: %d characters.]"` (amended 14 Oct: with whole conversations the earlier messages are shown, so the marker no longer says they can't be seen). In `GmailSource.text()`, after decoding and before `take(MAX_BODY_CHARS)`, apply `cutQuoted`; append the marker line when `cutChars > 0`; for HTML, `cutChars` counts the text cut, not its markup. The stored `detail` is the cut text with the marker (the full text isn't stored; "Open in Gmail" has it).
+3. `Prompts.describe` needs no change: the marker is in the text. Add to `Prompts.system(Email)` (amended): "Quoted text inside a message, and its signature, are left out and marked in square brackets: any earlier message of the conversation it quoted is shown above it, and anything else it quoted you can't see." Gmail wraps a forward in a `gmail_quote` div too: a `gmail_quote` div that begins with the forward marker is kept, and the quotes inside it cut.
 
 **Tests.** `MimeTest`: nested blockquotes removed whole; `gmail_quote` div removed; plain "On … wrote:" cut; signature cut; a forward keeps its forwarded content and cuts the second-level quote; `cutChars` counts.
 
@@ -134,8 +138,8 @@ Items: AR-04, DX-03, DX-07, AI-02, DX-06, DX-01, AI-04. No dependency on other p
 **Steps.**
 
 1. `Mime.Attachment(val name: String, val type: String, val size: Long?)` and `fun attachments(structure: ImapValue): List<Attachment>`: walk as `collect` does; a leaf part is an attachment when its disposition is `attachment`, or when its type isn't `text` and it has a filename (`filename` in the disposition's parameter list at index 9, or `name` in the body parameters at index 2). Skip `inline` images without a filename. `type` is `"$type/$subtype"` lower-cased.
-2. `GmailSource.text()` returns `Pair<String?, List<Mime.Attachment>>` (rename to `textAndAttachments`); the structure is fetched once already. `GmailThreads.Body` gains `attachments: List<String>` (each `name|type|size`), `fetched` puts `EXTRA_ATTACHMENTS = "attachments"` into `extra` as lines `name (type, size)` joined by `\n`; `knownBodies`/`withRead` carry it.
-3. `Prompts.describe`, Email branch: after From, `Messages in this conversation: N (only the newest is shown; earlier ones may hold the request)` from `EXTRA_MESSAGES` when N > 1, and `Attachments: a.pdf (110 KB), b.docx` when any (AI-04). Sizes formatted `KB`/`MB`.
+2. `GmailSource.text()` returns `Pair<String?, List<Mime.Attachment>>` (rename to `textAndAttachments`); the structure is fetched once already. `GmailThreads.Body` gains `attachments: List<Mime.Attachment>`, every message's in the conversation, each once; `fetched` puts `EXTRA_ATTACHMENTS = "attachments"` into `extra` as a JSON list of them (amended: JSON reads back whole whatever a file is called, where `name (type, size)` lines couldn't); `knownBodies`/`withRead` carry it.
+3. `Prompts.describe`, Email branch: after From, `Messages in this conversation: N, all shown, oldest first` from `EXTRA_MESSAGES` when N > 1 (amended: whole conversations are read), and `Attachments: a.pdf (110 KB), b.docx` when any (AI-04). Sizes formatted `KB`/`MB`.
 4. `TaskSheet` Notes: a line "Attachments: …" when present; tapping opens Gmail through the existing `TaskOpener`.
 
 **Tests.** `MimeTest`: attachments from a multipart structure with a PDF attachment, an inline logo and a text part; `GmailTest`: `fetched` carries the extra; `EnrichTest`: `describe` prints the two lines.
@@ -150,7 +154,7 @@ Items: AR-04, DX-03, DX-07, AI-02, DX-06, DX-01, AI-04. No dependency on other p
 
 **Files.** `enrich/Prompts.kt`.
 
-**Steps.** Add to `Prompts.system(Email)` after the kinds: "You see the newest message only. If it refers to an earlier message or an attachment you can't see, don't guess what it asked: make nextStep 'Read the earlier message/attachment and decide' and effortMin 10."
+**Steps.** Add to `Prompts.system(Email)` after the kinds (amended 14 Oct for whole conversations): "You see the whole conversation the starred message is in, oldest message first; when there's more than one, each is headed by who sent it and when ("From you" for the student's own). You don't see attachments, only their names. If the email refers to an attachment, or to an earlier message you can't see, don't guess what it asked: make nextStep 'Read the attachment/earlier message and decide' and effortMin 10." And relative dates are worked out from when the message saying them was sent.
 
 **Tests.** Golden files (phase 8) will cover the text; for now `EnrichTest` asserts the sentence is present.
 

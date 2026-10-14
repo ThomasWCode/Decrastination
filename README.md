@@ -1,6 +1,6 @@
 # Decrastination
 
-An Android app that gathers everything outstanding from Teams assignments, Power Planner, the Gmail inbox and AnkiDroid, shows the single next thing to do on a home-screen widget, and, while work is due today or tomorrow, replaces procrastination apps with that instruction until the work's own source says it's done.
+An Android app that gathers everything outstanding from Teams assignments, Power Planner, your starred Gmail conversations and AnkiDroid, shows the single next thing to do on a home-screen widget, and, while work is due today or tomorrow, replaces procrastination apps with that instruction until the work's own source says it's done.
 
 A personal, sideloaded app for one phone (a Samsung Galaxy S24 on Android 16).
 

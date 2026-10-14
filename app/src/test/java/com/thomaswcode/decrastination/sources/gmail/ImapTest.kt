@@ -89,7 +89,7 @@ class ImapTest {
         val imap = script.client
         imap.greeting()
         imap.login("me@example.com", "pa\"ss")
-        assertEquals(2, imap.examine("INBOX"))
+        assertEquals(2, imap.examine("INBOX").exists)
         assertEquals(listOf(5L, 9L), imap.uidSearch("ALL"))
         val fetched = imap.uidFetch(listOf(5, 9), "UID X-GM-MSGID X-GM-THRID")
         assertEquals(listOf("101"), fetched.drop(1).map { it["X-GM-MSGID"]?.string })
@@ -104,6 +104,110 @@ class ImapTest {
             ),
             script.commands,
         )
+    }
+
+    @Test
+    fun `mailboxes are listed with their special uses, whatever they're called`() {
+        val script = Script(
+            """
+            * LIST (\HasNoChildren) "/" "INBOX"
+            * LIST (\HasChildren \Noselect) "/" "[Gmail]"
+            * LIST (\All \HasNoChildren) "/" "[Gmail]/All Mail"
+            * LIST (\HasNoChildren \Trash) "/" "[Gmail]/Bin"
+            * LIST (\Flagged \HasNoChildren) "/" "[Gmail]/Starred"
+            d1 OK Success
+            """.trimIndent() + "\n",
+        )
+        val boxes = script.client.list()
+        assertEquals(listOf("INBOX", "[Gmail]", "[Gmail]/All Mail", "[Gmail]/Bin", "[Gmail]/Starred"), boxes.map { it.name })
+        assertEquals(setOf("\\all", "\\hasnochildren"), boxes[2].attributes)
+        assertEquals("[Gmail]/Starred", boxes.single { "\\flagged" in it.attributes }.name)
+        assertEquals(listOf("d1 LIST \"\" \"*\""), script.commands)
+    }
+
+    @Test
+    fun `examining a mailbox says how many it holds and the validity of its UIDs`() {
+        val script = Script(
+            """
+            * FLAGS (\Answered \Flagged \Draft \Deleted \Seen)
+            * OK [PERMANENTFLAGS ()] Flags permitted.
+            * OK [UIDVALIDITY 11] UIDs valid.
+            * 24 EXISTS
+            * 0 RECENT
+            * OK [UIDNEXT 70400] Predicted next UID.
+            d1 OK [READ-ONLY] [Gmail]/All Mail selected. (Success)
+            """.trimIndent() + "\n",
+        )
+        assertEquals(Examined(24, 11), script.client.examine("[Gmail]/All Mail"))
+    }
+
+    @Test
+    fun `the login's address and password aren't logged`() {
+        val logged = mutableListOf<String>()
+        val client = ImapClient(ByteArrayInputStream("d1 OK me@example.com authenticated (Success)\r\n".toByteArray()), ByteArrayOutputStream()) { logged += it }
+        client.login("me@example.com", "secret")
+        assertEquals(listOf("d1 LOGIN"), logged)
+    }
+
+    /** All Mail listed, examined under validity 11, and the starred message [starred] searched for, then its conversation's [uids]. */
+    private fun listing(starred: String, uids: String, more: String = "") = Script(
+        """
+        * LIST (\All \HasNoChildren) "/" "[Gmail]/All Mail"
+        * LIST (\Flagged \HasNoChildren) "/" "[Gmail]/Starred"
+        d1 OK Success
+        * OK [UIDVALIDITY 11] UIDs valid.
+        * 3 EXISTS
+        d2 OK [READ-ONLY] [Gmail]/All Mail selected. (Success)
+        * SEARCH $starred
+        d3 OK SEARCH completed (Success)
+        * SEARCH $uids
+        d4 OK SEARCH completed (Success)
+        """.trimIndent() + "\n" + more,
+    )
+
+    private fun envelope(uid: Long, at: String, name: String, sent: Boolean = false) =
+        """* $uid FETCH (UID $uid X-GM-MSGID ${1000 + uid} X-GM-THRID 100 X-GM-LABELS (${if (sent) "\"\\\\Sent\"" else ""}) INTERNALDATE "$at" """ +
+            """ENVELOPE ("Thu, 8 Oct 2026" "Trip" (("$name" NIL "${name.lowercase()}" "example.com")) NIL NIL NIL NIL NIL NIL "<$uid@x>"))"""
+
+    /** The conversation of [uids] as a read leaves it stored: under validity 11, its text read. */
+    private fun storedConversation(vararg uids: Long): com.thomaswcode.decrastination.core.TaskItem {
+        val messages = uids.map { MailMessage(it, "${1000 + it}", "100", it, "Trip", "Hughes", "hughes@example.com", sent = false) }
+        val conversation = GmailThreads.conversation(messages, 11)
+        val fetched = GmailThreads.fetched(listOf(conversation), mapOf(conversation.version to GmailThreads.Body("Bring the form.")), 0, java.time.ZoneId.of("Europe/London"))
+        return com.thomaswcode.decrastination.core.Merge.apply(emptyList(), com.thomaswcode.decrastination.core.Source.Gmail, fetched, 0).tasks.single()
+    }
+
+    @Test
+    fun `a listing with nothing new fetches no envelope`() {
+        val script = listing(starred = "9", uids = "5 9")
+        val listed = StarredConversations.list(script.client, listOf(storedConversation(5, 9)))
+        assertEquals(listOf(listOf(5L, 9L)), listed.conversations.map { it.uids })
+        assertEquals(
+            listOf("d1 LIST \"\" \"*\"", "d2 EXAMINE \"[Gmail]/All Mail\"", "d3 UID SEARCH FLAGGED", "d4 UID SEARCH NOT DRAFT X-GM-THRID 100"),
+            script.commands,
+        )
+    }
+
+    @Test
+    fun `a reply nobody starred brings its conversation's envelopes, to be read whole`() {
+        val script = listing(
+            starred = "9",
+            uids = "5 9 12",
+            more = envelope(12, "08-Oct-2026 19:10:00 +0100", "Tom", sent = true) + "\nd5 OK Success\n" +
+                envelope(5, "07-Oct-2026 09:00:00 +0100", "Hughes") + "\n" + envelope(9, "08-Oct-2026 18:02:00 +0100", "Hughes") + "\nd6 OK Success\n",
+        )
+        val listed = StarredConversations.list(script.client, listOf(storedConversation(5, 9)))
+        val conversation = listed.conversations.single()
+        assertEquals(listOf(5L, 9L, 12L), conversation.uids)
+        // The reply's yours: the conversation is still with Mr Hughes.
+        assertEquals("hughes@example.com", conversation.fromAddress)
+        assertEquals(listOf("d5 UID FETCH 12 (${StarredConversations.ENVELOPE})", "d6 UID FETCH 5,9 (${StarredConversations.ENVELOPE})"), script.commands.drop(4))
+    }
+
+    @Test
+    fun `no All Mail, no read`() {
+        val script = Script("* LIST (\\HasNoChildren) \"/\" \"INBOX\"\nd1 OK Success\n")
+        assertFailsWith<com.thomaswcode.decrastination.sources.SourceUnavailable> { StarredConversations.list(script.client, emptyList()) }
     }
 
     @Test

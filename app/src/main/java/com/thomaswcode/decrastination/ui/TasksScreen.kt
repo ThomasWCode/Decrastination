@@ -36,7 +36,6 @@ import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.R
 import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.core.Instructions
-import com.thomaswcode.decrastination.core.Merge
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.data.SourceStatus
@@ -164,7 +163,6 @@ private fun SourceTile(source: Source, status: SourceStatus, open: Int, now: Lon
 private fun TaskTile(task: TaskItem, index: Int, count: Int, now: Long, zone: java.time.ZoneId, byId: Map<String, TaskItem>, onClick: () -> Unit) {
     val overdue = task.isOpen && task.dueAt?.let { it < now } == true
     val hiddenUntil = task.availableFrom?.takeIf { it > now }
-    val followUp = task.isOpen && task.extra[Merge.EXTRA_FOLLOW_UP] == "true"
     // Claude's plan for it not used (out of range, or not adding up): said, so it can be checked.
     val dropped = Enrichments.current(task)?.dropped?.takeIf { task.isOpen }
     val waits = task.isOpen && task.userAfter != null && Instructions.waiting(task, byId)
@@ -197,12 +195,11 @@ private fun TaskTile(task: TaskItem, index: Int, count: Int, now: Long, zone: ja
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
-        val tags = dropped != null || hiddenUntil != null || followUp || waits || task.userDueAt != null || task.userEffortMin != null || startsAt != null || steps != null
+        val tags = dropped != null || hiddenUntil != null || waits || task.userDueAt != null || task.userEffortMin != null || startsAt != null || steps != null
         if (task.isOpen && tags) {
             FlowRow(Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 if (dropped != null) WarningPill("Claude's plan dropped")
                 if (hiddenUntil != null) Pill("Hidden till ${Format.at(hiddenUntil, now, zone)}")
-                if (followUp) Pill("Archived")
                 if (waits) Pill("Waits for another task")
                 if (task.userDueAt != null) Pill("Due date yours")
                 if (task.userEffortMin != null) Pill("Minutes yours")
