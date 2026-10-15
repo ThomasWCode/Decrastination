@@ -255,8 +255,8 @@ fun TaskSheet(
                     },
                     note = listOfNotNull(
                         if (!own && task.userDueAt != null) "Yours: ${task.source.label} says ${sourceDue?.let { Format.at(it, now, zone) } ?: "no date"}" else null,
-                        // Where Claude's reading came from (AI-09).
-                        Enrichments.current(task)?.reason?.let { "Claude: “$it” in ${if (task.source == com.thomaswcode.decrastination.core.Source.Gmail) "the email" else "the instructions"}" },
+                        // Where Claude's reading came from (AI-09); one from a photo says what it saw, under Takes.
+                        Enrichments.current(task)?.reason?.takeUnless { fromPhoto(task) }?.let { "Claude: “$it” in ${if (task.source == com.thomaswcode.decrastination.core.Source.Gmail) "the email" else "the instructions"}" },
                     ).joinToString(". ").takeIf { it.isNotEmpty() },
                     urgent = task.isOpen && task.hardAt(now) && task.deadlineAt(now)?.let { it < now } == true,
                     onChange = if (changeable) ({ picking = OwnChange.DueOn }) else null,
@@ -272,8 +272,8 @@ fun TaskSheet(
                     note = listOfNotNull(
                         if (!own && task.userEffortMin != null) "Yours: the app reckoned ${Format.minutes(task.appEffortMin)}" else null,
                         if (task.subSteps.isNotEmpty() && task.userEffortMin != null) "Its steps are scaled to match" else null,
-                        // Read from its photo (AI-23).
-                        if (task.photo != null && task.enrichment?.by != RuleEnricher.BY && task.enrichment?.inputHash == com.thomaswcode.decrastination.core.Enrichments.inputHash(task)) "From your photo" else null,
+                        // Read from its photo (AI-23), with what Claude saw in it.
+                        if (fromPhoto(task)) "From your photo" + (Enrichments.current(task)?.reason?.takeIf { it.isNotBlank() }?.let { ": “$it”" } ?: "") else null,
                         // The app's estimate as the plan takes it: by how long such work has taken you.
                         runtime.calibration.multiplierFor(task).takeIf { kotlin.math.abs(it - 1.0) >= 0.05 }?.let { m ->
                             "Planned as ${Format.minutes((task.effortMin * m).roundToInt())}: such work has taken you ${if (m > 1) "longer" else "less time"}"
@@ -542,3 +542,6 @@ private fun openLink(activity: Activity, url: String): String? = try {
 } catch (e: android.content.ActivityNotFoundException) {
     "Nothing on the phone opens $url"
 }
+
+/** Whether [task]'s reading in force was made from its photo (AI-23): its reason then says what Claude saw, not a quote. */
+private fun fromPhoto(task: TaskItem): Boolean = task.photo != null && task.enrichment?.by != RuleEnricher.BY && Enrichments.current(task) != null
