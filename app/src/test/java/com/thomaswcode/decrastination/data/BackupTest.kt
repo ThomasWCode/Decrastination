@@ -158,6 +158,10 @@ class BackupTest {
         val second = slot("teams:a#-1#1", now - 1_800_000L)
         assertEquals(2, Backups.mergeLog(here, ActivityLog(slots = listOf(kept, second)), now).slots.size)
         assertEquals(1, merged.blocks.size)
+        // The weeks' rollups too (PL-10), this phone's own winning.
+        val week = WeekRollup("2026-09-28", minutes = 120, finished = 3, onTime = 2, blocks = 1, fullDays = 2, slotsKept = 4, slotsMissed = 1)
+        val weeks = Backups.mergeLog(ActivityLog(weeks = listOf(week)), ActivityLog(weeks = listOf(week.copy(minutes = 1), week.copy(week = "2026-09-21"))), now).weeks
+        assertEquals(listOf("2026-09-21" to 120, "2026-09-28" to 120), weeks.map { it.week to it.minutes })
     }
 
     private fun backup(log: ActivityLog = ActivityLog(), settings: Settings = Settings(), calibration: Calibration = Calibration(), answers: Map<String, String> = emptyMap()) =
@@ -267,6 +271,10 @@ class BackupTest {
         val back = Backups.decode(Backups.encode(backup))!!
         assertEquals(6, back.format)
         assertEquals(42L, back.felix.nextCheckAt)
+        // The chat as well (LR-08's copy before a reset); none in one from before.
+        val chat = com.thomaswcode.decrastination.core.ChatState(listOf(com.thomaswcode.decrastination.core.ChatMessage("m1", com.thomaswcode.decrastination.core.Speaker.You, "move the physics to Thursday", 5)))
+        assertEquals(chat, Backups.decode(Backups.encode(backup.copy(chat = chat)))!!.chat)
+        assertEquals(com.thomaswcode.decrastination.core.ChatState(), Backups.decode("""{"app":"Decrastination","format":5,"exportedAt":0,"settings":{},"log":{}}""")!!.chat)
         assertEquals(mapOf("teams:a#0" to 7L), back.slots.previous)
         assertEquals(null, Backups.decode(Backups.encode(backup).replace("\"format\": 6", "\"format\": 7")))
     }

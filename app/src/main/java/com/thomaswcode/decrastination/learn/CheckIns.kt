@@ -120,6 +120,8 @@ class CheckInActivity : ComponentActivity() {
                                     log.copy(checkIns = log.checkIns + CheckIn(week, now, feel, avoided.trim(), inTheWay.trim(), change.trim(), energy.trim())).trimmed(now)
                                 }
                                 Notify.cancel(this@CheckInActivity, CheckIns.ID)
+                                // Felix's questions, should he have begun them: the form has the answers.
+                                if (added) graph.endCheckInFlow()
                                 if (!added) return@launch
                                 // As a job: it can outlast this screen.
                                 // Unless the week has had its review already (the evening's ran first).

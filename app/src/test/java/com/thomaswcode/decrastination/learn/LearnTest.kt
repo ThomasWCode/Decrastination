@@ -470,5 +470,16 @@ class DaysReplanTest {
         assertEquals(1, learned.timed["Homework|"])
         assertEquals(reset.learnFrom, learned.learnFrom)
     }
+
+    @Test
+    fun `a reset just after midnight leaves out its own day, by the app's zone`() {
+        // Eight weekend days, 60 of 100 minutes done on each; the reset 30 minutes into the first
+        // (23:30 the day before, in UTC).
+        val sunday = LocalDate.parse("2026-10-11")
+        val days = generateSequence(sunday) { it.minusDays(1) }.filter { DayKind.of(it) == DayKind.Weekend }.take(8)
+            .map { DayRecord(it.toString(), 100, emptyList(), doneMin = 60, full = false) }.toList()
+        val reset = Calibration(learnFrom = Fixtures.at("${days.minOf { it.date }}T00:30"))
+        assertEquals(7, Calibrator.learn(ActivityLog(days = days), reset, sunday, LONDON).calibration.yieldDays[DayKind.Weekend])
+    }
 }
 

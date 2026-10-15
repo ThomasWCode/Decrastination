@@ -54,12 +54,12 @@ object CheckInFlow {
 
     /**
      * [draft] with [text] as its question's answer, the next one to ask: null where it can't be (the
-     * first wants a number from 1 to 5).
+     * first wants a number from 1 to 5, and nothing else).
      */
     fun answered(draft: Draft, text: String): Draft? {
         val words = text.trim()
         return when (draft.step) {
-            0 -> Regex("""[1-5]""").find(words)?.value?.toInt()?.let { draft.copy(step = 1, feel = it) }
+            0 -> Regex("""[1-5]""").matchEntire(words)?.value?.toInt()?.let { draft.copy(step = 1, feel = it) }
             1 -> draft.copy(step = 2, avoided = words)
             2 -> draft.copy(step = 3, inTheWay = words)
             3 -> draft.copy(step = 4, change = words)

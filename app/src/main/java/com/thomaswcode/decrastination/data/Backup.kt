@@ -51,6 +51,8 @@ data class Backup(
     val felix: FelixState = FelixState(),
     /** Today's slots' starts and misses (AR-07), for a restore the same day. */
     val slots: com.thomaswcode.decrastination.core.SlotState = com.thomaswcode.decrastination.core.SlotState(),
+    /** The chat (AR-07, LR-08), so a reset's copy holds what it clears: restored where this phone's is empty. None in a backup from before. */
+    val chat: com.thomaswcode.decrastination.core.ChatState = com.thomaswcode.decrastination.core.ChatState(),
 ) {
     companion object {
         const val APP = "Decrastination"
@@ -61,8 +63,8 @@ data class Backup(
          */
         /**
          * 4 since slots replaced sessions in the log (LR-09, AR-09), 5 with what's remembered
-         * (AI-21), 6 with Felix's state and today's slots (AR-07): an older app refuses it rather
-         * than losing them.
+         * (AI-21), 6 with Felix's state, today's slots and the chat (AR-07): an older app refuses it
+         * rather than losing them.
          */
         const val FORMAT = 6
     }
@@ -310,5 +312,6 @@ object Backups {
         checkIns = (current.checkIns + imported.checkIns).distinctBy { it.weekOf }.sortedBy { it.at },
         reviews = (current.reviews + imported.reviews).distinctBy { it.at }.sortedBy { it.at },
         felix = (current.felix + imported.felix).distinctBy { it.id }.sortedBy { it.at },
+        weeks = (current.weeks + imported.weeks).distinctBy { it.week }.sortedBy { it.week },
     ).trimmed(now)
 }

@@ -40,6 +40,7 @@ object Review {
             graph.log.value,
             graph.runtime.value.calibration,
             today = graph.focus.today(now),
+            zone = zone,
             defaultMargin = graph.settings.value.marginDays,
         )
         graph.runtime.update { it.copy(calibration = learned.calibration) }

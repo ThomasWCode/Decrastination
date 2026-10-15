@@ -44,8 +44,17 @@ object Export {
         )
     }
 
-    /** A cell as CSV holds it (RFC 4180): quoted, its quotes doubled, where it holds a comma, a quote or a line break. */
-    fun cell(text: String): String = if (text.any { it == ',' || it == '"' || it == '\n' || it == '\r' }) "\"" + text.replace("\"", "\"\"") + "\"" else text
+    /**
+     * A cell as CSV holds it (RFC 4180): quoted, its quotes doubled, where it holds a comma, a quote
+     * or a line break. Text a spreadsheet would take for a formula (`=`, `+`, `-` or `@` first, or a
+     * tab or a return) is led by `'`, so it's shown as it is; a number stays a number.
+     */
+    fun cell(text: String): String {
+        val safe = if (text.isNotEmpty() && text[0] in FORMULA && text.toDoubleOrNull() == null) "'$text" else text
+        return if (safe.any { it == ',' || it == '"' || it == '\n' || it == '\r' }) "\"" + safe.replace("\"", "\"\"") + "\"" else safe
+    }
+
+    private const val FORMULA = "=+-@\t\r"
 
     /** [header] and [rows] as a CSV table, lines ending CRLF. */
     fun table(header: List<String>, rows: List<List<Any?>>): String =
