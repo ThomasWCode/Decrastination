@@ -77,6 +77,8 @@ data class RuntimeState(
     val droppedAlerted: Map<String, String> = emptyMap(),
     /** "How was it?" questions kept while notifications couldn't be seen, to ask once they can. */
     val assessLater: List<AssessLater> = emptyList(),
+    /** The week's check-in as Felix asks it (LR-02), its answers so far: null when none is being asked. */
+    val checkInDraft: com.thomaswcode.decrastination.learn.CheckInFlow.Draft? = null,
     /** The model's last calls (AC-07), oldest first: [CallRecord.MAX] of them. */
     val calls: List<CallRecord> = emptyList(),
     /** Pairs of tasks you've said aren't the same work (DX-15), by [com.thomaswcode.decrastination.core.Duplicates.key]: not asked about again. */
