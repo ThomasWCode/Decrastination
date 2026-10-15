@@ -77,7 +77,11 @@ private fun TaskItem.enrichedOnly(): TaskItem {
             aiEffortMin = null,
             subSteps = if (stepsFromEnrichment()) emptyList() else subSteps,
         )
+    // An invite's time is exact (DX-02): the email is that event, unless Claude read work to do by a
+    // date the email gives (a reply by Friday), when the invite stays on its sheet.
+    val invited = invite?.takeIf { !(e.kind == Kind.Admin && e.deadlineQuoted && e.deadline != null) }
     val due = when {
+        invited != null -> invited.start
         // An email has no deadline of its own: what the rules found is a guess from its words
         // ("appointment"), and the enrichment's reading of it wins where it gives one.
         source == Source.Gmail -> e.deadline ?: base.dueAt
@@ -89,7 +93,11 @@ private fun TaskItem.enrichedOnly(): TaskItem {
     return copy(
         // A reading from before starred-only reading may say an email is only to read; starred, it
         // never is (AI-02): the rules' kind stands until it's read again ([Enrichments.stale]).
-        kind = if (source == Source.Gmail) e.kind?.takeIf { it != Kind.Info } ?: base.kind else base.kind,
+        kind = when {
+            invited != null -> Kind.Event
+            source == Source.Gmail -> e.kind?.takeIf { it != Kind.Info } ?: base.kind
+            else -> base.kind
+        },
         dueAt = due,
         // An email the model has read (it gives a kind): its start replaces the rules' guess, as its
         // deadline does. Otherwise the later of the two.
