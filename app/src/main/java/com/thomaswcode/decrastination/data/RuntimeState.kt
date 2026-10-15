@@ -229,7 +229,13 @@ data class WeeklyReview(
     val week: String? = null,
     /** Why the rules wrote it, not Claude: off, resting, at its cap, or no answer that could be used. */
     val why: String? = null,
+    /** What's remembered before and after the week's tidy, when there was one (AI-21): for the Reviews page to show, and undo. */
+    val memoryTidy: MemoryTidyRecord? = null,
 )
+
+/** The facts remembered before a weekly tidy, and after it (AI-21). */
+@Serializable
+data class MemoryTidyRecord(val before: List<com.thomaswcode.decrastination.core.Fact>, val after: List<com.thomaswcode.decrastination.core.Fact>)
 
 @Serializable
 data class BlockRecord(val at: Long, val target: String, val reason: String)

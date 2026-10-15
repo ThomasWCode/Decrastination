@@ -331,6 +331,17 @@ class CommandActivity : Activity() {
                 }
             }
             "chat-clear" -> graph.clearChat().also { Log.i(TAG, "Chat cleared") }
+            // What Felix remembers (AI-21): its standing instructions and facts, a line each.
+            "memory" -> graph.memory.value.let { m ->
+                Log.i(TAG, "memory: ${m.facts.size} facts, ${com.thomaswcode.decrastination.core.Memories.chars(m.facts)} of ${com.thomaswcode.decrastination.core.Memories.FACT_BUDGET_CHARS} characters; ${m.rules.size} rules")
+                m.rules.forEach { Log.i(TAG, "memory rule: ${it.text}") }
+                m.facts.forEach { Log.i(TAG, "memory fact: ${it.topic}: ${it.text}") }
+            }
+            // The weekly tidy now, due or not (a paid call), applied as Sunday's would be.
+            "memory-tidy" -> {
+                val tidy = com.thomaswcode.decrastination.learn.Review.tidyMemory(graph, graph.clock.now(), force = true)
+                Log.i(TAG, tidy?.let { "memory-tidy: ${com.thomaswcode.decrastination.learn.Review.tidyLine(it)}" } ?: "memory-tidy: nothing tidied (no facts, Claude held or failed, or no room made)")
+            }
             // --es do apply|undo: the last reply's first card applied, or taken back, as its buttons do.
             "chat-card" -> {
                 val message = graph.chat.value.messages.lastOrNull { it.proposals.isNotEmpty() }

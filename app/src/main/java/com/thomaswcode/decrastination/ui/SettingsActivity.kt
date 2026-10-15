@@ -165,6 +165,10 @@ class SettingsActivity : ComponentActivity() {
                     Note("Sent to Claude with every call, with your school days and what's remembered.")
                 }
 
+                // What Felix remembers, and how he's to behave (AI-21): saved as each is added or forgotten.
+                item { Section("What Felix remembers") }
+                item { MemorySection(graph) }
+
                 item { Section("Hours") }
                 item {
                     WindowField("School days: work", draft.weekdayHours, "weekdayHours", form) { draft = draft.copy(weekdayHours = it) }

@@ -53,9 +53,9 @@ class BackupTest {
     fun `a backup keeps the school calendar, and one from before has none`() {
         val school = SchoolCalendar(listOf(NoSchool("2026-10-26", "2026-10-30", "Half term")), listOf(HalfDay("2026-10-23", 750)))
         val backup = Backup(exportedAt = now, settings = Settings(), log = ActivityLog(), school = school)
-        assertEquals(4, backup.format)
+        assertEquals(5, backup.format)
         // A backup from a later app's format is refused, rather than read without what it adds.
-        assertNull(Backups.decode("""{"app":"Decrastination","format":5,"exportedAt":0,"settings":{},"log":{}}"""))
+        assertNull(Backups.decode("""{"app":"Decrastination","format":6,"exportedAt":0,"settings":{},"log":{}}"""))
         assertEquals(school, Backups.decode(Backups.encode(backup))!!.school)
         // Format 2 (2.0.0) is still read, with no days off.
         val old = Backups.decode("""{"app":"Decrastination","format":2,"exportedAt":0,"settings":{},"log":{}}""")!!
@@ -114,6 +114,19 @@ class BackupTest {
         kind = Kind.Homework, label = key, plannedMin = 30, start = start, end = start + 30 * 60_000L, window = com.thomaswcode.decrastination.core.WindowKind.Evening,
         outcome = SlotOutcome.Kept, workedMin = 30, at = start + 30 * 60_000L,
     )
+
+    @Test
+    fun `what's remembered is merged, this phone's own winning, and one past its bounds refused`() {
+        val here = com.thomaswcode.decrastination.core.MemoryState(facts = listOf(com.thomaswcode.decrastination.core.Fact("football", "on Tuesdays", 5)))
+        val theirs = com.thomaswcode.decrastination.core.MemoryState(
+            facts = listOf(com.thomaswcode.decrastination.core.Fact("Football", "on Mondays", 1), com.thomaswcode.decrastination.core.Fact("sleep", "in bed by 22:30", 2)),
+            rules = listOf(com.thomaswcode.decrastination.core.Rule("be blunter", 3)),
+        )
+        val merged = Backups.mergedMemory(here, theirs)
+        assertEquals(listOf("sleep" to "in bed by 22:30", "football" to "on Tuesdays"), merged.facts.map { it.topic to it.text })
+        assertEquals(listOf("be blunter"), merged.rules.map { it.text })
+        assertNotNull(Backups.problem(backup().copy(memory = com.thomaswcode.decrastination.core.MemoryState(facts = listOf(com.thomaswcode.decrastination.core.Fact("", "x", 1))))))
+    }
 
     @Test
     fun `merging a log adds what's missing and doubles nothing`() {

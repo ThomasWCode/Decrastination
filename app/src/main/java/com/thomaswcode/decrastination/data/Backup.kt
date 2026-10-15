@@ -45,6 +45,8 @@ data class Backup(
     val ownTasks: List<TaskItem> = emptyList(),
     /** The school calendar (PL-16): days off and half-days, none in a backup from before. */
     val school: SchoolCalendar = SchoolCalendar(),
+    /** What Felix remembers (AI-21): none in a backup from before. */
+    val memory: com.thomaswcode.decrastination.core.MemoryState = com.thomaswcode.decrastination.core.MemoryState(),
 ) {
     companion object {
         const val APP = "Decrastination"
@@ -53,8 +55,11 @@ data class Backup(
          * older version, which would restore the rest and quietly lose them, refuses it whole as from
          * a newer one; an older backup is read here with none.
          */
-        /** 4 since slots replaced sessions in the log (LR-09, AR-09): an older app refuses it rather than losing them. */
-        const val FORMAT = 4
+        /**
+         * 4 since slots replaced sessions in the log (LR-09, AR-09), 5 with what's remembered
+         * (AI-21): an older app refuses it rather than losing them.
+         */
+        const val FORMAT = 5
     }
 }
 
@@ -96,6 +101,11 @@ object Backups {
             if (calibration.yields.values.any { !it.isFinite() || it !in Calibrator.MIN_YIELD..Calibrator.MAX_YIELD }) add("what the app learned about the days' time")
             if (calibration.yieldDays.values.any { it !in Calibrator.YIELD_DAYS..Calibrator.YIELD_LOOK_BACK } || calibration.yields.keys != calibration.yieldDays.keys) add("what the app learned about the days' time's evidence")
             if (!evidence(calibration)) add("what the app learned's evidence")
+            // What's remembered as the app keeps it (AI-21): in its room, every fact with a topic.
+            val memory = backup.memory
+            if (com.thomaswcode.decrastination.core.Memories.chars(memory.facts) > com.thomaswcode.decrastination.core.Memories.FACT_BUDGET_CHARS ||
+                memory.facts.any { it.topic.isBlank() || it.text.isBlank() } || memory.rules.size > com.thomaswcode.decrastination.core.Memories.RULE_MAX || memory.rules.any { it.text.isBlank() }
+            ) add("what's remembered")
             // What a card takes in AnkiDroid (DX-11): within the bounds it's learned in, each from its stretches.
             if (calibration.ankiSecondsPerCard.values.any { !it.isFinite() || it !in com.thomaswcode.decrastination.learn.AnkiProgress.MIN_SECONDS..com.thomaswcode.decrastination.learn.AnkiProgress.MAX_SECONDS } ||
                 calibration.ankiSecondsPerCard.keys != calibration.ankiStretches.keys || calibration.ankiStretches.values.any { it !in 1..com.thomaswcode.decrastination.learn.AnkiProgress.STRETCHES }
@@ -260,6 +270,19 @@ object Backups {
             refused = maxOf(here.refused, imported.refused),
             failed = maxOf(here.failed, imported.failed),
         )
+    }
+
+    /**
+     * What's remembered here, with the backup's added (AI-21): a fact of a topic not here, a rule not
+     * here; this phone's own wins, and what's past the room goes, oldest first.
+     */
+    fun mergedMemory(here: com.thomaswcode.decrastination.core.MemoryState, backup: com.thomaswcode.decrastination.core.MemoryState): com.thomaswcode.decrastination.core.MemoryState {
+        val given = backup.facts.filter { f -> here.facts.none { it.topic.equals(f.topic, ignoreCase = true) } }.map { com.thomaswcode.decrastination.core.Given(it.topic, it.text) } +
+            backup.rules.map { com.thomaswcode.decrastination.core.Given(text = it.text, kind = com.thomaswcode.decrastination.core.Given.RULE) }
+        val (merged, _) = com.thomaswcode.decrastination.core.Memories.apply(here, given, 0L)
+        // The backup's own times, not 0: the merge keeps what each was.
+        val times = (backup.facts.associate { it.topic.lowercase() to it.at } + here.facts.associate { it.topic.lowercase() to it.at })
+        return merged.copy(facts = merged.facts.map { f -> f.copy(at = times[f.topic.lowercase()] ?: f.at) }.sortedBy { it.at })
     }
 
     /**

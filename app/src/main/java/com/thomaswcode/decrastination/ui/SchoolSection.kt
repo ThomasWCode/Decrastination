@@ -113,11 +113,11 @@ fun SchoolSection(graph: AppGraph) {
     }
 }
 
-/** One day off or half-day, and its delete. */
+/** One row of a list saved at once (a day off, a half-day, a memory), and its delete, [action] said aloud. */
 @Composable
-private fun Entry(text: String, onDelete: () -> Unit) {
+internal fun Entry(text: String, action: String = "Delete", onDelete: () -> Unit) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(text, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-        IconButton(onClick = onDelete) { Icon(painterResource(R.drawable.ic_close), contentDescription = "Delete") }
+        IconButton(onClick = onDelete) { Icon(painterResource(R.drawable.ic_close), contentDescription = action) }
     }
 }
