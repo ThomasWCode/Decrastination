@@ -1376,11 +1376,31 @@ class AppGraph private constructor(context: Context) {
             if (lines.isNotEmpty()) chat.update { s -> s.copy(messages = s.messages.map { if (it.id == reply.id) it.copy(remembered = lines) else it }) }
             // Its changes to what exists, made now, as if Apply were tapped: Undo takes them back.
             if (kept) reply.proposals.filter { it.instant }.forEach { applyProposal(reply.id, it.id) }
+            // Its steps ticked (AI-14), said under it.
+            val done = if (kept) tickSteps(reading.actions) else emptyList()
+            if (done.isNotEmpty()) chat.update { s -> s.copy(messages = s.messages.map { if (it.id == reply.id) it.copy(done = done) else it }) }
             null
         }
         // Why it waits, said once: written only when it changes, as this runs after every sync.
         if (note != null && chat.value.unanswered?.let { it.id == waiting.id && (it.note != note || it.stuck != stuck) } == true) {
             chat.update { s -> s.copy(messages = s.messages.map { if (it.id == waiting.id && it.answeredAt == null) it.copy(note = note, stuck = stuck) else it }) }
+        }
+    }
+
+    /**
+     * The chat's steps to tick (AI-14), at once, as it alters what exists (AI-24): its slot today
+     * kept where it has one (earning as a tick does), else ticked as on its sheet. A line each that
+     * was, "Ticked: Q1, of Essay".
+     */
+    private suspend fun tickSteps(actions: List<com.thomaswcode.decrastination.core.ChatAction>): List<String> {
+        val plan = plan()
+        return actions.filter { it.type == com.thomaswcode.decrastination.core.ChatAction.Type.TickStep }.mapNotNull { a ->
+            val task = tasks.value.tasks.firstOrNull { it.id == a.taskId } ?: return@mapNotNull null
+            val index = a.stepIndex ?: return@mapNotNull null
+            val step = task.subSteps.getOrNull(index)?.takeIf { !it.done } ?: return@mapNotNull null
+            val piece = plan.todaySlots.firstOrNull { it.chunk?.taskId == task.id && it.chunk.stepIndex == index }?.chunk
+            val ticked = if (piece != null) focus.keepSlot(piece.key) else runCatching { focus.tickBlock(task.id, index, step.title); true }.getOrDefault(false)
+            "Ticked: ${step.title}, of ${task.title}".takeIf { ticked }
         }
     }
 

@@ -71,6 +71,7 @@ object ChatPrompts {
 """ + InstructionPrompts.CHANGE_TYPES.prependIndent("        ") + """
         3. Answer questions about their work from what you're given, briefly: what's due when from the task list; what's on a day, how full it is, what to do next and why something isn't planned from the plan. The plan is what the app has them do and shows them, so say what it says rather than planning the work again yourself. The context gives the time now: a deadline later today is still ahead ("due at 16:00 today"), not past, and a slot marked past has gone by; say "overdue" only where the plan marks it so.
         4. Remember (memories): a fact about the student worth keeping for later (a preference, a pattern, something about their week: "football is on Tuesdays"), with a short topic, so a newer fact on the same topic replaces it; or, kind "rule", a standing instruction about how you should behave ("don't message before 8", "be blunter"). To forget one, give its topic (a rule's own words) and an empty text. Busy times, limits and days off are changes, not memories; most messages need none.
+        5. Act (actions): tickStep when the student says a step is done (taskId, and stepIndex from the list's steps); open to show them a task (taskId, stepIndex -1). Most messages need none.
 
         Reply in one to three short sentences of plain UK English (asked what's on, a short list instead, a line a task). A change to a task that's already listed, a busy time or a limit today, or how an event counts is made as soon as you give it, so say what you've done ("Moved it to 19:30"); a new task or event, a busy time or a limit on another day, days off or a half-day are shown to the student to confirm, so say what you'd add. To undo a change, give the change that puts it back. When a reply from them is likely, offer up to three short ones in their words (suggestedReplies). If what you need is missing or unclear (which task they mean, or when), ask one short question and change nothing. Don't add a task that's already listed: change it instead. When their message is about a given task, event or day, it's about that unless they clearly name another. Do only what they asked for, and leave every field you don't use null.
     """
@@ -109,12 +110,20 @@ object ChatPrompts {
         "kind" to mapOf("type" to "string", "enum" to listOf(com.thomaswcode.decrastination.core.Given.FACT, com.thomaswcode.decrastination.core.Given.RULE)),
     )
 
+    /** Something to do for the student (AI-14), plain fields so no union is added: stepIndex -1 for none. */
+    private val ACTION = InstructionPrompts.obj(
+        "type" to mapOf("type" to "string", "enum" to listOf("tickStep", "open")),
+        "taskId" to STRING,
+        "stepIndex" to INTEGER,
+    )
+
     val SCHEMA: Map<String, Any> = InstructionPrompts.obj(
         "reply" to STRING,
         "newTasks" to mapOf("type" to "array", "items" to TASK),
         "changes" to mapOf("type" to "array", "items" to InstructionPrompts.CHANGE),
         "memories" to mapOf("type" to "array", "items" to MEMORY),
         "suggestedReplies" to mapOf("type" to "array", "items" to STRING),
+        "actions" to mapOf("type" to "array", "items" to ACTION),
     )
 
     /**
@@ -208,6 +217,8 @@ object ChatPrompts {
             // A date the app or Claude set is a plan, not a deadline (PL-14): said, so it's not called overdue.
             val due = (t.deadlineAt(now) ?: t.dueAt)?.let { at(it) + if (t.hardAt(now)) "" else " (a plan)" } ?: "no date"
             appendLine("- ${t.id} | ${t.title.take(MAX_TITLE)} | ${t.source.label} | ${t.kind.label} | $due | ${t.effortMin} | ${t.workedMin + t.photoMin} | ${start?.let(::at) ?: "-"}")
+            // Its steps by their place, for a tick (AI-14).
+            t.subSteps.take(OwnTasks.MAX_STEPS).forEachIndexed { i, step -> appendLine("    step $i: ${step.title.take(MAX_TITLE)} (${step.minutes} min)${if (step.done) ", done" else ""}") }
         }
         appendLine()
         appendLine("Calendar events in the next fortnight (eventKey | title | when):")
@@ -357,6 +368,8 @@ object ChatAnswers {
         val leftOut: List<String>,
         val memories: List<com.thomaswcode.decrastination.core.Given> = emptyList(),
         val suggestedReplies: List<String> = emptyList(),
+        /** Steps to tick and tasks to show (AI-14), each checked against what there is. */
+        val actions: List<com.thomaswcode.decrastination.core.ChatAction> = emptyList(),
     )
 
     /**
@@ -368,7 +381,9 @@ object ChatAnswers {
         fun card(changes: List<Change>, instant: Boolean) = changes.takeIf { it.isNotEmpty() }?.let {
             com.thomaswcode.decrastination.core.Proposal(id(), changes = it, lines = it.map { c -> Instructions.describe(c, tasks, zone) }, instant = instant)
         }
-        return listOfNotNull(card(now, instant = true)) + reading.tasks.map { com.thomaswcode.decrastination.core.Proposal(id(), task = it) } + listOfNotNull(card(later, instant = false))
+        // A task to show, a card with its Open (AI-14).
+        val opens = reading.actions.filter { it.type == com.thomaswcode.decrastination.core.ChatAction.Type.Open }.map { com.thomaswcode.decrastination.core.Proposal(id(), open = it.taskId) }
+        return listOfNotNull(card(now, instant = true)) + reading.tasks.map { com.thomaswcode.decrastination.core.Proposal(id(), task = it) } + listOfNotNull(card(later, instant = false)) + opens
     }
 
     @Serializable
@@ -378,7 +393,14 @@ object ChatAnswers {
         val changes: List<InstructionAnswers.Given> = emptyList(),
         val memories: List<com.thomaswcode.decrastination.core.Given> = emptyList(),
         val suggestedReplies: List<String> = emptyList(),
+        val actions: List<GivenAction> = emptyList(),
     )
+
+    @Serializable
+    private data class GivenAction(val type: String = "", val taskId: String = "", val stepIndex: Int = -1)
+
+    /** The most actions one answer takes: a few at most is what's meant. */
+    private const val MAX_ACTIONS = 5
 
     @Serializable
     private data class NewTask(
@@ -433,7 +455,18 @@ object ChatAnswers {
             changes = emptyList()
         }
         val replies = answer.suggestedReplies.map { it.trim().take(FelixAnswers.MAX_REPLY) }.filter { it.isNotEmpty() }.distinct().take(FelixAnswers.MAX_REPLIES)
-        return Reading(reply.take(ChatPrompts.MAX_TEXT), made, changes, leftOut, answer.memories.take(MAX_MEMORIES), replies)
+        // A step ticked, of a listed task's still to do; a listed task shown (AI-14).
+        val actions = answer.actions.take(MAX_ACTIONS).mapNotNull { a ->
+            val task = byId[a.taskId]
+            when {
+                task == null -> null.also { leftOut += "an action on a task that isn't listed" }
+                a.type == "open" -> com.thomaswcode.decrastination.core.ChatAction(com.thomaswcode.decrastination.core.ChatAction.Type.Open, task.id)
+                a.type == "tickStep" && task.isOpen && task.subSteps.getOrNull(a.stepIndex)?.done == false ->
+                    com.thomaswcode.decrastination.core.ChatAction(com.thomaswcode.decrastination.core.ChatAction.Type.TickStep, task.id, a.stepIndex)
+                else -> null.also { leftOut += "a step to tick that isn't one of “${task.title.take(60)}”'s still to do" }
+            }
+        }.distinct()
+        return Reading(reply.take(ChatPrompts.MAX_TEXT), made, changes, leftOut, answer.memories.take(MAX_MEMORIES), replies, actions)
     }
 
     private fun task(n: NewTask, now: Long, zone: ZoneId): OwnTask? {

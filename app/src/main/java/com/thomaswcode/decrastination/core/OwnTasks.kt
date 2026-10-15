@@ -165,7 +165,7 @@ object OwnTasks {
     }
 
     /** The changes an instruction makes to one of your own that are made on it, not laid over it. */
-    val MADE_ON_IT = setOf(ChangeType.DueBy, ChangeType.StartFrom, ChangeType.Minutes)
+    val MADE_ON_IT = setOf(ChangeType.DueBy, ChangeType.StartFrom, ChangeType.Minutes, ChangeType.Steps)
 
     /**
      * [change] (a due date, a start, or minutes: [MADE_ON_IT]) made on your own [task] itself, as
@@ -223,6 +223,8 @@ object OwnTasks {
         return when (change.type) {
             ChangeType.DueBy -> draft.copy(dueAt = change.time)
             ChangeType.StartFrom -> draft.copy(startFrom = change.time)
+            // Its steps anew (AI-19), its minutes theirs: a step of an old name keeps its tick.
+            ChangeType.Steps -> change.steps?.takeIf { it.isNotEmpty() }?.let { steps -> draft.copy(steps = steps.map { it.copy(wasIndex = null) }, minutes = steps.sumOf { it.minutes }) }
             ChangeType.Minutes -> {
                 // Fewer than its steps: they couldn't add up to it ([minutesFor]).
                 val minutes = change.minutes?.takeIf { it >= maxOf(1, draft.steps.size) } ?: return null

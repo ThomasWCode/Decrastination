@@ -394,4 +394,29 @@ class ChatTest {
         assertEquals(listOf(Speaker.You, Speaker.Claude, Speaker.You), turns.map { it.first })
         assertEquals("Moved it to 19:30.\n\nTen minutes into the physics: starting?", turns[1].second)
     }
+
+    @Test
+    fun `a step said done is ticked, a task shown is a card, and what can't be is said`() {
+        val essay = com.thomaswcode.decrastination.core.OwnTasks.create(
+            com.thomaswcode.decrastination.core.OwnTask(title = "Essay", steps = listOf(com.thomaswcode.decrastination.core.OwnStep("Plan", 20), com.thomaswcode.decrastination.core.OwnStep("Write", 40))),
+            "e", now,
+        )
+        val reading = ChatAnswers.parse(
+            """{"reply":"Ticked the plan.","newTasks":[],"changes":[],"memories":[],"suggestedReplies":[],"actions":[{"type":"tickStep","taskId":"${essay.id}","stepIndex":0},{"type":"open","taskId":"${essay.id}","stepIndex":-1},{"type":"tickStep","taskId":"${essay.id}","stepIndex":7},{"type":"open","taskId":"nope","stepIndex":-1}]}""",
+            listOf(essay), emptyList(), com.thomaswcode.decrastination.core.About(), now, LONDON,
+        )!!
+        assertEquals(
+            listOf(
+                com.thomaswcode.decrastination.core.ChatAction(com.thomaswcode.decrastination.core.ChatAction.Type.TickStep, essay.id, 0),
+                com.thomaswcode.decrastination.core.ChatAction(com.thomaswcode.decrastination.core.ChatAction.Type.Open, essay.id),
+            ),
+            reading.actions,
+        )
+        assertEquals(2, reading.leftOut.size)
+        val cards = ChatAnswers.cards(reading, mapOf(essay.id to essay), java.time.LocalDate.parse("2026-10-12"), LONDON)
+        assertEquals(listOf(essay.id), cards.mapNotNull { it.open })
+        // Its steps are listed by their place, for that.
+        val context = ChatPrompts.context(listOf(essay), emptyList(), emptyList(), now, LONDON)
+        assertTrue("    step 0: Plan (20 min)\n    step 1: Write (40 min)" in context, context)
+    }
 }
