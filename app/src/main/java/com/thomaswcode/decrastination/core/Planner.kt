@@ -502,8 +502,11 @@ object Planner {
                     from = day
                 }
             }
-            // Short of time before its deadline, a piece with no day, or one carried past the deadline's day.
-            val short = reachable(item) && (item.minutes > freeBefore || assigned.any { it == null || it > lastDayBefore(item.deadline, zone) })
+            // Short of time before its deadline: a piece with no day, one carried past the deadline's day,
+            // or one no single day before it held (put into the first, over its time), where the margin
+            // is no stricter than the deadline, so its days were the deadline's.
+            val forced = behind.any { it } && lastUsableDay(item, input) >= lastDayBefore(item.deadline, zone)
+            val short = reachable(item) && (item.minutes > freeBefore || forced || assigned.any { it == null || it > lastDayBefore(item.deadline, zone) })
             item.chunks.indices.forEach { i ->
                 val day = assigned[i] ?: return@forEach
                 placed.getValue(day) += chunk(item, i, behind = behind[i] || day > dueBy, why = why, noRoom = noRoom(item, day, short))
@@ -551,8 +554,9 @@ object Planner {
                 return window.lastIndex
             }
             // Whether pieces [i] on can still follow in order from day [from], each on the first day
-            // with room for it: tried by placing them, then taken back.
-            fun restFollows(from: Int, i: Int): Boolean {
+            // with room for it, a day after the one before where [apart] (revision's gap): tried by
+            // placing them, then taken back.
+            fun restFollows(from: Int, i: Int, apart: Boolean): Boolean {
                 val tried = mutableListOf<Pair<Int, Int>>()
                 var day = from
                 var follows = true
@@ -565,6 +569,7 @@ object Planner {
                     assigned[k] = window[day]
                     take(item, window[day], item.chunks[k].minutes)
                     tried += day to k
+                    if (apart) day++
                 }
                 tried.forEach { (d, k) ->
                     give(item, window[d], item.chunks[k].minutes)
@@ -574,24 +579,25 @@ object Planner {
             }
             // Whether piece [i] can go on [day] with the pieces after it still to follow in order: a
             // big last piece that only a weekend holds keeps the ones before it from passing it.
-            fun usable(day: Int, i: Int): Boolean {
+            fun usable(day: Int, i: Int, apart: Boolean = false): Boolean {
                 if (!fits(day, i)) return false
                 assigned[i] = window[day]
                 take(item, window[day], item.chunks[i].minutes)
-                val follows = restFollows(day, i + 1)
+                val follows = restFollows(if (apart) day + 1 else day, i + 1, apart)
                 give(item, window[day], item.chunks[i].minutes)
                 assigned[i] = null
                 return follows
             }
-            // The nearest usable day to [at] for piece [i], between [lo] and [hi], earlier first.
-            fun nearest(at: Int, lo: Int, hi: Int, i: Int): Int? {
+            // The nearest usable day to [at] for piece [i], between [lo] and [hi], earlier first; [apart],
+            // with the pieces after it still able to keep revision's day apart.
+            fun nearest(at: Int, lo: Int, hi: Int, i: Int, apart: Boolean = false): Int? {
                 if (lo > hi) return null
                 val start = at.coerceIn(lo, hi)
                 for (step in 0..(hi - lo)) {
                     val earlier = start - step
-                    if (earlier >= lo && usable(earlier, i)) return earlier
+                    if (earlier >= lo && usable(earlier, i, apart)) return earlier
                     val later = start + step
-                    if (step > 0 && later <= hi && usable(later, i)) return later
+                    if (step > 0 && later <= hi && usable(later, i, apart)) return later
                 }
                 return null
             }
@@ -602,7 +608,9 @@ object Planner {
                 val within = if (weekly && previous >= 0) minOf(window.lastIndex, previous + 7) else window.lastIndex
                 val at = target(i)
                 // The gap and the week kept where there's room; then the week given up; then the gap.
-                val kept = nearest(minOf(at, within), apart, within, i) ?: nearest(at, apart, window.lastIndex, i)
+                // Revision's look-ahead keeps its gap where a day allows (else as without it).
+                val kept = (if (spaced) nearest(minOf(at, within), apart, within, i, apart = true) ?: nearest(at, apart, window.lastIndex, i, apart = true) else null)
+                    ?: nearest(minOf(at, within), apart, within, i) ?: nearest(at, apart, window.lastIndex, i)
                 // Where it would go without them: what tells a piece the week or the gap moved.
                 val bound = apart > from || within < window.lastIndex
                 val loose = if (kept == null || bound) nearest(at, from, window.lastIndex, i) else kept
