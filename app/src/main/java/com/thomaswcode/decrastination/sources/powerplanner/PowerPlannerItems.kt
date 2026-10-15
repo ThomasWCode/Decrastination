@@ -19,6 +19,9 @@ import java.time.temporal.ChronoUnit
  * come from the class's slot that day in the two-week timetable, counted from `WeekOneStartsOn`.
  * An event (an exam, or "Call with Jags") is all day when its `EndTime` ends in `:59`.
  */
+/** One lesson in the timetable: its class's name ("Study Period" for a free one), and when it is. */
+data class Lesson(val className: String, val start: LocalTime, val end: LocalTime)
+
 object PowerPlannerItems {
     const val TASK = 5
     const val EVENT = 6
@@ -87,13 +90,24 @@ object PowerPlannerItems {
 
     /** The class's first slot on [day] in the two-week timetable, as (start, end), or null if it has none. */
     fun slot(klass: PpClass?, day: LocalDate, timetable: Timetable): Pair<LocalTime, LocalTime>? {
-        val schedules = klass?.schedules ?: return null
-        val week = scheduleWeek(day, timetable.weekOneStartsOn?.let(::parse)?.toLocalDate())
-        return schedules
-            .filter { dotNetDay(it.dayOfWeek) == day.dayOfWeek && (it.scheduleWeek == BOTH_WEEKS || week == null || it.scheduleWeek == week) }
-            .map { parse(it.startTime).toLocalTime() to parse(it.endTime).toLocalTime() }
-            .minByOrNull { it.first }
+        klass ?: return null
+        return schedulesOn(klass, day, timetable).map { timeOf(it.startTime) to timeOf(it.endTime) }.minByOrNull { it.first }
     }
+
+    /** The class's slots on [day] in the two-week timetable: those of its week, and those of both. */
+    fun schedulesOn(klass: PpClass, day: LocalDate, timetable: Timetable): List<PpSchedule> {
+        val week = scheduleWeek(day, timetable.weekOneStartsOn?.let(::parse)?.toLocalDate())
+        return klass.schedules.orEmpty()
+            .filter { dotNetDay(it.dayOfWeek) == day.dayOfWeek && (it.scheduleWeek == BOTH_WEEKS || week == null || it.scheduleWeek == week) }
+    }
+
+    /** A timetable time ("2026-09-05T12:20:00": its date means nothing) as the time of day it gives. */
+    fun timeOf(text: String): LocalTime = parse(text).toLocalTime()
+
+    /** Every lesson on [day], by its start (DX-09): what the school day's windows are read from. */
+    fun lessonsOn(timetable: Timetable, day: LocalDate): List<Lesson> =
+        timetable.classes.flatMap { klass -> schedulesOn(klass, day, timetable).map { Lesson(klass.name, timeOf(it.startTime), timeOf(it.endTime)) } }
+            .sortedBy { it.start }
 
     /** 1 or 2: weeks alternate from the week holding [weekOne]. Null when there's no rotation. */
     fun scheduleWeek(day: LocalDate, weekOne: LocalDate?): Int? {
