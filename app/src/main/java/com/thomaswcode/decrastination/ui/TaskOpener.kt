@@ -25,8 +25,13 @@ object TaskOpener {
     const val GMAIL = "com.google.android.gm"
     const val POWER_PLANNER = "com.barebonesdev.powerplanner"
 
-    /** Opens [task]; returns something to tell you (what went wrong, or what to look for), or null. */
-    suspend fun open(context: Context, task: TaskItem): String? = when (task.source) {
+    /** Opens [task]; returns something to tell you (what went wrong, or what to look for), or null. Felix sees it opened (LR-03). */
+    suspend fun open(context: Context, task: TaskItem): String? {
+        com.thomaswcode.decrastination.AppGraph.get(context).felix.noteActivity(listOf(task.id))
+        return openIn(context, task)
+    }
+
+    private suspend fun openIn(context: Context, task: TaskItem): String? = when (task.source) {
         Source.Teams -> openTeams(context, task)
         Source.Anki -> {
             val deckId = task.extra[AnkiRules.EXTRA_DECK_ID]?.toLongOrNull()

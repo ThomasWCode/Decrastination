@@ -30,6 +30,8 @@ data class RuntimeState(
     val photosDone: List<PhotoDone> = emptyList(),
     /** Slots being kept whose due (the task's step or minutes, the log, free time) isn't all given yet (LR-09). */
     val keeping: List<Keeping> = emptyList(),
+    /** Felix's pace and what he's seen done (LR-03). */
+    val felix: FelixState = FelixState(),
     /** The decks' counts read as AnkiDroid came and went (NF-03): the last [com.thomaswcode.decrastination.learn.AnkiProgress.KEEP]. */
     val ankiReadings: List<com.thomaswcode.decrastination.learn.AnkiReading> = emptyList(),
     /** Since when AnkiDroid has been in front, read coming in; null when it isn't. */
@@ -318,6 +320,26 @@ data class AnkiWorked(val date: String = "", val minutes: Map<String, Int> = emp
 
     fun without(taskId: String): AnkiWorked = copy(minutes = minutes - taskId)
 }
+
+/**
+ * Felix between looks (LR-03): when he said he'd check again, when he last wrote, a message he wrote
+ * ahead (AC-10), and when something was last seen done on each task (opened, studied in AnkiDroid).
+ */
+@Serializable
+data class FelixState(
+    val nextCheckAt: Long? = null,
+    val lastSentAt: Long? = null,
+    val draft: FelixDraft? = null,
+    val activity: Map<String, Long> = emptyMap(),
+) {
+    /** [taskIds] seen done on [at]: the last day's kept. */
+    fun withActivity(taskIds: Collection<String>, at: Long): FelixState =
+        copy(activity = (activity + taskIds.associateWith { at }).filterValues { it > at - 24 * 3_600_000L })
+}
+
+/** A message of Felix's written ahead (AC-10): sent if it still fits its reason and piece when the time comes. */
+@Serializable
+data class FelixDraft(val reason: String, val key: String?, val answer: com.thomaswcode.decrastination.enrich.FelixAnswer, val at: Long)
 
 /** A daily alarm's run that failed: tried again [at], this being try [tries] (`Daily.failed`). */
 @Serializable

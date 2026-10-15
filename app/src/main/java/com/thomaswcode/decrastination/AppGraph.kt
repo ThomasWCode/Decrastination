@@ -296,6 +296,9 @@ class AppGraph private constructor(context: Context) {
     /** Time in AnkiDroid as work (NF-03, DX-11). */
     val anki = com.thomaswcode.decrastination.block.AnkiWatch(this)
 
+    /** The voice of the app's messages (LR-03). */
+    val felix = com.thomaswcode.decrastination.learn.Felix(this)
+
     /**
      * [made]'s next seven days written to the calendar you picked (NF-07). A slot you've moved there
      * is taken as your time for its task's next piece, where its deadline allows; else it's put back,
@@ -789,6 +792,9 @@ class AppGraph private constructor(context: Context) {
 
     /** The model's weekly review, while Claude is switched on and has its key; else null. */
     fun modelReviewer(): ClaudeReviewer? = claudeKey()?.let { ClaudeReviewer(it, endpoint(), profile = profile()) }
+
+    /** Felix's caller (AI-22), while Claude is switched on and has its key; else null. */
+    fun felixCaller(): com.thomaswcode.decrastination.enrich.FelixCaller? = claudeKey()?.let { com.thomaswcode.decrastination.enrich.FelixCaller(it, endpoint()) }
 
     /** The weekly tidy's (AI-21): the profile without the facts, which it's given to tidy. */
     fun memoryTidier(): com.thomaswcode.decrastination.enrich.MemoryTidier? =

@@ -71,6 +71,8 @@ class AnkiWatch(private val graph: AppGraph) {
         if (graph.runtime.value.ankiFrontSince != null) return
         val reading = read(now, entering = true) ?: return
         graph.runtime.update { it.copy(ankiFrontSince = now, ankiReadings = (it.ankiReadings + reading).takeLast(AnkiProgress.KEEP)) }
+        // In AnkiDroid: work on the deck tasks, as Felix sees it (LR-03).
+        graph.felix.noteActivity(graph.tasks.value.tasks.filter { it.source == Source.Anki && it.isOpen }.map { it.id }, now)
     }
 
     private suspend fun went(now: Long) {

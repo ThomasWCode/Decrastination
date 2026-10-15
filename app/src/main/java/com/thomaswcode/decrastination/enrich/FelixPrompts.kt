@@ -44,7 +44,8 @@ object FelixPrompts {
 
     /**
      * What he's told for one message: the [reason]; the time; the [slot]'s piece (its minutes, its
-     * time, and what earns it its free time) and its first action, or the [task] it's about; today's
+     * time, and what earns it its free time) and its first action, or the slot on [record] (missed,
+     * or kept), or the [task] it's about; today's
      * slots kept, missed and to come, and the free time there is ([freeMin]); his [recent] messages
      * and the replies to them; and, for a Question, the [question] to put.
      */
@@ -60,6 +61,7 @@ object FelixPrompts {
         now: Long,
         zone: ZoneId,
         freeMin: Int? = null,
+        record: SlotRecord? = null,
     ): String = buildString {
         fun clock(at: Long) = Instant.ofEpochMilli(at).atZone(zone).format(CLOCK)
         appendLine("Reason: $reason")
@@ -75,6 +77,14 @@ object FelixPrompts {
             appendLine("Piece: ${piece.label}, ${piece.minutes} min, slot ${clock(slot.start)}–${clock(slot.end)}; it earns its free time $earns")
             // A piece's first steps come with phase 7's micro-plans.
             appendLine("First action: none yet")
+        } else if (record != null) {
+            val how = when {
+                record.outcome == SlotOutcome.Missed -> "it went by undone, and has been moved to later"
+                record.earned -> "kept"
+                record.kind == com.thomaswcode.decrastination.core.Kind.Homework && record.plannedMin >= settings.photoFromMin -> "ticked done, but it earns its free time only with a photo of it"
+                else -> "ticked done, without earning its free time yet"
+            }
+            appendLine("Piece: ${record.label}, ${record.plannedMin} min, slot ${clock(record.start)}–${clock(record.end)}; $how")
         } else if (task != null) {
             appendLine("Task: ${task.title}")
         }
@@ -85,7 +95,8 @@ object FelixPrompts {
         appendLine("Today: $kept kept, $missed missed, ${toCome.size} to come$next")
         if (toCome.isNotEmpty()) appendLine("Left today: " + toCome.joinToString("; ") { "${it.chunk?.label} ${clock(it.start)}–${clock(it.end)}" })
         freeMin?.let { appendLine("Free time now: $it min") }
-        val shown = recent.sortedBy { it.at }.takeLast(RECENT)
+        // His silences (he chose not to write, or the model couldn't be asked) aren't messages.
+        val shown = recent.filter { it.text.isNotBlank() }.sortedBy { it.at }.takeLast(RECENT)
         if (shown.isNotEmpty()) {
             appendLine("Recent, oldest first:")
             for (r in shown) {
