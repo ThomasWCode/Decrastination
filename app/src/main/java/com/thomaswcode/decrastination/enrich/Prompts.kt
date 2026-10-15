@@ -45,7 +45,21 @@ object Prompts {
     /** Who the prompts are for, by year group (AI-06). */
     private fun student(year: Int) = "a UK sixth-form student (Year $year)"
 
-    fun system(job: Enrichments.Job, year: Int = 12): String = when (job) {
+    /** [job]'s system prompt: what it's to do, the limits its answer is checked against (AI-03), and worked examples (AI-07). */
+    fun system(job: Enrichments.Job, year: Int = 12): String = brief(job, year) + "\n\n" + limits(job) + "\n\n" + Examples.text(job)
+
+    /**
+     * The limits the app checks [job]'s answer against (AI-03), said in its prompt from the checks'
+     * own values, so the model keeps to them rather than finding them out.
+     */
+    fun limits(job: Enrichments.Job): String = when (job) {
+        Enrichments.Job.Assignment ->
+            "Limits the app enforces: at most ${Answers.MAX_STEPS} steps; no step longer than ${Answers.MAX_STEP} minutes; a total of at most ${Answers.MAX_EFFORT / 60} hours; the steps must add up to effortMin exactly."
+        else ->
+            "Limits the app enforces: without blocks, effortMin at most ${Answers.MAX_EFFORT / 60} hours; at most $MAX_BLOCKS blocks, none longer than ${Answers.MAX_EFFORT} minutes, ${Answers.MAX_BLOCKS_EFFORT / 60} hours in all, adding up to effortMin exactly."
+    }
+
+    private fun brief(job: Enrichments.Job, year: Int): String = when (job) {
         Enrichments.Job.Email -> """
             You triage one email for a planner app used by ${student(year)}. The planner turns each obligation into scheduled work and blocks distracting apps until it's done, so overstating the work costs the student free time and understating it lets work slip. Every email you see was starred by the student: it is something to do. An email the student sent themselves is a note of something they mean to do.
 
@@ -57,6 +71,7 @@ object Prompts {
             - effortMin: the minutes of the student's own work it needs, reading included: at least 5 for something only to read and decide.
             - nextStep: the one concrete next action, as an instruction under 12 words ("Reply to Mr Hughes confirming the trip").
             - question: rarely: the one question that would settle a reading the text can't (which Friday; whether the test is the 12th or the 19th); otherwise null.
+            - reason: the phrase in the email that gave the deadline or the kind, quoted (under 160 characters); empty if nothing did.
             - blocks: when the email holds more than one piece of work for the student, or dated items (a calendar of deadlines, an application that opens on a date), the pieces of work in order, each with its minutes (10 to 60 where the work allows: a long piece of work, like writing a proposal, is several blocks with the same dates; at most $MAX_BLOCKS blocks, longer ones if there's more work than that), from (the date before which it can't be done, or null) and due (when it must be done by, written as for deadline, only where the email gives one; otherwise null, and the block waits for the email's own deadline, or with none is planned within the week). A window the email gives only roughly ("applications open in December") runs from its first day to its last. The planner schedules each block in its own window, so one email can become work spread over months, kept after the email is archived. An email with blocks is Admin, and its effortMin is their total. Otherwise an empty list.
 
             You see the conversation the starred message is in, oldest message first (where a long one's earlier messages had to be cut short or left out, it says so); when there's more than one, each is headed by who sent it and when ("From you" for the student's own). The first message shown keeps what it quotes from earlier (cut short too, where it had to be); in the ones after it, quoted text and signatures are left out and marked in square brackets, as what they quote is shown above them. You don't see attachments, only their names (an attached email goes by its subject). Where what the email asks turns on an attachment or an earlier message you can't see, and its name doesn't tell you, don't guess what it asked: make nextStep say to read it first, naming it ("Read the attached consent form and decide"), and effortMin 10.
@@ -66,18 +81,19 @@ object Prompts {
         Enrichments.Job.Assignment -> """
             You plan one homework assignment for ${student(year)}, for a planner that schedules the work over the days before it's due and blocks distracting apps until it's done.
 
-            Split the work into the ordered steps the student will actually do, each with a realistic duration in minutes for a typical Year 12 student (the planner adjusts them to this one). Keep steps between 10 and 60 minutes where the work allows, and a short task as one step. A step has dates of its own only where the instructions give them (a draft due before the final version): from, the date before which it can't be started, and due, when it must be done by (YYYY-MM-DDTHH:MM, or the date alone); otherwise both null. Base the steps on the instructions. Learning numbered vocabulary sections is a step of its own, with nothing else in it, and those sections in its ankiSections: the planner leaves it out where the student's Anki decks hold them. Every other step has an empty ankiSections. Add a step for handing work in only where the instructions ask for it, in its place in the order. Each step's where: "home" for a step that needs the laptop, books or quiet (an essay, an upload, a long problem set); "anywhere" for one that can be done at school in a free period with what's in the bag (a booklet, reading, vocabulary).
+            Split the work into the ordered steps the student will actually do, each with a realistic duration in minutes for a typical Year 12 student (the planner adjusts them to this one). Keep steps between 10 and 60 minutes where the work allows, and a short task as one step. A step has dates of its own only where the instructions give them (a draft due before the final version): from, the date before which it can't be started, and due, when it must be done by (YYYY-MM-DDTHH:MM, or the date alone); otherwise both null. Base the steps on the instructions. Learning numbered vocabulary sections is a step of its own, with nothing else in it, and those sections in its ankiSections: the planner leaves it out where the student's Anki decks hold them. Every other step has an empty ankiSections. Add a step for handing work in only where the instructions ask for it, in its place in the order. No step may start after the assignment's due time. Work that comes after the hand-in (revising for a test the work prepares for) gets no dates of its own; give the test's day in testDate instead. Each step's where: "home" for a step that needs the laptop, books or quiet (an essay, an upload, a long problem set); "anywhere" for one that can be done at school in a free period with what's in the bag (a booklet, reading, vocabulary).
 
             Also give:
             - effortMin: the total minutes, the sum of the steps.
             - ankiSections: every vocabulary section the student is asked to learn, written like "1.2" (from "learn vocabulary 1.2" or "p46-47/ 2.2/2.3"); otherwise an empty list.
             - testDate: if the work prepares for a test or assessment on a stated date, that date (YYYY-MM-DD); otherwise null.
             - question: rarely: the one question that would settle a reading the text can't (which Friday; whether the test is the 12th or the 19th); otherwise null.
+            - reason: the phrase in the instructions that gave the test date or the split, quoted (under 160 characters); empty if nothing did.
         """.trimIndent()
         Enrichments.Job.Effort -> """
             Estimate how many minutes of work ${student(year)} needs to finish one item from their planner, from its title, class and details: a realistic total for a typical Year 12 student (the planner adjusts it to this one). A call, meeting or other appointment isn't work: give only the minutes needed to prepare for it, at least 1.
 
-            If it's big enough to be worth doing in parts (revising for a test, a project), also split it into blocks: the ordered pieces of work, 10 to 60 minutes each (at most $MAX_BLOCKS blocks), adding up to effortMin, each with from (the date before which it can't be done, YYYY-MM-DD) and due (when it must be done by, YYYY-MM-DDTHH:MM or the date alone) where the details give them, otherwise null. Otherwise blocks is an empty list.
+            If it's big enough to be worth doing in parts (revising for a test, a project), also split it into blocks: the ordered pieces of work, 10 to 60 minutes each (at most $MAX_BLOCKS blocks), adding up to effortMin, each with from (the date before which it can't be done, YYYY-MM-DD) and due (when it must be done by, YYYY-MM-DDTHH:MM or the date alone) where the details give them, otherwise null. No block may start after the item's date. Otherwise blocks is an empty list.
         """.trimIndent()
     }
 
@@ -88,38 +104,49 @@ object Prompts {
             "actionableFrom" to nullable(mapOf("type" to "string", "format" to "date")),
             "deadline" to nullable(LOCAL_TIME),
             "deadlineQuoted" to mapOf("type" to "boolean"),
-            "effortMin" to mapOf("type" to "integer"),
+            "effortMin" to described(mapOf("type" to "integer"), "The minutes in all; with blocks, their sum"),
             "nextStep" to mapOf("type" to "string"),
             "question" to nullable(mapOf("type" to "string")),
+            "reason" to described(mapOf("type" to "string"), REASON),
             "blocks" to mapOf("type" to "array", "items" to block(vocabulary = false)),
         )
         Enrichments.Job.Assignment -> obj(
             "subSteps" to mapOf("type" to "array", "items" to block(vocabulary = true)),
-            "effortMin" to mapOf("type" to "integer"),
+            "effortMin" to described(mapOf("type" to "integer"), "The sum of the steps' minutes"),
             "ankiSections" to mapOf("type" to "array", "items" to mapOf("type" to "string")),
             "testDate" to nullable(mapOf("type" to "string", "format" to "date")),
             "question" to nullable(mapOf("type" to "string")),
+            "reason" to described(mapOf("type" to "string"), REASON),
         )
         Enrichments.Job.Effort -> obj(
-            "effortMin" to mapOf("type" to "integer"),
+            "effortMin" to described(mapOf("type" to "integer"), "The minutes in all; with blocks, their sum"),
             "blocks" to mapOf("type" to "array", "items" to block(vocabulary = false)),
         )
     }
 
     private val LOCAL_TIME = mapOf("type" to "string", "description" to "Local date and time, YYYY-MM-DDTHH:MM, or the date alone, YYYY-MM-DD")
 
-    /** One block (or step) of work: its own dates where it has them; an assignment's, its vocabulary sections too. */
+    /** What a reading's [Enrichment.reason] is (AI-09). */
+    private const val REASON = "The phrase in the text that gave the deadline, kind or test date, quoted, under 160 characters; empty if none did"
+
+    /**
+     * One block (or step) of work: its own dates where it has them; an assignment's, its vocabulary
+     * sections too. Each field says what it's for and its limit (AI-20), as the checks have it.
+     */
     private fun block(vocabulary: Boolean): Map<String, Any> = obj(
         *listOfNotNull(
             "title" to mapOf("type" to "string"),
-            "minutes" to mapOf("type" to "integer"),
-            ("ankiSections" to mapOf("type" to "array", "items" to mapOf("type" to "string"))).takeIf { vocabulary },
+            "minutes" to described(mapOf("type" to "integer"), "10 to 60 where the work allows; never over ${if (vocabulary) Answers.MAX_STEP else Answers.MAX_EFFORT}"),
+            ("ankiSections" to described(mapOf("type" to "array", "items" to mapOf("type" to "string")), "Only for a step that is nothing but learning numbered vocabulary sections")).takeIf { vocabulary },
             // An assignment's steps say where they can be done (PL-15).
-            ("where" to mapOf("type" to "string", "enum" to listOf("anywhere", "home"))).takeIf { vocabulary },
-            "from" to nullable(mapOf("type" to "string", "format" to "date")),
+            ("where" to described(mapOf("type" to "string", "enum" to listOf("anywhere", "home")), "home for a step that needs the laptop, books or quiet; anywhere for one that can be done at school in a free period")).takeIf { vocabulary },
+            "from" to described(nullable(mapOf("type" to "string", "format" to "date")), "The date before which this ${if (vocabulary) "step" else "block"} can't be done, only if the text gives one; never after the task's due date"),
             "due" to nullable(LOCAL_TIME),
         ).toTypedArray(),
     )
+
+    /** [schema] with what it's for said to the model. */
+    private fun described(schema: Map<String, Any>, text: String): Map<String, Any> = schema + ("description" to text)
 
     /** [job]'s schema as the JSON it's sent as. */
     fun schemaJson(job: Enrichments.Job): JsonElement = toJson(schema(job))
@@ -145,8 +172,18 @@ object Prompts {
     private val TODAY = DateTimeFormatter.ofPattern("EEEE d MMMM yyyy, HH:mm", Locale.UK)
     private val DAY_TIME = DateTimeFormatter.ofPattern("EEEE d MMMM yyyy HH:mm", Locale.UK)
 
-    /** The item, as the model reads it. */
-    fun describe(task: TaskItem, job: Enrichments.Job, now: Long, zone: ZoneId): String = buildString {
+    /** Said before the item when the student photographed the work (AI-23). */
+    fun photo(job: Enrichments.Job): String = "The student photographed the work itself; estimate and split from what the photo shows" +
+        if (job == Enrichments.Job.Effort) "." else ", and say in reason what you saw."
+
+    /** What's said to the model of its answer's [complaint], asked once more (AI-01). */
+    fun repair(complaint: String): String = "Your answer had a problem: $complaint. Return the whole answer again with only that put right."
+
+    /**
+     * The item, as the model reads it; with [previous], its steps as planned before (AI-08), so a
+     * step whose work hasn't changed keeps its title, and with it its tick.
+     */
+    fun describe(task: TaskItem, job: Enrichments.Job, now: Long, zone: ZoneId, previous: List<SubStep> = emptyList(), decks: Map<String, String> = emptyMap()): String = buildString {
         fun at(time: Long) = Instant.ofEpochMilli(time).atZone(zone)
         appendLine("Today: ${at(now).format(TODAY)}")
         when (job) {
@@ -165,10 +202,20 @@ object Prompts {
                 // What the source says, not what an older enrichment laid over it.
                 val due = if (task.sourceValues != null) task.sourceValues.dueAt else task.dueAt
                 appendLine("Due: " + (due?.let { at(it).format(DAY_TIME) } ?: "no date"))
+                // The vocabulary decks by topic (DX-10), so a section can be named by what it's about.
+                if (job == Enrichments.Job.Assignment && decks.isNotEmpty()) appendLine("Decks: " + decks.entries.sortedBy { it.key }.joinToString("; ") { "${it.key} ${it.value}" })
+                // The files the teacher attached, by name (DX-08): what "the booklet" is.
+                if (job == Enrichments.Job.Assignment) GmailThreads.attachmentsOf(task).takeIf { it.isNotEmpty() }?.let { files -> appendLine("Attachments: " + files.joinToString(", ") { it.label }) }
+                if (job == Enrichments.Job.Assignment) com.thomaswcode.decrastination.sources.teams.TeamsRows.linksOf(task).takeIf { it.isNotEmpty() }?.let { appendLine("Links: " + it.joinToString(", ")) }
             }
         }
         // What the student said to its questions (AI-10).
         task.answers.forEach { appendLine("The student says: $it") }
+        if (previous.isNotEmpty()) {
+            val noun = if (job == Enrichments.Job.Assignment) "step" else "block"
+            appendLine("${noun.replaceFirstChar(Char::uppercase)}s as planned before (keep the exact title of any $noun whose work is unchanged; mark none as done):")
+            previous.forEachIndexed { i, step -> appendLine("${i + 1}. ${step.title} (${step.minutes} min)") }
+        }
         val text = task.detail.trim()
         if (text.isNotEmpty()) {
             appendLine()
@@ -182,6 +229,12 @@ object Prompts {
 object Answers {
     private val json = Json { ignoreUnknownKeys = true }
 
+    /**
+     * An answer read (AI-01): its enrichment (null if it isn't one), and the check it failed, said
+     * so the model can put it right ([Prompts.repair]); null when it passed them all.
+     */
+    data class Parsed(val enrichment: Enrichment?, val complaint: String? = null)
+
     @Serializable
     private data class Triage(
         val kind: String,
@@ -192,6 +245,7 @@ object Answers {
         val effortMin: Int,
         val nextStep: String,
         val question: String? = null,
+        val reason: String = "",
         val blocks: List<Step> = emptyList(),
     )
 
@@ -199,17 +253,22 @@ object Answers {
     private data class Step(val title: String, val minutes: Int, val ankiSections: List<String> = emptyList(), val from: String? = null, val due: String? = null, val where: String? = null)
 
     @Serializable
-    private data class Split(val subSteps: List<Step>, val effortMin: Int, val ankiSections: List<String> = emptyList(), val testDate: String? = null, val question: String? = null)
+    private data class Split(val subSteps: List<Step>, val effortMin: Int, val ankiSections: List<String> = emptyList(), val testDate: String? = null, val question: String? = null, val reason: String = "")
 
     @Serializable
     private data class Estimate(val effortMin: Int, val blocks: List<Step> = emptyList())
 
-    private const val MAX_EFFORT = 600
+    internal const val MAX_EFFORT = 600
 
     /** The longest question put to you. */
     private const val MAX_QUESTION = 200
 
     private fun question(text: String?): String? = text?.trim()?.takeIf { it.isNotEmpty() }?.take(MAX_QUESTION)
+
+    /** The longest phrase a reading's reason quotes (AI-09). */
+    private const val MAX_REASON = 160
+
+    private fun reason(text: String): String? = text.trim().trim('"', '“', '”').trim().takeIf { it.isNotEmpty() }?.take(MAX_REASON)
 
     /** The Email job's kinds (AI-02): Info, only to read, isn't one since only starred emails are read. */
     private val EMAIL_KINDS = mapOf("Admin" to Kind.Admin, "Event" to Kind.Event)
@@ -219,16 +278,22 @@ object Answers {
      * hold months of applications (a calendar of five months' came to 13). Past it, an estimate
      * gone wrong.
      */
-    private const val MAX_BLOCKS_EFFORT = 1_200
-    private const val MAX_STEP = 240
-    private const val MAX_STEPS = 12
+    internal const val MAX_BLOCKS_EFFORT = 1_200
+    internal const val MAX_STEP = 240
+    internal const val MAX_STEPS = 12
     private const val MAX_TITLE = 80
     private const val MAX_NEXT_STEP = 120
     private const val STEPS_SLACK_MIN = 10
+
+    /** The most of a date that can't be read put back to the model. */
+    private const val MAX_DATE_SAID = 30
     private val SECTION = Regex("""^[1-9]\.[1-9]$""")
 
-    /** The model's steps or blocks as checked: those the planner can take, or none, and then why not. */
-    private class Checked(val steps: List<SubStep>?, val dropped: String? = null)
+    /**
+     * The model's steps or blocks as checked: those the planner can take, or none, and then why not;
+     * and the lines saying whose dates were left out to keep them ([adjusted], AI-01).
+     */
+    private class Checked(val steps: List<SubStep>?, val dropped: String? = null, val adjusted: List<String> = emptyList())
 
     /** [minutes] in hours, for a reason given: "21 hours", "20.8 hours". */
     private fun hours(minutes: Int): String = if (minutes % 60 == 0) "${minutes / 60} hours" else "%.1f hours".format(Locale.UK, minutes / 60.0)
@@ -249,20 +314,40 @@ object Answers {
     /** A test's day: work must be done before school that morning. */
     private val SCHOOL_STARTS: LocalTime = LocalTime.of(8, 30)
 
-    /** [text] as [job]'s answer, or null if it isn't one. */
-    fun parse(job: Enrichments.Job, text: String, task: TaskItem, by: String, now: Long, zone: ZoneId): Enrichment? = runCatching {
+    /** [text] as [job]'s answer, or null if it isn't one: a step's dates that can't be left out ([read] with salvage). */
+    fun parse(job: Enrichments.Job, text: String, task: TaskItem, by: String, now: Long, zone: ZoneId): Enrichment? = read(job, text, task, by, now, zone, salvage = true).enrichment
+
+    /**
+     * [text] as [job]'s answer (AI-01). Not [salvage] (the first time of asking), any check failed
+     * is its [Parsed.complaint], to put back to the model; with it (asked again, or not asked), a
+     * step or block whose dates can't be (a start after it's due, a start or due after its task is
+     * due) keeps its place and minutes with none, said in [Enrichment.adjusted], and the rest still
+     * fail it.
+     */
+    fun read(job: Enrichments.Job, text: String, task: TaskItem, by: String, now: Long, zone: ZoneId, salvage: Boolean): Parsed {
+        // What the checks couldn't take but needn't drop the answer for: a date that can't be read,
+        // a kind that isn't one: said, so the answer's put back to be put right (AI-01).
+        val problems = mutableListOf<String>()
+        return runCatching {
+            val made = reading(job, text, task, by, now, zone, salvage, problems)
+            Parsed(made, (listOfNotNull(made?.dropped) + problems).firstOrNull()?.replaceFirstChar(Char::uppercase))
+        }.getOrElse { Parsed(null, "The answer isn't JSON the schema takes (${it.message?.lineSequence()?.firstOrNull()?.take(120)})") }
+    }
+
+    private fun reading(job: Enrichments.Job, text: String, task: TaskItem, by: String, now: Long, zone: ZoneId, salvage: Boolean, problems: MutableList<String>): Enrichment? {
         val base = Enrichment(inputHash = Enrichments.inputHash(task), by = by, at = now)
-        when (job) {
+        return when (job) {
             Enrichments.Job.Email -> json.decodeFromString(Triage.serializer(), text).let { t ->
                 // Starred, an email is always something to do (AI-02): Admin, or an Event. Any other
                 // kind is no answer at all, and the rules' reading stands.
-                val kind = EMAIL_KINDS[t.kind] ?: return@runCatching null
+                val kind = EMAIL_KINDS[t.kind] ?: return null.also { problems += "kind is \"${t.kind.take(20)}\": it must be Admin or Event" }
                 val total = effort(t.effortMin)
-                val deadline = t.deadline?.let { dateTime(it, zone) }?.takeIf { plausible(it, now) }
-                val opens = t.actionableFrom?.let { date(it, zone, LocalTime.MIDNIGHT) }?.takeIf { plausible(it, now) }
+                if (total == null && t.blocks.isEmpty()) problems += "effortMin is ${t.effortMin}, not from 1 to $MAX_EFFORT minutes"
+                val deadline = checkedTime("deadline", t.deadline, now, problems) { dateTime(it, zone) }
+                val opens = checkedTime("actionableFrom", t.actionableFrom, now, problems) { date(it, zone, LocalTime.MIDNIGHT) }
                 // Blocks of work, each perhaps with its own dates (Q12): not trusted, the triage stands
                 // without them, and the task says why.
-                val checked = trusted(steps(t.blocks, now, zone, vocabulary = false, maxMinutes = MAX_EFFORT, dueBy = deadline ?: sourceDue(task), opens = opens, noun = "block"), t.effortMin, t.blocks.size)
+                val checked = trusted(steps(t.blocks, now, zone, vocabulary = false, maxMinutes = MAX_EFFORT, dueBy = deadline ?: sourceDue(task), opens = opens, noun = "block", salvage = salvage), t.effortMin, t.blocks.size)
                 val blocks = checked.steps
                 base.copy(
                     // Blocks of work make it something to do, whatever else it says: the ones given,
@@ -277,15 +362,17 @@ object Answers {
                     nextStep = t.nextStep.trim().takeIf { it.isNotEmpty() }?.take(MAX_NEXT_STEP),
                     subSteps = blocks,
                     dropped = checked.dropped,
+                    adjusted = checked.adjusted,
                     question = question(t.question),
+                    reason = reason(t.reason),
                 )
             }
             Enrichments.Job.Assignment -> json.decodeFromString(Split.serializer(), text).let { s ->
                 // One step it can't take (no title, minutes or a date out of range) and the split isn't
                 // trusted: the task's whole estimate is planned instead, none of it lost with that step.
-                val testDate = s.testDate?.let { date(it, zone, SCHOOL_STARTS) }?.takeIf { plausible(it, now) }
+                val testDate = checkedTime("testDate", s.testDate, now, problems) { date(it, zone, SCHOOL_STARTS) }
                 // By the test, where there's one before the source's deadline: it's the task's then.
-                val read = steps(s.subSteps, now, zone, vocabulary = true, maxMinutes = MAX_STEP, dueBy = listOfNotNull(sourceDue(task), testDate).minOrNull())
+                val read = steps(s.subSteps, now, zone, vocabulary = true, maxMinutes = MAX_STEP, dueBy = listOfNotNull(sourceDue(task), testDate).minOrNull(), salvage = salvage)
                 val usable = read.steps != null
                 val valid = read.steps.orEmpty()
                 // More steps than the planner takes: the rest folded, so none of the work goes (see [fold]).
@@ -313,61 +400,82 @@ object Answers {
                 val dropped = when {
                     !usable -> read.dropped
                     agree || planned.isEmpty() -> null
-                    sum > MAX_EFFORT -> "${hours(sum)} of steps, past the ${MAX_EFFORT / 60} the app takes from one task"
-                    !allVocabulary && s.effortMin > MAX_EFFORT -> "a total of ${hours(s.effortMin)}, past the ${MAX_EFFORT / 60} the app takes from one task"
-                    else -> "the steps add up to $sum minutes, not the ${s.effortMin} it gives in all"
+                    sum > MAX_EFFORT -> "the steps come to ${hours(sum)}, over the ${MAX_EFFORT / 60} hours one task can take"
+                    !allVocabulary && s.effortMin > MAX_EFFORT -> "effortMin is ${hours(s.effortMin)}, over the ${MAX_EFFORT / 60} hours one task can take"
+                    else -> "the steps add up to $sum minutes, not the ${s.effortMin} effortMin gives"
                 }
                 base.copy(
                     effortMin = total ?: sum.takeIf { agree && it > 0 },
                     subSteps = planned.takeIf { agree }.orEmpty().ifEmpty { null },
                     dropped = dropped,
+                    adjusted = read.adjusted,
                     // A split not trusted hands no vocabulary to a deck either: its total, planned
                     // whole, already holds it.
                     ankiSections = if (usable && agree) sections else emptyList(),
                     testDate = testDate,
                     question = question(s.question),
+                    reason = reason(s.reason),
                 )
             }
             Enrichments.Job.Effort -> json.decodeFromString(Estimate.serializer(), text).let { e ->
                 val total = effort(e.effortMin)
                 // Big enough to do in parts: its blocks, each perhaps with its own dates (Q12).
-                val checked = trusted(steps(e.blocks, now, zone, vocabulary = false, maxMinutes = MAX_EFFORT, dueBy = sourceDue(task), noun = "block"), e.effortMin, e.blocks.size)
+                val checked = trusted(steps(e.blocks, now, zone, vocabulary = false, maxMinutes = MAX_EFFORT, dueBy = sourceDue(task), noun = "block", salvage = salvage), e.effortMin, e.blocks.size)
                 val blocks = checked.steps
-                base.copy(effortMin = blocks?.sumOf { it.minutes } ?: total, subSteps = blocks, dropped = checked.dropped)
+                base.copy(effortMin = blocks?.sumOf { it.minutes } ?: total, subSteps = blocks, dropped = checked.dropped, adjusted = checked.adjusted)
             }
         }
-    }.getOrNull()
+    }
 
     /**
-     * [given] as steps the planner can take, or none if any can't be, and why ([noun] names them):
-     * no title, minutes out of range (up to [maxMinutes]), a date that can't be read or is out of
-     * range, a start after its own deadline or after its task's ([dueBy]), a deadline before its
-     * task can be started ([opens]), or an order its dates forbid (a step that can't start till
-     * after one listed later is due). Each keeps its own dates; one longer than [MAX_PART_MIN] is
-     * cut into parts that keep them, so ticking a piece never ticks off more than it did. A
-     * step tagged as vocabulary ([vocabulary] jobs only) that asks for anything else too stays
-     * planned whole.
+     * [given] as steps the planner can take, or none if any can't be, and why, naming the step and
+     * what's wrong with it ([noun] names them; AI-01): no title, minutes out of range (up to
+     * [maxMinutes]), a date that can't be read or is out of range, a deadline before its task can
+     * be started ([opens]), or an order its dates forbid (a step that can't start till after one
+     * listed later is due). Dates that can't be (a start after its own deadline, a start or a
+     * deadline after its task's, [dueBy]) fail it too, unless it's to [salvage]: then the step keeps
+     * its place and minutes with no dates, planned by its task's, and a line in [Checked.adjusted]
+     * says so. Each keeps its own dates; one longer than [MAX_PART_MIN] is cut into parts that keep
+     * them, so ticking a piece never ticks off more than it did. A step tagged as vocabulary
+     * ([vocabulary] jobs only) that asks for anything else too stays planned whole.
      */
-    private fun steps(given: List<Step>, now: Long, zone: ZoneId, vocabulary: Boolean, maxMinutes: Int, dueBy: Long?, opens: Long? = null, noun: String = "step"): Checked {
+    private fun steps(given: List<Step>, now: Long, zone: ZoneId, vocabulary: Boolean, maxMinutes: Int, dueBy: Long?, opens: Long? = null, noun: String = "step", salvage: Boolean = true): Checked {
         fun no(why: String) = Checked(null, why)
-        val read = given.map { step ->
-            if (step.title.isBlank()) return no("a $noun has no title")
-            if (step.minutes < 1) return no("a $noun has no minutes")
-            if (step.minutes > maxMinutes) return no("a $noun of ${step.minutes} minutes, past the $maxMinutes one can take")
-            val from = step.from?.let { date(it, zone, LocalTime.MIDNIGHT) ?: return no("a $noun's date can't be read") }
-            val due = step.due?.let { dateTime(it, zone) ?: return no("a $noun's date can't be read") }
-            if (listOfNotNull(from, due).any { !plausible(it, now) }) return no("a $noun's date is out of range")
-            if (from != null && due != null && from > due) return no("a $noun starts after it's due")
-            if (from != null && dueBy != null && from > dueBy) return no("a $noun starts after the task is due")
-            if (due != null && opens != null && due < opens) return no("a $noun is due before the email can be started")
+        // A time as the model wrote it: a date at midnight alone, as "from" is.
+        fun at(time: Long): String = Instant.ofEpochMilli(time).atZone(zone).toLocalDateTime().let { if (it.toLocalTime() == LocalTime.MIDNIGHT) it.toLocalDate().toString() else it.toString().take(16) }
+        fun which(i: Int, title: String) = "$noun ${i + 1}" + title.trim().takeIf { it.isNotEmpty() }?.let { " ('${it.take(MAX_TITLE)}')" }.orEmpty()
+        val adjusted = mutableListOf<String>()
+        val read = given.mapIndexed { i, step ->
+            val name = which(i, step.title)
+            if (step.title.isBlank()) return no("$name has no title")
+            if (step.minutes < 1) return no("$name has no minutes")
+            if (step.minutes > maxMinutes) return no("$name is ${step.minutes} minutes, over the $maxMinutes allowed")
+            var from = step.from?.let { date(it, zone, LocalTime.MIDNIGHT) ?: return no("$name has a date that can't be read: '${it.take(MAX_DATE_SAID)}'") }
+            var due = step.due?.let { dateTime(it, zone) ?: return no("$name has a date that can't be read: '${it.take(MAX_DATE_SAID)}'") }
+            listOfNotNull(from, due).firstOrNull { !plausible(it, now) }?.let { return no("$name has a date out of range: ${at(it)}") }
+            // Dates that can't be: put right by the model, or, asked again, left out (AI-01).
+            val wrong = when {
+                from != null && due != null && from > due -> "starts on ${at(from)}, after its own due time ${at(due)}" to "its start was after its own due time"
+                from != null && dueBy != null && from > dueBy -> "starts on ${at(from)}, after the due time ${at(dueBy)}" to "its start was after the hand-in"
+                due != null && dueBy != null && due > dueBy -> "is due ${at(due)}, after the due time ${at(dueBy)}" to "it was due after the hand-in"
+                else -> null
+            }
+            if (wrong != null) {
+                if (!salvage) return no("$name ${wrong.first}")
+                adjusted += "'${step.title.trim().take(MAX_TITLE)}': ${wrong.second}, so it's planned by the task's date"
+                from = null
+                due = null
+            }
+            if (due != null && opens != null && due < opens) return no("$name is due ${at(due)}, before the email can be started on ${at(opens)}")
             val sections = if (vocabulary && AnkiRules.vocabularyOnly(step.title)) sections(step.ankiSections) else emptyList()
             SubStep(step.title.trim().take(MAX_TITLE), step.minutes, ankiSections = sections, from = from, dueAt = due, where = Where.of(step.where)?.name?.lowercase())
         }
         for (i in read.indices) {
             val from = read[i].from ?: continue
-            if (read.drop(i + 1).any { later -> later.dueAt != null && later.dueAt < from }) return no("the ${noun}s' dates are out of order")
+            val j = read.indices.drop(i + 1).firstOrNull { later -> read[later].dueAt?.let { it < from } == true } ?: continue
+            return no("${which(i, read[i].title)} can't start till ${at(from)}, after ${which(j, read[j].title)} is due ${at(read[j].dueAt!!)}")
         }
-        return Checked(read.flatMap(::fitParts))
+        return Checked(read.flatMap(::fitParts), adjusted = adjusted)
     }
 
     /**
@@ -381,12 +489,12 @@ object Answers {
         val blocks = checked.steps ?: return checked
         if (blocks.isEmpty()) return Checked(null)
         fun no(why: String) = Checked(null, why)
-        if (given > Prompts.MAX_BLOCKS) return no("$given blocks, past the ${Prompts.MAX_BLOCKS} the app takes")
+        if (given > Prompts.MAX_BLOCKS) return no("there are $given blocks, over the ${Prompts.MAX_BLOCKS} allowed")
         val sum = blocks.sumOf { it.minutes }
         val most = maxOf(sum, total)
-        if (most > MAX_BLOCKS_EFFORT) return no("${hours(most)} of blocks, past the ${MAX_BLOCKS_EFFORT / 60} the app takes from one task")
-        if (total < 1) return no("the blocks come with no total")
-        if (abs(sum - total) > maxOf(STEPS_SLACK_MIN, total / 10)) return no("the blocks add up to $sum minutes, not the $total it gives in all")
+        if (most > MAX_BLOCKS_EFFORT) return no("the blocks come to ${hours(most)}, over the ${MAX_BLOCKS_EFFORT / 60} hours one task can take")
+        if (total < 1) return no("the blocks come with no effortMin")
+        if (abs(sum - total) > maxOf(STEPS_SLACK_MIN, total / 10)) return no("the blocks add up to $sum minutes, not the $total effortMin gives")
         return checked
     }
 
@@ -443,6 +551,18 @@ object Answers {
 
     /** Within a month before now and a year and a bit after: anything else is a misreading. */
     private fun plausible(time: Long, now: Long): Boolean = time in (now - 31 * DAY_MS)..(now + 400 * DAY_MS)
+
+    /**
+     * [field]'s [given] text as a time by [read], if it's plausible ([plausible]): one that can't be
+     * read, or is further ahead than the app plans, is said in [problems] to be put right. One long
+     * gone (an old email's date) is no mistake: it's left out without a word.
+     */
+    private fun checkedTime(field: String, given: String?, now: Long, problems: MutableList<String>, read: (String) -> Long?): Long? {
+        val text = given?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        val time = read(text) ?: return null.also { problems += "$field \"${text.take(40)}\" isn't a date (YYYY-MM-DD) or a local date and time (YYYY-MM-DDTHH:MM)" }
+        if (time > now + 400 * DAY_MS) return null.also { problems += "$field $text is more than 400 days ahead, further than the app plans: give it only if the text says so" }
+        return time.takeIf { plausible(it, now) }
+    }
 
     private const val DAY_MS = 24 * 3_600_000L
 }

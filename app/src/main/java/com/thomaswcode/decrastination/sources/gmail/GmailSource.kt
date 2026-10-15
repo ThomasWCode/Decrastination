@@ -3,6 +3,8 @@ package com.thomaswcode.decrastination.sources.gmail
 import android.util.Log
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.core.Fetched
+import com.thomaswcode.decrastination.core.Invite
+import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.data.Secret
@@ -150,7 +152,8 @@ object GmailThreads {
 
     /**
      * Its messages' attachments (DX-01), every message's, each once: a JSON list of [Mime.Attachment],
-     * which reads back whole whatever a file is called.
+     * which reads back whole whatever a file is called. A Teams assignment's reference materials are
+     * kept so too (DX-08), so the sheet and the model see them alike.
      */
     const val EXTRA_ATTACHMENTS = "attachments"
 
@@ -162,19 +165,23 @@ object GmailThreads {
      * message changes (what's cut, how a conversation is put together), so a text made by older
      * ones is read again, once, as one cut shorter than reads now go is. 1: review v2's (whole
      * conversations; the later messages' quotes cut, the oldest read whole; attachments named).
+     * 2: calendar invites read (DX-02), so those starred already are found.
      */
-    const val TEXT_RULES = 1
+    const val TEXT_RULES = 2
     const val EXTRA_TEXT_RULES = "textRules"
 
-    /** A conversation's text, how far it was read ([EXTRA_TEXT_READ_TO]), what's attached to it, and by which [rules]. */
-    data class Body(val text: String, val readTo: Int = MAX_BODY_CHARS, val attachments: List<Mime.Attachment> = emptyList(), val rules: Int = TEXT_RULES) {
+    /** A conversation's text, how far it was read ([EXTRA_TEXT_READ_TO]), what's attached to it, by which [rules], and its [invite] (DX-02). */
+    data class Body(val text: String, val readTo: Int = MAX_BODY_CHARS, val attachments: List<Mime.Attachment> = emptyList(), val rules: Int = TEXT_RULES, val invite: Invite? = null) {
         /** All there is, or as much as a read takes now, made as reads make it now: reading it again would add nothing. */
         val whole: Boolean get() = (text.length < readTo || readTo >= MAX_BODY_CHARS) && rules >= TEXT_RULES
     }
 
     /** [task]'s stored text, how far it was read, and by which rules: stored before those were kept, by none. */
     fun bodyOf(task: TaskItem): Body =
-        Body(task.detail, task.extra[EXTRA_TEXT_READ_TO]?.toIntOrNull() ?: 0, attachmentsOf(task), task.extra[EXTRA_TEXT_RULES]?.toIntOrNull() ?: 0)
+        Body(task.detail, task.extra[EXTRA_TEXT_READ_TO]?.toIntOrNull() ?: 0, attachmentsOf(task), task.extra[EXTRA_TEXT_RULES]?.toIntOrNull() ?: 0, task.extra[Invite.EXTRA]?.let(Invite::read))
+
+    /** [files] as [EXTRA_ATTACHMENTS] keeps them. */
+    fun attachmentsExtra(files: List<Mime.Attachment>): String = json.encodeToString(ATTACHMENTS, files)
 
     /** What's attached to [task]'s conversation, as stored; none for a task from before attachments were kept. */
     fun attachmentsOf(task: TaskItem): List<Mime.Attachment> =
@@ -209,6 +216,12 @@ object GmailThreads {
         }
         return out
     }
+
+    /**
+     * A conversation's invite (DX-02), from each message's ([perMessage], oldest first, null where it
+     * has none): the newest's, an update moving it; none where that calls it off.
+     */
+    fun invite(perMessage: List<Invite?>): Invite? = perMessage.lastOrNull { it != null }?.takeUnless { it.cancelled }
 
     /**
      * [messages], every message of one conversation, as its task is made from: named by its newest;
@@ -319,7 +332,7 @@ object GmailThreads {
     /**
      * The tasks a read ends with, newest conversation first: each named, dated and triaged as the
      * rules read it, with its text from [bodies] (by [Conversation.version]), or marked to be
-     * fetched where there's none.
+     * fetched where there's none. One with an invite is that event, at its time (DX-02).
      */
     fun fetched(conversations: List<Conversation>, bodies: Map<String, Body>, now: Long, zone: ZoneId): List<Fetched> =
         conversations.sortedByDescending { it.receivedAt }.map { conversation ->
@@ -328,12 +341,13 @@ object GmailThreads {
             val subject = conversation.subject.ifBlank { "(no subject)" }
             val triage = EmailRules.triage(EmailRules.Email(conversation.fromName, conversation.fromAddress, subject, text, conversation.sent), now, zone)
             val from = listOfNotNull(conversation.fromName, conversation.fromAddress?.let { "<$it>" }).joinToString(" ")
+            val invite = body?.invite
             Fetched(
                 sourceId = conversation.threadId,
                 title = subject,
-                kind = triage.kind,
+                kind = if (invite != null) Kind.Event else triage.kind,
                 detail = text,
-                dueAt = triage.dueAt,
+                dueAt = invite?.start ?: triage.dueAt,
                 availableFrom = triage.availableFrom,
                 sourceEffortMin = triage.effortMin,
                 extra = buildMap {
@@ -353,7 +367,8 @@ object GmailThreads {
                         put(EXTRA_TEXT_READ_TO, body.readTo.toString())
                         put(EXTRA_TEXT_RULES, body.rules.toString())
                     }
-                    body?.attachments?.takeIf { it.isNotEmpty() }?.let { put(EXTRA_ATTACHMENTS, json.encodeToString(ATTACHMENTS, it)) }
+                    body?.attachments?.takeIf { it.isNotEmpty() }?.let { put(EXTRA_ATTACHMENTS, attachmentsExtra(it)) }
+                    invite?.let { put(Invite.EXTRA, it.stored) }
                 },
             )
         }
@@ -534,6 +549,7 @@ class GmailSource(private val secrets: SecretStore) : TaskSource {
                     if (System.nanoTime() > lastBy || (read.isNotEmpty() && System.nanoTime() > textsUntil)) break
                     val texts = mutableListOf<Pair<MailMessage, String>>()
                     val attachments = mutableListOf<List<Mime.Attachment>>()
+                    val invites = mutableListOf<Invite?>()
                     // What the first message read quotes isn't shown (it came before the conversation
                     // reached you, or before the messages a read takes), so it's read whole; the later
                     // ones' quotes are of messages shown above them (DX-06).
@@ -544,8 +560,8 @@ class GmailSource(private val secrets: SecretStore) : TaskSource {
                         val now = System.nanoTime()
                         if (now > lastBy) break@conversations
                         socket.soTimeout = ((lastBy - now) / 1_000_000).toInt().coerceIn(1, TIMEOUT_MS)
-                        val (text, attached) = try {
-                            textAndAttachments(imap, envelopes.getValue(uid), quotesCut = uid != oldest.uid)
+                        val (text, attached, invite) = try {
+                            textAndAttachments(imap, envelopes.getValue(uid), quotesCut = uid != oldest.uid, context.zone)
                         } catch (e: SocketTimeoutException) {
                             // Out of time mid-answer: the connection's spent, but what's read stands.
                             cut = true
@@ -558,10 +574,12 @@ class GmailSource(private val secrets: SecretStore) : TaskSource {
                         }
                         texts += envelopes.getValue(uid) to text
                         attachments += attached
+                        invites += invite
                     }
                     read[conversation.version] = GmailThreads.Body(
                         GmailThreads.conversationText(texts, context.zone, notRead = messages.size - reading.size),
                         attachments = GmailThreads.attachments(attachments),
+                        invite = GmailThreads.invite(invites),
                     )
                 }
                 val bodies = GmailThreads.withRead(stored, read)
@@ -579,14 +597,24 @@ class GmailSource(private val secrets: SecretStore) : TaskSource {
     /**
      * The message's readable text, from its first plain (else HTML) part, cut to
      * [GmailThreads.MAX_BODY_CHARS]: empty if it has none, null if it couldn't be read (gone from
-     * the mailbox since it was listed); and its attachments, from the same structure (DX-01). The
+     * the mailbox since it was listed); its attachments, from the same structure (DX-01); and its
+     * calendar invite, where it has one (DX-02), its times read in [zone] where they name none. The
      * part is fetched whole, up to [MAX_PART_BYTES]: HTML's text can come after 50 KB of markup and
      * styles (Warwick's Open Day email's did).
      */
-    private fun textAndAttachments(imap: ImapClient, message: MailMessage, quotesCut: Boolean): Pair<String?, List<Mime.Attachment>> {
-        val structure = imap.uidFetch(listOf(message.uid), "UID BODYSTRUCTURE").firstOrNull()?.get("BODYSTRUCTURE") ?: return null to emptyList()
+    private fun textAndAttachments(imap: ImapClient, message: MailMessage, quotesCut: Boolean, zone: ZoneId): Triple<String?, List<Mime.Attachment>, Invite?> {
+        val structure = imap.uidFetch(listOf(message.uid), "UID BODYSTRUCTURE").firstOrNull()?.get("BODYSTRUCTURE") ?: return Triple(null, emptyList(), null)
         val attachments = Mime.attachments(structure)
-        return text(imap, message, structure, quotesCut) to attachments
+        val text = text(imap, message, structure, quotesCut)
+        val invite = if (text == null) null else Mime.invitePart(structure)?.let { invite(imap, message, it, zone) }
+        return Triple(text, attachments, invite)
+    }
+
+    /** [part], a message's calendar, as its invite: a small part, fetched as a text is. */
+    private fun invite(imap: ImapClient, message: MailMessage, part: Mime.TextPart, zone: ZoneId): Invite? {
+        val response = imap.uidFetch(listOf(message.uid), "UID BODY.PEEK[${part.section}]<0.$MAX_PART_BYTES>").firstOrNull() ?: return null
+        val body = response.entries.firstOrNull { it.key.startsWith("BODY[") }?.value as? ImapValue.Str ?: return null
+        return Mime.invite(Mime.decode(body.bytes, part), zone)
     }
 
     private fun text(imap: ImapClient, message: MailMessage, structure: ImapValue, quotesCut: Boolean): String? {

@@ -273,6 +273,13 @@ class ChatTest {
         val text = ChatPrompts.plan(laid, LONDON)
         assertTrue("\nNow: 22:30–23:04 Bridge and Balances Beam Q's: part 1 of 3 (34 min); then " in text, text)
         assertFalse("Next to do" in text, text)
+        // Today's slots each say whether they've gone by, are under way or are to come (AI-13).
+        assertTrue("Today's slots (the times its pieces are laid at):\n- 22:30–23:04 Bridge and Balances Beam Q's: part 1 of 3 (34 min) [now]" in text, text)
+        val earlier = slot.copy(start = now - 90 * 60_000L, end = now - 60 * 60_000L)
+        val later = slot.copy(start = now + 30 * 60_000L, end = now + 64 * 60_000L)
+        val day = ChatPrompts.plan(plan.copy(buckets = plan.buckets.mapIndexed { i, b -> if (i == 0) b.copy(slots = listOf(earlier, later)) else b }), LONDON)
+        assertTrue("[past]" in day && "[ahead]" in day, day)
+        assertTrue("a deadline later today is still ahead" in ChatPrompts.system())
     }
 
     @Test
@@ -386,5 +393,30 @@ class ChatTest {
         val turns = ChatPrompts.turns(messages, "", mapOf(bridge.id to bridge), LONDON)
         assertEquals(listOf(Speaker.You, Speaker.Claude, Speaker.You), turns.map { it.first })
         assertEquals("Moved it to 19:30.\n\nTen minutes into the physics: starting?", turns[1].second)
+    }
+
+    @Test
+    fun `a step said done is ticked, a task shown is a card, and what can't be is said`() {
+        val essay = com.thomaswcode.decrastination.core.OwnTasks.create(
+            com.thomaswcode.decrastination.core.OwnTask(title = "Essay", steps = listOf(com.thomaswcode.decrastination.core.OwnStep("Plan", 20), com.thomaswcode.decrastination.core.OwnStep("Write", 40))),
+            "e", now,
+        )
+        val reading = ChatAnswers.parse(
+            """{"reply":"Ticked the plan.","newTasks":[],"changes":[],"memories":[],"suggestedReplies":[],"actions":[{"type":"tickStep","taskId":"${essay.id}","stepIndex":0},{"type":"open","taskId":"${essay.id}","stepIndex":-1},{"type":"tickStep","taskId":"${essay.id}","stepIndex":7},{"type":"open","taskId":"nope","stepIndex":-1}]}""",
+            listOf(essay), emptyList(), com.thomaswcode.decrastination.core.About(), now, LONDON,
+        )!!
+        assertEquals(
+            listOf(
+                com.thomaswcode.decrastination.core.ChatAction(com.thomaswcode.decrastination.core.ChatAction.Type.TickStep, essay.id, 0),
+                com.thomaswcode.decrastination.core.ChatAction(com.thomaswcode.decrastination.core.ChatAction.Type.Open, essay.id),
+            ),
+            reading.actions,
+        )
+        assertEquals(2, reading.leftOut.size)
+        val cards = ChatAnswers.cards(reading, mapOf(essay.id to essay), java.time.LocalDate.parse("2026-10-12"), LONDON)
+        assertEquals(listOf(essay.id), cards.mapNotNull { it.open })
+        // Its steps are listed by their place, for that.
+        val context = ChatPrompts.context(listOf(essay), emptyList(), emptyList(), now, LONDON)
+        assertTrue("    step 0: Plan (20 min)\n    step 1: Write (40 min)" in context, context)
     }
 }

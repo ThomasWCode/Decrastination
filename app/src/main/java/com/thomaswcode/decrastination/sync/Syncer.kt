@@ -1,5 +1,6 @@
 package com.thomaswcode.decrastination.sync
 
+import com.thomaswcode.decrastination.sources.anki.AnkiRules
 import com.thomaswcode.decrastination.core.Merge
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
@@ -129,13 +130,24 @@ class Syncer(
                 added = merged.added,
                 missed = merged.missed,
             )
+            // A deck topic an assignment names, come or changed (DX-10): its reading is out of date, so
+            // it's read again with the decks as they are, and its vocabulary isn't planned twice.
+            val topics = read.deckTopics?.takeIf { it != current.deckTopics }
             current.copy(
-                tasks = merged.tasks,
+                tasks = if (topics == null) {
+                    merged.tasks
+                } else {
+                    merged.tasks.map { t ->
+                        val named = t.source == Source.Teams && t.isOpen && t.enrichment != null && AnkiRules.describedSections(t, current.deckTopics) != AnkiRules.describedSections(t, topics)
+                        if (named) t.copy(enrichment = t.enrichment?.copy(inputHash = "")) else t
+                    }
+                },
                 // Their free time and record are given after; saved here, they can't be lost.
                 // An email that's just an email, or a task you've said isn't one, finished isn't work done: nothing to reward.
                 unrewarded = current.unrewarded + merged.completed.filterNot { it.hidden },
                 sources = current.sources + (source.source to SourceStatus(lastSuccessAt = now, lastAttemptAt = startedAt, dataAsOf = read.dataAsOf, note = read.note)),
                 ankiDay = read.ankiDay ?: current.ankiDay,
+                deckTopics = read.deckTopics ?: current.deckTopics,
                 timetable = read.timetable ?: current.timetable,
             )
         }

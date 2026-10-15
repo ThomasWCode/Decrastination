@@ -50,4 +50,13 @@ class FormatTest {
         assertEquals("1 h planned, 4 h 15 min free", Format.load(60, 315))
         assertEquals("7 h planned, 1 h 45 min over", Format.load(420, 315))
     }
+
+    @Test
+    fun `an invite says its day, its times and its place`() {
+        val invite = com.thomaswcode.decrastination.core.Invite("Open evening", Fixtures.at("2026-10-16T18:00"), Fixtures.at("2026-10-16T20:00"), "Main Hall")
+        assertEquals("Fri 16 Oct 18:00–20:00, Main Hall", Format.invite(invite, LONDON))
+        assertEquals("Fri 16 Oct 18:00 to Sat 17 Oct 10:00", Format.invite(invite.copy(end = Fixtures.at("2026-10-17T10:00"), location = null), LONDON))
+        assertEquals("Mon 26 Oct, all day", Format.invite(invite.copy(start = Fixtures.at("2026-10-26T00:00"), end = Fixtures.at("2026-10-27T00:00"), location = null), LONDON))
+        assertEquals("Mon 26 Oct to Fri 30 Oct", Format.invite(invite.copy(start = Fixtures.at("2026-10-26T00:00"), end = Fixtures.at("2026-10-31T00:00"), location = null), LONDON))
+    }
 }

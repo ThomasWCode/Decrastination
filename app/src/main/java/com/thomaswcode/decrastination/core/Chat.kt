@@ -39,6 +39,8 @@ data class ChatMessage(
     val stuck: Boolean = false,
     /** Claude's: what it remembered or forgot with it (AI-21), a line each. */
     val remembered: List<String> = emptyList(),
+    /** Claude's: what it did with it beyond its cards (AI-14: a step ticked), a line each. */
+    val done: List<String> = emptyList(),
     /** Felix's, put here from a notification he wrote (AI-24): why he wrote it ([com.thomaswcode.decrastination.enrich.FelixPrompts.Reason]). */
     val reason: String? = null,
     /** Claude's: up to three short replies you might send next, in your words (AI-24, UI-06). */
@@ -70,7 +72,15 @@ data class Proposal(
     val before: Map<String, OwnTask> = emptyMap(),
     /** Why applying it didn't work, if it didn't. */
     val note: String? = null,
+    /** A task to show you (AI-14: the chat's open), by id: a card with its Open. */
+    val open: String? = null,
 )
+
+/** Something the chat does for you beyond a change (AI-14): a step of a task ticked, or a task shown. */
+@Serializable
+data class ChatAction(val type: Type, val taskId: String, val stepIndex: Int? = null) {
+    enum class Type { TickStep, Open }
+}
 
 @Serializable
 enum class ProposalState { Proposed, Applied, Discarded }

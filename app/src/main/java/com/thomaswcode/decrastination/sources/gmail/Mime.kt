@@ -1,8 +1,17 @@
 package com.thomaswcode.decrastination.sources.gmail
 
+import com.thomaswcode.decrastination.core.Invite
 import kotlinx.serialization.Serializable
 import java.io.ByteArrayOutputStream
 import java.nio.charset.Charset
+import java.time.DayOfWeek
+import java.time.Duration
+import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.ZoneId
+import java.time.ZoneOffset
+import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
 import java.util.Base64
 import java.util.Locale
 
@@ -110,6 +119,240 @@ object Mime {
         // An attached email with no file name goes by its own subject, from its envelope.
         val subject = if (type == "message" && subtype == "rfc822") items.getOrNull(7)?.list?.getOrNull(1)?.string?.let(::decodeHeader)?.trim()?.takeIf { it.isNotEmpty() } else null
         out += Attachment(name ?: subject ?: if (type == "message") "an attached email" else "unnamed $type/$subtype", "$type/$subtype", size)
+    }
+
+    /**
+     * Where a message's calendar invite is (DX-02), from its BODYSTRUCTURE, walked as [textPart]
+     * walks it: its first `text/calendar` part, or one named `*.ics` (`application/ics`), attached
+     * or not. An attached email's own isn't this message's.
+     */
+    fun invitePart(structure: ImapValue): TextPart? = findInvite(structure, "")
+
+    private fun findInvite(node: ImapValue, prefix: String): TextPart? {
+        val items = node.list
+        if (items.isEmpty()) return null
+        if (items.first() is ImapValue.Items) {
+            items.takeWhile { it is ImapValue.Items }.forEachIndexed { i, child ->
+                findInvite(child, if (prefix.isEmpty()) "${i + 1}" else "$prefix.${i + 1}")?.let { return it }
+            }
+            return null
+        }
+        val type = items.getOrNull(0)?.string?.lowercase() ?: return null
+        val subtype = items.getOrNull(1)?.string?.lowercase() ?: return null
+        if (type == "message") return null
+        val disposition = items.getOrNull(if (type == "text") 9 else 8)?.list.orEmpty()
+        val name = parameter(disposition.getOrNull(1), "filename") ?: parameter(items.getOrNull(2), "name")
+        val calendar = (type == "text" && subtype == "calendar") || subtype == "ics" || name?.lowercase()?.endsWith(".ics") == true
+        if (!calendar) return null
+        val encoding = items.getOrNull(5)?.string?.lowercase() ?: "7bit"
+        return TextPart(prefix.ifEmpty { "1" }, "calendar", encoding, parameter(items.getOrNull(2), "charset"), items.getOrNull(6)?.string?.toLongOrNull())
+    }
+
+    /**
+     * [text], a calendar (RFC 5545), as the invite its first event is (DX-02): its `SUMMARY`, its
+     * `DTSTART`, its `DTEND` (else its `DURATION`; else an hour, or a day for a date alone) and its
+     * `LOCATION`, an alarm's lines inside it passed over; recurrence ignored, so its first time.
+     * Folded lines (a line break, then a space or a tab) are joined first. [Invite.cancelled] where
+     * the calendar or the event calls it off (`METHOD:CANCEL`, `STATUS:CANCELLED`). Null with no
+     * event, none with a start, or a start in a zone that can't be told ([time]).
+     */
+    fun invite(text: String, zone: ZoneId): Invite? {
+        val lines = text.replace("\r\n", "\n").replace("\n ", "").replace("\n\t", "").split('\n')
+        val zones = zones(lines)
+        var method: String? = null
+        var inEvent = false
+        var nested = 0
+        val props = HashMap<String, Property>()
+        for (line in lines) {
+            val p = property(line) ?: continue
+            val value = p.value.trim().uppercase(Locale.ROOT)
+            when {
+                !inEvent && p.name == "BEGIN" && value == "VEVENT" -> inEvent = true
+                !inEvent && p.name == "METHOD" -> method = value
+                !inEvent -> Unit
+                p.name == "BEGIN" -> nested++
+                p.name == "END" && nested > 0 -> nested--
+                p.name == "END" -> break
+                nested == 0 -> props.putIfAbsent(p.name, p)
+            }
+        }
+        val first = props["DTSTART"] ?: return null
+        val start = time(first, zone, zones) ?: return null
+        val end = props["DTEND"]?.let { time(it, zone, zones) }?.takeIf { it.isAfter(start) }
+            // A duration of days or weeks (no time in it) is that many days on the calendar, whatever the clocks do.
+            ?: props["DURATION"]?.let { d -> runCatching { d.value.trim().let { v -> if ('T' in v) start.plus(Duration.parse(v)) else start.plus(java.time.Period.parse(v)) } }.getOrNull() }?.takeIf { it.isAfter(start) }
+            ?: if (dateOnly(first)) start.plusDays(1) else start.plusHours(1)
+        return Invite(
+            summary = props["SUMMARY"]?.value?.let(::unescaped).orEmpty(),
+            start = start.toInstant().toEpochMilli(),
+            end = end.toInstant().toEpochMilli(),
+            location = props["LOCATION"]?.value?.let(::unescaped)?.takeIf { it.isNotEmpty() },
+            cancelled = method == "CANCEL" || props["STATUS"]?.value?.trim().equals("CANCELLED", ignoreCase = true),
+            // A date alone keeps its days, so it's all-day wherever the phone is later.
+            days = if (dateOnly(first)) start.toLocalDate() to end.toLocalDate() else null,
+        )
+    }
+
+    /** A calendar's content line (RFC 5545 §3.1): its name, its parameters (a quoted one as it's meant, `TZID="(UTC+00:00) Dublin, …"`), its value. */
+    private class Property(val name: String, val params: Map<String, String>, val value: String)
+
+    private fun property(line: String): Property? {
+        var quoted = false
+        var from = 0
+        val pieces = mutableListOf<String>()
+        for (i in line.indices) {
+            when (line[i]) {
+                '"' -> quoted = !quoted
+                ';' -> if (!quoted) {
+                    pieces += line.substring(from, i)
+                    from = i + 1
+                }
+                ':' -> if (!quoted) {
+                    pieces += line.substring(from, i)
+                    val params = pieces.drop(1).mapNotNull { p -> p.split('=', limit = 2).takeIf { it.size == 2 }?.let { (k, v) -> k.trim().uppercase(Locale.ROOT) to v.trim().removeSurrounding("\"") } }.toMap()
+                    return Property(pieces.first().trim().uppercase(Locale.ROOT), params, line.substring(i + 1))
+                }
+            }
+        }
+        return null
+    }
+
+    private val ICS_TIME = DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss", Locale.ROOT)
+
+    private fun dateOnly(p: Property): Boolean = p.params["VALUE"].equals("DATE", ignoreCase = true) || p.value.trim().length == 8
+
+    /**
+     * A `DTSTART` or `DTEND` (RFC 5545 §3.3.5): UTC's `…Z`; a floating time (no `TZID`) in [zone],
+     * the student's own; a date alone, its midnight in [zone]; else a local time in its `TZID`: a
+     * zone Java knows, a Windows name for one (Outlook's `Eastern Standard Time`), or the calendar's
+     * own `VTIMEZONE` of that name ([zones]). Null for a zone none of them tells, rather than a time
+     * in the wrong one.
+     */
+    private fun time(p: Property, zone: ZoneId, zones: Map<String, Zone>): ZonedDateTime? {
+        val v = p.value.trim()
+        return runCatching {
+            when {
+                dateOnly(p) -> LocalDate.parse(v, DateTimeFormatter.BASIC_ISO_DATE).atStartOfDay(zone)
+                v.endsWith("Z", ignoreCase = true) -> LocalDateTime.parse(v.dropLast(1), ICS_TIME).atZone(ZoneOffset.UTC)
+                else -> {
+                    val local = LocalDateTime.parse(v, ICS_TIME)
+                    val tzid = p.params["TZID"]?.trim()?.takeIf { it.isNotEmpty() }
+                    when {
+                        tzid == null -> local.atZone(zone)
+                        else -> zoneNamed(tzid)?.let { local.atZone(it) } ?: zones[tzid]?.offsetAt(local)?.let { local.atOffset(it).toZonedDateTime() }
+                    }
+                }
+            }
+        }.getOrNull()
+    }
+
+    /** [tzid] as Java knows it (an IANA name, perhaps with a leading slash), or Windows' name for one. */
+    private fun zoneNamed(tzid: String): ZoneId? =
+        runCatching { ZoneId.of(tzid.removePrefix("/")) }.getOrNull() ?: WINDOWS_ZONES[tzid]?.let { ZoneId.of(it) }
+
+    /** Windows' names for zones, as Outlook writes them in `TZID`, and the zones they are (CLDR's windowsZones, the common ones). */
+    private val WINDOWS_ZONES = mapOf(
+        "GMT Standard Time" to "Europe/London", "Greenwich Standard Time" to "Atlantic/Reykjavik", "UTC" to "UTC", "Coordinated Universal Time" to "UTC",
+        "W. Europe Standard Time" to "Europe/Berlin", "Romance Standard Time" to "Europe/Paris", "Central Europe Standard Time" to "Europe/Budapest",
+        "Central European Standard Time" to "Europe/Warsaw", "E. Europe Standard Time" to "Europe/Chisinau", "FLE Standard Time" to "Europe/Kiev",
+        "GTB Standard Time" to "Europe/Bucharest", "Russian Standard Time" to "Europe/Moscow", "Turkey Standard Time" to "Europe/Istanbul",
+        "Israel Standard Time" to "Asia/Jerusalem", "Egypt Standard Time" to "Africa/Cairo", "South Africa Standard Time" to "Africa/Johannesburg",
+        "W. Central Africa Standard Time" to "Africa/Lagos", "Morocco Standard Time" to "Africa/Casablanca", "Arabian Standard Time" to "Asia/Dubai",
+        "Pakistan Standard Time" to "Asia/Karachi", "India Standard Time" to "Asia/Kolkata", "Bangladesh Standard Time" to "Asia/Dhaka",
+        "SE Asia Standard Time" to "Asia/Bangkok", "China Standard Time" to "Asia/Shanghai", "Singapore Standard Time" to "Asia/Singapore",
+        "Tokyo Standard Time" to "Asia/Tokyo", "Korea Standard Time" to "Asia/Seoul", "W. Australia Standard Time" to "Australia/Perth",
+        "Cen. Australia Standard Time" to "Australia/Adelaide", "E. Australia Standard Time" to "Australia/Brisbane", "AUS Eastern Standard Time" to "Australia/Sydney",
+        "New Zealand Standard Time" to "Pacific/Auckland", "Eastern Standard Time" to "America/New_York", "Central Standard Time" to "America/Chicago",
+        "Mountain Standard Time" to "America/Denver", "US Mountain Standard Time" to "America/Phoenix", "Pacific Standard Time" to "America/Los_Angeles",
+        "Alaskan Standard Time" to "America/Anchorage", "Hawaiian Standard Time" to "Pacific/Honolulu", "Atlantic Standard Time" to "America/Halifax",
+        "Canada Central Standard Time" to "America/Regina", "SA Pacific Standard Time" to "America/Bogota", "E. South America Standard Time" to "America/Sao_Paulo",
+        "Argentina Standard Time" to "America/Buenos_Aires",
+    )
+
+    /**
+     * A zone as a calendar's own `VTIMEZONE` gives it: its parts (`STANDARD`, `DAYLIGHT`), each an
+     * offset from when it starts, once (`DTSTART`) or every year (`RRULE`'s month and day: `BYMONTH=3;
+     * BYDAY=-1SU`, the last Sunday of March).
+     */
+    private class Zone(val parts: List<Part>) {
+        class Part(val start: LocalDateTime, val offset: ZoneOffset, val month: Int?, val ordinal: Int?, val day: DayOfWeek?) {
+            /** When it last began, by [local] (that year's, or the year before's): null if not yet. */
+            fun lastStart(local: LocalDateTime): LocalDateTime? {
+                if (month == null || ordinal == null || day == null) return start.takeIf { it <= local }
+                return listOf(local.year, local.year - 1).asSequence()
+                    .map { y -> LocalDate.of(y, month, 1).with(java.time.temporal.TemporalAdjusters.dayOfWeekInMonth(ordinal, day)).atTime(start.toLocalTime()) }
+                    .firstOrNull { it <= local && it >= start }
+            }
+        }
+
+        /** The offset in force at [local]: the part that began last before it, else the earliest. */
+        fun offsetAt(local: LocalDateTime): ZoneOffset? =
+            parts.mapNotNull { p -> p.lastStart(local)?.let { it to p.offset } }.maxByOrNull { it.first }?.second ?: parts.minByOrNull { it.start }?.offset
+    }
+
+    /** Each `VTIMEZONE` in [lines], by its `TZID`. */
+    private fun zones(lines: List<String>): Map<String, Zone> {
+        val out = HashMap<String, Zone>()
+        var tzid: String? = null
+        var parts: MutableList<Zone.Part>? = null
+        var part: HashMap<String, String>? = null
+        for (line in lines) {
+            val p = property(line) ?: continue
+            val value = p.value.trim()
+            val upper = value.uppercase(Locale.ROOT)
+            when {
+                p.name == "BEGIN" && upper == "VTIMEZONE" -> {
+                    tzid = null
+                    parts = mutableListOf()
+                }
+                parts == null -> Unit
+                p.name == "BEGIN" && (upper == "STANDARD" || upper == "DAYLIGHT") -> part = HashMap()
+                p.name == "END" && (upper == "STANDARD" || upper == "DAYLIGHT") -> {
+                    part?.let(::zonePart)?.let { parts.add(it) }
+                    part = null
+                }
+                part != null -> part.putIfAbsent(p.name, value)
+                p.name == "TZID" -> tzid = value
+                p.name == "END" && upper == "VTIMEZONE" -> {
+                    tzid?.let { id -> parts.takeIf { it.isNotEmpty() }?.let { out[id] = Zone(it) } }
+                    parts = null
+                }
+            }
+        }
+        return out
+    }
+
+    private val BYDAY = Regex("""^([+-]?\d)?(MO|TU|WE|TH|FR|SA|SU)$""")
+
+    /** A `STANDARD` or `DAYLIGHT` part's start, offset and yearly rule; null where its start or offset can't be read. */
+    private fun zonePart(fields: Map<String, String>): Zone.Part? {
+        val start = fields["DTSTART"]?.let { runCatching { LocalDateTime.parse(it.removeSuffix("Z"), ICS_TIME) }.getOrNull() } ?: return null
+        val offset = fields["TZOFFSETTO"]?.let { o -> runCatching { ZoneOffset.of(if (o.length == 5) o.substring(0, 3) + ":" + o.substring(3) else o) }.getOrNull() } ?: return null
+        val rule = fields["RRULE"]?.split(';')?.mapNotNull { it.split('=', limit = 2).takeIf { kv -> kv.size == 2 }?.let { (k, v) -> k.uppercase(Locale.ROOT) to v.uppercase(Locale.ROOT) } }?.toMap().orEmpty()
+        val month = rule["BYMONTH"]?.toIntOrNull()?.takeIf { it in 1..12 }
+        val byDay = rule["BYDAY"]?.let { BYDAY.find(it) }
+        val ordinal = byDay?.let { it.groupValues[1].ifEmpty { "1" }.toIntOrNull() }
+        val day = byDay?.groupValues?.get(2)?.let { d -> DayOfWeek.entries.firstOrNull { it.name.startsWith(d) } }
+        val yearly = rule["FREQ"] == "YEARLY" && month != null && ordinal != null && day != null
+        return Zone.Part(start, offset, month.takeIf { yearly }, ordinal.takeIf { yearly }, day.takeIf { yearly })
+    }
+
+    /** A text value with its escapes undone (RFC 5545 §3.3.11): `\,`, `\;` and `\\` as themselves, `\n` a space here. */
+    private fun unescaped(value: String): String {
+        val out = StringBuilder()
+        var i = 0
+        while (i < value.length) {
+            val c = value[i]
+            if (c == '\\' && i + 1 < value.length) {
+                val next = value[i + 1]
+                out.append(if (next == 'n' || next == 'N') ' ' else next)
+                i += 2
+            } else {
+                out.append(c)
+                i++
+            }
+        }
+        return out.toString().replace(Regex(" {2,}"), " ").trim()
     }
 
     /**

@@ -12,7 +12,8 @@ package com.thomaswcode.decrastination.core
  *   can say it's done.
  * - A done task the source lists again is open again: a hand-in undone, an email starred again.
  *   A derived task once done stays done, even if the counts waver (Anki's learning cards come
- *   back within minutes).
+ *   back within minutes); so does one done by its tick ([TaskItem.tickDone]: feedback you've read,
+ *   which Teams goes on listing).
  * - Something the source already lists as finished, never seen open, is not added: it was done
  *   outside the plan and earns nothing.
  *
@@ -108,7 +109,7 @@ object Merge {
                 // Reported as it stood before it finished (see completion()).
                 old.status == Status.Open && f.done -> updated.copy(status = Status.Done, doneAt = now).also { completed += completion(old, it) }
                 old.status == Status.Open -> updated
-                old.derived && old.status == Status.Done -> updated.copy(status = Status.Done)
+                (old.derived || old.tickDone) && old.status == Status.Done -> updated.copy(status = Status.Done)
                 f.done -> updated.copy(status = Status.Done)
                 // A new round of it: the last round's minutes count towards neither this one's
                 // completion record nor what's left of it.
@@ -130,13 +131,16 @@ object Merge {
             fresh[old.id]?.let { return@mapNotNull it }
             if (old.source != source) return@mapNotNull old
             when {
-                old.status != Status.Open -> old.takeIf { now - (old.doneAt ?: old.lastSeenAt) < KEEP_FINISHED_MS }
+                // Done, kept a fortnight; and the same work as one still open for as long as that is,
+                // as its minutes worked count for it (DX-15).
+                old.status != Status.Open -> old.takeIf { now - (old.doneAt ?: old.lastSeenAt) < KEEP_FINISHED_MS || old.userSameAs?.let { byId[it]?.isOpen } == true }
                 old.derived -> old.copy(status = Status.Missed).also { missed += it }
                 else -> old.copy(status = Status.Done, doneAt = now).also { completed += completion(old, it) }
             }
         } + fresh.values.filter { it.id !in byId }
 
-        return Result(result, completed, reopened, added, missed)
+        // A link to the same work let go with the task it was to (DX-15).
+        return Result(Duplicates.linksPresent(result), completed, reopened, added, missed)
     }
 
     /**

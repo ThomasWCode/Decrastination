@@ -507,4 +507,41 @@ class InstructionsTest {
         assertEquals(emptyList(), Instructions.movedSlots(listOf(Change(ChangeType.OnDay, taskId = "teams:t", date = "2026-10-12")), plan))
         assertEquals(slots.take(2), Instructions.movedSlots(listOf(Change(ChangeType.StartFrom, taskId = "teams:t", time = Fixtures.at("2026-10-12T18:00"))), plan))
     }
+
+    @Test
+    fun `steps for a task of your own are read, said and made on it, its ticks kept by name`() {
+        val own = OwnTasks.create(OwnTask(title = "Essay", steps = listOf(OwnStep("Plan", 20), OwnStep("Write", 40))), "e", Fixtures.at("2026-10-12T17:00"))
+        val ticked = own.copy(subSteps = own.subSteps.map { if (it.title == "Plan") it.copy(done = true) else it })
+        val given = com.thomaswcode.decrastination.enrich.InstructionAnswers.Given(
+            "Steps", taskId = own.id,
+            steps = listOf(
+                com.thomaswcode.decrastination.enrich.InstructionAnswers.GivenStep("Plan", 20),
+                com.thomaswcode.decrastination.enrich.InstructionAnswers.GivenStep("Draft", 30, dueDate = "2026-10-14"),
+                com.thomaswcode.decrastination.enrich.InstructionAnswers.GivenStep("Polish", 10, where = "home"),
+            ),
+        )
+        val change = com.thomaswcode.decrastination.enrich.InstructionAnswers.change(given, mapOf(own.id to ticked), emptyMap(), Fixtures.at("2026-10-12T17:00"), Fixtures.LONDON)!!
+        assertEquals(listOf("Plan", "Draft", "Polish"), change.steps!!.map { it.title })
+        assertEquals("“Essay” in steps: Plan (20 min), Draft (30 min), Polish (10 min)", Instructions.describe(change, mapOf(own.id to ticked), Fixtures.LONDON))
+        val draft = OwnTasks.draftWith(ticked, change)!!
+        val made = OwnTasks.edited(ticked, draft)
+        assertEquals(listOf("Plan" to true, "Draft" to false, "Polish" to false), made.subSteps.map { it.title to it.done })
+        assertEquals(60, made.subSteps.sumOf { it.minutes })
+        // Not for a source's task.
+        val teams = ticked.copy(id = "teams:x", source = Source.Teams)
+        assertNull(com.thomaswcode.decrastination.enrich.InstructionAnswers.change(given.copy(taskId = teams.id), mapOf(teams.id to teams), emptyMap(), Fixtures.at("2026-10-12T17:00"), Fixtures.LONDON))
+        assertEquals("only a task of the student's own has its steps changed", com.thomaswcode.decrastination.enrich.InstructionAnswers.problem(given.copy(taskId = teams.id), mapOf(teams.id to teams), emptyMap()))
+        // Its steps come to its 60 minutes; to 70 only with a Minutes change saying so.
+        val longer = change.copy(steps = change.steps!!.map { if (it.title == "Polish") it.copy(minutes = 20) else it })
+        val tasks = mapOf(own.id to ticked)
+        assertNull(com.thomaswcode.decrastination.enrich.InstructionAnswers.stepsProblem(listOf(change), tasks))
+        assertEquals("the steps for “Essay” add up to 70 minutes, not its 60, and nothing says its total changes", com.thomaswcode.decrastination.enrich.InstructionAnswers.stepsProblem(listOf(longer), tasks))
+        assertNull(com.thomaswcode.decrastination.enrich.InstructionAnswers.stepsProblem(listOf(longer, Change(ChangeType.Minutes, taskId = own.id, minutes = 70)), tasks))
+        // A step's date years ahead, or after the task's own: not taken.
+        val dated = ticked.copy(dueAt = Fixtures.at("2026-10-15T17:00"))
+        fun withDue(due: String) = given.copy(steps = given.steps.map { if (it.title == "Draft") it.copy(dueDate = due) else it })
+        assertNull(com.thomaswcode.decrastination.enrich.InstructionAnswers.change(withDue("2029-01-01"), mapOf(own.id to dated), emptyMap(), Fixtures.at("2026-10-12T17:00"), Fixtures.LONDON))
+        assertNull(com.thomaswcode.decrastination.enrich.InstructionAnswers.change(withDue("2026-10-16"), mapOf(own.id to dated), emptyMap(), Fixtures.at("2026-10-12T17:00"), Fixtures.LONDON))
+        assertTrue(com.thomaswcode.decrastination.enrich.InstructionAnswers.change(withDue("2026-10-15"), mapOf(own.id to dated), emptyMap(), Fixtures.at("2026-10-12T17:00"), Fixtures.LONDON) != null)
+    }
 }

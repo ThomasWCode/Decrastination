@@ -226,7 +226,7 @@ class AppGraph private constructor(context: Context) {
         val tasks = state.tasks.map { task ->
             val o = overrides[task.id] ?: TaskOverrides.NONE
             if (o == task.overrides()) task else task.withOverrides(o)
-        }
+        }.let(com.thomaswcode.decrastination.core.Duplicates::linksPresent).let(com.thomaswcode.decrastination.core.Duplicates::credited)
         // Each day's windows, from the timetable's study periods and the school calendar (PL-15).
         val days = generateSequence(today) { it.plusDays(1) }.takeWhile { it <= reach }.toList()
         val calendar = school.value
@@ -314,7 +314,7 @@ class AppGraph private constructor(context: Context) {
         val byId = tasks.value.tasks.associateBy { it.id }
         val before = runtime.value.calendarWritten
         val written = withContext(Dispatchers.IO) {
-            SlotCalendar.write(app, calendarId, made, zone, before) { move ->
+            SlotCalendar.write(app, calendarId, made, zone, before, runtime.value.microPlans) { move ->
                 val task = move.desired.taskId?.let(byId::get)
                 when {
                     task == null -> "its task is no longer there"
@@ -588,6 +588,7 @@ class AppGraph private constructor(context: Context) {
             if (tasks.value.tasks.any { Enrichments.jobFor(it) != null && Enrichments.stale(it, modelOn, RuleEnricher.BY, modelOff) }) EnrichWorker.enqueue(app)
         }
         scope.launch { CalendarTime.refresh(app) }
+        scope.launch(Dispatchers.IO) { runCatching { sweepPhotos() } }
         // A change in the calendar: read again, and the plan made again, so a slot you've moved or
         // deleted in the calendar written to (which isn't read) is seen (NF-07). The app's own write
         // brings one replan more, which writes nothing.
@@ -795,6 +796,76 @@ class AppGraph private constructor(context: Context) {
     /** The model's weekly review, while Claude is switched on and has its key; else null. */
     fun modelReviewer(): ClaudeReviewer? = claudeKey()?.let { ClaudeReviewer(it, endpoint(), profile = profile()) }
 
+    /** The photo-to-task reader (NF-01), while Claude is switched on and has its key; else null. */
+    fun photoTaskReader(): com.thomaswcode.decrastination.enrich.PhotoTaskReader? = claudeKey()?.let { com.thomaswcode.decrastination.enrich.PhotoTaskReader(it, endpoint(), profile = profile()) }
+
+    /** Where tasks' photos are kept (AI-23): the app's own files, one a task. */
+    private val photos: File get() = File(app.filesDir, "photos")
+
+    /**
+     * [jpeg], a photo of [taskId]'s work (AI-23), kept with it (in place of one before) and read
+     * with it: its reading redone now, where it's one the model reads.
+     */
+    suspend fun attachPhoto(taskId: String, jpeg: ByteArray) {
+        val file = File(photos, taskId.replace(Regex("[^A-Za-z0-9._-]"), "_") + ".jpg")
+        withContext(Dispatchers.IO) {
+            photos.mkdirs()
+            file.writeBytes(jpeg)
+        }
+        val hash = java.security.MessageDigest.getInstance("SHA-256").digest(jpeg).take(8).joinToString("") { "%02x".format(it) }
+        tasks.update { s -> s.copy(tasks = s.tasks.map { if (it.id == taskId) it.copy(photo = com.thomaswcode.decrastination.core.TaskPhoto(file.path, hash, clock.now())) else it }) }
+        scope.launch { runCatching { enrichNow(only = taskId) }.onFailure { Log.w(TAG, "Reading a task with its photo failed", it) } }
+    }
+
+    /** [jpeg] read into tasks of your own to check (NF-01): the reading, or why there's none. */
+    suspend fun readPhotoTasks(jpeg: ByteArray): Pair<com.thomaswcode.decrastination.enrich.PhotoTasks.Reading?, String?> {
+        val reader = photoTaskReader() ?: return null to "Claude is off: add it with New task."
+        val now = clock.now()
+        return when (val called = callModel(interactive = true, cost = { r: com.thomaswcode.decrastination.enrich.PhotoTaskReader.Result -> r.costUsd to r.refused }) { reader.read(jpeg, now, clock.zone()) }) {
+            is Called.Held -> null to "Claude can't be asked now: add it with New task."
+            is Called.Failed -> null to "The photo couldn't be read (${called.error.message ?: "no connection"})."
+            is Called.Answered -> called.value.reading?.let { it to null } ?: (null to if (called.value.refused) "Claude declined to read it." else "Claude couldn't read the photo: try a clearer one.")
+        }
+    }
+
+    /**
+     * A photo of homework read into tasks (NF-01): held here, not by a screen, so turning the phone or
+     * leaving Work while the paid call runs loses nothing. [busy] while it's read; then what it read,
+     * with the photo for the tasks made from it, or why not.
+     */
+    class PhotoReading(val busy: Boolean, val reading: com.thomaswcode.decrastination.enrich.PhotoTasks.Reading? = null, val jpeg: ByteArray? = null, val why: String? = null)
+
+    /** The photo of homework being read, or read and not yet seen through (NF-01). */
+    val photoReading = kotlinx.coroutines.flow.MutableStateFlow<PhotoReading?>(null)
+
+    /** [file], a photo of homework just taken, read into tasks in the app's scope (NF-01), [photoReading] saying how it goes; the file let go. */
+    fun readPhotoOf(file: java.io.File) {
+        if (photoReading.value?.busy == true) return
+        photoReading.value = PhotoReading(busy = true)
+        scope.launch {
+            val done = runCatching {
+                val jpeg = withContext(Dispatchers.IO) { com.thomaswcode.decrastination.block.PhotoChecks.shrink(file) }
+                if (jpeg == null) {
+                    PhotoReading(busy = false, why = "Couldn't read the photo.")
+                } else {
+                    val (got, why) = readPhotoTasks(jpeg)
+                    PhotoReading(busy = false, reading = got, jpeg = jpeg.takeIf { got != null }, why = why)
+                }
+            }.getOrElse { PhotoReading(busy = false, why = "The photo couldn't be read (${it.message ?: "no connection"}).") }
+            withContext(NonCancellable + Dispatchers.IO) { file.delete() }
+            photoReading.value = done
+        }
+    }
+
+    /** The photos no task holds any more let go (AI-23): a task done and gone takes its photo with it. */
+    private fun sweepPhotos() {
+        val held = tasks.value.tasks.mapNotNull { it.photo?.path }.toSet()
+        photos.listFiles()?.filter { it.path !in held }?.forEach { it.delete() }
+    }
+
+    /** The micro-plans' caller (AI-15), while Claude is switched on and has its key; else null. */
+    fun microPlanner(): com.thomaswcode.decrastination.enrich.MicroPlanner? = claudeKey()?.let { com.thomaswcode.decrastination.enrich.MicroPlanner(it, endpoint()) }
+
     /** Felix's caller (AI-22), while Claude is switched on and has its key; else null. */
     fun felixCaller(): com.thomaswcode.decrastination.enrich.FelixCaller? = claudeKey()?.let { com.thomaswcode.decrastination.enrich.FelixCaller(it, endpoint()) }
 
@@ -809,7 +880,7 @@ class AppGraph private constructor(context: Context) {
         return secrets[Secret.AnthropicApiKey]?.takeIf { it.isNotBlank() }
     }
 
-    fun modelEnricher(): Enricher? = claudeKey()?.let { ClaudeEnricher(it, clock.zone(), endpoint(), profile = { profile() }) }
+    fun modelEnricher(): Enricher? = claudeKey()?.let { ClaudeEnricher(it, clock.zone(), endpoint(), profile = { profile() }, decks = { tasks.value.deckTopics }) }
 
     /**
      * A failed model call, counted in [month] (or a newer one counted since): the model rests ([ModelHold.Resting]), and one showing
@@ -1004,7 +1075,24 @@ class AppGraph private constructor(context: Context) {
                     // Declined, or no answer it could read: the rules' say, under the model's name.
                     is Called.Answered -> {
                         calls++
-                        called.value.enrichment ?: rules.enrich(task, job, now).enrichment?.copy(by = model.by)
+                        val first = called.value
+                        // A check its answer failed (AI-01): put back once, as a call of its own (counted
+                        // under the cap, held by a rest); the first's reading stands if that doesn't come back.
+                        val again = first.repair?.takeIf { calls < MAX_MODEL_CALLS }?.let { repair ->
+                            when (val second = callModel(interactive = false, task = task, cost = { r: Enricher.Result -> r.costUsd to r.refused }) { model.repair(task, job, now, repair) }) {
+                                is Called.Answered -> second.value.also { calls++ }
+                                is Called.Failed -> {
+                                    calls++
+                                    if (Failures.classify(second.error) != Failure.BadRequest) enricher = null
+                                    null
+                                }
+                                is Called.Held -> {
+                                    enricher = null
+                                    null
+                                }
+                            }
+                        }
+                        again?.enrichment ?: first.enrichment ?: rules.enrich(task, job, now).enrichment?.copy(by = model.by)
                     }
                 }
             } else {
@@ -1029,8 +1117,9 @@ class AppGraph private constructor(context: Context) {
             // by droppedAlerts, as the tasks change.
             // Its deck tasks take their sections and due date from it.
             val after = task.withEnrichment(made)
-            val sections = AnkiRules.sectionsOf(after)
-            if (sections != AnkiRules.sectionsOf(task) || (sections.isNotEmpty() && after.dueAt != task.dueAt)) decksChanged = true
+            val topics = tasks.value.deckTopics
+            val sections = AnkiRules.sectionsOf(after, topics)
+            if (sections != AnkiRules.sectionsOf(task, topics) || (sections.isNotEmpty() && after.dueAt != task.dueAt)) decksChanged = true
         }
         // Sections the deck pattern missed, or a deadline moved: their deck tasks come from reading Anki again, now.
         if (decksChanged) SyncWorker.syncNow(app, setOf(Source.Anki))
@@ -1142,14 +1231,15 @@ class AppGraph private constructor(context: Context) {
     }
 
     /**
-     * Your own task [taskId] done, as you say (2.0.0): finished through the queue a source's
-     * confirmation goes through, so it's logged and asked about as any is; but it earns no free time ([Focus.onCompleted]), as nothing but you says it's done.
+     * Your own task [taskId] done, as you say (2.0.0), or one done by its tick (NF-06): finished
+     * through the queue a source's confirmation goes through, so it's logged and asked about as any
+     * is; but it earns no free time ([Focus.onCompleted]), as nothing but you says it's done.
      */
     suspend fun finishOwnTask(taskId: String): Unit = withContext(NonCancellable) {
         val now = clock.now()
         var finished = false
         tasks.update { state ->
-            val task = state.tasks.firstOrNull { it.id == taskId && it.source == Source.Own && it.isOpen } ?: return@update state
+            val task = state.tasks.firstOrNull { it.id == taskId && (it.source == Source.Own || it.tickDone) && it.isOpen } ?: return@update state
             val done = task.copy(status = Status.Done, doneAt = now, lastSeenAt = now)
             finished = true
             state.copy(tasks = state.tasks.map { if (it.id == taskId) done else it }, unrewarded = state.unrewarded + done)
@@ -1170,7 +1260,8 @@ class AppGraph private constructor(context: Context) {
 
     /** Your own task [taskId] gone, as if it never was. */
     suspend fun deleteOwnTask(taskId: String) {
-        tasks.update { state -> state.copy(tasks = state.tasks.filterNot { it.id == taskId && it.source == Source.Own }) }
+        // A task linked to it as the same work (DX-15) is back: the work it stood for has gone.
+        tasks.update { state -> state.copy(tasks = com.thomaswcode.decrastination.core.Duplicates.linksPresent(state.tasks.filterNot { it.id == taskId && it.source == Source.Own })) }
         forgetCards(setOf(taskId))
     }
 
@@ -1295,7 +1386,7 @@ class AppGraph private constructor(context: Context) {
         applied: List<Instruction> = instructions.value.applied,
     ): ChatPrompts.Context {
         return ChatPrompts.Context(
-            known = ChatPrompts.context(state.tasks, time.events, applied, now, clock.zone()),
+            known = ChatPrompts.context(state.tasks, time.events, applied, now, clock.zone(), settings.value.classMap, runtime.value.notSame),
             plan = ChatPrompts.plan(plan(state, now = now, applied = applied, time = time), clock.zone()),
         )
     }
@@ -1357,6 +1448,9 @@ class AppGraph private constructor(context: Context) {
             // What it remembered (AI-21), with an answer kept only, and said under it.
             val lines = if (kept) remember(reading.memories) else emptyList()
             if (lines.isNotEmpty()) chat.update { s -> s.copy(messages = s.messages.map { if (it.id == reply.id) it.copy(remembered = lines) else it }) }
+            // Its steps ticked (AI-14), said under it: before its changes, as its steps are the ones it was shown.
+            val done = if (kept) tickSteps(reading.actions) else emptyList()
+            if (done.isNotEmpty()) chat.update { s -> s.copy(messages = s.messages.map { if (it.id == reply.id) it.copy(done = done) else it }) }
             // Its changes to what exists, made now, as if Apply were tapped: Undo takes them back.
             if (kept) reply.proposals.filter { it.instant }.forEach { applyProposal(reply.id, it.id) }
             null
@@ -1364,6 +1458,23 @@ class AppGraph private constructor(context: Context) {
         // Why it waits, said once: written only when it changes, as this runs after every sync.
         if (note != null && chat.value.unanswered?.let { it.id == waiting.id && (it.note != note || it.stuck != stuck) } == true) {
             chat.update { s -> s.copy(messages = s.messages.map { if (it.id == waiting.id && it.answeredAt == null) it.copy(note = note, stuck = stuck) else it }) }
+        }
+    }
+
+    /**
+     * The chat's steps to tick (AI-14), at once, as it alters what exists (AI-24): its piece kept
+     * where the plan has one, today or another day (earning as a tick does), else ticked as on its
+     * sheet, where that can be. A line each that was, "Ticked: Q1, of Essay"; none for one that wasn't.
+     */
+    private suspend fun tickSteps(actions: List<com.thomaswcode.decrastination.core.ChatAction>): List<String> {
+        val plan = plan()
+        return actions.filter { it.type == com.thomaswcode.decrastination.core.ChatAction.Type.TickStep }.mapNotNull { a ->
+            val task = tasks.value.tasks.firstOrNull { it.id == a.taskId } ?: return@mapNotNull null
+            val index = a.stepIndex ?: return@mapNotNull null
+            val step = task.subSteps.getOrNull(index)?.takeIf { !it.done } ?: return@mapNotNull null
+            val piece = (plan.todaySlots.mapNotNull { it.chunk } + plan.ordered).firstOrNull { it.taskId == task.id && it.stepIndex == index }
+            val ticked = if (piece != null) focus.keepSlot(piece.key) else runCatching { focus.tickBlock(task.id, index, step.title) }.getOrDefault(false)
+            "Ticked: ${step.title}, of ${task.title}".takeIf { ticked }
         }
     }
 
@@ -1450,7 +1561,8 @@ class AppGraph private constructor(context: Context) {
     private suspend fun tellAnswer(answer: ChatMessage) {
         val record = com.thomaswcode.decrastination.data.FelixRecord(answer.id, answer.at, com.thomaswcode.decrastination.enrich.FelixPrompts.Reason.Reply.name, answer.text, answer.suggestedReplies)
         log.update { it.copy(felix = it.felix.filterNot { r -> r.id == record.id } + record).trimmed(clock.now()) }
-        val cards = answer.proposals.filter { it.state == ProposalState.Proposed }.map { answer.id to it }
+        // Only a card with something to make: one that shows a task (AI-14) opens it in the chat.
+        val cards = answer.proposals.filter { it.state == ProposalState.Proposed && (it.task != null || it.changes.isNotEmpty()) }.map { answer.id to it }
         com.thomaswcode.decrastination.notify.FelixNotifications.post(app, answer.id, settings.value.felixName, answer.text, answer.suggestedReplies, cards)
     }
 
@@ -1788,7 +1900,7 @@ class AppGraph private constructor(context: Context) {
                     val o = overrides[task.id] ?: TaskOverrides.NONE
                     val now = task.overrides()
                     if (o == now) task else task.withOverrides(o)
-                },
+                }.let(com.thomaswcode.decrastination.core.Duplicates::linksPresent),
             )
         }
     }

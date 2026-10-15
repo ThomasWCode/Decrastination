@@ -236,4 +236,29 @@ class MergeTest {
         assertEquals(Status.Open, again.status)
         assertEquals(0, again.stepsWorkedMin)
     }
+
+    @Test
+    fun `feedback read, done by its tick, stays done while Teams still lists it, and goes once it doesn't`() {
+        val feedback = Fetched(sourceId = "k:feedback", title = "Read the feedback on Statics Prep", kind = Kind.Admin, extra = mapOf(TaskItem.EXTRA_TICK_DONE to "true"))
+        val ticked = first(feedback).map { it.copy(status = Status.Done, doneAt = t0) }
+        val again = Merge.apply(ticked, Source.Teams, listOf(feedback), t0 + 1)
+        assertEquals(Status.Done, again.tasks.single().status)
+        assertTrue(again.reopened.isEmpty())
+        // An assignment done and listed again is open again, as before.
+        val handedIn = first(fetched("a")).map { it.copy(status = Status.Done, doneAt = t0) }
+        assertEquals(Status.Open, Merge.apply(handedIn, Source.Teams, listOf(fetched("a")), t0 + 1).tasks.single().status)
+    }
+
+    @Test
+    fun `a finished task linked to one still open is kept past the fortnight, its minutes counting for it`() {
+        val kept = first(fetched("keep")).single()
+        val gone = first(fetched("dup")).single().copy(status = Status.Done, doneAt = t0, userSameAs = kept.id, workedMin = 30)
+        val later = t0 + Merge.KEEP_FINISHED_MS + 1
+        val after = Merge.apply(listOf(kept, gone), Source.Teams, listOf(fetched("keep")), later).tasks
+        assertEquals(listOf(kept.id, gone.id), after.map { it.id })
+        // Its kept one done too: it goes as any does.
+        val both = Merge.apply(listOf(kept.copy(status = Status.Done, doneAt = t0), gone), Source.Teams, emptyList(), later).tasks
+        assertTrue(both.isEmpty())
+    }
 }
+

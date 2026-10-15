@@ -422,6 +422,8 @@ private fun Claudes(graph: AppGraph, message: ChatMessage, tasks: Map<String, Ta
         message.proposals.forEach { ProposalCard(graph, message.id, it, tasks, now, zone, onEdit) }
         // What it remembered or forgot (AI-21), in small type under its words.
         message.remembered.forEach { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 4.dp)) }
+        // What it did beyond its cards (AI-14), likewise.
+        message.done.forEach { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 4.dp)) }
         message.note?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 4.dp)) }
     }
 }
@@ -438,6 +440,23 @@ private fun ProposalCard(graph: AppGraph, messageId: String, proposal: Proposal,
         colors = CardDefaults.cardColors(containerColor = if (discarded) MaterialTheme.colorScheme.surfaceContainer else MaterialTheme.colorScheme.secondaryContainer),
     ) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            // A task shown (AI-14): its name, and Open, to its sheet.
+            proposal.open?.let { id ->
+                val context = androidx.compose.ui.platform.LocalContext.current
+                Text("Task", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                Text(tasks[id]?.title ?: "A task no longer listed", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                if (id in tasks) {
+                    Button(onClick = {
+                        context.startActivity(
+                            android.content.Intent(context, MainActivity::class.java)
+                                .putExtra(MainActivity.EXTRA_TAB, MainActivity.TAB_TASKS)
+                                .putExtra(MainActivity.EXTRA_TASK, id)
+                                .addFlags(android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP or android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP),
+                        )
+                    }) { Text("Open") }
+                }
+                return@Column
+            }
             val task = proposal.task
             if (task != null) {
                 Text(if (task.kind == Kind.Event) "New event of yours" else "New task of yours", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)

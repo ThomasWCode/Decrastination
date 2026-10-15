@@ -45,7 +45,9 @@ import com.thomaswcode.decrastination.core.OwnTasks
 import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Status
+import com.thomaswcode.decrastination.core.Invite
 import com.thomaswcode.decrastination.core.TaskItem
+import com.thomaswcode.decrastination.core.invite
 import com.thomaswcode.decrastination.enrich.RuleEnricher
 import com.thomaswcode.decrastination.sources.gmail.GmailThreads
 import java.time.Instant
@@ -134,6 +136,23 @@ fun TaskSheet(
     val next = TaskSheetModel.next(plan, task.id).takeIf { task.isOpen }
     // An email's steps and your own are ticked here; the rest are what their source says.
     val ticksHere = Focus.tickable(task) && task.subSteps.isNotEmpty()
+    // A photo of the work (AI-23), for a task Claude reads: kept with it, and read with it.
+    val shot = androidx.compose.runtime.remember { java.io.File(activity.cacheDir, "photos/work.jpg").also { it.parentFile?.mkdirs() } }
+    val camera = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.TakePicture()) { taken ->
+        if (!taken) {
+            shot.delete()
+            return@rememberLauncherForActivityResult
+        }
+        graph.scope.launch {
+            val jpeg = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { com.thomaswcode.decrastination.block.PhotoChecks.shrink(shot).also { shot.delete() } }
+            if (jpeg == null) {
+                message = "Couldn't read the photo."
+            } else {
+                graph.attachPhoto(task.id, jpeg)
+                said = if (graph.claudeKey() != null) "Photo kept: Claude reads the task again with it." else "Photo kept: it's read with the task once Claude is on."
+            }
+        }
+    }
     // Undo only where a quick change of yours is what's in force: one of Claude's since wins.
     fun quick(type: ChangeType) = Instructions.quickInForce(instructions.applied, task.id, type)
 
@@ -183,11 +202,21 @@ fun TaskSheet(
                 }
             }
             if (ticksHere) Steps(graph, task, now, zone)
+            // An invite the email carries (DX-02): its time, and a tap putting it in your calendar.
+            val invite = task.invite
+            invite?.let { Text("Invite: " + Format.invite(it, zone), style = MaterialTheme.typography.bodyLarge) }
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (!own) Button(onClick = { scope.launch { TaskOpener.open(activity, task)?.let { message = it } } }) { Text("Open in ${task.source.label}") }
+                invite?.let { i -> OutlinedButton(onClick = { message = addToCalendar(activity, i, task.title, zone) }) { Text("Add to calendar") } }
                 // Written work: a photo shows it done, once Claude is on (Q16).
                 if (next != null && photo != null && photo.available && next.photoCheckable) {
                     OutlinedButton(enabled = !photo.checking, onClick = { photo.take(next) }) { Text("Check with a photo") }
+                }
+                // The work itself photographed, so Claude reads its size from it (AI-23).
+                if (task.isOpen && com.thomaswcode.decrastination.core.Enrichments.jobFor(task) != null) {
+                    OutlinedButton(onClick = { camera.launch(androidx.core.content.FileProvider.getUriForFile(activity, "${activity.packageName}.photos", shot)) }) {
+                        Text(if (task.photo == null) "Add a photo of the work" else "Photograph the work again")
+                    }
                 }
                 when {
                     own && task.isOpen -> Button(onClick = { scope.launch { graph.finishOwnTask(task.id) } }) { Text("All of it done") }
@@ -201,7 +230,7 @@ fun TaskSheet(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 !own && task.isOpen -> Text(
-                    "It's done when ${task.source.label} says so, read at each sync.",
+                    if (task.tickDone) "It's done once you tick it off, or when ${task.source.label} no longer lists it." else "It's done when ${task.source.label} says so, read at each sync.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -224,11 +253,11 @@ fun TaskSheet(
                             else -> "Planned again: its date was " + Format.at(due, now, zone)
                         }
                     },
-                    note = when {
-                        own -> null
-                        task.userDueAt != null -> "Yours: ${task.source.label} says ${sourceDue?.let { Format.at(it, now, zone) } ?: "no date"}"
-                        else -> null
-                    },
+                    note = listOfNotNull(
+                        if (!own && task.userDueAt != null) "Yours: ${task.source.label} says ${sourceDue?.let { Format.at(it, now, zone) } ?: "no date"}" else null,
+                        // Where Claude's reading came from (AI-09); one from a photo says what it saw, under Takes.
+                        Enrichments.current(task)?.reason?.takeUnless { fromPhoto(task) }?.let { "Claude: “$it” in ${if (task.source == com.thomaswcode.decrastination.core.Source.Gmail) "the email" else "the instructions"}" },
+                    ).joinToString(". ").takeIf { it.isNotEmpty() },
                     urgent = task.isOpen && task.hardAt(now) && task.deadlineAt(now)?.let { it < now } == true,
                     onChange = if (changeable) ({ picking = OwnChange.DueOn }) else null,
                     undo = when {
@@ -243,6 +272,8 @@ fun TaskSheet(
                     note = listOfNotNull(
                         if (!own && task.userEffortMin != null) "Yours: the app reckoned ${Format.minutes(task.appEffortMin)}" else null,
                         if (task.subSteps.isNotEmpty() && task.userEffortMin != null) "Its steps are scaled to match" else null,
+                        // Read from its photo (AI-23), with what Claude saw in it.
+                        if (fromPhoto(task)) "From your photo" + (Enrichments.current(task)?.reason?.takeIf { it.isNotBlank() }?.let { ": “$it”" } ?: "") else null,
                         // The app's estimate as the plan takes it: by how long such work has taken you.
                         runtime.calibration.multiplierFor(task).takeIf { kotlin.math.abs(it - 1.0) >= 0.05 }?.let { m ->
                             "Planned as ${Format.minutes((task.effortMin * m).roundToInt())}: such work has taken you ${if (m > 1) "longer" else "less time"}"
@@ -265,8 +296,13 @@ fun TaskSheet(
                     },
                 )
             }
-            Notes(task, now, zone, byId, onOpen = { scope.launch { TaskOpener.open(activity, task)?.let { message = it } } })
+            Notes(task, now, zone, byId, onOpen = { scope.launch { TaskOpener.open(activity, task)?.let { message = it } } }, onLink = { message = openLink(activity, it) })
             if (!ticksHere) Steps(graph, task, now, zone)
+            // Its next piece's first steps (AI-15), as written ahead.
+            next?.let { runtime.microPlans[it.key] }?.let(com.thomaswcode.decrastination.enrich.MicroPlans::lines)?.takeIf { it.isNotEmpty() }?.let { lines ->
+                Text("Its next piece", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                lines.forEach { Text(it, style = MaterialTheme.typography.bodyMedium) }
+            }
             // When its pieces are planned, and why (PL-07).
             TaskSheetModel.planned(plan, task.id, zone).takeIf { it.isNotEmpty() && task.isOpen }?.let { planned ->
                 Text("Planned", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -304,6 +340,12 @@ fun TaskSheet(
                 }
                 if (changeable && !task.userNotATask) OutlinedButton(onClick = { confirming = "not-a-task" }) { Text("Not a task") }
                 if (task.isOpen) OutlinedButton(onClick = onInstruct) { Text("Ask ${graph.settings.value.felixName} about it") }
+                // Its steps made by Felix (AI-19): the chat, with the ask written for you to send.
+                if (own && changeable) {
+                    OutlinedButton(onClick = {
+                        activity.startActivity(AskActivity.intent(activity, About(taskId = task.id, taskTitle = task.title), "Split this into steps", send = false))
+                    }) { Text("Split with ${graph.settings.value.felixName}") }
+                }
                 if (own && task.isOpen) OutlinedButton(onClick = onEdit) { Text("Edit") }
                 if (own) OutlinedButton(onClick = { confirming = "delete" }) { Text("Delete") }
             }
@@ -408,24 +450,40 @@ private fun Field(label: String, value: String, note: String? = null, urgent: Bo
 
 /** What's out of the ordinary about [task], and what it says. */
 @Composable
-private fun Notes(task: TaskItem, now: Long, zone: java.time.ZoneId, byId: Map<String, TaskItem>, onOpen: () -> Unit) {
+private fun Notes(task: TaskItem, now: Long, zone: java.time.ZoneId, byId: Map<String, TaskItem>, onOpen: () -> Unit, onLink: (String) -> Unit) {
     val lines = buildList {
         task.userAfter?.takeIf { task.isOpen && Instructions.waiting(task, byId) }?.let { add("Waits, as you said, until “${byId[it]?.title ?: it}” is done" to false) }
         if (task.userNotATask) add("You said it isn't a task: take that back in Felix's chat, under Your changes" to false)
         Enrichments.current(task)?.dropped?.takeIf { task.isOpen }?.let { add("Claude's plan was dropped ($it): planned as one piece" to true) }
+        // Steps kept with their dates left out (AI-01).
+        Enrichments.current(task)?.adjusted?.takeIf { it.isNotEmpty() && task.isOpen }?.let { lines ->
+            add("Claude's dates for ${if (lines.size == 1) "one step were" else "${lines.size} steps were"} adjusted: ${lines.joinToString("; ")}" to false)
+        }
         (Enrichments.current(task)?.nextStep ?: task.extra[GmailThreads.EXTRA_NEXT_STEP])?.let { add("Next: $it" to false) }
         task.enrichment?.takeIf { it.by != RuleEnricher.BY }?.let { add("Steps and estimate by Claude" to false) }
     }
     lines.forEach { (text, bad) ->
         Text(text, style = MaterialTheme.typography.bodyMedium, color = if (bad) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface)
     }
-    // What's attached, which the app can't open: a tap opens Gmail, saying what to look for (DX-01).
+    // What's attached, which the app can't open: a tap opens it where it is, the email in Gmail
+    // (DX-01) or the assignment in Teams (DX-08).
     GmailThreads.attachmentsOf(task).takeIf { it.isNotEmpty() }?.let { files ->
         Text(
             "Attachments: " + files.joinToString(", ") { it.label },
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.primary,
             modifier = Modifier.clickable(onClick = onOpen),
+        )
+    }
+    // An assignment's links (DX-08), each opened in the browser.
+    com.thomaswcode.decrastination.sources.teams.TeamsRows.linksOf(task).forEach { link ->
+        Text(
+            link,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.primary,
+            maxLines = 1,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            modifier = Modifier.clickable { onLink(link) },
         )
     }
     if (task.detail.isNotBlank()) Text(task.detail, style = MaterialTheme.typography.bodySmall)
@@ -456,3 +514,34 @@ private fun Steps(graph: AppGraph, task: TaskItem, now: Long, zone: java.time.Zo
         }
     }
 }
+
+/**
+ * [invite] as a new event in your calendar app, filled in for you to save (DX-02): its name (else
+ * the email's [title]), its times and its place. What went wrong where no app takes it.
+ */
+private fun addToCalendar(activity: Activity, invite: Invite, title: String, zone: java.time.ZoneId): String? {
+    val intent = android.content.Intent(android.content.Intent.ACTION_INSERT)
+        .setData(android.provider.CalendarContract.Events.CONTENT_URI)
+        .putExtra(android.provider.CalendarContract.Events.TITLE, invite.summary.ifBlank { title })
+        .putExtra(android.provider.CalendarContract.EXTRA_EVENT_BEGIN_TIME, invite.calendarTimes(zone).first)
+        .putExtra(android.provider.CalendarContract.EXTRA_EVENT_END_TIME, invite.calendarTimes(zone).second)
+        .putExtra(android.provider.CalendarContract.EXTRA_EVENT_ALL_DAY, invite.allDay(zone))
+    invite.location?.let { intent.putExtra(android.provider.CalendarContract.Events.EVENT_LOCATION, it) }
+    return try {
+        activity.startActivity(intent)
+        null
+    } catch (e: android.content.ActivityNotFoundException) {
+        "No calendar app to add it to"
+    }
+}
+
+/** [url] in the browser (DX-08); what went wrong where nothing on the phone opens it. */
+private fun openLink(activity: Activity, url: String): String? = try {
+    activity.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url)))
+    null
+} catch (e: android.content.ActivityNotFoundException) {
+    "Nothing on the phone opens $url"
+}
+
+/** Whether [task]'s reading in force was made from its photo (AI-23): its reason then says what Claude saw, not a quote. */
+private fun fromPhoto(task: TaskItem): Boolean = task.photo != null && Enrichments.current(task)?.fromPhoto == true

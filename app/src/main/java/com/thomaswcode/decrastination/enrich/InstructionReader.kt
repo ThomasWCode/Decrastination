@@ -11,6 +11,7 @@ import com.thomaswcode.decrastination.core.Change
 import com.thomaswcode.decrastination.core.ChangeType
 import com.thomaswcode.decrastination.core.Instruction
 import com.thomaswcode.decrastination.core.Instructions
+import com.thomaswcode.decrastination.core.OwnStep
 import com.thomaswcode.decrastination.core.OwnTasks
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.learn.CalendarEvent
@@ -65,6 +66,8 @@ object InstructionPrompts {
         - HalfDay: a school day that ends early. Needs date and endTime (HH:MM).
         - OnDay: all of the task's remaining work goes on one day. Needs taskId and date.
         - AtTime: the task's next piece starts at a set time. Needs taskId, date and time (HH:MM).
+        - SameAs: the task is the same work as another listed task, from another source, which is the one kept (this one is hidden). Needs taskId and afterTaskId (the one kept).
+        - Steps: replace a task of the student's own's steps with these, adding up to its minutes (for a new total, add a Minutes change with it too); dates within the task's. Needs taskId and steps (each with title, minutes, startDate and dueDate as YYYY-MM-DD or empty, and where: anywhere or home); only for tasks from Yours.
 
         Use the ids and event keys exactly as listed. Work out relative dates ("next Friday", "the weekend") from today; a weekday named alone ("on Saturday") means the next one, and only "every Saturday" or "on Saturdays" means each week. A stretch of days ("20 to 25 October", "this weekend") is one change per day, but for NoSchool, which takes the stretch whole. Leave every field a change type doesn't use null.
     """.trimIndent()
@@ -95,6 +98,17 @@ object InstructionPrompts {
         "weekday" to nullable(mapOf("type" to "string", "enum" to DayOfWeek.entries.map { it.name.lowercase().replaceFirstChar(Char::uppercase) })),
         "time" to nullable(mapOf("type" to "string", "description" to "HH:MM, 24-hour")),
         "endTime" to nullable(mapOf("type" to "string", "description" to "HH:MM, 24-hour")),
+        // Plain strings, empty for none: the chat's schema holds 15 of the API's 16 unions.
+        "steps" to mapOf(
+            "type" to "array",
+            "items" to obj(
+                "title" to STRING,
+                "minutes" to mapOf("type" to "integer"),
+                "startDate" to STRING,
+                "dueDate" to STRING,
+                "where" to mapOf("type" to "string", "enum" to listOf("anywhere", "home")),
+            ),
+        ),
     )
 
     val SCHEMA: Map<String, Any> = obj(
@@ -190,7 +204,12 @@ object InstructionAnswers {
         val weekday: String? = null,
         val time: String? = null,
         val endTime: String? = null,
+        val steps: List<GivenStep> = emptyList(),
     )
+
+    /** A step of a [ChangeType.Steps] change, its dates empty for none. */
+    @Serializable
+    internal data class GivenStep(val title: String = "", val minutes: Int = 0, val startDate: String = "", val dueDate: String = "", val where: String = "anywhere")
 
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -216,6 +235,7 @@ object InstructionAnswers {
         val changes = answer.changes.map { g ->
             change(g, byId, titles, now, zone) ?: return Reading.Unclear("Claude's reading couldn't be used: ${problem(g, byId, titles)}")
         }
+        stepsProblem(changes, byId)?.let { return Reading.Unclear("Claude's reading couldn't be used: $it") }
         // Tasks waiting on each other in a circle within this one reading: none would ever be planned.
         if (Instructions.makesCircle(changes, emptyList())) return Reading.Unclear("Claude's reading would have tasks wait for each other in a circle")
         return Reading.Changes(changes)
@@ -269,13 +289,55 @@ object InstructionAnswers {
                 val start = minute(g.time) ?: return null
                 at(date, g.time, LocalTime.MIDNIGHT, zone)?.takeIf { plausible(it, now) }?.let { Change(type, taskId = id, date = date, startMin = start, time = it) }
             }
+            // The same work as another listed task (DX-15), which is kept.
+            ChangeType.SameAs -> task?.let { id -> g.afterTaskId?.takeIf { it in tasks && it != id }?.let { Change(type, taskId = id, afterTaskId = it) } }
+            // Only a task of your own's steps, each with its minutes and its dates readable (AI-19).
+            ChangeType.Steps -> task?.takeIf { tasks.getValue(it).source == com.thomaswcode.decrastination.core.Source.Own }?.let { id ->
+                // A step's dates: readable, in range, its start not after its end, and neither after the task's day.
+                val dueDay = tasks.getValue(id).dueAt?.let { java.time.Instant.ofEpochMilli(it).atZone(zone).toLocalDate() }
+                fun dayOf(time: Long) = java.time.Instant.ofEpochMilli(time).atZone(zone).toLocalDate()
+                val steps = g.steps.takeIf { it.isNotEmpty() && it.size <= OwnTasks.MAX_STEPS }?.map { s ->
+                    if (s.title.isBlank() || s.minutes < 1) return null
+                    val from = s.startDate.takeIf { it.isNotBlank() }?.let { at(it, null, LocalTime.MIDNIGHT, zone)?.takeIf { t -> plausible(t, now) } ?: return null }
+                    val due = s.dueDate.takeIf { it.isNotBlank() }?.let { at(it, null, LocalTime.of(23, 59), zone)?.takeIf { t -> plausible(t, now) } ?: return null }
+                    if (from != null && due != null && from > due) return null
+                    if (dueDay != null && listOfNotNull(from, due).any { dayOf(it) > dueDay }) return null
+                    OwnStep(
+                        title = s.title.trim().take(OwnTasks.MAX_TITLE),
+                        minutes = s.minutes,
+                        from = from,
+                        dueAt = due,
+                        where = s.where.takeIf { it == "home" || it == "anywhere" },
+                    )
+                } ?: return null
+                Change(type, taskId = id, steps = steps)
+            }
         }
+    }
+
+    /**
+     * Why a split among [changes] can't be taken (AI-19): its steps don't add up to its task's
+     * minutes, and no Minutes change among them gives that new total. Null when each can.
+     */
+    internal fun stepsProblem(changes: List<Change>, tasks: Map<String, TaskItem>): String? {
+        for (c in changes.filter { it.type == ChangeType.Steps }) {
+            val task = tasks[c.taskId] ?: continue
+            val sum = c.steps.orEmpty().sumOf { it.minutes }
+            val draft = OwnTasks.draftOf(task)
+            val total = if (draft.steps.isEmpty()) draft.minutes else draft.steps.sumOf { it.minutes }
+            if (sum == total || changes.any { it.type == ChangeType.Minutes && it.taskId == c.taskId && it.minutes == sum }) continue
+            return "the steps for “${task.title.take(60)}” add up to $sum minutes, not its $total, and nothing says its total changes"
+        }
+        return null
     }
 
     /** Why [g] couldn't be used, in words. */
     internal fun problem(g: Given, tasks: Map<String, TaskItem>, events: Map<String, String>): String = when {
         ChangeType.entries.none { it.name == g.type } -> "a change of a kind the app doesn't make"
-        g.type in setOf("NotATask", "StartFrom", "DueBy", "Minutes", "After", "OnDay", "AtTime") && g.taskId !in tasks -> "it names a task that isn't listed"
+        g.type in setOf("NotATask", "StartFrom", "DueBy", "Minutes", "After", "OnDay", "AtTime", "Steps", "SameAs") && g.taskId !in tasks -> "it names a task that isn't listed"
+        g.type == "SameAs" -> "the task it's the same as isn't listed"
+        g.type == "Steps" && tasks[g.taskId]?.source != com.thomaswcode.decrastination.core.Source.Own -> "only a task of the student's own has its steps changed"
+        g.type == "Steps" -> "a step has no name or minutes, or a date that doesn't read, is out of range or falls after the task's"
         g.type == "After" -> "it waits on a task that isn't listed"
         g.type == "EventTime" && g.eventKey !in events -> "it names an event that isn't in the calendar"
         else -> "a date, time or number in it is out of range"

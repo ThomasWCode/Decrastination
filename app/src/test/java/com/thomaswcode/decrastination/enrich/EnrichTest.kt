@@ -8,6 +8,7 @@ import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.SourceValues
 import com.thomaswcode.decrastination.core.Status
+import com.thomaswcode.decrastination.core.SubStep
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.withEnrichment
 import com.thomaswcode.decrastination.sources.anki.AnkiRules
@@ -16,11 +17,14 @@ import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonArray
@@ -186,6 +190,22 @@ class PromptsTest {
 class AnswersTest {
     private fun parse(job: Enrichments.Job, text: String, task: TaskItem = email()) = Answers.parse(job, text, task, "claude-opus-5-5", NOW, LONDON)
 
+    /** The first time of asking (AI-01): nothing left out, the check failed its complaint. */
+    private fun strict(job: Enrichments.Job, text: String, task: TaskItem = email()) = Answers.read(job, text, task, "claude-opus-5-5", NOW, LONDON, salvage = false)
+
+    @Test
+    fun `a date that can't be read, one too far ahead, a kind that isn't one and an answer that isn't JSON are said, to be put right`() {
+        fun triage(deadline: String, kind: String = "Admin") = """{"kind":"$kind","actionableFrom":null,"deadline":$deadline,"deadlineQuoted":true,"effortMin":10,"nextStep":"x","question":null,"reason":"","blocks":[]}"""
+        assertEquals("Deadline \"Friday\" isn't a date (YYYY-MM-DD) or a local date and time (YYYY-MM-DDTHH:MM)", strict(Enrichments.Job.Email, triage("\"Friday\"")).complaint)
+        assertEquals("Deadline 2028-10-16 is more than 400 days ahead, further than the app plans: give it only if the text says so", strict(Enrichments.Job.Email, triage("\"2028-10-16\"")).complaint)
+        assertEquals("Kind is \"Info\": it must be Admin or Event", strict(Enrichments.Job.Email, triage("null", kind = "Info")).complaint)
+        assertTrue(strict(Enrichments.Job.Email, "{not json").complaint!!.startsWith("The answer isn't JSON the schema takes"))
+        // An old email's long-gone date is no mistake: left out without a word.
+        val old = strict(Enrichments.Job.Email, triage("\"2021-01-04\""))
+        assertNull(old.complaint)
+        assertNull(old.enrichment!!.deadline)
+    }
+
     @Test
     fun `an email's triage is read, its dates in local time`() {
         val e = parse(Enrichments.Job.Email, """{"kind":"Admin","actionableFrom":null,"deadline":"2026-10-12T08:30","effortMin":10,"nextStep":"Sign the form and give it to Mr Hughes"}""")!!
@@ -344,13 +364,16 @@ class AnswersTest {
         assertEquals(Fixtures.at("2026-10-30T00:00"), blocks[0].from)
         assertEquals(Fixtures.at("2026-11-20T23:59"), blocks[0].dueAt)
         assertNull(blocks[1].from)
-        // A block that opens after it's due isn't to be trusted: the triage stands without them, its
-        // whole estimate planned and the drop said, so it's still something to do, not hidden.
-        val muddled = parse(Enrichments.Job.Email, calendar.replace("2026-11-20", "2026-10-29"))!!
-        assertNull(muddled.subSteps)
+        // A block that opens after it's due: put back to the model the first time of asking (AI-01),
+        // and asked again, kept with no dates of its own, saying so.
+        val wrong = calendar.replace("2026-11-20", "2026-10-29")
+        assertEquals("Block 1 ('Apply to STEM Potential') starts on 2026-10-30, after its own due time 2026-10-29T23:59", strict(Enrichments.Job.Email, wrong).complaint)
+        val muddled = parse(Enrichments.Job.Email, wrong)!!
+        assertEquals(listOf(null to null, null to Fixtures.at("2027-01-15T23:59")), muddled.subSteps!!.map { it.from to it.dueAt })
         assertEquals(Kind.Admin, muddled.kind)
         assertEquals(90, muddled.effortMin)
-        assertEquals("a block starts after it's due", muddled.dropped)
+        assertNull(muddled.dropped)
+        assertEquals(listOf("'Apply to STEM Potential': its start was after its own due time, so it's planned by the task's date"), muddled.adjusted)
     }
 
     @Test
@@ -360,14 +383,14 @@ class AnswersTest {
         val wild = parse(Enrichments.Job.Effort, """{"effortMin":1250,"blocks":[$blocks]}""")!!
         assertNull(wild.subSteps)
         assertNull(wild.effortMin)
-        assertEquals("20.8 hours of blocks, past the 20 the app takes from one task", wild.dropped)
-        // The email due on the 15th; a block opening on the 20th can't be done by then.
-        val late = parse(
-            Enrichments.Job.Email,
-            """{"kind":"Admin","actionableFrom":null,"deadline":"2026-10-15","effortMin":60,"nextStep":"Apply","blocks":[{"title":"Apply","minutes":60,"from":"2026-10-20","due":null}]}""",
-        )!!
-        assertNull(late.subSteps)
-        assertEquals("a block starts after the task is due", late.dropped)
+        assertEquals("the blocks come to 20.8 hours, over the 20 hours one task can take", wild.dropped)
+        // The email due on the 15th; a block opening on the 20th can't be done by then: put back,
+        // then kept by the email's own date.
+        val text = """{"kind":"Admin","actionableFrom":null,"deadline":"2026-10-15","effortMin":60,"nextStep":"Apply","blocks":[{"title":"Apply","minutes":60,"from":"2026-10-20","due":null}]}"""
+        assertEquals("Block 1 ('Apply') starts on 2026-10-20, after the due time 2026-10-15T23:59", strict(Enrichments.Job.Email, text).complaint)
+        val late = parse(Enrichments.Job.Email, text)!!
+        assertEquals(listOf(null), late.subSteps!!.map { it.from })
+        assertEquals(listOf("'Apply': its start was after the hand-in, so it's planned by the task's date"), late.adjusted)
     }
 
     @Test
@@ -377,10 +400,10 @@ class AnswersTest {
             """{"kind":"Admin","actionableFrom":"2026-12-01","deadline":"2026-12-31","effortMin":60,"nextStep":"Apply","blocks":[{"title":"Apply","minutes":60,"from":null,"due":"2026-11-15"}]}""",
         )!!
         assertNull(early.subSteps)
-        assertEquals("a block is due before the email can be started", early.dropped)
+        assertEquals("block 1 ('Apply') is due 2026-11-15T23:59, before the email can be started on 2026-12-01", early.dropped)
         val backwards = parse(Enrichments.Job.Effort, """{"effortMin":60,"blocks":[{"title":"A","minutes":30,"from":"2026-10-20","due":null},{"title":"B","minutes":30,"from":null,"due":"2026-10-12"}]}""")!!
         assertNull(backwards.subSteps)
-        assertEquals("the blocks' dates are out of order", backwards.dropped)
+        assertEquals("block 1 ('A') can't start till 2026-10-20, after block 2 ('B') is due 2026-10-12T23:59", backwards.dropped)
     }
 
     @Test
@@ -392,7 +415,7 @@ class AnswersTest {
         // One more than that isn't trusted.
         val over = parse(Enrichments.Job.Effort, """{"effortMin":${total + 10},"blocks":[${given(Prompts.MAX_BLOCKS + 1)}]}""")!!
         assertNull(over.subSteps)
-        assertEquals("31 blocks, past the 30 the app takes", over.dropped)
+        assertEquals("there are 31 blocks, over the 30 allowed", over.dropped)
     }
 
     @Test
@@ -415,17 +438,21 @@ class AnswersTest {
         fun block(title: String = "Apply", minutes: Int = 30, from: String? = null, due: String? = null) =
             """{"title":"$title","minutes":$minutes,"from":${from?.let { "\"$it\"" }},"due":${due?.let { "\"$it\"" }}}"""
         fun effort(vararg blocks: String) = parse(Enrichments.Job.Effort, """{"effortMin":${30 * blocks.size},"blocks":[${blocks.joinToString(",")}]}""")!!.dropped
-        assertEquals("a block has no title", effort(block(title = " ")))
-        assertEquals("a block has no minutes", parse(Enrichments.Job.Effort, """{"effortMin":30,"blocks":[${block(minutes = 0)}]}""")!!.dropped)
-        assertEquals("a block of 700 minutes, past the 600 one can take", parse(Enrichments.Job.Effort, """{"effortMin":700,"blocks":[${block(minutes = 700)}]}""")!!.dropped)
-        assertEquals("a block's date can't be read", effort(block(due = "soon")))
-        assertEquals("a block's date is out of range", effort(block(due = "2030-01-01")))
-        assertEquals("a block starts after it's due", effort(block(from = "2026-10-20", due = "2026-10-15")))
+        assertEquals("block 1 has no title", effort(block(title = " ")))
+        assertEquals("block 1 ('Apply') has no minutes", parse(Enrichments.Job.Effort, """{"effortMin":30,"blocks":[${block(minutes = 0)}]}""")!!.dropped)
+        assertEquals("block 1 ('Apply') is 700 minutes, over the 600 allowed", parse(Enrichments.Job.Effort, """{"effortMin":700,"blocks":[${block(minutes = 700)}]}""")!!.dropped)
+        // An unreadable date, or one out of range, isn't left out: it fails the reading still.
+        assertEquals("block 1 ('Apply') has a date that can't be read: 'soon'", effort(block(due = "soon")))
+        assertEquals("block 1 ('Apply') has a date out of range: 2030-01-01T23:59", effort(block(due = "2030-01-01")))
+        assertEquals("block 2 ('Apply') starts on 2026-10-20, after its own due time 2026-10-15T23:59", Answers.read(Enrichments.Job.Effort, """{"effortMin":60,"blocks":[${block()},${block(from = "2026-10-20", due = "2026-10-15")}]}""", email(), "m", NOW, LONDON, salvage = false).enrichment!!.dropped)
         // An assignment's steps say the same of a step, and of a total past one task's.
         val split = { steps: String, total: Int -> parse(Enrichments.Job.Assignment, """{"subSteps":[$steps],"effortMin":$total,"ankiSections":[],"testDate":null}""", assignment("Do it"))!!.dropped }
-        assertEquals("a step of 300 minutes, past the 240 one can take", split("""{"title":"Essay","minutes":300,"ankiSections":[],"from":null,"due":null}""", 300))
-        assertEquals("the steps add up to 60 minutes, not the 120 it gives in all", split("""{"title":"Essay","minutes":60,"ankiSections":[],"from":null,"due":null}""", 120))
+        assertEquals("step 1 ('Essay') is 300 minutes, over the 240 allowed", split("""{"title":"Essay","minutes":300,"ankiSections":[],"from":null,"due":null}""", 300))
+        assertEquals("the steps add up to 60 minutes, not the 120 effortMin gives", split("""{"title":"Essay","minutes":60,"ankiSections":[],"from":null,"due":null}""", 120))
         assertNull(split("""{"title":"Essay","minutes":60,"ankiSections":[],"from":null,"due":null}""", 60))
+        // Said to the model, it starts with a capital.
+        assertEquals("The steps add up to 60 minutes, not the 120 effortMin gives", strict(Enrichments.Job.Assignment, """{"subSteps":[{"title":"Essay","minutes":60,"ankiSections":[],"from":null,"due":null}],"effortMin":120,"ankiSections":[],"testDate":null}""", assignment("Do it")).complaint)
+        assertNull(strict(Enrichments.Job.Effort, """{"effortMin":35,"blocks":[]}""").complaint)
     }
 
     @Test
@@ -438,7 +465,7 @@ class AnswersTest {
         val off = parse(Enrichments.Job.Effort, """{"effortMin":200,"blocks":[{"title":"A","minutes":30,"from":null,"due":null}]}""")!!
         assertNull(off.subSteps)
         assertEquals(200, off.effortMin)
-        assertEquals("the blocks add up to 30 minutes, not the 200 it gives in all", off.dropped)
+        assertEquals("the blocks add up to 30 minutes, not the 200 effortMin gives", off.dropped)
         // Kept, or none given: nothing dropped.
         assertNull(e.dropped)
         assertNull(parse(Enrichments.Job.Effort, """{"effortMin":35,"blocks":[]}""")!!.dropped)
@@ -453,13 +480,105 @@ class AnswersTest {
     }
 
     @Test
-    fun `a step can't start after the test that's its task's deadline`() {
+    fun `a reading quotes what gave it, and is asked with the steps as planned before`() {
         val e = parse(
-            Enrichments.Job.Assignment,
-            """{"subSteps":[{"title":"Revise","minutes":60,"ankiSections":[],"from":"2026-10-13","due":null}],"effortMin":60,"ankiSections":[],"testDate":"2026-10-12"}""",
-            assignment("Revise for the test"),
+            Enrichments.Job.Email,
+            """{"kind":"Admin","actionableFrom":null,"deadline":"2026-10-12","deadlineQuoted":true,"effortMin":10,"nextStep":"Sign the form","question":null,"reason":"“return the trip form by Monday 12 October”","blocks":[]}""",
         )!!
-        assertNull(e.subSteps)
+        assertEquals("return the trip form by Monday 12 October", e.reason)
+        assertNull(parse(Enrichments.Job.Email, """{"kind":"Admin","actionableFrom":null,"deadline":null,"effortMin":10,"nextStep":"Sign","reason":" ","blocks":[]}""")!!.reason)
+        val asked = Prompts.describe(assignment("Essay"), Enrichments.Job.Assignment, NOW, LONDON, listOf(SubStep("Plan", 20), SubStep("Write", 60)))
+        assertTrue("Steps as planned before (keep the exact title of any step whose work is unchanged; mark none as done):\n1. Plan (20 min)\n2. Write (60 min)" in asked, asked)
+        assertFalse("planned before" in Prompts.describe(assignment("Essay"), Enrichments.Job.Assignment, NOW, LONDON))
+        // The decks by topic, for an assignment (DX-10).
+        assertTrue("Decks: 1.3 Holidays and travel; 1.4 School" in Prompts.describe(assignment("Vocab"), Enrichments.Job.Assignment, NOW, LONDON, decks = mapOf("1.4" to "School", "1.3" to "Holidays and travel")))
+    }
+
+    @Test
+    fun `every worked example's answer is one the checks pass whole, and each is in its prompt`() {
+        for (job in Enrichments.Job.entries) {
+            for (example in Examples.of(job)) {
+                val item = (if (job == Enrichments.Job.Email) email() else assignment("Example")).copy(dueAt = example.due?.let(Fixtures::at), sourceValues = null)
+                val read = Answers.read(job, example.answer, item, "claude-opus-5-5", NOW, LONDON, salvage = false)
+                assertNotNull(read.enrichment, "$job: ${example.answer.take(60)}")
+                assertNull(read.complaint, "$job: ${read.complaint}")
+                assertTrue("Answer: ${example.answer}" in Prompts.system(job), "$job")
+            }
+        }
+        assertTrue(Prompts.system(Enrichments.Job.Assignment).contains("    Title: Vocabulary and reading"))
+    }
+
+    @Test
+    fun `a piece's first steps are read, asked once for its task as it is, and kept for today and tomorrow`() {
+        val task = assignment("1. Read pages 40-44.\n2. Write the essay.").copy(dueAt = Fixtures.at("2026-10-09T23:59"))
+        val chunk = com.thomaswcode.decrastination.core.Planner.plan(com.thomaswcode.decrastination.core.Planner.Input(listOf(task), NOW, LONDON, com.thomaswcode.decrastination.data.Settings(), windows = mapOf(java.time.LocalDate.parse("2026-10-09") to listOf(com.thomaswcode.decrastination.core.DayWindow(17 * 60, 22 * 60, com.thomaswcode.decrastination.core.WindowKind.Evening)))))
+        val piece = chunk.todaySlots.first { it.kind == com.thomaswcode.decrastination.core.SlotKind.Work }.chunk!!
+        val made = MicroPlans.parse("""{"first":"Open the essay title and read it aloud","next":["List three points","Write the first paragraph","An extra"],"doneWhen":"A paragraph a point"}""", piece, task, NOW)!!
+        assertEquals(listOf("List three points", "Write the first paragraph"), made.next)
+        assertEquals(listOf("First: Open the essay title and read it aloud", "Then: List three points; Write the first paragraph", "Done when: A paragraph a point"), MicroPlans.lines(made))
+        val tasks = mapOf(task.id to task)
+        // Each of today's pieces is due one.
+        val keys = chunk.todaySlots.filter { it.kind == com.thomaswcode.decrastination.core.SlotKind.Work }.mapNotNull { it.chunk?.key }
+        assertEquals(keys, MicroPlans.due(chunk, tasks, emptyMap()).map { it.first.key })
+        // Written: not due again, till its task changes.
+        assertEquals(keys - piece.key, MicroPlans.due(chunk, tasks, mapOf(piece.key to made)).map { it.first.key })
+        assertEquals(keys, MicroPlans.due(chunk, mapOf(task.id to task.copy(detail = "Changed")), mapOf(piece.key to made)).map { it.first.key })
+        // Declined or unread: kept empty, so not asked again.
+        assertEquals(keys - piece.key, MicroPlans.due(chunk, tasks, mapOf(piece.key to MicroPlans.none(piece, task, NOW))).map { it.first.key })
+        assertEquals(emptyList(), MicroPlans.lines(MicroPlans.none(piece, task, NOW)))
+        // Others go.
+        assertEquals(setOf(piece.key), MicroPlans.kept(chunk, mapOf(piece.key to made, "gone#1" to made)).keys)
+        // Its task changed since: out of date, let go rather than shown.
+        assertEquals(setOf(piece.key), MicroPlans.kept(chunk, mapOf(piece.key to made), tasks).keys)
+        assertEquals(emptySet(), MicroPlans.kept(chunk, mapOf(piece.key to made), mapOf(task.id to task.copy(detail = "Changed"))).keys)
+        val asked = MicroPlans.describe(piece, task)
+        assertTrue("Task: ${task.title}" in asked && "Instructions:\n1. Read pages 40-44." in asked, asked)
+        // The piece itself changed (its step renamed, its minutes): written for again.
+        assertTrue(MicroPlans.hashOf(task, piece) != MicroPlans.hashOf(task, piece.copy(step = "Read pages 40-46")))
+        assertTrue(MicroPlans.hashOf(task, piece) != MicroPlans.hashOf(task, piece.copy(minutes = piece.minutes + 10)))
+    }
+
+    @Test
+    fun `a photo of the work is read with its task, and a photo of homework read into tasks`() {
+        val task = assignment("Essay")
+        val photographed = task.copy(photo = com.thomaswcode.decrastination.core.TaskPhoto("/x.jpg", "ab12cd34ef56ab12", NOW))
+        // A task photographed is read again (AI-23).
+        assertNotEquals(Enrichments.inputHash(task), Enrichments.inputHash(photographed))
+        assertTrue("say in reason what you saw" in Prompts.photo(Enrichments.Job.Assignment))
+        val read = PhotoTasks.parse(
+            """{"tasks":[{"title":"Worksheet 5","subject":"Physics","dueDate":"2026-10-14","dueTime":"08:30","instructions":"Questions 1-6","minutes":45,"where":"anywhere","steps":[]},{"title":"","subject":"","dueDate":"","dueTime":"","instructions":"","minutes":0,"where":"home","steps":[]}],"question":"Is it due Wednesday or Thursday?"}""",
+            NOW, LONDON,
+        )!!
+        assertEquals(listOf("Worksheet 5"), read.tasks.map { it.title })
+        assertEquals(Fixtures.at("2026-10-14T08:30"), read.tasks.single().dueAt)
+        assertEquals("Physics" to "Questions 1-6", read.tasks.single().className to read.tasks.single().notes)
+        assertEquals(1, read.leftOut.size)
+        assertEquals("Is it due Wednesday or Thursday?", read.question)
+    }
+
+    @Test
+    fun `the limits the answers are checked against are said in the prompts and the schemas`() {
+        assertEquals(
+            "Limits the app enforces: at most 12 steps; no step longer than 240 minutes; a total of at most 10 hours; the steps must add up to effortMin exactly.",
+            Prompts.limits(Enrichments.Job.Assignment),
+        )
+        assertTrue(Prompts.limits(Enrichments.Job.Assignment) in Prompts.system(Enrichments.Job.Assignment))
+        assertTrue("at most 30 blocks, none longer than 600 minutes, 20 hours in all" in Prompts.system(Enrichments.Job.Email))
+        val step = Prompts.schemaJson(Enrichments.Job.Assignment).jsonObject["properties"]!!.jsonObject["subSteps"]!!.jsonObject["items"]!!.jsonObject["properties"]!!.jsonObject
+        assertEquals("10 to 60 where the work allows; never over 240", step["minutes"]!!.jsonObject["description"]!!.jsonPrimitive.content)
+        assertTrue("never after the task's due date" in step["from"]!!.jsonObject["description"]!!.jsonPrimitive.content)
+    }
+
+    @Test
+    fun `a step can't start after the test that's its task's deadline`() {
+        val text = """{"subSteps":[{"title":"Revise","minutes":60,"ankiSections":[],"from":"2026-10-13","due":null}],"effortMin":60,"ankiSections":[],"testDate":"2026-10-12"}"""
+        // Put back the first time of asking; then kept, by the test's day.
+        assertEquals("Step 1 ('Revise') starts on 2026-10-13, after the due time 2026-10-12T08:30", strict(Enrichments.Job.Assignment, text, assignment("Revise for the test")).complaint)
+        val e = parse(Enrichments.Job.Assignment, text, assignment("Revise for the test"))!!
+        assertEquals(listOf("Revise" to null), e.subSteps!!.map { it.title to it.from })
+        assertEquals(listOf("'Revise': its start was after the hand-in, so it's planned by the task's date"), e.adjusted)
+        assertTrue("No step may start after the assignment's due time" in Prompts.system(Enrichments.Job.Assignment))
+        assertTrue("No block may start after the item's date" in Prompts.system(Enrichments.Job.Effort))
     }
 
     @Test
@@ -510,9 +629,10 @@ class AiUsageTest {
         // dearer rates of a fallback's older Opus. Every call's input is cut to the most it covers,
         // and an email's text is well within it.
         // The profile sent with every call counted too, at its most.
-        val longest = Pricing.costUsd("claude-opus-4-8", input = 3L * (Pricing.MAX_INPUT_CHARS + Profile.MAX_BLOCK_CHARS) + 4_000, output = ClaudeEnricher.MAX_TOKENS)
+        // A photo check's three pictures among the rest (AI-17).
+        val longest = Pricing.costUsd("claude-opus-4-8", input = 3L * (Pricing.MAX_INPUT_CHARS + Profile.MAX_BLOCK_CHARS) + 3 * 3_300 + 1_000, output = ClaudeEnricher.MAX_TOKENS)
         assertTrue(longest <= Pricing.WORST_CALL_USD, "$longest > ${Pricing.WORST_CALL_USD}")
-        assertEquals(1.26, Pricing.WORST_CALL_USD, 1e-9)
+        assertEquals(1.295, Pricing.WORST_CALL_USD, 1e-9)
         assertTrue(Prompts.MAX_TEXT + 1_000 < Pricing.MAX_INPUT_CHARS)
     }
 
@@ -632,7 +752,7 @@ class ClaudeEnricherTest {
         assertEquals("high", config["effort"]!!.jsonPrimitive.content)
         val format = config["format"]!!.jsonObject
         assertEquals("json_schema", format["type"]!!.jsonPrimitive.content)
-        assertEquals(listOf("kind", "actionableFrom", "deadline", "deadlineQuoted", "effortMin", "nextStep", "question", "blocks"), format["schema"]!!.jsonObject["required"]!!.jsonArray.map { it.jsonPrimitive.content })
+        assertEquals(listOf("kind", "actionableFrom", "deadline", "deadlineQuoted", "effortMin", "nextStep", "question", "reason", "blocks"), format["schema"]!!.jsonObject["required"]!!.jsonArray.map { it.jsonPrimitive.content })
         assertTrue("triage one email" in body["system"].toString(), body["system"].toString().take(120))
         assertTrue("Subject: Berlin trip form" in body["messages"].toString())
         // No thinking setting: Opus 5.5 always thinks, and rejects one that turns it off.
@@ -642,6 +762,35 @@ class ClaudeEnricherTest {
         assertEquals("claude-opus-5-5", e.by)
         assertEquals(Fixtures.at("2026-10-12T08:30"), e.deadline)
         assertEquals(0.0108, result.costUsd, 1e-9)
+    }
+
+    @Test
+    fun `an answer that fails a check is put back once, with the problem, and read again`() = runBlocking {
+        val bad = """{"effortMin":200,"blocks":[{"title":"A","minutes":30,"from":null,"due":null}]}"""
+        server.enqueue(reply(bad))
+        val task = assignment("Revise for the mock")
+        val first = enricher().enrich(task, Enrichments.Job.Effort, NOW)
+        server.takeRequest()
+        // Meanwhile, its reading as it can be: the total planned whole.
+        assertEquals("The blocks add up to 30 minutes, not the 200 effortMin gives", first.repair!!.complaint)
+        assertEquals(200, first.enrichment!!.effortMin)
+        server.enqueue(reply("""{"effortMin":60,"blocks":[{"title":"A","minutes":30,"from":null,"due":null},{"title":"B","minutes":30,"from":null,"due":null}]}"""))
+        val second = enricher().repair(task, Enrichments.Job.Effort, NOW, first.repair!!)
+        val messages = Json.parseToJsonElement(server.takeRequest().body.readUtf8()).jsonObject["messages"]!!.jsonArray
+        assertEquals(listOf("user", "assistant", "user"), messages.map { it.jsonObject["role"]!!.jsonPrimitive.content })
+        fun said(turn: JsonElement): String = turn.jsonObject["content"]!!.let { c -> if (c is JsonPrimitive) c.content else c.jsonArray.joinToString("") { it.jsonObject["text"]!!.jsonPrimitive.content } }
+        assertEquals(bad, said(messages[1]))
+        assertTrue(said(messages[2]).startsWith("Your answer had a problem: The blocks add up to 30 minutes"), said(messages[2]))
+        assertTrue(second.repaired)
+        assertEquals(listOf("A", "B"), second.enrichment!!.subSteps!!.map { it.title })
+        // Wrong again: dropped, said so.
+        server.enqueue(reply(bad))
+        val again = enricher().repair(task, Enrichments.Job.Effort, NOW, first.repair!!)
+        assertTrue(again.repaired)
+        assertEquals("the blocks add up to 30 minutes, not the 200 effortMin gives", again.enrichment!!.dropped)
+        // One that passes isn't put back.
+        server.enqueue(reply("""{"effortMin":35,"blocks":[]}"""))
+        assertNull(enricher().enrich(task, Enrichments.Job.Effort, NOW).repair)
     }
 
     @Test
@@ -701,17 +850,19 @@ class PhotoCheckerTest {
                 ),
             )
             server.enqueue(MockResponse().setHeader("Content-Type", "application/json").setBody(body.toString()))
-            val result = PhotoChecker("test-key", endpoint = server.url("").toString().trimEnd('/')).check(byteArrayOf(1, 2, 3), "Chapter 17 review, part 2 of 3")
+            val result = PhotoChecker("test-key", endpoint = server.url("").toString().trimEnd('/')).check(listOf(byteArrayOf(1, 2, 3), byteArrayOf(4, 5, 6)), "The piece of work: Chapter 17 review, part 2 of 3, 30 min")
             val request = Json.parseToJsonElement(server.takeRequest().body.readUtf8()).jsonObject
             val content = request["messages"]!!.jsonArray.single().jsonObject["content"]!!.jsonArray
+            // A page each, then what they're of (AI-17).
+            assertEquals(listOf("image", "image", "text"), content.map { it.jsonObject["type"]!!.jsonPrimitive.content })
             val image = content.first().jsonObject
-            assertEquals("image", image["type"]!!.jsonPrimitive.content)
             assertEquals("image/jpeg", image["source"]!!.jsonObject["media_type"]!!.jsonPrimitive.content)
             assertEquals("AQID", image["source"]!!.jsonObject["data"]!!.jsonPrimitive.content)
-            assertTrue("Chapter 17 review, part 2 of 3" in content[1].toString())
+            assertTrue("Chapter 17 review, part 2 of 3" in content[2].toString())
             assertEquals(true, result.verdict!!.done)
             // A confidence past 1 is read as 1.
             assertEquals(1.0, result.verdict!!.confidence)
+            assertTrue("Blank or crossed-out pages, a photo of a screen, printed answers, or work for a different task are not done" in PhotoChecker.system())
         } finally {
             server.shutdown()
         }

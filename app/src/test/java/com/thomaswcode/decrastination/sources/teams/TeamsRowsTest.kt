@@ -42,6 +42,23 @@ class TeamsRowsTest {
     }
 
     @Test
+    fun `an assignment's reference materials and links are kept, as an email's attachments are, and sent with it`() {
+        val row = rows.first() + mapOf("attachments" to "Statics booklet.pdf\nMark scheme.pdf\n", "links" to "https://example.com/notes\nhttps://example.com/notes")
+        val task = com.thomaswcode.decrastination.core.Merge.apply(emptyList(), com.thomaswcode.decrastination.core.Source.Teams, listOfNotNull(TeamsRows.fetched(row)), 0).tasks.single()
+        assertEquals(listOf("Statics booklet.pdf", "Mark scheme.pdf"), com.thomaswcode.decrastination.sources.gmail.GmailThreads.attachmentsOf(task).map { it.name })
+        assertEquals(listOf("https://example.com/notes"), TeamsRows.linksOf(task))
+        val described = com.thomaswcode.decrastination.enrich.Prompts.describe(task, com.thomaswcode.decrastination.core.Enrichments.Job.Assignment, 0, Fixtures.LONDON)
+        assertEquals(true, "Attachments: Statics booklet.pdf, Mark scheme.pdf" in described, described)
+        assertEquals(true, "Links: https://example.com/notes" in described, described)
+        // Its links are what it's read from too: changed, it's read again.
+        assertEquals(false, com.thomaswcode.decrastination.core.Enrichments.inputHash(task) == com.thomaswcode.decrastination.core.Enrichments.inputHash(task.copy(extra = task.extra - TeamsRows.EXTRA_LINKS)))
+        // A widget before 0.4.0 gives neither.
+        val older = TeamsRows.fetched(rows.first())!!
+        assertNull(older.extra[com.thomaswcode.decrastination.sources.gmail.GmailThreads.EXTRA_ATTACHMENTS])
+        assertNull(older.extra[TeamsRows.EXTRA_LINKS])
+    }
+
+    @Test
     fun `a row without a key is skipped, a blank title named`() {
         assertNull(TeamsRows.fetched(mapOf("title" to "x")))
         // In a read, a row without its key fails it: skipped, its assignment would look handed in.
@@ -49,6 +66,27 @@ class TeamsRowsTest {
         kotlin.test.assertFailsWith<java.io.IOException> { TeamsRows.all(listOf(mapOf("key" to "k", "title" to "a"), mapOf("key" to " ", "title" to "x"))) }
         assertEquals(listOf("k"), TeamsRows.all(listOf(mapOf("key" to "k", "title" to "a"))).map { it.sourceId })
         assertEquals("Untitled assignment", TeamsRows.fetched(mapOf("key" to "k", "title" to " "))!!.title)
+    }
+
+    @Test
+    fun `returned work with feedback is ten minutes' reading, due in three days, done by a tick`() {
+        val row = mapOf("key" to "k1", "title" to "Statics Prep", "class_name" to "12.2-PH3", "returned_at" to Fixtures.at("2026-10-14T16:00"), "feedback" to "Good work; check your units in Q3.")
+        val f = TeamsRows.returned(row)!!
+        assertEquals("k1:feedback:${Fixtures.at("2026-10-14T16:00")}", f.sourceId)
+        // Returned again later: feedback of its own.
+        assertEquals("k1:feedback:${Fixtures.at("2026-10-21T16:00")}", TeamsRows.returned(row + ("returned_at" to Fixtures.at("2026-10-21T16:00")))!!.sourceId)
+        assertEquals("Read the feedback on Statics Prep", f.title)
+        assertEquals(Kind.Admin, f.kind)
+        assertEquals("Good work; check your units in Q3.", f.detail)
+        assertEquals(Fixtures.at("2026-10-17T16:00"), f.dueAt)
+        assertEquals(10, f.sourceEffortMin)
+        assertEquals("k1", f.extra[TeamsRows.EXTRA_FEEDBACK_ON])
+        val task = com.thomaswcode.decrastination.core.Merge.apply(emptyList(), com.thomaswcode.decrastination.core.Source.Teams, listOf(f), 0).tasks.single()
+        assertEquals(true, task.tickDone)
+        // Not read by Claude: it's ten minutes as it is.
+        assertNull(com.thomaswcode.decrastination.core.Enrichments.jobFor(task))
+        assertNull(TeamsRows.returned(mapOf("title" to "x")))
+        kotlin.test.assertFailsWith<java.io.IOException> { TeamsRows.allReturned(listOf(mapOf("title" to "x"))) }
     }
 
     @Test

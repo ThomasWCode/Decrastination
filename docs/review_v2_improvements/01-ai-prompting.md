@@ -12,29 +12,29 @@ The model-side settings (effort, model per job, caching, retries) are in [02-ai-
 
 | ID | Improvement | Priority | Effort | Status |
 |---|---|---|---|---|
-| AI-01 | One repair round, then salvage a split with one bad date | P1 | M | Changed (Q-01) |
+| AI-01 | One repair round, then salvage a split with one bad date | P1 | M | Changed (Q-01); Implemented (v3 phase 7) |
 | AI-02 | The Email job after starred-only reading: no Info, always a next step | P1 | S | Changed (Q-04); Implemented (v3 phase 1) |
-| AI-03 | Tell the model the hard limits the checks enforce | P1 | S | – |
+| AI-03 | Tell the model the hard limits the checks enforce | P1 | S | –; Implemented (v3 phase 7) |
 | AI-04 | Tell the model it sees only the newest message of a thread, and what's attached | P1 | S | Implemented (v3 phase 1, as the whole conversation) |
 | AI-05 | A stable "about me" block: subjects, class codes, year, timetable, your lines, memories | P1 | M | Changed (Q-02); Implemented (v3 phase 5) |
 | AI-06 | Stop hard-coding "Year 12" | P1 | S | –; Implemented (v3 phase 5) |
-| AI-07 | Worked examples in each system prompt | P2 | M | – |
-| AI-08 | Keep step titles stable when a task is enriched again | P2 | S | – |
-| AI-09 | Ask for a one-line reason with each reading, and show it | P2 | M | – |
+| AI-07 | Worked examples in each system prompt | P2 | M | –; Implemented (v3 phase 7) |
+| AI-08 | Keep step titles stable when a task is enriched again | P2 | S | –; Implemented (v3 phase 7) |
+| AI-09 | Ask for a one-line reason with each reading, and show it | P2 | M | –; Implemented (v3 phase 7) |
 | AI-10 | Let the model ask one question when it isn't sure, and notify | P1 | M | Changed (Q-03); Implemented (v3 phase 5) |
 | AI-11 | A way to say "this email is a task" when Claude hid it | – | – | Withdrawn (Q-04) |
 | AI-12 | Every date the model sets is soft | P1 | S | Changed (Q-05, note 4); Implemented (v3 phase 2) |
-| AI-13 | Time-of-day awareness in the chat | P1 | S | – |
-| AI-14 | More kinds of card in the chat: tick, steps, open, move | P2 | M | Changed (Q-06) |
-| AI-15 | "Help me start": a micro-plan for every slot, ready before it starts | P1 | M | Changed (Q-07) |
-| AI-16 | The photo check should see the instructions, not just the piece's name | P1 | S | – |
-| AI-17 | Several photos for one piece; no partial credit | P3 | S | Changed (Q-08) |
+| AI-13 | Time-of-day awareness in the chat | P1 | S | –; Implemented (v3 phase 7) |
+| AI-14 | More kinds of card in the chat: tick, steps, open, move | P2 | M | Changed (Q-06); Implemented (v3 phase 7) |
+| AI-15 | "Help me start": a micro-plan for every slot, ready before it starts | P1 | M | Changed (Q-07); Implemented (v3 phase 7) |
+| AI-16 | The photo check should see the instructions, not just the piece's name | P1 | S | –; Implemented (v3 phase 7) |
+| AI-17 | Several photos for one piece; no partial credit | P3 | S | Changed (Q-08); Implemented (v3 phase 7) |
 | AI-18 | The weekly review should see last week's review, the day records and the slots kept | P2 | S | Changed |
-| AI-19 | A "Steps" change, so Claude can split or re-split a task of your own | P2 | M | – |
-| AI-20 | Schema descriptions as a steering channel | P2 | S | – |
+| AI-19 | A "Steps" change, so Claude can split or re-split a task of your own | P2 | M | –; Implemented (v3 phase 7) |
+| AI-20 | Schema descriptions as a steering channel | P2 | S | –; Implemented (v3 phase 7) |
 | AI-21 | Remembered facts and standing instructions, with a budget instead of a cap | P1 | M | Changed (Q-09, Q-36, Q-46); Implemented (v3 phase 5) |
 | AI-22 | The voice: Felix, a strict friend, everywhere | P1 | M | New (note 6, Q-31, Q-44); Implemented (v3 phase 5) |
-| AI-23 | A photo as context for an existing task | P2 | M | New (Q-22) |
+| AI-23 | A photo as context for an existing task | P2 | M | New (Q-22); Implemented (v3 phase 7) |
 | AI-24 | Replies continue in the chat; changes to existing tasks apply at once | P1 | M | New (note 6, Q-31, Q-42); Implemented (v3 phase 5) |
 
 ---

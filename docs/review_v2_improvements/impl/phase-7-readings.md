@@ -18,6 +18,8 @@ Items: AI-01, AI-03, AI-07, AI-08, AI-09, AI-13, AI-14, AI-15, AI-16, AI-17, AI-
 
 **Tests.** `EnrichTest`: a bad `from` is salvaged with the line; an unparseable date still drops; `complaint` text for each check; `ClaudeEnricher` against `MockWebServer` (the existing fake server in `EnrichTest`): the second request carries the assistant turn and the complaint; two bad answers → dropped, `repaired = true`.
 
+*(As built: the second time of asking is a call of its own (`Enricher.repair`, sent by `enrichNow` through `callModel`), so the cap reserves for it and a rest holds it; its item is cut to leave room for the first answer within `MAX_INPUT_CHARS`. `Answers.read` returns `Parsed`; `Answers.parse` stays, the salvaging read's enrichment, for its callers. A step due after its task is salvaged too.)*
+
 ---
 
 ## AI-03 and AI-20 Limits in the prompt and in the schema
@@ -76,6 +78,8 @@ Items: AI-01, AI-03, AI-07, AI-08, AI-09, AI-13, AI-14, AI-15, AI-16, AI-17, AI-
 
 **Tests.** `ChatTest`: actions parsed; `InstructionsTest`: Steps parsed and described; `OwnTasksTest`: Steps replaces, keeps ticks.
 
+*(As built: the chat's schema holds 15 of the API's 16 unions, so an action's `stepIndex` is a plain integer (-1 for none) and has no `key`, and a step's dates are plain strings (empty for none). *Open* shows the task's sheet in Work. *Split with Felix* is on your own tasks' sheets only, as only they take a Steps change.)*
+
 ---
 
 ## AI-15 Micro-plans, generated ahead
@@ -112,6 +116,8 @@ Items: AI-01, AI-03, AI-07, AI-08, AI-09, AI-13, AI-14, AI-15, AI-16, AI-17, AI-
 
 **Tests.** `EnrichTest`: `inputHash` changes with the photo hash; `PhotoTasks` parse.
 
+*(As built: the photo is `TaskItem.photo` (its path and hash), not an `extra`, as a sync replaces a task's extras; the hash is kept with it. *Add a photo of the work* is on the sheets of tasks the model reads (`Enrichments.jobFor`), as yours aren't read. The photo-to-tasks schema's dates are plain strings, empty for none. Photos no task holds are deleted at a start.)*
+
 ---
 
 ## DX-08 Teams links and attachments
@@ -141,6 +147,8 @@ Items: AI-01, AI-03, AI-07, AI-08, AI-09, AI-13, AI-14, AI-15, AI-16, AI-17, AI-
 
 **Tests.** `MimeTest`: both date forms; a missing `DTEND` gives one hour.
 
+*(As built: an email of an event stays off the plan and Tasks (the owner's call of 9 Oct, `justAnEmail`), so Work lists them folded, *Events in your email*, where an invite's sheet and its Add to calendar are reached. The invite is the event unless Claude read work to do by a date the email gives (Admin, quoted); its start is then still on the sheet. Kept as `summary|start|end|location` with a bar or line break in the text made a slash or a space; the newest message's invite stands, none where it's called off (`METHOD:CANCEL`, `STATUS:CANCELLED`); a `DURATION` stands for a missing `DTEND`, a date alone is all day (sent to the calendar app at UTC midnights, as Android wants), a `TZID` Java doesn't know is Windows' name for a zone (Outlook's `Eastern Standard Time`) or the calendar's own `VTIMEZONE`, read for its offsets and yearly changes, and one none of them tells gives no invite rather than a wrong time. The stored texts are read again once (`TEXT_RULES` 2), so emails starred already are found.)*
+
 ---
 
 ## DX-15 The same work from two sources
@@ -161,3 +169,5 @@ Items: AI-01, AI-03, AI-07, AI-08, AI-09, AI-13, AI-14, AI-15, AI-16, AI-17, AI-
 
 1. In the Teams widget: the provider lists assignments not handed in; returned work appears in Teams' Completed tab with a "Returned" state and the teacher's feedback on its detail page. Have the sync read the Completed tab's returned assignments (the most recent 20 is enough) and expose them on a new path, `/returned`, with `key, title, class_name, returned_at, feedback` (feedback text as the page shows it, empty when none), under the same permission. One PR there.
 2. Here: `TeamsSource.read` queries `/returned` when the provider answers it (an unknown path throws; catch and treat as none) and `TeamsRows.returned(row)` emits a `Fetched` per row: `sourceId = "$key:feedback"`, title "Read the feedback on <title>", `Kind.Admin`, `detail` = the feedback, `dueAt = returned_at + 3 days`, `sourceEffortMin = 10`, `extra["tickDone"] = "true"` so a tick finishes it (`Focus.keepSlot` → done); gone from `/returned` → finished.
+
+*(As built, here: a tick finishes it by the path one of your own takes (`AppGraph.finishOwnTask`), so it earns no completion time, as yours don't; `Merge` keeps it done while `/returned` still lists it, as a derived task's done stays; it isn't read by Claude (`Enrichments.jobFor`), being ten minutes as it is; Open asks the widget for its assignment's key (`extra["feedbackOn"]`). The widget's step 1 needs captures of returned work first: none of its fixtures shows a returned card or feedback.)*

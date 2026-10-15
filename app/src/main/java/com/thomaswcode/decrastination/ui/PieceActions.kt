@@ -25,6 +25,7 @@ import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.block.Credit
 import com.thomaswcode.decrastination.core.EarnsBy
 import com.thomaswcode.decrastination.block.PhotoChecks
+import com.thomaswcode.decrastination.enrich.PhotoChecker
 import com.thomaswcode.decrastination.core.Chunk
 import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.Source
@@ -39,26 +40,35 @@ import kotlinx.coroutines.launch
  */
 class PhotoCheck(val available: Boolean, val checking: Boolean, val take: (Chunk) -> Unit)
 
-/** A piece of the plan being photographed: its task, and its step's place and name (or "part 1 of 2"). */
-private data class PhotoPiece(val taskId: String, val stepIndex: Int?, val step: String?)
+/**
+ * A piece of the plan being photographed: its task, its step's place and name (or "part 1 of 2"),
+ * the pages taken so far (AI-17), and when the first was: a slot of its key kept before then isn't
+ * the one the photos show.
+ */
+private data class PhotoPiece(val taskId: String, val stepIndex: Int?, val step: String?, val pages: Int = 0, val takenAt: Long? = null)
 
 private val PIECE = Saver<PhotoPiece?, ArrayList<String?>>(
-    save = { p -> p?.let { arrayListOf(it.taskId, it.stepIndex?.toString(), it.step) } },
-    restore = { (taskId, index, step) -> PhotoPiece(taskId!!, index?.toInt(), step) },
+    save = { p -> p?.let { arrayListOf(it.taskId, it.stepIndex?.toString(), it.step, it.pages.toString(), it.takenAt?.toString()) } },
+    restore = { saved -> PhotoPiece(saved[0]!!, saved[1]?.toInt(), saved[2], saved.getOrNull(3)?.toInt() ?: 0, saved.getOrNull(4)?.toLongOrNull()) },
 )
 
 /**
- * The screen's photo check. The piece being photographed is kept through the screen being made
- * again while the camera is open (a turn of the phone, Android needing the memory), and found again
- * in [plan] when the photo comes back (BUG-P2-011). [say] gives how it went, and for which task.
+ * The screen's photo check: a page, then "Add another page?", up to [PhotoChecker.MAX_PAGES] in one
+ * check (AI-17). The piece being photographed, with its pages so far, is kept through the screen
+ * being made again while the camera is open (a turn of the phone, Android needing the memory), and
+ * found again in [plan] when the photos are checked (BUG-P2-011). [say] gives how it went, and for
+ * which task.
  */
 @Composable
 fun rememberPhotoCheck(graph: AppGraph, activity: Activity, plan: Plan, say: (taskId: String, text: String) -> Unit): PhotoCheck {
     val settings by graph.settings.state.collectAsStateWithLifecycle()
     val checker = remember(settings.aiEnabled, settings.aiKeyActive) { graph.photoChecker() }
-    val file = remember { File(activity.cacheDir, "photos/check.jpg").also { it.parentFile?.mkdirs() } }
-    val uri = remember { FileProvider.getUriForFile(activity, "${activity.packageName}.photos", file) }
+    val dir = remember { File(activity.cacheDir, "photos").also { it.mkdirs() } }
+    fun page(n: Int) = File(dir, "check-$n.jpg")
+    fun uriOf(file: File) = FileProvider.getUriForFile(activity, "${activity.packageName}.photos", file)
     var photoFor by rememberSaveable(stateSaver = PIECE) { mutableStateOf<PhotoPiece?>(null) }
+    // Asked after a page: another, or check those taken.
+    var asking by rememberSaveable { mutableStateOf(false) }
     // App-wide, not this screen's: a check runs on when the screen goes (a tab changed), and its
     // outcome is shown on whichever screen is there, or the next.
     val running by PhotoChecks.running.collectAsStateWithLifecycle()
@@ -68,33 +78,69 @@ fun rememberPhotoCheck(graph: AppGraph, activity: Activity, plan: Plan, say: (ta
         PhotoChecks.unseen.value = null
         say(taskId, text)
     }
-    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { taken ->
-        val wanted = photoFor
+    /** The pages taken checked together, the piece found again in the plan as it is now. */
+    fun check(wanted: PhotoPiece) {
         photoFor = null
-        if (!taken || wanted == null || checker == null) {
-            // Not to be checked (cancelled): not kept either.
-            file.delete()
-            return@rememberLauncherForActivityResult
-        }
+        val pages = (1..wanted.pages).map(::page)
         val piece = plan.chunksOf(wanted.taskId).firstOrNull { it.stepIndex == wanted.stepIndex && it.step == wanted.step }
-        if (piece == null) {
-            file.delete()
-            say(wanted.taskId, "That piece has changed since the photo was taken (done, or planned again), so it wasn't checked.")
-            return@rememberLauncherForActivityResult
+        if (piece == null || checker == null) {
+            pages.forEach { it.delete() }
+            if (piece == null) say(wanted.taskId, "That piece has changed since the photo was taken (done, or planned again), so it wasn't checked.")
+            return
         }
-        say(piece.taskId, "Checking the photo…")
+        say(piece.taskId, if (pages.size == 1) "Checking the photo…" else "Checking the ${pages.size} pages…")
         PhotoChecks.running.value = piece.taskId
         graph.scope.launch {
             try {
-                PhotoChecks.unseen.value = piece.taskId to PhotoChecks.check(activity.applicationContext, graph, file, piece)
+                PhotoChecks.unseen.value = piece.taskId to PhotoChecks.check(activity.applicationContext, graph, pages, piece, takenAt = wanted.takenAt ?: graph.clock.now())
             } finally {
                 PhotoChecks.running.value = null
             }
         }
     }
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { taken ->
+        val wanted = photoFor ?: return@rememberLauncherForActivityResult
+        when {
+            // Not to be checked: with no page yet, nothing to keep.
+            checker == null || (!taken && wanted.pages == 0) -> {
+                photoFor = null
+                (1..PhotoChecker.MAX_PAGES).forEach { page(it).delete() }
+            }
+            // That page not taken: those before it are checked.
+            !taken -> check(wanted)
+            else -> {
+                val more = wanted.copy(pages = wanted.pages + 1, takenAt = wanted.takenAt ?: graph.clock.now())
+                photoFor = more
+                if (more.pages >= PhotoChecker.MAX_PAGES) check(more) else asking = true
+            }
+        }
+    }
+    if (asking) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = {
+                asking = false
+                photoFor?.let(::check)
+            },
+            title = { Text("Add another page?") },
+            text = { Text("Up to ${PhotoChecker.MAX_PAGES} pages go in one check.") },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = {
+                    asking = false
+                    photoFor?.let { launcher.launch(uriOf(page(it.pages + 1))) }
+                }) { Text("Add a page") }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = {
+                    asking = false
+                    photoFor?.let(::check)
+                }) { Text("Check it now") }
+            },
+        )
+    }
     return PhotoCheck(checker != null, running != null) { piece ->
+        (1..PhotoChecker.MAX_PAGES).forEach { page(it).delete() }
         photoFor = PhotoPiece(piece.taskId, piece.stepIndex, piece.step)
-        launcher.launch(uri)
+        launcher.launch(uriOf(page(1)))
     }
 }
 
