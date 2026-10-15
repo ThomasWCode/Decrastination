@@ -464,6 +464,19 @@ class AnswersTest {
     }
 
     @Test
+    fun `the limits the answers are checked against are said in the prompts and the schemas`() {
+        assertEquals(
+            "Limits the app enforces: at most 12 steps; no step longer than 240 minutes; a total of at most 10 hours; the steps must add up to effortMin exactly.",
+            Prompts.limits(Enrichments.Job.Assignment),
+        )
+        assertTrue(Prompts.system(Enrichments.Job.Assignment).endsWith(Prompts.limits(Enrichments.Job.Assignment)))
+        assertTrue("at most 30 blocks, none longer than 600 minutes, 20 hours in all" in Prompts.system(Enrichments.Job.Email))
+        val step = Prompts.schemaJson(Enrichments.Job.Assignment).jsonObject["properties"]!!.jsonObject["subSteps"]!!.jsonObject["items"]!!.jsonObject["properties"]!!.jsonObject
+        assertEquals("10 to 60 where the work allows; never over 240", step["minutes"]!!.jsonObject["description"]!!.jsonPrimitive.content)
+        assertTrue("never after the task's due date" in step["from"]!!.jsonObject["description"]!!.jsonPrimitive.content)
+    }
+
+    @Test
     fun `a step can't start after the test that's its task's deadline`() {
         val text = """{"subSteps":[{"title":"Revise","minutes":60,"ankiSections":[],"from":"2026-10-13","due":null}],"effortMin":60,"ankiSections":[],"testDate":"2026-10-12"}"""
         // Put back the first time of asking; then kept, by the test's day.
