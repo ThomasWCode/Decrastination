@@ -18,9 +18,15 @@ import com.thomaswcode.decrastination.enrich.FelixPrompts.Reason
  */
 object FelixRules {
     /** What a message would be about: a slot under way, or one on record (missed, kept). */
-    data class Trigger(val reason: Reason, val slot: Slot? = null, val record: SlotRecord? = null, val asks: List<com.thomaswcode.decrastination.data.AssessLater> = emptyList()) {
+    data class Trigger(
+        val reason: Reason,
+        val slot: Slot? = null,
+        val record: SlotRecord? = null,
+        val asks: List<com.thomaswcode.decrastination.data.AssessLater> = emptyList(),
+        val question: com.thomaswcode.decrastination.data.FelixQuestion? = null,
+    ) {
         val key: String? get() = slot?.chunk?.key ?: record?.key
-        val taskId: String? get() = slot?.chunk?.taskId ?: record?.taskId
+        val taskId: String? get() = slot?.chunk?.taskId ?: record?.taskId ?: question?.taskId
     }
 
     /** At most this many messages about one slot under way with nothing done: the first, then at the checks he sets. */
@@ -74,6 +80,8 @@ object FelixRules {
             return Trigger(Reason.DayDone, record = last)
         }
         val paced = state.nextCheckAt?.let { now < it } == true
+        // A question of the model's about a reading (AI-10): put when he's free to, the oldest first.
+        if (!paced) state.questions.firstOrNull()?.let { return Trigger(Reason.Question, question = it) }
         // Work its source says is done that the app saw none of: how it went, asked together in the evening.
         if (!paced && toAsk.isNotEmpty() && com.thomaswcode.decrastination.block.BlockPolicy.minuteOfDay(now, zone) >= COMPLETIONS_FROM_MIN && sent.none { it.reason == Reason.Completions.name }) {
             return Trigger(Reason.Completions, asks = toAsk)

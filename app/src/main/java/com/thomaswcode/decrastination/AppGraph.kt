@@ -1012,6 +1012,8 @@ class AppGraph private constructor(context: Context) {
                 )
             }
             if (!laid) continue
+            // A question it couldn't settle from the text (AI-10): Felix puts it.
+            made.question?.let { felix.queueQuestion(task.id, it, now) }
             // A plan of the model's dropped (out of range, not adding up) is said once it's laid,
             // by droppedAlerts, as the tasks change.
             // Its deck tasks take their sections and due date from it.

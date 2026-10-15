@@ -631,7 +631,7 @@ class ClaudeEnricherTest {
         assertEquals("high", config["effort"]!!.jsonPrimitive.content)
         val format = config["format"]!!.jsonObject
         assertEquals("json_schema", format["type"]!!.jsonPrimitive.content)
-        assertEquals(listOf("kind", "actionableFrom", "deadline", "deadlineQuoted", "effortMin", "nextStep", "blocks"), format["schema"]!!.jsonObject["required"]!!.jsonArray.map { it.jsonPrimitive.content })
+        assertEquals(listOf("kind", "actionableFrom", "deadline", "deadlineQuoted", "effortMin", "nextStep", "question", "blocks"), format["schema"]!!.jsonObject["required"]!!.jsonArray.map { it.jsonPrimitive.content })
         assertTrue("triage one email" in body["system"].toString(), body["system"].toString().take(120))
         assertTrue("Subject: Berlin trip form" in body["messages"].toString())
         // No thinking setting: Opus 5.5 always thinks, and rejects one that turns it off.
@@ -779,5 +779,23 @@ class PhotoCheckerTest {
         assertTrue(usage.allows(10, inFlight = 1))
         assertFalse(usage.allows(10, inFlight = 2))
         assertTrue(AiUsage(spentUsd = 1_000.0).allows(null, inFlight = 9))
+    }
+}
+
+class QuestionTest {
+    @Test
+    fun `a question it can't settle is read, and only one worth asking`() {
+        val text = """{"kind":"Admin","actionableFrom":null,"deadline":"2026-10-16","deadlineQuoted":true,"effortMin":10,"nextStep":"Sign the form","question":" Is it this Friday or next? ","blocks":[]}"""
+        assertEquals("Is it this Friday or next?", Answers.parse(Enrichments.Job.Email, text, email(), "claude-opus-5-5", NOW, LONDON)!!.question)
+        assertNull(Answers.parse(Enrichments.Job.Email, text.replace("\" Is it this Friday or next? \"", "null"), email(), "claude-opus-5-5", NOW, LONDON)!!.question)
+    }
+
+    @Test
+    fun `an answer is read with the task, and only a task with one is read again`() {
+        val task = email()
+        assertEquals(Enrichments.inputHash(task), Enrichments.inputHash(task.copy(answers = emptyList())))
+        val answered = task.copy(answers = listOf("Next Friday, the 23rd"))
+        kotlin.test.assertNotEquals(Enrichments.inputHash(task), Enrichments.inputHash(answered))
+        assertTrue("The student says: Next Friday, the 23rd" in Prompts.describe(answered, Enrichments.Job.Email, NOW, LONDON))
     }
 }

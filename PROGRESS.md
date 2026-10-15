@@ -80,7 +80,8 @@ The implementation of `docs/review_v2_improvements/impl/` on branch `v3`. Delete
 - LR-05 "How did it go?" as Felix's question once an evening, about the day's completions no kept slot saw, his replies the three answers; the old question with Claude off; its channel gone: fafb2fc.
 - LR-07 the routine notifications at most four a day and none in quiet hours, the rest held for the next briefing; Felix and protection unheld: 0079695.
 - AC-10 Felix's next "starting?" written ahead, ten minutes before it's due, and sent as it is if it still fits: a29645c.
-- UI-06 his offered replies as chips in the chat; UI-16 the chat titled with his name and his button on every screen, the menu's Ask Claude gone: this commit.
+- UI-06 his offered replies as chips in the chat; UI-16 the chat titled with his name and his button on every screen, the menu's Ask Claude gone: df1b3ab.
+- AI-10 one question when an email's or an assignment's reading can't be settled from its text, put by Felix when he's free; the answer an instruction on the task and read with it again: this commit.
 
 ## Current
 

@@ -337,11 +337,17 @@ data class FelixState(
     val lastSentAt: Long? = null,
     val draft: FelixDraft? = null,
     val activity: Map<String, Long> = emptyMap(),
+    /** The model's questions about tasks waiting to be put (AI-10). */
+    val questions: List<FelixQuestion> = emptyList(),
 ) {
     /** [taskIds] seen done on [at]: the last day's kept. */
     fun withActivity(taskIds: Collection<String>, at: Long): FelixState =
         copy(activity = (activity + taskIds.associateWith { at }).filterValues { it > at - 24 * 3_600_000L })
 }
+
+/** A question of the model's about [taskId]'s reading (AI-10), from [at]. */
+@Serializable
+data class FelixQuestion(val taskId: String, val question: String, val at: Long)
 
 /** A message of Felix's written ahead (AC-10): sent if it still fits its reason and piece when the time comes. */
 @Serializable
