@@ -53,6 +53,17 @@ class ReviewsActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         val graph = AppGraph.get(this)
         setContent { AppTheme { Reviews(graph) } }
+        // From the summary's notification (NF-02): its email opened over the page, once.
+        if (savedInstanceState == null) intent.getStringExtra(EXTRA_SEND)?.let { week ->
+            graph.log.value.reviews.firstOrNull { it.week == week }?.summary?.let { text ->
+                runCatching { startActivity(com.thomaswcode.decrastination.learn.Summary.email(graph.settings.value.summaryEmail, week, text)) }
+            }
+        }
+    }
+
+    companion object {
+        /** The week whose summary to open in an email. */
+        const val EXTRA_SEND = "send"
     }
 }
 

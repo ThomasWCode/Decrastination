@@ -214,6 +214,16 @@ object Stats {
         return if (run >= HOLIDAY_DAYS) today.minusDays(TERM_LOOK_BACK - run + 1L) else today.minusDays(TERM_LOOK_BACK.toLong())
     }
 
+    /**
+     * [log]'s week rollups, those of weeks the log still holds whole made again from its records
+     * (PL-10): a week's is written at its review, which can come before the week's end (Sunday
+     * evening's), so what came in after it is taken in while the records are there.
+     */
+    fun refreshedWeeks(log: ActivityLog, now: Long, zone: ZoneId): List<WeekRollup> {
+        val cut = Instant.ofEpochMilli(now - ActivityLog.KEEP_DAYS * DAY_MS).atZone(zone).toLocalDate()
+        return log.weeks.map { w -> LocalDate.parse(w.week).let { monday -> if (monday.isAfter(cut)) rollup(log, monday, zone) else w } }
+    }
+
     /** Work with no class, by subject. */
     const val OTHER = "Other"
 

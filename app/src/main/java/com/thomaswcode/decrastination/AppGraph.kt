@@ -1341,6 +1341,9 @@ class AppGraph private constructor(context: Context) {
         if (log.value.felix.lastOrNull()?.reason == com.thomaswcode.decrastination.enrich.FelixPrompts.Reason.CheckIn.name) com.thomaswcode.decrastination.notify.FelixNotifications.cancel(app)
     }
 
+    /** Raised at each reset of the record (LR-08), so a review already out when it came doesn't put back what it took. */
+    val resets = java.util.concurrent.atomic.AtomicInteger()
+
     /** What can be reset (LR-08), and what each takes. */
     enum class Reset(val title: String, val takes: String) {
         Stats("Stats", "the record of what got done (slots, completions, days, blocks, the reviews and the check-ins), and what the app learned from it"),
@@ -1374,6 +1377,7 @@ class AppGraph private constructor(context: Context) {
         }.getOrElse { return@withContext "Nothing was reset: a copy of it couldn't be saved first." }
         val all = what == Reset.Everything
         if (all || what == Reset.Stats) {
+            resets.incrementAndGet()
             // Felix's messages are the chat's to reset, not Stats'.
             log.update { com.thomaswcode.decrastination.data.ActivityLog(felix = it.felix) }
             runtime.update { it.copy(calibration = com.thomaswcode.decrastination.core.Calibration()) }
@@ -1385,8 +1389,10 @@ class AppGraph private constructor(context: Context) {
         }
         if (all || what == Reset.Chat) {
             clearChat()
-            runtime.update { it.copy(felix = com.thomaswcode.decrastination.data.FelixState()) }
+            runtime.update { it.copy(felix = com.thomaswcode.decrastination.data.FelixState(), checkInDraft = null) }
             log.update { it.copy(felix = emptyList()) }
+            // His notification too, a check-in's question among them: nothing's left to answer it.
+            com.thomaswcode.decrastination.notify.FelixNotifications.cancel(app)
         }
         if (all || what == Reset.Instructions) {
             instructions.update { com.thomaswcode.decrastination.core.InstructionState() }
@@ -1440,7 +1446,8 @@ class AppGraph private constructor(context: Context) {
                 .setContentTitle(settings.value.felixName)
                 .setContentText(SUMMARY_READY)
                 .setStyle(androidx.core.app.NotificationCompat.BigTextStyle().bigText("$SUMMARY_READY\n\n$text"))
-                .let { com.thomaswcode.decrastination.notify.Notify.opening(it, app, SUMMARY_ID, com.thomaswcode.decrastination.learn.Summary.email(settings.value.summaryEmail, week, text)) }
+                // Through the Reviews page, which opens the email: a tap held through quiet hours is the app's own.
+                .let { com.thomaswcode.decrastination.notify.Notify.opening(it, app, SUMMARY_ID, android.content.Intent(app, com.thomaswcode.decrastination.ui.ReviewsActivity::class.java).putExtra(com.thomaswcode.decrastination.ui.ReviewsActivity.EXTRA_SEND, week).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) }
                 .setAutoCancel(true)
                 .build(),
         )
