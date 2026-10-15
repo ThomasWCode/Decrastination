@@ -56,7 +56,7 @@ class PhotoChecker(apiKey: String, endpoint: String? = null, val model: String =
                     ContentBlockParam.ofText(TextBlockParam.builder().text("The piece of work: $piece".take(Pricing.MAX_INPUT_CHARS)).build()),
                 ),
             )
-            .outputConfig(OutputConfig.builder().effort(OutputConfig.Effort.HIGH).format(JsonOutputFormat.builder().schema(schema).build()).build())
+            .outputConfig(OutputConfig.builder().effort(ModelEffort.of(ModelEffort.Job.PhotoCheck)).format(JsonOutputFormat.builder().schema(schema).build()).build())
             .putAdditionalHeader("anthropic-beta", ClaudeEnricher.FALLBACK_BETA)
             .putAdditionalBodyProperty("fallbacks", JsonValue.from("default"))
             .build()

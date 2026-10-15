@@ -53,6 +53,8 @@ import com.thomaswcode.decrastination.data.SecretStore
 import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.data.TaskState
 import com.thomaswcode.decrastination.enrich.AiUsage
+import com.thomaswcode.decrastination.enrich.Failures
+import com.thomaswcode.decrastination.enrich.Failure
 import com.thomaswcode.decrastination.enrich.ChatPrompts
 import com.thomaswcode.decrastination.enrich.ChatReader
 import com.thomaswcode.decrastination.enrich.ClaudeEnricher
@@ -783,13 +785,25 @@ class AppGraph private constructor(context: Context) {
      * that the key or the account can't be used ([KeyProblem]) is alerted, once a stretch of it,
      * not at each hourly retry. The rules stand in meanwhile.
      */
-    suspend fun modelFailed(error: Throwable, month: String, at: Long) {
+    suspend fun modelFailed(error: Throwable, month: String, at: Long, task: TaskItem? = null) {
         val problem = KeyProblem.of(error)
-        val after = runtime.update { state -> state.copy(aiUsage = state.aiUsage.forMonth(month).failure(error.message ?: error.javaClass.simpleName, at, problem)) }
+        // Rested by what failed (AC-04): busy, the server, a timeout, no network, a request it won't take.
+        val kind = Failures.classify(error)
+        var rest = 0L
+        val after = runtime.update { state ->
+            val usage = state.aiUsage.forMonth(month)
+            rest = usage.restAfter(kind, at, Failures.retryAfterMs(error))
+            state.copy(
+                aiUsage = usage.failure(error.message ?: error.javaClass.simpleName, at, problem, rest, kind),
+                // A task the API won't take as asked isn't sent again till it changes.
+                enrichFailed = if (kind == Failure.BadRequest && task != null) (state.enrichFailed + (task.id to Enrichments.inputHash(task))).entries.toList().takeLast(MAX_ENRICH_FAILED).associate { it.key to it.value } else state.enrichFailed,
+            )
+        }
+        Log.w(TAG, "Claude's call failed ($kind): resting ${rest / 60_000} min")
         alertKeyProblem(after.aiUsage)
-        // Once its hour's rest is over, it's tried again on what's still the rules' (a key topped up
-        // or put right meanwhile works then), rather than at whatever next changes.
-        EnrichWorker.retryAfter(app, ModelHold.REST_MS + RETRY_SLACK_MS)
+        // Once its rest is over, it's tried again on what's still the rules' (a key topped up or put
+        // right meanwhile works then), rather than at whatever next changes.
+        if (rest > 0) EnrichWorker.retryAfter(app, rest + RETRY_SLACK_MS)
     }
 
     /**
@@ -845,9 +859,53 @@ class AppGraph private constructor(context: Context) {
      * What stops the model being asked now ([ModelHold]), or null: off, resting after a failed
      * call, or no room under the cap. Each call checks it under [modelCalls] just before sending.
      */
-    fun modelHold(): ModelHold? {
+    fun modelHold(interactive: Boolean = false): ModelHold? {
         val s = settings.value
-        return ModelHold.of(claudeKey() != null, runtime.value.aiUsage, clock.now(), clock.zone(), s.aiMonthlyCapUsd)
+        return ModelHold.of(claudeKey() != null, runtime.value.aiUsage, clock.now(), clock.zone(), s.aiMonthlyCapUsd, interactive)
+    }
+
+    /** How a model call went ([callModel]): held before it was sent, failed, or answered. */
+    sealed interface Called<out T> {
+        data class Held(val hold: ModelHold) : Called<Nothing>
+        data class Failed(val error: Throwable) : Called<Nothing>
+        data class Answered<T>(val value: T) : Called<T>
+    }
+
+    /** Calls sent and not back yet (AC-05): counted against the cap at their dearest. */
+    private val inFlight = java.util.concurrent.atomic.AtomicInteger()
+
+    /**
+     * A model call (AC-05): its room taken under [modelCalls] for a moment (the model not held, an
+     * [interactive] one through a rest; room under the cap beside the calls in flight), then [send]
+     * with the lock let go, so the chat or a photo check doesn't wait behind an email's reading;
+     * counted as it went, [cost] its price and whether it was declined, or its failure ([task], one
+     * the API wouldn't take, isn't sent again till it changes).
+     */
+    suspend fun <T> callModel(interactive: Boolean, task: TaskItem? = null, cost: (T) -> Pair<Double, Boolean>, send: suspend (at: Long) -> T): Called<T> {
+        val held = modelCalls.withLock {
+            val hold = modelHold(interactive) ?: ModelHold.Capped.takeIf {
+                !runtime.value.aiUsage.forMonth(AiUsage.monthOf(clock.now(), clock.zone())).allows(settings.value.aiMonthlyCapUsd, inFlight.get())
+            }
+            if (hold == null) inFlight.incrementAndGet()
+            hold
+        }
+        if (held != null) return Called.Held(held)
+        // Counted in the month it's made in, as the cap was checked for.
+        val at = clock.now()
+        val month = AiUsage.monthOf(at, clock.zone())
+        return try {
+            val value = send(at)
+            val (usd, refused) = cost(value)
+            modelWorked(usd, refused, month, at)
+            Called.Answered(value)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            modelFailed(e, month, at, task)
+            Called.Failed(e)
+        } finally {
+            inFlight.decrementAndGet()
+        }
     }
 
     /**
@@ -870,46 +928,43 @@ class AppGraph private constructor(context: Context) {
         var enricher = model.takeIf { modelAvailable() }
         var calls = 0
         var decksChanged = false
+        // A task whose call the API wouldn't take as asked (AC-04): the rules' till it changes.
+        fun refused(task: TaskItem) = runtime.value.enrichFailed[task.id] == Enrichments.inputHash(task)
         val candidates = tasks.value.tasks
             // [only]: that task alone (the debug `enrich-task`), so nothing else is sent anywhere.
             .filter { only == null || it.id == only }
             .mapNotNull { task -> Enrichments.jobFor(task)?.let { task to it } }
-            .filter { (task, _) -> Enrichments.stale(task, enricher != null, RuleEnricher.BY, modelOff = claudeKey() == null) }
+            .filter { (task, _) -> Enrichments.stale(task, enricher != null && !refused(task), RuleEnricher.BY, modelOff = claudeKey() == null) }
             .sortedBy { (task, _) -> task.dueAt ?: Long.MAX_VALUE }
         for ((snapshot, _) in candidates) {
             // Read afresh: a sync since the run began may have closed or changed it.
             val task = tasks.value.tasks.firstOrNull { it.id == snapshot.id } ?: continue
             val job = Enrichments.jobFor(task) ?: continue
-            if (!Enrichments.stale(task, enricher != null, RuleEnricher.BY, modelOff = claudeKey() == null)) continue
+            if (!Enrichments.stale(task, enricher != null && !refused(task), RuleEnricher.BY, modelOff = claudeKey() == null)) continue
             val now = clock.now()
             // Switched off (or its key removed) while this runs: nothing more is sent.
             if (claudeKey() == null) enricher = null
-            var enrichment = if (enricher != null && calls < MAX_MODEL_CALLS) modelCalls.withLock call@{
-                // Checked again under the lock, just before sending, so every other call counts:
-                // switched off, resting after a failed call (one made while this waited), or no
-                // room under the cap. The rules then do the rest of the run.
-                if (modelHold() != null) {
-                    enricher = null
-                    return@call null
-                }
-                calls++
-                // Counted in the month it's made in, as the cap was checked for: it may have
-                // waited for the lock past midnight.
-                val at = clock.now()
-                val month = AiUsage.monthOf(at, clock.zone())
-                val result = runCatching { enricher!!.enrich(task, job, now) }
-                    .onFailure { error ->
-                        Log.w(TAG, "The model's enrichment failed; the rules stand in", error)
-                        modelFailed(error, month, at)
+            val model = enricher?.takeIf { calls < MAX_MODEL_CALLS && !refused(task) }
+            var enrichment = if (model != null) {
+                // Held now (switched off, resting after a failed call, no room under the cap): the
+                // rules do the rest of the run.
+                when (val called = callModel(interactive = false, task = task, cost = { r: Enricher.Result -> r.costUsd to r.refused }) { model.enrich(task, job, now) }) {
+                    is Called.Held -> {
                         enricher = null
+                        null
                     }
-                    .getOrNull()
-                result?.let { r -> modelWorked(r.costUsd, r.refused, month, at) }
-                when {
-                    result?.enrichment != null -> result.enrichment
+                    is Called.Failed -> {
+                        calls++
+                        Log.w(TAG, "The model's enrichment failed; the rules stand in", called.error)
+                        // Only a request it won't take leaves the others to be asked.
+                        if (Failures.classify(called.error) != Failure.BadRequest) enricher = null
+                        null
+                    }
                     // Declined, or no answer it could read: the rules' say, under the model's name.
-                    result != null -> rules.enrich(task, job, now).enrichment?.copy(by = enricher?.by ?: RuleEnricher.BY)
-                    else -> null
+                    is Called.Answered -> {
+                        calls++
+                        called.value.enrichment ?: rules.enrich(task, job, now).enrichment?.copy(by = model.by)
+                    }
                 }
             } else {
                 null
@@ -936,6 +991,9 @@ class AppGraph private constructor(context: Context) {
         // Sections the deck pattern missed, or a deadline moved: their deck tasks come from reading Anki again, now.
         if (decksChanged) SyncWorker.syncNow(app, setOf(Source.Anki))
     }
+
+    /** The most tasks remembered as refused as asked (AC-04): far more than there are. */
+    private val MAX_ENRICH_FAILED = 200
 
     /** Held while instructions are read, so each is read once. */
     private val readingInstructions = Mutex()
@@ -1077,18 +1135,16 @@ class AppGraph private constructor(context: Context) {
     suspend fun readInstructions() = readingInstructions.withLock {
         while (true) {
             val next = instructions.value.instructions.firstOrNull { it.state == InstructionStatus.Reading } ?: return@withLock
-            val waiting = modelCalls.withLock call@{
-                modelHold()?.let { return@call because(it) }
+            val waiting = run call@{
                 val reader = instructionReader() ?: return@call because(ModelHold.Off)
-                val at = clock.now()
-                val month = AiUsage.monthOf(at, clock.zone())
-                val result = runCatching { reader.read(next, tasks.value.tasks, calendarTime.events, at) }
-                    .onFailure { error ->
-                        Log.w(TAG, "Reading an instruction failed", error)
-                        modelFailed(error, month, at)
+                val result = when (val called = callModel(interactive = true, cost = { r: InstructionReader.Result -> r.costUsd to r.refused }) { at -> reader.read(next, tasks.value.tasks, calendarTime.events, at) }) {
+                    is Called.Held -> return@call because(called.hold)
+                    is Called.Failed -> {
+                        Log.w(TAG, "Reading an instruction failed", called.error)
+                        return@call "Claude's call failed: ${retryWords()}"
                     }
-                    .getOrNull() ?: return@call "Claude's call failed: it's tried again within the hour"
-                modelWorked(result.costUsd, result.refused, month, at)
+                    is Called.Answered -> called.value
+                }
                 val reading = result.reading ?: InstructionAnswers.Reading.Unclear(if (result.refused) "Claude declined to read it" else "Claude's answer couldn't be used")
                 instructions.update { state ->
                     state.copy(
@@ -1117,9 +1173,12 @@ class AppGraph private constructor(context: Context) {
 
     private fun because(hold: ModelHold): String = when (hold) {
         ModelHold.Off -> "Waiting for Claude, which is off (Settings)"
-        ModelHold.Resting -> "Waiting for Claude, resting an hour after a failed call"
+        ModelHold.Resting -> "Waiting for Claude, resting ${ModelHold.restLeftMin(runtime.value.aiUsage, clock.now())} min more after a failed call"
         ModelHold.Capped -> "Waiting for Claude: this month's cap is reached"
     }
+
+    /** When a failed call is tried again (AC-04): after its rest, or at the next chance where it has none. */
+    private fun retryWords(): String = ModelHold.restLeftMin(runtime.value.aiUsage, clock.now()).let { if (it > 0) "it's tried again in $it min" else "it's tried again at the next chance" }
 
     private fun instructionReader(): InstructionReader? = claudeKey()?.let { InstructionReader(it, clock.zone(), endpoint()) }
 
@@ -1175,27 +1234,26 @@ class AppGraph private constructor(context: Context) {
         // Answered with nothing usable, it waits for your Try again ([retry]): never asked by itself.
         if (waiting.stuck && !retry) return@withLock
         var stuck = false
-        val note = modelCalls.withLock call@{
+        val note = run call@{
             // Taken back (or the chat cleared) while this waited its turn: nothing to ask.
             if (chat.value.unanswered?.id != waiting.id) return@withLock
-            modelHold()?.let { return@call because(it) }
             val key = claudeKey() ?: return@call because(ModelHold.Off)
-            // Being asked now: whatever it said before (a failed call) is gone.
-            chat.update { s -> s.copy(messages = s.messages.map { if (it.id == waiting.id) it.copy(note = null, stuck = false) else it }) }
-            val at = clock.now()
-            val month = AiUsage.monthOf(at, clock.zone())
             // One snapshot of the tasks, the calendar and your changes: what Claude's shown is what its answer's checked against.
             val state = tasks.value
             val time = calendarTime
-            val result = runCatching {
+            val called = callModel(interactive = true, cost = { r: ChatReader.Result -> r.costUsd to r.refused }) { at ->
+                // Being asked now: whatever it said before (a failed call) is gone.
+                chat.update { s -> s.copy(messages = s.messages.map { if (it.id == waiting.id) it.copy(note = null, stuck = false) else it }) }
                 ChatReader(key, clock.zone(), endpoint()).answer(chat.value.messages, state.tasks, time.events, chatContext(at, state, time, instructions.value.applied), at)
             }
-                .onFailure { error ->
-                    Log.w(TAG, "Claude's answer in the chat failed", error)
-                    modelFailed(error, month, at)
+            val result = when (called) {
+                is Called.Held -> return@call because(called.hold)
+                is Called.Failed -> {
+                    Log.w(TAG, "Claude's answer in the chat failed", called.error)
+                    return@call "Claude's call failed: ${retryWords()}, or now with Try again"
                 }
-                .getOrNull() ?: return@call "Claude's call failed: it's tried again within the hour, or now with Try again"
-            modelWorked(result.costUsd, result.refused, month, at)
+                is Called.Answered -> called.value
+            }
             val reading = result.reading ?: run {
                 stuck = true
                 return@call if (result.refused) "Claude declined to answer that: Try again, or put it another way" else "Claude's answer couldn't be read: Try again"

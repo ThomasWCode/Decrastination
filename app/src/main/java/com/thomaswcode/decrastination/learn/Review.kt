@@ -9,11 +9,10 @@ import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.R
 import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.data.WeeklyReview
-import com.thomaswcode.decrastination.enrich.AiUsage
+import com.thomaswcode.decrastination.enrich.ClaudeReviewer
 import com.thomaswcode.decrastination.enrich.ModelHold
 import com.thomaswcode.decrastination.notify.Channels
 import com.thomaswcode.decrastination.notify.Notify
-import kotlinx.coroutines.sync.withLock
 
 /**
  * The weekly review (docs/scheduler.md §5, item 7): on Sunday evening, after the check-in (or
@@ -88,20 +87,13 @@ object Review {
         val reviewer = graph.modelReviewer() ?: return Outcome(why = because(ModelHold.Off))
         val zone = graph.clock.zone()
         val input = ReviewInput.describe(graph.log.value, graph.runtime.value.calibration, graph.settings.value, now, zone, week)
-        // The cap checked and the cost recorded in one turn with every other model call.
-        val result = graph.modelCalls.withLock {
-            // Checked again here, just before sending: switched off, resting after a failed call
-            // (perhaps one made while this waited), or no room under the cap.
-            graph.modelHold()?.let { return Outcome(why = because(it)) }
-            val current = graph.modelReviewer() ?: return Outcome(why = because(ModelHold.Off))
-            // Counted in the month it's made in, as the cap was checked for.
-            val at = graph.clock.now()
-            val month = AiUsage.monthOf(at, zone)
-            // A failure is recorded (Setup shows it; the model rests), then the rules' review stands.
-            runCatching { current.review(input) }
-                .onFailure { e -> graph.modelFailed(e, month, at) }
-                .getOrThrow()
-                .also { r -> graph.modelWorked(r.costUsd, r.refused, month, at) }
+        // Its room taken with every other model call's, then sent (AC-05). A failure is recorded
+        // (Setup shows it; the model rests), then the rules' review stands.
+        val current = graph.modelReviewer() ?: return Outcome(why = because(ModelHold.Off))
+        val result = when (val called = graph.callModel(interactive = false, cost = { r: ClaudeReviewer.Result -> r.costUsd to r.refused }) { current.review(input) }) {
+            is AppGraph.Called.Held -> return Outcome(why = because(called.hold))
+            is AppGraph.Called.Failed -> throw called.error
+            is AppGraph.Called.Answered -> called.value
         }
         val answer = result.answer ?: return Outcome(why = if (result.refused) "Claude declined to review it" else "Claude's answer couldn't be used")
         val changes = answer.changes.filter(ReviewInput::allowed)

@@ -346,6 +346,18 @@ class CommandActivity : Activity() {
                     Log.i(TAG, "chat-card ${intent.getStringExtra("do")}: ${card.lines} -> ${now?.state}")
                 }
             }
+            "ai-effort" -> {
+                // --es job <Chat|Email|…> --es level <low|medium|high>, or level none: back to its own (AC-02); till the app restarts.
+                val job = intent.getStringExtra("job")?.let { name -> com.thomaswcode.decrastination.enrich.ModelEffort.Job.entries.firstOrNull { it.name.equals(name, ignoreCase = true) } }
+                val level = intent.getStringExtra("level")
+                when {
+                    job == null -> Log.w(TAG, "ai-effort needs --es job, one of ${com.thomaswcode.decrastination.enrich.ModelEffort.Job.entries.joinToString()}")
+                    level == "none" -> com.thomaswcode.decrastination.enrich.ModelEffort.overrides.remove(job).also { Log.i(TAG, "ai-effort: $job as its own again") }
+                    else -> runCatching { com.anthropic.models.messages.OutputConfig.Effort.of(level.orEmpty().lowercase()) }
+                        .onSuccess { com.thomaswcode.decrastination.enrich.ModelEffort.overrides[job] = it; Log.i(TAG, "ai-effort: $job at $it till the app restarts") }
+                        .onFailure { Log.w(TAG, "ai-effort needs --es level low, medium or high") }
+                }
+            }
             "ai-endpoint" -> {
                 // --es base <url> sends the model's calls to a stand-in till the app restarts; none, to Anthropic again.
                 graph.modelEndpoint = intent.getStringExtra("base")

@@ -429,7 +429,7 @@ class ChatReader(apiKey: String, private val zone: ZoneId, endpoint: String? = n
             .model(model)
             .maxTokens(ClaudeEnricher.MAX_TOKENS)
             .system(ChatPrompts.SYSTEM)
-            .outputConfig(OutputConfig.builder().effort(OutputConfig.Effort.HIGH).format(JsonOutputFormat.builder().schema(schema).build()).build())
+            .outputConfig(OutputConfig.builder().effort(ModelEffort.of(ModelEffort.Job.Chat)).format(JsonOutputFormat.builder().schema(schema).build()).build())
             .putAdditionalHeader("anthropic-beta", ClaudeEnricher.FALLBACK_BETA)
             .putAdditionalBodyProperty("fallbacks", JsonValue.from("default"))
         ChatPrompts.turns(messages, context.known, tasks.associateBy { it.id }, zone, plan = context.plan).forEach { (from, text) ->
