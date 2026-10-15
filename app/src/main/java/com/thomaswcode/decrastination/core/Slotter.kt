@@ -160,6 +160,9 @@ object Slotter {
         val moved = mutableListOf<Pair<Chunk, Long>>()
         for (chunk in chunks) {
             val pin = pins[chunk.key]?.takeIf { it in day } ?: continue
+            // Its time and grace gone by (its slot missed, PL-13): laid as any piece, where the last plan
+            // put it, so it isn't laid again at the next five minutes at every plan and never begins.
+            if (pin + chunk.minutes * MINUTE + GRACE_MS <= now) continue
             // Its piece opens at the pin itself (the time you gave), to the minute: not at the next five.
             val exact = holding(chunk, pin)?.takeIf { allowed(chunk, it) && beforeDeadline(chunk, pin) && pin >= (chunk.availableAt ?: Long.MIN_VALUE) }
             if (exact != null) place(chunk, pin, exact, pinned = true) else moved += chunk to pin
