@@ -151,6 +151,18 @@ class OwnTasksTest {
     }
 
     @Test
+    fun `in the form, a renamed step keeps its tick, a new one of an old name has none, and where it's done goes on it`() {
+        val task = own(steps = listOf(OwnStep("Draft", 60), OwnStep("Redraft", 45)))
+        val firstDone = task.copy(subSteps = task.subSteps.mapIndexed { i, s -> if (i == 0) s.copy(done = true) else s })
+        // The first renamed, the second needing home, and a new "Draft" after them.
+        val draft = OwnTasks.draftOf(firstDone).let { d -> d.copy(steps = listOf(d.steps[0].copy(title = "First draft"), d.steps[1].copy(where = "home"), OwnStep("Draft", 20))) }
+        val edited = OwnTasks.edited(firstDone, draft)
+        assertEquals(listOf("First draft" to true, "Redraft" to false, "Draft" to false), edited.subSteps.map { it.title to it.done })
+        assertEquals(listOf(null, "home", null), edited.subSteps.map { it.where })
+        assertEquals(125, edited.sourceEffortMin)
+    }
+
+    @Test
     fun `steps of the same name keep their own ticks through an edit`() {
         val task = own(steps = listOf(OwnStep("Review", 20), OwnStep("Write", 30), OwnStep("Review", 20)))
         val firstDone = task.copy(subSteps = task.subSteps.mapIndexed { i, s -> if (i == 0) s.copy(done = true) else s })

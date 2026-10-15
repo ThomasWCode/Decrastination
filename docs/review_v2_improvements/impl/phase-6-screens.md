@@ -145,6 +145,8 @@ Done in UI-17 step 5. `Groups.bySubject(tasks, classMap)`: tested.
 
 **Tests.** `OwnTasksTest`: a renamed step keeps its tick when `wasIndex` says so.
 
+*(As built: `OwnStep.where` is nullable, null meaning as its task (so a step nobody set keeps its task's where); up and down buttons, not a drag; from the form, steps match by their place alone, so a new step with an old step's name has no tick of its own.)*
+
 ---
 
 ## UI-07 Say it instead of typing it

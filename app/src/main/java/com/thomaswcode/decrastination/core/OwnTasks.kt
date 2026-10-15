@@ -22,8 +22,20 @@ data class OwnTask(
     val where: String = "anywhere",
 )
 
+/**
+ * A step of a task of your own: its name and minutes, its own dates where it has them, and where it
+ * can be done (UI-15: "home", "anywhere", or null, as its task). [wasIndex]: the step it was in the
+ * task's list, as the form had it, so a renamed step keeps its tick; never kept.
+ */
 @Serializable
-data class OwnStep(val title: String, val minutes: Int, val from: Long? = null, val dueAt: Long? = null)
+data class OwnStep(
+    val title: String,
+    val minutes: Int,
+    val from: Long? = null,
+    val dueAt: Long? = null,
+    val where: String? = null,
+    @kotlinx.serialization.Transient val wasIndex: Int? = null,
+)
 
 /**
  * Your own tasks (2.0.0, Q28). You're their source: what you give is kept as a source's values are
@@ -95,7 +107,7 @@ object OwnTasks {
         dueAt = task.sourceValues?.dueAt ?: task.dueAt,
         startFrom = task.notBefore,
         minutes = task.sourceEffortMin ?: task.kind.defaultEffortMin,
-        steps = task.subSteps.map { OwnStep(it.title, it.minutes, it.from, it.dueAt) },
+        steps = task.subSteps.mapIndexed { i, s -> OwnStep(s.title, s.minutes, s.from, s.dueAt, s.where, wasIndex = i) },
         where = task.extra[EXTRA_WHERE] ?: "anywhere",
     )
 
@@ -226,13 +238,18 @@ object OwnTasks {
 
     private fun apply(old: TaskItem, task: OwnTask): TaskItem {
         val event = task.kind == Kind.Event
-        // Each step matched to the one it was by name, a repeated name by its turn (the second
-        // "Review" to the second), so a step done stays done and one to do stays to do.
+        // Each step matched to the one it was: from the form, by its place then (UI-15), so a renamed
+        // step keeps its tick and a new one of an old name has none; otherwise by name, a repeated
+        // name by its turn (the second "Review" to the second). A step done stays done, one to do to do.
         val seen = HashMap<String, Int>()
+        val byPlace = task.steps.any { it.wasIndex != null }
         val steps = if (event) emptyList() else task.steps.take(MAX_STEPS).map { s ->
             val turn = seen.merge(s.title.trim(), 1, Int::plus)!! - 1
-            val was = old.subSteps.filter { it.title == s.title.trim() }.getOrNull(turn)
-            SubStep(s.title.trim().take(MAX_TITLE), s.minutes, done = was?.done == true, byHand = was?.byHand == true, timedMin = was?.timedMin ?: 0, from = s.from, dueAt = s.dueAt)
+            val was = if (byPlace) s.wasIndex?.let { old.subSteps.getOrNull(it) } else old.subSteps.filter { it.title == s.title.trim() }.getOrNull(turn)
+            SubStep(
+                s.title.trim().take(MAX_TITLE), s.minutes, done = was?.done == true, byHand = was?.byHand == true, timedMin = was?.timedMin ?: 0,
+                from = s.from, dueAt = s.dueAt, where = Where.of(s.where)?.name?.lowercase(),
+            )
         }
         val minutes = when {
             event -> 0
