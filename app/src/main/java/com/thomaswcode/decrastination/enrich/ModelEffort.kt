@@ -39,11 +39,12 @@ object ModelEffort {
     }
 
     /** An enrichment's job as one of these. */
-    fun of(job: Enrichments.Job): OutputConfig.Effort = of(
-        when (job) {
-            Enrichments.Job.Email -> Job.Email
-            Enrichments.Job.Assignment -> Job.Assignment
-            Enrichments.Job.Effort -> Job.Effort
-        },
-    )
+    fun jobOf(job: Enrichments.Job): Job = when (job) {
+        Enrichments.Job.Email -> Job.Email
+        Enrichments.Job.Assignment -> Job.Assignment
+        Enrichments.Job.Effort -> Job.Effort
+    }
+
+    /** An enrichment's job's effort. */
+    fun of(job: Enrichments.Job): OutputConfig.Effort = of(jobOf(job))
 }

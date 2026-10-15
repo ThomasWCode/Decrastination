@@ -5,6 +5,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Row
@@ -313,6 +314,7 @@ class SettingsActivity : ComponentActivity() {
                             ModelEffort.table().forEach { (effort, jobs) -> Note("$effort: $jobs") }
                             Note("By job, not set here: high for what the plan is made from, medium for what someone's waiting for (AC-02).")
                         }
+                        item { RecentCalls(runtime.calls, graph.clock.zone()) }
                     }
 
                     // Each source as Setup has it, and how Teams and Anki are read.
@@ -550,3 +552,33 @@ internal fun parseTime(text: String): Int? {
     val minutes = digits.takeLast(2).toInt()
     return if (hours in 0..23 && minutes in 0..59) hours * 60 + minutes else null
 }
+
+/** The model's recent calls (AC-07), newest first: a line each, a tap opening all it used, with Copy. */
+@Composable
+private fun RecentCalls(calls: List<com.thomaswcode.decrastination.data.CallRecord>, zone: java.time.ZoneId) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var open by remember { mutableStateOf<Long?>(null) }
+    Column {
+        Section("Recent calls")
+        if (calls.isEmpty()) Note("None yet.")
+        calls.asReversed().forEach { call ->
+            val opened = open == call.at
+            Column(Modifier.fillMaxWidth().clickable { open = if (opened) null else call.at }.padding(vertical = 4.dp)) {
+                Text(
+                    listOfNotNull(java.time.Instant.ofEpochMilli(call.at).atZone(zone).toLocalTime().withSecond(0).withNano(0).toString(), call.job, call.title, call.outcome).joinToString(" · ") + " · $%.3f".format(Locale.UK, call.costUsd),
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                )
+                if (opened) {
+                    val details = call.details(zone)
+                    Text(details, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    androidx.compose.material3.TextButton(onClick = {
+                        context.getSystemService(android.content.ClipboardManager::class.java)?.setPrimaryClip(android.content.ClipData.newPlainText("A Claude call", details))
+                    }) { Text("Copy") }
+                }
+            }
+        }
+    }
+}
+

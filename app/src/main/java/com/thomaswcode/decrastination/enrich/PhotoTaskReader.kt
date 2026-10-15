@@ -20,7 +20,7 @@ import java.util.Base64
 /** A photo of homework read into tasks (NF-01), at the effort of the readings the plan is made from (AC-02). */
 class PhotoTaskReader(apiKey: String, endpoint: String? = null, val model: String = ClaudeEnricher.MODEL, private val profile: Profile.Block = Profile.Block.NONE) {
 
-    data class Result(val reading: PhotoTasks.Reading?, val costUsd: Double, val refused: Boolean = false)
+    data class Result(val reading: PhotoTasks.Reading?, val costUsd: Double, val refused: Boolean = false, val usage: ModelCalls.Usage = ModelCalls.Usage.NONE)
 
     private val client: AnthropicClient = AnthropicOkHttpClient.builder()
         .apiKey(apiKey)
@@ -44,10 +44,11 @@ class PhotoTaskReader(apiKey: String, endpoint: String? = null, val model: Strin
             .build()
         val message = withContext(Dispatchers.IO) { client.messages().create(params) }
         val cost = Pricing.costUsd(message)
+        val usage = ModelCalls.usage(message)
         return when (message.stopReason().orElse(null)) {
-            StopReason.REFUSAL -> Result(null, cost, refused = true)
-            StopReason.MAX_TOKENS -> Result(null, cost)
-            else -> Result(PhotoTasks.parse(message.content().mapNotNull { it.text().orElse(null)?.text() }.joinToString(""), now, zone), cost)
+            StopReason.REFUSAL -> Result(null, cost, refused = true, usage = usage)
+            StopReason.MAX_TOKENS -> Result(null, cost, usage = usage)
+            else -> Result(PhotoTasks.parse(message.content().mapNotNull { it.text().orElse(null)?.text() }.joinToString(""), now, zone), cost, usage = usage)
         }
     }
 }

@@ -33,6 +33,8 @@ interface Enricher {
         val repair: Repair? = null,
         /** This is the answer asked for again. */
         val repaired: Boolean = false,
+        /** What its call used (AC-07). */
+        val usage: ModelCalls.Usage = ModelCalls.Usage.NONE,
     )
 }
 

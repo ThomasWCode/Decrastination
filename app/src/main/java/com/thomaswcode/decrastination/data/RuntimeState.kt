@@ -77,6 +77,8 @@ data class RuntimeState(
     val droppedAlerted: Map<String, String> = emptyMap(),
     /** "How was it?" questions kept while notifications couldn't be seen, to ask once they can. */
     val assessLater: List<AssessLater> = emptyList(),
+    /** The model's last calls (AC-07), oldest first: [CallRecord.MAX] of them. */
+    val calls: List<CallRecord> = emptyList(),
     /** Pairs of tasks you've said aren't the same work (DX-15), by [com.thomaswcode.decrastination.core.Duplicates.key]: not asked about again. */
     val notSame: List<String> = emptyList(),
     /** Today's and tomorrow's pieces' first steps (AI-15), by piece key: written ahead, as the plan has them. */
@@ -392,3 +394,44 @@ data class DailyRetry(val at: Long, val tries: Int)
 /** A finished task's "how was it?", kept to ask once notifications can be seen. */
 @Serializable
 data class AssessLater(val taskId: String, val title: String, val doneAt: Long? = null)
+
+/**
+ * One model call as it went (AC-07): when, its job and what it was about, how hard it thought, its
+ * tokens (in, out, and read from the cache), how long it took, why it stopped, how it went (used,
+ * repaired, salvaged, dropped:<why>, refused, failed:<why>, empty), and what it cost.
+ */
+@Serializable
+data class CallRecord(
+    val at: Long,
+    val job: String,
+    val title: String? = null,
+    val effort: String,
+    val inTokens: Long = 0,
+    val outTokens: Long = 0,
+    val cacheRead: Long = 0,
+    val latencyMs: Long = 0,
+    val stop: String? = null,
+    val outcome: String,
+    val costUsd: Double = 0.0,
+) {
+    /** All of it as the record's row shows it opened, to copy. */
+    fun details(zone: java.time.ZoneId): String = buildString {
+        append(java.time.Instant.ofEpochMilli(at).atZone(zone).toLocalDateTime().withNano(0).toString().replace('T', ' '))
+        append(" · ").append(job)
+        title?.let { append(" · “").append(it).append('”') }
+        append('\n').append("Effort ").append(effort).append(" · ").append(inTokens).append(" in")
+        if (cacheRead > 0) append(" (").append(cacheRead).append(" from the cache)")
+        append(", ").append(outTokens).append(" out · ").append("%.1f s".format(java.util.Locale.UK, latencyMs / 1000.0))
+        stop?.let { append(" · ").append(it) }
+        append('\n').append(outcome).append(" · ").append("$%.4f".format(java.util.Locale.UK, costUsd))
+    }
+
+    companion object {
+        /** The most kept: the last hundred. */
+        const val MAX = 100
+    }
+}
+
+/** These calls and [call], the newest, as many as are kept. */
+fun List<CallRecord>.plusCall(call: CallRecord): List<CallRecord> = (this + call).takeLast(CallRecord.MAX)
+
