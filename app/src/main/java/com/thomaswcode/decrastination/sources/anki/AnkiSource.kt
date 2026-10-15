@@ -109,6 +109,12 @@ object AnkiProvider {
 class AnkiSource(private val context: Context) : TaskSource {
     override val source = Source.Anki
 
+    /**
+     * Each deck's unseen cards as last asked (AR-08), with the counts and options they were asked
+     * at ([UnseenCache]): asked again only once those change, as a deck studied or the day turned.
+     */
+    private val unseenAsked = UnseenCache()
+
     override suspend fun read(context: ReadContext): SourceRead = withContext(Dispatchers.IO) {
         if (!AnkiProvider.hasPermission(this@AnkiSource.context)) {
             throw SourceUnavailable("AnkiDroid's permission isn't granted")
@@ -116,7 +122,7 @@ class AnkiSource(private val context: Context) : TaskSource {
         val resolver = this@AnkiSource.context.contentResolver
         val decks = AnkiProvider.decks(resolver)
         val unseen = HashMap<Long, Int>()
-        val count = { deck: Deck -> unseen.getOrPut(deck.id) { AnkiProvider.unseenCards(resolver, deck.name) } }
+        val count = { deck: Deck -> unseen.getOrPut(deck.id) { unseenAsked.get(deck) { AnkiProvider.unseenCards(resolver, deck.name) } } }
         val textbook = context.settings.ankiTextbook
         val homework = AnkiRules.homeworkDecks(decks, textbook, context.known, count, context.now, context.zone, context.ankiSecondsPerCard)
         val homeworkDecks = homework.filter { !it.done }.mapNotNull { it.extra[AnkiRules.EXTRA_DECK_ID]?.toLongOrNull() }.toSet()
@@ -125,3 +131,22 @@ class AnkiSource(private val context: Context) : TaskSource {
         SourceRead(items = listOfNotNull(quota) + homework, ankiDay = day, deckTopics = AnkiRules.topics(decks, textbook))
     }
 }
+
+/**
+ * Decks' unseen cards, kept with the counts and options each was asked at (AR-08): asked of
+ * AnkiDroid again only once a deck's today's counts or its new cards a day differ, as studying it
+ * or the Anki day turning makes them. Pure, for the tests.
+ */
+class UnseenCache {
+    private data class Asked(val learn: Int, val review: Int, val new: Int, val newPerDay: Int, val unseen: Int)
+
+    private val asked = HashMap<Long, Asked>()
+
+    /** [deck]'s unseen cards: as asked before at its counts, or [ask]ed now. */
+    @Synchronized
+    fun get(deck: Deck, ask: () -> Int): Int {
+        asked[deck.id]?.takeIf { it.learn == deck.learn && it.review == deck.review && it.new == deck.new && it.newPerDay == deck.newPerDay }?.let { return it.unseen }
+        return ask().also { asked[deck.id] = Asked(deck.learn, deck.review, deck.new, deck.newPerDay, it) }
+    }
+}
+
