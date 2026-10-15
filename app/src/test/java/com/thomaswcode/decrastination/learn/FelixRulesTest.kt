@@ -123,4 +123,19 @@ class FelixRulesTest {
         assertNull(completions(at("19:05"), FelixState(nextCheckAt = at("19:20"))))
         assertNull(completions(at("19:30"), sent = listOf(sent(Reason.Completions, null, at("19:05")))))
     }
+
+    @Test
+    fun `his next message is written ahead for the next slot's grace, and sent only while it fits`() {
+        val grace = settings.felixGraceMin * 60_000L
+        val (trigger, due) = FelixRules.upcoming(plan, settings, at("16:30"))!!
+        assertEquals(Reason.SlotStart to first.chunk!!.key, trigger.reason to trigger.key)
+        assertEquals(first.start + grace, due)
+        val draft = com.thomaswcode.decrastination.data.FelixDraft(Reason.SlotStart.name, first.chunk!!.key, com.thomaswcode.decrastination.enrich.FelixAnswer("Ten minutes in: starting?"), at("17:02"))
+        val now = first.start + grace
+        assertEquals(true, FelixRules.fits(draft, trigger, now, lastSentAt = at("16:00")))
+        // Another piece's, too old, or with a message of his since: written again.
+        assertEquals(false, FelixRules.fits(draft.copy(key = "teams:b#-1#1"), trigger, now, null))
+        assertEquals(false, FelixRules.fits(draft.copy(at = now - FelixRules.DRAFT_FRESH_MS - 1), trigger, now, null))
+        assertEquals(false, FelixRules.fits(draft, trigger, now, lastSentAt = at("17:05")))
+    }
 }

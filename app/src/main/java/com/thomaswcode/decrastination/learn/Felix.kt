@@ -119,14 +119,11 @@ class Felix(private val graph: AppGraph) {
         val caller = graph.felixCaller() ?: return null
         val settings = graph.settings.value
         val zone = graph.clock.zone()
-        val profile = graph.profile(now)
-        val task = trigger.taskId?.let { id -> graph.tasks.value.tasks.firstOrNull { it.id == id } }
-        val recent = graph.log.value.felix.filter { it.text.isNotBlank() }
-        val free = (graph.focus.creditLeftMs(now) / 60_000L).toInt().takeIf { trigger.reason == FelixPrompts.Reason.DayDone || trigger.reason == FelixPrompts.Reason.SlotKept }
-        val user = FelixPrompts.describe(trigger.reason, graph.plan(now = now), trigger.slot, task, today(now), recent, null, settings, now, zone, free, trigger.record, trigger.asks.map { it.title })
-        val called = graph.callModel(interactive = false, cost = { r: FelixCaller.Result -> r.costUsd to r.refused }) { caller.say(FelixPrompts.system(settings, profile.year), profile.text, user) }
-        if (called is AppGraph.Called.Failed) Log.w(AppGraph.TAG, "Felix's message failed", called.error)
-        val answer = (called as? AppGraph.Called.Answered)?.value?.answer
+        // Written ahead and still fitting (AC-10): sent as it is, at once.
+        val state = graph.runtime.value.felix
+        val drafted = state.draft?.takeIf { FelixRules.fits(it, trigger, now, graph.log.value.felix.filter { r -> r.text.isNotBlank() }.maxOfOrNull { r -> r.at }) }
+        if (state.draft != null) graph.runtime.update { it.copy(felix = it.felix.copy(draft = null)) }
+        val answer = drafted?.answer ?: ask(caller, trigger, now)
         val text = answer?.message.orEmpty()
         val next = now + (answer?.nextCheckMin ?: settings.felixDefaultCheckMin).coerceAtLeast(FelixAnswers.MIN_CHECK_MIN) * 60_000L
         // Asking how the completions went, the replies are the three answers (LR-05).
@@ -160,6 +157,40 @@ class Felix(private val graph: AppGraph) {
         val answer = Assessment.ANSWERS.firstOrNull { it.first.equals(text.trim(), ignoreCase = true) }?.second ?: return false
         record.asks.forEach { Assessment.record(graph.app, it.taskId, it.doneAt ?: 0L, answer) }
         return true
+    }
+
+    /** His answer for [trigger] as it stands at [at] (now, or when a draft's for), or null: held, failed, or none. */
+    private suspend fun ask(caller: FelixCaller, trigger: FelixRules.Trigger, at: Long): com.thomaswcode.decrastination.enrich.FelixAnswer? {
+        val settings = graph.settings.value
+        val profile = graph.profile(at)
+        val task = trigger.taskId?.let { id -> graph.tasks.value.tasks.firstOrNull { it.id == id } }
+        val recent = graph.log.value.felix.filter { it.text.isNotBlank() }
+        val free = (graph.focus.creditLeftMs(at) / 60_000L).toInt().takeIf { trigger.reason == FelixPrompts.Reason.DayDone || trigger.reason == FelixPrompts.Reason.SlotKept }
+        val user = FelixPrompts.describe(trigger.reason, graph.plan(), trigger.slot, task, today(at), recent, null, settings, at, graph.clock.zone(), free, trigger.record, trigger.asks.map { it.title })
+        val called = graph.callModel(interactive = false, cost = { r: FelixCaller.Result -> r.costUsd to r.refused }) { caller.say(FelixPrompts.system(settings, profile.year), profile.text, user) }
+        if (called is AppGraph.Called.Failed) Log.w(AppGraph.TAG, "Felix's message failed", called.error)
+        return (called as? AppGraph.Called.Answered)?.value?.answer
+    }
+
+    /**
+     * His next message written ahead (AC-10), after a plan: a slot's "starting?" due within
+     * [FelixRules.AHEAD_MS], written as of that moment, so it's sent the moment it's due. Not again
+     * while one fits; not with Claude off; not while he's writing.
+     */
+    suspend fun draftAhead(plan: com.thomaswcode.decrastination.core.Plan, now: Long = graph.clock.now()) {
+        val caller = graph.felixCaller() ?: return
+        val (trigger, at) = FelixRules.upcoming(plan, graph.settings.value, now) ?: return
+        if (at - now > FelixRules.AHEAD_MS) return
+        val lastSent = graph.log.value.felix.filter { it.text.isNotBlank() }.maxOfOrNull { it.at }
+        if (FelixRules.fits(graph.runtime.value.felix.draft, trigger, now, lastSent)) return
+        if (!writing.tryLock()) return
+        try {
+            val answer = ask(caller, trigger, at) ?: return
+            graph.runtime.update { it.copy(felix = it.felix.copy(draft = com.thomaswcode.decrastination.data.FelixDraft(trigger.reason.name, trigger.key, answer, now))) }
+            Log.i(AppGraph.TAG, "Felix wrote ahead for ${trigger.key}, due at ${java.time.Instant.ofEpochMilli(at).atZone(graph.clock.zone()).toLocalTime()}")
+        } finally {
+            writing.unlock()
+        }
     }
 
     /** His next look, by alarm: the phone may be asleep through the service's ticks. */
