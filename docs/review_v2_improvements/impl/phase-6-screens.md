@@ -57,6 +57,8 @@ Items: UI-17, UI-18, UI-12, UI-01, UI-02, UI-03, UI-04, UI-05, UI-08, UI-09, UI-
 
 **Done when.** The menu has three entries; every former Setup/Settings/Protection control is reachable under Settings.
 
+*(As built: two entries till phase 8 brings Reviews; Backup is a page of its own, as Setup's backup had no other home among them; the first run reaches Setup by the attention mark, which shows while no source has been read; the Protection page stays for its alerts, its panel shared with Settings.)*
+
 ---
 
 ## UI-01 Time pickers
