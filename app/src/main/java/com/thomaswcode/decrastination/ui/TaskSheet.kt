@@ -267,6 +267,11 @@ fun TaskSheet(
             }
             Notes(task, now, zone, byId, onOpen = { scope.launch { TaskOpener.open(activity, task)?.let { message = it } } })
             if (!ticksHere) Steps(graph, task, now, zone)
+            // Its next piece's first steps (AI-15), as written ahead.
+            next?.let { runtime.microPlans[it.key] }?.let(com.thomaswcode.decrastination.enrich.MicroPlans::lines)?.takeIf { it.isNotEmpty() }?.let { lines ->
+                Text("Its next piece", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                lines.forEach { Text(it, style = MaterialTheme.typography.bodyMedium) }
+            }
             // When its pieces are planned, and why (PL-07).
             TaskSheetModel.planned(plan, task.id, zone).takeIf { it.isNotEmpty() && task.isOpen }?.let { planned ->
                 Text("Planned", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)

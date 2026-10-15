@@ -64,14 +64,15 @@ object SlotCalendarDiff {
         starts + taken.mapNotNull { move -> before[move.desired.uri]?.let { move.desired.uri to it } }
 
     /** [plan]'s slots, work and outside, from today for [DAYS] days, as events. */
-    fun desired(plan: Plan, zone: ZoneId): List<Desired> = (0 until DAYS).flatMap { offset ->
+    fun desired(plan: Plan, zone: ZoneId, micro: Map<String, com.thomaswcode.decrastination.enrich.MicroPlan> = emptyMap()): List<Desired> = (0 until DAYS).flatMap { offset ->
         val date = plan.today.plusDays(offset)
         plan.bucket(date)?.slots.orEmpty().map { slot ->
             val chunk = slot.chunk
             Desired(
                 uri = "$URI_PREFIX$date/${slot.key}",
                 title = chunk?.label ?: "Outside",
-                description = chunk?.let { "${it.source.label}. ${it.whyLine(plan.today, zone)}." } ?: "A break outside.",
+                // With its first step (AI-15), where one's written.
+                description = chunk?.let { c -> "${c.source.label}. ${c.whyLine(plan.today, zone)}." + (micro[c.key]?.first?.takeIf { it.isNotEmpty() }?.let { " First: $it" } ?: "") } ?: "A break outside.",
                 start = slot.start,
                 end = slot.end,
                 taskId = chunk?.taskId,

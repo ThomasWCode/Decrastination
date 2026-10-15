@@ -493,6 +493,30 @@ class AnswersTest {
     }
 
     @Test
+    fun `a piece's first steps are read, asked once for its task as it is, and kept for today and tomorrow`() {
+        val task = assignment("1. Read pages 40-44.\n2. Write the essay.").copy(dueAt = Fixtures.at("2026-10-09T23:59"))
+        val chunk = com.thomaswcode.decrastination.core.Planner.plan(com.thomaswcode.decrastination.core.Planner.Input(listOf(task), NOW, LONDON, com.thomaswcode.decrastination.data.Settings(), windows = mapOf(java.time.LocalDate.parse("2026-10-09") to listOf(com.thomaswcode.decrastination.core.DayWindow(17 * 60, 22 * 60, com.thomaswcode.decrastination.core.WindowKind.Evening)))))
+        val piece = chunk.todaySlots.first { it.kind == com.thomaswcode.decrastination.core.SlotKind.Work }.chunk!!
+        val made = MicroPlans.parse("""{"first":"Open the essay title and read it aloud","next":["List three points","Write the first paragraph","An extra"],"doneWhen":"A paragraph a point"}""", piece, task, NOW)!!
+        assertEquals(listOf("List three points", "Write the first paragraph"), made.next)
+        assertEquals(listOf("First: Open the essay title and read it aloud", "Then: List three points; Write the first paragraph", "Done when: A paragraph a point"), MicroPlans.lines(made))
+        val tasks = mapOf(task.id to task)
+        // Each of today's pieces is due one.
+        val keys = chunk.todaySlots.filter { it.kind == com.thomaswcode.decrastination.core.SlotKind.Work }.mapNotNull { it.chunk?.key }
+        assertEquals(keys, MicroPlans.due(chunk, tasks, emptyMap()).map { it.first.key })
+        // Written: not due again, till its task changes.
+        assertEquals(keys - piece.key, MicroPlans.due(chunk, tasks, mapOf(piece.key to made)).map { it.first.key })
+        assertEquals(keys, MicroPlans.due(chunk, mapOf(task.id to task.copy(detail = "Changed")), mapOf(piece.key to made)).map { it.first.key })
+        // Declined or unread: kept empty, so not asked again.
+        assertEquals(keys - piece.key, MicroPlans.due(chunk, tasks, mapOf(piece.key to MicroPlans.none(piece, task, NOW))).map { it.first.key })
+        assertEquals(emptyList(), MicroPlans.lines(MicroPlans.none(piece, task, NOW)))
+        // Others go.
+        assertEquals(setOf(piece.key), MicroPlans.kept(chunk, mapOf(piece.key to made, "gone#1" to made)).keys)
+        val asked = MicroPlans.describe(piece, task)
+        assertTrue("Task: ${task.title}" in asked && "Instructions:\n1. Read pages 40-44." in asked, asked)
+    }
+
+    @Test
     fun `the limits the answers are checked against are said in the prompts and the schemas`() {
         assertEquals(
             "Limits the app enforces: at most 12 steps; no step longer than 240 minutes; a total of at most 10 hours; the steps must add up to effortMin exactly.",

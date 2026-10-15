@@ -66,6 +66,7 @@ data class WidgetModel(
             armed: Boolean = false,
             reward: String? = null,
             slots: List<SlotRecord> = emptyList(),
+            micro: Map<String, com.thomaswcode.decrastination.enrich.MicroPlan> = emptyMap(),
         ): WidgetModel {
             val now = plan.now
             val next = plan.next
@@ -84,8 +85,8 @@ data class WidgetModel(
                     else -> "Do: ${next.label}"
                 },
                 reward = reward,
-                // A piece's first step comes with phase 7's micro-plans (AI-15).
-                label = null,
+                // Its first step (AI-15), written ahead.
+                label = next?.let { micro[it.key] }?.first?.takeIf { it.isNotEmpty() },
                 badge = next?.let { badge(it, now, zone) },
                 urgent = next?.urgent == true,
                 minutes = next?.let { Format.minutes(it.minutes) },

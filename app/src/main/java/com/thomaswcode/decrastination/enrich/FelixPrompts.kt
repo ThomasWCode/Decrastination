@@ -63,6 +63,7 @@ object FelixPrompts {
         freeMin: Int? = null,
         record: SlotRecord? = null,
         done: List<String> = emptyList(),
+        firstAction: String? = null,
     ): String = buildString {
         fun clock(at: Long) = Instant.ofEpochMilli(at).atZone(zone).format(CLOCK)
         appendLine("Reason: $reason")
@@ -76,8 +77,8 @@ object FelixPrompts {
                 EarnsBy.Nothing -> "nothing: nothing can check it"
             }
             appendLine("Piece: ${piece.label}, ${piece.minutes} min, slot ${clock(slot.start)}–${clock(slot.end)}; it earns its free time $earns")
-            // A piece's first steps come with phase 7's micro-plans.
-            appendLine("First action: none yet")
+            // Its first step, written ahead (AI-15).
+            appendLine("First action: ${firstAction ?: "none yet"}")
         } else if (record != null) {
             val how = when {
                 record.outcome == SlotOutcome.Missed -> "it went by undone, and has been moved to later"
