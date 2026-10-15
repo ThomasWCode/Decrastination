@@ -1261,6 +1261,53 @@ class AppGraph private constructor(context: Context) {
         return true
     }
 
+    /** What can be reset (LR-08), and what each takes. */
+    enum class Reset(val title: String, val takes: String) {
+        Stats("Stats", "the record of what got done (slots, completions, days, blocks, the reviews and the check-ins), and what the app learned from it"),
+        Calibration("What the app has learned", "how long your work takes, the margins and how much of each day you use, learned afresh from now"),
+        Memories("What Felix remembers", "his facts about you and how you'd have him behave, and your lines for the profile"),
+        Chat("The chat and Felix's history", "the chat's messages, Felix's messages and what he was waiting to say"),
+        Instructions("Your changes", "every change in use"),
+        Everything("Everything learned", "all of these"),
+    }
+
+    /**
+     * [what] reset (LR-08), with no parent code, a copy of all the app keeps saved first, as
+     * `reset-<date>.json` in Documents/Decrastination (or the app's own files where that can't be
+     * written). What happened, in words.
+     */
+    suspend fun reset(what: Reset): String = withContext(NonCancellable) {
+        val now = clock.now()
+        val name = "reset-" + java.time.Instant.ofEpochMilli(now).atZone(clock.zone()).toLocalDate() + ".json"
+        val text = exportBackup()
+        val saved = if (com.thomaswcode.decrastination.data.BackupFolder.available && withContext(Dispatchers.IO) { com.thomaswcode.decrastination.data.BackupFolder.write(app.contentResolver, name, text) }) {
+            "Documents/Decrastination/$name"
+        } else {
+            withContext(Dispatchers.IO) { File(File(app.filesDir, "backups").apply { mkdirs() }, name).writeText(text) }
+            "the app's own files ($name)"
+        }
+        val all = what == Reset.Everything
+        if (all || what == Reset.Stats) {
+            log.update { com.thomaswcode.decrastination.data.ActivityLog() }
+            runtime.update { it.copy(calibration = com.thomaswcode.decrastination.core.Calibration()) }
+        }
+        if (what == Reset.Calibration) runtime.update { it.copy(calibration = com.thomaswcode.decrastination.core.Calibration(learnFrom = now)) }
+        if (all || what == Reset.Memories) {
+            memory.update { com.thomaswcode.decrastination.core.MemoryState() }
+            changeSettings { it.copy(profileLines = emptyList()) }
+        }
+        if (all || what == Reset.Chat) {
+            clearChat()
+            runtime.update { it.copy(felix = com.thomaswcode.decrastination.data.FelixState()) }
+            log.update { it.copy(felix = emptyList()) }
+        }
+        if (all || what == Reset.Instructions) {
+            instructions.update { com.thomaswcode.decrastination.core.InstructionState() }
+            layInstructions()
+        }
+        "${what.title}: reset. A copy of everything from before is in $saved."
+    }
+
     /** The most of what a call was about that its record keeps (AC-07). */
     private val MAX_CALL_TITLE = 80
 

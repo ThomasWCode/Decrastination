@@ -456,5 +456,19 @@ class DaysReplanTest {
         assertEquals(3, learned.timed["Homework|Physics"])
         assertEquals(forgetting.forgotten, learned.forgotten)
     }
+
+    @Test
+    fun `reset, the calibration learns only from what comes after`() {
+        fun done(at: String, worked: Int) = com.thomaswcode.decrastination.data.CompletionRecord(
+            taskId = "t$at", title = "t", source = com.thomaswcode.decrastination.core.Source.Teams, kind = com.thomaswcode.decrastination.core.Kind.Homework,
+            estimateMin = 30, workedMin = worked, firstSeenAt = com.thomaswcode.decrastination.Fixtures.at(at) - 3_600_000L, doneAt = com.thomaswcode.decrastination.Fixtures.at(at),
+        )
+        val reset = com.thomaswcode.decrastination.core.Calibration(learnFrom = com.thomaswcode.decrastination.Fixtures.at("2026-10-04T00:00"))
+        val log = com.thomaswcode.decrastination.data.ActivityLog(completions = listOf(done("2026-10-01T18:00", 90), done("2026-10-05T18:00", 30)))
+        assertEquals(listOf("t2026-10-05T18:00"), Calibrator.remembered(log.completions, reset).map { it.taskId })
+        val learned = Calibrator.learn(log, reset, java.time.LocalDate.parse("2026-10-08")).calibration
+        assertEquals(1, learned.timed["Homework|"])
+        assertEquals(reset.learnFrom, learned.learnFrom)
+    }
 }
 
