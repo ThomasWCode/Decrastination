@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -38,6 +39,7 @@ import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.core.Chunk
 import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.ui.AppTheme
+import com.thomaswcode.decrastination.ui.FelixFab
 import com.thomaswcode.decrastination.ui.Format
 import com.thomaswcode.decrastination.ui.PieceActions
 import com.thomaswcode.decrastination.ui.rememberPhotoCheck
@@ -116,6 +118,8 @@ class BlockedActivity : ComponentActivity() {
         // Shared with the Plan (IMP-P1-001): the same actions, the same rules.
         val photo = rememberPhotoCheck(graph, this, plan) { _, text -> message = text }
 
+        // Felix here too (UI-16), about the next piece's task.
+        androidx.compose.foundation.layout.Box(Modifier.fillMaxSize()) {
         Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
             Column(
                 Modifier.fillMaxSize().safeDrawingPadding().verticalScroll(rememberScrollState()).padding(24.dp),
@@ -139,7 +143,15 @@ class BlockedActivity : ComponentActivity() {
                 TextButton(onClick = { why = !why }) { Text(if (why) "Hide why" else "Why am I blocked?") }
                 AnimatedVisibility(why) { Why(verdict.reason, plan.todayBucket?.chunks.orEmpty(), settings.workMinPerFreeMin, graph.focus.missedKeepsPressure(now), settings) }
                 OutlinedButton(onClick = ::goHome, modifier = Modifier.fillMaxWidth()) { Text("Go to the home screen") }
+                // Room under it for Felix's button.
+                androidx.compose.foundation.layout.Spacer(Modifier.size(48.dp))
             }
+        }
+        FelixFab(
+            this@BlockedActivity,
+            next?.let { com.thomaswcode.decrastination.core.About(taskId = it.taskId, taskTitle = it.title) } ?: com.thomaswcode.decrastination.core.About(),
+            Modifier.align(androidx.compose.ui.Alignment.BottomEnd).safeDrawingPadding().padding(16.dp),
+        )
         }
     }
 

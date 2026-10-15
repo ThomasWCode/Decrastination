@@ -54,7 +54,7 @@ fun SchoolSection(graph: AppGraph) {
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
         if (school.noSchool.isEmpty() && school.halfDays.isEmpty()) {
             Text(
-                "No days off or half-days yet. Tell Ask Claude (\"half term is 26 to 30 October\"), or add them here: a day off is planned as a weekend is.",
+                "No days off or half-days yet. Tell Felix (\"half term is 26 to 30 October\"), or add them here: a day off is planned as a weekend is.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

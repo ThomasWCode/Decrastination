@@ -96,6 +96,7 @@ class SettingsActivity : ComponentActivity() {
 
         Scaffold(
             topBar = { BackBar("Settings", this) },
+            floatingActionButton = { FelixFab(this) },
             bottomBar = {
                 Column(Modifier.fillMaxWidth().padding(16.dp)) {
                     message?.let { Text(it, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(bottom = 8.dp)) }

@@ -207,7 +207,7 @@ fun TaskSheet(graph: AppGraph, activity: Activity, taskId: String, onClose: () -
                     else -> Button(onClick = { scope.launch { TaskOpener.open(activity, task)?.let { message = it } } }) { Text("Open in ${task.source.label}") }
                 }
                 if (changeable && !task.userNotATask) OutlinedButton(onClick = { confirming = "not-a-task" }) { Text("Not a task") }
-                if (task.isOpen) OutlinedButton(onClick = onInstruct) { Text("Ask Claude about it") }
+                if (task.isOpen) OutlinedButton(onClick = onInstruct) { Text("Ask ${graph.settings.value.felixName} about it") }
             }
             if (own && task.isOpen) {
                 Text(
@@ -304,7 +304,7 @@ private fun Field(label: String, value: String, note: String? = null, urgent: Bo
 private fun Notes(task: TaskItem, now: Long, zone: java.time.ZoneId, byId: Map<String, TaskItem>, onOpen: () -> Unit) {
     val lines = buildList {
         task.userAfter?.takeIf { task.isOpen && Instructions.waiting(task, byId) }?.let { add("Waits, as you said, until “${byId[it]?.title ?: it}” is done" to false) }
-        if (task.userNotATask) add("You said it isn't a task: take that back in Ask Claude, under Your changes" to false)
+        if (task.userNotATask) add("You said it isn't a task: take that back in Felix's chat, under Your changes" to false)
         Enrichments.current(task)?.dropped?.takeIf { task.isOpen }?.let { add("Claude's plan was dropped ($it): planned as one piece" to true) }
         (Enrichments.current(task)?.nextStep ?: task.extra[GmailThreads.EXTRA_NEXT_STEP])?.let { add("Next: $it" to false) }
         task.enrichment?.takeIf { it.by != RuleEnricher.BY }?.let { add("Steps and estimate by Claude" to false) }

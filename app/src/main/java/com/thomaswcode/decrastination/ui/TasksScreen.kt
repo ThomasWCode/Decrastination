@@ -123,10 +123,8 @@ fun TasksScreen(graph: AppGraph, activity: Activity, opening: String? = null, on
             }
         }
         Column(Modifier.align(Alignment.BottomEnd).padding(16.dp), horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            // Or say it to Claude, who makes the card (Q29).
-            SmallFloatingActionButton(onClick = { activity.startActivity(AskActivity.intent(activity)) }) {
-                Icon(painterResource(R.drawable.ic_chat), contentDescription = "Ask Claude")
-            }
+            // Or say it to Felix, who makes the card (Q29); here above New task, as Felix is on every screen (UI-16).
+            FelixFab(activity)
             ExtendedFloatingActionButton(
                 onClick = { making = true },
                 icon = { Icon(painterResource(R.drawable.ic_add), contentDescription = null) },
