@@ -38,13 +38,16 @@ import androidx.compose.ui.window.DialogProperties
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.R
 import com.thomaswcode.decrastination.core.Kind
+import com.thomaswcode.decrastination.core.OwnStep
 import com.thomaswcode.decrastination.core.OwnTask
 import com.thomaswcode.decrastination.core.OwnTasks
 import com.thomaswcode.decrastination.core.TaskItem
 import java.time.Instant
 import java.time.LocalTime
 import java.util.UUID
+import androidx.compose.ui.draw.rotate
 import kotlinx.coroutines.launch
+import kotlinx.serialization.builtins.ListSerializer
 
 /**
  * The form for a task of your own (2.0.0, Q28): a new one (from [initial], Claude's, if given), or
@@ -67,6 +70,10 @@ fun OwnTaskForm(graph: AppGraph, editing: TaskItem?, initial: OwnTask? = null, o
     var from by rememberSaveable { mutableStateOf(start.startFrom) }
     var hours by rememberSaveable { mutableStateOf((start.minutes / 60).toString()) }
     var minutes by rememberSaveable { mutableStateOf((start.minutes % 60).toString()) }
+    // Its steps as you change them (UI-15), kept through a turn of the phone as their words.
+    var stepsText by rememberSaveable { mutableStateOf(STEPS.encodeToString(ListSerializer(StepRow.serializer()), start.steps.mapIndexed { i, st -> StepRow(st.title, st.minutes.toString(), st.where, wasIndex = i.takeIf { editing != null }) })) }
+    val rows = STEPS.decodeFromString(ListSerializer(StepRow.serializer()), stepsText)
+    fun setRows(next: List<StepRow>) { stepsText = STEPS.encodeToString(ListSerializer(StepRow.serializer()), next) }
     var picking by rememberSaveable { mutableStateOf<String?>(null) }
     var problem by rememberSaveable { mutableStateOf<String?>(null) }
     var saving by rememberSaveable { mutableStateOf(false) }
@@ -81,7 +88,13 @@ fun OwnTaskForm(graph: AppGraph, editing: TaskItem?, initial: OwnTask? = null, o
         className = subject,
         dueAt = due,
         startFrom = from.takeUnless { event },
-        minutes = (hours.toIntOrNull() ?: 0) * 60 + (minutes.toIntOrNull() ?: 0),
+        // With steps, its minutes are theirs together.
+        minutes = if (rows.isEmpty()) (hours.toIntOrNull() ?: 0) * 60 + (minutes.toIntOrNull() ?: 0) else rows.sumOf { it.min },
+        // The steps as listed, each with its own dates as it had them.
+        steps = rows.map { r ->
+            val was = r.wasIndex?.let { start.steps.getOrNull(it) }
+            OwnStep(r.title.trim(), r.min, was?.from, was?.dueAt, r.where, r.wasIndex)
+        },
     )
 
     Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
@@ -135,7 +148,20 @@ fun OwnTaskForm(graph: AppGraph, editing: TaskItem?, initial: OwnTask? = null, o
                         onClear = if (due != null && !event) ({ due = null }) else null,
                     )
                     if (!event) {
-                        if (start.steps.isEmpty()) {
+                        // Its steps, each changed here (UI-15): in order, with the total.
+                        Text("Steps", style = MaterialTheme.typography.titleSmall)
+                        rows.forEachIndexed { i, row ->
+                            StepEditor(
+                                row,
+                                first = i == 0,
+                                last = i == rows.lastIndex,
+                                onChange = { changed -> setRows(rows.mapIndexed { j, r -> if (j == i) changed else r }) },
+                                onMove = { by -> setRows(rows.toMutableList().also { list -> list.add(i + by, list.removeAt(i)) }) },
+                                onDelete = { setRows(rows.filterIndexed { j, _ -> j != i }) },
+                            )
+                        }
+                        if (rows.size < OwnTasks.MAX_STEPS) TextButton(onClick = { setRows(rows + StepRow("", "30")) }) { Text("Add a step") }
+                        if (rows.isEmpty()) {
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                                 OutlinedTextField(
                                     hours,
@@ -157,7 +183,7 @@ fun OwnTaskForm(graph: AppGraph, editing: TaskItem?, initial: OwnTask? = null, o
                             Text("How long it takes in all.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         } else {
                             Text(
-                                "${start.steps.size} steps, ${Format.minutes(start.steps.sumOf { it.minutes })} in all: its page changes their minutes together.",
+                                "${rows.size} step${if (rows.size == 1) "" else "s"}, ${Format.minutes(rows.sumOf { it.min })} in all: how long it takes is theirs together.",
                                 style = MaterialTheme.typography.bodyMedium,
                             )
                         }
@@ -207,6 +233,45 @@ fun OwnTaskForm(graph: AppGraph, editing: TaskItem?, initial: OwnTask? = null, o
         ) { day, _ ->
             picking = null
             from = day.atStartOfDay(zone).toInstant().toEpochMilli()
+        }
+    }
+}
+
+/** A step as the form has it (UI-15): its words as typed, where it can be done, and the step it was. */
+@kotlinx.serialization.Serializable
+private data class StepRow(val title: String, val minutes: String, val where: String? = null, val wasIndex: Int? = null) {
+    val min: Int get() = minutes.toIntOrNull() ?: 0
+}
+
+private val STEPS = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+
+/** One step: its name, its minutes, whether it needs home, and its moves and delete. */
+@Composable
+private fun StepEditor(row: StepRow, first: Boolean, last: Boolean, onChange: (StepRow) -> Unit, onMove: (Int) -> Unit, onDelete: () -> Unit) {
+    androidx.compose.material3.OutlinedCard(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            OutlinedTextField(
+                row.title,
+                { onChange(row.copy(title = it.take(OwnTasks.MAX_TITLE))) },
+                label = { Text("Step") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                OutlinedTextField(
+                    row.minutes,
+                    { onChange(row.copy(minutes = it.filter(Char::isDigit).take(4))) },
+                    label = { Text("Minutes") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.weight(1f),
+                )
+                FilterChip(selected = row.where == "home", onClick = { onChange(row.copy(where = if (row.where == "home") "anywhere" else "home")) }, label = { Text("Home only") })
+                IconButton(enabled = !first, onClick = { onMove(-1) }) { Icon(painterResource(R.drawable.ic_expand_more), contentDescription = "Up", modifier = Modifier.rotate(180f)) }
+                IconButton(enabled = !last, onClick = { onMove(1) }) { Icon(painterResource(R.drawable.ic_expand_more), contentDescription = "Down") }
+                IconButton(onClick = onDelete) { Icon(painterResource(R.drawable.ic_close), contentDescription = "Delete the step") }
+            }
         }
     }
 }
