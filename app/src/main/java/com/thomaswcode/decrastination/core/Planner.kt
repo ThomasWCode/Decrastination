@@ -374,8 +374,12 @@ object Planner {
         }
         val (urgent, later) = placeable.partition { date(it.deadline, zone) <= today }
 
-        // Work with a real deadline its days can't hold (PL-02): said, once a task, with the numbers.
+        // Work with a real deadline its days can't hold (PL-02): said, once a task, with the numbers:
+        // a task in runs (its blocks' dates) for all of its runs with the deadline, against the time free
+        // before the first of them was placed.
         val wontFit = mutableListOf<WontFit>()
+        val runsMinutes = items.filter { it.hard }.groupBy { it.task.id to it.deadline }.mapValues { (_, runs) -> runs.sumOf { it.minutes } }
+        val runsFree = HashMap<Pair<String, Long>, Int>()
         /**
          * The free time [item] has before its deadline itself, at its turn (before it takes any): from
          * the first day it can be done to its deadline's day, or the day before for a morning
@@ -387,6 +391,8 @@ object Planner {
             // As much of each day as it can have: on a day it can only start late, the time after its start.
             return generateSequence(from) { it.plusDays(1) }.takeWhile { it <= last }.sumOf { room(item, it).coerceAtLeast(0) }
         }
+        /** [item]'s deadline is within the plan's reach: only then were all its days before it counted. */
+        fun reachable(item: Item): Boolean = lastDayBefore(item.deadline, zone) <= horizon
         /**
          * Whether a piece of [item] behind on [day] had no room before its deadline itself: on a day
          * after it, its task [short] of time, or a margin no stricter than the deadline, so behind its
@@ -396,8 +402,11 @@ object Planner {
             day > lastDayBefore(item.deadline, zone) || short || lastUsableDay(item, input) >= lastDayBefore(item.deadline, zone)
         /** [item], [short] of time before its deadline still to come: said, once a task. */
         fun sayIfShort(item: Item, free: Int, short: Boolean) {
+            // The time free before the first of its runs with this deadline took any: theirs together.
+            val key = item.task.id to item.deadline
+            val before = runsFree.getOrPut(key) { free }
             if (!item.hard || item.deadline < input.now || wontFit.any { it.taskId == item.task.id }) return
-            if (short) wontFit += WontFit(item.task.id, item.task.title, item.minutes, free, item.deadline)
+            if (short) wontFit += WontFit(item.task.id, item.task.title, runsMinutes[key] ?: item.minutes, before, item.deadline)
         }
 
         // Due by today (overdue, or later today): into today, from the first day it can be.
@@ -407,7 +416,7 @@ object Planner {
             var day = maxOf(firstDay(item), floorOf(item) ?: today)
             val freeBefore = freeUntilDue(item, day)
             // Short of time before its deadline, or (found as it's placed) carried past it by a per-day limit.
-            var short = item.minutes > freeBefore
+            var short = reachable(item) && item.minutes > freeBefore
             for (i in item.chunks.indices) {
                 // Past its deadline it's due now, but a task that can only go so far a day carries
                 // on over the next days, each step to a day with both a step and the time free (not
@@ -494,7 +503,7 @@ object Planner {
                 }
             }
             // Short of time before its deadline, a piece with no day, or one carried past the deadline's day.
-            val short = item.minutes > freeBefore || assigned.any { it == null || it > lastDayBefore(item.deadline, zone) }
+            val short = reachable(item) && (item.minutes > freeBefore || assigned.any { it == null || it > lastDayBefore(item.deadline, zone) })
             item.chunks.indices.forEach { i ->
                 val day = assigned[i] ?: return@forEach
                 placed.getValue(day) += chunk(item, i, behind = behind[i] || day > dueBy, why = why, noRoom = noRoom(item, day, short))
@@ -518,7 +527,7 @@ object Planner {
             val window = generateSequence(earliest) { it.plusDays(1) }.takeWhile { it <= last }.toList()
             val n = item.chunks.size
             // Each day's share: the free time it has left, none where a limit you set is reached.
-            val weight = window.map { day -> if (capped(day, MIN_CHUNK)) 0 else free.getValue(day).coerceAtLeast(0) }
+            val weight = window.map { day -> if (capped(day, MIN_CHUNK)) 0 else room(item, day).coerceAtLeast(0) }
             val total = weight.sum()
             val perDay = item.task.stepsPerDay
             // For a test: as Claude read it of the task as it is now, not of what it said before.
@@ -608,8 +617,9 @@ object Planner {
                 whys[i] = when {
                     n == 1 -> Why.MostRoom
                     day == loose -> Why.Spread
-                    at > within && day <= within -> Why.MinimumTouch
-                    else -> Why.RevisionGap
+                    // Moved by the gap where revision's would have gone without it (before the day after its last piece).
+                    spaced && (loose == null || loose < apart) -> Why.RevisionGap
+                    else -> Why.MinimumTouch
                 }
                 assigned[i] = window[day]
                 take(item, window[day], item.chunks[i].minutes)
@@ -617,7 +627,7 @@ object Planner {
             }
             // Behind only where it can't start before its last usable day is past (a start after it).
             val dueBy = lastUsableDay(item, input)
-            val short = item.minutes > freeBefore || assigned.any { it!! > lastDayBefore(item.deadline, zone) }
+            val short = reachable(item) && (item.minutes > freeBefore || assigned.any { it!! > lastDayBefore(item.deadline, zone) })
             item.chunks.indices.forEach { i -> placed.getValue(assigned[i]!!) += chunk(item, i, behind = assigned[i]!! > dueBy, why = whys[i]!!, noRoom = noRoom(item, assigned[i]!!, short)) }
             sayIfShort(item, freeBefore, short)
             note(item, assigned)

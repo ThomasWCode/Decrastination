@@ -941,6 +941,32 @@ class PlannerTest {
     }
 
     @Test
+    fun `a task that opens late tonight weighs tonight by the time after it opens`() {
+        // Thursday 17:00, an hour due Saturday 09:00 (its days Thursday and Friday), open from 21:00:
+        // tonight has 60 minutes for it, Friday 300 (a quarter of an hour taken). Friday it is.
+        val late = task("late", Fixtures.at("2026-10-10T09:00"), effort = 60).copy(notBefore = Fixtures.at("2026-10-08T21:00"))
+        val friday = Busy(Fixtures.at("2026-10-09T17:00"), Fixtures.at("2026-10-09T17:15"))
+        assertEquals(listOf(LocalDate.parse("2026-10-09")), plan(listOf(late), "2026-10-08T17:00", busy = listOf(friday)).dayOf("late"))
+    }
+
+    @Test
+    fun `a deadline past the plan's reach is never said not to fit`() {
+        // Six months off, more than the plan's 90 days hold: the days after them weren't counted.
+        val big = task("big", Fixtures.at("2027-04-15T23:59"), effort = 50_000)
+        assertEquals(emptyList(), plan(listOf(big), "2026-10-08T17:00").wontFit)
+    }
+
+    @Test
+    fun `a task in runs is said not to fit for all of them, against the time they had`() {
+        // Two hour-long blocks opening apart, both by Saturday 09:00, with an hour and a half free on
+        // Thursday and Friday: 120 minutes left of 90, not the last run's 60 of 30.
+        val steps = listOf(SubStep("A", 60, from = Fixtures.at("2026-10-08T00:00")), SubStep("B", 60, from = Fixtures.at("2026-10-08T12:00")))
+        val loads = mapOf(LocalDate.parse("2026-10-08") to 255, LocalDate.parse("2026-10-09") to 270)
+        val plan = plan(listOf(task("runs", Fixtures.at("2026-10-10T09:00"), steps = steps)), "2026-10-08T17:00", loads = loads)
+        assertEquals(listOf(WontFit("teams:runs", "runs", 120, 90, Fixtures.at("2026-10-10T09:00"))), plan.wontFit)
+    }
+
+    @Test
     fun `work a per-day limit carries past its deadline is said not to fit, however much time there is`() {
         // Three steps of a deck one a day, due tomorrow night: the third goes to Saturday, past it.
         val deck = task("deck", Fixtures.at("2026-10-09T23:59"), steps = (1..3).map { SubStep("20 new cards", 9) }).copy(stepsPerDay = 1)
