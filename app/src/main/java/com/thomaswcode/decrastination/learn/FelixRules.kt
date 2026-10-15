@@ -18,7 +18,7 @@ import com.thomaswcode.decrastination.enrich.FelixPrompts.Reason
  */
 object FelixRules {
     /** What a message would be about: a slot under way, or one on record (missed, kept). */
-    data class Trigger(val reason: Reason, val slot: Slot? = null, val record: SlotRecord? = null) {
+    data class Trigger(val reason: Reason, val slot: Slot? = null, val record: SlotRecord? = null, val asks: List<com.thomaswcode.decrastination.data.AssessLater> = emptyList()) {
         val key: String? get() = slot?.chunk?.key ?: record?.key
         val taskId: String? get() = slot?.chunk?.taskId ?: record?.taskId
     }
@@ -29,14 +29,19 @@ object FelixRules {
     /** A slot missed or kept, or the day done, is said only while it's fresh: not after a restart hours on. */
     const val FRESH_MS = 30 * 60_000L
 
+    /** The evening's question about the day's completions comes from this minute of the day (LR-05). */
+    const val COMPLETIONS_FROM_MIN = 19 * 60
+
     /** How long after a slot's end and grace its miss is surely on record. */
     private const val MISS_LAG_MS = 60_000L
 
     /**
      * The reason to write now, if any, in this order: nothing in quiet hours or a busy event; a slot
      * gone by undone (SlotEnd), or kept without the photo it [needsPhoto] to earn, asked about once;
-     * today's last slot kept (DayDone), once; then, with nothing under way or to come today, nothing.
-     * Otherwise, not before the check he set: a slot under way its grace (`felixGraceMin`) and more
+     * today's last slot kept (DayDone), once; from [COMPLETIONS_FROM_MIN], not before the check he set,
+     * the day's completions with no kept slot ([toAsk], LR-05), once an evening; then, with nothing
+     * under way or to come today, nothing. Otherwise, not before the check he set: a slot under way
+     * its grace (`felixGraceMin`) and more
      * with nothing done on its task since it began (SlotStart), at most [MAX_PER_SLOT] times; and a
      * slot just kept, every third one (SlotKept). [today]: today's slots on record; [sent]: his
      * messages today, the silent ones (he chose not to write, or the model couldn't be asked) too.
@@ -51,6 +56,8 @@ object FelixRules {
         quiet: Boolean,
         busyNow: Boolean,
         needsPhoto: (SlotRecord) -> Boolean,
+        toAsk: List<com.thomaswcode.decrastination.data.AssessLater> = emptyList(),
+        zone: java.time.ZoneId = java.time.ZoneId.systemDefault(),
     ): Trigger? {
         if (quiet || busyNow) return null
         fun said(reason: Reason, key: String?, since: Long) = sent.filter { it.reason == reason.name && it.key == key && it.at >= since }
@@ -66,10 +73,15 @@ object FelixRules {
         if (plan.todayBucket?.chunks.orEmpty().isEmpty() && last != null && fresh(last) && sent.none { it.reason == Reason.DayDone.name }) {
             return Trigger(Reason.DayDone, record = last)
         }
+        val paced = state.nextCheckAt?.let { now < it } == true
+        // Work its source says is done that the app saw none of: how it went, asked together in the evening.
+        if (!paced && toAsk.isNotEmpty() && com.thomaswcode.decrastination.block.BlockPolicy.minuteOfDay(now, zone) >= COMPLETIONS_FROM_MIN && sent.none { it.reason == Reason.Completions.name }) {
+            return Trigger(Reason.Completions, asks = toAsk)
+        }
         // Quiet when nothing's scheduled (Q-31): no slot of today's under way or to come.
         val work = plan.todaySlots.filter { it.kind == SlotKind.Work && it.chunk != null }
         if (work.none { it.end > now }) return null
-        if (state.nextCheckAt?.let { now < it } == true) return null
+        if (paced) return null
         plan.slotAt(now)?.let { slot ->
             val chunk = slot.chunk!!
             val done = (state.activity[chunk.taskId]?.let { it >= slot.start } == true) || kept.any { it.taskId == chunk.taskId && it.at >= slot.start }

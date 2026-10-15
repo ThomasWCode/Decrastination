@@ -76,7 +76,8 @@ The implementation of `docs/review_v2_improvements/impl/` on branch `v3`. Delete
 - AI-22 Felix's prompt and call: his name and line from Settings → Felix (with when he asks into a slot and checks again), what he's told for each reason, his answer held to two sentences, three replies and five minutes at least before he checks again, his messages kept in the log: fd65ffd.
 - AI-24 the chat as Felix: changes to what exists made at once on a card with its Undo, the rest to confirm; up to three replies offered; his notifications with a reply box (his replies its choices) and buttons for up to two cards; a reply goes on in the chat, its answer his next notification: 6c94cd9.
 - LR-03 when Felix writes: a slot under way with nothing done (after its grace, again at his checks, three at most), one gone by undone or ticked without its photo, the day done, one kept slot in three; never in quiet hours, a busy event or a day with nothing scheduled; his pace his own, an alarm for his next look: 43ae37f.
-- LR-04 the morning briefing as Felix's message over the day's list, on a day with slots; the list alone otherwise: this commit.
+- LR-04 the morning briefing as Felix's message over the day's list, on a day with slots; the list alone otherwise: 27d6571.
+- LR-05 "How did it go?" as Felix's question once an evening, about the day's completions no kept slot saw, his replies the three answers; the old question with Claude off; its channel gone: this commit.
 
 ## Current
 

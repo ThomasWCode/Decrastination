@@ -175,6 +175,8 @@ data class FelixRecord(
     val nextCheckAt: Long? = null,
     val replyText: String? = null,
     val repliedAt: Long? = null,
+    /** The completions a Completions message asks about (LR-05): a reply of one of its three answers goes on each. */
+    val asks: List<AssessLater> = emptyList(),
 )
 
 /** How a slot went (LR-09): kept in its time or after its grace, missed, or moved on purpose. */

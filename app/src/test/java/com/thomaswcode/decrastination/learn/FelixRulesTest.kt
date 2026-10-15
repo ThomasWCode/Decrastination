@@ -39,7 +39,7 @@ class FelixRulesTest {
     private fun at(time: String) = Fixtures.at("2026-10-12T$time")
 
     private fun due(now: Long, state: FelixState = FelixState(), today: List<SlotRecord> = emptyList(), sent: List<FelixRecord> = emptyList(), quiet: Boolean = false, busy: Boolean = false, needsPhoto: Boolean = false, p: com.thomaswcode.decrastination.core.Plan = plan) =
-        FelixRules.due(p, state, today, sent, settings, now, quiet, busy) { needsPhoto }
+        FelixRules.due(p, state, today, sent, settings, now, quiet, busy, needsPhoto = { needsPhoto })
 
     private fun record(key: String, outcome: SlotOutcome, start: Long, at: Long, earned: Boolean = true, plannedMin: Int = 30) = SlotRecord(
         date = "2026-10-12", key = key, taskId = key.substringBefore('#'), kind = Kind.Homework, label = key, plannedMin = plannedMin,
@@ -111,5 +111,16 @@ class FelixRulesTest {
         assertEquals("Study period at eleven, the statics at five." to "Nothing after seven.", FelixRules.sentences("Study period at eleven, the statics at five. Nothing after seven."))
         assertEquals("A clear evening: vocab at five!" to "Then the statics. That's it.", FelixRules.sentences("A clear evening: vocab at five! Then the statics. That's it."))
         assertEquals("One line only" to null, FelixRules.sentences(" One line only "))
+    }
+
+    @Test
+    fun `the day's completions no slot saw are asked about once, in the evening, at his pace`() {
+        val ask = listOf(com.thomaswcode.decrastination.data.AssessLater("teams:c", "German reading", at("16:00")))
+        fun completions(now: Long, state: FelixState = FelixState(), sent: List<FelixRecord> = emptyList()) =
+            FelixRules.due(plan, state, emptyList(), sent, settings, now, false, false, { false }, ask, LONDON)
+        assertEquals(Reason.Completions to ask, completions(at("19:05")).let { it?.reason to it?.asks })
+        assertNull(completions(at("18:55")).takeIf { it?.reason == Reason.Completions })
+        assertNull(completions(at("19:05"), FelixState(nextCheckAt = at("19:20"))))
+        assertNull(completions(at("19:30"), sent = listOf(sent(Reason.Completions, null, at("19:05")))))
     }
 }

@@ -44,9 +44,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 /**
- * The quick self-assessment after each verified completion (docs/scheduler.md §5, item 5): one tap
- * in the notification, harder, as expected or easier; or a tap on it to add a line. It feeds the
- * effort multipliers and the weekly review.
+ * The quick self-assessment after each verified completion (docs/scheduler.md §5, item 5): harder,
+ * as expected or easier, and a line if you like. It feeds the effort multipliers and the weekly
+ * review. Since review v2 (LR-05) it's Felix's question, once an evening, about the day's work done
+ * outside the app's knowledge; with Claude off, a notification of its own per completion, as before.
  */
 object Assessment {
     private const val BASE_ID = 4100
@@ -55,7 +56,8 @@ object Assessment {
     const val EXTRA_TITLE = "title"
     const val EXTRA_ANSWER = "answer"
 
-    private val ANSWERS = listOf("Harder" to Calibrator.HARDER, "As expected" to Calibrator.AS_EXPECTED, "Easier" to Calibrator.EASIER)
+    /** The three answers, as said and as kept. */
+    val ANSWERS = listOf("Harder" to Calibrator.HARDER, "As expected" to Calibrator.AS_EXPECTED, "Easier" to Calibrator.EASIER)
 
     const val EXTRA_DONE_AT = "doneAt"
 
@@ -73,18 +75,20 @@ object Assessment {
             .filterNot { t -> answered.any { it.taskId == t.id && it.doneAt == t.doneAt } }
             .map { AssessLater(it.id, it.title, it.doneAt) }
         if (asks.isEmpty()) return
-        if (!Notify.shown(context, Channels.HOW_IT_WENT)) {
-            AppGraph.get(context).runtime.update { it.copy(assessLater = (it.assessLater + asks).distinctBy { a -> a.taskId to a.doneAt }.takeLast(MAX_LATER)) }
+        // Felix asks in the evening (LR-05); without Claude, or while notifications can't be seen, kept till they can.
+        val graph = AppGraph.get(context)
+        if (graph.claudeKey() != null || !Notify.shown(context, Channels.FELIX)) {
+            graph.runtime.update { it.copy(assessLater = (it.assessLater + asks).distinctBy { a -> a.taskId to a.doneAt }.takeLast(MAX_LATER)) }
             return
         }
         asks.forEach { post(context, it) }
     }
 
-    /** The questions kept while notifications couldn't be seen, asked now they can. */
+    /** The questions kept while notifications couldn't be seen, asked now they can: with Claude off (on, they're Felix's). */
     suspend fun askLater(context: Context) {
         val graph = AppGraph.get(context)
         val waiting = graph.runtime.value.assessLater
-        if (waiting.isEmpty() || !Notify.shown(context, Channels.HOW_IT_WENT)) return
+        if (waiting.isEmpty() || graph.claudeKey() != null || !Notify.shown(context, Channels.FELIX)) return
         waiting.forEach { post(context, it) }
         graph.runtime.update { it.copy(assessLater = it.assessLater - waiting.toSet()) }
     }
@@ -92,7 +96,7 @@ object Assessment {
     private const val MAX_LATER = 20
 
     private fun post(context: Context, ask: AssessLater) {
-        val builder = NotificationCompat.Builder(context, Channels.HOW_IT_WENT)
+        val builder = NotificationCompat.Builder(context, Channels.FELIX)
             .setSmallIcon(R.drawable.ic_focus)
             .setContentTitle("Done: ${ask.title}")
             .setContentText("How was it?")
