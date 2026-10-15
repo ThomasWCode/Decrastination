@@ -12,7 +12,7 @@ Things the app doesn't do that would be useful, judged against what it's for: a 
 | NF-04 | Exam season: revision plans per subject from the exam dates | – | L | Deferred (Q-27) |
 | NF-05 | Recurring work and weekly-minutes goals | – | M | Deferred (Q-27) |
 | NF-06 | Returned work with feedback becomes a short task | P2 | S | – |
-| NF-07 | Every slot written to your Google Calendar, adjusted live | P1 | M | Changed (note 2); confirmed (Q-39) |
+| NF-07 | Every slot written to your Google Calendar, adjusted live | P1 | M | Changed (note 2); confirmed (Q-39); Implemented (v3 phase 3) |
 | NF-08 | Streaks and a weekly target | – | – | Withdrawn (Q-25) |
 
 ---
