@@ -182,6 +182,10 @@ class SettingsActivity : ComponentActivity() {
                 item {
                     TimeField("Daily cards due by", draft.ankiDeadlineMin, "ankiDeadlineMin", form) { draft = draft.copy(ankiDeadlineMin = it) }
                     NumberField("Current textbook", draft.ankiTextbook, SettingsLimits.TEXTBOOK, "ankiTextbook", form) { draft = draft.copy(ankiTextbook = it) }
+                    // What a card takes in each deck, as learned from time in AnkiDroid (DX-11).
+                    com.thomaswcode.decrastination.learn.AnkiProgress.lines(graph.runtime.value.calibration, graph.tasks.value.tasks).forEach {
+                        Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
 
                 item { Section("Blocked sites") }

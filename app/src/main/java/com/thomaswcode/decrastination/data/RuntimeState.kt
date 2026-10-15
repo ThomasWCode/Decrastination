@@ -28,6 +28,10 @@ data class RuntimeState(
     val calendarsToClear: List<Long> = emptyList(),
     /** Photo checks found done whose due (the task's step or minutes, the log, free time) isn't all given yet. */
     val photosDone: List<PhotoDone> = emptyList(),
+    /** The decks' counts read as AnkiDroid came and went (NF-03): the last [com.thomaswcode.decrastination.learn.AnkiProgress.KEEP]. */
+    val ankiReadings: List<com.thomaswcode.decrastination.learn.AnkiReading> = emptyList(),
+    /** Since when AnkiDroid has been in front, read coming in; null when it isn't. */
+    val ankiFrontSince: Long? = null,
     /** Loosening changes waiting their delay. */
     val pending: List<PendingChange> = emptyList(),
     /** A parent code unblocked everything until then. */

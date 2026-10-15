@@ -62,6 +62,8 @@ class Syncer(
     /** Hears each source's failure in full, for the log; the store keeps only its message. */
     private val onFailure: (Source, Throwable) -> Unit = { _, _ -> },
     readContext: CoroutineContext = Dispatchers.IO,
+    /** Seconds a card per Anki deck, as learned (DX-11). */
+    private val ankiRates: () -> Map<Long, Double> = { emptyMap() },
 ) {
     private val sources = sources.sortedBy { it.source == Source.Anki }
     private val readers = CoroutineScope(SupervisorJob() + readContext)
@@ -98,7 +100,7 @@ class Syncer(
     private suspend fun readOne(source: TaskSource): SyncReport {
         val startedAt = clock.now()
         val state = tasks.value
-        val context = ReadContext(startedAt, clock.zone(), settings.value, state.tasks, state.ankiDay)
+        val context = ReadContext(startedAt, clock.zone(), settings.value, state.tasks, state.ankiDay, ankiRates())
         // The last read given up on, still stuck in a call that can't be stopped: not another.
         if (reads[source.source]?.isCompleted == false) return failed(source.source, startedAt, "Still waiting for the last read, which hasn't answered")
         val reading = readers.async { source.read(context) }

@@ -61,7 +61,8 @@ The implementation of `docs/review_v2_improvements/impl/` on branch `v3`. Delete
 - AR-09 focus sessions gone: no Start, no session in the policy, the block screen, the widget or the chat (which says the slot under way instead); a session's records in the old files passed over as they load; a backup's slots kept on import, which LR-09 missed: 950d44f.
 - BL-01 blocked while today's work isn't done, tomorrow's alone not; BL-02 blocking from 10:00 on a weekend or a day off (`weekendBlockFromMin`), by the school calendar; BL-11 a slot missed today that went to tomorrow keeping tonight blocked till the hours end, a move of yours not: 6eb0a34.
 - BL-04 the reward line on the block screen, the Do now card and the widget; BL-07 an hour of free time on a day with nothing to do: c40ef07.
-- BL-10 free time between today's slots after one kept, till the next starts: this commit. Found with it, a step piece's key renumbered once a piece before it was kept, so its slot's kept start was lost (PL-13): fixed on phase 3's branch (585ba27), with a test here that keeping a piece leaves its task's next one in its slot.
+- BL-10 free time between today's slots after one kept, till the next starts: a569faa. Found with it, a step piece's key renumbered once a piece before it was kept, so its slot's kept start was lost (PL-13): fixed on phase 3's branch (585ba27), with a test here that keeping a piece leaves its task's next one in its slot.
+- NF-03 time in AnkiDroid as work: the decks read as it comes and goes, a deck task done by then has its slot kept, and Anki read again at once; DX-11 seconds a card learned per deck, the deck tasks' minutes going by them, shown in Settings → Anki: this commit.
 
 ## Current
 
