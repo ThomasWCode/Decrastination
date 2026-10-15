@@ -51,6 +51,11 @@ data class Enrichment(
     val reason: String? = null,
     /** Read by the model with a photo of the work (AI-23): only then is its estimate "From your photo". The rules' standing in for it never is. */
     val fromPhoto: Boolean = false,
+    /**
+     * The prompts it was read by ([com.thomaswcode.decrastination.enrich.Prompts.VERSION], AC-06):
+     * the model's reading is made again once they've changed. 1 for one stored before there was one.
+     */
+    val promptVersion: Int = 1,
 )
 
 /**
@@ -187,11 +192,19 @@ object Enrichments {
      * Whether [task] needs enriching again: never done, changed since, done by the rules when the
      * model is now on, or done by the model when it's now switched off ([modelOff]: what it read goes
      * with it, and the rules' reading stands instead); or an email read, before starred-only reading,
-     * as only to read (AI-02), which a starred one never is.
+     * as only to read (AI-02), which a starred one never is; or, the model on, an open task the model
+     * read by older prompts (AC-06). Resting or refused, the model's older reading stands.
      */
     fun stale(task: TaskItem, modelOn: Boolean, rules: String, modelOff: Boolean = false): Boolean {
         val e = task.enrichment ?: return true
         return e.inputHash != inputHash(task) || (modelOn && e.by == rules) || (modelOff && e.by != rules) ||
-            (task.source == Source.Gmail && e.kind == Kind.Info)
+            (task.source == Source.Gmail && e.kind == Kind.Info) ||
+            (modelOn && e.by != rules && task.isOpen && e.promptVersion < com.thomaswcode.decrastination.enrich.Prompts.VERSION)
     }
+
+    /**
+     * The order tasks are read in (AC-06): those never read first, then those read by the oldest
+     * prompts, each soonest due first, so a run's calls go where they're most out of date.
+     */
+    val NEED: Comparator<TaskItem> = compareBy<TaskItem>({ it.enrichment?.promptVersion ?: 0 }, { it.dueAt ?: Long.MAX_VALUE })
 }

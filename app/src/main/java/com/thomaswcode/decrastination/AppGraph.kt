@@ -1047,7 +1047,8 @@ class AppGraph private constructor(context: Context) {
             .filter { only == null || it.id == only }
             .mapNotNull { task -> Enrichments.jobFor(task)?.let { task to it } }
             .filter { (task, _) -> Enrichments.stale(task, enricher != null && !refused(task), RuleEnricher.BY, modelOff = claudeKey() == null) }
-            .sortedBy { (task, _) -> task.dueAt ?: Long.MAX_VALUE }
+            // Never read first, then the oldest prompts' readings (AC-06), soonest due first.
+            .sortedWith(compareBy(Enrichments.NEED) { it.first })
         for ((snapshot, _) in candidates) {
             // Read afresh: a sync since the run began may have closed or changed it.
             val task = tasks.value.tasks.firstOrNull { it.id == snapshot.id } ?: continue
@@ -1092,7 +1093,8 @@ class AppGraph private constructor(context: Context) {
                                 }
                             }
                         }
-                        again?.enrichment ?: first.enrichment ?: rules.enrich(task, job, now).enrichment?.copy(by = model.by)
+                        // The rules' under the model's name is the model's answer by these prompts (AC-06), not asked for again till they change.
+                        again?.enrichment ?: first.enrichment ?: rules.enrich(task, job, now).enrichment?.copy(by = model.by, promptVersion = com.thomaswcode.decrastination.enrich.Prompts.VERSION)
                     }
                 }
             } else {
@@ -1123,6 +1125,18 @@ class AppGraph private constructor(context: Context) {
         }
         // Sections the deck pattern missed, or a deadline moved: their deck tasks come from reading Anki again, now.
         if (decksChanged) SyncWorker.syncNow(app, setOf(Source.Anki))
+    }
+
+    /**
+     * [taskId] read again by Claude as it is now (AC-06, the sheet's *Read again with Claude*): its
+     * reading forgotten (its steps kept, to be kept by name, AI-08) and the task read at once. False,
+     * with nothing changed, while Claude can't be asked (off, resting, at the cap).
+     */
+    suspend fun readAgain(taskId: String): Boolean = withContext(NonCancellable) {
+        if (claudeKey() == null || !modelAvailable()) return@withContext false
+        tasks.update { state -> state.copy(tasks = state.tasks.map { if (it.id == taskId && it.isOpen) it.copy(enrichment = null) else it }) }
+        enrichNow(only = taskId)
+        true
     }
 
     /** The most tasks remembered as refused as asked (AC-04): far more than there are. */
