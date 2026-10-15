@@ -134,6 +134,8 @@ Items: LR-01, LR-02, LR-06, LR-08, PL-08, PL-09, PL-10, PL-11, NF-02, AC-06, AC-
 
 **Tests.** `BackupFolderTest`: `toPrune` keeps the newest 14 by the date in the name, never names a `reset-*` file, and names nothing at 14 or fewer. `BackupTest`: FORMAT 5 round trip, an older format refused.
 
+*(As built: FORMAT 6, as 5 was taken by what Felix remembers in phase 5; it adds Felix's state and today's slots, restored only where this phone has none of its own (Felix's) and on the same day (the slots). A newer format is refused, as before; an older one is still read, so backups from before stay importable.)*
+
 **Done when.** `backup-now` leaves `decrastination-<today>.json` under `/sdcard/Documents/Decrastination` (`adb shell ls`), a second run the same day replaces it rather than adding a copy, Import of that file from Setup restores it, and Settings → Backup shows the time. Keeping a copy off the phone is the owner's own doing and not this item's (Google Drive and OneDrive offer no folder to Android's folder picker; a sync app mirroring the folder, or Export by hand, does it).
 
 ---

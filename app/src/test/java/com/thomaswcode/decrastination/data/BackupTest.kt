@@ -53,9 +53,9 @@ class BackupTest {
     fun `a backup keeps the school calendar, and one from before has none`() {
         val school = SchoolCalendar(listOf(NoSchool("2026-10-26", "2026-10-30", "Half term")), listOf(HalfDay("2026-10-23", 750)))
         val backup = Backup(exportedAt = now, settings = Settings(), log = ActivityLog(), school = school)
-        assertEquals(5, backup.format)
+        assertEquals(Backup.FORMAT, backup.format)
         // A backup from a later app's format is refused, rather than read without what it adds.
-        assertNull(Backups.decode("""{"app":"Decrastination","format":6,"exportedAt":0,"settings":{},"log":{}}"""))
+        assertNull(Backups.decode("""{"app":"Decrastination","format":${Backup.FORMAT + 1},"exportedAt":0,"settings":{},"log":{}}"""))
         assertEquals(school, Backups.decode(Backups.encode(backup))!!.school)
         // Format 2 (2.0.0) is still read, with no days off.
         val old = Backups.decode("""{"app":"Decrastination","format":2,"exportedAt":0,"settings":{},"log":{}}""")!!
@@ -257,4 +257,18 @@ class BackupTest {
         assertEquals(listOf("saturday" to InstructionStatus.Applied, "due" to InstructionStatus.Applied, "b-after-a" to InstructionStatus.Unclear), restored.map { it.id to it.state })
         assertEquals(dueFriday.appliedAt, restored.single { it.id == "due" }.appliedAt)
     }
+
+    @Test
+    fun `format 6 keeps Felix's state and today's slots, and a newer one is refused`() {
+        val backup = Backup(
+            exportedAt = 1, settings = com.thomaswcode.decrastination.data.Settings(), log = ActivityLog(),
+            felix = FelixState(nextCheckAt = 42), slots = com.thomaswcode.decrastination.core.SlotState("2026-10-15", previous = mapOf("teams:a#0" to 7L)),
+        )
+        val back = Backups.decode(Backups.encode(backup))!!
+        assertEquals(6, back.format)
+        assertEquals(42L, back.felix.nextCheckAt)
+        assertEquals(mapOf("teams:a#0" to 7L), back.slots.previous)
+        assertEquals(null, Backups.decode(Backups.encode(backup).replace("\"format\": 6", "\"format\": 7")))
+    }
 }
+
