@@ -487,6 +487,15 @@ class FocusTest {
     }
 
     @Test
+    fun `feedback to read is finished by its kept slot, though Teams lists it (NF-06)`() = runTest {
+        val feedback = task("k:feedback", kind = Kind.Admin, due = "2026-10-12T23:59", effort = 10).copy(extra = mapOf(TaskItem.EXTRA_TICK_DONE to "true"))
+        val first = laid(feedback).single()
+        clock.time = first.end
+        assertTrue(slotted.keepSlot(first.chunk!!.key))
+        assertEquals(listOf("teams:k:feedback"), ownDone)
+    }
+
+    @Test
     fun `a short piece earns on its tick, a longer one when its photo passes, once`() = runTest {
         val slots = laid(task("short", due = "2026-10-12T23:59", effort = 15), task("long", due = "2026-10-12T23:59", effort = 30))
         val short = slots.single { it.chunk!!.taskId == "teams:short" }

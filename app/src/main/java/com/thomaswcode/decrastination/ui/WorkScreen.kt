@@ -48,8 +48,8 @@ import kotlinx.coroutines.launch
  * can't be read, protection off, Claude's key), then every open task by when it's due (Overdue,
  * Today, Tomorrow, This week, Later, No due date) or by subject, from every source or one; each a
  * tile, a tap opening it to change ([TaskSheet]); *New task* makes one of your own. Below, folded:
- * the work the plan leaves out and why, the tasks you said aren't, those finished lately, and how
- * each source's last read went.
+ * the work the plan leaves out and why, the tasks you said aren't, the emails of events (DX-02),
+ * those finished lately, and how each source's last read went.
  */
 @Composable
 fun WorkScreen(graph: AppGraph, activity: Activity, opening: String? = null, onOpened: () -> Unit = {}) {
@@ -82,6 +82,14 @@ fun WorkScreen(graph: AppGraph, activity: Activity, opening: String? = null, onO
     val trouble = trouble(state, runtime, now)
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     var said by rememberSaveable { mutableStateOf<String?>(null) }
+    // A photo of homework read into tasks (NF-01): the app's, so a turn of the phone or leaving Work loses nothing.
+    val photoReading by graph.photoReading.collectAsStateWithLifecycle()
+    val reading = photoReading?.busy == true
+    LaunchedEffect(photoReading) { photoReading?.let { p -> said = if (p.busy) "Reading the photo…" else p.why } }
+    val homework = androidx.compose.runtime.remember { java.io.File(activity.cacheDir, "photos/homework.jpg").also { it.parentFile?.mkdirs() } }
+    val camera = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.TakePicture()) { taken ->
+        if (taken) graph.readPhotoOf(homework) else homework.delete()
+    }
     // The screen's camera, for a photo of the work from a task's sheet (UI-09); what it said, about which task.
     var saidAbout by rememberSaveable { mutableStateOf<String?>(null) }
     val photo = rememberPhotoCheck(graph, activity, plan) { taskId, text ->
@@ -92,7 +100,7 @@ fun WorkScreen(graph: AppGraph, activity: Activity, opening: String? = null, onO
     var bySubject by rememberSaveable { mutableStateOf(false) }
     var only by rememberSaveable { mutableStateOf<String?>(null) }
     // The due-date sections open; what's not for now folded, till you say otherwise.
-    var folded by rememberSaveable { mutableStateOf(listOf(FINISHED, NOT_TASKS, SOURCES, NOT_PLANNED)) }
+    var folded by rememberSaveable { mutableStateOf(listOf(FINISHED, NOT_TASKS, SOURCES, NOT_PLANNED, EMAIL_EVENTS)) }
     val toggle = { key: String -> folded = if (key in folded) folded - key else folded + key }
     Box(Modifier.fillMaxSize()) {
         // Room at the foot for both buttons (the chat's over New task), so the last row scrolls clear.
@@ -140,11 +148,19 @@ fun WorkScreen(graph: AppGraph, activity: Activity, opening: String? = null, onO
                 }
             }
             val groups = if (bySubject) Groups.bySubject(open, settings.classMap, now) else Groups.byDue(open, now, zone).map { (g, t) -> g.title to t }
+            // Work that looks the same from two sources (DX-15): said on each.
+            val pairs = com.thomaswcode.decrastination.core.Duplicates.candidates(state.tasks, settings.classMap, runtime.notSame)
+            val alike = pairs.flatMap { (a, b) -> listOf(a.id to b, b.id to a) }.groupBy({ it.first }, { it.second })
             for ((title, tasks) in groups) {
                 val key = "group-$title"
                 val expanded = key !in folded
                 item(key = key) { FoldingHeading(title, expanded, { toggle(key) }, summary = "${tasks.size}") }
-                if (expanded) itemsIndexed(tasks, key = { _, it -> it.id }) { index, task -> TaskTile(task, index, tasks.size, now, zone, byId) { sheetFor = task.id } }
+                if (expanded) itemsIndexed(tasks, key = { _, it -> it.id }) { index, task ->
+                    Column {
+                        TaskTile(task, index, tasks.size, now, zone, byId) { sheetFor = task.id }
+                        alike[task.id]?.firstOrNull()?.let { other -> SameLine(graph, task, other) }
+                    }
+                }
             }
             // Open work the plan leaves out, each with why (IMP-P1-002): folded, as it isn't for now.
             // Each fold of one source's too, where one is chosen.
@@ -159,12 +175,22 @@ fun WorkScreen(graph: AppGraph, activity: Activity, opening: String? = null, onO
                     }
                 }
             }
-            // Tasks you've said aren't: kept, off the plan, and here to check (taken back in Ask Claude).
-            val notTasks = state.tasks.filter { it.isOpen && it.userNotATask && (only == null || it.source.name == only) }.sortedWith(compareBy(nullsLast()) { it.dueAt })
+            // Tasks you've said aren't, or are the same work as another (DX-15): kept, off the plan, and
+            // here to check (taken back in Ask Claude).
+            val notTasks = state.tasks.filter { it.isOpen && (it.userNotATask || it.userSameAs != null) && (only == null || it.source.name == only) }.sortedWith(compareBy(nullsLast()) { it.dueAt })
             if (notTasks.isNotEmpty()) {
                 val expanded = NOT_TASKS !in folded
-                item(key = NOT_TASKS) { FoldingHeading("Not tasks, as you said", expanded, { toggle(NOT_TASKS) }, summary = "${notTasks.size}") }
+                item(key = NOT_TASKS) { FoldingHeading("Hidden, as you said", expanded, { toggle(NOT_TASKS) }, summary = "${notTasks.size}") }
                 if (expanded) itemsIndexed(notTasks, key = { _, it -> "not-" + it.id }) { index, task -> TaskTile(task, index, notTasks.size, now, zone, byId) { sheetFor = task.id } }
+            }
+            // Emails of events (your call, 9 Oct, not tasks): off the plan and the lists, here to see,
+            // an invite's with its time and Add to calendar on its sheet (DX-02).
+            val emailEvents = state.tasks.filter { it.isOpen && it.justAnEmail && it.kind == com.thomaswcode.decrastination.core.Kind.Event && !it.userNotATask && it.userSameAs == null && (only == null || it.source.name == only) }
+                .sortedWith(compareBy(nullsLast()) { it.dueAt })
+            if (emailEvents.isNotEmpty()) {
+                val expanded = EMAIL_EVENTS !in folded
+                item(key = EMAIL_EVENTS) { FoldingHeading("Events in your email", expanded, { toggle(EMAIL_EVENTS) }, summary = "${emailEvents.size}") }
+                if (expanded) itemsIndexed(emailEvents, key = { _, it -> "event-" + it.id }) { index, task -> TaskTile(task, index, emailEvents.size, now, zone, byId) { sheetFor = task.id } }
             }
             val finished = state.tasks.filter { !it.isOpen && !it.hidden && (only == null || it.source.name == only) }.sortedByDescending { it.doneAt ?: it.lastSeenAt }
             if (finished.isNotEmpty()) {
@@ -192,6 +218,12 @@ fun WorkScreen(graph: AppGraph, activity: Activity, opening: String? = null, onO
         Column(Modifier.align(Alignment.BottomEnd).padding(16.dp), horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(12.dp)) {
             // Or say it to Felix, who makes the card (Q29); here above New task, as Felix is on every screen (UI-16).
             FelixFab(activity)
+            // Or photograph it (NF-01), once Claude is on to read it.
+            if (settings.aiEnabled && settings.aiKeyActive) {
+                androidx.compose.material3.SmallFloatingActionButton(onClick = { if (!reading) camera.launch(androidx.core.content.FileProvider.getUriForFile(activity, "${activity.packageName}.photos", homework)) }) {
+                    Icon(painterResource(R.drawable.ic_camera), contentDescription = "Photograph homework")
+                }
+            }
             ExtendedFloatingActionButton(
                 onClick = { making = true },
                 icon = { Icon(painterResource(R.drawable.ic_add), contentDescription = null) },
@@ -201,11 +233,13 @@ fun WorkScreen(graph: AppGraph, activity: Activity, opening: String? = null, onO
     }
     sheetFor?.let { id -> TaskSheetHost(graph, activity, id, plan, photo, said.takeIf { saidAbout == id }) { sheetFor = null } }
     if (making) OwnTaskForm(graph, editing = null) { making = false }
+    photoReading?.takeIf { !it.busy }?.let { p -> p.reading?.let { got -> p.jpeg?.let { jpeg -> PhotoTasksSheet(graph, got, jpeg) { graph.photoReading.value = null } } } }
 }
 
 private const val FINISHED = "finished"
 private const val NOT_PLANNED = "not-planned"
 private const val NOT_TASKS = "not-tasks"
+private const val EMAIL_EVENTS = "email-events"
 private const val SOURCES = "sources"
 
 /** How reading [source] last went: when, its data's age, and why it failed, in red. */
@@ -238,6 +272,8 @@ private fun TaskTile(task: TaskItem, index: Int, count: Int, now: Long, zone: ja
     // A start you gave (or one of your own's): planned from then on, not hidden.
     val startsAt = (if (task.source == Source.Own) task.notBefore else task.userFrom)?.takeIf { task.isOpen && it > now }
     val steps = task.subSteps.takeIf { it.isNotEmpty() && task.isOpen }
+    // The same work as another, which is planned (DX-15).
+    val sameAs = task.userSameAs?.let { byId[it] }
     ListTile(index, count, onClick = onClick) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(
@@ -264,9 +300,11 @@ private fun TaskTile(task: TaskItem, index: Int, count: Int, now: Long, zone: ja
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
-        val tags = dropped != null || hiddenUntil != null || waits || task.userDueAt != null || task.userEffortMin != null || startsAt != null || steps != null
+        val tags = dropped != null || hiddenUntil != null || waits || task.userDueAt != null || task.userEffortMin != null || startsAt != null || steps != null || task.userNotATask || sameAs != null
         if (task.isOpen && tags) {
             FlowRow(Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                if (task.userNotATask) Pill("Not a task")
+                sameAs?.let { Pill("Same as “${it.title}”") }
                 if (dropped != null) WarningPill("Claude's plan dropped")
                 if (hiddenUntil != null) Pill("Hidden till ${Format.at(hiddenUntil, now, zone)}")
                 if (waits) Pill("Waits for another task")
@@ -278,3 +316,29 @@ private fun TaskTile(task: TaskItem, index: Int, count: Int, now: Long, zone: ja
         }
     }
 }
+
+/**
+ * [task] looks like the same work as [other] (DX-15): Same keeps [other] and takes [task] off the
+ * plan and the list (a change of yours, taken back in Your changes); Different isn't asked again.
+ */
+@Composable
+private fun SameLine(graph: AppGraph, task: TaskItem, other: TaskItem) {
+    Row(Modifier.fillMaxWidth().padding(start = 28.dp, end = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text("Looks like the same work as “${other.title}” from ${other.source.label}. Same?", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+        androidx.compose.material3.TextButton(onClick = {
+            graph.scope.launch {
+                graph.addOwnChange(
+                    java.util.UUID.randomUUID().toString(), "Same as “${other.title}”",
+                    com.thomaswcode.decrastination.core.About(taskId = task.id, taskTitle = task.title),
+                    com.thomaswcode.decrastination.core.Change(com.thomaswcode.decrastination.core.ChangeType.SameAs, taskId = task.id, afterTaskId = other.id),
+                )
+            }
+        }) { Text("Same") }
+        androidx.compose.material3.TextButton(onClick = {
+            graph.scope.launch { graph.runtime.update { it.copy(notSame = (it.notSame + com.thomaswcode.decrastination.core.Duplicates.key(task.id, other.id)).distinct().takeLast(MAX_NOT_SAME)) } }
+        }) { Text("Different") }
+    }
+}
+
+/** The most pairs said to be different kept: far more than there are. */
+private const val MAX_NOT_SAME = 200

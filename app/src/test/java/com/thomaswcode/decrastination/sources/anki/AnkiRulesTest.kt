@@ -315,4 +315,26 @@ class AnkiRulesTest {
         assertNull(AnkiProvider.parseCounts("[0, 3]"))
         assertNull(AnkiProvider.parseCounts("nonsense"))
     }
+
+    @Test
+    fun `homework naming a deck's topic takes that deck, the one alone it names`() {
+        val decks = listOf(
+            Deck(1, "Textbook 2::1.3", 0, 0, 0, description = "Holidays and travel"),
+            Deck(2, "Textbook 2::1.4", 0, 0, 0, description = "School"),
+            Deck(3, "Textbook 2::1.5", 0, 0, 0, description = "the"),
+            Deck(4, "Textbook 1::1.3", 0, 0, 0, description = "Family"),
+        )
+        val topics = AnkiRules.topics(decks, textbook = 2)
+        assertEquals(mapOf("1.3" to "Holidays and travel", "1.4" to "School"), topics)
+        fun task(detail: String) = com.thomaswcode.decrastination.core.TaskItem(
+            id = "teams:v", source = com.thomaswcode.decrastination.core.Source.Teams, sourceId = "v", title = "Vocab", detail = detail,
+            kind = com.thomaswcode.decrastination.core.Kind.Homework, firstSeenAt = 0, lastSeenAt = 0,
+        )
+        assertEquals(listOf(1 to 3), AnkiRules.sectionsOf(task("Learn the vocabulary for holidays and travel."), topics))
+        // Two named, or a word inside another, is none.
+        assertEquals(emptyList(), AnkiRules.sectionsOf(task("Holidays and travel, then school words."), topics))
+        assertEquals(emptyList(), AnkiRules.sectionsOf(task("Read about schooling."), topics))
+        // A section number still wins.
+        assertEquals(listOf(1 to 4), AnkiRules.sectionsOf(task("Learn vocabulary 1.4 on holidays and travel"), topics))
+    }
 }

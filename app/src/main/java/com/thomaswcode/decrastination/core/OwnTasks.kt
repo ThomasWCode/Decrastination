@@ -127,12 +127,14 @@ object OwnTasks {
     }
 
     /**
-     * [current] with what [changes] made (a due date, a start, minutes) put back as it was in [was]:
-     * only a field that still holds what they set, so a later change to it, or to another field,
-     * stands. A step's minutes come back only while the steps are the same ones.
+     * [current] with what [changes] made (a due date, a start, minutes, its steps) put back as it was
+     * in [was]: only a field that still holds what they set, so a later change to it, or to another
+     * field, stands. A step's minutes come back only while the steps are the same ones.
      */
     fun restored(current: OwnTask, was: OwnTask, changes: List<Change>): OwnTask {
         var d = current
+        // Its steps still the ones the change gave (AI-19): those they replaced, and their minutes.
+        changes.lastOrNull { it.type == ChangeType.Steps }?.let { c -> if (sameSteps(d.steps, c.steps)) d = d.copy(steps = was.steps, minutes = was.minutes) }
         changes.lastOrNull { it.type == ChangeType.DueBy }?.let { c -> if (d.dueAt == c.time) d = d.copy(dueAt = was.dueAt) }
         changes.lastOrNull { it.type == ChangeType.StartFrom }?.let { c -> if (d.startFrom == c.time) d = d.copy(startFrom = was.startFrom) }
         changes.lastOrNull { it.type == ChangeType.Minutes }?.let { c ->
@@ -152,6 +154,7 @@ object OwnTasks {
      */
     fun relayered(laterWas: OwnTask, undone: List<Change>, undoneWas: OwnTask): OwnTask {
         var d = laterWas
+        undone.lastOrNull { it.type == ChangeType.Steps }?.let { c -> if (sameSteps(d.steps, c.steps)) d = d.copy(steps = undoneWas.steps, minutes = undoneWas.minutes) }
         undone.lastOrNull { it.type == ChangeType.DueBy }?.let { c -> if (d.dueAt == c.time) d = d.copy(dueAt = undoneWas.dueAt) }
         undone.lastOrNull { it.type == ChangeType.StartFrom }?.let { c -> if (d.startFrom == c.time) d = d.copy(startFrom = undoneWas.startFrom) }
         undone.lastOrNull { it.type == ChangeType.Minutes }?.let { c ->
@@ -164,8 +167,12 @@ object OwnTasks {
         return d
     }
 
+    /** Whether [steps] are the ones [given] (a Steps change's) made: the same names and minutes, in order. */
+    private fun sameSteps(steps: List<OwnStep>, given: List<OwnStep>?): Boolean =
+        given != null && steps.map { it.title.trim() to it.minutes } == given.map { it.title.trim() to it.minutes }
+
     /** The changes an instruction makes to one of your own that are made on it, not laid over it. */
-    val MADE_ON_IT = setOf(ChangeType.DueBy, ChangeType.StartFrom, ChangeType.Minutes)
+    val MADE_ON_IT = setOf(ChangeType.DueBy, ChangeType.StartFrom, ChangeType.Minutes, ChangeType.Steps)
 
     /**
      * [change] (a due date, a start, or minutes: [MADE_ON_IT]) made on your own [task] itself, as
@@ -223,6 +230,8 @@ object OwnTasks {
         return when (change.type) {
             ChangeType.DueBy -> draft.copy(dueAt = change.time)
             ChangeType.StartFrom -> draft.copy(startFrom = change.time)
+            // Its steps anew (AI-19), its minutes theirs: a step of an old name keeps its tick.
+            ChangeType.Steps -> change.steps?.takeIf { it.isNotEmpty() }?.let { steps -> draft.copy(steps = steps.map { it.copy(wasIndex = null) }, minutes = steps.sumOf { it.minutes }) }
             ChangeType.Minutes -> {
                 // Fewer than its steps: they couldn't add up to it ([minutesFor]).
                 val minutes = change.minutes?.takeIf { it >= maxOf(1, draft.steps.size) } ?: return null

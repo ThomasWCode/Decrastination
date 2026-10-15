@@ -127,6 +127,8 @@ data class TaskItem(
     val photosCounted: Map<String, Int> = emptyMap(),
     /** Your answers to the model's questions about it (AI-10), oldest first: read with it from then on. */
     val answers: List<String> = emptyList(),
+    /** A photo of its work (AI-23), read with it from then on: kept here, not in [extra], so a sync keeps it. */
+    val photo: TaskPhoto? = null,
     val subSteps: List<SubStep> = emptyList(),
     /**
      * Of [workedMin] and [photoMin], the minutes the source's own steps already leave out: an Anki
@@ -169,19 +171,28 @@ data class TaskItem(
     val userDueAt: Long? = null,
     val userOnDay: String? = null,
     val userAtTime: Long? = null,
+    /** The task listed it's the same work as, which is kept (DX-15): this one's off the plan and the list. */
+    val userSameAs: String? = null,
 ) {
     val isOpen: Boolean get() = status == Status.Open
+
+    /**
+     * Done once you tick its piece off ([EXTRA_TICK_DONE]), as one of your own is, though a source
+     * lists it: a returned assignment's feedback to read (NF-06), which no source can say is read.
+     */
+    val tickDone: Boolean get() = extra[EXTRA_TICK_DONE] == "true"
 
     /**
      * An email that only needs reading, or tells of an event (your call, 9 Oct): not a task. It's
      * kept, so archiving it still finishes it and a reply that asks something brings it back as a
      * task, but it's kept off the plan (so the widget, the briefing and blocking), the Tasks list,
-     * and the rewards for finishing work. Its kind is the enrichment's reading, or the rules'.
+     * and the rewards for finishing work. Its kind is the enrichment's reading, or the rules', or
+     * its invite's (DX-02); Work lists the events folded, to see and to add to the calendar.
      */
     val justAnEmail: Boolean get() = source == Source.Gmail && (kind == Kind.Info || kind == Kind.Event)
 
     /** Not work to plan: an email that's just an email, or one you've said isn't a task. */
-    val hidden: Boolean get() = justAnEmail || userNotATask
+    val hidden: Boolean get() = justAnEmail || userNotATask || userSameAs != null
 
     /**
      * Its real deadline, where it has one (PL-14): yours; an email's own words as Claude quoted them
@@ -193,6 +204,8 @@ data class TaskItem(
             // The rules' date is a guess from its words, and Claude's is only a quote where it says so:
             // a reading of the email as it is now, not one its new content has made out of date.
             Source.Gmail -> Enrichments.current(this)?.takeIf { it.deadlineQuoted && it.deadline == dueAt }?.deadline
+                // An invite's start is the sender's own time (DX-02).
+                ?: invite?.start?.takeIf { it == dueAt }
             // A deck for homework has its assignments' deadline, not one of its own: their earliest real
             // one, as read with them (the planner reads them through it), as its date may be a test
             // date Claude read, a plan.
@@ -265,6 +278,9 @@ data class TaskItem(
 
     companion object {
         fun id(source: Source, sourceId: String): String = "${source.name.lowercase()}:$sourceId"
+
+        /** Marks a task done by its tick ([tickDone]). */
+        const val EXTRA_TICK_DONE = "tickDone"
     }
 }
 
@@ -314,3 +330,7 @@ data class Fetched(
     val notBefore: Long? = null,
     val extra: Map<String, String> = emptyMap(),
 )
+
+/** A photo of a task's work (AI-23): its file, the app's own ([path]), [hash] its SHA-256's first bytes, for the task's reading, and when. */
+@Serializable
+data class TaskPhoto(val path: String, val hash: String, val at: Long)

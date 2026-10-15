@@ -198,7 +198,7 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
                 is DayModel.Row.Window -> WindowRow(row, zone)
                 is DayModel.Row.Event -> EventRow(row.event, EventJudge.judge(row.event, answers), runtime.eventsAsked, now, zone) { eventFor = eventKey(row.event) }
                 is DayModel.Row.Planned -> PlannedRow(
-                    row, plan, zone, messageOf(row.slot.chunk?.taskId.orEmpty()), today,
+                    row, plan, zone, messageOf(row.slot.chunk?.taskId.orEmpty()), today, row.slot.chunk?.key?.let { runtime.microPlans[it] },
                     onOpen = { row.slot.chunk?.let { sheetFor = it.key } },
                     onMove = { row.slot.chunk?.let { moving = it.key } },
                     // Done, with an Undo while it's said (UI-03).
@@ -413,7 +413,7 @@ private fun verdict(judgement: EventJudge.Judgement, asked: Boolean): String = w
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun PlannedRow(row: DayModel.Row.Planned, plan: Plan, zone: ZoneId, message: String?, today: Boolean, onOpen: () -> Unit, onMove: () -> Unit, onDone: () -> Unit, onLater: () -> Unit) {
+private fun PlannedRow(row: DayModel.Row.Planned, plan: Plan, zone: ZoneId, message: String?, today: Boolean, micro: com.thomaswcode.decrastination.enrich.MicroPlan?, onOpen: () -> Unit, onMove: () -> Unit, onDone: () -> Unit, onLater: () -> Unit) {
     val slot: Slot = row.slot
     val chunk = slot.chunk
     if (slot.kind == SlotKind.Outside || chunk == null) {
@@ -469,6 +469,8 @@ private fun PlannedRow(row: DayModel.Row.Planned, plan: Plan, zone: ZoneId, mess
                 )
                 Text(chunk.label, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Text(chunk.whyLine(plan.today, zone), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                // Its first step (AI-15); the rest on its sheet.
+                micro?.first?.takeIf { it.isNotEmpty() }?.let { Text("First: $it", style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis) }
                 message?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary) }
             }
             TextButton(onClick = onDone) { Text("Done") }

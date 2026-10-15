@@ -40,6 +40,8 @@ data class SourceRead(
     val ankiDay: AnkiDay? = null,
     /** Power Planner only: the timetable the read used, kept for the days' windows (DX-09). */
     val timetable: Timetable? = null,
+    /** Anki only: the textbook's decks' topics, by section (DX-10). */
+    val deckTopics: Map<String, String>? = null,
 )
 
 /** A source that can't be read for a reason the setup screen can fix, such as a missing password. */

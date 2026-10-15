@@ -45,6 +45,12 @@ data class Enrichment(
     val dropped: String? = null,
     /** The one question that would settle what the text can't (AI-10): put to you by Felix. Rarely any. */
     val question: String? = null,
+    /** A line for each step whose dates couldn't be, kept with none (AI-01): said on the task's sheet. */
+    val adjusted: List<String> = emptyList(),
+    /** The phrase in the text that gave the reading (AI-09), quoted: under its due date on the sheet. */
+    val reason: String? = null,
+    /** Read by the model with a photo of the work (AI-23): only then is its estimate "From your photo". The rules' standing in for it never is. */
+    val fromPhoto: Boolean = false,
 )
 
 /**
@@ -73,7 +79,11 @@ private fun TaskItem.enrichedOnly(): TaskItem {
             aiEffortMin = null,
             subSteps = if (stepsFromEnrichment()) emptyList() else subSteps,
         )
+    // An invite's time is exact (DX-02): the email is that event, unless Claude read work to do by a
+    // date the email gives (a reply by Friday), when the invite stays on its sheet.
+    val invited = invite?.takeIf { !(e.kind == Kind.Admin && e.deadlineQuoted && e.deadline != null) }
     val due = when {
+        invited != null -> invited.start
         // An email has no deadline of its own: what the rules found is a guess from its words
         // ("appointment"), and the enrichment's reading of it wins where it gives one.
         source == Source.Gmail -> e.deadline ?: base.dueAt
@@ -85,7 +95,11 @@ private fun TaskItem.enrichedOnly(): TaskItem {
     return copy(
         // A reading from before starred-only reading may say an email is only to read; starred, it
         // never is (AI-02): the rules' kind stands until it's read again ([Enrichments.stale]).
-        kind = if (source == Source.Gmail) e.kind?.takeIf { it != Kind.Info } ?: base.kind else base.kind,
+        kind = when {
+            invited != null -> Kind.Event
+            source == Source.Gmail -> e.kind?.takeIf { it != Kind.Info } ?: base.kind
+            else -> base.kind
+        },
         dueAt = due,
         // An email the model has read (it gives a kind): its start replaces the rules' guess, as its
         // deadline does. Otherwise the later of the two.
@@ -133,8 +147,8 @@ object Enrichments {
     /** What [task] needs, or null: done, derived (the Anki quota and decks), or an event. */
     fun jobFor(task: TaskItem): Job? = when {
         !task.isOpen || task.derived -> null
-        // You've said it isn't a task: nothing to read it for.
-        task.userNotATask -> null
+        // You've said it isn't a task: nothing to read it for. Nor feedback to read (NF-06): ten minutes, as it is.
+        task.userNotATask || task.tickDone -> null
         // Its text not read yet (more new emails than one read takes), or not as far as reads now
         // go (cut by an older, lower limit): asked about once it is (GmailThreads.textRead).
         task.source == Source.Gmail && !GmailThreads.textRead(task) -> null
@@ -161,7 +175,7 @@ object Enrichments {
             task.extra["from"].orEmpty(),
             task.extra["received"].orEmpty(),
             // Your answers to its questions (AI-10): only where there are some, so no other task's changes.
-        ) + listOfNotNull(task.extra[GmailThreads.EXTRA_ATTACHMENTS], task.answers.takeIf { it.isNotEmpty() }?.joinToString("\n"))).joinToString("\n")
+        ) + listOfNotNull(task.extra[GmailThreads.EXTRA_ATTACHMENTS], task.extra[com.thomaswcode.decrastination.sources.teams.TeamsRows.EXTRA_LINKS], task.answers.takeIf { it.isNotEmpty() }?.joinToString("\n"), task.photo?.hash)).joinToString("\n")
         val digest = MessageDigest.getInstance("SHA-256").digest(text.toByteArray(Charsets.UTF_8))
         return digest.take(8).joinToString("") { "%02x".format(it) }
     }

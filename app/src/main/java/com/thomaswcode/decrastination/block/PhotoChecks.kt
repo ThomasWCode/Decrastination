@@ -32,22 +32,28 @@ object PhotoChecks {
     /** The last check's outcome, by task, until a screen has shown it: one left while it ran shows it on coming back. */
     val unseen = MutableStateFlow<Pair<String, String>?>(null)
 
-    /** Checks [photo] against [piece], records the cost, and says how it went. The photo is deleted, whatever happens. */
-    suspend fun check(context: Context, graph: AppGraph, photo: File, piece: Chunk): String {
-        // When it was taken: a slot of its key kept before then isn't the one it shows.
-        val takenAt = graph.clock.now()
+    /**
+     * Checks [photos], the pages of [piece]'s work (AI-17), against it and its task (AI-16), records
+     * the cost, and says how it went. The photos are deleted, whatever happens.
+     */
+    suspend fun check(context: Context, graph: AppGraph, photos: List<File>, piece: Chunk, takenAt: Long = graph.clock.now()): String {
+        // [takenAt], when its first page was taken: a slot of its key kept before then isn't the one it shows.
         if (!piece.photoCheckable) {
-            withContext(NonCancellable + Dispatchers.IO) { photo.delete() }
+            withContext(NonCancellable + Dispatchers.IO) { photos.forEach { it.delete() } }
             return "Only written homework can be checked from a photo."
         }
-        val jpeg = try {
-            withContext(Dispatchers.IO) { shrink(photo) } ?: return "Couldn't read the photo."
+        val jpegs = try {
+            // Every page, or the check isn't made: one left out could be the one that shows it isn't done.
+            val read = withContext(Dispatchers.IO) { photos.map { shrink(it) } }
+            if (read.isEmpty() || read.any { it == null }) return if (photos.size > 1) "A page couldn't be read: take the photos again." else "Couldn't read the photo."
+            read.filterNotNull()
         } finally {
-            withContext(NonCancellable + Dispatchers.IO) { photo.delete() }
+            withContext(NonCancellable + Dispatchers.IO) { photos.forEach { it.delete() } }
         }
         // Its room taken with every other model call's, then sent (AC-05).
         val current = graph.photoChecker() ?: return OFF
-        val result = when (val called = graph.callModel(interactive = true, cost = { r: PhotoChecker.Result -> r.costUsd to r.refused }) { current.check(jpeg, piece.label) }) {
+        val about = PhotoChecker.context(piece, graph.tasks.value.tasks.firstOrNull { it.id == piece.taskId })
+        val result = when (val called = graph.callModel(interactive = true, cost = { r: PhotoChecker.Result -> r.costUsd to r.refused }) { current.check(jpegs, about) }) {
             is AppGraph.Called.Held -> return when (called.hold) {
                 ModelHold.Off -> OFF
                 ModelHold.Resting -> "Claude's key isn't working (Setup says why): tick it Done, or the source will have to do."
@@ -70,7 +76,7 @@ object PhotoChecks {
      * a camera can store a portrait page as landscape pixels with a note to turn them (EXIF), which
      * decoding doesn't read, so the page went sideways (IMP-P2-014).
      */
-    private fun shrink(photo: File): ByteArray? {
+    fun shrink(photo: File): ByteArray? {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeFile(photo.path, bounds)
         val long = maxOf(bounds.outWidth, bounds.outHeight).takeIf { it > 0 } ?: return null

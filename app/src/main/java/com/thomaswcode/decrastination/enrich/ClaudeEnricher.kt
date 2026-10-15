@@ -30,6 +30,8 @@ class ClaudeEnricher(
     private val model: String = MODEL,
     /** Who the student is (AI-05): read for each call, as it changes with what's remembered. */
     private val profile: () -> Profile.Block = { Profile.Block.NONE },
+    /** The vocabulary decks' topics (DX-10), for an assignment's sections. */
+    private val decks: () -> Map<String, String> = { emptyMap() },
 ) : Enricher {
     override val by = model
 
@@ -41,12 +43,87 @@ class ClaudeEnricher(
         .build()
 
     override suspend fun enrich(task: TaskItem, job: Enrichments.Job, now: Long): Enricher.Result {
+        val photo = photoOf(task)
+        val message = send(job) { item(task, job, photo, Prompts.describe(task, job, now, zone, previous(task), decks()).take(Pricing.MAX_INPUT_CHARS)) }
+        val cost = Pricing.costUsd(message)
+        when (message.stopReason().orElse(null)) {
+            StopReason.REFUSAL -> return Enricher.Result(null, cost, refused = true)
+            // Cut off mid-answer: nothing to trust.
+            StopReason.MAX_TOKENS -> return Enricher.Result(null, cost)
+            else -> Unit
+        }
+        val text = textOf(message)
+        // By the model that answered: a fallback's answer isn't the asked-for model's (BUG-P3-001).
+        val answeredBy = message.model().asString().ifBlank { by }
+        val strict = Answers.read(job, text, task, answeredBy, now, zone, salvage = false)
+        // A reading the photo was in says so (AI-23).
+        fun seen(e: com.thomaswcode.decrastination.core.Enrichment?) = if (photo != null) e?.copy(fromPhoto = true) else e
+        val complaint = strict.complaint ?: return Enricher.Result(seen(strict.enrichment), cost)
+        // A check it failed (AI-01): read with the dates that can't be left out meanwhile, and the
+        // answer and its problem kept to put back once ([repair]).
+        return Enricher.Result(seen(Answers.parse(job, text, task, answeredBy, now, zone)), cost, repair = Enricher.Repair(text, complaint))
+    }
+
+    /**
+     * The second time of asking (AI-01): the item, the model's first answer as its own turn, and
+     * what was wrong with it; read with the dates that can't be left out. The item is cut to leave
+     * room for the answer, so the call is within what every call's held to ([Pricing.MAX_INPUT_CHARS]);
+     * with too little, it isn't sent.
+     */
+    override suspend fun repair(task: TaskItem, job: Enrichments.Job, now: Long, repair: Enricher.Repair): Enricher.Result {
+        val asked = Prompts.repair(repair.complaint)
+        val room = Pricing.MAX_INPUT_CHARS - repair.answer.length - asked.length
+        if (room < MIN_REPAIR_ROOM) return Enricher.Result(null)
+        val photo = photoOf(task)
+        val message = send(job) {
+            item(task, job, photo, Prompts.describe(task, job, now, zone, previous(task), decks()).take(room))
+            addAssistantMessage(repair.answer)
+            addUserMessage(asked)
+        }
+        val cost = Pricing.costUsd(message)
+        when (message.stopReason().orElse(null)) {
+            StopReason.REFUSAL -> return Enricher.Result(null, cost, refused = true, repaired = true)
+            StopReason.MAX_TOKENS -> return Enricher.Result(null, cost, repaired = true)
+            else -> Unit
+        }
+        val answeredBy = message.model().asString().ifBlank { by }
+        val read = Answers.parse(job, textOf(message), task, answeredBy, now, zone)
+        return Enricher.Result(if (photo != null) read?.copy(fromPhoto = true) else read, cost, repaired = true)
+    }
+
+    /** [task]'s photo of its work (AI-23), from its file; none if it has none, or it can't be read. */
+    private suspend fun photoOf(task: TaskItem): ByteArray? = task.photo?.let { p -> withContext(Dispatchers.IO) { runCatching { java.io.File(p.path).readBytes() }.getOrNull() } }
+
+    /** The item as the user's turn: with [photo], the photo first and the model told what it is. */
+    private fun MessageCreateParams.Builder.item(task: TaskItem, job: Enrichments.Job, photo: ByteArray?, text: String) {
+        if (photo == null) {
+            addUserMessage(text)
+            return
+        }
+        val image = com.anthropic.models.messages.ImageBlockParam.builder()
+            .source(com.anthropic.models.messages.Base64ImageSource.builder().data(java.util.Base64.getEncoder().encodeToString(photo)).mediaType(com.anthropic.models.messages.Base64ImageSource.MediaType.IMAGE_JPEG).build())
+            .build()
+        addUserMessageOfBlockParams(
+            listOf(
+                com.anthropic.models.messages.ContentBlockParam.ofImage(image),
+                com.anthropic.models.messages.ContentBlockParam.ofText(com.anthropic.models.messages.TextBlockParam.builder().text(Prompts.photo(job) + "\n\n" + text).build()),
+            ),
+        )
+    }
+
+    /** [task]'s steps as planned before (AI-08): its own, or its last reading's. */
+    private fun previous(task: TaskItem): List<com.thomaswcode.decrastination.core.SubStep> = task.subSteps.ifEmpty { task.enrichment?.subSteps.orEmpty() }
+
+    private fun textOf(message: Message): String = message.content().mapNotNull { block -> block.text().orElse(null)?.text() }.joinToString("")
+
+    /** [job]'s request, its turns from [turns]: the system prompt and the profile, the effort, the schema, and the fallback on. */
+    private suspend fun send(job: Enrichments.Job, turns: MessageCreateParams.Builder.() -> Unit): Message {
         val student = profile()
         val params = MessageCreateParams.builder()
             .model(model)
             .maxTokens(MAX_TOKENS)
             .systemOfTextBlockParams(ModelCalls.systemBlocks(Prompts.system(job, student.year), student.text))
-            .addUserMessage(Prompts.describe(task, job, now, zone).take(Pricing.MAX_INPUT_CHARS))
+            .apply(turns)
             .outputConfig(
                 OutputConfig.builder()
                     .effort(ModelEffort.of(job))
@@ -57,18 +134,7 @@ class ClaudeEnricher(
             .putAdditionalHeader("anthropic-beta", FALLBACK_BETA)
             .putAdditionalBodyProperty("fallbacks", JsonValue.from("default"))
             .build()
-        val message = withContext(Dispatchers.IO) { client.messages().create(params) }
-        val cost = Pricing.costUsd(message)
-        when (message.stopReason().orElse(null)) {
-            StopReason.REFUSAL -> return Enricher.Result(null, cost, refused = true)
-            // Cut off mid-answer: nothing to trust.
-            StopReason.MAX_TOKENS -> return Enricher.Result(null, cost)
-            else -> Unit
-        }
-        val text = message.content().mapNotNull { block -> block.text().orElse(null)?.text() }.joinToString("")
-        // By the model that answered: a fallback's answer isn't the asked-for model's (BUG-P3-001).
-        val answeredBy = message.model().asString().ifBlank { by }
-        return Enricher.Result(Answers.parse(job, text, task, answeredBy, now, zone), cost)
+        return withContext(Dispatchers.IO) { client.messages().create(params) }
     }
 
     private fun schema(map: Map<String, Any>): JsonOutputFormat.Schema =
@@ -80,6 +146,9 @@ class ClaudeEnricher(
 
         /** Room for thinking at high effort and the answer; a call costs only what it uses. */
         const val MAX_TOKENS = 16_000L
+
+        /** The least of the item worth asking again with: less, and the first answer's reading stands. */
+        private const val MIN_REPAIR_ROOM = 4_000
     }
 }
 
@@ -93,8 +162,8 @@ object Pricing {
     /** A token is at least a byte, and a character at most three bytes of UTF-8 (a four-byte one is two characters). */
     private const val TOKENS_PER_CHAR = 3
 
-    /** The instructions, the schema, and a photo check's picture (no more than 1 568 pixels a side, about 3 300 tokens). */
-    private const val PROMPT_TOKENS = 4_000
+    /** The instructions, the schema, and a photo check's pictures (up to three, AI-17; no more than 1 568 pixels a side, about 3 300 tokens each). */
+    private const val PROMPT_TOKENS = 11_000
 
     /**
      * The most text any call sends, every call's cut to it: room for an email's [Prompts.MAX_TEXT]
@@ -106,7 +175,7 @@ object Pricing {
      * The most one call can cost, at the dearer rates: the longest text any call sends
      * ([MAX_INPUT_CHARS], and the profile sent with it, [Profile.MAX_BLOCK_CHARS], at
      * [TOKENS_PER_CHAR] tokens each, and [PROMPT_TOKENS] more), and all of [ClaudeEnricher.MAX_TOKENS]
-     * out. $1.26. Every job's input is held to it, not only an email's (BUG-P2-015), so a cap is
+     * out. $1.295. Every job's input is held to it, not only an email's (BUG-P2-015), so a cap is
      * never passed by a call it let through.
      */
     val WORST_CALL_USD: Double =
