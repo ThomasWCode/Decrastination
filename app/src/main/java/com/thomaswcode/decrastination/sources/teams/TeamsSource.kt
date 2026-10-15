@@ -28,6 +28,7 @@ object TeamsProvider {
     val root: Uri = Uri.Builder().scheme(ContentResolver.SCHEME_CONTENT).authority(AUTHORITY).build()
     private val assignmentsUri: Uri = root.buildUpon().appendPath("assignments").build()
     private val stateUri: Uri = root.buildUpon().appendPath("state").build()
+    private val returnedUri: Uri = root.buildUpon().appendPath("returned").build()
 
     const val METHOD_REQUEST_SYNC = "requestSync"
     const val METHOD_OPEN = "open"
@@ -37,6 +38,16 @@ object TeamsProvider {
     fun assignments(resolver: ContentResolver): List<Map<String, Any?>> = resolver.rows(assignmentsUri)
 
     fun state(resolver: ContentResolver): Map<String, Any?> = resolver.rows(stateUri).single()
+
+    /**
+     * The work handed back to you with feedback (NF-06), from a widget that lists it; none from one
+     * that doesn't, which refuses a path it doesn't know.
+     */
+    fun returned(resolver: ContentResolver): List<Map<String, Any?>> = try {
+        resolver.rows(returnedUri)
+    } catch (e: IllegalArgumentException) {
+        emptyList()
+    }
 
     /** Starts something in Teams that takes over the screen, so only at a deliberate moment. */
     fun call(resolver: ContentResolver, method: String, arg: String? = null): Bundle? = resolver.call(root, method, arg, null)
@@ -75,6 +86,14 @@ object TeamsRows {
     /** The web addresses its instructions link to (DX-08), one a line, as the widget gives them (0.4.0 on). */
     const val EXTRA_LINKS = "links"
 
+    /** On a returned assignment's feedback to read (NF-06): the assignment's key, for Open. */
+    const val EXTRA_FEEDBACK_ON = "feedbackOn"
+
+    /** How long after the work comes back its feedback is due to be read (NF-06), and how long reading it takes. */
+    const val FEEDBACK_DAYS = 3L
+    const val FEEDBACK_MIN = 10
+    private const val DAY_MS = 24 * 3_600_000L
+
     fun fetched(row: Map<String, Any?>): Fetched? {
         // A blank key is no identity: every such row would be the same task.
         val key = (row["key"] as? String)?.takeIf { it.isNotBlank() } ?: return null
@@ -111,6 +130,30 @@ object TeamsRows {
     fun all(rows: List<Map<String, Any?>>): List<Fetched> =
         rows.map { row -> fetched(row) ?: throw IOException("The Teams widget listed an assignment without its key") }
 
+    /**
+     * A returned assignment's feedback, as a task to read it (NF-06): "Read the feedback on …", Admin,
+     * ten minutes, due three days after the work came back, the feedback its text, done by its tick
+     * ([TaskItem.tickDone]) or once the widget no longer lists it. Null without a key.
+     */
+    fun returned(row: Map<String, Any?>): Fetched? {
+        val key = (row["key"] as? String)?.takeIf { it.isNotBlank() } ?: return null
+        val title = (row["title"] as? String)?.takeIf { it.isNotBlank() } ?: "an assignment"
+        return Fetched(
+            sourceId = "$key:feedback",
+            title = "Read the feedback on $title",
+            kind = Kind.Admin,
+            detail = (row["feedback"] as? String).orEmpty(),
+            className = (row["class_name"] as? String)?.takeIf { it.isNotBlank() },
+            dueAt = (row["returned_at"] as? Long)?.let { it + FEEDBACK_DAYS * DAY_MS },
+            sourceEffortMin = FEEDBACK_MIN,
+            extra = mapOf(TaskItem.EXTRA_TICK_DONE to "true", EXTRA_FEEDBACK_ON to key),
+        )
+    }
+
+    /** Every returned assignment's feedback as a task; a row without its key fails the read, as [all]'s do. */
+    fun allReturned(rows: List<Map<String, Any?>>): List<Fetched> =
+        rows.map { row -> returned(row) ?: throw IOException("The Teams widget listed returned work without its key") }
+
     /** A line about the widget's own state worth showing, or null when all is well. */
     fun note(state: Map<String, Any?>): String? {
         val status = state["status"] as? String
@@ -129,9 +172,11 @@ class TeamsSource(private val resolver: ContentResolver) : TaskSource {
 
     override suspend fun read(context: ReadContext): SourceRead = withContext(Dispatchers.IO) {
         val rows = TeamsProvider.assignments(resolver)
+        // Work handed back with feedback (NF-06), where the widget lists it.
+        val returned = TeamsProvider.returned(resolver)
         val state = TeamsProvider.state(resolver)
         SourceRead(
-            items = TeamsRows.all(rows),
+            items = TeamsRows.all(rows) + TeamsRows.allReturned(returned),
             dataAsOf = state["last_success_at"] as? Long,
             note = TeamsRows.note(state),
         )

@@ -65,7 +65,8 @@ object TaskOpener {
 
     private suspend fun openTeams(context: Context, task: TaskItem): Pair<Boolean, String?> {
         val result = runCatching {
-            withContext(Dispatchers.IO) { TeamsProvider.call(context.contentResolver, TeamsProvider.METHOD_OPEN, task.sourceId) }
+            // Feedback to read opens its assignment (NF-06).
+            withContext(Dispatchers.IO) { TeamsProvider.call(context.contentResolver, TeamsProvider.METHOD_OPEN, task.extra[com.thomaswcode.decrastination.sources.teams.TeamsRows.EXTRA_FEEDBACK_ON] ?: task.sourceId) }
         }.getOrNull()
         if (result?.getBoolean(TeamsProvider.RESULT_STARTED) == true) return true to null
         val reason = when (result?.getString(TeamsProvider.RESULT_REASON)) {

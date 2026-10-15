@@ -292,7 +292,7 @@ class Focus(
     /** Held while a slot's outcome is recorded: two ticks at once keep a slot once, and a tick and its slot's end don't cross. */
     private val keeping = Mutex()
 
-    /** What keeping a slot leaves to do: one of your own it finished. */
+    /** What keeping a slot leaves to do: one of your own it finished, or one done by its tick (NF-06). */
     private class Kept(val ownDone: String?)
 
     private suspend fun keep(key: String, extraMin: Int, photo: Boolean, verified: Boolean, seenAt: Long?, now: Long, photoDone: PhotoDone? = null): Kept? {
@@ -401,9 +401,10 @@ class Focus(
                 )
             }
         }
-        // One of your own finished by it: its last step (seen to as its steps are), or its minutes all worked.
+        // One of your own finished by it: its last step (seen to as its steps are), or its minutes all
+        // worked; so too one done by its tick (NF-06).
         val task = tasks.value.tasks.firstOrNull { it.id == record.taskId }.takeUnless { k.earnOnly }
-        return Kept(task?.takeIf { it.source == Source.Own && it.isOpen && it.subSteps.isEmpty() && Planner.remaining(it, runtime.value.calibration.multiplierFor(it)) <= 0 }?.id)
+        return Kept(task?.takeIf { (it.source == Source.Own || it.tickDone) && it.isOpen && it.subSteps.isEmpty() && Planner.remaining(it, runtime.value.calibration.multiplierFor(it)) <= 0 }?.id)
     }
 
     /** Carries through the slots a stop left part-way kept ([RuntimeState.keeping]): at start-up, before the photo checks. */
@@ -633,7 +634,7 @@ class Focus(
         // Its slots kept today without earning, this time round, that no photo could check (longer
         // pieces of work that isn't written, ticked: BL-08): its source saying it's done is their
         // evidence, so they earn by it. Written work's is its photo.
-        val confirming = completed.filter { it.kind != Kind.Info && it.kind != Kind.Event && it.source != Source.Own && today(it.doneAt ?: now) == today }
+        val confirming = completed.filter { it.kind != Kind.Info && it.kind != Kind.Event && it.source != Source.Own && !it.tickDone && today(it.doneAt ?: now) == today }
             .flatMap { task ->
                 log.value.slots.filter {
                     it.taskId == task.id && it.outcome.kept && !it.earned && it.date == today.toString() && it.at >= since(task) &&
@@ -647,8 +648,8 @@ class Focus(
             // time is for the day the work was confirmed: given late (the app stopped first), after
             // that day is over, it has gone as the rest of that day's has.
             // Nor is a task of your own you said is done: no source confirms it (your call, 12 Oct); its
-            // slots earned their time.
-            val earned = fresh.filter { it.kind != Kind.Info && it.kind != Kind.Event && it.source != Source.Own && today(it.doneAt ?: now) == today }.sumOf { task ->
+            // slots earned their time. Nor one done by its tick (NF-06), for the same reason.
+            val earned = fresh.filter { it.kind != Kind.Info && it.kind != Kind.Event && it.source != Source.Own && !it.tickDone && today(it.doneAt ?: now) == today }.sumOf { task ->
                 // Less what its kept slots and photo checks already earned time for: as stored while it's still
                 // this completion, as the completion had it once the task has reopened.
                 val stored = tasks.value.tasks.firstOrNull { it.id == task.id && it.doneAt == task.doneAt }

@@ -66,6 +66,25 @@ class TeamsRowsTest {
     }
 
     @Test
+    fun `returned work with feedback is ten minutes' reading, due in three days, done by a tick`() {
+        val row = mapOf("key" to "k1", "title" to "Statics Prep", "class_name" to "12.2-PH3", "returned_at" to Fixtures.at("2026-10-14T16:00"), "feedback" to "Good work; check your units in Q3.")
+        val f = TeamsRows.returned(row)!!
+        assertEquals("k1:feedback", f.sourceId)
+        assertEquals("Read the feedback on Statics Prep", f.title)
+        assertEquals(Kind.Admin, f.kind)
+        assertEquals("Good work; check your units in Q3.", f.detail)
+        assertEquals(Fixtures.at("2026-10-17T16:00"), f.dueAt)
+        assertEquals(10, f.sourceEffortMin)
+        assertEquals("k1", f.extra[TeamsRows.EXTRA_FEEDBACK_ON])
+        val task = com.thomaswcode.decrastination.core.Merge.apply(emptyList(), com.thomaswcode.decrastination.core.Source.Teams, listOf(f), 0).tasks.single()
+        assertEquals(true, task.tickDone)
+        // Not read by Claude: it's ten minutes as it is.
+        assertNull(com.thomaswcode.decrastination.core.Enrichments.jobFor(task))
+        assertNull(TeamsRows.returned(mapOf("title" to "x")))
+        kotlin.test.assertFailsWith<java.io.IOException> { TeamsRows.allReturned(listOf(mapOf("title" to "x"))) }
+    }
+
+    @Test
     fun `the widget's own trouble is noted`() {
         assertEquals("The Teams widget's sync service is off", TeamsRows.note(mapOf("sync_service_enabled" to 0L, "status" to "idle")))
         assertEquals("The Teams widget's last sync failed: Couldn't read the Past due list", TeamsRows.note(mapOf("sync_service_enabled" to 1L, "status" to "failed", "status_message" to "Couldn't read the Past due list")))

@@ -236,4 +236,16 @@ class MergeTest {
         assertEquals(Status.Open, again.status)
         assertEquals(0, again.stepsWorkedMin)
     }
+
+    @Test
+    fun `feedback read, done by its tick, stays done while Teams still lists it, and goes once it doesn't`() {
+        val feedback = Fetched(sourceId = "k:feedback", title = "Read the feedback on Statics Prep", kind = Kind.Admin, extra = mapOf(TaskItem.EXTRA_TICK_DONE to "true"))
+        val ticked = first(feedback).map { it.copy(status = Status.Done, doneAt = t0) }
+        val again = Merge.apply(ticked, Source.Teams, listOf(feedback), t0 + 1)
+        assertEquals(Status.Done, again.tasks.single().status)
+        assertTrue(again.reopened.isEmpty())
+        // An assignment done and listed again is open again, as before.
+        val handedIn = first(fetched("a")).map { it.copy(status = Status.Done, doneAt = t0) }
+        assertEquals(Status.Open, Merge.apply(handedIn, Source.Teams, listOf(fetched("a")), t0 + 1).tasks.single().status)
+    }
 }

@@ -230,7 +230,7 @@ fun TaskSheet(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 !own && task.isOpen -> Text(
-                    "It's done when ${task.source.label} says so, read at each sync.",
+                    if (task.tickDone) "It's done once you tick it off, or when ${task.source.label} no longer lists it." else "It's done when ${task.source.label} says so, read at each sync.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

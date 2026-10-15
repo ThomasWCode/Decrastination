@@ -1202,14 +1202,15 @@ class AppGraph private constructor(context: Context) {
     }
 
     /**
-     * Your own task [taskId] done, as you say (2.0.0): finished through the queue a source's
-     * confirmation goes through, so it's logged and asked about as any is; but it earns no free time ([Focus.onCompleted]), as nothing but you says it's done.
+     * Your own task [taskId] done, as you say (2.0.0), or one done by its tick (NF-06): finished
+     * through the queue a source's confirmation goes through, so it's logged and asked about as any
+     * is; but it earns no free time ([Focus.onCompleted]), as nothing but you says it's done.
      */
     suspend fun finishOwnTask(taskId: String): Unit = withContext(NonCancellable) {
         val now = clock.now()
         var finished = false
         tasks.update { state ->
-            val task = state.tasks.firstOrNull { it.id == taskId && it.source == Source.Own && it.isOpen } ?: return@update state
+            val task = state.tasks.firstOrNull { it.id == taskId && (it.source == Source.Own || it.tickDone) && it.isOpen } ?: return@update state
             val done = task.copy(status = Status.Done, doneAt = now, lastSeenAt = now)
             finished = true
             state.copy(tasks = state.tasks.map { if (it.id == taskId) done else it }, unrewarded = state.unrewarded + done)
