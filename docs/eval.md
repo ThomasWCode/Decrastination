@@ -52,6 +52,16 @@ The Email job now says whether its deadline is the email's own words (`deadlineQ
 
 All three quoted labels passed: the open day quoted, the two notes with no date.
 
+## Review v2, phase 3 (15 Oct): where a step can be done (PL-15)
+
+The Assignment job now says of each step whether it's for home (the laptop, books or quiet) or can be done anywhere, a free period at school included (`where`). Only that job's prompt changed, so round 5 is the four assignment cases: the scorer now takes a round of one job, failing a missing answer only among that job's cases. `where` has no labels yet (they'd be yours): the report shows each step's reading.
+
+| Round | Prompt | Passed | What failed |
+|---|---|---|---|
+| 5 (15 Oct) | phase 3's | 4 of 4 | none |
+
+The readings: printing sheets, a listening exercise, joining an online group and practice exam questions and their marking for home; reading a text, learning vocabulary, translating, revising notes and a final run-through anywhere.
+
 ## The chat (2.0.0)
 
 Ten messages to *Ask Claude*, sent as the app sends them: the exact system prompt, schema and turns built from the phone's `tasks.json` and `instructions.json` (pulled into `private/eval-chat/`, addresses redacted) by a throwaway JVM test kept out of the repo, each answered by an Opus subagent, and each answer put through `ChatAnswers.parse`. 12 Oct, against `ChatPrompts` as committed in #30: all ten read, and each did what was asked.

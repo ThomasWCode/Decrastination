@@ -48,21 +48,25 @@ The implementation of `docs/review_v2_improvements/impl/` on branch `v3`. Delete
 - PL-13 the plan made again as things change, slot alarms, missed slots moved and kept, today's slots stable: 8c801c1. 50 000 property seeds pass, with slots just over drawn in the last plan's starts.
 - NF-07 the next seven days' slots written to the calendar you pick, hand moves taken as your time, with DX-12 (location and description, optional events asked about) and DX-13 (calendars chosen for reading): 8445cfc.
 - Found on the phone: Ask Claude failed on every message (the API's 400, "too many parameters with union types": 17 nullable fields, its limit 16), as PL-16's end date on a change took the chat's schema over it. A new task's subject and notes are now empty strings for none (15), and `SchemaLimitsTest` holds every schema the app sends to the limit: 8057cdf.
-- PL-07's last reason, phase 3's to add: a piece whose slot went by undone says it was moved when its time passed (`Why.Refitted`): this commit.
+- PL-07's last reason, phase 3's to add: a piece whose slot went by undone says it was moved when its time passed (`Why.Refitted`): 1146ca7.
+- Eval round 5 (`docs/eval.md`): the Assignment job's `where`, 4 of 4.
+- Phone (15 Oct, from 04:50, over phase 2's final build with its data; APK kept as `private/apk/2026-10-15-phase2.apk`, data in `private/backup/2026-10-15-before-phase3/`; screenshots in `private/screens/phase3/`): the calendar's write permission granted over adb; the timetable kept by a Power Planner sync (DX-09); each piece on the Plan at its time, five minutes apart (PL-12); a week of slots, work done anywhere in break and lunch, Wednesday's study period holding three pieces and today's capacity counting Thursday's (PL-15), breaks outside on the weekend; today's starts kept from one plan to the next (PL-13); Settings → Calendar listing the calendars to write to and those read (NF-07, DX-13). Found there: the chat's schema over the API's limit (8057cdf).
 
 ## Current
 
-Phase 3: on the phone (the calendar's write permission, the Decrastination calendar picked), the eval round for the Assignment job's `where`, then the pull request.
+Phase 3: the pull request, with three checks on the phone still to come: PL-13's missed slot (today's first is at 10:45, missed at 11:13 if undone), PL-04's and PL-16's through the chat (the model rests until about 06:05 after the call the schema broke), and NF-07's write, once the Decrastination calendar is on the phone.
 
 ## Outstanding
 
-- Phase 3: an eval round for the Assignment job's `where`, the phone, the pull request.
+- Phase 3: Codex's review, the phone checks above, the merge.
 - Phases 4 to 8.
 
 ## For the owner (deferred: you weren't live)
 
-- **Old stars are tasks now.** Seven starred conversations the inbox never showed came in: *Happy New Year!* (2021), *Another password for your safe: code.org login* (2021, holds a password, and Claude has read it, as it reads every starred email), *Drum Homework: 10/11/2021*, *HOMEMADE CANDLES FOR PEOPLE* (2023), *Re: Acen told me to send everyone his email…* (2021, 9 messages), *Re: St John's Garden Website* (2025, 8 messages) and an untitled one (Aug 2025). Unstar any that aren't tasks.
-- **A starred conversation read as an Event is still off the plan and Tasks** (`TaskItem.justAnEmail`, unchanged by the plan): Claude read *Re: St John's Garden Website* as an Event ("Check for Analisa's Zoom link for Friday's call"), so it's hidden. Say if a starred event should show.
+- **The Decrastination calendar isn't on the phone.** Settings → Calendar lists every calendar the phone has (twenty) and none is called Decrastination, though a calendar sync was asked for at 05:01. If it's on an account the phone doesn't sync, make it on one it does; once it shows, pick it there (or in Setup) and the week's slots are written within a minute. If Google Calendar gives it default notifications, turn them off there: the app's events carry none.
+
+- **Old stars are tasks now.** Seven starred conversations the inbox never showed came in (2021 to 2025); which, and one you'll want to look at, are in `private/notes-for-owner.md`, as the repository is public. Unstar any that aren't tasks.
+- **A starred conversation read as an Event is still off the plan and Tasks** (`TaskItem.justAnEmail`, unchanged by the plan): one about a call (in `private/notes-for-owner.md`) is hidden so. Say if a starred event should show.
 - **Claude's 884 minutes for *german books/radio/tv*** (a note of resources) looks high; set its minutes on its sheet if so. AI-03 (phase 7) gives the model the limits.
 - **Long calendar events count as a few hours of each of their days until you're asked (DX-14).** Read to 90 days now, the all-day events of your own calendar further off than a week (half term, a trip, the Christmas holidays, among others) take 3 hours of each of their days, more where two overlap, until they're within the week, when the app asks about each as before. Holidays are likely free time: answer *Free* when asked, or tell the chat now ("half term is free"); I haven't, as the answers are yours. (The event names stay out of this file: the repository is public.)
 - **Email dates are plans until their emails are read again (PL-14, AI-12).** Claude's readings from before this phase don't say whether a date was the email's own, so no email's date is overdue now; phase 8 reads them again by the prompt's version. Only *Happy New Year!* (a 2021 newsletter with a guessed date in January) had one, read again: not quoted.
