@@ -138,4 +138,13 @@ class FelixRulesTest {
         assertEquals(false, FelixRules.fits(draft.copy(at = now - FelixRules.DRAFT_FRESH_MS - 1), trigger, now, null))
         assertEquals(false, FelixRules.fits(draft, trigger, now, lastSentAt = at("17:05")))
     }
+
+    @Test
+    fun `a question of the model's is put when he's free, the oldest first`() {
+        val q = com.thomaswcode.decrastination.data.FelixQuestion("teams:a", "The 12th or the 19th?", at("09:00"))
+        val state = FelixState(questions = listOf(q, q.copy(taskId = "teams:b")))
+        assertEquals(Reason.Question to q, due(at("16:30"), state).let { it?.reason to it?.question })
+        assertNull(due(at("16:30"), state.copy(nextCheckAt = at("16:40"))))
+        assertNull(due(at("23:30"), state, quiet = true))
+    }
 }

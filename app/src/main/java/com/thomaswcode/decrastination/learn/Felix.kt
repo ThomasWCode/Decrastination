@@ -127,9 +127,16 @@ class Felix(private val graph: AppGraph) {
         val text = answer?.message.orEmpty()
         val next = now + (answer?.nextCheckMin ?: settings.felixDefaultCheckMin).coerceAtLeast(FelixAnswers.MIN_CHECK_MIN) * 60_000L
         // Asking how the completions went, the replies are the three answers (LR-05).
-        val replies = if (trigger.reason == FelixPrompts.Reason.Completions) Assessment.ANSWERS.map { it.first } else answer?.replies.orEmpty()
+        val replies = when (trigger.reason) {
+            FelixPrompts.Reason.Completions -> Assessment.ANSWERS.map { it.first }
+            // A question's answer is in your words (AI-10).
+            FelixPrompts.Reason.Question -> emptyList()
+            else -> answer?.replies.orEmpty()
+        }
         val record = FelixRecord(UUID.randomUUID().toString(), now, trigger.reason.name, text, replies, trigger.key, trigger.taskId, next, asks = trigger.asks)
         graph.log.update { it.copy(felix = it.felix + record).trimmed(now) }
+        // Put (or let go, silent): off the list.
+        trigger.question?.let { q -> graph.runtime.update { it.copy(felix = it.felix.copy(questions = it.felix.questions - q)) } }
         // Asked (or let go, silent): off the list, with any older than today's.
         if (trigger.asks.isNotEmpty()) {
             val dayStart = graph.focus.today(now).atStartOfDay(zone).toInstant().toEpochMilli()
@@ -145,14 +152,36 @@ class Felix(private val graph: AppGraph) {
     private companion object {
         /** How long the morning's briefing waits for his sentence. */
         const val MORNING_MS = 20_000L
+
+        /** A task's answers kept: the latest. */
+        const val MAX_ANSWERS = 5
+    }
+
+    /**
+     * The model's [question] about [taskId]'s reading (AI-10), to be put when he can: not while one's
+     * waiting for it, nor again within a day of the last he put about it.
+     */
+    suspend fun queueQuestion(taskId: String, question: String, now: Long = graph.clock.now()) {
+        if (graph.log.value.felix.any { it.reason == FelixPrompts.Reason.Question.name && it.taskId == taskId && it.at > now - 24 * 3_600_000L }) return
+        graph.runtime.update { s ->
+            if (s.felix.questions.any { it.taskId == taskId }) s
+            else s.copy(felix = s.felix.copy(questions = s.felix.questions + com.thomaswcode.decrastination.data.FelixQuestion(taskId, question, now)))
+        }
     }
 
     /**
      * [text] in reply to his message [record], if it's a Completions one and [text] one of its three
      * answers (LR-05): put on each completion it asked about, as the old notification's buttons
-     * did. False for anything else, which goes on in the chat.
+     * did; or, a Question's (AI-10), an instruction on its task and kept with it, so the model reads
+     * it again with your answer. False for anything else, which goes on in the chat.
      */
     suspend fun answered(record: FelixRecord, text: String): Boolean {
+        if (record.reason == FelixPrompts.Reason.Question.name && record.taskId != null) {
+            val task = graph.tasks.value.tasks.firstOrNull { it.id == record.taskId } ?: return false
+            graph.addInstruction(text, com.thomaswcode.decrastination.core.About(taskId = task.id, taskTitle = task.title))
+            graph.tasks.update { s -> s.copy(tasks = s.tasks.map { if (it.id == task.id) it.copy(answers = (it.answers + text.trim()).takeLast(MAX_ANSWERS)) else it }) }
+            return true
+        }
         if (record.reason != FelixPrompts.Reason.Completions.name || record.asks.isEmpty()) return false
         val answer = Assessment.ANSWERS.firstOrNull { it.first.equals(text.trim(), ignoreCase = true) }?.second ?: return false
         record.asks.forEach { Assessment.record(graph.app, it.taskId, it.doneAt ?: 0L, answer) }
@@ -166,7 +195,7 @@ class Felix(private val graph: AppGraph) {
         val task = trigger.taskId?.let { id -> graph.tasks.value.tasks.firstOrNull { it.id == id } }
         val recent = graph.log.value.felix.filter { it.text.isNotBlank() }
         val free = (graph.focus.creditLeftMs(at) / 60_000L).toInt().takeIf { trigger.reason == FelixPrompts.Reason.DayDone || trigger.reason == FelixPrompts.Reason.SlotKept }
-        val user = FelixPrompts.describe(trigger.reason, graph.plan(), trigger.slot, task, today(at), recent, null, settings, at, graph.clock.zone(), free, trigger.record, trigger.asks.map { it.title })
+        val user = FelixPrompts.describe(trigger.reason, graph.plan(), trigger.slot, task, today(at), recent, trigger.question?.question, settings, at, graph.clock.zone(), free, trigger.record, trigger.asks.map { it.title })
         val called = graph.callModel(interactive = false, cost = { r: FelixCaller.Result -> r.costUsd to r.refused }) { caller.say(FelixPrompts.system(settings, profile.year), profile.text, user) }
         if (called is AppGraph.Called.Failed) Log.w(AppGraph.TAG, "Felix's message failed", called.error)
         return (called as? AppGraph.Called.Answered)?.value?.answer
