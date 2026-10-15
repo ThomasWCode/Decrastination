@@ -112,6 +112,8 @@ Items: LR-01, LR-02, LR-06, LR-08, PL-08, PL-09, PL-10, PL-11, NF-02, AC-06, AC-
 
 **Steps.** A JUnit test gated by `System.getenv("CLAUDE_DECRASTINATION_API_KEY")` (skipped otherwise; the owner sets it on the machine the session runs on): for each case in `private/eval/cases.json`, call the real `ClaudeEnricher` with the key, effort from `-Peffort`, write the answer to `private/eval/answers/<id>-<run>.json`, then run the existing `score` logic; stop when the summed cost passes `EVAL_BUDGET_USD` (default 2). Run with `./gradlew :app:testDebugUnitTest --tests '*EvalRunTest*'` with the variable in the environment (Gradle test tasks inherit it; if not, pass it through `systemProperty` as the golden-file flag is). Document in `docs/eval.md`. Never in CI.
 
+*(As built: it runs only with `-PrunEval=true` as well as the key, since the key is in this PC's environment for the app's own testing: gated by the key alone, every test run here would be a paid round. The answer's text comes back on `Enricher.Result.answer`; the profile is the settings' defaults' with the case's task, as `dump`'s prompts have it; and the first answer is scored, as the app's reading is until a repair, which the run doesn't ask for. Round 6, its first: 10 of 10, $0.245.)*
+
 ---
 
 ## AR-03 The debug page

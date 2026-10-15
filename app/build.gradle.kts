@@ -61,8 +61,12 @@ android {
 }
 
 // The golden prompts written again (AR-01, GoldenPromptsTest): ./gradlew testDebugUnitTest -PupdateGolden=true
+// The scored eval run through the API (AR-02, EvalRunTest, docs/eval.md), only when asked:
+// ./gradlew testDebugUnitTest --tests '*EvalRunTest*' -PrunEval=true [-Peffort=high]
 tasks.withType<Test>().configureEach {
     systemProperty("updateGolden", providers.gradleProperty("updateGolden").getOrElse("false"))
+    systemProperty("runEval", providers.gradleProperty("runEval").getOrElse("false"))
+    systemProperty("effort", providers.gradleProperty("effort").getOrElse(""))
 }
 
 dependencies {

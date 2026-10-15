@@ -59,10 +59,10 @@ class ClaudeEnricher(
         val strict = Answers.read(job, text, task, answeredBy, now, zone, salvage = false)
         // A reading the photo was in says so (AI-23).
         fun seen(e: com.thomaswcode.decrastination.core.Enrichment?) = if (photo != null) e?.copy(fromPhoto = true) else e
-        val complaint = strict.complaint ?: return Enricher.Result(seen(strict.enrichment), cost, usage = usage)
+        val complaint = strict.complaint ?: return Enricher.Result(seen(strict.enrichment), cost, usage = usage, answer = text)
         // A check it failed (AI-01): read with the dates that can't be left out meanwhile, and the
         // answer and its problem kept to put back once ([repair]).
-        return Enricher.Result(seen(Answers.parse(job, text, task, answeredBy, now, zone)), cost, repair = Enricher.Repair(text, complaint), usage = usage)
+        return Enricher.Result(seen(Answers.parse(job, text, task, answeredBy, now, zone)), cost, repair = Enricher.Repair(text, complaint), usage = usage, answer = text)
     }
 
     /**
@@ -89,8 +89,9 @@ class ClaudeEnricher(
             else -> Unit
         }
         val answeredBy = message.model().asString().ifBlank { by }
-        val read = Answers.parse(job, textOf(message), task, answeredBy, now, zone)
-        return Enricher.Result(if (photo != null) read?.copy(fromPhoto = true) else read, cost, repaired = true, usage = usage)
+        val text = textOf(message)
+        val read = Answers.parse(job, text, task, answeredBy, now, zone)
+        return Enricher.Result(if (photo != null) read?.copy(fromPhoto = true) else read, cost, repaired = true, usage = usage, answer = text)
     }
 
     /** [task]'s photo of its work (AI-23), from its file; none if it has none, or it can't be read. */
