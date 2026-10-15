@@ -201,16 +201,41 @@ object ReviewInput {
         val bounds = bounds(settings)
         return changes.fold(settings) { s, change ->
             val range = bounds[change.setting] ?: return@fold s
-            if (change.value !in range) return@fold s
-            when (change.setting) {
-                "boxMin" -> s.copy(boxMin = change.value)
-                "marginDays" -> s.copy(marginDays = change.value)
-                "softMinPerDay" -> s.copy(softMinPerDay = change.value)
-                "workMinPerFreeMin" -> s.copy(workMinPerFreeMin = change.value)
-                "weekdayHoursStart" -> s.copy(weekdayHours = s.weekdayHours.copy(startMin = change.value))
-                "weekdayHoursEnd" -> s.copy(weekdayHours = s.weekdayHours.copy(endMin = change.value))
-                else -> s
-            }
+            if (change.value !in range) s else set(s, change.setting, change.value)
         }
     }
+
+    /** [settings] with [setting], one the review may change, at [value], whatever its bounds: as it was before a review, put back (LR-01). */
+    fun set(settings: Settings, setting: String, value: Int): Settings = when (setting) {
+        "boxMin" -> settings.copy(boxMin = value)
+        "marginDays" -> settings.copy(marginDays = value)
+        "softMinPerDay" -> settings.copy(softMinPerDay = value)
+        "workMinPerFreeMin" -> settings.copy(workMinPerFreeMin = value)
+        "weekdayHoursStart" -> settings.copy(weekdayHours = settings.weekdayHours.copy(startMin = value))
+        "weekdayHoursEnd" -> settings.copy(weekdayHours = settings.weekdayHours.copy(endMin = value))
+        else -> settings
+    }
+
+    /** What [setting] is called on the Reviews page (LR-01). */
+    fun label(setting: String): String = when (setting) {
+        "boxMin" -> "A piece's length"
+        "marginDays" -> "Days to spare before a deadline"
+        "softMinPerDay" -> "Undated work a day"
+        "workMinPerFreeMin" -> "Work for a minute of free time"
+        "weekdayHoursStart" -> "A school day's start"
+        "weekdayHoursEnd" -> "A school day's end"
+        else -> setting
+    }
+
+    /** [setting]'s [value] as it reads: minutes, days, or a time of day. */
+    fun valueText(setting: String, value: Int): String = when (setting) {
+        "marginDays" -> "$value day${if (value == 1) "" else "s"}"
+        "workMinPerFreeMin" -> "$value min"
+        in HOURS -> "%02d:%02d".format(Locale.UK, value / 60, value % 60)
+        else -> "$value min"
+    }
+
+    /** A review's [change] as the Reviews page says it: "A piece's length 45 min → 30 min (shorter pieces got finished)". */
+    fun changeText(change: Change, before: Int?): String =
+        label(change.setting) + " " + (before?.let { valueText(change.setting, it) + " → " } ?: "to ") + valueText(change.setting, change.value) + " (" + change.why.trim() + ")"
 }

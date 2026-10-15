@@ -1182,6 +1182,28 @@ class AppGraph private constructor(context: Context) {
         runtime.update { s -> s.calibration.let { c -> s.copy(calibration = c.copy(multipliers = c.multipliers - key, timed = c.timed - key, forgotten = c.forgotten + (key to now))) } }
     }
 
+    /**
+     * [change], one of [review]'s, put back (LR-01): its setting to its value before, as a change of
+     * yours (once armed, one that loosens waits as yours do), while it's still what the review left.
+     * What happened, in words.
+     */
+    suspend fun undoReviewChange(review: com.thomaswcode.decrastination.data.WeeklyReview, change: com.thomaswcode.decrastination.learn.ReviewInput.Change): String {
+        val before = review.settingsBefore[change.setting] ?: return "What it was before isn't known."
+        if (com.thomaswcode.decrastination.learn.ReviewInput.valueOf(settings.value, change.setting) != change.value) return "It's been changed since: left as it is."
+        changeSettings { com.thomaswcode.decrastination.learn.ReviewInput.set(it, change.setting, before) }
+        val now = com.thomaswcode.decrastination.learn.ReviewInput.valueOf(settings.value, change.setting)
+        val label = com.thomaswcode.decrastination.learn.ReviewInput.label(change.setting)
+        return if (now == before) "$label is back to ${com.thomaswcode.decrastination.learn.ReviewInput.valueText(change.setting, before)}." else "$label back to ${com.thomaswcode.decrastination.learn.ReviewInput.valueText(change.setting, before)} waits, as a change that loosens does once armed."
+    }
+
+    /** [review]'s tidy of what's remembered undone (LR-01): its facts as they were, while they're still as it left them. What happened, in words. */
+    suspend fun undoTidy(review: com.thomaswcode.decrastination.data.WeeklyReview): String {
+        val tidy = review.memoryTidy ?: return "That review tidied nothing."
+        var done = false
+        memory.update { state -> if (state.facts == tidy.after) state.copy(facts = tidy.before).also { done = true } else state }
+        return if (done) "What's remembered is back as it was before the tidy." else "What's remembered has changed since: left as it is."
+    }
+
     /** The most of what a call was about that its record keeps (AC-07). */
     private val MAX_CALL_TITLE = 80
 

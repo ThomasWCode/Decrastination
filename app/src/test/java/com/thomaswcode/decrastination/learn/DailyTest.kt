@@ -231,6 +231,10 @@ class ReviewInputTest {
         assertEquals(Settings().weekdayHours.copy(startMin = Settings().weekdayHours.startMin - 45), hours.weekdayHours)
         assertEquals(false, ReviewInput.allowed(ReviewInput.Change("weekdayHoursEnd", Settings().weekdayHours.endMin + 90, "x"), Settings()))
         assertEquals("weekdayHours", ReviewInput.fieldOf("weekdayHoursEnd"))
+        // Put back as it was, whatever the bounds (LR-01), and said in words.
+        assertEquals(90, ReviewInput.set(Settings(), "boxMin", 90).boxMin)
+        assertEquals("A piece's length 45 min → 30 min (shorter pieces got finished)", ReviewInput.changeText(ReviewInput.Change("boxMin", 30, "shorter pieces got finished"), 45))
+        assertEquals("A school day's start 16:45 → 16:00 (earlier starts went well)", ReviewInput.changeText(ReviewInput.Change("weekdayHoursStart", 960, "earlier starts went well"), 1005))
     }
 
     @Test
