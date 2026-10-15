@@ -166,7 +166,8 @@ fun TodayScreen(graph: AppGraph, activity: Activity) {
                     WontFitTile(short, index, plan.wontFit.size, plan.now, zone) {
                         val text = "There isn't time for “${short.title}” by ${Format.at(short.deadline, plan.now, zone)}: ${Format.minutes(short.leftMin)} left, " +
                             "${Format.minutes(short.freeMin)} free. What should I shorten, move or ask for more time on?"
-                        activity.startActivity(AskActivity.intent(activity, About(taskId = short.taskId, taskTitle = short.title), text))
+                        // In the box, to change or send: a paid call only when you send it.
+                        activity.startActivity(AskActivity.intent(activity, About(taskId = short.taskId, taskTitle = short.title), text, send = false))
                     }
                 }
             }
