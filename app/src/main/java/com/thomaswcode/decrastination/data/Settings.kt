@@ -18,6 +18,14 @@ data class Settings(
     val weekdayHours: Window = Window(16 * 60 + 45, 22 * 60),
     /** And at the weekend: 08:30 to 22:30. */
     val weekendHours: Window = Window(8 * 60 + 30, 22 * 60 + 30),
+    /** The timetable's name for a free period (PL-15), compared trimmed, whatever its case. */
+    val studyPeriodName: String = "Study Period",
+    /** School's morning break: work can go in it (PL-15). */
+    val breakWindow: Window = Window(10 * 60 + 45, 11 * 60 + 15),
+    /** Lunch, either side of eating (13:40 to 13:55): work can go in both parts. */
+    val lunchWindows: List<Window> = listOf(Window(13 * 60 + 15, 13 * 60 + 40), Window(13 * 60 + 55, 14 * 60 + 35)),
+    /** A school window with less free than this left isn't used. */
+    val minSchoolSlotMin: Int = 15,
     /** How long a piece of work is cut into, when it has no steps of its own (docs/scheduler.md §3). */
     val boxMin: Int = 45,
     /** Days before a deadline its work should be finished by, until calibration learns better. */

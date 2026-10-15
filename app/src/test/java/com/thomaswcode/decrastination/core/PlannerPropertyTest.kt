@@ -35,7 +35,7 @@ class PlannerPropertyTest {
             val effort = 5 + random.nextInt(296)
             // Steps whose minutes add up to the task's, each at least one.
             val steps = minOf(random.nextInt(7), effort).let { count ->
-                shareOut(effort, List(count) { 1 + random.nextInt(10) }).mapIndexed { i, minutes -> SubStep("step ${i + 1}", minutes) }
+                shareOut(effort, List(count) { 1 + random.nextInt(10) }).mapIndexed { i, minutes -> SubStep("step ${i + 1}", minutes, where = pick(null, "home", "anywhere")) }
             }
             // Undated; due in the next month; or due a few days back, or today (PL-14's hard and soft dates gone by).
             val dueAt = when {
@@ -93,6 +93,20 @@ class PlannerPropertyTest {
             hardBusy = List(random.nextInt(3)) { busy() },
             // Kinds of day found to use only part of their free time (PL-06).
             calibration = Calibration(yields = DayKind.entries.filter { chance(25) }.associateWith { 0.5 + random.nextInt(51) / 100.0 }),
+            // School days as windows, some of the time (PL-15): break, lunch, maybe a study period, the evening.
+            windows = if (!chance(50)) emptyMap() else (0L..30L).map { today.plusDays(it) }.associateWith { day ->
+                val weekend = day.dayOfWeek == java.time.DayOfWeek.SATURDAY || day.dayOfWeek == java.time.DayOfWeek.SUNDAY
+                if (weekend) {
+                    listOf(DayWindow(8 * 60, 22 * 60, WindowKind.Evening))
+                } else {
+                    listOfNotNull(
+                        DayWindow(645, 675, WindowKind.Break),
+                        DayWindow(795, 820, WindowKind.Lunch),
+                        DayWindow(9 * 60 + random.nextInt(4) * 60, 9 * 60 + random.nextInt(4) * 60 + 55, WindowKind.Study).takeIf { chance(40) && it.endMin <= 795 && it.startMin >= 675 },
+                        DayWindow(16 * 60 + 45, 22 * 60, WindowKind.Evening),
+                    ).sortedBy { it.startMin }
+                }
+            },
         )
     }
 
@@ -115,9 +129,10 @@ class PlannerPropertyTest {
         checkStability(seed, plan, input)
         checkMinimumTouch(seed, plan, input)
         checkRevisionGap(seed, plan, input)
-        checkWhy(seed, plan)
+        checkWhy(seed, plan, input)
         checkOverdue(seed, plan, input)
         checkWontFit(seed, plan, input)
+        checkHome(seed, plan, input)
     }
 
     /**
@@ -267,7 +282,7 @@ class PlannerPropertyTest {
      * Every piece says why it's on its day (PL-07), as its flags do: overdue work is overdue, undated
      * work soft, work past its deadline short of room, work due soon due soon, the rest spread.
      */
-    private fun checkWhy(seed: Long, plan: Plan) {
+    private fun checkWhy(seed: Long, plan: Plan, input: Planner.Input) {
         val placing = setOf(Why.DueSoon, Why.Spread, Why.MinimumTouch, Why.RevisionGap, Why.MostRoom, Why.Packed)
         for (bucket in plan.buckets) for (chunk in bucket.chunks) {
             val allowed = when {
@@ -283,8 +298,7 @@ class PlannerPropertyTest {
             assertTrue(chunk.why != Why.RevisionGap || chunk.kind == Kind.Revision, "seed=$seed: ${chunk.taskId} part ${chunk.part}, ${chunk.kind}, says RevisionGap")
             assertTrue(chunk.why != Why.MostRoom || chunk.parts == 1, "seed=$seed: ${chunk.taskId} part ${chunk.part} of ${chunk.parts} says MostRoom")
             // Placed after its deadline's own last day: there was no room before it.
-            val due = java.time.Instant.ofEpochMilli(chunk.deadline).atZone(LONDON)
-            val lastDay = if (due.toLocalTime() < LocalTime.NOON) due.toLocalDate().minusDays(1) else due.toLocalDate()
+            val lastDay = Planner.lastDayBefore(chunk.deadline, input)
             if (chunk.behind && !chunk.soft && bucket.date > lastDay) assertTrue(chunk.why == Why.NoRoom, "seed=$seed: ${chunk.taskId} part ${chunk.part} on ${bucket.date}, after its deadline's day, says ${chunk.why}")
         }
     }
@@ -310,15 +324,20 @@ class PlannerPropertyTest {
             assertTrue(task.hardDeadline && task.dueAt!! >= input.now, "seed=$seed: ${short.taskId} said not to fit, its deadline the app's or gone")
             val leftOut = plan.unplanned.any { it.taskId == task.id }
             // Or carried past its deadline's own last day (a per-day limit), whatever the minutes free.
-            val late = plan.buckets.any { b ->
-                b.chunks.any { c ->
-                    val due = java.time.Instant.ofEpochMilli(c.deadline).atZone(LONDON)
-                    c.taskId == task.id && b.date > (if (due.toLocalTime() < LocalTime.NOON) due.toLocalDate().minusDays(1) else due.toLocalDate())
-                }
-            }
+            val late = plan.buckets.any { b -> b.chunks.any { c -> c.taskId == task.id && b.date > Planner.lastDayBefore(c.deadline, input) } }
             // Or a piece no single day held, put behind into the first.
             val forced = plan.chunksOf(task.id).any { it.behind }
             assertTrue(short.leftMin > short.freeMin || leftOut || late || forced, "seed=$seed: ${task.id} said not to fit: ${short.leftMin} min left, ${short.freeMin} free")
+        }
+    }
+
+    /** Work only for home is in the evening's time (PL-15): never more of it on a day than that holds, but for work flagged as checkCapacity allows. */
+    private fun checkHome(seed: Long, plan: Plan, input: Planner.Input) {
+        for (bucket in plan.buckets) {
+            val byToday = { c: Chunk -> bucket.date == plan.today && !c.soft && Planner.date(c.deadline, LONDON) <= plan.today }
+            val home = bucket.chunks.filter { it.where == Where.Home && !it.behind && !it.overdue && !byToday(it) }.sumOf { it.minutes }
+            val evening = Planner.capacityOf(bucket.date, input).homeMin
+            assertTrue(home <= evening, "seed=$seed: ${bucket.date} holds $home minutes of home work in its evening's $evening")
         }
     }
 

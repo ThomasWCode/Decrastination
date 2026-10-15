@@ -18,6 +18,8 @@ data class OwnTask(
     val startFrom: Long? = null,
     val minutes: Int = Kind.Homework.defaultEffortMin,
     val steps: List<OwnStep> = emptyList(),
+    /** Where it can be done (PL-15): "anywhere", a free period at school included, or "home". The form asks in phase 6. */
+    val where: String = "anywhere",
 )
 
 @Serializable
@@ -34,6 +36,9 @@ object OwnTasks {
     const val MAX_NOTES = 4_000
     const val MAX_CLASS = 60
     const val MAX_STEPS = 30
+
+    /** The task's [OwnTask.where], kept in its extras as a source's own value would be (PL-15). */
+    const val EXTRA_WHERE = "where"
 
     /** A minute to sixty hours: a term's project, not a year's. */
     val MINUTES = 1..60 * 60
@@ -91,6 +96,7 @@ object OwnTasks {
         startFrom = task.notBefore,
         minutes = task.sourceEffortMin ?: task.kind.defaultEffortMin,
         steps = task.subSteps.map { OwnStep(it.title, it.minutes, it.from, it.dueAt) },
+        where = task.extra[EXTRA_WHERE] ?: "anywhere",
     )
 
     /**
@@ -242,6 +248,8 @@ object OwnTasks {
             notBefore = task.startFrom,
             sourceEffortMin = minutes,
             subSteps = steps,
+            // Anywhere unless you said home: only "home" is kept (PL-15).
+            extra = if (Where.of(task.where) == Where.Home) old.extra + (EXTRA_WHERE to "home") else old.extra - EXTRA_WHERE,
             // As a source's: what an instruction is laid over, and taking one back comes back to.
             sourceValues = SourceValues(task.kind, task.dueAt, null),
         ).enriched()

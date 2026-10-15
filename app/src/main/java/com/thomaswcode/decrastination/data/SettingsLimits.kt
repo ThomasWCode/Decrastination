@@ -14,6 +14,9 @@ object SettingsLimits {
     val SOFT_MIN_PER_DAY = 10..600
     val WORK_MIN_PER_FREE_MIN = 1..20
     val TEXTBOOK = 1..9
+    val MIN_SCHOOL_SLOT_MIN = 5..60
+    const val MAX_NAME = 60
+    const val MAX_LUNCH_WINDOWS = 4
 
     /** How long a loosening change may wait: the screen doesn't set it, so it's held to what makes sense. */
     val LOOSEN_DELAY_HOURS = 1..24 * 14
@@ -34,6 +37,10 @@ object SettingsLimits {
             check("the Anki deadline", ankiDeadlineMin in MINUTE_OF_DAY)
             check("the school-day hours", window(weekdayHours, overnight = false))
             check("the weekend hours", window(weekendHours, overnight = false))
+            check("the timetable's name for a free period", studyPeriodName.isNotBlank() && studyPeriodName.length <= MAX_NAME)
+            check("the morning break", window(breakWindow, overnight = false))
+            check("lunch", lunchWindows.size <= MAX_LUNCH_WINDOWS && lunchWindows.all { window(it, overnight = false) })
+            check("the shortest school time used", minSchoolSlotMin in MIN_SCHOOL_SLOT_MIN)
             check("the box length", boxMin in BOX_MIN)
             check("the safety margin", marginDays in MARGIN_DAYS)
             check("the days given to undated work", softDeadlineDays in SOFT_DEADLINE_DAYS)
