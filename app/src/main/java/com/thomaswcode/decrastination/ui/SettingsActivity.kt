@@ -143,6 +143,7 @@ class SettingsActivity : ComponentActivity() {
                     WindowField("Weekends: work", draft.weekendHours, "weekendHours", form) { draft = draft.copy(weekendHours = it) }
                     WindowField("Quiet hours (nothing blocked)", draft.quietHours, "quietHours", form, overnight = true) { draft = draft.copy(quietHours = it) }
                     TimeField("School days: blocking from", draft.weekdayBlockFromMin, "weekdayBlockFromMin", form) { draft = draft.copy(weekdayBlockFromMin = it) }
+                    TimeField("Weekends and days off: blocking from", draft.weekendBlockFromMin, "weekendBlockFromMin", form) { draft = draft.copy(weekendBlockFromMin = it) }
                 }
 
                 // Days with no school and half-days (PL-16): saved as they're added or deleted.

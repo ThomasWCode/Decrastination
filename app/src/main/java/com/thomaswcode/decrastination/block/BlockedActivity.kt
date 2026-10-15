@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.core.Chunk
+import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.ui.AppTheme
 import com.thomaswcode.decrastination.ui.Format
 import com.thomaswcode.decrastination.ui.PieceActions
@@ -134,7 +135,7 @@ class BlockedActivity : ComponentActivity() {
                     Text("Free time left today: ${Format.minutes((credit / 60_000).toInt())}", style = MaterialTheme.typography.bodyMedium)
                 }
                 TextButton(onClick = { why = !why }) { Text(if (why) "Hide why" else "Why am I blocked?") }
-                AnimatedVisibility(why) { Why(verdict.reason, plan.todayBucket?.chunks.orEmpty(), settings.workMinPerFreeMin) }
+                AnimatedVisibility(why) { Why(verdict.reason, plan.todayBucket?.chunks.orEmpty(), settings.workMinPerFreeMin, graph.focus.missedKeepsPressure(now), settings) }
                 OutlinedButton(onClick = ::goHome, modifier = Modifier.fillMaxWidth()) { Text("Go to the home screen") }
             }
         }
@@ -156,11 +157,12 @@ class BlockedActivity : ComponentActivity() {
     }
 
     @Composable
-    private fun Why(reason: BlockPolicy.Reason, today: List<Chunk>, ratio: Int) {
+    private fun Why(reason: BlockPolicy.Reason, today: List<Chunk>, ratio: Int, spilled: Boolean, settings: Settings) {
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             when (reason) {
-                BlockPolicy.Reason.DueSoon -> {
-                    Text("While anything is planned for today, blocking is strict. Today:", style = MaterialTheme.typography.bodyMedium)
+                BlockPolicy.Reason.TodayUndone -> {
+                    if (spilled) Text("A slot you missed went to tomorrow, so tonight stays blocked.", style = MaterialTheme.typography.bodyMedium)
+                    if (today.isNotEmpty()) Text("While today's work isn't done, blocking is strict. Today:", style = MaterialTheme.typography.bodyMedium)
                     today.take(12).forEach { Text("• ${it.label} (${Format.minutes(it.minutes)})", style = MaterialTheme.typography.bodySmall) }
                     if (today.size > 12) Text("and ${today.size - 12} more", style = MaterialTheme.typography.bodySmall)
                 }
@@ -170,7 +172,7 @@ class BlockedActivity : ComponentActivity() {
                 )
                 else -> Text(reason.headline, style = MaterialTheme.typography.bodyMedium)
             }
-            Text("Nothing is blocked 22:30–07:00, or before 16:45 on school days.", style = MaterialTheme.typography.bodySmall)
+            Text("Nothing is blocked ${Format.clock(settings.quietHours.startMin)}–${Format.clock(settings.quietHours.endMin)}, or before ${Format.clock(settings.weekdayBlockFromMin)} on school days and ${Format.clock(settings.weekendBlockFromMin)} on other days.", style = MaterialTheme.typography.bodySmall)
         }
     }
 

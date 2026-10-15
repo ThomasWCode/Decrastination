@@ -240,7 +240,12 @@ class AppGraph private constructor(context: Context) {
     }
 
     /** The blocker's state and decisions (block/Focus.kt). */
-    val focus = Focus(tasks, settings, runtime, log, clock, onOwnTaskDone = { finishOwnTask(it) }) { state, s, now -> plan(state, s, now) }
+    val focus = Focus(
+        tasks, settings, runtime, log, clock,
+        onOwnTaskDone = { finishOwnTask(it) },
+        // A school day by the school calendar (BL-02): a day off blocks from the weekend's time.
+        schoolDay = { com.thomaswcode.decrastination.core.SchoolDays.kindOf(it, school.value) == com.thomaswcode.decrastination.core.DayKind.Weekday },
+    ) { state, s, now -> plan(state, s, now) }
 
     /**
      * The plan made again as what it depends on changes (PL-13): today's slot starts kept, then the

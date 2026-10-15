@@ -48,6 +48,8 @@ class Focus(
     private val clock: WallClock,
     /** One of your own whose work a kept slot finished (LR-09): finished, as Done does. */
     private val onOwnTaskDone: suspend (String) -> Unit = {},
+    /** Whether [LocalDate] is a school day (BL-02): by the school calendar; without one, Monday to Friday. */
+    private val schoolDay: (LocalDate) -> Boolean = { it.dayOfWeek.value <= 5 },
     private val planOf: (TaskState, Settings, Long) -> Plan,
 ) {
     /** What the blocker covers. */
@@ -90,12 +92,24 @@ class Focus(
                 now = now,
                 zone = clock.zone(),
                 settings = settings.value,
-                pressure = plan(now).pressure,
+                pressure = plan(now).pressure || missedKeepsPressure(now),
                 creditLeftMs = creditLeftMs(now),
                 overrideUntil = state.overrideUntil,
                 forceActiveUntil = state.forceActiveUntil,
+                schoolDay = schoolDay(today(now)),
             ),
         )
+    }
+
+    /**
+     * A slot missed today that went to tomorrow keeps today's work undone (BL-11), till the day's
+     * hours end: letting a slot lapse doesn't buy the evening. A move of yours forgets it (PL-13).
+     */
+    fun missedKeepsPressure(now: Long = clock.now()): Boolean {
+        val today = today(now)
+        if (runtime.value.slots.on(today).missed.none { it.spilled }) return false
+        val hours = if (schoolDay(today)) settings.value.weekdayHours else settings.value.weekendHours
+        return BlockPolicy.minuteOfDay(now, clock.zone()) < hours.endMin
     }
 
     /** [pkg] as something the blocker covers outright (an app, or a browser whose sites can't be read). */

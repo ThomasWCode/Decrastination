@@ -41,6 +41,9 @@ object Format {
         else -> "Due ${at(dueAt, now, zone)}"
     }
 
+    /** A minute of the day as "16:45". */
+    fun clock(minute: Int): String = "%02d:%02d".format(Locale.UK, minute / 60, minute % 60)
+
     /** "45 min", "1 h 30 min". */
     fun minutes(minutes: Int): String = when {
         minutes < 60 -> "$minutes min"

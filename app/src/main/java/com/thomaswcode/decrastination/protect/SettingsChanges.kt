@@ -78,6 +78,7 @@ object SettingsChanges {
         "blockedBrowsers" to { old, new -> !new.blockedBrowsers.containsAll(old.blockedBrowsers) },
         "quietHours" to { old, new -> adds(old.quietHours, new.quietHours) },
         "weekdayBlockFromMin" to { old, new -> new.weekdayBlockFromMin > old.weekdayBlockFromMin },
+        "weekendBlockFromMin" to { old, new -> new.weekendBlockFromMin > old.weekendBlockFromMin },
         "workMinPerFreeMin" to { old, new -> new.workMinPerFreeMin < old.workMinPerFreeMin },
         "teamsAutoSync" to NEVER,
         "teamsFirstUnlockMin" to NEVER,
@@ -120,6 +121,7 @@ object SettingsChanges {
         "blockedBrowsers" to "Browsers blocked outright",
         "quietHours" to "Quiet hours",
         "weekdayBlockFromMin" to "School-day blocking starts",
+        "weekendBlockFromMin" to "Other days' blocking starts",
         "workMinPerFreeMin" to "Minutes of work per free minute",
         "teamsAutoSync" to "Automatic Teams syncs",
         "teamsFirstUnlockMin" to "First-unlock Teams sync after",
@@ -290,7 +292,7 @@ object SettingsChanges {
                 ).joinToString("; ").let { "$label: $it" }
             }
             "quietHours", "weekdayHours", "weekendHours" -> "$label: ${window(field, old)} → ${window(field, new)}"
-            "ankiDeadlineMin", "weekdayBlockFromMin", "teamsFirstUnlockMin", "briefingWeekdayMin", "briefingWeekendMin", "checkInMin" -> "$label: ${time(before)} → ${time(after)}"
+            "ankiDeadlineMin", "weekdayBlockFromMin", "weekendBlockFromMin", "teamsFirstUnlockMin", "briefingWeekdayMin", "briefingWeekendMin", "checkInMin" -> "$label: ${time(before)} → ${time(after)}"
             "armed" -> if (new.armed) "Arm protection" else "Disarm protection"
             else -> "$label: $before → $after"
         }

@@ -13,6 +13,7 @@ import com.thomaswcode.decrastination.core.Slot
 import com.thomaswcode.decrastination.core.DayWindow
 import com.thomaswcode.decrastination.core.FixedClock
 import com.thomaswcode.decrastination.core.Kind
+import com.thomaswcode.decrastination.core.MissedSlot
 import com.thomaswcode.decrastination.core.Planner
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Status
@@ -523,5 +524,36 @@ class FocusTest {
         tasks.update { state -> state.copy(tasks = state.tasks.map { if (it.id == "teams:a") it.copy(status = Status.Done, doneAt = clock.time) else it }) }
         assertTrue(ahead.keepSlot("teams:b#-1#1"))
         assertEquals(15 * 60_000L, ahead.creditLeftMs())
+    }
+
+    // --- What blocks (BL-01, BL-11) ---
+
+    @Test
+    fun `tomorrow's work alone doesn't block, today's does`() = runTest {
+        // Monday 20:00 with ten minutes of free time: work that can't start till tomorrow leaves today free.
+        clock.time = Fixtures.at("2026-10-12T20:00")
+        runtime.update { it.copy(credit = it.credit.earn(monday, 10.0)) }
+        tasks.update { it.copy(tasks = listOf(task("later", due = "2026-10-14T23:59").copy(notBefore = Fixtures.at("2026-10-13T00:00")))) }
+        assertEquals(BlockPolicy.Verdict.Spend, focus.verdict())
+        tasks.update { it.copy(tasks = it.tasks + task("tonight", due = "2026-10-12T23:59")) }
+        assertEquals(BlockPolicy.Verdict.Block(BlockPolicy.Reason.TodayUndone), focus.verdict())
+    }
+
+    @Test
+    fun `a slot missed today that went to tomorrow blocks till the hours end, and a move of yours lifts it`() = runTest {
+        clock.time = Fixtures.at("2026-10-12T20:00")
+        val missed = MissedSlot("teams:t#-1#1", "teams:t", clock.time - 3_600_000L, spilled = true)
+        runtime.update { it.copy(credit = it.credit.earn(monday, 10.0), slots = SlotState(monday.toString(), missed = listOf(missed))) }
+        assertEquals(BlockPolicy.Verdict.Block(BlockPolicy.Reason.TodayUndone), focus.verdict())
+        // The day's hours end at 22:00: free time again till the quiet hours.
+        clock.time = Fixtures.at("2026-10-12T22:05")
+        assertEquals(BlockPolicy.Verdict.Spend, focus.verdict())
+        // Missed but still today's (not spilled): nothing more than today's plan says.
+        clock.time = Fixtures.at("2026-10-12T20:00")
+        runtime.update { it.copy(slots = SlotState(monday.toString(), missed = listOf(missed.copy(spilled = false)))) }
+        assertEquals(BlockPolicy.Verdict.Spend, focus.verdict())
+        // Moved on purpose (a time you gave its task): forgotten.
+        runtime.update { it.copy(slots = SlotState(monday.toString(), missed = listOf(missed)).moved("teams:t")) }
+        assertEquals(BlockPolicy.Verdict.Spend, focus.verdict())
     }
 }

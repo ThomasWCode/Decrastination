@@ -57,6 +57,7 @@ object SettingsLimits {
             check("the undated work a day", softMinPerDay in SOFT_MIN_PER_DAY)
             check("the quiet hours", window(quietHours, overnight = true))
             check("when blocking starts on school days", weekdayBlockFromMin in MINUTE_OF_DAY)
+            check("when blocking starts on other days", weekendBlockFromMin in MINUTE_OF_DAY)
             check("the minutes of work for one of free time", workMinPerFreeMin in WORK_MIN_PER_FREE_MIN)
             check("the first-unlock Teams sync time", teamsFirstUnlockMin in MINUTE_OF_DAY)
             check("how often Teams syncs", teamsSyncEveryMin in TEAMS_EVERY_MIN)
