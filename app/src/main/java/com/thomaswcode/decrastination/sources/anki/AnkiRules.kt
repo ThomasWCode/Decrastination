@@ -167,7 +167,7 @@ object AnkiRules {
         .filterKeys { SECTION_NAME.matches(it) }
 
     /** The section of the one deck whose description [task]'s words hold as a whole phrase: none where none does, or more than one. */
-    private fun describedSections(task: TaskItem, topics: Map<String, String>): List<Pair<Int, Int>> {
+    fun describedSections(task: TaskItem, topics: Map<String, String>): List<Pair<Int, Int>> {
         val text = (task.title + "\n" + task.detail).lowercase()
         val named = topics.filter { (_, topic) -> Regex("(?<![\\p{L}\\d])" + Regex.escape(topic.lowercase()) + "(?![\\p{L}\\d])").containsMatchIn(text) }
         val section = named.keys.singleOrNull() ?: return emptyList()

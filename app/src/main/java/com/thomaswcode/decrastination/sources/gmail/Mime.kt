@@ -188,6 +188,8 @@ object Mime {
             end = end.toInstant().toEpochMilli(),
             location = props["LOCATION"]?.value?.let(::unescaped)?.takeIf { it.isNotEmpty() },
             cancelled = method == "CANCEL" || props["STATUS"]?.value?.trim().equals("CANCELLED", ignoreCase = true),
+            // A date alone keeps its days, so it's all-day wherever the phone is later.
+            days = if (dateOnly(first)) start.toLocalDate() to end.toLocalDate() else null,
         )
     }
 

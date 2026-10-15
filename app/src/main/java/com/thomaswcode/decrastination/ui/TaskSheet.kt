@@ -544,4 +544,4 @@ private fun openLink(activity: Activity, url: String): String? = try {
 }
 
 /** Whether [task]'s reading in force was made from its photo (AI-23): its reason then says what Claude saw, not a quote. */
-private fun fromPhoto(task: TaskItem): Boolean = task.photo != null && task.enrichment?.by != RuleEnricher.BY && Enrichments.current(task) != null
+private fun fromPhoto(task: TaskItem): Boolean = task.photo != null && Enrichments.current(task)?.fromPhoto == true

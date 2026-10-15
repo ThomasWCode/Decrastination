@@ -528,6 +528,9 @@ class AnswersTest {
         assertEquals(emptyList(), MicroPlans.lines(MicroPlans.none(piece, task, NOW)))
         // Others go.
         assertEquals(setOf(piece.key), MicroPlans.kept(chunk, mapOf(piece.key to made, "gone#1" to made)).keys)
+        // Its task changed since: out of date, let go rather than shown.
+        assertEquals(setOf(piece.key), MicroPlans.kept(chunk, mapOf(piece.key to made), tasks).keys)
+        assertEquals(emptySet(), MicroPlans.kept(chunk, mapOf(piece.key to made), mapOf(task.id to task.copy(detail = "Changed"))).keys)
         val asked = MicroPlans.describe(piece, task)
         assertTrue("Task: ${task.title}" in asked && "Instructions:\n1. Read pages 40-44." in asked, asked)
         // The piece itself changed (its step renamed, its minutes): written for again.

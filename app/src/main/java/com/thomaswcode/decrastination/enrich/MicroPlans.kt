@@ -82,9 +82,10 @@ object MicroPlans {
         ahead(plan).mapNotNull { chunk -> tasks[chunk.taskId]?.takeIf { plans[chunk.key]?.inputHash != hashOf(it, chunk) }?.let { chunk to it } }
 
     /** [plans] kept for today's and tomorrow's slots only. */
-    fun kept(plan: Plan, plans: Map<String, MicroPlan>): Map<String, MicroPlan> {
-        val keys = ahead(plan).map { it.key }.toSet()
-        return plans.filterKeys { it in keys }
+    fun kept(plan: Plan, plans: Map<String, MicroPlan>, tasks: Map<String, TaskItem>? = null): Map<String, MicroPlan> {
+        val pieces = ahead(plan).associateBy { it.key }
+        // And, with [tasks], only those written for the piece and task as they are now: a changed one's is out of date.
+        return plans.filter { (key, made) -> pieces[key]?.let { chunk -> tasks == null || tasks[chunk.taskId]?.let { made.inputHash == hashOf(it, chunk) } == true } == true }
     }
 
     /** [plan] in full, as a piece's sheet says it: "First: …", "Then: …", "Done when: …". */
