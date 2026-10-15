@@ -90,7 +90,7 @@ object Review {
         // Its room taken with every other model call's, then sent (AC-05). A failure is recorded
         // (Setup shows it; the model rests), then the rules' review stands.
         val current = graph.modelReviewer() ?: return Outcome(why = because(ModelHold.Off))
-        val result = when (val called = graph.callModel(interactive = false, cost = { r: ClaudeReviewer.Result -> r.costUsd to r.refused }) { current.review(input) }) {
+        val result = when (val called = graph.callModel(interactive = false, record = com.thomaswcode.decrastination.enrich.ModelCalls.OnRecord(com.thomaswcode.decrastination.enrich.ModelEffort.Job.Review, "the week") { r: ClaudeReviewer.Result -> r.usage to com.thomaswcode.decrastination.enrich.ModelCalls.outcome(r.refused, r.answer == null) }, cost = { r: ClaudeReviewer.Result -> r.costUsd to r.refused }) { current.review(input) }) {
             is AppGraph.Called.Held -> return Outcome(why = because(called.hold))
             is AppGraph.Called.Failed -> throw called.error
             is AppGraph.Called.Answered -> called.value
@@ -114,7 +114,7 @@ object Review {
         val before = graph.memory.value.facts
         if (before.isEmpty() || !(force || MemoryTidy.due(before))) return null
         val tidier = graph.memoryTidier() ?: return null
-        val called = graph.callModel(interactive = false, cost = { r: MemoryTidier.Result -> r.costUsd to r.refused }) { at -> tidier.tidy(before, at, graph.clock.zone()) }
+        val called = graph.callModel(interactive = false, record = com.thomaswcode.decrastination.enrich.ModelCalls.OnRecord(com.thomaswcode.decrastination.enrich.ModelEffort.Job.Tidy, "what's remembered") { r: MemoryTidier.Result -> r.usage to com.thomaswcode.decrastination.enrich.ModelCalls.outcome(r.refused, r.answer == null) }, cost = { r: MemoryTidier.Result -> r.costUsd to r.refused }) { at -> tidier.tidy(before, at, graph.clock.zone()) }
         val answer = (called as? AppGraph.Called.Answered)?.value?.answer ?: return null
         val after = MemoryTidy.after(answer, before, now) ?: return null
         var applied = false

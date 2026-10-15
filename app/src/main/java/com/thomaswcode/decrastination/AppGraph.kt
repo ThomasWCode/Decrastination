@@ -52,6 +52,7 @@ import com.thomaswcode.decrastination.data.Secret
 import com.thomaswcode.decrastination.data.SecretStore
 import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.data.TaskState
+import com.thomaswcode.decrastination.data.plusCall
 import com.thomaswcode.decrastination.enrich.AiUsage
 import com.thomaswcode.decrastination.enrich.Failures
 import com.thomaswcode.decrastination.enrich.Failure
@@ -821,7 +822,7 @@ class AppGraph private constructor(context: Context) {
     suspend fun readPhotoTasks(jpeg: ByteArray): Pair<com.thomaswcode.decrastination.enrich.PhotoTasks.Reading?, String?> {
         val reader = photoTaskReader() ?: return null to "Claude is off: add it with New task."
         val now = clock.now()
-        return when (val called = callModel(interactive = true, cost = { r: com.thomaswcode.decrastination.enrich.PhotoTaskReader.Result -> r.costUsd to r.refused }) { reader.read(jpeg, now, clock.zone()) }) {
+        return when (val called = callModel(interactive = true, record = com.thomaswcode.decrastination.enrich.ModelCalls.OnRecord(com.thomaswcode.decrastination.enrich.ModelEffort.Job.PhotoToTask, "a photo of homework") { r: com.thomaswcode.decrastination.enrich.PhotoTaskReader.Result -> r.usage to com.thomaswcode.decrastination.enrich.ModelCalls.outcome(r.refused, r.reading == null) }, cost = { r: com.thomaswcode.decrastination.enrich.PhotoTaskReader.Result -> r.costUsd to r.refused }) { reader.read(jpeg, now, clock.zone()) }) {
             is Called.Held -> null to "Claude can't be asked now: add it with New task."
             is Called.Failed -> null to "The photo couldn't be read (${called.error.message ?: "no connection"})."
             is Called.Answered -> called.value.reading?.let { it to null } ?: (null to if (called.value.refused) "Claude declined to read it." else "Claude couldn't read the photo: try a clearer one.")
@@ -989,7 +990,7 @@ class AppGraph private constructor(context: Context) {
      * counted as it went, [cost] its price and whether it was declined, or its failure ([task], one
      * the API wouldn't take, isn't sent again till it changes).
      */
-    suspend fun <T> callModel(interactive: Boolean, task: TaskItem? = null, cost: (T) -> Pair<Double, Boolean>, send: suspend (at: Long) -> T): Called<T> {
+    suspend fun <T> callModel(interactive: Boolean, task: TaskItem? = null, record: com.thomaswcode.decrastination.enrich.ModelCalls.OnRecord<T>? = null, cost: (T) -> Pair<Double, Boolean>, send: suspend (at: Long) -> T): Called<T> {
         val held = modelCalls.withLock {
             val hold = modelHold(interactive) ?: ModelHold.Capped.takeIf {
                 !runtime.value.aiUsage.forMonth(AiUsage.monthOf(clock.now(), clock.zone())).allows(settings.value.aiMonthlyCapUsd, inFlight.get())
@@ -1009,15 +1010,26 @@ class AppGraph private constructor(context: Context) {
                     val value = send(at)
                     val (usd, refused) = cost(value)
                     modelWorked(usd, refused, month, at)
+                    record?.let { r -> r.read(value).let { (usage, outcome) -> keepCall(r, at, usage, outcome, usd) } }
                     Called.Answered(value)
                 } catch (e: Throwable) {
                     modelFailed(e, month, at, task)
+                    record?.let { r -> keepCall(r, at, com.thomaswcode.decrastination.enrich.ModelCalls.Usage.NONE, "failed:" + Failures.classify(e).name.lowercase(), 0.0) }
                     Called.Failed(e)
                 }
             }
         } finally {
             inFlight.decrementAndGet()
         }
+    }
+
+    /** [r]'s call, made at [at], put on record (AC-07): what it used, how it went, what it cost. */
+    private suspend fun keepCall(r: com.thomaswcode.decrastination.enrich.ModelCalls.OnRecord<*>, at: Long, usage: com.thomaswcode.decrastination.enrich.ModelCalls.Usage, outcome: String, usd: Double) {
+        val call = com.thomaswcode.decrastination.data.CallRecord(
+            at = at, job = r.job.name, title = r.title?.trim()?.take(MAX_CALL_TITLE), effort = com.thomaswcode.decrastination.enrich.ModelEffort.of(r.job).toString().lowercase(),
+            inTokens = usage.inTokens, outTokens = usage.outTokens, cacheRead = usage.cacheRead, latencyMs = clock.now() - at, stop = usage.stop, outcome = outcome, costUsd = usd,
+        )
+        runtime.update { it.copy(calls = it.calls.plusCall(call)) }
     }
 
     /**
@@ -1061,7 +1073,7 @@ class AppGraph private constructor(context: Context) {
             var enrichment = if (model != null) {
                 // Held now (switched off, resting after a failed call, no room under the cap): the
                 // rules do the rest of the run.
-                when (val called = callModel(interactive = false, task = task, cost = { r: Enricher.Result -> r.costUsd to r.refused }) { model.enrich(task, job, now) }) {
+                when (val called = callModel(interactive = false, task = task, record = com.thomaswcode.decrastination.enrich.ModelCalls.OnRecord(com.thomaswcode.decrastination.enrich.ModelEffort.jobOf(job), task.title) { r: Enricher.Result -> r.usage to com.thomaswcode.decrastination.enrich.ModelCalls.outcome(r) }, cost = { r: Enricher.Result -> r.costUsd to r.refused }) { model.enrich(task, job, now) }) {
                     is Called.Held -> {
                         enricher = null
                         null
@@ -1080,7 +1092,7 @@ class AppGraph private constructor(context: Context) {
                         // A check its answer failed (AI-01): put back once, as a call of its own (counted
                         // under the cap, held by a rest); the first's reading stands if that doesn't come back.
                         val again = first.repair?.takeIf { calls < MAX_MODEL_CALLS }?.let { repair ->
-                            when (val second = callModel(interactive = false, task = task, cost = { r: Enricher.Result -> r.costUsd to r.refused }) { model.repair(task, job, now, repair) }) {
+                            when (val second = callModel(interactive = false, task = task, record = com.thomaswcode.decrastination.enrich.ModelCalls.OnRecord(com.thomaswcode.decrastination.enrich.ModelEffort.jobOf(job), task.title) { r: Enricher.Result -> r.usage to com.thomaswcode.decrastination.enrich.ModelCalls.outcome(r) }, cost = { r: Enricher.Result -> r.costUsd to r.refused }) { model.repair(task, job, now, repair) }) {
                                 is Called.Answered -> second.value.also { calls++ }
                                 is Called.Failed -> {
                                     calls++
@@ -1138,6 +1150,9 @@ class AppGraph private constructor(context: Context) {
         enrichNow(only = taskId)
         true
     }
+
+    /** The most of what a call was about that its record keeps (AC-07). */
+    private val MAX_CALL_TITLE = 80
 
     /** The most tasks remembered as refused as asked (AC-04): far more than there are. */
     private val MAX_ENRICH_FAILED = 200
@@ -1318,7 +1333,7 @@ class AppGraph private constructor(context: Context) {
             val waiting = run call@{
                 val reader = instructionReader() ?: return@call because(ModelHold.Off)
                 // Through a rest only for you waiting on it (AC-04): after a sync or an enrichment it waits.
-                val result = when (val called = callModel(interactive = interactive, cost = { r: InstructionReader.Result -> r.costUsd to r.refused }) { at -> reader.read(next, tasks.value.tasks, calendarTime.events, at) }) {
+                val result = when (val called = callModel(interactive = interactive, record = com.thomaswcode.decrastination.enrich.ModelCalls.OnRecord(com.thomaswcode.decrastination.enrich.ModelEffort.Job.Instruction, next.text) { r: InstructionReader.Result -> r.usage to com.thomaswcode.decrastination.enrich.ModelCalls.outcome(r.refused, r.reading == null) }, cost = { r: InstructionReader.Result -> r.costUsd to r.refused }) { at -> reader.read(next, tasks.value.tasks, calendarTime.events, at) }) {
                     is Called.Held -> return@call because(called.hold)
                     is Called.Failed -> {
                         Log.w(TAG, "Reading an instruction failed", called.error)
@@ -1422,7 +1437,7 @@ class AppGraph private constructor(context: Context) {
             // One snapshot of the tasks, the calendar and your changes: what Claude's shown is what its answer's checked against.
             val state = tasks.value
             val time = calendarTime
-            val called = callModel(interactive = true, cost = { r: ChatReader.Result -> r.costUsd to r.refused }) { at ->
+            val called = callModel(interactive = true, record = com.thomaswcode.decrastination.enrich.ModelCalls.OnRecord(com.thomaswcode.decrastination.enrich.ModelEffort.Job.Chat, waiting.text) { r: ChatReader.Result -> r.usage to com.thomaswcode.decrastination.enrich.ModelCalls.outcome(r.refused, r.reading == null) }, cost = { r: ChatReader.Result -> r.costUsd to r.refused }) { at ->
                 // Being asked now: whatever it said before (a failed call) is gone.
                 chat.update { s -> s.copy(messages = s.messages.map { if (it.id == waiting.id) it.copy(note = null, stuck = false) else it }) }
                 ChatReader(key, clock.zone(), endpoint(), profile = profile(at), settings = settings.value).answer(chat.value.messages, state.tasks, time.events, chatContext(at, state, time, instructions.value.applied), at)
