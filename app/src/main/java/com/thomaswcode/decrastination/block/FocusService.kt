@@ -287,7 +287,8 @@ class FocusService : AccessibilityService() {
         spending = target to SystemClock.elapsedRealtime()
         // Block again the moment it runs out.
         handler.removeCallbacks(creditCheck)
-        val left = graph.focus.creditLeftMs()
+        // Free time, or between slots till the next one starts (BL-10).
+        val left = graph.focus.spendableMs()
         handler.postDelayed(creditCheck, left.coerceIn(1_000L, SPEND_TICK_MS))
         shownEndsAt = 0L
         countdown(target, left)
@@ -321,7 +322,7 @@ class FocusService : AccessibilityService() {
     /** A minute of free time left, while it's still being spent: said once. More earned since, it's set again for the new end instead. */
     private val warnEnding: Runnable = Runnable {
         val (target, since) = spending ?: return@Runnable
-        val left = graph.focus.creditLeftMs() - (SystemClock.elapsedRealtime() - since)
+        val left = graph.focus.spendableMs(spentMs = SystemClock.elapsedRealtime() - since)
         if (left > FreeTimeNotice.WARN_MS + COUNTDOWN_SLACK_MS) {
             shownEndsAt = 0L
             return@Runnable countdown(target, left)
@@ -362,7 +363,7 @@ class FocusService : AccessibilityService() {
         // Taken off the blocklist meanwhile (a removal that fell due): no longer charged.
         if (!stillBlocked(target)) return@Runnable stopSpending()
         if (frontPackage() != packageOf(target) && !aside(target)) return@Runnable stopSpending()
-        val left = graph.focus.creditLeftMs() - (SystemClock.elapsedRealtime() - since)
+        val left = graph.focus.spendableMs(spentMs = SystemClock.elapsedRealtime() - since)
         val verdict = graph.focus.verdict()
         // Allowed outright now (quiet hours, a parent's unblock): free time isn't spent, nor is
         // anything covered when it would have run out.

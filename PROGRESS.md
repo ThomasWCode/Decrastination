@@ -60,7 +60,8 @@ The implementation of `docs/review_v2_improvements/impl/` on branch `v3`. Delete
 - LR-09 each slot's outcome the record (kept, kept late, missed, moved), and the days, Stats, the weekly review and school's yield read from it; the box experiment gone; with BL-08, a short piece earning on its tick and a longer one on its photo, today's slots earning no more than today's plan: this commit. The phone's data as of 06:45 loads whole under the new schema (checked locally against the copy, not committed).
 - AR-09 focus sessions gone: no Start, no session in the policy, the block screen, the widget or the chat (which says the slot under way instead); a session's records in the old files passed over as they load; a backup's slots kept on import, which LR-09 missed: 950d44f.
 - BL-01 blocked while today's work isn't done, tomorrow's alone not; BL-02 blocking from 10:00 on a weekend or a day off (`weekendBlockFromMin`), by the school calendar; BL-11 a slot missed today that went to tomorrow keeping tonight blocked till the hours end, a move of yours not: 6eb0a34.
-- BL-04 the reward line on the block screen, the Do now card and the widget; BL-07 an hour of free time on a day with nothing to do: this commit.
+- BL-04 the reward line on the block screen, the Do now card and the widget; BL-07 an hour of free time on a day with nothing to do: c40ef07.
+- BL-10 free time between today's slots after one kept, till the next starts: this commit. Found with it, a step piece's key renumbered once a piece before it was kept, so its slot's kept start was lost (PL-13): fixed on phase 3's branch (585ba27), with a test here that keeping a piece leaves its task's next one in its slot.
 
 ## Current
 

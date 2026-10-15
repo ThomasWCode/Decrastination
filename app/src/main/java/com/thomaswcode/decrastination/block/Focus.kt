@@ -99,8 +99,26 @@ class Focus(
                 overrideUntil = state.overrideUntil,
                 forceActiveUntil = state.forceActiveUntil,
                 schoolDay = schoolDay(today(now)),
+                gapUntil = gapUntil(now),
             ),
         )
+    }
+
+    /** The end of the gap after a slot kept today that [now] is in (BL-10), if it's in one. */
+    fun gapUntil(now: Long = clock.now()): Long? {
+        val today = today(now).toString()
+        val keptAt = log.value.slots.filter { it.outcome.kept && it.date == today }.maxOfOrNull { it.at }
+        return plan(now).gapUntil(now, keptAt)
+    }
+
+    /**
+     * How long free time can run from [now]: what's left of it, and in a gap between slots (BL-10)
+     * no longer than till the next slot starts.
+     */
+    fun spendableMs(now: Long = clock.now(), spentMs: Long = 0): Long {
+        val credit = creditLeftMs(now) - spentMs
+        val gap = gapUntil(now)?.takeIf { plan(now).pressure || missedKeepsPressure(now) }?.let { it - now } ?: Long.MAX_VALUE
+        return minOf(credit, gap)
     }
 
     /**

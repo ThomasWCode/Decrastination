@@ -433,6 +433,16 @@ class FocusTest {
     }
 
     @Test
+    fun `keeping a piece leaves its task's next piece in its slot`() = runTest {
+        val (first, second) = laid(task("t", due = "2026-10-12T23:59", steps = steps(), effort = 60))
+        clock.time = first.end
+        assertTrue(slotted.keepSlot(first.chunk!!.key))
+        // Its key is its step's, which a piece kept before it doesn't renumber, so its start is kept.
+        val next = Planner.plan(input(tasks.value, settings.value, clock.time)).todaySlots.single { it.kind == SlotKind.Work }
+        assertEquals(second.chunk!!.key to second.start, next.chunk!!.key to next.start)
+    }
+
+    @Test
     fun `a missed slot is recorded once, and kept after it is kept late where it was laid`() = runTest {
         val first = laid(task("t", due = "2026-10-12T23:59", steps = steps(), effort = 60)).first()
         val key = first.chunk!!.key
@@ -593,5 +603,26 @@ class FocusTest {
         tasks.update { state -> state.copy(tasks = state.tasks.map { it.copy(status = Status.Done, doneAt = clock.time) }) }
         focus.grantAllowanceIfDue()
         assertEquals(0L, focus.creditLeftMs())
+    }
+
+    // --- Free time between today's slots (BL-10) ---
+
+    @Test
+    fun `after a slot kept, the gap till the next is free time, and it closes when the next begins or goes by undone`() = runTest {
+        val slots = laid(task("t", due = "2026-10-12T23:59", steps = steps(), effort = 60))
+        val (first, second) = slots
+        // Ticked two minutes early, at 17:28: blocked till then, a gap after it till 17:35.
+        clock.time = first.end - 2 * 60_000L
+        assertEquals(null, slotted.gapUntil())
+        assertTrue(slotted.keepSlot(first.chunk!!.key))
+        runtime.update { it.copy(credit = it.credit.earn(monday, 10.0)) }
+        assertEquals(second.start, slotted.gapUntil())
+        assertEquals(BlockPolicy.Verdict.Spend, slotted.verdict())
+        // Free time runs only till the next slot's start, however much there is.
+        assertEquals(second.start - clock.time, slotted.spendableMs())
+        // The next slot begun: blocked.
+        clock.time = second.start
+        assertEquals(null, slotted.gapUntil())
+        assertEquals(BlockPolicy.Verdict.Block(BlockPolicy.Reason.TodayUndone), slotted.verdict())
     }
 }

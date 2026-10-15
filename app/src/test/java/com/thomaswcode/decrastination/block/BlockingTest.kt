@@ -55,6 +55,7 @@ class BlockPolicyTest {
         forceUntil: String? = null,
         // Monday to Friday, unless said otherwise (a day off school).
         schoolDay: Boolean = java.time.LocalDate.parse(at.take(10)).dayOfWeek.value <= 5,
+        gapUntil: String? = null,
     ) = BlockPolicy.decide(
         BlockPolicy.Input(
             now = Fixtures.at(at),
@@ -65,6 +66,7 @@ class BlockPolicyTest {
             overrideUntil = overrideUntil?.let(Fixtures::at),
             forceActiveUntil = forceUntil?.let(Fixtures::at),
             schoolDay = schoolDay,
+            gapUntil = gapUntil?.let(Fixtures::at),
         ),
     )
 
@@ -75,6 +77,15 @@ class BlockPolicyTest {
         // Friday 9 Oct is a school day: free until 16:45.
         assertEquals(BlockPolicy.Verdict.Allow(BlockPolicy.Reason.BeforeBlock), decide("2026-10-09T12:00"))
         assertEquals(BlockPolicy.Verdict.Allow(BlockPolicy.Reason.BeforeBlock), decide("2026-10-09T16:44"))
+    }
+
+    @Test
+    fun `between today's slots after one kept, earned time is spent till the next starts`() {
+        // Monday 17:32, a slot kept at 17:30 and the next at 17:35: five minutes of it, with credit.
+        assertEquals(BlockPolicy.Verdict.Spend, decide("2026-10-12T17:32", creditMs = 600_000L, gapUntil = "2026-10-12T17:35"))
+        assertEquals(BlockPolicy.Verdict.Block(BlockPolicy.Reason.TodayUndone), decide("2026-10-12T17:35", creditMs = 600_000L, gapUntil = "2026-10-12T17:35"))
+        // No credit: blocked in the gap all the same.
+        assertEquals(BlockPolicy.Verdict.Block(BlockPolicy.Reason.TodayUndone), decide("2026-10-12T17:32", gapUntil = "2026-10-12T17:35"))
     }
 
     @Test

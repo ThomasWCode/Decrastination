@@ -16,6 +16,7 @@ import kotlinx.serialization.Serializable
  *    school day, 10:00 on a weekend or a day off (BL-02).
  * 3. Otherwise: while today's work isn't done, blocking is strict (BL-01: today's pieces still to
  *    do, or a slot missed today that went to tomorrow, BL-11).
+ *    Between today's slots, after one kept, earned time can be spent till the next starts (BL-10).
  * 4. With nothing left today, earned free time is spent while a blocked app is in front; with none
  *    left, it's blocked until more is earned.
  */
@@ -33,6 +34,8 @@ object BlockPolicy {
         val forceActiveUntil: Long? = null,
         /** A school day (BL-02): blocking starts at `weekdayBlockFromMin`; on a weekend or a day off, at `weekendBlockFromMin`. */
         val schoolDay: Boolean = true,
+        /** In a gap after a kept slot (BL-10): till the next slot's start, free time can be spent. */
+        val gapUntil: Long? = null,
     )
 
     enum class Reason(val headline: String) {
@@ -66,6 +69,8 @@ object BlockPolicy {
             if (isQuiet(now, input.zone, input.settings)) return Verdict.Allow(Reason.Quiet)
             if (isBeforeBlockStart(now, input.zone, input.settings, input.schoolDay)) return Verdict.Allow(Reason.BeforeBlock)
         }
+        // Between today's slots, after one kept (BL-10): its earned time, till the next starts.
+        if (input.gapUntil != null && now < input.gapUntil && input.creditLeftMs > 0) return Verdict.Spend
         return when {
             input.pressure -> Verdict.Block(Reason.TodayUndone)
             input.creditLeftMs > 0 -> Verdict.Spend
