@@ -163,8 +163,9 @@ class ChatTest {
         assertTrue("- teams:bridge | Bridge and Balances Beam Q's | Teams | Homework | Tue 13 Oct 2026 08:30 | 100 | 25 | -" in context, context)
         assertFalse("Changes already in use" in context)
         // An email's date Claude didn't quote is a plan, and said to be (PL-14).
-        val reading = Enrichment(inputHash = "", by = "claude", at = now, kind = Kind.Admin, deadline = Fixtures.at("2026-10-14T23:59"))
-        val email = bridge.copy(id = "gmail:form", source = Source.Gmail, title = "Form", dueAt = Fixtures.at("2026-10-14T23:59"), enrichment = reading)
+        val unread = bridge.copy(id = "gmail:form", source = Source.Gmail, title = "Form", dueAt = Fixtures.at("2026-10-14T23:59"))
+        val reading = Enrichment(inputHash = com.thomaswcode.decrastination.core.Enrichments.inputHash(unread), by = "claude", at = now, kind = Kind.Admin, deadline = Fixtures.at("2026-10-14T23:59"))
+        val email = unread.copy(enrichment = reading)
         val withEmail = ChatPrompts.context(listOf(email), emptyList(), emptyList(), now, LONDON)
         assertTrue("| Gmail | Homework | Wed 14 Oct 2026 23:59 (a plan) |" in withEmail, withEmail)
         assertFalse("(a plan)" in ChatPrompts.context(listOf(email.copy(enrichment = reading.copy(deadlineQuoted = true))), emptyList(), emptyList(), now, LONDON))

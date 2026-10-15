@@ -46,7 +46,7 @@ object Calibrator {
 
     /** A kind of day's yield (PL-06): from its last [YIELD_LOOK_BACK] finished days with work, once it has [YIELD_DAYS]. */
     const val YIELD_DAYS = 7
-    private const val YIELD_LOOK_BACK = 14
+    const val YIELD_LOOK_BACK = 14
     const val MIN_YIELD = 0.5
     const val MAX_YIELD = 1.0
 
@@ -204,15 +204,18 @@ object Calibrator {
         // Each session is judged by its own task's next completion after it, so a later round of
         // a task done again isn't credited with an earlier round's finish.
         val completions = log.completions.groupBy { it.taskId }.mapValues { (_, list) -> list.sortedBy { it.doneAt } }
+        /** The completion that tells how [session]'s work went: its task's next after it. */
+        fun outcome(session: SessionRecord) = completions[session.taskId]?.firstOrNull { it.doneAt >= session.startedAt }
         fun rewarded(session: SessionRecord): Boolean {
             if (!session.completed) return false
-            val next = completions[session.taskId]?.firstOrNull { it.doneAt >= session.startedAt } ?: return false
-            // By a real deadline: done by a plan's date says nothing of the box (PL-14).
-            return next.dueAt != null && next.hardDeadline && next.doneAt <= next.dueAt
+            val next = outcome(session) ?: return false
+            return next.dueAt != null && next.doneAt <= next.dueAt
         }
         // Judged once its outcome is known: one cut short failed then; one run in full waits for
-        // its task's completion after it, and until then counts for no box, for or against.
-        fun judged(session: SessionRecord): Boolean = !session.completed || completions[session.taskId]?.any { it.doneAt >= session.startedAt } == true
+        // its task's completion after it, and until then counts for no box, for or against. Done
+        // against a plan's date, or none, it counts for none either: only a real deadline says
+        // whether the work was done in time (PL-14).
+        fun judged(session: SessionRecord): Boolean = !session.completed || outcome(session)?.let { it.dueAt != null && it.hardDeadline } == true
         // Your own box is a candidate too: with nothing to go on, it's kept.
         val candidates = (BOXES + defaultBox).distinct()
         val result = HashMap<Kind, Int>()

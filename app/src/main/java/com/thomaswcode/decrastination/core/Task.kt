@@ -184,8 +184,9 @@ data class TaskItem(
      */
     val realDeadline: Long?
         get() = userDueAt ?: when (source) {
-            // The rules' date is a guess from its words, and Claude's is only a quote where it says so.
-            Source.Gmail -> enrichment?.takeIf { it.deadlineQuoted && it.deadline == dueAt }?.deadline
+            // The rules' date is a guess from its words, and Claude's is only a quote where it says so:
+            // a reading of the email as it is now, not one its new content has made out of date.
+            Source.Gmail -> Enrichments.current(this)?.takeIf { it.deadlineQuoted && it.deadline == dueAt }?.deadline
             // Your own task's date is yours; a source's, its own (one kept from before Phase 4 has no source values).
             else -> if (sourceValues != null) sourceValues.dueAt else dueAt
         }
@@ -196,6 +197,16 @@ data class TaskItem(
      * work is planned again ([Planner]).
      */
     val hardDeadline: Boolean get() = dueAt != null && dueAt == realDeadline
+
+    /**
+     * The deadline in force at [now] (PL-14), as the plan holds it: [dueAt] where it's the real one or
+     * a plan still to come; a plan gone by gives way to the real deadline behind it; with none, null,
+     * and the work is undated again.
+     */
+    fun deadlineAt(now: Long): Long? = dueAt?.takeIf { it == realDeadline || it >= now } ?: realDeadline
+
+    /** Whether [deadlineAt] is a real deadline, which can be missed. */
+    fun hardAt(now: Long): Boolean = deadlineAt(now)?.let { it == realDeadline } == true
 
     /**
      * Minutes of blocks you ticked off by hand in Tasks: done, but neither timed nor checked, so

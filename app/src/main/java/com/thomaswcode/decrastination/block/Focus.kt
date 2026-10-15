@@ -533,10 +533,11 @@ class Focus(
                         // nor is vocabulary its decks hold (their own records learn from it).
                         estimateMin = (task.effortMin * (1 - task.sourceProgress.coerceIn(0.0, 1.0)) - deckMinutes(task)).roundToInt().coerceAtLeast(1),
                         workedMin = worked(task),
-                        // Its own deadline; one split into dated blocks with none of its own, its last block's.
-                        dueAt = task.dueAt ?: task.subSteps.mapNotNull { it.dueAt }.maxOrNull(),
-                        // A step's date is a plan's, never a deadline to meet.
-                        hardDeadline = task.hardDeadline,
+                        // The deadline in force when it was done (a plan's gone by gives way to the real one
+                        // behind it); one split into dated blocks with none of its own, its last block's.
+                        dueAt = task.deadlineAt(task.doneAt ?: now) ?: task.subSteps.mapNotNull { it.dueAt }.maxOrNull(),
+                        // A step's date, or any the app or Claude set, is a plan's, never a deadline to meet.
+                        hardDeadline = task.hardAt(task.doneAt ?: now),
                         firstSeenAt = task.firstSeenAt,
                         doneAt = task.doneAt ?: now,
                         byHand = handMinutes(task) > 0,
