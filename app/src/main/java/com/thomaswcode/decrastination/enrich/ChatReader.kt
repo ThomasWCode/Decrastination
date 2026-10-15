@@ -23,6 +23,7 @@ import com.thomaswcode.decrastination.core.ProposalState
 import com.thomaswcode.decrastination.core.Speaker
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.Unplanned
+import com.thomaswcode.decrastination.core.Why
 import com.thomaswcode.decrastination.core.shareOut
 import com.thomaswcode.decrastination.learn.CalendarEvent
 import com.thomaswcode.decrastination.learn.EventJudge
@@ -173,7 +174,8 @@ object ChatPrompts {
         appendLine("Today: ${Instant.ofEpochMilli(now).atZone(zone).format(TODAY)} (${zone.id})")
         appendLine()
         appendLine("Open tasks (id | title | from | kind | due, a real deadline unless marked a plan, which is never overdue and moves on once it passes | minutes in all | minutes worked so far | can't start before):")
-        val open = tasks.filter { it.isOpen && !it.hidden }.sortedBy { it.dueAt ?: Long.MAX_VALUE }
+        // By the date shown (the deadline in force, PL-14), so a plan's date gone by doesn't crowd nearer ones out of the list.
+        val open = tasks.filter { it.isOpen && !it.hidden }.sortedBy { it.deadlineAt(now) ?: it.dueAt ?: Long.MAX_VALUE }
         if (open.isEmpty()) appendLine("(none)")
         open.take(InstructionPrompts.MAX_TASKS).forEach { t ->
             val start = listOfNotNull(t.availableFrom, t.userFrom, t.notBefore).maxOrNull()?.takeIf { it > now }
@@ -294,7 +296,8 @@ object ChatPrompts {
                 val flags = listOfNotNull(
                     first.dueAt?.let { "due ${at(it)}" } ?: "no due date",
                     "overdue".takeIf { dated && pieces.any { it.overdue } },
-                    "won't fit before its deadline".takeIf { dated && pieces.any { it.behind } },
+                    // Behind its deadline itself (PL-02), not only the safety margin, which a piece can still meet.
+                    "won't fit before its deadline".takeIf { dated && pieces.any { it.why == Why.NoRoom } },
                     pieces.mapNotNull { it.availableAt }.minOrNull()?.let { "can't start before ${at(it)}" },
                 )
                 // Why each piece is on its day, as a short code (PL-07): the sheet's sentence would take the plan's room.

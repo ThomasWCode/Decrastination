@@ -87,7 +87,8 @@ object ReviewInput {
         appendLine("Finished this week:")
         val finished = log.completions.filter { inWeek(it.doneAt) }
         finished.takeLast(MAX_LISTED).ifEmpty { null }?.forEach { c ->
-            val due = c.dueAt?.let { " due ${at(it)}," }.orEmpty()
+            // A date the app or Claude set is a plan (PL-14): said, as being early or late for it says nothing.
+            val due = c.dueAt?.let { " due ${at(it)}" + (if (c.hardDeadline) "" else " (a plan, not a deadline)") + "," }.orEmpty()
             val answer = c.assessment?.let { " felt $it" }.orEmpty() + c.note?.let { " (\"${it.take(MAX_NOTE_CHARS)}\")" }.orEmpty()
             appendLine("- ${c.title.take(MAX_TITLE)} [${c.kind.label}${c.className?.let { ", ${it.take(MAX_TITLE)}" }.orEmpty()}]:$due done ${at(c.doneAt)}, estimate ${c.estimateMin} min, timed ${c.workedMin} min${if (c.byHand) " (some ticked off by hand)" else ""}${if (c.photo) " (some found done by a photo check)" else ""}.$answer")
         } ?: appendLine("- nothing")

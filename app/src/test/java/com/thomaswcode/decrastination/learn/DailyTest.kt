@@ -201,6 +201,9 @@ class ReviewInputTest {
         assertTrue("- Statics Prep [Homework, 12.1 Physics]: due Fri 9 Oct 21:00, done Fri 9 Oct 20:00, estimate 40 min, timed 55 min. felt harder (\"the diagrams\")" in text, text)
         assertTrue("the week felt 3/5" in text, text)
         assertTrue("Settings: boxMin 45, marginDays 1, softMinPerDay 60, workMinPerFreeMin 3." in text, text)
+        // Done by a date the app or Claude set: a plan, said to be one.
+        val planned = log.copy(completions = log.completions.map { it.copy(hardDeadline = false) })
+        assertTrue("Statics Prep [Homework, 12.1 Physics]: due Fri 9 Oct 21:00 (a plan, not a deadline), done Fri 9 Oct 20:00" in ReviewInput.describe(planned, Calibration(), Settings(), now, LONDON, week = "2026-10-05"))
     }
 
     @Test

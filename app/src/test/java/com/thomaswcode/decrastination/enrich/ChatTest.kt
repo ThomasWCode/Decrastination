@@ -177,6 +177,23 @@ class ChatTest {
         assertFalse("| Trip |" in withEvents, withEvents)
     }
 
+    @Test
+    fun `the context's list of tasks is cut by the dates shown, a plan's gone by not crowding out nearer ones`() {
+        // Eighty tasks whose test dates Claude read are gone by, Teams' own at the end of November; one due tomorrow.
+        val faded = (1..80).map { i -> bridge.copy(id = "teams:t$i", sourceId = "t$i", title = "t$i", dueAt = Fixtures.at("2026-10-01T08:30"), sourceValues = SourceValues(Kind.Homework, Fixtures.at("2026-11-30T23:59"), null)) }
+        val context = ChatPrompts.context(faded + bridge, emptyList(), emptyList(), now, LONDON)
+        assertTrue("- teams:bridge |" in context, context)
+        assertTrue("- teams:t1 | t1 | Teams | Homework | Mon 30 Nov 2026 23:59 |" in context, context)
+    }
+
+    @Test
+    fun `work behind only the safety margin isn't said not to fit`() {
+        val margin = piece(bridge.id, bridge.title, null, 30, 1, 1, Fixtures.at("2026-10-14T23:59"), behind = true).copy(why = Why.Spread)
+        val text = ChatPrompts.plan(plan.copy(buckets = listOf(DayBucket(today, 315, listOf(margin)))), LONDON)
+        assertTrue("[why: spread] | due Wed 14 Oct 2026 23:59" in text, text)
+        assertFalse("won't fit before its deadline" in text, text)
+    }
+
     /** A piece of [taskId] as the planner gives one. */
     private fun piece(taskId: String, title: String, step: String?, minutes: Int, part: Int, parts: Int, dueAt: Long?, behind: Boolean = false) = Chunk(
         taskId = taskId, source = Source.Teams, kind = Kind.Homework, title = title, step = step, minutes = minutes, dueAt = dueAt, deadline = dueAt ?: now,
