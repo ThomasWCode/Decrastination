@@ -105,4 +105,11 @@ class FelixRulesTest {
         assertEquals(at("17:15"), FelixRules.next(plan, FelixState(nextCheckAt = at("17:15")), settings, at("17:11")))
         assertEquals(first.end + Slotter.GRACE_MS + 60_000L, FelixRules.next(plan, FelixState(), settings, first.start + grace + 1))
     }
+
+    @Test
+    fun `the morning's title is his first sentence, the rest its text`() {
+        assertEquals("Study period at eleven, the statics at five." to "Nothing after seven.", FelixRules.sentences("Study period at eleven, the statics at five. Nothing after seven."))
+        assertEquals("A clear evening: vocab at five!" to "Then the statics. That's it.", FelixRules.sentences("A clear evening: vocab at five! Then the statics. That's it."))
+        assertEquals("One line only" to null, FelixRules.sentences(" One line only "))
+    }
 }

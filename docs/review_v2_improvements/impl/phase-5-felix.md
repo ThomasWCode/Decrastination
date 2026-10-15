@@ -188,7 +188,7 @@ Settings added (all `NEVER` in LOOSER unless said):
 
 **Files.** `learn/Briefing.kt`.
 
-**Steps.** `Briefing.run`: after the day record, ask Felix (reason `Morning`) with a 20 s timeout; on an answer, the notification's title is his message's first sentence and `setContentText` the second, with the computed list as the `InboxStyle` lines; on no answer (off, resting, timeout) the list alone as now. Posted on the `FELIX` channel with a reply action (AI-24). Nothing on a day with no slots (the list alone, no call).
+**Steps.** `Briefing.run`: after the day record, ask Felix (reason `Morning`) with a 20 s timeout; on an answer, the notification's title is his message's first sentence and `setContentText` the second, with the computed list as the `InboxStyle` lines; on no answer (off, resting, timeout) the list alone as now. Posted on the `FELIX` channel with a reply action (AI-24). Nothing on a day with no slots (the list alone, no call). *(As built: one sentence only, and the list's title is the text; the morning's answer sets no check, the day's slots doing that; the split is `FelixRules.sentences`, tested there.)*
 
 **Tests.** `DailyTest`: the summary builder unchanged; the Felix path tested through `FelixRules.morningInput`.
 
