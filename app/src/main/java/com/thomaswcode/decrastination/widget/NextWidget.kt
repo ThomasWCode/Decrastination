@@ -71,7 +71,8 @@ class NextWidget : GlanceAppWidget() {
             val runtime by graph.runtime.state.collectAsState()
             val plan = graph.plan(tasks, settings)
             val model = WidgetModel.from(plan, tasks, graph.clock.zone(), runtime, settings.armed, reward = graph.focus.rewardLine(plan))
-            GlanceTheme { Content(model) }
+            // The logo's colours (UI-12), as the app's.
+            GlanceTheme(colors = androidx.glance.material3.ColorProviders(light = com.thomaswcode.decrastination.ui.Colours.Light, dark = com.thomaswcode.decrastination.ui.Colours.Dark)) { Content(model) }
         }
     }
 

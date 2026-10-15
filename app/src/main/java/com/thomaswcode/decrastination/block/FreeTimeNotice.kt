@@ -27,7 +27,7 @@ object FreeTimeNotice {
         Notify.post(
             context,
             ID,
-            NotificationCompat.Builder(context, Channels.FREE_TIME)
+            Notify.builder(context, Channels.FREE_TIME)
                 .setSmallIcon(R.drawable.ic_focus)
                 .setContentTitle("Free time: $what")
                 .setContentText("Covered again when it runs out.")
@@ -50,7 +50,7 @@ object FreeTimeNotice {
         Notify.post(
             context,
             ENDING_ID,
-            NotificationCompat.Builder(context, Channels.FREE_TIME_ENDING)
+            Notify.builder(context, Channels.FREE_TIME_ENDING)
                 .setSmallIcon(R.drawable.ic_focus)
                 .setContentTitle("A minute of free time left")
                 .setContentText("$what is covered again in a minute.")

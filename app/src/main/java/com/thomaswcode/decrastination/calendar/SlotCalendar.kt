@@ -89,7 +89,7 @@ object SlotCalendar {
 
     /** Says a move of yours was written back, and [why]. */
     fun sayRefused(context: Context, move: SlotCalendarDiff.HandMove, zone: ZoneId, why: String) {
-        val notification = NotificationCompat.Builder(context, Channels.CALENDAR)
+        val notification = Notify.builder(context, Channels.CALENDAR)
             .setSmallIcon(R.drawable.ic_focus)
             .setContentTitle("Can't move “${move.desired.title}”")
             .setContentText("Not to ${Instant.ofEpochMilli(move.existing.start).atZone(zone).format(WHEN)}: $why, so it's back where it was.")

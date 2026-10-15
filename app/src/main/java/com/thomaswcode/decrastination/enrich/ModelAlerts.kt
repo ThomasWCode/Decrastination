@@ -26,7 +26,7 @@ object ModelAlerts {
         Notify.post(
             context,
             KEY_ID,
-            NotificationCompat.Builder(context, Channels.MODEL)
+            Notify.builder(context, Channels.MODEL)
                 .setSmallIcon(R.drawable.ic_focus)
                 .setContentTitle("Claude has stopped working")
                 .setContentText(problem.says)
@@ -48,7 +48,7 @@ object ModelAlerts {
             context,
             task.id,
             DROPPED_ID,
-            NotificationCompat.Builder(context, Channels.MODEL)
+            Notify.builder(context, Channels.MODEL)
                 .setSmallIcon(R.drawable.ic_focus)
                 .setContentTitle("Claude's plan was dropped")
                 .setContentText("${task.title}: $why")
