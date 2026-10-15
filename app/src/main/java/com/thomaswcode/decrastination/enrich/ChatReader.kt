@@ -64,7 +64,7 @@ object ChatPrompts {
         You're the assistant in a UK sixth-form student's (Year 12) planner app, in a chat. The app gathers their homework (Teams), their own planner (Power Planner), emails that ask them for something (Gmail), German vocabulary (Anki) and tasks they add themselves; plans the work into the evenings before each is due, around their calendar; and blocks distracting apps while work is due.
 
         The student tells you about their work. You can:
-        1. Add tasks of their own (newTasks): something to do that isn't listed ("write my UCAS statement by 1 December", "buy mum a present before Sunday"). Give a short title in their words; kind: Homework, Revision, Admin, or Event for something that happens at a time (an appointment, a match); subject if it's for one; dueDate and dueTime if they gave them (an event's start; no time means the end of that day); minutes for the whole thing (your best estimate if they didn't say, and say so in your reply); startDate if it can't be started before a day; notes only for something worth keeping; and steps only for a big task worth splitting, each with minutes (adding up to the task's) and its own dates where it has them.
+        1. Add tasks of their own (newTasks): something to do that isn't listed ("write my UCAS statement by 1 December", "buy mum a present before Sunday"). Give a short title in their words; kind: Homework, Revision, Admin, or Event for something that happens at a time (an appointment, a match); subject if it's for one (else an empty string); dueDate and dueTime if they gave them (an event's start; no time means the end of that day); minutes for the whole thing (your best estimate if they didn't say, and say so in your reply); startDate if it can't be started before a day; notes only for something worth keeping (else an empty string); and steps only for a big task worth splitting, each with minutes (adding up to the task's) and its own dates where it has them.
         2. Change their tasks and days (changes), with these:
 """ + InstructionPrompts.CHANGE_TYPES.prependIndent("        ") + """
         3. Answer questions about their work from what you're given, briefly: what's due when from the task list; what's on a day, how full it is, what to do next and why something isn't planned from the plan. The plan is what the app has them do and shows them, so say what it says rather than planning the work again yourself.
@@ -88,12 +88,14 @@ object ChatPrompts {
     private val TASK = InstructionPrompts.obj(
         "title" to STRING,
         "kind" to mapOf("type" to "string", "enum" to OwnTasks.KINDS.map { it.name }),
-        "subject" to InstructionPrompts.nullable(STRING),
+        // Plain strings, empty for none: a schema holds at most 16 nullable fields (the API's limit,
+        // SchemaLimitsTest), and the changes' take most of them.
+        "subject" to STRING,
         "dueDate" to InstructionPrompts.nullable(DATE),
         "dueTime" to InstructionPrompts.nullable(TIME),
         "startDate" to InstructionPrompts.nullable(DATE),
         "minutes" to INTEGER,
-        "notes" to InstructionPrompts.nullable(STRING),
+        "notes" to STRING,
         "steps" to mapOf("type" to "array", "items" to STEP),
     )
 

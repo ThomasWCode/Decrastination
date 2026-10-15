@@ -693,6 +693,8 @@ class FocusService : AccessibilityService() {
             // A session that has run its time.
             graph.focus.session?.takeIf { it.isDue(graph.clock.now(), graph.clock.uptime()) }?.let { Sessions.end(this@FocusService, early = false) }
             graph.applyDueChanges()
+            // A slot whose end went by while its alarm couldn't ring (PL-13).
+            runCatching { graph.slots.sweep() }.onFailure { Log.w(TAG, "Looking at missed slots failed", it) }
             val now = SystemClock.elapsedRealtime()
             if (now - lastWatchdogAt >= WATCHDOG_MS) {
                 lastWatchdogAt = now

@@ -145,6 +145,14 @@ class SettingsActivity : ComponentActivity() {
                     TimeField("School days: blocking from", draft.weekdayBlockFromMin, "weekdayBlockFromMin", form) { draft = draft.copy(weekdayBlockFromMin = it) }
                 }
 
+                // Days with no school and half-days (PL-16): saved as they're added or deleted.
+                item { Section("School") }
+                item { SchoolSection(graph) }
+
+                // The calendar written to and those read (NF-07, DX-13): saved as they're picked.
+                item { Section("Calendar") }
+                item { CalendarSection(graph, this@SettingsActivity) }
+
                 item { Section("Reminders") }
                 item {
                     TimeField("Morning briefing, school days", draft.briefingWeekdayMin, "briefingWeekdayMin", form) { draft = draft.copy(briefingWeekdayMin = it) }

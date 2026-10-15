@@ -9,21 +9,29 @@ import android.os.Looper
 import android.util.Log
 import com.thomaswcode.decrastination.block.Focus
 import com.thomaswcode.decrastination.block.Sessions
+import com.thomaswcode.decrastination.block.SlotAlarms
+import com.thomaswcode.decrastination.block.Slots
+import com.thomaswcode.decrastination.calendar.SlotCalendar
+import com.thomaswcode.decrastination.calendar.SlotCalendarDiff
 import com.thomaswcode.decrastination.core.About
 import com.thomaswcode.decrastination.core.Change
 import com.thomaswcode.decrastination.core.ChangeType
 import com.thomaswcode.decrastination.core.ChatMessage
 import com.thomaswcode.decrastination.core.ChatState
 import com.thomaswcode.decrastination.core.Enrichments
+import com.thomaswcode.decrastination.core.HalfDay
 import com.thomaswcode.decrastination.core.Instruction
 import com.thomaswcode.decrastination.core.InstructionState
 import com.thomaswcode.decrastination.core.InstructionStatus
+import com.thomaswcode.decrastination.core.NoSchool
 import com.thomaswcode.decrastination.core.Instructions
 import com.thomaswcode.decrastination.core.OwnTask
 import com.thomaswcode.decrastination.core.OwnTasks
 import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.Proposal
 import com.thomaswcode.decrastination.core.ProposalState
+import com.thomaswcode.decrastination.core.SchoolCalendar
+import com.thomaswcode.decrastination.core.SlotKind
 import com.thomaswcode.decrastination.core.Speaker
 import com.thomaswcode.decrastination.core.Planner
 import com.thomaswcode.decrastination.core.Source
@@ -93,6 +101,7 @@ import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
@@ -125,17 +134,20 @@ class AppGraph private constructor(context: Context) {
     /** Your chat with Claude (2.0.0, Q29): what you said, its answers, and what became of its cards. */
     val chat = JsonStore(File(app.filesDir, "chat.json"), ChatState.serializer(), ::ChatState)
 
+    /** Days with no school and half-days (PL-16), told to the chat or added in Settings. */
+    val school = JsonStore(File(app.filesDir, "school.json"), SchoolCalendar.serializer(), ::SchoolCalendar)
+
     init {
         // Files that couldn't be read whole at this start: kept for Setup to say, till you've seen them.
         // On record before anything else runs, and only then is a bad file replaced by what was kept
         // of it: a start cut short before then finds it again, and says it (once: its copy is the same).
-        val found = listOfNotNull(tasks.problem, settings.problem, secrets.problem, runtime.problem, log.problem, instructions.problem, chat.problem)
+        val found = listOfNotNull(tasks.problem, settings.problem, secrets.problem, runtime.problem, log.problem, instructions.problem, chat.problem, school.problem)
         if (found.isNotEmpty()) {
             found.forEach { Log.w(TAG, "${it.file} couldn't be read whole; set aside as ${it.copy}") }
             runBlocking {
                 runCatching {
                     runtime.update { it.withUnreadable(found) }
-                }.onSuccess { listOf(tasks, settings, runtime, log, instructions, chat).forEach { it.keepRecovered() } }
+                }.onSuccess { listOf(tasks, settings, runtime, log, instructions, chat, school).forEach { it.keepRecovered() } }
                     .onFailure { Log.w(TAG, "Couldn't keep what was found unreadable", it) }
             }
         }
@@ -195,6 +207,11 @@ class AppGraph private constructor(context: Context) {
             val o = overrides[task.id] ?: TaskOverrides.NONE
             if (o == task.overrides()) task else task.withOverrides(o)
         }
+        // Each day's windows, from the timetable's study periods and the school calendar (PL-15).
+        val days = generateSequence(today) { it.plusDays(1) }.takeWhile { it <= reach }.toList()
+        val calendar = school.value
+        val windows = days.associateWith { com.thomaswcode.decrastination.core.SchoolDays.windows(it, settings, state.timetable, calendar) }
+        val dayKinds = days.associateWith { com.thomaswcode.decrastination.core.SchoolDays.kindOf(it, calendar) }
         return Planner.plan(
             Planner.Input(
                 tasks = tasks,
@@ -207,6 +224,12 @@ class AppGraph private constructor(context: Context) {
                 dayLoads = time.dayLoads,
                 dayCaps = Instructions.dayCaps(applied, today, reach),
                 workedTodayMin = workedToday(now, zone),
+                windows = windows,
+                dayKinds = dayKinds,
+                // Today's pieces where the last plan laid them, where that's still free, and those whose
+                // slots went by undone (PL-13).
+                previousSlots = runtime.value.slots.on(today).previous,
+                missedSlots = runtime.value.slots.on(today).missed.map { it.key }.toSet(),
             ),
         )
     }
@@ -219,6 +242,91 @@ class AppGraph private constructor(context: Context) {
 
     /** The blocker's state and decisions (block/Focus.kt). */
     val focus = Focus(tasks, settings, runtime, log, clock) { state, s, now -> plan(state, s, now) }
+
+    /**
+     * The plan made again as what it depends on changes (PL-13): today's slot starts kept, then the
+     * slot alarms set to it and the widget redrawn.
+     */
+    val watcher = PlanWatcher(
+        scope = scope,
+        changes = merge(
+            tasks.state,
+            settings.state,
+            instructions.state,
+            calendarState,
+            school.state,
+            runtime.state.map { it.slots.previous to it.calibration }.distinctUntilChanged(),
+        ),
+        plan = { plan() },
+        keep = ::keepSlots,
+        hooks = listOf(
+            { made -> SlotAlarms.arm(app, made, clock.now()) },
+            ::writeSlots,
+            { _ -> WidgetUpdater.update(app) },
+        ),
+        onFailure = { Log.w(TAG, "Replanning failed", it) },
+    )
+
+    /** Today's slots as they pass: begun, or missed (PL-13). */
+    val slots = Slots(this)
+
+    /**
+     * [made]'s next seven days written to the calendar you picked (NF-07). A slot you've moved there
+     * is taken as your time for its task's next piece, where its deadline allows; else it's put back,
+     * and you're told.
+     */
+    private suspend fun writeSlots(made: Plan) {
+        clearOldCalendars()
+        val calendarId = settings.value.calendarWriteId ?: return
+        if (!SlotCalendar.allowed(app)) return
+        val zone = clock.zone()
+        val byId = tasks.value.tasks.associateBy { it.id }
+        val before = runtime.value.calendarWritten
+        val written = withContext(Dispatchers.IO) {
+            SlotCalendar.write(app, calendarId, made, zone, before) { move ->
+                val task = move.desired.taskId?.let(byId::get)
+                when {
+                    task == null -> "its task is no longer there"
+                    Instructions.latePin(SlotCalendar.change(move, zone), task, zone) -> "it's due before then"
+                    else -> null
+                }
+            }
+        }
+        // A move taken counts as written only once its instruction is in: stopped before, the next
+        // write finds it a move again, rather than putting it back.
+        val held = SlotCalendarDiff.pending(written.starts, before, written.taken)
+        if (held != before) runtime.update { it.copy(calendarWritten = held) }
+        written.refused.forEach { (move, why) -> SlotCalendar.sayRefused(app, move, zone, why) }
+        for (move in written.taken) {
+            val taskId = move.desired.taskId ?: continue
+            addOwnChange(java.util.UUID.randomUUID().toString(), "Moved in the calendar", About(taskId = taskId, taskTitle = byId[taskId]?.title), SlotCalendar.change(move, zone))
+            runtime.update { it.copy(calendarWritten = it.calendarWritten + (move.desired.uri to move.existing.start)) }
+        }
+    }
+
+    /** The app's events taken out of calendars no longer written to, each kept on the list till that's done. */
+    private suspend fun clearOldCalendars() {
+        val waiting = runtime.value.calendarsToClear
+        if (waiting.isEmpty()) return
+        val cleared = withContext(Dispatchers.IO) { waiting.filter { SlotCalendar.clear(app, it) } }
+        if (cleared.isNotEmpty()) runtime.update { it.copy(calendarsToClear = it.calendarsToClear - cleared.toSet()) }
+    }
+
+    /**
+     * [made]'s today kept for the next plan (PL-13): its work slots' starts, and which missed pieces
+     * went to another day. Written only where that changes something, so keeping them doesn't make
+     * the plan again for nothing.
+     */
+    private suspend fun keepSlots(made: Plan) {
+        // A slot whose grace went by before its alarm or a sweep could see it is missed first: once its
+        // start is replaced by where this plan moved it, nothing would know it was.
+        runCatching { slots.sweep() }.onFailure { Log.w(TAG, "Looking at missed slots failed", it) }
+        val starts = made.todaySlots.filter { it.kind == SlotKind.Work }.associate { it.chunk!!.key to it.start }
+        runtime.update { state ->
+            val kept = state.slots.on(made.today).copy(previous = starts).reconciled(made)
+            if (kept == state.slots) state else state.copy(slots = kept)
+        }
+    }
 
     /** Applies a settings change: at once, or, once armed, pending if it loosens blocking. */
     /**
@@ -447,7 +555,33 @@ class AppGraph private constructor(context: Context) {
             if (tasks.value.tasks.any { Enrichments.jobFor(it) != null && Enrichments.stale(it, modelOn, RuleEnricher.BY, modelOff) }) EnrichWorker.enqueue(app)
         }
         scope.launch { CalendarTime.refresh(app) }
-        scope.launch { calendarChanged.debounce(CALENDAR_QUIET_MS).collect { CalendarTime.refresh(app) } }
+        // A change in the calendar: read again, and the plan made again, so a slot you've moved or
+        // deleted in the calendar written to (which isn't read) is seen (NF-07). The app's own write
+        // brings one replan more, which writes nothing.
+        scope.launch {
+            calendarChanged.debounce(CALENDAR_QUIET_MS).collect {
+                CalendarTime.refresh(app)
+                watcher.poke()
+            }
+        }
+        // The calendar written to, or those not read, changed (NF-07, DX-13): what was written to
+        // one no longer is goes from it, and the calendar's read again.
+        scope.launch {
+            settings.state.map { it.calendarWriteId }.distinctUntilChanged().collect { id ->
+                val was = runtime.value.calendarWrittenTo
+                if (was == id) return@collect
+                // The old one kept on the list to clear till it is: without the permission now, or
+                // should the provider fail, it's tried again at the next replan.
+                runtime.update { state ->
+                    state.copy(calendarWrittenTo = id, calendarWritten = emptyMap(), calendarsToClear = (state.calendarsToClear + listOfNotNull(was)).distinct() - listOfNotNull(id).toSet())
+                }
+                clearOldCalendars()
+                watcher.poke()
+            }
+        }
+        scope.launch {
+            settings.state.map { it.calendarWriteId to it.calendarsExcluded }.distinctUntilChanged().drop(1).collect { CalendarTime.refresh(app) }
+        }
         // Anki's deadline or textbook changed (saved, or a waiting change fallen due): its tasks are
         // made with them, so it's read again now.
         scope.launch {
@@ -502,6 +636,12 @@ class AppGraph private constructor(context: Context) {
                 runCatching { droppedAlerts(state.tasks) }.onFailure { Log.w(TAG, "Dropped-plan warnings failed", it) }
             }
         }
+        // Slots whose end went by with the phone off, as if their alarms had rung; then the plan, made
+        // again as it changes, from now on (PL-13).
+        scope.launch {
+            runCatching { slots.sweep() }.onFailure { Log.w(TAG, "Looking at missed slots failed", it) }
+            watcher.start()
+        }
         // Redraw the widget whenever what it shows may have changed.
         scope.launch {
             combine(tasks.state, settings.state, runtime.state) { _, _, _ -> }.drop(1).debounce(WIDGET_DEBOUNCE_MS).collect {
@@ -539,6 +679,7 @@ class AppGraph private constructor(context: Context) {
             aiUsage = runtime.value.aiUsage,
             instructions = instructions.value.applied,
             ownTasks = tasks.value.tasks.filter { it.source == Source.Own },
+            school = school.value,
         ),
     )
 
@@ -560,6 +701,8 @@ class AppGraph private constructor(context: Context) {
         val ownAdded = Backups.restoredOwnTasks(backup.ownTasks, tasks.value.tasks).map { it.id }.toSet()
         tasks.update { state -> state.copy(tasks = state.tasks + Backups.restoredOwnTasks(backup.ownTasks, state.tasks)) }
         if (ownAdded.isNotEmpty()) layTaskOverrides()
+        // The backup's days off and half-days beside those here (PL-16).
+        school.update { it.withAll(backup.school) }
         val own = ownAdded.size
         val told = buildList {
             if (own > 0) add("$own task${if (own == 1) "" else "s"} of your own")
@@ -1236,7 +1379,21 @@ class AppGraph private constructor(context: Context) {
         val instruction = instructions.value.instructions.firstOrNull { it.id == id && it.state == InstructionStatus.Understood } ?: return@withLock
         if (refuseCircle(instruction)) return@withLock
         if (refuseOnOwnTasks(instruction)) return@withLock
+        if (refuseLate(instruction)) return@withLock
         setApplied(id)
+    }
+
+    /**
+     * [instruction] would put a task's work after its real deadline (PL-04): it's marked unclear,
+     * saying so, rather than applied.
+     */
+    private suspend fun refuseLate(instruction: Instruction): Boolean {
+        val byId = tasks.value.tasks.associateBy { it.id }
+        if (instruction.changes.none { c -> c.taskId?.let(byId::get)?.let { Instructions.latePin(c, it, clock.zone()) } == true }) return false
+        instructions.update { state ->
+            state.copy(instructions = state.instructions.map { if (it.id == instruction.id) it.copy(state = InstructionStatus.Unclear, note = "It's due before then") else it })
+        }
+        return true
     }
 
     /**
@@ -1268,11 +1425,39 @@ class AppGraph private constructor(context: Context) {
     }
 
     private suspend fun setApplied(id: String) {
+        makeOnSchool(id)
         makeOnOwnTasks(id)
+        // A time, a day or a start you gave a task moves it on purpose: its missed slots are forgotten (PL-13).
+        val moved = instructions.value.instructions.firstOrNull { it.id == id }?.changes.orEmpty()
+            .filter { it.type == ChangeType.AtTime || it.type == ChangeType.OnDay || it.type == ChangeType.StartFrom }.mapNotNull { it.taskId }
+        if (moved.isNotEmpty()) runtime.update { state -> state.copy(slots = moved.fold(state.slots) { s, taskId -> s.moved(taskId) }) }
         instructions.update { state ->
             state.copy(instructions = state.instructions.map { if (it.id == id && it.state == InstructionStatus.Understood) it.copy(state = InstructionStatus.Applied, appliedAt = clock.now()) else it })
         }
         layInstructions()
+    }
+
+    /**
+     * [id]'s days off and half-days put in the school calendar (PL-16), and taken out of it: Settings
+     * lists them, and deleting one there is how one is taken back. One left with nothing else to do
+     * is done with, and goes.
+     */
+    private suspend fun makeOnSchool(id: String) {
+        val instruction = instructions.value.instructions.firstOrNull { it.id == id } ?: return
+        val made = instruction.changes.filter { Instructions.schoolEntry(it) != null }
+        if (made.isEmpty()) return
+        school.update { calendar ->
+            made.mapNotNull(Instructions::schoolEntry).fold(calendar) { c, entry ->
+                when (entry) {
+                    is NoSchool -> c.with(entry)
+                    is HalfDay -> c.with(entry)
+                    else -> c
+                }
+            }
+        }
+        instructions.update { state ->
+            state.copy(instructions = state.instructions.mapNotNull { i -> if (i.id != id) i else i.copy(changes = i.changes - made.toSet()).takeIf { it.changes.isNotEmpty() } })
+        }
     }
 
     /**

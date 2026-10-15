@@ -25,7 +25,8 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class PlannerTest {
-    private val settings = Settings()
+    // The box these tests were written for (30 since PL-12).
+    private val settings = Settings(boxMin = 45)
 
     private fun task(
         id: String,
@@ -725,6 +726,239 @@ class PlannerTest {
         val drums = Busy(Fixtures.at("2026-10-08T18:00"), Fixtures.at("2026-10-08T19:00"))
         assertEquals(255, Planner.capacity(thursday, input("2026-10-08T08:00", listOf(drums), emptyMap())))
         assertEquals(660, Planner.capacity(saturday, input("2026-10-08T08:00", emptyList(), mapOf(saturday to 180))))
+    }
+
+    // --- Windows: study periods, break and lunch, the evening (PL-15) ---
+
+    /** Tuesday 13 Oct as a school day: break, lunch either side of eating, a study period, the evening. */
+    private val tuesday = LocalDate.parse("2026-10-13")
+    private val schoolDay = listOf(
+        DayWindow(645, 675, WindowKind.Break), DayWindow(795, 820, WindowKind.Lunch), DayWindow(835, 875, WindowKind.Lunch),
+        DayWindow(875, 930, WindowKind.Study), DayWindow(1005, 1320, WindowKind.Evening),
+    )
+
+    private fun windowed(tasks: List<TaskItem>, at: String, windows: Map<LocalDate, List<DayWindow>> = mapOf(tuesday to schoolDay), busy: List<Busy> = emptyList()) =
+        Planner.Input(tasks, Fixtures.at(at), LONDON, settings, busy = busy, windows = windows)
+
+    @Test
+    fun `a day with windows has each piece at a time, the next being the slot under way or the one after`() {
+        // Tuesday 16:50, two half hours for home due tomorrow night: tonight from 16:50, a break between.
+        val tasks = listOf(task("a", Fixtures.at("2026-10-14T23:59"), effort = 30), task("b", Fixtures.at("2026-10-14T23:59"), effort = 30))
+        val plan = Planner.plan(windowed(tasks, "2026-10-13T16:50"))
+        val slots = plan.todayBucket!!.slots
+        fun hm(time: Long) = java.time.Instant.ofEpochMilli(time).atZone(LONDON).toLocalTime().toString()
+        assertEquals(listOf("16:50–17:20", "17:25–17:55"), slots.map { hm(it.start) + "–" + hm(it.end) })
+        assertEquals(slots[0].chunk, plan.next)
+        assertEquals(slots[1].chunk, plan.then)
+        // At 17:05, with the first under way where the last plan put it: still the next, and kept there.
+        val starts = slots.associate { it.chunk!!.key to it.start }
+        val later = Planner.plan(windowed(tasks, "2026-10-13T17:05").copy(previousSlots = starts))
+        assertEquals(slots.map { it.start }, later.todaySlots.map { it.start })
+        assertEquals(slots[0].chunk!!.key, later.next!!.key)
+        assertEquals(slots[1].chunk!!.key, later.then!!.key)
+        // Without windows, no slots: the day's pieces in order, as before.
+        assertTrue(Planner.plan(windowed(tasks, "2026-10-13T16:50", windows = emptyMap())).todayBucket!!.slots.isEmpty())
+    }
+
+    @Test
+    fun `a missed slot's piece moves to the next free time, the others staying where they were`() {
+        // Tuesday 16:50: three half hours due tomorrow night, at 16:50, 17:25 and 18:00.
+        val tasks = listOf("a", "b", "c").map { task(it, Fixtures.at("2026-10-14T23:59"), effort = 30) }
+        val first = Planner.plan(windowed(tasks, "2026-10-13T16:50")).todaySlots
+        fun hm(time: Long) = java.time.Instant.ofEpochMilli(time).atZone(LONDON).toLocalTime().toString()
+        assertEquals(listOf("16:50", "17:25", "18:00"), first.map { hm(it.start) })
+        // 17:30: a's slot went by undone, so its start isn't kept (PL-13); b's under way and c's stay.
+        val starts = first.associate { it.chunk!!.key to it.start }
+        val missed = first[0].chunk!!.key
+        val later = Planner.plan(windowed(tasks, "2026-10-13T17:30").copy(previousSlots = starts - missed)).todaySlots
+        assertEquals(listOf("b" to "17:25", "c" to "18:00", "a" to "18:35"), later.map { it.chunk!!.title to hm(it.start) })
+        // And it says why it moved.
+        val missedPlan = Planner.plan(windowed(tasks, "2026-10-13T17:30").copy(previousSlots = starts - missed, missedSlots = setOf(missed)))
+        assertEquals(Why.Refitted, missedPlan.ordered.single { it.key == missed }.why)
+        assertEquals("Moved when its time passed", missedPlan.ordered.single { it.key == missed }.whyLine(tuesday, LONDON))
+        assertTrue(missedPlan.ordered.filter { it.key != missed }.none { it.why == Why.Refitted })
+    }
+
+    // --- Pins: a day, a time (PL-04) ---
+
+    @Test
+    fun `a day you give for a task keeps all of it on that day`() {
+        // Ninety minutes due in ten days, put on Saturday: both pieces Saturday, where you put them.
+        val essay = task("essay", Fixtures.at("2026-10-18T23:59"), effort = 90).copy(userOnDay = "2026-10-10")
+        val plan = plan(listOf(essay), "2026-10-08T17:00")
+        assertEquals(listOf(LocalDate.parse("2026-10-10")), plan.dayOf("essay"))
+        assertTrue(plan.chunksOf("teams:essay").all { it.why == Why.Pinned && !it.behind }, "${plan.chunksOf("teams:essay").map { it.why }}")
+        assertEquals("Where you put it", plan.chunksOf("teams:essay").first().whyLine(LocalDate.parse("2026-10-08"), LONDON))
+        // A day gone by, or after its deadline, isn't kept to.
+        assertTrue(plan(listOf(essay.copy(userOnDay = "2026-10-07")), "2026-10-08T17:00").chunksOf("teams:essay").none { it.why == Why.Pinned })
+        assertTrue(plan(listOf(essay.copy(userOnDay = "2026-10-20")), "2026-10-08T17:00").chunksOf("teams:essay").none { it.why == Why.Pinned })
+    }
+
+    @Test
+    fun `a time you give for a task's next piece holds it then, the rest after it`() {
+        // Monday 17:00; the essay's next piece at 19:30 on Tuesday (a school day with windows), due Friday.
+        val essay = task("essay", Fixtures.at("2026-10-16T23:59"), effort = 90).copy(userAtTime = Fixtures.at("2026-10-13T19:30"))
+        val plan = Planner.plan(windowed(listOf(essay), "2026-10-12T17:00"))
+        val pinned = plan.chunksOf("teams:essay").single { it.why == Why.Pinned }
+        assertEquals(1, pinned.part)
+        val slot = plan.bucket(tuesday)!!.slotOf(pinned)!!
+        assertEquals(Fixtures.at("2026-10-13T19:30"), slot.start)
+        assertTrue(slot.pinned)
+        // The rest no earlier than it.
+        val days = plan.buckets.flatMap { b -> b.chunks.filter { it.taskId == "teams:essay" }.map { b.date } }
+        assertTrue(days.all { it >= tuesday }, "$days")
+        // A time at or past its deadline is left alone.
+        val late = essay.copy(userAtTime = Fixtures.at("2026-10-17T10:00"))
+        assertTrue(Planner.plan(windowed(listOf(late), "2026-10-12T17:00")).chunksOf("teams:essay").none { it.why == Why.Pinned })
+    }
+
+    @Test
+    fun `work you put on a day has its time before work due that day`() {
+        // Thursday 17:00, 300 minutes left: five hours due tonight, and an hour you put on today.
+        val tonight = task("tonight", Fixtures.at("2026-10-08T23:59"), effort = 300)
+        val essay = task("essay", Fixtures.at("2026-10-18T23:59"), effort = 60).copy(userOnDay = "2026-10-08")
+        val plan = plan(listOf(tonight, essay), "2026-10-08T17:00")
+        assertEquals(listOf(LocalDate.parse("2026-10-08")), plan.dayOf("essay"))
+        assertTrue(plan.chunksOf("teams:essay").none { it.behind })
+        // What's due tonight has the 240 minutes after it.
+        assertEquals(listOf(WontFit("teams:tonight", "tonight", 300, 240, Fixtures.at("2026-10-08T23:59"))), plan.wontFit)
+    }
+
+    @Test
+    fun `a day or a time before a task can start isn't kept to`() {
+        val essay = task("essay", Fixtures.at("2026-10-18T23:59"), effort = 60).copy(notBefore = Fixtures.at("2026-10-12T00:00"))
+        assertTrue(plan(listOf(essay.copy(userOnDay = "2026-10-10")), "2026-10-08T17:00").chunksOf("teams:essay").none { it.why == Why.Pinned })
+        assertTrue(plan(listOf(essay.copy(userAtTime = Fixtures.at("2026-10-10T19:00"))), "2026-10-08T17:00").chunksOf("teams:essay").none { it.why == Why.Pinned })
+        // From the day it can start, it is.
+        assertTrue(plan(listOf(essay.copy(userOnDay = "2026-10-13")), "2026-10-08T17:00").chunksOf("teams:essay").all { it.why == Why.Pinned })
+    }
+
+    @Test
+    fun `a time you give past a plan's date leaves the date behind`() {
+        // An email's date Claude read but didn't quote, Saturday; its next piece put on Monday at 19:00:
+        // Monday it is, and nothing of it late for Saturday.
+        val email = task("form", Fixtures.at("2026-10-10T23:59"), effort = 60, kind = Kind.Admin)
+            .copy(id = "gmail:form", source = Source.Gmail, sourceValues = SourceValues(Kind.Admin, Fixtures.at("2026-10-10T23:59"), null), userAtTime = Fixtures.at("2026-10-12T19:00"))
+        assertFalse(email.hardDeadline)
+        val plan = plan(listOf(email), "2026-10-08T17:00")
+        val days = plan.buckets.filter { b -> b.chunks.any { it.taskId == "gmail:form" } }.map { it.date }
+        assertEquals(LocalDate.parse("2026-10-12"), days.first())
+        assertTrue(plan.chunksOf("gmail:form").none { it.behind || it.overdue })
+    }
+
+    @Test
+    fun `capacity sums a day's windows, the evening's being what home work has`() {
+        // 30 + 25 + 40 + 55 at school, 315 in the evening.
+        assertEquals(Planner.Capacity(315, 465), Planner.capacityOf(tuesday, windowed(emptyList(), "2026-10-13T08:00")))
+        // A school window with less than 15 minutes left isn't used: a meeting through most of break.
+        val meeting = Busy(Fixtures.at("2026-10-13T10:45"), Fixtures.at("2026-10-13T11:05"))
+        assertEquals(Planner.Capacity(315, 435), Planner.capacityOf(tuesday, windowed(emptyList(), "2026-10-13T08:00", busy = listOf(meeting))))
+        // After school, only the evening is left.
+        assertEquals(Planner.Capacity(315, 315), Planner.capacityOf(tuesday, windowed(emptyList(), "2026-10-13T15:45")))
+    }
+
+    @Test
+    fun `school time split by busy time into stretches too short to use isn't counted`() {
+        // A ten-minute call in the middle of break leaves two ten-minute stretches, under the 15 a
+        // school slot needs: none of break counts, so school has lunch and the study period's 120.
+        val call = Busy(Fixtures.at("2026-10-13T10:55"), Fixtures.at("2026-10-13T11:05"))
+        assertEquals(Planner.Capacity(315, 435), Planner.capacityOf(tuesday, windowed(emptyList(), "2026-10-13T08:00", busy = listOf(call))))
+    }
+
+    @Test
+    fun `home work never takes school time, and work done anywhere takes school's first`() {
+        // The evening taken by a lesson: only school's 150 minutes are free on Tuesday.
+        val drums = Busy(Fixtures.at("2026-10-13T16:45"), Fixtures.at("2026-10-13T22:00"))
+        val essay = task("essay", Fixtures.at("2026-10-13T23:59"), effort = 30)
+        val plan = Planner.plan(windowed(listOf(essay), "2026-10-13T08:00", busy = listOf(drums)))
+        // Teams homework is done at home: none of it at school, so it's behind tonight.
+        assertTrue(plan.chunksOf("teams:essay").all { it.where == Where.Home })
+        assertEquals(Planner.Capacity(0, 150), Planner.capacityOf(tuesday, windowed(emptyList(), "2026-10-13T08:00", busy = listOf(drums))))
+        // A reading done anywhere, and the essay at home, both due tonight: the reading takes school's
+        // time, so the evening holds the essay whole.
+        val reading = task("reading", Fixtures.at("2026-10-13T23:59"), effort = 60, kind = Kind.Admin)
+        val both = Planner.plan(windowed(listOf(reading, task("essay", Fixtures.at("2026-10-13T23:59"), effort = 300)), "2026-10-13T08:00"))
+        assertTrue(both.chunksOf("teams:essay").none { it.behind }, "${both.chunksOf("teams:essay").map { it.minutes to it.behind }}")
+        assertTrue(both.chunksOf("teams:reading").all { it.where == Where.Anywhere })
+    }
+
+    @Test
+    fun `a step can say it's done anywhere, its task's other steps at home`() {
+        val steps = listOf(SubStep("Read the chapter", 30, where = "anywhere"), SubStep("Write it up", 40))
+        val plan = Planner.plan(windowed(listOf(task("t", Fixtures.at("2026-10-20T23:59"), steps = steps)), "2026-10-13T08:00"))
+        assertEquals(listOf(Where.Anywhere, Where.Home), plan.chunksOf("teams:t").map { it.where })
+        // In order still: the reading on or before the write-up's day.
+        val days = plan.buckets.flatMap { b -> b.chunks.filter { it.taskId == "teams:t" }.map { b.date } }
+        assertEquals(days.sorted(), days)
+    }
+
+    @Test
+    fun `work for home not open yet is said not to fit by the evenings' time, not school's`() {
+        // Opens Tuesday morning, due at 16:00, before the evening: school's 150 minutes come before
+        // it, but homework for home has none of them, so no room at all. Done anywhere, it fits.
+        val prep = task("prep", Fixtures.at("2026-10-13T16:00"), effort = 60, available = Fixtures.at("2026-10-13T08:00"))
+        assertEquals(listOf(WontFit("teams:prep", "prep", 60, 0, Fixtures.at("2026-10-13T16:00"))), Planner.plan(windowed(listOf(prep), "2026-10-12T17:00")).wontFit)
+        assertEquals(emptyList(), Planner.plan(windowed(listOf(prep.copy(kind = Kind.Admin)), "2026-10-12T17:00")).wontFit)
+    }
+
+    @Test
+    fun `a same-day deadline is usable where a window comes before it`() {
+        // No margin: due at 11:30, Tuesday's break (10:45) comes before it, so Tuesday is its day;
+        // without windows, a morning deadline's day isn't one, and Monday it is.
+        val noMargin = Calibration(marginDays = mapOf(Kind.Admin to 0))
+        val form = task("form", Fixtures.at("2026-10-13T11:30"), effort = 20, kind = Kind.Admin)
+        assertEquals(listOf(tuesday), Planner.plan(windowed(listOf(form), "2026-10-12T17:00").copy(calibration = noMargin)).dayOf("form"))
+        assertEquals(listOf(LocalDate.parse("2026-10-12")), Planner.plan(windowed(listOf(form), "2026-10-12T17:00", windows = emptyMap()).copy(calibration = noMargin)).dayOf("form"))
+        // Due at 10:30, before every window that day: Monday again.
+        val early = form.copy(dueAt = Fixtures.at("2026-10-13T10:30"))
+        assertEquals(listOf(LocalDate.parse("2026-10-12")), Planner.plan(windowed(listOf(early), "2026-10-12T17:00").copy(calibration = noMargin)).dayOf("form"))
+    }
+
+    @Test
+    fun `a same-day deadline counts only by windows the work can use, and only their time before it`() {
+        // No margin, due Tuesday 13:00: homework for home can't use break, so Monday it is; work done
+        // anywhere has break's 30 minutes before it, so a 25-minute form goes in it, a 45-minute one doesn't.
+        val noMargin = Calibration(marginDays = mapOf(Kind.Homework to 0, Kind.Admin to 0))
+        val essay = task("essay", Fixtures.at("2026-10-13T13:00"), effort = 25)
+        assertEquals(listOf(LocalDate.parse("2026-10-12")), Planner.plan(windowed(listOf(essay), "2026-10-12T17:00").copy(calibration = noMargin)).dayOf("essay"))
+        val form = task("form", Fixtures.at("2026-10-13T13:00"), effort = 25, kind = Kind.Admin)
+        assertEquals(listOf(tuesday), Planner.plan(windowed(listOf(form), "2026-10-12T17:00").copy(calibration = noMargin)).dayOf("form"))
+        val long = form.copy(sourceEffortMin = 45)
+        assertEquals(listOf(LocalDate.parse("2026-10-12")), Planner.plan(windowed(listOf(long), "2026-10-12T17:00").copy(calibration = noMargin)).dayOf("form"))
+    }
+
+    @Test
+    fun `on its deadline's day a task's school work leaves its evening time for its home work`() {
+        // No margin, due Tuesday 17:15, Monday's evening gone: the write-up for home has the evening's
+        // half hour before the deadline, the reading after it (done anywhere) school's time, both Tuesday.
+        val noMargin = Calibration(marginDays = mapOf(Kind.Homework to 0))
+        val steps = listOf(SubStep("Write it up", 30), SubStep("Read the chapter", 30, where = "anywhere"))
+        val plan = Planner.plan(windowed(listOf(task("t", Fixtures.at("2026-10-13T17:15"), steps = steps)), "2026-10-12T21:55").copy(calibration = noMargin))
+        assertEquals(listOf(tuesday, tuesday), plan.buckets.flatMap { b -> b.chunks.filter { it.taskId == "teams:t" }.map { b.date } })
+        assertTrue(plan.chunksOf("teams:t").none { it.behind }, "${plan.chunksOf("teams:t").map { it.why }}")
+        assertEquals(emptyList(), plan.wontFit)
+    }
+
+    @Test
+    fun `a step's piece keeps its key when a step before it is done, so its slot's start is kept`() {
+        val steps = listOf(SubStep("Read", 20), SubStep("Write", 30))
+        val t = task("t", Fixtures.at("2026-10-20T09:00"), steps = steps)
+        val before = plan(listOf(t), "2026-10-08T17:00").chunksOf("teams:t").single { it.step == "Write" }.key
+        val after = plan(listOf(t.copy(subSteps = listOf(steps[0].copy(done = true), steps[1]))), "2026-10-08T17:00").chunksOf("teams:t").single().key
+        assertEquals("teams:t#1", after)
+        assertEquals(before, after)
+    }
+
+    @Test
+    fun `today's work with no slot comes before tomorrow's slots`() {
+        // Tuesday 21:50: Monday's evening gone but for ten minutes, a half hour due tonight has no
+        // slot left today; it's still the next thing, not tomorrow's first slot.
+        val tonight = task("tonight", Fixtures.at("2026-10-13T23:59"), effort = 30)
+        val tomorrow = task("tomorrow", Fixtures.at("2026-10-15T23:59"), effort = 30)
+        val windows = mapOf(tuesday to schoolDay, tuesday.plusDays(1) to schoolDay)
+        val plan = Planner.plan(windowed(listOf(tonight, tomorrow), "2026-10-13T21:50", windows = windows))
+        assertTrue(plan.todaySlots.none { it.chunk?.taskId == "teams:tonight" })
+        assertEquals("teams:tonight", plan.next?.taskId)
     }
 
     @Test

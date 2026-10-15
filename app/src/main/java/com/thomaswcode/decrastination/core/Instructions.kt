@@ -86,6 +86,18 @@ enum class ChangeType {
 
     /** No work from [Change.startMin] to [Change.endMin] on [Change.date], or every [Change.weekday]. */
     BusyTime,
+
+    /** No school from [Change.date] to [Change.endDate] (PL-16): kept in the school calendar, not the instruction. */
+    NoSchool,
+
+    /** School on [Change.date] ends at [Change.endMin] (PL-16): kept in the school calendar too. */
+    HalfDay,
+
+    /** All of the task's remaining work on [Change.date] (PL-04). */
+    OnDay,
+
+    /** The task's next piece starts at [Change.time]: [Change.date] at [Change.startMin] (PL-04). */
+    AtTime,
 }
 
 /** One change an instruction makes. Which fields mean anything depends on [type]. */
@@ -93,7 +105,7 @@ enum class ChangeType {
 data class Change(
     val type: ChangeType,
     val taskId: String? = null,
-    /** [ChangeType.StartFrom]'s start or [ChangeType.DueBy]'s deadline. */
+    /** [ChangeType.StartFrom]'s start, [ChangeType.DueBy]'s deadline, or [ChangeType.AtTime]'s start. */
     val time: Long? = null,
     val afterTaskId: String? = null,
     val eventKey: String? = null,
@@ -102,6 +114,8 @@ data class Change(
     val eventAnswer: String? = null,
     /** A day, as YYYY-MM-DD. */
     val date: String? = null,
+    /** [ChangeType.NoSchool]'s last day, as YYYY-MM-DD. */
+    val endDate: String? = null,
     /** Every such day, 1 (Monday) to 7 (Sunday). */
     val weekday: Int? = null,
     val freeMin: Int? = null,
@@ -120,7 +134,17 @@ data class InstructionState(val instructions: List<Instruction> = emptyList()) {
 }
 
 /** What applied instructions say about one task. */
-data class TaskOverrides(val notATask: Boolean = false, val from: Long? = null, val after: String? = null, val dueAt: Long? = null, val minutes: Int? = null) {
+data class TaskOverrides(
+    val notATask: Boolean = false,
+    val from: Long? = null,
+    val after: String? = null,
+    val dueAt: Long? = null,
+    val minutes: Int? = null,
+    /** All of it on this day, YYYY-MM-DD (PL-04). */
+    val onDay: String? = null,
+    /** Its next piece at this time (PL-04). */
+    val atTime: Long? = null,
+) {
     companion object {
         val NONE = TaskOverrides()
     }
@@ -181,6 +205,8 @@ object Instructions {
     /** Each task's overrides from [applied] (in order: a later one's wins). */
     fun taskOverrides(applied: List<Instruction>): Map<String, TaskOverrides> {
         val out = HashMap<String, TaskOverrides>()
+        // The day of each task's time in force: a day given after it keeps it where it's that day.
+        val timeOn = HashMap<String, String?>()
         for (change in applied.flatMap { it.changes }) {
             val id = change.taskId ?: continue
             val o = out[id] ?: TaskOverrides.NONE
@@ -190,6 +216,10 @@ object Instructions {
                 ChangeType.After -> o.copy(after = change.afterTaskId)
                 ChangeType.DueBy -> o.copy(dueAt = change.time)
                 ChangeType.Minutes -> o.copy(minutes = change.minutes)
+                // The later of a day for all of it and a time for its next piece wins, but a time on the day
+                // it's kept to stays, whichever came first.
+                ChangeType.OnDay -> o.copy(onDay = change.date, atTime = o.atTime?.takeIf { timeOn[id] == change.date })
+                ChangeType.AtTime -> o.copy(atTime = change.time, onDay = o.onDay?.takeIf { it == change.date }).also { timeOn[id] = change.date }
                 else -> o
             }
         }
@@ -296,7 +326,40 @@ object Instructions {
             }
             ChangeType.DayLimit -> if ((change.freeMin ?: 0) == 0) "${day(change)}: no work" else "${day(change)}: at most ${hours(change.freeMin!!)} of work"
             ChangeType.BusyTime -> "${day(change)}, ${clock(change.startMin)}–${clock(change.endMin)}: busy, no work"
+            ChangeType.NoSchool -> {
+                val first = date(change.date)
+                val last = date(change.endDate) ?: first
+                when {
+                    first == null -> "No school on a day"
+                    last == null || last == first -> "No school on ${first.format(DAY)}"
+                    else -> "No school from ${first.format(DAY)} to ${last.format(DAY)}"
+                }
+            }
+            ChangeType.HalfDay -> "Half-day on ${day(change)}, ends ${clock(change.endMin)}"
+            ChangeType.OnDay -> "All of ${title(change.taskId)} on ${day(change)}"
+            ChangeType.AtTime -> "${title(change.taskId)} at ${clock(change.startMin)} on ${day(change)}"
         }
+    }
+
+    /**
+     * Whether [change] puts [task]'s work after its real deadline (PL-04): all of it on a day after
+     * the deadline's, or its next piece at or after the deadline. Then it isn't applied: it's due
+     * before then.
+     */
+    fun latePin(change: Change, task: TaskItem, zone: ZoneId): Boolean {
+        val real = task.realDeadline ?: return false
+        return when (change.type) {
+            ChangeType.OnDay -> date(change.date)?.let { it > Instant.ofEpochMilli(real).atZone(zone).toLocalDate() } == true
+            ChangeType.AtTime -> change.time?.let { it >= real } == true
+            else -> false
+        }
+    }
+
+    /** What [change] puts in the school calendar (PL-16), or null for one of another kind or without its dates. */
+    fun schoolEntry(change: Change): Any? = when (change.type) {
+        ChangeType.NoSchool -> change.date?.let { from -> NoSchool(from, maxOf(from, change.endDate ?: from)) }
+        ChangeType.HalfDay -> change.date?.let { date -> change.endMin?.let { HalfDay(date, it) } }
+        else -> null
     }
 
     private fun clock(minutes: Int?): String = minutes?.let { "%02d:%02d".format(Locale.UK, it / 60, it % 60) } ?: "?"
@@ -311,7 +374,7 @@ object Instructions {
 }
 
 /** What [task]'s instructions say of it now, as [TaskOverrides] holds it. */
-fun TaskItem.overrides(): TaskOverrides = TaskOverrides(userNotATask, userFrom, userAfter, userDueAt, userEffortMin)
+fun TaskItem.overrides(): TaskOverrides = TaskOverrides(userNotATask, userFrom, userAfter, userDueAt, userEffortMin, userOnDay, userAtTime)
 
 /**
  * The task with [o] as its instructions' say: kept on it, and laid over what the source and the
@@ -326,4 +389,6 @@ fun TaskItem.withOverrides(o: TaskOverrides): TaskItem =
         userAfter = o.after,
         userDueAt = o.dueAt,
         userEffortMin = o.minutes,
+        userOnDay = o.onDay,
+        userAtTime = o.atTime,
     ).enriched()

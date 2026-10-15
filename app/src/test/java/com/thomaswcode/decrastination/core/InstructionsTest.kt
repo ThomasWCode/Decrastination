@@ -331,6 +331,100 @@ class InstructionsTest {
     }
 
     @Test
+    fun `days off and half-days are read as dates, and said`() {
+        // Half term as one change over its days; a half-day ending at 12:30 (PL-16).
+        val reading = parse(
+            """{"understood":true,"question":null,"changes":[
+              {"type":"NoSchool","taskId":null,"afterTaskId":null,"eventKey":null,"eventTime":null,"minutes":null,"date":"2026-10-26","endDate":"2026-10-30","weekday":null,"time":null,"endTime":null},
+              {"type":"NoSchool","taskId":null,"afterTaskId":null,"eventKey":null,"eventTime":null,"minutes":null,"date":"2026-11-13","endDate":null,"weekday":null,"time":null,"endTime":null},
+              {"type":"HalfDay","taskId":null,"afterTaskId":null,"eventKey":null,"eventTime":null,"minutes":null,"date":"2026-10-23","endDate":null,"weekday":null,"time":null,"endTime":"12:30"}
+            ]}""",
+        )
+        val changes = assertIs<InstructionAnswers.Reading.Changes>(reading).changes
+        assertEquals(Change(ChangeType.NoSchool, date = "2026-10-26", endDate = "2026-10-30"), changes[0])
+        assertEquals(Change(ChangeType.NoSchool, date = "2026-11-13", endDate = "2026-11-13"), changes[1])
+        assertEquals(Change(ChangeType.HalfDay, date = "2026-10-23", endMin = 750), changes[2])
+        val tasks = emptyMap<String, TaskItem>()
+        assertEquals("No school from Mon 26 Oct to Fri 30 Oct", Instructions.describe(changes[0], tasks, LONDON))
+        assertEquals("No school on Fri 13 Nov", Instructions.describe(changes[1], tasks, LONDON))
+        assertEquals("Half-day on Fri 23 Oct, ends 12:30", Instructions.describe(changes[2], tasks, LONDON))
+        assertEquals(NoSchool("2026-10-26", "2026-10-30"), Instructions.schoolEntry(changes[0]))
+        assertEquals(HalfDay("2026-10-23", 750), Instructions.schoolEntry(changes[2]))
+        // An end before the start, or a weekday for a stretch, isn't a reading the app can use.
+        fun one(change: String) = parse("""{"understood":true,"question":null,"changes":[$change]}""")
+        assertIs<InstructionAnswers.Reading.Unclear>(one("""{"type":"NoSchool","taskId":null,"afterTaskId":null,"eventKey":null,"eventTime":null,"minutes":null,"date":"2026-10-30","endDate":"2026-10-26","weekday":null,"time":null,"endTime":null}"""))
+        assertIs<InstructionAnswers.Reading.Unclear>(one("""{"type":"NoSchool","taskId":null,"afterTaskId":null,"eventKey":null,"eventTime":null,"minutes":null,"date":null,"endDate":null,"weekday":"Monday","time":null,"endTime":null}"""))
+        assertIs<InstructionAnswers.Reading.Unclear>(one("""{"type":"HalfDay","taskId":null,"afterTaskId":null,"eventKey":null,"eventTime":null,"minutes":null,"date":"2026-10-23","endDate":null,"weekday":null,"time":null,"endTime":null}"""))
+    }
+
+    @Test
+    fun `a day for a task and a time for its next piece are read, said, and laid on the task`() {
+        // Friday 9 Oct: all of the essay on Sunday; the prep's next piece at 19:30 on Monday (PL-04).
+        val reading = parse(
+            """{"understood":true,"question":null,"changes":[
+              {"type":"OnDay","taskId":"teams:essay","afterTaskId":null,"eventKey":null,"eventTime":null,"minutes":null,"date":"2026-10-11","endDate":null,"weekday":null,"time":null,"endTime":null},
+              {"type":"AtTime","taskId":"teams:prep","afterTaskId":null,"eventKey":null,"eventTime":null,"minutes":null,"date":"2026-10-12","endDate":null,"weekday":null,"time":"19:30","endTime":null}
+            ]}""",
+        )
+        val changes = assertIs<InstructionAnswers.Reading.Changes>(reading).changes
+        assertEquals(Change(ChangeType.OnDay, taskId = "teams:essay", date = "2026-10-11"), changes[0])
+        assertEquals(Change(ChangeType.AtTime, taskId = "teams:prep", date = "2026-10-12", startMin = 19 * 60 + 30, time = Fixtures.at("2026-10-12T19:30")), changes[1])
+        val tasks = listOf(essay, prep).associateBy { it.id }
+        assertEquals("All of “essay” on Sun 11 Oct", Instructions.describe(changes[0], tasks, LONDON))
+        assertEquals("“prep” at 19:30 on Mon 12 Oct", Instructions.describe(changes[1], tasks, LONDON))
+        // Laid on the tasks.
+        val overrides = Instructions.taskOverrides(listOf(applied(*changes.toTypedArray())))
+        assertEquals("2026-10-11", overrides.getValue(essay.id).onDay)
+        assertEquals(Fixtures.at("2026-10-12T19:30"), prep.withOverrides(overrides.getValue(prep.id)).userAtTime)
+        assertEquals(overrides.getValue(prep.id), prep.withOverrides(overrides.getValue(prep.id)).overrides())
+        // A time on the day all of it is kept to keeps the day; a later day for all of it drops a time on another.
+        val both = Instructions.taskOverrides(listOf(applied(Change(ChangeType.OnDay, taskId = prep.id, date = "2026-10-12"), changes[1])))
+        assertEquals(TaskOverrides(onDay = "2026-10-12", atTime = Fixtures.at("2026-10-12T19:30")), both.getValue(prep.id))
+        val later = Instructions.taskOverrides(listOf(applied(changes[1]), applied(Change(ChangeType.OnDay, taskId = prep.id, date = "2026-10-11"), at = now + 1)))
+        assertEquals(TaskOverrides(onDay = "2026-10-11"), later.getValue(prep.id))
+        // The day given after the time, for the time's own day: both kept, as in the other order.
+        val same = Instructions.taskOverrides(listOf(applied(changes[1]), applied(Change(ChangeType.OnDay, taskId = prep.id, date = "2026-10-12"), at = now + 1)))
+        assertEquals(TaskOverrides(onDay = "2026-10-12", atTime = Fixtures.at("2026-10-12T19:30")), same.getValue(prep.id))
+        // A weekday isn't a day for a task, nor a time without one.
+        fun one(change: String) = parse("""{"understood":true,"question":null,"changes":[$change]}""")
+        assertIs<InstructionAnswers.Reading.Unclear>(one("""{"type":"OnDay","taskId":"teams:essay","afterTaskId":null,"eventKey":null,"eventTime":null,"minutes":null,"date":null,"endDate":null,"weekday":"Monday","time":null,"endTime":null}"""))
+        assertIs<InstructionAnswers.Reading.Unclear>(one("""{"type":"AtTime","taskId":"teams:essay","afterTaskId":null,"eventKey":null,"eventTime":null,"minutes":null,"date":"2026-10-11","endDate":null,"weekday":null,"time":null,"endTime":null}"""))
+    }
+
+    @Test
+    fun `a day or a time after a task's real deadline is late`() {
+        // The essay's due Monday 12 Oct, 09:00.
+        assertTrue(Instructions.latePin(Change(ChangeType.OnDay, taskId = essay.id, date = "2026-10-13"), essay, LONDON))
+        assertFalse(Instructions.latePin(Change(ChangeType.OnDay, taskId = essay.id, date = "2026-10-12"), essay, LONDON))
+        assertTrue(Instructions.latePin(Change(ChangeType.AtTime, taskId = essay.id, date = "2026-10-12", startMin = 600, time = Fixtures.at("2026-10-12T10:00")), essay, LONDON))
+        assertFalse(Instructions.latePin(Change(ChangeType.AtTime, taskId = essay.id, date = "2026-10-11", startMin = 1170, time = Fixtures.at("2026-10-11T19:30")), essay, LONDON))
+        // Undated, or a plan's date: never late.
+        assertFalse(Instructions.latePin(Change(ChangeType.OnDay, taskId = "teams:x", date = "2027-01-01"), task("x", null), LONDON))
+    }
+
+    @Test
+    fun `the school calendar merges stretches that overlap or run on, and knows its days`() {
+        val calendar = SchoolCalendar()
+            .with(NoSchool("2026-10-26", "2026-10-28", "Half term"))
+            .with(NoSchool("2026-10-28", "2026-10-30"))
+            .with(NoSchool("2026-12-21", "2027-01-01", "Christmas"))
+            // Runs on from half term: the same stretch.
+            .with(NoSchool("2026-10-31", "2026-11-01"))
+            .with(HalfDay("2026-10-23", 750))
+            .with(HalfDay("2026-10-23", 780))
+        assertEquals(listOf(NoSchool("2026-10-26", "2026-11-01", "Half term"), NoSchool("2026-12-21", "2027-01-01", "Christmas")), calendar.noSchool)
+        assertEquals(listOf(HalfDay("2026-10-23", 780)), calendar.halfDays)
+        assertFalse(calendar.isSchoolDay(java.time.LocalDate.parse("2026-10-27")))
+        assertTrue(calendar.isSchoolDay(java.time.LocalDate.parse("2026-11-02")))
+        assertFalse(calendar.isSchoolDay(java.time.LocalDate.parse("2026-10-24")))
+        assertEquals(780, calendar.halfDay(java.time.LocalDate.parse("2026-10-23"))?.endsAtMin)
+        // A stretch that joins two others makes them one.
+        val joined = SchoolCalendar().with(NoSchool("2026-10-01", "2026-10-02")).with(NoSchool("2026-10-05", "2026-10-06")).with(NoSchool("2026-10-03", "2026-10-04"))
+        assertEquals(listOf(NoSchool("2026-10-01", "2026-10-06")), joined.noSchool)
+        assertEquals(listOf(NoSchool("2026-12-21", "2027-01-01", "Christmas")), calendar.without(calendar.noSchool.first()).noSchool)
+    }
+
+    @Test
     fun `minutes fewer than a task's steps aren't taken from Claude`() {
         val stepped = essay.copy(subSteps = listOf(SubStep("a", 20), SubStep("b", 20), SubStep("c", 20)))
         val reading = InstructionAnswers.parse(

@@ -82,9 +82,10 @@ fun SetupScreen(graph: AppGraph, activity: Activity) {
         }
     }
     val ankiAllowed = remember(refresh) { AnkiProvider.hasPermission(activity) }
-    val requestCalendar = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+    // Read and written: busy time, and the plan's slots written back (NF-07).
+    val requestCalendar = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { granted ->
         refresh++
-        if (granted) {
+        if (granted[CalendarTime.PERMISSION] == true) {
             hadCalendar = true
             scope.launch { CalendarTime.refresh(activity) }
         }
@@ -194,8 +195,10 @@ fun SetupScreen(graph: AppGraph, activity: Activity) {
                 title = "Calendar",
                 done = calendarAllowed,
                 detail = if (calendarAllowed) "Its events come off your free time: lessons take their slot, trains don't, and you're asked about all-day and long ones." else "Read only, so lessons and plans come off your free time.",
-                action = if (calendarAllowed) null else "Allow" to { requestCalendar.launch(CalendarTime.PERMISSION) },
+                action = if (calendarAllowed) null else "Allow" to { requestCalendar.launch(arrayOf(CalendarTime.PERMISSION, android.Manifest.permission.WRITE_CALENDAR)) },
             )
+            // The calendar the plan is written to (NF-07), picked here as Setup's step.
+            if (calendarAllowed) CalendarSection(graph, activity, reading = false)
             SetupItem(
                 title = "Blocking and protection",
                 done = runtime.protection.problems.isEmpty() && runtime.protection.checkedAt != null,

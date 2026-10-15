@@ -1,5 +1,8 @@
 package com.thomaswcode.decrastination.data
 
+import com.thomaswcode.decrastination.sources.powerplanner.PpClass
+import com.thomaswcode.decrastination.sources.powerplanner.PpSchedule
+import com.thomaswcode.decrastination.sources.powerplanner.Timetable
 import kotlinx.coroutines.test.runTest
 import java.io.File
 import java.nio.file.Files
@@ -18,6 +21,14 @@ class StoresTest {
         JsonStore(file, Settings.serializer(), ::Settings).update { it.copy(ankiTextbook = 2) }
         assertEquals(2, JsonStore(file, Settings.serializer(), ::Settings).value.ankiTextbook)
         assertFalse(File(dir, "settings.json.tmp").exists())
+    }
+
+    @Test
+    fun `the tasks keep the timetable they were last read with`() = runTest {
+        val file = File(dir, "tasks.json")
+        val timetable = Timetable("2026-08-24T00:00:00", listOf(PpClass("c", "Study Period", listOf(PpSchedule("2026-09-05T08:50:00", "2026-09-05T09:45:00", dayOfWeek = 2)))))
+        JsonStore(file, TaskState.serializer(), ::TaskState).update { it.copy(timetable = timetable) }
+        assertEquals(timetable, JsonStore(file, TaskState.serializer(), ::TaskState).value.timetable)
     }
 
     @Test

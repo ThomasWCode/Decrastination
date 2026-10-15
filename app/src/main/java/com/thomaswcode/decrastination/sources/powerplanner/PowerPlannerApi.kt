@@ -160,4 +160,6 @@ data class PpSchedule(
     @SerialName("ScheduleWeek") val scheduleWeek: Int = 3,
 )
 
+/** The semester's classes and their two-week timetable; kept with the tasks between reads (DX-09). */
+@Serializable
 data class Timetable(val weekOneStartsOn: String?, val classes: List<PpClass>)

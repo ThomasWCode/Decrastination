@@ -5,6 +5,7 @@ import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.sources.anki.AnkiDay
+import com.thomaswcode.decrastination.sources.powerplanner.Timetable
 import java.time.ZoneId
 
 /**
@@ -35,6 +36,8 @@ data class SourceRead(
     val note: String? = null,
     /** Anki only: today's quota deck, as fixed at the day's first read. */
     val ankiDay: AnkiDay? = null,
+    /** Power Planner only: the timetable the read used, kept for the days' windows (DX-09). */
+    val timetable: Timetable? = null,
 )
 
 /** A source that can't be read for a reason the setup screen can fix, such as a missing password. */
