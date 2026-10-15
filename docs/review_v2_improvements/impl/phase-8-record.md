@@ -144,6 +144,8 @@ Items: LR-01, LR-02, LR-06, LR-08, PL-08, PL-09, PL-10, PL-11, NF-02, AC-06, AC-
 
 **Steps.** `AnkiSource`: skip `unseenCards` for a deck whose `(counts, options)` equal the last read's (keep a map in the source instance). `PlanWatcher`: skip the hooks when `plan == lastPlan` (data-class equality). `SlotCalendar.write`: skip the query when the desired events equal the last written set.
 
+*(As built: the plan's hooks aren't skipped: a plan the same but for the time still needs the alarms armed for the next slot (only the next start and end are set), the widget's line moved on and what's due written ahead, so only the calendar write, the costly one, is. It skips while the calendar hasn't changed since it was last read, as well as the slots being the same: a slot moved or deleted there by hand is read on its change, as NF-07 needs.)*
+
 ---
 
 ## Closing the plan

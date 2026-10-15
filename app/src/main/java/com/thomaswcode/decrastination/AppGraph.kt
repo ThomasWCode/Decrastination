@@ -312,6 +312,10 @@ class AppGraph private constructor(context: Context) {
         val calendarId = settings.value.calendarWriteId ?: return
         if (!SlotCalendar.allowed(app)) return
         val zone = clock.zone()
+        // The same slots as last written, and nothing changed in the calendar since (AR-08): it isn't read again.
+        val desired = com.thomaswcode.decrastination.calendar.SlotCalendarDiff.desired(made, zone, runtime.value.microPlans)
+        if (!calendarTouched && lastWritten == (calendarId to desired)) return
+        calendarTouched = false
         val byId = tasks.value.tasks.associateBy { it.id }
         val before = runtime.value.calendarWritten
         val written = withContext(Dispatchers.IO) {
@@ -329,6 +333,7 @@ class AppGraph private constructor(context: Context) {
         val held = SlotCalendarDiff.pending(written.starts, before, written.taken)
         if (held != before) runtime.update { it.copy(calendarWritten = held) }
         written.refused.forEach { (move, why) -> SlotCalendar.sayRefused(app, move, zone, why) }
+        lastWritten = calendarId to desired
         for (move in written.taken) {
             val taskId = move.desired.taskId ?: continue
             addOwnChange(java.util.UUID.randomUUID().toString(), "Moved in the calendar", About(taskId = taskId, taskTitle = byId[taskId]?.title), SlotCalendar.change(move, zone))
@@ -517,6 +522,18 @@ class AppGraph private constructor(context: Context) {
     private var calendarWatched = false
 
     /**
+     * Whether the calendar has changed since the app last read the one it writes to (AR-08): till it
+     * has, a plan that would write what was written last ([lastWritten]) doesn't read it again. A
+     * change there (a slot moved or deleted by hand, or the app's own write) has it read again.
+     */
+    @Volatile
+    private var calendarTouched = true
+
+    /** The calendar last written to and the slots written there (AR-08). */
+    @Volatile
+    private var lastWritten: Pair<Long, List<com.thomaswcode.decrastination.calendar.SlotCalendarDiff.Desired>>? = null
+
+    /**
      * Watches the calendar for changes, once it may be read: at start, and at each read of it
      * after (so allowing it later, in Setup or Android's settings, starts the watching too).
      */
@@ -529,6 +546,7 @@ class AppGraph private constructor(context: Context) {
                 true,
                 object : ContentObserver(Handler(Looper.getMainLooper())) {
                     override fun onChange(selfChange: Boolean) {
+                        calendarTouched = true
                         calendarChanged.tryEmit(Unit)
                     }
                 },
