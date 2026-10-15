@@ -95,6 +95,31 @@ object FelixRules {
         return null
     }
 
+    /** How far ahead his next message is written (AC-10). */
+    const val AHEAD_MS = 10 * 60_000L
+
+    /** How old a draft can be when it's sent: written ahead, but not before the last plan. */
+    const val DRAFT_FRESH_MS = 20 * 60_000L
+
+    /**
+     * The message he's likeliest to write next, and when (AC-10): the next slot of today's whose
+     * grace into it is still to come, asked about at that moment as if nothing's done on it by then.
+     * The rest (a miss, a kept slot) depend on what happens, so aren't written ahead.
+     */
+    fun upcoming(plan: Plan, settings: Settings, now: Long): Pair<Trigger, Long>? {
+        val grace = settings.felixGraceMin * 60_000L
+        val slot = plan.todaySlots.filter { it.kind == SlotKind.Work && it.chunk != null }.firstOrNull { it.start + grace > now } ?: return null
+        return Trigger(Reason.SlotStart, slot = slot) to slot.start + grace
+    }
+
+    /**
+     * Whether [draft] is the message for [trigger] now (AC-10): written for its reason and piece, not
+     * longer ago than [DRAFT_FRESH_MS], and with no message of his since ([lastSentAt]), which it
+     * would repeat or contradict.
+     */
+    fun fits(draft: com.thomaswcode.decrastination.data.FelixDraft?, trigger: Trigger, now: Long, lastSentAt: Long?): Boolean =
+        draft != null && draft.reason == trigger.reason.name && draft.key == trigger.key && now - draft.at <= DRAFT_FRESH_MS && (lastSentAt == null || lastSentAt < draft.at)
+
     /** [message]'s first sentence, and the rest if there's more (LR-04: the morning's title and text). */
     fun sentences(message: String): Pair<String, String?> {
         val parts = message.trim().split(Regex("(?<=[.!?])\\s+"), limit = 2)

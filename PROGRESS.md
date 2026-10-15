@@ -78,7 +78,8 @@ The implementation of `docs/review_v2_improvements/impl/` on branch `v3`. Delete
 - LR-03 when Felix writes: a slot under way with nothing done (after its grace, again at his checks, three at most), one gone by undone or ticked without its photo, the day done, one kept slot in three; never in quiet hours, a busy event or a day with nothing scheduled; his pace his own, an alarm for his next look: 43ae37f.
 - LR-04 the morning briefing as Felix's message over the day's list, on a day with slots; the list alone otherwise: 27d6571.
 - LR-05 "How did it go?" as Felix's question once an evening, about the day's completions no kept slot saw, his replies the three answers; the old question with Claude off; its channel gone: fafb2fc.
-- LR-07 the routine notifications at most four a day and none in quiet hours, the rest held for the next briefing; Felix and protection unheld: this commit.
+- LR-07 the routine notifications at most four a day and none in quiet hours, the rest held for the next briefing; Felix and protection unheld: 0079695.
+- AC-10 Felix's next "starting?" written ahead, ten minutes before it's due, and sent as it is if it still fits: this commit.
 
 ## Current
 

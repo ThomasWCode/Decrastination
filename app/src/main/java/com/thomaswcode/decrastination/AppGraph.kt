@@ -286,6 +286,8 @@ class AppGraph private constructor(context: Context) {
             { made -> SlotAlarms.arm(app, made, clock.now()) },
             ::writeSlots,
             { _ -> WidgetUpdater.update(app) },
+            // Felix's next message written ahead (AC-10): by itself, as a model call takes a while.
+            { made -> scope.launch { runCatching { com.thomaswcode.decrastination.enrich.Ahead.run(this@AppGraph, made, clock.now()) }.onFailure { Log.w(TAG, "Writing ahead failed", it) } }; Unit },
         ),
         onFailure = { Log.w(TAG, "Replanning failed", it) },
     )
