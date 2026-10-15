@@ -17,6 +17,7 @@ import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.runBlocking
@@ -478,12 +479,26 @@ class AnswersTest {
     }
 
     @Test
+    fun `every worked example's answer is one the checks pass whole, and each is in its prompt`() {
+        for (job in Enrichments.Job.entries) {
+            for (example in Examples.of(job)) {
+                val item = (if (job == Enrichments.Job.Email) email() else assignment("Example")).copy(dueAt = example.due?.let(Fixtures::at), sourceValues = null)
+                val read = Answers.read(job, example.answer, item, "claude-opus-5-5", NOW, LONDON, salvage = false)
+                assertNotNull(read.enrichment, "$job: ${example.answer.take(60)}")
+                assertNull(read.complaint, "$job: ${read.complaint}")
+                assertTrue("Answer: ${example.answer}" in Prompts.system(job), "$job")
+            }
+        }
+        assertTrue(Prompts.system(Enrichments.Job.Assignment).contains("    Title: Vocabulary and reading"))
+    }
+
+    @Test
     fun `the limits the answers are checked against are said in the prompts and the schemas`() {
         assertEquals(
             "Limits the app enforces: at most 12 steps; no step longer than 240 minutes; a total of at most 10 hours; the steps must add up to effortMin exactly.",
             Prompts.limits(Enrichments.Job.Assignment),
         )
-        assertTrue(Prompts.system(Enrichments.Job.Assignment).endsWith(Prompts.limits(Enrichments.Job.Assignment)))
+        assertTrue(Prompts.limits(Enrichments.Job.Assignment) in Prompts.system(Enrichments.Job.Assignment))
         assertTrue("at most 30 blocks, none longer than 600 minutes, 20 hours in all" in Prompts.system(Enrichments.Job.Email))
         val step = Prompts.schemaJson(Enrichments.Job.Assignment).jsonObject["properties"]!!.jsonObject["subSteps"]!!.jsonObject["items"]!!.jsonObject["properties"]!!.jsonObject
         assertEquals("10 to 60 where the work allows; never over 240", step["minutes"]!!.jsonObject["description"]!!.jsonPrimitive.content)
