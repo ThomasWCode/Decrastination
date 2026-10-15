@@ -63,6 +63,8 @@ object Briefing {
 
     suspend fun run(context: Context) {
         val graph = AppGraph.get(context)
+        // What the night held back (LR-07), first thing.
+        runCatching { Notify.postHeld(context) }.onFailure { android.util.Log.w(AppGraph.TAG, "Posting what was held back failed", it) }
         // The calendar read first: woken by its alarm, the app has had no time to read it yet.
         CalendarTime.refresh(context)
         val now = graph.clock.now()

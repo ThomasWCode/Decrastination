@@ -32,6 +32,10 @@ data class RuntimeState(
     val keeping: List<Keeping> = emptyList(),
     /** Felix's pace and what he's seen done (LR-03). */
     val felix: FelixState = FelixState(),
+    /** The routine notifications gone today, by date (LR-07): only today's kept. */
+    val notifiedToday: Map<String, Int> = emptyMap(),
+    /** Those held back by the ceiling or quiet hours (LR-07), to go at the next briefing. */
+    val heldNotifications: List<HeldNotification> = emptyList(),
     /** The decks' counts read as AnkiDroid came and went (NF-03): the last [com.thomaswcode.decrastination.learn.AnkiProgress.KEEP]. */
     val ankiReadings: List<com.thomaswcode.decrastination.learn.AnkiReading> = emptyList(),
     /** Since when AnkiDroid has been in front, read coming in; null when it isn't. */
@@ -342,6 +346,10 @@ data class FelixState(
 /** A message of Felix's written ahead (AC-10): sent if it still fits its reason and piece when the time comes. */
 @Serializable
 data class FelixDraft(val reason: String, val key: String?, val answer: com.thomaswcode.decrastination.enrich.FelixAnswer, val at: Long)
+
+/** A notification held back (LR-07): where it was to go, and what it said. */
+@Serializable
+data class HeldNotification(val channel: String, val id: Int, val tag: String? = null, val at: Long, val title: String, val text: String)
 
 /** A daily alarm's run that failed: tried again [at], this being try [tries] (`Daily.failed`). */
 @Serializable
