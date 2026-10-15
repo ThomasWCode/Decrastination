@@ -183,6 +183,8 @@ Settings added in this phase (all `NEVER` in `SettingsChanges.LOOSER`, each with
 
 **Done when.** "Put the physics at 19:30" in the chat (phase 5) or the Move sheet (phase 6) pins the slot.
 
+*(As built, found on the phone on 15 Oct and fixed in phase 5: a pin goes by the key its piece has (`Chunk.keyOf`, the one place a key is made), as a step's key became its task and step in 585ba27; a time off the five minutes ("give me 15" at 20:27) is laid at its own minute; one whose time is taken goes to the first free time running past it; and one whose time and grace have gone by is laid as any piece, where the last plan put it, rather than five minutes on at every plan.)*
+
 ---
 
 ## PL-13 Adjust live: slot alarms, missed slots, stability, the plan watcher

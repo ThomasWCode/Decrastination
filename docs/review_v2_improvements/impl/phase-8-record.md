@@ -163,3 +163,5 @@ Items: LR-01, LR-02, LR-06, LR-08, PL-08, PL-09, PL-10, PL-11, NF-02, AC-06, AC-
 ## Closing the plan
 
 When every phase is done: delete `PROGRESS.md`; mark each item **Implemented** in the review documents' summary tables; make sure `README.md`, `docs/scheduler.md` and `docs/data-sources.md` read as a description of the app as it now is; bump `versionName` to `3.0.0` and `versionCode`; run the full CI command once more.
+
+*(As built, 15 Oct: `PROGRESS.md` deleted with phase 8's last commit; what it kept for you is in `docs/needs-you.md`'s *3.0.0: review v2*, and the plan's record is in the git history.)*
