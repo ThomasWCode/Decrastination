@@ -315,6 +315,7 @@ class SettingsActivity : ComponentActivity() {
                             Note("By job, not set here: high for what the plan is made from, medium for what someone's waiting for (AC-02).")
                         }
                         item { RecentCalls(runtime.calls, graph.clock.zone()) }
+                        item { LastCrash(this@SettingsActivity) }
                     }
 
                     // Each source as Setup has it, and how Teams and Anki are read.
@@ -578,6 +579,29 @@ private fun RecentCalls(calls: List<com.thomaswcode.decrastination.data.CallReco
                     }) { Text("Copy") }
                 }
             }
+        }
+    }
+}
+
+/** The app's last crash (AR-06), as it was written down, with Copy; or that there's been none. */
+@Composable
+private fun LastCrash(activity: android.app.Activity) {
+    val crash = remember { com.thomaswcode.decrastination.data.Crashes.last(activity.filesDir) }
+    var open by remember { mutableStateOf(false) }
+    Column {
+        Section("Last crash")
+        if (crash == null) {
+            Note("None.")
+        } else {
+            Text(
+                if (open) crash else crash.lineSequence().take(3).joinToString("\n"),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.fillMaxWidth().clickable { open = !open },
+            )
+            androidx.compose.material3.TextButton(onClick = {
+                activity.getSystemService(android.content.ClipboardManager::class.java)?.setPrimaryClip(android.content.ClipData.newPlainText("The last crash", crash))
+            }) { Text("Copy") }
         }
     }
 }
