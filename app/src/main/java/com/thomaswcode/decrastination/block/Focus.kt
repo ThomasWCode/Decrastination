@@ -440,7 +440,13 @@ class Focus(
         runtime.update { state ->
             state.copy(
                 credit = if (record.earned) state.credit.takeBack(today, Credit.forSlot(record.plannedMin, settings.value.workMinPerFreeMin)) else state.credit,
-                slots = if (missed != null && missed.date == today.toString()) state.slots.on(today).missed(record.key, record.taskId, missed.at) else state.slots,
+                slots = when {
+                    missed != null && missed.date == today.toString() -> state.slots.on(today).missed(record.key, record.taskId, missed.at)
+                    // Kept in its slot: its start back, so the next plan keeps it where it was while that's
+                    // free (PL-13) rather than laying it anew, where today may have no room left for it.
+                    missed == null && record.date == today.toString() -> state.slots.on(today).let { it.copy(previous = it.previous + (record.key to record.start)) }
+                    else -> state.slots
+                },
             )
         }
         true
