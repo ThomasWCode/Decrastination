@@ -6,6 +6,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -403,23 +404,66 @@ private fun OptionalNumberField(label: String, value: Int?, range: IntRange, key
         number = true,
     )
 
+/** A value shown as it is, picked in a dialog ([onPick]): tapping the field or its button opens it (UI-01). */
 @Composable
-private fun TimeField(label: String, minuteOfDay: Int, key: String, form: Form, onChange: (Int) -> Unit) =
-    ParsedField(label, SettingsChanges.clock(minuteOfDay), key, form, ::parseTime, onChange, number = false)
-
-@Composable
-private fun WindowField(label: String, window: Window, key: String, form: Form, overnight: Boolean = false, onChange: (Window) -> Unit) =
-    ParsedField(
-        "$label (from–to)",
-        "${SettingsChanges.clock(window.startMin)}–${SettingsChanges.clock(window.endMin)}",
-        key,
-        form,
-        // Working hours end the day they start (the planner plans each day's own); quiet hours
-        // may run past midnight.
-        { text -> text.split('–', '-').map { it.trim() }.takeIf { it.size == 2 }?.let { (a, b) -> parseTime(a)?.let { s -> parseTime(b)?.let { e -> Window(s, e).takeIf { SettingsLimits.window(it, overnight) } } } } },
-        onChange,
-        number = false,
+private fun PickedField(label: String, shown: String, modifier: Modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), onPick: () -> Unit) {
+    val source = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    val pressed by source.collectIsPressedAsState()
+    LaunchedEffect(pressed) { if (pressed) onPick() }
+    OutlinedTextField(
+        value = shown,
+        onValueChange = {},
+        readOnly = true,
+        label = { Text(label) },
+        singleLine = true,
+        trailingIcon = { androidx.compose.material3.IconButton(onClick = onPick) { androidx.compose.material3.Icon(androidx.compose.ui.res.painterResource(com.thomaswcode.decrastination.R.drawable.ic_expand_more), contentDescription = "Pick $label") } },
+        interactionSource = source,
+        modifier = modifier,
     )
+}
+
+/** A time of day (UI-01), shown as HH:MM and picked on a clock. [form] isn't needed: a picked time is always one. */
+@Composable
+private fun TimeField(label: String, minuteOfDay: Int, key: String, @Suppress("UNUSED_PARAMETER") form: Form, onChange: (Int) -> Unit) {
+    var picking by rememberSaveable(key) { mutableStateOf(false) }
+    PickedField(label, SettingsChanges.clock(minuteOfDay)) { picking = true }
+    if (picking) TimeDialog(label, minuteOfDay, onClose = { picking = false }) { onChange(it); picking = false }
+}
+
+/**
+ * A stretch of the day (UI-01): its start and its end, each picked on a clock, and how long it is.
+ * Working hours end the day they start (the planner plans each day's own); quiet hours ([overnight])
+ * may run past midnight. A pick that wouldn't make one says why, and changes nothing.
+ */
+@Composable
+private fun WindowField(label: String, window: Window, key: String, @Suppress("UNUSED_PARAMETER") form: Form, overnight: Boolean = false, onChange: (Window) -> Unit) {
+    var picking by rememberSaveable(key) { mutableStateOf<Boolean?>(null) }
+    var problem by rememberSaveable(key) { mutableStateOf<String?>(null) }
+    androidx.compose.foundation.layout.Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)) {
+        Text(label, style = MaterialTheme.typography.bodyMedium)
+        Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
+            PickedField("From", SettingsChanges.clock(window.startMin), Modifier.weight(1f)) { picking = true }
+            PickedField("To", SettingsChanges.clock(window.endMin), Modifier.weight(1f)) { picking = false }
+        }
+        Text(
+            problem ?: Format.minutes(window.minutes),
+            style = MaterialTheme.typography.bodySmall,
+            color = if (problem != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+    picking?.let { start ->
+        TimeDialog(if (start) "$label: from" else "$label: to", if (start) window.startMin else window.endMin, onClose = { picking = null }) { picked ->
+            val next = if (start) window.copy(startMin = picked) else window.copy(endMin = picked)
+            if (SettingsLimits.window(next, overnight)) {
+                onChange(next)
+                problem = null
+            } else {
+                problem = if (overnight) "It can't start and end at the same time" else "It has to end after it starts, the same day"
+            }
+            picking = null
+        }
+    }
+}
 
 /** "16:45" or "1645" as minutes after midnight. */
 internal fun parseTime(text: String): Int? {
