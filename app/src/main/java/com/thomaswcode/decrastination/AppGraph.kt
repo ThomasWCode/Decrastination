@@ -201,6 +201,11 @@ class AppGraph private constructor(context: Context) {
             val o = overrides[task.id] ?: TaskOverrides.NONE
             if (o == task.overrides()) task else task.withOverrides(o)
         }
+        // Each day's windows, from the timetable's study periods and the school calendar (PL-15).
+        val days = generateSequence(today) { it.plusDays(1) }.takeWhile { it <= reach }.toList()
+        val calendar = school.value
+        val windows = days.associateWith { com.thomaswcode.decrastination.core.SchoolDays.windows(it, settings, state.timetable, calendar) }
+        val dayKinds = days.associateWith { com.thomaswcode.decrastination.core.SchoolDays.kindOf(it, calendar) }
         return Planner.plan(
             Planner.Input(
                 tasks = tasks,
@@ -213,6 +218,8 @@ class AppGraph private constructor(context: Context) {
                 dayLoads = time.dayLoads,
                 dayCaps = Instructions.dayCaps(applied, today, reach),
                 workedTodayMin = workedToday(now, zone),
+                windows = windows,
+                dayKinds = dayKinds,
             ),
         )
     }

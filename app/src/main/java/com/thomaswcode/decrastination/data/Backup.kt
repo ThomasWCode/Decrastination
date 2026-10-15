@@ -137,7 +137,9 @@ object Backups {
             task.availableFrom == null && task.sourceValues?.availableFrom == null &&
             // Nor anything else only a source gives (an Anki deck's day's cards, the enrichment's
             // estimate, a source's extras), nor a miss, which only a source's counts can make.
-            task.stepsPerDay == null && !task.derived && task.extra.isEmpty() && task.aiEffortMin == null &&
+            task.stepsPerDay == null && !task.derived && task.aiEffortMin == null &&
+            // Its one extra of yours: where it's done, when that's at home (PL-15).
+            task.extra.keys.all { it == OwnTasks.EXTRA_WHERE } && task.extra[OwnTasks.EXTRA_WHERE].let { it == null || it == "home" } &&
             task.status != com.thomaswcode.decrastination.core.Status.Missed && task.photosCounted.values.all { it in minutes } &&
             task.subSteps.all { it.timedMin in minutes } &&
             task.enrichment == null &&

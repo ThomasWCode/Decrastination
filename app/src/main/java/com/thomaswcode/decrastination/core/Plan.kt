@@ -89,6 +89,8 @@ data class Chunk(
     val stepIndex: Int? = null,
     /** Why it's on its day (PL-07). */
     val why: Why,
+    /** Where it can be done (PL-15): anywhere, a free period at school included, or only at home. */
+    val where: Where = Where.Anywhere,
 ) {
     val label: String get() = step?.let { "$title: $it" } ?: title
 

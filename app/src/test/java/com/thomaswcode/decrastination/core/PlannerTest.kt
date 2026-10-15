@@ -727,6 +727,69 @@ class PlannerTest {
         assertEquals(660, Planner.capacity(saturday, input("2026-10-08T08:00", emptyList(), mapOf(saturday to 180))))
     }
 
+    // --- Windows: study periods, break and lunch, the evening (PL-15) ---
+
+    /** Tuesday 13 Oct as a school day: break, lunch either side of eating, a study period, the evening. */
+    private val tuesday = LocalDate.parse("2026-10-13")
+    private val schoolDay = listOf(
+        DayWindow(645, 675, WindowKind.Break), DayWindow(795, 820, WindowKind.Lunch), DayWindow(835, 875, WindowKind.Lunch),
+        DayWindow(875, 930, WindowKind.Study), DayWindow(1005, 1320, WindowKind.Evening),
+    )
+
+    private fun windowed(tasks: List<TaskItem>, at: String, windows: Map<LocalDate, List<DayWindow>> = mapOf(tuesday to schoolDay), busy: List<Busy> = emptyList()) =
+        Planner.Input(tasks, Fixtures.at(at), LONDON, settings, busy = busy, windows = windows)
+
+    @Test
+    fun `capacity sums a day's windows, the evening's being what home work has`() {
+        // 30 + 25 + 40 + 55 at school, 315 in the evening.
+        assertEquals(Planner.Capacity(315, 465), Planner.capacityOf(tuesday, windowed(emptyList(), "2026-10-13T08:00")))
+        // A school window with less than 15 minutes left isn't used: a meeting through most of break.
+        val meeting = Busy(Fixtures.at("2026-10-13T10:45"), Fixtures.at("2026-10-13T11:05"))
+        assertEquals(Planner.Capacity(315, 435), Planner.capacityOf(tuesday, windowed(emptyList(), "2026-10-13T08:00", busy = listOf(meeting))))
+        // After school, only the evening is left.
+        assertEquals(Planner.Capacity(315, 315), Planner.capacityOf(tuesday, windowed(emptyList(), "2026-10-13T15:45")))
+    }
+
+    @Test
+    fun `home work never takes school time, and work done anywhere takes school's first`() {
+        // The evening taken by a lesson: only school's 150 minutes are free on Tuesday.
+        val drums = Busy(Fixtures.at("2026-10-13T16:45"), Fixtures.at("2026-10-13T22:00"))
+        val essay = task("essay", Fixtures.at("2026-10-13T23:59"), effort = 30)
+        val plan = Planner.plan(windowed(listOf(essay), "2026-10-13T08:00", busy = listOf(drums)))
+        // Teams homework is done at home: none of it at school, so it's behind tonight.
+        assertTrue(plan.chunksOf("teams:essay").all { it.where == Where.Home })
+        assertEquals(Planner.Capacity(0, 150), Planner.capacityOf(tuesday, windowed(emptyList(), "2026-10-13T08:00", busy = listOf(drums))))
+        // A reading done anywhere, and the essay at home, both due tonight: the reading takes school's
+        // time, so the evening holds the essay whole.
+        val reading = task("reading", Fixtures.at("2026-10-13T23:59"), effort = 60, kind = Kind.Admin)
+        val both = Planner.plan(windowed(listOf(reading, task("essay", Fixtures.at("2026-10-13T23:59"), effort = 300)), "2026-10-13T08:00"))
+        assertTrue(both.chunksOf("teams:essay").none { it.behind }, "${both.chunksOf("teams:essay").map { it.minutes to it.behind }}")
+        assertTrue(both.chunksOf("teams:reading").all { it.where == Where.Anywhere })
+    }
+
+    @Test
+    fun `a step can say it's done anywhere, its task's other steps at home`() {
+        val steps = listOf(SubStep("Read the chapter", 30, where = "anywhere"), SubStep("Write it up", 40))
+        val plan = Planner.plan(windowed(listOf(task("t", Fixtures.at("2026-10-20T23:59"), steps = steps)), "2026-10-13T08:00"))
+        assertEquals(listOf(Where.Anywhere, Where.Home), plan.chunksOf("teams:t").map { it.where })
+        // In order still: the reading on or before the write-up's day.
+        val days = plan.buckets.flatMap { b -> b.chunks.filter { it.taskId == "teams:t" }.map { b.date } }
+        assertEquals(days.sorted(), days)
+    }
+
+    @Test
+    fun `a same-day deadline is usable where a window comes before it`() {
+        // No margin: due at 11:30, Tuesday's break (10:45) comes before it, so Tuesday is its day;
+        // without windows, a morning deadline's day isn't one, and Monday it is.
+        val noMargin = Calibration(marginDays = mapOf(Kind.Admin to 0))
+        val form = task("form", Fixtures.at("2026-10-13T11:30"), effort = 20, kind = Kind.Admin)
+        assertEquals(listOf(tuesday), Planner.plan(windowed(listOf(form), "2026-10-12T17:00").copy(calibration = noMargin)).dayOf("form"))
+        assertEquals(listOf(LocalDate.parse("2026-10-12")), Planner.plan(windowed(listOf(form), "2026-10-12T17:00", windows = emptyMap()).copy(calibration = noMargin)).dayOf("form"))
+        // Due at 10:30, before every window that day: Monday again.
+        val early = form.copy(dueAt = Fixtures.at("2026-10-13T10:30"))
+        assertEquals(listOf(LocalDate.parse("2026-10-12")), Planner.plan(windowed(listOf(early), "2026-10-12T17:00").copy(calibration = noMargin)).dayOf("form"))
+    }
+
     @Test
     fun `capacity is scaled by the day's kind's yield`() {
         // Weekends found to use half their free time (PL-06): Saturday's 840 minutes plan as 420;

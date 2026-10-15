@@ -218,6 +218,17 @@ class AnswersTest {
     }
 
     @Test
+    fun `an assignment's steps say where they can be done (PL-15)`() {
+        val e = parse(
+            Enrichments.Job.Assignment,
+            """{"subSteps":[{"title":"Read pages 40-44","minutes":20,"ankiSections":[],"from":null,"due":null,"where":"anywhere"},{"title":"Write the essay","minutes":40,"ankiSections":[],"from":null,"due":null,"where":"home"}],"effortMin":60,"ankiSections":[],"testDate":null}""",
+            assignment("Read pages 40-44, then write the essay."),
+        )!!
+        assertEquals(listOf("anywhere", "home"), e.subSteps!!.map { it.where })
+        assertTrue("\"home\" for a step that needs the laptop" in Prompts.system(Enrichments.Job.Assignment))
+    }
+
+    @Test
     fun `what's out of range is dropped rather than trusted`() {
         val e = parse(Enrichments.Job.Email, """{"kind":"Admin","actionableFrom":"1999-01-01","deadline":"2031-01-01T09:00","effortMin":5000,"nextStep":"  "}""")!!
         assertEquals(Kind.Admin, e.kind)
