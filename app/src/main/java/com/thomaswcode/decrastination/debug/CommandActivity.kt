@@ -271,6 +271,8 @@ class CommandActivity : Activity() {
             }
             "briefing" -> Briefing.run(this).also { Log.i(TAG, "Briefing posted") }
             "check-in" -> CheckIns.remind(this).also { Log.i(TAG, "Check-in reminder posted") }
+            // The nightly backup's work, once (AR-07).
+            "backup-now" -> Log.i(TAG, "Backup: ${if (graph.backupNow()) "written" else "not written"}; last ${graph.runtime.value.lastBackupAt}")
             "review" -> {
                 Review.run(this, ifDue = false)
                 Log.i(TAG, "Review: ${graph.log.value.reviews.lastOrNull()?.lines}; calibration ${graph.runtime.value.calibration}")

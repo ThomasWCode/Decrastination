@@ -734,8 +734,28 @@ class AppGraph private constructor(context: Context) {
             ownTasks = tasks.value.tasks.filter { it.source == Source.Own },
             school = school.value,
             memory = memory.value,
+            felix = runtime.value.felix,
+            slots = runtime.value.slots,
         ),
     )
+
+    /**
+     * The nightly backup (AR-07): all the app keeps, as `decrastination-<date>.json` in
+     * Documents/Decrastination, replacing the day's if it's run again; those past the newest
+     * fortnight let go; its time kept for Settings. False below Android 10, or where it can't be written.
+     */
+    suspend fun backupNow(): Boolean = withContext(NonCancellable + Dispatchers.IO) {
+        if (!com.thomaswcode.decrastination.data.BackupFolder.available) return@withContext false
+        val now = clock.now()
+        val folder = com.thomaswcode.decrastination.data.BackupFolder
+        val name = folder.nightlyName(java.time.Instant.ofEpochMilli(now).atZone(clock.zone()).toLocalDate().toString())
+        if (!folder.write(app.contentResolver, name, exportBackup())) return@withContext false
+        val files = folder.list(app.contentResolver)
+        val gone = folder.toPrune(files.map { it.first }).toSet()
+        files.filter { it.first in gone }.forEach { folder.delete(app.contentResolver, it.second) }
+        runtime.update { it.copy(lastBackupAt = now) }
+        true
+    }
 
     /**
      * Restores the backup [text] and says what happened. Nothing is restored from one that holds
@@ -764,6 +784,14 @@ class AppGraph private constructor(context: Context) {
             if (restored > 0) add("$restored instruction${if (restored == 1) "" else "s"} restored")
             if (unclear > 0) add("$unclear left unapplied under Your changes in Felix's chat, as ${if (unclear == 1) "it" else "they"} would have tasks wait for each other in a circle")
         }.takeIf { it.isNotEmpty() }?.joinToString(", ", prefix = " ", postfix = ".") ?: ""
+        // Felix's state where this phone has none of its own; today's slots, restored the same day (AR-07).
+        val today = java.time.Instant.ofEpochMilli(clock.now()).atZone(clock.zone()).toLocalDate().toString()
+        runtime.update { s ->
+            s.copy(
+                felix = if (s.felix == com.thomaswcode.decrastination.data.FelixState()) backup.felix else s.felix,
+                slots = if (backup.slots.date == today && s.slots.on(java.time.LocalDate.parse(today)).let { it.previous.isEmpty() && it.missed.isEmpty() }) backup.slots else s.slots,
+            )
+        }
         // This month's spend on Claude, armed or not: it can only rise, so the cap isn't given again.
         val month = AiUsage.monthOf(clock.now(), clock.zone())
         runtime.update { it.copy(aiUsage = Backups.mergeUsage(it.aiUsage, backup.aiUsage, month)) }

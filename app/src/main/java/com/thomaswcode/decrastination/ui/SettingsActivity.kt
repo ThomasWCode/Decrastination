@@ -348,7 +348,10 @@ class SettingsActivity : ComponentActivity() {
                     }
 
                     // A backup, and what couldn't be read at a start, as Setup has them.
-                    BACKUP -> item { SetupScreen(graph, this@SettingsActivity, setOf(SetupPart.Saved, SetupPart.Backup), scroll = false) }
+                    BACKUP -> {
+                        item { SetupScreen(graph, this@SettingsActivity, setOf(SetupPart.Saved, SetupPart.Backup), scroll = false) }
+                        item { NightlyBackup(runtime.lastBackupAt, graph.clock.now()) }
+                    }
                     RESET -> item { ResetPage(graph) }
                 }
             }
@@ -650,6 +653,20 @@ private fun ResetPage(graph: AppGraph) {
             },
             dismissButton = { androidx.compose.material3.TextButton(onClick = { asking = null }) { Text("Keep it") } },
         )
+    }
+}
+
+/** The nightly backup (AR-07): where it goes, and when it last did. */
+@Composable
+private fun NightlyBackup(last: Long?, now: Long) {
+    Column {
+        Section("Nightly backup")
+        if (!com.thomaswcode.decrastination.data.BackupFolder.available) {
+            Note("The nightly backup needs Android 10 or later.")
+        } else {
+            Note("Every night, all the app keeps goes to Documents/Decrastination on the phone, the last two weeks of them kept. Import opens one through the file picker. A copy off the phone is yours to make: a sync app mirroring the folder, or Export.")
+            Note("Last backup: " + (last?.let { Format.ago(it, now) } ?: "not yet"))
+        }
     }
 }
 

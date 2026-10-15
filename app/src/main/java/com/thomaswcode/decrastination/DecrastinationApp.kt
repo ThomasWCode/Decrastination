@@ -20,6 +20,7 @@ class DecrastinationApp : Application() {
         AppGraph.get(this)
         SyncWorker.schedule(this)
         WatchdogWorker.schedule(this)
+        com.thomaswcode.decrastination.data.BackupWorker.schedule(this)
         Daily.schedule(this)
     }
 }

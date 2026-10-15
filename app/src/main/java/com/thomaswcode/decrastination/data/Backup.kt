@@ -47,6 +47,10 @@ data class Backup(
     val school: SchoolCalendar = SchoolCalendar(),
     /** What Felix remembers (AI-21): none in a backup from before. */
     val memory: com.thomaswcode.decrastination.core.MemoryState = com.thomaswcode.decrastination.core.MemoryState(),
+    /** Felix's own state (AR-07): when he looks next, what he's waiting to say. None in a backup from before. */
+    val felix: FelixState = FelixState(),
+    /** Today's slots' starts and misses (AR-07), for a restore the same day. */
+    val slots: com.thomaswcode.decrastination.core.SlotState = com.thomaswcode.decrastination.core.SlotState(),
 ) {
     companion object {
         const val APP = "Decrastination"
@@ -57,9 +61,10 @@ data class Backup(
          */
         /**
          * 4 since slots replaced sessions in the log (LR-09, AR-09), 5 with what's remembered
-         * (AI-21): an older app refuses it rather than losing them.
+         * (AI-21), 6 with Felix's state and today's slots (AR-07): an older app refuses it rather
+         * than losing them.
          */
-        const val FORMAT = 5
+        const val FORMAT = 6
     }
 }
 
