@@ -149,7 +149,7 @@ Settings added (LOOSER lambda in brackets; all need LABELS and limits):
 
 **Steps.**
 
-1. `Plan.gapUntil(now: Long, kept: Set<String>): Long?`: when `now` is after the end of a work slot whose key is in `kept` (today's records with Kept/KeptLate), and before the start of the next work slot today → that start; else null.
+1. `Plan.gapUntil(now: Long, kept: Set<String>): Long?`: when `now` is after the end of a work slot whose key is in `kept` (today's records with Kept/KeptLate), and before the start of the next work slot today → that start; else null. *(As built: a kept piece leaves the plan, so the gap is from the last tick today (`keptAt`) with no work slot of today's begun, under way or gone by undone. And a step piece's key is now its task and step, not its part, which renumbered once a piece before it was kept and lost its kept start, PL-13.)*
 2. `BlockPolicy.Input.gapUntil: Long? = null`; in `decide`, after the override and before-block checks: `if (input.gapUntil != null && input.creditLeftMs > 0) return Verdict.Spend`. Then `pressure → Block(TodayUndone)` as now.
 3. `Focus.spendableUntil(now): Long?` = `min(now + creditLeftMs, gapUntil ?: Long.MAX_VALUE)`; `FocusService.startSpending` uses it for the countdown end and re-blocks at the next slot's start (the `creditCheck` runnable already re-evaluates the verdict).
 

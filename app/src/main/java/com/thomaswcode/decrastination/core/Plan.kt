@@ -249,6 +249,18 @@ data class Plan(
     /** Today's work slot at [time], if one is under way. */
     fun slotAt(time: Long): Slot? = todaySlots.firstOrNull { it.kind == SlotKind.Work && time >= it.start && time < it.end }
 
+    /**
+     * Free time between today's slots (BL-10): from a piece ticked done at [keptAt] till the next work
+     * slot today starts. A kept piece leaves the plan, so a work slot of today's already begun is one
+     * under way, or gone by undone: either closes the gap. Null outside one, or with no slot after.
+     */
+    fun gapUntil(now: Long, keptAt: Long?): Long? {
+        if (keptAt == null || keptAt > now) return null
+        val work = todaySlots.filter { it.kind == SlotKind.Work }
+        if (work.any { it.start <= now }) return null
+        return work.minOfOrNull { it.start }
+    }
+
     /** The first work slot today at or after [time], else tomorrow's first. */
     fun nextSlot(time: Long): Slot? =
         todaySlots.firstOrNull { it.kind == SlotKind.Work && it.start >= time } ?: tomorrowBucket?.slots.orEmpty().firstOrNull { it.kind == SlotKind.Work }
