@@ -18,7 +18,7 @@ import kotlinx.serialization.Serializable
  * One AnkiDroid deck with today's counts (`deck_count` is `[learn, review, new]`), and the new
  * cards a day its options allow ([newPerDay]: AnkiDroid's "New cards/day").
  */
-data class Deck(val id: Long, val name: String, val learn: Int, val review: Int, val new: Int, val newPerDay: Int = AnkiRules.NEW_PER_DAY) {
+data class Deck(val id: Long, val name: String, val learn: Int, val review: Int, val new: Int, val newPerDay: Int = AnkiRules.NEW_PER_DAY, val description: String = "") {
     val isTopLevel: Boolean get() = SEPARATOR !in name
 
     companion object {
@@ -152,8 +152,33 @@ object AnkiRules {
             section.split('.').takeIf { it.size == 2 }?.let { (major, minor) -> major.toIntOrNull()?.let { a -> minor.toIntOrNull()?.let { b -> a to b } } }
         }.distinct()
 
-    /** The vocabulary sections [task] asks for: the deck pattern wins when it finds anything; else the sections the enrichment read. */
-    fun sectionsOf(task: TaskItem): List<Pair<Int, Int>> = linkedSections(task.title + "\n" + task.detail).ifEmpty { enrichedSections(task) }
+    /**
+     * The vocabulary sections [task] asks for: the deck pattern wins when it finds anything; else a
+     * deck whose description it names, the one alone that it does ([topics], DX-10: "Holidays and
+     * travel" for 1.3); else the sections the enrichment read.
+     */
+    fun sectionsOf(task: TaskItem, topics: Map<String, String> = emptyMap()): List<Pair<Int, Int>> =
+        linkedSections(task.title + "\n" + task.detail).ifEmpty { describedSections(task, topics) }.ifEmpty { enrichedSections(task) }
+
+    /** The textbook's decks with a description worth matching (DX-10): their section ("1.3") to it. */
+    fun topics(decks: List<Deck>, textbook: Int): Map<String, String> = decks
+        .filter { it.name.startsWith("Textbook $textbook${Deck.SEPARATOR}") && it.description.trim().length >= MIN_TOPIC }
+        .associate { it.name.substringAfterLast(Deck.SEPARATOR) to it.description.trim().take(MAX_TOPIC) }
+        .filterKeys { SECTION_NAME.matches(it) }
+
+    /** The section of the one deck whose description [task]'s words hold as a whole phrase: none where none does, or more than one. */
+    private fun describedSections(task: TaskItem, topics: Map<String, String>): List<Pair<Int, Int>> {
+        val text = (task.title + "\n" + task.detail).lowercase()
+        val named = topics.filter { (_, topic) -> Regex("(?<![\\p{L}\\d])" + Regex.escape(topic.lowercase()) + "(?![\\p{L}\\d])").containsMatchIn(text) }
+        val section = named.keys.singleOrNull() ?: return emptyList()
+        val (major, minor) = section.split('.')
+        return listOf(major.toInt() to minor.toInt())
+    }
+
+    /** A description shorter than this matches too much. */
+    private const val MIN_TOPIC = 4
+    private const val MAX_TOPIC = 60
+    private val SECTION_NAME = Regex("""^[1-9]\.[1-9]$""")
 
     /**
      * For each assignment, the vocabulary sections ("1.2") its deck tasks from the current
@@ -273,9 +298,10 @@ object AnkiRules {
     ): List<Fetched> {
         val byName = decks.associateBy { it.name }
         val wanted = LinkedHashMap<Deck, MutableList<TaskItem>>()
+        val topics = topics(decks, textbook)
         for (task in assignments) {
             if (!task.isOpen || task.source == Source.Anki) continue
-            for (section in sectionsOf(task)) {
+            for (section in sectionsOf(task, topics)) {
                 val deck = byName[deckName(textbook, section)] ?: continue
                 wanted.getOrPut(deck) { mutableListOf() } += task
             }

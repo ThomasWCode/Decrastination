@@ -36,12 +36,14 @@ object AnkiProvider {
      * being left out: left out, its deck task would be dropped as missed (BUG-P2-007).
      */
     fun decks(resolver: ContentResolver): List<Deck> =
-        resolver.query(decksUri, arrayOf("deck_id", "deck_name", "deck_count", "options"), null, null, null)?.use { cursor ->
+        resolver.query(decksUri, arrayOf("deck_id", "deck_name", "deck_count", "options", "deck_desc"), null, null, null)?.use { cursor ->
             buildList {
                 while (cursor.moveToNext()) {
                     val name = cursor.getString(1)
                     val counts = parseCounts(cursor.getString(2)) ?: throw IOException("AnkiDroid's counts for $name can't be read")
-                    add(Deck(cursor.getLong(0), name, counts[0], counts[1], counts[2], newPerDay(cursor.getString(3))))
+                    // Its description (DX-10), the topic a deck's named by: none where there's none.
+                    val description = runCatching { cursor.getString(4) }.getOrNull().orEmpty()
+                    add(Deck(cursor.getLong(0), name, counts[0], counts[1], counts[2], newPerDay(cursor.getString(3)), description))
                 }
             }
         } ?: throw SourceUnavailable("AnkiDroid isn't answering (is it installed?)")
@@ -120,6 +122,6 @@ class AnkiSource(private val context: Context) : TaskSource {
         val homeworkDecks = homework.filter { !it.done }.mapNotNull { it.extra[AnkiRules.EXTRA_DECK_ID]?.toLongOrNull() }.toSet()
         val reviewsOnly = AnkiRules.homeworkDueSoon(homework, context.now, context.zone)
         val (quota, day) = AnkiRules.quota(decks, textbook, context.ankiDay, context.now, context.zone, context.settings.ankiDeadlineMin, homeworkDecks, reviewsOnly, context.ankiSecondsPerCard, count)
-        SourceRead(items = listOfNotNull(quota) + homework, ankiDay = day)
+        SourceRead(items = listOfNotNull(quota) + homework, ankiDay = day, deckTopics = AnkiRules.topics(decks, textbook))
     }
 }

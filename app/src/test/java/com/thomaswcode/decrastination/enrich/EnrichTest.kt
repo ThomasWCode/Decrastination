@@ -477,6 +477,8 @@ class AnswersTest {
         val asked = Prompts.describe(assignment("Essay"), Enrichments.Job.Assignment, NOW, LONDON, listOf(SubStep("Plan", 20), SubStep("Write", 60)))
         assertTrue("Steps as planned before (keep the exact title of any step whose work is unchanged; mark none as done):\n1. Plan (20 min)\n2. Write (60 min)" in asked, asked)
         assertFalse("planned before" in Prompts.describe(assignment("Essay"), Enrichments.Job.Assignment, NOW, LONDON))
+        // The decks by topic, for an assignment (DX-10).
+        assertTrue("Decks: 1.3 Holidays and travel; 1.4 School" in Prompts.describe(assignment("Vocab"), Enrichments.Job.Assignment, NOW, LONDON, decks = mapOf("1.4" to "School", "1.3" to "Holidays and travel")))
     }
 
     @Test
