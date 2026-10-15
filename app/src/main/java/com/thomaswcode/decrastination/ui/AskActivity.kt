@@ -403,6 +403,8 @@ private fun Claudes(graph: AppGraph, message: ChatMessage, tasks: Map<String, Ta
             Text(message.text, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp))
         }
         message.proposals.forEach { ProposalCard(graph, message.id, it, tasks, now, zone, onEdit) }
+        // What it remembered or forgot (AI-21), in small type under its words.
+        message.remembered.forEach { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 4.dp)) }
         message.note?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 4.dp)) }
     }
 }

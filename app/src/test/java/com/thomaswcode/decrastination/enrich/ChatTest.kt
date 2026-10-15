@@ -306,4 +306,16 @@ class ChatTest {
         assertEquals(asked, ChatState(listOf(asked)).unanswered)
         assertNull(ChatState(listOf(asked.copy(answeredAt = now), ChatMessage("c", Speaker.Claude, "hi", now))).unanswered)
     }
+
+    @Test
+    fun `an answer's memories are read, an empty text forgetting`() {
+        val text = """{"reply":"Noted.","newTasks":[],"changes":[],"memories":[{"topic":"football","text":"on Tuesdays","kind":"fact"},{"topic":"messages before 8","text":"","kind":"rule"}]}"""
+        val reading = ChatAnswers.parse(text, emptyList(), emptyList(), com.thomaswcode.decrastination.core.About(), now, LONDON)!!
+        assertEquals(
+            listOf(com.thomaswcode.decrastination.core.Given("football", "on Tuesdays"), com.thomaswcode.decrastination.core.Given("messages before 8", "", com.thomaswcode.decrastination.core.Given.RULE)),
+            reading.memories,
+        )
+        // One from before this was asked for has none.
+        assertEquals(emptyList(), ChatAnswers.parse("""{"reply":"Noted.","newTasks":[],"changes":[]}""", emptyList(), emptyList(), com.thomaswcode.decrastination.core.About(), now, LONDON)!!.memories)
+    }
 }

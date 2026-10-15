@@ -92,7 +92,7 @@ Settings added (all `NEVER` in LOOSER unless said):
 
 ## AI-21 Memories and standing instructions
 
-**Files.** New `core/Memory.kt`; `AppGraph.kt`; `enrich/ChatReader.kt` (schema); `data/Backup.kt`; `ui/SettingsActivity.kt` (phase 6 moves it to Settings → Felix).
+**Files.** New `core/Memory.kt`; `AppGraph.kt`; `enrich/ChatReader.kt` (schema); `data/Backup.kt`; `ui/SettingsActivity.kt` (phase 6 moves it to Settings → Felix). *(As built: the list is `ui/MemorySection.kt`, Settings → What Felix remembers, each line with a forget and an instruction added in your own words.)*
 
 **Steps.**
 
@@ -107,15 +107,15 @@ Settings added (all `NEVER` in LOOSER unless said):
    }
    @Serializable data class Given(val topic: String, val text: String? = null, val kind: String = "fact")  // kind "fact" | "rule"; text null drops
    ```
-   `apply`: a fact with an existing topic (trimmed, ignore case) replaces it; null text drops; a rule is appended unless an equal one exists (null drops the matching one); facts over the budget drop oldest-first; rules over `RULE_MAX` refuse the newest with a line "Too many standing instructions; drop one first".
-2. `AppGraph.memory = JsonStore(File(app.filesDir, "memory.json"), MemoryState.serializer(), ::MemoryState)`. `Backup.memory: MemoryState = MemoryState()` (FORMAT 4; older formats refused).
+   *(As built: an empty text forgets, not a null: a nullable field is a union, and the chat's schema is near the API's 16.)* `apply`: a fact with an existing topic (trimmed, ignore case) replaces it; null text drops; a rule is appended unless an equal one exists (null drops the matching one); facts over the budget drop oldest-first; rules over `RULE_MAX` refuse the newest with a line "Too many standing instructions; drop one first".
+2. `AppGraph.memory = JsonStore(File(app.filesDir, "memory.json"), MemoryState.serializer(), ::MemoryState)`. `Backup.memory: MemoryState = MemoryState()` (FORMAT 4; older formats refused). *(As built: FORMAT 5, as phase 4 took 4; on import merged by topic and by words, this phone's own winning.)*
 3. Chat schema (`ChatPrompts.SCHEMA`) gains `"memories" to mapOf("type" to "array", "items" to obj("topic" to STRING, "text" to nullable(STRING), "kind" to mapOf("type" to "string", "enum" to listOf("fact", "rule"))))`; `ChatAnswers.Reading.memories: List<Given>`; `ChatPrompts.SYSTEM` adds:
    ```
    4. Remember (memories): a fact about the student worth keeping for later (a preference, a pattern, something about their week: "football is on Tuesdays"), with a short topic so a newer fact on the same topic replaces it; or, kind "rule", a standing instruction about how you should behave ("don't message before 8", "be blunter"). Give text null to forget one. Busy times, limits and holidays are changes, not memories.
    ```
    Felix's schema (AI-22) carries the same field.
 4. `AppGraph.answerChat`: after parsing, `Memories.apply(...)` → store, and the lines go on the Claude message as `ChatMessage.remembered: List<String>` (new field; `AskActivity` shows them in small text under the message).
-5. Weekly tidy (phase 8's Reviews page shows it; the tidy itself is here): `enrich/MemoryTidy.kt`: a call with the facts in, `{facts: [{topic, text}]}` out, system prompt "Rewrite these remembered facts about the student into fewer, current lines: merge duplicates, drop what's stale or contradicted by a newer line, keep the newest on each topic, keep every rule-like preference. At most N lines." Run by `Review.run` after the model review when the facts exceed 70 % of the budget; store `WeeklyReview.memoryTidy: MemoryTidyRecord(before: List<Fact>, after: List<Fact>)`; apply `after`. Rules are never tidied.
+5. Weekly tidy (phase 8's Reviews page shows it; the tidy itself is here): `enrich/MemoryTidy.kt`: a call with the facts in, `{facts: [{topic, text}]}` out, system prompt "Rewrite these remembered facts about the student into fewer, current lines: merge duplicates, drop what's stale or contradicted by a newer line, keep the newest on each topic, keep every rule-like preference. At most N lines." Run by `Review.run` after the model review when the facts exceed 70 % of the budget; store `WeeklyReview.memoryTidy: MemoryTidyRecord(before: List<Fact>, after: List<Fact>)`; apply `after`. Rules are never tidied. *(As built: N is two thirds of the facts sent; `after` is kept only if it makes room and the facts are still those sent; the review's last line says how many became how many; `memory-tidy` runs it from a PC.)*
 
 **Tests.** `MemoryTest` (new): replace by topic; drop; budget; rule cap; lines. `ChatTest`: memories parsed from an answer.
 

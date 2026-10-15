@@ -7,9 +7,12 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.R
+import com.thomaswcode.decrastination.data.MemoryTidyRecord
 import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.data.WeeklyReview
 import com.thomaswcode.decrastination.enrich.ClaudeReviewer
+import com.thomaswcode.decrastination.enrich.MemoryTidier
+import com.thomaswcode.decrastination.enrich.MemoryTidy
 import com.thomaswcode.decrastination.enrich.ModelHold
 import com.thomaswcode.decrastination.notify.Channels
 import com.thomaswcode.decrastination.notify.Notify
@@ -19,6 +22,7 @@ import com.thomaswcode.decrastination.notify.Notify
  * without it), the calibration is learned afresh from the log, the capacity checked, and, once
  * Claude is on, the week goes to the model for a note and bounded changes, which apply at once,
  * armed or not (your call, 11 Oct). Until then the note is the rules': what changed, in words.
+ * Then what's remembered is tidied, once it's past 70 % of its room (AI-21).
  */
 object Review {
     private const val ID = 4003
@@ -43,11 +47,14 @@ object Review {
         val model = runCatching { modelReview(graph, now, week) }
             .onFailure { Log.w(AppGraph.TAG, "The model's weekly review failed; the rules' stands", it) }
             .getOrElse { Outcome(why = "Claude's call failed") }
-        // The rules' findings always stand: the model's note comes first, and they follow.
+        val tidy = runCatching { tidyMemory(graph, now) }
+            .onFailure { Log.w(AppGraph.TAG, "Tidying what's remembered failed; it's left as it was", it) }
+            .getOrNull()
+        // The rules' findings always stand: the model's note comes first, and they follow; then the tidy's line.
         val review = (
             model.review?.let { it.copy(lines = it.lines + findings) }
                 ?: WeeklyReview(now, findings.ifEmpty { listOf("Nothing to change this week: the estimates held.") }, by = "rules", why = model.why)
-            ).copy(week = week)
+            ).let { it.copy(week = week, lines = it.lines + listOfNotNull(tidy?.let(::tidyLine)), memoryTidy = tidy) }
         graph.log.update { it.copy(reviews = it.reviews + review).trimmed(now) }
         val open = PendingIntent.getActivity(
             context,
@@ -103,6 +110,27 @@ object Review {
         val note = answer.note.ifEmpty { listOf("No note this week.") }
         return Outcome(WeeklyReview(now, note + changeLines(changes, graph.settings.value), by = result.model ?: reviewer.model))
     }
+
+    /**
+     * What's remembered, tidied by the model once its facts are past [MemoryTidy.DUE_SHARE] of their
+     * room (AI-21), or when [force]d (a PC's `memory-tidy`): its own call, after the review's. The
+     * before and after, or null: not due, the model held or failed (recorded as any call is), an
+     * answer that isn't a tidy, or the facts changed while it was out.
+     */
+    suspend fun tidyMemory(graph: AppGraph, now: Long, force: Boolean = false): MemoryTidyRecord? {
+        val before = graph.memory.value.facts
+        if (before.isEmpty() || !(force || MemoryTidy.due(before))) return null
+        val tidier = graph.memoryTidier() ?: return null
+        val called = graph.callModel(interactive = false, cost = { r: MemoryTidier.Result -> r.costUsd to r.refused }) { at -> tidier.tidy(before, at, graph.clock.zone()) }
+        val answer = (called as? AppGraph.Called.Answered)?.value?.answer ?: return null
+        val after = MemoryTidy.after(answer, before, now) ?: return null
+        var applied = false
+        graph.memory.update { state -> MemoryTidy.applied(state, before, after)?.also { applied = true } ?: state }
+        return if (applied) MemoryTidyRecord(before, after) else null
+    }
+
+    /** The tidy in the review's words. */
+    fun tidyLine(tidy: MemoryTidyRecord): String = "Felix tidied what he remembers: ${tidy.before.size} facts into ${tidy.after.size}."
 
     /** Why the model didn't review the week, in words. */
     private fun because(hold: ModelHold): String = when (hold) {

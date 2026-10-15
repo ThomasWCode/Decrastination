@@ -37,6 +37,8 @@ data class ChatMessage(
      * never by itself.
      */
     val stuck: Boolean = false,
+    /** Claude's: what it remembered or forgot with it (AI-21), a line each. */
+    val remembered: List<String> = emptyList(),
 )
 
 /**

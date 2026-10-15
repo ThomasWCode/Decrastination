@@ -141,14 +141,17 @@ class AppGraph private constructor(context: Context) {
     /** What Felix remembers (AI-21): facts, and standing instructions. */
     val memory = JsonStore(File(app.filesDir, "memory.json"), com.thomaswcode.decrastination.core.MemoryState.serializer(), { com.thomaswcode.decrastination.core.MemoryState() })
 
-    /** Who the student is, as every model call sends it (AI-05): from the settings, the tasks, the timetable, the school calendar and what's remembered. */
-    fun profile(now: Long = clock.now()): com.thomaswcode.decrastination.enrich.Profile.Block {
+    /**
+     * Who the student is, as every model call sends it (AI-05): from the settings, the tasks, the
+     * timetable, the school calendar and what's [remembered].
+     */
+    fun profile(now: Long = clock.now(), remembered: com.thomaswcode.decrastination.core.MemoryState = memory.value): com.thomaswcode.decrastination.enrich.Profile.Block {
         val s = settings.value
         val state = tasks.value
         val zone = clock.zone()
         return com.thomaswcode.decrastination.enrich.Profile.Block(
             com.thomaswcode.decrastination.enrich.Profile.yearGroup(now, zone, s.yearGroupStart),
-            com.thomaswcode.decrastination.enrich.Profile.block(s, state.tasks, state.timetable, school.value, memory.value, now, zone),
+            com.thomaswcode.decrastination.enrich.Profile.block(s, state.tasks, state.timetable, school.value, remembered, now, zone),
         )
     }
 
@@ -156,13 +159,13 @@ class AppGraph private constructor(context: Context) {
         // Files that couldn't be read whole at this start: kept for Setup to say, till you've seen them.
         // On record before anything else runs, and only then is a bad file replaced by what was kept
         // of it: a start cut short before then finds it again, and says it (once: its copy is the same).
-        val found = listOfNotNull(tasks.problem, settings.problem, secrets.problem, runtime.problem, log.problem, instructions.problem, chat.problem, school.problem)
+        val found = listOfNotNull(tasks.problem, settings.problem, secrets.problem, runtime.problem, log.problem, instructions.problem, chat.problem, school.problem, memory.problem)
         if (found.isNotEmpty()) {
             found.forEach { Log.w(TAG, "${it.file} couldn't be read whole; set aside as ${it.copy}") }
             runBlocking {
                 runCatching {
                     runtime.update { it.withUnreadable(found) }
-                }.onSuccess { listOf(tasks, settings, runtime, log, instructions, chat, school).forEach { it.keepRecovered() } }
+                }.onSuccess { listOf(tasks, settings, runtime, log, instructions, chat, school, memory).forEach { it.keepRecovered() } }
                     .onFailure { Log.w(TAG, "Couldn't keep what was found unreadable", it) }
             }
         }
@@ -704,6 +707,7 @@ class AppGraph private constructor(context: Context) {
             instructions = instructions.value.applied,
             ownTasks = tasks.value.tasks.filter { it.source == Source.Own },
             school = school.value,
+            memory = memory.value,
         ),
     )
 
@@ -725,8 +729,9 @@ class AppGraph private constructor(context: Context) {
         val ownAdded = Backups.restoredOwnTasks(backup.ownTasks, tasks.value.tasks).map { it.id }.toSet()
         tasks.update { state -> state.copy(tasks = state.tasks + Backups.restoredOwnTasks(backup.ownTasks, state.tasks)) }
         if (ownAdded.isNotEmpty()) layTaskOverrides()
-        // The backup's days off and half-days beside those here (PL-16).
+        // The backup's days off and half-days beside those here (PL-16); and what it remembered (AI-21).
         school.update { it.withAll(backup.school) }
+        memory.update { Backups.mergedMemory(it, backup.memory) }
         val own = ownAdded.size
         val told = buildList {
             if (own > 0) add("$own task${if (own == 1) "" else "s"} of your own")
@@ -784,6 +789,10 @@ class AppGraph private constructor(context: Context) {
 
     /** The model's weekly review, while Claude is switched on and has its key; else null. */
     fun modelReviewer(): ClaudeReviewer? = claudeKey()?.let { ClaudeReviewer(it, endpoint(), profile = profile()) }
+
+    /** The weekly tidy's (AI-21): the profile without the facts, which it's given to tidy. */
+    fun memoryTidier(): com.thomaswcode.decrastination.enrich.MemoryTidier? =
+        claudeKey()?.let { com.thomaswcode.decrastination.enrich.MemoryTidier(it, endpoint(), profile = profile(remembered = memory.value.copy(facts = emptyList()))) }
 
     /** Claude's API key, while Claude is switched on and the key is in use; else null. */
     fun claudeKey(): String? {
@@ -1286,20 +1295,33 @@ class AppGraph private constructor(context: Context) {
                     ),
                 note = reading.leftOut.takeIf { it.isNotEmpty() }?.let { "Left out, as the app can't use it: ${it.joinToString("; ")}" },
             )
+            var kept = false
             chat.update { s ->
                 // Only while it's still the one waiting: taken back meanwhile, the answer goes with it.
                 if (s.unanswered?.id != waiting.id) {
                     s
                 } else {
+                    kept = true
                     s.copy(messages = (s.messages.map { if (it.id == waiting.id) it.copy(answeredAt = reply.at, note = null) else it } + reply).takeLast(MAX_CHAT))
                 }
             }
+            // What it remembered (AI-21), with an answer kept only, and said under it.
+            val lines = if (kept) remember(reading.memories) else emptyList()
+            if (lines.isNotEmpty()) chat.update { s -> s.copy(messages = s.messages.map { if (it.id == reply.id) it.copy(remembered = lines) else it }) }
             null
         }
         // Why it waits, said once: written only when it changes, as this runs after every sync.
         if (note != null && chat.value.unanswered?.let { it.id == waiting.id && (it.note != note || it.stuck != stuck) } == true) {
             chat.update { s -> s.copy(messages = s.messages.map { if (it.id == waiting.id && it.answeredAt == null) it.copy(note = note, stuck = stuck) else it }) }
         }
+    }
+
+    /** [given] kept in what's remembered (AI-21), and a line for each thing that did. */
+    suspend fun remember(given: List<com.thomaswcode.decrastination.core.Given>): List<String> {
+        if (given.isEmpty()) return emptyList()
+        var lines = emptyList<String>()
+        memory.update { state -> com.thomaswcode.decrastination.core.Memories.apply(state, given, clock.now()).also { lines = it.second }.first }
+        return lines
     }
 
     /** Your message still waiting for Claude taken back, unanswered. */

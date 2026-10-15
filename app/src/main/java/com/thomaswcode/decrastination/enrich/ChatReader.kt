@@ -68,6 +68,7 @@ object ChatPrompts {
         2. Change their tasks and days (changes), with these:
 """ + InstructionPrompts.CHANGE_TYPES.prependIndent("        ") + """
         3. Answer questions about their work from what you're given, briefly: what's due when from the task list; what's on a day, how full it is, what to do next and why something isn't planned from the plan. The plan is what the app has them do and shows them, so say what it says rather than planning the work again yourself.
+        4. Remember (memories): a fact about the student worth keeping for later (a preference, a pattern, something about their week: "football is on Tuesdays"), with a short topic, so a newer fact on the same topic replaces it; or, kind "rule", a standing instruction about how you should behave ("don't message before 8", "be blunter"). To forget one, give its topic (a rule's own words) and an empty text. Busy times, limits and days off are changes, not memories; most messages need none.
 
         Reply in one to three short sentences of plain UK English (asked what's on, a short list instead, a line a task).Nothing you suggest happens until the student taps Add or Apply on it, so never say you've done it: say what you'd do ("I'd add…", "I'd move…"). If what you need is missing or unclear (which task they mean, or when), ask one short question and suggest nothing. Don't add a task that's already listed: change it instead. When their message is about a given task, event or day, it's about that unless they clearly name another. Suggest only what they asked for, and leave every field you don't use null.
     """
@@ -99,10 +100,18 @@ object ChatPrompts {
         "steps" to mapOf("type" to "array", "items" to STEP),
     )
 
+    /** A memory to keep or forget (AI-21): a string each, so no union is added (the API takes 16). */
+    val MEMORY: Map<String, Any> = InstructionPrompts.obj(
+        "topic" to STRING,
+        "text" to STRING,
+        "kind" to mapOf("type" to "string", "enum" to listOf(com.thomaswcode.decrastination.core.Given.FACT, com.thomaswcode.decrastination.core.Given.RULE)),
+    )
+
     val SCHEMA: Map<String, Any> = InstructionPrompts.obj(
         "reply" to STRING,
         "newTasks" to mapOf("type" to "array", "items" to TASK),
         "changes" to mapOf("type" to "array", "items" to InstructionPrompts.CHANGE),
+        "memories" to mapOf("type" to "array", "items" to MEMORY),
     )
 
     /**
@@ -313,10 +322,15 @@ object ChatPrompts {
 /** Claude's answer in the chat, checked: its reply, the tasks and changes the app can make, and what it left out. */
 object ChatAnswers {
 
-    data class Reading(val reply: String, val tasks: List<OwnTask>, val changes: List<Change>, val leftOut: List<String>)
+    data class Reading(val reply: String, val tasks: List<OwnTask>, val changes: List<Change>, val leftOut: List<String>, val memories: List<com.thomaswcode.decrastination.core.Given> = emptyList())
 
     @Serializable
-    private data class Answer(val reply: String = "", val newTasks: List<NewTask> = emptyList(), val changes: List<InstructionAnswers.Given> = emptyList())
+    private data class Answer(
+        val reply: String = "",
+        val newTasks: List<NewTask> = emptyList(),
+        val changes: List<InstructionAnswers.Given> = emptyList(),
+        val memories: List<com.thomaswcode.decrastination.core.Given> = emptyList(),
+    )
 
     @Serializable
     private data class NewTask(
@@ -346,6 +360,9 @@ object ChatAnswers {
      * ([OwnTasks.problem]) with plausible dates, each change as an instruction's is; what can't be
      * used is left out and said ([Reading.leftOut]), the rest kept. Null if it can't be read at all.
      */
+    /** The most memories one answer gives: a few at most is what's meant. */
+    private const val MAX_MEMORIES = 5
+
     fun parse(text: String, tasks: List<TaskItem>, events: List<CalendarEvent>, about: About, now: Long, zone: ZoneId): Reading? {
         val answer = runCatching { json.decodeFromString(Answer.serializer(), text) }.getOrNull() ?: return null
         val reply = answer.reply.trim().takeIf { it.isNotEmpty() } ?: return null
@@ -367,7 +384,7 @@ object ChatAnswers {
             leftOut += "changes that would have tasks wait for each other in a circle"
             changes = emptyList()
         }
-        return Reading(reply.take(ChatPrompts.MAX_TEXT), made, changes, leftOut)
+        return Reading(reply.take(ChatPrompts.MAX_TEXT), made, changes, leftOut, answer.memories.take(MAX_MEMORIES))
     }
 
     private fun task(n: NewTask, now: Long, zone: ZoneId): OwnTask? {
