@@ -96,7 +96,8 @@ The implementation of `docs/review_v2_improvements/impl/` on branch `v3`. Delete
 - UI-07 a mic in the chat's box, your words put in it (after what's there), not sent; the box asks you to tell Felix: 9af5581.
 - UI-15 your own task's steps changed in its form: each one's name, minutes and whether it needs home, in order, added and deleted, the total its minutes; a renamed step keeps its tick, by its place as the form had it: c57a1c1.
 - UI-17 two screens, Day and Work, for Plan and Tasks: Day the week's strip with each day's load (UI-02) and a mark where work is behind, today's DO NOW card, and the day as it runs from a tested `DayModel` (windows, events with how they're counted and their sheet, slots on record or to come with a Done each, free time between, the moment it is, what has no time, and what's done, UI-08); Work what makes the plan less than all there is, then the tasks by due date or subject (`Groups.bySubject`, UI-10) from every source or one, what the plan leaves out, and the folds as before; a first-run hint on each: 40abdcb.
-- UI-03 a slot swiped right to left done, its Undo said while it shows (`Focus.unkeepSlot`: the step to do again, its minutes and free time back); left to right later today, at the first time with its minutes free (`AppGraph.laterToday`, a change of yours): this commit.
+- UI-03 a slot swiped right to left done, its Undo said while it shows (`Focus.unkeepSlot`: the step to do again, its minutes and free time back); left to right later today, at the first time with its minutes free (`AppGraph.laterToday`, a change of yours): 9ff1a3e.
+- UI-04 a slot held to move it: a day of the next fortnight with its load (none after a real deadline), then this piece at a time or all of it that day, as a change of yours. No drag between rows (UI-04 doesn't need one; a sheet does it for less): this commit.
 
 ## Current
 

@@ -2,6 +2,7 @@ package com.thomaswcode.decrastination.ui
 
 import android.app.Activity
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -116,6 +117,8 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
     var sheetFor by rememberSaveable { mutableStateOf<String?>(null) }
     var changing by rememberSaveable { mutableStateOf<String?>(null) }
     var eventFor by rememberSaveable { mutableStateOf<String?>(null) }
+    // A piece being moved by hand (UI-04), by its key.
+    var moving by rememberSaveable { mutableStateOf<String?>(null) }
     val answers = runtime.eventAnswers + Instructions.eventAnswers(instructions.applied)
     val model = remember(plan, day, calendar, log, school, settings, tasks) {
         DayModel.from(plan, day, calendar.events, log.slots, SchoolDays.windows(day, settings, tasks.timetable, school), now, zone)
@@ -172,6 +175,7 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
                 is DayModel.Row.Planned -> PlannedRow(
                     row, plan, zone, messageOf(row.slot.chunk?.taskId.orEmpty()),
                     onOpen = { row.slot.chunk?.let { sheetFor = it.key } },
+                    onMove = { row.slot.chunk?.let { moving = it.key } },
                     // Done, with an Undo while it's said (UI-03).
                     onDone = {
                         val chunk = row.slot.chunk ?: return@PlannedRow
@@ -232,6 +236,17 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
         }
     }
     changing?.let { id -> TaskSheetHost(graph, activity, id) { changing = null } }
+    moving?.let { key ->
+        val chunk = plan.ordered.firstOrNull { it.key == key }
+        if (chunk == null) {
+            LaunchedEffect(key) { moving = null }
+        } else {
+            MoveSheet(graph, chunk, plan, zone, onDone = { said ->
+                moving = null
+                scope.launch { snackbar.showSnackbar("$said: undone in the chat's Your changes") }
+            }) { moving = null }
+        }
+    }
     eventFor?.let { key ->
         val event = calendar.events.firstOrNull { eventKey(it) == key }
         if (event == null) LaunchedEffect(key) { eventFor = null } else EventSheet(graph, activity, event, answers, now, zone) { eventFor = null }
@@ -354,11 +369,11 @@ private fun verdict(judgement: EventJudge.Judgement, asked: Boolean): String = w
 
 /**
  * A slot of the plan's: its time, its piece and why it's there, and Done; swiped right to left it's
- * done, left to right it's later today (UI-03). Outside, a small card.
+ * done, left to right it's later today (UI-03); held, it's moved (UI-04). Outside, a small card.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun PlannedRow(row: DayModel.Row.Planned, plan: Plan, zone: ZoneId, message: String?, onOpen: () -> Unit, onDone: () -> Unit, onLater: () -> Unit) {
+private fun PlannedRow(row: DayModel.Row.Planned, plan: Plan, zone: ZoneId, message: String?, onOpen: () -> Unit, onMove: () -> Unit, onDone: () -> Unit, onLater: () -> Unit) {
     val slot: Slot = row.slot
     val chunk = slot.chunk
     if (slot.kind == SlotKind.Outside || chunk == null) {
@@ -395,8 +410,7 @@ private fun PlannedRow(row: DayModel.Row.Planned, plan: Plan, zone: ZoneId, mess
         },
     ) {
     Card(
-        onClick = onOpen,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).combinedClickable(onClick = onOpen, onLongClick = onMove, onLongClickLabel = "Move it"),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = if (now) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh),
     ) {
