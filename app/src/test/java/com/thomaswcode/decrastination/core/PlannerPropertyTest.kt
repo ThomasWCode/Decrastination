@@ -279,6 +279,8 @@ class PlannerPropertyTest {
                 else -> placing - Why.DueSoon
             }
             assertTrue(chunk.why in allowed, "seed=$seed: ${chunk.taskId} part ${chunk.part} says ${chunk.why}, not one of $allowed")
+            // A day apart is revision's alone (no test dates are drawn here).
+            assertTrue(chunk.why != Why.RevisionGap || chunk.kind == Kind.Revision, "seed=$seed: ${chunk.taskId} part ${chunk.part}, ${chunk.kind}, says RevisionGap")
             assertTrue(chunk.why != Why.MostRoom || chunk.parts == 1, "seed=$seed: ${chunk.taskId} part ${chunk.part} of ${chunk.parts} says MostRoom")
             // Placed after its deadline's own last day: there was no room before it.
             val due = java.time.Instant.ofEpochMilli(chunk.deadline).atZone(LONDON)
