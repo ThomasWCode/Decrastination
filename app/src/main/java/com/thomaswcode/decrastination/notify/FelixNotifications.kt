@@ -31,9 +31,20 @@ object FelixNotifications {
     /**
      * [text], his message [id], from [name], with [replies] to choose from and [cards] (each with the
      * chat message it's on) to act on. [sent]: the reply just sent to it, shown under it while he
-     * answers, without sounding again.
+     * answers, without sounding again. [title] in his name's place, and [lines] under it (the
+     * morning's list, LR-04).
      */
-    fun post(context: Context, id: String, name: String, text: String, replies: List<String>, cards: List<Pair<String, Proposal>> = emptyList(), sent: String? = null) {
+    fun post(
+        context: Context,
+        id: String,
+        name: String,
+        text: String,
+        replies: List<String>,
+        cards: List<Pair<String, Proposal>> = emptyList(),
+        sent: String? = null,
+        title: String? = null,
+        lines: List<String> = emptyList(),
+    ) {
         val open = PendingIntent.getActivity(
             context,
             ID,
@@ -50,9 +61,12 @@ object FelixNotifications {
         val input = RemoteInput.Builder(KEY_REPLY).setLabel("Reply to $name").setChoices(replies.toTypedArray()).build()
         val builder = NotificationCompat.Builder(context, Channels.FELIX)
             .setSmallIcon(R.drawable.ic_focus)
-            .setContentTitle(name)
+            .setContentTitle(title ?: name)
             .setContentText(text)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .setStyle(
+                if (lines.isEmpty()) NotificationCompat.BigTextStyle().bigText(text)
+                else NotificationCompat.InboxStyle().setBigContentTitle(title ?: name).setSummaryText(text).also { style -> lines.forEach(style::addLine) },
+            )
             .setContentIntent(open)
             .setAutoCancel(true)
             .setOnlyAlertOnce(sent != null)

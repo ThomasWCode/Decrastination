@@ -54,6 +54,31 @@ class Felix(private val graph: AppGraph) {
         write(FelixRules.Trigger(reason, slot = slot, record = record.takeIf { slot == null }), now)
     }
 
+    /**
+     * The morning's message (LR-04): his sentence or two on the day's shape, the first the title and
+     * the second the text over the briefing's [lines] (its facts, should the sentence be off). False,
+     * the list going alone as before, with no slot today, Claude off or resting, no answer within
+     * [MORNING_MS], or an empty one. It sets no check: the day's slots do that.
+     */
+    suspend fun morning(title: String, lines: List<String>, now: Long = graph.clock.now()): Boolean = writing.withLock {
+        val plan = graph.plan(now = now)
+        if (plan.todaySlots.none { it.kind == com.thomaswcode.decrastination.core.SlotKind.Work }) return@withLock false
+        val caller = graph.felixCaller() ?: return@withLock false
+        val settings = graph.settings.value
+        val profile = graph.profile(now)
+        val user = FelixPrompts.describe(FelixPrompts.Reason.Morning, plan, null, null, today(now), graph.log.value.felix, null, settings, now, graph.clock.zone())
+        val called = kotlinx.coroutines.withTimeoutOrNull(MORNING_MS) {
+            graph.callModel(interactive = false, cost = { r: FelixCaller.Result -> r.costUsd to r.refused }) { caller.say(FelixPrompts.system(settings, profile.year), profile.text, user) }
+        }
+        val answer = (called as? AppGraph.Called.Answered)?.value?.answer?.takeIf { it.message.isNotBlank() } ?: return@withLock false
+        val record = FelixRecord(UUID.randomUUID().toString(), now, FelixPrompts.Reason.Morning.name, answer.message, answer.replies)
+        graph.log.update { it.copy(felix = it.felix + record).trimmed(now) }
+        answer.memories.takeIf { it.isNotEmpty() }?.let { graph.remember(it) }
+        val (first, second) = FelixRules.sentences(answer.message)
+        FelixNotifications.post(graph.app, record.id, settings.felixName, second ?: title, answer.replies, title = first, lines = lines)
+        true
+    }
+
     private fun today(now: Long): List<SlotRecord> {
         val date = graph.focus.today(now).toString()
         return graph.log.value.slots.filter { it.date == date }
@@ -106,6 +131,11 @@ class Felix(private val graph: AppGraph) {
         if (text.isNotBlank()) FelixNotifications.post(graph.app, record.id, settings.felixName, text, record.replies)
         Log.i(AppGraph.TAG, "Felix, ${trigger.reason} about ${trigger.key}: ${if (text.isBlank()) "nothing" else "a message"}, next look in ${(next - now) / 60_000L} min")
         return record
+    }
+
+    private companion object {
+        /** How long the morning's briefing waits for his sentence. */
+        const val MORNING_MS = 20_000L
     }
 
     /** His next look, by alarm: the phone may be asleep through the service's ticks. */

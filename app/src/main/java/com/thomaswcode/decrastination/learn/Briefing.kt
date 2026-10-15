@@ -14,8 +14,9 @@ import com.thomaswcode.decrastination.ui.MainActivity
 
 /**
  * The morning briefing (Q13): today's plan in a notification, at 07:00 on school days and 08:30 at
- * weekends; a Teams sync offered at the next unlock; and the day's plan recorded for the capacity
- * check, with yesterday's marked done or not.
+ * weekends, Felix's sentence on the day's shape over it on a day with slots (LR-04); a Teams sync
+ * offered at the next unlock; and the day's plan recorded for the capacity check, with yesterday's
+ * marked done or not.
  */
 object Briefing {
     private const val ID = 4001
@@ -74,6 +75,11 @@ object Briefing {
         }
         graph.runtime.update { it.copy(teamsAuto = it.teamsAuto.copy(morningUntil = now + MORNING_OFFER_MS)) }
         val (title, lines) = summary(plan)
+        // Felix's sentence on the day over the list (LR-04); the list alone without it.
+        if (runCatching { graph.felix.morning(title, lines, now) }.onFailure { android.util.Log.w(AppGraph.TAG, "Felix's morning message failed", it) }.getOrDefault(false)) {
+            Notify.cancel(context, ID)
+            return
+        }
         val open = PendingIntent.getActivity(
             context,
             ID,
