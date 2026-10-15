@@ -21,7 +21,7 @@ Revised after your answers: Gmail becomes starred-only (Q-04), which removes thr
 | DX-11 | Anki: seconds per card from the counts around a slot | P2 | M | Changed (note 1) |
 | DX-12 | Calendar: location and description for the event judge and the Day view | P2 | S | – |
 | DX-13 | Calendar: choose which calendars count | P1 | S | – |
-| DX-14 | Calendar: look as far ahead as the planner plans | P1 | S | Changed (now needed) |
+| DX-14 | Calendar: look as far ahead as the planner plans | P1 | S | Changed (now needed); Implemented (v3 phase 2) |
 | DX-15 | The same work from two sources | P2 | M | – |
 
 ---
