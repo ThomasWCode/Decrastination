@@ -625,4 +625,18 @@ class FocusTest {
         assertEquals(null, slotted.gapUntil())
         assertEquals(BlockPolicy.Verdict.Block(BlockPolicy.Reason.TodayUndone), slotted.verdict())
     }
+
+    @Test
+    fun `a short piece of a later day's ticked ahead earns nothing today`() = runTest {
+        val tuesday = monday.plusDays(1)
+        val both = evening + (tuesday to listOf(DayWindow(17 * 60, 22 * 60, WindowKind.Evening)))
+        val ahead = Focus(tasks, settings, runtime, log, clock) { state, s, now ->
+            Planner.plan(Planner.Input(state.tasks, now, LONDON, s, windows = both, previousSlots = runtime.value.slots.on(monday).previous))
+        }
+        laid(task("later", due = "2026-10-13T23:59", effort = 15).copy(notBefore = Fixtures.at("2026-10-13T00:00")))
+        clock.time = Fixtures.at("2026-10-12T18:00")
+        assertTrue(ahead.keepSlot("teams:later#-1#1"))
+        assertEquals(0L, ahead.creditLeftMs())
+        assertFalse(log.value.slots.single().earned)
+    }
 }

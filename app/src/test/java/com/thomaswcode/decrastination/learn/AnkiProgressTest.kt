@@ -102,4 +102,24 @@ class AnkiProgressTest {
         assertEquals(14, AnkiRules.effortMin(40, 20))
         assertEquals(6, AnkiRules.effortMin(40, 20, 6.0))
     }
+
+    @Test
+    fun `a stretch longer than three hours is no stretch, its going out not seen in time`() {
+        val counts = Triple(0, 10, 0) to Triple(0, 0, 0)
+        val readings = listOf(reading("2026-10-12T12:00", true, counts.first, counts.second), reading("2026-10-12T16:00", false, counts.first, counts.second))
+        assertEquals(emptyList(), AnkiProgress.stretches(readings, LONDON))
+    }
+
+    @Test
+    fun `the quota's reviews go by each deck's own speed, its new cards by their deck's`() {
+        val decks = listOf(
+            com.thomaswcode.decrastination.sources.anki.Deck(1, "Textbook 1", 0, 30, 20),
+            com.thomaswcode.decrastination.sources.anki.Deck(11, "Textbook 1::1.1", 0, 0, 20),
+            com.thomaswcode.decrastination.sources.anki.Deck(2, "GCSE Vocab", 0, 30, 0),
+        )
+        // 30 reviews at 4 s and 30 at Anki's 8, and 20 new at 1.1's 12 s: 2, 4 and 4 minutes, 10.
+        assertEquals(10, AnkiRules.quotaMin(decks, 20, 11, mapOf(1L to 4.0, 11L to 12.0)))
+        // None learned: Anki's usual, 8 s a review and 25 a new card.
+        assertEquals(17, AnkiRules.quotaMin(decks, 20, 11, emptyMap()))
+    }
 }

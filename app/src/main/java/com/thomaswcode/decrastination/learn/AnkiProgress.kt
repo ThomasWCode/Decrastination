@@ -58,9 +58,12 @@ object AnkiProgress {
     /** What a stretch did for a deck task: its cards, its share of the stretch's minutes, and whether today's work of it is all done. */
     data class Done(val taskId: String, val cards: Int, val minutes: Int, val finished: Boolean)
 
-    /** The stretches in [readings]: each reading coming in with the one after it going out, the same Anki day. */
+    /** The longest a stretch can be: past it, its going out wasn't seen in time (the phone off, the service down). */
+    const val MAX_STRETCH_MS = 3 * 3_600_000L
+
+    /** The stretches in [readings]: each reading coming in with the one after it going out, the same Anki day, within [MAX_STRETCH_MS]. */
     fun stretches(readings: List<AnkiReading>, zone: ZoneId): List<Stretch> =
-        readings.zipWithNext().filter { (a, b) -> a.entering && !b.entering && AnkiRules.ankiDay(a.at, zone) == AnkiRules.ankiDay(b.at, zone) }
+        readings.zipWithNext().filter { (a, b) -> a.entering && !b.entering && b.at - a.at <= MAX_STRETCH_MS && AnkiRules.ankiDay(a.at, zone) == AnkiRules.ankiDay(b.at, zone) }
             .map { (a, b) -> Stretch(a, b) }
 
     /**

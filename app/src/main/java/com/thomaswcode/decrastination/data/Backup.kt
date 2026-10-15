@@ -53,7 +53,8 @@ data class Backup(
          * older version, which would restore the rest and quietly lose them, refuses it whole as from
          * a newer one; an older backup is read here with none.
          */
-        const val FORMAT = 3
+        /** 4 since slots replaced sessions in the log (LR-09, AR-09): an older app refuses it rather than losing them. */
+        const val FORMAT = 4
     }
 }
 
@@ -266,7 +267,8 @@ object Backups {
      * same day or week) isn't doubled, and this phone's own version of it wins.
      */
     fun mergeLog(current: ActivityLog, imported: ActivityLog, now: Long): ActivityLog = ActivityLog(
-        slots = (current.slots + imported.slots).distinctBy { Triple(it.key, it.date, it.outcome) }.sortedBy { it.at },
+        // A task in boxes keeps one key for its next box: two kept the same day are told apart by when.
+        slots = (current.slots + imported.slots).distinctBy { listOf(it.key, it.start, it.outcome, it.at) }.sortedBy { it.at },
         completions = (current.completions + imported.completions).distinctBy { it.taskId to it.doneAt }.sortedBy { it.doneAt },
         blocks = (current.blocks + imported.blocks).distinctBy { Triple(it.at, it.target, it.reason) }.sortedBy { it.at },
         protection = (current.protection + imported.protection).distinctBy { it.at }.sortedBy { it.at },

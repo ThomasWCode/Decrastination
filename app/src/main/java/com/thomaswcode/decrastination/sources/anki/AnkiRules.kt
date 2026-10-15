@@ -98,6 +98,16 @@ object AnkiRules {
     /** Every due card, counting each top-level deck once: a parent's counts include its children's. */
     fun dueReviews(decks: List<Deck>): Int = decks.filter { it.isTopLevel }.sumOf { it.learn + it.review }
 
+    /**
+     * The quota's minutes (DX-11): each top-level deck's reviews at its own learned seconds a card,
+     * or Anki's usual, and [newLeft] new cards at their deck's ([deckId]).
+     */
+    fun quotaMin(decks: List<Deck>, newLeft: Int, deckId: Long?, rates: Map<Long, Double>): Int {
+        val reviews = decks.filter { it.isTopLevel }.sumOf { (it.learn + it.review) * (rates[it.id] ?: REVIEW_SECONDS.toDouble()) }
+        val new = newLeft * (deckId?.let(rates::get) ?: NEW_SECONDS.toDouble())
+        return ceil((reviews + new) / 60.0).toInt()
+    }
+
     /** Minutes for [reviews] and [new] cards: by the deck's own seconds a card where it's learned ([secondsPerCard], DX-11), else Anki's usual. */
     fun effortMin(reviews: Int, new: Int, secondsPerCard: Double? = null): Int =
         ceil((secondsPerCard?.let { (reviews + new) * it } ?: (reviews * REVIEW_SECONDS + new * NEW_SECONDS).toDouble()) / 60.0).toInt()
@@ -224,7 +234,7 @@ object AnkiRules {
             },
             className = "German",
             dueAt = dueAt,
-            sourceEffortMin = effortMin(reviews, newLeft, today.deckId?.let(rates::get)).coerceAtLeast(1),
+            sourceEffortMin = quotaMin(decks, newLeft, today.deckId, rates).coerceAtLeast(1),
             done = reviews == 0 && newLeft == 0,
             derived = true,
             extra = buildMap {

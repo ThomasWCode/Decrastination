@@ -304,7 +304,9 @@ class Focus(
         val task = tasks.value.tasks.firstOrNull { it.id == chunk.taskId }
         val today = today(now)
         val ratio = settings.value.workMinPerFreeMin
-        val earns = photo || chunk.minutes < settings.value.photoFromMin
+        // A piece of a later day's, ticked ahead, earns nothing today (BL-08: today's plan, not more).
+        val laidToday = (slot?.start ?: now).let { today(it) } == today
+        val earns = (photo || chunk.minutes < settings.value.photoFromMin) && laidToday
         // A slot of it missed today (it was moved on): this is that slot, kept late, where it was laid.
         val missed = log.value.slots.lastOrNull { it.key == key && it.date == today.toString() && it.outcome == SlotOutcome.Missed }
         val record = SlotRecord(

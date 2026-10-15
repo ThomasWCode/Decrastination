@@ -53,7 +53,9 @@ class BackupTest {
     fun `a backup keeps the school calendar, and one from before has none`() {
         val school = SchoolCalendar(listOf(NoSchool("2026-10-26", "2026-10-30", "Half term")), listOf(HalfDay("2026-10-23", 750)))
         val backup = Backup(exportedAt = now, settings = Settings(), log = ActivityLog(), school = school)
-        assertEquals(3, backup.format)
+        assertEquals(4, backup.format)
+        // A backup from a later app's format is refused, rather than read without what it adds.
+        assertNull(Backups.decode("""{"app":"Decrastination","format":5,"exportedAt":0,"settings":{},"log":{}}"""))
         assertEquals(school, Backups.decode(Backups.encode(backup))!!.school)
         // Format 2 (2.0.0) is still read, with no days off.
         val old = Backups.decode("""{"app":"Decrastination","format":2,"exportedAt":0,"settings":{},"log":{}}""")!!
@@ -127,6 +129,9 @@ class BackupTest {
         val merged = Backups.mergeLog(here, backup, now)
         assertEquals(listOf("teams:b", "teams:a"), merged.completions.map { it.taskId })
         assertEquals(listOf("teams:b#-1#1", "teams:a#-1#1"), merged.slots.map { it.key })
+        // Two boxes of one task kept the same day share a key: told apart by when they were laid.
+        val second = slot("teams:a#-1#1", now - 1_800_000L)
+        assertEquals(2, Backups.mergeLog(here, ActivityLog(slots = listOf(kept, second)), now).slots.size)
         assertEquals(1, merged.blocks.size)
     }
 
