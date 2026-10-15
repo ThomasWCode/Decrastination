@@ -159,7 +159,8 @@ object Calibrator {
         val floor = minOf(MIN_MARGIN, start)
         val ceiling = maxOf(MAX_MARGIN, start)
         val result = HashMap<Kind, Int>()
-        for ((kind, records) in completions.filter { it.dueAt != null }.groupBy { it.kind }) {
+        // Only real deadlines say whether you finish in time: a date the app or Claude set was a plan (PL-14).
+        for ((kind, records) in completions.filter { it.dueAt != null && it.hardDeadline }.groupBy { it.kind }) {
             var margin = start
             var late = 0
             var early = 0
@@ -206,7 +207,8 @@ object Calibrator {
         fun rewarded(session: SessionRecord): Boolean {
             if (!session.completed) return false
             val next = completions[session.taskId]?.firstOrNull { it.doneAt >= session.startedAt } ?: return false
-            return next.dueAt != null && next.doneAt <= next.dueAt
+            // By a real deadline: done by a plan's date says nothing of the box (PL-14).
+            return next.dueAt != null && next.hardDeadline && next.doneAt <= next.dueAt
         }
         // Judged once its outcome is known: one cut short failed then; one run in full waits for
         // its task's completion after it, and until then counts for no box, for or against.

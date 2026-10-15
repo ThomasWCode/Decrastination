@@ -515,6 +515,21 @@ class PlannerTest {
     }
 
     @Test
+    fun `a test date Claude read before an assignment's deadline is a plan, the assignment's own holding once it passes`() {
+        // Teams says Friday 23 Oct; Claude read a test on Tuesday 6 Oct into its instructions.
+        val own = Fixtures.at("2026-10-23T23:59")
+        val test = Fixtures.at("2026-10-06T08:30")
+        val assignment = task("prep", test, effort = 60).copy(sourceValues = SourceValues(Kind.Homework, own, null))
+        assertFalse(assignment.hardDeadline)
+        assertEquals(own, assignment.realDeadline)
+        // Before the test, it's planned by it; after, by Teams' own date, which can still be missed.
+        assertTrue(plan(listOf(assignment), "2026-10-05T17:00").ordered.all { it.deadline == test && !it.overdue })
+        val after = plan(listOf(assignment), "2026-10-08T17:00")
+        assertTrue(after.ordered.isNotEmpty() && after.ordered.all { it.deadline == own && it.dueAt == own && !it.overdue && !it.soft })
+        assertTrue(plan(listOf(assignment), "2026-10-24T17:00").ordered.all { it.overdue })
+    }
+
+    @Test
     fun `a Teams deadline passed is overdue and placed first`() {
         val late = task("late", Fixtures.at("2026-10-05T23:59"), effort = 30)
         val later = task("later", Fixtures.at("2026-10-20T23:59"), effort = 30)
@@ -926,6 +941,9 @@ class PlannerTest {
         val plan = Planner.plan(input)
         assertTrue(plan.ordered.all { it.behind })
         assertEquals(emptyList(), plan.wontFit)
+        // One that can only start at 21:00 has the hour after it, not the evening.
+        val opening = task("late", Fixtures.at("2026-10-09T09:00"), effort = 120).copy(notBefore = Fixtures.at("2026-10-08T21:00"))
+        assertEquals(listOf(WontFit("teams:late", "late", 120, 60, Fixtures.at("2026-10-09T09:00"))), Planner.plan(input.copy(tasks = listOf(opening))).wontFit)
         // Due this morning, with its hours tonight: none of its time is before its deadline.
         val morning = Planner.plan(input.copy(tasks = listOf(task("prep", Fixtures.at("2026-10-09T08:30"), effort = 60)), now = Fixtures.at("2026-10-09T01:00")))
         assertEquals(listOf(WontFit("teams:prep", "prep", 60, 0, Fixtures.at("2026-10-09T08:30"))), morning.wontFit)

@@ -41,8 +41,13 @@ object CalendarTime {
     const val EXTRA_ANSWER = "answer"
     private const val BASE_ID = 4200
     private const val DAY_MS = 24 * 3_600_000L
-    /** As far as the plan reaches (DX-14), so a trip in its third week takes its day's hours out of the spread. */
-    private const val LOOK_AHEAD_MS = Planner.MAX_HORIZON_DAYS * DAY_MS
+    /**
+     * The end of the plan's last day (DX-14): its days run to today + [Planner.MAX_HORIZON_DAYS], each
+     * whole, so the calendar is read to that day's midnight, where you are; a trip in the plan's third
+     * week takes its day's hours out of the spread.
+     */
+    fun readUntil(now: Long, zone: ZoneId): Long =
+        Instant.ofEpochMilli(now).atZone(zone).toLocalDate().plusDays(Planner.MAX_HORIZON_DAYS + 1).atStartOfDay(zone).toInstant().toEpochMilli()
     private const val ASK_AHEAD_MS = 7 * DAY_MS
 
     fun allowed(context: Context): Boolean = context.checkSelfPermission(PERMISSION) == PackageManager.PERMISSION_GRANTED
@@ -111,7 +116,7 @@ object CalendarTime {
         // Your instructions about events over your answers to its questions; a question one of them
         // has answered since it was asked is withdrawn.
         val yours = Instructions.eventAnswers(graph.instructions.value.applied)
-        val events = runCatching { withContext(Dispatchers.IO) { read(context, now - DAY_MS, now + LOOK_AHEAD_MS) } }
+        val events = runCatching { withContext(Dispatchers.IO) { read(context, now - DAY_MS, readUntil(now, graph.clock.zone())) } }
             .onFailure { Log.w(AppGraph.TAG, "Can't read the calendar", it) }
             .getOrNull() ?: run {
             // Not read this time: the events last read, judged again with the answers as they are

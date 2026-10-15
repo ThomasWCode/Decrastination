@@ -229,16 +229,21 @@ object Planner {
         fun startOf(task: TaskItem): Long? = task.userFrom ?: linked(task).takeIf { a -> a.isNotEmpty() && a.all { it.userFrom != null } }?.minOf { it.userFrom!! }
         // A deck task's deadline: the earliest of its assignments' as they are now (a due date you gave included).
         fun dueOf(task: TaskItem): Long? = linked(task).filterNot(::heldBack).mapNotNull { it.dueAt }.minOrNull() ?: task.dueAt
+        // A deck task's real deadline is its assignments', as its deadline is (dueOf, PL-14).
+        fun realOf(task: TaskItem): Long? = linked(task).filterNot(::heldBack).takeIf { it.isNotEmpty() }?.mapNotNull { it.realDeadline }?.minOrNull() ?: task.realDeadline
         val items = work.map { t -> startOf(t)?.let { from -> t.copy(notBefore = listOfNotNull(t.notBefore, from).maxOrNull()) } ?: t }
             .map { t -> if (linked(t).isEmpty()) t else t.copy(dueAt = dueOf(t)) }.flatMap { task ->
-            // A date the app or Claude set is a plan (PL-14): once it has passed, the work is undated
-            // again, its week counted on from that date, so it's planned within the next week rather
-            // than overdue. Only a real deadline gone by is overdue.
-            val due = plannedDue(task, input)
-            val planned = if (due == task.dueAt) task else task.copy(dueAt = null)
+            // A date the app or Claude set is a plan (PL-14): once it has passed, the real deadline
+            // behind it holds (an assignment's own, after a test date Claude read before it); with
+            // none, the work is undated again, its week counted on from that date, so it's planned
+            // within the next week rather than overdue. Only a real deadline gone by is overdue.
+            val real = realOf(task)
+            val due = plannedDue(task.dueAt, real, input.now)
+            val planned = if (due == task.dueAt) task else task.copy(dueAt = due)
             // A step's own dates gone by were a plan's too: it's done with its task's own.
             val pieces = pieces(task, input, held[task.id].orEmpty()).map { p -> if (p.due != null && p.due < input.now) p.undated() else p }
-            windows(planned, deadlineOf(task, input), soft = due == null, hard = due != null && task.hardDeadline, pieces) { start -> softWeek(start, input) }
+            val deadline = due ?: softWeek(task.dueAt ?: task.firstSeenAt, input)
+            windows(planned, deadline, soft = due == null, hard = due != null && due == real, pieces) { start -> softWeek(start, input) }
         }.filter { it.chunks.isNotEmpty() }
 
         val lastDeadline = items.maxOfOrNull { date(it.deadline, zone) } ?: today
@@ -378,7 +383,8 @@ object Planner {
         fun freeUntilDue(item: Item, from: LocalDate): Int {
             val due = Instant.ofEpochMilli(item.deadline).atZone(zone)
             val last = minOf(horizon, if (due.toLocalTime() < NOON) due.toLocalDate().minusDays(1) else due.toLocalDate())
-            return generateSequence(from) { it.plusDays(1) }.takeWhile { it <= last }.sumOf { (free[it] ?: 0).coerceAtLeast(0) }
+            // As much of each day as it can have: on a day it can only start late, the time after its start.
+            return generateSequence(from) { it.plusDays(1) }.takeWhile { it <= last }.sumOf { room(item, it).coerceAtLeast(0) }
         }
         /** [item] has more left than its time before its deadline still to come, or some of it fits nowhere: said. */
         fun sayIfShort(item: Item, free: Int, leftOut: Boolean) {
@@ -755,13 +761,13 @@ object Planner {
     }
 
     /**
-     * [task]'s deadline as the plan holds it (PL-14): a real one, even gone by; a date the app or
-     * Claude set while it's still to come; else none, and the work is undated.
+     * The deadline [due] is held to (PL-14): itself where it's the [real] one, even gone by, or still
+     * to come; gone by, the real one behind it, if there is one; else none, and the work is undated.
      */
-    private fun plannedDue(task: TaskItem, input: Input): Long? = task.dueAt?.takeIf { task.hardDeadline || it >= input.now }
+    private fun plannedDue(due: Long?, real: Long?, now: Long): Long? = due?.takeIf { it == real || it >= now } ?: real
 
     /** The deadline [task] is planned against: [plannedDue], or for undated work its soft week's end. */
-    private fun deadlineOf(task: TaskItem, input: Input): Long = plannedDue(task, input) ?: softWeek(task.dueAt ?: task.firstSeenAt, input)
+    private fun deadlineOf(task: TaskItem, input: Input): Long = plannedDue(task.dueAt, task.realDeadline, input.now) ?: softWeek(task.dueAt ?: task.firstSeenAt, input)
 
     /**
      * A soft deadline: `softDeadlineDays` on from [from], in calendar days where you are (so a week
