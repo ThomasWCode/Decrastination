@@ -94,10 +94,6 @@
             android:launchMode="singleTop"
             android:windowSoftInputMode="adjustResize" />
         <activity
-            android:name=".ui.CalendarActivity"
-            android:exported="false"
-            android:label="Calendar" />
-        <activity
             android:name=".ui.SetupActivity"
             android:exported="false"
             android:label="Setup" />

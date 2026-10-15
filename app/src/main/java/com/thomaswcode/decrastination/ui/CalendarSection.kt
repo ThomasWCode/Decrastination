@@ -36,9 +36,10 @@ private const val HOW =
         "If Google Calendar gives it default notifications, turn them off there: the app's events carry none."
 
 /**
- * The calendars (NF-07, DX-13): the one the plan's next seven days of slots are written to, picked
- * from those events can be added to ([choosing]); and which are read for busy time, each with a
- * tick ([reading]), the one written to never. Saved at once, as they're picked.
+ * The calendars (NF-07, DX-13; Settings → Calendar since UI-11): the permission, and the one the
+ * plan's next seven days of slots are written to, picked from those events can be added to
+ * ([choosing]); which are read for busy time, each with a tick ([reading]), the one written to
+ * never; and how far each goes. Saved at once, as they're picked.
  */
 @Composable
 fun CalendarSection(graph: AppGraph, activity: Activity, choosing: Boolean = true, reading: Boolean = true) {
@@ -88,6 +89,10 @@ fun CalendarSection(graph: AppGraph, activity: Activity, choosing: Boolean = tru
                     }
                 }
             }
+            Note(
+                "Read from today as far as the plan goes, ${com.thomaswcode.decrastination.core.Planner.MAX_HORIZON_DAYS} days; each event's verdict is on its sheet in Day. " +
+                    "The plan's slots are written for the next ${com.thomaswcode.decrastination.calendar.SlotCalendarDiff.DAYS} days.",
+            )
         }
     }
 }
