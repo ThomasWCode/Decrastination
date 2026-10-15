@@ -403,3 +403,23 @@ class EvidenceTest {
         assertEquals(emptyMap(), Calibrator.timed(listOf(first.copy(byHand = true), first.copy(photo = true))))
     }
 }
+
+class DaysReplanTest {
+    private fun kept(key: String, laid: String, worked: Int, window: WindowKind) = SlotRecord(
+        date = laid.take(10), key = key, taskId = key.substringBefore('#'), kind = Kind.Homework, label = key, plannedMin = worked,
+        start = Fixtures.at(laid), end = Fixtures.at(laid) + worked * 60_000L, window = window, outcome = SlotOutcome.Kept,
+        workedMin = worked, at = Fixtures.at("2026-10-09T08:00"),
+    )
+
+    @Test
+    fun `a slot laid later today and ticked early counts as today's work, and replanning counts school's minutes again`() {
+        // Ticked at 08:00: the 17:00 slot and the 10:45 one at school.
+        val log = ActivityLog(slots = listOf(kept("teams:a#-1#1", "2026-10-09T17:00", 30, WindowKind.Evening), kept("teams:b#-1#1", "2026-10-09T10:45", 20, WindowKind.Break)))
+        assertEquals(mapOf("teams:a" to 30, "teams:b" to 20), Days.workedOn(log, "2026-10-09"))
+        val day = DayRecord("2026-10-09", 90, listOf(DayChunk("teams:a", 30), DayChunk("teams:b", 20), DayChunk("teams:c", 40)), zone = "Europe/London", schoolMin = 60)
+        val again = Days.replan(day, listOf(DayChunk("teams:c", 40)), log, Fixtures.at("2026-10-09T09:00"), LONDON, aheadSchoolMin = 25)
+        // School's: the 20 kept at break, and the 25 laid there now.
+        assertEquals(45, again.schoolMin)
+        assertEquals(90, again.plannedMin)
+    }
+}

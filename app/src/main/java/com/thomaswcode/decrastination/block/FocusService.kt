@@ -154,6 +154,8 @@ class FocusService : AccessibilityService() {
 
     override fun onServiceConnected() {
         super.onServiceConnected()
+        // A stretch in AnkiDroid begun before the service stopped is let go (NF-03).
+        graph.anki.reset()
         if (active) {
             Log.i(TAG, "Focus service connected again")
             return

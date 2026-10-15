@@ -63,7 +63,8 @@ The implementation of `docs/review_v2_improvements/impl/` on branch `v3`. Delete
 - BL-04 the reward line on the block screen, the Do now card and the widget; BL-07 an hour of free time on a day with nothing to do: c40ef07.
 - BL-10 free time between today's slots after one kept, till the next starts: a569faa. Found with it, a step piece's key renumbered once a piece before it was kept, so its slot's kept start was lost (PL-13): fixed on phase 3's branch (585ba27), with a test here that keeping a piece leaves its task's next one in its slot.
 - NF-03 time in AnkiDroid as work: the decks read as it comes and goes, a deck task done by then has its slot kept, and Anki read again at once; DX-11 seconds a card learned per deck, the deck tasks' minutes going by them, shown in Settings → Anki: 9e03b44.
-- The record: README's phase 4 sentence, the review tables' items Implemented: this commit.
+- The record: README's phase 4 sentence, the review tables' items Implemented: 09d8c07.
+- Pull request #38 (stacked on #37): Codex round 1 (12 P2: every slot of a task recorded moved by a time for one, a replanned day's school minutes stale, a stretch in AnkiDroid left open by a restart, a later day's piece earning today, a backup merge folding two boxes of one key, a morning tick not counted in today's limit, the quota's reviews at one deck's speed, no Anki read after a stretch across 04:00, the reward's settings not on the Settings screen, a deck studied ahead not keeping its piece, a backup's learned speeds wiped by a stretch without evidence, the backup format not moved on) fixed in this commit.
 
 ## Current
 

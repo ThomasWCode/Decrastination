@@ -236,10 +236,8 @@ class AppGraph private constructor(context: Context) {
     }
 
     /** Minutes worked in today's kept slots, as the day's record counts them (LR-09). */
-    private fun workedToday(now: Long, zone: java.time.ZoneId): Int {
-        val start = java.time.Instant.ofEpochMilli(now).atZone(zone).toLocalDate().atStartOfDay(zone).toInstant().toEpochMilli()
-        return com.thomaswcode.decrastination.learn.Days.workedIn(log.value, start, now + 1).values.sum()
-    }
+    private fun workedToday(now: Long, zone: java.time.ZoneId): Int =
+        com.thomaswcode.decrastination.learn.Days.workedOn(log.value, java.time.Instant.ofEpochMilli(now).atZone(zone).toLocalDate().toString()).values.sum()
 
     /** The blocker's state and decisions (block/Focus.kt). */
     val focus = Focus(
@@ -1432,8 +1430,8 @@ class AppGraph private constructor(context: Context) {
         val moved = instructions.value.instructions.firstOrNull { it.id == id }?.changes.orEmpty()
             .filter { it.type == ChangeType.AtTime || it.type == ChangeType.OnDay || it.type == ChangeType.StartFrom }.mapNotNull { it.taskId }
         if (moved.isNotEmpty()) {
-            focus.plan().todaySlots.filter { it.kind == SlotKind.Work && it.chunk?.taskId in moved }
-                .forEach { slot -> focus.moveSlot(slot.key, Focus.Laid(slot.start, slot.end, slot.window)) }
+            val changes = instructions.value.instructions.firstOrNull { it.id == id }?.changes.orEmpty()
+            Instructions.movedSlots(changes, focus.plan()).forEach { slot -> focus.moveSlot(slot.key, Focus.Laid(slot.start, slot.end, slot.window)) }
             runtime.update { state -> state.copy(slots = moved.fold(state.slots) { s, taskId -> s.moved(taskId) }) }
         }
         instructions.update { state ->

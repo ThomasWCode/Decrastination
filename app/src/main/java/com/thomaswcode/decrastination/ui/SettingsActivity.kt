@@ -176,6 +176,8 @@ class SettingsActivity : ComponentActivity() {
                     NumberField("Days given to undated work", draft.softDeadlineDays, SettingsLimits.SOFT_DEADLINE_DAYS, "softDeadlineDays", form) { draft = draft.copy(softDeadlineDays = it) }
                     NumberField("Undated work a day, at most (minutes)", draft.softMinPerDay, SettingsLimits.SOFT_MIN_PER_DAY, "softMinPerDay", form) { draft = draft.copy(softMinPerDay = it) }
                     NumberField("Minutes of work for one of free time", draft.workMinPerFreeMin, SettingsLimits.WORK_MIN_PER_FREE_MIN, "workMinPerFreeMin", form) { draft = draft.copy(workMinPerFreeMin = it) }
+                    NumberField("Pieces this long earn with a photo (minutes)", draft.photoFromMin, SettingsLimits.PHOTO_FROM_MIN, "photoFromMin", form) { draft = draft.copy(photoFromMin = it) }
+                    NumberField("A day with nothing to do: free minutes", draft.freeAllowanceMin, SettingsLimits.FREE_ALLOWANCE_MIN, "freeAllowanceMin", form) { draft = draft.copy(freeAllowanceMin = it) }
                 }
 
                 item { Section("Anki") }

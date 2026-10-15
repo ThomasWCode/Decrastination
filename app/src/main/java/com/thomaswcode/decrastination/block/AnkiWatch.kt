@@ -24,6 +24,14 @@ import kotlinx.coroutines.withContext
 class AnkiWatch(private val graph: AppGraph) {
     private val lock = Mutex()
 
+    /**
+     * The focus service starting again: a stretch begun before it stopped is let go, as when it ended
+     * isn't known (its cards would be spread over all the time the service was down).
+     */
+    fun reset() {
+        if (graph.runtime.value.ankiFrontSince != null) graph.scope.launch { graph.runtime.update { it.copy(ankiFrontSince = null) } }
+    }
+
     /** [pkg] is in front: AnkiDroid come, or gone. Cheap when it's neither. */
     fun seen(pkg: String) {
         val inside = graph.runtime.value.ankiFrontSince != null
@@ -46,18 +54,29 @@ class AnkiWatch(private val graph: AppGraph) {
         reading ?: return@withLock
         val zone = graph.clock.zone()
         val stretches = AnkiProgress.stretches(graph.runtime.value.ankiReadings, zone)
-        val stretch = stretches.lastOrNull()?.takeIf { it.to == reading } ?: return@withLock
-        val tasks = graph.tasks.value
-        val plan = graph.plan(now = now)
-        for (done in AnkiProgress.done(stretch, tasks.tasks, reviewsOnly = tasks.ankiDay?.reviewsOnly == true)) {
-            Log.i(AppGraph.TAG, "AnkiDroid: ${done.cards} cards for ${done.taskId} in ${done.minutes} min${if (done.finished) ", today's done" else ""}")
-            if (!done.finished) continue
-            val piece = plan.todayBucket?.chunks?.firstOrNull { it.taskId == done.taskId } ?: continue
-            graph.focus.keepSlot(piece.key, extraMin = (done.minutes - piece.minutes).coerceAtLeast(0), now = now)
+        // A stretch across 04:00 (or one cut short) counts for nothing, but the decks are read again all the same.
+        val stretch = stretches.lastOrNull()?.takeIf { it.to == reading }
+        if (stretch != null) {
+            val tasks = graph.tasks.value
+            val plan = graph.plan(now = now)
+            for (done in AnkiProgress.done(stretch, tasks.tasks, reviewsOnly = tasks.ankiDay?.reviewsOnly == true)) {
+                Log.i(AppGraph.TAG, "AnkiDroid: ${done.cards} cards for ${done.taskId} in ${done.minutes} min${if (done.finished) ", today's done" else ""}")
+                if (!done.finished) continue
+                // Its next piece, today's or a later day's: studied ahead is kept all the same.
+                val piece = plan.ordered.firstOrNull { it.taskId == done.taskId } ?: continue
+                graph.focus.keepSlot(piece.key, extraMin = (done.minutes - piece.minutes).coerceAtLeast(0), now = now)
+            }
+            // What a card takes, per deck (DX-11): a deck with new evidence takes it; the rest keep theirs (a backup's, say).
+            val rates = AnkiProgress.secondsPerCard(stretches)
+            graph.runtime.update {
+                it.copy(
+                    calibration = it.calibration.copy(
+                        ankiSecondsPerCard = it.calibration.ankiSecondsPerCard + rates.mapValues { r -> r.value.first },
+                        ankiStretches = it.calibration.ankiStretches + rates.mapValues { r -> r.value.second },
+                    ),
+                )
+            }
         }
-        // What a card takes, per deck, from the stretches so far (DX-11).
-        val rates = AnkiProgress.secondsPerCard(stretches)
-        graph.runtime.update { it.copy(calibration = it.calibration.copy(ankiSecondsPerCard = rates.mapValues { r -> r.value.first }, ankiStretches = rates.mapValues { r -> r.value.second })) }
         graph.syncer.sync(setOf(Source.Anki))
     }
 

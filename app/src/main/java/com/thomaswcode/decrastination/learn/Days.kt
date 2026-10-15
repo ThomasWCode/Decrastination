@@ -83,11 +83,12 @@ object Days {
      * another's kept slots so far), and the rest is what the plan has today now ([ahead]). So the day
      * is judged by what it could hold once the event was known.
      */
-    fun replan(old: DayRecord, ahead: List<DayChunk>, log: ActivityLog, now: Long, zone: ZoneId): DayRecord {
+    fun replan(old: DayRecord, ahead: List<DayChunk>, log: ActivityLog, now: Long, zone: ZoneId, aheadSchoolMin: Int = 0): DayRecord {
         val dayZone = old.zone?.let { runCatching { ZoneId.of(it) }.getOrNull() } ?: zone
         val start = LocalDate.parse(old.date).atStartOfDay(dayZone).toInstant().toEpochMilli()
         val done = log.completions.filter { it.doneAt in start..now }.map { it.taskId }.toSet()
-        val worked = workedIn(log, start, now + 1)
+        // Kept today, a slot laid later today and ticked early included.
+        val worked = workedOn(log, old.date)
         val kept = old.chunks.groupBy { it.taskId }.mapNotNull { (id, chunks) ->
             val planned = chunks.sumOf { it.minutes }
             when {
@@ -97,8 +98,14 @@ object Days {
             }
         }
         val chunks = kept + ahead.filter { it.taskId !in done }
-        return old.copy(plannedMin = chunks.sumOf { it.minutes }, chunks = chunks)
+        // School's minutes as planned again: those kept there today, and what's laid there now.
+        val school = log.slots.filter { it.date == old.date && it.outcome.kept && it.window.atSchool }.sumOf { it.plannedMin } + aheadSchoolMin
+        return old.copy(plannedMin = chunks.sumOf { it.minutes }, chunks = chunks, schoolMin = school)
     }
+
+    /** Minutes worked on each task in the slots laid on [date] and kept, whenever they were ticked (LR-09). */
+    fun workedOn(log: ActivityLog, date: String): Map<String, Int> =
+        log.slots.filter { it.outcome.kept && it.date == date }.groupBy { it.taskId }.mapValues { (_, kept) -> kept.sumOf { it.workedMin } }.filterValues { it > 0 }
 
     /** Minutes worked on each task from [start] until [end]: its kept slots' (LR-09), by when each was laid. */
     fun workedIn(log: ActivityLog, start: Long, end: Long): Map<String, Int> =
