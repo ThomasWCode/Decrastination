@@ -331,6 +331,55 @@ class InstructionsTest {
     }
 
     @Test
+    fun `days off and half-days are read as dates, and said`() {
+        // Half term as one change over its days; a half-day ending at 12:30 (PL-16).
+        val reading = parse(
+            """{"understood":true,"question":null,"changes":[
+              {"type":"NoSchool","taskId":null,"afterTaskId":null,"eventKey":null,"eventTime":null,"minutes":null,"date":"2026-10-26","endDate":"2026-10-30","weekday":null,"time":null,"endTime":null},
+              {"type":"NoSchool","taskId":null,"afterTaskId":null,"eventKey":null,"eventTime":null,"minutes":null,"date":"2026-11-13","endDate":null,"weekday":null,"time":null,"endTime":null},
+              {"type":"HalfDay","taskId":null,"afterTaskId":null,"eventKey":null,"eventTime":null,"minutes":null,"date":"2026-10-23","endDate":null,"weekday":null,"time":null,"endTime":"12:30"}
+            ]}""",
+        )
+        val changes = assertIs<InstructionAnswers.Reading.Changes>(reading).changes
+        assertEquals(Change(ChangeType.NoSchool, date = "2026-10-26", endDate = "2026-10-30"), changes[0])
+        assertEquals(Change(ChangeType.NoSchool, date = "2026-11-13", endDate = "2026-11-13"), changes[1])
+        assertEquals(Change(ChangeType.HalfDay, date = "2026-10-23", endMin = 750), changes[2])
+        val tasks = emptyMap<String, TaskItem>()
+        assertEquals("No school from Mon 26 Oct to Fri 30 Oct", Instructions.describe(changes[0], tasks, LONDON))
+        assertEquals("No school on Fri 13 Nov", Instructions.describe(changes[1], tasks, LONDON))
+        assertEquals("Half-day on Fri 23 Oct, ends 12:30", Instructions.describe(changes[2], tasks, LONDON))
+        assertEquals(NoSchool("2026-10-26", "2026-10-30"), Instructions.schoolEntry(changes[0]))
+        assertEquals(HalfDay("2026-10-23", 750), Instructions.schoolEntry(changes[2]))
+        // An end before the start, or a weekday for a stretch, isn't a reading the app can use.
+        fun one(change: String) = parse("""{"understood":true,"question":null,"changes":[$change]}""")
+        assertIs<InstructionAnswers.Reading.Unclear>(one("""{"type":"NoSchool","taskId":null,"afterTaskId":null,"eventKey":null,"eventTime":null,"minutes":null,"date":"2026-10-30","endDate":"2026-10-26","weekday":null,"time":null,"endTime":null}"""))
+        assertIs<InstructionAnswers.Reading.Unclear>(one("""{"type":"NoSchool","taskId":null,"afterTaskId":null,"eventKey":null,"eventTime":null,"minutes":null,"date":null,"endDate":null,"weekday":"Monday","time":null,"endTime":null}"""))
+        assertIs<InstructionAnswers.Reading.Unclear>(one("""{"type":"HalfDay","taskId":null,"afterTaskId":null,"eventKey":null,"eventTime":null,"minutes":null,"date":"2026-10-23","endDate":null,"weekday":null,"time":null,"endTime":null}"""))
+    }
+
+    @Test
+    fun `the school calendar merges stretches that overlap or run on, and knows its days`() {
+        val calendar = SchoolCalendar()
+            .with(NoSchool("2026-10-26", "2026-10-28", "Half term"))
+            .with(NoSchool("2026-10-28", "2026-10-30"))
+            .with(NoSchool("2026-12-21", "2027-01-01", "Christmas"))
+            // Runs on from half term: the same stretch.
+            .with(NoSchool("2026-10-31", "2026-11-01"))
+            .with(HalfDay("2026-10-23", 750))
+            .with(HalfDay("2026-10-23", 780))
+        assertEquals(listOf(NoSchool("2026-10-26", "2026-11-01", "Half term"), NoSchool("2026-12-21", "2027-01-01", "Christmas")), calendar.noSchool)
+        assertEquals(listOf(HalfDay("2026-10-23", 780)), calendar.halfDays)
+        assertFalse(calendar.isSchoolDay(java.time.LocalDate.parse("2026-10-27")))
+        assertTrue(calendar.isSchoolDay(java.time.LocalDate.parse("2026-11-02")))
+        assertFalse(calendar.isSchoolDay(java.time.LocalDate.parse("2026-10-24")))
+        assertEquals(780, calendar.halfDay(java.time.LocalDate.parse("2026-10-23"))?.endsAtMin)
+        // A stretch that joins two others makes them one.
+        val joined = SchoolCalendar().with(NoSchool("2026-10-01", "2026-10-02")).with(NoSchool("2026-10-05", "2026-10-06")).with(NoSchool("2026-10-03", "2026-10-04"))
+        assertEquals(listOf(NoSchool("2026-10-01", "2026-10-06")), joined.noSchool)
+        assertEquals(listOf(NoSchool("2026-12-21", "2027-01-01", "Christmas")), calendar.without(calendar.noSchool.first()).noSchool)
+    }
+
+    @Test
     fun `minutes fewer than a task's steps aren't taken from Claude`() {
         val stepped = essay.copy(subSteps = listOf(SubStep("a", 20), SubStep("b", 20), SubStep("c", 20)))
         val reading = InstructionAnswers.parse(

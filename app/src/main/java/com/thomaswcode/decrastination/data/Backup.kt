@@ -9,6 +9,7 @@ import com.thomaswcode.decrastination.core.InstructionStatus
 import com.thomaswcode.decrastination.core.Instructions
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.OwnTasks
+import com.thomaswcode.decrastination.core.SchoolCalendar
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.enriched
@@ -42,14 +43,17 @@ data class Backup(
     val instructions: List<Instruction> = emptyList(),
     /** Your own tasks (2.0.0), open or lately done: no source can give them back. */
     val ownTasks: List<TaskItem> = emptyList(),
+    /** The school calendar (PL-16): days off and half-days, none in a backup from before. */
+    val school: SchoolCalendar = SchoolCalendar(),
 ) {
     companion object {
         const val APP = "Decrastination"
         /**
-         * 2 since 2.0.0, which keeps your own tasks: an older version, which would restore the rest
-         * and quietly lose them, refuses it whole as from a newer one.
+         * 2 since 2.0.0, which keeps your own tasks; 3 since review v2's school calendar (PL-16). An
+         * older version, which would restore the rest and quietly lose them, refuses it whole as from
+         * a newer one; an older backup is read here with none.
          */
-        const val FORMAT = 2
+        const val FORMAT = 3
     }
 }
 
@@ -96,6 +100,7 @@ object Backups {
             if (!backup.aiUsage.spentUsd.isFinite() || backup.aiUsage.spentUsd < 0 || backup.aiUsage.calls < 0) add("Claude's spending")
             if (backup.instructions.any { !wellFormed(it, backup.exportedAt) }) add("an instruction")
             if (backup.ownTasks.any { !wellFormed(it) } || backup.ownTasks.map { it.id }.toSet().size != backup.ownTasks.size) add("a task of your own")
+            if (!wellFormed(backup.school)) add("the school calendar")
         }
         return bad.takeIf { it.isNotEmpty() }?.let { "it holds what this app never writes (${it.joinToString(", ")})" }
     }
@@ -173,9 +178,18 @@ object Backups {
                 ChangeType.EventTime -> named(change.eventKey) && change.eventAnswer?.let(::answer) == true
                 ChangeType.DayLimit -> change.freeMin in 0..DAY_MIN && day(change)
                 ChangeType.BusyTime -> change.startMin in 0 until DAY_MIN && (change.endMin ?: -1) in ((change.startMin ?: DAY_MIN) + 1)..DAY_MIN && day(change)
+                // Kept in the school calendar once applied, never in an instruction in use; well formed all the same.
+                ChangeType.NoSchool -> isDate(change.date) && (change.endDate == null || isDate(change.endDate) && change.endDate >= change.date!!)
+                ChangeType.HalfDay -> isDate(change.date) && change.endMin in 0..DAY_MIN
             }
         }
     }
+
+    private fun isDate(text: String?): Boolean = text != null && runCatching { java.time.LocalDate.parse(text) }.isSuccess
+
+    /** Whether [school] is one this app could have kept: dates that read, stretches in order, an end within the day. */
+    fun wellFormed(school: SchoolCalendar): Boolean =
+        school.noSchool.all { isDate(it.from) && isDate(it.to) && it.from <= it.to } && school.halfDays.all { isDate(it.date) && it.endsAtMin in 0..DAY_MIN }
 
     /** A calendar answer as they're kept: "free", "busy", or "load:<minutes>" within a day. */
     private fun answer(value: String): Boolean =

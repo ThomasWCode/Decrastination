@@ -5,11 +5,14 @@ import com.thomaswcode.decrastination.core.Calibration
 import com.thomaswcode.decrastination.core.Change
 import com.thomaswcode.decrastination.core.ChangeType
 import com.thomaswcode.decrastination.core.DayKind
+import com.thomaswcode.decrastination.core.HalfDay
 import com.thomaswcode.decrastination.core.Instruction
 import com.thomaswcode.decrastination.core.InstructionStatus
 import com.thomaswcode.decrastination.core.Kind
+import com.thomaswcode.decrastination.core.NoSchool
 import com.thomaswcode.decrastination.core.OwnTask
 import com.thomaswcode.decrastination.core.OwnTasks
+import com.thomaswcode.decrastination.core.SchoolCalendar
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.enrich.AiUsage
 import java.io.ByteArrayInputStream
@@ -17,6 +20,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class BackupTest {
     private val now = Fixtures.at("2026-10-09T20:00")
@@ -43,6 +47,21 @@ class BackupTest {
             eventAnswers = mapOf("Drum lesson" to "busy"),
         )
         assertEquals(backup, Backups.decode(Backups.encode(backup)))
+    }
+
+    @Test
+    fun `a backup keeps the school calendar, and one from before has none`() {
+        val school = SchoolCalendar(listOf(NoSchool("2026-10-26", "2026-10-30", "Half term")), listOf(HalfDay("2026-10-23", 750)))
+        val backup = Backup(exportedAt = now, settings = Settings(), log = ActivityLog(), school = school)
+        assertEquals(3, backup.format)
+        assertEquals(school, Backups.decode(Backups.encode(backup))!!.school)
+        // Format 2 (2.0.0) is still read, with no days off.
+        val old = Backups.decode("""{"app":"Decrastination","format":2,"exportedAt":0,"settings":{},"log":{}}""")!!
+        assertEquals(SchoolCalendar(), old.school)
+        assertNull(Backups.problem(old))
+        // One the app couldn't have kept is refused whole.
+        val bad = backup.copy(school = SchoolCalendar(listOf(NoSchool("2026-10-30", "2026-10-26"))))
+        assertNotNull(Backups.problem(bad))
     }
 
     @Test
@@ -161,7 +180,7 @@ class BackupTest {
         assertNotNull(Backups.problem(backup().copy(ownTasks = listOf(mine.copy(derived = true)))))
         assertNotNull(Backups.problem(backup().copy(ownTasks = listOf(mine.copy(extra = mapOf("from" to "x"))))))
         // A backup of this version is one an older version refuses whole, not one it restores without them.
-        assertEquals(2, Backup.FORMAT)
+        assertTrue(Backup.FORMAT > 1)
         val laid = mine.copy(userDueAt = now + 3 * 86_400_000L, userNotATask = true).let { it.copy(dueAt = it.userDueAt) }
         val restored = Backups.restoredOwnTasks(listOf(laid), emptyList()).single()
         assertNull(restored.userDueAt)

@@ -86,6 +86,12 @@ enum class ChangeType {
 
     /** No work from [Change.startMin] to [Change.endMin] on [Change.date], or every [Change.weekday]. */
     BusyTime,
+
+    /** No school from [Change.date] to [Change.endDate] (PL-16): kept in the school calendar, not the instruction. */
+    NoSchool,
+
+    /** School on [Change.date] ends at [Change.endMin] (PL-16): kept in the school calendar too. */
+    HalfDay,
 }
 
 /** One change an instruction makes. Which fields mean anything depends on [type]. */
@@ -102,6 +108,8 @@ data class Change(
     val eventAnswer: String? = null,
     /** A day, as YYYY-MM-DD. */
     val date: String? = null,
+    /** [ChangeType.NoSchool]'s last day, as YYYY-MM-DD. */
+    val endDate: String? = null,
     /** Every such day, 1 (Monday) to 7 (Sunday). */
     val weekday: Int? = null,
     val freeMin: Int? = null,
@@ -296,7 +304,24 @@ object Instructions {
             }
             ChangeType.DayLimit -> if ((change.freeMin ?: 0) == 0) "${day(change)}: no work" else "${day(change)}: at most ${hours(change.freeMin!!)} of work"
             ChangeType.BusyTime -> "${day(change)}, ${clock(change.startMin)}–${clock(change.endMin)}: busy, no work"
+            ChangeType.NoSchool -> {
+                val first = date(change.date)
+                val last = date(change.endDate) ?: first
+                when {
+                    first == null -> "No school on a day"
+                    last == null || last == first -> "No school on ${first.format(DAY)}"
+                    else -> "No school from ${first.format(DAY)} to ${last.format(DAY)}"
+                }
+            }
+            ChangeType.HalfDay -> "Half-day on ${day(change)}, ends ${clock(change.endMin)}"
         }
+    }
+
+    /** What [change] puts in the school calendar (PL-16), or null for one of another kind or without its dates. */
+    fun schoolEntry(change: Change): Any? = when (change.type) {
+        ChangeType.NoSchool -> change.date?.let { from -> NoSchool(from, maxOf(from, change.endDate ?: from)) }
+        ChangeType.HalfDay -> change.date?.let { date -> change.endMin?.let { HalfDay(date, it) } }
+        else -> null
     }
 
     private fun clock(minutes: Int?): String = minutes?.let { "%02d:%02d".format(Locale.UK, it / 60, it % 60) } ?: "?"
