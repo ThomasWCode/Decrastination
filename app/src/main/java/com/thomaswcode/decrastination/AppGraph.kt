@@ -823,7 +823,8 @@ class AppGraph private constructor(context: Context) {
         var rest = 0L
         val after = runtime.update { state ->
             val usage = state.aiUsage.forCall(month)
-            rest = usage.restAfter(kind, at, Failures.retryAfterMs(error))
+            // Older than a call that's gone through since: no rest comes of it.
+            rest = if (usage.stale(at)) 0L else usage.restAfter(kind, at, Failures.retryAfterMs(error))
             state.copy(
                 aiUsage = usage.failure(error.message ?: error.javaClass.simpleName, at, problem, rest, kind),
                 // A task the API won't take as asked isn't sent again till it changes.
@@ -929,16 +930,20 @@ class AppGraph private constructor(context: Context) {
         // Counted in the month it's made in, as the cap was checked for (or a newer one counted since).
         val at = clock.now()
         val month = AiUsage.monthOf(at, clock.zone())
+        // Sent, it's paid for: it comes back and is counted, whatever cancels its caller meanwhile (a
+        // job stopped), which goes on at its next suspension.
         return try {
-            val value = send(at)
-            val (usd, refused) = cost(value)
-            modelWorked(usd, refused, month, at)
-            Called.Answered(value)
-        } catch (e: kotlinx.coroutines.CancellationException) {
-            throw e
-        } catch (e: Throwable) {
-            modelFailed(e, month, at, task)
-            Called.Failed(e)
+            withContext<Called<T>>(NonCancellable) {
+                try {
+                    val value = send(at)
+                    val (usd, refused) = cost(value)
+                    modelWorked(usd, refused, month, at)
+                    Called.Answered(value)
+                } catch (e: Throwable) {
+                    modelFailed(e, month, at, task)
+                    Called.Failed(e)
+                }
+            }
         } finally {
             inFlight.decrementAndGet()
         }
@@ -1226,10 +1231,10 @@ class AppGraph private constructor(context: Context) {
     private val answering = Mutex()
 
     /**
-     * Your [text] to Claude about [about] (2.0.0, Q29): kept, then answered ([answerChat]). Not while
-     * one of yours still waits for its answer: false then, and nothing's kept.
+     * Your [text] to Claude about [about] (2.0.0, Q29): kept as message [id], then answered
+     * ([answerChat]). Not while one of yours still waits for its answer: false then, and nothing's kept.
      */
-    suspend fun ask(text: String, about: About = About()): Boolean {
+    suspend fun ask(text: String, about: About = About(), id: String = java.util.UUID.randomUUID().toString()): Boolean {
         val words = text.trim().take(ChatPrompts.MAX_TEXT)
         if (words.isEmpty()) return false
         var added = false
@@ -1238,7 +1243,7 @@ class AppGraph private constructor(context: Context) {
                 state
             } else {
                 added = true
-                state.copy(messages = (state.messages + ChatMessage(java.util.UUID.randomUUID().toString(), Speaker.You, words, clock.now(), about)).takeLast(MAX_CHAT))
+                state.copy(messages = (state.messages + ChatMessage(id, Speaker.You, words, clock.now(), about)).takeLast(MAX_CHAT))
             }
         }
         if (added) scope.launch { answerChat() }
@@ -1371,33 +1376,42 @@ class AppGraph private constructor(context: Context) {
         }
         val his = chat.value.messages.firstOrNull { it.id == id }
         val said = record?.text ?: his?.text.orEmpty()
-        if (!ask(words, his?.about ?: About())) {
+        // The reply's own message in the chat, so its answer is told from any to what's said after it.
+        val asked = java.util.UUID.randomUUID().toString()
+        if (!ask(words, his?.about ?: About(), asked)) {
             com.thomaswcode.decrastination.notify.FelixNotifications.post(app, id, name, "$said\n\nYour last message to me is still waiting for its answer: send this again once it's come.", emptyList())
             return false
         }
         // Shown as sent, under his message, while he answers: as work of its own, as the receiver
         // that took the reply is let go once this returns, and the app may go with it.
         com.thomaswcode.decrastination.notify.FelixNotifications.post(app, id, name, said, emptyList(), sent = words)
-        com.thomaswcode.decrastination.notify.FelixReplyWorker.enqueue(app, id, words, now)
+        com.thomaswcode.decrastination.notify.FelixReplyWorker.enqueue(app, id, asked, words)
         return true
     }
 
     /**
      * The chat's answer to a reply from Felix's notification ([replyToFelix]), as
-     * [com.thomaswcode.decrastination.notify.FelixReplyWorker] runs it: shown as his next
-     * notification, or why there's none, where the reply was made; nothing with the chat in front,
-     * which shows it.
+     * [com.thomaswcode.decrastination.notify.FelixReplyWorker] runs it: the answer to that reply's
+     * message, [asked], not one to anything said after it, shown as his next notification, or why
+     * there's none, where the reply was made; nothing with the chat in front, which shows it.
      */
-    suspend fun answerReply(id: String, words: String, since: Long) {
+    suspend fun answerReply(id: String, asked: String, words: String) {
         val name = settings.value.felixName
         val said = log.value.felix.firstOrNull { it.id == id }?.text ?: chat.value.messages.firstOrNull { it.id == id }?.text.orEmpty()
         answerChat()
-        val last = chat.value.messages.lastOrNull() ?: return
+        val messages = chat.value.messages
+        val mine = messages.indexOfFirst { it.id == asked }
+        // Taken back, or the chat cleared: nothing to tell.
+        if (mine < 0) return
+        // Its answer: his first after it, with nothing more of yours between.
+        val later = messages.drop(mine + 1)
+        val answer = later.takeWhile { it.from != Speaker.You }.firstOrNull { it.from == Speaker.Claude }
         when {
             chatInFront -> com.thomaswcode.decrastination.notify.FelixNotifications.cancel(app)
-            last.from == Speaker.Claude && last.at >= since -> tellAnswer(last)
+            answer != null -> tellAnswer(answer)
             // Not answered (Claude off, resting, a failed call): why, where the reply was made.
-            last.from == Speaker.You && last.note != null -> com.thomaswcode.decrastination.notify.FelixNotifications.post(app, id, name, "$said\n\n${last.note}", emptyList(), sent = words)
+            later.none { it.from == Speaker.You } && messages[mine].note != null ->
+                com.thomaswcode.decrastination.notify.FelixNotifications.post(app, id, name, "$said\n\n${messages[mine].note}", emptyList(), sent = words)
         }
     }
 

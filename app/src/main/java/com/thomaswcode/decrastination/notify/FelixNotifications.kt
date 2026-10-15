@@ -1,6 +1,5 @@
 package com.thomaswcode.decrastination.notify
 
-import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import androidx.core.app.NotificationCompat
@@ -46,14 +45,6 @@ object FelixNotifications {
         lines: List<String> = emptyList(),
         channel: String = Channels.FELIX,
     ) {
-        // Mutable, as the reply's words are put in it.
-        val reply = PendingIntent.getBroadcast(
-            context,
-            ID,
-            Intent(context, FelixReplyReceiver::class.java).setAction(ACTION_REPLY).putExtra(EXTRA_ID, id),
-            PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
-        )
-        val input = RemoteInput.Builder(KEY_REPLY).setLabel("Reply to $name").setChoices(replies.toTypedArray()).build()
         val builder = NotificationCompat.Builder(context, channel)
             .setSmallIcon(R.drawable.ic_focus)
             .setContentTitle(title ?: name)
@@ -65,17 +56,12 @@ object FelixNotifications {
             .let { Notify.opening(it, context, ID, AskActivity.intent(context).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
             .setAutoCancel(true)
             .setOnlyAlertOnce(sent != null)
-            .addAction(NotificationCompat.Action.Builder(R.drawable.ic_send, "Reply", reply).addRemoteInput(input).setAllowGeneratedReplies(false).build())
+            // Kept with it, as its buttons are, should the morning's be held back (LR-07).
+            .let { Notify.replying(it, context, "Reply", ID, Intent(context, FelixReplyReceiver::class.java).setAction(ACTION_REPLY).putExtra(EXTRA_ID, id), KEY_REPLY, "Reply to $name", replies) }
         sent?.let { builder.setRemoteInputHistory(arrayOf<CharSequence>(it)) }
         cards.take(MAX_CARDS).forEachIndexed { i, (messageId, card) ->
             val label = card.task?.let { "Add “${it.title.take(MAX_CARD_TITLE)}”" } ?: if (card.changes.size == 1) "Apply the change" else "Apply the changes"
-            val act = PendingIntent.getBroadcast(
-                context,
-                ID + 1 + i,
-                Intent(context, FelixReplyReceiver::class.java).setAction(ACTION_CARD).putExtra(EXTRA_MESSAGE, messageId).putExtra(EXTRA_CARD, card.id),
-                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
-            )
-            builder.addAction(0, label, act)
+            Notify.button(builder, context, label, ID + 1 + i, Intent(context, FelixReplyReceiver::class.java).setAction(ACTION_CARD).putExtra(EXTRA_MESSAGE, messageId).putExtra(EXTRA_CARD, card.id))
         }
         Notify.post(context, ID, builder.build())
     }

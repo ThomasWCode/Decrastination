@@ -10,7 +10,9 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.app.RemoteInput
 import com.thomaswcode.decrastination.data.HeldNotification
+import com.thomaswcode.decrastination.data.HeldReply
 import com.thomaswcode.decrastination.data.HeldTap
 import kotlinx.coroutines.launch
 import kotlinx.serialization.builtins.ListSerializer
@@ -43,17 +45,39 @@ object Notify {
         return builder.addAction(0, label, PendingIntent.getBroadcast(context, requestCode, intent, FLAGS))
     }
 
+    /**
+     * [builder] with a button, [label], opening a reply box ([key], saying [hint], offering
+     * [choices]) whose words go to [intent]'s receiver; kept with it too, as [opening]'s tap is.
+     */
+    fun replying(builder: NotificationCompat.Builder, context: Context, label: String, requestCode: Int, intent: Intent, key: String, hint: String, choices: List<String>): NotificationCompat.Builder {
+        keep(builder, HeldTap(label = label, broadcast = true, requestCode = requestCode, intent = intent.toUri(Intent.URI_INTENT_SCHEME), reply = HeldReply(key, hint, choices)))
+        return builder.addAction(replyAction(context, label, requestCode, intent, HeldReply(key, hint, choices)))
+    }
+
+    private fun replyAction(context: Context, label: String, requestCode: Int, intent: Intent, reply: HeldReply): NotificationCompat.Action {
+        // Mutable, as the reply's words are put in it.
+        val pending = PendingIntent.getBroadcast(context, requestCode, intent, PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+        val input = RemoteInput.Builder(reply.key).setLabel(reply.label).setChoices(reply.choices.toTypedArray()).build()
+        return NotificationCompat.Action.Builder(com.thomaswcode.decrastination.R.drawable.ic_send, label, pending).addRemoteInput(input).setAllowGeneratedReplies(false).build()
+    }
+
     private fun taps(json: String?): List<HeldTap> = json?.let { runCatching { Json.decodeFromString(TAPS, it) }.getOrNull() }.orEmpty()
 
     private fun keep(builder: NotificationCompat.Builder, tap: HeldTap) {
         builder.extras.putString(EXTRA_TAPS, Json.encodeToString(TAPS, taps(builder.extras.getString(EXTRA_TAPS)) + tap))
     }
 
-    /** [tap] made again: only ever one of the app's own, as it's read back from a file. */
-    private fun pending(context: Context, tap: HeldTap): PendingIntent? {
+    /** [tap]'s intent read back: only ever one of the app's own, as it's read from a file. */
+    private fun intentOf(context: Context, tap: HeldTap): Intent? {
         val intent = runCatching { Intent.parseUri(tap.intent, Intent.URI_INTENT_SCHEME) }.getOrNull() ?: return null
         if (intent.component?.packageName != context.packageName) return null
         intent.selector = null
+        return intent
+    }
+
+    /** [tap] made again. */
+    private fun pending(context: Context, tap: HeldTap): PendingIntent? {
+        val intent = intentOf(context, tap) ?: return null
         return if (tap.broadcast) PendingIntent.getBroadcast(context, tap.requestCode, intent, FLAGS) else PendingIntent.getActivity(context, tap.requestCode, intent, FLAGS)
     }
 
@@ -144,7 +168,12 @@ object Notify {
                 .setStyle(NotificationCompat.BigTextStyle().bigText(h.text))
                 .setContentIntent(h.taps.firstOrNull { it.label == null }?.let { pending(context, it) } ?: app)
                 .setAutoCancel(true)
-            h.taps.forEach { tap -> tap.label?.let { label -> pending(context, tap)?.let { builder.addAction(0, label, it) } } }
+            h.taps.forEach { tap ->
+                val label = tap.label ?: return@forEach
+                val reply = tap.reply
+                if (reply != null) intentOf(context, tap)?.let { builder.addAction(replyAction(context, label, tap.requestCode, it, reply)) }
+                else pending(context, tap)?.let { builder.addAction(0, label, it) }
+            }
             if (h.tag != null) manager.notify(h.tag, h.id, builder.build()) else manager.notify(h.id, builder.build())
         }
         graph.runtime.update { s -> s.copy(heldNotifications = s.heldNotifications - held.toSet()) }

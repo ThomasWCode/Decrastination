@@ -164,9 +164,10 @@ class SlotReceiver : BroadcastReceiver() {
                         graph.slots.onEnd(key!!, if (window != null && start >= 0 && end >= start) Focus.Laid(start, end, window) else null)
                     }
                 }
-                // Each is a moment Felix may have something to say (LR-03): his look runs on by itself,
-                // as the model's answer may take longer than a receiver is given.
-                graph.scope.launch { runCatching { graph.felix.check() }.onFailure { Log.w(AppGraph.TAG, "Felix's look failed", it) } }
+                // Each is a moment Felix may have something to say (LR-03): his look is work of its own,
+                // as the model's answer may take longer than a receiver is given, and the app may go
+                // once it's let go.
+                com.thomaswcode.decrastination.learn.FelixWorker.enqueue(context)
             } finally {
                 pending.finish()
             }
