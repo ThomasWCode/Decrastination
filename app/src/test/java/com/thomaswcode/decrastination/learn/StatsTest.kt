@@ -120,4 +120,14 @@ class StatsTest {
         )
         assertEquals(emptyList(), Stats.calibrationLines(Calibration()))
     }
+
+    @Test
+    fun `a slot counts on the day it was laid, as recorded, whatever the zone now`() {
+        // Laid on the 9th at 23:30 in London, read where it's the 10th already: the 9th's.
+        val late = slot("2026-10-09T23:30", SlotOutcome.Kept)
+        val tokyo = java.time.ZoneId.of("Asia/Tokyo")
+        val summary = Stats.summary(ActivityLog(slots = listOf(late)), Fixtures.at("2026-10-09T23:59"), tokyo)
+        assertEquals(30, summary.days.single { it.date == LocalDate.parse("2026-10-09") }.slotMin)
+        assertEquals(0, summary.days.single { it.date == LocalDate.parse("2026-10-10") }.slotMin)
+    }
 }

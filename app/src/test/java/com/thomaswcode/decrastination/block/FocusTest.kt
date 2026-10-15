@@ -771,4 +771,61 @@ class FocusTest {
         tasks.update { it.copy(tasks = listOf(task("plan", kind = Kind.Admin, due = "2026-10-12T23:59", effort = 30).copy(id = "own:plan", source = Source.Own))) }
         assertEquals("Finish today's slot (30 min)", focus.rewardLine(focus.plan()))
     }
+
+    // --- Codex's third review of phase 4 ---
+
+    @Test
+    fun `a photo's reward on a slot kept already, stopped part-way, is given at start-up, once`() = runTest {
+        val long = laid(task("long", due = "2026-10-12T23:59", effort = 30)).single()
+        clock.time = long.end
+        assertTrue(slotted.keepSlot(long.chunk!!.key))
+        val unearned = log.value.slots.single()
+        val photo = PhotoDone("p", "teams:long", null, 30, clock.time, key = long.chunk!!.key, takenAt = clock.time - 60_000L)
+        val journal = Keeping(unearned.copy(earned = true, photo = true), null, null, 0, 10.0, replaces = unearned, photo = photo, earnOnly = true)
+        // Stopped after the record was marked, before the free time: given, once, and the photo let go.
+        runtime.update { it.copy(photosDone = listOf(photo), keeping = listOf(journal)) }
+        log.update { it.copy(slots = listOf(journal.record)) }
+        repeat(2) { slotted.finishKeeps() }
+        slotted.finishPhotos()
+        assertEquals(10 * 60_000L, slotted.creditLeftMs())
+        assertEquals(listOf(journal.record), log.value.slots)
+        assertEquals(emptyList(), runtime.value.photosDone)
+        assertEquals(30, tasks.value.tasks.single().workedMin)
+    }
+
+    @Test
+    fun `a photo of a piece is its own, not a slot of its key kept before it was taken`() = runTest {
+        // A task in boxes: the first kept without a photo, then a photo of the next, which has its key now.
+        val first = laid(task("box", due = "2026-10-12T23:59", effort = 60)).first()
+        val key = first.chunk!!.key
+        clock.time = first.end
+        assertTrue(slotted.keepSlot(key))
+        clock.time += 10 * 60_000L
+        val taken = clock.time
+        clock.time += 60_000L
+        assertTrue(slotted.photoChecked("teams:box", null, 30, key = key, takenAt = taken))
+        assertEquals(listOf(false, true), log.value.slots.map { it.earned })
+        assertEquals(60, tasks.value.tasks.single().workedMin)
+        // Ticked while a check of it ran: that's the slot the photo shows, and it earns.
+        tasks.update { state -> state.copy(tasks = state.tasks.map { it.copy(workedMin = 0) }) }
+        log.update { it.copy(slots = emptyList()) }
+        val start = clock.time
+        clock.time += 60_000L
+        assertTrue(slotted.keepSlot(key))
+        assertTrue(slotted.photoChecked("teams:box", null, 30, key = key, takenAt = start))
+        assertEquals(listOf(true), log.value.slots.map { it.earned })
+        assertEquals(30, tasks.value.tasks.single().workedMin)
+    }
+
+    @Test
+    fun `an empty day waits for what a stop left part-way`() = runTest {
+        clock.time = Fixtures.at("2026-10-12T09:00")
+        val record = SlotRecord(
+            date = "2026-10-12", key = "teams:a#-1#1", taskId = "teams:a", kind = Kind.Homework, label = "a", plannedMin = 15,
+            start = clock.time, end = clock.time, window = WindowKind.Evening, outcome = SlotOutcome.Kept, workedMin = 15, at = clock.time,
+        )
+        runtime.update { it.copy(keeping = listOf(Keeping(record, null, null, 0, 5.0))) }
+        focus.grantAllowanceIfDue()
+        assertEquals(0L, focus.creditLeftMs())
+    }
 }

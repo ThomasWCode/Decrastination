@@ -133,7 +133,7 @@ class Focus(
      * record of the day, if made yet, planned nothing. A day emptied by finishing its work, or by
      * moving it away, earned or chose what it has. Only once each source has been read today: the
      * list from before (the app just started, a sync not run yet) may not hold today's work. One
-     * never read (not set up) holds none.
+     * never read (not set up) holds none. And not before what a stop left part-way is finished.
      */
     suspend fun grantAllowanceIfDue(now: Long = clock.now()) {
         val minutes = settings.value.freeAllowanceMin
@@ -141,6 +141,8 @@ class Focus(
         val today = today(now)
         val day = today.toString()
         if (runtime.value.credit.on(today).allowanceOn == day) return
+        // Not while a stop's left work part-way recorded (a slot kept, a photo, a completion): it's finished first.
+        if (runtime.value.keeping.isNotEmpty() || runtime.value.photosDone.isNotEmpty() || tasks.value.unrewarded.isNotEmpty()) return
         val dayStart = today.atStartOfDay(clock.zone()).toInstant().toEpochMilli()
         if (Source.SYNCED.any { source -> tasks.value.status(source).lastSuccessAt?.let { it < dayStart } == true }) return
         val plan = plan(now)
@@ -362,8 +364,9 @@ class Focus(
      */
     private suspend fun finish(k: Keeping, now: Long, recovering: Boolean): Kept? {
         val record = k.record
-        var carried = false
-        tasks.update { state ->
+        // A slot kept already, earning now: nothing on the task.
+        var carried = k.earnOnly
+        if (!k.earnOnly) tasks.update { state ->
             state.copy(
                 tasks = state.tasks.map { t ->
                     if (t.id != record.taskId) return@map t
@@ -389,9 +392,18 @@ class Focus(
             return null
         }
         // A slot of it missed today and kept after all is one slot, kept late: that miss gives way.
+        // Earning only, the record it was is marked; gone since (marked by another photo, trimmed), nothing's given.
+        var recorded = true
         log.update { state ->
-            if (recovering && state.slots.any { it.key == record.key && it.at == record.at && it.outcome.kept }) state
-            else state.copy(slots = state.slots.filterNot { it == k.replaces } + record).trimmed(now)
+            when {
+                recovering && state.slots.any { it.key == record.key && it.at == record.at && it.outcome.kept && (!k.earnOnly || it.earned) } -> state
+                k.earnOnly -> if (k.replaces != null && k.replaces in state.slots) state.copy(slots = state.slots.map { if (it == k.replaces) record else it }) else state.also { recorded = false }
+                else -> state.copy(slots = state.slots.filterNot { it == k.replaces } + record).trimmed(now)
+            }
+        }
+        if (!recorded) {
+            runtime.update { it.copy(keeping = it.keeping - k) }
+            return null
         }
         val today = today(now)
         val day = today(record.at)
@@ -401,14 +413,14 @@ class Focus(
             } else {
                 state.copy(
                     credit = if (k.earningMin > 0 && day == today) state.credit.earn(today, k.earningMin) else state.credit.on(today),
-                    slots = if (day == today) state.slots.on(today).kept(record.key) else state.slots,
+                    slots = if (day == today && !k.earnOnly) state.slots.on(today).kept(record.key) else state.slots,
                     keeping = state.keeping - k,
                     photosDone = k.photo?.let { state.photosDone - it } ?: state.photosDone,
                 )
             }
         }
         // One of your own finished by it: its last step (seen to as its steps are), or its minutes all worked.
-        val task = tasks.value.tasks.firstOrNull { it.id == record.taskId }
+        val task = tasks.value.tasks.firstOrNull { it.id == record.taskId }.takeUnless { k.earnOnly }
         return Kept(task?.takeIf { it.source == Source.Own && it.isOpen && it.subSteps.isEmpty() && Planner.remaining(it, runtime.value.calibration.multiplierFor(it)) <= 0 }?.id)
     }
 
@@ -467,8 +479,8 @@ class Focus(
      * kept one's free time earned. Saved first ([RuntimeState.photosDone]), so a stop part-way is
      * finished at start-up.
      */
-    suspend fun photoChecked(taskId: String, step: String?, minutes: Int, stepIndex: Int? = null, key: String): Boolean {
-        val done = PhotoDone(UUID.randomUUID().toString(), taskId, step, minutes, clock.now(), stepIndex, key)
+    suspend fun photoChecked(taskId: String, step: String?, minutes: Int, stepIndex: Int? = null, key: String, takenAt: Long? = null): Boolean {
+        val done = PhotoDone(UUID.randomUUID().toString(), taskId, step, minutes, clock.now(), stepIndex, key, takenAt)
         runtime.update { it.copy(photosDone = it.photosDone + done) }
         return finishPhoto(done)
     }
@@ -527,9 +539,13 @@ class Focus(
     private suspend fun photoEarns(done: PhotoDone, key: String): Boolean {
         val at = done.at
         val today = today(at).toString()
-        val unearned = log.value.slots.lastOrNull { it.key == key && it.outcome.kept && it.date == today && !it.earned }
+        // Taken of a piece still to do: a slot of it kept since (ticked while the check ran) is the one
+        // it shows; one kept before it was taken is another (an earlier box under the same key, a
+        // round before the task reopened), and the piece in the plan now is the one.
+        val taken = done.takenAt ?: at
+        val unearned = log.value.slots.lastOrNull { it.key == key && it.outcome.kept && it.date == today && !it.earned && it.at >= taken }
         if (unearned == null) {
-            val kept = keeping.withLock { keep(key, 0, photo = true, verified = false, seenAt = at, now = maxOf(at, clock.now()), photoDone = done) } ?: return false
+            val kept = keeping.withLock { keep(key, 0, photo = true, verified = false, seenAt = taken, now = maxOf(at, clock.now()), photoDone = done) } ?: return false
             kept.ownDone?.let { onOwnTaskDone(it) }
             return true
         }
@@ -537,10 +553,10 @@ class Focus(
     }
 
     /**
-     * [unearned], a slot kept today without earning, earns now (BL-08: its photo passed, or its
-     * source says it's done), within today's plan: given with [letGo]'s letting go where there's
-     * one, then marked on its record. False when its day is over, it's earned since (another photo),
-     * or [letGo] was let go already. Held under [keeping], as a keep is.
+     * [unearned], a slot kept today without earning, earns now (BL-08: its photo passed), within
+     * today's plan: journalled, its record marked, then given with [letGo]'s letting go. False when
+     * its day is over, it's earned since (another photo), or [letGo] was let go already. Held under
+     * [keeping], as a keep is.
      */
     private suspend fun earnKept(unearned: SlotRecord, photo: Boolean, letGo: PhotoDone? = null): Boolean {
         val now = clock.now()
@@ -548,13 +564,11 @@ class Focus(
         val ratio = settings.value.workMinPerFreeMin
         if (unearned.date != today.toString() || unearned !in log.value.slots) return false
         val earning = minOf(Credit.forSlot(unearned.plannedMin, ratio), slotRoomMin(now, ratio))
-        var given = false
-        runtime.update { state ->
-            if (letGo != null && letGo !in state.photosDone) state
-            else state.copy(credit = state.credit.earn(today, earning), photosDone = letGo?.let { state.photosDone - it } ?: state.photosDone).also { given = true }
-        }
-        if (given) log.update { state -> state.copy(slots = state.slots.map { if (it == unearned) it.copy(earned = true, photo = it.photo || photo) else it }) }
-        return given
+        // On record before anything changes, as a keep is: a stop part-way is carried through at start-up, once.
+        val journal = Keeping(unearned.copy(earned = true, photo = unearned.photo || photo), null, null, 0, earning, replaces = unearned, photo = letGo, earnOnly = true)
+        var saved = false
+        runtime.update { state -> if (letGo != null && letGo !in state.photosDone) state else state.copy(keeping = state.keeping + journal).also { saved = true } }
+        return saved && finish(journal, now, recovering = false) != null
     }
 
     /**

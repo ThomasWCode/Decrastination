@@ -201,8 +201,9 @@ class YieldTest {
             )
         }
         assertEquals(1.0, Calibrator.yields(days, slots { it + 30 * 60_000L }, sunday)[DayKind.School]!!, 1e-9)
-        // Ticked at home before school began: none of school's time used, as low as it goes.
+        // Ticked at home before school began, or in its grace after it ended: none of school's time used, as low as it goes.
         assertEquals(Calibrator.MIN_YIELD, Calibrator.yields(days, slots { it - 3 * 3_600_000L }, sunday)[DayKind.School]!!, 1e-9)
+        assertEquals(Calibrator.MIN_YIELD, Calibrator.yields(days, slots { it + 45 * 60_000L }, sunday)[DayKind.School]!!, 1e-9)
     }
 
     @Test

@@ -56,10 +56,11 @@ object Stats {
         fun dateOf(at: Long): LocalDate = Instant.ofEpochMilli(at).atZone(zone).toLocalDate()
         fun inRange(at: Long): Boolean = dateOf(at).let { !it.isBefore(first) && !it.isAfter(today) }
         val completions = log.completions.filter { inRange(it.doneAt) }
-        // The slots with an outcome, by the day each was laid in (LR-09): a deliberate move is neither.
-        val slots = log.slots.filter { inRange(it.start) && it.outcome != SlotOutcome.Moved }
+        // The slots with an outcome, by the day each was laid in as recorded (LR-09), whatever the
+        // zone now: a deliberate move is neither.
+        val slots = log.slots.filter { LocalDate.parse(it.date).let { d -> !d.isBefore(first) && !d.isAfter(today) } && it.outcome != SlotOutcome.Moved }
         val kept = slots.filter { it.outcome.kept }
-        fun minutesOn(date: LocalDate): Int = kept.filter { dateOf(it.start) == date }.sumOf { it.workedMin }
+        fun minutesOn(date: LocalDate): Int = kept.filter { it.date == date.toString() }.sumOf { it.workedMin }
         val blocks = log.blocks.filter { inRange(it.at) }
         val protection = log.protection.filter { inRange(it.at) }
         val plans = log.days.associateBy { it.date }

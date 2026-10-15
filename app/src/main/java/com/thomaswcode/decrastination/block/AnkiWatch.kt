@@ -85,14 +85,21 @@ class AnkiWatch(private val graph: AppGraph) {
         if (stretch != null) {
             val tasks = graph.tasks.value
             val plan = graph.plan(now = now)
+            // Visits that didn't finish a deck's cards: their minutes kept towards the one that does.
+            var worked = graph.runtime.value.ankiWorked.on(java.time.Instant.ofEpochMilli(now).atZone(zone).toLocalDate().toString())
             for (done in AnkiProgress.done(stretch, tasks.tasks, reviewsOnly = tasks.ankiDay?.reviewsOnly == true)) {
                 Log.i(AppGraph.TAG, "AnkiDroid: ${done.cards} cards for ${done.taskId} in ${done.minutes} min${if (done.finished) ", today's done" else ""}")
-                if (!done.finished) continue
-                // Its next piece, today's or a later day's: studied ahead is kept all the same. The
-                // cards counted are its evidence, as a photo is written work's (BL-08).
+                if (!done.finished) {
+                    worked = worked.plus(done.taskId, done.minutes)
+                    continue
+                }
+                // Its next piece, today's or a later day's: studied ahead is kept all the same, with all
+                // of today's time on it. The cards counted are its evidence, as a photo is written work's (BL-08).
                 val piece = plan.ordered.firstOrNull { it.taskId == done.taskId } ?: continue
-                graph.focus.keepSlot(piece.key, extraMin = (done.minutes - piece.minutes).coerceAtLeast(0), verified = true, now = now)
+                val minutes = (worked.minutes[done.taskId] ?: 0) + done.minutes
+                if (graph.focus.keepSlot(piece.key, extraMin = (minutes - piece.minutes).coerceAtLeast(0), verified = true, now = now)) worked = worked.without(done.taskId)
             }
+            graph.runtime.update { it.copy(ankiWorked = worked) }
             // What a card takes, per deck (DX-11): a deck with new evidence takes it; the rest keep theirs (a backup's, say).
             val rates = AnkiProgress.secondsPerCard(stretches)
             graph.runtime.update {

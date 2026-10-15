@@ -34,6 +34,8 @@ data class RuntimeState(
     val ankiReadings: List<com.thomaswcode.decrastination.learn.AnkiReading> = emptyList(),
     /** Since when AnkiDroid has been in front, read coming in; null when it isn't. */
     val ankiFrontSince: Long? = null,
+    /** AnkiDroid time on deck tasks today not in a kept slot yet (NF-03): the visits before the one that finishes their cards. */
+    val ankiWorked: AnkiWorked = AnkiWorked(),
     /** Loosening changes waiting their delay. */
     val pending: List<PendingChange> = emptyList(),
     /** A parent code unblocked everything until then. */
@@ -249,6 +251,8 @@ data class PhotoDone(
     val stepIndex: Int? = null,
     /** The piece it was for ([com.thomaswcode.decrastination.core.Chunk.key], LR-09): its slot is kept by it. */
     val key: String? = null,
+    /** When the photo was taken (the check began): a slot of its key kept before then is another's. */
+    val takenAt: Long? = null,
 )
 
 /**
@@ -256,7 +260,8 @@ data class PhotoDone(
  * start-up (`Focus.finishKeeps`): its [record]; its task's step ([stepIndex], still [step]), none for
  * a box of time, and the minutes worked on the task before ([workedBefore]), so the task's change
  * is made once; the free time it earns; the miss of it today it [replaces]; and the [photo] that
- * kept it, let go with it.
+ * kept it, let go with it. [earnOnly]: a slot kept already, earning now (its photo passed): the
+ * record it [replaces] marked, nothing done to the task.
  */
 @Serializable
 data class Keeping(
@@ -267,7 +272,19 @@ data class Keeping(
     val earningMin: Double,
     val replaces: SlotRecord? = null,
     val photo: PhotoDone? = null,
+    val earnOnly: Boolean = false,
 )
+
+/** Minutes in AnkiDroid on each deck task on [date] (NF-03), kept till the visit that finishes its cards. */
+@Serializable
+data class AnkiWorked(val date: String = "", val minutes: Map<String, Int> = emptyMap()) {
+    /** As it stands on [date]: a new day starts empty. */
+    fun on(date: String): AnkiWorked = if (this.date == date) this else AnkiWorked(date)
+
+    fun plus(taskId: String, add: Int): AnkiWorked = copy(minutes = minutes + (taskId to (minutes[taskId] ?: 0) + add))
+
+    fun without(taskId: String): AnkiWorked = copy(minutes = minutes - taskId)
+}
 
 /** A daily alarm's run that failed: tried again [at], this being try [tries] (`Daily.failed`). */
 @Serializable
