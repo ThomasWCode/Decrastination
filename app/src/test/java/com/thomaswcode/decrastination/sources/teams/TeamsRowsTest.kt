@@ -42,6 +42,20 @@ class TeamsRowsTest {
     }
 
     @Test
+    fun `an assignment's reference materials and links are kept, as an email's attachments are, and sent with it`() {
+        val row = rows.first() + mapOf("attachments" to "Statics booklet.pdf\nMark scheme.pdf\n", "links" to "https://example.com/notes\nhttps://example.com/notes")
+        val task = com.thomaswcode.decrastination.core.Merge.apply(emptyList(), com.thomaswcode.decrastination.core.Source.Teams, listOfNotNull(TeamsRows.fetched(row)), 0).tasks.single()
+        assertEquals(listOf("Statics booklet.pdf", "Mark scheme.pdf"), com.thomaswcode.decrastination.sources.gmail.GmailThreads.attachmentsOf(task).map { it.name })
+        assertEquals(listOf("https://example.com/notes"), TeamsRows.linksOf(task))
+        val described = com.thomaswcode.decrastination.enrich.Prompts.describe(task, com.thomaswcode.decrastination.core.Enrichments.Job.Assignment, 0, Fixtures.LONDON)
+        assertEquals(true, "Attachments: Statics booklet.pdf, Mark scheme.pdf" in described, described)
+        // A widget before 0.4.0 gives neither.
+        val older = TeamsRows.fetched(rows.first())!!
+        assertNull(older.extra[com.thomaswcode.decrastination.sources.gmail.GmailThreads.EXTRA_ATTACHMENTS])
+        assertNull(older.extra[TeamsRows.EXTRA_LINKS])
+    }
+
+    @Test
     fun `a row without a key is skipped, a blank title named`() {
         assertNull(TeamsRows.fetched(mapOf("title" to "x")))
         // In a read, a row without its key fails it: skipped, its assignment would look handed in.

@@ -296,7 +296,7 @@ fun TaskSheet(
                     },
                 )
             }
-            Notes(task, now, zone, byId, onOpen = { scope.launch { TaskOpener.open(activity, task)?.let { message = it } } })
+            Notes(task, now, zone, byId, onOpen = { scope.launch { TaskOpener.open(activity, task)?.let { message = it } } }, onLink = { message = openLink(activity, it) })
             if (!ticksHere) Steps(graph, task, now, zone)
             // Its next piece's first steps (AI-15), as written ahead.
             next?.let { runtime.microPlans[it.key] }?.let(com.thomaswcode.decrastination.enrich.MicroPlans::lines)?.takeIf { it.isNotEmpty() }?.let { lines ->
@@ -450,7 +450,7 @@ private fun Field(label: String, value: String, note: String? = null, urgent: Bo
 
 /** What's out of the ordinary about [task], and what it says. */
 @Composable
-private fun Notes(task: TaskItem, now: Long, zone: java.time.ZoneId, byId: Map<String, TaskItem>, onOpen: () -> Unit) {
+private fun Notes(task: TaskItem, now: Long, zone: java.time.ZoneId, byId: Map<String, TaskItem>, onOpen: () -> Unit, onLink: (String) -> Unit) {
     val lines = buildList {
         task.userAfter?.takeIf { task.isOpen && Instructions.waiting(task, byId) }?.let { add("Waits, as you said, until “${byId[it]?.title ?: it}” is done" to false) }
         if (task.userNotATask) add("You said it isn't a task: take that back in Felix's chat, under Your changes" to false)
@@ -465,13 +465,25 @@ private fun Notes(task: TaskItem, now: Long, zone: java.time.ZoneId, byId: Map<S
     lines.forEach { (text, bad) ->
         Text(text, style = MaterialTheme.typography.bodyMedium, color = if (bad) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface)
     }
-    // What's attached, which the app can't open: a tap opens Gmail, saying what to look for (DX-01).
+    // What's attached, which the app can't open: a tap opens it where it is, the email in Gmail
+    // (DX-01) or the assignment in Teams (DX-08).
     GmailThreads.attachmentsOf(task).takeIf { it.isNotEmpty() }?.let { files ->
         Text(
             "Attachments: " + files.joinToString(", ") { it.label },
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.primary,
             modifier = Modifier.clickable(onClick = onOpen),
+        )
+    }
+    // An assignment's links (DX-08), each opened in the browser.
+    com.thomaswcode.decrastination.sources.teams.TeamsRows.linksOf(task).forEach { link ->
+        Text(
+            link,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.primary,
+            maxLines = 1,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            modifier = Modifier.clickable { onLink(link) },
         )
     }
     if (task.detail.isNotBlank()) Text(task.detail, style = MaterialTheme.typography.bodySmall)
@@ -521,4 +533,12 @@ private fun addToCalendar(activity: Activity, invite: Invite, title: String, zon
     } catch (e: android.content.ActivityNotFoundException) {
         "No calendar app to add it to"
     }
+}
+
+/** [url] in the browser (DX-08); what went wrong where nothing on the phone opens it. */
+private fun openLink(activity: Activity, url: String): String? = try {
+    activity.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url)))
+    null
+} catch (e: android.content.ActivityNotFoundException) {
+    "Nothing on the phone opens $url"
 }
