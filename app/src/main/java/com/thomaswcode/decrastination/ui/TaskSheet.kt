@@ -13,7 +13,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
@@ -41,6 +42,7 @@ import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.core.Instructions
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.OwnTasks
+import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Status
 import com.thomaswcode.decrastination.core.TaskItem
@@ -52,33 +54,59 @@ import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 
 /**
- * A task opened from Tasks or the Plan, with what goes with it: the form for one of your own, and
- * the chat about it. [onClose] when it's shut.
+ * A task opened from Day or Work, with what goes with it: the form for one of your own, the chat
+ * about it, and its next piece moved (UI-04). [plan]: the screen's; [photo], its camera, for a
+ * photo of the work; [note], its last word on the task (how a photo check went). [onClose] when
+ * it's shut.
  */
 @Composable
-fun TaskSheetHost(graph: AppGraph, activity: Activity, taskId: String, onClose: () -> Unit) {
-    // The form open over the sheet, kept through a turn of the phone.
+fun TaskSheetHost(graph: AppGraph, activity: Activity, taskId: String, plan: Plan, photo: PhotoCheck? = null, note: String? = null, onClose: () -> Unit) {
+    // The form or the move open over the sheet, kept through a turn of the phone; and what a move said.
     var editing by rememberSaveable { mutableStateOf(false) }
+    var moving by rememberSaveable { mutableStateOf<String?>(null) }
+    var moved by rememberSaveable { mutableStateOf<String?>(null) }
     val task = graph.tasks.value.tasks.firstOrNull { it.id == taskId }
-    if (editing && task != null) {
-        OwnTaskForm(graph, task) { editing = false }
-    } else {
-        TaskSheet(graph, activity, taskId, onClose, onInstruct = {
+    val piece = moving?.let { key -> plan.ordered.firstOrNull { it.key == key } }
+    // Planned again meanwhile, the piece gone: back to the sheet.
+    if (moving != null && piece == null) LaunchedEffect(moving) { moving = null }
+    when {
+        editing && task != null -> OwnTaskForm(graph, task) { editing = false }
+        piece != null -> MoveSheet(graph, piece, plan, graph.clock.zone(), onDone = { said ->
+            moving = null
+            moved = "$said: undone in the chat's Your changes"
+        }) { moving = null }
+        else -> TaskSheet(graph, activity, taskId, plan, photo, moved ?: note, onClose, onInstruct = {
             task?.let { activity.startActivity(AskActivity.intent(activity, About(taskId = it.id, taskTitle = it.title))) }
-        }, onEdit = { editing = true })
+        }, onEdit = { editing = true }, onMove = { moving = it })
     }
 }
 
 /**
- * A task (2.0.0, Q30): what it is, and what you can change about it, each at once, armed or not:
- * when it's due, how long it takes, when it can start, and whether it's a task at all. A source's
- * task keeps each change as a quick change (an instruction with no Claude) over what the source
- * says, which *Undo* takes back; one of your own is changed itself, and can be edited whole,
- * finished (earning no free time) or deleted. A deck's task, which Anki makes afresh, can't be changed.
+ * A task (2.0.0, Q30), in three parts (UI-09). **Do**: its next piece done (its slot kept, LR-09),
+ * its steps where they're ticked here, the task where it lives, a photo of the work, and one of
+ * your own all done; a source's task has no Done of its own, as its source says. **About**: when
+ * it's due, how long it takes and when it can start, each changed at once, armed or not; what it
+ * says, its steps, when its pieces are planned and why, and the instructions on it, folded.
+ * **Change**: its next piece later today, tomorrow or to a day you pick, not a task, Felix asked
+ * about it, and one of your own edited, deleted, or kept for home. A source's task keeps each
+ * change as a quick change (an instruction with no Claude) over what the source says, which *Undo*
+ * takes back; one of your own is changed itself. A deck's task, which Anki makes afresh, can't be
+ * changed, but its pieces move.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun TaskSheet(graph: AppGraph, activity: Activity, taskId: String, onClose: () -> Unit, onInstruct: () -> Unit, onEdit: () -> Unit) {
+fun TaskSheet(
+    graph: AppGraph,
+    activity: Activity,
+    taskId: String,
+    plan: Plan,
+    photo: PhotoCheck?,
+    note: String?,
+    onClose: () -> Unit,
+    onInstruct: () -> Unit,
+    onEdit: () -> Unit,
+    onMove: (String) -> Unit,
+) {
     val state by graph.tasks.state.collectAsStateWithLifecycle()
     // Read so a change taken back redraws what's yours.
     val instructions by graph.instructions.state.collectAsStateWithLifecycle()
@@ -96,9 +124,16 @@ fun TaskSheet(graph: AppGraph, activity: Activity, taskId: String, onClose: () -
     var picking by rememberSaveable { mutableStateOf<OwnChange?>(null) }
     var confirming by rememberSaveable { mutableStateOf<String?>(null) }
     var message by rememberSaveable { mutableStateOf<String?>(null) }
+    // What an action here said (a piece done, moved later), over the screen's last word.
+    var said by rememberSaveable { mutableStateOf<String?>(null) }
+    var showInstructions by rememberSaveable { mutableStateOf(false) }
     val own = task.source == Source.Own
     val changeable = task.isOpen && !task.derived
     val byId = state.tasks.associateBy { it.id }
+    // Its next piece in the plan: to tick, photograph or move.
+    val next = TaskSheetModel.next(plan, task.id).takeIf { task.isOpen }
+    // An email's steps and your own are ticked here; the rest are what their source says.
+    val ticksHere = Focus.tickable(task) && task.subSteps.isNotEmpty()
     // Undo only where a quick change of yours is what's in force: one of Claude's since wins.
     fun quick(type: ChangeType) = Instructions.quickInForce(instructions.applied, task.id, type)
 
@@ -133,7 +168,47 @@ fun TaskSheet(graph: AppGraph, activity: Activity, taskId: String, onClose: () -
                     fontWeight = FontWeight.Medium,
                 )
             }
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            message?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error) }
+            (said ?: note)?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.secondary) }
+
+            // Do: its next piece, its steps, where it lives, a photo of the work.
+            SectionHeading("Do", sheet = true)
+            next?.let { piece ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Next: ${piece.step ?: if (piece.parts > 1) "part ${piece.part} of ${piece.parts}" else piece.title}", style = MaterialTheme.typography.bodyLarge)
+                        Text(Format.minutes(piece.minutes), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    FilledTonalButton(onClick = { scope.launch { said = keepPiece(graph, piece, now) } }) { Text("Done") }
+                }
+            }
+            if (ticksHere) Steps(graph, task, now, zone)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (!own) Button(onClick = { scope.launch { TaskOpener.open(activity, task)?.let { message = it } } }) { Text("Open in ${task.source.label}") }
+                // Written work: a photo shows it done, once Claude is on (Q16).
+                if (next != null && photo != null && photo.available && next.photoCheckable) {
+                    OutlinedButton(enabled = !photo.checking, onClick = { photo.take(next) }) { Text("Check with a photo") }
+                }
+                when {
+                    own && task.isOpen -> Button(onClick = { scope.launch { graph.finishOwnTask(task.id) } }) { Text("All of it done") }
+                    own -> Button(onClick = { scope.launch { graph.reopenOwnTask(task.id) } }) { Text("Not done") }
+                }
+            }
+            when {
+                own && task.isOpen -> Text(
+                    "All of it done earns no free time: nothing but you says it's done. Its pieces earn theirs.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                !own && task.isOpen -> Text(
+                    "It's done when ${task.source.label} says so, read at each sync.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
+            // About: when it's due, how long it takes, what it says, when it's planned and why.
+            SectionHeading("About", sheet = true)
             if (task.kind == Kind.Event) {
                 Field("When", task.dueAt?.let { Format.at(it, now, zone) } ?: "No time", onChange = if (own && changeable) ({ picking = OwnChange.DueOn }) else null)
             } else {
@@ -190,31 +265,63 @@ fun TaskSheet(graph: AppGraph, activity: Activity, taskId: String, onClose: () -
                     },
                 )
             }
-            message?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error) }
             Notes(task, now, zone, byId, onOpen = { scope.launch { TaskOpener.open(activity, task)?.let { message = it } } })
-            Steps(graph, task, now, zone)
+            if (!ticksHere) Steps(graph, task, now, zone)
+            // When its pieces are planned, and why (PL-07).
+            TaskSheetModel.planned(plan, task.id, zone).takeIf { it.isNotEmpty() && task.isOpen }?.let { planned ->
+                Text("Planned", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                planned.take(MAX_PLANNED).forEach { Text("• " + TaskSheetModel.line(it, today, zone), style = MaterialTheme.typography.bodyMedium) }
+                if (planned.size > MAX_PLANNED) Text("and ${planned.size - MAX_PLANNED} more", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            // What you've said about it, folded.
+            TaskSheetModel.instructions(instructions.applied, task.id).takeIf { it.isNotEmpty() }?.let { words ->
+                Row(Modifier.fillMaxWidth().clickable { showInstructions = !showInstructions }, verticalAlignment = Alignment.CenterVertically) {
+                    Text("Instructions", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+                    Text(if (showInstructions) "Hide" else "Show ${words.size}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                }
+                if (showInstructions) words.forEach { Text("“$it”", style = MaterialTheme.typography.bodyMedium) }
+            }
+
+            // Change: its next piece moved, what it is, Felix asked, yours edited.
+            SectionHeading("Change", sheet = true)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                when {
-                    own && task.isOpen -> {
-                        Button(onClick = { scope.launch { graph.finishOwnTask(task.id) } }) { Text("Done") }
-                        OutlinedButton(onClick = onEdit) { Text("Edit") }
-                        OutlinedButton(onClick = { confirming = "delete" }) { Text("Delete") }
+                next?.let { piece ->
+                    OutlinedButton(onClick = {
+                        scope.launch {
+                            said = graph.laterToday(piece.key)?.let { "Later today, at ${Format.at(it, now, zone)}: undone in the chat's Your changes" } ?: "No time left today for it"
+                        }
+                    }) { Text("Later today") }
+                    val tomorrow = today.plusDays(1)
+                    if (TaskSheetModel.canGo(piece, tomorrow, zone)) {
+                        OutlinedButton(onClick = {
+                            scope.launch {
+                                graph.addOwnChange(UUID.randomUUID().toString(), "Tomorrow", About(taskId = task.id, taskTitle = task.title), Change(ChangeType.OnDay, taskId = task.id, date = tomorrow.toString()))
+                                said = "Tomorrow: undone in the chat's Your changes"
+                            }
+                        }) { Text("Tomorrow") }
                     }
-                    own -> {
-                        Button(onClick = { scope.launch { graph.reopenOwnTask(task.id) } }) { Text("Not done") }
-                        OutlinedButton(onClick = { confirming = "delete" }) { Text("Delete") }
-                    }
-                    else -> Button(onClick = { scope.launch { TaskOpener.open(activity, task)?.let { message = it } } }) { Text("Open in ${task.source.label}") }
+                    OutlinedButton(onClick = { onMove(piece.key) }) { Text("Move…") }
                 }
                 if (changeable && !task.userNotATask) OutlinedButton(onClick = { confirming = "not-a-task" }) { Text("Not a task") }
                 if (task.isOpen) OutlinedButton(onClick = onInstruct) { Text("Ask ${graph.settings.value.felixName} about it") }
+                if (own && task.isOpen) OutlinedButton(onClick = onEdit) { Text("Edit") }
+                if (own) OutlinedButton(onClick = { confirming = "delete" }) { Text("Delete") }
             }
-            if (own && task.isOpen) {
-                Text(
-                    "Done earns no free time: nothing but you says it's done. Its focus sessions earn theirs.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+            // Where yours can be done (PL-15): anywhere, a free period at school too, or at home.
+            if (own && changeable) {
+                val home = OwnTasks.draftOf(task).where == "home"
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    FilterChip(
+                        selected = home,
+                        onClick = { scope.launch { graph.saveOwnTask(task.sourceId, OwnTasks.draftOf(task).copy(where = if (home) "anywhere" else "home")) } },
+                        label = { Text("Home only") },
+                    )
+                    Text(
+                        if (home) "Planned at home, not in a free period at school" else "Planned anywhere, a free period at school too",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
         }
     }
@@ -323,6 +430,9 @@ private fun Notes(task: TaskItem, now: Long, zone: java.time.ZoneId, byId: Map<S
     }
     if (task.detail.isNotBlank()) Text(task.detail, style = MaterialTheme.typography.bodySmall)
 }
+
+/** The most of a task's pieces its sheet lists as planned: the rest are counted. */
+private const val MAX_PLANNED = 6
 
 /** [task]'s steps, each with its minutes and dates; an email's or one of your own's ticked off here. */
 @Composable

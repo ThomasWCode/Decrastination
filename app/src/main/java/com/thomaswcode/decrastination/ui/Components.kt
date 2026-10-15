@@ -85,11 +85,11 @@ fun GroupTile(modifier: Modifier = Modifier, content: @Composable ColumnScope.()
     )
 }
 
-/** A section's heading: bold, in the theme's accent, with room above to part it from the last. */
+/** A section's heading: bold, in the theme's accent, with room above to part it from the last; in a sheet ([sheet]), at its edge. */
 @Composable
-fun SectionHeading(title: String, trailing: String? = null) {
+fun SectionHeading(title: String, trailing: String? = null, sheet: Boolean = false) {
     Row(
-        Modifier.fillMaxWidth().padding(start = 28.dp, end = 28.dp, top = 24.dp, bottom = 8.dp),
+        Modifier.fillMaxWidth().then(if (sheet) Modifier.padding(top = 8.dp) else Modifier.padding(start = 28.dp, end = 28.dp, top = 24.dp, bottom = 8.dp)),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, modifier = Modifier.weight(1f))

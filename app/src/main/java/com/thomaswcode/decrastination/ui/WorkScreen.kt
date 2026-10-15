@@ -82,6 +82,12 @@ fun WorkScreen(graph: AppGraph, activity: Activity, opening: String? = null, onO
     val trouble = trouble(state, runtime, now)
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     var said by rememberSaveable { mutableStateOf<String?>(null) }
+    // The screen's camera, for a photo of the work from a task's sheet (UI-09); what it said, about which task.
+    var saidAbout by rememberSaveable { mutableStateOf<String?>(null) }
+    val photo = rememberPhotoCheck(graph, activity, plan) { taskId, text ->
+        said = text
+        saidAbout = taskId
+    }
     // By due date or by subject, from every source or one (UI-10): kept through a turn of the phone.
     var bySubject by rememberSaveable { mutableStateOf(false) }
     var only by rememberSaveable { mutableStateOf<String?>(null) }
@@ -191,7 +197,7 @@ fun WorkScreen(graph: AppGraph, activity: Activity, opening: String? = null, onO
             )
         }
     }
-    sheetFor?.let { id -> TaskSheetHost(graph, activity, id) { sheetFor = null } }
+    sheetFor?.let { id -> TaskSheetHost(graph, activity, id, plan, photo, said.takeIf { saidAbout == id }) { sheetFor = null } }
     if (making) OwnTaskForm(graph, editing = null) { making = false }
 }
 

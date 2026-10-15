@@ -235,7 +235,7 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
             }) { sheetFor = null }
         }
     }
-    changing?.let { id -> TaskSheetHost(graph, activity, id) { changing = null } }
+    changing?.let { id -> TaskSheetHost(graph, activity, id, plan, photo, messageOf(id)) { changing = null } }
     moving?.let { key ->
         val chunk = plan.ordered.firstOrNull { it.key == key }
         if (chunk == null) {
