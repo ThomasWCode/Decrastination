@@ -26,6 +26,8 @@ import java.time.Instant
 object SlotAlarms {
     const val ACTION_SLOT_START = "com.thomaswcode.decrastination.SLOT_START"
     const val ACTION_SLOT_END = "com.thomaswcode.decrastination.SLOT_END"
+    /** Felix's next look (LR-03). */
+    const val ACTION_FELIX_CHECK = "com.thomaswcode.decrastination.FELIX_CHECK"
     const val EXTRA_KEY = "key"
     const val EXTRA_START = "start"
     const val EXTRA_END = "end"
@@ -42,6 +44,19 @@ object SlotAlarms {
         val (start, end) = next(plan, now)
         start?.let { set(alarms, it.start, intent(context, ACTION_SLOT_START, it)) }
         end?.let { set(alarms, it.end + GRACE_MS, intent(context, ACTION_SLOT_END, it)) }
+    }
+
+    /** Felix's next look (LR-03) at [at], or none: set again with each look. */
+    fun armFelix(context: Context, at: Long?) {
+        val alarms = context.getSystemService(AlarmManager::class.java) ?: return
+        val intent = PendingIntent.getBroadcast(
+            context,
+            3,
+            Intent(context, SlotReceiver::class.java).setAction(ACTION_FELIX_CHECK),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+        alarms.cancel(intent)
+        at?.let { set(alarms, it, intent) }
     }
 
     /**
@@ -133,21 +148,26 @@ class Slots(private val graph: AppGraph) {
 /** A slot's alarm: its start or its end ([SlotAlarms]). */
 class SlotReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        val key = intent.getStringExtra(SlotAlarms.EXTRA_KEY) ?: return
+        val key = intent.getStringExtra(SlotAlarms.EXTRA_KEY)
+        if (key == null && intent.action != SlotAlarms.ACTION_FELIX_CHECK) return
         val pending = goAsync()
         CoroutineScope(Dispatchers.Default).launch {
             try {
                 val graph = AppGraph.get(context)
                 when (intent.action) {
-                    SlotAlarms.ACTION_SLOT_START -> graph.slots.onStart(key)
+                    SlotAlarms.ACTION_SLOT_START -> graph.slots.onStart(key!!)
                     SlotAlarms.ACTION_SLOT_END -> {
                         // As the alarm had it laid, for its record.
                         val window = intent.getStringExtra(SlotAlarms.EXTRA_WINDOW)?.let { name -> WindowKind.entries.firstOrNull { it.name == name } }
                         val start = intent.getLongExtra(SlotAlarms.EXTRA_START, -1L)
                         val end = intent.getLongExtra(SlotAlarms.EXTRA_END, -1L)
-                        graph.slots.onEnd(key, if (window != null && start >= 0 && end >= start) Focus.Laid(start, end, window) else null)
+                        graph.slots.onEnd(key!!, if (window != null && start >= 0 && end >= start) Focus.Laid(start, end, window) else null)
                     }
                 }
+                // Each is a moment Felix may have something to say (LR-03): his look is work of its own,
+                // as the model's answer may take longer than a receiver is given, and the app may go
+                // once it's let go.
+                com.thomaswcode.decrastination.learn.FelixWorker.enqueue(context)
             } finally {
                 pending.finish()
             }

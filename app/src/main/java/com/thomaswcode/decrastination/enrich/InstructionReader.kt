@@ -69,9 +69,10 @@ object InstructionPrompts {
         Use the ids and event keys exactly as listed. Work out relative dates ("next Friday", "the weekend") from today; a weekday named alone ("on Saturday") means the next one, and only "every Saturday" or "on Saturdays" means each week. A stretch of days ("20 to 25 October", "this weekend") is one change per day, but for NoSchool, which takes the stretch whole. Leave every field a change type doesn't use null.
     """.trimIndent()
 
-    val SYSTEM = (
+    /** The instructions' reader's, for a student in Year [year] (AI-06). */
+    fun system(year: Int = 12): String = (
         """
-        You turn one instruction from a UK sixth-form student (Year 12) into changes for their planner app. The app plans their homework and other tasks into the evenings before each is due, counts their calendar's events as time they can't work, and blocks distracting apps while work is due. The student writes the instruction about one task, one calendar event, one day, or nothing in particular, and checks your reading before it's applied.
+        You turn one instruction from a UK sixth-form student (Year $year) into changes for their planner app. The app plans their homework and other tasks into the evenings before each is due, counts their calendar's events as time they can't work, and blocks distracting apps while work is due. The student writes the instruction about one task, one calendar event, one day, or nothing in particular, and checks your reading before it's applied.
 
         Give only the changes the instruction asks for. The types:
 """ + CHANGE_TYPES.prependIndent("        ") + """
@@ -306,7 +307,7 @@ object InstructionAnswers {
 }
 
 /** Claude reading one instruction ([InstructionPrompts]), as the enrichment's calls are made. */
-class InstructionReader(apiKey: String, private val zone: ZoneId, endpoint: String? = null, val model: String = ClaudeEnricher.MODEL) {
+class InstructionReader(apiKey: String, private val zone: ZoneId, endpoint: String? = null, val model: String = ClaudeEnricher.MODEL, private val profile: Profile.Block = Profile.Block.NONE) {
 
     data class Result(val reading: InstructionAnswers.Reading?, val costUsd: Double, val refused: Boolean = false)
 
@@ -322,9 +323,9 @@ class InstructionReader(apiKey: String, private val zone: ZoneId, endpoint: Stri
         val params = MessageCreateParams.builder()
             .model(model)
             .maxTokens(ClaudeEnricher.MAX_TOKENS)
-            .system(InstructionPrompts.SYSTEM)
+            .systemOfTextBlockParams(ModelCalls.systemBlocks(InstructionPrompts.system(profile.year), profile.text))
             .addUserMessage(InstructionPrompts.describe(instruction, tasks, events, now, zone).take(Pricing.MAX_INPUT_CHARS))
-            .outputConfig(OutputConfig.builder().effort(OutputConfig.Effort.HIGH).format(JsonOutputFormat.builder().schema(schema).build()).build())
+            .outputConfig(OutputConfig.builder().effort(ModelEffort.of(ModelEffort.Job.Instruction)).format(JsonOutputFormat.builder().schema(schema).build()).build())
             .putAdditionalHeader("anthropic-beta", ClaudeEnricher.FALLBACK_BETA)
             .putAdditionalBodyProperty("fallbacks", JsonValue.from("default"))
             .build()

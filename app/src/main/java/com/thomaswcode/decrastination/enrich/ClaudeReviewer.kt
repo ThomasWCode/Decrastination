@@ -17,7 +17,7 @@ import java.time.Duration
  * The weekly review by the model (docs/data-sources.md §5, job 4): the week in, a note and bounded
  * changes out ([ReviewInput]), as the enrichment's calls are made. Off until Claude is switched on.
  */
-class ClaudeReviewer(apiKey: String, endpoint: String? = null, val model: String = ClaudeEnricher.MODEL) {
+class ClaudeReviewer(apiKey: String, endpoint: String? = null, val model: String = ClaudeEnricher.MODEL, private val profile: Profile.Block = Profile.Block.NONE) {
 
     /** [model]: the model that answered, a fallback's if one did. */
     data class Result(val answer: ReviewInput.Answer?, val costUsd: Double, val refused: Boolean = false, val model: String? = null)
@@ -36,9 +36,9 @@ class ClaudeReviewer(apiKey: String, endpoint: String? = null, val model: String
         val params = MessageCreateParams.builder()
             .model(model)
             .maxTokens(ClaudeEnricher.MAX_TOKENS)
-            .system(ReviewInput.SYSTEM)
+            .systemOfTextBlockParams(ModelCalls.systemBlocks(ReviewInput.system(profile.year), profile.text))
             .addUserMessage(week.take(Pricing.MAX_INPUT_CHARS))
-            .outputConfig(OutputConfig.builder().effort(OutputConfig.Effort.HIGH).format(JsonOutputFormat.builder().schema(schema).build()).build())
+            .outputConfig(OutputConfig.builder().effort(ModelEffort.of(ModelEffort.Job.Review)).format(JsonOutputFormat.builder().schema(schema).build()).build())
             .putAdditionalHeader("anthropic-beta", ClaudeEnricher.FALLBACK_BETA)
             .putAdditionalBodyProperty("fallbacks", JsonValue.from("default"))
             .build()

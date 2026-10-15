@@ -813,6 +813,27 @@ class PlannerTest {
     }
 
     @Test
+    fun `a time you give for a task in steps holds its next step then, and a missed step says it moved`() {
+        // A step's piece is known by its task and step (PL-12), and so are its pin and its missed slot.
+        val essay = task("essay", Fixtures.at("2026-10-16T23:59"), effort = 60, steps = listOf(SubStep("Read", 30), SubStep("Write", 30)))
+        val plan = Planner.plan(windowed(listOf(essay.copy(userAtTime = Fixtures.at("2026-10-13T19:30"))), "2026-10-12T17:00"))
+        val pinned = plan.chunksOf("teams:essay").single { it.why == Why.Pinned }
+        assertEquals(0, pinned.stepIndex)
+        val slot = plan.bucket(tuesday)!!.slotOf(pinned)!!
+        assertEquals(Fixtures.at("2026-10-13T19:30"), slot.start)
+        assertTrue(slot.pinned)
+        // A time off the five minutes ("give me 15" at 19:17) is kept to the minute.
+        val offFive = Planner.plan(windowed(listOf(essay.copy(userAtTime = Fixtures.at("2026-10-13T19:32"))), "2026-10-12T17:00"))
+        val atMinute = offFive.bucket(tuesday)!!.slotOf(offFive.chunksOf("teams:essay").single { it.why == Why.Pinned })!!
+        assertEquals(Fixtures.at("2026-10-13T19:32"), atMinute.start)
+        assertTrue(atMinute.pinned)
+        // Tuesday 17:30: the first step's slot went by undone, so it says it moved (PL-13).
+        val read = Planner.plan(windowed(listOf(essay), "2026-10-13T16:50")).todaySlots.first { it.chunk?.stepIndex == 0 }.chunk!!
+        val moved = Planner.plan(windowed(listOf(essay), "2026-10-13T17:30").copy(missedSlots = setOf(read.key)))
+        assertEquals(Why.Refitted, moved.ordered.single { it.key == read.key }.why)
+    }
+
+    @Test
     fun `work you put on a day has its time before work due that day`() {
         // Thursday 17:00, 300 minutes left: five hours due tonight, and an hour you put on today.
         val tonight = task("tonight", Fixtures.at("2026-10-08T23:59"), effort = 300)

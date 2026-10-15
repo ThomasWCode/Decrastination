@@ -53,6 +53,8 @@ import com.thomaswcode.decrastination.data.SecretStore
 import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.data.TaskState
 import com.thomaswcode.decrastination.enrich.AiUsage
+import com.thomaswcode.decrastination.enrich.Failures
+import com.thomaswcode.decrastination.enrich.Failure
 import com.thomaswcode.decrastination.enrich.ChatPrompts
 import com.thomaswcode.decrastination.enrich.ChatReader
 import com.thomaswcode.decrastination.enrich.ClaudeEnricher
@@ -136,17 +138,34 @@ class AppGraph private constructor(context: Context) {
     /** Days with no school and half-days (PL-16), told to the chat or added in Settings. */
     val school = JsonStore(File(app.filesDir, "school.json"), SchoolCalendar.serializer(), ::SchoolCalendar)
 
+    /** What Felix remembers (AI-21): facts, and standing instructions. */
+    val memory = JsonStore(File(app.filesDir, "memory.json"), com.thomaswcode.decrastination.core.MemoryState.serializer(), { com.thomaswcode.decrastination.core.MemoryState() })
+
+    /**
+     * Who the student is, as every model call sends it (AI-05): from the settings, the tasks, the
+     * timetable, the school calendar and what's [remembered].
+     */
+    fun profile(now: Long = clock.now(), remembered: com.thomaswcode.decrastination.core.MemoryState = memory.value): com.thomaswcode.decrastination.enrich.Profile.Block {
+        val s = settings.value
+        val state = tasks.value
+        val zone = clock.zone()
+        return com.thomaswcode.decrastination.enrich.Profile.Block(
+            com.thomaswcode.decrastination.enrich.Profile.yearGroup(now, zone, s.yearGroupStart),
+            com.thomaswcode.decrastination.enrich.Profile.block(s, state.tasks, state.timetable, school.value, remembered, now, zone),
+        )
+    }
+
     init {
         // Files that couldn't be read whole at this start: kept for Setup to say, till you've seen them.
         // On record before anything else runs, and only then is a bad file replaced by what was kept
         // of it: a start cut short before then finds it again, and says it (once: its copy is the same).
-        val found = listOfNotNull(tasks.problem, settings.problem, secrets.problem, runtime.problem, log.problem, instructions.problem, chat.problem, school.problem)
+        val found = listOfNotNull(tasks.problem, settings.problem, secrets.problem, runtime.problem, log.problem, instructions.problem, chat.problem, school.problem, memory.problem)
         if (found.isNotEmpty()) {
             found.forEach { Log.w(TAG, "${it.file} couldn't be read whole; set aside as ${it.copy}") }
             runBlocking {
                 runCatching {
                     runtime.update { it.withUnreadable(found) }
-                }.onSuccess { listOf(tasks, settings, runtime, log, instructions, chat, school).forEach { it.keepRecovered() } }
+                }.onSuccess { listOf(tasks, settings, runtime, log, instructions, chat, school, memory).forEach { it.keepRecovered() } }
                     .onFailure { Log.w(TAG, "Couldn't keep what was found unreadable", it) }
             }
         }
@@ -267,6 +286,8 @@ class AppGraph private constructor(context: Context) {
             { made -> SlotAlarms.arm(app, made, clock.now()) },
             ::writeSlots,
             { _ -> WidgetUpdater.update(app) },
+            // Felix's next message written ahead (AC-10): by itself, as a model call takes a while.
+            { made -> scope.launch { runCatching { com.thomaswcode.decrastination.enrich.Ahead.run(this@AppGraph, made, clock.now()) }.onFailure { Log.w(TAG, "Writing ahead failed", it) } }; Unit },
         ),
         onFailure = { Log.w(TAG, "Replanning failed", it) },
     )
@@ -276,6 +297,9 @@ class AppGraph private constructor(context: Context) {
 
     /** Time in AnkiDroid as work (NF-03, DX-11). */
     val anki = com.thomaswcode.decrastination.block.AnkiWatch(this)
+
+    /** The voice of the app's messages (LR-03). */
+    val felix = com.thomaswcode.decrastination.learn.Felix(this)
 
     /**
      * [made]'s next seven days written to the calendar you picked (NF-07). A slot you've moved there
@@ -688,6 +712,7 @@ class AppGraph private constructor(context: Context) {
             instructions = instructions.value.applied,
             ownTasks = tasks.value.tasks.filter { it.source == Source.Own },
             school = school.value,
+            memory = memory.value,
         ),
     )
 
@@ -709,13 +734,14 @@ class AppGraph private constructor(context: Context) {
         val ownAdded = Backups.restoredOwnTasks(backup.ownTasks, tasks.value.tasks).map { it.id }.toSet()
         tasks.update { state -> state.copy(tasks = state.tasks + Backups.restoredOwnTasks(backup.ownTasks, state.tasks)) }
         if (ownAdded.isNotEmpty()) layTaskOverrides()
-        // The backup's days off and half-days beside those here (PL-16).
+        // The backup's days off and half-days beside those here (PL-16); and what it remembered (AI-21).
         school.update { it.withAll(backup.school) }
+        memory.update { Backups.mergedMemory(it, backup.memory) }
         val own = ownAdded.size
         val told = buildList {
             if (own > 0) add("$own task${if (own == 1) "" else "s"} of your own")
             if (restored > 0) add("$restored instruction${if (restored == 1) "" else "s"} restored")
-            if (unclear > 0) add("$unclear left unapplied under Ask Claude's Your changes, as ${if (unclear == 1) "it" else "they"} would have tasks wait for each other in a circle")
+            if (unclear > 0) add("$unclear left unapplied under Your changes in Felix's chat, as ${if (unclear == 1) "it" else "they"} would have tasks wait for each other in a circle")
         }.takeIf { it.isNotEmpty() }?.joinToString(", ", prefix = " ", postfix = ".") ?: ""
         // This month's spend on Claude, armed or not: it can only rise, so the cap isn't given again.
         val month = AiUsage.monthOf(clock.now(), clock.zone())
@@ -764,10 +790,17 @@ class AppGraph private constructor(context: Context) {
     private fun endpoint(): String? = modelEndpoint?.also { Log.w(TAG, "Claude's calls go to $it, not Anthropic (debug ai-endpoint)") }
 
     /** The photo check, while Claude is switched on and has its key; else null. */
-    fun photoChecker(): PhotoChecker? = claudeKey()?.let { PhotoChecker(it, endpoint()) }
+    fun photoChecker(): PhotoChecker? = claudeKey()?.let { PhotoChecker(it, endpoint(), profile = profile()) }
 
     /** The model's weekly review, while Claude is switched on and has its key; else null. */
-    fun modelReviewer(): ClaudeReviewer? = claudeKey()?.let { ClaudeReviewer(it, endpoint()) }
+    fun modelReviewer(): ClaudeReviewer? = claudeKey()?.let { ClaudeReviewer(it, endpoint(), profile = profile()) }
+
+    /** Felix's caller (AI-22), while Claude is switched on and has its key; else null. */
+    fun felixCaller(): com.thomaswcode.decrastination.enrich.FelixCaller? = claudeKey()?.let { com.thomaswcode.decrastination.enrich.FelixCaller(it, endpoint()) }
+
+    /** The weekly tidy's (AI-21): the profile without the facts, which it's given to tidy. */
+    fun memoryTidier(): com.thomaswcode.decrastination.enrich.MemoryTidier? =
+        claudeKey()?.let { com.thomaswcode.decrastination.enrich.MemoryTidier(it, endpoint(), profile = profile(remembered = memory.value.copy(facts = emptyList()))) }
 
     /** Claude's API key, while Claude is switched on and the key is in use; else null. */
     fun claudeKey(): String? {
@@ -776,20 +809,33 @@ class AppGraph private constructor(context: Context) {
         return secrets[Secret.AnthropicApiKey]?.takeIf { it.isNotBlank() }
     }
 
-    fun modelEnricher(): Enricher? = claudeKey()?.let { ClaudeEnricher(it, clock.zone(), endpoint()) }
+    fun modelEnricher(): Enricher? = claudeKey()?.let { ClaudeEnricher(it, clock.zone(), endpoint(), profile = { profile() }) }
 
     /**
-     * A failed model call, counted in [month]: the model rests ([ModelHold.Resting]), and one showing
+     * A failed model call, counted in [month] (or a newer one counted since): the model rests ([ModelHold.Resting]), and one showing
      * that the key or the account can't be used ([KeyProblem]) is alerted, once a stretch of it,
      * not at each hourly retry. The rules stand in meanwhile.
      */
-    suspend fun modelFailed(error: Throwable, month: String, at: Long) {
+    suspend fun modelFailed(error: Throwable, month: String, at: Long, task: TaskItem? = null) {
         val problem = KeyProblem.of(error)
-        val after = runtime.update { state -> state.copy(aiUsage = state.aiUsage.forMonth(month).failure(error.message ?: error.javaClass.simpleName, at, problem)) }
+        // Rested by what failed (AC-04): busy, the server, a timeout, no network, a request it won't take.
+        val kind = Failures.classify(error)
+        var rest = 0L
+        val after = runtime.update { state ->
+            val usage = state.aiUsage.forCall(month)
+            // Older than a call that's gone through since: no rest comes of it.
+            rest = if (usage.stale(at)) 0L else usage.restAfter(kind, at, Failures.retryAfterMs(error))
+            state.copy(
+                aiUsage = usage.failure(error.message ?: error.javaClass.simpleName, at, problem, rest, kind),
+                // A task the API won't take as asked isn't sent again till it changes.
+                enrichFailed = if (kind == Failure.BadRequest && task != null) (state.enrichFailed + (task.id to Enrichments.inputHash(task))).entries.toList().takeLast(MAX_ENRICH_FAILED).associate { it.key to it.value } else state.enrichFailed,
+            )
+        }
+        Log.w(TAG, "Claude's call failed ($kind): resting ${rest / 60_000} min")
         alertKeyProblem(after.aiUsage)
-        // Once its hour's rest is over, it's tried again on what's still the rules' (a key topped up
-        // or put right meanwhile works then), rather than at whatever next changes.
-        EnrichWorker.retryAfter(app, ModelHold.REST_MS + RETRY_SLACK_MS)
+        // Once its rest is over, it's tried again on what's still the rules' (a key topped up or put
+        // right meanwhile works then), rather than at whatever next changes.
+        if (rest > 0) EnrichWorker.retryAfter(app, rest + RETRY_SLACK_MS)
     }
 
     /**
@@ -830,13 +876,18 @@ class AppGraph private constructor(context: Context) {
         if (ModelAlerts.keyProblem(app, problem)) runtime.update { it.copy(aiUsage = it.aiUsage.alerted(problem)) }
     }
 
-    /** A model call that went through, counted in [month]: its cost, and the key working again if it wasn't. */
+    /**
+     * A model call that went through, counted in [month] (or a newer one counted since): its cost,
+     * and the key working again if it wasn't, its alert then gone; not when a failure since, of a
+     * call sent after it, found the problem standing.
+     */
     suspend fun modelWorked(costUsd: Double, refused: Boolean, month: String, at: Long) {
         var mended = false
         runtime.update { state ->
-            val before = state.aiUsage.forMonth(month)
-            mended = before.keyProblem != null
-            state.copy(aiUsage = before.record(costUsd, refused, at))
+            val before = state.aiUsage.forCall(month)
+            val after = before.record(costUsd, refused, at)
+            mended = before.keyProblem != null && after.keyProblem == null
+            state.copy(aiUsage = after)
         }
         if (mended) ModelAlerts.keyFixed(app)
     }
@@ -845,9 +896,57 @@ class AppGraph private constructor(context: Context) {
      * What stops the model being asked now ([ModelHold]), or null: off, resting after a failed
      * call, or no room under the cap. Each call checks it under [modelCalls] just before sending.
      */
-    fun modelHold(): ModelHold? {
+    fun modelHold(interactive: Boolean = false): ModelHold? {
         val s = settings.value
-        return ModelHold.of(claudeKey() != null, runtime.value.aiUsage, clock.now(), clock.zone(), s.aiMonthlyCapUsd)
+        return ModelHold.of(claudeKey() != null, runtime.value.aiUsage, clock.now(), clock.zone(), s.aiMonthlyCapUsd, interactive)
+    }
+
+    /** How a model call went ([callModel]): held before it was sent, failed, or answered. */
+    sealed interface Called<out T> {
+        data class Held(val hold: ModelHold) : Called<Nothing>
+        data class Failed(val error: Throwable) : Called<Nothing>
+        data class Answered<T>(val value: T) : Called<T>
+    }
+
+    /** Calls sent and not back yet (AC-05): counted against the cap at their dearest. */
+    private val inFlight = java.util.concurrent.atomic.AtomicInteger()
+
+    /**
+     * A model call (AC-05): its room taken under [modelCalls] for a moment (the model not held, an
+     * [interactive] one through a rest; room under the cap beside the calls in flight), then [send]
+     * with the lock let go, so the chat or a photo check doesn't wait behind an email's reading;
+     * counted as it went, [cost] its price and whether it was declined, or its failure ([task], one
+     * the API wouldn't take, isn't sent again till it changes).
+     */
+    suspend fun <T> callModel(interactive: Boolean, task: TaskItem? = null, cost: (T) -> Pair<Double, Boolean>, send: suspend (at: Long) -> T): Called<T> {
+        val held = modelCalls.withLock {
+            val hold = modelHold(interactive) ?: ModelHold.Capped.takeIf {
+                !runtime.value.aiUsage.forMonth(AiUsage.monthOf(clock.now(), clock.zone())).allows(settings.value.aiMonthlyCapUsd, inFlight.get())
+            }
+            if (hold == null) inFlight.incrementAndGet()
+            hold
+        }
+        if (held != null) return Called.Held(held)
+        // Counted in the month it's made in, as the cap was checked for (or a newer one counted since).
+        val at = clock.now()
+        val month = AiUsage.monthOf(at, clock.zone())
+        // Sent, it's paid for: it comes back and is counted, whatever cancels its caller meanwhile (a
+        // job stopped), which goes on at its next suspension.
+        return try {
+            withContext<Called<T>>(NonCancellable) {
+                try {
+                    val value = send(at)
+                    val (usd, refused) = cost(value)
+                    modelWorked(usd, refused, month, at)
+                    Called.Answered(value)
+                } catch (e: Throwable) {
+                    modelFailed(e, month, at, task)
+                    Called.Failed(e)
+                }
+            }
+        } finally {
+            inFlight.decrementAndGet()
+        }
     }
 
     /**
@@ -870,46 +969,43 @@ class AppGraph private constructor(context: Context) {
         var enricher = model.takeIf { modelAvailable() }
         var calls = 0
         var decksChanged = false
+        // A task whose call the API wouldn't take as asked (AC-04): the rules' till it changes.
+        fun refused(task: TaskItem) = runtime.value.enrichFailed[task.id] == Enrichments.inputHash(task)
         val candidates = tasks.value.tasks
             // [only]: that task alone (the debug `enrich-task`), so nothing else is sent anywhere.
             .filter { only == null || it.id == only }
             .mapNotNull { task -> Enrichments.jobFor(task)?.let { task to it } }
-            .filter { (task, _) -> Enrichments.stale(task, enricher != null, RuleEnricher.BY, modelOff = claudeKey() == null) }
+            .filter { (task, _) -> Enrichments.stale(task, enricher != null && !refused(task), RuleEnricher.BY, modelOff = claudeKey() == null) }
             .sortedBy { (task, _) -> task.dueAt ?: Long.MAX_VALUE }
         for ((snapshot, _) in candidates) {
             // Read afresh: a sync since the run began may have closed or changed it.
             val task = tasks.value.tasks.firstOrNull { it.id == snapshot.id } ?: continue
             val job = Enrichments.jobFor(task) ?: continue
-            if (!Enrichments.stale(task, enricher != null, RuleEnricher.BY, modelOff = claudeKey() == null)) continue
+            if (!Enrichments.stale(task, enricher != null && !refused(task), RuleEnricher.BY, modelOff = claudeKey() == null)) continue
             val now = clock.now()
             // Switched off (or its key removed) while this runs: nothing more is sent.
             if (claudeKey() == null) enricher = null
-            var enrichment = if (enricher != null && calls < MAX_MODEL_CALLS) modelCalls.withLock call@{
-                // Checked again under the lock, just before sending, so every other call counts:
-                // switched off, resting after a failed call (one made while this waited), or no
-                // room under the cap. The rules then do the rest of the run.
-                if (modelHold() != null) {
-                    enricher = null
-                    return@call null
-                }
-                calls++
-                // Counted in the month it's made in, as the cap was checked for: it may have
-                // waited for the lock past midnight.
-                val at = clock.now()
-                val month = AiUsage.monthOf(at, clock.zone())
-                val result = runCatching { enricher!!.enrich(task, job, now) }
-                    .onFailure { error ->
-                        Log.w(TAG, "The model's enrichment failed; the rules stand in", error)
-                        modelFailed(error, month, at)
+            val model = enricher?.takeIf { calls < MAX_MODEL_CALLS && !refused(task) }
+            var enrichment = if (model != null) {
+                // Held now (switched off, resting after a failed call, no room under the cap): the
+                // rules do the rest of the run.
+                when (val called = callModel(interactive = false, task = task, cost = { r: Enricher.Result -> r.costUsd to r.refused }) { model.enrich(task, job, now) }) {
+                    is Called.Held -> {
                         enricher = null
+                        null
                     }
-                    .getOrNull()
-                result?.let { r -> modelWorked(r.costUsd, r.refused, month, at) }
-                when {
-                    result?.enrichment != null -> result.enrichment
+                    is Called.Failed -> {
+                        calls++
+                        Log.w(TAG, "The model's enrichment failed; the rules stand in", called.error)
+                        // Only a request it won't take leaves the others to be asked.
+                        if (Failures.classify(called.error) != Failure.BadRequest) enricher = null
+                        null
+                    }
                     // Declined, or no answer it could read: the rules' say, under the model's name.
-                    result != null -> rules.enrich(task, job, now).enrichment?.copy(by = enricher?.by ?: RuleEnricher.BY)
-                    else -> null
+                    is Called.Answered -> {
+                        calls++
+                        called.value.enrichment ?: rules.enrich(task, job, now).enrichment?.copy(by = model.by)
+                    }
                 }
             } else {
                 null
@@ -926,6 +1022,9 @@ class AppGraph private constructor(context: Context) {
                 )
             }
             if (!laid) continue
+            // A question it couldn't settle from the text (AI-10): Felix puts it. One waiting from an
+            // older reading goes, asked again as this one has it, or settled by it.
+            felix.queueQuestion(task.id, made.question, now)
             // A plan of the model's dropped (out of range, not adding up) is said once it's laid,
             // by droppedAlerts, as the tasks change.
             // Its deck tasks take their sections and due date from it.
@@ -937,6 +1036,9 @@ class AppGraph private constructor(context: Context) {
         if (decksChanged) SyncWorker.syncNow(app, setOf(Source.Anki))
     }
 
+    /** The most tasks remembered as refused as asked (AC-04): far more than there are. */
+    private val MAX_ENRICH_FAILED = 200
+
     /** Held while instructions are read, so each is read once. */
     private val readingInstructions = Mutex()
 
@@ -947,7 +1049,7 @@ class AppGraph private constructor(context: Context) {
     suspend fun addInstruction(text: String, about: About): String {
         val id = java.util.UUID.randomUUID().toString()
         instructions.update { it.copy(instructions = it.instructions + Instruction(id, text.trim().take(InstructionPrompts.MAX_TEXT), about, clock.now())) }
-        scope.launch { readInstructions() }
+        scope.launch { readInstructions(interactive = true) }
         return id
     }
 
@@ -1067,28 +1169,27 @@ class AppGraph private constructor(context: Context) {
         instructions.update { state ->
             state.copy(instructions = state.instructions.map { if (it.id == id && it.state != InstructionStatus.Applied) it.copy(text = text.trim().take(InstructionPrompts.MAX_TEXT), state = InstructionStatus.Reading, changes = emptyList(), note = null) else it })
         }
-        scope.launch { readInstructions() }
+        scope.launch { readInstructions(interactive = true) }
     }
 
     /**
      * Reads the instructions waiting for Claude, one call each, as the enrichment's calls are made:
      * under the cap, and resting after a failure. While Claude can't be asked, each says why.
      */
-    suspend fun readInstructions() = readingInstructions.withLock {
+    suspend fun readInstructions(interactive: Boolean = false) = readingInstructions.withLock {
         while (true) {
             val next = instructions.value.instructions.firstOrNull { it.state == InstructionStatus.Reading } ?: return@withLock
-            val waiting = modelCalls.withLock call@{
-                modelHold()?.let { return@call because(it) }
+            val waiting = run call@{
                 val reader = instructionReader() ?: return@call because(ModelHold.Off)
-                val at = clock.now()
-                val month = AiUsage.monthOf(at, clock.zone())
-                val result = runCatching { reader.read(next, tasks.value.tasks, calendarTime.events, at) }
-                    .onFailure { error ->
-                        Log.w(TAG, "Reading an instruction failed", error)
-                        modelFailed(error, month, at)
+                // Through a rest only for you waiting on it (AC-04): after a sync or an enrichment it waits.
+                val result = when (val called = callModel(interactive = interactive, cost = { r: InstructionReader.Result -> r.costUsd to r.refused }) { at -> reader.read(next, tasks.value.tasks, calendarTime.events, at) }) {
+                    is Called.Held -> return@call because(called.hold)
+                    is Called.Failed -> {
+                        Log.w(TAG, "Reading an instruction failed", called.error)
+                        return@call "Claude's call failed: ${retryWords()}"
                     }
-                    .getOrNull() ?: return@call "Claude's call failed: it's tried again within the hour"
-                modelWorked(result.costUsd, result.refused, month, at)
+                    is Called.Answered -> called.value
+                }
                 val reading = result.reading ?: InstructionAnswers.Reading.Unclear(if (result.refused) "Claude declined to read it" else "Claude's answer couldn't be used")
                 instructions.update { state ->
                     state.copy(
@@ -1117,20 +1218,23 @@ class AppGraph private constructor(context: Context) {
 
     private fun because(hold: ModelHold): String = when (hold) {
         ModelHold.Off -> "Waiting for Claude, which is off (Settings)"
-        ModelHold.Resting -> "Waiting for Claude, resting an hour after a failed call"
+        ModelHold.Resting -> "Waiting for Claude, resting ${ModelHold.restLeftMin(runtime.value.aiUsage, clock.now())} min more after a failed call"
         ModelHold.Capped -> "Waiting for Claude: this month's cap is reached"
     }
 
-    private fun instructionReader(): InstructionReader? = claudeKey()?.let { InstructionReader(it, clock.zone(), endpoint()) }
+    /** When a failed call is tried again (AC-04): after its rest, or at the next chance where it has none. */
+    private fun retryWords(): String = ModelHold.restLeftMin(runtime.value.aiUsage, clock.now()).let { if (it > 0) "it's tried again in $it min" else "it's tried again at the next chance" }
+
+    private fun instructionReader(): InstructionReader? = claudeKey()?.let { InstructionReader(it, clock.zone(), endpoint(), profile = profile()) }
 
     /** Held while the chat is answered, so each message is answered once. */
     private val answering = Mutex()
 
     /**
-     * Your [text] to Claude about [about] (2.0.0, Q29): kept, then answered ([answerChat]). Not while
-     * one of yours still waits for its answer: false then, and nothing's kept.
+     * Your [text] to Claude about [about] (2.0.0, Q29): kept as message [id], then answered
+     * ([answerChat]). Not while one of yours still waits for its answer: false then, and nothing's kept.
      */
-    suspend fun ask(text: String, about: About = About()): Boolean {
+    suspend fun ask(text: String, about: About = About(), id: String = java.util.UUID.randomUUID().toString()): Boolean {
         val words = text.trim().take(ChatPrompts.MAX_TEXT)
         if (words.isEmpty()) return false
         var added = false
@@ -1139,7 +1243,7 @@ class AppGraph private constructor(context: Context) {
                 state
             } else {
                 added = true
-                state.copy(messages = (state.messages + ChatMessage(java.util.UUID.randomUUID().toString(), Speaker.You, words, clock.now(), about)).takeLast(MAX_CHAT))
+                state.copy(messages = (state.messages + ChatMessage(id, Speaker.You, words, clock.now(), about)).takeLast(MAX_CHAT))
             }
         }
         if (added) scope.launch { answerChat() }
@@ -1175,27 +1279,26 @@ class AppGraph private constructor(context: Context) {
         // Answered with nothing usable, it waits for your Try again ([retry]): never asked by itself.
         if (waiting.stuck && !retry) return@withLock
         var stuck = false
-        val note = modelCalls.withLock call@{
+        val note = run call@{
             // Taken back (or the chat cleared) while this waited its turn: nothing to ask.
             if (chat.value.unanswered?.id != waiting.id) return@withLock
-            modelHold()?.let { return@call because(it) }
             val key = claudeKey() ?: return@call because(ModelHold.Off)
-            // Being asked now: whatever it said before (a failed call) is gone.
-            chat.update { s -> s.copy(messages = s.messages.map { if (it.id == waiting.id) it.copy(note = null, stuck = false) else it }) }
-            val at = clock.now()
-            val month = AiUsage.monthOf(at, clock.zone())
             // One snapshot of the tasks, the calendar and your changes: what Claude's shown is what its answer's checked against.
             val state = tasks.value
             val time = calendarTime
-            val result = runCatching {
-                ChatReader(key, clock.zone(), endpoint()).answer(chat.value.messages, state.tasks, time.events, chatContext(at, state, time, instructions.value.applied), at)
+            val called = callModel(interactive = true, cost = { r: ChatReader.Result -> r.costUsd to r.refused }) { at ->
+                // Being asked now: whatever it said before (a failed call) is gone.
+                chat.update { s -> s.copy(messages = s.messages.map { if (it.id == waiting.id) it.copy(note = null, stuck = false) else it }) }
+                ChatReader(key, clock.zone(), endpoint(), profile = profile(at), settings = settings.value).answer(chat.value.messages, state.tasks, time.events, chatContext(at, state, time, instructions.value.applied), at)
             }
-                .onFailure { error ->
-                    Log.w(TAG, "Claude's answer in the chat failed", error)
-                    modelFailed(error, month, at)
+            val result = when (called) {
+                is Called.Held -> return@call because(called.hold)
+                is Called.Failed -> {
+                    Log.w(TAG, "Claude's answer in the chat failed", called.error)
+                    return@call "Claude's call failed: ${retryWords()}, or now with Try again"
                 }
-                .getOrNull() ?: return@call "Claude's call failed: it's tried again within the hour, or now with Try again"
-            modelWorked(result.costUsd, result.refused, month, at)
+                is Called.Answered -> called.value
+            }
             val reading = result.reading ?: run {
                 stuck = true
                 return@call if (result.refused) "Claude declined to answer that: Try again, or put it another way" else "Claude's answer couldn't be read: Try again"
@@ -1205,29 +1308,119 @@ class AppGraph private constructor(context: Context) {
                 from = Speaker.Claude,
                 text = reading.reply,
                 at = clock.now(),
-                proposals = reading.tasks.map { Proposal(java.util.UUID.randomUUID().toString(), task = it) } +
-                    listOfNotNull(
-                        reading.changes.takeIf { it.isNotEmpty() }?.let { changes ->
-                            val byId = tasks.value.tasks.associateBy { it.id }
-                            Proposal(java.util.UUID.randomUUID().toString(), changes = changes, lines = changes.map { Instructions.describe(it, byId, clock.zone()) })
-                        },
-                    ),
+                // Its changes to what exists made at once, on a card applied as it's made (AI-24); the rest to confirm.
+                proposals = com.thomaswcode.decrastination.enrich.ChatAnswers.cards(reading, tasks.value.tasks.associateBy { it.id }, java.time.Instant.ofEpochMilli(clock.now()).atZone(clock.zone()).toLocalDate(), clock.zone()),
+                suggestedReplies = reading.suggestedReplies,
                 note = reading.leftOut.takeIf { it.isNotEmpty() }?.let { "Left out, as the app can't use it: ${it.joinToString("; ")}" },
             )
+            var kept = false
             chat.update { s ->
                 // Only while it's still the one waiting: taken back meanwhile, the answer goes with it.
                 if (s.unanswered?.id != waiting.id) {
                     s
                 } else {
+                    kept = true
                     s.copy(messages = (s.messages.map { if (it.id == waiting.id) it.copy(answeredAt = reply.at, note = null) else it } + reply).takeLast(MAX_CHAT))
                 }
             }
+            // What it remembered (AI-21), with an answer kept only, and said under it.
+            val lines = if (kept) remember(reading.memories) else emptyList()
+            if (lines.isNotEmpty()) chat.update { s -> s.copy(messages = s.messages.map { if (it.id == reply.id) it.copy(remembered = lines) else it }) }
+            // Its changes to what exists, made now, as if Apply were tapped: Undo takes them back.
+            if (kept) reply.proposals.filter { it.instant }.forEach { applyProposal(reply.id, it.id) }
             null
         }
         // Why it waits, said once: written only when it changes, as this runs after every sync.
         if (note != null && chat.value.unanswered?.let { it.id == waiting.id && (it.note != note || it.stuck != stuck) } == true) {
             chat.update { s -> s.copy(messages = s.messages.map { if (it.id == waiting.id && it.answeredAt == null) it.copy(note = note, stuck = stuck) else it }) }
         }
+    }
+
+    /** [given] kept in what's remembered (AI-21), and a line for each thing that did. */
+    suspend fun remember(given: List<com.thomaswcode.decrastination.core.Given>): List<String> {
+        if (given.isEmpty()) return emptyList()
+        var lines = emptyList<String>()
+        memory.update { state -> com.thomaswcode.decrastination.core.Memories.apply(state, given, clock.now()).also { lines = it.second }.first }
+        return lines
+    }
+
+    /** Whether the chat is on screen (AI-24): an answer there isn't a notification too. */
+    @Volatile
+    var chatInFront = false
+
+    /**
+     * Your [text] in reply to Felix's message [id], from its notification (AI-24): his message put in
+     * the chat if it isn't there yet, your reply kept with it, and asked there; the answer, when it
+     * comes, is his next notification while the chat isn't on screen. Returns once it's asked, not
+     * answered. False, and the notification says why, when a message of yours is still waiting.
+     */
+    suspend fun replyToFelix(text: String, id: String): Boolean {
+        val words = text.trim()
+        if (words.isEmpty()) return false
+        val now = clock.now()
+        val name = settings.value.felixName
+        val record = log.value.felix.firstOrNull { it.id == id }
+        // One of the three answers to how the day's completions went (LR-05): on them, and that's all.
+        if (record != null && felix.answered(record, words)) {
+            log.update { l -> l.copy(felix = l.felix.map { if (it.id == id) it.copy(replyText = words, repliedAt = now) else it }) }
+            com.thomaswcode.decrastination.notify.FelixNotifications.cancel(app)
+            return true
+        }
+        if (record != null) {
+            val title = record.taskId?.let { t -> tasks.value.tasks.firstOrNull { it.id == t }?.title }
+            chat.update { s ->
+                if (s.messages.any { it.id == id }) s
+                else s.copy(messages = (s.messages + ChatMessage(id, Speaker.Claude, record.text, record.at, About(taskId = record.taskId, taskTitle = title), reason = record.reason, suggestedReplies = record.replies)).takeLast(MAX_CHAT))
+            }
+            log.update { l -> l.copy(felix = l.felix.map { if (it.id == id) it.copy(replyText = words, repliedAt = now) else it }) }
+        }
+        val his = chat.value.messages.firstOrNull { it.id == id }
+        val said = record?.text ?: his?.text.orEmpty()
+        // The reply's own message in the chat, so its answer is told from any to what's said after it.
+        val asked = java.util.UUID.randomUUID().toString()
+        if (!ask(words, his?.about ?: About(), asked)) {
+            com.thomaswcode.decrastination.notify.FelixNotifications.post(app, id, name, "$said\n\nYour last message to me is still waiting for its answer: send this again once it's come.", emptyList())
+            return false
+        }
+        // Shown as sent, under his message, while he answers: as work of its own, as the receiver
+        // that took the reply is let go once this returns, and the app may go with it.
+        com.thomaswcode.decrastination.notify.FelixNotifications.post(app, id, name, said, emptyList(), sent = words)
+        com.thomaswcode.decrastination.notify.FelixReplyWorker.enqueue(app, id, asked, words)
+        return true
+    }
+
+    /**
+     * The chat's answer to a reply from Felix's notification ([replyToFelix]), as
+     * [com.thomaswcode.decrastination.notify.FelixReplyWorker] runs it: the answer to that reply's
+     * message, [asked], not one to anything said after it, shown as his next notification, or why
+     * there's none, where the reply was made; nothing with the chat in front, which shows it.
+     */
+    suspend fun answerReply(id: String, asked: String, words: String) {
+        val name = settings.value.felixName
+        val said = log.value.felix.firstOrNull { it.id == id }?.text ?: chat.value.messages.firstOrNull { it.id == id }?.text.orEmpty()
+        answerChat()
+        val messages = chat.value.messages
+        val mine = messages.indexOfFirst { it.id == asked }
+        // Taken back, or the chat cleared: nothing to tell.
+        if (mine < 0) return
+        // Its answer: his first after it, with nothing more of yours between.
+        val later = messages.drop(mine + 1)
+        val answer = later.takeWhile { it.from != Speaker.You }.firstOrNull { it.from == Speaker.Claude }
+        when {
+            chatInFront -> com.thomaswcode.decrastination.notify.FelixNotifications.cancel(app)
+            answer != null -> tellAnswer(answer)
+            // Not answered (Claude off, resting, a failed call): why, where the reply was made.
+            later.none { it.from == Speaker.You } && messages[mine].note != null ->
+                com.thomaswcode.decrastination.notify.FelixNotifications.post(app, id, name, "$said\n\n${messages[mine].note}", emptyList(), sent = words)
+        }
+    }
+
+    /** [answer], Felix's in the chat to a reply from a notification, as his next notification (AI-24), with its replies and cards; and on record. */
+    private suspend fun tellAnswer(answer: ChatMessage) {
+        val record = com.thomaswcode.decrastination.data.FelixRecord(answer.id, answer.at, com.thomaswcode.decrastination.enrich.FelixPrompts.Reason.Reply.name, answer.text, answer.suggestedReplies)
+        log.update { it.copy(felix = it.felix.filterNot { r -> r.id == record.id } + record).trimmed(clock.now()) }
+        val cards = answer.proposals.filter { it.state == ProposalState.Proposed }.map { answer.id to it }
+        com.thomaswcode.decrastination.notify.FelixNotifications.post(app, answer.id, settings.value.felixName, answer.text, answer.suggestedReplies, cards)
     }
 
     /** Your message still waiting for Claude taken back, unanswered. */

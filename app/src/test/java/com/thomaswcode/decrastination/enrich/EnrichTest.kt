@@ -509,9 +509,10 @@ class AiUsageTest {
         // Every character three tokens, the instructions' worth more, and all the output, at the
         // dearer rates of a fallback's older Opus. Every call's input is cut to the most it covers,
         // and an email's text is well within it.
-        val longest = Pricing.costUsd("claude-opus-4-8", input = 3L * Pricing.MAX_INPUT_CHARS + 4_000, output = ClaudeEnricher.MAX_TOKENS)
+        // The profile sent with every call counted too, at its most.
+        val longest = Pricing.costUsd("claude-opus-4-8", input = 3L * (Pricing.MAX_INPUT_CHARS + Profile.MAX_BLOCK_CHARS) + 4_000, output = ClaudeEnricher.MAX_TOKENS)
         assertTrue(longest <= Pricing.WORST_CALL_USD, "$longest > ${Pricing.WORST_CALL_USD}")
-        assertEquals(1.02, Pricing.WORST_CALL_USD, 1e-9)
+        assertEquals(1.26, Pricing.WORST_CALL_USD, 1e-9)
         assertTrue(Prompts.MAX_TEXT + 1_000 < Pricing.MAX_INPUT_CHARS)
     }
 
@@ -631,7 +632,7 @@ class ClaudeEnricherTest {
         assertEquals("high", config["effort"]!!.jsonPrimitive.content)
         val format = config["format"]!!.jsonObject
         assertEquals("json_schema", format["type"]!!.jsonPrimitive.content)
-        assertEquals(listOf("kind", "actionableFrom", "deadline", "deadlineQuoted", "effortMin", "nextStep", "blocks"), format["schema"]!!.jsonObject["required"]!!.jsonArray.map { it.jsonPrimitive.content })
+        assertEquals(listOf("kind", "actionableFrom", "deadline", "deadlineQuoted", "effortMin", "nextStep", "question", "blocks"), format["schema"]!!.jsonObject["required"]!!.jsonArray.map { it.jsonPrimitive.content })
         assertTrue("triage one email" in body["system"].toString(), body["system"].toString().take(120))
         assertTrue("Subject: Berlin trip form" in body["messages"].toString())
         // No thinking setting: Opus 5.5 always thinks, and rejects one that turns it off.
@@ -714,5 +715,107 @@ class PhotoCheckerTest {
         } finally {
             server.shutdown()
         }
+    }
+
+    @Test
+    fun `the readings the plan is made from think hard, the answers someone waits for less`() {
+        val high = ModelEffort.Job.entries.filter { ModelEffort.of(it) == com.anthropic.models.messages.OutputConfig.Effort.HIGH }
+        assertEquals(listOf("Email", "Assignment", "Effort", "Instruction", "Review", "PhotoToTask", "PhotoContext"), high.map { it.name })
+        assertEquals(com.anthropic.models.messages.OutputConfig.Effort.MEDIUM, ModelEffort.of(ModelEffort.Job.Chat))
+        assertEquals(com.anthropic.models.messages.OutputConfig.Effort.HIGH, ModelEffort.of(com.thomaswcode.decrastination.core.Enrichments.Job.Assignment))
+    }
+
+    @Test
+    fun `a failed call is told by what failed`() {
+        assertEquals(Failure.RateLimit, Failures.classify(429, key = false))
+        assertEquals(Failure.Overloaded, Failures.classify(529, key = false))
+        assertEquals(Failure.Server, Failures.classify(500, key = false))
+        assertEquals(Failure.Timeout, Failures.classify(408, key = false))
+        assertEquals(Failure.BadRequest, Failures.classify(400, key = false))
+        assertEquals(Failure.Key, Failures.classify(401, key = false))
+        assertEquals(Failure.Key, Failures.classify(400, key = true))
+        assertEquals(Failure.Network, Failures.classify(RuntimeException(java.net.UnknownHostException("api.anthropic.com"))))
+        assertEquals(Failure.Timeout, Failures.classify(java.net.SocketTimeoutException("read timed out")))
+        assertEquals(Failure.Unknown, Failures.classify(IllegalStateException("odd")))
+    }
+
+    @Test
+    fun `the rest after a failure goes by what failed and how many in a row`() {
+        val minute = 60_000L
+        assertEquals(listOf(5, 15, 60).map { it * minute }, (1..3).map { Failures.restMs(Failure.RateLimit, it) })
+        assertEquals(listOf(15, 60).map { it * minute }, (1..2).map { Failures.restMs(Failure.Server, it) })
+        assertEquals(0L, Failures.restMs(Failure.Network, 1))
+        assertEquals(0L, Failures.restMs(Failure.BadRequest, 4))
+        assertEquals(60 * minute, Failures.restMs(Failure.Key, 1))
+        // A longer Retry-After stands.
+        assertEquals(20 * minute, Failures.restMs(Failure.RateLimit, 1, retryAfterMs = 20 * minute))
+        // Three failures already this hour: an hour, whatever the fourth was.
+        val at = Fixtures.at("2026-10-12T17:00")
+        val busy = AiUsage(failedAt = listOf(at - 50 * minute, at - 30 * minute, at - 10 * minute))
+        assertEquals(60 * minute, busy.restAfter(Failure.Network, at))
+        assertEquals(0L, AiUsage(failedAt = listOf(at - 70 * minute)).restAfter(Failure.Network, at))
+        // Counted in a row till a call works.
+        val twice = AiUsage().failure("busy", at, restMs = 5 * minute, kind = Failure.RateLimit).failure("busy", at + 6 * minute, restMs = 15 * minute, kind = Failure.RateLimit)
+        assertEquals(2 to (at + 21 * minute), twice.failuresInRow to twice.restUntil)
+        assertEquals(0 to null, twice.record(0.01, false, at + 30 * minute).let { it.failuresInRow to it.restUntil })
+    }
+
+    @Test
+    fun `a rest holds what runs by itself, not what someone waits for, unless it's the key`() {
+        val at = Fixtures.at("2026-10-12T17:00")
+        val resting = AiUsage(restUntil = at + 600_000L)
+        assertEquals(ModelHold.Resting, ModelHold.of(true, resting, at, LONDON, null))
+        assertEquals(null, ModelHold.of(true, resting, at, LONDON, null, interactive = true))
+        assertEquals(ModelHold.Resting, ModelHold.of(true, resting.copy(keyProblem = KeyProblem.Rejected), at, LONDON, null, interactive = true))
+        assertEquals(null, ModelHold.of(true, resting, at + 600_000L, LONDON, null))
+        assertEquals(10, ModelHold.restLeftMin(resting, at))
+    }
+
+    @Test
+    fun `a call from a month gone by is counted in the newer month, never taking the record back`() {
+        val november = AiUsage("2026-11", spentUsd = 3.0, calls = 2)
+        val late = november.forCall("2026-10").record(0.5, refused = false, at = Fixtures.at("2026-11-01T00:00"))
+        assertEquals(Triple("2026-11", 3.5, 3), Triple(late.month, late.spentUsd, late.calls))
+        // A newer month's own starts at nothing, as ever.
+        assertEquals("2026-11" to 0.0, AiUsage("2026-10", spentUsd = 9.0).forCall("2026-11").let { it.month to it.spentUsd })
+    }
+
+    @Test
+    fun `a failure older than a call that has gone through since brings no rest`() {
+        val worked = AiUsage("2026-10").record(0.1, refused = false, at = NOW + 2_000)
+        val late = worked.failure("503", NOW + 1_000, KeyProblem.Rejected, restMs = 15 * 60_000L)
+        assertEquals(null to null, late.restUntil to late.keyProblem)
+        assertEquals(0 to 1, late.failuresInRow to late.failed)
+        // A newer one's failure rests it as ever.
+        assertEquals(NOW + 3_000 + 15 * 60_000L, worked.failure("503", NOW + 3_000, restMs = 15 * 60_000L).restUntil)
+    }
+
+    @Test
+    fun `the cap counts the calls still in flight at their dearest`() {
+        // Room under a $10 cap for two more calls at their dearest: one in flight leaves room for one, two for none.
+        val worst = Pricing.WORST_CALL_USD
+        val usage = AiUsage(spentUsd = 10 - 2 * worst - 0.0001)
+        assertTrue(usage.allows(10, inFlight = 0))
+        assertTrue(usage.allows(10, inFlight = 1))
+        assertFalse(usage.allows(10, inFlight = 2))
+        assertTrue(AiUsage(spentUsd = 1_000.0).allows(null, inFlight = 9))
+    }
+}
+
+class QuestionTest {
+    @Test
+    fun `a question it can't settle is read, and only one worth asking`() {
+        val text = """{"kind":"Admin","actionableFrom":null,"deadline":"2026-10-16","deadlineQuoted":true,"effortMin":10,"nextStep":"Sign the form","question":" Is it this Friday or next? ","blocks":[]}"""
+        assertEquals("Is it this Friday or next?", Answers.parse(Enrichments.Job.Email, text, email(), "claude-opus-5-5", NOW, LONDON)!!.question)
+        assertNull(Answers.parse(Enrichments.Job.Email, text.replace("\" Is it this Friday or next? \"", "null"), email(), "claude-opus-5-5", NOW, LONDON)!!.question)
+    }
+
+    @Test
+    fun `an answer is read with the task, and only a task with one is read again`() {
+        val task = email()
+        assertEquals(Enrichments.inputHash(task), Enrichments.inputHash(task.copy(answers = emptyList())))
+        val answered = task.copy(answers = listOf("Next Friday, the 23rd"))
+        kotlin.test.assertNotEquals(Enrichments.inputHash(task), Enrichments.inputHash(answered))
+        assertTrue("The student says: Next Friday, the 23rd" in Prompts.describe(answered, Enrichments.Job.Email, NOW, LONDON))
     }
 }

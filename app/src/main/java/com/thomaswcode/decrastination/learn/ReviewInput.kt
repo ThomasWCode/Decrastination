@@ -42,8 +42,9 @@ object ReviewInput {
     private const val MAX_NOTE_CHARS = 300
     private const val MAX_ANSWER = 600
 
-    val SYSTEM = """
-        You review a UK sixth-form student's week (Year 12) for the planner app that schedules their homework and blocks distracting apps until it's done. You get the week's finished work (estimates against the minutes worked in its kept slots, and the student's own "harder/as expected/easier"), the slots kept and missed by hour and day, how often the blocker stopped them, their Sunday answers, and the current settings and calibration.
+    /** The weekly review's, for a student in Year [year] (AI-06). */
+    fun system(year: Int = 12): String = """
+        You review a UK sixth-form student's week (Year $year) for the planner app that schedules their homework and blocks distracting apps until it's done. You get the week's finished work (estimates against the minutes worked in its kept slots, and the student's own "harder/as expected/easier"), the slots kept and missed by hour and day, how often the blocker stopped them, their Sunday answers, and the current settings and calibration.
 
         Write a note of at most five short lines for the student: what the week shows, specific and kind, with numbers where they help ("German took 1.4× its estimates; its pieces now start earlier"). Then propose changes only to these settings, and only where the week gives a reason: boxMin (minutes a piece of work is cut into, 25–60), marginDays (days before a deadline to finish, 0–3), softMinPerDay (minutes of undated work a day, 30–120), workMinPerFreeMin (minutes of work for one of free time, 2–5). Give each change a short reason. No change is a fine answer.
     """.trimIndent()

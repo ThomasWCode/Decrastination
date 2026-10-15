@@ -30,12 +30,20 @@ data class RuntimeState(
     val photosDone: List<PhotoDone> = emptyList(),
     /** Slots being kept whose due (the task's step or minutes, the log, free time) isn't all given yet (LR-09). */
     val keeping: List<Keeping> = emptyList(),
+    /** Felix's pace and what he's seen done (LR-03). */
+    val felix: FelixState = FelixState(),
+    /** The routine notifications gone today, by date (LR-07): only today's kept. */
+    val notifiedToday: Map<String, Int> = emptyMap(),
+    /** Those held back by the ceiling or quiet hours (LR-07), to go at the next briefing. */
+    val heldNotifications: List<HeldNotification> = emptyList(),
     /** The decks' counts read as AnkiDroid came and went (NF-03): the last [com.thomaswcode.decrastination.learn.AnkiProgress.KEEP]. */
     val ankiReadings: List<com.thomaswcode.decrastination.learn.AnkiReading> = emptyList(),
     /** Since when AnkiDroid has been in front, read coming in; null when it isn't. */
     val ankiFrontSince: Long? = null,
     /** AnkiDroid time on deck tasks today not in a kept slot yet (NF-03): the visits before the one that finishes their cards. */
     val ankiWorked: AnkiWorked = AnkiWorked(),
+    /** Tasks whose call the API wouldn't take as asked (AC-04), with the input it refused: sent again once that changes. */
+    val enrichFailed: Map<String, String> = emptyMap(),
     /** Loosening changes waiting their delay. */
     val pending: List<PendingChange> = emptyList(),
     /** A parent code unblocked everything until then. */
@@ -128,6 +136,8 @@ data class ActivityLog(
     val days: List<DayRecord> = emptyList(),
     val checkIns: List<CheckIn> = emptyList(),
     val reviews: List<WeeklyReview> = emptyList(),
+    /** Felix's messages and the replies to them (AI-22, LR-03): the last [FELIX_KEEP_DAYS] days. */
+    val felix: List<FelixRecord> = emptyList(),
 ) {
     fun trimmed(now: Long): ActivityLog {
         val since = now - KEEP_DAYS * 24 * 3_600_000L
@@ -140,13 +150,38 @@ data class ActivityLog(
             days = days.filter { it.date >= sinceDay },
             checkIns = checkIns.filter { it.at >= since },
             reviews = reviews.filter { it.at >= since },
+            felix = felix.filter { it.at >= now - FELIX_KEEP_DAYS * 24 * 3_600_000L },
         )
     }
 
     companion object {
         const val KEEP_DAYS = 120L
+
+        /** His messages are many and matter for a few weeks: the review reads the last one's. */
+        const val FELIX_KEEP_DAYS = 30L
     }
 }
+
+/**
+ * A message of Felix's (AI-22, LR-03): when, why ([reason], a [com.thomaswcode.decrastination.enrich.FelixPrompts.Reason]),
+ * what he said and the replies he offered, the piece ([key]) or task it was about, when he'd check
+ * again, and the student's reply, when one came.
+ */
+@Serializable
+data class FelixRecord(
+    val id: String,
+    val at: Long,
+    val reason: String,
+    val text: String,
+    val replies: List<String> = emptyList(),
+    val key: String? = null,
+    val taskId: String? = null,
+    val nextCheckAt: Long? = null,
+    val replyText: String? = null,
+    val repliedAt: Long? = null,
+    /** The completions a Completions message asks about (LR-05): a reply of one of its three answers goes on each. */
+    val asks: List<AssessLater> = emptyList(),
+)
 
 /** How a slot went (LR-09): kept in its time or after its grace, missed, or moved on purpose. */
 @Serializable
@@ -227,7 +262,13 @@ data class WeeklyReview(
     val week: String? = null,
     /** Why the rules wrote it, not Claude: off, resting, at its cap, or no answer that could be used. */
     val why: String? = null,
+    /** What's remembered before and after the week's tidy, when there was one (AI-21): for the Reviews page to show, and undo. */
+    val memoryTidy: MemoryTidyRecord? = null,
 )
+
+/** The facts remembered before a weekly tidy, and after it (AI-21). */
+@Serializable
+data class MemoryTidyRecord(val before: List<com.thomaswcode.decrastination.core.Fact>, val after: List<com.thomaswcode.decrastination.core.Fact>)
 
 @Serializable
 data class BlockRecord(val at: Long, val target: String, val reason: String)
@@ -285,6 +326,60 @@ data class AnkiWorked(val date: String = "", val minutes: Map<String, Int> = emp
 
     fun without(taskId: String): AnkiWorked = copy(minutes = minutes - taskId)
 }
+
+/**
+ * Felix between looks (LR-03): when he said he'd check again, when he last wrote, a message he wrote
+ * ahead (AC-10), and when something was last seen done on each task (opened, studied in AnkiDroid).
+ */
+@Serializable
+data class FelixState(
+    val nextCheckAt: Long? = null,
+    val lastSentAt: Long? = null,
+    val draft: FelixDraft? = null,
+    val activity: Map<String, Long> = emptyMap(),
+    /** The model's questions about tasks waiting to be put (AI-10). */
+    val questions: List<FelixQuestion> = emptyList(),
+    /** A message whose call didn't come back, to try again (LR-03). */
+    val retry: FelixRetry? = null,
+) {
+    /** [taskIds] seen done on [at]: the last day's kept. */
+    fun withActivity(taskIds: Collection<String>, at: Long): FelixState =
+        copy(activity = (activity + taskIds.associateWith { at }).filterValues { it > at - 24 * 3_600_000L })
+
+    /** [question] waiting about [taskId] (AI-10) in place of the one there was, where it stood (as it was, if the same); null, none. */
+    fun withQuestion(taskId: String, question: String?, at: Long): FelixState {
+        val was = questions.firstOrNull { it.taskId == taskId }
+        val next = question?.let { q -> was?.takeIf { it.question == q } ?: FelixQuestion(taskId, q, at) }
+        return copy(questions = if (was == null) questions + listOfNotNull(next) else questions.flatMap { if (it.taskId == taskId) listOfNotNull(next) else listOf(it) }.distinct())
+    }
+}
+
+/** A message whose call didn't come back (held, failed): its reason and piece, tried again from [notBefore] (LR-03). */
+@Serializable
+data class FelixRetry(val reason: String, val key: String?, val notBefore: Long)
+
+/** A question of the model's about [taskId]'s reading (AI-10), from [at]. */
+@Serializable
+data class FelixQuestion(val taskId: String, val question: String, val at: Long)
+
+/** A message of Felix's written ahead (AC-10): sent if it still fits its reason and piece when the time comes. */
+@Serializable
+data class FelixDraft(val reason: String, val key: String?, val answer: com.thomaswcode.decrastination.enrich.FelixAnswer, val at: Long)
+
+/** A notification held back (LR-07): where it was to go, what it said, and its tap and buttons ([taps]), to be made again with. */
+@Serializable
+data class HeldNotification(val channel: String, val id: Int, val tag: String? = null, val at: Long, val title: String, val text: String, val taps: List<HeldTap> = emptyList())
+
+/**
+ * A held notification's tap (no [label]) or a button of it: an activity of the app's to open, or
+ * ([broadcast]) a receiver of its to send to, as [intent] (`Intent.toUri`) with [requestCode].
+ */
+@Serializable
+data class HeldTap(val label: String? = null, val broadcast: Boolean = false, val requestCode: Int = 0, val intent: String, val reply: HeldReply? = null)
+
+/** A button's reply box (Felix's, AI-24): its key, what it says, and the replies it offers; its intent mutable, to take the words. */
+@Serializable
+data class HeldReply(val key: String, val label: String, val choices: List<String> = emptyList())
 
 /** A daily alarm's run that failed: tried again [at], this being try [tries] (`Daily.failed`). */
 @Serializable

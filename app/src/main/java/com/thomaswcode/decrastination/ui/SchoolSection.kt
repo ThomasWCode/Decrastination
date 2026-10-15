@@ -54,7 +54,7 @@ fun SchoolSection(graph: AppGraph) {
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
         if (school.noSchool.isEmpty() && school.halfDays.isEmpty()) {
             Text(
-                "No days off or half-days yet. Tell Ask Claude (\"half term is 26 to 30 October\"), or add them here: a day off is planned as a weekend is.",
+                "No days off or half-days yet. Tell Felix (\"half term is 26 to 30 October\"), or add them here: a day off is planned as a weekend is.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -113,11 +113,11 @@ fun SchoolSection(graph: AppGraph) {
     }
 }
 
-/** One day off or half-day, and its delete. */
+/** One row of a list saved at once (a day off, a half-day, a memory), and its delete, [action] said aloud. */
 @Composable
-private fun Entry(text: String, onDelete: () -> Unit) {
+internal fun Entry(text: String, action: String = "Delete", onDelete: () -> Unit) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(text, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-        IconButton(onClick = onDelete) { Icon(painterResource(R.drawable.ic_close), contentDescription = "Delete") }
+        IconButton(onClick = onDelete) { Icon(painterResource(R.drawable.ic_close), contentDescription = action) }
     }
 }

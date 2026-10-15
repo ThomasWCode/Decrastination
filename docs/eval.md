@@ -62,6 +62,17 @@ The Assignment job now says of each step whether it's for home (the laptop, book
 
 The readings: printing sheets, a listening exercise, joining an online group and practice exam questions and their marking for home; reading a text, learning vocabulary, translating, revising notes and a final run-through anywhere.
 
+## Review v2, phase 5 (15 Oct): Felix, the chat as him, the tidy, one question
+
+Twenty requests made as the app makes them, from the phone's data of 15 Oct 06:45 (its tasks, settings, school calendar and the changes in use, in `private/eval-felix/`), by a throwaway JVM test kept out of the repository: Felix's prompt for each of his reasons, about tonight's real slots; the chat, now Felix, with tonight's plan; the weekly tidy of a month's overlapping facts; and the Email job's new question. Each was answered by an Opus subagent and read by the app's own readers (`FelixAnswers.parse`, `ChatAnswers.parse`, `MemoryTidy.after`, `Answers.parse`). The real calls are the phone's, at its checks.
+
+| Group | Passed | What came back |
+|---|---|---|
+| Felix, ten reasons | 10 of 10 | Each named its piece and its first action, in two sentences at most, with no emoji, guilt or praise for nothing. At 07:00 with "don't message me before 8" standing, an empty message. Around slots he set his next check 8 to 15 minutes on; on the day done, none (the default then). The photo ask said which page to photograph. One case was built past its slot's end, and he asked what happened, as the rules would have him. |
+| The chat as Felix, six messages | 6 of 6 | A time and the minutes for tonight's first piece, made at once and said as done ("Moved … to 19:30 tonight"). An INSET day that falls inside the half term already kept: nothing added. A preference remembered as a fact, and "don't message me before 8" as a rule. "What's due tomorrow?" answered from the list, with two replies to offer. |
+| The weekly tidy | 1 of 1 | 16 overlapping facts (2 240 characters) into 10 lines (768), within its two-thirds limit: the newest kept on each topic, and two pairs merged. |
+| One question (AI-10) | 3 of 3 | An email whose date turns on a booking asked which Friday; two clear ones asked nothing. |
+
 ## The chat (2.0.0)
 
 Ten messages to *Ask Claude*, sent as the app sends them: the exact system prompt, schema and turns built from the phone's `tasks.json` and `instructions.json` (pulled into `private/eval-chat/`, addresses redacted) by a throwaway JVM test kept out of the repo, each answered by an Opus subagent, and each answer put through `ChatAnswers.parse`. 12 Oct, against `ChatPrompts` as committed in #30: all ten read, and each did what was asked.

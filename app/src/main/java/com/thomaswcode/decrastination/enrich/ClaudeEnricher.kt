@@ -28,6 +28,8 @@ class ClaudeEnricher(
     private val zone: ZoneId,
     endpoint: String? = null,
     private val model: String = MODEL,
+    /** Who the student is (AI-05): read for each call, as it changes with what's remembered. */
+    private val profile: () -> Profile.Block = { Profile.Block.NONE },
 ) : Enricher {
     override val by = model
 
@@ -39,14 +41,15 @@ class ClaudeEnricher(
         .build()
 
     override suspend fun enrich(task: TaskItem, job: Enrichments.Job, now: Long): Enricher.Result {
+        val student = profile()
         val params = MessageCreateParams.builder()
             .model(model)
             .maxTokens(MAX_TOKENS)
-            .system(Prompts.system(job))
+            .systemOfTextBlockParams(ModelCalls.systemBlocks(Prompts.system(job, student.year), student.text))
             .addUserMessage(Prompts.describe(task, job, now, zone).take(Pricing.MAX_INPUT_CHARS))
             .outputConfig(
                 OutputConfig.builder()
-                    .effort(OutputConfig.Effort.HIGH)
+                    .effort(ModelEffort.of(job))
                     .format(JsonOutputFormat.builder().schema(schema(Prompts.schema(job))).build())
                     .build(),
             )
@@ -101,12 +104,13 @@ object Pricing {
 
     /**
      * The most one call can cost, at the dearer rates: the longest text any call sends
-     * ([MAX_INPUT_CHARS] at [TOKENS_PER_CHAR] tokens each, and [PROMPT_TOKENS] more), and all of
-     * [ClaudeEnricher.MAX_TOKENS] out. $1.02. Every job's input is held to it, not only an email's
-     * (BUG-P2-015), so a cap is never passed by a call it let through.
+     * ([MAX_INPUT_CHARS], and the profile sent with it, [Profile.MAX_BLOCK_CHARS], at
+     * [TOKENS_PER_CHAR] tokens each, and [PROMPT_TOKENS] more), and all of [ClaudeEnricher.MAX_TOKENS]
+     * out. $1.26. Every job's input is held to it, not only an email's (BUG-P2-015), so a cap is
+     * never passed by a call it let through.
      */
     val WORST_CALL_USD: Double =
-        ((MAX_INPUT_CHARS.toLong() * TOKENS_PER_CHAR + PROMPT_TOKENS) * OLDER_OPUS.input + ClaudeEnricher.MAX_TOKENS * OLDER_OPUS.output) / 1_000_000.0
+        (((MAX_INPUT_CHARS.toLong() + Profile.MAX_BLOCK_CHARS) * TOKENS_PER_CHAR + PROMPT_TOKENS) * OLDER_OPUS.input + ClaudeEnricher.MAX_TOKENS * OLDER_OPUS.output) / 1_000_000.0
 
     fun rates(model: String): Rates = if (model.startsWith(ClaudeEnricher.MODEL)) OPUS_5_5 else OLDER_OPUS
 

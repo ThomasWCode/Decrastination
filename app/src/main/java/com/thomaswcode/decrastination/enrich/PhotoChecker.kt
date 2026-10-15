@@ -23,7 +23,7 @@ import java.util.Base64
  * the piece it's for in, `{done, confidence, reason}` out. A piece can't be confirmed done at its
  * source, so this stands in for the timer. Built, and offered only while Claude is on.
  */
-class PhotoChecker(apiKey: String, endpoint: String? = null, val model: String = ClaudeEnricher.MODEL) {
+class PhotoChecker(apiKey: String, endpoint: String? = null, val model: String = ClaudeEnricher.MODEL, private val profile: Profile.Block = Profile.Block.NONE) {
 
     @Serializable
     data class Verdict(val done: Boolean, val confidence: Double, val reason: String)
@@ -48,7 +48,7 @@ class PhotoChecker(apiKey: String, endpoint: String? = null, val model: String =
         val params = MessageCreateParams.builder()
             .model(model)
             .maxTokens(ClaudeEnricher.MAX_TOKENS)
-            .system(SYSTEM)
+            .systemOfTextBlockParams(ModelCalls.systemBlocks(system(profile.year), profile.text))
             .addUserMessageOfBlockParams(
                 listOf(
                     ContentBlockParam.ofImage(image),
@@ -56,7 +56,7 @@ class PhotoChecker(apiKey: String, endpoint: String? = null, val model: String =
                     ContentBlockParam.ofText(TextBlockParam.builder().text("The piece of work: $piece".take(Pricing.MAX_INPUT_CHARS)).build()),
                 ),
             )
-            .outputConfig(OutputConfig.builder().effort(OutputConfig.Effort.HIGH).format(JsonOutputFormat.builder().schema(schema).build()).build())
+            .outputConfig(OutputConfig.builder().effort(ModelEffort.of(ModelEffort.Job.PhotoCheck)).format(JsonOutputFormat.builder().schema(schema).build()).build())
             .putAdditionalHeader("anthropic-beta", ClaudeEnricher.FALLBACK_BETA)
             .putAdditionalBodyProperty("fallbacks", JsonValue.from("default"))
             .build()
@@ -80,8 +80,9 @@ class PhotoChecker(apiKey: String, endpoint: String? = null, val model: String =
         /** Photos are sent no bigger than this on their long side: what the model reads at full detail. */
         const val MAX_SIDE = 1568
 
-        val SYSTEM = """
-            You check a photo of a UK sixth-form student's written work (Year 12) for the planner app that times their homework. Say whether it shows the piece of work described done: answers or writing for all of it, not blank pages, the questions alone, a few lines, or a different task. Be fair, and not easily fooled. Give your confidence from 0 to 1, and one short reason the student will read.
+        /** The photo check's, for a student in Year [year] (AI-06). */
+        fun system(year: Int = 12): String = """
+            You check a photo of a UK sixth-form student's written work (Year $year) for the planner app that times their homework. Say whether it shows the piece of work described done: answers or writing for all of it, not blank pages, the questions alone, a few lines, or a different task. Be fair, and not easily fooled. Give your confidence from 0 to 1, and one short reason the student will read.
         """.trimIndent()
 
         val SCHEMA: Map<String, Any> = mapOf(

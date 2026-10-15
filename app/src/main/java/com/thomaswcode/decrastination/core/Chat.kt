@@ -3,10 +3,10 @@ package com.thomaswcode.decrastination.core
 import kotlinx.serialization.Serializable
 
 /**
- * Asking Claude (2.0.0, Q29): one chat for everything you'd say about your work. You write; Claude
- * answers, asks when something's missing, and puts what it would do on cards ([Proposal]): a new
- * task of your own, or changes to your tasks and days. Nothing changes until you tap a card's Add
- * or Apply. Kept in `chat.json`.
+ * Asking Claude (2.0.0, Q29), Felix since review v2 (AI-24): one chat for everything you'd say about
+ * your work. You write; he answers, asks when something's missing, and puts what he does on cards
+ * ([Proposal]): a change to a task you have is made at once, its card's Undo taking it back; a new
+ * task of your own, or days off, wait for the card's Add or Apply. Kept in `chat.json`.
  */
 @Serializable
 data class ChatState(val messages: List<ChatMessage> = emptyList()) {
@@ -37,6 +37,12 @@ data class ChatMessage(
      * never by itself.
      */
     val stuck: Boolean = false,
+    /** Claude's: what it remembered or forgot with it (AI-21), a line each. */
+    val remembered: List<String> = emptyList(),
+    /** Felix's, put here from a notification he wrote (AI-24): why he wrote it ([com.thomaswcode.decrastination.enrich.FelixPrompts.Reason]). */
+    val reason: String? = null,
+    /** Claude's: up to three short replies you might send next, in your words (AI-24, UI-06). */
+    val suggestedReplies: List<String> = emptyList(),
 )
 
 /**
@@ -54,6 +60,8 @@ data class Proposal(
      */
     val lines: List<String> = emptyList(),
     val state: ProposalState = ProposalState.Proposed,
+    /** Made as it was given (AI-24): a change to what exists, applied at once, Undo taking it back. */
+    val instant: Boolean = false,
     val made: String? = null,
     /**
      * Your own tasks its changes were made on, by id, as they were before: what *Undo* puts back, as

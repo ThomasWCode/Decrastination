@@ -99,7 +99,7 @@ data class Chunk(
      * no step of its own, its part. Not a step's part: that renumbers once a piece before it is kept,
      * and its slot's kept start (PL-13) would be lost with it.
      */
-    val key: String get() = if (stepIndex != null) "$taskId#$stepIndex" else "$taskId#-1#$part"
+    val key: String get() = keyOf(taskId, stepIndex, part)
 
     val label: String get() = step?.let { "$title: $it" } ?: title
 
@@ -122,9 +122,15 @@ data class Chunk(
         }
     }
 
-    private companion object {
-        val DAY: DateTimeFormatter = DateTimeFormatter.ofPattern("EEE d MMM", Locale.UK)
-        val WEEKDAY: DateTimeFormatter = DateTimeFormatter.ofPattern("EEEE", Locale.UK)
+    companion object {
+        private val DAY: DateTimeFormatter = DateTimeFormatter.ofPattern("EEE d MMM", Locale.UK)
+        private val WEEKDAY: DateTimeFormatter = DateTimeFormatter.ofPattern("EEEE", Locale.UK)
+
+        /**
+         * A piece's [key] from what makes it, for the planner naming one before it's made (its pin,
+         * its missed slot): the one place it's made, so the two can't come apart.
+         */
+        fun keyOf(taskId: String, stepIndex: Int?, part: Int): String = if (stepIndex != null) "$taskId#$stepIndex" else "$taskId#-1#$part"
     }
 
     /** Bad news, shown in red wherever it appears: overdue, due today, or behind. */
@@ -134,6 +140,29 @@ data class Chunk(
 
     /** Written homework, which a photo can show done: not a deck's cards, an email or an event. */
     val photoCheckable: Boolean get() = kind == Kind.Homework && source != Source.Anki
+
+    /** What lets a kept slot of it earn (BL-08), with pieces from [photoFromMin] minutes needing more than a tick. */
+    fun earnsBy(photoFromMin: Int): EarnsBy = when {
+        minutes < photoFromMin -> EarnsBy.Tick
+        photoCheckable -> EarnsBy.Photo
+        source == Source.Own -> EarnsBy.Nothing
+        else -> EarnsBy.Source
+    }
+}
+
+/** What lets a kept slot earn (BL-08). */
+enum class EarnsBy {
+    /** Short: its tick. */
+    Tick,
+
+    /** Longer, written work: a photo check of it. */
+    Photo,
+
+    /** Longer, not written work: its source saying it's done (Anki's cards counted, Teams handed in). */
+    Source,
+
+    /** Longer, one of your own that isn't written work: nothing can check it. */
+    Nothing,
 }
 
 data class DayBucket(

@@ -96,6 +96,7 @@ class SettingsActivity : ComponentActivity() {
 
         Scaffold(
             topBar = { BackBar("Settings", this) },
+            floatingActionButton = { FelixFab(this) },
             bottomBar = {
                 Column(Modifier.fillMaxWidth().padding(16.dp)) {
                     message?.let { Text(it, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(bottom = 8.dp)) }
@@ -136,6 +137,45 @@ class SettingsActivity : ComponentActivity() {
                     )
                     OptionalNumberField("Monthly cap ($, blank for none)", draft.aiMonthlyCapUsd, SettingsLimits.CAP_USD, "aiMonthlyCapUsd", form) { draft = draft.copy(aiMonthlyCapUsd = it) }
                 }
+
+                // Who you are, as every call to Claude says it (AI-05).
+                item { Section("About you") }
+                item {
+                    NumberField("The September you went into Year 12", draft.yearGroupStart, SettingsLimits.YEAR_GROUP_START, "yearGroupStart", form) { draft = draft.copy(yearGroupStart = it) }
+                    NumberField("Current German textbook", draft.ankiTextbook, SettingsLimits.TEXTBOOK, "ankiTextbook", form) { draft = draft.copy(ankiTextbook = it) }
+                    OutlinedTextField(
+                        value = raw[PROFILE] ?: draft.profileLines.joinToString("\n"),
+                        onValueChange = { value ->
+                            raw = raw + (PROFILE to value)
+                            draft = draft.copy(profileLines = value.lines().map { it.trim().take(SettingsLimits.MAX_PROFILE_LINE) }.filter { it.isNotEmpty() }.take(SettingsLimits.MAX_PROFILE_LINES))
+                        },
+                        label = { Text("What you'd have Claude know, a line each") },
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                        minLines = 3,
+                    )
+                    // Each class code the sources give, and the subject it is: blank leaves it the code.
+                    for (code in (draft.classMap.keys + graph.tasks.value.tasks.mapNotNull { it.className?.trim()?.takeIf(String::isNotEmpty) }).distinct().sorted().take(SettingsLimits.MAX_CLASSES)) {
+                        OutlinedTextField(
+                            value = draft.classMap[code].orEmpty(),
+                            onValueChange = { subject -> draft = draft.copy(classMap = if (subject.isBlank()) draft.classMap - code else draft.classMap + (code to subject.take(SettingsLimits.MAX_NAME))) },
+                            label = { Text("$code is") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                        )
+                    }
+                    Note("Sent to Claude with every call, with your school days and what's remembered.")
+                }
+
+                // The voice of the app's messages (AI-22, LR-03); what he remembers, and how he's to
+                // behave (AI-21), saved as each is added or forgotten.
+                item { Section("Felix") }
+                item {
+                    TextField("His name", draft.felixName, SettingsLimits.MAX_NAME, "felixName", form) { draft = draft.copy(felixName = it) }
+                    TextField("Who he is", draft.felixLine, SettingsLimits.MAX_FELIX_LINE, "felixLine", form) { draft = draft.copy(felixLine = it) }
+                    NumberField("He asks this far into a slot with nothing done (minutes)", draft.felixGraceMin, SettingsLimits.FELIX_GRACE_MIN, "felixGraceMin", form) { draft = draft.copy(felixGraceMin = it) }
+                    NumberField("He checks again after, if he doesn't say (minutes)", draft.felixDefaultCheckMin, SettingsLimits.FELIX_CHECK_MIN, "felixDefaultCheckMin", form) { draft = draft.copy(felixDefaultCheckMin = it) }
+                }
+                item { MemorySection(graph) }
 
                 item { Section("Hours") }
                 item {
@@ -183,7 +223,6 @@ class SettingsActivity : ComponentActivity() {
                 item { Section("Anki") }
                 item {
                     TimeField("Daily cards due by", draft.ankiDeadlineMin, "ankiDeadlineMin", form) { draft = draft.copy(ankiDeadlineMin = it) }
-                    NumberField("Current textbook", draft.ankiTextbook, SettingsLimits.TEXTBOOK, "ankiTextbook", form) { draft = draft.copy(ankiTextbook = it) }
                     // What a card takes in each deck, as learned from time in AnkiDroid (DX-11).
                     com.thomaswcode.decrastination.learn.AnkiProgress.lines(graph.runtime.value.calibration, graph.tasks.value.tasks).forEach {
                         Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -274,6 +313,7 @@ class SettingsActivity : ComponentActivity() {
 
     private companion object {
         const val SITES = "blockedSites"
+        const val PROFILE = "profileLines"
 
         /** The settings as their JSON, to keep a draft through the screen being made again. */
         val SETTINGS = Saver<Settings, String>(
@@ -340,6 +380,11 @@ private fun <T> ParsedField(label: String, shown: String, key: String, form: For
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
     )
 }
+
+/** Some words, not blank and no longer than [max]. */
+@Composable
+private fun TextField(label: String, value: String, max: Int, key: String, form: Form, onChange: (String) -> Unit) =
+    ParsedField(label, value, key, form, { it.trim().takeIf { s -> s.isNotEmpty() && s.length <= max } }, onChange, number = false)
 
 @Composable
 private fun NumberField(label: String, value: Int, range: IntRange, key: String, form: Form, onChange: (Int) -> Unit) =

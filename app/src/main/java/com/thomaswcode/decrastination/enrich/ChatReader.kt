@@ -11,6 +11,7 @@ import com.thomaswcode.decrastination.core.About
 import com.thomaswcode.decrastination.core.Change
 import com.thomaswcode.decrastination.core.ChatMessage
 import com.thomaswcode.decrastination.core.Chunk
+import com.thomaswcode.decrastination.core.InstantChanges
 import com.thomaswcode.decrastination.core.Instruction
 import com.thomaswcode.decrastination.core.Instructions
 import com.thomaswcode.decrastination.core.Kind
@@ -24,6 +25,7 @@ import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.Unplanned
 import com.thomaswcode.decrastination.core.Why
 import com.thomaswcode.decrastination.core.shareOut
+import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.learn.CalendarEvent
 import com.thomaswcode.decrastination.learn.EventJudge
 import java.time.Duration
@@ -58,17 +60,19 @@ object ChatPrompts {
     private val DAY = DateTimeFormatter.ofPattern("EEEE d MMMM yyyy", Locale.UK)
     private val CLOCK = DateTimeFormatter.ofPattern("HH:mm", Locale.UK)
 
-    val SYSTEM = (
+    /** The chat's instructions, as Felix (AI-24; Q-44: the chat is him too), for a student in Year [year] (AI-06). */
+    fun system(settings: Settings = Settings(), year: Int = 12): String = (
         """
-        You're the assistant in a UK sixth-form student's (Year 12) planner app, in a chat. The app gathers their homework (Teams), their own planner (Power Planner), emails that ask them for something (Gmail), German vocabulary (Anki) and tasks they add themselves; plans the work into the evenings before each is due, around their calendar; and blocks distracting apps while work is due.
+        You are ${settings.felixName}: ${settings.felixLine}, and this is the chat in a UK sixth-form student's (Year $year) planner app. The app gathers their homework (Teams), their own planner (Power Planner), emails that ask them for something (Gmail), German vocabulary (Anki) and tasks they add themselves; plans the work into the evenings before each is due, around their calendar; and blocks distracting apps while work is due.
 
         The student tells you about their work. You can:
         1. Add tasks of their own (newTasks): something to do that isn't listed ("write my UCAS statement by 1 December", "buy mum a present before Sunday"). Give a short title in their words; kind: Homework, Revision, Admin, or Event for something that happens at a time (an appointment, a match); subject if it's for one (else an empty string); dueDate and dueTime if they gave them (an event's start; no time means the end of that day); minutes for the whole thing (your best estimate if they didn't say, and say so in your reply); startDate if it can't be started before a day; notes only for something worth keeping (else an empty string); and steps only for a big task worth splitting, each with minutes (adding up to the task's) and its own dates where it has them.
         2. Change their tasks and days (changes), with these:
 """ + InstructionPrompts.CHANGE_TYPES.prependIndent("        ") + """
         3. Answer questions about their work from what you're given, briefly: what's due when from the task list; what's on a day, how full it is, what to do next and why something isn't planned from the plan. The plan is what the app has them do and shows them, so say what it says rather than planning the work again yourself.
+        4. Remember (memories): a fact about the student worth keeping for later (a preference, a pattern, something about their week: "football is on Tuesdays"), with a short topic, so a newer fact on the same topic replaces it; or, kind "rule", a standing instruction about how you should behave ("don't message before 8", "be blunter"). To forget one, give its topic (a rule's own words) and an empty text. Busy times, limits and days off are changes, not memories; most messages need none.
 
-        Reply in one to three short sentences of plain UK English (asked what's on, a short list instead, a line a task).Nothing you suggest happens until the student taps Add or Apply on it, so never say you've done it: say what you'd do ("I'd add…", "I'd move…"). If what you need is missing or unclear (which task they mean, or when), ask one short question and suggest nothing. Don't add a task that's already listed: change it instead. When their message is about a given task, event or day, it's about that unless they clearly name another. Suggest only what they asked for, and leave every field you don't use null.
+        Reply in one to three short sentences of plain UK English (asked what's on, a short list instead, a line a task). A change to a task that's already listed, a busy time or a limit today, or how an event counts is made as soon as you give it, so say what you've done ("Moved it to 19:30"); a new task or event, a busy time or a limit on another day, days off or a half-day are shown to the student to confirm, so say what you'd add. To undo a change, give the change that puts it back. When a reply from them is likely, offer up to three short ones in their words (suggestedReplies). If what you need is missing or unclear (which task they mean, or when), ask one short question and change nothing. Don't add a task that's already listed: change it instead. When their message is about a given task, event or day, it's about that unless they clearly name another. Do only what they asked for, and leave every field you don't use null.
     """
         ).trimIndent()
 
@@ -98,10 +102,19 @@ object ChatPrompts {
         "steps" to mapOf("type" to "array", "items" to STEP),
     )
 
+    /** A memory to keep or forget (AI-21): a string each, so no union is added (the API takes 16). */
+    val MEMORY: Map<String, Any> = InstructionPrompts.obj(
+        "topic" to STRING,
+        "text" to STRING,
+        "kind" to mapOf("type" to "string", "enum" to listOf(com.thomaswcode.decrastination.core.Given.FACT, com.thomaswcode.decrastination.core.Given.RULE)),
+    )
+
     val SCHEMA: Map<String, Any> = InstructionPrompts.obj(
         "reply" to STRING,
         "newTasks" to mapOf("type" to "array", "items" to TASK),
         "changes" to mapOf("type" to "array", "items" to InstructionPrompts.CHANGE),
+        "memories" to mapOf("type" to "array", "items" to MEMORY),
+        "suggestedReplies" to mapOf("type" to "array", "items" to STRING),
     )
 
     /**
@@ -115,9 +128,21 @@ object ChatPrompts {
      * so a long list of tasks can't push it out: the list loses its end, and the plan its far days.
      */
     fun turns(messages: List<ChatMessage>, context: String, tasks: Map<String, TaskItem>, zone: ZoneId, budget: Int = Pricing.MAX_INPUT_CHARS, plan: String = ""): List<Pair<Speaker, String>> {
-        val recent = messages.takeLast(HISTORY).dropWhile { it.from != Speaker.You }
+        val last = messages.takeLast(HISTORY)
+        // Before any of yours: an answer cut off from its question by the window goes; a message of
+        // Felix's own (a notification you answered, [ChatMessage.reason]) is said in your first turn,
+        // as the conversation has to start with one of yours.
+        val lead = last.takeWhile { it.from != Speaker.You }.filter { it.reason != null }
+        val recent = last.dropWhile { it.from != Speaker.You }
         if (recent.isEmpty()) return emptyList()
-        val texts = recent.map { m -> m.from to text(m, tasks, zone) }
+        // A turn each way at a time: a message of Felix's from a notification can follow his last answer.
+        val folded = recent.map { m -> m.from to text(m, tasks, zone) }.fold(emptyList<Pair<Speaker, String>>()) { turns, (from, text) ->
+            if (turns.lastOrNull()?.first == from) turns.dropLast(1) + (from to turns.last().second + "\n\n" + text) else turns + (from to text)
+        }
+        val texts = if (lead.isEmpty()) folded else {
+            val before = lead.joinToString("\n") { "(You'd written to them: “${it.text.trim().take(MAX_TEXT)}”)" }
+            listOf(folded.first().first to before + "\n\n" + folded.first().second) + folded.drop(1)
+        }
         val newest = texts.last().second.take(budget)
         // The turns before it, newest first, while they fit their share, starting again with one of yours.
         var left = (budget - newest.length) / 4
@@ -154,7 +179,7 @@ object ChatPrompts {
                 ?: p.changes.joinToString("; ") { Instructions.describe(it, tasks, zone) }
             val became = when (p.state) {
                 ProposalState.Proposed -> "not acted on yet"
-                ProposalState.Applied -> "the student applied it"
+                ProposalState.Applied -> if (p.instant) "made at once" else "the student applied it"
                 ProposalState.Discarded -> "the student discarded it"
             }
             "\n[Suggested: $what — $became]"
@@ -312,10 +337,35 @@ object ChatPrompts {
 /** Claude's answer in the chat, checked: its reply, the tasks and changes the app can make, and what it left out. */
 object ChatAnswers {
 
-    data class Reading(val reply: String, val tasks: List<OwnTask>, val changes: List<Change>, val leftOut: List<String>)
+    data class Reading(
+        val reply: String,
+        val tasks: List<OwnTask>,
+        val changes: List<Change>,
+        val leftOut: List<String>,
+        val memories: List<com.thomaswcode.decrastination.core.Given> = emptyList(),
+        val suggestedReplies: List<String> = emptyList(),
+    )
+
+    /**
+     * [reading]'s cards (AI-24): its changes to what exists ([InstantChanges]) on one card, applied as
+     * it's made, first; its new tasks, a card each; the rest of its changes on one card to confirm.
+     */
+    fun cards(reading: Reading, tasks: Map<String, TaskItem>, today: LocalDate, zone: ZoneId, id: () -> String = { java.util.UUID.randomUUID().toString() }): List<com.thomaswcode.decrastination.core.Proposal> {
+        val (now, later) = reading.changes.partition { InstantChanges.instant(it, tasks, today) }
+        fun card(changes: List<Change>, instant: Boolean) = changes.takeIf { it.isNotEmpty() }?.let {
+            com.thomaswcode.decrastination.core.Proposal(id(), changes = it, lines = it.map { c -> Instructions.describe(c, tasks, zone) }, instant = instant)
+        }
+        return listOfNotNull(card(now, instant = true)) + reading.tasks.map { com.thomaswcode.decrastination.core.Proposal(id(), task = it) } + listOfNotNull(card(later, instant = false))
+    }
 
     @Serializable
-    private data class Answer(val reply: String = "", val newTasks: List<NewTask> = emptyList(), val changes: List<InstructionAnswers.Given> = emptyList())
+    private data class Answer(
+        val reply: String = "",
+        val newTasks: List<NewTask> = emptyList(),
+        val changes: List<InstructionAnswers.Given> = emptyList(),
+        val memories: List<com.thomaswcode.decrastination.core.Given> = emptyList(),
+        val suggestedReplies: List<String> = emptyList(),
+    )
 
     @Serializable
     private data class NewTask(
@@ -345,6 +395,9 @@ object ChatAnswers {
      * ([OwnTasks.problem]) with plausible dates, each change as an instruction's is; what can't be
      * used is left out and said ([Reading.leftOut]), the rest kept. Null if it can't be read at all.
      */
+    /** The most memories one answer gives: a few at most is what's meant. */
+    private const val MAX_MEMORIES = 5
+
     fun parse(text: String, tasks: List<TaskItem>, events: List<CalendarEvent>, about: About, now: Long, zone: ZoneId): Reading? {
         val answer = runCatching { json.decodeFromString(Answer.serializer(), text) }.getOrNull() ?: return null
         val reply = answer.reply.trim().takeIf { it.isNotEmpty() } ?: return null
@@ -366,7 +419,8 @@ object ChatAnswers {
             leftOut += "changes that would have tasks wait for each other in a circle"
             changes = emptyList()
         }
-        return Reading(reply.take(ChatPrompts.MAX_TEXT), made, changes, leftOut)
+        val replies = answer.suggestedReplies.map { it.trim().take(FelixAnswers.MAX_REPLY) }.filter { it.isNotEmpty() }.distinct().take(FelixAnswers.MAX_REPLIES)
+        return Reading(reply.take(ChatPrompts.MAX_TEXT), made, changes, leftOut, answer.memories.take(MAX_MEMORIES), replies)
     }
 
     private fun task(n: NewTask, now: Long, zone: ZoneId): OwnTask? {
@@ -411,7 +465,15 @@ object ChatAnswers {
 }
 
 /** Claude in the chat ([ChatPrompts]), as the enrichment's calls are made. */
-class ChatReader(apiKey: String, private val zone: ZoneId, endpoint: String? = null, val model: String = ClaudeEnricher.MODEL) {
+class ChatReader(
+    apiKey: String,
+    private val zone: ZoneId,
+    endpoint: String? = null,
+    val model: String = ClaudeEnricher.MODEL,
+    private val profile: Profile.Block = Profile.Block.NONE,
+    /** Felix's name and line, as the chat's him (AI-24). */
+    private val settings: Settings = Settings(),
+) {
 
     data class Result(val reading: ChatAnswers.Reading?, val costUsd: Double, val refused: Boolean = false)
 
@@ -428,8 +490,8 @@ class ChatReader(apiKey: String, private val zone: ZoneId, endpoint: String? = n
         val builder = MessageCreateParams.builder()
             .model(model)
             .maxTokens(ClaudeEnricher.MAX_TOKENS)
-            .system(ChatPrompts.SYSTEM)
-            .outputConfig(OutputConfig.builder().effort(OutputConfig.Effort.HIGH).format(JsonOutputFormat.builder().schema(schema).build()).build())
+            .systemOfTextBlockParams(ModelCalls.systemBlocks(ChatPrompts.system(settings, profile.year), profile.text))
+            .outputConfig(OutputConfig.builder().effort(ModelEffort.of(ModelEffort.Job.Chat)).format(JsonOutputFormat.builder().schema(schema).build()).build())
             .putAdditionalHeader("anthropic-beta", ClaudeEnricher.FALLBACK_BETA)
             .putAdditionalBodyProperty("fallbacks", JsonValue.from("default"))
         ChatPrompts.turns(messages, context.known, tasks.associateBy { it.id }, zone, plan = context.plan).forEach { (from, text) ->

@@ -2,6 +2,7 @@ package com.thomaswcode.decrastination.block
 
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.Chunk
+import com.thomaswcode.decrastination.core.EarnsBy
 import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.Planner
 import com.thomaswcode.decrastination.core.SlotKind
@@ -186,27 +187,8 @@ class Focus(
         return if (parts.isEmpty()) line else "$line → ${parts.joinToString(", ")}"
     }
 
-    /** What lets a kept slot of [piece] earn (BL-08). */
-    enum class EarnsBy {
-        /** Short: its tick. */
-        Tick,
-
-        /** Longer, written work: a photo check of it. */
-        Photo,
-
-        /** Longer, not written work: its source saying it's done (Anki's cards counted, Teams handed in). */
-        Source,
-
-        /** Longer, one of your own that isn't written work: nothing can check it. */
-        Nothing,
-    }
-
-    fun earnsBy(piece: Chunk): EarnsBy = when {
-        piece.minutes < settings.value.photoFromMin -> EarnsBy.Tick
-        piece.photoCheckable -> EarnsBy.Photo
-        piece.source == Source.Own -> EarnsBy.Nothing
-        else -> EarnsBy.Source
-    }
+    /** What lets a kept slot of [piece] earn (BL-08), by the settings. */
+    fun earnsBy(piece: Chunk): EarnsBy = piece.earnsBy(settings.value.photoFromMin)
 
     /**
      * A slot missed today that went to tomorrow keeps today's work undone (BL-11), till the day's
