@@ -126,6 +126,11 @@ class BackupTest {
         assertEquals(listOf("sleep" to "in bed by 22:30", "football" to "on Tuesdays"), merged.facts.map { it.topic to it.text })
         assertEquals(listOf("be blunter"), merged.rules.map { it.text })
         assertNotNull(Backups.problem(backup().copy(memory = com.thomaswcode.decrastination.core.MemoryState(facts = listOf(com.thomaswcode.decrastination.core.Fact("", "x", 1))))))
+        // Over the room together: the oldest go, wherever they came from.
+        val big = "x".repeat(2_900)
+        val local = com.thomaswcode.decrastination.core.MemoryState(facts = listOf(com.thomaswcode.decrastination.core.Fact("old", big, 1), com.thomaswcode.decrastination.core.Fact("mid", big, 5)))
+        val newer = com.thomaswcode.decrastination.core.MemoryState(facts = listOf(com.thomaswcode.decrastination.core.Fact("new", big, 9)))
+        assertEquals(listOf("mid", "new"), Backups.mergedMemory(local, newer).facts.map { it.topic })
     }
 
     @Test

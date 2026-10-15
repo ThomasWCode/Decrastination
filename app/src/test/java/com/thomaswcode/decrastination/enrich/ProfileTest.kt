@@ -74,12 +74,22 @@ class ProfileTest {
     }
 
     @Test
-    fun `cut at its limit, what's remembered goes first, the oldest first, and the subjects stay`() {
-        val many = MemoryState(facts = (1..100).map { Fact("topic $it", "a fact worth keeping about the week, number $it", now + it) })
-        val text = Profile.block(settings, listOf(maths), null, SchoolCalendar(), many, now, LONDON)
-        assertTrue(text.length <= Profile.MAX_CHARS, "${text.length}")
-        assertTrue("Subjects: Physics (12.2-PH3)" in text)
-        assertTrue("- topic 100: " in text)
+    fun `its own part held to its size, your lines first, and what's remembered whole within its own room`() {
+        val lines = settings.copy(profileLines = (1..20).map { "a line of mine about the week, the " + "x".repeat(150) + " $it" })
+        val many = MemoryState(
+            facts = (1..150).map { Fact("topic $it", "a fact worth keeping about the week, number $it", now + it) },
+            rules = listOf(Rule("don't message before 8", now)),
+        )
+        val text = Profile.block(lines, listOf(maths), null, SchoolCalendar(), many, now, LONDON)
+        val own = text.substringBefore("How Felix should behave:")
+        assertTrue(own.length <= Profile.MAX_CHARS, "${own.length}")
+        assertTrue("Subjects: Physics (12.2-PH3)" in own)
+        assertFalse(" 20" in own.lines().last())
+        // Every instruction; the facts newest first, within their room.
+        assertTrue("- don't message before 8" in text)
+        assertTrue("- topic 150: " in text)
         assertFalse("- topic 1: " in text)
+        val facts = text.substringAfter("Remembered:").lines().filter { it.startsWith("- ") }
+        assertTrue(facts.sumOf { it.removePrefix("- ").length - 2 } <= com.thomaswcode.decrastination.core.Memories.FACT_BUDGET_CHARS)
     }
 }

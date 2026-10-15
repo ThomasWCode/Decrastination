@@ -83,7 +83,8 @@ The implementation of `docs/review_v2_improvements/impl/` on branch `v3`. Delete
 - UI-06 his offered replies as chips in the chat; UI-16 the chat titled with his name and his button on every screen, the menu's Ask Claude gone: df1b3ab.
 - AI-10 one question when an email's or an assignment's reading can't be settled from its text, put by Felix when he's free; the answer an instruction on the task and read with it again: c37c360.
 - Eval (`docs/eval.md`, phase 5): Felix's ten reasons 10 of 10, the chat as him 6 of 6, the weekly tidy, and one question 3 of 3, answered by Opus subagents on the requests as the app builds them from the phone's data.
-- The record: README's phase 5 sentence, the review tables' items Implemented: this commit.
+- The record: README's phase 5 sentence, the review tables' items Implemented: 4c8e48e.
+- Pull request #39 (stacked on #38): Codex round 1 (1 P1: a reply to a notification sent to the model without Felix's message it answered; 9 P2: the notification ceiling counted apart from its decision, and a switched-off channel's counted; the profile's cut dropping the standing instructions; Felix asking while his channel's hidden; a question or completions lost to a failed call; a backup's facts merged at time 0; a look that found him writing eating his alarm; an older call's success ending a newer rest, a no-rest failure shortening one; instructions read through a rest after a sync) fixed in this commit.
 
 ## Current
 

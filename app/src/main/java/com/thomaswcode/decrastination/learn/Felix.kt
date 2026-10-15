@@ -32,9 +32,12 @@ class Felix(private val graph: AppGraph) {
         graph.runtime.update { it.copy(felix = it.felix.withActivity(taskIds, now)) }
     }
 
-    /** Writes if there's a reason to now; then sets his next look. */
+    /** Writes if there's a reason to now; then sets his next look. Writing already (a draft), he looks again in a minute. */
     suspend fun check(now: Long = graph.clock.now()) {
-        if (!writing.tryLock()) return
+        if (!writing.tryLock()) {
+            SlotAlarms.armFelix(graph.app, now + BUSY_RETRY_MS)
+            return
+        }
         try {
             due(now)?.let { write(it, now) }
             arm(now)
@@ -63,6 +66,7 @@ class Felix(private val graph: AppGraph) {
     suspend fun morning(title: String, lines: List<String>, now: Long = graph.clock.now()): Boolean = writing.withLock {
         val plan = graph.plan(now = now)
         if (plan.todaySlots.none { it.kind == com.thomaswcode.decrastination.core.SlotKind.Work }) return@withLock false
+        if (!com.thomaswcode.decrastination.notify.Notify.shown(graph.app, com.thomaswcode.decrastination.notify.Channels.FELIX)) return@withLock false
         val caller = graph.felixCaller() ?: return@withLock false
         val settings = graph.settings.value
         val profile = graph.profile(now)
@@ -85,8 +89,9 @@ class Felix(private val graph: AppGraph) {
     }
 
     private fun due(now: Long): FelixRules.Trigger? {
-        // Claude off: he has no voice, and nothing's put on record to say so.
-        if (graph.claudeKey() == null) return null
+        // Claude off, or his messages not to be seen (notifications or his channel off): he has no
+        // voice, nothing's asked of the model, and nothing's put on record, so it's all there for later.
+        if (graph.claudeKey() == null || !com.thomaswcode.decrastination.notify.Notify.shown(graph.app, com.thomaswcode.decrastination.notify.Channels.FELIX)) return null
         val settings = graph.settings.value
         val zone = graph.clock.zone()
         val dayStart = graph.focus.today(now).atStartOfDay(zone).toInstant().toEpochMilli()
@@ -135,6 +140,11 @@ class Felix(private val graph: AppGraph) {
             else -> answer?.replies.orEmpty()
         }
         val record = FelixRecord(UUID.randomUUID().toString(), now, trigger.reason.name, text, replies, trigger.key, trigger.taskId, next, asks = trigger.asks)
+        // A question or completions with no answer from the model (held, failed): kept to ask at his next look, nothing on record.
+        if (answer == null && (trigger.question != null || trigger.asks.isNotEmpty())) {
+            graph.runtime.update { it.copy(felix = it.felix.copy(nextCheckAt = next)) }
+            return null
+        }
         graph.log.update { it.copy(felix = it.felix + record).trimmed(now) }
         // Put (or let go, silent): off the list.
         trigger.question?.let { q -> graph.runtime.update { it.copy(felix = it.felix.copy(questions = it.felix.questions - q)) } }
@@ -153,6 +163,9 @@ class Felix(private val graph: AppGraph) {
     private companion object {
         /** How long the morning's briefing waits for his sentence. */
         const val MORNING_MS = 20_000L
+
+        /** How soon he looks again when a look finds him writing. */
+        const val BUSY_RETRY_MS = 60_000L
 
         /** A task's answers kept: the latest. */
         const val MAX_ANSWERS = 5
@@ -208,6 +221,7 @@ class Felix(private val graph: AppGraph) {
      * while one fits; not with Claude off; not while he's writing.
      */
     suspend fun draftAhead(plan: com.thomaswcode.decrastination.core.Plan, now: Long = graph.clock.now()) {
+        if (!com.thomaswcode.decrastination.notify.Notify.shown(graph.app, com.thomaswcode.decrastination.notify.Channels.FELIX)) return
         val caller = graph.felixCaller() ?: return
         val (trigger, at) = FelixRules.upcoming(plan, graph.settings.value, now) ?: return
         if (at - now > FelixRules.AHEAD_MS) return

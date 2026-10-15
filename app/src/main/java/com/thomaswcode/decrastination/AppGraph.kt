@@ -1038,7 +1038,7 @@ class AppGraph private constructor(context: Context) {
     suspend fun addInstruction(text: String, about: About): String {
         val id = java.util.UUID.randomUUID().toString()
         instructions.update { it.copy(instructions = it.instructions + Instruction(id, text.trim().take(InstructionPrompts.MAX_TEXT), about, clock.now())) }
-        scope.launch { readInstructions() }
+        scope.launch { readInstructions(interactive = true) }
         return id
     }
 
@@ -1158,19 +1158,20 @@ class AppGraph private constructor(context: Context) {
         instructions.update { state ->
             state.copy(instructions = state.instructions.map { if (it.id == id && it.state != InstructionStatus.Applied) it.copy(text = text.trim().take(InstructionPrompts.MAX_TEXT), state = InstructionStatus.Reading, changes = emptyList(), note = null) else it })
         }
-        scope.launch { readInstructions() }
+        scope.launch { readInstructions(interactive = true) }
     }
 
     /**
      * Reads the instructions waiting for Claude, one call each, as the enrichment's calls are made:
      * under the cap, and resting after a failure. While Claude can't be asked, each says why.
      */
-    suspend fun readInstructions() = readingInstructions.withLock {
+    suspend fun readInstructions(interactive: Boolean = false) = readingInstructions.withLock {
         while (true) {
             val next = instructions.value.instructions.firstOrNull { it.state == InstructionStatus.Reading } ?: return@withLock
             val waiting = run call@{
                 val reader = instructionReader() ?: return@call because(ModelHold.Off)
-                val result = when (val called = callModel(interactive = true, cost = { r: InstructionReader.Result -> r.costUsd to r.refused }) { at -> reader.read(next, tasks.value.tasks, calendarTime.events, at) }) {
+                // Through a rest only for you waiting on it (AC-04): after a sync or an enrichment it waits.
+                val result = when (val called = callModel(interactive = interactive, cost = { r: InstructionReader.Result -> r.costUsd to r.refused }) { at -> reader.read(next, tasks.value.tasks, calendarTime.events, at) }) {
                     is Called.Held -> return@call because(called.hold)
                     is Called.Failed -> {
                         Log.w(TAG, "Reading an instruction failed", called.error)

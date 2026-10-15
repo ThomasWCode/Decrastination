@@ -19,7 +19,9 @@ import java.util.Locale
  * Who the student is (AI-05, AI-06), sent with every model call as a second system block after the
  * job's own: their year group and subjects, the school day, when they work, days off coming,
  * the textbook, what they've said about themselves, how they've asked Felix to behave, and what's
- * remembered. At most [MAX_CHARS], cut from the end, so what's remembered goes first. Pure.
+ * remembered. All but the last two at most [MAX_CHARS], cut from the end (your own lines first);
+ * the standing instructions and the facts whole, within their own bounds ([Memories]), the newest
+ * facts first and the oldest gone past their room. Pure.
  */
 object Profile {
     const val MAX_CHARS = 2_000
@@ -65,18 +67,22 @@ object Profile {
             lines += "From the student:"
             said.forEach { lines += "- $it" }
         }
-        memory.rules.takeIf { it.isNotEmpty() }?.let { rules ->
-            lines += "How Felix should behave:"
-            rules.forEach { lines += "- ${it.text}" }
-        }
-        memory.facts.takeIf { it.isNotEmpty() }?.let { facts ->
-            lines += "Remembered:"
-            facts.sortedByDescending { it.at }.forEach { lines += "- ${it.topic}: ${it.text}" }
-        }
-        // Cut from the end: what's remembered first, the oldest of it last in, so first out.
+        // Held to its size from the end: your own lines first, the subjects always.
         while (lines.size > 2 && lines.sumOf { it.length + 1 } > MAX_CHARS) lines.removeAt(lines.lastIndex)
         // A heading left with nothing under it goes too.
         if (lines.last().endsWith(":")) lines.removeAt(lines.lastIndex)
+        // What's remembered, within its own bounds (AI-21): every standing instruction, and the
+        // facts newest first, the oldest past their room left out.
+        memory.rules.take(com.thomaswcode.decrastination.core.Memories.RULE_MAX).takeIf { it.isNotEmpty() }?.let { rules ->
+            lines += "How Felix should behave:"
+            rules.forEach { lines += "- ${it.text}" }
+        }
+        var room = com.thomaswcode.decrastination.core.Memories.FACT_BUDGET_CHARS
+        val facts = memory.facts.sortedByDescending { it.at }.takeWhile { f -> (room - (f.topic.length + f.text.length)).also { room = it } >= 0 }
+        if (facts.isNotEmpty()) {
+            lines += "Remembered:"
+            facts.forEach { lines += "- ${it.topic}: ${it.text}" }
+        }
         return lines.joinToString("\n")
     }
 
