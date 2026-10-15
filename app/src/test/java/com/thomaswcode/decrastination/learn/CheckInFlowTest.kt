@@ -25,6 +25,9 @@ class CheckInFlowTest {
         assertEquals("How was the week, 1 to 5?", CheckInFlow.question(draft))
         assertEquals(listOf("1", "2", "3", "4", "5"), CheckInFlow.replies(draft, ActivityLog(), LONDON))
         assertNull(CheckInFlow.answered(draft, "pretty good"))
+        // The number alone: not a digit found in other words.
+        for (reply in listOf("10", "15", "I wanted 5 but got 2", "0", "6")) assertNull(CheckInFlow.answered(draft, reply), reply)
+        assertEquals(3, CheckInFlow.answered(draft, " 3 ")!!.feel)
         draft = CheckInFlow.answered(draft, "4")!!
         assertEquals("What did you avoid, and why?", CheckInFlow.question(draft))
         for (answer in listOf("The essay, it felt huge", "Football", "Start earlier", "Before tea")) draft = CheckInFlow.answered(draft, answer)!!

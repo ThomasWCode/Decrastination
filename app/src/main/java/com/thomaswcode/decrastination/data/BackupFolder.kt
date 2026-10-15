@@ -38,6 +38,8 @@ object BackupFolder {
         val there = list(resolver).firstOrNull { it.first == name }?.second
         if (there != null) {
             resolver.openOutputStream(there, "wt")?.use { it.write(bytes) } ?: return false
+            // Whole now, should a write before have left it pending.
+            resolver.update(there, ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING, 0) }, null, null)
         } else {
             val values = ContentValues().apply {
                 put(MediaStore.MediaColumns.DISPLAY_NAME, name)
@@ -46,7 +48,12 @@ object BackupFolder {
                 put(MediaStore.MediaColumns.IS_PENDING, 1)
             }
             val uri = resolver.insert(collection(), values) ?: return false
-            resolver.openOutputStream(uri, "w")?.use { it.write(bytes) } ?: return false
+            val written = runCatching { resolver.openOutputStream(uri, "w")?.use { it.write(bytes) } != null }.getOrDefault(false)
+            if (!written) {
+                // Half made: let go, so no hidden copy keeps the name.
+                runCatching { resolver.delete(uri, null, null) }
+                return false
+            }
             resolver.update(uri, ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING, 0) }, null, null)
         }
         return true

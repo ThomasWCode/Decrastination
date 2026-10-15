@@ -60,7 +60,7 @@ adb shell am start -n com.thomaswcode.decrastination/.debug.Command --es cmd enr
 
 ## Backups
 
-Every night the app saves all it keeps (your own tasks, the settings, the log, what it's learned, your changes, what Felix remembers, his state and today's slots) to `Documents/Decrastination` on the phone as `decrastination-<date>.json`, the newest fortnight kept, with no folder to pick and no permission to give; Settings → Backup says when it last did, and Import reads one back. A Reset saves `reset-<date>.json` there first, never pruned. Keeping a copy off the phone is yours to do: a sync app mirroring the folder, or Export by hand.
+Every night the app saves all it keeps (your own tasks, the settings, the log, what it's learned, your changes, what Felix remembers, his state and today's slots) to `Documents/Decrastination` on the phone as `decrastination-<date>.json`, the newest fortnight kept, with no folder to pick and no permission to give; Settings → Backup says when it last did, and Import reads one back. A Reset saves `reset-<date>-<time>.json` there first, never pruned. Keeping a copy off the phone is yours to do: a sync app mirroring the folder, or Export by hand.
 
 ## Setting up the blocker
 

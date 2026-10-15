@@ -58,14 +58,14 @@ object Calibrator {
             calibration.learnFrom?.let { r.doneAt < it } == true || calibration.forgotten[Calibration.key(r.kind, r.className)]?.let { r.doneAt < it } == true
         }
 
-    fun learn(whole: ActivityLog, previous: Calibration, today: LocalDate, defaultMargin: Int = MIN_MARGIN): Learned {
+    fun learn(whole: ActivityLog, previous: Calibration, today: LocalDate, zone: java.time.ZoneId = java.time.ZoneId.systemDefault(), defaultMargin: Int = MIN_MARGIN): Learned {
         // What came before a reset of the calibration (LR-08) teaches nothing: its days and slots as well.
         val from = previous.learnFrom
         val log = if (from == null) {
             whole
         } else {
             // Its days from the one after it: the reset's own is part before, part after.
-            val after = java.time.Instant.ofEpochMilli(from).atZone(java.time.ZoneOffset.UTC).toLocalDate().toString()
+            val after = java.time.Instant.ofEpochMilli(from).atZone(zone).toLocalDate().toString()
             whole.copy(slots = whole.slots.filter { it.at >= from }, days = whole.days.filter { it.date > after })
         }
         val completions = remembered(log.completions, previous)

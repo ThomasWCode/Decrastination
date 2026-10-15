@@ -101,7 +101,9 @@ object ReviewInput {
         fun inWeek(time: Long) = time in start until end
         fun at(time: Long) = Instant.ofEpochMilli(time).atZone(zone).format(WHEN)
         // Last week's review and what it changed (AI-18), so the note can say how that went.
-        log.reviews.filter { it.at < start }.maxByOrNull { it.at }?.let { last ->
+        // By the week each reviewed (one answered late, on the Monday after, is still last week's); by
+        // when it ran for one from before weeks were kept.
+        log.reviews.filter { r -> r.week?.let { it < week } ?: (r.at < start) }.maxWithOrNull(compareBy({ it.week.orEmpty() }, { it.at }))?.let { last ->
             appendLine("Last week's review said: " + last.lines.take(MAX_NOTE).joinToString(" ") { it.take(MAX_NOTE_CHARS) })
             if (last.changes.isEmpty()) {
                 appendLine("It changed nothing.")
@@ -196,13 +198,18 @@ object ReviewInput {
         else -> null
     }
 
-    /** [settings] with [changes] applied, where they're to a setting the review may change and within its bounds as [settings] stood. */
+    /**
+     * [settings] with [changes] applied, where they're to a setting the review may change and within
+     * its bounds as [settings] stood. A school day's two ends, each within its reach, can still meet
+     * or cross: then neither moves.
+     */
     fun apply(settings: Settings, changes: List<Change>): Settings {
         val bounds = bounds(settings)
-        return changes.fold(settings) { s, change ->
+        val applied = changes.fold(settings) { s, change ->
             val range = bounds[change.setting] ?: return@fold s
             if (change.value !in range) s else set(s, change.setting, change.value)
         }
+        return if (com.thomaswcode.decrastination.data.SettingsLimits.window(applied.weekdayHours, overnight = false)) applied else applied.copy(weekdayHours = settings.weekdayHours)
     }
 
     /** [settings] with [setting], one the review may change, at [value], whatever its bounds: as it was before a review, put back (LR-01). */

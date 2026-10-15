@@ -68,6 +68,8 @@ Items: LR-01, LR-02, LR-06, LR-08, PL-08, PL-09, PL-10, PL-11, NF-02, AC-06, AC-
 
 **Steps.** Rows: Stats (the activity log: `log.update { ActivityLog() }`; the calibration follows at the next review; also `runtime.calibration = Calibration()` now), Calibration only (`Calibration.learnFrom: Long = now` stored and honoured by `Calibrator.learn`, which ignores records before it), Memories and profile lines (`memory.update { MemoryState() }`, `profileLines = emptyList()`), Chat and Felix history (`clearChat()`, `runtime.felix = FelixState()`, `log.felix = emptyList()`), Instructions (lists what would go, then `instructions.update { InstructionState() }` and `layInstructions()`), Everything learned (all five). Each: an `AlertDialog` naming what's lost; before it, `exportBackup()` written as `reset-<date>.json` to `Documents/Decrastination` through `BackupFolder.write` (the writer AR-07 below specifies: build `data/BackupFolder.kt` here, AR-07 adds the worker), and to `filesDir/backups/` when that write fails. No parent code.
 
+*(As built: the copy is `reset-<date>-<time>.json`, so two resets in a day each keep theirs, and it holds the chat, which a reset can clear (the backup's format 6 has it; an import restores it where this phone's chat is empty).)*
+
 ---
 
 ## PL-08, PL-09, PL-10, PL-11 Stats and export

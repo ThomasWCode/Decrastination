@@ -186,11 +186,16 @@ object Stats {
     /**
      * When this term began (PL-10's period), as the school calendar has it: the day after the last
      * run of [HOLIDAY_DAYS] or more days without school before [today], a weekend included; with
-     * none in [TERM_LOOK_BACK] days, that far back.
+     * none in [TERM_LOOK_BACK] days, that far back. The days off today is in are this term's break,
+     * not the one before it: they're passed first.
      */
     fun termStart(today: LocalDate, isSchoolDay: (LocalDate) -> Boolean): LocalDate {
+        var first = 1
+        if (!isSchoolDay(today)) {
+            while (first < TERM_LOOK_BACK && !isSchoolDay(today.minusDays(first.toLong()))) first++
+        }
         var run = 0
-        for (back in 1..TERM_LOOK_BACK) {
+        for (back in first..TERM_LOOK_BACK) {
             val date = today.minusDays(back.toLong())
             if (isSchoolDay(date)) {
                 if (run >= HOLIDAY_DAYS) return date.plusDays(run + 1L)

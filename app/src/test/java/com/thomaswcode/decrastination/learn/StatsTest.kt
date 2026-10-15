@@ -182,9 +182,15 @@ class StatsTest {
 
     @Test
     fun `this term began after the last run of days without school`() {
-        val halfTerm = (LocalDate.parse("2026-10-24")..LocalDate.parse("2026-11-08"))
-        fun school(d: LocalDate) = d !in halfTerm && d.dayOfWeek.value <= 5
-        assertEquals(LocalDate.parse("2026-11-09"), Stats.termStart(LocalDate.parse("2026-11-20"), ::school))
+        // Made-up breaks: nine days in November, and the Christmas holidays.
+        val breaks = listOf(LocalDate.parse("2026-11-14")..LocalDate.parse("2026-11-22"), LocalDate.parse("2026-12-19")..LocalDate.parse("2027-01-03"))
+        fun school(d: LocalDate) = breaks.none { d in it } && d.dayOfWeek.value <= 5
+        assertEquals(LocalDate.parse("2026-11-23"), Stats.termStart(LocalDate.parse("2026-12-04"), ::school))
+        // On a weekend in term, and on the first day back.
+        assertEquals(LocalDate.parse("2026-11-23"), Stats.termStart(LocalDate.parse("2026-12-06"), ::school))
+        assertEquals(LocalDate.parse("2027-01-04"), Stats.termStart(LocalDate.parse("2027-01-04"), ::school))
+        // In the holidays, this term is the one before them, not a day long.
+        assertEquals(LocalDate.parse("2026-11-23"), Stats.termStart(LocalDate.parse("2026-12-30"), ::school))
         // None in the time looked back: that far.
         assertEquals(LocalDate.parse("2026-11-20").minusDays(120), Stats.termStart(LocalDate.parse("2026-11-20")) { it.dayOfWeek.value <= 5 })
     }
@@ -195,6 +201,12 @@ class StatsTest {
         assertEquals("\"a, b\"", com.thomaswcode.decrastination.learn.Export.cell("a, b"))
         assertEquals("\"say \"\"hi\"\"\"", com.thomaswcode.decrastination.learn.Export.cell("say \"hi\""))
         assertEquals("\"two\nlines\"", com.thomaswcode.decrastination.learn.Export.cell("two\nlines"))
+        // What a spreadsheet would take for a formula, shown as text; numbers as they are.
+        assertEquals("'=HYPERLINK(\"x\")".let { "\"" + it.replace("\"", "\"\"") + "\"" }, com.thomaswcode.decrastination.learn.Export.cell("=HYPERLINK(\"x\")"))
+        assertEquals("'+44 7700", com.thomaswcode.decrastination.learn.Export.cell("+44 7700"))
+        assertEquals("'@SUM(A1)", com.thomaswcode.decrastination.learn.Export.cell("@SUM(A1)"))
+        assertEquals("-5", com.thomaswcode.decrastination.learn.Export.cell("-5"))
+        assertEquals("0.75", com.thomaswcode.decrastination.learn.Export.cell("0.75"))
         val files = com.thomaswcode.decrastination.learn.Export.csv(ActivityLog(completions = listOf(completion("a", "2026-10-06T18:00", null))), Calibration(), LONDON)
         assertEquals(listOf("completions.csv", "slots.csv", "days.csv", "blocks.csv", "felix.csv", "calibration.csv"), files.keys.toList())
         assertEquals("task,title,source,kind,class,estimate_min,worked_min,due,hard_deadline,first_seen,done,assessment,note,by_hand,photo,your_estimate", files.getValue("completions.csv").lineSequence().first())

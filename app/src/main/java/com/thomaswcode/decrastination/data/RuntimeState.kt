@@ -465,6 +465,6 @@ data class CallRecord(
     }
 }
 
-/** These calls and [call], the newest, as many as are kept. */
-fun List<CallRecord>.plusCall(call: CallRecord): List<CallRecord> = (this + call).takeLast(CallRecord.MAX)
+/** These calls and [call], by when each began (one comes back after another sent since), as many as are kept. */
+fun List<CallRecord>.plusCall(call: CallRecord): List<CallRecord> = (this + call).sortedBy { it.at }.takeLast(CallRecord.MAX)
 

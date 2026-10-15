@@ -736,6 +736,7 @@ class AppGraph private constructor(context: Context) {
             memory = memory.value,
             felix = runtime.value.felix,
             slots = runtime.value.slots,
+            chat = chat.value,
         ),
     )
 
@@ -778,9 +779,13 @@ class AppGraph private constructor(context: Context) {
         // The backup's days off and half-days beside those here (PL-16); and what it remembered (AI-21).
         school.update { it.withAll(backup.school) }
         memory.update { Backups.mergedMemory(it, backup.memory) }
+        // The chat where this phone's is empty (a reset's copy brings it back, LR-08).
+        var chatBack = 0
+        chat.update { s -> if (s.messages.isEmpty() && backup.chat.messages.isNotEmpty()) backup.chat.also { chatBack = it.messages.size } else s }
         val own = ownAdded.size
         val told = buildList {
             if (own > 0) add("$own task${if (own == 1) "" else "s"} of your own")
+            if (chatBack > 0) add("the chat ($chatBack message${if (chatBack == 1) "" else "s"})")
             if (restored > 0) add("$restored instruction${if (restored == 1) "" else "s"} restored")
             if (unclear > 0) add("$unclear left unapplied under Your changes in Felix's chat, as ${if (unclear == 1) "it" else "they"} would have tasks wait for each other in a circle")
         }.takeIf { it.isNotEmpty() }?.joinToString(", ", prefix = " ", postfix = ".") ?: ""
@@ -1091,9 +1096,11 @@ class AppGraph private constructor(context: Context) {
      * on, those only the rules have seen; soonest due first. The model does it while it's on and
      * the month's spend leaves room under the cap, at most [MAX_MODEL_CALLS] a run; the rules do
      * the rest, and stand in for a call that fails (the model is then left alone for the run) or
-     * that the model declines (recorded as the model's, so it isn't asked again).
+     * that the model declines (recorded as the model's, so it isn't asked again). With [force], [only]
+     * is read again by the model whatever it was read by (AC-06), its reading kept unless the model
+     * gives one; whether it did.
      */
-    suspend fun enrichNow(model: Enricher? = modelEnricher(), only: String? = null) {
+    suspend fun enrichNow(model: Enricher? = modelEnricher(), only: String? = null, force: Boolean = false): Boolean {
         // Not while it rests after a failed call (no network, a bad key), nor with no room under the
         // cap: then what only the rules have seen isn't due for it.
         var enricher = model.takeIf { modelAvailable() }
@@ -1101,18 +1108,23 @@ class AppGraph private constructor(context: Context) {
         var decksChanged = false
         // A task whose call the API wouldn't take as asked (AC-04): the rules' till it changes.
         fun refused(task: TaskItem) = runtime.value.enrichFailed[task.id] == Enrichments.inputHash(task)
+        fun due(task: TaskItem) = (force && task.id == only) || Enrichments.stale(task, enricher != null && !refused(task), RuleEnricher.BY, modelOff = claudeKey() == null)
+        // Whether [only]'s reading laid was the model's (for [force]).
+        var readByModel = false
         val candidates = tasks.value.tasks
             // [only]: that task alone (the debug `enrich-task`), so nothing else is sent anywhere.
             .filter { only == null || it.id == only }
             .mapNotNull { task -> Enrichments.jobFor(task)?.let { task to it } }
-            .filter { (task, _) -> Enrichments.stale(task, enricher != null && !refused(task), RuleEnricher.BY, modelOff = claudeKey() == null) }
+            .filter { (task, _) -> due(task) }
             // Never read first, then the oldest prompts' readings (AC-06), soonest due first.
             .sortedWith(compareBy(Enrichments.NEED) { it.first })
         for ((snapshot, _) in candidates) {
             // Read afresh: a sync since the run began may have closed or changed it.
             val task = tasks.value.tasks.firstOrNull { it.id == snapshot.id } ?: continue
             val job = Enrichments.jobFor(task) ?: continue
-            if (!Enrichments.stale(task, enricher != null && !refused(task), RuleEnricher.BY, modelOff = claudeKey() == null)) continue
+            if (!due(task)) continue
+            // Whether the model gave this one's reading, not the rules standing in.
+            var fromModel = false
             val now = clock.now()
             // Switched off (or its key removed) while this runs: nothing more is sent.
             if (claudeKey() == null) enricher = null
@@ -1153,12 +1165,15 @@ class AppGraph private constructor(context: Context) {
                             }
                         }
                         // The rules' under the model's name is the model's answer by these prompts (AC-06), not asked for again till they change.
-                        again?.enrichment ?: first.enrichment ?: rules.enrich(task, job, now).enrichment?.copy(by = model.by, promptVersion = com.thomaswcode.decrastination.enrich.Prompts.VERSION)
+                        (again?.enrichment ?: first.enrichment)?.also { fromModel = true }
+                            ?: if (force) null else rules.enrich(task, job, now).enrichment?.copy(by = model.by, promptVersion = com.thomaswcode.decrastination.enrich.Prompts.VERSION)
                     }
                 }
             } else {
                 null
             }
+            // Read again on asking: the reading there stands unless the model gave one.
+            if (enrichment == null && force) continue
             if (enrichment == null) enrichment = rules.enrich(task, job, now).enrichment
             val made = enrichment ?: continue
             // Laid only over the task as it was read (changed during the call, the next run does it).
@@ -1171,6 +1186,7 @@ class AppGraph private constructor(context: Context) {
                 )
             }
             if (!laid) continue
+            if (fromModel && task.id == only) readByModel = true
             // A question it couldn't settle from the text (AI-10): Felix puts it. One waiting from an
             // older reading goes, asked again as this one has it, or settled by it.
             felix.queueQuestion(task.id, made.question, now)
@@ -1184,18 +1200,22 @@ class AppGraph private constructor(context: Context) {
         }
         // Sections the deck pattern missed, or a deadline moved: their deck tasks come from reading Anki again, now.
         if (decksChanged) SyncWorker.syncNow(app, setOf(Source.Anki))
+        return readByModel
     }
 
+    /** How a read again on asking went (AC-06). */
+    enum class ReadAgain { Read, NotNow, NoReading }
+
     /**
-     * [taskId] read again by Claude as it is now (AC-06, the sheet's *Read again with Claude*): its
-     * reading forgotten (its steps kept, to be kept by name, AI-08) and the task read at once. False,
-     * with nothing changed, while Claude can't be asked (off, resting, at the cap).
+     * [taskId] read again by Claude as it is now (AC-06, the sheet's *Read again with Claude*), by
+     * these prompts whatever it was read by, its steps shown it to keep by name (AI-08). The reading
+     * there stands till the new one comes: [ReadAgain.NoReading] where none did (the call failed or
+     * was held, Claude declined, the task changed meanwhile); [ReadAgain.NotNow], with nothing sent,
+     * while Claude can't be asked (off, resting, at the cap).
      */
-    suspend fun readAgain(taskId: String): Boolean = withContext(NonCancellable) {
-        if (claudeKey() == null || !modelAvailable()) return@withContext false
-        tasks.update { state -> state.copy(tasks = state.tasks.map { if (it.id == taskId && it.isOpen) it.copy(enrichment = null) else it }) }
-        enrichNow(only = taskId)
-        true
+    suspend fun readAgain(taskId: String): ReadAgain = withContext(NonCancellable) {
+        if (claudeKey() == null || !modelAvailable()) return@withContext ReadAgain.NotNow
+        if (enrichNow(only = taskId, force = true)) ReadAgain.Read else ReadAgain.NoReading
     }
 
     /** Said on a message whose answer you let go (AC-08). */
@@ -1218,6 +1238,8 @@ class AppGraph private constructor(context: Context) {
     suspend fun undoReviewChange(review: com.thomaswcode.decrastination.data.WeeklyReview, change: com.thomaswcode.decrastination.learn.ReviewInput.Change): String {
         val before = review.settingsBefore[change.setting] ?: return "What it was before isn't known."
         if (com.thomaswcode.decrastination.learn.ReviewInput.valueOf(settings.value, change.setting) != change.value) return "It's been changed since: left as it is."
+        // One end of a school day's hours back alone can meet the other: then it can't be.
+        if (!com.thomaswcode.decrastination.data.SettingsLimits.window(com.thomaswcode.decrastination.learn.ReviewInput.set(settings.value, change.setting, before).weekdayHours, overnight = false)) return "It can't go back on its own: the day's hours would end before they start. Change them in Settings."
         changeSettings { com.thomaswcode.decrastination.learn.ReviewInput.set(it, change.setting, before) }
         val now = com.thomaswcode.decrastination.learn.ReviewInput.valueOf(settings.value, change.setting)
         val label = com.thomaswcode.decrastination.learn.ReviewInput.label(change.setting)
@@ -1234,13 +1256,16 @@ class AppGraph private constructor(context: Context) {
 
     /**
      * The week's check-in asked by Felix (LR-02): its first question, unless the week has its check-in
-     * already or his notifications can't be shown (false then, and the form's reminder goes instead).
+     * already, or his notifications can't be shown or it's quiet hours (false then, and the form's
+     * reminder goes instead).
      */
     suspend fun askCheckIn(): Boolean {
         val now = clock.now()
         val week = com.thomaswcode.decrastination.learn.Daily.checkInWeek(now, clock.zone(), settings.value.checkInMin)
         if (log.value.checkIns.any { it.weekOf == week }) return true
         if (!com.thomaswcode.decrastination.notify.Notify.shown(app, com.thomaswcode.decrastination.notify.Channels.FELIX)) return false
+        // In quiet hours the form's reminder goes instead, held as the routine ones are till the morning.
+        if (com.thomaswcode.decrastination.block.BlockPolicy.isQuiet(now, clock.zone(), settings.value)) return false
         val draft = com.thomaswcode.decrastination.learn.CheckInFlow.Draft(week)
         runtime.update { it.copy(checkInDraft = draft) }
         askNext(draft, now)
@@ -1266,7 +1291,8 @@ class AppGraph private constructor(context: Context) {
         val flow = com.thomaswcode.decrastination.learn.CheckInFlow
         log.update { l -> l.copy(felix = l.felix.map { if (it.id == record.id) it.copy(replyText = words, repliedAt = now) else it }) }
         val draft = runtime.value.checkInDraft
-        if (draft == null || log.value.checkIns.any { it.weekOf == draft.week }) {
+        val week = com.thomaswcode.decrastination.learn.Daily.checkInWeek(now, clock.zone(), settings.value.checkInMin)
+        if (draft == null || draft.week != week || log.value.checkIns.any { it.weekOf == draft.week }) {
             runtime.update { it.copy(checkInDraft = null) }
             com.thomaswcode.decrastination.notify.FelixNotifications.cancel(app)
             return true
@@ -1289,6 +1315,16 @@ class AppGraph private constructor(context: Context) {
         return true
     }
 
+    /**
+     * Felix's check-in let go (LR-02), the form having taken the week's answers: its answers so far,
+     * and his question while it's the last thing he said.
+     */
+    suspend fun endCheckInFlow() {
+        if (runtime.value.checkInDraft == null) return
+        runtime.update { it.copy(checkInDraft = null) }
+        if (log.value.felix.lastOrNull()?.reason == com.thomaswcode.decrastination.enrich.FelixPrompts.Reason.CheckIn.name) com.thomaswcode.decrastination.notify.FelixNotifications.cancel(app)
+    }
+
     /** What can be reset (LR-08), and what each takes. */
     enum class Reset(val title: String, val takes: String) {
         Stats("Stats", "the record of what got done (slots, completions, days, blocks, the reviews and the check-ins), and what the app learned from it"),
@@ -1301,12 +1337,13 @@ class AppGraph private constructor(context: Context) {
 
     /**
      * [what] reset (LR-08), with no parent code, a copy of all the app keeps saved first, as
-     * `reset-<date>.json` in Documents/Decrastination (or the app's own files where that can't be
-     * written). What happened, in words.
+     * `reset-<date>-<time>.json` in Documents/Decrastination (or the app's own files where that
+     * can't be written). What happened, in words.
      */
     suspend fun reset(what: Reset): String = withContext(NonCancellable) {
         val now = clock.now()
-        val name = "reset-" + java.time.Instant.ofEpochMilli(now).atZone(clock.zone()).toLocalDate() + ".json"
+        // To the second: two resets the same day each keep their copy.
+        val name = "reset-" + java.time.Instant.ofEpochMilli(now).atZone(clock.zone()).format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd-HHmmss", java.util.Locale.UK)) + ".json"
         val text = exportBackup()
         val saved = if (com.thomaswcode.decrastination.data.BackupFolder.available && withContext(Dispatchers.IO) { com.thomaswcode.decrastination.data.BackupFolder.write(app.contentResolver, name, text) }) {
             "Documents/Decrastination/$name"
