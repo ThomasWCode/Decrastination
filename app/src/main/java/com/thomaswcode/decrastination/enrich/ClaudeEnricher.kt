@@ -46,7 +46,7 @@ class ClaudeEnricher(
             .addUserMessage(Prompts.describe(task, job, now, zone).take(Pricing.MAX_INPUT_CHARS))
             .outputConfig(
                 OutputConfig.builder()
-                    .effort(OutputConfig.Effort.HIGH)
+                    .effort(ModelEffort.of(job))
                     .format(JsonOutputFormat.builder().schema(schema(Prompts.schema(job))).build())
                     .build(),
             )

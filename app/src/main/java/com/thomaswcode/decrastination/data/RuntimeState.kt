@@ -36,6 +36,8 @@ data class RuntimeState(
     val ankiFrontSince: Long? = null,
     /** AnkiDroid time on deck tasks today not in a kept slot yet (NF-03): the visits before the one that finishes their cards. */
     val ankiWorked: AnkiWorked = AnkiWorked(),
+    /** Tasks whose call the API wouldn't take as asked (AC-04), with the input it refused: sent again once that changes. */
+    val enrichFailed: Map<String, String> = emptyMap(),
     /** Loosening changes waiting their delay. */
     val pending: List<PendingChange> = emptyList(),
     /** A parent code unblocked everything until then. */

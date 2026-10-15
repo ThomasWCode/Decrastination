@@ -715,4 +715,69 @@ class PhotoCheckerTest {
             server.shutdown()
         }
     }
+
+    @Test
+    fun `the readings the plan is made from think hard, the answers someone waits for less`() {
+        val high = ModelEffort.Job.entries.filter { ModelEffort.of(it) == com.anthropic.models.messages.OutputConfig.Effort.HIGH }
+        assertEquals(listOf("Email", "Assignment", "Effort", "Instruction", "Review", "PhotoToTask", "PhotoContext"), high.map { it.name })
+        assertEquals(com.anthropic.models.messages.OutputConfig.Effort.MEDIUM, ModelEffort.of(ModelEffort.Job.Chat))
+        assertEquals(com.anthropic.models.messages.OutputConfig.Effort.HIGH, ModelEffort.of(com.thomaswcode.decrastination.core.Enrichments.Job.Assignment))
+    }
+
+    @Test
+    fun `a failed call is told by what failed`() {
+        assertEquals(Failure.RateLimit, Failures.classify(429, key = false))
+        assertEquals(Failure.Overloaded, Failures.classify(529, key = false))
+        assertEquals(Failure.Server, Failures.classify(500, key = false))
+        assertEquals(Failure.Timeout, Failures.classify(408, key = false))
+        assertEquals(Failure.BadRequest, Failures.classify(400, key = false))
+        assertEquals(Failure.Key, Failures.classify(401, key = false))
+        assertEquals(Failure.Key, Failures.classify(400, key = true))
+        assertEquals(Failure.Network, Failures.classify(RuntimeException(java.net.UnknownHostException("api.anthropic.com"))))
+        assertEquals(Failure.Timeout, Failures.classify(java.net.SocketTimeoutException("read timed out")))
+        assertEquals(Failure.Unknown, Failures.classify(IllegalStateException("odd")))
+    }
+
+    @Test
+    fun `the rest after a failure goes by what failed and how many in a row`() {
+        val minute = 60_000L
+        assertEquals(listOf(5, 15, 60).map { it * minute }, (1..3).map { Failures.restMs(Failure.RateLimit, it) })
+        assertEquals(listOf(15, 60).map { it * minute }, (1..2).map { Failures.restMs(Failure.Server, it) })
+        assertEquals(0L, Failures.restMs(Failure.Network, 1))
+        assertEquals(0L, Failures.restMs(Failure.BadRequest, 4))
+        assertEquals(60 * minute, Failures.restMs(Failure.Key, 1))
+        // A longer Retry-After stands.
+        assertEquals(20 * minute, Failures.restMs(Failure.RateLimit, 1, retryAfterMs = 20 * minute))
+        // Three failures already this hour: an hour, whatever the fourth was.
+        val at = Fixtures.at("2026-10-12T17:00")
+        val busy = AiUsage(failedAt = listOf(at - 50 * minute, at - 30 * minute, at - 10 * minute))
+        assertEquals(60 * minute, busy.restAfter(Failure.Network, at))
+        assertEquals(0L, AiUsage(failedAt = listOf(at - 70 * minute)).restAfter(Failure.Network, at))
+        // Counted in a row till a call works.
+        val twice = AiUsage().failure("busy", at, restMs = 5 * minute, kind = Failure.RateLimit).failure("busy", at + 6 * minute, restMs = 15 * minute, kind = Failure.RateLimit)
+        assertEquals(2 to (at + 21 * minute), twice.failuresInRow to twice.restUntil)
+        assertEquals(0 to null, twice.record(0.01, false, at + 30 * minute).let { it.failuresInRow to it.restUntil })
+    }
+
+    @Test
+    fun `a rest holds what runs by itself, not what someone waits for, unless it's the key`() {
+        val at = Fixtures.at("2026-10-12T17:00")
+        val resting = AiUsage(restUntil = at + 600_000L)
+        assertEquals(ModelHold.Resting, ModelHold.of(true, resting, at, LONDON, null))
+        assertEquals(null, ModelHold.of(true, resting, at, LONDON, null, interactive = true))
+        assertEquals(ModelHold.Resting, ModelHold.of(true, resting.copy(keyProblem = KeyProblem.Rejected), at, LONDON, null, interactive = true))
+        assertEquals(null, ModelHold.of(true, resting, at + 600_000L, LONDON, null))
+        assertEquals(10, ModelHold.restLeftMin(resting, at))
+    }
+
+    @Test
+    fun `the cap counts the calls still in flight at their dearest`() {
+        // Room under a $10 cap for two more calls at their dearest: one in flight leaves room for one, two for none.
+        val worst = Pricing.WORST_CALL_USD
+        val usage = AiUsage(spentUsd = 10 - 2 * worst - 0.0001)
+        assertTrue(usage.allows(10, inFlight = 0))
+        assertTrue(usage.allows(10, inFlight = 1))
+        assertFalse(usage.allows(10, inFlight = 2))
+        assertTrue(AiUsage(spentUsd = 1_000.0).allows(null, inFlight = 9))
+    }
 }
