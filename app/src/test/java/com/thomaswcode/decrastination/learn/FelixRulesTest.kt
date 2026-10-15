@@ -147,4 +147,35 @@ class FelixRulesTest {
         assertNull(due(at("16:30"), state.copy(nextCheckAt = at("16:40"))))
         assertNull(due(at("23:30"), state, quiet = true))
     }
+
+    @Test
+    fun `with a grace past the writing ahead, he looks when the next slot's message is to be written`() {
+        val long = settings.copy(felixGraceMin = 30)
+        val ahead = first.start + 30 * 60_000L - FelixRules.AHEAD_MS
+        assertEquals(ahead, FelixRules.next(plan, FelixState(), long, at("16:30")))
+        assertEquals(ahead, FelixRules.next(plan, FelixState(), long, first.start))
+        // Then at its grace in.
+        assertEquals(first.start + 30 * 60_000L, FelixRules.next(plan, FelixState(), long, ahead))
+    }
+
+    @Test
+    fun `completions kept from a day he couldn't be seen are asked about, unless a slot kept that day saw them`() {
+        val yesterday = com.thomaswcode.decrastination.data.AssessLater("teams:c", "German reading", Fixtures.at("2026-10-11T16:00"))
+        val today = com.thomaswcode.decrastination.data.AssessLater("teams:d", "Maths sheet", at("16:00"))
+        val seen = com.thomaswcode.decrastination.data.AssessLater("teams:a", "a", Fixtures.at("2026-10-11T18:00"))
+        val kept = record("teams:a#-1#1", SlotOutcome.Kept, Fixtures.at("2026-10-11T17:00"), Fixtures.at("2026-10-11T17:30")).copy(date = "2026-10-11")
+        assertEquals(listOf(yesterday, today), FelixRules.toAsk(listOf(yesterday, today, seen), listOf(kept), at("19:05"), LONDON))
+        // The same task's slot kept on another day saw other work.
+        assertEquals(listOf(seen), FelixRules.toAsk(listOf(seen), listOf(kept.copy(date = "2026-10-12")), at("19:05"), LONDON))
+    }
+
+    @Test
+    fun `a newer reading's question takes the place of the one waiting, and none takes it away`() {
+        val q = com.thomaswcode.decrastination.data.FelixQuestion("teams:a", "The 12th or the 19th?", at("09:00"))
+        val state = FelixState(questions = listOf(q, com.thomaswcode.decrastination.data.FelixQuestion("teams:b", "Which exercise?", at("09:05"))))
+        assertEquals(listOf("Part 1 or part 2?", "Which exercise?"), state.withQuestion("teams:a", "Part 1 or part 2?", at("10:00")).questions.map { it.question })
+        assertEquals(state, state.withQuestion("teams:a", "The 12th or the 19th?", at("10:00")))
+        assertEquals(listOf("teams:b"), state.withQuestion("teams:a", null, at("10:00")).questions.map { it.taskId })
+        assertEquals(listOf("teams:a", "teams:b", "teams:c"), state.withQuestion("teams:c", "Which?", at("10:00")).questions.map { it.taskId })
+    }
 }

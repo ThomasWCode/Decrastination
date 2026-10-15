@@ -10,8 +10,9 @@ import kotlinx.coroutines.launch
 
 /**
  * What's done from Felix's notification (AI-24): a reply, typed or one of his, goes on in the chat
- * ([AppGraph.replyToFelix], whose answer comes as his next notification); a card's button adds the
- * task or applies the changes, as the chat's Add and Apply do.
+ * ([AppGraph.replyToFelix], whose answer comes as his next notification, made as work of its own,
+ * [FelixReplyWorker]); a card's button adds the task or applies the changes, as the chat's Add and
+ * Apply do.
  */
 class FelixReplyReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {

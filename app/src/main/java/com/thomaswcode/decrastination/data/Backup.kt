@@ -101,10 +101,13 @@ object Backups {
             if (calibration.yields.values.any { !it.isFinite() || it !in Calibrator.MIN_YIELD..Calibrator.MAX_YIELD }) add("what the app learned about the days' time")
             if (calibration.yieldDays.values.any { it !in Calibrator.YIELD_DAYS..Calibrator.YIELD_LOOK_BACK } || calibration.yields.keys != calibration.yieldDays.keys) add("what the app learned about the days' time's evidence")
             if (!evidence(calibration)) add("what the app learned's evidence")
-            // What's remembered as the app keeps it (AI-21): in its room, every fact with a topic.
+            // What's remembered as the app keeps it (AI-21): in its room, every fact with a topic, and
+            // each within the bounds it's kept to, as all of it goes with every call.
             val memory = backup.memory
-            if (com.thomaswcode.decrastination.core.Memories.chars(memory.facts) > com.thomaswcode.decrastination.core.Memories.FACT_BUDGET_CHARS ||
-                memory.facts.any { it.topic.isBlank() || it.text.isBlank() } || memory.rules.size > com.thomaswcode.decrastination.core.Memories.RULE_MAX || memory.rules.any { it.text.isBlank() }
+            val kept = com.thomaswcode.decrastination.core.Memories
+            if (kept.chars(memory.facts) > kept.FACT_BUDGET_CHARS || memory.rules.size > kept.RULE_MAX ||
+                memory.facts.any { it.topic.isBlank() || it.text.isBlank() || it.topic.length > kept.MAX_TOPIC || it.text.length > kept.MAX_TEXT } ||
+                memory.rules.any { it.text.isBlank() || it.text.length > kept.MAX_TEXT }
             ) add("what's remembered")
             // What a card takes in AnkiDroid (DX-11): within the bounds it's learned in, each from its stretches.
             if (calibration.ankiSecondsPerCard.values.any { !it.isFinite() || it !in com.thomaswcode.decrastination.learn.AnkiProgress.MIN_SECONDS..com.thomaswcode.decrastination.learn.AnkiProgress.MAX_SECONDS } ||

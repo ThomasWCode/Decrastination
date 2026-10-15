@@ -126,6 +126,13 @@ class BackupTest {
         assertEquals(listOf("sleep" to "in bed by 22:30", "football" to "on Tuesdays"), merged.facts.map { it.topic to it.text })
         assertEquals(listOf("be blunter"), merged.rules.map { it.text })
         assertNotNull(Backups.problem(backup().copy(memory = com.thomaswcode.decrastination.core.MemoryState(facts = listOf(com.thomaswcode.decrastination.core.Fact("", "x", 1))))))
+        // Each within the bounds it's kept to, as all of it goes with every call.
+        assertNotNull(Backups.problem(backup().copy(memory = com.thomaswcode.decrastination.core.MemoryState(rules = listOf(com.thomaswcode.decrastination.core.Rule("x".repeat(301), 1))))))
+        assertNotNull(Backups.problem(backup().copy(memory = com.thomaswcode.decrastination.core.MemoryState(facts = listOf(com.thomaswcode.decrastination.core.Fact("t".repeat(61), "x", 1))))))
+        assertEquals(
+            null,
+            Backups.problem(backup().copy(memory = com.thomaswcode.decrastination.core.MemoryState(facts = listOf(com.thomaswcode.decrastination.core.Fact("t".repeat(60), "x".repeat(300), 1)), rules = listOf(com.thomaswcode.decrastination.core.Rule("x".repeat(300), 1))))),
+        )
         // Over the room together: the oldest go, wherever they came from.
         val big = "x".repeat(2_900)
         val local = com.thomaswcode.decrastination.core.MemoryState(facts = listOf(com.thomaswcode.decrastination.core.Fact("old", big, 1), com.thomaswcode.decrastination.core.Fact("mid", big, 5)))

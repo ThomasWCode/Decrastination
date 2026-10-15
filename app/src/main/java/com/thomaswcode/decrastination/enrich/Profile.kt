@@ -21,10 +21,16 @@ import java.util.Locale
  * the textbook, what they've said about themselves, how they've asked Felix to behave, and what's
  * remembered. All but the last two at most [MAX_CHARS], cut from the end (your own lines first);
  * the standing instructions and the facts whole, within their own bounds ([Memories]), the newest
- * facts first and the oldest gone past their room. Pure.
+ * facts first and the oldest gone past their room; and the whole within [MAX_BLOCK_CHARS]. Pure.
  */
 object Profile {
     const val MAX_CHARS = 2_000
+
+    /**
+     * The most the whole block can be: its own part, the standing instructions and the facts, with
+     * their lines. What the cap's dearest call counts on ([Pricing.WORST_CALL_USD], AC-05).
+     */
+    const val MAX_BLOCK_CHARS = 16_000
 
     /** The most subjects, study periods and days off it names: a school week's worth. */
     private const val MAX_SUBJECTS = 12
@@ -83,7 +89,11 @@ object Profile {
             lines += "Remembered:"
             facts.forEach { lines += "- ${it.topic}: ${it.text}" }
         }
-        return lines.joinToString("\n")
+        // The whole within what the cap's dearest call counts on: the oldest facts go first.
+        var size = lines.sumOf { it.length + 1 }
+        while (lines.size > 2 && size > MAX_BLOCK_CHARS) size -= lines.removeAt(lines.lastIndex).length + 1
+        if (lines.last().endsWith(":")) lines.removeAt(lines.lastIndex)
+        return lines.joinToString("\n").take(MAX_BLOCK_CHARS)
     }
 
     /** "School days: lessons 08:30–15:30; study periods Tue 11:15–12:15; break 10:45–11:15; lunch 13:15–14:35 (eating 13:40–13:55)." */

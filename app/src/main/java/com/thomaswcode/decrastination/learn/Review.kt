@@ -1,6 +1,5 @@
 package com.thomaswcode.decrastination.learn
 
-import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.util.Log
@@ -56,12 +55,6 @@ object Review {
                 ?: WeeklyReview(now, findings.ifEmpty { listOf("Nothing to change this week: the estimates held.") }, by = "rules", why = model.why)
             ).let { it.copy(week = week, lines = it.lines + listOfNotNull(tidy?.let(::tidyLine)), memoryTidy = tidy) }
         graph.log.update { it.copy(reviews = it.reviews + review).trimmed(now) }
-        val open = PendingIntent.getActivity(
-            context,
-            ID,
-            Intent(context, CheckInActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
-        )
         Notify.post(
             context,
             ID,
@@ -70,7 +63,7 @@ object Review {
                 .setContentTitle("This week's review")
                 .setContentText(review.lines.first())
                 .setStyle(NotificationCompat.BigTextStyle().bigText(review.lines.joinToString("\n")))
-                .setContentIntent(open)
+                .let { Notify.opening(it, context, ID, Intent(context, CheckInActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
                 .setAutoCancel(true)
                 .build(),
         )

@@ -1,7 +1,6 @@
 package com.thomaswcode.decrastination.enrich
 
 import android.app.NotificationManager
-import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import androidx.core.app.NotificationCompat
@@ -32,7 +31,7 @@ object ModelAlerts {
                 .setContentTitle("Claude has stopped working")
                 .setContentText(problem.says)
                 .setStyle(NotificationCompat.BigTextStyle().bigText("${problem.says}. ${problem.fix}. The rules stand in meanwhile."))
-                .setContentIntent(open(context, KEY_ID, MainActivity.OPEN_SETUP))
+                .let { Notify.opening(it, context, KEY_ID, tab(context, MainActivity.OPEN_SETUP)) }
                 .setAutoCancel(true)
                 .build(),
         )
@@ -54,7 +53,7 @@ object ModelAlerts {
                 .setContentTitle("Claude's plan was dropped")
                 .setContentText("${task.title}: $why")
                 .setStyle(NotificationCompat.BigTextStyle().bigText("${task.title}: $why. It's planned as one piece meanwhile; Tasks shows it."))
-                .setContentIntent(open(context, DROPPED_ID, MainActivity.TAB_TASKS))
+                .let { Notify.opening(it, context, DROPPED_ID, tab(context, MainActivity.TAB_TASKS)) }
                 .setAutoCancel(true)
                 .build(),
         )
@@ -78,10 +77,6 @@ object ModelAlerts {
         posted.filter { it.id == DROPPED_ID && it.tag != null && it.tag !in standing }.forEach { Notify.cancel(context, it.tag, DROPPED_ID) }
     }
 
-    private fun open(context: Context, id: Int, tab: Int): PendingIntent = PendingIntent.getActivity(
-        context,
-        id,
-        Intent(context, MainActivity::class.java).putExtra(MainActivity.EXTRA_TAB, tab).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
-    )
+    private fun tab(context: Context, tab: Int): Intent =
+        Intent(context, MainActivity::class.java).putExtra(MainActivity.EXTRA_TAB, tab).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
 }

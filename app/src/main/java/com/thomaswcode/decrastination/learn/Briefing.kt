@@ -1,6 +1,5 @@
 package com.thomaswcode.decrastination.learn
 
-import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import androidx.core.app.NotificationCompat
@@ -82,12 +81,6 @@ object Briefing {
             Notify.cancel(context, ID)
             return
         }
-        val open = PendingIntent.getActivity(
-            context,
-            ID,
-            Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
-        )
         Notify.post(
             context,
             ID,
@@ -96,7 +89,7 @@ object Briefing {
                 .setContentTitle(title)
                 .setContentText(lines.firstOrNull().orEmpty())
                 .setStyle(NotificationCompat.InboxStyle().also { style -> lines.forEach(style::addLine) })
-                .setContentIntent(open)
+                .let { Notify.opening(it, context, ID, Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
                 .setAutoCancel(true)
                 .build(),
         )

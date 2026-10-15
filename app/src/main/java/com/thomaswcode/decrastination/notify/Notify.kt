@@ -11,14 +11,52 @@ import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.thomaswcode.decrastination.data.HeldNotification
+import com.thomaswcode.decrastination.data.HeldTap
 import kotlinx.coroutines.launch
+import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.json.Json
 
 /**
  * Posting notifications, only when they're allowed (a runtime permission since Android 13); the
  * routine ones within their ceiling and outside quiet hours ([NotifyRules], LR-07), the rest held
- * for the next morning's briefing ([postHeld]).
+ * for the next morning's briefing ([postHeld]), made again with their tap and buttons ([opening],
+ * [button]).
  */
 object Notify {
+    /** Where a notification's tap and buttons are kept, to make it again with should it be held back. */
+    private const val EXTRA_TAPS = "com.thomaswcode.decrastination.taps"
+    private const val FLAGS = PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+    private val TAPS = ListSerializer(HeldTap.serializer())
+
+    /**
+     * [builder] opening [intent]'s activity (the app's) when tapped, kept with it too: held back
+     * (LR-07), it's posted as it was made, not as a line opening the app.
+     */
+    fun opening(builder: NotificationCompat.Builder, context: Context, requestCode: Int, intent: Intent): NotificationCompat.Builder {
+        keep(builder, HeldTap(label = null, broadcast = false, requestCode = requestCode, intent = intent.toUri(Intent.URI_INTENT_SCHEME)))
+        return builder.setContentIntent(PendingIntent.getActivity(context, requestCode, intent, FLAGS))
+    }
+
+    /** [builder] with a button, [label], sending [intent] to a receiver of the app's; kept with it too, as [opening]'s tap is. */
+    fun button(builder: NotificationCompat.Builder, context: Context, label: String, requestCode: Int, intent: Intent): NotificationCompat.Builder {
+        keep(builder, HeldTap(label = label, broadcast = true, requestCode = requestCode, intent = intent.toUri(Intent.URI_INTENT_SCHEME)))
+        return builder.addAction(0, label, PendingIntent.getBroadcast(context, requestCode, intent, FLAGS))
+    }
+
+    private fun taps(json: String?): List<HeldTap> = json?.let { runCatching { Json.decodeFromString(TAPS, it) }.getOrNull() }.orEmpty()
+
+    private fun keep(builder: NotificationCompat.Builder, tap: HeldTap) {
+        builder.extras.putString(EXTRA_TAPS, Json.encodeToString(TAPS, taps(builder.extras.getString(EXTRA_TAPS)) + tap))
+    }
+
+    /** [tap] made again: only ever one of the app's own, as it's read back from a file. */
+    private fun pending(context: Context, tap: HeldTap): PendingIntent? {
+        val intent = runCatching { Intent.parseUri(tap.intent, Intent.URI_INTENT_SCHEME) }.getOrNull() ?: return null
+        if (intent.component?.packageName != context.packageName) return null
+        intent.selector = null
+        return if (tap.broadcast) PendingIntent.getBroadcast(context, tap.requestCode, intent, FLAGS) else PendingIntent.getActivity(context, tap.requestCode, intent, FLAGS)
+    }
+
     fun allowed(context: Context): Boolean =
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
@@ -50,8 +88,9 @@ object Notify {
 
     /**
      * Whether [notification] is held back (LR-07): one of the routine channels' in quiet hours, or
-     * past today's ceiling, decided and counted in one step. Held, its words are kept for the next
-     * briefing; gone, it's counted. One on a channel you've switched off isn't shown, so it's neither.
+     * past today's ceiling, decided and counted in one step. Held, its words, tap and buttons are
+     * kept for the next briefing; gone, it's counted. One on a channel you've switched off isn't
+     * shown, so it's neither.
      */
     private fun held(context: Context, id: Int, tag: String?, notification: Notification): Boolean {
         val channel = notification.channelId ?: return false
@@ -74,37 +113,39 @@ object Notify {
         graph.scope.launch {
             graph.runtime.update { s ->
                 if (goes) s.copy(notifiedToday = mapOf(date to maxOf(sent, s.notifiedToday[date] ?: 0)))
-                else s.copy(heldNotifications = (s.heldNotifications.filterNot { it.id == id && it.tag == tag } + HeldNotification(channel, id, tag, now, title, text)).takeLast(NotifyRules.MAX_HELD))
+                else s.copy(heldNotifications = (s.heldNotifications.filterNot { it.id == id && it.tag == tag } + HeldNotification(channel, id, tag, now, title, text, taps(extras.getString(EXTRA_TAPS)))).takeLast(NotifyRules.MAX_HELD))
             }
         }
         return !goes
     }
 
-    /** What was held back (LR-07), posted now (the morning's briefing), each opening the app, outside the ceiling; then let go. */
+    /**
+     * What was held back (LR-07), posted now (the morning's briefing) as it was made, its tap and
+     * buttons with it (one with none kept opens the app), outside the ceiling; then let go. Not while
+     * notifications aren't allowed: then kept for the next briefing, not lost.
+     */
     @SuppressLint("MissingPermission")
     suspend fun postHeld(context: Context) {
         val graph = com.thomaswcode.decrastination.AppGraph.get(context)
         val held = graph.runtime.value.heldNotifications
-        if (held.isEmpty()) return
-        if (allowed(context)) {
-            val open = PendingIntent.getActivity(
-                context,
-                0,
-                Intent(context, com.thomaswcode.decrastination.ui.MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
-            )
-            for (h in held) {
-                val notification = NotificationCompat.Builder(context, h.channel)
-                    .setSmallIcon(com.thomaswcode.decrastination.R.drawable.ic_focus)
-                    .setContentTitle(h.title)
-                    .setContentText(h.text)
-                    .setStyle(NotificationCompat.BigTextStyle().bigText(h.text))
-                    .setContentIntent(open)
-                    .setAutoCancel(true)
-                    .build()
-                val manager = NotificationManagerCompat.from(context)
-                if (h.tag != null) manager.notify(h.tag, h.id, notification) else manager.notify(h.id, notification)
-            }
+        if (held.isEmpty() || !allowed(context)) return
+        val app = PendingIntent.getActivity(
+            context,
+            0,
+            Intent(context, com.thomaswcode.decrastination.ui.MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            FLAGS,
+        )
+        val manager = NotificationManagerCompat.from(context)
+        for (h in held) {
+            val builder = NotificationCompat.Builder(context, h.channel)
+                .setSmallIcon(com.thomaswcode.decrastination.R.drawable.ic_focus)
+                .setContentTitle(h.title)
+                .setContentText(h.text)
+                .setStyle(NotificationCompat.BigTextStyle().bigText(h.text))
+                .setContentIntent(h.taps.firstOrNull { it.label == null }?.let { pending(context, it) } ?: app)
+                .setAutoCancel(true)
+            h.taps.forEach { tap -> tap.label?.let { label -> pending(context, tap)?.let { builder.addAction(0, label, it) } } }
+            if (h.tag != null) manager.notify(h.tag, h.id, builder.build()) else manager.notify(h.id, builder.build())
         }
         graph.runtime.update { s -> s.copy(heldNotifications = s.heldNotifications - held.toSet()) }
     }

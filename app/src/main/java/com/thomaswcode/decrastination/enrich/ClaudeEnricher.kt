@@ -104,12 +104,13 @@ object Pricing {
 
     /**
      * The most one call can cost, at the dearer rates: the longest text any call sends
-     * ([MAX_INPUT_CHARS] at [TOKENS_PER_CHAR] tokens each, and [PROMPT_TOKENS] more), and all of
-     * [ClaudeEnricher.MAX_TOKENS] out. $1.02. Every job's input is held to it, not only an email's
-     * (BUG-P2-015), so a cap is never passed by a call it let through.
+     * ([MAX_INPUT_CHARS], and the profile sent with it, [Profile.MAX_BLOCK_CHARS], at
+     * [TOKENS_PER_CHAR] tokens each, and [PROMPT_TOKENS] more), and all of [ClaudeEnricher.MAX_TOKENS]
+     * out. $1.26. Every job's input is held to it, not only an email's (BUG-P2-015), so a cap is
+     * never passed by a call it let through.
      */
     val WORST_CALL_USD: Double =
-        ((MAX_INPUT_CHARS.toLong() * TOKENS_PER_CHAR + PROMPT_TOKENS) * OLDER_OPUS.input + ClaudeEnricher.MAX_TOKENS * OLDER_OPUS.output) / 1_000_000.0
+        (((MAX_INPUT_CHARS.toLong() + Profile.MAX_BLOCK_CHARS) * TOKENS_PER_CHAR + PROMPT_TOKENS) * OLDER_OPUS.input + ClaudeEnricher.MAX_TOKENS * OLDER_OPUS.output) / 1_000_000.0
 
     fun rates(model: String): Rates = if (model.startsWith(ClaudeEnricher.MODEL)) OPUS_5_5 else OLDER_OPUS
 

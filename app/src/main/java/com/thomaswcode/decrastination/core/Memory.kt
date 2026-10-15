@@ -32,8 +32,10 @@ object Memories {
     /** The facts' room: about 1 500 tokens, the profile's share of them. */
     const val FACT_BUDGET_CHARS = 6_000
     const val RULE_MAX = 20
-    private const val MAX_TOPIC = 60
-    private const val MAX_TEXT = 300
+
+    /** A fact's topic, and a fact's or a rule's words, at most: what [apply] keeps. */
+    const val MAX_TOPIC = 60
+    const val MAX_TEXT = 300
 
     /** What [facts] take of their room: each topic and text. */
     fun chars(facts: List<Fact>): Int = facts.sumOf { it.topic.length + it.text.length }

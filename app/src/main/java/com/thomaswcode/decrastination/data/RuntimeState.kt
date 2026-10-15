@@ -343,6 +343,13 @@ data class FelixState(
     /** [taskIds] seen done on [at]: the last day's kept. */
     fun withActivity(taskIds: Collection<String>, at: Long): FelixState =
         copy(activity = (activity + taskIds.associateWith { at }).filterValues { it > at - 24 * 3_600_000L })
+
+    /** [question] waiting about [taskId] (AI-10) in place of the one there was, where it stood (as it was, if the same); null, none. */
+    fun withQuestion(taskId: String, question: String?, at: Long): FelixState {
+        val was = questions.firstOrNull { it.taskId == taskId }
+        val next = question?.let { q -> was?.takeIf { it.question == q } ?: FelixQuestion(taskId, q, at) }
+        return copy(questions = if (was == null) questions + listOfNotNull(next) else questions.flatMap { if (it.taskId == taskId) listOfNotNull(next) else listOf(it) }.distinct())
+    }
 }
 
 /** A question of the model's about [taskId]'s reading (AI-10), from [at]. */
@@ -353,9 +360,16 @@ data class FelixQuestion(val taskId: String, val question: String, val at: Long)
 @Serializable
 data class FelixDraft(val reason: String, val key: String?, val answer: com.thomaswcode.decrastination.enrich.FelixAnswer, val at: Long)
 
-/** A notification held back (LR-07): where it was to go, and what it said. */
+/** A notification held back (LR-07): where it was to go, what it said, and its tap and buttons ([taps]), to be made again with. */
 @Serializable
-data class HeldNotification(val channel: String, val id: Int, val tag: String? = null, val at: Long, val title: String, val text: String)
+data class HeldNotification(val channel: String, val id: Int, val tag: String? = null, val at: Long, val title: String, val text: String, val taps: List<HeldTap> = emptyList())
+
+/**
+ * A held notification's tap (no [label]) or a button of it: an activity of the app's to open, or
+ * ([broadcast]) a receiver of its to send to, as [intent] (`Intent.toUri`) with [requestCode].
+ */
+@Serializable
+data class HeldTap(val label: String? = null, val broadcast: Boolean = false, val requestCode: Int = 0, val intent: String)
 
 /** A daily alarm's run that failed: tried again [at], this being try [tries] (`Daily.failed`). */
 @Serializable

@@ -509,9 +509,10 @@ class AiUsageTest {
         // Every character three tokens, the instructions' worth more, and all the output, at the
         // dearer rates of a fallback's older Opus. Every call's input is cut to the most it covers,
         // and an email's text is well within it.
-        val longest = Pricing.costUsd("claude-opus-4-8", input = 3L * Pricing.MAX_INPUT_CHARS + 4_000, output = ClaudeEnricher.MAX_TOKENS)
+        // The profile sent with every call counted too, at its most.
+        val longest = Pricing.costUsd("claude-opus-4-8", input = 3L * (Pricing.MAX_INPUT_CHARS + Profile.MAX_BLOCK_CHARS) + 4_000, output = ClaudeEnricher.MAX_TOKENS)
         assertTrue(longest <= Pricing.WORST_CALL_USD, "$longest > ${Pricing.WORST_CALL_USD}")
-        assertEquals(1.02, Pricing.WORST_CALL_USD, 1e-9)
+        assertEquals(1.26, Pricing.WORST_CALL_USD, 1e-9)
         assertTrue(Prompts.MAX_TEXT + 1_000 < Pricing.MAX_INPUT_CHARS)
     }
 
@@ -768,6 +769,15 @@ class PhotoCheckerTest {
         assertEquals(ModelHold.Resting, ModelHold.of(true, resting.copy(keyProblem = KeyProblem.Rejected), at, LONDON, null, interactive = true))
         assertEquals(null, ModelHold.of(true, resting, at + 600_000L, LONDON, null))
         assertEquals(10, ModelHold.restLeftMin(resting, at))
+    }
+
+    @Test
+    fun `a call from a month gone by is counted in the newer month, never taking the record back`() {
+        val november = AiUsage("2026-11", spentUsd = 3.0, calls = 2)
+        val late = november.forCall("2026-10").record(0.5, refused = false, at = Fixtures.at("2026-11-01T00:00"))
+        assertEquals(Triple("2026-11", 3.5, 3), Triple(late.month, late.spentUsd, late.calls))
+        // A newer month's own starts at nothing, as ever.
+        assertEquals("2026-11" to 0.0, AiUsage("2026-10", spentUsd = 9.0).forCall("2026-11").let { it.month to it.spentUsd })
     }
 
     @Test
