@@ -204,6 +204,8 @@ object Prompts {
                 appendLine("Due: " + (due?.let { at(it).format(DAY_TIME) } ?: "no date"))
                 // The vocabulary decks by topic (DX-10), so a section can be named by what it's about.
                 if (job == Enrichments.Job.Assignment && decks.isNotEmpty()) appendLine("Decks: " + decks.entries.sortedBy { it.key }.joinToString("; ") { "${it.key} ${it.value}" })
+                // The files the teacher attached, by name (DX-08): what "the booklet" is.
+                if (job == Enrichments.Job.Assignment) GmailThreads.attachmentsOf(task).takeIf { it.isNotEmpty() }?.let { files -> appendLine("Attachments: " + files.joinToString(", ") { it.label }) }
             }
         }
         // What the student said to its questions (AI-10).

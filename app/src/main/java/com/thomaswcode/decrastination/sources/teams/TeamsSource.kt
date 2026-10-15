@@ -7,6 +7,7 @@ import android.os.Bundle
 import com.thomaswcode.decrastination.core.Fetched
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.Source
+import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.sources.ReadContext
 import com.thomaswcode.decrastination.sources.SourceRead
 import com.thomaswcode.decrastination.sources.SourceUnavailable
@@ -71,6 +72,9 @@ object TeamsRows {
     const val EXTRA_TAB = "tab"
     const val EXTRA_DUE_TEXT = "dueText"
 
+    /** The web addresses its instructions link to (DX-08), one a line, as the widget gives them (0.4.0 on). */
+    const val EXTRA_LINKS = "links"
+
     fun fetched(row: Map<String, Any?>): Fetched? {
         // A blank key is no identity: every such row would be the same task.
         val key = (row["key"] as? String)?.takeIf { it.isNotBlank() } ?: return null
@@ -84,9 +88,21 @@ object TeamsRows {
             extra = buildMap {
                 (row["tab"] as? String)?.let { put(EXTRA_TAB, it) }
                 (row["due_text"] as? String)?.let { put(EXTRA_DUE_TEXT, it) }
+                // Its reference materials by name and its links (DX-08), where the widget gives them
+                // (0.4.0 on): the files kept as an email's are, and their names sent with it.
+                lines(row["attachments"]).takeIf { it.isNotEmpty() }?.let { names ->
+                    put(com.thomaswcode.decrastination.sources.gmail.GmailThreads.EXTRA_ATTACHMENTS, com.thomaswcode.decrastination.sources.gmail.GmailThreads.attachmentsExtra(names.map { com.thomaswcode.decrastination.sources.gmail.Mime.Attachment(it, "") }))
+                }
+                lines(row["links"]).takeIf { it.isNotEmpty() }?.let { put(EXTRA_LINKS, it.joinToString("\n")) }
             },
         )
     }
+
+    /** A column of lines, each once, blanks left out; none where the widget gives no such column. */
+    private fun lines(value: Any?): List<String> = (value as? String).orEmpty().lines().map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+
+    /** [task]'s links (DX-08): none for one read before the widget gave them. */
+    fun linksOf(task: TaskItem): List<String> = task.extra[EXTRA_LINKS].orEmpty().lines().filter { it.isNotBlank() }
 
     /**
      * Every row as a task. A row without its key is a broken read, not one to skip: skipped, its

@@ -152,7 +152,8 @@ object GmailThreads {
 
     /**
      * Its messages' attachments (DX-01), every message's, each once: a JSON list of [Mime.Attachment],
-     * which reads back whole whatever a file is called.
+     * which reads back whole whatever a file is called. A Teams assignment's reference materials are
+     * kept so too (DX-08), so the sheet and the model see them alike.
      */
     const val EXTRA_ATTACHMENTS = "attachments"
 
@@ -178,6 +179,9 @@ object GmailThreads {
     /** [task]'s stored text, how far it was read, and by which rules: stored before those were kept, by none. */
     fun bodyOf(task: TaskItem): Body =
         Body(task.detail, task.extra[EXTRA_TEXT_READ_TO]?.toIntOrNull() ?: 0, attachmentsOf(task), task.extra[EXTRA_TEXT_RULES]?.toIntOrNull() ?: 0, task.extra[Invite.EXTRA]?.let(Invite::read))
+
+    /** [files] as [EXTRA_ATTACHMENTS] keeps them. */
+    fun attachmentsExtra(files: List<Mime.Attachment>): String = json.encodeToString(ATTACHMENTS, files)
 
     /** What's attached to [task]'s conversation, as stored; none for a task from before attachments were kept. */
     fun attachmentsOf(task: TaskItem): List<Mime.Attachment> =
@@ -363,7 +367,7 @@ object GmailThreads {
                         put(EXTRA_TEXT_READ_TO, body.readTo.toString())
                         put(EXTRA_TEXT_RULES, body.rules.toString())
                     }
-                    body?.attachments?.takeIf { it.isNotEmpty() }?.let { put(EXTRA_ATTACHMENTS, json.encodeToString(ATTACHMENTS, it)) }
+                    body?.attachments?.takeIf { it.isNotEmpty() }?.let { put(EXTRA_ATTACHMENTS, attachmentsExtra(it)) }
                     invite?.let { put(Invite.EXTRA, it.stored) }
                 },
             )
