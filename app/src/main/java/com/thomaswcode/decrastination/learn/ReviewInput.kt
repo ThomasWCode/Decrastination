@@ -2,7 +2,8 @@ package com.thomaswcode.decrastination.learn
 
 import com.thomaswcode.decrastination.core.Calibration
 import com.thomaswcode.decrastination.data.ActivityLog
-import com.thomaswcode.decrastination.data.SessionRecord
+import com.thomaswcode.decrastination.data.SlotOutcome
+import com.thomaswcode.decrastination.data.SlotRecord
 import com.thomaswcode.decrastination.data.Settings
 import java.time.Instant
 import java.time.LocalDate
@@ -42,7 +43,7 @@ object ReviewInput {
     private const val MAX_ANSWER = 600
 
     val SYSTEM = """
-        You review a UK sixth-form student's week (Year 12) for the planner app that schedules their homework and blocks distracting apps until it's done. You get the week's finished work (estimates against the minutes timed in focus sessions, and the student's own "harder/as expected/easier"), the sessions by hour, how often the blocker stopped them, their Sunday answers, and the current settings and calibration.
+        You review a UK sixth-form student's week (Year 12) for the planner app that schedules their homework and blocks distracting apps until it's done. You get the week's finished work (estimates against the minutes worked in its kept slots, and the student's own "harder/as expected/easier"), the slots kept and missed by hour and day, how often the blocker stopped them, their Sunday answers, and the current settings and calibration.
 
         Write a note of at most five short lines for the student: what the week shows, specific and kind, with numbers where they help ("German took 1.4× its estimates; its pieces now start earlier"). Then propose changes only to these settings, and only where the week gives a reason: boxMin (minutes a piece of work is cut into, 25–60), marginDays (days before a deadline to finish, 0–3), softMinPerDay (minutes of undated work a day, 30–120), workMinPerFreeMin (minutes of work for one of free time, 2–5). Give each change a short reason. No change is a fine answer.
     """.trimIndent()
@@ -93,14 +94,16 @@ object ReviewInput {
             appendLine("- ${c.title.take(MAX_TITLE)} [${c.kind.label}${c.className?.let { ", ${it.take(MAX_TITLE)}" }.orEmpty()}]:$due done ${at(c.doneAt)}, estimate ${c.estimateMin} min, timed ${c.workedMin} min${if (c.byHand) " (some ticked off by hand)" else ""}${if (c.photo) " (some found done by a photo check)" else ""}.$answer")
         } ?: appendLine("- nothing")
         if (finished.size > MAX_LISTED) appendLine("- and ${finished.size - MAX_LISTED} more before those")
-        // A session across the week's start or end: only its minutes within the week.
-        fun minutes(session: SessionRecord) = Days.minutesIn(session, start, end)
-        val sessions = log.sessions.filter { !it.photo && (inWeek(it.startedAt) || minutes(it) > 0) }
-        val photos = log.sessions.count { inWeek(it.startedAt) && it.photo }
+        // The week's slots (LR-09): kept or missed, by the hour and the day they were laid in.
+        val slots = log.slots.filter { inWeek(it.start) && it.outcome != SlotOutcome.Moved }
         appendLine()
-        appendLine("Focus sessions: ${sessions.size}, ${sessions.count { it.completed }} run to the end, ${sessions.sumOf { minutes(it) }} min in all.")
-        val byHour = sessions.groupBy { Instant.ofEpochMilli(it.startedAt).atZone(zone).hour }.toSortedMap()
-        if (byHour.isNotEmpty()) appendLine("Started by hour: " + byHour.entries.joinToString { (h, s) -> "%02d:00 ×%d".format(Locale.UK, h, s.size) })
+        appendLine("Slots: ${slots.count { it.outcome.kept }} kept of ${slots.size}, ${slots.filter { it.outcome.kept }.sumOf { it.workedMin }} min worked; ${slots.count { it.outcome == SlotOutcome.KeptLate }} kept late, ${slots.count { it.outcome == SlotOutcome.Missed }} missed.")
+        fun split(of: List<SlotRecord>) = "${of.count { it.outcome.kept }}/${of.size}"
+        val byHour = slots.groupBy { Instant.ofEpochMilli(it.start).atZone(zone).hour }.toSortedMap()
+        if (byHour.isNotEmpty()) appendLine("Kept by hour: " + byHour.entries.joinToString { (h, s) -> "%02d:00 %s".format(Locale.UK, h, split(s)) })
+        val byDay = slots.groupBy { Instant.ofEpochMilli(it.start).atZone(zone).dayOfWeek }.toSortedMap()
+        if (byDay.isNotEmpty()) appendLine("Kept by day: " + byDay.entries.joinToString { (d, s) -> "${d.getDisplayName(java.time.format.TextStyle.SHORT, Locale.UK)} ${split(s)}" })
+        val photos = slots.count { it.photo }
         if (photos > 0) appendLine("Pieces a photo check found done: $photos.")
         appendLine("Times the blocker stopped them: ${log.blocks.count { inWeek(it.at) }}.")
         // The reviewed week's answers only: last week's, answered late, aren't this week's.
@@ -114,7 +117,6 @@ object ReviewInput {
         if (calibration.multipliers.isNotEmpty()) appendLine("Learned time multipliers: " + calibration.multipliers.entries.joinToString { (k, v) -> "$k ×%.2f".format(Locale.UK, v) })
         // Per kind, these stand in for the settings above: the planner uses them where they're set.
         if (calibration.marginDays.isNotEmpty()) appendLine("Learned margins (days, used instead of marginDays): " + calibration.marginDays.entries.joinToString { (k, v) -> "${k.name} $v" })
-        if (calibration.boxMin.isNotEmpty()) appendLine("Learned box lengths (minutes, used instead of boxMin): " + calibration.boxMin.entries.joinToString { (k, v) -> "${k.name} $v" })
     }.trimEnd()
 
     /** Whether [change] is to a setting the review may change, and within its bounds. */

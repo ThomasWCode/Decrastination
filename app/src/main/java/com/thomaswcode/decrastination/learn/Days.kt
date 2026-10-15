@@ -2,6 +2,7 @@ package com.thomaswcode.decrastination.learn
 
 import com.thomaswcode.decrastination.core.DayKind
 import com.thomaswcode.decrastination.core.Plan
+import com.thomaswcode.decrastination.core.SlotKind
 import com.thomaswcode.decrastination.data.ActivityLog
 import com.thomaswcode.decrastination.data.SessionRecord
 import java.time.LocalDate
@@ -29,6 +30,8 @@ data class DayRecord(
     val zone: String? = null,
     /** Its kind, for its yield (PL-06); null in a record from before, whose date tells it. */
     val kind: DayKind? = null,
+    /** Of [plannedMin], the minutes laid in school's windows (LR-09): what school's yield is learned against. */
+    val schoolMin: Int = 0,
 )
 
 /** The Sunday check-in (docs/scheduler.md §5, item 6): five questions, a scale or a line each. */
@@ -50,12 +53,13 @@ object Days {
     /** Today's plan as it stands, for the record. */
     fun record(plan: Plan, zone: ZoneId): DayRecord {
         val chunks = plan.todayBucket?.chunks.orEmpty().map { DayChunk(it.taskId, it.minutes) }
-        return DayRecord(plan.today.toString(), chunks.sumOf { it.minutes }, chunks, zone = zone.id, kind = DayKind.of(plan.today))
+        val school = plan.todaySlots.filter { it.kind == SlotKind.Work && it.window.atSchool }.sumOf { it.chunk!!.minutes }
+        return DayRecord(plan.today.toString(), chunks.sumOf { it.minutes }, chunks, zone = zone.id, kind = DayKind.of(plan.today), schoolMin = school)
     }
 
     /**
      * [day], finished: each of its tasks counts as done in full if its source confirmed it done by
-     * the day's end, or as far as the day's focus sessions on it went.
+     * the day's end, or as far as the day's kept slots on it went (LR-09).
      */
     fun finish(day: DayRecord, log: ActivityLog, now: ZoneId): DayRecord {
         // By the day's own midnights, where it was planned: travel since doesn't move them.
@@ -77,7 +81,7 @@ object Days {
     /**
      * [old], today's record, made again once an answer about an event has changed what today holds:
      * what was done of it already counts as planned and done (a finished task's pieces in full,
-     * another's sessions so far), and the rest is what the plan has today now ([ahead]). So the day
+     * another's kept slots so far), and the rest is what the plan has today now ([ahead]). So the day
      * is judged by what it could hold once the event was known.
      */
     fun replan(old: DayRecord, ahead: List<DayChunk>, log: ActivityLog, now: Long, zone: ZoneId): DayRecord {
@@ -97,9 +101,9 @@ object Days {
         return old.copy(plannedMin = chunks.sumOf { it.minutes }, chunks = chunks)
     }
 
-    /** Minutes worked on each task from [start] until [end]: a session across either counts only its part within. */
-    private fun workedIn(log: ActivityLog, start: Long, end: Long): Map<String, Int> =
-        log.sessions.groupBy { it.taskId }.mapValues { (_, sessions) -> sessions.sumOf { minutesIn(it, start, end) } }.filterValues { it > 0 }
+    /** Minutes worked on each task from [start] until [end]: its kept slots' (LR-09), by when each was laid. */
+    fun workedIn(log: ActivityLog, start: Long, end: Long): Map<String, Int> =
+        log.slots.filter { it.outcome.kept && it.start >= start && it.start < end }.groupBy { it.taskId }.mapValues { (_, kept) -> kept.sumOf { it.workedMin } }.filterValues { it > 0 }
 
     /**
      * Minutes of [session] from [start] until [end]: a timed one's as far as its time fell in them

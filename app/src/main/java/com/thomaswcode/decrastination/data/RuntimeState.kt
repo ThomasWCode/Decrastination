@@ -7,6 +7,7 @@ import com.thomaswcode.decrastination.core.Calibration
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Uptime
+import com.thomaswcode.decrastination.core.WindowKind
 import com.thomaswcode.decrastination.enrich.AiUsage
 import com.thomaswcode.decrastination.learn.CheckIn
 import com.thomaswcode.decrastination.learn.DayRecord
@@ -115,6 +116,8 @@ data class ProtectionState(
 @Serializable
 data class ActivityLog(
     val sessions: List<SessionRecord> = emptyList(),
+    /** Each slot's outcome (LR-09): the record the days, the calibration and the stats read. */
+    val slots: List<SlotRecord> = emptyList(),
     val completions: List<CompletionRecord> = emptyList(),
     val blocks: List<BlockRecord> = emptyList(),
     val protection: List<ProtectionRecord> = emptyList(),
@@ -128,6 +131,7 @@ data class ActivityLog(
         val sinceDay = java.time.Instant.ofEpochMilli(since).atZone(java.time.ZoneOffset.UTC).toLocalDate().toString()
         return ActivityLog(
             sessions = sessions.filter { it.startedAt >= since },
+            slots = slots.filter { it.at >= since },
             completions = completions.filter { it.doneAt >= since },
             blocks = blocks.filter { it.at >= since },
             protection = protection.filter { it.at >= since },
@@ -141,6 +145,44 @@ data class ActivityLog(
         const val KEEP_DAYS = 120L
     }
 }
+
+/** How a slot went (LR-09): kept in its time or after its grace, missed, or moved on purpose. */
+@Serializable
+enum class SlotOutcome {
+    Kept,
+    KeptLate,
+    Missed,
+    Moved,
+    ;
+
+    /** Done, in its time or after. */
+    val kept: Boolean get() = this == Kept || this == KeptLate
+}
+
+/**
+ * A slot's outcome (LR-09): which piece ([key], its task's), when it was laid ([start] to [end], in
+ * a [window]), how it went, and what was worked: the planned minutes and any more you said. [earned]
+ * when it earned its free time (a short piece on its tick, a long one with its photo, BL-08); [at]
+ * when it was recorded. A piece ticked with no slot of its own is recorded at the tick.
+ */
+@Serializable
+data class SlotRecord(
+    val date: String,
+    val key: String,
+    val taskId: String,
+    val kind: Kind,
+    val className: String? = null,
+    val label: String,
+    val plannedMin: Int,
+    val start: Long,
+    val end: Long,
+    val window: WindowKind,
+    val outcome: SlotOutcome,
+    val workedMin: Int,
+    val photo: Boolean = false,
+    val earned: Boolean = false,
+    val at: Long,
+)
 
 @Serializable
 data class SessionRecord(
@@ -225,6 +267,8 @@ data class PhotoDone(
     val at: Long,
     /** Its step's place in its task's list; null from before this was kept. */
     val stepIndex: Int? = null,
+    /** The piece it was for ([com.thomaswcode.decrastination.core.Chunk.key], LR-09): its slot is kept by it. */
+    val key: String? = null,
 )
 
 /** A daily alarm's run that failed: tried again [at], this being try [tries] (`Daily.failed`). */
