@@ -346,7 +346,7 @@ class SettingsActivity : ComponentActivity() {
                         TimeField("Sunday check-in", draft.checkInMin, "checkInMin", form) { draft = draft.copy(checkInMin = it) }
                         Note("The week's review follows the check-in an hour and a half later, answered or not. Those held back by quiet hours or the day's four go with the next briefing.")
                         // The weekly summary for home (NF-02): where it goes, and this week's to send now.
-                        TextField("Weekly summary goes to (an email address)", draft.summaryEmail, SUMMARY_EMAIL_MAX, "summaryEmail", form) { draft = draft.copy(summaryEmail = it) }
+                        OptionalTextField("Weekly summary goes to (an email address, or none)", draft.summaryEmail, SUMMARY_EMAIL_MAX, "summaryEmail", form) { draft = draft.copy(summaryEmail = it) }
                         val latest = graph.log.value.reviews.filter { it.summary != null }.maxByOrNull { it.at }
                         if (latest?.summary != null && latest.week != null) {
                             val context = androidx.compose.ui.platform.LocalContext.current
@@ -484,6 +484,11 @@ private fun <T> ParsedField(label: String, shown: String, key: String, form: For
 @Composable
 private fun TextField(label: String, value: String, max: Int, key: String, form: Form, onChange: (String) -> Unit) =
     ParsedField(label, value, key, form, { it.trim().takeIf { s -> s.isNotEmpty() && s.length <= max } }, onChange, number = false)
+
+/** Text up to [max] characters, or blank for none. */
+@Composable
+private fun OptionalTextField(label: String, value: String, max: Int, key: String, form: Form, onChange: (String) -> Unit) =
+    ParsedField(label, value, key, form, { it.trim().takeIf { s -> s.length <= max } }, onChange, number = false)
 
 @Composable
 private fun NumberField(label: String, value: Int, range: IntRange, key: String, form: Form, onChange: (Int) -> Unit) =

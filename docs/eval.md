@@ -34,7 +34,7 @@ Since phase 8 the set can be asked of Claude itself, as the phone asks it: `Eval
 ./gradlew testDebugUnitTest --tests '*EvalRunTest*' -PrunEval=true
 ```
 
-with `CLAUDE_DECRASTINATION_API_KEY` in the environment, which the test inherits from Gradle (it's never printed). It stops once it has spent `EVAL_BUDGET_USD` (2 dollars unless set), the cases after that not asked (the score then fails them as unanswered); `-Peffort=low|medium|high|max` sets how hard Claude thinks for the run, each job's own otherwise (high for these three). Each case's outcome and cost, and the run's total, are in the test's output (`app/build/test-results/testDebugUnitTest/`). Gradle won't run it again with nothing changed: add `--rerun` for another round. Without `-PrunEval=true`, the key or `private/eval` it's skipped, so CI never runs it, nor does a plain test run here, where the key is set.
+with `CLAUDE_DECRASTINATION_API_KEY` in the environment, which the test inherits from Gradle (it's never printed). It stops before a call that, at its dearest ($1.295, the cap's worst case), could take it past `EVAL_BUDGET_USD` (2 dollars unless set), the cases after that not asked (the score then fails them as unanswered); `-Peffort=low|medium|high|max` sets how hard Claude thinks for the run, each job's own otherwise (high for these three). Each case's outcome and cost, and the run's total, are in the test's output (`app/build/test-results/testDebugUnitTest/`). Gradle won't run it again with nothing changed: add `--rerun` for another round. Without `-PrunEval=true`, the key or `private/eval` it's skipped, so CI never runs it, nor does a plain test run here, where the key is set.
 
 ## Labels
 

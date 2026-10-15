@@ -185,6 +185,12 @@ class StatsTest {
         assertEquals(30 + 200, Stats.summary(partial, now, LONDON, days = 26 * 7).slotMin)
         // A week with no rollup keeps what's left of its records.
         assertEquals(30 + 30, Stats.summary(partial.copy(weeks = emptyList()), now, LONDON, days = 26 * 7).slotMin)
+        // A rollup written at its review, before a slot kept later that Sunday, made again while the
+        // log holds the week whole; one past that stays as it was.
+        val late = log.copy(weeks = listOf(week, boundary), slots = log.slots + slot("2026-10-11T19:00", SlotOutcome.Kept))
+        val refreshed = Stats.refreshedWeeks(late, now, LONDON)
+        assertEquals(60, refreshed.single { it.week == "2026-10-05" }.minutes)
+        assertEquals(200, refreshed.single { it.week == "2026-06-08" }.minutes)
     }
 
     @Test

@@ -11,6 +11,7 @@ import java.util.Locale
 import kotlinx.coroutines.runBlocking
 import org.junit.Assume.assumeTrue
 import kotlin.test.Test
+import kotlin.test.fail
 
 /**
  * A scored eval run through the API (AR-02, docs/eval.md): each case of the private set
@@ -18,9 +19,9 @@ import kotlin.test.Test
  * [ClaudeEnricher] with the key, its answer written to `private/eval/answers/<id>-<run>.json` (the
  * run numbered on from the last), then the lot scored as [EvalSetTest.score] does. A paid call a
  * case, so it runs only when asked, `-PrunEval=true`, with the key in the environment and the set
- * on disk: never in CI, nor in a plain test run here. It stops once what it's spent reaches
- * `EVAL_BUDGET_USD` (2 dollars unless set); `-Peffort=low|medium|high|max` sets how hard the model
- * thinks, each job's own otherwise.
+ * on disk: never in CI, nor in a plain test run here. It stops before a call whose dearest case
+ * ([Pricing.WORST_CALL_USD]) could take it past `EVAL_BUDGET_USD` (2 dollars unless set);
+ * `-Peffort=low|medium|high|max` sets how hard the model thinks, each job's own otherwise.
  */
 class EvalRunTest {
     private val zone: ZoneId = ZoneId.of("Europe/London")
@@ -33,7 +34,7 @@ class EvalRunTest {
         val set = EvalSetTest()
         val cases = set.cases()
         val answers = File(set.dir!!, "answers").apply { mkdirs() }
-        val budget = System.getenv("EVAL_BUDGET_USD")?.toDoubleOrNull() ?: 2.0
+        val budget = System.getenv("EVAL_BUDGET_USD")?.let { text -> text.toDoubleOrNull()?.takeIf { it.isFinite() && it >= 0 } ?: fail("EVAL_BUDGET_USD should be a number of dollars, not $text") } ?: 2.0
         val effort = System.getProperty("effort").orEmpty().ifBlank { null }?.let { OutputConfig.Effort.of(it.lowercase(Locale.ROOT)) }
         val run = (answers.listFiles().orEmpty().mapNotNull { it.nameWithoutExtension.substringAfterLast('-').toIntOrNull() }.maxOrNull() ?: 0) + 1
         val jobs = Enrichments.Job.entries.map(ModelEffort::jobOf)
@@ -41,8 +42,9 @@ class EvalRunTest {
         var spent = 0.0
         try {
             for (case in cases) {
-                if (spent >= budget) {
-                    println("Stopped at ${dollars(spent)}, the budget ${dollars(budget)}: ${case.id} and the cases after it not asked")
+                // The next call's dearest case must fit what's left (AC-05's worst call), so the budget is never passed.
+                if (spent + Pricing.WORST_CALL_USD > budget) {
+                    println("Stopped at ${dollars(spent)}: the next call could cost up to ${dollars(Pricing.WORST_CALL_USD)}, past the budget of ${dollars(budget)}; ${case.id} and the cases after it not asked")
                     break
                 }
                 val now = set.nowOf(case)
