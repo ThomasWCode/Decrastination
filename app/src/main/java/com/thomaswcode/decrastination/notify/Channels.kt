@@ -7,7 +7,8 @@ import android.content.Context
 /** The app's notification channels, created at start-up (creating one that exists changes nothing). */
 object Channels {
     const val SYNC = "sync"
-    const val SESSION = "session"
+    /** The focus sessions' channel, gone with them (review v2, AR-09). */
+    private const val SESSION = "session"
     const val PROTECTION = "protection"
     /** The one channel the next four were (before 1.8.0): taken over by them, then deleted once nothing's left on it. */
     private const val DAILY = "daily"
@@ -61,13 +62,12 @@ object Channels {
         if (manager.getNotificationChannel(DAILY) != null && manager.activeNotifications.none { it.notification.channelId == DAILY }) {
             manager.deleteNotificationChannel(DAILY)
         }
+        // Sessions are gone (AR-09): their channel, and a session's notification left on it, with them.
+        if (manager.getNotificationChannel(SESSION) != null) manager.deleteNotificationChannel(SESSION)
         manager.createNotificationChannels(
             listOf(
                 NotificationChannel(SYNC, "Reading your tasks", NotificationManager.IMPORTANCE_MIN).apply {
                     description = "Shown only on older Android versions, while a sync runs"
-                },
-                NotificationChannel(SESSION, "Focus sessions", NotificationManager.IMPORTANCE_LOW).apply {
-                    description = "The session under way, and how it ended"
                 },
                 NotificationChannel(PROTECTION, "Protection", NotificationManager.IMPORTANCE_HIGH).apply {
                     description = "When blocking is off: the focus service switched off, or protection weakened"

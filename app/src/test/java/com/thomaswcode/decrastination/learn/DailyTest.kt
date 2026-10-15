@@ -1,5 +1,8 @@
 package com.thomaswcode.decrastination.learn
 
+import com.thomaswcode.decrastination.core.WindowKind
+import com.thomaswcode.decrastination.data.SlotOutcome
+import com.thomaswcode.decrastination.data.SlotRecord
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.Fixtures.LONDON
 import com.thomaswcode.decrastination.block.TeamsAutoSync
@@ -11,7 +14,6 @@ import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.data.ActivityLog
 import com.thomaswcode.decrastination.data.CompletionRecord
 import com.thomaswcode.decrastination.data.DailyRetry
-import com.thomaswcode.decrastination.data.SessionRecord
 import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.data.WeeklyReview
 import com.thomaswcode.decrastination.enrich.ClaudeReviewer
@@ -115,11 +117,10 @@ class ReviewInputTest {
     private val now = Fixtures.at("2026-10-11T21:00")
 
     @Test
-    fun `the model sees the learned margins and boxes, not only the settings`() {
-        val calibration = Calibration(marginDays = mapOf(Kind.Homework to 3), boxMin = mapOf(Kind.Homework to 25))
+    fun `the model sees the learned margins, not only the settings`() {
+        val calibration = Calibration(marginDays = mapOf(Kind.Homework to 3))
         val text = ReviewInput.describe(ActivityLog(), calibration, Settings(), now, LONDON, week = "2026-10-05")
         assertTrue("Learned margins (days, used instead of marginDays): Homework 3" in text, text)
-        assertTrue("Learned box lengths (minutes, used instead of boxMin): Homework 25" in text, text)
     }
 
     @Test
@@ -157,11 +158,18 @@ class ReviewInputTest {
     }
 
     @Test
-    fun `a session across the week's end counts only its minutes within the week`() {
-        // Sunday 23:30 to Monday 02:30: 30 minutes of the reviewed week.
-        val log = ActivityLog(sessions = listOf(SessionRecord("teams:a", Kind.Homework, label = "a", plannedMin = 180, workedMin = 180, startedAt = Fixtures.at("2026-10-11T23:30"), endedAt = 0, completed = true)))
+    fun `the week's slots are told kept and missed, by hour and day`() {
+        // Laid in the reviewed week: kept on Thursday at 17:00, missed on Friday at 19:00; Monday's is the next week's.
+        fun slot(start: String, outcome: SlotOutcome) = SlotRecord(
+            date = start.take(10), key = "teams:a#-1#1", taskId = "teams:a", kind = Kind.Homework, label = "a", plannedMin = 30,
+            start = Fixtures.at(start), end = Fixtures.at(start) + 30 * 60_000L, window = WindowKind.Evening, outcome = outcome,
+            workedMin = if (outcome.kept) 30 else 0, at = Fixtures.at(start),
+        )
+        val log = ActivityLog(slots = listOf(slot("2026-10-08T17:00", SlotOutcome.Kept), slot("2026-10-09T19:00", SlotOutcome.Missed), slot("2026-10-12T17:00", SlotOutcome.Kept)))
         val text = ReviewInput.describe(log, Calibration(), Settings(), Fixtures.at("2026-10-12T10:00"), LONDON, week = "2026-10-05")
-        assertTrue("Focus sessions: 1, 1 run to the end, 30 min in all." in text, text)
+        assertTrue("Slots: 1 kept of 2, 30 min worked; 0 kept late, 1 missed." in text, text)
+        assertTrue("Kept by hour: 17:00 1/1, 19:00 0/1" in text, text)
+        assertTrue("Kept by day: Thu 1/1, Fri 0/1" in text, text)
     }
 
     @Test

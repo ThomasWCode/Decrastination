@@ -36,6 +36,8 @@ object PhotoChecks {
 
     /** Checks [photo] against [piece], records the cost, and says how it went. The photo is deleted, whatever happens. */
     suspend fun check(context: Context, graph: AppGraph, photo: File, piece: Chunk): String {
+        // When it was taken: a slot of its key kept before then isn't the one it shows.
+        val takenAt = graph.clock.now()
         if (!piece.photoCheckable) {
             withContext(NonCancellable + Dispatchers.IO) { photo.delete() }
             return "Only written homework can be checked from a photo."
@@ -69,9 +71,7 @@ object PhotoChecks {
         }
         val verdict = result.verdict ?: return "Claude couldn't say. Try a clearer photo."
         if (!verdict.done || verdict.confidence < PhotoChecker.ACCEPT) return "Not yet: ${verdict.reason}"
-        // A session on it started while this was checked (from another screen): that counts it.
-        if (graph.focus.session?.taskId == piece.taskId) return "Done, but a session on it started meanwhile: it counts the work when it ends. ${verdict.reason}"
-        if (!graph.focus.photoChecked(piece.taskId, piece.step, piece.minutes, piece.stepIndex)) return "Done, but it was already ticked off: ${verdict.reason}"
+        if (!graph.focus.photoChecked(piece.taskId, piece.step, piece.minutes, piece.stepIndex, piece.key, takenAt)) return "Done, but it was already ticked off: ${verdict.reason}"
         return "Done: ${verdict.reason}"
     }
 

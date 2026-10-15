@@ -52,10 +52,11 @@ object Briefing {
         val now = graph.clock.now()
         val zone = graph.clock.zone()
         val plan = graph.plan()
-        val ahead = Days.record(plan, zone).chunks
+        val record = Days.record(plan, zone)
+        val ahead = record.chunks
         graph.log.update { log ->
             val old = log.days.firstOrNull { it.date == plan.today.toString() && it.full == null } ?: return@update log
-            log.copy(days = log.days.map { if (it === old) Days.replan(old, ahead, log, now, zone) else it })
+            log.copy(days = log.days.map { if (it === old) Days.replan(old, ahead, log, now, zone, record.schoolMin) else it })
         }
     }
 

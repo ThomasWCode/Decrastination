@@ -42,7 +42,7 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 /**
- * The last fortnight (PLAN.md Phase 6): what got finished, the focus sessions, the blocks, what
+ * The last fortnight (PLAN.md Phase 6): what got finished, the slots kept, the blocks, what
  * protection found, today's free time, and what the app has learned about your work. The numbers
  * as tiles to skim, the sentences behind them folded under "In full".
  */
@@ -60,7 +60,7 @@ fun StatsScreen(graph: AppGraph) {
     val zone = graph.clock.zone()
     val stats = remember(log, now) { Stats.summary(log, now, zone) }
     val learned = remember(runtime.calibration) { Stats.calibrationLines(runtime.calibration) }
-    val most = stats.days.maxOf { it.focusMin }.coerceAtLeast(1)
+    val most = stats.days.maxOf { it.slotMin }.coerceAtLeast(1)
     val credit = runtime.credit.on(graph.focus.today(now))
     val leftMin = (graph.focus.creditLeftMs(now) / 60_000).toInt()
     val usage = runtime.aiUsage.forMonth(AiUsage.monthOf(now, zone))
@@ -76,7 +76,7 @@ fun StatsScreen(graph: AppGraph) {
             Column(Modifier.padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 TileRow(
                     { StatTile("Finished", "${stats.completions}", if (stats.dated > 0) "${stats.onTime} of ${stats.dated} dated on time" else "none with a deadline") },
-                    { StatTile("Focus", Format.minutes(stats.focusMin), "${stats.sessions} session${if (stats.sessions == 1) "" else "s"}, ${stats.sessionsFinished} to the end") },
+                    { StatTile("Slots kept", "${stats.slotsKept} of ${stats.slotsPlanned}", "earned ${stats.slotsEarned}, ${Format.minutes(stats.slotMin)} worked") },
                 )
                 TileRow(
                     { StatTile("Blocked", "${stats.blocks}", stats.topBlocked.firstOrNull()?.let { (target, _) -> "most: ${Blocklist.NAMES[target] ?: target}" } ?: "nothing") },
@@ -132,7 +132,7 @@ fun StatsScreen(graph: AppGraph) {
                 Group {
                     GroupTile {
                         Line("${stats.completions} finished" + if (stats.dated > 0) "; ${stats.onTime} of the ${stats.dated} with a deadline by it." else ".")
-                        Line("${stats.sessions} focus session${if (stats.sessions == 1) "" else "s"}, ${stats.sessionsFinished} run to the end: ${Format.minutes(stats.focusMin)} in all.")
+                        Line("${stats.slotsKept} slot${if (stats.slotsKept == 1) "" else "s"} kept of ${stats.slotsPlanned}, ${stats.slotsEarned} earning free time: ${Format.minutes(stats.slotMin)} worked.")
                         if (stats.photoChecks > 0) Line("${stats.photoChecks} piece${if (stats.photoChecks == 1) "" else "s"} a photo check found done.")
                         Line("Blocked ${stats.blocks} time${if (stats.blocks == 1) "" else "s"}" + if (top.isNotEmpty()) ": $top." else ".")
                         Line(
@@ -188,7 +188,7 @@ private fun StatTile(label: String, value: String, note: String, warn: Boolean =
 
 @Composable
 private fun DayRow(day: Stats.Day, most: Int, today: LocalDate) {
-    val quiet = day.completions == 0 && day.focusMin == 0 && day.blocks == 0
+    val quiet = day.completions == 0 && day.slotMin == 0 && day.blocks == 0
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(
             if (day.date == today) "Today" else day.date.format(DAY),
@@ -199,14 +199,14 @@ private fun DayRow(day: Stats.Day, most: Int, today: LocalDate) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             // Focus minutes as a bar, against the fortnight's busiest day.
             Box(Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)).background(MaterialTheme.colorScheme.surfaceContainerHighest)) {
-                if (day.focusMin > 0) {
-                    Box(Modifier.fillMaxWidth(day.focusMin / most.toFloat()).fillMaxHeight().background(MaterialTheme.colorScheme.primary))
+                if (day.slotMin > 0) {
+                    Box(Modifier.fillMaxWidth(day.slotMin / most.toFloat()).fillMaxHeight().background(MaterialTheme.colorScheme.primary))
                 }
             }
             Text(
                 listOfNotNull(
                     "${day.completions} done",
-                    Format.minutes(day.focusMin).takeIf { day.focusMin > 0 }?.let { "$it focus" },
+                    Format.minutes(day.slotMin).takeIf { day.slotMin > 0 }?.let { "$it in slots" },
                     "${day.blocks} block${if (day.blocks == 1) "" else "s"}".takeIf { day.blocks > 0 },
                     when (day.planDone) {
                         true -> "plan done"

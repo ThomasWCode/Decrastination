@@ -29,7 +29,7 @@ data class OwnStep(val title: String, val minutes: Int, val from: Long? = null, 
  * Your own tasks (2.0.0, Q28). You're their source: what you give is kept as a source's values are
  * ([TaskItem.sourceValues]), so an instruction laid over one can be taken back, and only you change
  * it. Nothing reads them, so no sync touches them; one is done when you say so, which earns no free
- * time (your call, 12 Oct): focus sessions on it earn theirs. Pure.
+ * time (your call, 12 Oct): its kept slots earn theirs. Pure.
  */
 object OwnTasks {
     const val MAX_TITLE = 200

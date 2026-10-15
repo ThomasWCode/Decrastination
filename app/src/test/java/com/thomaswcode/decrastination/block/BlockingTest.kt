@@ -51,9 +51,11 @@ class BlockPolicyTest {
         at: String,
         pressure: Boolean = true,
         creditMs: Long = 0,
-        session: FocusSession? = null,
         overrideUntil: String? = null,
         forceUntil: String? = null,
+        // Monday to Friday, unless said otherwise (a day off school).
+        schoolDay: Boolean = java.time.LocalDate.parse(at.take(10)).dayOfWeek.value <= 5,
+        gapUntil: String? = null,
     ) = BlockPolicy.decide(
         BlockPolicy.Input(
             now = Fixtures.at(at),
@@ -61,9 +63,10 @@ class BlockPolicyTest {
             settings = settings,
             pressure = pressure,
             creditLeftMs = creditMs,
-            session = session,
             overrideUntil = overrideUntil?.let(Fixtures::at),
             forceActiveUntil = forceUntil?.let(Fixtures::at),
+            schoolDay = schoolDay,
+            gapUntil = gapUntil?.let(Fixtures::at),
         ),
     )
 
@@ -72,43 +75,41 @@ class BlockPolicyTest {
         assertEquals(BlockPolicy.Verdict.Allow(BlockPolicy.Reason.Quiet), decide("2026-10-09T23:00"))
         assertEquals(BlockPolicy.Verdict.Allow(BlockPolicy.Reason.Quiet), decide("2026-10-10T06:59"))
         // Friday 9 Oct is a school day: free until 16:45.
-        assertEquals(BlockPolicy.Verdict.Allow(BlockPolicy.Reason.SchoolHours), decide("2026-10-09T12:00"))
-        assertEquals(BlockPolicy.Verdict.Allow(BlockPolicy.Reason.SchoolHours), decide("2026-10-09T16:44"))
+        assertEquals(BlockPolicy.Verdict.Allow(BlockPolicy.Reason.BeforeBlock), decide("2026-10-09T12:00"))
+        assertEquals(BlockPolicy.Verdict.Allow(BlockPolicy.Reason.BeforeBlock), decide("2026-10-09T16:44"))
     }
 
     @Test
-    fun `from 16 45 on a school day, and all day at the weekend, work due soon blocks`() {
-        assertEquals(BlockPolicy.Verdict.Block(BlockPolicy.Reason.DueSoon), decide("2026-10-09T16:45"))
-        assertEquals(BlockPolicy.Verdict.Block(BlockPolicy.Reason.DueSoon), decide("2026-10-10T07:00"))
-        assertEquals(BlockPolicy.Verdict.Block(BlockPolicy.Reason.DueSoon), decide("2026-10-10T22:29"))
+    fun `between today's slots after one kept, earned time is spent till the next starts`() {
+        // Monday 17:32, a slot kept at 17:30 and the next at 17:35: five minutes of it, with credit.
+        assertEquals(BlockPolicy.Verdict.Spend, decide("2026-10-12T17:32", creditMs = 600_000L, gapUntil = "2026-10-12T17:35"))
+        assertEquals(BlockPolicy.Verdict.Block(BlockPolicy.Reason.TodayUndone), decide("2026-10-12T17:35", creditMs = 600_000L, gapUntil = "2026-10-12T17:35"))
+        // No credit: blocked in the gap all the same.
+        assertEquals(BlockPolicy.Verdict.Block(BlockPolicy.Reason.TodayUndone), decide("2026-10-12T17:32", gapUntil = "2026-10-12T17:35"))
+    }
+
+    @Test
+    fun `from 16 45 on a school day, and from 10 00 on a weekend or a day off, today's work undone blocks`() {
+        assertEquals(BlockPolicy.Verdict.Block(BlockPolicy.Reason.TodayUndone), decide("2026-10-09T16:45"))
+        // Saturday 10 Oct: free till 10:00 (BL-02), then blocked till the quiet hours.
+        assertEquals(BlockPolicy.Verdict.Allow(BlockPolicy.Reason.BeforeBlock), decide("2026-10-10T09:00"))
+        assertEquals(BlockPolicy.Verdict.Block(BlockPolicy.Reason.TodayUndone), decide("2026-10-10T10:30"))
+        assertEquals(BlockPolicy.Verdict.Block(BlockPolicy.Reason.TodayUndone), decide("2026-10-10T22:29"))
+        // Wednesday 28 Oct, a day off school: as a weekend; a school day that Wednesday is still free at 10:30.
+        assertEquals(BlockPolicy.Verdict.Allow(BlockPolicy.Reason.BeforeBlock), decide("2026-10-28T09:00", schoolDay = false))
+        assertEquals(BlockPolicy.Verdict.Block(BlockPolicy.Reason.TodayUndone), decide("2026-10-28T10:30", schoolDay = false))
+        assertEquals(BlockPolicy.Verdict.Allow(BlockPolicy.Reason.BeforeBlock), decide("2026-10-28T10:30"))
     }
 
     @Test
     fun `while work is due soon, free time can't be spent`() {
-        assertEquals(BlockPolicy.Verdict.Block(BlockPolicy.Reason.DueSoon), decide("2026-10-10T12:00", creditMs = 600_000))
+        assertEquals(BlockPolicy.Verdict.Block(BlockPolicy.Reason.TodayUndone), decide("2026-10-10T12:00", creditMs = 600_000))
     }
 
     @Test
     fun `with nothing due soon, earned time is spent, and without it the app is blocked`() {
         assertEquals(BlockPolicy.Verdict.Spend, decide("2026-10-10T12:00", pressure = false, creditMs = 600_000))
         assertEquals(BlockPolicy.Verdict.Block(BlockPolicy.Reason.NoFreeTime), decide("2026-10-10T12:00", pressure = false))
-    }
-
-    @Test
-    fun `a session blocks until the uptime clock says its time is up, the date set forward or not`() {
-        val now = Fixtures.at("2026-10-10T12:00")
-        val session = FocusSession("teams:t", "t", null, 30, startedAt = now - 60 * 60_000L, startedUptime = Uptime(1, 0))
-        // The wall clock says an hour has passed; the phone has been on for ten minutes.
-        val input = BlockPolicy.Input(now, LONDON, Settings(), pressure = false, creditLeftMs = 60_000L, session = session, uptime = Uptime(1, 10 * 60_000L))
-        assertEquals(BlockPolicy.Verdict.Block(BlockPolicy.Reason.Session), BlockPolicy.decide(input))
-        assertEquals(BlockPolicy.Verdict.Spend, BlockPolicy.decide(input.copy(uptime = Uptime(1, 31 * 60_000L))))
-    }
-
-    @Test
-    fun `a focus session blocks whatever the hour`() {
-        val session = FocusSession("teams:t", "Statics Prep", null, 25, Fixtures.at("2026-10-09T23:00"))
-        assertEquals(BlockPolicy.Verdict.Block(BlockPolicy.Reason.Session), decide("2026-10-09T23:10", pressure = false, session = session))
-        assertEquals(BlockPolicy.Verdict.Allow(BlockPolicy.Reason.Quiet), decide("2026-10-09T23:30", session = session))
     }
 
     @Test
@@ -119,7 +120,7 @@ class BlockPolicyTest {
 
     @Test
     fun `testing from a PC can make it act as within blocking hours`() {
-        assertEquals(BlockPolicy.Verdict.Block(BlockPolicy.Reason.DueSoon), decide("2026-10-09T23:00", forceUntil = "2026-10-09T23:10"))
+        assertEquals(BlockPolicy.Verdict.Block(BlockPolicy.Reason.TodayUndone), decide("2026-10-09T23:00", forceUntil = "2026-10-09T23:10"))
     }
 }
 
@@ -146,7 +147,7 @@ class CreditTest {
 
     @Test
     fun `a minute of free time for three of work, a completion's capped at half an hour`() {
-        assertEquals(15.0, Credit.forSession(45, 3))
+        assertEquals(15.0, Credit.forSlot(45, 3))
         assertEquals(10.0, Credit.forCompletion(30, 3))
         assertEquals(30.0, Credit.forCompletion(300, 3))
         assertEquals(0.0, Credit.forCompletion(0, 3))

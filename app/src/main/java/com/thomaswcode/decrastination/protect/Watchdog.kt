@@ -23,7 +23,6 @@ import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.R
 import com.thomaswcode.decrastination.block.Blocklist
 import com.thomaswcode.decrastination.block.FocusService
-import com.thomaswcode.decrastination.block.Sessions
 import com.thomaswcode.decrastination.data.ProtectionRecord
 import com.thomaswcode.decrastination.data.ProtectionState
 import com.thomaswcode.decrastination.learn.Daily
@@ -255,8 +254,6 @@ class AdminReceiver : DeviceAdminReceiver() {
 class WatchdogWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
         AppGraph.get(applicationContext).applyDueChanges()
-        // A session whose time is up, should neither the focus service nor its alarm have ended it.
-        Sessions.end(applicationContext, early = false)
         Watchdog.check(applicationContext, repair = true)
         return Result.success()
     }
@@ -324,7 +321,6 @@ class BootReceiver : BroadcastReceiver() {
                 SyncWorker.schedule(context)
                 WatchdogWorker.schedule(context)
                 Daily.schedule(context)
-                Sessions.restore(context)
                 Watchdog.check(context, repair = true)
             } finally {
                 pending.finish()

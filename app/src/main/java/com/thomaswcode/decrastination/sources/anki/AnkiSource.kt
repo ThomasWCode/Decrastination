@@ -116,10 +116,10 @@ class AnkiSource(private val context: Context) : TaskSource {
         val unseen = HashMap<Long, Int>()
         val count = { deck: Deck -> unseen.getOrPut(deck.id) { AnkiProvider.unseenCards(resolver, deck.name) } }
         val textbook = context.settings.ankiTextbook
-        val homework = AnkiRules.homeworkDecks(decks, textbook, context.known, count, context.now, context.zone)
+        val homework = AnkiRules.homeworkDecks(decks, textbook, context.known, count, context.now, context.zone, context.ankiSecondsPerCard)
         val homeworkDecks = homework.filter { !it.done }.mapNotNull { it.extra[AnkiRules.EXTRA_DECK_ID]?.toLongOrNull() }.toSet()
         val reviewsOnly = AnkiRules.homeworkDueSoon(homework, context.now, context.zone)
-        val (quota, day) = AnkiRules.quota(decks, textbook, context.ankiDay, context.now, context.zone, context.settings.ankiDeadlineMin, homeworkDecks, reviewsOnly, count)
+        val (quota, day) = AnkiRules.quota(decks, textbook, context.ankiDay, context.now, context.zone, context.settings.ankiDeadlineMin, homeworkDecks, reviewsOnly, context.ankiSecondsPerCard, count)
         SourceRead(items = listOfNotNull(quota) + homework, ankiDay = day)
     }
 }

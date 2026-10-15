@@ -10,7 +10,13 @@ import kotlin.math.roundToLong
  * while a blocked app is in front. What's left at midnight is gone.
  */
 @Serializable
-data class Credit(val day: String = "", val earnedMs: Long = 0, val spentMs: Long = 0) {
+data class Credit(
+    val day: String = "",
+    val earnedMs: Long = 0,
+    val spentMs: Long = 0,
+    /** The day a day with nothing to do was given its free time (BL-07), so it's given once. */
+    val allowanceOn: String = "",
+) {
 
     val leftMs: Long get() = (earnedMs - spentMs).coerceAtLeast(0)
 
@@ -30,12 +36,12 @@ data class Credit(val day: String = "", val earnedMs: Long = 0, val spentMs: Lon
         if (past(today)) this else on(today).let { it.copy(spentMs = (it.spentMs + ms).coerceAtMost(it.earnedMs)) }
 
     companion object {
-        /** A finished focus session of [minutes] earns a third of them (with the default ratio). */
-        fun forSession(minutes: Int, workMinPerFreeMin: Int): Double = minutes.toDouble() / workMinPerFreeMin.coerceAtLeast(1)
+        /** A kept slot of [minutes] earns a third of them (with the default ratio), BL-08. */
+        fun forSlot(minutes: Int, workMinPerFreeMin: Int): Double = minutes.toDouble() / workMinPerFreeMin.coerceAtLeast(1)
 
         /**
          * A task the source confirms done earns its remaining estimate at the same rate, the work
-         * no session counted, up to 30 minutes (docs/scheduler.md §4's ceiling). There's no floor:
+         * no kept slot counted, up to 30 minutes (docs/scheduler.md §4's ceiling). There's no floor:
          * with one, archiving a pile of emails would earn five minutes each.
          */
         fun forCompletion(remainingMin: Int, workMinPerFreeMin: Int): Double =

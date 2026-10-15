@@ -48,7 +48,7 @@ import kotlinx.coroutines.launch
  * - **Free time**: while a blocked app is allowed on earned time, the time is spent, and it's
  *   blocked when that runs out.
  *
- * Besides: it ends focus sessions on time, offers the automatic Teams syncs (with their banner),
+ * Besides: it offers the automatic Teams syncs (with their banner),
  * applies pending setting changes when due, runs the watchdog's check, and, once protection is
  * armed, the settings guard (layer 2), which backs out of this app's own pages in Settings.
  */
@@ -154,13 +154,16 @@ class FocusService : AccessibilityService() {
 
     override fun onServiceConnected() {
         super.onServiceConnected()
+        // First: a new service has none till it's connected, and everything below reads it.
+        graph = AppGraph.get(this)
+        // A stretch in AnkiDroid begun before the service stopped is let go (NF-03).
+        graph.anki.reset()
         if (active) {
             Log.i(TAG, "Focus service connected again")
             return
         }
         active = true
         if (!scope.isActive) scope = newScope()
-        graph = AppGraph.get(this)
         labels = GuardRules.Labels(
             app = getString(R.string.app_name),
             service = getString(R.string.focus_service_label),
@@ -235,6 +238,8 @@ class FocusService : AccessibilityService() {
 
     /** [pkg] owns the window in use: block it, let it spend free time, or leave it. */
     private fun onFront(pkg: String, firstLook: Boolean) {
+        // AnkiDroid come or gone: the decks' counts read (NF-03).
+        graph.anki.seen(pkg)
         if (pkg == packageName) {
             // Time in this app isn't time on the blocked one, unless that's still on screen.
             stopSpendingUnlessAside()
@@ -287,7 +292,8 @@ class FocusService : AccessibilityService() {
         spending = target to SystemClock.elapsedRealtime()
         // Block again the moment it runs out.
         handler.removeCallbacks(creditCheck)
-        val left = graph.focus.creditLeftMs()
+        // Free time, or between slots till the next one starts (BL-10).
+        val left = graph.focus.spendableMs()
         handler.postDelayed(creditCheck, left.coerceIn(1_000L, SPEND_TICK_MS))
         shownEndsAt = 0L
         countdown(target, left)
@@ -321,7 +327,7 @@ class FocusService : AccessibilityService() {
     /** A minute of free time left, while it's still being spent: said once. More earned since, it's set again for the new end instead. */
     private val warnEnding: Runnable = Runnable {
         val (target, since) = spending ?: return@Runnable
-        val left = graph.focus.creditLeftMs() - (SystemClock.elapsedRealtime() - since)
+        val left = graph.focus.spendableMs(spentMs = SystemClock.elapsedRealtime() - since)
         if (left > FreeTimeNotice.WARN_MS + COUNTDOWN_SLACK_MS) {
             shownEndsAt = 0L
             return@Runnable countdown(target, left)
@@ -362,7 +368,7 @@ class FocusService : AccessibilityService() {
         // Taken off the blocklist meanwhile (a removal that fell due): no longer charged.
         if (!stillBlocked(target)) return@Runnable stopSpending()
         if (frontPackage() != packageOf(target) && !aside(target)) return@Runnable stopSpending()
-        val left = graph.focus.creditLeftMs() - (SystemClock.elapsedRealtime() - since)
+        val left = graph.focus.spendableMs(spentMs = SystemClock.elapsedRealtime() - since)
         val verdict = graph.focus.verdict()
         // Allowed outright now (quiet hours, a parent's unblock): free time isn't spent, nor is
         // anything covered when it would have run out.
@@ -690,9 +696,9 @@ class FocusService : AccessibilityService() {
         // being spent, its own check does this.)
         if (spending == null) lookAtScreen()
         scope.launch {
-            // A session that has run its time.
-            graph.focus.session?.takeIf { it.isDue(graph.clock.now(), graph.clock.uptime()) }?.let { Sessions.end(this@FocusService, early = false) }
             graph.applyDueChanges()
+            // A day with nothing to do starts with free time (BL-07), given once.
+            runCatching { graph.focus.grantAllowanceIfDue() }.onFailure { Log.w(TAG, "Giving the day's free time failed", it) }
             // A slot whose end went by while its alarm couldn't ring (PL-13).
             runCatching { graph.slots.sweep() }.onFailure { Log.w(TAG, "Looking at missed slots failed", it) }
             val now = SystemClock.elapsedRealtime()

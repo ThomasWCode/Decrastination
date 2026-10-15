@@ -49,7 +49,6 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.R
-import com.thomaswcode.decrastination.block.FocusSession
 import com.thomaswcode.decrastination.core.About
 import com.thomaswcode.decrastination.core.Chunk
 import com.thomaswcode.decrastination.core.DayBucket
@@ -142,7 +141,7 @@ fun TodayScreen(graph: AppGraph, activity: Activity) {
         item(key = "next") {
             val unread = Source.SYNCED.filter { tasks.status(it).lastSuccessAt == null }
             NextCard(
-                graph, activity, plan, runtime.session, zone, photo, ::messageOf, say,
+                graph, activity, plan, zone, photo, ::messageOf, say,
                 empty = when {
                     unread.isNotEmpty() -> "Nothing planned yet: ${unread.joinToString { it.label }} not read yet."
                     trouble.isNotEmpty() -> "Nothing planned, but not every source is up to date (above): there may be more."
@@ -312,15 +311,13 @@ private fun NextCard(
     graph: AppGraph,
     activity: Activity,
     plan: Plan,
-    session: FocusSession?,
     zone: ZoneId,
     photo: PhotoCheck,
     messageOf: (taskId: String, general: Boolean) -> String?,
     say: (taskId: String?, text: String) -> Unit,
     empty: String,
 ) {
-    // A session under way: the piece it's on, as the block screen shows it.
-    val next = session?.let { plan.pieceOf(it.taskId, it.stepIndex, it.step) } ?: plan.next
+    val next = plan.next
     val message = messageOf(next?.taskId.orEmpty(), true)
     Card(
         modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 12.dp),
@@ -328,9 +325,9 @@ private fun NextCard(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
     ) {
         Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (session != null) SessionLine(graph, session)
             if (next == null) {
                 Text("Nothing to do", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
+                graph.focus.rewardLine(plan)?.let { Text(it, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold) }
                 Text(empty, style = MaterialTheme.typography.bodyMedium)
                 message?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onPrimaryContainer) }
                 return@Column
@@ -338,7 +335,8 @@ private fun NextCard(
             Text("DO NOW", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
             Text(next.label, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
             Badges(next, plan.now, zone)
-            plan.then?.takeIf { session == null }?.let { Text("Then: ${it.label}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onPrimaryContainer) }
+            graph.focus.rewardLine(plan)?.let { Text(it, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onPrimaryContainer) }
+            plan.then?.let { Text("Then: ${it.label}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onPrimaryContainer) }
             PieceActions(graph, activity, next, plan.now, photo) { say(next.taskId, it) }
             message?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onPrimaryContainer) }
         }
@@ -354,24 +352,6 @@ private fun Badges(chunk: Chunk, now: Long, zone: ZoneId) {
         Pill(Format.minutes(chunk.minutes))
         Text(chunk.source.label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onPrimaryContainer)
     }
-}
-
-/** "Focus: Statics Prep, 12:34 left", by the clock that ends the session, every second. */
-@Composable
-private fun SessionLine(graph: AppGraph, session: FocusSession) {
-    val left by produceState(session.leftMs(graph.clock.now(), graph.clock.uptime()), session) {
-        while (true) {
-            value = session.leftMs(graph.clock.now(), graph.clock.uptime())
-            delay(1_000)
-        }
-    }
-    val seconds = (left / 1000).coerceAtLeast(0)
-    Text(
-        "Focus: ${session.label}, %d:%02d left".format(Locale.UK, seconds / 60, seconds % 60),
-        style = MaterialTheme.typography.titleMedium,
-        fontWeight = FontWeight.Bold,
-        color = MaterialTheme.colorScheme.primary,
-    )
 }
 
 /** A piece's actions, from a tap on it in the plan. */

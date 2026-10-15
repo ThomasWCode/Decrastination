@@ -198,7 +198,7 @@ fun TaskSheet(graph: AppGraph, activity: Activity, taskId: String, onClose: () -
                     own && task.isOpen -> {
                         Button(onClick = { scope.launch { graph.finishOwnTask(task.id) } }) { Text("Done") }
                         OutlinedButton(onClick = onEdit) { Text("Edit") }
-                        OutlinedButton(enabled = runtime.session?.taskId != task.id, onClick = { confirming = "delete" }) { Text("Delete") }
+                        OutlinedButton(onClick = { confirming = "delete" }) { Text("Delete") }
                     }
                     own -> {
                         Button(onClick = { scope.launch { graph.reopenOwnTask(task.id) } }) { Text("Not done") }
@@ -264,7 +264,7 @@ fun TaskSheet(graph: AppGraph, activity: Activity, taskId: String, onClose: () -
             confirmButton = {
                 TextButton(onClick = {
                     confirming = null
-                    scope.launch { if (!graph.deleteOwnTask(task.id)) message = "Stop its focus session first" }
+                    scope.launch { graph.deleteOwnTask(task.id) }
                 }) { Text("Delete") }
             },
             dismissButton = { TextButton(onClick = { confirming = null }) { Text("Cancel") } },
