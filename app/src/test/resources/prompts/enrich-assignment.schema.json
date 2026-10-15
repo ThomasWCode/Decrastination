@@ -1,0 +1,111 @@
+{
+    "type": "object",
+    "properties": {
+        "subSteps": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "title": {
+                        "type": "string"
+                    },
+                    "minutes": {
+                        "type": "integer",
+                        "description": "10 to 60 where the work allows; never over 240"
+                    },
+                    "ankiSections": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "description": "Only for a step that is nothing but learning numbered vocabulary sections"
+                    },
+                    "where": {
+                        "type": "string",
+                        "enum": [
+                            "anywhere",
+                            "home"
+                        ],
+                        "description": "home for a step that needs the laptop, books or quiet; anywhere for one that can be done at school in a free period"
+                    },
+                    "from": {
+                        "anyOf": [
+                            {
+                                "type": "string",
+                                "format": "date"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "description": "The date before which this step can't be done, only if the text gives one; never after the task's due date"
+                    },
+                    "due": {
+                        "anyOf": [
+                            {
+                                "type": "string",
+                                "description": "Local date and time, YYYY-MM-DDTHH:MM, or the date alone, YYYY-MM-DD"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    }
+                },
+                "required": [
+                    "title",
+                    "minutes",
+                    "ankiSections",
+                    "where",
+                    "from",
+                    "due"
+                ],
+                "additionalProperties": false
+            }
+        },
+        "effortMin": {
+            "type": "integer",
+            "description": "The sum of the steps' minutes"
+        },
+        "ankiSections": {
+            "type": "array",
+            "items": {
+                "type": "string"
+            }
+        },
+        "testDate": {
+            "anyOf": [
+                {
+                    "type": "string",
+                    "format": "date"
+                },
+                {
+                    "type": "null"
+                }
+            ]
+        },
+        "question": {
+            "anyOf": [
+                {
+                    "type": "string"
+                },
+                {
+                    "type": "null"
+                }
+            ]
+        },
+        "reason": {
+            "type": "string",
+            "description": "The phrase in the text that gave the deadline, kind or test date, quoted, under 160 characters; empty if none did"
+        }
+    },
+    "required": [
+        "subSteps",
+        "effortMin",
+        "ankiSections",
+        "testDate",
+        "question",
+        "reason"
+    ],
+    "additionalProperties": false
+}

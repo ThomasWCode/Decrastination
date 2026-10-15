@@ -1,0 +1,58 @@
+{
+    "type": "object",
+    "properties": {
+        "message": {
+            "type": "string"
+        },
+        "replies": {
+            "type": "array",
+            "items": {
+                "type": "string"
+            }
+        },
+        "nextCheckMin": {
+            "anyOf": [
+                {
+                    "type": "integer"
+                },
+                {
+                    "type": "null"
+                }
+            ]
+        },
+        "memories": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "topic": {
+                        "type": "string"
+                    },
+                    "text": {
+                        "type": "string"
+                    },
+                    "kind": {
+                        "type": "string",
+                        "enum": [
+                            "fact",
+                            "rule"
+                        ]
+                    }
+                },
+                "required": [
+                    "topic",
+                    "text",
+                    "kind"
+                ],
+                "additionalProperties": false
+            }
+        }
+    },
+    "required": [
+        "message",
+        "replies",
+        "nextCheckMin",
+        "memories"
+    ],
+    "additionalProperties": false
+}

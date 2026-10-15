@@ -1,0 +1,389 @@
+{
+    "type": "object",
+    "properties": {
+        "reply": {
+            "type": "string"
+        },
+        "newTasks": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "title": {
+                        "type": "string"
+                    },
+                    "kind": {
+                        "type": "string",
+                        "enum": [
+                            "Homework",
+                            "Revision",
+                            "Admin",
+                            "Event"
+                        ]
+                    },
+                    "subject": {
+                        "type": "string"
+                    },
+                    "dueDate": {
+                        "anyOf": [
+                            {
+                                "type": "string",
+                                "format": "date"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    },
+                    "dueTime": {
+                        "anyOf": [
+                            {
+                                "type": "string",
+                                "description": "HH:MM, 24-hour"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    },
+                    "startDate": {
+                        "anyOf": [
+                            {
+                                "type": "string",
+                                "format": "date"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    },
+                    "minutes": {
+                        "type": "integer"
+                    },
+                    "notes": {
+                        "type": "string"
+                    },
+                    "steps": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "title": {
+                                    "type": "string"
+                                },
+                                "minutes": {
+                                    "type": "integer"
+                                },
+                                "startDate": {
+                                    "anyOf": [
+                                        {
+                                            "type": "string",
+                                            "format": "date"
+                                        },
+                                        {
+                                            "type": "null"
+                                        }
+                                    ]
+                                },
+                                "dueDate": {
+                                    "anyOf": [
+                                        {
+                                            "type": "string",
+                                            "format": "date"
+                                        },
+                                        {
+                                            "type": "null"
+                                        }
+                                    ]
+                                }
+                            },
+                            "required": [
+                                "title",
+                                "minutes",
+                                "startDate",
+                                "dueDate"
+                            ],
+                            "additionalProperties": false
+                        }
+                    }
+                },
+                "required": [
+                    "title",
+                    "kind",
+                    "subject",
+                    "dueDate",
+                    "dueTime",
+                    "startDate",
+                    "minutes",
+                    "notes",
+                    "steps"
+                ],
+                "additionalProperties": false
+            }
+        },
+        "changes": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "type": {
+                        "type": "string",
+                        "enum": [
+                            "NotATask",
+                            "StartFrom",
+                            "After",
+                            "DueBy",
+                            "Minutes",
+                            "EventTime",
+                            "DayLimit",
+                            "BusyTime",
+                            "NoSchool",
+                            "HalfDay",
+                            "OnDay",
+                            "AtTime",
+                            "Steps",
+                            "SameAs"
+                        ]
+                    },
+                    "taskId": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    },
+                    "afterTaskId": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    },
+                    "eventKey": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    },
+                    "eventTime": {
+                        "anyOf": [
+                            {
+                                "type": "string",
+                                "enum": [
+                                    "free",
+                                    "busy",
+                                    "hours"
+                                ]
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    },
+                    "minutes": {
+                        "anyOf": [
+                            {
+                                "type": "integer"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    },
+                    "date": {
+                        "anyOf": [
+                            {
+                                "type": "string",
+                                "format": "date"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    },
+                    "endDate": {
+                        "anyOf": [
+                            {
+                                "type": "string",
+                                "format": "date"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    },
+                    "weekday": {
+                        "anyOf": [
+                            {
+                                "type": "string",
+                                "enum": [
+                                    "Monday",
+                                    "Tuesday",
+                                    "Wednesday",
+                                    "Thursday",
+                                    "Friday",
+                                    "Saturday",
+                                    "Sunday"
+                                ]
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    },
+                    "time": {
+                        "anyOf": [
+                            {
+                                "type": "string",
+                                "description": "HH:MM, 24-hour"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    },
+                    "endTime": {
+                        "anyOf": [
+                            {
+                                "type": "string",
+                                "description": "HH:MM, 24-hour"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    },
+                    "steps": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "title": {
+                                    "type": "string"
+                                },
+                                "minutes": {
+                                    "type": "integer"
+                                },
+                                "startDate": {
+                                    "type": "string"
+                                },
+                                "dueDate": {
+                                    "type": "string"
+                                },
+                                "where": {
+                                    "type": "string",
+                                    "enum": [
+                                        "anywhere",
+                                        "home"
+                                    ]
+                                }
+                            },
+                            "required": [
+                                "title",
+                                "minutes",
+                                "startDate",
+                                "dueDate",
+                                "where"
+                            ],
+                            "additionalProperties": false
+                        }
+                    }
+                },
+                "required": [
+                    "type",
+                    "taskId",
+                    "afterTaskId",
+                    "eventKey",
+                    "eventTime",
+                    "minutes",
+                    "date",
+                    "endDate",
+                    "weekday",
+                    "time",
+                    "endTime",
+                    "steps"
+                ],
+                "additionalProperties": false
+            }
+        },
+        "memories": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "topic": {
+                        "type": "string"
+                    },
+                    "text": {
+                        "type": "string"
+                    },
+                    "kind": {
+                        "type": "string",
+                        "enum": [
+                            "fact",
+                            "rule"
+                        ]
+                    }
+                },
+                "required": [
+                    "topic",
+                    "text",
+                    "kind"
+                ],
+                "additionalProperties": false
+            }
+        },
+        "suggestedReplies": {
+            "type": "array",
+            "items": {
+                "type": "string"
+            }
+        },
+        "actions": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "type": {
+                        "type": "string",
+                        "enum": [
+                            "tickStep",
+                            "open"
+                        ]
+                    },
+                    "taskId": {
+                        "type": "string"
+                    },
+                    "stepIndex": {
+                        "type": "integer"
+                    }
+                },
+                "required": [
+                    "type",
+                    "taskId",
+                    "stepIndex"
+                ],
+                "additionalProperties": false
+            }
+        }
+    },
+    "required": [
+        "reply",
+        "newTasks",
+        "changes",
+        "memories",
+        "suggestedReplies",
+        "actions"
+    ],
+    "additionalProperties": false
+}

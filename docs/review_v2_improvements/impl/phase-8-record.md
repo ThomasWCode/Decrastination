@@ -102,6 +102,8 @@ Items: LR-01, LR-02, LR-06, LR-08, PL-08, PL-09, PL-10, PL-11, NF-02, AC-06, AC-
 
 **Steps.** Render every system prompt (`Prompts.system` × jobs + limits + examples, `ChatPrompts.SYSTEM`, `InstructionPrompts.SYSTEM`, `PhotoChecker.SYSTEM`, `ReviewInput.SYSTEM`, `FelixPrompts.system`, `MicroPlans.SYSTEM`, `PhotoTasks.SYSTEM`, `SummaryPrompts.SYSTEM`, `MemoryTidy.SYSTEM`, the profile block for fixture settings) and every schema (as JSON) with fixed inputs; compare to the resource files; on mismatch print a unified diff and fail; with `-PupdateGolden=true` (read `System.getProperty("updateGolden")`, passed through `build.gradle.kts`'s `tasks.withType<Test> { systemProperty(...) }`) rewrite them. A second test asserts `Prompts.VERSION` changed whenever any golden file differs from git's `HEAD` version (read via `git show HEAD:path` through `ProcessBuilder`; skip when git isn't available).
 
+*(As built: the version test asks only of the copies a reading is made by (the three jobs' prompts and schemas, `enrich-*`, and the profile), since `Prompts.VERSION` is theirs: a reading made by older ones is made again, a paid call a task, which a change to the chat's prompt doesn't call for. It compares what's made now with HEAD's copies, so it holds in the run that writes them again too. A copy new since HEAD has nothing to compare with.)*
+
 ---
 
 ## AR-02 A scored eval run

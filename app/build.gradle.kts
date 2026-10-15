@@ -60,6 +60,11 @@ android {
     }
 }
 
+// The golden prompts written again (AR-01, GoldenPromptsTest): ./gradlew testDebugUnitTest -PupdateGolden=true
+tasks.withType<Test>().configureEach {
+    systemProperty("updateGolden", providers.gradleProperty("updateGolden").getOrElse("false"))
+}
+
 dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.exifinterface)

@@ -1,0 +1,91 @@
+{
+    "type": "object",
+    "properties": {
+        "tasks": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "title": {
+                        "type": "string"
+                    },
+                    "subject": {
+                        "type": "string"
+                    },
+                    "dueDate": {
+                        "type": "string"
+                    },
+                    "dueTime": {
+                        "type": "string"
+                    },
+                    "instructions": {
+                        "type": "string"
+                    },
+                    "minutes": {
+                        "type": "integer"
+                    },
+                    "where": {
+                        "type": "string",
+                        "enum": [
+                            "anywhere",
+                            "home"
+                        ]
+                    },
+                    "steps": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "title": {
+                                    "type": "string"
+                                },
+                                "minutes": {
+                                    "type": "integer"
+                                },
+                                "where": {
+                                    "type": "string",
+                                    "enum": [
+                                        "anywhere",
+                                        "home"
+                                    ]
+                                }
+                            },
+                            "required": [
+                                "title",
+                                "minutes",
+                                "where"
+                            ],
+                            "additionalProperties": false
+                        }
+                    }
+                },
+                "required": [
+                    "title",
+                    "subject",
+                    "dueDate",
+                    "dueTime",
+                    "instructions",
+                    "minutes",
+                    "where",
+                    "steps"
+                ],
+                "additionalProperties": false
+            }
+        },
+        "question": {
+            "anyOf": [
+                {
+                    "type": "string"
+                },
+                {
+                    "type": "null"
+                }
+            ]
+        }
+    },
+    "required": [
+        "tasks",
+        "question"
+    ],
+    "additionalProperties": false
+}
