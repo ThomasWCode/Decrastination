@@ -91,7 +91,12 @@ data class Chunk(
     val why: Why,
     /** Where it can be done (PL-15): anywhere, a free period at school included, or only at home. */
     val where: Where = Where.Anywhere,
+    /** Its deadline is a real one (PL-14), which its slot on the deadline's day keeps before (PL-12). */
+    val hard: Boolean = false,
 ) {
+    /** Which piece it is, across replans (PL-12): its task, its step's place, its part. */
+    val key: String get() = "$taskId#${stepIndex ?: -1}#$part"
+
     val label: String get() = step?.let { "$title: $it" } ?: title
 
     /** [why] as its sheet says it, from [today]: "Spread over the 12 days to its deadline". */
@@ -127,8 +132,27 @@ data class Chunk(
     val photoCheckable: Boolean get() = kind == Kind.Homework && source != Source.Anki
 }
 
-data class DayBucket(val date: LocalDate, val capacityMin: Int, val chunks: List<Chunk>) {
+data class DayBucket(
+    val date: LocalDate,
+    val capacityMin: Int,
+    val chunks: List<Chunk>,
+    /** Its pieces at their times, and outside breaks (PL-12): on a day with windows. */
+    val slots: List<Slot> = emptyList(),
+    /** Its pieces no free time holds whole, in order. */
+    val unslotted: List<Chunk> = emptyList(),
+) {
     val plannedMin: Int get() = chunks.sumOf { it.minutes }
+
+    /** [chunk]'s slot on the day, if it has one. */
+    fun slotOf(chunk: Chunk): Slot? = slots.firstOrNull { it.kind == SlotKind.Work && it.chunk?.key == chunk.key }
+}
+
+/** What a slot holds (PL-12): a piece of work, or a break outside. */
+enum class SlotKind { Work, Outside }
+
+/** A time on a day (PL-12): a piece's, or an outside break's; [pinned] where you put it. Epoch millis. */
+data class Slot(val kind: SlotKind, val chunk: Chunk?, val start: Long, val end: Long, val window: WindowKind, val pinned: Boolean) {
+    val key: String get() = chunk?.key ?: "outside:$start"
 }
 
 /**
@@ -196,10 +220,27 @@ data class Plan(
      * The single next thing to do: the first chunk that can be started now, today's before the
      * nearest day's; if none can, the first.
      */
-    val next: Chunk? get() = ordered.firstOrNull { it.startable(now) } ?: ordered.firstOrNull()
+    val next: Chunk? get() = slotAt(now)?.chunk ?: nextSlot(now)?.chunk ?: ordered.firstOrNull { it.startable(now) } ?: ordered.firstOrNull()
 
-    /** And the one after it, chosen the same way. */
-    val then: Chunk? get() = next?.let { first -> ordered.filter { it !== first }.let { rest -> rest.firstOrNull { it.startable(now) } ?: rest.firstOrNull() } }
+    /** And the one after it: the next slot's, or chosen as [next] is. */
+    val then: Chunk?
+        get() {
+            val first = next ?: return null
+            val slots = todaySlots.filter { it.kind == SlotKind.Work } + tomorrowBucket?.slots.orEmpty().filter { it.kind == SlotKind.Work }
+            val at = slots.indexOfFirst { it.chunk == first }
+            if (at >= 0) slots.getOrNull(at + 1)?.chunk?.let { return it }
+            return ordered.filter { it !== first && it != first }.let { rest -> rest.firstOrNull { it.startable(now) } ?: rest.firstOrNull() }
+        }
+
+    /** Today's slots, work and outside (PL-12). */
+    val todaySlots: List<Slot> get() = todayBucket?.slots.orEmpty()
+
+    /** Today's work slot at [time], if one is under way. */
+    fun slotAt(time: Long): Slot? = todaySlots.firstOrNull { it.kind == SlotKind.Work && time >= it.start && time < it.end }
+
+    /** The first work slot today at or after [time], else tomorrow's first. */
+    fun nextSlot(time: Long): Slot? =
+        todaySlots.firstOrNull { it.kind == SlotKind.Work && it.start >= time } ?: tomorrowBucket?.slots.orEmpty().firstOrNull { it.kind == SlotKind.Work }
 
     fun chunksOf(taskId: String): List<Chunk> = ordered.filter { it.taskId == taskId }
 

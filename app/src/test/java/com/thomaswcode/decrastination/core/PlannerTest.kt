@@ -25,7 +25,8 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class PlannerTest {
-    private val settings = Settings()
+    // The box these tests were written for (30 since PL-12).
+    private val settings = Settings(boxMin = 45)
 
     private fun task(
         id: String,
@@ -738,6 +739,26 @@ class PlannerTest {
 
     private fun windowed(tasks: List<TaskItem>, at: String, windows: Map<LocalDate, List<DayWindow>> = mapOf(tuesday to schoolDay), busy: List<Busy> = emptyList()) =
         Planner.Input(tasks, Fixtures.at(at), LONDON, settings, busy = busy, windows = windows)
+
+    @Test
+    fun `a day with windows has each piece at a time, the next being the slot under way or the one after`() {
+        // Tuesday 16:50, two half hours for home due tomorrow night: tonight from 16:50, a break between.
+        val tasks = listOf(task("a", Fixtures.at("2026-10-14T23:59"), effort = 30), task("b", Fixtures.at("2026-10-14T23:59"), effort = 30))
+        val plan = Planner.plan(windowed(tasks, "2026-10-13T16:50"))
+        val slots = plan.todayBucket!!.slots
+        fun hm(time: Long) = java.time.Instant.ofEpochMilli(time).atZone(LONDON).toLocalTime().toString()
+        assertEquals(listOf("16:50–17:20", "17:25–17:55"), slots.map { hm(it.start) + "–" + hm(it.end) })
+        assertEquals(slots[0].chunk, plan.next)
+        assertEquals(slots[1].chunk, plan.then)
+        // At 17:05, with the first under way where the last plan put it: still the next, and kept there.
+        val starts = slots.associate { it.chunk!!.key to it.start }
+        val later = Planner.plan(windowed(tasks, "2026-10-13T17:05").copy(previousSlots = starts))
+        assertEquals(slots.map { it.start }, later.todaySlots.map { it.start })
+        assertEquals(slots[0].chunk!!.key, later.next!!.key)
+        assertEquals(slots[1].chunk!!.key, later.then!!.key)
+        // Without windows, no slots: the day's pieces in order, as before.
+        assertTrue(Planner.plan(windowed(tasks, "2026-10-13T16:50", windows = emptyMap())).todayBucket!!.slots.isEmpty())
+    }
 
     @Test
     fun `capacity sums a day's windows, the evening's being what home work has`() {

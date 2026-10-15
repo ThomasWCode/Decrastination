@@ -20,7 +20,7 @@ The implementation of `docs/review_v2_improvements/impl/` on branch `v3`. Delete
 
 - Pull request #35: Codex round 1 (5 P2: the input hash without attachments, "all shown", a long conversation never finishing, RFC 2231 names, alike attachments merged) fixed in 88afeab; round 2 (1 P2: the prompt claimed the oldest message is shown whole) fixed in b3653f8, with the first message read (not the conversation's first) keeping its quotes. One P2 or fewer, so the loop ended; CI green; the final build on the phone (23:46, a sync with no FETCH); merged.
 
-### Phase 2
+### Phase 2: merged as #36 (09b5ee6), 15 Oct
 
 `impl/phase-2-spread.md`:
 
@@ -38,20 +38,21 @@ The implementation of `docs/review_v2_improvements/impl/` on branch `v3`. Delete
 
 ### Phase 3
 
-`impl/phase-3-slots.md`, begun on a local branch (`v3-phase3`) while #36 was reviewed:
+`impl/phase-3-slots.md`, begun on a local branch (`v3-phase3`) while #36 was reviewed, and moved onto its merge:
 
-- DX-09 the timetable kept with the tasks, and a day's lessons: 7655ad0.
-- PL-16 the school calendar (days off, half-days) from the chat or Settings: 67e1685.
-- PL-15 a school day's time as windows, work for home kept to the evening: this commit. 50 000 property seeds pass with windows and where drawn.
+- DX-09 the timetable kept with the tasks, and a day's lessons: 37e67f1.
+- PL-16 the school calendar (days off, half-days) from the chat or Settings: 160de65.
+- PL-15 a school day's time as windows, work for home kept to the evening: 00bfacc. 50 000 property seeds pass with windows and where drawn.
+- PL-12 every piece at a time, breaks between, outside breaks on free days (`core/Slotter.kt`): this commit. 50 000 property seeds pass with the slots checked, and again with pins and the last plan's starts drawn.
 
 ## Current
 
-Phase 2: the pull request and Codex's review.
+Phase 3: PL-04 (pins) next.
 
 ## Outstanding
 
-- Phase 2: the pull request, its review and merge.
-- Phases 3 to 8.
+- Phase 3: PL-04, PL-13, NF-07 (with DX-12, DX-13), an eval round for the Assignment job's `where`, the phone, the pull request.
+- Phases 4 to 8.
 
 ## For the owner (deferred: you weren't live)
 

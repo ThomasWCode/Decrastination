@@ -180,11 +180,13 @@ fun TodayScreen(graph: AppGraph, activity: Activity) {
             val shown = if (more && day !in whole) rows.take(PER_DAY) else rows
             val tiles = shown.size + if (more) 1 else 0
             itemsIndexed(shown, key = { _, it -> "$day-${it.taskId}" }) { index, row ->
+                // Each piece's time on the day (PL-12), where it has one.
+                val time = { chunk: Chunk -> bucket.slotOf(chunk)?.let { Format.span(it.start, it.end, zone) } }
                 if (row.pieces.size == 1) {
-                    ChunkTile(row.first, index, tiles, plan.now, zone) { sheetFor = keyOf(row.first) }
+                    ChunkTile(row.first, time(row.first), index, tiles, plan.now, zone) { sheetFor = row.first.key }
                 } else {
                     val key = "$day|${row.taskId}"
-                    TaskRowTile(row, index, tiles, plan.now, zone, key in opened, { opened = opened.toggle(key) }) { sheetFor = keyOf(it) }
+                    TaskRowTile(row, time, index, tiles, plan.now, zone, key in opened, { opened = opened.toggle(key) }) { sheetFor = it.key }
                 }
             }
             if (more) {
@@ -233,7 +235,7 @@ fun TodayScreen(graph: AppGraph, activity: Activity) {
 
     // A piece's actions, as the block screen has them, without opening a blocked app first.
     sheetFor?.let { key ->
-        val chunk = plan.ordered.firstOrNull { keyOf(it) == key }
+        val chunk = plan.ordered.firstOrNull { it.key == key }
         if (chunk == null) {
             // Done, or planned again: nothing to act on.
             LaunchedEffect(key) { sheetFor = null }
@@ -249,9 +251,6 @@ fun TodayScreen(graph: AppGraph, activity: Activity) {
 
 private const val MESSAGE_MS = 20_000L
 private const val NOT_PLANNED = "not-planned"
-
-/** A piece told apart from every other in the plan: its task, its place, its step. */
-private fun keyOf(chunk: Chunk) = "${chunk.taskId}#${chunk.part}#${chunk.stepIndex}#${chunk.step}"
 
 /** Something that makes the plan less than the whole picture, and where it's put right. */
 private data class Trouble(val text: String, val fix: Fix) {
@@ -473,7 +472,7 @@ private fun DayHeader(bucket: DayBucket, today: LocalDate, expanded: Boolean, on
  * together, opening ([expanded]) into the pieces, each of which opens its actions ([onPiece]).
  */
 @Composable
-private fun TaskRowTile(row: TaskRow, index: Int, count: Int, now: Long, zone: ZoneId, expanded: Boolean, onToggle: () -> Unit, onPiece: (Chunk) -> Unit) {
+private fun TaskRowTile(row: TaskRow, timeOf: (Chunk) -> String?, index: Int, count: Int, now: Long, zone: ZoneId, expanded: Boolean, onToggle: () -> Unit, onPiece: (Chunk) -> Unit) {
     val first = row.first
     ListTile(index, count, onToggle) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -513,7 +512,11 @@ private fun TaskRowTile(row: TaskRow, index: Int, count: Int, now: Long, zone: Z
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis,
                         )
-                        Text(Format.minutes(piece.minutes), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(
+                            listOfNotNull(timeOf(piece), Format.minutes(piece.minutes)).joinToString(" · "),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
                 }
             }
@@ -522,7 +525,7 @@ private fun TaskRowTile(row: TaskRow, index: Int, count: Int, now: Long, zone: Z
 }
 
 @Composable
-private fun ChunkTile(chunk: Chunk, index: Int, count: Int, now: Long, zone: ZoneId, onClick: () -> Unit) {
+private fun ChunkTile(chunk: Chunk, time: String?, index: Int, count: Int, now: Long, zone: ZoneId, onClick: () -> Unit) {
     ListTile(index, count, onClick) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             // Urgent work marked down its edge, to be picked out at a glance.
@@ -533,7 +536,7 @@ private fun ChunkTile(chunk: Chunk, index: Int, count: Int, now: Long, zone: Zon
             Column(Modifier.weight(1f)) {
                 Text(chunk.label, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Text(
-                    "${WidgetModel.badge(chunk, now, zone)} · ${chunk.source.label}",
+                    listOfNotNull(time, WidgetModel.badge(chunk, now, zone), chunk.source.label).joinToString(" · "),
                     style = MaterialTheme.typography.bodySmall,
                     color = if (chunk.urgent) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
                 )

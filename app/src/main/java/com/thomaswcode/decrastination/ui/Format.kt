@@ -13,6 +13,10 @@ object Format {
     private val WEEKDAY = DateTimeFormatter.ofPattern("EEE HH:mm", Locale.UK)
     private val DATE = DateTimeFormatter.ofPattern("EEE d MMM HH:mm", Locale.UK)
 
+    /** A slot's time on its day (PL-12): "17:00–17:30". */
+    fun span(start: Long, end: Long, zone: ZoneId): String =
+        Instant.ofEpochMilli(start).atZone(zone).format(TIME) + "–" + Instant.ofEpochMilli(end).atZone(zone).format(TIME)
+
     /** "today 23:59", "tomorrow 08:30", "Fri 09:00" within a week, else "Mon 12 Oct 11:00". */
     fun at(time: Long, now: Long, zone: ZoneId): String {
         val then = Instant.ofEpochMilli(time).atZone(zone)
