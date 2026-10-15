@@ -6,12 +6,12 @@ Things the app doesn't do that would be useful, judged against what it's for: a 
 
 | ID | Feature | Priority | Effort | Status |
 |---|---|---|---|---|
-| NF-01 | A photo of a worksheet or the board becomes a task, or informs one | P1 | M | Changed (Q-22) |
+| NF-01 | A photo of a worksheet or the board becomes a task, or informs one | P1 | M | Changed (Q-22); Implemented (v3 phase 7) |
 | NF-02 | A weekly summary in the email itself, sent to your dad, with a Sunday reminder | P1 | M | Changed (Q-24, Q-33) |
 | NF-03 | Anki work counted from the deck's counts, without pressing anything | P2 | M | Changed (Q-23, note 1); Implemented (v3 phase 4) |
 | NF-04 | Exam season: revision plans per subject from the exam dates | – | L | Deferred (Q-27) |
 | NF-05 | Recurring work and weekly-minutes goals | – | M | Deferred (Q-27) |
-| NF-06 | Returned work with feedback becomes a short task | P2 | S | – |
+| NF-06 | Returned work with feedback becomes a short task | P2 | S | –; Implemented here (v3 phase 7); the widget's half waits for captures of returned work |
 | NF-07 | Every slot written to your Google Calendar, adjusted live | P1 | M | Changed (note 2); confirmed (Q-39); Implemented (v3 phase 3) |
 | NF-08 | Streaks and a weekly target | – | – | Withdrawn (Q-25) |
 

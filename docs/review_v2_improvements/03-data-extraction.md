@@ -9,20 +9,20 @@ Revised after your answers: Gmail becomes starred-only (Q-04), which removes thr
 | ID | Improvement | Priority | Effort | Status |
 |---|---|---|---|---|
 | DX-01 | Attachment names and types, from the structure already fetched | P1 | S | Implemented (v3 phase 1) |
-| DX-02 | Calendar invites in emails (`text/calendar`) as events | P3 | M | – |
+| DX-02 | Calendar invites in emails (`text/calendar`) as events | P3 | M | –; Implemented (v3 phase 7) |
 | DX-03 | Read only starred emails, and every starred email is a task | P1 | M | Changed (Q-04); Implemented (v3 phase 1, whole conversations) |
 | DX-04 | Bulk-mail headers as a hint | – | – | Withdrawn (Q-04) |
 | DX-05 | Sender rules | – | – | Withdrawn (Q-11) |
 | DX-06 | Strip quoted replies and signatures before the model sees them | P2 | S | Implemented (v3 phase 1) |
 | DX-07 | The sync after starred-only: the Starred folder, flags for the known | P1 | S | Changed; Implemented (v3 phase 1) |
-| DX-08 | Teams: the instructions' links and attachments | P2 | S | – |
+| DX-08 | Teams: the instructions' links and attachments | P2 | S | –; Implemented (v3 phase 7; the widget's half in TeamsAssignmentsWidget #15) |
 | DX-09 | Power Planner: the timetable, for free periods, lessons and the school day | P1 | M | Changed (Q-12); Implemented (v3 phase 3) |
-| DX-10 | Anki: deck descriptions, so topic-named homework finds its deck | P2 | S | – |
+| DX-10 | Anki: deck descriptions, so topic-named homework finds its deck | P2 | S | –; Implemented (v3 phase 7) |
 | DX-11 | Anki: seconds per card from the counts around a slot | P2 | M | Changed (note 1); Implemented (v3 phase 4) |
 | DX-12 | Calendar: location and description for the event judge and the Day view | P2 | S | Implemented (v3 phase 3: read, an optional or tentative event asked about; the Day view with UI-17) |
 | DX-13 | Calendar: choose which calendars count | P1 | S | Implemented (v3 phase 3) |
 | DX-14 | Calendar: look as far ahead as the planner plans | P1 | S | Changed (now needed); Implemented (v3 phase 2) |
-| DX-15 | The same work from two sources | P2 | M | – |
+| DX-15 | The same work from two sources | P2 | M | –; Implemented (v3 phase 7) |
 
 ---
 
