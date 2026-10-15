@@ -99,12 +99,15 @@ object Review {
             is AppGraph.Called.Answered -> called.value
         }
         val answer = result.answer ?: return Outcome(why = if (result.refused) "Claude declined to review it" else "Claude's answer couldn't be used")
-        val changes = answer.changes.filter(ReviewInput::allowed)
+        val settings = graph.settings.value
+        val changes = answer.changes.filter { ReviewInput.allowed(it, settings) }
+        // What each was, kept with the review (AI-18, LR-01): next week's reads it, and its page undoes it.
+        val before = changes.mapNotNull { c -> ReviewInput.valueOf(settings, c.setting)?.let { c.setting to it } }.toMap()
         // At once, armed or not (your call, 11 Oct); laid over what's been asked for, so a change
         // waiting for another setting keeps its wait.
         if (changes.isNotEmpty()) graph.applyReviewChanges(changes)
         val note = answer.note.ifEmpty { listOf("No note this week.") }
-        return Outcome(WeeklyReview(now, note + changeLines(changes, graph.settings.value), by = result.model ?: reviewer.model))
+        return Outcome(WeeklyReview(now, note + changeLines(changes, graph.settings.value), by = result.model ?: reviewer.model, changes = changes, settingsBefore = before))
     }
 
     /**

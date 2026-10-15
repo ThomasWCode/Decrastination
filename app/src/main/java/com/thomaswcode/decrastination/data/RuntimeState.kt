@@ -276,6 +276,9 @@ data class WeeklyReview(
     val why: String? = null,
     /** What's remembered before and after the week's tidy, when there was one (AI-21): for the Reviews page to show, and undo. */
     val memoryTidy: MemoryTidyRecord? = null,
+    /** The changes it made to the settings (AI-18, LR-01), and each one's value before: next week's review reads them, and the Reviews page undoes them. */
+    val changes: List<com.thomaswcode.decrastination.learn.ReviewInput.Change> = emptyList(),
+    val settingsBefore: Map<String, Int> = emptyMap(),
 )
 
 /**

@@ -405,7 +405,8 @@ class AppGraph private constructor(context: Context) {
         applyDue(force = true)
         val state = runtime.value
         // The settings it names: one it sets to the value already asked for applies now all the same.
-        val fields = changes.map { it.setting }.filter { it in com.thomaswcode.decrastination.learn.ReviewInput.BOUNDS }.toSet()
+        val bounds = com.thomaswcode.decrastination.learn.ReviewInput.bounds(settings.value)
+        val fields = changes.map { it.setting }.filter { it in bounds }.map(com.thomaswcode.decrastination.learn.ReviewInput::fieldOf).toSet()
         val outcome = SettingsChanges.atOnce(settings.value, state.pending, fields) { com.thomaswcode.decrastination.learn.ReviewInput.apply(it, changes) }
         runtime.update { it.copy(pending = outcome.pending, uptimeMark = if (outcome.pending.isEmpty()) null else it.uptimeMark) }
         settings.update { outcome.settings }
