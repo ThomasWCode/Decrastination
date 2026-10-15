@@ -1413,5 +1413,18 @@ class PlannerTest {
         val event = task("event", Fixtures.at("2026-10-20T09:00"), kind = Kind.Event, available = Fixtures.at("2026-10-15T00:00"))
         assertTrue(plan(listOf(notATask, event), "2026-10-08T17:00").unplanned.isEmpty())
     }
-}
 
+    @Test
+    fun `a time for a task's next piece is kept only from when it can start, before its real deadline`() {
+        val due = Fixtures.at("2026-10-12T17:00")
+        val task = TaskItem(
+            id = "teams:t", source = Source.Teams, sourceId = "t", title = "t", dueAt = due, kind = Kind.Homework,
+            sourceEffortMin = 30, firstSeenAt = Fixtures.at("2026-10-12T08:00"), lastSeenAt = Fixtures.at("2026-10-12T08:00"),
+        )
+        val now = Fixtures.at("2026-10-12T09:00")
+        assertNull(Planner.pinProblem(task, Fixtures.at("2026-10-12T16:00"), now, LONDON))
+        assertEquals(Planner.PinProblem.PastDeadline, Planner.pinProblem(task, Fixtures.at("2026-10-12T17:00"), now, LONDON))
+        assertEquals(Planner.PinProblem.NotYet, Planner.pinProblem(task.copy(notBefore = Fixtures.at("2026-10-12T15:00")), Fixtures.at("2026-10-12T14:00"), now, LONDON))
+        assertEquals(Planner.PinProblem.DayGone, Planner.pinProblem(task, Fixtures.at("2026-10-11T16:00"), now, LONDON))
+    }
+}

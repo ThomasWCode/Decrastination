@@ -60,6 +60,8 @@ class WidgetModelTest {
         assertEquals("${Format.span(slot.start, slot.end, LONDON)} · essay", model.headline)
         assertEquals(slot.chunk!!.key, model.key)
         assertEquals("Today: 1 of 2 kept, 30 min left", model.summary)
+        // Gone by but in its grace, it's still to tick: counted, with nothing left.
+        assertEquals("Today: 1 of 2 kept, nothing left", WidgetModel.day(plan.copy(now = slot.end + 60_000L), listOf(kept)))
         // With no slot today, kept or to come, the count is of tasks as before.
         val unslotted = Planner.plan(Planner.Input(listOf(task("essay", "2026-10-09T23:59", effort = 30)), now, LONDON, Settings()))
         assertNull(WidgetModel.day(unslotted, emptyList()))

@@ -324,4 +324,12 @@ class OwnTasksTest {
         assertEquals(listOf(1, 2, 3), rows.first().pieces.map { it.part })
         assertEquals(90, rows.first().minutes)
     }
+
+    @Test
+    fun `a step made anew in the form after every old one went has no tick, even with an old one's name`() {
+        val made = OwnTasks.create(OwnTask(title = "Essay", steps = listOf(OwnStep("Plan", 20), OwnStep("Write", 40))), "s", now)
+        val ticked = made.copy(subSteps = made.subSteps.map { if (it.title == "Plan") it.copy(done = true) else it })
+        val anew = OwnTasks.edited(ticked, OwnTask(title = "Essay", steps = listOf(OwnStep("Plan", 30)), fromForm = true))
+        assertEquals(listOf("Plan" to false), anew.subSteps.map { it.title to it.done })
+    }
 }

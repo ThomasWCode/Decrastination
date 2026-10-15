@@ -147,24 +147,26 @@ fun WorkScreen(graph: AppGraph, activity: Activity, opening: String? = null, onO
                 if (expanded) itemsIndexed(tasks, key = { _, it -> it.id }) { index, task -> TaskTile(task, index, tasks.size, now, zone, byId) { sheetFor = task.id } }
             }
             // Open work the plan leaves out, each with why (IMP-P1-002): folded, as it isn't for now.
-            if (plan.unplanned.isNotEmpty()) {
+            // Each fold of one source's too, where one is chosen.
+            val unplanned = plan.unplanned.filter { gap -> only == null || byId[gap.taskId]?.source?.name == only }
+            if (unplanned.isNotEmpty()) {
                 val expanded = NOT_PLANNED !in folded
-                item(key = NOT_PLANNED) { FoldingHeading("Not planned", expanded, { toggle(NOT_PLANNED) }, summary = "${plan.unplanned.size}", detail = "Open work left out of the plan, and why") }
+                item(key = NOT_PLANNED) { FoldingHeading("Not planned", expanded, { toggle(NOT_PLANNED) }, summary = "${unplanned.size}", detail = "Open work left out of the plan, and why") }
                 if (expanded) {
                     val lastDay = plan.buckets.lastOrNull()?.date ?: plan.today
-                    itemsIndexed(plan.unplanned, key = { _, it -> "unplanned-${it.taskId}-${it.reason}" }) { index, gap ->
-                        UnplannedTile(gap, index, plan.unplanned.size, lastDay, plan.now, zone) { sheetFor = gap.taskId }
+                    itemsIndexed(unplanned, key = { _, it -> "unplanned-${it.taskId}-${it.reason}" }) { index, gap ->
+                        UnplannedTile(gap, index, unplanned.size, lastDay, plan.now, zone) { sheetFor = gap.taskId }
                     }
                 }
             }
             // Tasks you've said aren't: kept, off the plan, and here to check (taken back in Ask Claude).
-            val notTasks = state.tasks.filter { it.isOpen && it.userNotATask }.sortedWith(compareBy(nullsLast()) { it.dueAt })
+            val notTasks = state.tasks.filter { it.isOpen && it.userNotATask && (only == null || it.source.name == only) }.sortedWith(compareBy(nullsLast()) { it.dueAt })
             if (notTasks.isNotEmpty()) {
                 val expanded = NOT_TASKS !in folded
                 item(key = NOT_TASKS) { FoldingHeading("Not tasks, as you said", expanded, { toggle(NOT_TASKS) }, summary = "${notTasks.size}") }
                 if (expanded) itemsIndexed(notTasks, key = { _, it -> "not-" + it.id }) { index, task -> TaskTile(task, index, notTasks.size, now, zone, byId) { sheetFor = task.id } }
             }
-            val finished = state.tasks.filter { !it.isOpen && !it.hidden }.sortedByDescending { it.doneAt ?: it.lastSeenAt }
+            val finished = state.tasks.filter { !it.isOpen && !it.hidden && (only == null || it.source.name == only) }.sortedByDescending { it.doneAt ?: it.lastSeenAt }
             if (finished.isNotEmpty()) {
                 val expanded = FINISHED !in folded
                 item(key = FINISHED) { FoldingHeading("Finished or missed lately", expanded, { toggle(FINISHED) }, summary = "${finished.size}") }

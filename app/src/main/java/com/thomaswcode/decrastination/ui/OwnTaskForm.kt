@@ -95,6 +95,7 @@ fun OwnTaskForm(graph: AppGraph, editing: TaskItem?, initial: OwnTask? = null, o
             val was = r.wasIndex?.let { start.steps.getOrNull(it) }
             OwnStep(r.title.trim(), r.min, was?.from, was?.dueAt, r.where, r.wasIndex)
         },
+        fromForm = true,
     )
 
     Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
