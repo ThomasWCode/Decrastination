@@ -9,9 +9,8 @@ import com.thomaswcode.decrastination.learn.DeckCount
 import com.thomaswcode.decrastination.sources.anki.AnkiProvider
 import com.thomaswcode.decrastination.sources.anki.Deck
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 /**
@@ -19,39 +18,66 @@ import kotlinx.coroutines.withContext
  * so studying without touching this app ticks its pieces. Going out, a deck task whose work today
  * is all done has its slot kept (LR-09, earning by BL-08), the minutes past its piece's as more it
  * took; the speed a card is learned per deck (DX-11); and Anki is read again at once, so the plan
- * shows what's left (the counts are the progress: a piece part done is less of it).
+ * shows what's left (the counts are the progress: a piece part done is less of it). Each coming
+ * and going is decided as it's seen and handled after the one before, so leaving before the read
+ * coming in is done isn't lost behind it.
  */
 class AnkiWatch(private val graph: AppGraph) {
-    private val lock = Mutex()
+    private sealed interface Event {
+        data class Came(val at: Long) : Event
+        data class Went(val at: Long) : Event
+        data object Reset : Event
+    }
+
+    /** AnkiDroid's comings and goings, handled one at a time in the order they were seen. */
+    private val events = Channel<Event>(Channel.UNLIMITED)
+
+    /** Whether AnkiDroid was in front as last seen; till the first, as the last run left it. */
+    @Volatile
+    private var inFront: Boolean? = null
+
+    init {
+        graph.scope.launch {
+            for (event in events) {
+                runCatching {
+                    when (event) {
+                        is Event.Came -> came(event.at)
+                        is Event.Went -> went(event.at)
+                        Event.Reset -> if (graph.runtime.value.ankiFrontSince != null) graph.runtime.update { it.copy(ankiFrontSince = null) }
+                    }
+                }.onFailure { Log.w(AppGraph.TAG, "Reading AnkiDroid's decks failed", it) }
+            }
+        }
+    }
 
     /**
      * The focus service starting again: a stretch begun before it stopped is let go, as when it ended
      * isn't known (its cards would be spread over all the time the service was down).
      */
     fun reset() {
-        if (graph.runtime.value.ankiFrontSince != null) graph.scope.launch { graph.runtime.update { it.copy(ankiFrontSince = null) } }
+        inFront = false
+        events.trySend(Event.Reset)
     }
 
     /** [pkg] is in front: AnkiDroid come, or gone. Cheap when it's neither. */
     fun seen(pkg: String) {
-        val inside = graph.runtime.value.ankiFrontSince != null
-        when {
-            pkg == AnkiProvider.PACKAGE && !inside -> graph.scope.launch { runCatching { came() }.onFailure { Log.w(AppGraph.TAG, "Reading AnkiDroid's decks failed", it) } }
-            pkg != AnkiProvider.PACKAGE && inside -> graph.scope.launch { runCatching { went() }.onFailure { Log.w(AppGraph.TAG, "Reading AnkiDroid's decks failed", it) } }
-        }
+        val anki = pkg == AnkiProvider.PACKAGE
+        val was = inFront ?: (graph.runtime.value.ankiFrontSince != null)
+        inFront = anki
+        if (anki != was) events.trySend(if (anki) Event.Came(graph.clock.now()) else Event.Went(graph.clock.now()))
     }
 
-    private suspend fun came(now: Long = graph.clock.now()): Unit = lock.withLock {
-        if (graph.runtime.value.ankiFrontSince != null) return@withLock
-        val reading = read(now, entering = true) ?: return@withLock
+    private suspend fun came(now: Long) {
+        if (graph.runtime.value.ankiFrontSince != null) return
+        val reading = read(now, entering = true) ?: return
         graph.runtime.update { it.copy(ankiFrontSince = now, ankiReadings = (it.ankiReadings + reading).takeLast(AnkiProgress.KEEP)) }
     }
 
-    private suspend fun went(now: Long = graph.clock.now()): Unit = lock.withLock {
-        if (graph.runtime.value.ankiFrontSince == null) return@withLock
+    private suspend fun went(now: Long) {
+        if (graph.runtime.value.ankiFrontSince == null) return
         val reading = read(now, entering = false)
         graph.runtime.update { state -> state.copy(ankiFrontSince = null, ankiReadings = reading?.let { (state.ankiReadings + it).takeLast(AnkiProgress.KEEP) } ?: state.ankiReadings) }
-        reading ?: return@withLock
+        reading ?: return
         val zone = graph.clock.zone()
         val stretches = AnkiProgress.stretches(graph.runtime.value.ankiReadings, zone)
         // A stretch across 04:00 (or one cut short) counts for nothing, but the decks are read again all the same.
@@ -62,9 +88,10 @@ class AnkiWatch(private val graph: AppGraph) {
             for (done in AnkiProgress.done(stretch, tasks.tasks, reviewsOnly = tasks.ankiDay?.reviewsOnly == true)) {
                 Log.i(AppGraph.TAG, "AnkiDroid: ${done.cards} cards for ${done.taskId} in ${done.minutes} min${if (done.finished) ", today's done" else ""}")
                 if (!done.finished) continue
-                // Its next piece, today's or a later day's: studied ahead is kept all the same.
+                // Its next piece, today's or a later day's: studied ahead is kept all the same. The
+                // cards counted are its evidence, as a photo is written work's (BL-08).
                 val piece = plan.ordered.firstOrNull { it.taskId == done.taskId } ?: continue
-                graph.focus.keepSlot(piece.key, extraMin = (done.minutes - piece.minutes).coerceAtLeast(0), now = now)
+                graph.focus.keepSlot(piece.key, extraMin = (done.minutes - piece.minutes).coerceAtLeast(0), verified = true, now = now)
             }
             // What a card takes, per deck (DX-11): a deck with new evidence takes it; the rest keep theirs (a backup's, say).
             val rates = AnkiProgress.secondsPerCard(stretches)

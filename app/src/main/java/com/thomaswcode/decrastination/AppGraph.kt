@@ -533,9 +533,10 @@ class AppGraph private constructor(context: Context) {
             settleCompletions()
             CalendarTime.refresh(app)
         }
-        // Any a stop left ungiven: completions, and photo checks; and a day with nothing to do's free time (BL-07).
+        // Any a stop left ungiven: slots being kept, photo checks and completions; and a day with nothing to do's free time (BL-07).
         scope.launch {
             runCatching { focus.grantAllowanceIfDue() }.onFailure { Log.w(TAG, "Giving the day's free time failed", it) }
+            focus.finishKeeps()
             focus.finishPhotos()
             settleCompletions()
         }
