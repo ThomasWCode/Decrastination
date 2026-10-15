@@ -37,12 +37,20 @@ class PlannerPropertyTest {
             val steps = minOf(random.nextInt(7), effort).let { count ->
                 shareOut(effort, List(count) { 1 + random.nextInt(10) }).mapIndexed { i, minutes -> SubStep("step ${i + 1}", minutes) }
             }
-            return TaskItem(
+            // Undated; due in the next month; or due a few days back, or today (PL-14's hard and soft dates gone by).
+            val dueAt = when {
+                chance(20) -> null
+                chance(15) -> at(today.minusDays(random.nextLong(6)), pick(LocalTime.of(8, 30), LocalTime.of(23, 59)))
+                else -> at(today.plusDays(1L + random.nextInt(30)), pick(LocalTime.of(8, 30), LocalTime.of(23, 59)))
+            }
+            // An email's date is a real deadline only where Claude quoted it (AI-12), in a reading of it as it is.
+            val quoted = if (source == Source.Gmail && dueAt != null) chance(50) else null
+            val task = TaskItem(
                 id = TaskItem.id(source, "t$index"),
                 source = source,
                 sourceId = "t$index",
                 title = "t$index",
-                dueAt = if (chance(20)) null else at(today.plusDays(1L + random.nextInt(30)), pick(LocalTime.of(8, 30), LocalTime.of(23, 59))),
+                dueAt = dueAt,
                 availableFrom = if (chance(10)) now + HOUR + random.nextLong(10 * DAY) else null,
                 kind = pick(Kind.Homework, Kind.Revision, Kind.Admin),
                 sourceEffortMin = effort,
@@ -52,6 +60,7 @@ class PlannerPropertyTest {
                 firstSeenAt = now - random.nextLong(11) * DAY,
                 lastSeenAt = now,
             )
+            return quoted?.let { task.copy(enrichment = Enrichment(inputHash = Enrichments.inputHash(task), by = "test", at = now, deadline = dueAt, deadlineQuoted = it)) } ?: task
         }
 
         /** A stretch of [lo]..[hi] (minutes of the day), at least a quarter of an hour, on quarter hours. */
@@ -82,6 +91,8 @@ class PlannerPropertyTest {
             dayLoads = List(random.nextInt(2)) { day() to random.nextInt(241) }.toMap(),
             dayCaps = List(random.nextInt(3)) { day() to random.nextInt(301) }.toMap(),
             hardBusy = List(random.nextInt(3)) { busy() },
+            // Kinds of day found to use only part of their free time (PL-06).
+            calibration = Calibration(yields = DayKind.entries.filter { chance(25) }.associateWith { 0.5 + random.nextInt(51) / 100.0 }),
         )
     }
 
@@ -102,12 +113,21 @@ class PlannerPropertyTest {
         checkCompleteness(seed, plan, input)
         checkDeterminism(seed, plan, input)
         checkStability(seed, plan, input)
+        checkMinimumTouch(seed, plan, input)
+        checkRevisionGap(seed, plan, input)
+        checkWhy(seed, plan)
+        checkOverdue(seed, plan, input)
+        checkWontFit(seed, plan, input)
     }
 
-    /** No day holds more than its time, but for overdue and due-today work, which may, and work flagged behind. */
+    /**
+     * No day holds more than its time, but for overdue work and today's work dated by today (a real
+     * deadline or a plan's date: PL-14), which may, and work flagged behind.
+     */
     private fun checkCapacity(seed: Long, plan: Plan) {
         for (bucket in plan.buckets) {
-            val held = bucket.chunks.filter { !it.behind && !it.overdue && !it.dueToday }.sumOf { it.minutes }
+            val byToday = { c: Chunk -> bucket.date == plan.today && !c.soft && Planner.date(c.deadline, LONDON) <= plan.today }
+            val held = bucket.chunks.filter { !it.behind && !it.overdue && !byToday(it) }.sumOf { it.minutes }
             assertTrue(held <= bucket.capacityMin, "seed=$seed: ${bucket.date} holds $held minutes of its ${bucket.capacityMin}")
         }
     }
@@ -172,11 +192,133 @@ class PlannerPropertyTest {
         val later = input.copy(now = input.now + MINUTE)
         val today = Planner.date(input.now, input.zone)
         if (Planner.capacity(today, later) != Planner.capacity(today, input)) return
+        val laterPlan = Planner.plan(later)
+        // A date the app set passing in that minute plans its work again (PL-14): things move then.
+        fun deadlines(p: Plan) = p.ordered.map { it.taskId to it.deadline }.toSet()
+        if (deadlines(laterPlan) != deadlines(plan)) return
         fun after(p: Plan) = p.buckets.filter { it.date > today }.flatMap { b -> b.chunks.map { (it.taskId to it.part) to b.date } }.toMap()
         val before = after(plan)
-        val next = after(Planner.plan(later))
+        val next = after(laterPlan)
         for ((piece, day) in before) {
             assertTrue(next[piece] == day, "seed=$seed: ${piece.first} part ${piece.second} moved from $day to ${next[piece]} as a minute passed")
+        }
+    }
+
+    /**
+     * The days a task spread over its window (PL-01) had, and its pieces by day: dated work due after
+     * tomorrow, all of it placed and none of it behind (where the window couldn't hold it, it's placed
+     * backwards instead, and may leave some out).
+     */
+    private class Spread(val task: TaskItem, val window: List<LocalDate>, val pieces: List<Pair<LocalDate, Chunk>>)
+
+    private fun spreads(plan: Plan, input: Planner.Input): List<Spread> {
+        val zone = input.zone
+        val today = Planner.date(input.now, zone)
+        val placed = plan.buckets.flatMap { b -> b.chunks.map { b.date to it } }.groupBy { it.second.taskId }
+        val leftOut = plan.unplanned.map { it.taskId }.toSet()
+        return input.tasks.mapNotNull { task ->
+            val due = task.dueAt?.takeIf { task.id !in leftOut } ?: return@mapNotNull null
+            val pieces = placed[task.id].orEmpty()
+            if (pieces.isEmpty() || pieces.any { (_, c) -> c.soft || c.behind || c.overdue || c.dueToday || c.dueSoon }) return@mapNotNull null
+            val first = task.notBefore?.takeIf { it > input.now }?.let { maxOf(today, Planner.date(it, zone)) } ?: today
+            val dueAt = java.time.Instant.ofEpochMilli(due).atZone(zone)
+            val margin = input.settings.marginDays.toLong()
+            val last = dueAt.toLocalDate().minusDays(margin).let { if (margin == 0L && dueAt.toLocalTime() < LocalTime.NOON) it.minusDays(1) else it }
+            Spread(task, generateSequence(first) { it.plusDays(1) }.takeWhile { it <= last }.toList(), pieces.sortedWith(compareBy({ it.first }, { it.second.part })))
+        }
+    }
+
+    /** Whether a day had room left for [chunk] of [task] once all was planned: then it had at its turn too. */
+    private fun hadRoom(plan: Plan, input: Planner.Input, task: TaskItem, day: LocalDate, chunk: Chunk): Boolean {
+        val bucket = plan.bucket(day) ?: return false
+        if (task.notBefore?.let { it > input.now && Planner.date(it, input.zone) == day } == true) return false
+        if (task.stepsPerDay?.let { limit -> bucket.chunks.count { it.taskId == task.id } >= limit } == true) return false
+        return bucket.capacityMin - bucket.plannedMin >= chunk.minutes
+    }
+
+    /** Over a window of a week or more, no gap of more than a week between pieces where a day within it had room. */
+    private fun checkMinimumTouch(seed: Long, plan: Plan, input: Planner.Input) {
+        for (spread in spreads(plan, input).filter { it.window.size >= 7 }) {
+            for (i in 1 until spread.pieces.size) {
+                val (before, _) = spread.pieces[i - 1]
+                val (day, chunk) = spread.pieces[i]
+                if (java.time.temporal.ChronoUnit.DAYS.between(before, day) <= 7) continue
+                val week = generateSequence(before.plusDays(1)) { it.plusDays(1) }.take(7).filter { it in spread.window }
+                assertTrue(week.none { hadRoom(plan, input, spread.task, it, chunk) }, "seed=$seed: ${spread.task.id} part ${chunk.part} on $day, more than a week after $before, with room in between")
+            }
+        }
+    }
+
+    /**
+     * Revision's last piece isn't on the day of the one before where a later day in its window had
+     * room. Only the last: an earlier piece may rightly keep to its day so the ones after it can follow.
+     */
+    private fun checkRevisionGap(seed: Long, plan: Plan, input: Planner.Input) {
+        for (spread in spreads(plan, input).filter { it.task.kind == Kind.Revision && it.pieces.size >= 2 }) {
+            val (before, _) = spread.pieces[spread.pieces.lastIndex - 1]
+            val (day, chunk) = spread.pieces.last()
+            if (day != before) continue
+            val later = spread.window.filter { it > day }
+            assertTrue(later.none { hadRoom(plan, input, spread.task, it, chunk) }, "seed=$seed: ${spread.task.id} part ${chunk.part} on $day with the piece before it, a later day having room")
+        }
+    }
+
+    /**
+     * Every piece says why it's on its day (PL-07), as its flags do: overdue work is overdue, undated
+     * work soft, work past its deadline short of room, work due soon due soon, the rest spread.
+     */
+    private fun checkWhy(seed: Long, plan: Plan) {
+        val placing = setOf(Why.DueSoon, Why.Spread, Why.MinimumTouch, Why.RevisionGap, Why.MostRoom, Why.Packed)
+        for (bucket in plan.buckets) for (chunk in bucket.chunks) {
+            val allowed = when {
+                chunk.overdue -> setOf(Why.Overdue)
+                chunk.soft -> setOf(Why.Soft)
+                // Behind the deadline itself, no room; behind only the safety margin, the reason it was placed.
+                chunk.behind -> placing + Why.NoRoom
+                chunk.dueSoon -> setOf(Why.DueSoon)
+                else -> placing - Why.DueSoon
+            }
+            assertTrue(chunk.why in allowed, "seed=$seed: ${chunk.taskId} part ${chunk.part} says ${chunk.why}, not one of $allowed")
+            // A day apart is revision's alone (no test dates are drawn here).
+            assertTrue(chunk.why != Why.RevisionGap || chunk.kind == Kind.Revision, "seed=$seed: ${chunk.taskId} part ${chunk.part}, ${chunk.kind}, says RevisionGap")
+            assertTrue(chunk.why != Why.MostRoom || chunk.parts == 1, "seed=$seed: ${chunk.taskId} part ${chunk.part} of ${chunk.parts} says MostRoom")
+            // Placed after its deadline's own last day: there was no room before it.
+            val due = java.time.Instant.ofEpochMilli(chunk.deadline).atZone(LONDON)
+            val lastDay = if (due.toLocalTime() < LocalTime.NOON) due.toLocalDate().minusDays(1) else due.toLocalDate()
+            if (chunk.behind && !chunk.soft && bucket.date > lastDay) assertTrue(chunk.why == Why.NoRoom, "seed=$seed: ${chunk.taskId} part ${chunk.part} on ${bucket.date}, after its deadline's day, says ${chunk.why}")
+        }
+    }
+
+    /** Only a real deadline gone by is overdue (PL-14): never a date the app or Claude set. */
+    private fun checkOverdue(seed: Long, plan: Plan, input: Planner.Input) {
+        val byId = input.tasks.associateBy { it.id }
+        for (chunk in plan.ordered.filter { it.overdue }) {
+            val task = byId.getValue(chunk.taskId)
+            assertTrue(task.hardDeadline && task.dueAt!! < input.now, "seed=$seed: ${chunk.taskId} part ${chunk.part} overdue, its deadline ${task.dueAt} ${if (task.hardDeadline) "real" else "a plan"}")
+        }
+    }
+
+    /**
+     * What's said won't fit (PL-02): a task with a real deadline still to come, once, with more left
+     * than was free before it, or some of it fitting nowhere.
+     */
+    private fun checkWontFit(seed: Long, plan: Plan, input: Planner.Input) {
+        val byId = input.tasks.associateBy { it.id }
+        assertTrue(plan.wontFit.map { it.taskId }.let { it.size == it.toSet().size }, "seed=$seed: a task said twice not to fit")
+        for (short in plan.wontFit) {
+            val task = byId.getValue(short.taskId)
+            assertTrue(task.hardDeadline && task.dueAt!! >= input.now, "seed=$seed: ${short.taskId} said not to fit, its deadline the app's or gone")
+            val leftOut = plan.unplanned.any { it.taskId == task.id }
+            // Or carried past its deadline's own last day (a per-day limit), whatever the minutes free.
+            val late = plan.buckets.any { b ->
+                b.chunks.any { c ->
+                    val due = java.time.Instant.ofEpochMilli(c.deadline).atZone(LONDON)
+                    c.taskId == task.id && b.date > (if (due.toLocalTime() < LocalTime.NOON) due.toLocalDate().minusDays(1) else due.toLocalDate())
+                }
+            }
+            // Or a piece no single day held, put behind into the first.
+            val forced = plan.chunksOf(task.id).any { it.behind }
+            assertTrue(short.leftMin > short.freeMin || leftOut || late || forced, "seed=$seed: ${task.id} said not to fit: ${short.leftMin} min left, ${short.freeMin} free")
         }
     }
 

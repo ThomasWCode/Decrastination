@@ -85,16 +85,19 @@ object EventJudge {
 
     /**
      * What the planner takes: the busy intervals, and the minutes of each day taken at no set time;
-     * and the events as read, for the calendar's page and your instructions about them.
+     * and the events as read, for the calendar's page and your instructions about them. One that
+     * would be asked about but starts after [askUntil] (DX-14: questions keep to the week ahead)
+     * counts as a few hours of its day meanwhile, so the plan beyond it leaves it room.
      */
     data class Time(val busy: List<Busy>, val dayLoads: Map<LocalDate, Int>, val toAsk: List<CalendarEvent>, val events: List<CalendarEvent> = emptyList())
 
-    fun time(events: List<CalendarEvent>, answers: Map<String, String>, zone: ZoneId): Time {
+    fun time(events: List<CalendarEvent>, answers: Map<String, String>, zone: ZoneId, askUntil: Long): Time {
         val busy = mutableListOf<Busy>()
         val loads = HashMap<LocalDate, Int>()
         val ask = mutableListOf<CalendarEvent>()
         for (event in events) {
-            when (val judgement = judge(event, answers)) {
+            val judged = judge(event, answers)
+            when (val judgement = if (judged == Judgement.Ask && event.start > askUntil) Judgement.Load(FEW_HOURS_MIN) else judged) {
                 Judgement.Free -> Unit
                 Judgement.Busy -> if (event.allDay) {
                     // All of each of its days.

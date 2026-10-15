@@ -212,7 +212,7 @@ class WidgetLayoutTest {
 
     @Test
     fun `pills too wide to sit side by side are stacked, or plain where there's no height`() {
-        val parts = WidgetLayout.Parts(badge = "Waiting a week", minutes = "1 h 20 min")
+        val parts = WidgetLayout.Parts(badge = "From Fri 04:00", minutes = "1 h 20 min")
         assertEquals(WidgetLayout.Pills.Row, WidgetLayout.of(width = 360f, height = 60f, parts).pills)
         assertEquals(WidgetLayout.Pills.Plain, WidgetLayout.of(width = 160f, height = 60f, parts).pills)
         assertEquals(WidgetLayout.Pills.Stacked, WidgetLayout.of(width = 160f, height = 120f, parts).pills)
@@ -226,7 +226,7 @@ class WidgetLayoutTest {
 
     @Test
     fun `larger text is allowed for`() {
-        val parts = WidgetLayout.Parts(badge = "Waiting a week", minutes = "1 h 20 min")
+        val parts = WidgetLayout.Parts(badge = "From Fri 04:00", minutes = "1 h 20 min")
         // Side by side at the default size; at 1.3 times, too wide, and stacked.
         assertEquals(WidgetLayout.Pills.Row, WidgetLayout.of(width = 280f, height = 120f, parts).pills)
         assertEquals(WidgetLayout.Pills.Stacked, WidgetLayout.of(width = 280f, height = 120f, parts, fontScale = 1.3f).pills)

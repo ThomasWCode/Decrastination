@@ -40,7 +40,8 @@ class EvalSetTest {
     data class Case(val id: String, val job: Enrichments.Job, val now: String, val task: TaskItem, val expect: Expect, val note: String = "")
 
     /**
-     * What a right answer has; null where it doesn't matter. [deadline] "none" for no deadline.
+     * What a right answer has; null where it doesn't matter. [deadline] "none" for no deadline;
+     * [deadlineQuoted] whether it's the email's own words (AI-12).
      * [mentions]: what some step, block or the next step must each hold, case aside; parts joined
      * by `+` must all be in the same one ("Imperial+Work Experience": not met by a STEM Potential block).
      */
@@ -48,6 +49,7 @@ class EvalSetTest {
     data class Expect(
         val kind: String? = null,
         val deadline: String? = null,
+        val deadlineQuoted: Boolean? = null,
         val effortMin: List<Int>? = null,
         val mentions: List<String> = emptyList(),
         val blocksAtLeast: Int? = null,
@@ -146,6 +148,7 @@ class EvalSetTest {
         fun day(time: Long?) = time?.let { Instant.ofEpochMilli(it).atZone(zone).toLocalDate().toString() } ?: "none"
         expect.kind?.let { add("kind ${e.kind?.name ?: "-"} (want $it)" to (e.kind?.name == it)) }
         expect.deadline?.let { add("deadline ${day(e.deadline)} (want $it)" to (day(e.deadline) == it)) }
+        expect.deadlineQuoted?.let { add("quoted ${e.deadlineQuoted} (want $it)" to (e.deadlineQuoted == it)) }
         expect.testDate?.let { add("test ${day(e.testDate)} (want $it)" to (day(e.testDate) == it)) }
         expect.effortMin?.let { (lo, hi) -> add("${made.effortMin} min (want $lo–$hi)" to (made.effortMin in lo..hi)) }
         // The steps given, kept or dropped: what the model saw is checked apart from whether the app kept it.

@@ -34,7 +34,14 @@ object Review {
         val zone = graph.clock.zone()
         val week = Daily.checkInWeek(now, zone, graph.settings.value.checkInMin)
         if (ifDue && reviewed(graph.log.value.reviews, week, Daily.lastCheckIn(now, zone, graph.settings.value.checkInMin))) return
-        val learned = Calibrator.learn(graph.log.value, graph.runtime.value.calibration, graph.settings.value.boxMin, week = now / WEEK_MS, defaultMargin = graph.settings.value.marginDays)
+        val learned = Calibrator.learn(
+            graph.log.value,
+            graph.runtime.value.calibration,
+            graph.settings.value.boxMin,
+            week = now / WEEK_MS,
+            today = graph.focus.today(now),
+            defaultMargin = graph.settings.value.marginDays,
+        )
         graph.runtime.update { it.copy(calibration = learned.calibration) }
         val findings = learned.changes + listOfNotNull(Days.capacityAdvice(graph.log.value.days, graph.focus.today(now)))
         val model = runCatching { modelReview(graph, now, week) }

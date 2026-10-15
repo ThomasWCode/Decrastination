@@ -9,6 +9,7 @@ import com.thomaswcode.decrastination.core.ChangeType
 import com.thomaswcode.decrastination.core.ChatMessage
 import com.thomaswcode.decrastination.core.ChatState
 import com.thomaswcode.decrastination.core.Chunk
+import com.thomaswcode.decrastination.core.Enrichment
 import com.thomaswcode.decrastination.core.DayBucket
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.Plan
@@ -20,6 +21,8 @@ import com.thomaswcode.decrastination.core.Speaker
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.OwnTask
 import com.thomaswcode.decrastination.core.Unplanned
+import com.thomaswcode.decrastination.core.Why
+import com.thomaswcode.decrastination.learn.CalendarEvent
 import java.time.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -159,12 +162,47 @@ class ChatTest {
         assertTrue(context.startsWith("Today: Monday 12 October 2026, 22:45 (Europe/London)"))
         assertTrue("- teams:bridge | Bridge and Balances Beam Q's | Teams | Homework | Tue 13 Oct 2026 08:30 | 100 | 25 | -" in context, context)
         assertFalse("Changes already in use" in context)
+        // An email's date Claude didn't quote is a plan, and said to be (PL-14).
+        val unread = bridge.copy(id = "gmail:form", source = Source.Gmail, title = "Form", dueAt = Fixtures.at("2026-10-14T23:59"))
+        val reading = Enrichment(inputHash = com.thomaswcode.decrastination.core.Enrichments.inputHash(unread), by = "claude", at = now, kind = Kind.Admin, deadline = Fixtures.at("2026-10-14T23:59"))
+        val email = unread.copy(enrichment = reading)
+        val withEmail = ChatPrompts.context(listOf(email), emptyList(), emptyList(), now, LONDON)
+        assertTrue("| Gmail | Homework | Wed 14 Oct 2026 23:59 (a plan) |" in withEmail, withEmail)
+        assertFalse("(a plan)" in ChatPrompts.context(listOf(email.copy(enrichment = reading.copy(deadlineQuoted = true))), emptyList(), emptyList(), now, LONDON))
+        // The calendar's read as far as the plan reaches (DX-14); the chat's told of the fortnight's events.
+        val drums = CalendarEvent(1, "Drums", Fixtures.at("2026-10-15T18:00"), Fixtures.at("2026-10-15T19:00"), allDay = false)
+        val trip = CalendarEvent(2, "Trip", Fixtures.at("2026-11-02T08:00"), Fixtures.at("2026-11-02T18:00"), allDay = false)
+        val withEvents = ChatPrompts.context(emptyList(), listOf(drums, trip), emptyList(), now, LONDON)
+        assertTrue("| Drums |" in withEvents, withEvents)
+        assertFalse("| Trip |" in withEvents, withEvents)
+    }
+
+    @Test
+    fun `the context's list of tasks is cut by the dates shown, a plan's gone by not crowding out nearer ones`() {
+        // Eighty tasks whose test dates Claude read are gone by, Teams' own at the end of November; one due tomorrow.
+        val faded = (1..80).map { i -> bridge.copy(id = "teams:t$i", sourceId = "t$i", title = "t$i", dueAt = Fixtures.at("2026-10-01T08:30"), sourceValues = SourceValues(Kind.Homework, Fixtures.at("2026-11-30T23:59"), null)) }
+        val context = ChatPrompts.context(faded + bridge, emptyList(), emptyList(), now, LONDON)
+        assertTrue("- teams:bridge |" in context, context)
+        assertTrue("- teams:t1 | t1 | Teams | Homework | Mon 30 Nov 2026 23:59 |" in context, context)
+    }
+
+    @Test
+    fun `work behind only the safety margin isn't said not to fit`() {
+        val margin = piece(bridge.id, bridge.title, null, 30, 1, 1, Fixtures.at("2026-10-14T23:59"), behind = true).copy(why = Why.Spread)
+        val text = ChatPrompts.plan(plan.copy(buckets = listOf(DayBucket(today, 315, listOf(margin)))), LONDON)
+        assertTrue("[why: spread] | due Wed 14 Oct 2026 23:59" in text, text)
+        assertFalse("won't fit before its deadline" in text, text)
     }
 
     /** A piece of [taskId] as the planner gives one. */
     private fun piece(taskId: String, title: String, step: String?, minutes: Int, part: Int, parts: Int, dueAt: Long?, behind: Boolean = false) = Chunk(
         taskId = taskId, source = Source.Teams, kind = Kind.Homework, title = title, step = step, minutes = minutes, dueAt = dueAt, deadline = dueAt ?: now,
         soft = dueAt == null, overdue = false, dueToday = false, behind = behind, part = part, parts = parts, taskMinutes = minutes,
+        why = when {
+            dueAt == null -> Why.Soft
+            behind -> Why.NoRoom
+            else -> Why.Spread
+        },
     )
 
     private val today = LocalDate.of(2026, 10, 12)
@@ -199,15 +237,15 @@ class ChatTest {
         // Tonight over its time, the physics on one line with its pieces.
         assertTrue("\n- Today, Monday 12 October 2026: 100 min planned of 0 min of working time left, over by 100 min\n" in text, text)
         assertTrue(
-            "\n  - teams:bridge | Bridge and Balances Beam Q's | 100 min: part 1 of 3 (34 min), part 2 of 3 (33 min), part 3 of 3 (33 min) | due Tue 13 Oct 2026 08:30 | won't fit before its deadline\n" in text,
+            "\n  - teams:bridge | Bridge and Balances Beam Q's | 100 min: part 1 of 3 (34 min) [why: noroom], part 2 of 3 (33 min) [why: noroom], part 3 of 3 (33 min) [why: noroom] | due Tue 13 Oct 2026 08:30 | won't fit before its deadline\n" in text,
             text,
         )
         assertTrue("\n- Tomorrow, Tuesday 13 October 2026: nothing planned (315 min of working time)\n  - event at 16:20: powerplanner:dentist | Dentist | Power Planner\n" in text, text)
         assertTrue("\nEvents on the Plan other than those under their days below (past, after Sunday 25 October 2026, or with no date):\n- own:match | Match | Yours | Sun 1 Nov 2026 09:00\n" in text, text)
         // Undated work behind only its soft deadline, the app's own: not said to be late.
         assertTrue(
-            "\n- Wednesday 14 October 2026: 60 min planned of 315 min of working time\n  - own:essay | Essay | 40 min: Draft (40 min) | due Fri 30 Oct 2026 17:00\n" +
-                "  - gmail:zip | Zip card | 20 min: all of it (20 min) | no due date\n" in text,
+            "\n- Wednesday 14 October 2026: 60 min planned of 315 min of working time\n  - own:essay | Essay | 40 min: Draft (40 min) [why: spread] | due Fri 30 Oct 2026 17:00\n" +
+                "  - gmail:zip | Zip card | 20 min: all of it (20 min) [why: soft] | no due date\n" in text,
             text,
         )
         // The fortnight in full, then a line for the rest.

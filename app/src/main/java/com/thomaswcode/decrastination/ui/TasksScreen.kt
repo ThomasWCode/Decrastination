@@ -161,7 +161,10 @@ private fun SourceTile(source: Source, status: SourceStatus, open: Int, now: Lon
 /** A task as a tile: its name and minutes, when it's due, its source and kind, and what's out of the ordinary as tags. */
 @Composable
 private fun TaskTile(task: TaskItem, index: Int, count: Int, now: Long, zone: java.time.ZoneId, byId: Map<String, TaskItem>, onClick: () -> Unit) {
-    val overdue = task.isOpen && task.dueAt?.let { it < now } == true
+    // The deadline in force (a plan's gone by gives way to the real one behind it): only a real one gone by is late (PL-14).
+    val due = task.deadlineAt(now) ?: task.dueAt
+    val hard = task.hardAt(now)
+    val overdue = task.isOpen && hard && due?.let { it < now } == true
     val hiddenUntil = task.availableFrom?.takeIf { it > now }
     // Claude's plan for it not used (out of range, or not adding up): said, so it can be checked.
     val dropped = Enrichments.current(task)?.dropped?.takeIf { task.isOpen }
@@ -183,7 +186,7 @@ private fun TaskTile(task: TaskItem, index: Int, count: Int, now: Long, zone: ja
         }
         // When it's due, first and coloured when late.
         Text(
-            if (task.isOpen) Format.due(task.dueAt, now, zone) else task.status.name,
+            if (task.isOpen) Format.due(due, hard, now, zone) else task.status.name,
             style = MaterialTheme.typography.bodyMedium,
             color = if (overdue) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.padding(top = 2.dp),

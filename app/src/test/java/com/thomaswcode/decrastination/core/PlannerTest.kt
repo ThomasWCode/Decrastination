@@ -3,6 +3,7 @@ package com.thomaswcode.decrastination.core
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.Fixtures.LONDON
 import com.thomaswcode.decrastination.data.Settings
+import com.thomaswcode.decrastination.data.Window
 import com.thomaswcode.decrastination.sources.anki.AnkiRules
 import com.thomaswcode.decrastination.sources.powerplanner.ClassesResponse
 import com.thomaswcode.decrastination.sources.powerplanner.AgendaResponse
@@ -109,6 +110,13 @@ class PlannerTest {
         // Then what's overdue, the oldest deadline first.
         assertEquals("Pg 60&61", order[soon.size])
         assertTrue(tonight.todayBucket!!.chunks.first { it.title == "Pg 60&61" }.overdue)
+        // Why each is there (PL-07): tonight's is due today; what's overdue says since when.
+        val wednesday = LocalDate.parse("2026-10-07")
+        assertEquals(Why.DueSoon, tonight.next!!.why)
+        assertEquals("Due today", tonight.next!!.whyLine(wednesday, LONDON))
+        val pg = tonight.todayBucket!!.chunks.first { it.title == "Pg 60&61" }
+        assertEquals(Why.Overdue, pg.why)
+        assertEquals("Overdue since " + Planner.date(pg.deadline, LONDON).format(java.time.format.DateTimeFormatter.ofPattern("EEE d MMM", java.util.Locale.UK)), pg.whyLine(wednesday, LONDON))
     }
 
     @Test
@@ -171,30 +179,34 @@ class PlannerTest {
     fun `tomorrow morning's deadlines are today's, behind, since tonight is gone`() {
         val frost = tonight.todayBucket!!.chunks.single { it.title.startsWith("Dr. Frost") }
         assertTrue(frost.behind)
+        assertEquals(Why.NoRoom, frost.why)
+        assertEquals("Couldn't fit before its deadline", frost.whyLine(LocalDate.parse("2026-10-07"), LONDON))
         assertTrue(tonight.todayBucket!!.chunks.single { it.title == "Prep and Assessment preparation" }.behind)
     }
 
     @Test
-    fun `later deadlines sit on their last usable day`() {
-        // Friday 08:30 → Thursday; the test Monday 11:00 → Sunday; PREP 2 Tuesday 08:00 → Monday;
-        // the call Wednesday 14 Oct 16:00 → Tuesday.
+    fun `later deadlines take the day with most room before them`() {
+        // Spread (PL-01): a single piece goes to the roomiest day of its window. Friday 08:30's last
+        // usable day is Thursday, the only one with time; the test Monday 11:00 gets Saturday, the
+        // first of the weekend; PREP 2 (Tuesday 08:00) Sunday, Saturday having less now; the call
+        // (Wednesday 16:00) Saturday, roomier than any weekday still.
         assertTrue("Gefahren im Internet. Wie kann man sich schuetzen? Verbot?" in tonight.titlesOn("2026-10-08"))
-        assertEquals(listOf("Test"), tonight.titlesOn("2026-10-11"))
-        assertEquals(listOf("PREP 2"), tonight.titlesOn("2026-10-12"))
-        assertEquals(listOf("Call with a friend after school."), tonight.titlesOn("2026-10-13"))
+        assertEquals(listOf("Test", "Call with a friend after school."), tonight.titlesOn("2026-10-10"))
+        assertEquals(listOf("PREP 2"), tonight.titlesOn("2026-10-11"))
     }
 
     // --- The rules, one at a time. ---
 
     @Test
-    fun `a big task spreads one chunk per evening, backwards from its last usable day`() {
-        // 135 minutes due Monday 09:00: three 45s on Friday, Saturday and Sunday.
+    fun `a big task spreads over its window by each day's free time`() {
+        // 135 minutes due Monday 09:00, Thursday 17:00: three 45s where its shares of the window's
+        // time fall, Thursday's 300 minutes, Friday's 315 and the weekend's 840 each: Friday,
+        // Saturday and Sunday.
         val plan = plan(listOf(task("big", Fixtures.at("2026-10-12T09:00"), effort = 135)), "2026-10-08T17:00")
         assertEquals(listOf("2026-10-09", "2026-10-10", "2026-10-11").map(LocalDate::parse), plan.dayOf("big"))
         assertEquals(listOf(1, 2, 3), plan.chunksOf("teams:big").map { it.part })
-        // Its first evening is tomorrow, so it's already due soon: spreading is what makes a
-        // Monday deadline press on Thursday.
-        assertTrue(plan.pressure)
+        // Nothing of it is today's, so today isn't strict for it: pressure is today's bucket alone.
+        assertFalse(plan.pressure)
         assertEquals(listOf("part 1 of 3"), plan.dueSoon.map { it.step })
     }
 
@@ -229,8 +241,9 @@ class PlannerTest {
         )
         val plan = plan(listOf(task("e", dueAt = null, steps = steps)), "2026-10-08T17:00")
         fun dayOf(step: String) = plan.buckets.first { b -> b.chunks.any { it.step == step } }.date
-        assertTrue(dayOf("Draft") < dayOf("Final"), "draft ${dayOf("Draft")}, final ${dayOf("Final")}")
-        assertEquals(listOf(1, 2), plan.chunksOf("teams:e").map { it.part }.sorted())
+        // Saturday holds both now (840 minutes): the draft first in the day, as it's first in order.
+        assertTrue(dayOf("Draft") <= dayOf("Final"), "draft ${dayOf("Draft")}, final ${dayOf("Final")}")
+        assertEquals(listOf(1, 2), plan.chunksOf("teams:e").map { it.part })
         assertEquals(setOf(2), plan.chunksOf("teams:e").map { it.parts }.toSet())
     }
 
@@ -328,6 +341,7 @@ class PlannerTest {
         val plan = plan(listOf(a, b), "2026-10-08T17:00")
         val behind = plan.todayBucket!!.chunks.filter { it.behind }
         assertTrue(behind.isNotEmpty())
+        assertTrue(behind.all { it.why == Why.NoRoom })
         assertTrue(plan.ordered.all { it.part <= it.parts })
         assertEquals(600, plan.ordered.sumOf { it.minutes })
     }
@@ -396,12 +410,14 @@ class PlannerTest {
 
     @Test
     fun `undated work has a soft deadline a week on, and goes after real deadlines`() {
-        val email = task("email", null, effort = 15, kind = Kind.Admin, firstSeen = Fixtures.at("2026-10-01T09:00"))
+        val email = task("email", null, effort = 15, kind = Kind.Admin, firstSeen = Fixtures.at("2026-10-02T09:00"))
         val homework = task("hw", Fixtures.at("2026-10-08T21:00"), effort = 30)
         val plan = plan(listOf(email, homework), "2026-10-08T17:00")
-        // The email's soft deadline (8 Oct 09:00) has passed: it's overdue, but still after the homework.
+        // The email's soft deadline is tomorrow morning, a week after it was first seen: it's
+        // today's, but after the homework.
         assertEquals(listOf("teams:hw", "teams:email"), plan.todayBucket!!.chunks.map { it.taskId })
         assertTrue(plan.todayBucket!!.chunks.last().soft)
+        assertEquals(Fixtures.at("2026-10-09T09:00"), plan.todayBucket!!.chunks.last().deadline)
     }
 
     @Test
@@ -445,10 +461,91 @@ class PlannerTest {
     }
 
     @Test
-    fun `overdue undated work waits for a day with time, not tonight after its hours`() {
-        // Its soft deadline passed a week ago; at 22:10 tonight's hours are gone: tomorrow.
+    fun `undated work whose week has gone by is planned within the next, never overdue`() {
+        // First seen 24 Sep 09:00: its week ended on 1 Oct, the next on 8 Oct at 09:00. At 22:10 that
+        // night it's in its third, to 15 Oct 09:00 (PL-14): planned by then, not tonight after its
+        // hours, and not overdue.
         val email = task("email", null, effort = 15, kind = Kind.Admin, firstSeen = Fixtures.at("2026-09-24T09:00"))
-        assertEquals(listOf(LocalDate.parse("2026-10-09")), plan(listOf(email), "2026-10-08T22:10").dayOf("email"))
+        val plan = plan(listOf(email), "2026-10-08T22:10")
+        val chunk = plan.ordered.single()
+        assertEquals(Fixtures.at("2026-10-15T09:00"), chunk.deadline)
+        assertFalse(chunk.overdue)
+        assertEquals(Why.Soft, chunk.why)
+        assertTrue(plan.dayOf("email").single() in LocalDate.parse("2026-10-09")..LocalDate.parse("2026-10-14"), "${plan.dayOf("email")}")
+    }
+
+    // --- Dates the app set are elastic; only a real deadline is overdue (PL-14) ---
+
+    @Test
+    fun `a step whose date has passed is re-fitted, not overdue`() {
+        // Claude's blocks: the reply's date went by on Monday, the form's is next Friday, and the
+        // task (from Teams) is due the Friday after. The reply is done with the task's own, before
+        // the form, not overdue into today.
+        val steps = listOf(SubStep("Reply", 20, dueAt = Fixtures.at("2026-10-05T23:59")), SubStep("Form", 30, dueAt = Fixtures.at("2026-10-16T23:59")))
+        val plan = plan(listOf(task("e", dueAt = Fixtures.at("2026-10-23T23:59"), steps = steps)), "2026-10-08T17:00")
+        fun piece(step: String) = plan.chunksOf("teams:e").single { it.step == step }
+        fun dayOf(step: String) = plan.buckets.first { b -> b.chunks.any { it.step == step } }.date
+        assertFalse(piece("Reply").overdue)
+        assertEquals(Fixtures.at("2026-10-23T23:59"), piece("Reply").dueAt)
+        assertTrue(dayOf("Reply") <= dayOf("Form"), "reply ${dayOf("Reply")}, form ${dayOf("Form")}")
+        assertTrue(plan.ordered.none { it.overdue })
+    }
+
+    @Test
+    fun `an email deadline the model guessed never shows overdue and is re-planned within a week when it passes`() {
+        // Claude read Monday into it without quoting the email: a plan. Monday gone, it's undated
+        // again, to the Monday after, and planned in that week.
+        val guessed = Fixtures.at("2026-10-05T23:59")
+        val unread = task("e", dueAt = guessed, kind = Kind.Admin, effort = 15).copy(id = "gmail:e", source = Source.Gmail)
+        val reading = Enrichment(inputHash = Enrichments.inputHash(unread), by = "claude", at = Fixtures.at("2026-10-01T12:00"), kind = Kind.Admin, deadline = guessed, deadlineQuoted = false)
+        val email = unread.copy(enrichment = reading)
+        assertFalse(email.hardDeadline)
+        val plan = plan(listOf(email), "2026-10-08T17:00")
+        val chunk = plan.ordered.single()
+        assertFalse(chunk.overdue)
+        assertTrue(chunk.soft)
+        assertEquals(Fixtures.at("2026-10-12T23:59"), chunk.deadline)
+        val day = plan.buckets.single { b -> b.chunks.isNotEmpty() }.date
+        assertTrue(day in LocalDate.parse("2026-10-08")..LocalDate.parse("2026-10-12"), "$day")
+        // The same date quoted from the email is a deadline: overdue, and today's.
+        val quoted = email.copy(enrichment = reading.copy(deadlineQuoted = true))
+        assertTrue(quoted.hardDeadline)
+        val late = plan(listOf(quoted), "2026-10-08T17:00").ordered.single()
+        assertTrue(late.overdue)
+        assertEquals(Why.Overdue, late.why)
+        // A quote in a reading of what the email said before (a reply since): not the email's words now.
+        assertFalse(quoted.copy(detail = "A reply came since").hardDeadline)
+    }
+
+    @Test
+    fun `a test date Claude read before an assignment's deadline is a plan, the assignment's own holding once it passes`() {
+        // Teams says Friday 23 Oct; Claude read a test on Tuesday 6 Oct into its instructions.
+        val own = Fixtures.at("2026-10-23T23:59")
+        val test = Fixtures.at("2026-10-06T08:30")
+        val assignment = task("prep", test, effort = 60).copy(sourceValues = SourceValues(Kind.Homework, own, null))
+        assertFalse(assignment.hardDeadline)
+        assertEquals(own, assignment.realDeadline)
+        // The deadline in force: the test until it passes, then Teams' own.
+        assertEquals(test, assignment.deadlineAt(Fixtures.at("2026-10-05T17:00")))
+        assertFalse(assignment.hardAt(Fixtures.at("2026-10-05T17:00")))
+        assertEquals(own, assignment.deadlineAt(Fixtures.at("2026-10-08T17:00")))
+        assertTrue(assignment.hardAt(Fixtures.at("2026-10-08T17:00")))
+        // Before the test, it's planned by it; after, by Teams' own date, which can still be missed.
+        assertTrue(plan(listOf(assignment), "2026-10-05T17:00").ordered.all { it.deadline == test && !it.overdue })
+        val after = plan(listOf(assignment), "2026-10-08T17:00")
+        assertTrue(after.ordered.isNotEmpty() && after.ordered.all { it.deadline == own && it.dueAt == own && !it.overdue && !it.soft })
+        assertTrue(plan(listOf(assignment), "2026-10-24T17:00").ordered.all { it.overdue })
+    }
+
+    @Test
+    fun `a Teams deadline passed is overdue and placed first`() {
+        val late = task("late", Fixtures.at("2026-10-05T23:59"), effort = 30)
+        val later = task("later", Fixtures.at("2026-10-20T23:59"), effort = 30)
+        assertTrue(late.hardDeadline)
+        val plan = plan(listOf(later, late), "2026-10-08T17:00")
+        assertEquals("teams:late", plan.next!!.taskId)
+        assertTrue(plan.chunksOf("teams:late").all { it.overdue && it.why == Why.Overdue })
+        assertEquals(listOf(LocalDate.parse("2026-10-08")), plan.dayOf("late"))
     }
 
     @Test
@@ -572,13 +669,14 @@ class PlannerTest {
     @Test
     fun `work whose last usable day comes first is placed first`() {
         // The essay is due later but has a three-day margin, so its last usable day (Wednesday)
-        // comes before the other's (Friday): it gets Wednesday, its own last usable day.
+        // comes before the other's (Friday): it claims its days first, Tuesday the earlier of its
+        // two equal evenings, and the form's three pieces fit after it.
         val margins = Calibration(marginDays = mapOf(Kind.Admin to 0, Kind.Homework to 3))
         val admin = task("form", Fixtures.at("2026-10-16T23:00"), kind = Kind.Admin, steps = listOf(SubStep("a", 310), SubStep("b", 310), SubStep("c", 310)))
         val essay = task("essay", Fixtures.at("2026-10-17T09:00"), steps = listOf(SubStep("all", 310)))
         val input = Planner.Input(listOf(admin, essay), Fixtures.at("2026-10-13T16:45"), LONDON, settings, calibration = margins)
         val plan = Planner.plan(input)
-        assertEquals(listOf(LocalDate.parse("2026-10-14")), plan.dayOf("essay"))
+        assertEquals(listOf(LocalDate.parse("2026-10-13")), plan.dayOf("essay"))
         assertTrue(plan.ordered.none { it.behind })
     }
 
@@ -630,15 +728,36 @@ class PlannerTest {
     }
 
     @Test
+    fun `capacity is scaled by the day's kind's yield`() {
+        // Weekends found to use half their free time (PL-06): Saturday's 840 minutes plan as 420;
+        // Thursday's evening is as it was. A limit you set is of the work, after the yield.
+        val halfWeekends = Calibration(yields = mapOf(DayKind.Weekend to 0.5))
+        fun input(caps: Map<LocalDate, Int> = emptyMap()) = Planner.Input(emptyList(), Fixtures.at("2026-10-08T08:00"), LONDON, settings, calibration = halfWeekends, dayCaps = caps)
+        val thursday = LocalDate.parse("2026-10-08")
+        val saturday = LocalDate.parse("2026-10-10")
+        assertEquals(420, Planner.capacity(saturday, input()))
+        assertEquals(315, Planner.capacity(thursday, input()))
+        assertEquals(300, Planner.capacity(saturday, input(mapOf(saturday to 300))))
+        assertEquals(420, Planner.capacity(saturday, input(mapOf(saturday to 600))))
+        // The plan holds no more than that.
+        val big = task("big", Fixtures.at("2026-10-12T08:30"), effort = 600, steps = listOf(SubStep("all", 600)))
+        val plan = Planner.plan(input().copy(tasks = listOf(big)))
+        assertEquals(420, plan.bucket(saturday)!!.capacityMin)
+    }
+
+    @Test
     fun `with no margin, a morning deadline's own day is never usable`() {
+        // Due Sunday 09:00 with no margin, Friday 17:00, Saturday mostly taken: Sunday would be the
+        // roomiest day, but a morning deadline's own day isn't one to work on. Friday has most.
         val noMargin = Planner.Input(
-            listOf(task("t", Fixtures.at("2026-10-12T09:00"))),
-            Fixtures.at("2026-10-08T17:00"),
+            listOf(task("t", Fixtures.at("2026-10-11T09:00"))),
+            Fixtures.at("2026-10-09T17:00"),
             LONDON,
             settings,
             calibration = Calibration(marginDays = mapOf(Kind.Homework to 0)),
+            dayLoads = mapOf(LocalDate.parse("2026-10-10") to 600),
         )
-        assertEquals(LocalDate.parse("2026-10-11"), Planner.plan(noMargin).buckets.single { it.chunks.isNotEmpty() }.date)
+        assertEquals(LocalDate.parse("2026-10-09"), Planner.plan(noMargin).buckets.single { it.chunks.isNotEmpty() }.date)
     }
 
     @Test
@@ -704,6 +823,249 @@ class PlannerTest {
         val steps = listOf(SubStep("Practice", 30, done = true), SubStep("Practice", 30), SubStep("Write up", 20))
         val chunks = plan(listOf(task("t", Fixtures.at("2026-10-20T09:00"), steps = steps)), "2026-10-08T17:00").chunksOf("teams:t")
         assertEquals(listOf(1, 2), chunks.map { it.stepIndex })
+    }
+
+
+    // --- Spreading later work over its window (PL-01) ---
+
+    /** Every day 17:00 to 21:00, weekday or weekend: four hours, so shares are even. */
+    private val evenings = Settings(weekdayHours = Window(17 * 60, 21 * 60), weekendHours = Window(17 * 60, 21 * 60), boxMin = 30)
+
+    private fun spread(tasks: List<TaskItem>, at: String, busy: List<Busy> = emptyList(), with: Settings = evenings) =
+        Planner.plan(Planner.Input(tasks, Fixtures.at(at), LONDON, with, busy = busy))
+
+    @Test
+    fun `a task due in 12 days with 6 pieces gets one every second day, not the last six evenings`() {
+        // Monday 08:00, due Saturday week (its last usable day the Thursday before): twelve evenings alike.
+        val plan = spread(listOf(task("booklet", Fixtures.at("2026-10-24T23:59"), effort = 180)), "2026-10-12T08:00")
+        assertEquals(listOf("2026-10-12", "2026-10-14", "2026-10-16", "2026-10-18", "2026-10-20", "2026-10-22").map(LocalDate::parse), plan.dayOf("booklet"))
+        assertTrue(plan.ordered.none { it.behind })
+        assertTrue(plan.ordered.all { it.why == Why.Spread })
+        assertEquals("Spread over the 12 days to its deadline", plan.ordered.first().whyLine(LocalDate.parse("2026-10-12"), LONDON))
+    }
+
+    @Test
+    fun `spreading follows free time, a day with a busy evening takes a smaller share`() {
+        // Four pieces over four evenings, the last two three-quarters taken: they hold one piece between them.
+        val busy = listOf("2026-10-14", "2026-10-15").map { Busy(Fixtures.at("${it}T17:00"), Fixtures.at("${it}T20:00")) }
+        val plan = spread(listOf(task("t", Fixtures.at("2026-10-16T23:59"), effort = 120)), "2026-10-12T08:00", busy)
+        val days = plan.dayOf("t")
+        assertEquals(4, plan.chunksOf("teams:t").size)
+        assertEquals(1, days.count { it >= LocalDate.parse("2026-10-14") })
+        assertEquals(LocalDate.parse("2026-10-14"), days.last())
+        assertTrue(plan.ordered.all { it.why == Why.Spread })
+    }
+
+    @Test
+    fun `a task with a three-week window is touched at least once a week`() {
+        // Two pieces over 21 even evenings: shares would fall ten days apart; the second comes within the week.
+        val plan = spread(listOf(task("t", Fixtures.at("2026-11-02T23:59"), effort = 60)), "2026-10-12T08:00")
+        val days = plan.dayOf("t")
+        assertEquals(2, days.size)
+        assertTrue(java.time.temporal.ChronoUnit.DAYS.between(days[0], days[1]) in 1..7, "$days")
+        assertEquals(listOf(Why.Spread, Why.MinimumTouch), plan.ordered.map { it.why })
+        assertEquals("Kept within a week of its last piece", plan.ordered.last().whyLine(LocalDate.parse("2026-10-12"), LONDON))
+    }
+
+    @Test
+    fun `revision pieces are at least a day apart`() {
+        // Saturday 08:00, three pieces due Tuesday night: Saturday's and Sunday's 840 minutes would
+        // take two on Sunday; revision goes on to Monday instead.
+        fun pieces(kind: Kind) = plan(listOf(task("t", Fixtures.at("2026-10-20T23:59"), effort = 135, kind = kind)), "2026-10-17T08:00").let { p ->
+            p.buckets.flatMap { b -> b.chunks.filter { it.taskId == "teams:t" }.map { b.date.toString() to it.why } }
+        }
+        assertEquals(listOf("2026-10-17", "2026-10-18", "2026-10-18").map { it to Why.Spread }, pieces(Kind.Homework))
+        assertEquals(listOf("2026-10-17" to Why.Spread, "2026-10-18" to Why.Spread, "2026-10-19" to Why.RevisionGap), pieces(Kind.Revision))
+    }
+
+    @Test
+    fun `a single piece goes to the day with most room, the earlier on a tie`() {
+        // Thursday 17:00, due Tuesday 08:30: Saturday and Sunday tie at 840 minutes, Saturday first.
+        val due = Fixtures.at("2026-10-13T08:30")
+        val roomiest = plan(listOf(task("t", due)), "2026-10-08T17:00")
+        assertEquals(listOf(LocalDate.parse("2026-10-10")), roomiest.dayOf("t"))
+        assertEquals(Why.MostRoom, roomiest.ordered.single().why)
+        assertEquals("The day with most room before Tuesday", roomiest.ordered.single().whyLine(LocalDate.parse("2026-10-08"), LONDON))
+        // Saturday mostly taken: Sunday.
+        assertEquals(listOf(LocalDate.parse("2026-10-11")), plan(listOf(task("t", due)), "2026-10-08T17:00", loads = mapOf(LocalDate.parse("2026-10-10") to 600)).dayOf("t"))
+    }
+
+    @Test
+    fun `work due tomorrow is still placed first and takes today's time`() {
+        // Thursday 17:00: tomorrow night's essay is today's (its last usable day), before any spreading.
+        val essay = task("essay", Fixtures.at("2026-10-09T23:59"), effort = 60)
+        val far = task("far", Fixtures.at("2026-10-30T23:59"), effort = 300)
+        val plan = plan(listOf(far, essay), "2026-10-08T17:00")
+        assertEquals(listOf(LocalDate.parse("2026-10-08")), plan.dayOf("essay"))
+        assertEquals("teams:essay", plan.todayBucket!!.chunks.first().taskId)
+        assertTrue(plan.chunksOf("teams:essay").all { it.dueSoon && it.why == Why.DueSoon })
+        assertEquals("Due tomorrow", plan.chunksOf("teams:essay").first().whyLine(LocalDate.parse("2026-10-08"), LONDON))
+        assertTrue(plan.chunksOf("teams:far").none { it.why == Why.DueSoon })
+    }
+
+    @Test
+    fun `undated work still fills from its soft week backwards`() {
+        // First seen now: its soft deadline is a week on (15 Oct), and it sits on its last usable day.
+        val email = task("email", null, effort = 15, kind = Kind.Admin, firstSeen = Fixtures.at("2026-10-08T17:00"))
+        val plan = plan(listOf(email), "2026-10-08T17:00")
+        assertEquals(listOf(LocalDate.parse("2026-10-14")), plan.dayOf("email"))
+        assertEquals(Why.Soft, plan.ordered.single().why)
+        assertEquals("Undated: fills spare time this week", plan.ordered.single().whyLine(LocalDate.parse("2026-10-08"), LONDON))
+    }
+
+    @Test
+    fun `today's bucket alone is pressure`() {
+        // Due Saturday morning, Thursday 22:10: tonight's hours are gone, so it's Friday's, not today's.
+        val tomorrow = plan(listOf(task("t", Fixtures.at("2026-10-10T09:00"), effort = 30)), "2026-10-08T22:10")
+        assertTrue(tomorrow.todayBucket!!.chunks.isEmpty() && tomorrow.tomorrowBucket!!.chunks.isNotEmpty())
+        assertFalse(tomorrow.pressure)
+        assertTrue(plan(listOf(task("t", Fixtures.at("2026-10-08T21:00"), effort = 30)), "2026-10-08T17:00").pressure)
+    }
+
+    // --- A real deadline its days can't hold, said early (PL-02) ---
+
+    @Test
+    fun `a task its days can't hold before its deadline is said, with the numbers`() {
+        // Thursday 17:00, six hours due Saturday morning: Thursday and Friday have two hours each
+        // once the calendar's taken its share. One line, with what's left and what's free.
+        val loads = mapOf(LocalDate.parse("2026-10-08") to 180, LocalDate.parse("2026-10-09") to 195)
+        val due = Fixtures.at("2026-10-10T09:00")
+        val plan = plan(listOf(task("coursework", due, effort = 360)), "2026-10-08T17:00", loads = loads)
+        assertEquals(listOf(WontFit("teams:coursework", "coursework", 360, 240, due)), plan.wontFit)
+        // Undated work never is: its deadline is the app's own.
+        assertEquals(emptyList(), plan(listOf(task("notes", null, effort = 2000, kind = Kind.Admin)), "2026-10-08T17:00", loads = loads).wontFit)
+        // Nor is work that fits, or a plan's date (an email's Claude didn't quote).
+        assertEquals(emptyList(), plan(listOf(task("short", due, effort = 120)), "2026-10-08T17:00", loads = loads).wontFit)
+        val guessed = task("e", due, effort = 360).copy(id = "gmail:e", source = Source.Gmail, enrichment = Enrichment(inputHash = "", by = "claude", at = 0, deadline = due))
+        assertEquals(emptyList(), plan(listOf(guessed), "2026-10-08T17:00", loads = loads).wontFit)
+    }
+
+    @Test
+    fun `a task that opens late tonight weighs tonight by the time after it opens`() {
+        // Thursday 17:00, an hour due Saturday 09:00 (its days Thursday and Friday), open from 21:00:
+        // tonight has 60 minutes for it, Friday 300 (a quarter of an hour taken). Friday it is.
+        val late = task("late", Fixtures.at("2026-10-10T09:00"), effort = 60).copy(notBefore = Fixtures.at("2026-10-08T21:00"))
+        val friday = Busy(Fixtures.at("2026-10-09T17:00"), Fixtures.at("2026-10-09T17:15"))
+        assertEquals(listOf(LocalDate.parse("2026-10-09")), plan(listOf(late), "2026-10-08T17:00", busy = listOf(friday)).dayOf("late"))
+    }
+
+    @Test
+    fun `a deadline past the plan's reach is never said not to fit`() {
+        // Six months off, more than the plan's 90 days hold: the days after them weren't counted.
+        val big = task("big", Fixtures.at("2027-04-15T23:59"), effort = 50_000)
+        assertEquals(emptyList(), plan(listOf(big), "2026-10-08T17:00").wontFit)
+    }
+
+    @Test
+    fun `a task in runs is said not to fit for all of them, against the time they had`() {
+        // Two hour-long blocks opening apart, both by Saturday 09:00, with an hour and a half free on
+        // Thursday and Friday: 120 minutes left of 90, not the last run's 60 of 30.
+        val steps = listOf(SubStep("A", 60, from = Fixtures.at("2026-10-08T00:00")), SubStep("B", 60, from = Fixtures.at("2026-10-08T12:00")))
+        val loads = mapOf(LocalDate.parse("2026-10-08") to 255, LocalDate.parse("2026-10-09") to 270)
+        val plan = plan(listOf(task("runs", Fixtures.at("2026-10-10T09:00"), steps = steps)), "2026-10-08T17:00", loads = loads)
+        assertEquals(listOf(WontFit("teams:runs", "runs", 120, 90, Fixtures.at("2026-10-10T09:00"))), plan.wontFit)
+    }
+
+    @Test
+    fun `a piece no single day before its deadline holds is said not to fit`() {
+        // A 45-minute step, and half an hour free on each of Thursday and Friday before Saturday morning.
+        val loads = mapOf(LocalDate.parse("2026-10-08") to 270, LocalDate.parse("2026-10-09") to 285)
+        val essay = task("essay", Fixtures.at("2026-10-10T09:00"), steps = listOf(SubStep("Write it", 45)))
+        val plan = plan(listOf(essay), "2026-10-08T17:00", loads = loads)
+        assertEquals(listOf(WontFit("teams:essay", "essay", 45, 60, Fixtures.at("2026-10-10T09:00"))), plan.wontFit)
+        assertEquals(Why.NoRoom, plan.chunksOf("teams:essay").single().why)
+    }
+
+    @Test
+    fun `revision looks ahead for days to keep its pieces a day apart`() {
+        // Ten minutes free on Thursday and on Friday, the evening's whole on Saturday: three ten-minute
+        // pieces of revision due Sunday night go one a day, not all on Saturday where the time is.
+        val loads = mapOf(LocalDate.parse("2026-10-08") to 290, LocalDate.parse("2026-10-09") to 305)
+        val revision = task("rev", Fixtures.at("2026-10-11T23:59"), kind = Kind.Revision, steps = (1..3).map { SubStep("Topic $it", 10) })
+        assertEquals(listOf("2026-10-08", "2026-10-09", "2026-10-10").map(LocalDate::parse), plan(listOf(revision), "2026-10-08T17:00", loads = loads).dayOf("rev"))
+    }
+
+    @Test
+    fun `a homework deck's date is a deadline only where its assignments' is`() {
+        val due = Fixtures.at("2026-10-12T09:00")
+        val deck = TaskItem(
+            id = "anki:deck", source = Source.Anki, sourceId = AnkiRules.DECK_PREFIX + "1", title = "Anki: Textbook 1::1.2", dueAt = due,
+            kind = Kind.Revision, sourceEffortMin = 9, derived = true, extra = mapOf(AnkiRules.EXTRA_FOR to "teams:a"),
+            sourceValues = SourceValues(Kind.Revision, due, null), firstSeenAt = 0, lastSeenAt = 0,
+        )
+        // Its date a test date Claude read for its assignment, none of theirs a deadline: a plan.
+        assertNull(deck.realDeadline)
+        assertFalse(deck.hardDeadline)
+        // Its assignment's own deadline, read with it: a deadline, in force once passed.
+        val hard = deck.copy(extra = deck.extra + (AnkiRules.EXTRA_REAL to due.toString()))
+        assertEquals(due, hard.realDeadline)
+        assertEquals(due, hard.deadlineAt(Fixtures.at("2026-10-13T17:00")))
+        assertTrue(hard.hardAt(Fixtures.at("2026-10-13T17:00")))
+    }
+
+    @Test
+    fun `work not open yet is said not to fit where its days from its opening can't hold it`() {
+        // Opens Friday 17:00, due Saturday 09:00: Friday's 300 minutes from then, for six hours.
+        val app = task("app", Fixtures.at("2026-10-10T09:00"), effort = 360, available = Fixtures.at("2026-10-09T17:00"))
+        assertEquals(listOf(WontFit("teams:app", "app", 360, 300, Fixtures.at("2026-10-10T09:00"))), plan(listOf(app), "2026-10-08T17:00").wontFit)
+        // Five hours fit.
+        assertEquals(emptyList(), plan(listOf(app.copy(sourceEffortMin = 300)), "2026-10-08T17:00").wontFit)
+    }
+
+    @Test
+    fun `work a per-day limit carries past its deadline is said not to fit, however much time there is`() {
+        // Three steps of a deck one a day, due tomorrow night: the third goes to Saturday, past it.
+        val deck = task("deck", Fixtures.at("2026-10-09T23:59"), steps = (1..3).map { SubStep("20 new cards", 9) }).copy(stepsPerDay = 1)
+        val plan = plan(listOf(deck), "2026-10-08T17:00")
+        assertEquals(listOf("teams:deck"), plan.wontFit.map { it.taskId })
+        assertTrue(plan.wontFit.single().leftMin < plan.wontFit.single().freeMin)
+    }
+
+    @Test
+    fun `work for a test is spaced only as Claude reads the task now`() {
+        // Saturday 08:00, three pieces due Tuesday night (as revision pieces are spaced): for a test
+        // Claude read in its instructions, a day apart; the reading out of date (the text changed since), not.
+        val homework = task("t", Fixtures.at("2026-10-20T23:59"), effort = 135)
+        val reading = Enrichment(inputHash = Enrichments.inputHash(homework), by = "claude", at = 0, testDate = Fixtures.at("2026-10-21T08:30"))
+        fun days(task: TaskItem) = plan(listOf(task), "2026-10-17T08:00").let { p -> p.buckets.flatMap { b -> b.chunks.filter { it.taskId == "teams:t" }.map { b.date.toString() } } }
+        assertEquals(listOf("2026-10-17", "2026-10-18", "2026-10-19"), days(homework.copy(enrichment = reading)))
+        assertEquals(listOf("2026-10-17", "2026-10-18", "2026-10-18"), days(homework.copy(enrichment = reading, detail = "Changed since")))
+    }
+
+    @Test
+    fun `a deck's deadline is the earliest of its assignments' in force`() {
+        // A: a test date Claude read gone by, Teams' own on 23 Oct. B: a plan's date to come, 14 Oct.
+        // The deck's vocabulary is for B's date first, not A's real one.
+        val a = task("a", Fixtures.at("2026-10-06T08:30")).copy(sourceValues = SourceValues(Kind.Homework, Fixtures.at("2026-10-23T23:59"), null))
+        val b = task("b", Fixtures.at("2026-10-14T08:30")).copy(sourceValues = SourceValues(Kind.Homework, Fixtures.at("2026-10-27T23:59"), null))
+        val deck = TaskItem(
+            id = "anki:deck", source = Source.Anki, sourceId = AnkiRules.DECK_PREFIX + "1", title = "Anki: Textbook 1::1.2", dueAt = Fixtures.at("2026-10-23T23:59"),
+            kind = Kind.Revision, sourceEffortMin = 9, derived = true, subSteps = listOf(SubStep("20 new cards", 9)),
+            extra = mapOf(AnkiRules.EXTRA_FOR to "teams:a,teams:b", AnkiRules.EXTRA_DECK_NAME to "Textbook 1::1.2"),
+            firstSeenAt = Fixtures.at("2026-10-07T12:00"), lastSeenAt = Fixtures.at("2026-10-07T12:00"),
+        )
+        val chunk = plan(listOf(a, b, deck), "2026-10-08T17:00").chunksOf("anki:deck").single()
+        assertEquals(Fixtures.at("2026-10-14T08:30"), chunk.deadline)
+        assertFalse(chunk.overdue)
+    }
+
+    @Test
+    fun `work inside its safety margin that still fits before its deadline isn't said not to fit`() {
+        // Homework finished three days early, as learned: an hour due Saturday morning is behind
+        // that margin on Thursday, but Thursday and Friday hold it before the deadline itself.
+        val late = Calibration(marginDays = mapOf(Kind.Homework to 3))
+        val input = Planner.Input(listOf(task("essay", Fixtures.at("2026-10-10T09:00"), effort = 60)), Fixtures.at("2026-10-08T17:00"), LONDON, settings, calibration = late)
+        val plan = Planner.plan(input)
+        assertTrue(plan.ordered.all { it.behind })
+        assertEquals(emptyList(), plan.wontFit)
+        // Behind only the margin: its pieces say why they're where they are, not that there's no room.
+        assertTrue(plan.ordered.none { it.why == Why.NoRoom }, "${plan.ordered.map { it.why }}")
+        // One that can only start at 21:00 has the hour after it, not the evening.
+        val opening = task("late", Fixtures.at("2026-10-09T09:00"), effort = 120).copy(notBefore = Fixtures.at("2026-10-08T21:00"))
+        assertEquals(listOf(WontFit("teams:late", "late", 120, 60, Fixtures.at("2026-10-09T09:00"))), Planner.plan(input.copy(tasks = listOf(opening))).wontFit)
+        // Due this morning, with its hours tonight: none of its time is before its deadline.
+        val morning = Planner.plan(input.copy(tasks = listOf(task("prep", Fixtures.at("2026-10-09T08:30"), effort = 60)), now = Fixtures.at("2026-10-09T01:00")))
+        assertEquals(listOf(WontFit("teams:prep", "prep", 60, 0, Fixtures.at("2026-10-09T08:30"))), morning.wontFit)
     }
 
     // --- What's left out, and why (IMP-P1-002) ---

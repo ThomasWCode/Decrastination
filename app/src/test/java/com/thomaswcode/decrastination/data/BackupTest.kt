@@ -4,6 +4,7 @@ import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.core.Calibration
 import com.thomaswcode.decrastination.core.Change
 import com.thomaswcode.decrastination.core.ChangeType
+import com.thomaswcode.decrastination.core.DayKind
 import com.thomaswcode.decrastination.core.Instruction
 import com.thomaswcode.decrastination.core.InstructionStatus
 import com.thomaswcode.decrastination.core.Kind
@@ -107,6 +108,12 @@ class BackupTest {
         assertNotNull(Backups.problem(backup(settings = Settings(boxMin = 5))))
         assertNotNull(Backups.problem(backup(settings = Settings(weekdayHours = Window(22 * 60, 16 * 60)))))
         assertNotNull(Backups.problem(backup(calibration = Calibration(multipliers = mapOf("Homework|" to 99.0)))))
+        // A day's yield past what the review learns (PL-06), or evidence it couldn't have counted.
+        assertNotNull(Backups.problem(backup(calibration = Calibration(yields = mapOf(DayKind.Weekend to -1.0)))))
+        assertNotNull(Backups.problem(backup(calibration = Calibration(yields = mapOf(DayKind.Weekend to 0.6), yieldDays = mapOf(DayKind.Weekend to 2)))))
+        assertNull(Backups.problem(backup(calibration = Calibration(yields = mapOf(DayKind.Weekend to 0.6), yieldDays = mapOf(DayKind.Weekend to 9)))))
+        // A yield with no days behind it is one the review never learns.
+        assertNotNull(Backups.problem(backup(calibration = Calibration(yields = mapOf(DayKind.Weekend to 0.5)))))
         // Evidence it couldn't have counted: a negative count, a kind it doesn't know, a class's own
         // figure on fewer than its three timed pieces. One from before 1.8.0 kept none, which is fine.
         assertNotNull(Backups.problem(backup(calibration = Calibration(timed = mapOf("Homework|" to -1), counted = true))))
