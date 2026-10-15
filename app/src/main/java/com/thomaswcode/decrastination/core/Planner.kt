@@ -51,8 +51,9 @@ import kotlin.math.roundToInt
  *    overdue (PL-14). A date the app or Claude set is a plan: gone by, its work is undated again,
  *    its week counted on from that date, and a step's own dates gone by are dropped; undated work's
  *    week, ended undone, is followed by the next.
- * 11. Work with a real deadline its days can't hold is said ([Plan.wontFit], PL-02): what's left
- *    and what was free before the deadline, the day it becomes so.
+ * 11. Work with a real deadline still to come that has more left than the free time before it is
+ *    said ([Plan.wontFit], PL-02), the day it becomes so: what's left, and what's free before the
+ *    deadline itself (the safety margin aside).
  *
  * Spreading means today's bucket holds a fair share of every task's days, not the whole of a far
  * task's work in its last ones; placing everything early would put every task in today and the
@@ -368,22 +369,29 @@ object Planner {
 
         // Work with a real deadline its days can't hold (PL-02): said, once a task, with the numbers.
         val wontFit = mutableListOf<WontFit>()
-        /** The free time left from [from] to [until], before what's being placed takes any. */
-        fun freeIn(from: LocalDate, until: LocalDate): Int =
-            generateSequence(from) { it.plusDays(1) }.takeWhile { it <= until }.sumOf { (free[it] ?: 0).coerceAtLeast(0) }
-        /** [item], placed as [made], some of it behind its real deadline or left out: it won't fit in the [freeBefore] it had. */
-        fun sayIfShort(item: Item, made: List<Chunk>, freeBefore: Int, leftOut: Boolean) {
-            if (!item.hard || !(leftOut || made.any { it.behind }) || wontFit.any { it.taskId == item.task.id }) return
-            wontFit += WontFit(item.task.id, item.task.title, item.minutes, freeBefore, item.deadline)
+        /**
+         * The free time [item] has before its deadline itself, at its turn (before it takes any): from
+         * the first day it can be done to its deadline's day, or the day before for a morning
+         * deadline. Not to its last usable day: the safety margin is the app's own, and work inside
+         * it, flagged behind, may still be done in time.
+         */
+        fun freeUntilDue(item: Item, from: LocalDate): Int {
+            val due = Instant.ofEpochMilli(item.deadline).atZone(zone)
+            val last = minOf(horizon, if (due.toLocalTime() < NOON) due.toLocalDate().minusDays(1) else due.toLocalDate())
+            return generateSequence(from) { it.plusDays(1) }.takeWhile { it <= last }.sumOf { (free[it] ?: 0).coerceAtLeast(0) }
+        }
+        /** [item] has more left than its time before its deadline still to come, or some of it fits nowhere: said. */
+        fun sayIfShort(item: Item, free: Int, leftOut: Boolean) {
+            if (!item.hard || item.deadline < input.now || wontFit.any { it.taskId == item.task.id }) return
+            if (leftOut || item.minutes > free) wontFit += WontFit(item.task.id, item.task.title, item.minutes, free, item.deadline)
         }
 
         // Due by today (overdue, or later today): into today, from the first day it can be.
         fun placeNow(item: Item) {
             val perDay = item.task.stepsPerDay
             val assigned = arrayOfNulls<LocalDate>(item.chunks.size)
-            val freeBefore = freeIn(today, today)
-            val made = mutableListOf<Chunk>()
             var day = maxOf(firstDay(item), floorOf(item) ?: today)
+            val freeBefore = freeUntilDue(item, day)
             for (i in item.chunks.indices) {
                 // Past its deadline it's due now, but a task that can only go so far a day carries
                 // on over the next days, each step to a day with both a step and the time free (not
@@ -403,10 +411,10 @@ object Planner {
                 // Due today but only possible from a later day (a deck whose next cards come
                 // tomorrow): it misses its deadline, so it's behind.
                 val why = if (item.hard && item.deadline < input.now) Why.Overdue else if (item.soft) Why.Soft else Why.DueSoon
-                made += chunk(item, i, behind = day > date(item.deadline, zone), why = why).also { placed.getValue(day) += it }
+                placed.getValue(day) += chunk(item, i, behind = day > date(item.deadline, zone), why = why)
             }
-            // Due today and short of today's time: said. Overdue work has already missed its deadline.
-            sayIfShort(item, made, freeBefore, leftOut = item.deadline >= input.now && assigned.any { it == null })
+            // Due later today and short of the time before it: said (overdue work has missed it already).
+            sayIfShort(item, freeBefore, leftOut = assigned.any { it == null })
             note(item, assigned)
         }
 
@@ -420,7 +428,7 @@ object Planner {
             val perDay = item.task.stepsPerDay
             val assigned = arrayOfNulls<LocalDate>(item.chunks.size)
             val behind = BooleanArray(item.chunks.size)
-            val freeBefore = freeIn(earliest, minOf(dueBy, horizon))
+            val freeBefore = freeUntilDue(item, earliest)
             fun fits(day: LocalDate, i: Int) =
                 room(item, day) >= item.chunks[i].minutes && (perDay == null || countOn(assigned, day) < perDay)
             fun latest(from: LocalDate, i: Int): LocalDate? =
@@ -468,11 +476,11 @@ object Planner {
                     from = day
                 }
             }
-            val made = item.chunks.indices.mapNotNull { i ->
-                val day = assigned[i] ?: return@mapNotNull null
-                chunk(item, i, behind = behind[i] || day > dueBy, why = why).also { placed.getValue(day) += it }
+            item.chunks.indices.forEach { i ->
+                val day = assigned[i] ?: return@forEach
+                placed.getValue(day) += chunk(item, i, behind = behind[i] || day > dueBy, why = why)
             }
-            sayIfShort(item, made, freeBefore, leftOut = assigned.any { it == null })
+            sayIfShort(item, freeBefore, leftOut = assigned.any { it == null })
             note(item, assigned)
         }
 
@@ -498,7 +506,7 @@ object Planner {
             val weekly = window.size >= 7
             val assigned = arrayOfNulls<LocalDate>(n)
             val whys = arrayOfNulls<Why>(n)
-            val freeBefore = freeIn(earliest, minOf(lastUsableDay(item, input), horizon))
+            val freeBefore = freeUntilDue(item, earliest)
             fun fits(day: Int, i: Int) =
                 room(item, window[day]) >= item.chunks[i].minutes && (perDay == null || countOn(assigned, window[day]) < perDay)
             // Where piece [i]'s share falls: the first day whose running total of free time reaches it.
@@ -589,8 +597,8 @@ object Planner {
             }
             // Behind only where it can't start before its last usable day is past (a start after it).
             val dueBy = lastUsableDay(item, input)
-            val made = item.chunks.indices.map { i -> chunk(item, i, behind = assigned[i]!! > dueBy, why = whys[i]!!).also { placed.getValue(assigned[i]!!) += it } }
-            sayIfShort(item, made, freeBefore, leftOut = false)
+            item.chunks.indices.forEach { i -> placed.getValue(assigned[i]!!) += chunk(item, i, behind = assigned[i]!! > dueBy, why = whys[i]!!) }
+            sayIfShort(item, freeBefore, leftOut = false)
             note(item, assigned)
         }
 
