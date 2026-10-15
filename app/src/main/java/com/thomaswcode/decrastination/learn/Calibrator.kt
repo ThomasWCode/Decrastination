@@ -52,19 +52,25 @@ object Calibrator {
     /** The calibration the log teaches, and what changed from [previous], in words. */
     data class Learned(val calibration: Calibration, val changes: List<String>)
 
+    /** Of [completions], those [calibration] hasn't been told to forget (LR-06): a kind or class's from before it was. */
+    fun remembered(completions: List<CompletionRecord>, calibration: Calibration): List<CompletionRecord> =
+        if (calibration.forgotten.isEmpty()) completions else completions.filterNot { r -> calibration.forgotten[Calibration.key(r.kind, r.className)]?.let { r.doneAt < it } == true }
+
     fun learn(log: ActivityLog, previous: Calibration, today: LocalDate, defaultMargin: Int = MIN_MARGIN): Learned {
-        val multipliers = multipliers(log.completions)
-        val margins = margins(log.completions, defaultMargin)
+        val completions = remembered(log.completions, previous)
+        val multipliers = multipliers(completions)
+        val margins = margins(completions, defaultMargin)
         val next = Calibration(
             yields = yields(log.days, log.slots, today),
             yieldDays = yieldDays(log.days, log.slots, today),
             multipliers = multipliers,
             marginDays = margins,
-            timed = timed(log.completions),
+            timed = timed(completions),
             counted = true,
             // Learned as AnkiDroid is used (DX-11), not from the log: kept as it stands.
             ankiSecondsPerCard = previous.ankiSecondsPerCard,
             ankiStretches = previous.ankiStretches,
+            forgotten = previous.forgotten,
         )
         return Learned(next, describe(previous, next, defaultMargin))
     }
@@ -127,7 +133,8 @@ object Calibrator {
      */
     fun upgraded(calibration: Calibration, completions: List<CompletionRecord>): Calibration? {
         if (calibration.counted || calibration.multipliers.isEmpty()) return null
-        return calibration.copy(multipliers = multipliers(completions), timed = timed(completions), counted = true)
+        val kept = remembered(completions, calibration)
+        return calibration.copy(multipliers = multipliers(kept), timed = timed(kept), counted = true)
     }
 
     /** Whether [record]'s minutes are how long it took: timed, and all of it (no blocks ticked by hand, no photo check). */

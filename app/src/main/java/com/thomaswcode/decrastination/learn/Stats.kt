@@ -213,8 +213,17 @@ object Stats {
     private const val TERM_LOOK_BACK = 120
     private const val DAY_MS = 24 * 3_600_000L
 
+    /** A line of what's been learned (LR-06), and the kind or class it's of where it can be forgotten. */
+    data class CalibrationRow(val line: String, val forget: String? = null)
+
     /** The calibration in words, a line a value: what the planner now assumes about your work. */
-    fun calibrationLines(calibration: Calibration): List<String> {
+    fun calibrationLines(calibration: Calibration): List<String> = calibrationRows(calibration).map { it.line }
+
+    /**
+     * [calibrationLines] as rows (LR-06), each class's figure (and one still coming) with its key, so
+     * it can be forgotten ([Calibration.forgotten]), starting afresh from its kind's.
+     */
+    fun calibrationRows(calibration: Calibration): List<CalibrationRow> {
         fun what(key: String): String {
             val kind = key.substringBefore('|')
             val className = key.substringAfter('|', "")
@@ -223,21 +232,22 @@ object Stats {
         }
         // What each figure rests on (IMP-P2-016): its timed pieces, or only your answers.
         fun pieces(n: Int) = "$n timed piece${if (n == 1) "" else "s"}"
+        fun forgettable(key: String) = key.takeIf { it.substringAfter('|').isNotEmpty() }
         val multipliers = calibration.multipliers.entries.sortedBy { it.key }.map { (key, value) ->
             val n = calibration.timed[key] ?: 0
-            "${what(key)}: takes %.1f× the estimate".format(Locale.UK, value) + if (n > 0) " (from ${pieces(n)})" else " (from your answers)"
+            CalibrationRow("${what(key)}: takes %.1f× the estimate".format(Locale.UK, value) + if (n > 0) " (from ${pieces(n)})" else " (from your answers)", forgettable(key))
         }
         // A class with some timed pieces, not yet enough for its own figure.
         val coming = calibration.timed.entries.filter { (key, n) -> key.substringAfter('|').isNotEmpty() && key !in calibration.multipliers && n > 0 }
             .sortedBy { it.key }
-            .map { (key, n) -> "${what(key)}: ${pieces(n)} so far; its own figure counts from ${Calibrator.MIN_CLASS_TIMED}" }
+            .map { (key, n) -> CalibrationRow("${what(key)}: ${pieces(n)} so far; its own figure counts from ${Calibrator.MIN_CLASS_TIMED}", key) }
         val margins = calibration.marginDays.entries.sortedBy { it.key.ordinal }.map { (kind, days) ->
-            "${kind.label}: finished $days day${if (days == 1) "" else "s"} before the deadline"
+            CalibrationRow("${kind.label}: finished $days day${if (days == 1) "" else "s"} before the deadline")
         }
         // How much of each kind of day's free time is used (PL-06), and the days it rests on.
         val yields = calibration.yields.entries.sortedBy { it.key.ordinal }.map { (kind, share) ->
             val n = calibration.yieldDays[kind] ?: 0
-            "${kind.label}: about ${kotlin.math.round(share * 100).toInt()} % of the free time used" + if (n > 0) " (from $n days)" else ""
+            CalibrationRow("${kind.label}: about ${kotlin.math.round(share * 100).toInt()} % of the free time used" + if (n > 0) " (from $n days)" else "")
         }
         return multipliers + coming + margins + yields
     }

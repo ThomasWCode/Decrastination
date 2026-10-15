@@ -439,4 +439,22 @@ class DaysReplanTest {
         assertEquals(45, again.schoolMin)
         assertEquals(90, again.plannedMin)
     }
+
+    @Test
+    fun `a class forgotten learns nothing from its work before, and afresh from its work after`() {
+        fun done(at: String, worked: Int) = com.thomaswcode.decrastination.data.CompletionRecord(
+            taskId = "t$at", title = "t", source = com.thomaswcode.decrastination.core.Source.Teams, kind = com.thomaswcode.decrastination.core.Kind.Homework,
+            className = "Physics", estimateMin = 30, workedMin = worked, firstSeenAt = com.thomaswcode.decrastination.Fixtures.at(at) - 3_600_000L,
+            doneAt = com.thomaswcode.decrastination.Fixtures.at(at),
+        )
+        val before = listOf("2026-10-01T18:00", "2026-10-02T18:00", "2026-10-03T18:00").map { done(it, 60) }
+        val forgetting = com.thomaswcode.decrastination.core.Calibration(forgotten = mapOf("Homework|Physics" to com.thomaswcode.decrastination.Fixtures.at("2026-10-04T00:00")))
+        assertEquals(emptyList(), Calibrator.remembered(before, forgetting))
+        val after = before + listOf("2026-10-05T18:00", "2026-10-06T18:00", "2026-10-07T18:00").map { done(it, 30) }
+        assertEquals(3, Calibrator.remembered(after, forgetting).size)
+        val learned = Calibrator.learn(com.thomaswcode.decrastination.data.ActivityLog(completions = after), forgetting, java.time.LocalDate.parse("2026-10-08")).calibration
+        assertEquals(3, learned.timed["Homework|Physics"])
+        assertEquals(forgetting.forgotten, learned.forgotten)
+    }
 }
+

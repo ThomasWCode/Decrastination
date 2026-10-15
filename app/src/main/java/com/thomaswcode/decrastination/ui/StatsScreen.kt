@@ -73,7 +73,9 @@ fun StatsScreen(graph: AppGraph) {
     var proposing by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
-    val learned = remember(runtime.calibration) { Stats.calibrationLines(runtime.calibration) }
+    val learned = remember(runtime.calibration) { Stats.calibrationRows(runtime.calibration) }
+    // A class's figure to forget (LR-06), asked first.
+    var forgetting by remember { mutableStateOf<Stats.CalibrationRow?>(null) }
     val most = stats.days.maxOf { it.slotMin }.coerceAtLeast(1)
     val credit = runtime.credit.on(graph.focus.today(now))
     val leftMin = (graph.focus.creditLeftMs(now) / 60_000).toInt()
@@ -84,6 +86,20 @@ fun StatsScreen(graph: AppGraph) {
     var inFull by rememberSaveable { mutableStateOf(false) }
     val shown = if (allDays) stats.days else stats.days.take(WEEK)
 
+    forgetting?.let { row ->
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { forgetting = null },
+            title = { Text("Forget this?") },
+            text = { Text("${row.line.substringBefore(':')}: what the app has learned goes, and its work so far won't teach it again. Its kind's figure stands for it meanwhile.") },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = {
+                    forgetting = null
+                    row.forget?.let { key -> scope.launch { graph.forgetCalibration(key) } }
+                }) { Text("Forget") }
+            },
+            dismissButton = { androidx.compose.material3.TextButton(onClick = { forgetting = null }) { Text("Keep") } },
+        )
+    }
     if (proposing && suggested != null) {
         androidx.compose.material3.AlertDialog(
             onDismissRequest = { proposing = false },
@@ -194,7 +210,16 @@ fun StatsScreen(graph: AppGraph) {
                     if (learned.isEmpty()) {
                         Line("Nothing yet: it learns from finished work, at Sunday's review.")
                     } else {
-                        learned.forEach { Line(it) }
+                        learned.forEach { row ->
+                            if (row.forget == null) {
+                                Line(row.line)
+                            } else {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(row.line, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f).padding(vertical = 3.dp))
+                                    androidx.compose.material3.TextButton(onClick = { forgetting = row }) { Text("Forget") }
+                                }
+                            }
+                        }
                     }
                 }
             }

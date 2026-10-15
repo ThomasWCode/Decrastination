@@ -1172,6 +1172,15 @@ class AppGraph private constructor(context: Context) {
     /** Said on a message whose answer you let go (AC-08). */
     private val CANCELLED = "Cancelled"
 
+    /**
+     * What's been learned about [key] (`Kind|class`) forgotten (LR-06): its figure goes now, the
+     * kind's standing for it, and its work so far teaches nothing at the reviews after.
+     */
+    suspend fun forgetCalibration(key: String) {
+        val now = clock.now()
+        runtime.update { s -> s.calibration.let { c -> s.copy(calibration = c.copy(multipliers = c.multipliers - key, timed = c.timed - key, forgotten = c.forgotten + (key to now))) } }
+    }
+
     /** The most of what a call was about that its record keeps (AC-07). */
     private val MAX_CALL_TITLE = 80
 

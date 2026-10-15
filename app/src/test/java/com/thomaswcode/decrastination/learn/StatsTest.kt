@@ -119,6 +119,8 @@ class StatsTest {
             Stats.calibrationLines(calibration),
         )
         assertEquals(emptyList(), Stats.calibrationLines(Calibration()))
+        // A class's figure, and one coming, can be forgotten (LR-06); a kind's can't.
+        assertEquals(listOf(null, "Homework|Physics", null, "Homework|German", null, null), Stats.calibrationRows(calibration).map { it.forget })
     }
 
     @Test
