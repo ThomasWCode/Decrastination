@@ -304,6 +304,12 @@ fun TaskSheet(
                 }
                 if (changeable && !task.userNotATask) OutlinedButton(onClick = { confirming = "not-a-task" }) { Text("Not a task") }
                 if (task.isOpen) OutlinedButton(onClick = onInstruct) { Text("Ask ${graph.settings.value.felixName} about it") }
+                // Its steps made by Felix (AI-19): the chat, with the ask written for you to send.
+                if (own && changeable) {
+                    OutlinedButton(onClick = {
+                        activity.startActivity(AskActivity.intent(activity, About(taskId = task.id, taskTitle = task.title), "Split this into steps", send = false))
+                    }) { Text("Split with ${graph.settings.value.felixName}") }
+                }
                 if (own && task.isOpen) OutlinedButton(onClick = onEdit) { Text("Edit") }
                 if (own) OutlinedButton(onClick = { confirming = "delete" }) { Text("Delete") }
             }

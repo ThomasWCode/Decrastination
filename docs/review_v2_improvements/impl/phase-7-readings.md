@@ -78,6 +78,8 @@ Items: AI-01, AI-03, AI-07, AI-08, AI-09, AI-13, AI-14, AI-15, AI-16, AI-17, AI-
 
 **Tests.** `ChatTest`: actions parsed; `InstructionsTest`: Steps parsed and described; `OwnTasksTest`: Steps replaces, keeps ticks.
 
+*(As built: the chat's schema holds 15 of the API's 16 unions, so an action's `stepIndex` is a plain integer (-1 for none) and has no `key`, and a step's dates are plain strings (empty for none). *Open* shows the task's sheet in Work. *Split with Felix* is on your own tasks' sheets only, as only they take a Steps change.)*
+
 ---
 
 ## AI-15 Micro-plans, generated ahead

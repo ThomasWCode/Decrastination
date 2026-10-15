@@ -98,6 +98,9 @@ enum class ChangeType {
 
     /** The task's next piece starts at [Change.time]: [Change.date] at [Change.startMin] (PL-04). */
     AtTime,
+
+    /** A task of your own's steps replaced with [Change.steps] (AI-19): made on the task itself, its ticks kept by name. */
+    Steps,
 }
 
 /** One change an instruction makes. Which fields mean anything depends on [type]. */
@@ -124,6 +127,8 @@ data class Change(
     /** Minutes after midnight. */
     val startMin: Int? = null,
     val endMin: Int? = null,
+    /** [ChangeType.Steps]'s steps, in order (AI-19). */
+    val steps: List<OwnStep>? = null,
 )
 
 /** Your instructions. Kept in `instructions.json`. */
@@ -356,6 +361,7 @@ object Instructions {
             ChangeType.HalfDay -> "Half-day on ${day(change)}, ends ${clock(change.endMin)}"
             ChangeType.OnDay -> "All of ${title(change.taskId)} on ${day(change)}"
             ChangeType.AtTime -> "${title(change.taskId)} at ${clock(change.startMin)} on ${day(change)}"
+            ChangeType.Steps -> "${title(change.taskId)} in steps: " + change.steps.orEmpty().joinToString(", ") { "${it.title} (${it.minutes} min)" }
         }
     }
 
@@ -417,7 +423,7 @@ fun TaskItem.withOverrides(o: TaskOverrides): TaskItem =
  * another day, or every week; days off; a half-day) are shown to confirm, as new tasks are. Pure.
  */
 object InstantChanges {
-    private val ON_A_TASK = setOf(ChangeType.AtTime, ChangeType.OnDay, ChangeType.StartFrom, ChangeType.DueBy, ChangeType.Minutes, ChangeType.NotATask, ChangeType.After)
+    private val ON_A_TASK = setOf(ChangeType.AtTime, ChangeType.OnDay, ChangeType.StartFrom, ChangeType.DueBy, ChangeType.Minutes, ChangeType.NotATask, ChangeType.After, ChangeType.Steps)
 
     fun instant(change: Change, tasks: Map<String, TaskItem>, today: java.time.LocalDate): Boolean = when (change.type) {
         in ON_A_TASK -> change.taskId in tasks && (change.type != ChangeType.After || change.afterTaskId in tasks)

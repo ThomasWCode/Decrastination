@@ -507,4 +507,29 @@ class InstructionsTest {
         assertEquals(emptyList(), Instructions.movedSlots(listOf(Change(ChangeType.OnDay, taskId = "teams:t", date = "2026-10-12")), plan))
         assertEquals(slots.take(2), Instructions.movedSlots(listOf(Change(ChangeType.StartFrom, taskId = "teams:t", time = Fixtures.at("2026-10-12T18:00"))), plan))
     }
+
+    @Test
+    fun `steps for a task of your own are read, said and made on it, its ticks kept by name`() {
+        val own = OwnTasks.create(OwnTask(title = "Essay", steps = listOf(OwnStep("Plan", 20), OwnStep("Write", 40))), "e", Fixtures.at("2026-10-12T17:00"))
+        val ticked = own.copy(subSteps = own.subSteps.map { if (it.title == "Plan") it.copy(done = true) else it })
+        val given = com.thomaswcode.decrastination.enrich.InstructionAnswers.Given(
+            "Steps", taskId = own.id,
+            steps = listOf(
+                com.thomaswcode.decrastination.enrich.InstructionAnswers.GivenStep("Plan", 20),
+                com.thomaswcode.decrastination.enrich.InstructionAnswers.GivenStep("Draft", 30, dueDate = "2026-10-14"),
+                com.thomaswcode.decrastination.enrich.InstructionAnswers.GivenStep("Polish", 10, where = "home"),
+            ),
+        )
+        val change = com.thomaswcode.decrastination.enrich.InstructionAnswers.change(given, mapOf(own.id to ticked), emptyMap(), Fixtures.at("2026-10-12T17:00"), Fixtures.LONDON)!!
+        assertEquals(listOf("Plan", "Draft", "Polish"), change.steps!!.map { it.title })
+        assertEquals("“Essay” in steps: Plan (20 min), Draft (30 min), Polish (10 min)", Instructions.describe(change, mapOf(own.id to ticked), Fixtures.LONDON))
+        val draft = OwnTasks.draftWith(ticked, change)!!
+        val made = OwnTasks.edited(ticked, draft)
+        assertEquals(listOf("Plan" to true, "Draft" to false, "Polish" to false), made.subSteps.map { it.title to it.done })
+        assertEquals(60, made.subSteps.sumOf { it.minutes })
+        // Not for a source's task.
+        val teams = ticked.copy(id = "teams:x", source = Source.Teams)
+        assertNull(com.thomaswcode.decrastination.enrich.InstructionAnswers.change(given.copy(taskId = teams.id), mapOf(teams.id to teams), emptyMap(), Fixtures.at("2026-10-12T17:00"), Fixtures.LONDON))
+        assertEquals("only a task of the student's own has its steps changed", com.thomaswcode.decrastination.enrich.InstructionAnswers.problem(given.copy(taskId = teams.id), mapOf(teams.id to teams), emptyMap()))
+    }
 }
