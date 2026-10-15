@@ -12,8 +12,8 @@ android {
         applicationId = "com.thomaswcode.decrastination"
         minSdk = 26
         targetSdk = 36
-        versionCode = 16
-        versionName = "2.0.0"
+        versionCode = 17
+        versionName = "3.0.0"
     }
 
     signingConfigs {
@@ -58,6 +58,15 @@ android {
     testOptions {
         unitTests.isReturnDefaultValues = true
     }
+}
+
+// The golden prompts written again (AR-01, GoldenPromptsTest): ./gradlew testDebugUnitTest -PupdateGolden=true
+// The scored eval run through the API (AR-02, EvalRunTest, docs/eval.md), only when asked:
+// ./gradlew testDebugUnitTest --tests '*EvalRunTest*' -PrunEval=true [-Peffort=high]
+tasks.withType<Test>().configureEach {
+    systemProperty("updateGolden", providers.gradleProperty("updateGolden").getOrElse("false"))
+    systemProperty("runEval", providers.gradleProperty("runEval").getOrElse("false"))
+    systemProperty("effort", providers.gradleProperty("effort").getOrElse(""))
 }
 
 dependencies {

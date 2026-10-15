@@ -26,6 +26,16 @@ A small set of your real emails and assignments, each with the right answer, to 
 
 Elsewhere (CI, another PC) the two tests find no `private/eval` and are skipped.
 
+## A scored run through the API (review v2, AR-02)
+
+Since phase 8 the set can be asked of Claude itself, as the phone asks it: `EvalRunTest` sends each case through the app's own `ClaudeEnricher` (the job's system prompt, the profile from the settings' defaults and the case's task, the item, the schema and the job's effort: what `dump` writes, unredacted, as the app sends it), writes each answer to `answers/<id>-<run>.json` (the run numbered on from the last), then scores every answer as `score` does. It's a paid call a case, so it runs only when asked:
+
+```bash
+./gradlew testDebugUnitTest --tests '*EvalRunTest*' -PrunEval=true
+```
+
+with `CLAUDE_DECRASTINATION_API_KEY` in the environment, which the test inherits from Gradle (it's never printed). It stops before a call that, at its dearest ($1.295, the cap's worst case), could take it past `EVAL_BUDGET_USD` (2 dollars unless set), the cases after that not asked (the score then fails them as unanswered); `-Peffort=low|medium|high|max` sets how hard Claude thinks for the run, each job's own otherwise (high for these three). Each case's outcome and cost, and the run's total, are in the test's output (`app/build/test-results/testDebugUnitTest/`). Gradle won't run it again with nothing changed: add `--rerun` for another round. Without `-PrunEval=true`, the key or `private/eval` it's skipped, so CI never runs it, nor does a plain test run here, where the key is set.
+
 ## Labels
 
 The labels are yours: they were checked with you on 11 Oct (the work-experience email must name STEM Potential, Rosalind Franklin and Imperial Work Experience among its blocks). Change one in `make_cases.py` and run it again; keep held-out cases aside if a prompt is being tuned against these.
@@ -48,7 +58,7 @@ The Email job now says whether its deadline is the email's own words (`deadlineQ
 
 | Round | Prompt | Passed | What failed |
 |---|---|---|---|
-| 4 (15 Oct) | phase 2's | 8 of 10 | `dad-apply`: its three blocks are the three applications (start the CERN team, book Cambridge, register for Oxford), now undated rather than each due two weeks on, as AI-12 means, but none says "apply", which its label asks for (round 3's had a "Reply … agreeing to apply" block); `german-assess`: a step dated after the task is due, as in round 1 (AI-01, phase 7) |
+| 4 (15 Oct) | phase 2's | 8 of 10 | `dad-apply`: its three blocks are the three applications, now undated rather than each due two weeks on, as AI-12 means, but none says "apply", which its label asks for (round 3's had a "Reply … agreeing to apply" block); `german-assess`: a step dated after the task is due, as in round 1 (AI-01, phase 7) |
 
 All three quoted labels passed: the open day quoted, the two notes with no date.
 
@@ -61,6 +71,16 @@ The Assignment job now says of each step whether it's for home (the laptop, book
 | 5 (15 Oct) | phase 3's | 4 of 4 | none |
 
 The readings: printing sheets, a listening exercise, joining an online group and practice exam questions and their marking for home; reading a text, learning vocabulary, translating, revising notes and a final run-through anywhere.
+
+## Review v2, phase 8 (15 Oct): the first run through the API (AR-02)
+
+Phases 6 and 7 changed the readings' prompts (the limits, the examples, a reason, the steps kept), and phase 8 raised `Prompts.VERSION` to 2 for them. Round 6 is the whole set through the API, by `EvalRunTest`, at each job's own effort (high).
+
+| Round | Prompt | Passed | Cost | What failed |
+|---|---|---|---|---|
+| 6 (15 Oct) | phase 8's (version 2), through the API | 10 of 10 | $0.245, 94 s | none |
+
+No answer needed putting back (AI-01): each passed the app's checks as it came.
 
 ## Review v2, phase 5 (15 Oct): Felix, the chat as him, the tidy, one question
 

@@ -1,0 +1,24 @@
+{
+    "type": "object",
+    "properties": {
+        "done": {
+            "type": "boolean"
+        },
+        "confidence": {
+            "type": "number"
+        },
+        "reason": {
+            "type": "string"
+        },
+        "seen": {
+            "type": "string"
+        }
+    },
+    "required": [
+        "done",
+        "confidence",
+        "reason",
+        "seen"
+    ],
+    "additionalProperties": false
+}

@@ -371,7 +371,7 @@ object InstructionAnswers {
 /** Claude reading one instruction ([InstructionPrompts]), as the enrichment's calls are made. */
 class InstructionReader(apiKey: String, private val zone: ZoneId, endpoint: String? = null, val model: String = ClaudeEnricher.MODEL, private val profile: Profile.Block = Profile.Block.NONE) {
 
-    data class Result(val reading: InstructionAnswers.Reading?, val costUsd: Double, val refused: Boolean = false)
+    data class Result(val reading: InstructionAnswers.Reading?, val costUsd: Double, val refused: Boolean = false, val usage: ModelCalls.Usage = ModelCalls.Usage.NONE)
 
     private val client: AnthropicClient = AnthropicOkHttpClient.builder()
         .apiKey(apiKey)
@@ -393,12 +393,13 @@ class InstructionReader(apiKey: String, private val zone: ZoneId, endpoint: Stri
             .build()
         val message = withContext(Dispatchers.IO) { client.messages().create(params) }
         val cost = Pricing.costUsd(message)
+        val usage = ModelCalls.usage(message)
         when (message.stopReason().orElse(null)) {
-            StopReason.REFUSAL -> return Result(null, cost, refused = true)
-            StopReason.MAX_TOKENS -> return Result(null, cost)
+            StopReason.REFUSAL -> return Result(null, cost, refused = true, usage = usage)
+            StopReason.MAX_TOKENS -> return Result(null, cost, usage = usage)
             else -> Unit
         }
         val text = message.content().mapNotNull { it.text().orElse(null)?.text() }.joinToString("")
-        return Result(InstructionAnswers.parse(text, tasks, events, instruction.about, now, zone), cost)
+        return Result(InstructionAnswers.parse(text, tasks, events, instruction.about, now, zone), cost, usage = usage)
     }
 }

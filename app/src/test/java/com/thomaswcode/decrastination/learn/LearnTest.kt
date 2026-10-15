@@ -439,4 +439,47 @@ class DaysReplanTest {
         assertEquals(45, again.schoolMin)
         assertEquals(90, again.plannedMin)
     }
+
+    @Test
+    fun `a class forgotten learns nothing from its work before, and afresh from its work after`() {
+        fun done(at: String, worked: Int) = com.thomaswcode.decrastination.data.CompletionRecord(
+            taskId = "t$at", title = "t", source = com.thomaswcode.decrastination.core.Source.Teams, kind = com.thomaswcode.decrastination.core.Kind.Homework,
+            className = "Physics", estimateMin = 30, workedMin = worked, firstSeenAt = com.thomaswcode.decrastination.Fixtures.at(at) - 3_600_000L,
+            doneAt = com.thomaswcode.decrastination.Fixtures.at(at),
+        )
+        val before = listOf("2026-10-01T18:00", "2026-10-02T18:00", "2026-10-03T18:00").map { done(it, 60) }
+        val forgetting = com.thomaswcode.decrastination.core.Calibration(forgotten = mapOf("Homework|Physics" to com.thomaswcode.decrastination.Fixtures.at("2026-10-04T00:00")))
+        assertEquals(emptyList(), Calibrator.remembered(before, forgetting))
+        val after = before + listOf("2026-10-05T18:00", "2026-10-06T18:00", "2026-10-07T18:00").map { done(it, 30) }
+        assertEquals(3, Calibrator.remembered(after, forgetting).size)
+        val learned = Calibrator.learn(com.thomaswcode.decrastination.data.ActivityLog(completions = after), forgetting, java.time.LocalDate.parse("2026-10-08")).calibration
+        assertEquals(3, learned.timed["Homework|Physics"])
+        assertEquals(forgetting.forgotten, learned.forgotten)
+    }
+
+    @Test
+    fun `reset, the calibration learns only from what comes after`() {
+        fun done(at: String, worked: Int) = com.thomaswcode.decrastination.data.CompletionRecord(
+            taskId = "t$at", title = "t", source = com.thomaswcode.decrastination.core.Source.Teams, kind = com.thomaswcode.decrastination.core.Kind.Homework,
+            estimateMin = 30, workedMin = worked, firstSeenAt = com.thomaswcode.decrastination.Fixtures.at(at) - 3_600_000L, doneAt = com.thomaswcode.decrastination.Fixtures.at(at),
+        )
+        val reset = com.thomaswcode.decrastination.core.Calibration(learnFrom = com.thomaswcode.decrastination.Fixtures.at("2026-10-04T00:00"))
+        val log = com.thomaswcode.decrastination.data.ActivityLog(completions = listOf(done("2026-10-01T18:00", 90), done("2026-10-05T18:00", 30)))
+        assertEquals(listOf("t2026-10-05T18:00"), Calibrator.remembered(log.completions, reset).map { it.taskId })
+        val learned = Calibrator.learn(log, reset, java.time.LocalDate.parse("2026-10-08")).calibration
+        assertEquals(1, learned.timed["Homework|"])
+        assertEquals(reset.learnFrom, learned.learnFrom)
+    }
+
+    @Test
+    fun `a reset just after midnight leaves out its own day, by the app's zone`() {
+        // Eight weekend days, 60 of 100 minutes done on each; the reset 30 minutes into the first
+        // (23:30 the day before, in UTC).
+        val sunday = LocalDate.parse("2026-10-11")
+        val days = generateSequence(sunday) { it.minusDays(1) }.filter { DayKind.of(it) == DayKind.Weekend }.take(8)
+            .map { DayRecord(it.toString(), 100, emptyList(), doneMin = 60, full = false) }.toList()
+        val reset = Calibration(learnFrom = Fixtures.at("${days.minOf { it.date }}T00:30"))
+        assertEquals(7, Calibrator.learn(ActivityLog(days = days), reset, sunday, LONDON).calibration.yieldDays[DayKind.Weekend])
+    }
 }
+

@@ -340,6 +340,20 @@ fun TaskSheet(
                 }
                 if (changeable && !task.userNotATask) OutlinedButton(onClick = { confirming = "not-a-task" }) { Text("Not a task") }
                 if (task.isOpen) OutlinedButton(onClick = onInstruct) { Text("Ask ${graph.settings.value.felixName} about it") }
+                // Claude's reading made again, as the task is now (AC-06).
+                if (task.isOpen && Enrichments.jobFor(task) != null && graph.claudeKey() != null) {
+                    OutlinedButton(
+                        onClick = {
+                            scope.launch {
+                                said = when (graph.readAgain(task.id)) {
+                                    AppGraph.ReadAgain.Read -> "Read again by Claude"
+                                    AppGraph.ReadAgain.NotNow -> "Claude can't be asked now: try again later"
+                                    AppGraph.ReadAgain.NoReading -> "No new reading came back: the one there stands"
+                                }
+                            }
+                        },
+                    ) { Text("Read again with Claude") }
+                }
                 // Its steps made by Felix (AI-19): the chat, with the ask written for you to send.
                 if (own && changeable) {
                     OutlinedButton(onClick = {

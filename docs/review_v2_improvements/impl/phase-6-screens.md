@@ -85,6 +85,8 @@ Done inside UI-17's week strip and `DayModel`; also the day header text "2 h 10 
 
 **Tests.** `SlotterTest` covers `firstFreeAfter`.
 
+*(As built, found on the phone on 15 Oct: Undo puts the slot's kept start back, so the piece keeps its time rather than being laid anew where the day may have no room; one swipe is one Done, the row's dismissal seen again as it's put back keeping nothing; and Day draws the plan again when a start comes back.)*
+
 ---
 
 ## UI-04 Move a piece by hand

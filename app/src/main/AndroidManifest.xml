@@ -152,6 +152,14 @@
             android:exported="false"
             android:label="This week" />
         <activity
+            android:name=".ui.ReviewsActivity"
+            android:exported="false"
+            android:label="Reviews" />
+        <activity
+            android:name=".ui.DebugActivity"
+            android:exported="false"
+            android:label="Debug" />
+        <activity
             android:name=".learn.AssessActivity"
             android:exported="false"
             android:label="How was it?" />

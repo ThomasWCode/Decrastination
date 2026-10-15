@@ -20,7 +20,7 @@ import java.time.Duration
 class ClaudeReviewer(apiKey: String, endpoint: String? = null, val model: String = ClaudeEnricher.MODEL, private val profile: Profile.Block = Profile.Block.NONE) {
 
     /** [model]: the model that answered, a fallback's if one did. */
-    data class Result(val answer: ReviewInput.Answer?, val costUsd: Double, val refused: Boolean = false, val model: String? = null)
+    data class Result(val answer: ReviewInput.Answer?, val costUsd: Double, val refused: Boolean = false, val model: String? = null, val usage: ModelCalls.Usage = ModelCalls.Usage.NONE)
 
     private val client: AnthropicClient = AnthropicOkHttpClient.builder()
         .apiKey(apiKey)
@@ -44,14 +44,15 @@ class ClaudeReviewer(apiKey: String, endpoint: String? = null, val model: String
             .build()
         val message = withContext(Dispatchers.IO) { client.messages().create(params) }
         val cost = Pricing.costUsd(message)
+        val usage = ModelCalls.usage(message)
         when (message.stopReason().orElse(null)) {
-            StopReason.REFUSAL -> return Result(null, cost, refused = true)
-            StopReason.MAX_TOKENS -> return Result(null, cost)
+            StopReason.REFUSAL -> return Result(null, cost, refused = true, usage = usage)
+            StopReason.MAX_TOKENS -> return Result(null, cost, usage = usage)
             else -> Unit
         }
         val text = message.content().mapNotNull { it.text().orElse(null)?.text() }.joinToString("")
         val answer = runCatching { json.decodeFromString(ReviewInput.Answer.serializer(), text) }.getOrNull()
             ?.let { it.copy(note = it.note.map(String::trim).filter(String::isNotEmpty).take(ReviewInput.MAX_NOTE)) }
-        return Result(answer, cost, model = message.model().asString().ifBlank { null })
+        return Result(answer, cost, model = message.model().asString().ifBlank { null }, usage = usage)
     }
 }

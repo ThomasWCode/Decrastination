@@ -7,7 +7,7 @@ Things the app doesn't do that would be useful, judged against what it's for: a 
 | ID | Feature | Priority | Effort | Status |
 |---|---|---|---|---|
 | NF-01 | A photo of a worksheet or the board becomes a task, or informs one | P1 | M | Changed (Q-22); Implemented (v3 phase 7) |
-| NF-02 | A weekly summary in the email itself, sent to your dad, with a Sunday reminder | P1 | M | Changed (Q-24, Q-33) |
+| NF-02 | A weekly summary in the email itself, sent to your dad, with a Sunday reminder | P1 | M | Changed (Q-24, Q-33); Implemented (v3 phase 8) |
 | NF-03 | Anki work counted from the deck's counts, without pressing anything | P2 | M | Changed (Q-23, note 1); Implemented (v3 phase 4) |
 | NF-04 | Exam season: revision plans per subject from the exam dates | – | L | Deferred (Q-27) |
 | NF-05 | Recurring work and weekly-minutes goals | – | M | Deferred (Q-27) |

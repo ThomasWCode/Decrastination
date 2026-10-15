@@ -5,6 +5,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Row
@@ -313,6 +314,8 @@ class SettingsActivity : ComponentActivity() {
                             ModelEffort.table().forEach { (effort, jobs) -> Note("$effort: $jobs") }
                             Note("By job, not set here: high for what the plan is made from, medium for what someone's waiting for (AC-02).")
                         }
+                        item { RecentCalls(runtime.calls, graph.clock.zone()) }
+                        item { LastCrash(this@SettingsActivity) }
                     }
 
                     // Each source as Setup has it, and how Teams and Anki are read.
@@ -342,10 +345,23 @@ class SettingsActivity : ComponentActivity() {
                         TimeField("Morning briefing, weekends", draft.briefingWeekendMin, "briefingWeekendMin", form) { draft = draft.copy(briefingWeekendMin = it) }
                         TimeField("Sunday check-in", draft.checkInMin, "checkInMin", form) { draft = draft.copy(checkInMin = it) }
                         Note("The week's review follows the check-in an hour and a half later, answered or not. Those held back by quiet hours or the day's four go with the next briefing.")
+                        // The weekly summary for home (NF-02): where it goes, and this week's to send now.
+                        OptionalTextField("Weekly summary goes to (an email address, or none)", draft.summaryEmail, SUMMARY_EMAIL_MAX, "summaryEmail", form) { draft = draft.copy(summaryEmail = it) }
+                        val latest = graph.log.value.reviews.filter { it.summary != null }.maxByOrNull { it.at }
+                        if (latest?.summary != null && latest.week != null) {
+                            val context = androidx.compose.ui.platform.LocalContext.current
+                            androidx.compose.material3.TextButton(onClick = { runCatching { context.startActivity(com.thomaswcode.decrastination.learn.Summary.email(draft.summaryEmail, latest.week, latest.summary)) } }) { Text("Send this week's summary") }
+                        } else {
+                            Note("The summary is written after each Sunday's review, while Claude is on.")
+                        }
                     }
 
                     // A backup, and what couldn't be read at a start, as Setup has them.
-                    BACKUP -> item { SetupScreen(graph, this@SettingsActivity, setOf(SetupPart.Saved, SetupPart.Backup), scroll = false) }
+                    BACKUP -> {
+                        item { SetupScreen(graph, this@SettingsActivity, setOf(SetupPart.Saved, SetupPart.Backup), scroll = false) }
+                        item { NightlyBackup(graph, runtime.lastBackupAt, graph.clock.now()) }
+                    }
+                    RESET -> item { ResetPage(graph) }
                 }
             }
         }
@@ -402,6 +418,10 @@ private const val SOURCES = "sources"
 private const val CALENDAR = "calendar"
 private const val NOTIFICATIONS = "notifications"
 private const val BACKUP = "backup"
+private const val RESET = "reset"
+
+/** The most of an email address the summary goes to (NF-02). */
+private const val SUMMARY_EMAIL_MAX = 120
 
 /** Its pages, every control of the old Setup, Settings and Protection pages on one of them (UI-18). */
 private val PAGES = listOf(
@@ -416,6 +436,7 @@ private val PAGES = listOf(
     Page(CALENDAR, "Calendar", "The calendars read, and the one your plan's written to"),
     Page(NOTIFICATIONS, "Notifications", "The morning briefing and Sunday's check-in"),
     Page(BACKUP, "Backup", "The settings, the log and what's learned, saved or restored"),
+    Page(RESET, "Reset", "Stats, what's learned, what Felix remembers, the chat, your changes"),
 )
 
 @Composable
@@ -463,6 +484,11 @@ private fun <T> ParsedField(label: String, shown: String, key: String, form: For
 @Composable
 private fun TextField(label: String, value: String, max: Int, key: String, form: Form, onChange: (String) -> Unit) =
     ParsedField(label, value, key, form, { it.trim().takeIf { s -> s.isNotEmpty() && s.length <= max } }, onChange, number = false)
+
+/** Text up to [max] characters, or blank for none. */
+@Composable
+private fun OptionalTextField(label: String, value: String, max: Int, key: String, form: Form, onChange: (String) -> Unit) =
+    ParsedField(label, value, key, form, { it.trim().takeIf { s -> s.length <= max } }, onChange, number = false)
 
 @Composable
 private fun NumberField(label: String, value: Int, range: IntRange, key: String, form: Form, onChange: (Int) -> Unit) =
@@ -550,3 +576,132 @@ internal fun parseTime(text: String): Int? {
     val minutes = digits.takeLast(2).toInt()
     return if (hours in 0..23 && minutes in 0..59) hours * 60 + minutes else null
 }
+
+/** The model's recent calls (AC-07), newest first: a line each, a tap opening all it used, with Copy. */
+@Composable
+private fun RecentCalls(calls: List<com.thomaswcode.decrastination.data.CallRecord>, zone: java.time.ZoneId) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var open by remember { mutableStateOf<Long?>(null) }
+    Column {
+        Section("Recent calls")
+        if (calls.isEmpty()) Note("None yet.")
+        calls.asReversed().forEach { call ->
+            val opened = open == call.at
+            Column(Modifier.fillMaxWidth().clickable { open = if (opened) null else call.at }.padding(vertical = 4.dp)) {
+                Text(
+                    listOfNotNull(java.time.Instant.ofEpochMilli(call.at).atZone(zone).toLocalTime().withSecond(0).withNano(0).toString(), call.job, call.title, call.outcome).joinToString(" · ") + " · $%.3f".format(Locale.UK, call.costUsd),
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                )
+                if (opened) {
+                    val details = call.details(zone)
+                    Text(details, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    androidx.compose.material3.TextButton(onClick = {
+                        context.getSystemService(android.content.ClipboardManager::class.java)?.setPrimaryClip(android.content.ClipData.newPlainText("A Claude call", details))
+                    }) { Text("Copy") }
+                }
+            }
+        }
+    }
+}
+
+/** The app's last crash (AR-06), as it was written down, with Copy; or that there's been none. */
+@Composable
+private fun LastCrash(activity: android.app.Activity) {
+    val crash = remember { com.thomaswcode.decrastination.data.Crashes.last(activity.filesDir) }
+    var open by remember { mutableStateOf(false) }
+    Column {
+        Section("Last crash")
+        if (crash == null) {
+            Note("None.")
+        } else {
+            Text(
+                if (open) crash else crash.lineSequence().take(3).joinToString("\n"),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.fillMaxWidth().clickable { open = !open },
+            )
+            androidx.compose.material3.TextButton(onClick = {
+                activity.getSystemService(android.content.ClipboardManager::class.java)?.setPrimaryClip(android.content.ClipData.newPlainText("The last crash", crash))
+            }) { Text("Copy") }
+        }
+    }
+}
+
+/**
+ * What can be reset (LR-08), a row each: asked first, saying what goes (your changes listed), a copy
+ * of everything saved before, and no parent code.
+ */
+@Composable
+private fun ResetPage(graph: AppGraph) {
+    val scope = rememberCoroutineScope()
+    var asking by remember { mutableStateOf<AppGraph.Reset?>(null) }
+    var said by remember { mutableStateOf<String?>(null) }
+    Column {
+        Note("A copy of everything the app keeps is saved to Documents/Decrastination before each, to import from Backup.")
+        AppGraph.Reset.entries.forEach { r ->
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f).padding(vertical = 6.dp)) {
+                    Text(r.title, style = MaterialTheme.typography.bodyLarge)
+                    Text(r.takes.replaceFirstChar(Char::uppercase), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                androidx.compose.material3.TextButton(onClick = { asking = r }) { Text("Reset") }
+            }
+        }
+        said?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.secondary) }
+    }
+    asking?.let { r ->
+        val changes = if (r == AppGraph.Reset.Instructions || r == AppGraph.Reset.Everything) graph.instructions.value.applied.map { it.text.take(80) } else emptyList()
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { asking = null },
+            title = { Text("Reset ${r.title.replaceFirstChar(Char::lowercase)}?") },
+            text = {
+                Text(
+                    "This goes: ${r.takes}." + (if (changes.isNotEmpty()) " Your changes: " + changes.joinToString("; ") { "“$it”" } + "." else "") +
+                        " A copy of everything is saved first.",
+                )
+            },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = {
+                    asking = null
+                    scope.launch { said = graph.reset(r) }
+                }) { Text("Reset") }
+            },
+            dismissButton = { androidx.compose.material3.TextButton(onClick = { asking = null }) { Text("Keep it") } },
+        )
+    }
+}
+
+/**
+ * The nightly backup (AR-07): where it goes, and when it last did. And a reset's copies kept in the
+ * app's own files (LR-08), where Documents couldn't be written: the file picker can't reach them, so
+ * each is restored from here.
+ */
+@Composable
+private fun NightlyBackup(graph: AppGraph, last: Long?, now: Long) {
+    val scope = rememberCoroutineScope()
+    val copies = remember { graph.resetCopies() }
+    var said by remember { mutableStateOf<String?>(null) }
+    Column {
+        Section("Nightly backup")
+        if (!com.thomaswcode.decrastination.data.BackupFolder.available) {
+            Note("The nightly backup needs Android 10 or later.")
+        } else {
+            Note("Every night, all the app keeps goes to Documents/Decrastination on the phone, the last two weeks of them kept. Import opens one through the file picker. A copy off the phone is yours to make: a sync app mirroring the folder, or Export.")
+            Note("Last backup: " + (last?.let { Format.ago(it, now) } ?: "not yet"))
+        }
+        if (copies.isNotEmpty()) {
+            Section("Copies saved before a reset")
+            Note("Kept in the app's own files, as Documents couldn't be written then; the file picker can't reach them, so they're restored from here.")
+            copies.forEach { name ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(name, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                    androidx.compose.material3.TextButton(onClick = { scope.launch { said = graph.restoreResetCopy(name) } }) { Text("Restore") }
+                }
+            }
+            said?.let { Note(it) }
+        }
+    }
+}
+

@@ -1,0 +1,115 @@
+{
+    "type": "object",
+    "properties": {
+        "kind": {
+            "type": "string",
+            "enum": [
+                "Admin",
+                "Event"
+            ]
+        },
+        "actionableFrom": {
+            "anyOf": [
+                {
+                    "type": "string",
+                    "format": "date"
+                },
+                {
+                    "type": "null"
+                }
+            ]
+        },
+        "deadline": {
+            "anyOf": [
+                {
+                    "type": "string",
+                    "description": "Local date and time, YYYY-MM-DDTHH:MM, or the date alone, YYYY-MM-DD"
+                },
+                {
+                    "type": "null"
+                }
+            ]
+        },
+        "deadlineQuoted": {
+            "type": "boolean"
+        },
+        "effortMin": {
+            "type": "integer",
+            "description": "The minutes in all; with blocks, their sum"
+        },
+        "nextStep": {
+            "type": "string"
+        },
+        "question": {
+            "anyOf": [
+                {
+                    "type": "string"
+                },
+                {
+                    "type": "null"
+                }
+            ]
+        },
+        "reason": {
+            "type": "string",
+            "description": "The phrase in the text that gave the deadline, kind or test date, quoted, under 160 characters; empty if none did"
+        },
+        "blocks": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "title": {
+                        "type": "string"
+                    },
+                    "minutes": {
+                        "type": "integer",
+                        "description": "10 to 60 where the work allows; never over 600"
+                    },
+                    "from": {
+                        "anyOf": [
+                            {
+                                "type": "string",
+                                "format": "date"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "description": "The date before which this block can't be done, only if the text gives one; never after the task's due date"
+                    },
+                    "due": {
+                        "anyOf": [
+                            {
+                                "type": "string",
+                                "description": "Local date and time, YYYY-MM-DDTHH:MM, or the date alone, YYYY-MM-DD"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    }
+                },
+                "required": [
+                    "title",
+                    "minutes",
+                    "from",
+                    "due"
+                ],
+                "additionalProperties": false
+            }
+        }
+    },
+    "required": [
+        "kind",
+        "actionableFrom",
+        "deadline",
+        "deadlineQuoted",
+        "effortMin",
+        "nextStep",
+        "question",
+        "reason",
+        "blocks"
+    ],
+    "additionalProperties": false
+}

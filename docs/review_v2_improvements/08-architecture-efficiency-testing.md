@@ -6,14 +6,14 @@ The code's shape is good: a pure core with tests, Android at the edges, JSON sto
 
 | ID | Improvement | Priority | Effort | Status |
 |---|---|---|---|---|
-| AR-01 | Golden files for the prompts and schemas in CI | P1 | S | – |
-| AR-02 | A scored eval run as a Gradle task, with a budget | P2 | M | – (Q-26 yes) |
-| AR-03 | The debug commands as a page in the debug build | P2 | S | – |
+| AR-01 | Golden files for the prompts and schemas in CI | P1 | S | –; Implemented (v3 phase 8) |
+| AR-02 | A scored eval run as a Gradle task, with a budget | P2 | M | – (Q-26 yes); Implemented (v3 phase 8) |
+| AR-03 | The debug commands as a page in the debug build | P2 | S | –; Implemented (v3 phase 8) |
 | AR-04 | Property tests for the planner's invariants: spread, slots, stability | P1 | M | Changed; Implemented in part (v3 phase 1: the planner's rules; phase 2: spread, why, overdue; slots with phase 3) |
 | AR-05 | Screen tests for the flows that matter | P2 | M | Changed |
-| AR-06 | A crash record you can read on the phone | P2 | S | – |
-| AR-07 | A nightly backup to Documents/Decrastination | P2 | M | – |
-| AR-08 | Trim the work a sync does when nothing changed | P3 | S | – |
+| AR-06 | A crash record you can read on the phone | P2 | S | –; Implemented (v3 phase 8) |
+| AR-07 | A nightly backup to Documents/Decrastination | P2 | M | –; Implemented (v3 phase 8) |
+| AR-08 | Trim the work a sync does when nothing changed | P3 | S | –; Implemented (v3 phase 8) |
 | AR-09 | Removing sessions safely | P1 | M | New (note 1); Implemented (v3 phase 4) |
 
 ---

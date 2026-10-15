@@ -1,5 +1,6 @@
 package com.thomaswcode.decrastination.learn
 
+import java.time.LocalDate
 import android.content.Context
 import android.content.Intent
 import android.util.Log
@@ -35,15 +36,18 @@ object Review {
         val zone = graph.clock.zone()
         val week = Daily.checkInWeek(now, zone, graph.settings.value.checkInMin)
         if (ifDue && reviewed(graph.log.value.reviews, week, Daily.lastCheckIn(now, zone, graph.settings.value.checkInMin))) return
+        // A reset of the record while this is out (LR-08) lets what it makes go.
+        val generation = graph.resets.get()
         val learned = Calibrator.learn(
             graph.log.value,
             graph.runtime.value.calibration,
             today = graph.focus.today(now),
+            zone = zone,
             defaultMargin = graph.settings.value.marginDays,
         )
         graph.runtime.update { it.copy(calibration = learned.calibration) }
         val findings = learned.changes + listOfNotNull(Days.capacityAdvice(graph.log.value.days, graph.focus.today(now)))
-        val model = runCatching { modelReview(graph, now, week) }
+        val model = runCatching { modelReview(graph, now, week, generation) }
             .onFailure { Log.w(AppGraph.TAG, "The model's weekly review failed; the rules' stands", it) }
             .getOrElse { Outcome(why = "Claude's call failed") }
         val tidy = runCatching { tidyMemory(graph, now) }
@@ -54,7 +58,20 @@ object Review {
             model.review?.let { it.copy(lines = it.lines + findings) }
                 ?: WeeklyReview(now, findings.ifEmpty { listOf("Nothing to change this week: the estimates held.") }, by = "rules", why = model.why)
             ).let { it.copy(week = week, lines = it.lines + listOfNotNull(tidy?.let(::tidyLine)), memoryTidy = tidy) }
-        graph.log.update { it.copy(reviews = it.reviews + review).trimmed(now) }
+        // The week's totals (PL-10), kept past its days; those of the weeks before it the log still
+        // holds whole made again with them, so what came in after their reviews is in them.
+        val rollup = Stats.rollup(graph.log.value, LocalDate.parse(week), zone)
+        var kept = false
+        graph.log.update { l ->
+            if (graph.resets.get() != generation) l
+            else l.copy(reviews = l.reviews + review, weeks = Stats.refreshedWeeks(l, now, zone).filterNot { w -> w.week == week } + rollup).trimmed(now).also { kept = true }
+        }
+        if (!kept) {
+            Log.i(AppGraph.TAG, "The record was reset while the week's review was out: it isn't kept")
+            return
+        }
+        // The week's summary for home (NF-02), after its review: its own call, its failure the review's no matter.
+        runCatching { graph.writeSummary(week) }.onFailure { Log.w(AppGraph.TAG, "The week's summary failed", it) }
         Notify.post(
             context,
             ID,
@@ -83,25 +100,30 @@ object Review {
      * The model's review, while Claude is on and under its cap: a note and bounded changes, the
      * changes applied through [AppGraph.applyReviewChanges]. Otherwise why it couldn't be had.
      */
-    private suspend fun modelReview(graph: AppGraph, now: Long, week: String): Outcome {
+    private suspend fun modelReview(graph: AppGraph, now: Long, week: String, generation: Int): Outcome {
         val reviewer = graph.modelReviewer() ?: return Outcome(why = because(ModelHold.Off))
         val zone = graph.clock.zone()
         val input = ReviewInput.describe(graph.log.value, graph.runtime.value.calibration, graph.settings.value, now, zone, week)
         // Its room taken with every other model call's, then sent (AC-05). A failure is recorded
         // (Setup shows it; the model rests), then the rules' review stands.
         val current = graph.modelReviewer() ?: return Outcome(why = because(ModelHold.Off))
-        val result = when (val called = graph.callModel(interactive = false, cost = { r: ClaudeReviewer.Result -> r.costUsd to r.refused }) { current.review(input) }) {
+        val result = when (val called = graph.callModel(interactive = false, record = com.thomaswcode.decrastination.enrich.ModelCalls.OnRecord(com.thomaswcode.decrastination.enrich.ModelEffort.Job.Review, "the week") { r: ClaudeReviewer.Result -> r.usage to com.thomaswcode.decrastination.enrich.ModelCalls.outcome(r.refused, r.answer == null) }, cost = { r: ClaudeReviewer.Result -> r.costUsd to r.refused }) { current.review(input) }) {
             is AppGraph.Called.Held -> return Outcome(why = because(called.hold))
             is AppGraph.Called.Failed -> throw called.error
             is AppGraph.Called.Answered -> called.value
         }
         val answer = result.answer ?: return Outcome(why = if (result.refused) "Claude declined to review it" else "Claude's answer couldn't be used")
-        val changes = answer.changes.filter(ReviewInput::allowed)
+        val settings = graph.settings.value
+        val changes = answer.changes.filter { ReviewInput.allowed(it, settings) }
+        // What each was, kept with the review (AI-18, LR-01): next week's reads it, and its page undoes it.
+        val before = changes.mapNotNull { c -> ReviewInput.valueOf(settings, c.setting)?.let { c.setting to it } }.toMap()
+        // Not after a reset of the record that came while Claude was asked (LR-08): the review's let go.
+        if (graph.resets.get() != generation) return Outcome(why = "the record was reset while Claude was asked")
         // At once, armed or not (your call, 11 Oct); laid over what's been asked for, so a change
         // waiting for another setting keeps its wait.
         if (changes.isNotEmpty()) graph.applyReviewChanges(changes)
         val note = answer.note.ifEmpty { listOf("No note this week.") }
-        return Outcome(WeeklyReview(now, note + changeLines(changes, graph.settings.value), by = result.model ?: reviewer.model))
+        return Outcome(WeeklyReview(now, note + changeLines(changes, graph.settings.value), by = result.model ?: reviewer.model, changes = changes, settingsBefore = before))
     }
 
     /**
@@ -114,7 +136,7 @@ object Review {
         val before = graph.memory.value.facts
         if (before.isEmpty() || !(force || MemoryTidy.due(before))) return null
         val tidier = graph.memoryTidier() ?: return null
-        val called = graph.callModel(interactive = false, cost = { r: MemoryTidier.Result -> r.costUsd to r.refused }) { at -> tidier.tidy(before, at, graph.clock.zone()) }
+        val called = graph.callModel(interactive = false, record = com.thomaswcode.decrastination.enrich.ModelCalls.OnRecord(com.thomaswcode.decrastination.enrich.ModelEffort.Job.Tidy, "what's remembered") { r: MemoryTidier.Result -> r.usage to com.thomaswcode.decrastination.enrich.ModelCalls.outcome(r.refused, r.answer == null) }, cost = { r: MemoryTidier.Result -> r.costUsd to r.refused }) { at -> tidier.tidy(before, at, graph.clock.zone()) }
         val answer = (called as? AppGraph.Called.Answered)?.value?.answer ?: return null
         val after = MemoryTidy.after(answer, before, now) ?: return null
         var applied = false

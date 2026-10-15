@@ -30,7 +30,7 @@ class PhotoChecker(apiKey: String, endpoint: String? = null, val model: String =
     @Serializable
     data class Verdict(val done: Boolean, val confidence: Double, val reason: String, val seen: String = "")
 
-    data class Result(val verdict: Verdict?, val costUsd: Double, val refused: Boolean = false)
+    data class Result(val verdict: Verdict?, val costUsd: Double, val refused: Boolean = false, val usage: ModelCalls.Usage = ModelCalls.Usage.NONE)
 
     private val client: AnthropicClient = AnthropicOkHttpClient.builder()
         .apiKey(apiKey)
@@ -61,15 +61,16 @@ class PhotoChecker(apiKey: String, endpoint: String? = null, val model: String =
             .build()
         val message = withContext(Dispatchers.IO) { client.messages().create(params) }
         val cost = Pricing.costUsd(message)
+        val usage = ModelCalls.usage(message)
         when (message.stopReason().orElse(null)) {
-            StopReason.REFUSAL -> return Result(null, cost, refused = true)
-            StopReason.MAX_TOKENS -> return Result(null, cost)
+            StopReason.REFUSAL -> return Result(null, cost, refused = true, usage = usage)
+            StopReason.MAX_TOKENS -> return Result(null, cost, usage = usage)
             else -> Unit
         }
         val text = message.content().mapNotNull { it.text().orElse(null)?.text() }.joinToString("")
         val verdict = runCatching { json.decodeFromString(Verdict.serializer(), text) }.getOrNull()
             ?.let { it.copy(confidence = it.confidence.coerceIn(0.0, 1.0), reason = it.reason.trim().take(200), seen = it.seen.trim().take(MAX_SEEN)) }
-        return Result(verdict, cost)
+        return Result(verdict, cost, usage = usage)
     }
 
     companion object {

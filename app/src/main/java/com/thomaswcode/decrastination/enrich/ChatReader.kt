@@ -536,7 +536,7 @@ class ChatReader(
     private val settings: Settings = Settings(),
 ) {
 
-    data class Result(val reading: ChatAnswers.Reading?, val costUsd: Double, val refused: Boolean = false)
+    data class Result(val reading: ChatAnswers.Reading?, val costUsd: Double, val refused: Boolean = false, val usage: ModelCalls.Usage = ModelCalls.Usage.NONE)
 
     private val client: AnthropicClient = AnthropicOkHttpClient.builder()
         .apiKey(apiKey)
@@ -560,13 +560,14 @@ class ChatReader(
         }
         val message = withContext(Dispatchers.IO) { client.messages().create(builder.build()) }
         val cost = Pricing.costUsd(message)
+        val usage = ModelCalls.usage(message)
         when (message.stopReason().orElse(null)) {
-            StopReason.REFUSAL -> return Result(null, cost, refused = true)
-            StopReason.MAX_TOKENS -> return Result(null, cost)
+            StopReason.REFUSAL -> return Result(null, cost, refused = true, usage = usage)
+            StopReason.MAX_TOKENS -> return Result(null, cost, usage = usage)
             else -> Unit
         }
         val text = message.content().mapNotNull { it.text().orElse(null)?.text() }.joinToString("")
         val about = messages.lastOrNull { it.from == Speaker.You }?.about ?: About()
-        return Result(ChatAnswers.parse(text, tasks, events, about, now, zone), cost)
+        return Result(ChatAnswers.parse(text, tasks, events, about, now, zone), cost, usage = usage)
     }
 }

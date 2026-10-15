@@ -29,7 +29,7 @@ The model-side settings (effort, model per job, caching, retries) are in [02-ai-
 | AI-15 | "Help me start": a micro-plan for every slot, ready before it starts | P1 | M | Changed (Q-07); Implemented (v3 phase 7) |
 | AI-16 | The photo check should see the instructions, not just the piece's name | P1 | S | –; Implemented (v3 phase 7) |
 | AI-17 | Several photos for one piece; no partial credit | P3 | S | Changed (Q-08); Implemented (v3 phase 7) |
-| AI-18 | The weekly review should see last week's review, the day records and the slots kept | P2 | S | Changed |
+| AI-18 | The weekly review should see last week's review, the day records and the slots kept | P2 | S | Changed; Implemented (v3 phase 8) |
 | AI-19 | A "Steps" change, so Claude can split or re-split a task of your own | P2 | M | –; Implemented (v3 phase 7) |
 | AI-20 | Schema descriptions as a steering channel | P2 | S | –; Implemented (v3 phase 7) |
 | AI-21 | Remembered facts and standing instructions, with a budget instead of a cap | P1 | M | Changed (Q-09, Q-36, Q-46); Implemented (v3 phase 5) |

@@ -47,6 +47,12 @@ data class Backup(
     val school: SchoolCalendar = SchoolCalendar(),
     /** What Felix remembers (AI-21): none in a backup from before. */
     val memory: com.thomaswcode.decrastination.core.MemoryState = com.thomaswcode.decrastination.core.MemoryState(),
+    /** Felix's own state (AR-07): when he looks next, what he's waiting to say. None in a backup from before. */
+    val felix: FelixState = FelixState(),
+    /** Today's slots' starts and misses (AR-07), for a restore the same day. */
+    val slots: com.thomaswcode.decrastination.core.SlotState = com.thomaswcode.decrastination.core.SlotState(),
+    /** The chat (AR-07, LR-08), so a reset's copy holds what it clears: restored where this phone's is empty. None in a backup from before. */
+    val chat: com.thomaswcode.decrastination.core.ChatState = com.thomaswcode.decrastination.core.ChatState(),
 ) {
     companion object {
         const val APP = "Decrastination"
@@ -57,9 +63,10 @@ data class Backup(
          */
         /**
          * 4 since slots replaced sessions in the log (LR-09, AR-09), 5 with what's remembered
-         * (AI-21): an older app refuses it rather than losing them.
+         * (AI-21), 6 with Felix's state, today's slots and the chat (AR-07): an older app refuses it
+         * rather than losing them.
          */
-        const val FORMAT = 5
+        const val FORMAT = 6
     }
 }
 
@@ -94,6 +101,14 @@ object Backups {
             if (log.completions.any { it.estimateMin < 0 || it.workedMin < 0 }) add("a finished task's minutes")
             if (log.days.any { it.plannedMin < 0 || (it.doneMin ?: 0) < 0 || runCatching { java.time.LocalDate.parse(it.date) }.isFailure }) add("a day's plan")
             if (log.checkIns.any { it.feel !in 1..5 }) add("a check-in's answer")
+            // The weeks' rollups (PL-10), as a review writes them: each from its Monday, no count below
+            // nothing, and none past what a week holds.
+            if (log.weeks.any { w ->
+                    runCatching { java.time.LocalDate.parse(w.week) }.getOrNull()?.dayOfWeek != java.time.DayOfWeek.MONDAY ||
+                        listOf(w.minutes, w.finished, w.onTime, w.dated, w.blocks, w.fullDays, w.slotsKept, w.slotsMissed).any { it < 0 } ||
+                        w.onTime > w.finished || w.dated > w.finished || w.fullDays > 7 || w.minutes > 7 * DAY_MIN
+                } || log.weeks.map { it.week }.toSet().size != log.weeks.size
+            ) add("a week's totals")
             val calibration = backup.calibration
             if (calibration.multipliers.values.any { !it.isFinite() || it !in Calibrator.MIN_MULTIPLIER..Calibrator.MAX_MULTIPLIER }) add("what the app learned about estimates")
             if (calibration.marginDays.values.any { it !in SettingsLimits.MARGIN_DAYS }) add("what the app learned about margins")
@@ -305,5 +320,6 @@ object Backups {
         checkIns = (current.checkIns + imported.checkIns).distinctBy { it.weekOf }.sortedBy { it.at },
         reviews = (current.reviews + imported.reviews).distinctBy { it.at }.sortedBy { it.at },
         felix = (current.felix + imported.felix).distinctBy { it.id }.sortedBy { it.at },
+        weeks = (current.weeks + imported.weeks).distinctBy { it.week }.sortedBy { it.week },
     ).trimmed(now)
 }

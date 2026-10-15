@@ -53,7 +53,7 @@ object PhotoChecks {
         // Its room taken with every other model call's, then sent (AC-05).
         val current = graph.photoChecker() ?: return OFF
         val about = PhotoChecker.context(piece, graph.tasks.value.tasks.firstOrNull { it.id == piece.taskId })
-        val result = when (val called = graph.callModel(interactive = true, cost = { r: PhotoChecker.Result -> r.costUsd to r.refused }) { current.check(jpegs, about) }) {
+        val result = when (val called = graph.callModel(interactive = true, record = com.thomaswcode.decrastination.enrich.ModelCalls.OnRecord(com.thomaswcode.decrastination.enrich.ModelEffort.Job.PhotoCheck, piece.label) { r: PhotoChecker.Result -> r.usage to com.thomaswcode.decrastination.enrich.ModelCalls.outcome(r.refused, r.verdict == null) }, cost = { r: PhotoChecker.Result -> r.costUsd to r.refused }) { current.check(jpegs, about) }) {
             is AppGraph.Called.Held -> return when (called.hold) {
                 ModelHold.Off -> OFF
                 ModelHold.Resting -> "Claude's key isn't working (Setup says why): tick it Done, or the source will have to do."

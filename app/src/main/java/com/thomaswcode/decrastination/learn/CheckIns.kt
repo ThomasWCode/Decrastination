@@ -46,7 +46,14 @@ import kotlinx.coroutines.launch
 object CheckIns {
     const val ID = 4002
 
-    fun remind(context: Context) {
+    /**
+     * The week's check-in begun (LR-02): Felix asks its first question in his notification, the rest
+     * as each is answered ([AppGraph.checkInReply]); the form, This week, takes them all at once.
+     * The reminder to open the form, where his notifications can't be shown.
+     */
+    suspend fun remind(context: Context) {
+        val graph = AppGraph.get(context)
+        if (graph.askCheckIn()) return
         Notify.post(
             context,
             ID,
@@ -113,6 +120,8 @@ class CheckInActivity : ComponentActivity() {
                                     log.copy(checkIns = log.checkIns + CheckIn(week, now, feel, avoided.trim(), inTheWay.trim(), change.trim(), energy.trim())).trimmed(now)
                                 }
                                 Notify.cancel(this@CheckInActivity, CheckIns.ID)
+                                // Felix's questions, should he have begun them: the form has the answers.
+                                if (added) graph.endCheckInFlow()
                                 if (!added) return@launch
                                 // As a job: it can outlast this screen.
                                 // Unless the week has had its review already (the evening's ran first).
