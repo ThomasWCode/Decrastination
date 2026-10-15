@@ -822,6 +822,11 @@ class PlannerTest {
         val slot = plan.bucket(tuesday)!!.slotOf(pinned)!!
         assertEquals(Fixtures.at("2026-10-13T19:30"), slot.start)
         assertTrue(slot.pinned)
+        // A time off the five minutes ("give me 15" at 19:17) is kept to the minute.
+        val offFive = Planner.plan(windowed(listOf(essay.copy(userAtTime = Fixtures.at("2026-10-13T19:32"))), "2026-10-12T17:00"))
+        val atMinute = offFive.bucket(tuesday)!!.slotOf(offFive.chunksOf("teams:essay").single { it.why == Why.Pinned })!!
+        assertEquals(Fixtures.at("2026-10-13T19:32"), atMinute.start)
+        assertTrue(atMinute.pinned)
         // Tuesday 17:30: the first step's slot went by undone, so it says it moved (PL-13).
         val read = Planner.plan(windowed(listOf(essay), "2026-10-13T16:50")).todaySlots.first { it.chunk?.stepIndex == 0 }.chunk!!
         val moved = Planner.plan(windowed(listOf(essay), "2026-10-13T17:30").copy(missedSlots = setOf(read.key)))
