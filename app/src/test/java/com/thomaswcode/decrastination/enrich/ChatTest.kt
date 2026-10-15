@@ -273,6 +273,13 @@ class ChatTest {
         val text = ChatPrompts.plan(laid, LONDON)
         assertTrue("\nNow: 22:30–23:04 Bridge and Balances Beam Q's: part 1 of 3 (34 min); then " in text, text)
         assertFalse("Next to do" in text, text)
+        // Today's slots each say whether they've gone by, are under way or are to come (AI-13).
+        assertTrue("Today's slots (the times its pieces are laid at):\n- 22:30–23:04 Bridge and Balances Beam Q's: part 1 of 3 (34 min) [now]" in text, text)
+        val earlier = slot.copy(start = now - 90 * 60_000L, end = now - 60 * 60_000L)
+        val later = slot.copy(start = now + 30 * 60_000L, end = now + 64 * 60_000L)
+        val day = ChatPrompts.plan(plan.copy(buckets = plan.buckets.mapIndexed { i, b -> if (i == 0) b.copy(slots = listOf(earlier, later)) else b }), LONDON)
+        assertTrue("[past]" in day && "[ahead]" in day, day)
+        assertTrue("a deadline later today is still ahead" in ChatPrompts.system())
     }
 
     @Test

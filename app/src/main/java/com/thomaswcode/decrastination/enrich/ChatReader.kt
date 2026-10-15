@@ -69,7 +69,7 @@ object ChatPrompts {
         1. Add tasks of their own (newTasks): something to do that isn't listed ("write my UCAS statement by 1 December", "buy mum a present before Sunday"). Give a short title in their words; kind: Homework, Revision, Admin, or Event for something that happens at a time (an appointment, a match); subject if it's for one (else an empty string); dueDate and dueTime if they gave them (an event's start; no time means the end of that day); minutes for the whole thing (your best estimate if they didn't say, and say so in your reply); startDate if it can't be started before a day; notes only for something worth keeping (else an empty string); and steps only for a big task worth splitting, each with minutes (adding up to the task's) and its own dates where it has them.
         2. Change their tasks and days (changes), with these:
 """ + InstructionPrompts.CHANGE_TYPES.prependIndent("        ") + """
-        3. Answer questions about their work from what you're given, briefly: what's due when from the task list; what's on a day, how full it is, what to do next and why something isn't planned from the plan. The plan is what the app has them do and shows them, so say what it says rather than planning the work again yourself.
+        3. Answer questions about their work from what you're given, briefly: what's due when from the task list; what's on a day, how full it is, what to do next and why something isn't planned from the plan. The plan is what the app has them do and shows them, so say what it says rather than planning the work again yourself. The context gives the time now: a deadline later today is still ahead ("due at 16:00 today"), not past, and a slot marked past has gone by; say "overdue" only where the plan marks it so.
         4. Remember (memories): a fact about the student worth keeping for later (a preference, a pattern, something about their week: "football is on Tuesdays"), with a short topic, so a newer fact on the same topic replaces it; or, kind "rule", a standing instruction about how you should behave ("don't message before 8", "be blunter"). To forget one, give its topic (a rule's own words) and an empty text. Busy times, limits and days off are changes, not memories; most messages need none.
 
         Reply in one to three short sentences of plain UK English (asked what's on, a short list instead, a line a task). A change to a task that's already listed, a busy time or a limit today, or how an event counts is made as soon as you give it, so say what you've done ("Moved it to 19:30"); a new task or event, a busy time or a limit on another day, days off or a half-day are shown to the student to confirm, so say what you'd add. To undo a change, give the change that puts it back. When a reply from them is likely, offer up to three short ones in their words (suggestedReplies). If what you need is missing or unclear (which task they mean, or when), ask one short question and change nothing. Don't add a task that's already listed: change it instead. When their message is about a given task, event or day, it's about that unless they clearly name another. Do only what they asked for, and leave every field you don't use null.
@@ -258,6 +258,19 @@ object ChatPrompts {
         when {
             doing != null -> appendLine("Now: ${clock(doing.start)}–${clock(doing.end)} ${piece(doing.chunk!!)}$then")
             else -> plan.next?.let { appendLine("Next to do: ${piece(it)}$then") }
+        }
+        // Today's slots at their times, each gone by, under way or to come (AI-13), so a time today isn't taken for past.
+        val slots = plan.todaySlots.filter { it.kind == com.thomaswcode.decrastination.core.SlotKind.Work && it.chunk != null }
+        if (slots.isNotEmpty()) {
+            appendLine("Today's slots (the times its pieces are laid at):")
+            slots.forEach { s ->
+                val state = when {
+                    s.end <= plan.now -> "past"
+                    s.start <= plan.now -> "now"
+                    else -> "ahead"
+                }
+                appendLine("- ${clock(s.start)}–${clock(s.end)} ${piece(s.chunk!!)} [$state]")
+            }
         }
         val last = plan.today.plusDays(PLAN_DAYS - 1L)
         fun day(time: Long): LocalDate = Instant.ofEpochMilli(time).atZone(zone).toLocalDate()
