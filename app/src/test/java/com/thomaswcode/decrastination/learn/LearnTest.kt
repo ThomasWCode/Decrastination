@@ -103,6 +103,8 @@ class CalibratorTest {
         // Never past three days.
         val veryLate = (0..9).map { done("v$it", dueAt = due + it * DAY, doneAt = due + it * DAY + HOUR) }
         assertEquals(mapOf(Kind.Homework to 3), Calibrator.margins(veryLate))
+        // Late against dates the app or Claude set: plans, which teach no margin (PL-14).
+        assertEquals(emptyMap(), Calibrator.margins(late.map { it.copy(hardDeadline = false) }))
     }
 
     @Test
@@ -117,6 +119,9 @@ class CalibratorTest {
         val log = ActivityLog(sessions = sessions, completions = onTime)
         assertEquals(mapOf(Kind.Homework to 25), Calibrator.boxes(log, defaultBox = 45, week = 7))
         assertEquals(Calibrator.boxes(log, 45, week = 7), Calibrator.boxes(log, 45, week = 7))
+        // Done by a plan's date, not a real deadline: the 25s earn nothing, and the default stands (PL-14).
+        val planned = log.copy(completions = onTime.map { it.copy(hardDeadline = false) })
+        assertEquals(emptyMap(), Calibrator.boxes(planned, defaultBox = 45, week = 7))
     }
 
     @Test
@@ -332,6 +337,13 @@ class CalendarQuestionsTest {
     private val now = Fixtures.at("2026-10-09T17:00")
 
     private fun event(id: Long, title: String, start: String, end: String) = CalendarEvent(id, title, Fixtures.at(start), Fixtures.at(end), allDay = false)
+
+    @Test
+    fun `the calendar is read to the end of the plan's last day`() {
+        // 90 days on from Thursday 15 Oct is Wednesday 13 Jan: read until its midnight, whatever the time now.
+        assertEquals(Fixtures.at("2027-01-14T00:00"), CalendarTime.readUntil(Fixtures.at("2026-10-15T17:00"), LONDON))
+        assertEquals(Fixtures.at("2027-01-14T00:00"), CalendarTime.readUntil(Fixtures.at("2026-10-15T00:05"), LONDON))
+    }
 
     @Test
     fun `an ended occurrence of a long event doesn't stand in for the next`() {
