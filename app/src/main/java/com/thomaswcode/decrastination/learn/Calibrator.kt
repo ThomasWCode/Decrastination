@@ -7,7 +7,6 @@ import com.thomaswcode.decrastination.data.ActivityLog
 import com.thomaswcode.decrastination.data.SlotOutcome
 import com.thomaswcode.decrastination.data.SlotRecord
 import com.thomaswcode.decrastination.data.CompletionRecord
-import com.thomaswcode.decrastination.data.SessionRecord
 import java.time.LocalDate
 import kotlin.random.Random
 

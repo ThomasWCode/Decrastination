@@ -25,7 +25,6 @@ import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.block.Credit
 import com.thomaswcode.decrastination.block.Focus
 import com.thomaswcode.decrastination.block.PhotoChecks
-import com.thomaswcode.decrastination.block.Sessions
 import com.thomaswcode.decrastination.core.Chunk
 import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.Source
@@ -101,37 +100,20 @@ fun rememberPhotoCheck(graph: AppGraph, activity: Activity, plan: Plan, say: (ta
 
 /**
  * What can be done with [piece], wherever it's shown (the Plan, the block screen): **Open** goes to
- * the task; **Start** runs a focus session on it (**Stop** ends the one running); **Check it's done**
- * asks its source (**Done**, for one of your own, is your say); **Refresh Teams** asks the Teams widget to sync; **Photo check** sends a photo
+ * the task; **Done** keeps its slot (LR-09); **Check it's done** asks its source (**All of it done**,
+ * for one of your own, is your say); **Refresh Teams** asks the Teams widget to sync; **Photo check** sends a photo
  * of written work. [say] gives how each went.
  */
 @Composable
 fun PieceActions(graph: AppGraph, activity: Activity, piece: Chunk, now: Long, photo: PhotoCheck, say: (String) -> Unit) {
     val tasks by graph.tasks.state.collectAsStateWithLifecycle()
-    val runtime by graph.runtime.state.collectAsStateWithLifecycle()
-    val session = runtime.session
     val scope = rememberCoroutineScope()
-    // Tapped: off till the session it starts is shown (a second tap would end it and start another).
-    var starting by remember { mutableStateOf(false) }
-    LaunchedEffect(session) { starting = false }
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Button(onClick = {
             tasks.tasks.firstOrNull { it.id == piece.taskId }?.let { task ->
                 scope.launch { TaskOpener.open(activity, task)?.let(say) }
             }
         }) { Text("Open") }
-        if (session == null) {
-            // Not before it's available (an Anki deck's next cards at 04:00).
-            FilledTonalButton(enabled = piece.startable(now) && !photo.checking && !starting, onClick = {
-                starting = true
-                scope.launch {
-                    runCatching { Sessions.start(activity, piece.taskId, piece.label, piece.step, piece.minutes, piece.box, piece.stepIndex) }
-                        .onFailure { starting = false }.getOrThrow()
-                }
-            }) { Text("Start ${Format.minutes(minOf(piece.minutes, Focus.MAX_SESSION_MIN))}") }
-        } else {
-            OutlinedButton(onClick = { scope.launch { Sessions.end(activity, early = true) } }) { Text("Stop session") }
-        }
         // This piece done (LR-09): its slot kept, earning its free time if it's short (a longer one's
         // photo earns it, BL-08).
         FilledTonalButton(onClick = {
@@ -176,9 +158,8 @@ fun PieceActions(graph: AppGraph, activity: Activity, piece: Chunk, now: Long, p
                 scope.launch { say(graph.requestTeamsSync() ?: "The Teams widget is syncing Teams") }
             }) { Text("Refresh Teams") }
         }
-        // Written work: a photo instead of the timer, once Claude is on (Q16). Not during a
-        // session: the two would count the same piece twice.
-        if (photo.available && session == null && piece.photoCheckable) {
+        // Written work: a photo shows it done, once Claude is on (Q16; BL-08: a longer piece earns by it).
+        if (photo.available && piece.photoCheckable) {
             OutlinedButton(enabled = !photo.checking, onClick = { photo.take(piece) }) { Text("Photo check") }
         }
     }

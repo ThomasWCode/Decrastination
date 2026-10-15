@@ -92,10 +92,8 @@ class WidgetModelTest {
     }
 
     @Test
-    fun `a focus session and free time show in the summary`() {
+    fun `free time shows in the summary`() {
         val plan = Planner.plan(Planner.Input(emptyList(), now, LONDON, Settings()))
-        val session = RuntimeState(session = com.thomaswcode.decrastination.block.FocusSession("teams:t", "Statics Prep", null, 25, now - 5 * 60_000L))
-        assertEquals("Focus: Statics Prep, 20 min left", WidgetModel.from(plan, TaskState(), LONDON, session).summary)
         val credit = RuntimeState(credit = com.thomaswcode.decrastination.block.Credit().earn(java.time.LocalDate.of(2026, 10, 9), 15.0))
         assertEquals("Nothing due soon · 15 min of free time", WidgetModel.from(plan, TaskState(), LONDON, credit).summary)
     }

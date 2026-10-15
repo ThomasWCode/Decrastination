@@ -84,7 +84,7 @@ object Backups {
         val bad = buildList {
             addAll(SettingsLimits.problems(backup.settings))
             val log = backup.log
-            if (log.sessions.any { it.workedMin !in 0..DAY_MIN || it.plannedMin !in 0..DAY_MIN || it.startedAt < 0 }) add("a focus session's minutes")
+            if (log.slots.any { it.workedMin !in 0..DAY_MIN || it.plannedMin !in 0..DAY_MIN || it.start < 0 || it.end < it.start }) add("a slot's minutes")
             if (log.completions.any { it.estimateMin < 0 || it.workedMin < 0 }) add("a finished task's minutes")
             if (log.days.any { it.plannedMin < 0 || (it.doneMin ?: 0) < 0 || runCatching { java.time.LocalDate.parse(it.date) }.isFailure }) add("a day's plan")
             if (log.checkIns.any { it.feel !in 1..5 }) add("a check-in's answer")
@@ -262,7 +262,7 @@ object Backups {
      * same day or week) isn't doubled, and this phone's own version of it wins.
      */
     fun mergeLog(current: ActivityLog, imported: ActivityLog, now: Long): ActivityLog = ActivityLog(
-        sessions = (current.sessions + imported.sessions).distinctBy { it.taskId to it.startedAt }.sortedBy { it.startedAt },
+        slots = (current.slots + imported.slots).distinctBy { Triple(it.key, it.date, it.outcome) }.sortedBy { it.at },
         completions = (current.completions + imported.completions).distinctBy { it.taskId to it.doneAt }.sortedBy { it.doneAt },
         blocks = (current.blocks + imported.blocks).distinctBy { Triple(it.at, it.target, it.reason) }.sortedBy { it.at },
         protection = (current.protection + imported.protection).distinctBy { it.at }.sortedBy { it.at },

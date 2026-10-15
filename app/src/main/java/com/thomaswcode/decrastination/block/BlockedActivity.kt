@@ -45,8 +45,8 @@ import kotlinx.coroutines.delay
 
 /**
  * What a blocked app shows instead (PLAN.md Phase 3): why, the next thing to do, and the ways
- * to get on with it. **Open** goes to the task; **Start** runs a focus session on it; **Check
- * it's done** asks its source; **Refresh Teams** asks the Teams widget to sync. There's no way
+ * to get on with it. **Open** goes to the task; **Done** keeps its slot; **Check it's done**
+ * asks its source; **Refresh Teams** asks the Teams widget to sync. There's no way
  * through (docs/scheduler.md §6, layer 1). Back, and **Go home**, go to the home screen.
  *
  * Its own task (manifest), so neither Back nor Recents can reveal the app behind.
@@ -93,7 +93,6 @@ class BlockedActivity : ComponentActivity() {
         }
         val plan = remember(tasks, settings, now / 60_000) { graph.plan(tasks, settings, now) }
         val verdict = remember(tasks, settings, runtime, now / 10_000) { graph.focus.verdict(now) }
-        val session = runtime.session
         val zone = graph.clock.zone()
         var message by remember { mutableStateOf<String?>(null) }
         var why by remember { mutableStateOf(false) }
@@ -108,12 +107,11 @@ class BlockedActivity : ComponentActivity() {
             }
         }
         // Nothing is blocked any more (free time earned, quiet hours begun), or not this: let it through.
-        LaunchedEffect(verdict, session, targetBlocked) {
-            // Its target no longer blocked goes at once, session or not; otherwise once nothing's
-            // blocked and no session holds it.
-            if (!targetBlocked || (verdict !is BlockPolicy.Verdict.Block && session == null)) finish()
+        LaunchedEffect(verdict, targetBlocked) {
+            // Its target no longer blocked goes at once; otherwise once nothing's blocked.
+            if (!targetBlocked || verdict !is BlockPolicy.Verdict.Block) finish()
         }
-        val next = if (session != null) plan.pieceOf(session.taskId, session.stepIndex, session.step) ?: plan.next else plan.next
+        val next = plan.next
         // Shared with the Plan (IMP-P1-001): the same actions, the same rules.
         val photo = rememberPhotoCheck(graph, this, plan) { _, text -> message = text }
 
@@ -124,14 +122,6 @@ class BlockedActivity : ComponentActivity() {
             ) {
                 Text("Not now", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.SemiBold)
                 Text("${targetLabel()} is blocked. ${verdict.reason.headline}.", style = MaterialTheme.typography.bodyLarge)
-                if (session != null) {
-                    val left = session.leftMs(now, graph.clock.uptime()) / 1000
-                    Text(
-                        "Focus: ${session.label}, %d:%02d left".format(left / 60, left % 60),
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                    )
-                }
                 if (next != null) {
                     NextCard(next, plan.now, zone)
                     PieceActions(graph, this@BlockedActivity, next, plan.now, photo) { message = it }
@@ -178,7 +168,6 @@ class BlockedActivity : ComponentActivity() {
                     "Nothing is planned for today, but there's no free time left. Every $ratio minutes of work earns a minute; it's gone at midnight.",
                     style = MaterialTheme.typography.bodyMedium,
                 )
-                BlockPolicy.Reason.Session -> Text("You started a focus session: blocked apps stay blocked until it ends.", style = MaterialTheme.typography.bodyMedium)
                 else -> Text(reason.headline, style = MaterialTheme.typography.bodyMedium)
             }
             Text("Nothing is blocked 22:30–07:00, or before 16:45 on school days.", style = MaterialTheme.typography.bodySmall)

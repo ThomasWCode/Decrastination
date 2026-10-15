@@ -51,7 +51,6 @@ class BlockPolicyTest {
         at: String,
         pressure: Boolean = true,
         creditMs: Long = 0,
-        session: FocusSession? = null,
         overrideUntil: String? = null,
         forceUntil: String? = null,
     ) = BlockPolicy.decide(
@@ -61,7 +60,6 @@ class BlockPolicyTest {
             settings = settings,
             pressure = pressure,
             creditLeftMs = creditMs,
-            session = session,
             overrideUntil = overrideUntil?.let(Fixtures::at),
             forceActiveUntil = forceUntil?.let(Fixtures::at),
         ),
@@ -92,23 +90,6 @@ class BlockPolicyTest {
     fun `with nothing due soon, earned time is spent, and without it the app is blocked`() {
         assertEquals(BlockPolicy.Verdict.Spend, decide("2026-10-10T12:00", pressure = false, creditMs = 600_000))
         assertEquals(BlockPolicy.Verdict.Block(BlockPolicy.Reason.NoFreeTime), decide("2026-10-10T12:00", pressure = false))
-    }
-
-    @Test
-    fun `a session blocks until the uptime clock says its time is up, the date set forward or not`() {
-        val now = Fixtures.at("2026-10-10T12:00")
-        val session = FocusSession("teams:t", "t", null, 30, startedAt = now - 60 * 60_000L, startedUptime = Uptime(1, 0))
-        // The wall clock says an hour has passed; the phone has been on for ten minutes.
-        val input = BlockPolicy.Input(now, LONDON, Settings(), pressure = false, creditLeftMs = 60_000L, session = session, uptime = Uptime(1, 10 * 60_000L))
-        assertEquals(BlockPolicy.Verdict.Block(BlockPolicy.Reason.Session), BlockPolicy.decide(input))
-        assertEquals(BlockPolicy.Verdict.Spend, BlockPolicy.decide(input.copy(uptime = Uptime(1, 31 * 60_000L))))
-    }
-
-    @Test
-    fun `a focus session blocks whatever the hour`() {
-        val session = FocusSession("teams:t", "Statics Prep", null, 25, Fixtures.at("2026-10-09T23:00"))
-        assertEquals(BlockPolicy.Verdict.Block(BlockPolicy.Reason.Session), decide("2026-10-09T23:10", pressure = false, session = session))
-        assertEquals(BlockPolicy.Verdict.Allow(BlockPolicy.Reason.Quiet), decide("2026-10-09T23:30", session = session))
     }
 
     @Test
@@ -146,7 +127,7 @@ class CreditTest {
 
     @Test
     fun `a minute of free time for three of work, a completion's capped at half an hour`() {
-        assertEquals(15.0, Credit.forSession(45, 3))
+        assertEquals(15.0, Credit.forSlot(45, 3))
         assertEquals(10.0, Credit.forCompletion(30, 3))
         assertEquals(30.0, Credit.forCompletion(300, 3))
         assertEquals(0.0, Credit.forCompletion(0, 3))

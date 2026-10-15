@@ -106,16 +106,27 @@ class BackupTest {
         assertEquals(here, Backups.mergeUsage(here, AiUsage(month = "2026-09", spentUsd = 99.0), month))
     }
 
+    /** A slot of [key]'s kept, laid at [start]. */
+    private fun slot(key: String, start: Long) = SlotRecord(
+        date = java.time.Instant.ofEpochMilli(start).atZone(java.time.ZoneId.of("Europe/London")).toLocalDate().toString(), key = key, taskId = key.substringBefore('#'),
+        kind = Kind.Homework, label = key, plannedMin = 30, start = start, end = start + 30 * 60_000L, window = com.thomaswcode.decrastination.core.WindowKind.Evening,
+        outcome = SlotOutcome.Kept, workedMin = 30, at = start + 30 * 60_000L,
+    )
+
     @Test
     fun `merging a log adds what's missing and doubles nothing`() {
         val shared = completion("teams:a", now - 3_600_000L)
-        val here = ActivityLog(completions = listOf(shared), blocks = listOf(BlockRecord(now - 60_000L, "com.google.android.youtube", "DueSoon")))
+        val kept = slot("teams:a#-1#1", now - 3_600_000L)
+        val here = ActivityLog(completions = listOf(shared), slots = listOf(kept), blocks = listOf(BlockRecord(now - 60_000L, "com.google.android.youtube", "DueSoon")))
         val backup = ActivityLog(
             completions = listOf(shared, completion("teams:b", now - 7_200_000L)),
+            // The slot here and one this phone hasn't: the slots too (LR-09).
+            slots = listOf(kept, slot("teams:b#-1#1", now - 7_200_000L)),
             blocks = listOf(BlockRecord(now - 60_000L, "com.google.android.youtube", "DueSoon")),
         )
         val merged = Backups.mergeLog(here, backup, now)
         assertEquals(listOf("teams:b", "teams:a"), merged.completions.map { it.taskId })
+        assertEquals(listOf("teams:b#-1#1", "teams:a#-1#1"), merged.slots.map { it.key })
         assertEquals(1, merged.blocks.size)
     }
 
@@ -126,8 +137,7 @@ class BackupTest {
     fun `a backup holding what the app never writes is refused whole`() {
         assertNull(Backups.problem(backup(ActivityLog(completions = listOf(completion("teams:a", now))))))
         // Negative minutes, which the stats can't take; a box no screen allows; a multiplier past its bounds; a calendar answer of no kind.
-        val session = SessionRecord("teams:a", Kind.Homework, label = "a", plannedMin = 30, workedMin = -1, startedAt = now - 3_600_000L, endedAt = now, completed = false)
-        assertNotNull(Backups.problem(backup(ActivityLog(sessions = listOf(session)))))
+        assertNotNull(Backups.problem(backup(ActivityLog(slots = listOf(slot("teams:a#-1#1", now - 3_600_000L).copy(workedMin = -1))))))
         assertNotNull(Backups.problem(backup(settings = Settings(boxMin = 5))))
         assertNotNull(Backups.problem(backup(settings = Settings(weekdayHours = Window(22 * 60, 16 * 60)))))
         assertNotNull(Backups.problem(backup(calibration = Calibration(multipliers = mapOf("Homework|" to 99.0)))))

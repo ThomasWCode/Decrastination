@@ -254,13 +254,6 @@ data class Plan(
         todaySlots.firstOrNull { it.kind == SlotKind.Work && it.start >= time } ?: tomorrowBucket?.slots.orEmpty().firstOrNull { it.kind == SlotKind.Work }
 
     fun chunksOf(taskId: String): List<Chunk> = ordered.filter { it.taskId == taskId }
-
-    /**
-     * The piece of [taskId] whose step is [stepIndex] and [step] (a focus session's), or, where the
-     * plan has moved on under it (a step ticked meanwhile), the task's first.
-     */
-    fun pieceOf(taskId: String, stepIndex: Int?, step: String?): Chunk? =
-        chunksOf(taskId).let { pieces -> pieces.firstOrNull { it.stepIndex == stepIndex && it.step == step } ?: pieces.firstOrNull() }
 }
 
 /**

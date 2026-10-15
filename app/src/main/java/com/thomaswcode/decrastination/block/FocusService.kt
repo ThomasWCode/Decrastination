@@ -48,7 +48,7 @@ import kotlinx.coroutines.launch
  * - **Free time**: while a blocked app is allowed on earned time, the time is spent, and it's
  *   blocked when that runs out.
  *
- * Besides: it ends focus sessions on time, offers the automatic Teams syncs (with their banner),
+ * Besides: it offers the automatic Teams syncs (with their banner),
  * applies pending setting changes when due, runs the watchdog's check, and, once protection is
  * armed, the settings guard (layer 2), which backs out of this app's own pages in Settings.
  */
@@ -690,8 +690,6 @@ class FocusService : AccessibilityService() {
         // being spent, its own check does this.)
         if (spending == null) lookAtScreen()
         scope.launch {
-            // A session that has run its time.
-            graph.focus.session?.takeIf { it.isDue(graph.clock.now(), graph.clock.uptime()) }?.let { Sessions.end(this@FocusService, early = false) }
             graph.applyDueChanges()
             // A slot whose end went by while its alarm couldn't ring (PL-13).
             runCatching { graph.slots.sweep() }.onFailure { Log.w(TAG, "Looking at missed slots failed", it) }

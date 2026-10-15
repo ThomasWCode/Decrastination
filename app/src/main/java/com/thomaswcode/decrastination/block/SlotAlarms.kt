@@ -91,7 +91,7 @@ class Slots(private val graph: AppGraph) {
     /** [key]'s slot is over, and its grace: its piece still planned is missed, and moves; recorded as it was [laid] (LR-09). */
     suspend fun onEnd(key: String, laid: Focus.Laid? = null, now: Long = graph.clock.now()) {
         val plan = graph.plan(now = now)
-        // Done (ticked, or finished in a session): nothing missed.
+        // Done (ticked, or by its source): nothing missed.
         val chunk = plan.ordered.firstOrNull { it.key == key }
         if (chunk == null) {
             Log.i(AppGraph.TAG, "Slot over, its piece done: $key")
