@@ -17,6 +17,7 @@ import androidx.glance.LocalContext
 import androidx.glance.LocalSize
 import androidx.glance.action.Action
 import androidx.glance.action.ActionParameters
+import androidx.glance.action.actionParametersOf
 import androidx.glance.action.clickable
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.SizeMode
@@ -69,8 +70,10 @@ class NextWidget : GlanceAppWidget() {
             val tasks by graph.tasks.state.collectAsState()
             val settings by graph.settings.state.collectAsState()
             val runtime by graph.runtime.state.collectAsState()
+            val log by graph.log.state.collectAsState()
             val plan = graph.plan(tasks, settings)
-            val model = WidgetModel.from(plan, tasks, graph.clock.zone(), runtime, settings.armed, reward = graph.focus.rewardLine(plan))
+            val today = plan.today.toString()
+            val model = WidgetModel.from(plan, tasks, graph.clock.zone(), runtime, settings.armed, reward = graph.focus.rewardLine(plan), slots = log.slots.filter { it.date == today })
             // The logo's colours (UI-12), as the app's.
             GlanceTheme(colors = androidx.glance.material3.ColorProviders(light = com.thomaswcode.decrastination.ui.Colours.Light, dark = com.thomaswcode.decrastination.ui.Colours.Dark)) { Content(model) }
         }
@@ -150,22 +153,20 @@ class NextWidget : GlanceAppWidget() {
         }
     }
 
-    /** The next thing: "DO NOW" over it where there's room, its badge and minutes as pills, then what comes after; ↻ beside. */
+    /** The slot under way or next with its time, its first step where there's room, its badge and minutes as pills, then what comes after; ✓ and ↻ beside. */
     @Composable
     private fun Next(model: WidgetModel, layout: WidgetLayout) {
         val context = LocalContext.current
         val open = actionStartActivity(OpenTaskActivity.intent(context, model.taskId))
         Row(GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Column(GlanceModifier.defaultWeight().clickable(open)) {
-                val labelled = layout.label && model.label != null
-                if (labelled) {
-                    Text("DO NOW", style = TextStyle(color = GlanceTheme.colors.primary, fontSize = 11.sp, fontWeight = FontWeight.Bold))
-                }
                 Text(
-                    if (labelled) model.label!! else model.headline,
+                    model.headline,
                     maxLines = layout.headlineLines,
                     style = TextStyle(color = GlanceTheme.colors.onPrimaryContainer, fontSize = 17.sp, fontWeight = FontWeight.Bold),
                 )
+                // Its first step (AI-15), where there's room.
+                if (layout.label) model.label?.let { Text(it, maxLines = 1, style = TextStyle(color = GlanceTheme.colors.onPrimaryContainer, fontSize = 13.sp)) }
                 if (model.badge != null || model.minutes != null) {
                     when (layout.pills) {
                         WidgetLayout.Pills.Row -> Row(GlanceModifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -198,6 +199,16 @@ class NextWidget : GlanceAppWidget() {
             if (layout.cue) {
                 Spacer(GlanceModifier.width(6.dp))
                 Cue(model.warning.orEmpty())
+            }
+            // ✓: the piece done, as the app's Done keeps it (UI-05).
+            if (layout.tick) model.key?.let { key ->
+                Spacer(GlanceModifier.width(8.dp))
+                Image(
+                    ImageProvider(R.drawable.ic_check),
+                    contentDescription = "Done",
+                    colorFilter = ColorFilter.tint(GlanceTheme.colors.primary),
+                    modifier = GlanceModifier.size(28.dp).clickable(actionRunCallback<TickAction>(actionParametersOf(TickAction.KEY to key))),
+                )
             }
             if (layout.refresh) {
                 Spacer(GlanceModifier.width(8.dp))
@@ -306,6 +317,8 @@ data class WidgetLayout(
     val listLines: Int,
     /** A short widget sits in the middle of its row; a tall one reads from the top. */
     val centred: Boolean,
+    /** ✓ beside the next thing (UI-05), where it's a piece and there's room. */
+    val tick: Boolean = false,
     /**
      * A warning there's no room to say: a red ! beside the card's name instead, so no size shows
      * all well while something isn't (IMP-P1-007). It opens the app, which says what.
@@ -325,9 +338,11 @@ data class WidgetLayout(
         val minutes: String? = null,
         val then: Boolean = false,
         val label: Boolean = false,
+        /** A piece to tick (UI-05). */
+        val tick: Boolean = false,
     ) {
         companion object {
-            fun of(model: WidgetModel) = Parts(model.warning != null, model.badge, model.minutes, model.then != null, model.label != null)
+            fun of(model: WidgetModel) = Parts(model.warning != null, model.badge, model.minutes, model.then != null, model.label != null, model.key != null)
         }
     }
 
@@ -355,17 +370,22 @@ data class WidgetLayout(
         private const val ROOMY_SIDES = 44f
         private const val REFRESH = 36f
         private const val CUE = 28f
+        private const val TICK = 36f
+
+        /** The narrowest a widget with ✓ is: a 2×1's. */
+        private const val TICK_FROM = 140f
 
         /** [fontScale]: the phone's text size, which the text's sizes (at the default, below) grow with. */
         fun of(width: Float, height: Float, parts: Parts, fontScale: Float = 1f): WidgetLayout {
             fun t(atDefault: Float) = atDefault * fontScale
             val refresh = width >= 180
+            val tick = parts.tick && width >= TICK_FROM
             val values = listOfNotNull(parts.badge, parts.minutes)
             val pillsHigh = if (values.isEmpty()) 0f else t(PILLS)
             // A warning keeps room for its cue beside the pills, in case its strip doesn't fit.
             val cueRoom = if (parts.warning) CUE else 0f
             fun sideBySide(sides: Float) =
-                values.sumOf { it.length * t(CHAR) + PILL.toDouble() } + GAP * (values.size - 1) <= width - sides - (if (refresh) REFRESH else 0f) - cueRoom
+                values.sumOf { it.length * t(CHAR) + PILL.toDouble() } + GAP * (values.size - 1) <= width - sides - (if (refresh) REFRESH else 0f) - (if (tick) TICK else 0f) - cueRoom
 
             val roomyPills = if (sideBySide(ROOMY_SIDES)) Pills.Row else Pills.Stacked
             val card = ROOMY_PADDING + (if (parts.label) t(LABEL) else 0f) + t(HEADLINE) + pillsHigh * (if (roomyPills == Pills.Stacked) 2 else 1) +
@@ -375,7 +395,7 @@ data class WidgetLayout(
                 val listLines = ((height - card - t(HEADLINE) * (headlineLines - 1)) / t(LINE)).toInt().coerceIn(0, 12)
                 return WidgetLayout(
                     true, headlineLines, label = parts.label, refresh, roomyPills, then = parts.then,
-                    summary = true, warning = parts.warning, listLines, centred = false,
+                    summary = true, warning = parts.warning, listLines, centred = false, tick = tick,
                 )
             }
             // Each in turn, as long as it fits; what isn't there takes no room.
@@ -391,8 +411,21 @@ data class WidgetLayout(
             val warning = parts.warning && fits(t(WARNING))
             val summary = fits(t(SUMMARY))
             val headlineLines = if (fits(t(HEADLINE))) 2 else 1
-            return WidgetLayout(false, headlineLines, label, refresh, pills, then, summary, warning, listLines = 0, centred = true, cue = parts.warning && !warning)
+            return WidgetLayout(false, headlineLines, label, refresh, pills, then, summary, warning, listLines = 0, centred = true, cue = parts.warning && !warning, tick = tick)
         }
+    }
+}
+
+/** ✓: [KEY]'s piece done (UI-05), down the app's own path (LR-09: its slot kept), and the widget drawn again. */
+class TickAction : ActionCallback {
+    override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
+        val key = parameters[KEY] ?: return
+        AppGraph.get(context).focus.keepSlot(key)
+        WidgetUpdater.update(context)
+    }
+
+    companion object {
+        val KEY = ActionParameters.Key<String>("key")
     }
 }
 

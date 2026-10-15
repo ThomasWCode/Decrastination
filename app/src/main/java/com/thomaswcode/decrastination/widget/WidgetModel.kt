@@ -2,9 +2,12 @@ package com.thomaswcode.decrastination.widget
 
 import com.thomaswcode.decrastination.core.Chunk
 import com.thomaswcode.decrastination.core.Plan
+import com.thomaswcode.decrastination.core.SlotKind
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Uptime
 import com.thomaswcode.decrastination.data.RuntimeState
+import com.thomaswcode.decrastination.data.SlotOutcome
+import com.thomaswcode.decrastination.data.SlotRecord
 import com.thomaswcode.decrastination.data.TaskState
 import com.thomaswcode.decrastination.ui.Format
 import com.thomaswcode.decrastination.ui.Groups
@@ -12,20 +15,21 @@ import java.time.ZoneId
 
 /**
  * What the widget shows, worked out from the plan: pure, so its wording is tested without a
- * home screen. The widget only lays it out (docs/scheduler.md, PLAN.md Phase 2: "Do:" line,
- * due/behind badge, minutes, "then:" line, ↻; tap opens the task).
+ * home screen. The widget only lays it out (UI-05: the slot under way or next with its time and a
+ * tick; its badge and minutes; the "Then:" line; today's slots kept and the time left; ↻; a tap
+ * opens the task).
  */
 data class WidgetModel(
-    /** "Do: Statics Prep", or "Nothing due" when the plan is empty: for a size with no "DO NOW" label. */
+    /** "17:00–17:30 · Statics Prep", its slot's time first (UI-05); "Do: Statics Prep" with no slot; "Nothing due". */
     val headline: String,
-    /** "Statics Prep" alone, under a "DO NOW" label; null when nothing's planned. */
+    /** The piece's first step under it (AI-15's micro-plan, phase 7), where there's room; null without one. */
     val label: String?,
     val badge: String?,
     /** The badge is bad news: overdue, due today, behind. */
     val urgent: Boolean,
     val minutes: String?,
     val then: String?,
-    /** "3 due today · 1 tomorrow". */
+    /** "Today: 1 of 4 kept, 1 h 20 left" with slots today (UI-05); else "3 today · 1 tomorrow". */
     val summary: String,
     /** The rest of today's work (or tomorrow's, if today's is done), a line a task (Q31), for the largest size. */
     val list: List<Line>,
@@ -37,6 +41,8 @@ data class WidgetModel(
     val reward: String? = null,
     /** The task a tap opens, if any. */
     val taskId: String?,
+    /** The piece the tick keeps (UI-05, LR-09), if any. */
+    val key: String? = null,
 ) {
     /** A row of the list: [urgent] as the headline's badge is (overdue, due today, behind). */
     data class Line(val text: String, val minutes: String, val urgent: Boolean, val taskId: String)
@@ -48,25 +54,41 @@ data class WidgetModel(
 
         /**
          * [runtime] and [armed] add the blocker's side: protection trouble comes first among the
-         * warnings, and free time is shown.
+         * warnings, and free time is shown. [slots]: today's on record, for the day's count.
          */
-        fun from(plan: Plan, state: TaskState, zone: ZoneId, runtime: RuntimeState = RuntimeState(), armed: Boolean = false, reward: String? = null): WidgetModel {
+        fun from(
+            plan: Plan,
+            state: TaskState,
+            zone: ZoneId,
+            runtime: RuntimeState = RuntimeState(),
+            armed: Boolean = false,
+            reward: String? = null,
+            slots: List<SlotRecord> = emptyList(),
+        ): WidgetModel {
             val now = plan.now
             val next = plan.next
+            // The slot that holds it, today's or tomorrow's, for its time (UI-05).
+            val tomorrowSlots = plan.tomorrowBucket?.slots.orEmpty()
+            val slot = next?.let { n -> (plan.todaySlots + tomorrowSlots).firstOrNull { it.kind == SlotKind.Work && it.chunk?.key == n.key } }
             val today = plan.todayBucket?.chunks.orEmpty()
             val tomorrow = plan.tomorrowBucket?.chunks.orEmpty()
             // After the next and the one after it, which have lines of their own; a task's pieces as one line (Q31).
             val rest = Groups.byTask(today.ifEmpty { tomorrow }.filterNot { it === next || it === plan.then })
             fun tasks(chunks: List<Chunk>) = chunks.map { it.taskId }.distinct().size
             return WidgetModel(
-                headline = next?.let { "Do: ${it.label}" } ?: "Nothing due",
+                headline = when {
+                    next == null -> "Nothing due"
+                    slot != null -> (if (tomorrowSlots.any { it === slot }) "Tomorrow " else "") + Format.span(slot.start, slot.end, zone) + " · " + next.label
+                    else -> "Do: ${next.label}"
+                },
                 reward = reward,
-                label = next?.label,
+                // A piece's first step comes with phase 7's micro-plans (AI-15).
+                label = null,
                 badge = next?.let { badge(it, now, zone) },
                 urgent = next?.urgent == true,
                 minutes = next?.let { Format.minutes(it.minutes) },
                 then = plan.then?.let { "Then: ${it.label}" },
-                summary = when {
+                summary = day(plan, slots) ?: when {
                     today.isEmpty() && tomorrow.isEmpty() -> runtime.credit.on(plan.today).leftMs.takeIf { it > 0 }
                         ?.let { "Nothing due soon · ${Format.minutes((it / 60_000L).toInt())} of free time" }
                         ?: "Nothing due today or tomorrow"
@@ -82,7 +104,23 @@ data class WidgetModel(
                 more = (rest.size - LIST_MAX).coerceAtLeast(0),
                 warning = protection(runtime, armed) ?: warning(state, now),
                 taskId = next?.taskId,
+                key = next?.key,
             )
+        }
+
+        /**
+         * Today's slots as the header has them (UI-05): "Today: 1 of 4 kept, 1 h 20 left", the kept,
+         * missed and still to come counted, and the minutes of those still to come from now. Null
+         * with no slot today, kept, missed or planned.
+         */
+        fun day(plan: Plan, slots: List<SlotRecord>): String? {
+            val now = plan.now
+            val ahead = plan.todaySlots.filter { it.kind == SlotKind.Work && it.chunk != null && it.end > now }
+            val kept = slots.count { it.outcome.kept }
+            val total = kept + slots.count { it.outcome == SlotOutcome.Missed } + ahead.size
+            if (total == 0) return null
+            val left = ahead.sumOf { ((it.end - maxOf(it.start, now)) / 60_000L).toInt() }
+            return "Today: $kept of $total kept, " + if (left > 0) "${Format.minutes(left)} left" else "nothing left"
         }
 
         /** "From 04:00" (it can't be started yet), "Overdue", "Due 23:59" (today), "Behind", or when it's due. */

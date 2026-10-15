@@ -99,6 +99,8 @@ Done inside UI-17's week strip and `DayModel`; also the day header text "2 h 10 
 
 **Tests.** `WidgetModelTest`: headline and summary from a plan with slots.
 
+*(As built: the headline is the first row at every size, so the "DO NOW" caption over the old `label` went; the ✓ shows from a 2×1's width, beside ↻ where there's room for both.)*
+
 ---
 
 ## UI-08 Done today
