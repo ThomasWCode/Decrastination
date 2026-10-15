@@ -4,6 +4,9 @@ import com.thomaswcode.decrastination.core.Calibration
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.data.ActivityLog
 import com.thomaswcode.decrastination.data.SlotOutcome
+import com.thomaswcode.decrastination.data.WeekRollup
+import com.thomaswcode.decrastination.data.Window
+import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -50,6 +53,10 @@ object Stats {
         val protectionRepaired: Int,
     )
 
+    /**
+     * The [days] to [now] in figures: each day's, and the period's. Weeks older than the log keeps
+     * ([ActivityLog.KEEP_DAYS]) come from their rollups (PL-10), in the totals only.
+     */
     fun summary(log: ActivityLog, now: Long, zone: ZoneId, days: Int = DAYS): Summary {
         val today = Instant.ofEpochMilli(now).atZone(zone).toLocalDate()
         val first = today.minusDays(days - 1L)
@@ -76,17 +83,20 @@ object Stats {
         }
         // Only real deadlines are met or missed (PL-14): a date the app or Claude set was a plan.
         val dated = completions.filter { it.dueAt != null && it.hardDeadline }
+        // Weeks wholly before what the log keeps, but in the period: their rollups (PL-10).
+        val kept0 = Instant.ofEpochMilli(now - ActivityLog.KEEP_DAYS * DAY_MS).atZone(zone).toLocalDate()
+        val older = log.weeks.filter { w -> LocalDate.parse(w.week).let { !it.isBefore(first) && it.plusDays(6).isBefore(kept0) } }
         return Summary(
             days = perDay,
-            completions = completions.size,
-            dated = dated.size,
-            onTime = dated.count { it.doneAt <= it.dueAt!! },
-            slotsPlanned = slots.size,
-            slotsKept = kept.size,
+            completions = completions.size + older.sumOf { it.finished },
+            dated = dated.size + older.sumOf { it.dated },
+            onTime = dated.count { it.doneAt <= it.dueAt!! } + older.sumOf { it.onTime },
+            slotsPlanned = slots.size + older.sumOf { it.slotsKept + it.slotsMissed },
+            slotsKept = kept.size + older.sumOf { it.slotsKept },
             slotsEarned = kept.count { it.earned },
             photoChecks = kept.count { it.photo },
-            slotMin = kept.sumOf { it.workedMin },
-            blocks = blocks.size,
+            slotMin = kept.sumOf { it.workedMin } + older.sumOf { it.minutes },
+            blocks = blocks.size + older.sumOf { it.blocks },
             topBlocked = blocks.groupingBy { it.target }.eachCount().entries
                 .sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key })
                 .take(TOP)
@@ -95,6 +105,113 @@ object Stats {
             protectionRepaired = protection.count { it.repaired },
         )
     }
+
+    /** A subject's period (PL-08): its kept slots' minutes and pieces, its deadlines met of those it had, and its timed work's time over its estimates, from [timed] pieces. */
+    data class SubjectRow(val subject: String, val minutes: Int, val pieces: Int, val dated: Int, val onTime: Int, val timed: Int, val ratio: Double?)
+
+    /**
+     * Each subject's numbers over the [days] to [now] (PL-08), busiest first. A subject is the class
+     * map's name for a class, or the class as it is; work with neither is [OTHER]. Timed work is
+     * finished work with minutes and an estimate of the app's, none of it ticked by hand or by photo.
+     */
+    fun bySubject(log: ActivityLog, classMap: Map<String, String>, now: Long, zone: ZoneId, days: Int = DAYS): List<SubjectRow> {
+        val today = Instant.ofEpochMilli(now).atZone(zone).toLocalDate()
+        val first = today.minusDays(days - 1L)
+        fun inRange(date: LocalDate) = !date.isBefore(first) && !date.isAfter(today)
+        fun subject(className: String?) = className?.trim()?.takeIf { it.isNotEmpty() }?.let { classMap[it]?.trim()?.takeIf { s -> s.isNotEmpty() } ?: it } ?: OTHER
+        val kept = log.slots.filter { it.outcome.kept && inRange(LocalDate.parse(it.date)) }
+        val done = log.completions.filter { inRange(Instant.ofEpochMilli(it.doneAt).atZone(zone).toLocalDate()) }
+        return (kept.map { subject(it.className) } + done.map { subject(it.className) }).distinct().map { s ->
+            val slots = kept.filter { subject(it.className) == s }
+            val finished = done.filter { subject(it.className) == s }
+            val dated = finished.filter { it.dueAt != null && it.hardDeadline }
+            val timed = finished.filter { it.estimateMin > 0 && it.workedMin > 0 && !it.byHand && !it.photo && !it.yourEstimate }
+            SubjectRow(
+                subject = s,
+                minutes = slots.sumOf { it.workedMin },
+                pieces = slots.size,
+                dated = dated.size,
+                onTime = dated.count { it.doneAt <= it.dueAt!! },
+                timed = timed.size,
+                ratio = timed.takeIf { it.isNotEmpty() }?.let { t -> t.sumOf { it.workedMin }.toDouble() / t.sumOf { it.estimateMin } },
+            )
+        }.sortedWith(compareByDescending<SubjectRow> { it.minutes }.thenBy { it.subject })
+    }
+
+    /** Slots kept and missed by their start's weekday and hour (PL-09), over the last [weeks] weeks: (kept, missed). */
+    fun heat(log: ActivityLog, now: Long, zone: ZoneId, weeks: Int = HEAT_WEEKS): Map<Pair<DayOfWeek, Int>, Pair<Int, Int>> =
+        log.slots.filter { it.start in (now - weeks * 7 * DAY_MS)..now && it.outcome != SlotOutcome.Moved }
+            .groupBy { Instant.ofEpochMilli(it.start).atZone(zone).let { t -> t.dayOfWeek to t.hour } }
+            .mapValues { (_, slots) -> slots.count { it.outcome.kept } to slots.count { it.outcome == SlotOutcome.Missed } }
+
+    /**
+     * The weekday hours [heat]'s kept slots suggest (PL-09): from the start of the first hour to the
+     * end of the last that hold them, the outlying tenth at each end left out; null with fewer than
+     * [MIN_HEAT] kept on weekdays to go by.
+     */
+    fun suggestedWeekdayHours(heat: Map<Pair<DayOfWeek, Int>, Pair<Int, Int>>): Window? {
+        val byHour = IntArray(24)
+        heat.forEach { (at, counts) -> if (at.first.value <= DayOfWeek.FRIDAY.value) byHour[at.second] += counts.first }
+        val total = byHour.sum()
+        if (total < MIN_HEAT) return null
+        var low = 0
+        var cut = 0
+        while (low < 23 && cut + byHour[low] <= total / 10) cut += byHour[low++]
+        var high = 23
+        cut = 0
+        while (high > low && cut + byHour[high] <= total / 10) cut += byHour[high--]
+        return Window(low * 60, minOf(24 * 60 - 1, (high + 1) * 60))
+    }
+
+    /** The week from [monday] in totals (PL-10), as its review writes them down. */
+    fun rollup(log: ActivityLog, monday: LocalDate, zone: ZoneId): WeekRollup {
+        val dates = (0L..6L).map { monday.plusDays(it).toString() }.toSet()
+        fun inWeek(at: Long) = Instant.ofEpochMilli(at).atZone(zone).toLocalDate().toString() in dates
+        val slots = log.slots.filter { it.date in dates && it.outcome != SlotOutcome.Moved }
+        val done = log.completions.filter { inWeek(it.doneAt) }
+        val dated = done.filter { it.dueAt != null && it.hardDeadline }
+        return WeekRollup(
+            week = monday.toString(),
+            minutes = slots.filter { it.outcome.kept }.sumOf { it.workedMin },
+            finished = done.size,
+            onTime = dated.count { it.doneAt <= it.dueAt!! },
+            dated = dated.size,
+            blocks = log.blocks.count { inWeek(it.at) },
+            fullDays = log.days.count { it.date in dates && it.full == true },
+            slotsKept = slots.count { it.outcome.kept },
+            slotsMissed = slots.count { it.outcome == SlotOutcome.Missed },
+        )
+    }
+
+    /**
+     * When this term began (PL-10's period), as the school calendar has it: the day after the last
+     * run of [HOLIDAY_DAYS] or more days without school before [today], a weekend included; with
+     * none in [TERM_LOOK_BACK] days, that far back.
+     */
+    fun termStart(today: LocalDate, isSchoolDay: (LocalDate) -> Boolean): LocalDate {
+        var run = 0
+        for (back in 1..TERM_LOOK_BACK) {
+            val date = today.minusDays(back.toLong())
+            if (isSchoolDay(date)) {
+                if (run >= HOLIDAY_DAYS) return date.plusDays(run + 1L)
+                run = 0
+            } else {
+                run++
+            }
+        }
+        return if (run >= HOLIDAY_DAYS) today.minusDays(TERM_LOOK_BACK - run + 1L) else today.minusDays(TERM_LOOK_BACK.toLong())
+    }
+
+    /** Work with no class, by subject. */
+    const val OTHER = "Other"
+
+    /** How far back the hours' heat looks. */
+    const val HEAT_WEEKS = 8
+
+    private const val MIN_HEAT = 10
+    private const val HOLIDAY_DAYS = 5
+    private const val TERM_LOOK_BACK = 120
+    private const val DAY_MS = 24 * 3_600_000L
 
     /** The calibration in words, a line a value: what the planner now assumes about your work. */
     fun calibrationLines(calibration: Calibration): List<String> {

@@ -1,5 +1,6 @@
 package com.thomaswcode.decrastination.learn
 
+import java.time.LocalDate
 import android.content.Context
 import android.content.Intent
 import android.util.Log
@@ -54,7 +55,9 @@ object Review {
             model.review?.let { it.copy(lines = it.lines + findings) }
                 ?: WeeklyReview(now, findings.ifEmpty { listOf("Nothing to change this week: the estimates held.") }, by = "rules", why = model.why)
             ).let { it.copy(week = week, lines = it.lines + listOfNotNull(tidy?.let(::tidyLine)), memoryTidy = tidy) }
-        graph.log.update { it.copy(reviews = it.reviews + review).trimmed(now) }
+        // The week's totals (PL-10), kept past its days.
+        val rollup = Stats.rollup(graph.log.value, LocalDate.parse(week), zone)
+        graph.log.update { it.copy(reviews = it.reviews + review, weeks = it.weeks.filterNot { w -> w.week == week } + rollup).trimmed(now) }
         Notify.post(
             context,
             ID,
