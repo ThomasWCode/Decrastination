@@ -967,6 +967,36 @@ class PlannerTest {
     }
 
     @Test
+    fun `a piece no single day before its deadline holds is said not to fit`() {
+        // A 45-minute step, and half an hour free on each of Thursday and Friday before Saturday morning.
+        val loads = mapOf(LocalDate.parse("2026-10-08") to 270, LocalDate.parse("2026-10-09") to 285)
+        val essay = task("essay", Fixtures.at("2026-10-10T09:00"), steps = listOf(SubStep("Write it", 45)))
+        val plan = plan(listOf(essay), "2026-10-08T17:00", loads = loads)
+        assertEquals(listOf(WontFit("teams:essay", "essay", 45, 60, Fixtures.at("2026-10-10T09:00"))), plan.wontFit)
+        assertEquals(Why.NoRoom, plan.chunksOf("teams:essay").single().why)
+    }
+
+    @Test
+    fun `revision looks ahead for days to keep its pieces a day apart`() {
+        // Ten minutes free on Thursday and on Friday, the evening's whole on Saturday: three ten-minute
+        // pieces of revision due Sunday night go one a day, not all on Saturday where the time is.
+        val loads = mapOf(LocalDate.parse("2026-10-08") to 290, LocalDate.parse("2026-10-09") to 305)
+        val revision = task("rev", Fixtures.at("2026-10-11T23:59"), kind = Kind.Revision, steps = (1..3).map { SubStep("Topic $it", 10) })
+        assertEquals(listOf("2026-10-08", "2026-10-09", "2026-10-10").map(LocalDate::parse), plan(listOf(revision), "2026-10-08T17:00", loads = loads).dayOf("rev"))
+    }
+
+    @Test
+    fun `a homework deck's date is its assignments', not a deadline of its own`() {
+        val deck = TaskItem(
+            id = "anki:deck", source = Source.Anki, sourceId = AnkiRules.DECK_PREFIX + "1", title = "Anki: Textbook 1::1.2", dueAt = Fixtures.at("2026-10-12T09:00"),
+            kind = Kind.Revision, sourceEffortMin = 9, derived = true, extra = mapOf(AnkiRules.EXTRA_FOR to "teams:a"),
+            sourceValues = SourceValues(Kind.Revision, Fixtures.at("2026-10-12T09:00"), null), firstSeenAt = 0, lastSeenAt = 0,
+        )
+        assertNull(deck.realDeadline)
+        assertFalse(deck.hardDeadline)
+    }
+
+    @Test
     fun `work a per-day limit carries past its deadline is said not to fit, however much time there is`() {
         // Three steps of a deck one a day, due tomorrow night: the third goes to Saturday, past it.
         val deck = task("deck", Fixtures.at("2026-10-09T23:59"), steps = (1..3).map { SubStep("20 new cards", 9) }).copy(stepsPerDay = 1)

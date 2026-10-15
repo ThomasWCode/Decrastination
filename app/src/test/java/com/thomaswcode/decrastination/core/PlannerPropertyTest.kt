@@ -316,7 +316,9 @@ class PlannerPropertyTest {
                     c.taskId == task.id && b.date > (if (due.toLocalTime() < LocalTime.NOON) due.toLocalDate().minusDays(1) else due.toLocalDate())
                 }
             }
-            assertTrue(short.leftMin > short.freeMin || leftOut || late, "seed=$seed: ${task.id} said not to fit: ${short.leftMin} min left, ${short.freeMin} free")
+            // Or a piece no single day held, put behind into the first.
+            val forced = plan.chunksOf(task.id).any { it.behind }
+            assertTrue(short.leftMin > short.freeMin || leftOut || late || forced, "seed=$seed: ${task.id} said not to fit: ${short.leftMin} min left, ${short.freeMin} free")
         }
     }
 
