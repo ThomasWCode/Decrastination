@@ -92,8 +92,15 @@ fun SectionHeading(title: String, trailing: String? = null, sheet: Boolean = fal
         Modifier.fillMaxWidth().then(if (sheet) Modifier.padding(top = 8.dp) else Modifier.padding(start = 28.dp, end = 28.dp, top = 24.dp, bottom = 8.dp)),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, modifier = Modifier.weight(1f))
-        trailing?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        // The title its own width, never squeezed by a long line beside it ("Tod/ay"); the line the rest, wrapping there.
+        Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(end = 12.dp))
+        Text(
+            trailing.orEmpty(),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = androidx.compose.ui.text.style.TextAlign.End,
+            modifier = Modifier.weight(1f),
+        )
     }
 }
 
