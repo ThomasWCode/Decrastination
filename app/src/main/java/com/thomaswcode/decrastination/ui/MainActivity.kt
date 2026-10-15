@@ -174,10 +174,12 @@ class MainActivity : ComponentActivity() {
          * The menu (UI-18): the week, the reviews (LR-01), and Settings, which has every page Setup and
          * Protection had. Setup itself is the attention mark's.
          */
-        private val MENU = listOf(
+        private val MENU = listOfNotNull(
             "This week" to CheckInActivity::class.java,
             "Reviews" to ReviewsActivity::class.java,
             "Settings" to SettingsActivity::class.java,
+            // The debug page (AR-03), on a debug build.
+            ("Debug" to DebugActivity::class.java).takeIf { com.thomaswcode.decrastination.BuildConfig.DEBUG },
         )
     }
 }

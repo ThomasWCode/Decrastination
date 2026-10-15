@@ -118,6 +118,8 @@ Items: LR-01, LR-02, LR-06, LR-08, PL-08, PL-09, PL-10, PL-11, NF-02, AC-06, AC-
 
 **Steps.** Sections: recent calls (AC-07), the rendered prompt for a chosen task (`Prompts.system` + profile + `describe`), the chat context (`AppGraph.chatContext`), Felix's state and queue, store sizes and ages, the last sync's timings per source (`SourceStatus`), the watchdog's findings; every block copyable; buttons for the argument-less commands (`sync`, `enrich`, `briefing`, `review`, `calendar`, `protection`).
 
+*(As built: `backup-now` (AR-07) is among the buttons. `CommandActivity` ran only what came through its DUMP-guarded alias; it now runs those commands too when the app itself starts it (it isn't exported), on a debug build, and no others. Felix's queue is in his state (the questions waiting and the message to try again), shown with his last ten messages.)*
+
 ---
 
 ## AR-06 A crash record
