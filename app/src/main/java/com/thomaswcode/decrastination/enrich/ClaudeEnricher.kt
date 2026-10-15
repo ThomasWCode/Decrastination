@@ -56,10 +56,12 @@ class ClaudeEnricher(
         // By the model that answered: a fallback's answer isn't the asked-for model's (BUG-P3-001).
         val answeredBy = message.model().asString().ifBlank { by }
         val strict = Answers.read(job, text, task, answeredBy, now, zone, salvage = false)
-        val complaint = strict.complaint ?: return Enricher.Result(strict.enrichment, cost)
+        // A reading the photo was in says so (AI-23).
+        fun seen(e: com.thomaswcode.decrastination.core.Enrichment?) = if (photo != null) e?.copy(fromPhoto = true) else e
+        val complaint = strict.complaint ?: return Enricher.Result(seen(strict.enrichment), cost)
         // A check it failed (AI-01): read with the dates that can't be left out meanwhile, and the
         // answer and its problem kept to put back once ([repair]).
-        return Enricher.Result(Answers.parse(job, text, task, answeredBy, now, zone), cost, repair = Enricher.Repair(text, complaint))
+        return Enricher.Result(seen(Answers.parse(job, text, task, answeredBy, now, zone)), cost, repair = Enricher.Repair(text, complaint))
     }
 
     /**
@@ -85,7 +87,8 @@ class ClaudeEnricher(
             else -> Unit
         }
         val answeredBy = message.model().asString().ifBlank { by }
-        return Enricher.Result(Answers.parse(job, textOf(message), task, answeredBy, now, zone), cost, repaired = true)
+        val read = Answers.parse(job, textOf(message), task, answeredBy, now, zone)
+        return Enricher.Result(if (photo != null) read?.copy(fromPhoto = true) else read, cost, repaired = true)
     }
 
     /** [task]'s photo of its work (AI-23), from its file; none if it has none, or it can't be read. */

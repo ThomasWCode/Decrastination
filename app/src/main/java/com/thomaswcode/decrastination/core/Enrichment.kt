@@ -49,6 +49,8 @@ data class Enrichment(
     val adjusted: List<String> = emptyList(),
     /** The phrase in the text that gave the reading (AI-09), quoted: under its due date on the sheet. */
     val reason: String? = null,
+    /** Read by the model with a photo of the work (AI-23): only then is its estimate "From your photo". The rules' standing in for it never is. */
+    val fromPhoto: Boolean = false,
 )
 
 /**

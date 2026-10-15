@@ -43,7 +43,10 @@ object PhotoChecks {
             return "Only written homework can be checked from a photo."
         }
         val jpegs = try {
-            withContext(Dispatchers.IO) { photos.mapNotNull { shrink(it) } }.takeIf { it.isNotEmpty() } ?: return "Couldn't read the photo."
+            // Every page, or the check isn't made: one left out could be the one that shows it isn't done.
+            val read = withContext(Dispatchers.IO) { photos.map { shrink(it) } }
+            if (read.isEmpty() || read.any { it == null }) return if (photos.size > 1) "A page couldn't be read: take the photos again." else "Couldn't read the photo."
+            read.filterNotNull()
         } finally {
             withContext(NonCancellable + Dispatchers.IO) { photos.forEach { it.delete() } }
         }

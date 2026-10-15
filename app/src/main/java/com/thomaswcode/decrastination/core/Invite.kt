@@ -1,6 +1,7 @@
 package com.thomaswcode.decrastination.core
 
 import java.time.Instant
+import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
 
@@ -11,16 +12,27 @@ import java.time.ZoneId
  * date the email gives ([enriched]). [cancelled]: the message calls it off, so the conversation has
  * none; never stored.
  */
-data class Invite(val summary: String, val start: Long, val end: Long, val location: String? = null, val cancelled: Boolean = false) {
-    /** As its task keeps it ([EXTRA]): `summary|start|end|location`, a bar or a line break in the text made a slash or a space. */
-    val stored: String get() = listOf(summary.plain(), start.toString(), end.toString(), location.orEmpty().plain()).joinToString("|")
+data class Invite(val summary: String, val start: Long, val end: Long, val location: String? = null, val cancelled: Boolean = false, val days: Pair<LocalDate, LocalDate>? = null) {
+    /**
+     * As its task keeps it ([EXTRA]): `summary|start|end|location|days`, a bar or a line break in the
+     * text made a slash or a space; [days] as `first/after`, empty for a timed one.
+     */
+    val stored: String get() = listOf(summary.plain(), start.toString(), end.toString(), location.orEmpty().plain(), days?.let { "${it.first}/${it.second}" }.orEmpty()).joinToString("|")
 
-    /** From midnight to a midnight in [zone]: a day's event, or days'. */
+    /**
+     * A day's event, or days': one the invite gave by [days] (its own dates, whatever zone the phone
+     * is in now), or from midnight to a midnight in [zone].
+     */
     fun allDay(zone: ZoneId): Boolean {
+        if (days != null) return true
         val from = Instant.ofEpochMilli(start).atZone(zone)
         val to = Instant.ofEpochMilli(end).atZone(zone)
         return from.toLocalTime() == LocalTime.MIDNIGHT && to.toLocalTime() == LocalTime.MIDNIGHT && to.toLocalDate() > from.toLocalDate()
     }
+
+    /** Its first day and the day after its last, as all-day: its own [days], or its times' in [zone]; null for a timed one. */
+    fun dayRange(zone: ZoneId): Pair<LocalDate, LocalDate>? =
+        days ?: if (allDay(zone)) Instant.ofEpochMilli(start).atZone(zone).toLocalDate() to Instant.ofEpochMilli(end).atZone(zone).toLocalDate() else null
 
     /**
      * Its start and end as the calendar app is to be given them (DX-02): an all-day one's at UTC
@@ -28,9 +40,9 @@ data class Invite(val summary: String, val start: Long, val end: Long, val locat
      * another's as they are.
      */
     fun calendarTimes(zone: ZoneId): Pair<Long, Long> {
-        if (!allDay(zone)) return start to end
-        fun utc(time: Long) = Instant.ofEpochMilli(time).atZone(zone).toLocalDate().atStartOfDay(java.time.ZoneOffset.UTC).toInstant().toEpochMilli()
-        return utc(start) to utc(end)
+        val (first, after) = dayRange(zone) ?: return start to end
+        fun utc(day: LocalDate) = day.atStartOfDay(java.time.ZoneOffset.UTC).toInstant().toEpochMilli()
+        return utc(first) to utc(after)
     }
 
     companion object {
@@ -40,10 +52,12 @@ data class Invite(val summary: String, val start: Long, val end: Long, val locat
         /** An invite as [stored], or null where it isn't one. */
         fun read(stored: String): Invite? {
             val parts = stored.split('|')
-            if (parts.size != 4) return null
+            if (parts.size != 4 && parts.size != 5) return null
             val start = parts[1].toLongOrNull() ?: return null
             val end = parts[2].toLongOrNull() ?: return null
-            return Invite(parts[0], start, maxOf(start, end), parts[3].ifEmpty { null })
+            // Its days, kept since #41 (none in one kept before, nor in a timed one).
+            val days = parts.getOrNull(4)?.takeIf { it.isNotEmpty() }?.split('/')?.takeIf { it.size == 2 }?.let { (a, b) -> runCatching { LocalDate.parse(a) to LocalDate.parse(b) }.getOrNull() }
+            return Invite(parts[0], start, maxOf(start, end), parts[3].ifEmpty { null }, days = days)
         }
 
         private fun String.plain() = replace('|', '/').replace('\r', ' ').replace('\n', ' ')

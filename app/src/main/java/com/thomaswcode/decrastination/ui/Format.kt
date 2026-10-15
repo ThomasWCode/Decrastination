@@ -25,9 +25,10 @@ object Format {
     fun invite(invite: com.thomaswcode.decrastination.core.Invite, zone: ZoneId): String {
         val start = Instant.ofEpochMilli(invite.start).atZone(zone)
         val end = Instant.ofEpochMilli(invite.end).atZone(zone)
+        val days = invite.dayRange(zone)
         val time = when {
-            invite.allDay(zone) && end.toLocalDate() == start.toLocalDate().plusDays(1) -> start.format(DAY) + ", all day"
-            invite.allDay(zone) -> start.format(DAY) + " to " + end.minusDays(1).format(DAY)
+            days != null && days.second == days.first.plusDays(1) -> days.first.format(DAY) + ", all day"
+            days != null -> days.first.format(DAY) + " to " + days.second.minusDays(1).format(DAY)
             start.toLocalDate() == end.toLocalDate() -> start.format(DATE) + "–" + end.format(TIME)
             else -> start.format(DATE) + " to " + end.format(DATE)
         }

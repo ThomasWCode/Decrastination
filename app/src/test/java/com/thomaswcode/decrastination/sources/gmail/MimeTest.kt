@@ -316,6 +316,12 @@ class MimeTest {
         val day = Mime.invite("BEGIN:VCALENDAR\nBEGIN:VEVENT\nDTSTART;VALUE=DATE:20261026\nSUMMARY:Sports day\nEND:VEVENT\nEND:VCALENDAR", LONDON)!!
         assertEquals(Fixtures.at("2026-10-26T00:00") to Fixtures.at("2026-10-27T00:00"), day.start to day.end)
         assertTrue(day.allDay(LONDON))
+        // Its own days, kept: in New York later it's still Monday 26th, all day, and goes to the calendar so.
+        val kept = Invite.read(day.stored)!!
+        val newYork = java.time.ZoneId.of("America/New_York")
+        assertTrue(kept.allDay(newYork))
+        assertEquals(java.time.Instant.parse("2026-10-26T00:00:00Z").toEpochMilli() to java.time.Instant.parse("2026-10-27T00:00:00Z").toEpochMilli(), kept.calendarTimes(newYork))
+        assertEquals("Mon 26 Oct, all day", com.thomaswcode.decrastination.ui.Format.invite(kept, newYork))
         assertEquals(true, Mime.invite("BEGIN:VCALENDAR\nMETHOD:CANCEL\nBEGIN:VEVENT\nDTSTART:20261016T170000Z\nEND:VEVENT\nEND:VCALENDAR", LONDON)?.cancelled)
         assertNull(Mime.invite("BEGIN:VCALENDAR\nBEGIN:VEVENT\nSUMMARY:No time\nEND:VEVENT\nEND:VCALENDAR", LONDON))
         // Kept with its task, a bar in its name made a slash.

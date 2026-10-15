@@ -14,6 +14,10 @@ object Ahead {
     /** One run of the micro-plans at a time: a plan made meanwhile is caught up with by the next. */
     private val planning = Mutex()
 
+    /** A run that found another under way: once that ends, the plan's made again, so the newer plan's pieces are seen to. */
+    @Volatile
+    private var missed = false
+
     suspend fun run(graph: AppGraph, plan: Plan, now: Long) {
         // The piece of his next message first, so what he writes ahead can say its first action.
         com.thomaswcode.decrastination.learn.FelixRules.upcoming(plan, graph.settings.value, now)?.first?.slot?.chunk?.key?.let { microPlans(graph, plan, now, only = it) }
@@ -27,13 +31,16 @@ object Ahead {
      * empty, so it isn't paid for again till its task changes. Those for days gone let go.
      */
     private suspend fun microPlans(graph: AppGraph, plan: Plan, now: Long, only: String? = null) {
-        if (!planning.tryLock()) return
+        if (!planning.tryLock()) {
+            missed = true
+            return
+        }
         // Any written: the plan's made again, so its calendar events carry them.
         var written = false
         try {
-            graph.runtime.update { it.copy(microPlans = MicroPlans.kept(plan, it.microPlans)) }
-            val caller = graph.microPlanner() ?: return
             val tasks = graph.tasks.value.tasks.associateBy { it.id }
+            graph.runtime.update { it.copy(microPlans = MicroPlans.kept(plan, it.microPlans, tasks)) }
+            val caller = graph.microPlanner() ?: return
             for ((chunk, task) in MicroPlans.due(plan, tasks, graph.runtime.value.microPlans).filter { only == null || it.first.key == only }.take(MicroPlans.MAX_A_RUN)) {
                 if (!graph.modelAvailable()) return
                 val profile = graph.profile(now).text
@@ -51,7 +58,9 @@ object Ahead {
             }
         } finally {
             planning.unlock()
-            if (written) graph.watcher.poke()
+            val again = missed
+            missed = false
+            if (written || again) graph.watcher.poke()
         }
     }
 }

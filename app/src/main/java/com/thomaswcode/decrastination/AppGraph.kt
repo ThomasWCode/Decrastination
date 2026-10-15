@@ -1448,11 +1448,11 @@ class AppGraph private constructor(context: Context) {
             // What it remembered (AI-21), with an answer kept only, and said under it.
             val lines = if (kept) remember(reading.memories) else emptyList()
             if (lines.isNotEmpty()) chat.update { s -> s.copy(messages = s.messages.map { if (it.id == reply.id) it.copy(remembered = lines) else it }) }
-            // Its changes to what exists, made now, as if Apply were tapped: Undo takes them back.
-            if (kept) reply.proposals.filter { it.instant }.forEach { applyProposal(reply.id, it.id) }
-            // Its steps ticked (AI-14), said under it.
+            // Its steps ticked (AI-14), said under it: before its changes, as its steps are the ones it was shown.
             val done = if (kept) tickSteps(reading.actions) else emptyList()
             if (done.isNotEmpty()) chat.update { s -> s.copy(messages = s.messages.map { if (it.id == reply.id) it.copy(done = done) else it }) }
+            // Its changes to what exists, made now, as if Apply were tapped: Undo takes them back.
+            if (kept) reply.proposals.filter { it.instant }.forEach { applyProposal(reply.id, it.id) }
             null
         }
         // Why it waits, said once: written only when it changes, as this runs after every sync.
@@ -1462,9 +1462,9 @@ class AppGraph private constructor(context: Context) {
     }
 
     /**
-     * The chat's steps to tick (AI-14), at once, as it alters what exists (AI-24): its slot today
-     * kept where it has one (earning as a tick does), else ticked as on its sheet. A line each that
-     * was, "Ticked: Q1, of Essay".
+     * The chat's steps to tick (AI-14), at once, as it alters what exists (AI-24): its piece kept
+     * where the plan has one, today or another day (earning as a tick does), else ticked as on its
+     * sheet, where that can be. A line each that was, "Ticked: Q1, of Essay"; none for one that wasn't.
      */
     private suspend fun tickSteps(actions: List<com.thomaswcode.decrastination.core.ChatAction>): List<String> {
         val plan = plan()
@@ -1472,8 +1472,8 @@ class AppGraph private constructor(context: Context) {
             val task = tasks.value.tasks.firstOrNull { it.id == a.taskId } ?: return@mapNotNull null
             val index = a.stepIndex ?: return@mapNotNull null
             val step = task.subSteps.getOrNull(index)?.takeIf { !it.done } ?: return@mapNotNull null
-            val piece = plan.todaySlots.firstOrNull { it.chunk?.taskId == task.id && it.chunk.stepIndex == index }?.chunk
-            val ticked = if (piece != null) focus.keepSlot(piece.key) else runCatching { focus.tickBlock(task.id, index, step.title); true }.getOrDefault(false)
+            val piece = (plan.todaySlots.mapNotNull { it.chunk } + plan.ordered).firstOrNull { it.taskId == task.id && it.stepIndex == index }
+            val ticked = if (piece != null) focus.keepSlot(piece.key) else runCatching { focus.tickBlock(task.id, index, step.title) }.getOrDefault(false)
             "Ticked: ${step.title}, of ${task.title}".takeIf { ticked }
         }
     }
