@@ -8,6 +8,7 @@ import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.SourceValues
 import com.thomaswcode.decrastination.core.Status
+import com.thomaswcode.decrastination.core.SubStep
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.withEnrichment
 import com.thomaswcode.decrastination.sources.anki.AnkiRules
@@ -464,6 +465,19 @@ class AnswersTest {
     }
 
     @Test
+    fun `a reading quotes what gave it, and is asked with the steps as planned before`() {
+        val e = parse(
+            Enrichments.Job.Email,
+            """{"kind":"Admin","actionableFrom":null,"deadline":"2026-10-12","deadlineQuoted":true,"effortMin":10,"nextStep":"Sign the form","question":null,"reason":"“return the trip form by Monday 12 October”","blocks":[]}""",
+        )!!
+        assertEquals("return the trip form by Monday 12 October", e.reason)
+        assertNull(parse(Enrichments.Job.Email, """{"kind":"Admin","actionableFrom":null,"deadline":null,"effortMin":10,"nextStep":"Sign","reason":" ","blocks":[]}""")!!.reason)
+        val asked = Prompts.describe(assignment("Essay"), Enrichments.Job.Assignment, NOW, LONDON, listOf(SubStep("Plan", 20), SubStep("Write", 60)))
+        assertTrue("Steps as planned before (keep the exact title of any step whose work is unchanged; mark none as done):\n1. Plan (20 min)\n2. Write (60 min)" in asked, asked)
+        assertFalse("planned before" in Prompts.describe(assignment("Essay"), Enrichments.Job.Assignment, NOW, LONDON))
+    }
+
+    @Test
     fun `the limits the answers are checked against are said in the prompts and the schemas`() {
         assertEquals(
             "Limits the app enforces: at most 12 steps; no step longer than 240 minutes; a total of at most 10 hours; the steps must add up to effortMin exactly.",
@@ -658,7 +672,7 @@ class ClaudeEnricherTest {
         assertEquals("high", config["effort"]!!.jsonPrimitive.content)
         val format = config["format"]!!.jsonObject
         assertEquals("json_schema", format["type"]!!.jsonPrimitive.content)
-        assertEquals(listOf("kind", "actionableFrom", "deadline", "deadlineQuoted", "effortMin", "nextStep", "question", "blocks"), format["schema"]!!.jsonObject["required"]!!.jsonArray.map { it.jsonPrimitive.content })
+        assertEquals(listOf("kind", "actionableFrom", "deadline", "deadlineQuoted", "effortMin", "nextStep", "question", "reason", "blocks"), format["schema"]!!.jsonObject["required"]!!.jsonArray.map { it.jsonPrimitive.content })
         assertTrue("triage one email" in body["system"].toString(), body["system"].toString().take(120))
         assertTrue("Subject: Berlin trip form" in body["messages"].toString())
         // No thinking setting: Opus 5.5 always thinks, and rejects one that turns it off.

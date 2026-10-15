@@ -41,7 +41,7 @@ class ClaudeEnricher(
         .build()
 
     override suspend fun enrich(task: TaskItem, job: Enrichments.Job, now: Long): Enricher.Result {
-        val message = send(job) { addUserMessage(Prompts.describe(task, job, now, zone).take(Pricing.MAX_INPUT_CHARS)) }
+        val message = send(job) { addUserMessage(Prompts.describe(task, job, now, zone, previous(task)).take(Pricing.MAX_INPUT_CHARS)) }
         val cost = Pricing.costUsd(message)
         when (message.stopReason().orElse(null)) {
             StopReason.REFUSAL -> return Enricher.Result(null, cost, refused = true)
@@ -70,7 +70,7 @@ class ClaudeEnricher(
         val room = Pricing.MAX_INPUT_CHARS - repair.answer.length - asked.length
         if (room < MIN_REPAIR_ROOM) return Enricher.Result(null)
         val message = send(job) {
-            addUserMessage(Prompts.describe(task, job, now, zone).take(room))
+            addUserMessage(Prompts.describe(task, job, now, zone, previous(task)).take(room))
             addAssistantMessage(repair.answer)
             addUserMessage(asked)
         }
@@ -83,6 +83,9 @@ class ClaudeEnricher(
         val answeredBy = message.model().asString().ifBlank { by }
         return Enricher.Result(Answers.parse(job, textOf(message), task, answeredBy, now, zone), cost, repaired = true)
     }
+
+    /** [task]'s steps as planned before (AI-08): its own, or its last reading's. */
+    private fun previous(task: TaskItem): List<com.thomaswcode.decrastination.core.SubStep> = task.subSteps.ifEmpty { task.enrichment?.subSteps.orEmpty() }
 
     private fun textOf(message: Message): String = message.content().mapNotNull { block -> block.text().orElse(null)?.text() }.joinToString("")
 
