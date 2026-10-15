@@ -1267,7 +1267,7 @@ class AppGraph private constructor(context: Context) {
             val called = callModel(interactive = true, cost = { r: ChatReader.Result -> r.costUsd to r.refused }) { at ->
                 // Being asked now: whatever it said before (a failed call) is gone.
                 chat.update { s -> s.copy(messages = s.messages.map { if (it.id == waiting.id) it.copy(note = null, stuck = false) else it }) }
-                ChatReader(key, clock.zone(), endpoint(), profile = profile(at)).answer(chat.value.messages, state.tasks, time.events, chatContext(at, state, time, instructions.value.applied), at)
+                ChatReader(key, clock.zone(), endpoint(), profile = profile(at), settings = settings.value).answer(chat.value.messages, state.tasks, time.events, chatContext(at, state, time, instructions.value.applied), at)
             }
             val result = when (called) {
                 is Called.Held -> return@call because(called.hold)
@@ -1286,13 +1286,9 @@ class AppGraph private constructor(context: Context) {
                 from = Speaker.Claude,
                 text = reading.reply,
                 at = clock.now(),
-                proposals = reading.tasks.map { Proposal(java.util.UUID.randomUUID().toString(), task = it) } +
-                    listOfNotNull(
-                        reading.changes.takeIf { it.isNotEmpty() }?.let { changes ->
-                            val byId = tasks.value.tasks.associateBy { it.id }
-                            Proposal(java.util.UUID.randomUUID().toString(), changes = changes, lines = changes.map { Instructions.describe(it, byId, clock.zone()) })
-                        },
-                    ),
+                // Its changes to what exists made at once, on a card applied as it's made (AI-24); the rest to confirm.
+                proposals = com.thomaswcode.decrastination.enrich.ChatAnswers.cards(reading, tasks.value.tasks.associateBy { it.id }, java.time.Instant.ofEpochMilli(clock.now()).atZone(clock.zone()).toLocalDate(), clock.zone()),
+                suggestedReplies = reading.suggestedReplies,
                 note = reading.leftOut.takeIf { it.isNotEmpty() }?.let { "Left out, as the app can't use it: ${it.joinToString("; ")}" },
             )
             var kept = false
@@ -1308,6 +1304,8 @@ class AppGraph private constructor(context: Context) {
             // What it remembered (AI-21), with an answer kept only, and said under it.
             val lines = if (kept) remember(reading.memories) else emptyList()
             if (lines.isNotEmpty()) chat.update { s -> s.copy(messages = s.messages.map { if (it.id == reply.id) it.copy(remembered = lines) else it }) }
+            // Its changes to what exists, made now, as if Apply were tapped: Undo takes them back.
+            if (kept) reply.proposals.filter { it.instant }.forEach { applyProposal(reply.id, it.id) }
             null
         }
         // Why it waits, said once: written only when it changes, as this runs after every sync.
@@ -1322,6 +1320,59 @@ class AppGraph private constructor(context: Context) {
         var lines = emptyList<String>()
         memory.update { state -> com.thomaswcode.decrastination.core.Memories.apply(state, given, clock.now()).also { lines = it.second }.first }
         return lines
+    }
+
+    /** Whether the chat is on screen (AI-24): an answer there isn't a notification too. */
+    @Volatile
+    var chatInFront = false
+
+    /**
+     * Your [text] in reply to Felix's message [id], from its notification (AI-24): his message put in
+     * the chat if it isn't there yet, your reply kept with it, and asked there; the answer, when it
+     * comes, is his next notification while the chat isn't on screen. Returns once it's asked, not
+     * answered. False, and the notification says why, when a message of yours is still waiting.
+     */
+    suspend fun replyToFelix(text: String, id: String): Boolean {
+        val words = text.trim()
+        if (words.isEmpty()) return false
+        val now = clock.now()
+        val name = settings.value.felixName
+        val record = log.value.felix.firstOrNull { it.id == id }
+        if (record != null) {
+            val title = record.taskId?.let { t -> tasks.value.tasks.firstOrNull { it.id == t }?.title }
+            chat.update { s ->
+                if (s.messages.any { it.id == id }) s
+                else s.copy(messages = (s.messages + ChatMessage(id, Speaker.Claude, record.text, record.at, About(taskId = record.taskId, taskTitle = title), reason = record.reason, suggestedReplies = record.replies)).takeLast(MAX_CHAT))
+            }
+            log.update { l -> l.copy(felix = l.felix.map { if (it.id == id) it.copy(replyText = words, repliedAt = now) else it }) }
+        }
+        val his = chat.value.messages.firstOrNull { it.id == id }
+        val said = record?.text ?: his?.text.orEmpty()
+        if (!ask(words, his?.about ?: About())) {
+            com.thomaswcode.decrastination.notify.FelixNotifications.post(app, id, name, "$said\n\nYour last message to me is still waiting for its answer: send this again once it's come.", emptyList())
+            return false
+        }
+        // Shown as sent, under his message, while he answers.
+        com.thomaswcode.decrastination.notify.FelixNotifications.post(app, id, name, said, emptyList(), sent = words)
+        scope.launch {
+            answerChat()
+            val last = chat.value.messages.lastOrNull() ?: return@launch
+            when {
+                chatInFront -> com.thomaswcode.decrastination.notify.FelixNotifications.cancel(app)
+                last.from == Speaker.Claude && last.at >= now -> tellAnswer(last)
+                // Not answered (Claude off, resting, a failed call): why, where the reply was made.
+                last.from == Speaker.You && last.note != null -> com.thomaswcode.decrastination.notify.FelixNotifications.post(app, id, name, "$said\n\n${last.note}", emptyList(), sent = words)
+            }
+        }
+        return true
+    }
+
+    /** [answer], Felix's in the chat to a reply from a notification, as his next notification (AI-24), with its replies and cards; and on record. */
+    private suspend fun tellAnswer(answer: ChatMessage) {
+        val record = com.thomaswcode.decrastination.data.FelixRecord(answer.id, answer.at, com.thomaswcode.decrastination.enrich.FelixPrompts.Reason.Reply.name, answer.text, answer.suggestedReplies)
+        log.update { it.copy(felix = it.felix.filterNot { r -> r.id == record.id } + record).trimmed(clock.now()) }
+        val cards = answer.proposals.filter { it.state == ProposalState.Proposed }.map { answer.id to it }
+        com.thomaswcode.decrastination.notify.FelixNotifications.post(app, answer.id, settings.value.felixName, answer.text, answer.suggestedReplies, cards)
     }
 
     /** Your message still waiting for Claude taken back, unanswered. */

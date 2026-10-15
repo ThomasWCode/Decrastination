@@ -318,4 +318,61 @@ class ChatTest {
         // One from before this was asked for has none.
         assertEquals(emptyList(), ChatAnswers.parse("""{"reply":"Noted.","newTasks":[],"changes":[]}""", emptyList(), emptyList(), com.thomaswcode.decrastination.core.About(), now, LONDON)!!.memories)
     }
+
+    @Test
+    fun `changes to what exists are made at once, the rest shown to confirm`() {
+        val other = bridge.copy(id = "teams:other", sourceId = "other")
+        val tasks = listOf(bridge, other).associateBy { it.id }
+        val today = LocalDate.parse("2026-10-12")
+        assertTrue(com.thomaswcode.decrastination.core.InstantChanges.instant(Change(ChangeType.AtTime, taskId = "teams:bridge"), tasks, today))
+        assertFalse(com.thomaswcode.decrastination.core.InstantChanges.instant(Change(ChangeType.AtTime, taskId = "teams:gone"), tasks, today))
+        assertTrue(com.thomaswcode.decrastination.core.InstantChanges.instant(Change(ChangeType.After, taskId = "teams:bridge", afterTaskId = "teams:other"), tasks, today))
+        assertFalse(com.thomaswcode.decrastination.core.InstantChanges.instant(Change(ChangeType.After, taskId = "teams:bridge", afterTaskId = "teams:gone"), tasks, today))
+        // A busy time or a limit today at once; another day's, or every week's, to confirm.
+        assertTrue(com.thomaswcode.decrastination.core.InstantChanges.instant(Change(ChangeType.BusyTime, date = "2026-10-12", startMin = 1080, endMin = 1140), tasks, today))
+        assertFalse(com.thomaswcode.decrastination.core.InstantChanges.instant(Change(ChangeType.BusyTime, date = "2026-10-13", startMin = 1080, endMin = 1140), tasks, today))
+        assertFalse(com.thomaswcode.decrastination.core.InstantChanges.instant(Change(ChangeType.BusyTime, weekday = 2, startMin = 1080, endMin = 1140), tasks, today))
+        assertTrue(com.thomaswcode.decrastination.core.InstantChanges.instant(Change(ChangeType.DayLimit, date = "2026-10-12", freeMin = 60), tasks, today))
+        assertTrue(com.thomaswcode.decrastination.core.InstantChanges.instant(Change(ChangeType.EventTime, eventKey = "match", eventAnswer = "free"), tasks, today))
+        assertFalse(com.thomaswcode.decrastination.core.InstantChanges.instant(Change(ChangeType.NoSchool, date = "2026-10-26", endDate = "2026-10-30"), tasks, today))
+        assertFalse(com.thomaswcode.decrastination.core.InstantChanges.instant(Change(ChangeType.HalfDay, date = "2026-10-16", endMin = 750), tasks, today))
+    }
+
+    @Test
+    fun `a reading's cards put what's made at once first, then new tasks, then what's to confirm`() {
+        val reading = ChatAnswers.Reading(
+            reply = "Moved it to 19:30; I'd add the statement and the half term.",
+            tasks = listOf(OwnTask(title = "Statement", minutes = 60)),
+            changes = listOf(Change(ChangeType.AtTime, taskId = "teams:bridge", time = Fixtures.at("2026-10-13T19:30")), Change(ChangeType.NoSchool, date = "2026-10-26", endDate = "2026-10-30")),
+            leftOut = emptyList(),
+        )
+        var n = 0
+        val cards = ChatAnswers.cards(reading, mapOf(bridge.id to bridge), LocalDate.parse("2026-10-12"), LONDON) { "c${++n}" }
+        assertEquals(listOf("c1" to true, "c2" to false, "c3" to false), cards.map { it.id to it.instant })
+        assertEquals(listOf(ChangeType.AtTime), cards[0].changes.map { it.type })
+        assertEquals("Statement", cards[1].task?.title)
+        assertEquals(listOf(ChangeType.NoSchool), cards[2].changes.map { it.type })
+    }
+
+    @Test
+    fun `replies to offer are read, three at most, and the chat is Felix`() {
+        val reading = parse("""{"reply":"Moved.","newTasks":[],$none,"memories":[],"suggestedReplies":[" Thanks ","","Undo that","Thanks","Move it to 20:00 instead, after football training finishes","More"]}""")!!
+        assertEquals(listOf("Thanks", "Undo that", "Move it to 20:00 instead, after football"), reading.suggestedReplies)
+        val system = ChatPrompts.system(com.thomaswcode.decrastination.data.Settings(felixName = "Max", felixLine = "a coach"), 13)
+        assertTrue(system.startsWith("You are Max: a coach, and this is the chat in a UK sixth-form student's (Year 13) planner app."), system)
+        assertTrue("is made as soon as you give it" in system && "give the change that puts it back" in system)
+    }
+
+    @Test
+    fun `two messages of Felix's in a row are one turn`() {
+        val messages = listOf(
+            ChatMessage("1", Speaker.You, "Move the physics", now - 3_000_000L, answeredAt = now - 2_900_000L),
+            ChatMessage("2", Speaker.Claude, "Moved it to 19:30.", now - 2_900_000L),
+            ChatMessage("3", Speaker.Claude, "Ten minutes into the physics: starting?", now - 600_000L, reason = "SlotStart"),
+            ChatMessage("4", Speaker.You, "Give me 15", now),
+        )
+        val turns = ChatPrompts.turns(messages, "", mapOf(bridge.id to bridge), LONDON)
+        assertEquals(listOf(Speaker.You, Speaker.Claude, Speaker.You), turns.map { it.first })
+        assertEquals("Moved it to 19:30.\n\nTen minutes into the physics: starting?", turns[1].second)
+    }
 }

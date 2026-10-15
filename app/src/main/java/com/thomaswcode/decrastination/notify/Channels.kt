@@ -21,6 +21,8 @@ object Channels {
     const val MODEL = "model"
     const val FREE_TIME = "free-time"
     const val FREE_TIME_ENDING = "free-time-ending"
+    /** Felix's messages and his answers to your replies (AI-24, LR-03). */
+    const val FELIX = "felix"
 
     fun create(context: Context) {
         val manager = context.getSystemService(NotificationManager::class.java) ?: return
@@ -71,6 +73,9 @@ object Channels {
                 },
                 NotificationChannel(PROTECTION, "Protection", NotificationManager.IMPORTANCE_HIGH).apply {
                     description = "When blocking is off: the focus service switched off, or protection weakened"
+                },
+                NotificationChannel(FELIX, "Felix", NotificationManager.IMPORTANCE_DEFAULT).apply {
+                    description = "His messages about your work, and his answers to your replies"
                 },
                 NotificationChannel(MODEL, "Claude", NotificationManager.IMPORTANCE_DEFAULT).apply {
                     description = "When Claude's plan for a task is dropped, or its API key stops working"
