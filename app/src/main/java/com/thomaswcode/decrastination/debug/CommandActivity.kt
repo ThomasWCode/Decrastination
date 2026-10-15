@@ -331,6 +331,18 @@ class CommandActivity : Activity() {
                 }
             }
             "chat-clear" -> graph.clearChat().also { Log.i(TAG, "Chat cleared") }
+            // Felix (LR-03): his state and today's messages; a look now; or a message for a reason, whatever the rules say (a paid call).
+            "felix" -> {
+                val state = graph.runtime.value.felix
+                Log.i(TAG, "felix: next check ${state.nextCheckAt?.let { java.time.Instant.ofEpochMilli(it).atZone(graph.clock.zone()).toLocalTime() }}, last sent ${state.lastSentAt}, activity ${state.activity.keys}")
+                graph.log.value.felix.takeLast(10).forEach { Log.i(TAG, "felix ${it.reason} ${it.key}: ${it.text.ifBlank { "(silent)" }} ${it.replies}${it.replyText?.let { r -> " / reply: $r" }.orEmpty()}") }
+            }
+            "felix-check" -> graph.felix.check().also { Log.i(TAG, "felix-check done") }
+            "felix-say" -> {
+                val reason = intent.getStringExtra("reason")?.let { name -> com.thomaswcode.decrastination.enrich.FelixPrompts.Reason.entries.firstOrNull { it.name.equals(name, ignoreCase = true) } }
+                if (reason == null) Log.w(TAG, "felix-say needs --es reason, one of ${com.thomaswcode.decrastination.enrich.FelixPrompts.Reason.entries.joinToString()}")
+                else Log.i(TAG, "felix-say $reason: ${graph.felix.say(reason)?.let { "${it.text.ifBlank { "(silent)" }} ${it.replies}" } ?: "Claude is off"}")
+            }
             // What Felix remembers (AI-21): its standing instructions and facts, a line each.
             "memory" -> graph.memory.value.let { m ->
                 Log.i(TAG, "memory: ${m.facts.size} facts, ${com.thomaswcode.decrastination.core.Memories.chars(m.facts)} of ${com.thomaswcode.decrastination.core.Memories.FACT_BUDGET_CHARS} characters; ${m.rules.size} rules")
