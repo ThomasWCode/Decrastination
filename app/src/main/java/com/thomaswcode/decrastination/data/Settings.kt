@@ -67,6 +67,8 @@ data class Settings(
     val quietHours: Window = Window(22 * 60 + 30, 7 * 60),
     /** On school days blocking starts here (Q6b): school hours are left alone. */
     val weekdayBlockFromMin: Int = 16 * 60 + 45,
+    /** When blocking starts on a weekend or a day off school (BL-02). */
+    val weekendBlockFromMin: Int = 10 * 60,
     /** Minutes of work that earn one minute of free time (Q22: about 1 for 3). */
     val workMinPerFreeMin: Int = 3,
 
