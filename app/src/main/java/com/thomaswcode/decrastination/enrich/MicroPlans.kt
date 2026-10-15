@@ -51,8 +51,13 @@ object MicroPlans {
         }
     }.trimEnd()
 
-    /** What a piece's micro-plan is written for: its task as it is, and which piece. */
-    fun hashOf(task: TaskItem, chunk: Chunk): String = Enrichments.inputHash(task) + "#" + (chunk.stepIndex ?: -chunk.part)
+    /**
+     * What a piece's micro-plan is written for: its task as it is, and the piece as [describe] says
+     * it (which, its step's name, its minutes, of how many parts), so a step renamed or a piece
+     * resized is written for again.
+     */
+    fun hashOf(task: TaskItem, chunk: Chunk): String =
+        Enrichments.inputHash(task) + "#" + (chunk.stepIndex ?: -chunk.part) + "#" + Integer.toHexString("${chunk.step.orEmpty()}|${chunk.minutes}|${chunk.parts}".hashCode())
 
     @Serializable
     private data class Answer(val first: String = "", val next: List<String> = emptyList(), val doneWhen: String = "")

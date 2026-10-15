@@ -36,9 +36,8 @@ object PhotoChecks {
      * Checks [photos], the pages of [piece]'s work (AI-17), against it and its task (AI-16), records
      * the cost, and says how it went. The photos are deleted, whatever happens.
      */
-    suspend fun check(context: Context, graph: AppGraph, photos: List<File>, piece: Chunk): String {
-        // When it was taken: a slot of its key kept before then isn't the one it shows.
-        val takenAt = graph.clock.now()
+    suspend fun check(context: Context, graph: AppGraph, photos: List<File>, piece: Chunk, takenAt: Long = graph.clock.now()): String {
+        // [takenAt], when its first page was taken: a slot of its key kept before then isn't the one it shows.
         if (!piece.photoCheckable) {
             withContext(NonCancellable + Dispatchers.IO) { photos.forEach { it.delete() } }
             return "Only written homework can be checked from a photo."
