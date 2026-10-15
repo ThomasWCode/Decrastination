@@ -1204,6 +1204,63 @@ class AppGraph private constructor(context: Context) {
         return if (done) "What's remembered is back as it was before the tidy." else "What's remembered has changed since: left as it is."
     }
 
+    /**
+     * The week's check-in asked by Felix (LR-02): its first question, unless the week has its check-in
+     * already or his notifications can't be shown (false then, and the form's reminder goes instead).
+     */
+    suspend fun askCheckIn(): Boolean {
+        val now = clock.now()
+        val week = com.thomaswcode.decrastination.learn.Daily.checkInWeek(now, clock.zone(), settings.value.checkInMin)
+        if (log.value.checkIns.any { it.weekOf == week }) return true
+        if (!com.thomaswcode.decrastination.notify.Notify.shown(app, com.thomaswcode.decrastination.notify.Channels.FELIX)) return false
+        val draft = com.thomaswcode.decrastination.learn.CheckInFlow.Draft(week)
+        runtime.update { it.copy(checkInDraft = draft) }
+        askNext(draft, now)
+        return true
+    }
+
+    /** [draft]'s question as Felix's message, with its replies: on record, so its reply comes back here. */
+    private suspend fun askNext(draft: com.thomaswcode.decrastination.learn.CheckInFlow.Draft, now: Long, again: Boolean = false) {
+        val flow = com.thomaswcode.decrastination.learn.CheckInFlow
+        val text = (if (again) "A number from 1 to 5: " else "") + flow.question(draft)
+        val record = com.thomaswcode.decrastination.data.FelixRecord(java.util.UUID.randomUUID().toString(), now, com.thomaswcode.decrastination.enrich.FelixPrompts.Reason.CheckIn.name, text, flow.replies(draft, log.value, clock.zone()))
+        log.update { it.copy(felix = it.felix + record).trimmed(now) }
+        com.thomaswcode.decrastination.notify.FelixNotifications.post(app, record.id, settings.value.felixName, text, record.replies)
+    }
+
+    /**
+     * [words], the answer to the check-in question [record] asked (LR-02): kept, and the next asked;
+     * after the last, the week's check-in kept and its review begun. The form filled meanwhile, or the
+     * week moved on, ends it.
+     */
+    private suspend fun checkInReply(record: com.thomaswcode.decrastination.data.FelixRecord, words: String): Boolean {
+        val now = clock.now()
+        val flow = com.thomaswcode.decrastination.learn.CheckInFlow
+        log.update { l -> l.copy(felix = l.felix.map { if (it.id == record.id) it.copy(replyText = words, repliedAt = now) else it }) }
+        val draft = runtime.value.checkInDraft
+        if (draft == null || log.value.checkIns.any { it.weekOf == draft.week }) {
+            runtime.update { it.copy(checkInDraft = null) }
+            com.thomaswcode.decrastination.notify.FelixNotifications.cancel(app)
+            return true
+        }
+        val next = flow.answered(draft, words) ?: run {
+            askNext(draft, now, again = true)
+            return true
+        }
+        if (!flow.done(next)) {
+            runtime.update { it.copy(checkInDraft = next) }
+            askNext(next, now)
+            return true
+        }
+        var added = false
+        log.update { l -> if (l.checkIns.any { it.weekOf == next.week }) l else l.copy(checkIns = l.checkIns + flow.checkIn(next, now)).trimmed(now).also { added = true } }
+        runtime.update { it.copy(checkInDraft = null) }
+        com.thomaswcode.decrastination.notify.FelixNotifications.post(app, record.id, settings.value.felixName, "Thanks: the week's review comes next.", emptyList())
+        // Its review, unless the week has had it (the evening's ran first).
+        if (added) com.thomaswcode.decrastination.learn.ReviewWorker.enqueue(app, ifDue = true)
+        return true
+    }
+
     /** The most of what a call was about that its record keeps (AC-07). */
     private val MAX_CALL_TITLE = 80
 
@@ -1615,6 +1672,8 @@ class AppGraph private constructor(context: Context) {
         val now = clock.now()
         val name = settings.value.felixName
         val record = log.value.felix.firstOrNull { it.id == id }
+        // An answer to a check-in question (LR-02): the next asked, or the check-in kept.
+        if (record?.reason == com.thomaswcode.decrastination.enrich.FelixPrompts.Reason.CheckIn.name) return checkInReply(record, words)
         // One of the three answers to how the day's completions went (LR-05): on them, and that's all.
         if (record != null && felix.answered(record, words)) {
             log.update { l -> l.copy(felix = l.felix.map { if (it.id == id) it.copy(replyText = words, repliedAt = now) else it }) }

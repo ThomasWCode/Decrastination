@@ -24,7 +24,7 @@ import java.util.Locale
  */
 object FelixPrompts {
     /** Why a message is written. */
-    enum class Reason { SlotStart, SlotEnd, SlotKept, DayDone, Morning, Question, Completions, Summary, Reply }
+    enum class Reason { SlotStart, SlotEnd, SlotKept, DayDone, Morning, Question, Completions, Summary, Reply, CheckIn }
 
     /** His messages, and the replies to them, that he's shown: the last few. */
     const val RECENT = 6
