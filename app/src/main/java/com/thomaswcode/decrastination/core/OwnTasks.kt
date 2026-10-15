@@ -20,6 +20,8 @@ data class OwnTask(
     val steps: List<OwnStep> = emptyList(),
     /** Where it can be done (PL-15): "anywhere", a free period at school included, or "home". The form asks in phase 6. */
     val where: String = "anywhere",
+    /** From the form (UI-15): its steps matched to those they were by their place alone, never by a name. */
+    @kotlinx.serialization.Transient val fromForm: Boolean = false,
 )
 
 /**
@@ -242,7 +244,7 @@ object OwnTasks {
         // step keeps its tick and a new one of an old name has none; otherwise by name, a repeated
         // name by its turn (the second "Review" to the second). A step done stays done, one to do to do.
         val seen = HashMap<String, Int>()
-        val byPlace = task.steps.any { it.wasIndex != null }
+        val byPlace = task.fromForm || task.steps.any { it.wasIndex != null }
         val steps = if (event) emptyList() else task.steps.take(MAX_STEPS).map { s ->
             val turn = seen.merge(s.title.trim(), 1, Int::plus)!! - 1
             val was = if (byPlace) s.wasIndex?.let { old.subSteps.getOrNull(it) } else old.subSteps.filter { it.title == s.title.trim() }.getOrNull(turn)

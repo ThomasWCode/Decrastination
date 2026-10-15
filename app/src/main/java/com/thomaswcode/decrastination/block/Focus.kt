@@ -413,10 +413,11 @@ class Focus(
     }
 
     /**
-     * The last slot of [key]'s kept since [since] taken back (UI-03's Undo): its record gone, its step
-     * to do again (the key says which) or a box's minutes off its task, and the free time it earned
-     * given back, as far as it's left. Not once its task has finished by it (one of your own, its
-     * last piece): false then, and with none to take back.
+     * The last slot of [key]'s kept since [since] taken back (UI-03's Undo): its record gone (one kept
+     * late is the miss it was again, on record and in today's misses), its step to do again (the key
+     * says which) or a box's minutes off its task, and the free time it earned given back, as far as
+     * it's left. Not once its task has finished by it (one of your own, its last piece): false then,
+     * and with none to take back.
      */
     suspend fun unkeepSlot(key: String, since: Long, now: Long = clock.now()): Boolean = keeping.withLock {
         val record = log.value.slots.lastOrNull { it.key == key && it.outcome.kept && it.at >= since } ?: return@withLock false
@@ -432,10 +433,15 @@ class Focus(
                 },
             )
         }
-        log.update { state -> state.copy(slots = state.slots - record) }
-        if (record.earned) {
-            val today = today(now)
-            runtime.update { it.copy(credit = it.credit.takeBack(today, Credit.forSlot(record.plannedMin, settings.value.workMinPerFreeMin))) }
+        // Kept late, its slot had gone by undone: missed again, as when it went by.
+        val missed = record.takeIf { it.outcome == SlotOutcome.KeptLate }?.copy(outcome = SlotOutcome.Missed, workedMin = 0, photo = false, earned = false, at = minOf(record.end + Slotter.GRACE_MS, now))
+        log.update { state -> state.copy(slots = state.slots - record + listOfNotNull(missed)) }
+        val today = today(now)
+        runtime.update { state ->
+            state.copy(
+                credit = if (record.earned) state.credit.takeBack(today, Credit.forSlot(record.plannedMin, settings.value.workMinPerFreeMin)) else state.credit,
+                slots = if (missed != null && missed.date == today.toString()) state.slots.on(today).missed(record.key, record.taskId, missed.at) else state.slots,
+            )
         }
         true
     }

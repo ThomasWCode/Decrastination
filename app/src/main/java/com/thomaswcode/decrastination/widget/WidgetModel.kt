@@ -110,16 +110,17 @@ data class WidgetModel(
 
         /**
          * Today's slots as the header has them (UI-05): "Today: 1 of 4 kept, 1 h 20 left", the kept,
-         * missed and still to come counted, and the minutes of those still to come from now. Null
-         * with no slot today, kept, missed or planned.
+         * missed and still to come counted (one gone by but in its grace, still to tick, among them),
+         * and the minutes of those still to come from now. Null with no slot today, kept, missed or
+         * planned.
          */
         fun day(plan: Plan, slots: List<SlotRecord>): String? {
             val now = plan.now
-            val ahead = plan.todaySlots.filter { it.kind == SlotKind.Work && it.chunk != null && it.end > now }
+            val ahead = plan.todaySlots.filter { it.kind == SlotKind.Work && it.chunk != null && it.end + com.thomaswcode.decrastination.core.Slotter.GRACE_MS > now }
             val kept = slots.count { it.outcome.kept }
             val total = kept + slots.count { it.outcome == SlotOutcome.Missed } + ahead.size
             if (total == 0) return null
-            val left = ahead.sumOf { ((it.end - maxOf(it.start, now)) / 60_000L).toInt() }
+            val left = ahead.sumOf { ((it.end - maxOf(it.start, now)).coerceAtLeast(0) / 60_000L).toInt() }
             return "Today: $kept of $total kept, " + if (left > 0) "${Format.minutes(left)} left" else "nothing left"
         }
 

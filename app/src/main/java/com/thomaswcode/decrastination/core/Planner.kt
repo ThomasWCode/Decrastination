@@ -1048,6 +1048,24 @@ object Planner {
         return day.takeIf { it >= date(input.now, input.zone) && (start == null || it >= start) && (real == null || it <= date(real, input.zone)) }
     }
 
+    /** Why a time won't be kept for a task's next piece ([pinProblem]). */
+    enum class PinProblem { DayGone, NotYet, PastDeadline }
+
+    /**
+     * Why [at] wouldn't be kept as a time for [task]'s next piece (PL-04), as [pinnedTime] has it:
+     * its day gone, before the task can start, or at or past its real deadline; null if it would.
+     * Checked before a move by hand is made (UI-03, UI-04), so none is said done that the plan drops.
+     */
+    fun pinProblem(task: TaskItem, at: Long, now: Long, zone: ZoneId): PinProblem? {
+        val end = date(at, zone).plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli() - 1
+        return when {
+            end < now -> PinProblem.DayGone
+            task.notBefore?.let { at < it } == true -> PinProblem.NotYet
+            task.realDeadline?.let { at >= it } == true -> PinProblem.PastDeadline
+            else -> null
+        }
+    }
+
     /**
      * The time you gave for [task]'s next piece (PL-04), where its day hasn't gone, it's no earlier
      * than the task can start, and it's before its real deadline ([real]).

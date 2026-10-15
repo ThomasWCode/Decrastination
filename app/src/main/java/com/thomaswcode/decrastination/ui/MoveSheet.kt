@@ -50,6 +50,9 @@ private val CHIP_DAY = DateTimeFormatter.ofPattern("EEE d", Locale.UK)
 fun MoveSheet(graph: AppGraph, chunk: Chunk, plan: Plan, zone: ZoneId, onDone: (String) -> Unit, onClose: () -> Unit) {
     var chosen by rememberSaveable { mutableStateOf<String?>(null) }
     var timing by rememberSaveable { mutableStateOf(false) }
+    var problem by rememberSaveable { mutableStateOf<String?>(null) }
+    // A time pins a task's next piece (PL-04): only that one can be given one; the rest go by their day.
+    val next = plan.chunksOf(chunk.taskId).firstOrNull()?.key == chunk.key
     // A real deadline's day is the last a piece can go to.
     val last = if (chunk.hard) Planner.date(chunk.deadline, zone) else null
     fun apply(change: Change, said: String) {
@@ -73,11 +76,16 @@ fun MoveSheet(graph: AppGraph, chunk: Chunk, plan: Plan, zone: ZoneId, onDone: (
             }
             if (last != null) Text("No day after ${last.format(CHIP_DAY)}: due before then.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             chosen?.let(LocalDate::parse)?.let { day ->
-                Button(onClick = { timing = true }) { Text("This piece, at a time…") }
+                if (next) {
+                    Button(onClick = { timing = true }) { Text("This piece, at a time…") }
+                } else {
+                    Text("Only its next piece takes a time: all of it can go to a day.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
                 OutlinedButton(onClick = {
                     apply(Change(ChangeType.OnDay, taskId = chunk.taskId, date = day.toString()), "All of it on ${day.format(CHIP_DAY)}")
                 }) { Text("All of it, any time that day") }
             }
+            problem?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error) }
         }
     }
     if (timing) {
@@ -85,7 +93,16 @@ fun MoveSheet(graph: AppGraph, chunk: Chunk, plan: Plan, zone: ZoneId, onDone: (
         TimeDialog("${chunk.label}, on ${day.format(CHIP_DAY)}", 17 * 60, onClose = { timing = false }) { minute ->
             timing = false
             val time = day.atStartOfDay(zone).plusMinutes(minute.toLong()).toInstant().toEpochMilli()
-            apply(Change(ChangeType.AtTime, taskId = chunk.taskId, date = day.toString(), startMin = minute, time = time), "At ${day.format(CHIP_DAY)} ${"%02d:%02d".format(Locale.UK, minute / 60, minute % 60)}")
+            val now = graph.clock.now()
+            // Only a time the plan will keep: none it would drop is said done.
+            val task = graph.tasks.value.tasks.firstOrNull { it.id == chunk.taskId }
+            problem = when (task?.let { Planner.pinProblem(it, time, now, zone) }) {
+                null -> null
+                Planner.PinProblem.DayGone -> "That time's gone: pick a later one."
+                Planner.PinProblem.NotYet -> "It can't be started till ${Format.at(task.notBefore!!, now, zone)}: pick a later time."
+                Planner.PinProblem.PastDeadline -> "It's due ${Format.at(task.realDeadline!!, now, zone)}: pick a time before then."
+            }
+            if (problem == null) apply(Change(ChangeType.AtTime, taskId = chunk.taskId, date = day.toString(), startMin = minute, time = time), "At ${day.format(CHIP_DAY)} ${"%02d:%02d".format(Locale.UK, minute / 60, minute % 60)}")
         }
     }
 }
