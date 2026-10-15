@@ -535,10 +535,11 @@ class AppGraph private constructor(context: Context) {
         }
         // Any a stop left ungiven: slots being kept, photo checks and completions; and a day with nothing to do's free time (BL-07).
         scope.launch {
-            runCatching { focus.grantAllowanceIfDue() }.onFailure { Log.w(TAG, "Giving the day's free time failed", it) }
             focus.finishKeeps()
             focus.finishPhotos()
             settleCompletions()
+            // Only then is the day judged empty: a slot kept as the app stopped is work done.
+            runCatching { focus.grantAllowanceIfDue() }.onFailure { Log.w(TAG, "Giving the day's free time failed", it) }
         }
         // "How was it?" questions kept while notifications were off, once they're on.
         syncer.addAfterEverySync { Assessment.askLater(app) }

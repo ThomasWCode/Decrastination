@@ -93,8 +93,8 @@ object Calibrator {
     private fun ratios(days: List<DayRecord>, slots: List<SlotRecord>, today: LocalDate): Map<DayKind, List<Double>> {
         val byKind = judgedDays(days, today).mapValues { (_, judged) -> judged.map { it.doneMin!!.toDouble() / it.plannedMin } }
         // Kept in their time: one missed there and done that evening wasn't school's time used, nor
-        // one ticked before it began (at home, ahead of the day).
-        val kept = slots.filter { it.outcome == SlotOutcome.Kept && it.window.atSchool && it.at >= it.start }.groupBy { it.date }.mapValues { (_, k) -> k.sumOf { it.plannedMin } }
+        // one ticked before it began (at home, ahead of the day) or after it ended (in its grace).
+        val kept = slots.filter { it.outcome == SlotOutcome.Kept && it.window.atSchool && it.at in it.start..it.end }.groupBy { it.date }.mapValues { (_, k) -> k.sumOf { it.plannedMin } }
         val school = days.filter { it.schoolMin > 0 && it.doneMin != null && LocalDate.parse(it.date) <= today }
             .sortedBy { it.date }.takeLast(YIELD_LOOK_BACK)
             .map { minOf(1.0, (kept[it.date] ?: 0).toDouble() / it.schoolMin) }
