@@ -26,6 +26,9 @@ object SettingsLimits {
     const val MAX_PROFILE_LINE = 200
     const val MAX_CLASSES = 40
     val FREE_ALLOWANCE_MIN = 0..240
+    const val MAX_FELIX_LINE = 200
+    val FELIX_GRACE_MIN = 0..60
+    val FELIX_CHECK_MIN = 5..240
     const val MAX_NAME = 60
     const val MAX_LUNCH_WINDOWS = 4
 
@@ -58,6 +61,8 @@ object SettingsLimits {
             check("the year you went into Year 12", yearGroupStart in YEAR_GROUP_START)
             check("what you'd have Claude know", profileLines.size <= MAX_PROFILE_LINES && profileLines.all { it.length <= MAX_PROFILE_LINE })
             check("your classes", classMap.size <= MAX_CLASSES && classMap.all { (code, subject) -> code.length <= MAX_NAME && subject.length <= MAX_NAME })
+            check("Felix's name and line", felixName.isNotBlank() && felixName.length <= MAX_NAME && felixLine.isNotBlank() && felixLine.length <= MAX_FELIX_LINE)
+            check("when Felix asks and checks again", felixGraceMin in FELIX_GRACE_MIN && felixDefaultCheckMin in FELIX_CHECK_MIN)
             check("an empty day's free time", freeAllowanceMin in FREE_ALLOWANCE_MIN)
             check("the calendars", (calendarWriteId == null || calendarWriteId > 0) && calendarsExcluded.size <= MAX_CALENDARS_EXCLUDED && calendarsExcluded.all { it > 0 })
             check("the box length", boxMin in BOX_MIN)

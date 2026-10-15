@@ -298,5 +298,6 @@ object Backups {
         days = (current.days + imported.days).distinctBy { it.date }.sortedBy { it.date },
         checkIns = (current.checkIns + imported.checkIns).distinctBy { it.weekOf }.sortedBy { it.at },
         reviews = (current.reviews + imported.reviews).distinctBy { it.at }.sortedBy { it.at },
+        felix = (current.felix + imported.felix).distinctBy { it.id }.sortedBy { it.at },
     ).trimmed(now)
 }

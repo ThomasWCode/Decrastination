@@ -26,6 +26,7 @@ class SchemaLimitsTest {
             "weekly review" to ReviewInput.schema(),
             "photo check" to PhotoChecker.SCHEMA,
             "memory tidy" to MemoryTidy.SCHEMA,
+            "Felix" to FelixPrompts.SCHEMA,
         ) + Enrichments.Job.entries.associate { "enrichment ${it.name}" to Prompts.schema(it) }
         for ((name, schema) in schemas) {
             val count = unions(schema)

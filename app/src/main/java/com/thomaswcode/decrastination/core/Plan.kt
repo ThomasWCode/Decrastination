@@ -134,6 +134,29 @@ data class Chunk(
 
     /** Written homework, which a photo can show done: not a deck's cards, an email or an event. */
     val photoCheckable: Boolean get() = kind == Kind.Homework && source != Source.Anki
+
+    /** What lets a kept slot of it earn (BL-08), with pieces from [photoFromMin] minutes needing more than a tick. */
+    fun earnsBy(photoFromMin: Int): EarnsBy = when {
+        minutes < photoFromMin -> EarnsBy.Tick
+        photoCheckable -> EarnsBy.Photo
+        source == Source.Own -> EarnsBy.Nothing
+        else -> EarnsBy.Source
+    }
+}
+
+/** What lets a kept slot earn (BL-08). */
+enum class EarnsBy {
+    /** Short: its tick. */
+    Tick,
+
+    /** Longer, written work: a photo check of it. */
+    Photo,
+
+    /** Longer, not written work: its source saying it's done (Anki's cards counted, Teams handed in). */
+    Source,
+
+    /** Longer, one of your own that isn't written work: nothing can check it. */
+    Nothing,
 }
 
 data class DayBucket(

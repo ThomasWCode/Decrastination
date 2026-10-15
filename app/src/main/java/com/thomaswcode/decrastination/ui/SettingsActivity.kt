@@ -165,8 +165,15 @@ class SettingsActivity : ComponentActivity() {
                     Note("Sent to Claude with every call, with your school days and what's remembered.")
                 }
 
-                // What Felix remembers, and how he's to behave (AI-21): saved as each is added or forgotten.
-                item { Section("What Felix remembers") }
+                // The voice of the app's messages (AI-22, LR-03); what he remembers, and how he's to
+                // behave (AI-21), saved as each is added or forgotten.
+                item { Section("Felix") }
+                item {
+                    TextField("His name", draft.felixName, SettingsLimits.MAX_NAME, "felixName", form) { draft = draft.copy(felixName = it) }
+                    TextField("Who he is", draft.felixLine, SettingsLimits.MAX_FELIX_LINE, "felixLine", form) { draft = draft.copy(felixLine = it) }
+                    NumberField("He asks this far into a slot with nothing done (minutes)", draft.felixGraceMin, SettingsLimits.FELIX_GRACE_MIN, "felixGraceMin", form) { draft = draft.copy(felixGraceMin = it) }
+                    NumberField("He checks again after, if he doesn't say (minutes)", draft.felixDefaultCheckMin, SettingsLimits.FELIX_CHECK_MIN, "felixDefaultCheckMin", form) { draft = draft.copy(felixDefaultCheckMin = it) }
+                }
                 item { MemorySection(graph) }
 
                 item { Section("Hours") }
@@ -372,6 +379,11 @@ private fun <T> ParsedField(label: String, shown: String, key: String, form: For
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
     )
 }
+
+/** Some words, not blank and no longer than [max]. */
+@Composable
+private fun TextField(label: String, value: String, max: Int, key: String, form: Form, onChange: (String) -> Unit) =
+    ParsedField(label, value, key, form, { it.trim().takeIf { s -> s.isNotEmpty() && s.length <= max } }, onChange, number = false)
 
 @Composable
 private fun NumberField(label: String, value: Int, range: IntRange, key: String, form: Form, onChange: (Int) -> Unit) =
