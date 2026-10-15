@@ -167,7 +167,7 @@ object CalendarTime {
         // data: no two questions can share either.
         val tag = TAG_PREFIX + key
         val day = questionDay(event, zone)
-        val builder = NotificationCompat.Builder(context, Channels.CALENDAR)
+        val builder = Notify.builder(context, Channels.CALENDAR)
             .setSmallIcon(R.drawable.ic_focus)
             .setContentTitle("${event.title}, $day")
             .setContentText("How much of the day does it take? The plan leaves you that much less time.")

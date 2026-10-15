@@ -20,10 +20,24 @@ data class OwnTask(
     val steps: List<OwnStep> = emptyList(),
     /** Where it can be done (PL-15): "anywhere", a free period at school included, or "home". The form asks in phase 6. */
     val where: String = "anywhere",
+    /** From the form (UI-15): its steps matched to those they were by their place alone, never by a name. */
+    @kotlinx.serialization.Transient val fromForm: Boolean = false,
 )
 
+/**
+ * A step of a task of your own: its name and minutes, its own dates where it has them, and where it
+ * can be done (UI-15: "home", "anywhere", or null, as its task). [wasIndex]: the step it was in the
+ * task's list, as the form had it, so a renamed step keeps its tick; never kept.
+ */
 @Serializable
-data class OwnStep(val title: String, val minutes: Int, val from: Long? = null, val dueAt: Long? = null)
+data class OwnStep(
+    val title: String,
+    val minutes: Int,
+    val from: Long? = null,
+    val dueAt: Long? = null,
+    val where: String? = null,
+    @kotlinx.serialization.Transient val wasIndex: Int? = null,
+)
 
 /**
  * Your own tasks (2.0.0, Q28). You're their source: what you give is kept as a source's values are
@@ -95,7 +109,7 @@ object OwnTasks {
         dueAt = task.sourceValues?.dueAt ?: task.dueAt,
         startFrom = task.notBefore,
         minutes = task.sourceEffortMin ?: task.kind.defaultEffortMin,
-        steps = task.subSteps.map { OwnStep(it.title, it.minutes, it.from, it.dueAt) },
+        steps = task.subSteps.mapIndexed { i, s -> OwnStep(s.title, s.minutes, s.from, s.dueAt, s.where, wasIndex = i) },
         where = task.extra[EXTRA_WHERE] ?: "anywhere",
     )
 
@@ -226,20 +240,32 @@ object OwnTasks {
 
     private fun apply(old: TaskItem, task: OwnTask): TaskItem {
         val event = task.kind == Kind.Event
-        // Each step matched to the one it was by name, a repeated name by its turn (the second
-        // "Review" to the second), so a step done stays done and one to do stays to do.
+        // Each step matched to the one it was: from the form, by its place then (UI-15), so a renamed
+        // step keeps its tick and a new one of an old name has none; otherwise by name, a repeated
+        // name by its turn (the second "Review" to the second). A step done stays done, one to do to do.
         val seen = HashMap<String, Int>()
+        val byPlace = task.fromForm || task.steps.any { it.wasIndex != null }
+        val matched = HashSet<Int>()
         val steps = if (event) emptyList() else task.steps.take(MAX_STEPS).map { s ->
             val turn = seen.merge(s.title.trim(), 1, Int::plus)!! - 1
-            val was = old.subSteps.filter { it.title == s.title.trim() }.getOrNull(turn)
-            SubStep(s.title.trim().take(MAX_TITLE), s.minutes, done = was?.done == true, byHand = was?.byHand == true, timedMin = was?.timedMin ?: 0, from = s.from, dueAt = s.dueAt)
+            val index = if (byPlace) s.wasIndex?.takeIf { it in old.subSteps.indices } else old.subSteps.withIndex().filter { it.value.title == s.title.trim() }.getOrNull(turn)?.index
+            index?.let { matched += it }
+            val was = index?.let { old.subSteps[it] }
+            SubStep(
+                s.title.trim().take(MAX_TITLE), s.minutes, done = was?.done == true, byHand = was?.byHand == true, timedMin = was?.timedMin ?: 0,
+                from = s.from, dueAt = s.dueAt, where = Where.of(s.where)?.name?.lowercase(),
+            )
         }
         val minutes = when {
             event -> 0
             steps.isNotEmpty() -> steps.sumOf { it.minutes }
             else -> task.minutes
         }
+        // A step done and gone takes its worked minutes with it: the plan counts a done step's out of
+        // the worked time, so left in it they'd come off the steps still to do.
+        val gone = old.subSteps.withIndex().filter { it.index !in matched && it.value.done }.sumOf { (_, s) -> if (s.byHand) s.timedMin else s.minutes }
         return old.copy(
+            workedMin = (old.workedMin - gone).coerceAtLeast(0),
             title = task.title.trim().take(MAX_TITLE),
             detail = task.notes.trim().take(MAX_NOTES),
             className = task.className?.trim()?.take(MAX_CLASS)?.takeIf { it.isNotEmpty() },

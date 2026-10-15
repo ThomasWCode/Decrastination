@@ -2,16 +2,23 @@ package com.thomaswcode.decrastination.widget
 
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.Fixtures.LONDON
+import com.thomaswcode.decrastination.core.DayWindow
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.Planner
+import com.thomaswcode.decrastination.core.SlotKind
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.SubStep
 import com.thomaswcode.decrastination.core.TaskItem
+import com.thomaswcode.decrastination.core.WindowKind
 import com.thomaswcode.decrastination.data.ProtectionState
 import com.thomaswcode.decrastination.data.RuntimeState
 import com.thomaswcode.decrastination.data.Settings
+import com.thomaswcode.decrastination.data.SlotOutcome
+import com.thomaswcode.decrastination.data.SlotRecord
 import com.thomaswcode.decrastination.data.SourceStatus
 import com.thomaswcode.decrastination.data.TaskState
+import com.thomaswcode.decrastination.ui.Format
+import java.time.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -40,6 +47,30 @@ class WidgetModelTest {
     }
 
     @Test
+    fun `the slot under way or next leads with its time, and the day's count says what's kept and left`() {
+        val friday = LocalDate.parse("2026-10-09")
+        val evening = mapOf(friday to listOf(DayWindow(17 * 60, 22 * 60, WindowKind.Evening)))
+        val plan = Planner.plan(Planner.Input(listOf(task("essay", "2026-10-09T23:59", effort = 30)), now, LONDON, Settings(), windows = evening))
+        val slot = plan.todaySlots.single { it.kind == SlotKind.Work }
+        val kept = SlotRecord(
+            date = "2026-10-09", key = "teams:sheet#-1#1", taskId = "teams:sheet", kind = Kind.Homework, label = "sheet", plannedMin = 20,
+            start = now - 3_600_000L, end = now - 2_400_000L, window = WindowKind.Evening, outcome = SlotOutcome.Kept, workedMin = 20, at = now - 2_400_000L,
+        )
+        val model = WidgetModel.from(plan, TaskState(), LONDON, slots = listOf(kept))
+        assertEquals("${Format.span(slot.start, slot.end, LONDON)} · essay", model.headline)
+        assertEquals(slot.chunk!!.key, model.key)
+        // A tick keeps only what was shown: the plan's moment goes with it.
+        assertEquals(plan.now, model.seenAt)
+        assertEquals("Today: 1 of 2 kept, 30 min left", model.summary)
+        // Gone by but in its grace, it's still to tick: counted, with nothing left.
+        assertEquals("Today: 1 of 2 kept, nothing left", WidgetModel.day(plan.copy(now = slot.end + 60_000L), listOf(kept)))
+        // With no slot today, kept or to come, the count is of tasks as before.
+        val unslotted = Planner.plan(Planner.Input(listOf(task("essay", "2026-10-09T23:59", effort = 30)), now, LONDON, Settings()))
+        assertNull(WidgetModel.day(unslotted, emptyList()))
+        assertEquals("1 today", WidgetModel.from(unslotted, TaskState(), LONDON).summary)
+    }
+
+    @Test
     fun `the next thing to do, its badge and minutes, and what comes after`() {
         val model = model(
             listOf(
@@ -51,7 +82,9 @@ class WidgetModelTest {
         )
         // Work due later today before the overdue Statics: those deadlines can still be met.
         assertEquals("Do: Essay", model.headline)
-        assertEquals("Essay", model.label)
+        // Its first step comes with phase 7's micro-plans.
+        assertNull(model.label)
+        assertEquals("teams:Essay#-1#1", model.key)
         assertEquals("Due 21:00", model.badge)
         assertTrue(model.urgent)
         assertEquals("20 min", model.minutes)

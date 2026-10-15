@@ -87,6 +87,20 @@ fun DateTimeDialog(
     )
 }
 
+/** A time of day on a clock (UI-01), from [initialMinute] (minutes after midnight); [title] says what for. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun TimeDialog(title: String, initialMinute: Int, onClose: () -> Unit, onPick: (Int) -> Unit) {
+    val state = rememberTimePickerState(initialHour = initialMinute / 60, initialMinute = initialMinute % 60, is24Hour = true)
+    AlertDialog(
+        onDismissRequest = onClose,
+        title = { Text(title) },
+        text = { TimePicker(state) },
+        confirmButton = { TextButton(onClick = { onPick(state.hour * 60 + state.minute) }) { Text("Done") } },
+        dismissButton = { TextButton(onClick = onClose) { Text("Cancel") } },
+    )
+}
+
 /** How long something takes, in hours and minutes, from [initial], at least [least]; [note] says a word more. */
 @Composable
 fun MinutesDialog(title: String, initial: Int, note: String?, least: Int = 1, onClose: () -> Unit, onPick: (Int) -> Unit) {

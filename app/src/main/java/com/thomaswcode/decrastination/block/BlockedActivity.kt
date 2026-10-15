@@ -125,7 +125,10 @@ class BlockedActivity : ComponentActivity() {
                 Modifier.fillMaxSize().safeDrawingPadding().verticalScroll(rememberScrollState()).padding(24.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
-                Text("Not now", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.SemiBold)
+                // On the logo's pale pink (UI-12).
+                Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp)) {
+                    Text("Not now", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+                }
                 Text("${targetLabel()} is blocked. ${verdict.reason.headline}.", style = MaterialTheme.typography.bodyLarge)
                 // What finishing today earns (BL-04).
                 graph.focus.rewardLine(plan, now)?.let { Text(it, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary) }

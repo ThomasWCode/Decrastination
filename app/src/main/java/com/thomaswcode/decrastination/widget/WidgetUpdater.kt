@@ -56,8 +56,9 @@ object WidgetUpdater {
      * The next moment the plan can change with no new data: midnight, the next deadline (a chunk
      * turns overdue), the moment a chunk can be started (an Anki deck's cards at 04:00), the start
      * or end of today's working hours, and, while they last, every 15 minutes, since the time left
-     * today shrinks with every minute; and the moment Teams' data, as of [teamsAsOf], turns stale
-     * and earns its warning. A minute away at the soonest.
+     * today shrinks with every minute; the next slot's start or end (UI-05: the headline moves on);
+     * and the moment Teams' data, as of [teamsAsOf], turns stale and earns its warning. A minute
+     * away at the soonest.
      */
     fun nextRedrawAt(plan: Plan, zone: ZoneId, settings: Settings, teamsAsOf: Long? = null): Long {
         val now = plan.now
@@ -71,7 +72,8 @@ object WidgetUpdater {
         val end = plan.today.atStartOfDay().plusMinutes(hours.endMin.toLong()).atZone(zone).toInstant().toEpochMilli()
         val working = if (now in start until end) now + WORKING_REDRAW_MS else Long.MAX_VALUE
         val boundary = listOf(start, end).filter { it > now }.minOrNull() ?: Long.MAX_VALUE
-        return maxOf(minOf(midnight, deadline, startable, stale, working, boundary), now + 60_000L)
+        val slot = plan.todaySlots.filter { it.kind == com.thomaswcode.decrastination.core.SlotKind.Work }.flatMap { listOf(it.start, it.end) }.filter { it > now }.minOrNull() ?: Long.MAX_VALUE
+        return maxOf(minOf(midnight, deadline, startable, stale, working, boundary, slot), now + 60_000L)
     }
 
     fun cancelRedraw(context: Context) {

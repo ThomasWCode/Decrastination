@@ -40,7 +40,6 @@ import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.R
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.learn.CheckInActivity
-import com.thomaswcode.decrastination.protect.ProtectionActivity
 import com.thomaswcode.decrastination.sync.SyncWorker
 
 /**
@@ -104,10 +103,12 @@ class MainActivity : ComponentActivity() {
         val tasks by graph.tasks.state.collectAsStateWithLifecycle()
         val runtime by graph.runtime.state.collectAsStateWithLifecycle()
         val settings by graph.settings.state.collectAsStateWithLifecycle()
-        // What Setup would show in red, as a dot on the menu: a source failing, Claude's key, protection, a file unreadable.
+        // What Setup would show in red, as a mark that opens it (UI-18): a source failing, Claude's key,
+        // protection, a file unreadable; and, the first run, no source read yet.
         val attention = Source.SYNCED.any { tasks.status(it).error != null } ||
             (runtime.aiUsage.keyProblem != null && settings.aiEnabled && settings.aiKeyActive) ||
-            runtime.protection.problems.isNotEmpty() || runtime.unreadable.isNotEmpty()
+            runtime.protection.problems.isNotEmpty() || runtime.unreadable.isNotEmpty() ||
+            Source.SYNCED.all { tasks.status(it).lastSuccessAt == null && tasks.status(it).error == null }
         var menu by remember { mutableStateOf(false) }
         Scaffold(
             // Felix on every screen (UI-16): the Tasks tab has him above its New task.
@@ -116,20 +117,22 @@ class MainActivity : ComponentActivity() {
                 TopAppBar(
                     title = { Text("Decrastination", fontWeight = FontWeight.Bold) },
                     actions = {
+                        if (attention) {
+                            IconButton(onClick = { startActivity(Intent(this@MainActivity, SetupActivity::class.java)) }) {
+                                BadgedBox(badge = { Badge() }) { Icon(painterResource(R.drawable.ic_error), contentDescription = "Setup needs you") }
+                            }
+                        }
                         IconButton(enabled = !syncing, onClick = { SyncWorker.syncNow(this@MainActivity) }) {
                             Icon(painterResource(R.drawable.ic_refresh), contentDescription = "Sync now")
                         }
                         Box {
                             IconButton(onClick = { menu = true }) {
-                                BadgedBox(badge = { if (attention) Badge() }) {
-                                    Icon(painterResource(R.drawable.ic_more_vert), contentDescription = if (attention) "Menu: setup needs you" else "Menu")
-                                }
+                                Icon(painterResource(R.drawable.ic_more_vert), contentDescription = "Menu")
                             }
                             DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                                 MENU.forEach { (label, screen) ->
                                     DropdownMenuItem(
                                         text = { Text(label) },
-                                        trailingIcon = { if (screen == SetupActivity::class.java && attention) Badge() },
                                         onClick = {
                                             menu = false
                                             startActivity(Intent(this@MainActivity, screen))
@@ -148,8 +151,8 @@ class MainActivity : ComponentActivity() {
                     TABS.forEachIndexed { i, name -> Tab(selected = tab == i, onClick = { tab = i }, text = { Text(name) }) }
                 }
                 when (tab) {
-                    0 -> TodayScreen(graph, this@MainActivity)
-                    1 -> TasksScreen(graph, this@MainActivity, askedTask.value) { askedTask.value = null }
+                    0 -> DayScreen(graph, this@MainActivity)
+                    1 -> WorkScreen(graph, this@MainActivity, askedTask.value) { askedTask.value = null }
                     else -> StatsScreen(graph)
                 }
             }
@@ -164,15 +167,16 @@ class MainActivity : ComponentActivity() {
         const val EXTRA_TASK = "task"
         const val TAB_TASKS = 1
         const val OPEN_SETUP = 3
-        private val TABS = listOf("Plan", "Tasks", "Stats")
+        /** Day is when, Work is what (UI-17). */
+        private val TABS = listOf("Day", "Work", "Stats")
 
-        /** The menu: the pages kept out of the way. */
+        /**
+         * The menu (UI-18): the week, and Settings, which has every page Setup and Protection had; the
+         * Reviews come in phase 8. Setup itself is the attention mark's.
+         */
         private val MENU = listOf(
-            "Setup" to SetupActivity::class.java,
-            "Settings" to SettingsActivity::class.java,
-            "Calendar" to CalendarActivity::class.java,
-            "Blocking and protection" to ProtectionActivity::class.java,
             "This week" to CheckInActivity::class.java,
+            "Settings" to SettingsActivity::class.java,
         )
     }
 }

@@ -413,6 +413,46 @@ class Focus(
     }
 
     /**
+     * The last slot of [key]'s kept since [since] taken back (UI-03's Undo): its record gone (one kept
+     * late is the miss it was again, on record and in today's misses), its step to do again (the key
+     * says which) or a box's minutes off its task, and the free time it earned given back, as far as
+     * it's left. Not once its task has finished by it (one of your own, its last piece): false then,
+     * and with none to take back.
+     */
+    suspend fun unkeepSlot(key: String, since: Long, now: Long = clock.now()): Boolean = keeping.withLock {
+        val record = log.value.slots.lastOrNull { it.key == key && it.outcome.kept && it.at >= since } ?: return@withLock false
+        if (tasks.value.tasks.firstOrNull { it.id == record.taskId }?.isOpen != true) return@withLock false
+        // A step's key is its task and its place ("id#2"); a box's has its part after a -1 ("id#-1#1").
+        val stepIndex = key.removePrefix(record.taskId + "#").substringBefore('#').toIntOrNull()?.takeIf { it >= 0 }
+        tasks.update { state ->
+            state.copy(
+                tasks = state.tasks.map { t ->
+                    if (t.id != record.taskId) return@map t
+                    val steps = if (stepIndex == null) t.subSteps else t.subSteps.mapIndexed { i, s -> if (i == stepIndex) s.copy(done = false, timedMin = 0) else s }
+                    t.copy(subSteps = steps, workedMin = (t.workedMin - record.workedMin).coerceAtLeast(0))
+                },
+            )
+        }
+        // Kept late, its slot had gone by undone: missed again, as when it went by.
+        val missed = record.takeIf { it.outcome == SlotOutcome.KeptLate }?.copy(outcome = SlotOutcome.Missed, workedMin = 0, photo = false, earned = false, at = minOf(record.end + Slotter.GRACE_MS, now))
+        log.update { state -> state.copy(slots = state.slots - record + listOfNotNull(missed)) }
+        val today = today(now)
+        runtime.update { state ->
+            state.copy(
+                credit = if (record.earned) state.credit.takeBack(today, Credit.forSlot(record.plannedMin, settings.value.workMinPerFreeMin)) else state.credit,
+                slots = when {
+                    missed != null && missed.date == today.toString() -> state.slots.on(today).missed(record.key, record.taskId, missed.at)
+                    // Kept in its slot: its start back, so the next plan keeps it where it was while that's
+                    // free (PL-13) rather than laying it anew, where today may have no room left for it.
+                    missed == null && record.date == today.toString() -> state.slots.on(today).let { it.copy(previous = it.previous + (record.key to record.start)) }
+                    else -> state.slots
+                },
+            )
+        }
+        true
+    }
+
+    /**
      * The free minutes today's slots can still earn (BL-08): today's plan (the pieces still in it and
      * those kept today, with the one [keeping], a slot missed today and moved on among them) at the
      * ratio, less what kept slots have earned. Work beyond the day's plan earns nothing more today;

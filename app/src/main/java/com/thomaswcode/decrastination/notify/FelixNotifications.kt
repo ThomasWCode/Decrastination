@@ -45,7 +45,7 @@ object FelixNotifications {
         lines: List<String> = emptyList(),
         channel: String = Channels.FELIX,
     ) {
-        val builder = NotificationCompat.Builder(context, channel)
+        val builder = Notify.builder(context, channel)
             .setSmallIcon(R.drawable.ic_focus)
             .setContentTitle(title ?: name)
             .setContentText(text)
