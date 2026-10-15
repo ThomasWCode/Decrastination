@@ -318,15 +318,21 @@ class AppGraph private constructor(context: Context) {
         calendarTouched = false
         val byId = tasks.value.tasks.associateBy { it.id }
         val before = runtime.value.calendarWritten
-        val written = withContext(Dispatchers.IO) {
-            SlotCalendar.write(app, calendarId, made, zone, before, runtime.value.microPlans) { move ->
-                val task = move.desired.taskId?.let(byId::get)
-                when {
-                    task == null -> "its task is no longer there"
-                    Instructions.latePin(SlotCalendar.change(move, zone), task, zone) -> "it's due before then"
-                    else -> null
+        val written = try {
+            withContext(Dispatchers.IO) {
+                SlotCalendar.write(app, calendarId, made, zone, before, runtime.value.microPlans) { move ->
+                    val task = move.desired.taskId?.let(byId::get)
+                    when {
+                        task == null -> "its task is no longer there"
+                        Instructions.latePin(SlotCalendar.change(move, zone), task, zone) -> "it's due before then"
+                        else -> null
+                    }
                 }
             }
+        } catch (e: Throwable) {
+            // Not written: the calendar's read again at the next plan, the change seen before it with it.
+            calendarTouched = true
+            throw e
         }
         // A move taken counts as written only once its instruction is in: stopped before, the next
         // write finds it a move again, rather than putting it back.
@@ -779,9 +785,11 @@ class AppGraph private constructor(context: Context) {
         // The backup's days off and half-days beside those here (PL-16); and what it remembered (AI-21).
         school.update { it.withAll(backup.school) }
         memory.update { Backups.mergedMemory(it, backup.memory) }
-        // The chat where this phone's is empty (a reset's copy brings it back, LR-08).
+        // The chat where this phone's is empty (a reset's copy brings it back, LR-08): not a message
+        // of yours still waiting for its answer, which would be sent, words from then, as it opens.
+        val backedChat = backup.chat.let { c -> c.unanswered?.let { w -> c.copy(messages = c.messages.filterNot { it.id == w.id }) } ?: c }
         var chatBack = 0
-        chat.update { s -> if (s.messages.isEmpty() && backup.chat.messages.isNotEmpty()) backup.chat.also { chatBack = it.messages.size } else s }
+        chat.update { s -> if (s.messages.isEmpty() && backedChat.messages.isNotEmpty()) backedChat.also { chatBack = it.messages.size } else s }
         val own = ownAdded.size
         val told = buildList {
             if (own > 0) add("$own task${if (own == 1) "" else "s"} of your own")
@@ -1125,6 +1133,8 @@ class AppGraph private constructor(context: Context) {
             if (!due(task)) continue
             // Whether the model gave this one's reading, not the rules standing in.
             var fromModel = false
+            // Stale only by the prompts' version (AC-06): its reading stays unless the model reads it now.
+            val onlyVersion = Enrichments.staleOnlyByVersion(task, RuleEnricher.BY)
             val now = clock.now()
             // Switched off (or its key removed) while this runs: nothing more is sent.
             if (claudeKey() == null) enricher = null
@@ -1166,14 +1176,20 @@ class AppGraph private constructor(context: Context) {
                         }
                         // The rules' under the model's name is the model's answer by these prompts (AC-06), not asked for again till they change.
                         (again?.enrichment ?: first.enrichment)?.also { fromModel = true }
-                            ?: if (force) null else rules.enrich(task, job, now).enrichment?.copy(by = model.by, promptVersion = com.thomaswcode.decrastination.enrich.Prompts.VERSION)
+                            ?: when {
+                                force -> null
+                                // Declined by these prompts: the reading there kept, as theirs now, so it isn't asked for again till they change.
+                                onlyVersion -> task.enrichment?.copy(promptVersion = com.thomaswcode.decrastination.enrich.Prompts.VERSION)
+                                else -> rules.enrich(task, job, now).enrichment?.copy(by = model.by, promptVersion = com.thomaswcode.decrastination.enrich.Prompts.VERSION)
+                            }
                     }
                 }
             } else {
                 null
             }
-            // Read again on asking: the reading there stands unless the model gave one.
-            if (enrichment == null && force) continue
+            // Read again on asking, or past this run's calls with a reading only older prompts made: the
+            // reading there stands unless the model gave one.
+            if (enrichment == null && (force || onlyVersion)) continue
             if (enrichment == null) enrichment = rules.enrich(task, job, now).enrichment
             val made = enrichment ?: continue
             // Laid only over the task as it was read (changed during the call, the next run does it).
@@ -1345,15 +1361,21 @@ class AppGraph private constructor(context: Context) {
         // To the second: two resets the same day each keep their copy.
         val name = "reset-" + java.time.Instant.ofEpochMilli(now).atZone(clock.zone()).format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd-HHmmss", java.util.Locale.UK)) + ".json"
         val text = exportBackup()
-        val saved = if (com.thomaswcode.decrastination.data.BackupFolder.available && withContext(Dispatchers.IO) { com.thomaswcode.decrastination.data.BackupFolder.write(app.contentResolver, name, text) }) {
-            "Documents/Decrastination/$name"
-        } else {
-            withContext(Dispatchers.IO) { File(File(app.filesDir, "backups").apply { mkdirs() }, name).writeText(text) }
-            "the app's own files ($name)"
-        }
+        // Nothing goes till its copy is somewhere it can be restored from.
+        val saved = runCatching {
+            if (com.thomaswcode.decrastination.data.BackupFolder.available && withContext(Dispatchers.IO) { com.thomaswcode.decrastination.data.BackupFolder.write(app.contentResolver, name, text) }) {
+                "Documents/Decrastination/$name"
+            } else {
+                // Where Documents can't be written: the app's own files, which the file picker can't
+                // reach, so Settings → Backup restores from them itself (resetCopies).
+                withContext(Dispatchers.IO) { File(File(app.filesDir, RESET_COPIES).apply { mkdirs() }, name).writeText(text) }
+                "the app's own files ($name), which Settings → Backup can restore"
+            }
+        }.getOrElse { return@withContext "Nothing was reset: a copy of it couldn't be saved first." }
         val all = what == Reset.Everything
         if (all || what == Reset.Stats) {
-            log.update { com.thomaswcode.decrastination.data.ActivityLog() }
+            // Felix's messages are the chat's to reset, not Stats'.
+            log.update { com.thomaswcode.decrastination.data.ActivityLog(felix = it.felix) }
             runtime.update { it.copy(calibration = com.thomaswcode.decrastination.core.Calibration()) }
         }
         if (what == Reset.Calibration) runtime.update { it.copy(calibration = com.thomaswcode.decrastination.core.Calibration(learnFrom = now)) }
@@ -1372,6 +1394,20 @@ class AppGraph private constructor(context: Context) {
         }
         "${what.title}: reset. A copy of everything from before is in $saved."
     }
+
+    /** A reset's copies kept in the app's own files (LR-08), where Documents couldn't be written then: their names, newest first. */
+    fun resetCopies(): List<String> =
+        File(app.filesDir, RESET_COPIES).listFiles { f -> f.isFile && f.name.startsWith("reset-") && f.name.endsWith(".json") }.orEmpty().map { it.name }.sortedDescending()
+
+    /** [name], one of [resetCopies], restored as Import restores a backup. What happened, in words. */
+    suspend fun restoreResetCopy(name: String): String {
+        if (name !in resetCopies()) return "That copy isn't there."
+        val bytes = withContext(Dispatchers.IO) { File(File(app.filesDir, RESET_COPIES), name).inputStream().use { Backups.read(it) } } ?: return "That copy is too big to be a backup."
+        return importBackup(bytes.decodeToString())
+    }
+
+    /** Where a reset's copy goes when Documents can't take it. */
+    private val RESET_COPIES = "backups"
 
     /**
      * The [week]'s summary for home (NF-02), written by the model after its review and kept with it;
@@ -1394,10 +1430,12 @@ class AppGraph private constructor(context: Context) {
         val now = clock.now()
         val record = com.thomaswcode.decrastination.data.FelixRecord(java.util.UUID.randomUUID().toString(), now, com.thomaswcode.decrastination.enrich.FelixPrompts.Reason.Summary.name, SUMMARY_READY)
         log.update { it.copy(felix = it.felix + record).trimmed(now) }
+        // In quiet hours on the week's channel, held with the routine ones till the morning (LR-07).
+        val quiet = com.thomaswcode.decrastination.block.BlockPolicy.isQuiet(now, zone, settings.value)
         com.thomaswcode.decrastination.notify.Notify.post(
             app,
             SUMMARY_ID,
-            com.thomaswcode.decrastination.notify.Notify.builder(app, com.thomaswcode.decrastination.notify.Channels.FELIX)
+            com.thomaswcode.decrastination.notify.Notify.builder(app, if (quiet) com.thomaswcode.decrastination.notify.Channels.WEEKLY else com.thomaswcode.decrastination.notify.Channels.FELIX)
                 .setSmallIcon(R.drawable.ic_focus)
                 .setContentTitle(settings.value.felixName)
                 .setContentText(SUMMARY_READY)

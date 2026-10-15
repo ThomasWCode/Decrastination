@@ -280,4 +280,15 @@ class EnrichmentTest {
         assertEquals(null, Enrichments.jobFor(assignment().copy(status = Status.Done)))
         assertEquals(null, Enrichments.jobFor(assignment().copy(source = Source.Anki, derived = true)))
     }
+
+    @Test
+    fun `a model's reading of the text as it is, by older prompts, is stale only by its version`() {
+        val task = assignment()
+        val read = com.thomaswcode.decrastination.core.Enrichment(Enrichments.inputHash(task), "claude-opus-5-5", 0, effortMin = 40, promptVersion = 1)
+        assertTrue(Enrichments.staleOnlyByVersion(task.copy(enrichment = read), "rules"))
+        // By these prompts, by the rules, or of text since changed: not so.
+        assertFalse(Enrichments.staleOnlyByVersion(task.copy(enrichment = read.copy(promptVersion = com.thomaswcode.decrastination.enrich.Prompts.VERSION)), "rules"))
+        assertFalse(Enrichments.staleOnlyByVersion(task.copy(enrichment = read.copy(by = "rules")), "rules"))
+        assertFalse(Enrichments.staleOnlyByVersion(task.copy(enrichment = read.copy(inputHash = "older")), "rules"))
+    }
 }

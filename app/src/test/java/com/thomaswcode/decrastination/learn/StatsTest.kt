@@ -178,6 +178,13 @@ class StatsTest {
         val withOld = log.copy(weeks = listOf(old))
         assertEquals(30 + 100, Stats.summary(withOld, now, LONDON, days = 26 * 7).slotMin)
         assertEquals(30, Stats.summary(withOld, now, LONDON).slotMin)
+        // The week the log's end falls in (it keeps from 11 June): its rollup, whole, in place of
+        // the records left of it.
+        val boundary = week.copy(week = "2026-06-08", minutes = 200)
+        val partial = log.copy(weeks = listOf(boundary), slots = log.slots + slot("2026-06-12T17:00", SlotOutcome.Kept))
+        assertEquals(30 + 200, Stats.summary(partial, now, LONDON, days = 26 * 7).slotMin)
+        // A week with no rollup keeps what's left of its records.
+        assertEquals(30 + 30, Stats.summary(partial.copy(weeks = emptyList()), now, LONDON, days = 26 * 7).slotMin)
     }
 
     @Test

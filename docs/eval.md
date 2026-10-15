@@ -58,7 +58,7 @@ The Email job now says whether its deadline is the email's own words (`deadlineQ
 
 | Round | Prompt | Passed | What failed |
 |---|---|---|---|
-| 4 (15 Oct) | phase 2's | 8 of 10 | `dad-apply`: its three blocks are the three applications (start the CERN team, book Cambridge, register for Oxford), now undated rather than each due two weeks on, as AI-12 means, but none says "apply", which its label asks for (round 3's had a "Reply … agreeing to apply" block); `german-assess`: a step dated after the task is due, as in round 1 (AI-01, phase 7) |
+| 4 (15 Oct) | phase 2's | 8 of 10 | `dad-apply`: its three blocks are the three applications, now undated rather than each due two weeks on, as AI-12 means, but none says "apply", which its label asks for (round 3's had a "Reply … agreeing to apply" block); `german-assess`: a step dated after the task is due, as in round 1 (AI-01, phase 7) |
 
 All three quoted labels passed: the open day quoted, the two notes with no date.
 

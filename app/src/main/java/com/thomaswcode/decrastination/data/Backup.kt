@@ -101,6 +101,14 @@ object Backups {
             if (log.completions.any { it.estimateMin < 0 || it.workedMin < 0 }) add("a finished task's minutes")
             if (log.days.any { it.plannedMin < 0 || (it.doneMin ?: 0) < 0 || runCatching { java.time.LocalDate.parse(it.date) }.isFailure }) add("a day's plan")
             if (log.checkIns.any { it.feel !in 1..5 }) add("a check-in's answer")
+            // The weeks' rollups (PL-10), as a review writes them: each from its Monday, no count below
+            // nothing, and none past what a week holds.
+            if (log.weeks.any { w ->
+                    runCatching { java.time.LocalDate.parse(w.week) }.getOrNull()?.dayOfWeek != java.time.DayOfWeek.MONDAY ||
+                        listOf(w.minutes, w.finished, w.onTime, w.dated, w.blocks, w.fullDays, w.slotsKept, w.slotsMissed).any { it < 0 } ||
+                        w.onTime > w.finished || w.dated > w.finished || w.fullDays > 7 || w.minutes > 7 * DAY_MIN
+                } || log.weeks.map { it.week }.toSet().size != log.weeks.size
+            ) add("a week's totals")
             val calibration = backup.calibration
             if (calibration.multipliers.values.any { !it.isFinite() || it !in Calibrator.MIN_MULTIPLIER..Calibrator.MAX_MULTIPLIER }) add("what the app learned about estimates")
             if (calibration.marginDays.values.any { it !in SettingsLimits.MARGIN_DAYS }) add("what the app learned about margins")
