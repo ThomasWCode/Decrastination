@@ -33,6 +33,14 @@ import kotlinx.serialization.json.JsonPrimitive
 object Prompts {
 
     /**
+     * The prompts' version (AC-06): raised with every change to a system prompt, a schema, an
+     * example or the profile's shape, so a reading the model made by older ones is made again.
+     * 1: everything before review v2's phase 8 (what the readings stored then carry); 2: phases 1
+     * to 7's changes (PROGRESS.md listed them).
+     */
+    const val VERSION = 2
+
+    /**
      * Text past this is left out (and the model told). Room for a long email's own calendar of
      * deadlines (one seen ran to 8 500 characters); past it, a newsletter's tail, which doesn't
      * change its triage.
@@ -335,7 +343,7 @@ object Answers {
     }
 
     private fun reading(job: Enrichments.Job, text: String, task: TaskItem, by: String, now: Long, zone: ZoneId, salvage: Boolean, problems: MutableList<String>): Enrichment? {
-        val base = Enrichment(inputHash = Enrichments.inputHash(task), by = by, at = now)
+        val base = Enrichment(inputHash = Enrichments.inputHash(task), by = by, at = now, promptVersion = Prompts.VERSION)
         return when (job) {
             Enrichments.Job.Email -> json.decodeFromString(Triage.serializer(), text).let { t ->
                 // Starred, an email is always something to do (AI-02): Admin, or an Event. Any other
