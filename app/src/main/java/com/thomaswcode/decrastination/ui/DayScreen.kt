@@ -121,6 +121,7 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
         DayModel.from(plan, day, calendar.events, log.slots, SchoolDays.windows(day, settings, tasks.timetable, school), now, zone)
     }
     val list = rememberLazyListState()
+    val snackbar = remember { androidx.compose.material3.SnackbarHostState() }
     // Before the day's rows: the strip, today's DO NOW card, the day's heading, its deadlines that won't fit.
     val head = 3 + (if (today) 1 + plan.wontFit.size else 0)
     // Today's moment in view, as today's first shown.
@@ -128,6 +129,7 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
         if (today) model.rows.indexOfFirst { it is DayModel.Row.Now }.takeIf { it > 0 }?.let { list.scrollToItem(head + it - 1) }
     }
 
+    Box(Modifier.fillMaxWidth()) {
     LazyColumn(state = list, modifier = Modifier.fillMaxWidth(), contentPadding = PaddingValues(bottom = 96.dp)) {
         item(key = "hint") { Hint(graph, "day", "Day is when: today's slots as they come, and the week's days above. Work is what: every task, on the next tab.") }
         item(key = "week") { WeekStrip(plan, day) { chosen = it.toString() } }
@@ -167,13 +169,29 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
             when (row) {
                 is DayModel.Row.Window -> WindowRow(row, zone)
                 is DayModel.Row.Event -> EventRow(row.event, EventJudge.judge(row.event, answers), runtime.eventsAsked, now, zone) { eventFor = eventKey(row.event) }
-                is DayModel.Row.Planned -> PlannedRow(row, plan, zone, messageOf(row.slot.chunk?.taskId.orEmpty()), onOpen = { row.slot.chunk?.let { sheetFor = it.key } }) {
-                    val chunk = row.slot.chunk ?: return@PlannedRow
-                    scope.launch {
-                        val kept = graph.focus.keepSlot(chunk.key, seenAt = now)
-                        say(chunk.taskId, if (kept) "Done: ${chunk.label}." else "That piece has changed since (done, or planned again).")
-                    }
-                }
+                is DayModel.Row.Planned -> PlannedRow(
+                    row, plan, zone, messageOf(row.slot.chunk?.taskId.orEmpty()),
+                    onOpen = { row.slot.chunk?.let { sheetFor = it.key } },
+                    // Done, with an Undo while it's said (UI-03).
+                    onDone = {
+                        val chunk = row.slot.chunk ?: return@PlannedRow
+                        scope.launch {
+                            val since = graph.clock.now()
+                            if (!graph.focus.keepSlot(chunk.key, seenAt = now)) {
+                                snackbar.showSnackbar("That piece has changed since (done, or planned again).")
+                            } else if (snackbar.showSnackbar("Done: ${chunk.label}", actionLabel = "Undo", duration = androidx.compose.material3.SnackbarDuration.Short) == androidx.compose.material3.SnackbarResult.ActionPerformed) {
+                                if (!graph.focus.unkeepSlot(chunk.key, since)) snackbar.showSnackbar("It can't be taken back now: its task is finished.")
+                            }
+                        }
+                    },
+                    onLater = {
+                        val chunk = row.slot.chunk ?: return@PlannedRow
+                        scope.launch {
+                            val at = graph.laterToday(chunk.key)
+                            snackbar.showSnackbar(at?.let { "Later today, at ${clock(it, zone)}: undone in the chat's Your changes" } ?: "No time left today for it")
+                        }
+                    },
+                )
                 is DayModel.Row.Recorded -> RecordedRow(row.record, zone)
                 is DayModel.Row.Gap -> GapRow(row)
                 is DayModel.Row.Now -> NowRow(row.at, zone)
@@ -196,6 +214,9 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
                 }
             }
         }
+    }
+
+    androidx.compose.material3.SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).padding(bottom = 72.dp))
     }
 
     // A piece's actions, as the block screen has them.
@@ -331,9 +352,13 @@ private fun verdict(judgement: EventJudge.Judgement, asked: Boolean): String = w
     EventJudge.Judgement.Ask -> if (asked) "Asked" else "Not known"
 }
 
-/** A slot of the plan's: its time, its piece and why it's there, and a tick; outside, a small card. */
+/**
+ * A slot of the plan's: its time, its piece and why it's there, and Done; swiped right to left it's
+ * done, left to right it's later today (UI-03). Outside, a small card.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun PlannedRow(row: DayModel.Row.Planned, plan: Plan, zone: ZoneId, message: String?, onOpen: () -> Unit, onTick: () -> Unit) {
+private fun PlannedRow(row: DayModel.Row.Planned, plan: Plan, zone: ZoneId, message: String?, onOpen: () -> Unit, onDone: () -> Unit, onLater: () -> Unit) {
     val slot: Slot = row.slot
     val chunk = slot.chunk
     if (slot.kind == SlotKind.Outside || chunk == null) {
@@ -346,9 +371,32 @@ private fun PlannedRow(row: DayModel.Row.Planned, plan: Plan, zone: ZoneId, mess
         return
     }
     val now = row.state == DayModel.State.Now
+    val swipe = androidx.compose.material3.rememberSwipeToDismissBoxState(positionalThreshold = { it * 0.4f })
+    val scope = rememberCoroutineScope()
+    androidx.compose.material3.SwipeToDismissBox(
+        state = swipe,
+        modifier = Modifier.padding(horizontal = 12.dp, vertical = 3.dp),
+        backgroundContent = {
+            val done = swipe.dismissDirection == androidx.compose.material3.SwipeToDismissBoxValue.EndToStart
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 16.dp),
+                horizontalArrangement = if (done) Arrangement.End else Arrangement.Start,
+                verticalAlignment = Alignment.CenterVertically,
+            ) { Text(if (done) "Done" else "Later today", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary) }
+        },
+        onDismiss = { value ->
+            // Back in place: the row goes when the plan's made again.
+            scope.launch { swipe.reset() }
+            when (value) {
+                androidx.compose.material3.SwipeToDismissBoxValue.EndToStart -> onDone()
+                androidx.compose.material3.SwipeToDismissBoxValue.StartToEnd -> onLater()
+                else -> Unit
+            }
+        },
+    ) {
     Card(
         onClick = onOpen,
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 3.dp),
+        modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = if (now) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh),
     ) {
@@ -367,8 +415,9 @@ private fun PlannedRow(row: DayModel.Row.Planned, plan: Plan, zone: ZoneId, mess
                 Text(chunk.whyLine(plan.today, zone), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 message?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary) }
             }
-            TextButton(onClick = onTick) { Text("Done") }
+            TextButton(onClick = onDone) { Text("Done") }
         }
+    }
     }
 }
 

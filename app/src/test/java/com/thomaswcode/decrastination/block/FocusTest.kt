@@ -828,4 +828,21 @@ class FocusTest {
         focus.grantAllowanceIfDue()
         assertEquals(0L, focus.creditLeftMs())
     }
+
+    @Test
+    fun `a kept slot taken back is to do again, its minutes and free time back`() = runTest {
+        val first = laid(task("t", due = "2026-10-12T23:59", steps = listOf(SubStep("Q1", 15), SubStep("Q2", 15)), effort = 30)).first()
+        clock.time = first.end
+        val since = clock.time
+        assertTrue(slotted.keepSlot(first.chunk!!.key))
+        assertEquals(5 * 60_000L, slotted.creditLeftMs())
+        assertTrue(slotted.unkeepSlot(first.chunk!!.key, since))
+        val t = tasks.value.tasks.single()
+        assertEquals(listOf(false, false), t.subSteps.map { it.done })
+        assertEquals(0, t.workedMin)
+        assertEquals(emptyList(), log.value.slots)
+        assertEquals(0L, slotted.creditLeftMs())
+        // Nothing kept since: nothing to take back.
+        assertFalse(slotted.unkeepSlot(first.chunk!!.key, since))
+    }
 }
