@@ -147,7 +147,8 @@ class AskActivity : ComponentActivity() {
         graph.chatInFront = true
         graph.scope.launch {
             graph.answerChat()
-            graph.readInstructions()
+            // On the screen they're shown on: you're waiting on them.
+            graph.readInstructions(interactive = true)
         }
     }
 

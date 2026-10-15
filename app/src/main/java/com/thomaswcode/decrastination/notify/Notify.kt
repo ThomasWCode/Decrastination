@@ -42,24 +42,38 @@ object Notify {
         if (allowed(context) && !held(context, id, null, notification)) NotificationManagerCompat.from(context).notify(id, notification)
     }
 
+    /** Held while a routine one's ceiling is decided and counted, so two at once don't both take the last place. */
+    private val counting = Any()
+
+    /** Today's count as this run has it: ahead of the file, which is written after. */
+    private var count: Pair<String, Int>? = null
+
     /**
      * Whether [notification] is held back (LR-07): one of the routine channels' in quiet hours, or
-     * past today's ceiling. Held, its words are kept for the next briefing; gone, it's counted.
+     * past today's ceiling, decided and counted in one step. Held, its words are kept for the next
+     * briefing; gone, it's counted. One on a channel you've switched off isn't shown, so it's neither.
      */
     private fun held(context: Context, id: Int, tag: String?, notification: Notification): Boolean {
         val channel = notification.channelId ?: return false
-        if (channel !in NotifyRules.CEILINGED) return false
+        if (channel !in NotifyRules.CEILINGED || !shown(context, channel)) return false
         val graph = com.thomaswcode.decrastination.AppGraph.get(context)
         val now = graph.clock.now()
         val date = graph.focus.today(now).toString()
         val quiet = com.thomaswcode.decrastination.block.BlockPolicy.isQuiet(now, graph.clock.zone(), graph.settings.value)
-        val goes = NotifyRules.goesNow(channel, graph.runtime.value.notifiedToday[date] ?: 0, quiet)
+        val goes: Boolean
+        val sent: Int
+        synchronized(counting) {
+            val before = count?.takeIf { it.first == date }?.second ?: (graph.runtime.value.notifiedToday[date] ?: 0)
+            goes = NotifyRules.goesNow(channel, before, quiet)
+            sent = if (goes) before + 1 else before
+            count = date to sent
+        }
         val extras = notification.extras
         val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString().orEmpty()
         val text = (extras.getCharSequence(Notification.EXTRA_BIG_TEXT) ?: extras.getCharSequence(Notification.EXTRA_TEXT))?.toString().orEmpty()
         graph.scope.launch {
             graph.runtime.update { s ->
-                if (goes) s.copy(notifiedToday = NotifyRules.counted(s.notifiedToday, date))
+                if (goes) s.copy(notifiedToday = mapOf(date to maxOf(sent, s.notifiedToday[date] ?: 0)))
                 else s.copy(heldNotifications = (s.heldNotifications.filterNot { it.id == id && it.tag == tag } + HeldNotification(channel, id, tag, now, title, text)).takeLast(NotifyRules.MAX_HELD))
             }
         }

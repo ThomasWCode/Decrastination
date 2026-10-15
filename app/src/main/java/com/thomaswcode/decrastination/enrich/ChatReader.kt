@@ -128,11 +128,20 @@ object ChatPrompts {
      * so a long list of tasks can't push it out: the list loses its end, and the plan its far days.
      */
     fun turns(messages: List<ChatMessage>, context: String, tasks: Map<String, TaskItem>, zone: ZoneId, budget: Int = Pricing.MAX_INPUT_CHARS, plan: String = ""): List<Pair<Speaker, String>> {
-        val recent = messages.takeLast(HISTORY).dropWhile { it.from != Speaker.You }
+        val last = messages.takeLast(HISTORY)
+        // Before any of yours: an answer cut off from its question by the window goes; a message of
+        // Felix's own (a notification you answered, [ChatMessage.reason]) is said in your first turn,
+        // as the conversation has to start with one of yours.
+        val lead = last.takeWhile { it.from != Speaker.You }.filter { it.reason != null }
+        val recent = last.dropWhile { it.from != Speaker.You }
         if (recent.isEmpty()) return emptyList()
         // A turn each way at a time: a message of Felix's from a notification can follow his last answer.
-        val texts = recent.map { m -> m.from to text(m, tasks, zone) }.fold(emptyList<Pair<Speaker, String>>()) { turns, (from, text) ->
+        val folded = recent.map { m -> m.from to text(m, tasks, zone) }.fold(emptyList<Pair<Speaker, String>>()) { turns, (from, text) ->
             if (turns.lastOrNull()?.first == from) turns.dropLast(1) + (from to turns.last().second + "\n\n" + text) else turns + (from to text)
+        }
+        val texts = if (lead.isEmpty()) folded else {
+            val before = lead.joinToString("\n") { "(You'd written to them: “${it.text.trim().take(MAX_TEXT)}”)" }
+            listOf(folded.first().first to before + "\n\n" + folded.first().second) + folded.drop(1)
         }
         val newest = texts.last().second.take(budget)
         // The turns before it, newest first, while they fit their share, starting again with one of yours.

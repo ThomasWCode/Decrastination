@@ -277,12 +277,12 @@ object Backups {
      * here; this phone's own wins, and what's past the room goes, oldest first.
      */
     fun mergedMemory(here: com.thomaswcode.decrastination.core.MemoryState, backup: com.thomaswcode.decrastination.core.MemoryState): com.thomaswcode.decrastination.core.MemoryState {
-        val given = backup.facts.filter { f -> here.facts.none { it.topic.equals(f.topic, ignoreCase = true) } }.map { com.thomaswcode.decrastination.core.Given(it.topic, it.text) } +
-            backup.rules.map { com.thomaswcode.decrastination.core.Given(text = it.text, kind = com.thomaswcode.decrastination.core.Given.RULE) }
-        val (merged, _) = com.thomaswcode.decrastination.core.Memories.apply(here, given, 0L)
-        // The backup's own times, not 0: the merge keeps what each was.
-        val times = (backup.facts.associate { it.topic.lowercase() to it.at } + here.facts.associate { it.topic.lowercase() to it.at })
-        return merged.copy(facts = merged.facts.map { f -> f.copy(at = times[f.topic.lowercase()] ?: f.at) }.sortedBy { it.at })
+        fun same(a: String, b: String) = a.trim().equals(b.trim(), ignoreCase = true)
+        // Each with its own time, so the room is kept oldest first, wherever each came from.
+        val facts = (here.facts + backup.facts.filter { f -> here.facts.none { same(it.topic, f.topic) } }.distinctBy { it.topic.trim().lowercase() }).sortedBy { it.at }.toMutableList()
+        while (facts.size > 1 && com.thomaswcode.decrastination.core.Memories.chars(facts) > com.thomaswcode.decrastination.core.Memories.FACT_BUDGET_CHARS) facts.removeAt(0)
+        val rules = (here.rules + backup.rules.filter { r -> here.rules.none { same(it.text, r.text) } }.distinctBy { it.text.trim().lowercase() }).take(com.thomaswcode.decrastination.core.Memories.RULE_MAX)
+        return com.thomaswcode.decrastination.core.MemoryState(facts, rules)
     }
 
     /**

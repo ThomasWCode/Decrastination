@@ -52,19 +52,16 @@ data class AiUsage(
      */
     fun allows(capUsd: Int?, inFlight: Int = 0): Boolean = capUsd == null || spentUsd + (inFlight + 1) * Pricing.WORST_CALL_USD <= capUsd
 
-    /** A call that went through: the key works, whatever was wrong with it before. */
-    fun record(costUsd: Double, refused: Boolean, at: Long): AiUsage = copy(
-        spentUsd = spentUsd + costUsd,
-        calls = calls + 1,
-        refused = this.refused + if (refused) 1 else 0,
-        lastError = null,
-        lastCallAt = at,
-        keyProblem = null,
-        keyProblemSince = null,
-        keyAlerted = false,
-        restUntil = null,
-        failuresInRow = 0,
-    )
+    /**
+     * A call sent at [at] that went through: the key works, whatever was wrong with it before; but
+     * one sent before a failure since (calls overlap, AC-05) is counted only, the rest and the key
+     * problem that failure found standing.
+     */
+    fun record(costUsd: Double, refused: Boolean, at: Long): AiUsage {
+        val counted = copy(spentUsd = spentUsd + costUsd, calls = calls + 1, refused = this.refused + if (refused) 1 else 0, lastCallAt = maxOf(lastCallAt ?: at, at))
+        if (failedAt.any { it > at } || (keyProblemSince ?: Long.MIN_VALUE) > at) return counted
+        return counted.copy(lastError = null, keyProblem = null, keyProblemSince = null, keyAlerted = false, restUntil = null, failuresInRow = 0)
+    }
 
     /**
      * A failed call. One showing a problem with the key or the account ([problem]) begins a
@@ -74,7 +71,8 @@ data class AiUsage(
         failed = failed + 1,
         lastError = error,
         lastCallAt = at,
-        restUntil = if (restMs > 0) at + restMs else null,
+        // A rest under way that's longer stands: another call's failure set it.
+        restUntil = listOfNotNull(restUntil?.takeIf { it > at }, (at + restMs).takeIf { restMs > 0 }).maxOrNull(),
         failuresInRow = failuresInRow + 1,
         lastFailureClass = kind?.name ?: lastFailureClass,
         failedAt = (failedAt + at).filter { at - it < Failures.HOUR_MS },

@@ -364,6 +364,18 @@ class ChatTest {
     }
 
     @Test
+    fun `a message of Felix's before any of yours goes with your first turn`() {
+        val messages = listOf(
+            ChatMessage("f", Speaker.Claude, "Ten minutes into the physics: starting?", now - 600_000L, reason = "SlotStart"),
+            ChatMessage("r", Speaker.You, "Give me 15", now),
+        )
+        val turns = ChatPrompts.turns(messages, "", mapOf(bridge.id to bridge), LONDON)
+        assertEquals(listOf(Speaker.You), turns.map { it.first })
+        assertTrue("(You'd written to them: “Ten minutes into the physics: starting?”)" in turns.single().second, turns.single().second)
+        assertTrue(turns.single().second.endsWith("Give me 15"))
+    }
+
+    @Test
     fun `two messages of Felix's in a row are one turn`() {
         val messages = listOf(
             ChatMessage("1", Speaker.You, "Move the physics", now - 3_000_000L, answeredAt = now - 2_900_000L),
