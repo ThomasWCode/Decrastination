@@ -23,6 +23,7 @@ import com.thomaswcode.decrastination.core.ProposalState
 import com.thomaswcode.decrastination.core.Speaker
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.Unplanned
+import com.thomaswcode.decrastination.core.Why
 import com.thomaswcode.decrastination.core.shareOut
 import com.thomaswcode.decrastination.learn.CalendarEvent
 import com.thomaswcode.decrastination.learn.EventJudge
@@ -172,17 +173,22 @@ object ChatPrompts {
         val byId = tasks.associateBy { it.id }
         appendLine("Today: ${Instant.ofEpochMilli(now).atZone(zone).format(TODAY)} (${zone.id})")
         appendLine()
-        appendLine("Open tasks (id | title | from | kind | due | minutes in all | minutes worked so far | can't start before):")
-        val open = tasks.filter { it.isOpen && !it.hidden }.sortedBy { it.dueAt ?: Long.MAX_VALUE }
+        appendLine("Open tasks (id | title | from | kind | due, a real deadline unless marked a plan, which is never overdue and moves on once it passes | minutes in all | minutes worked so far | can't start before):")
+        // By the date shown (the deadline in force, PL-14), so a plan's date gone by doesn't crowd nearer ones out of the list.
+        val open = tasks.filter { it.isOpen && !it.hidden }.sortedBy { it.deadlineAt(now) ?: it.dueAt ?: Long.MAX_VALUE }
         if (open.isEmpty()) appendLine("(none)")
         open.take(InstructionPrompts.MAX_TASKS).forEach { t ->
             val start = listOfNotNull(t.availableFrom, t.userFrom, t.notBefore).maxOrNull()?.takeIf { it > now }
-            appendLine("- ${t.id} | ${t.title.take(MAX_TITLE)} | ${t.source.label} | ${t.kind.label} | ${t.dueAt?.let(::at) ?: "no date"} | ${t.effortMin} | ${t.workedMin + t.photoMin} | ${start?.let(::at) ?: "-"}")
+            // A date the app or Claude set is a plan, not a deadline (PL-14): said, so it's not called overdue.
+            val due = (t.deadlineAt(now) ?: t.dueAt)?.let { at(it) + if (t.hardAt(now)) "" else " (a plan)" } ?: "no date"
+            appendLine("- ${t.id} | ${t.title.take(MAX_TITLE)} | ${t.source.label} | ${t.kind.label} | $due | ${t.effortMin} | ${t.workedMin + t.photoMin} | ${start?.let(::at) ?: "-"}")
         }
         appendLine()
         appendLine("Calendar events in the next fortnight (eventKey | title | when):")
-        if (events.isEmpty()) appendLine("(none)")
-        events.sortedBy { it.start }.take(InstructionPrompts.MAX_EVENTS).forEach { e ->
+        // The calendar's read as far as the plan reaches (DX-14); the chat is told of the fortnight's.
+        val fortnight = events.filter { it.start < now + InstructionPrompts.EVENTS_AHEAD_MS }
+        if (fortnight.isEmpty()) appendLine("(none)")
+        fortnight.sortedBy { it.start }.take(InstructionPrompts.MAX_EVENTS).forEach { e ->
             val time = if (e.allDay) "all day " + Instant.ofEpochMilli(e.start).atZone(ZoneId.of("UTC")).toLocalDate().format(DAY) else "${at(e.start)} to ${at(e.end)}"
             appendLine("- ${EventJudge.key(e)} | ${e.title.take(MAX_TITLE)} | $time")
         }
@@ -213,7 +219,11 @@ object ChatPrompts {
         appendLine(
             "The plan: the work the app has them do each day so every deadline is met, as its Plan tab shows it. Its minutes are the app's, " +
                 "from what it's learned of how long things take them, so they can differ from the task list's. While anything's planned for " +
-                "today or tomorrow, blocked apps stay blocked in blocking hours; otherwise they cost free time earned by working.",
+                "today, blocked apps stay blocked in blocking hours; otherwise they cost free time earned by working. Each piece's [why: …] " +
+                "says why it's on its day: duesoon (due today or tomorrow), overdue, spread (its share of the free time to its deadline), " +
+                "minimumtouch (kept within a week of its piece before), revisiongap (a day after its revision piece before), mostroom (a " +
+                "task in one piece, on the roomiest day before its deadline), soft (no due date: spare time this week), packed (its days " +
+                "are too tight to spread it, so as late as they allow), noroom (no room before its deadline).",
         )
         // As the Do now card: in a focus session, its piece and no "then".
         val doing = session?.let { plan.pieceOf(it.taskId, it.stepIndex, it.step) }
@@ -286,10 +296,12 @@ object ChatPrompts {
                 val flags = listOfNotNull(
                     first.dueAt?.let { "due ${at(it)}" } ?: "no due date",
                     "overdue".takeIf { dated && pieces.any { it.overdue } },
-                    "won't fit before its deadline".takeIf { dated && pieces.any { it.behind } },
+                    // Behind its deadline itself (PL-02), not only the safety margin, which a piece can still meet.
+                    "won't fit before its deadline".takeIf { dated && pieces.any { it.why == Why.NoRoom } },
                     pieces.mapNotNull { it.availableAt }.minOrNull()?.let { "can't start before ${at(it)}" },
                 )
-                val parts = pieces.joinToString { "${it.step?.take(MAX_TITLE) ?: "all of it"} (${it.minutes} min)" }
+                // Why each piece is on its day, as a short code (PL-07): the sheet's sentence would take the plan's room.
+                val parts = pieces.joinToString { "${it.step?.take(MAX_TITLE) ?: "all of it"} (${it.minutes} min) [why: ${it.why.name.lowercase()}]" }
                 appendLine("  - $id | ${first.title.take(MAX_TITLE)} | ${pieces.sumOf { it.minutes }} min: $parts | ${flags.joinToString(" | ")}")
             }
         }

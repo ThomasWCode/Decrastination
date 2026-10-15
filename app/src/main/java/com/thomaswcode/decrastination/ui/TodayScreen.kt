@@ -50,16 +50,19 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.R
 import com.thomaswcode.decrastination.block.FocusSession
+import com.thomaswcode.decrastination.core.About
 import com.thomaswcode.decrastination.core.Chunk
 import com.thomaswcode.decrastination.core.DayBucket
 import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Unplanned
+import com.thomaswcode.decrastination.core.WontFit
 import com.thomaswcode.decrastination.data.RuntimeState
 import com.thomaswcode.decrastination.data.TaskState
 import com.thomaswcode.decrastination.enrich.KeyProblem
 import com.thomaswcode.decrastination.protect.ProtectionActivity
 import com.thomaswcode.decrastination.widget.WidgetModel
+import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -157,6 +160,17 @@ fun TodayScreen(graph: AppGraph, activity: Activity) {
                 }
             }
             if (!expanded) return@forEach
+            // A real deadline the days before it can't hold (PL-02): said under today, with what gives.
+            if (bucket.date == plan.today) {
+                itemsIndexed(plan.wontFit, key = { _, it -> "wontfit-${it.taskId}" }) { index, short ->
+                    WontFitTile(short, index, plan.wontFit.size, plan.now, zone) {
+                        val text = "There isn't time for “${short.title}” by ${Format.at(short.deadline, plan.now, zone)}: ${Format.minutes(short.leftMin)} left, " +
+                            "${Format.minutes(short.freeMin)} free. What should I shorten, move or ask for more time on?"
+                        // In the box, to change or send: a paid call only when you send it.
+                        activity.startActivity(AskActivity.intent(activity, About(taskId = short.taskId, taskTitle = short.title), text, send = false))
+                    }
+                }
+            }
             if (bucket.chunks.isEmpty()) {
                 item(key = "empty-$day") { ListTile(0, 1) { Text("Nothing planned.", style = MaterialTheme.typography.bodyMedium) } }
             }
@@ -384,6 +398,8 @@ private fun PieceSheet(
                 style = MaterialTheme.typography.bodyMedium,
                 color = if (chunk.urgent) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            // Why it's on this day (PL-07).
+            Text(chunk.whyLine(Instant.ofEpochMilli(now).atZone(zone).toLocalDate(), zone), style = MaterialTheme.typography.bodyMedium)
             PieceActions(graph, activity, chunk, now, photo, say)
             // Its due date, minutes or start: on the task's own sheet (2.0.0).
             TextButton(onClick = onChange) { Text("Change its due date, minutes…") }
@@ -414,6 +430,24 @@ private fun UnplannedTile(gap: Unplanned, index: Int, count: Int, lastDay: Local
 }
 
 private val DAY = DateTimeFormatter.ofPattern("EEEE d MMMM", Locale.UK)
+
+/** A real deadline that its days can't hold (PL-02): what's left, what was free, and *What gives?* to ask Claude. */
+@Composable
+private fun WontFitTile(short: WontFit, index: Int, count: Int, now: Long, zone: ZoneId, onAsk: () -> Unit) {
+    ListTile(index, count) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(Modifier.weight(1f)) {
+                Text(short.title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(
+                    "${Format.minutes(short.leftMin)} left, ${Format.minutes(short.freeMin)} free before ${Format.at(short.deadline, now, zone)}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
+            TextButton(onClick = onAsk) { Text("What gives?") }
+        }
+    }
+}
 
 @Composable
 private fun DayHeader(bucket: DayBucket, today: LocalDate, expanded: Boolean, onToggle: () -> Unit) {

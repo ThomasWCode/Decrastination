@@ -289,10 +289,23 @@ class OwnTasksTest {
     }
 
     @Test
+    fun `a date the app or Claude set that has gone by is today's, not overdue`() {
+        // Claude's reading of an email, not quoting it, gave this morning (PL-14): a plan, planned again.
+        val reading = Enrichment(inputHash = "", by = "claude", at = now, kind = Kind.Admin, deadline = Fixtures.at("2026-10-12T09:00"))
+        val email = teams("email", "2026-10-12T09:00").copy(id = "gmail:email", source = Source.Gmail, enrichment = reading)
+        val groups = Groups.byDue(listOf(teams("late", "2026-10-12T09:00"), email), now, LONDON)
+        assertEquals(listOf(DueGroup.Overdue to listOf("late"), DueGroup.Today to listOf("email")), groups.map { (g, ts) -> g to ts.map { it.title } })
+        // A test date Claude read gone by, before Teams' own next Monday: under the real deadline's group.
+        val test = teams("prep", "2026-10-09T08:30").copy(sourceValues = SourceValues(Kind.Homework, Fixtures.at("2026-10-19T09:00"), null))
+        assertEquals(listOf(DueGroup.Later to listOf("prep")), Groups.byDue(listOf(test), now, LONDON).map { (g, ts) -> g to ts.map { it.title } })
+    }
+
+    @Test
     fun `a day's pieces are a row a task, where its first piece comes, its pieces in order`() {
         fun chunk(task: String, part: Int) = Chunk(
             taskId = task, source = Source.Teams, kind = Kind.Homework, title = task, step = "part $part", minutes = 30,
             dueAt = null, deadline = now, soft = false, overdue = false, dueToday = false, behind = false, part = part, parts = 3, taskMinutes = 90,
+            why = Why.Spread,
         )
         val rows = Groups.byTask(listOf(chunk("a", 1), chunk("b", 1), chunk("a", 2), chunk("a", 3)))
         assertEquals(listOf("a", "b"), rows.map { it.taskId })

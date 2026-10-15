@@ -1,5 +1,6 @@
 package com.thomaswcode.decrastination.core
 
+import com.thomaswcode.decrastination.sources.anki.AnkiRules
 import kotlin.math.floor
 import kotlin.math.roundToInt
 import kotlinx.serialization.Serializable
@@ -176,6 +177,41 @@ data class TaskItem(
 
     /** Not work to plan: an email that's just an email, or one you've said isn't a task. */
     val hidden: Boolean get() = justAnEmail || userNotATask
+
+    /**
+     * Its real deadline, where it has one (PL-14): yours; an email's own words as Claude quoted them
+     * (AI-12); else its source's own. A date the app or Claude set (a guess from an email's words, a
+     * test date Claude read before its source's deadline) isn't one.
+     */
+    val realDeadline: Long?
+        get() = userDueAt ?: when (source) {
+            // The rules' date is a guess from its words, and Claude's is only a quote where it says so:
+            // a reading of the email as it is now, not one its new content has made out of date.
+            Source.Gmail -> Enrichments.current(this)?.takeIf { it.deadlineQuoted && it.deadline == dueAt }?.deadline
+            // A deck for homework has its assignments' deadline, not one of its own: their earliest real
+            // one, as read with them (the planner reads them through it), as its date may be a test
+            // date Claude read, a plan.
+            Source.Anki if extra[AnkiRules.EXTRA_FOR] != null -> extra[AnkiRules.EXTRA_REAL]?.toLongOrNull()
+            // Your own task's date is yours; a source's, its own (one kept from before Phase 4 has no source values).
+            else -> if (sourceValues != null) sourceValues.dueAt else dueAt
+        }
+
+    /**
+     * The deadline in force is a real one ([realDeadline]). Otherwise it's a plan: it orders the work,
+     * it's never overdue, and once it has passed the real deadline behind it holds, or with none the
+     * work is planned again ([Planner]).
+     */
+    val hardDeadline: Boolean get() = dueAt != null && dueAt == realDeadline
+
+    /**
+     * The deadline in force at [now] (PL-14), as the plan holds it: [dueAt] where it's the real one or
+     * a plan still to come; a plan gone by gives way to the real deadline behind it; with none, null,
+     * and the work is undated again.
+     */
+    fun deadlineAt(now: Long): Long? = dueAt?.takeIf { it == realDeadline || it >= now } ?: realDeadline
+
+    /** Whether [deadlineAt] is a real deadline, which can be missed. */
+    fun hardAt(now: Long): Boolean = deadlineAt(now)?.let { it == realDeadline } == true
 
     /**
      * Minutes of blocks you ticked off by hand in Tasks: done, but neither timed nor checked, so

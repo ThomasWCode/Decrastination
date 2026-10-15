@@ -140,16 +140,21 @@ fun TaskSheet(graph: AppGraph, activity: Activity, taskId: String, onClose: () -
                 val sourceDue = task.sourceValues?.dueAt
                 Field(
                     "Due",
-                    when (val due = task.dueAt) {
+                    // The deadline in force: a plan's gone by gives way to the real one behind it (PL-14).
+                    when (val due = task.deadlineAt(now) ?: task.dueAt) {
                         null -> "No due date"
-                        else -> (if (due < now) "Overdue: " else "") + Format.at(due, now, zone).replaceFirstChar(Char::uppercase)
+                        // Only a real deadline is overdue (PL-14); a date the app or Claude set moves on.
+                        else -> when {
+                            due >= now || task.hardAt(now) -> (if (due < now) "Overdue: " else "") + Format.at(due, now, zone).replaceFirstChar(Char::uppercase)
+                            else -> "Planned again: its date was " + Format.at(due, now, zone)
+                        }
                     },
                     note = when {
                         own -> null
                         task.userDueAt != null -> "Yours: ${task.source.label} says ${sourceDue?.let { Format.at(it, now, zone) } ?: "no date"}"
                         else -> null
                     },
-                    urgent = task.isOpen && task.dueAt?.let { it < now } == true,
+                    urgent = task.isOpen && task.hardAt(now) && task.deadlineAt(now)?.let { it < now } == true,
                     onChange = if (changeable) ({ picking = OwnChange.DueOn }) else null,
                     undo = when {
                         own && changeable && task.dueAt != null -> "Clear" to { make(Change(ChangeType.DueBy, taskId = task.id, time = null), "") }
@@ -328,7 +333,8 @@ private fun Steps(graph: AppGraph, task: TaskItem, now: Long, zone: java.time.Zo
     val planned = task.plannedStepMinutes(1.0)
     Text("Steps", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     task.subSteps.forEachIndexed { index, step ->
-        val dates = listOfNotNull(step.from?.let { "from " + Format.at(it, now, zone) }, step.dueAt?.let { Format.due(it, now, zone) }).joinToString(", ")
+        // A step's own date is a plan, never overdue (PL-14).
+        val dates = listOfNotNull(step.from?.let { "from " + Format.at(it, now, zone) }, step.dueAt?.let { Format.due(it, hard = false, now, zone) }).joinToString(", ")
         val minutes = Format.minutes(planned[index])
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(

@@ -19,9 +19,12 @@ class FormatTest {
 
     @Test
     fun `deadlines say when they're past`() {
-        assertEquals("Overdue: due Mon 5 Oct 14:30", Format.due(Fixtures.at("2026-10-05T14:30"), now, LONDON))
-        assertEquals("Due today 23:59", Format.due(Fixtures.at("2026-10-07T23:59"), now, LONDON))
-        assertEquals("No deadline", Format.due(null, now, LONDON))
+        assertEquals("Overdue: due Mon 5 Oct 14:30", Format.due(Fixtures.at("2026-10-05T14:30"), hard = true, now, LONDON))
+        assertEquals("Due today 23:59", Format.due(Fixtures.at("2026-10-07T23:59"), hard = true, now, LONDON))
+        assertEquals("No deadline", Format.due(null, hard = false, now, LONDON))
+        // A date the app or Claude set isn't overdue once it's gone by: the work is planned again (PL-14).
+        assertEquals("Planned again: its date was Mon 5 Oct 14:30", Format.due(Fixtures.at("2026-10-05T14:30"), hard = false, now, LONDON))
+        assertEquals("Due today 23:59", Format.due(Fixtures.at("2026-10-07T23:59"), hard = false, now, LONDON))
     }
 
     @Test

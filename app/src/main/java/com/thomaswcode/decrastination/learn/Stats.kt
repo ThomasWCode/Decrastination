@@ -30,7 +30,7 @@ object Stats {
         /** Newest first, today included. */
         val days: List<Day>,
         val completions: Int,
-        /** Completions that had a deadline, and of them, those confirmed done by it. */
+        /** Completions that had a real deadline (PL-14: not a date the app or Claude set), and of them, those confirmed done by it. */
         val dated: Int,
         val onTime: Int,
         val sessions: Int,
@@ -73,7 +73,8 @@ object Stats {
                 planDone = plans[date.toString()]?.full,
             )
         }
-        val dated = completions.filter { it.dueAt != null }
+        // Only real deadlines are met or missed (PL-14): a date the app or Claude set was a plan.
+        val dated = completions.filter { it.dueAt != null && it.hardDeadline }
         return Summary(
             days = perDay,
             completions = completions.size,
@@ -115,7 +116,12 @@ object Stats {
             "${kind.label}: finished $days day${if (days == 1) "" else "s"} before the deadline"
         }
         val boxes = calibration.boxMin.entries.sortedBy { it.key.ordinal }.map { (kind, minutes) -> "${kind.label}: cut into $minutes-minute pieces" }
-        return multipliers + coming + margins + boxes
+        // How much of each kind of day's free time is used (PL-06), and the days it rests on.
+        val yields = calibration.yields.entries.sortedBy { it.key.ordinal }.map { (kind, share) ->
+            val n = calibration.yieldDays[kind] ?: 0
+            "${kind.label}: about ${kotlin.math.round(share * 100).toInt()} % of the free time used" + if (n > 0) " (from $n days)" else ""
+        }
+        return multipliers + coming + margins + boxes + yields
     }
 
     private const val TOP = 5

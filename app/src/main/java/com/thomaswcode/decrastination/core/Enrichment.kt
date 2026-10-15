@@ -23,6 +23,11 @@ data class Enrichment(
     val actionableFrom: Long? = null,
     /** A deadline the text gives that the source doesn't know. */
     val deadline: Long? = null,
+    /**
+     * Whether an email's [deadline] is its own words (AI-12): only then is it a deadline that can be
+     * missed (PL-14); a day it only suggests, or one the model guessed, is a plan. False for the rules'.
+     */
+    val deadlineQuoted: Boolean = false,
     val effortMin: Int? = null,
     /** The next thing to do, in a few words. */
     val nextStep: String? = null,

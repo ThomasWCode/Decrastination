@@ -26,10 +26,14 @@ object Format {
         }
     }
 
-    /** "Due today 23:59", or "Overdue: due yesterday 21:00". */
-    fun due(dueAt: Long?, now: Long, zone: ZoneId): String = when {
+    /**
+     * "Due today 23:59", or "Overdue: due yesterday 21:00". Only a [hard] deadline is overdue
+     * (PL-14): a date the app or Claude set that has gone by was a plan, and the work is planned again.
+     */
+    fun due(dueAt: Long?, hard: Boolean, now: Long, zone: ZoneId): String = when {
         dueAt == null -> "No deadline"
-        dueAt < now -> "Overdue: due ${at(dueAt, now, zone)}"
+        dueAt < now && hard -> "Overdue: due ${at(dueAt, now, zone)}"
+        dueAt < now -> "Planned again: its date was ${at(dueAt, now, zone)}"
         else -> "Due ${at(dueAt, now, zone)}"
     }
 

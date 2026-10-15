@@ -15,6 +15,7 @@ import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.R
 import com.thomaswcode.decrastination.block.BlockPolicy
 import com.thomaswcode.decrastination.core.Instructions
+import com.thomaswcode.decrastination.core.Planner
 import com.thomaswcode.decrastination.notify.Channels
 import com.thomaswcode.decrastination.notify.Notify
 import com.thomaswcode.decrastination.widget.WidgetUpdater
@@ -40,7 +41,13 @@ object CalendarTime {
     const val EXTRA_ANSWER = "answer"
     private const val BASE_ID = 4200
     private const val DAY_MS = 24 * 3_600_000L
-    private const val LOOK_AHEAD_MS = 14 * DAY_MS
+    /**
+     * The end of the plan's last day (DX-14): its days run to today + [Planner.MAX_HORIZON_DAYS], each
+     * whole, so the calendar is read to that day's midnight, where you are; a trip in the plan's third
+     * week takes its day's hours out of the spread.
+     */
+    fun readUntil(now: Long, zone: ZoneId): Long =
+        Instant.ofEpochMilli(now).atZone(zone).toLocalDate().plusDays(Planner.MAX_HORIZON_DAYS + 1).atStartOfDay(zone).toInstant().toEpochMilli()
     private const val ASK_AHEAD_MS = 7 * DAY_MS
 
     fun allowed(context: Context): Boolean = context.checkSelfPermission(PERMISSION) == PackageManager.PERMISSION_GRANTED
@@ -109,19 +116,19 @@ object CalendarTime {
         // Your instructions about events over your answers to its questions; a question one of them
         // has answered since it was asked is withdrawn.
         val yours = Instructions.eventAnswers(graph.instructions.value.applied)
-        val events = runCatching { withContext(Dispatchers.IO) { read(context, now - DAY_MS, now + LOOK_AHEAD_MS) } }
+        val events = runCatching { withContext(Dispatchers.IO) { read(context, now - DAY_MS, readUntil(now, graph.clock.zone())) } }
             .onFailure { Log.w(AppGraph.TAG, "Can't read the calendar", it) }
             .getOrNull() ?: run {
             // Not read this time: the events last read, judged again with the answers as they are
             // now, so an instruction applied or taken back counts all the same.
-            graph.calendarTime = EventJudge.time(graph.calendarTime.events, graph.runtime.value.eventAnswers + yours, graph.clock.zone())
+            graph.calendarTime = EventJudge.time(graph.calendarTime.events, graph.runtime.value.eventAnswers + yours, graph.clock.zone(), askUntil = now + ASK_AHEAD_MS)
             return
         }
         yours.keys.forEach { cancelQuestion(context, it) }
         // Not counted as asked: taken back, the instruction leaves it to be asked again.
         if (graph.runtime.value.eventsAsked.any { it in yours }) graph.runtime.update { it.copy(eventsAsked = it.eventsAsked - yours.keys) }
         val answers = graph.runtime.value.eventAnswers + yours
-        val time = EventJudge.time(events, answers, graph.clock.zone())
+        val time = EventJudge.time(events, answers, graph.clock.zone(), askUntil = now + ASK_AHEAD_MS)
         graph.calendarTime = time
         // Not at night: they're asked at the first look after quiet hours. Nor while the question
         // couldn't be seen (notifications off): it's asked once it can be, not marked asked unseen.

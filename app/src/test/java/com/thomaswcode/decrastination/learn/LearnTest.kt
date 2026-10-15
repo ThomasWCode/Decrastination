@@ -3,6 +3,7 @@ package com.thomaswcode.decrastination.learn
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.Fixtures.LONDON
 import com.thomaswcode.decrastination.core.Calibration
+import com.thomaswcode.decrastination.core.DayKind
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.data.ActivityLog
@@ -68,7 +69,7 @@ class CalibratorTest {
         assertNull(Calibrator.upgraded(now, one))
         assertNull(Calibrator.upgraded(Calibration(multipliers = mapOf("Homework|" to 1.1), counted = true), one))
         assertNull(Calibrator.upgraded(Calibration(), one))
-        assertTrue(Calibrator.learn(ActivityLog(), Calibration(), 25, week = 0).calibration.counted)
+        assertTrue(Calibrator.learn(ActivityLog(), Calibration(), 25, week = 0, today = LocalDate.parse("2026-10-11")).calibration.counted)
     }
 
     @Test
@@ -102,6 +103,8 @@ class CalibratorTest {
         // Never past three days.
         val veryLate = (0..9).map { done("v$it", dueAt = due + it * DAY, doneAt = due + it * DAY + HOUR) }
         assertEquals(mapOf(Kind.Homework to 3), Calibrator.margins(veryLate))
+        // Late against dates the app or Claude set: plans, which teach no margin (PL-14).
+        assertEquals(emptyMap(), Calibrator.margins(late.map { it.copy(hardDeadline = false) }))
     }
 
     @Test
@@ -116,6 +119,26 @@ class CalibratorTest {
         val log = ActivityLog(sessions = sessions, completions = onTime)
         assertEquals(mapOf(Kind.Homework to 25), Calibrator.boxes(log, defaultBox = 45, week = 7))
         assertEquals(Calibrator.boxes(log, 45, week = 7), Calibrator.boxes(log, 45, week = 7))
+        // Done by a plan's date, not a real deadline: the 25s earn nothing, and the default stands (PL-14).
+        val planned = log.copy(completions = onTime.map { it.copy(hardDeadline = false) })
+        assertEquals(emptyMap(), Calibrator.boxes(planned, defaultBox = 45, week = 7))
+    }
+
+    @Test
+    fun `work done by a plan's date judges no box, for or against`() {
+        // Twelve 25s on work done by real deadlines; twelve 60s on work done by dates the app set.
+        val real = (1..12).map { done("t$it") }
+        val planned = (1..12).map { done("p$it").copy(hardDeadline = false) }
+        val sessions = (1..12).flatMap { i ->
+            listOf(
+                SessionRecord("t$i", Kind.Homework, label = "t$i", plannedMin = 25, workedMin = 25, startedAt = 0, endedAt = 0, completed = true, box = 25),
+                SessionRecord("p$i", Kind.Homework, label = "p$i", plannedMin = 60, workedMin = 60, startedAt = 0, endedAt = 0, completed = true, box = 60),
+            )
+        }
+        val log = ActivityLog(sessions = sessions, completions = real + planned)
+        // The 60s count for nothing (PL-14), so twelve sessions don't settle it: some weeks still try another.
+        assertTrue((1L..40L).any { Calibrator.boxes(log, defaultBox = 45, week = it)[Kind.Homework] != 25 })
+        assertEquals(mapOf(Kind.Homework to 25), Calibrator.boxes(log.copy(completions = real + planned.map { it.copy(hardDeadline = true) }), defaultBox = 45, week = 7))
     }
 
     @Test
@@ -163,7 +186,7 @@ class CalibratorTest {
     @Test
     fun `a multiplier gone back to its fallback is said`() {
         val previous = Calibration(multipliers = mapOf("Homework|12.1 Physics" to 1.5))
-        val learned = Calibrator.learn(ActivityLog(), previous, defaultBox = 45, week = 1)
+        val learned = Calibrator.learn(ActivityLog(), previous, defaultBox = 45, week = 1, today = LocalDate.parse("2026-10-11"))
         assertTrue(learned.changes.any { "Homework in 12.1 Physics takes ×1.00" in it }, learned.changes.toString())
     }
 
@@ -188,16 +211,74 @@ class CalibratorTest {
     @Test
     fun `a box length gone back to the default is said`() {
         val previous = Calibration(boxMin = mapOf(Kind.Homework to 25))
-        val learned = Calibrator.learn(ActivityLog(), previous, defaultBox = 45, week = 1)
+        val learned = Calibrator.learn(ActivityLog(), previous, defaultBox = 45, week = 1, today = LocalDate.parse("2026-10-11"))
         assertTrue(learned.changes.any { "Homework: pieces of 45 minutes" in it }, learned.changes.toString())
     }
 
     @Test
     fun `what changed is said in words`() {
-        val learned = Calibrator.learn(ActivityLog(completions = listOf(done("a", worked = 80))), Calibration(), defaultBox = 45, week = 1)
+        val learned = Calibrator.learn(ActivityLog(completions = listOf(done("a", worked = 80))), Calibration(), defaultBox = 45, week = 1, today = LocalDate.parse("2026-10-11"))
         // One timed piece: the kind's figure, not yet the class's own (IMP-P2-016).
         assertTrue(learned.changes.any { "Homework, any class takes ×1.30" in it }, learned.changes.toString())
         assertTrue(learned.changes.none { "12.1 Physics" in it }, learned.changes.toString())
+    }
+}
+
+/** How much of each kind of day's free time is used (PL-06), from the days' records. */
+class YieldTest {
+    private val sunday = LocalDate.parse("2026-10-18")
+
+    /** [date]'s record: [planned] minutes, [done] of them by the day's end. */
+    private fun day(date: String, planned: Int, done: Int?) = DayRecord(date, planned, emptyList(), doneMin = done, full = done?.let { it >= planned })
+
+    /** The [n] weekend days back from [sunday], each with [done] of 100 minutes done. */
+    private fun weekends(n: Int, done: (Int) -> Int): List<DayRecord> =
+        generateSequence(sunday) { it.minusDays(1) }.filter { DayKind.of(it) == DayKind.Weekend }.take(n).mapIndexed { i, d -> day(d.toString(), 100, done(i)) }.toList()
+
+    @Test
+    fun `a kind of day's yield is the median of done over planned, once it has seven days`() {
+        // Six weekend days aren't enough; a seventh gives the median of the seven: 60 %.
+        val shares = listOf(90, 40, 60, 100, 55, 70, 50)
+        assertNull(Calibrator.yields(weekends(6) { shares[it] }, sunday)[DayKind.Weekend])
+        assertEquals(0.6, Calibrator.yields(weekends(7) { shares[it] }, sunday)[DayKind.Weekend]!!, 1e-9)
+        assertEquals(7, Calibrator.yieldDays(weekends(7) { shares[it] }, sunday)[DayKind.Weekend])
+        // A day with nothing planned, or not yet finished, isn't one to judge by.
+        val idle = weekends(6) { shares[it] } + day("2026-10-03", 0, 0) + day("2026-09-27", 100, null)
+        assertNull(Calibrator.yields(idle, sunday)[DayKind.Weekend])
+        // Only the last fourteen of a kind count: older days are left out.
+        val old = weekends(14) { 100 } + weekends(30) { 20 }.drop(14)
+        assertEquals(1.0, Calibrator.yields(old, sunday)[DayKind.Weekend]!!, 1e-9)
+    }
+
+    @Test
+    fun `a yield is kept between a half and the whole of a day's free time`() {
+        // Seven weekends at 40 %: half their time (PL-06's Done when); doing more than planned is all of it.
+        assertEquals(Calibrator.MIN_YIELD, Calibrator.yields(weekends(7) { 40 }, sunday)[DayKind.Weekend]!!, 1e-9)
+        assertEquals(Calibrator.MAX_YIELD, Calibrator.yields(weekends(7) { 130 }, sunday)[DayKind.Weekend]!!, 1e-9)
+    }
+
+    @Test
+    fun `each kind of day learns its own, so bad Saturdays don't move the weekdays`() {
+        val weekdays = generateSequence(LocalDate.parse("2026-10-16")) { it.minusDays(1) }.filter { DayKind.of(it) == DayKind.Weekday }.take(7)
+            .map { day(it.toString(), 100, 100) }.toList()
+        val yields = Calibrator.yields(weekends(7) { 30 } + weekdays, sunday)
+        assertEquals(0.5, yields[DayKind.Weekend]!!, 1e-9)
+        assertEquals(1.0, yields[DayKind.Weekday]!!, 1e-9)
+        // A record kept before kinds were is told by its date; one saying its kind is taken at its word.
+        assertEquals(DayKind.Weekend, DayKind.of(LocalDate.parse("2026-10-17")))
+        val said = weekdays.map { it.copy(kind = DayKind.Weekend) }
+        assertNull(Calibrator.yields(said, sunday)[DayKind.Weekday])
+    }
+
+    @Test
+    fun `the review says when a kind of day's yield moves`() {
+        val log = ActivityLog(days = weekends(7) { 40 })
+        val learned = Calibrator.learn(log, Calibration(), defaultBox = 45, week = 1, today = sunday)
+        assertEquals(0.5, learned.calibration.yieldFor(DayKind.Weekend), 1e-9)
+        assertEquals(1.0, learned.calibration.yieldFor(DayKind.Weekday), 1e-9)
+        assertTrue("Weekends hold about 50 % of their free time now (was 100 %)" in learned.changes, "${learned.changes}")
+        // Learned again from the same days: nothing to say.
+        assertTrue(Calibrator.learn(log, learned.calibration, defaultBox = 45, week = 1, today = sunday).changes.none { "free time" in it })
     }
 }
 
@@ -225,7 +306,7 @@ class EventJudgeTest {
     @Test
     fun `your answer holds for every event of that name`() {
         val answers = mapOf("van hire" to "load:${EventJudge.FEW_HOURS_MIN}")
-        val time = EventJudge.time(listOf(event("Van Hire", allDay = true), event("Drum lesson")), answers, LONDON)
+        val time = EventJudge.time(listOf(event("Van Hire", allDay = true), event("Drum lesson")), answers, LONDON, askUntil = Long.MAX_VALUE)
         assertEquals(mapOf(LocalDate.parse("2026-10-10") to EventJudge.FEW_HOURS_MIN), time.dayLoads)
         assertEquals(1, time.busy.size)
         assertEquals(emptyList(), time.toAsk)
@@ -234,7 +315,7 @@ class EventJudgeTest {
     @Test
     fun `a timed event's few hours count once, an all-day event's on each day`() {
         val night = CalendarEvent(9, "Party", Fixtures.at("2026-10-10T22:00"), Fixtures.at("2026-10-11T02:00"), allDay = false)
-        val time = EventJudge.time(listOf(night), mapOf(EventJudge.key(night) to "load:180"), LONDON)
+        val time = EventJudge.time(listOf(night), mapOf(EventJudge.key(night) to "load:180"), LONDON, askUntil = Long.MAX_VALUE)
         assertEquals(mapOf(LocalDate.parse("2026-10-10") to 180), time.dayLoads)
     }
 
@@ -247,8 +328,22 @@ class EventJudgeTest {
     }
 
     @Test
+    fun `an all-day event past the week ahead counts as a few hours of its day, not a question`() {
+        // Seen on Thursday 8 Oct: the van hire on Saturday is asked about; a trip three weeks on
+        // isn't asked yet (DX-14), but takes its few hours out of its day meanwhile.
+        val now = Fixtures.at("2026-10-08T17:00")
+        val trip = CalendarEvent(5, "School trip", LocalDate.parse("2026-10-29").atStartOfDay(java.time.ZoneOffset.UTC).toInstant().toEpochMilli(), LocalDate.parse("2026-10-30").atStartOfDay(java.time.ZoneOffset.UTC).toInstant().toEpochMilli(), allDay = true)
+        val time = EventJudge.time(listOf(event("Van hire", allDay = true), trip), emptyMap(), LONDON, askUntil = now + 7 * DAY)
+        assertEquals(listOf("Van hire"), time.toAsk.map { it.title })
+        assertEquals(mapOf(LocalDate.parse("2026-10-29") to EventJudge.FEW_HOURS_MIN), time.dayLoads)
+        // Answered, the answer holds there too.
+        val answered = EventJudge.time(listOf(trip), mapOf(EventJudge.key(trip) to "busy"), LONDON, askUntil = now + 7 * DAY)
+        assertEquals(mapOf(LocalDate.parse("2026-10-29") to 24 * 60), answered.dayLoads)
+    }
+
+    @Test
     fun `what can't be judged is listed to ask, and asked once per name`() {
-        val time = EventJudge.time(listOf(event("Van hire", allDay = true), event("van hire ", allDay = true)), emptyMap(), LONDON)
+        val time = EventJudge.time(listOf(event("Van hire", allDay = true), event("van hire ", allDay = true)), emptyMap(), LONDON, askUntil = Long.MAX_VALUE)
         assertEquals(2, time.toAsk.size)
         assertEquals(1, CalendarTime.questions(time.toAsk, emptySet(), start - 3_600_000L).size)
         assertEquals(emptyMap(), time.dayLoads)
@@ -261,10 +356,17 @@ class CalendarQuestionsTest {
     private fun event(id: Long, title: String, start: String, end: String) = CalendarEvent(id, title, Fixtures.at(start), Fixtures.at(end), allDay = false)
 
     @Test
+    fun `the calendar is read to the end of the plan's last day`() {
+        // 90 days on from Thursday 15 Oct is Wednesday 13 Jan: read until its midnight, whatever the time now.
+        assertEquals(Fixtures.at("2027-01-14T00:00"), CalendarTime.readUntil(Fixtures.at("2026-10-15T17:00"), LONDON))
+        assertEquals(Fixtures.at("2027-01-14T00:00"), CalendarTime.readUntil(Fixtures.at("2026-10-15T00:05"), LONDON))
+    }
+
+    @Test
     fun `an ended occurrence of a long event doesn't stand in for the next`() {
         val yesterday = event(7, "Course", "2026-10-08T09:00", "2026-10-08T15:00")
         val tomorrow = event(8, "Course", "2026-10-10T09:00", "2026-10-10T15:00")
-        val time = EventJudge.time(listOf(yesterday, tomorrow), emptyMap(), LONDON)
+        val time = EventJudge.time(listOf(yesterday, tomorrow), emptyMap(), LONDON, askUntil = Long.MAX_VALUE)
         assertEquals(listOf(tomorrow), CalendarTime.questions(time.toAsk, emptySet(), now))
     }
 

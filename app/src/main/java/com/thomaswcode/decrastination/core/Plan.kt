@@ -1,7 +1,51 @@
 package com.thomaswcode.decrastination.core
 
 import kotlinx.serialization.Serializable
+import java.time.DayOfWeek
 import java.time.LocalDate
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.time.temporal.ChronoUnit
+import java.util.Locale
+
+/**
+ * Why a piece is on its day (PL-07), set as it's placed: shown on its sheet, and given to Claude
+ * with the plan so it explains the plan rather than guessing at it.
+ */
+enum class Why {
+    /** Due later today or tomorrow: placed first, in today's time. */
+    DueSoon,
+
+    /** Past a deadline: into today, the oldest first. */
+    Overdue,
+
+    /** Where its share of its window's free time falls (PL-01). */
+    Spread,
+
+    /** Brought within a week of its task's piece before (the minimum touch, Q-32). */
+    MinimumTouch,
+
+    /** Moved a day on from its task's piece before: revision, spaced. */
+    RevisionGap,
+
+    /** A task in one piece: the day of its window with most room. */
+    MostRoom,
+
+    /** Undated: in spare time, backwards from its soft week. */
+    Soft,
+
+    /** Its window couldn't hold it in order: placed as late as its days allow. */
+    Packed,
+
+    /** Where you put it (phase 3). */
+    Pinned,
+
+    /** Moved when its time passed (phase 3). */
+    Refitted,
+
+    /** No room before its deadline: flagged behind. */
+    NoRoom,
+}
 
 /**
  * One piece of a task, placed on one day: a sub-step ("Q1–8"), or a box of the task's remaining
@@ -43,8 +87,34 @@ data class Chunk(
     val box: Int? = null,
     /** Its sub-step's place in its task's list, so finishing it ticks that one, not another of the same title. */
     val stepIndex: Int? = null,
+    /** Why it's on its day (PL-07). */
+    val why: Why,
 ) {
     val label: String get() = step?.let { "$title: $it" } ?: title
+
+    /** [why] as its sheet says it, from [today]: "Spread over the 12 days to its deadline". */
+    fun whyLine(today: LocalDate, zone: ZoneId): String {
+        val due = Planner.date(deadline, zone)
+        val days = ChronoUnit.DAYS.between(today, due)
+        return when (why) {
+            Why.DueSoon -> if (due == today) "Due today" else "Due tomorrow"
+            Why.Overdue -> "Overdue since ${due.format(DAY)}"
+            Why.Spread -> "Spread over the $days days to its deadline"
+            Why.MinimumTouch -> "Kept within a week of its last piece"
+            Why.RevisionGap -> "A day apart from the last revision piece"
+            Why.MostRoom -> "The day with most room before " + if (days in 1..6) due.format(WEEKDAY) else due.format(DAY)
+            Why.Soft -> "Undated: fills spare time this week"
+            Why.Packed -> "Its days before the deadline are tight: as late as they allow"
+            Why.Pinned -> "Where you put it"
+            Why.Refitted -> "Moved when its time passed"
+            Why.NoRoom -> "Couldn't fit before its deadline"
+        }
+    }
+
+    private companion object {
+        val DAY: DateTimeFormatter = DateTimeFormatter.ofPattern("EEE d MMM", Locale.UK)
+        val WEEKDAY: DateTimeFormatter = DateTimeFormatter.ofPattern("EEEE", Locale.UK)
+    }
 
     /** Bad news, shown in red wherever it appears: overdue, due today, or behind. */
     val urgent: Boolean get() = overdue || dueToday || behind
@@ -100,17 +170,22 @@ data class Plan(
     val events: List<TaskItem>,
     /** Open work that isn't in [buckets], with why: it doesn't vanish without a word. */
     val unplanned: List<Unplanned> = emptyList(),
+    /** Work with a real deadline that the time before it can't hold (PL-02), one a task. */
+    val wontFit: List<WontFit> = emptyList(),
 ) {
     fun bucket(date: LocalDate): DayBucket? = buckets.firstOrNull { it.date == date }
 
     val todayBucket: DayBucket? get() = bucket(today)
     val tomorrowBucket: DayBucket? get() = bucket(today.plusDays(1))
 
-    /** What must happen today or tomorrow for every deadline to be met: by definition, what's due soon. */
+    /** What's planned today and tomorrow: what the next two days hold, for ordering and the briefing. */
     val dueSoon: List<Chunk> get() = todayBucket?.chunks.orEmpty() + tomorrowBucket?.chunks.orEmpty()
 
-    /** Something is due today or tomorrow: blocking is strict (docs/scheduler.md §4). */
-    val pressure: Boolean get() = dueSoon.isNotEmpty()
+    /**
+     * Something is planned today: blocking is strict (docs/scheduler.md §4). Today's bucket alone,
+     * since later work is spread over its window (PL-01) and tomorrow always holds a share of it.
+     */
+    val pressure: Boolean get() = todayBucket?.chunks.orEmpty().isNotEmpty()
 
     /** Every chunk in the order it's meant to be done. */
     val ordered: List<Chunk> get() = buckets.flatMap { it.chunks }
@@ -140,6 +215,13 @@ data class Plan(
  */
 @Serializable
 data class Calibration(
+    /**
+     * The share of a day's free time that's used, per kind of day (PL-06): learned from the days'
+     * records, between a half and all of it. None for a kind with too few days yet: all of it.
+     */
+    val yields: Map<DayKind, Double> = emptyMap(),
+    /** How many days each of [yields] rests on, for Stats. */
+    val yieldDays: Map<DayKind, Int> = emptyMap(),
     /** `actual / estimate` per kind and class, keyed `Kind|class` (or `Kind|` for the whole kind). */
     val multipliers: Map<String, Double> = emptyMap(),
     /** Safety margin in days, per kind. */
@@ -158,6 +240,9 @@ data class Calibration(
     fun multiplier(kind: Kind, className: String?): Double =
         multipliers["${kind.name}|${className.orEmpty()}"] ?: multipliers["${kind.name}|"] ?: 1.0
 
+    /** What a day of [kind] holds of its free time, as learned (PL-06). */
+    fun yieldFor(kind: DayKind): Double = yields[kind] ?: 1.0
+
     /**
      * What [task]'s estimate is multiplied by: what's been learned of the app's estimates for its
      * kind and class; your own minutes ([TaskItem.yourMinutes]) as they are, as you meant them.
@@ -169,6 +254,31 @@ data class Calibration(
 
     companion object {
         fun key(kind: Kind, className: String?): String = "${kind.name}|${className.orEmpty()}"
+    }
+}
+
+/**
+ * A task with a real deadline its days can't hold (PL-02), said the day it's so: [leftMin] of it
+ * to do, and [freeMin] free before [deadline] itself at its turn, before it took any.
+ */
+data class WontFit(val taskId: String, val title: String, val leftMin: Int, val freeMin: Int, val deadline: Long)
+
+/** The kinds of day that each learn how much of their free time is used (PL-06). */
+@Serializable
+enum class DayKind(val label: String) {
+    /** A school day's evening. */
+    Weekday("Weekday evenings"),
+
+    /** Saturday and Sunday (phase 3: a day off school too). */
+    Weekend("Weekends"),
+
+    /** A school day's windows in the day (phase 3): no records of its own until phase 4's slots. */
+    School("School windows"),
+    ;
+
+    companion object {
+        /** [date]'s kind by the calendar: Saturday and Sunday are the weekend. */
+        fun of(date: LocalDate): DayKind = if (date.dayOfWeek == DayOfWeek.SATURDAY || date.dayOfWeek == DayOfWeek.SUNDAY) Weekend else Weekday
     }
 }
 

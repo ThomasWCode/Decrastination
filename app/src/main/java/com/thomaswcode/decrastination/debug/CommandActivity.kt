@@ -199,7 +199,9 @@ class CommandActivity : Activity() {
                 }
                 CalendarTime.refresh(this)
                 val time = graph.calendarTime
-                Log.i(TAG, "Calendar: ${time.busy.size} busy, loads ${time.dayLoads}, ${time.toAsk.size} to ask about; allowed ${CalendarTime.allowed(this)}")
+                // How far it was read (DX-14: as far as the plan reaches).
+                val last = time.events.maxOfOrNull { it.start }?.let { java.time.Instant.ofEpochMilli(it).atZone(graph.clock.zone()).toLocalDate() }
+                Log.i(TAG, "Calendar: ${time.events.size} events, the last on $last; ${time.busy.size} busy, loads ${time.dayLoads}, ${time.toAsk.size} to ask about; allowed ${CalendarTime.allowed(this)}")
             }
             "assess" -> {
                 val task = graph.tasks.value.tasks.firstOrNull { it.id == intent.getStringExtra("task") }

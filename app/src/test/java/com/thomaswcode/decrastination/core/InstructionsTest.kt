@@ -371,6 +371,19 @@ class InstructionsTest {
     }
 
     @Test
+    fun `Claude is shown each task's deadline in force, a plan's gone by giving way to the real one`() {
+        // Claude read a test on Thursday 8 Oct before Teams' Friday 23 Oct: gone by, Teams' date holds.
+        val test = task("test", "2026-10-08T08:30").copy(sourceValues = SourceValues(Kind.Homework, Fixtures.at("2026-10-23T23:59"), null))
+        val instruction = Instruction("i", "two days later", About(taskId = test.id, taskTitle = test.title), now)
+        val text = InstructionPrompts.describe(instruction, listOf(test), emptyList(), now, LONDON)
+        assertTrue("  Due: Fri 23 Oct 2026 23:59\n" in text, text)
+        assertTrue("- teams:test | test | Teams | Fri 23 Oct 2026 23:59\n" in text, text)
+        // Still to come, it's shown as the plan it is.
+        val later = test.copy(dueAt = Fixtures.at("2026-10-14T08:30"))
+        assertTrue("  Due: Wed 14 Oct 2026 08:30 (a plan)" in InstructionPrompts.describe(instruction, listOf(later), emptyList(), now, LONDON))
+    }
+
+    @Test
     fun `Claude is shown the instruction, what it's about, and what it can name`() {
         val instruction = Instruction("i", "this can't be done until the essay is", About(taskId = prep.id, taskTitle = prep.title), now)
         val text = InstructionPrompts.describe(instruction, listOf(essay, prep), listOf(drums), now, LONDON)

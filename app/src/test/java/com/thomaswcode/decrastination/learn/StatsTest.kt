@@ -3,6 +3,7 @@ package com.thomaswcode.decrastination.learn
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.Fixtures.LONDON
 import com.thomaswcode.decrastination.core.Calibration
+import com.thomaswcode.decrastination.core.DayKind
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.data.ActivityLog
@@ -47,6 +48,8 @@ class StatsTest {
                 completion("a", "2026-10-09T18:00", due = "2026-10-10T08:30"),
                 completion("b", "2026-10-08T18:00", due = "2026-10-07T08:30"),
                 completion("c", "2026-10-08T19:00", due = null),
+                // Done after a date the app set: a plan, so neither on time nor late (PL-14).
+                completion("d", "2026-10-08T20:00", due = "2026-10-07T08:30").copy(hardDeadline = false),
                 // Three weeks ago: out of the fortnight.
                 completion("old", "2026-09-18T18:00", due = null),
             ),
@@ -62,8 +65,8 @@ class StatsTest {
         val stats = Stats.summary(log, now, LONDON)
         assertEquals(Stats.DAYS, stats.days.size)
         assertEquals(LocalDate.parse("2026-10-09"), stats.days.first().date)
-        assertEquals(3, stats.completions)
-        // Two had deadlines; one was met.
+        assertEquals(4, stats.completions)
+        // Two had real deadlines; one was met.
         assertEquals(2, stats.dated)
         assertEquals(1, stats.onTime)
         assertEquals(2, stats.sessions)
@@ -77,7 +80,7 @@ class StatsTest {
         assertEquals(listOf(1, 30, 2), listOf(today.completions, today.focusMin, today.blocks))
         assertEquals(null, today.planDone)
         val yesterday = stats.days[1]
-        assertEquals(listOf(2, 12, 1), listOf(yesterday.completions, yesterday.focusMin, yesterday.blocks))
+        assertEquals(listOf(3, 12, 1), listOf(yesterday.completions, yesterday.focusMin, yesterday.blocks))
         assertEquals(true, yesterday.planDone)
     }
 
@@ -98,6 +101,8 @@ class StatsTest {
             marginDays = mapOf(Kind.Revision to 2),
             boxMin = mapOf(Kind.Homework to 45),
             timed = mapOf("Homework|Physics" to 4, "Homework|" to 6, "Homework|German" to 2),
+            yields = mapOf(DayKind.Weekend to 0.55),
+            yieldDays = mapOf(DayKind.Weekend to 9),
         )
         assertEquals(
             listOf(
@@ -107,6 +112,7 @@ class StatsTest {
                 "Homework, German: 2 timed pieces so far; its own figure counts from 3",
                 "Revision: finished 2 days before the deadline",
                 "Homework: cut into 45-minute pieces",
+                "Weekends: about 55 % of the free time used (from 9 days)",
             ),
             Stats.calibrationLines(calibration),
         )

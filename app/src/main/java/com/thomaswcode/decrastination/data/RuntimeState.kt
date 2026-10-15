@@ -181,6 +181,8 @@ data class CompletionRecord(
      * estimate, so it teaches nothing about how far off the app's estimates are (2.0.0).
      */
     val yourEstimate: Boolean = false,
+    /** [dueAt] was a real deadline, not a date the app or Claude set (PL-14): only these count as on time or late. Records from before were. */
+    val hardDeadline: Boolean = true,
 )
 
 /** The Sunday review: what changed, in a few lines, and who wrote it (the rules or the model). */

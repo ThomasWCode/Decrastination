@@ -96,6 +96,9 @@ class AskActivity : ComponentActivity() {
     /** Words handed in to send (the Calendar's box), or, if one still waits, to go in the box. */
     private val handed = mutableStateOf<String?>(null)
 
+    /** Whether [handed] is sent, or only put in the box to be changed or sent (*What gives?*, PL-02). */
+    private var sendHanded = true
+
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
@@ -133,6 +136,7 @@ class AskActivity : ComponentActivity() {
 
     private fun take(intent: Intent) {
         about.value = aboutFrom(intent.extras)
+        sendHanded = intent.getBooleanExtra(EXTRA_SEND, true)
         handed.value = intent.getStringExtra(EXTRA_TEXT)
     }
 
@@ -167,12 +171,15 @@ class AskActivity : ComponentActivity() {
         val toCheck = instructions.instructions.filter { it.state != InstructionStatus.Applied }.sortedByDescending { it.at }
         val inUse = instructions.applied.reversed()
 
-        // Words handed in: sent, or, while one of yours still waits, put in the box.
+        // Words handed in: sent, or, while one of yours still waits (or when only to be put there), put in the box.
         val words = handed.value
         LaunchedEffect(words) {
             if (words != null) {
+                // Let go of once sent: cleared first, they recomposed this effect away, which cancelled
+                // the send halfway, its message saved to the file but neither shown nor answered.
+                val sent = sendHanded && graph.ask(words, about.value)
                 handed.value = null
-                if (!graph.ask(words, about.value)) draft = words else about.value = About()
+                if (!sent) draft = words else about.value = About()
             }
         }
 
@@ -285,6 +292,7 @@ class AskActivity : ComponentActivity() {
 
     companion object {
         private const val EXTRA_TEXT = "text"
+        private const val EXTRA_SEND = "send"
         private const val EXTRA_TASK = "task"
         private const val EXTRA_TASK_TITLE = "taskTitle"
         private const val EXTRA_EVENT = "event"
@@ -292,9 +300,13 @@ class AskActivity : ComponentActivity() {
         private const val EXTRA_EVENT_START = "eventStart"
         private const val EXTRA_DAY = "day"
 
-        /** The chat, about [about], with [text] to send (or to put in the box, if one still waits). */
-        fun intent(context: Context, about: About = About(), text: String? = null): Intent = Intent(context, AskActivity::class.java)
+        /**
+         * The chat, about [about], with [text] to send (or to put in the box, if one still waits); with
+         * [send] false, only put in the box, to be changed or sent.
+         */
+        fun intent(context: Context, about: About = About(), text: String? = null, send: Boolean = true): Intent = Intent(context, AskActivity::class.java)
             .putExtra(EXTRA_TEXT, text)
+            .putExtra(EXTRA_SEND, send)
             .putExtra(EXTRA_TASK, about.taskId)
             .putExtra(EXTRA_TASK_TITLE, about.taskTitle)
             .putExtra(EXTRA_EVENT, about.eventKey)
@@ -414,7 +426,7 @@ private fun ProposalCard(graph: AppGraph, messageId: String, proposal: Proposal,
                 Text(taskLine(task, now, zone), style = MaterialTheme.typography.bodyMedium)
                 if (task.steps.isNotEmpty()) {
                     task.steps.forEach { s ->
-                        val dates = listOfNotNull(s.from?.let { "from " + Format.at(it, now, zone) }, s.dueAt?.let { Format.due(it, now, zone) }).joinToString(", ")
+                        val dates = listOfNotNull(s.from?.let { "from " + Format.at(it, now, zone) }, s.dueAt?.let { Format.due(it, hard = false, now, zone) }).joinToString(", ")
                         Text("• ${s.title} (${Format.minutes(s.minutes)}${if (dates.isEmpty()) "" else "; $dates"})", style = MaterialTheme.typography.bodySmall)
                     }
                 }
@@ -451,7 +463,8 @@ private fun ProposalCard(graph: AppGraph, messageId: String, proposal: Proposal,
 private fun taskLine(task: OwnTask, now: Long, zone: ZoneId): String = listOfNotNull(
     task.kind.label,
     task.className,
-    task.dueAt?.let { if (task.kind == Kind.Event) Format.at(it, now, zone) else Format.due(it, now, zone) } ?: "No due date",
+    // Your own task's date is yours, so a real deadline.
+    task.dueAt?.let { if (task.kind == Kind.Event) Format.at(it, now, zone) else Format.due(it, hard = true, now, zone) } ?: "No due date",
     task.startFrom?.let { "not before " + Format.at(it, now, zone) },
     if (task.kind == Kind.Event) null else Format.minutes(if (task.steps.isEmpty()) task.minutes else task.steps.sumOf { it.minutes }),
 ).joinToString(" · ")
