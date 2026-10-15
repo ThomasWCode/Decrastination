@@ -323,21 +323,27 @@ object Answers {
      * due) keeps its place and minutes with none, said in [Enrichment.adjusted], and the rest still
      * fail it.
      */
-    fun read(job: Enrichments.Job, text: String, task: TaskItem, by: String, now: Long, zone: ZoneId, salvage: Boolean): Parsed = runCatching {
-        val made = reading(job, text, task, by, now, zone, salvage)
-        Parsed(made, made?.dropped?.replaceFirstChar(Char::uppercase))
-    }.getOrElse { Parsed(null) }
+    fun read(job: Enrichments.Job, text: String, task: TaskItem, by: String, now: Long, zone: ZoneId, salvage: Boolean): Parsed {
+        // What the checks couldn't take but needn't drop the answer for: a date that can't be read,
+        // a kind that isn't one: said, so the answer's put back to be put right (AI-01).
+        val problems = mutableListOf<String>()
+        return runCatching {
+            val made = reading(job, text, task, by, now, zone, salvage, problems)
+            Parsed(made, (listOfNotNull(made?.dropped) + problems).firstOrNull()?.replaceFirstChar(Char::uppercase))
+        }.getOrElse { Parsed(null, "The answer isn't JSON the schema takes (${it.message?.lineSequence()?.firstOrNull()?.take(120)})") }
+    }
 
-    private fun reading(job: Enrichments.Job, text: String, task: TaskItem, by: String, now: Long, zone: ZoneId, salvage: Boolean): Enrichment? {
+    private fun reading(job: Enrichments.Job, text: String, task: TaskItem, by: String, now: Long, zone: ZoneId, salvage: Boolean, problems: MutableList<String>): Enrichment? {
         val base = Enrichment(inputHash = Enrichments.inputHash(task), by = by, at = now)
         return when (job) {
             Enrichments.Job.Email -> json.decodeFromString(Triage.serializer(), text).let { t ->
                 // Starred, an email is always something to do (AI-02): Admin, or an Event. Any other
                 // kind is no answer at all, and the rules' reading stands.
-                val kind = EMAIL_KINDS[t.kind] ?: return null
+                val kind = EMAIL_KINDS[t.kind] ?: return null.also { problems += "kind is \"${t.kind.take(20)}\": it must be Admin or Event" }
                 val total = effort(t.effortMin)
-                val deadline = t.deadline?.let { dateTime(it, zone) }?.takeIf { plausible(it, now) }
-                val opens = t.actionableFrom?.let { date(it, zone, LocalTime.MIDNIGHT) }?.takeIf { plausible(it, now) }
+                if (total == null && t.blocks.isEmpty()) problems += "effortMin is ${t.effortMin}, not from 1 to $MAX_EFFORT minutes"
+                val deadline = checkedTime("deadline", t.deadline, now, problems) { dateTime(it, zone) }
+                val opens = checkedTime("actionableFrom", t.actionableFrom, now, problems) { date(it, zone, LocalTime.MIDNIGHT) }
                 // Blocks of work, each perhaps with its own dates (Q12): not trusted, the triage stands
                 // without them, and the task says why.
                 val checked = trusted(steps(t.blocks, now, zone, vocabulary = false, maxMinutes = MAX_EFFORT, dueBy = deadline ?: sourceDue(task), opens = opens, noun = "block", salvage = salvage), t.effortMin, t.blocks.size)
@@ -363,7 +369,7 @@ object Answers {
             Enrichments.Job.Assignment -> json.decodeFromString(Split.serializer(), text).let { s ->
                 // One step it can't take (no title, minutes or a date out of range) and the split isn't
                 // trusted: the task's whole estimate is planned instead, none of it lost with that step.
-                val testDate = s.testDate?.let { date(it, zone, SCHOOL_STARTS) }?.takeIf { plausible(it, now) }
+                val testDate = checkedTime("testDate", s.testDate, now, problems) { date(it, zone, SCHOOL_STARTS) }
                 // By the test, where there's one before the source's deadline: it's the task's then.
                 val read = steps(s.subSteps, now, zone, vocabulary = true, maxMinutes = MAX_STEP, dueBy = listOfNotNull(sourceDue(task), testDate).minOrNull(), salvage = salvage)
                 val usable = read.steps != null
@@ -544,6 +550,18 @@ object Answers {
 
     /** Within a month before now and a year and a bit after: anything else is a misreading. */
     private fun plausible(time: Long, now: Long): Boolean = time in (now - 31 * DAY_MS)..(now + 400 * DAY_MS)
+
+    /**
+     * [field]'s [given] text as a time by [read], if it's plausible ([plausible]): one that can't be
+     * read, or is further ahead than the app plans, is said in [problems] to be put right. One long
+     * gone (an old email's date) is no mistake: it's left out without a word.
+     */
+    private fun checkedTime(field: String, given: String?, now: Long, problems: MutableList<String>, read: (String) -> Long?): Long? {
+        val text = given?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        val time = read(text) ?: return null.also { problems += "$field \"${text.take(40)}\" isn't a date (YYYY-MM-DD) or a local date and time (YYYY-MM-DDTHH:MM)" }
+        if (time > now + 400 * DAY_MS) return null.also { problems += "$field $text is more than 400 days ahead, further than the app plans: give it only if the text says so" }
+        return time.takeIf { plausible(it, now) }
+    }
 
     private const val DAY_MS = 24 * 3_600_000L
 }

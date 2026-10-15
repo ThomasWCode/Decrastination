@@ -828,6 +828,35 @@ class AppGraph private constructor(context: Context) {
         }
     }
 
+    /**
+     * A photo of homework read into tasks (NF-01): held here, not by a screen, so turning the phone or
+     * leaving Work while the paid call runs loses nothing. [busy] while it's read; then what it read,
+     * with the photo for the tasks made from it, or why not.
+     */
+    class PhotoReading(val busy: Boolean, val reading: com.thomaswcode.decrastination.enrich.PhotoTasks.Reading? = null, val jpeg: ByteArray? = null, val why: String? = null)
+
+    /** The photo of homework being read, or read and not yet seen through (NF-01). */
+    val photoReading = kotlinx.coroutines.flow.MutableStateFlow<PhotoReading?>(null)
+
+    /** [file], a photo of homework just taken, read into tasks in the app's scope (NF-01), [photoReading] saying how it goes; the file let go. */
+    fun readPhotoOf(file: java.io.File) {
+        if (photoReading.value?.busy == true) return
+        photoReading.value = PhotoReading(busy = true)
+        scope.launch {
+            val done = runCatching {
+                val jpeg = withContext(Dispatchers.IO) { com.thomaswcode.decrastination.block.PhotoChecks.shrink(file) }
+                if (jpeg == null) {
+                    PhotoReading(busy = false, why = "Couldn't read the photo.")
+                } else {
+                    val (got, why) = readPhotoTasks(jpeg)
+                    PhotoReading(busy = false, reading = got, jpeg = jpeg.takeIf { got != null }, why = why)
+                }
+            }.getOrElse { PhotoReading(busy = false, why = "The photo couldn't be read (${it.message ?: "no connection"}).") }
+            withContext(NonCancellable + Dispatchers.IO) { file.delete() }
+            photoReading.value = done
+        }
+    }
+
     /** The photos no task holds any more let go (AI-23): a task done and gone takes its photo with it. */
     private fun sweepPhotos() {
         val held = tasks.value.tasks.mapNotNull { it.photo?.path }.toSet()

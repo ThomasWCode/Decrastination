@@ -523,8 +523,8 @@ private fun addToCalendar(activity: Activity, invite: Invite, title: String, zon
     val intent = android.content.Intent(android.content.Intent.ACTION_INSERT)
         .setData(android.provider.CalendarContract.Events.CONTENT_URI)
         .putExtra(android.provider.CalendarContract.Events.TITLE, invite.summary.ifBlank { title })
-        .putExtra(android.provider.CalendarContract.EXTRA_EVENT_BEGIN_TIME, invite.start)
-        .putExtra(android.provider.CalendarContract.EXTRA_EVENT_END_TIME, invite.end)
+        .putExtra(android.provider.CalendarContract.EXTRA_EVENT_BEGIN_TIME, invite.calendarTimes(zone).first)
+        .putExtra(android.provider.CalendarContract.EXTRA_EVENT_END_TIME, invite.calendarTimes(zone).second)
         .putExtra(android.provider.CalendarContract.EXTRA_EVENT_ALL_DAY, invite.allDay(zone))
     invite.location?.let { intent.putExtra(android.provider.CalendarContract.Events.EVENT_LOCATION, it) }
     return try {

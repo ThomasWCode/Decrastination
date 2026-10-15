@@ -131,7 +131,9 @@ object Merge {
             fresh[old.id]?.let { return@mapNotNull it }
             if (old.source != source) return@mapNotNull old
             when {
-                old.status != Status.Open -> old.takeIf { now - (old.doneAt ?: old.lastSeenAt) < KEEP_FINISHED_MS }
+                // Done, kept a fortnight; and the same work as one still open for as long as that is,
+                // as its minutes worked count for it (DX-15).
+                old.status != Status.Open -> old.takeIf { now - (old.doneAt ?: old.lastSeenAt) < KEEP_FINISHED_MS || old.userSameAs?.let { byId[it]?.isOpen } == true }
                 old.derived -> old.copy(status = Status.Missed).also { missed += it }
                 else -> old.copy(status = Status.Done, doneAt = now).also { completed += completion(old, it) }
             }

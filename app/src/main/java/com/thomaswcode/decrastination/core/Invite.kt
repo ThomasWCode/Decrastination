@@ -22,6 +22,17 @@ data class Invite(val summary: String, val start: Long, val end: Long, val locat
         return from.toLocalTime() == LocalTime.MIDNIGHT && to.toLocalTime() == LocalTime.MIDNIGHT && to.toLocalDate() > from.toLocalDate()
     }
 
+    /**
+     * Its start and end as the calendar app is to be given them (DX-02): an all-day one's at UTC
+     * midnight of its first and last-plus-one days, as Android's calendar wants all-day times;
+     * another's as they are.
+     */
+    fun calendarTimes(zone: ZoneId): Pair<Long, Long> {
+        if (!allDay(zone)) return start to end
+        fun utc(time: Long) = Instant.ofEpochMilli(time).atZone(zone).toLocalDate().atStartOfDay(java.time.ZoneOffset.UTC).toInstant().toEpochMilli()
+        return utc(start) to utc(end)
+    }
+
     companion object {
         /** Where an email's task keeps its invite. */
         const val EXTRA = "invite"

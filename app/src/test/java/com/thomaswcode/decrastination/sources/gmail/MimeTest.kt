@@ -321,4 +321,32 @@ class MimeTest {
         // Kept with its task, a bar in its name made a slash.
         assertEquals(Invite("Trip / coach", 1, 2, "Gate 3"), Invite.read(Invite("Trip | coach", 1, 2, "Gate 3").stored))
     }
+
+    @Test
+    fun `an invite's zone is Java's, Windows' name for one, or the calendar's own, and none it can't tell`() {
+        val eastern = "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nDTSTART;TZID=Eastern Standard Time:20261016T100000\r\nSUMMARY:Call\r\nEND:VEVENT\r\nEND:VCALENDAR"
+        assertEquals(Fixtures.at("2026-10-16T15:00"), Mime.invite(eastern, LONDON)?.start)
+        val custom = listOf(
+            "BEGIN:VCALENDAR",
+            "BEGIN:VTIMEZONE", "TZID:Customized Time Zone",
+            "BEGIN:STANDARD", "DTSTART:16010101T030000", "TZOFFSETFROM:+0100", "TZOFFSETTO:+0000", "RRULE:FREQ=YEARLY;BYDAY=-1SU;BYMONTH=10", "END:STANDARD",
+            "BEGIN:DAYLIGHT", "DTSTART:16010101T010000", "TZOFFSETFROM:+0000", "TZOFFSETTO:+0100", "RRULE:FREQ=YEARLY;BYDAY=-1SU;BYMONTH=3", "END:DAYLIGHT",
+            "END:VTIMEZONE",
+            "BEGIN:VEVENT", "DTSTART;TZID=\"Customized Time Zone\":20261016T180000", "DTEND;TZID=\"Customized Time Zone\":20261116T180000", "SUMMARY:Open evening", "END:VEVENT",
+            "END:VCALENDAR",
+        ).joinToString("\r\n")
+        val read = Mime.invite(custom, LONDON)!!
+        // Summer time in October, winter's by November: the calendar's own rules, read.
+        assertEquals(Fixtures.at("2026-10-16T18:00") to Fixtures.at("2026-11-16T18:00"), read.start to read.end)
+        assertNull(Mime.invite("BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nDTSTART;TZID=Nowhere Standard Time:20261016T100000\r\nEND:VEVENT\r\nEND:VCALENDAR", LONDON))
+    }
+
+    @Test
+    fun `an all-day invite goes to the calendar at UTC midnights`() {
+        val day = Invite("Sports day", Fixtures.at("2026-10-16T00:00"), Fixtures.at("2026-10-17T00:00"))
+        assertEquals(java.time.Instant.parse("2026-10-16T00:00:00Z").toEpochMilli() to java.time.Instant.parse("2026-10-17T00:00:00Z").toEpochMilli(), day.calendarTimes(LONDON))
+        val timed = Invite("Call", Fixtures.at("2026-10-16T18:00"), Fixtures.at("2026-10-16T19:00"))
+        assertEquals(timed.start to timed.end, timed.calendarTimes(LONDON))
+    }
 }
+

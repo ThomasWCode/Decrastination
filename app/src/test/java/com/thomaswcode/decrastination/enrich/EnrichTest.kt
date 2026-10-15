@@ -194,6 +194,19 @@ class AnswersTest {
     private fun strict(job: Enrichments.Job, text: String, task: TaskItem = email()) = Answers.read(job, text, task, "claude-opus-5-5", NOW, LONDON, salvage = false)
 
     @Test
+    fun `a date that can't be read, one too far ahead, a kind that isn't one and an answer that isn't JSON are said, to be put right`() {
+        fun triage(deadline: String, kind: String = "Admin") = """{"kind":"$kind","actionableFrom":null,"deadline":$deadline,"deadlineQuoted":true,"effortMin":10,"nextStep":"x","question":null,"reason":"","blocks":[]}"""
+        assertEquals("Deadline \"Friday\" isn't a date (YYYY-MM-DD) or a local date and time (YYYY-MM-DDTHH:MM)", strict(Enrichments.Job.Email, triage("\"Friday\"")).complaint)
+        assertEquals("Deadline 2028-10-16 is more than 400 days ahead, further than the app plans: give it only if the text says so", strict(Enrichments.Job.Email, triage("\"2028-10-16\"")).complaint)
+        assertEquals("Kind is \"Info\": it must be Admin or Event", strict(Enrichments.Job.Email, triage("null", kind = "Info")).complaint)
+        assertTrue(strict(Enrichments.Job.Email, "{not json").complaint!!.startsWith("The answer isn't JSON the schema takes"))
+        // An old email's long-gone date is no mistake: left out without a word.
+        val old = strict(Enrichments.Job.Email, triage("\"2021-01-04\""))
+        assertNull(old.complaint)
+        assertNull(old.enrichment!!.deadline)
+    }
+
+    @Test
     fun `an email's triage is read, its dates in local time`() {
         val e = parse(Enrichments.Job.Email, """{"kind":"Admin","actionableFrom":null,"deadline":"2026-10-12T08:30","effortMin":10,"nextStep":"Sign the form and give it to Mr Hughes"}""")!!
         assertEquals(Kind.Admin, e.kind)
@@ -517,6 +530,9 @@ class AnswersTest {
         assertEquals(setOf(piece.key), MicroPlans.kept(chunk, mapOf(piece.key to made, "gone#1" to made)).keys)
         val asked = MicroPlans.describe(piece, task)
         assertTrue("Task: ${task.title}" in asked && "Instructions:\n1. Read pages 40-44." in asked, asked)
+        // The piece itself changed (its step renamed, its minutes): written for again.
+        assertTrue(MicroPlans.hashOf(task, piece) != MicroPlans.hashOf(task, piece.copy(step = "Read pages 40-46")))
+        assertTrue(MicroPlans.hashOf(task, piece) != MicroPlans.hashOf(task, piece.copy(minutes = piece.minutes + 10)))
     }
 
     @Test

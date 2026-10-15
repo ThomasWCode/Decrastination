@@ -40,12 +40,16 @@ import kotlinx.coroutines.launch
  */
 class PhotoCheck(val available: Boolean, val checking: Boolean, val take: (Chunk) -> Unit)
 
-/** A piece of the plan being photographed: its task, its step's place and name (or "part 1 of 2"), and the pages taken so far (AI-17). */
-private data class PhotoPiece(val taskId: String, val stepIndex: Int?, val step: String?, val pages: Int = 0)
+/**
+ * A piece of the plan being photographed: its task, its step's place and name (or "part 1 of 2"),
+ * the pages taken so far (AI-17), and when the first was: a slot of its key kept before then isn't
+ * the one the photos show.
+ */
+private data class PhotoPiece(val taskId: String, val stepIndex: Int?, val step: String?, val pages: Int = 0, val takenAt: Long? = null)
 
 private val PIECE = Saver<PhotoPiece?, ArrayList<String?>>(
-    save = { p -> p?.let { arrayListOf(it.taskId, it.stepIndex?.toString(), it.step, it.pages.toString()) } },
-    restore = { saved -> PhotoPiece(saved[0]!!, saved[1]?.toInt(), saved[2], saved.getOrNull(3)?.toInt() ?: 0) },
+    save = { p -> p?.let { arrayListOf(it.taskId, it.stepIndex?.toString(), it.step, it.pages.toString(), it.takenAt?.toString()) } },
+    restore = { saved -> PhotoPiece(saved[0]!!, saved[1]?.toInt(), saved[2], saved.getOrNull(3)?.toInt() ?: 0, saved.getOrNull(4)?.toLongOrNull()) },
 )
 
 /**
@@ -88,7 +92,7 @@ fun rememberPhotoCheck(graph: AppGraph, activity: Activity, plan: Plan, say: (ta
         PhotoChecks.running.value = piece.taskId
         graph.scope.launch {
             try {
-                PhotoChecks.unseen.value = piece.taskId to PhotoChecks.check(activity.applicationContext, graph, pages, piece)
+                PhotoChecks.unseen.value = piece.taskId to PhotoChecks.check(activity.applicationContext, graph, pages, piece, takenAt = wanted.takenAt ?: graph.clock.now())
             } finally {
                 PhotoChecks.running.value = null
             }
@@ -105,7 +109,7 @@ fun rememberPhotoCheck(graph: AppGraph, activity: Activity, plan: Plan, say: (ta
             // That page not taken: those before it are checked.
             !taken -> check(wanted)
             else -> {
-                val more = wanted.copy(pages = wanted.pages + 1)
+                val more = wanted.copy(pages = wanted.pages + 1, takenAt = wanted.takenAt ?: graph.clock.now())
                 photoFor = more
                 if (more.pages >= PhotoChecker.MAX_PAGES) check(more) else asking = true
             }

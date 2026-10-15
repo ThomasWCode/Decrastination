@@ -127,6 +127,18 @@ class OwnTasksTest {
     }
 
     @Test
+    fun `a split undone puts back the steps it replaced, unless they've been changed since`() {
+        val was = OwnTask(title = "Essay", minutes = 90, steps = listOf(OwnStep("Write it", 90)))
+        val split = Change(ChangeType.Steps, taskId = "own:u1", steps = listOf(OwnStep("Plan", 15), OwnStep("Draft", 60), OwnStep("Check", 15)))
+        val now = was.copy(minutes = 90, steps = split.steps!!)
+        assertEquals(was.steps, OwnTasks.restored(now, was, listOf(split)).steps)
+        val since = now.copy(steps = listOf(OwnStep("Plan", 20), OwnStep("Draft", 70)), minutes = 90)
+        assertEquals(since.steps, OwnTasks.restored(since, was, listOf(split)).steps)
+        // A later card that replaced the split: undoing the split first leaves it what the split replaced.
+        assertEquals(was.steps, OwnTasks.relayered(now, listOf(split), was).steps)
+    }
+
+    @Test
     fun `undoing two cards in the opposite order leaves neither's value`() {
         val friday = OwnTask(title = "Essay", dueAt = Fixtures.at("2026-10-16T17:00"))
         val toSunday = Change(ChangeType.DueBy, taskId = "own:u1", time = Fixtures.at("2026-10-18T17:00"))
