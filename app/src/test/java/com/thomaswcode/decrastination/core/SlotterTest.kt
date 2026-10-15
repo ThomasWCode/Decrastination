@@ -140,11 +140,17 @@ class SlotterTest {
 
     @Test
     fun `the midday break outside goes first when the work needs its time, and none when the day is full`() {
-        // 840 minutes; twenty 35-minute pieces with their breaks need 800: room for two breaks, not three.
-        val pieces = (1..20).map { chunk("p$it", 35) }
-        val two = slot(saturday, pieces, listOf(w("08:30", "22:30")), outside = true).first.filter { it.kind == SlotKind.Outside }
-        assertEquals(listOf("outside 09:30–09:50", "outside 16:00–16:20"), two.described())
-        // Twenty-four half hours need all 840.
+        // 840 minutes; seventeen 35-minute pieces with their rests, a longer one after each hour and a
+        // half's work, need 730: room for three breaks by the sum, but laid around three, cutting the
+        // day up, one's left out. Around two, none is.
+        val two = slot(saturday, (1..17).map { chunk("p$it", 35) }, listOf(w("08:30", "22:30")), outside = true)
+        assertEquals(listOf("outside 09:30–09:50", "outside 16:00–16:20"), two.first.filter { it.kind == SlotKind.Outside }.described())
+        assertEquals(emptyList(), two.second)
+        // Twenty need 860 with their long rests, more than the day: no break, and the last left out still.
+        val twenty = slot(saturday, (1..20).map { chunk("p$it", 35) }, listOf(w("08:30", "22:30")), outside = true)
+        assertTrue(twenty.first.none { it.kind == SlotKind.Outside })
+        assertEquals(listOf("p20"), twenty.second.map { it.title })
+        // Twenty-four half hours need more than all 840.
         val full = slot(saturday, (1..24).map { chunk("p$it") }, listOf(w("08:30", "22:30")), outside = true).first
         assertTrue(full.none { it.kind == SlotKind.Outside })
     }

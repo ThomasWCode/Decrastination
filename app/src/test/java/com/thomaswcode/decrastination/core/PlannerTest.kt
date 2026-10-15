@@ -885,6 +885,15 @@ class PlannerTest {
     }
 
     @Test
+    fun `work for home not open yet is said not to fit by the evenings' time, not school's`() {
+        // Opens Tuesday morning, due at 16:00, before the evening: school's 150 minutes come before
+        // it, but homework for home has none of them, so no room at all. Done anywhere, it fits.
+        val prep = task("prep", Fixtures.at("2026-10-13T16:00"), effort = 60, available = Fixtures.at("2026-10-13T08:00"))
+        assertEquals(listOf(WontFit("teams:prep", "prep", 60, 0, Fixtures.at("2026-10-13T16:00"))), Planner.plan(windowed(listOf(prep), "2026-10-12T17:00")).wontFit)
+        assertEquals(emptyList(), Planner.plan(windowed(listOf(prep.copy(kind = Kind.Admin)), "2026-10-12T17:00")).wontFit)
+    }
+
+    @Test
     fun `a same-day deadline is usable where a window comes before it`() {
         // No margin: due at 11:30, Tuesday's break (10:45) comes before it, so Tuesday is its day;
         // without windows, a morning deadline's day isn't one, and Monday it is.

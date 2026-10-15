@@ -80,6 +80,10 @@ class PowerPlannerItemsTest {
         assertEquals(listOf(Lesson("German", LocalTime.of(8, 50), LocalTime.of(9, 45))), PowerPlannerItems.lessonsOn(both, LocalDate.of(2026, 10, 16)))
         assertEquals(listOf("German", "Study Period"), PowerPlannerItems.lessonsOn(both, LocalDate.of(2026, 10, 12)).map { it.className })
         assertEquals(emptyList(), PowerPlannerItems.lessonsOn(both, LocalDate.of(2026, 10, 10)))
+        // The week unknown (no week one given): only the lessons of both weeks are sure.
+        val unknown = both.copy(weekOneStartsOn = null)
+        assertEquals(emptyList(), PowerPlannerItems.lessonsOn(unknown, LocalDate.of(2026, 10, 9)))
+        assertEquals(listOf("Study Period"), PowerPlannerItems.lessonsOn(unknown, LocalDate.of(2026, 10, 12)).map { it.className })
     }
 
     private fun task(date: String, classId: String? = timetable.classes.single().identifier, percent: Double = 0.0, type: Int = 5, end: String? = null) =

@@ -9,6 +9,7 @@ import android.os.Build
 import android.util.Log
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.core.Plan
+import com.thomaswcode.decrastination.core.Slot
 import com.thomaswcode.decrastination.core.SlotKind
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -28,14 +29,23 @@ object SlotAlarms {
     /** How long after its slot's end a piece can still be ticked before the slot's missed. */
     const val GRACE_MS = com.thomaswcode.decrastination.core.Slotter.GRACE_MS
 
-    /** [plan]'s next work slot to start after [now], and the next whose end and grace are still to come, today's or tomorrow's. */
+    /** Alarms at [plan]'s [next] start and end. */
     fun arm(context: Context, plan: Plan, now: Long) {
         val alarms = context.getSystemService(AlarmManager::class.java) ?: return
         alarms.cancel(intent(context, ACTION_SLOT_START, null))
         alarms.cancel(intent(context, ACTION_SLOT_END, null))
-        val work = (plan.todaySlots + plan.tomorrowBucket?.slots.orEmpty()).filter { it.kind == SlotKind.Work }
-        work.firstOrNull { it.start > now }?.let { set(alarms, it.start, intent(context, ACTION_SLOT_START, it.key)) }
-        work.firstOrNull { it.end + GRACE_MS > now }?.let { set(alarms, it.end + GRACE_MS, intent(context, ACTION_SLOT_END, it.key)) }
+        val (start, end) = next(plan, now)
+        start?.let { set(alarms, it.start, intent(context, ACTION_SLOT_START, it.key)) }
+        end?.let { set(alarms, it.end + GRACE_MS, intent(context, ACTION_SLOT_END, it.key)) }
+    }
+
+    /**
+     * [plan]'s next work slot to start after [now], and the next whose end and grace are still to
+     * come, on whatever day they are: with nothing today or tomorrow, a later day's still rings.
+     */
+    fun next(plan: Plan, now: Long): Pair<Slot?, Slot?> {
+        val work = plan.buckets.flatMap { it.slots }.filter { it.kind == SlotKind.Work }.sortedBy { it.start }
+        return work.firstOrNull { it.start > now } to work.firstOrNull { it.end + GRACE_MS > now }
     }
 
     private fun set(alarms: AlarmManager, at: Long, intent: PendingIntent) {

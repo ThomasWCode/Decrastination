@@ -801,14 +801,16 @@ object Planner {
             val task = byId[gap.taskId] ?: continue
             val opens = task.availableFrom ?: continue
             val deadline = task.deadlineAt(input.now)?.takeIf { task.hardAt(input.now) && it > opens } ?: continue
-            val last = lastDayBefore(deadline, input)
+            // Work only for home has only the evening's time (PL-15).
+            val home = pieces(task, input, held[task.id].orEmpty()).let { it.isNotEmpty() && it.all { piece -> piece.where == Where.Home } }
+            val last = lastDayBefore(deadline, input, home)
             if (last > horizon || wontFit.any { it.taskId == task.id }) continue
             val first = date(opens, zone)
-            // All of each day's time, school's included (the most it could have): on its opening day the
-            // time after it opens, on its deadline's own day only the time before the deadline.
+            // All of each day's time it can use (the most it could have): on its opening day the time
+            // after it opens, on its deadline's own day only the time before the deadline.
             val room = generateSequence(first) { it.plusDays(1) }.takeWhile { it <= last }.sumOf { day ->
-                val whole = if (day == first) capacityFrom(day, opens, home = false) else capacity.getValue(day)
-                if (day == date(deadline, zone)) minOf(whole, capacityBefore(day, deadline, input)) else whole
+                val whole = if (day == first) capacityFrom(day, opens, home) else capacities.getValue(day).let { if (home) it.homeMin else it.anyMin }
+                if (day == date(deadline, zone)) minOf(whole, capacitiesBefore(day, deadline, input).let { if (home) it.homeMin else it.anyMin }) else whole
             }
             if (gap.minutes > room) wontFit += WontFit(task.id, task.title, gap.minutes, room, deadline)
         }
