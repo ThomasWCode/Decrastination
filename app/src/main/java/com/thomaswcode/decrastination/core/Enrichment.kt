@@ -203,6 +203,16 @@ object Enrichments {
     }
 
     /**
+     * Whether [task]'s reading is the model's, of its text as it is now, stale only as older prompts
+     * made it (AC-06): kept as it is unless the model reads it again, never the rules' in its place.
+     */
+    fun staleOnlyByVersion(task: TaskItem, rules: String): Boolean {
+        val e = task.enrichment ?: return false
+        return e.by != rules && e.inputHash == inputHash(task) && e.promptVersion < com.thomaswcode.decrastination.enrich.Prompts.VERSION &&
+            !(task.source == Source.Gmail && e.kind == Kind.Info)
+    }
+
+    /**
      * The order tasks are read in (AC-06): those never read first, then those read by the oldest
      * prompts, each soonest due first, so a run's calls go where they're most out of date.
      */

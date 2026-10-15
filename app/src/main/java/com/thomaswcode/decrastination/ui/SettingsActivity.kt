@@ -359,7 +359,7 @@ class SettingsActivity : ComponentActivity() {
                     // A backup, and what couldn't be read at a start, as Setup has them.
                     BACKUP -> {
                         item { SetupScreen(graph, this@SettingsActivity, setOf(SetupPart.Saved, SetupPart.Backup), scroll = false) }
-                        item { NightlyBackup(runtime.lastBackupAt, graph.clock.now()) }
+                        item { NightlyBackup(graph, runtime.lastBackupAt, graph.clock.now()) }
                     }
                     RESET -> item { ResetPage(graph) }
                 }
@@ -668,9 +668,16 @@ private fun ResetPage(graph: AppGraph) {
     }
 }
 
-/** The nightly backup (AR-07): where it goes, and when it last did. */
+/**
+ * The nightly backup (AR-07): where it goes, and when it last did. And a reset's copies kept in the
+ * app's own files (LR-08), where Documents couldn't be written: the file picker can't reach them, so
+ * each is restored from here.
+ */
 @Composable
-private fun NightlyBackup(last: Long?, now: Long) {
+private fun NightlyBackup(graph: AppGraph, last: Long?, now: Long) {
+    val scope = rememberCoroutineScope()
+    val copies = remember { graph.resetCopies() }
+    var said by remember { mutableStateOf<String?>(null) }
     Column {
         Section("Nightly backup")
         if (!com.thomaswcode.decrastination.data.BackupFolder.available) {
@@ -678,6 +685,17 @@ private fun NightlyBackup(last: Long?, now: Long) {
         } else {
             Note("Every night, all the app keeps goes to Documents/Decrastination on the phone, the last two weeks of them kept. Import opens one through the file picker. A copy off the phone is yours to make: a sync app mirroring the folder, or Export.")
             Note("Last backup: " + (last?.let { Format.ago(it, now) } ?: "not yet"))
+        }
+        if (copies.isNotEmpty()) {
+            Section("Copies saved before a reset")
+            Note("Kept in the app's own files, as Documents couldn't be written then; the file picker can't reach them, so they're restored from here.")
+            copies.forEach { name ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(name, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                    androidx.compose.material3.TextButton(onClick = { scope.launch { said = graph.restoreResetCopy(name) } }) { Text("Restore") }
+                }
+            }
+            said?.let { Note(it) }
         }
     }
 }

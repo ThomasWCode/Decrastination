@@ -62,6 +62,12 @@ object Stats {
         val first = today.minusDays(days - 1L)
         fun dateOf(at: Long): LocalDate = Instant.ofEpochMilli(at).atZone(zone).toLocalDate()
         fun inRange(at: Long): Boolean = dateOf(at).let { !it.isBefore(first) && !it.isAfter(today) }
+        // Weeks the log no longer keeps whole, in the period (PL-10): their rollups in the totals, in
+        // place of what's left of their records, the week the log's end falls in among them.
+        val kept0 = Instant.ofEpochMilli(now - ActivityLog.KEEP_DAYS * DAY_MS).atZone(zone).toLocalDate()
+        val older = log.weeks.filter { w -> LocalDate.parse(w.week).let { !it.isBefore(first) && it.isBefore(kept0) } }
+        val rolled = older.map { LocalDate.parse(it.week) }
+        fun rolledUp(date: LocalDate) = rolled.any { monday -> !date.isBefore(monday) && date.isBefore(monday.plusDays(7)) }
         val completions = log.completions.filter { inRange(it.doneAt) }
         // The slots with an outcome, by the day each was laid in as recorded (LR-09), whatever the
         // zone now: a deliberate move is neither.
@@ -81,22 +87,23 @@ object Stats {
                 planDone = plans[date.toString()]?.full,
             )
         }
-        // Only real deadlines are met or missed (PL-14): a date the app or Claude set was a plan.
-        val dated = completions.filter { it.dueAt != null && it.hardDeadline }
-        // Weeks wholly before what the log keeps, but in the period: their rollups (PL-10).
-        val kept0 = Instant.ofEpochMilli(now - ActivityLog.KEEP_DAYS * DAY_MS).atZone(zone).toLocalDate()
-        val older = log.weeks.filter { w -> LocalDate.parse(w.week).let { !it.isBefore(first) && it.plusDays(6).isBefore(kept0) } }
+        // In the totals, a rolled-up week's records are its rollup's. Only real deadlines are met or
+        // missed (PL-14): a date the app or Claude set was a plan.
+        val done = completions.filterNot { rolledUp(dateOf(it.doneAt)) }
+        val dated = done.filter { it.dueAt != null && it.hardDeadline }
+        val laid = slots.filterNot { rolledUp(LocalDate.parse(it.date)) }
+        val held = laid.filter { it.outcome.kept }
         return Summary(
             days = perDay,
-            completions = completions.size + older.sumOf { it.finished },
+            completions = done.size + older.sumOf { it.finished },
             dated = dated.size + older.sumOf { it.dated },
             onTime = dated.count { it.doneAt <= it.dueAt!! } + older.sumOf { it.onTime },
-            slotsPlanned = slots.size + older.sumOf { it.slotsKept + it.slotsMissed },
-            slotsKept = kept.size + older.sumOf { it.slotsKept },
+            slotsPlanned = laid.size + older.sumOf { it.slotsKept + it.slotsMissed },
+            slotsKept = held.size + older.sumOf { it.slotsKept },
             slotsEarned = kept.count { it.earned },
             photoChecks = kept.count { it.photo },
-            slotMin = kept.sumOf { it.workedMin } + older.sumOf { it.minutes },
-            blocks = blocks.size + older.sumOf { it.blocks },
+            slotMin = held.sumOf { it.workedMin } + older.sumOf { it.minutes },
+            blocks = blocks.count { !rolledUp(dateOf(it.at)) } + older.sumOf { it.blocks },
             topBlocked = blocks.groupingBy { it.target }.eachCount().entries
                 .sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key })
                 .take(TOP)

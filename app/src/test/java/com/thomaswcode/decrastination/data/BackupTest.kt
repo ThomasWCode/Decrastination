@@ -162,6 +162,11 @@ class BackupTest {
         val week = WeekRollup("2026-09-28", minutes = 120, finished = 3, onTime = 2, blocks = 1, fullDays = 2, slotsKept = 4, slotsMissed = 1)
         val weeks = Backups.mergeLog(ActivityLog(weeks = listOf(week)), ActivityLog(weeks = listOf(week.copy(minutes = 1), week.copy(week = "2026-09-21"))), now).weeks
         assertEquals(listOf("2026-09-21" to 120, "2026-09-28" to 120), weeks.map { it.week to it.minutes })
+        // One the app couldn't have written is refused: not from a Monday, or a count below nothing.
+        assertNull(Backups.problem(backup(ActivityLog(weeks = listOf(week)))))
+        assertNotNull(Backups.problem(backup(ActivityLog(weeks = listOf(week.copy(week = "2026-09-29"))))))
+        assertNotNull(Backups.problem(backup(ActivityLog(weeks = listOf(week.copy(week = "soon"))))))
+        assertNotNull(Backups.problem(backup(ActivityLog(weeks = listOf(week.copy(minutes = -1))))))
     }
 
     private fun backup(log: ActivityLog = ActivityLog(), settings: Settings = Settings(), calibration: Calibration = Calibration(), answers: Map<String, String> = emptyMap()) =
