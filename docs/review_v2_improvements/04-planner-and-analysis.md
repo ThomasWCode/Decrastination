@@ -8,20 +8,20 @@ Revised after your answers and notes. The first version kept the planner's backw
 
 | ID | Improvement | Priority | Effort | Status |
 |---|---|---|---|---|
-| PL-01 | Spread every later task evenly to its deadline, by the time each day has | P1 | L | Changed (Q-16, note 3); details confirmed (Q-32) |
-| PL-02 | Say early when a source deadline can't be met, and what gives | P1 | M | Changed |
+| PL-01 | Spread every later task evenly to its deadline, by the time each day has | P1 | L | Changed (Q-16, note 3); details confirmed (Q-32); Implemented (v3 phase 2) |
+| PL-02 | Say early when a source deadline can't be met, and what gives | P1 | M | Changed; Implemented (v3 phase 2; Felix's part with phase 5) |
 | PL-03 | A preference for how an evening starts | – | – | Withdrawn (Q-15) |
 | PL-04 | "On Thursday" and "at 19:30": pin work to a day or a time | P2 | S | Changed |
 | PL-05 | A most-per-day, apart from the hours | – | – | Withdrawn (Q-16) |
-| PL-06 | Plan with the hours the days really hold: a learned yield, per kind of day | P1 | M | Changed (Q-16, Q-49) |
-| PL-07 | Each piece says why it's where it is | P2 | S | – |
+| PL-06 | Plan with the hours the days really hold: a learned yield, per kind of day | P1 | M | Changed (Q-16, Q-49); Implemented (v3 phase 2: weekdays and weekends; school windows with phases 3 and 4) |
+| PL-07 | Each piece says why it's where it is | P2 | S | Implemented (v3 phase 2; pins and refits with phase 3) |
 | PL-08 | Stats by subject, with estimate accuracy | P2 | M | – |
 | PL-09 | When the work actually happens | P3 | S | Changed |
 | PL-10 | A term's view, not a fortnight's | P3 | M | – |
 | PL-11 | Export the log as CSV | P2 | S | – |
 | PL-12 | Every piece gets a time: slots in the day's free windows, and outside breaks at weekends | P1 | L | New (note 2, Q-32) |
 | PL-13 | Adjust live: slots move when the day does | P1 | M | New (note 2) |
-| PL-14 | Dates the app set are elastic; only a source's deadline is overdue | P1 | M | New (note 4) |
+| PL-14 | Dates the app set are elastic; only a source's deadline is overdue | P1 | M | New (note 4); Implemented (v3 phase 2) |
 | PL-15 | Study periods, break and lunch as planning windows | P1 | M | New (note 2, Q-30); settled (Q-52) |
 | PL-16 | The school calendar: holidays, half-days, INSET days | P1 | M | New (Q-43); settled (Q-50) |
 | PL-17 | Weekend windows: two a day | – | – | Withdrawn (Q-49) |

@@ -42,6 +42,16 @@ The Email job changed (AI-02, AI-04, DX-06, DX-01), and with it what the app sto
 
 Re-reading also found two faults the round couldn't have: an Outlook forward (subject `Fw:`, no forward marker) lost all 8 600 characters it forwarded (`open-day`), and an attached email had no name (`dad-apply`'s three, now named by their subjects).
 
+## Review v2, phase 2 (15 Oct): a quoted deadline (AI-12)
+
+The Email job now says whether its deadline is the email's own words (`deadlineQuoted`), and a quick action with no date of its own has none (no more "due within the next two weeks"). The scorer checks the new label where a case has one (`deadlineQuoted`, added to three cases: the open day's start is the email's own date; `dad-apply` and `zip-card` give none).
+
+| Round | Prompt | Passed | What failed |
+|---|---|---|---|
+| 4 (15 Oct) | phase 2's | 8 of 10 | `dad-apply`: its three blocks are the three applications (start the CERN team, book Cambridge, register for Oxford), now undated rather than each due two weeks on, as AI-12 means, but none says "apply", which its label asks for (round 3's had a "Reply … agreeing to apply" block); `german-assess`: a step dated after the task is due, as in round 1 (AI-01, phase 7) |
+
+All three quoted labels passed: the open day quoted, the two notes with no date.
+
 ## The chat (2.0.0)
 
 Ten messages to *Ask Claude*, sent as the app sends them: the exact system prompt, schema and turns built from the phone's `tasks.json` and `instructions.json` (pulled into `private/eval-chat/`, addresses redacted) by a throwaway JVM test kept out of the repo, each answered by an Opus subagent, and each answer put through `ChatAnswers.parse`. 12 Oct, against `ChatPrompts` as committed in #30: all ten read, and each did what was asked.

@@ -23,7 +23,7 @@ The model-side settings (effort, model per job, caching, retries) are in [02-ai-
 | AI-09 | Ask for a one-line reason with each reading, and show it | P2 | M | – |
 | AI-10 | Let the model ask one question when it isn't sure, and notify | P1 | M | Changed (Q-03) |
 | AI-11 | A way to say "this email is a task" when Claude hid it | – | – | Withdrawn (Q-04) |
-| AI-12 | Every date the model sets is soft | P1 | S | Changed (Q-05, note 4) |
+| AI-12 | Every date the model sets is soft | P1 | S | Changed (Q-05, note 4); Implemented (v3 phase 2) |
 | AI-13 | Time-of-day awareness in the chat | P1 | S | – |
 | AI-14 | More kinds of card in the chat: tick, steps, open, move | P2 | M | Changed (Q-06) |
 | AI-15 | "Help me start": a micro-plan for every slot, ready before it starts | P1 | M | Changed (Q-07) |

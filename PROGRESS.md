@@ -30,15 +30,18 @@ The implementation of `docs/review_v2_improvements/impl/` on branch `v3`. Delete
 - PL-14 only a real deadline is overdue; the app's dates move on: 2c30e87. 50 000 property seeds pass (25 s), with past dates and quoted and guessed email dates now drawn.
 - PL-06 a learned yield per kind of day: 0be81c0. 50 000 property seeds pass (24 s), with yields drawn.
 - DX-14 the calendar read to the plan's reach: 65a7b02.
-- PL-02 a real deadline its days can't hold, said early: this commit. 50 000 property seeds pass (26 s).
+- PL-02 a real deadline its days can't hold, said early: 5656fc8; judged by the deadline itself, not the safety margin (2dd9ebc, found on the phone); the chat's handed-in words sent before they're let go, and *What gives?* prefilled (d6556c9, found on the phone). 50 000 property seeds pass (25 s).
+- The eval's quoted-deadline label, and the calendar's reach in the debug log: d9b754f.
+- Phone (15 Oct, 00:56 to 01:16, over phase 1's build with its data; APK kept as `private/apk/2026-10-15-phase1.apk`, data in `private/backup/2026-10-15-before-phase2/`): the calendar read three months ahead (135 events; far all-day events a few hours a day, none asked about); the plan's pieces say why (`[why: …]` in the chat's plan: overdue Teams work `overdue`, tomorrow-morning homework `noroom`, undated email tasks `soft`, later work `spread`, a block on the roomiest day `mostroom`), and their sheets the sentence ("Couldn't fit before its deadline", "The day with most room before Sun 31 Jan"); the work-experience email's pieces run on through November, December and January, a piece a week or so; Tasks' *Overdue* holds only Teams' and Anki's five; two lines under today ("Digitalisierung der Gesellschaft: 3 h 30 min left, 0 min free before today 08:30", "Hausaufgabe Jugendkultur – Reading Summary: 1 h 18 min left, 1 h free before tomorrow 09:00") with *What gives?*, which put its question in the chat's box; the one dated email (*Happy New Year!*) read again: `deadlineQuoted` false, so its date (the rules' guess) is a plan; screenshots light and dark in `private/screens/phase2/`; protection armed, the six accessibility services as found, dark mode as found, no PiP.
+- Eval round 4 (`docs/eval.md`): 8 of 10; the quoted labels all pass.
 
 ## Current
 
-Phase 2: the items are in; the build, the eval round, the phone and the pull request next.
+Phase 2: the pull request and Codex's review.
 
 ## Outstanding
 
-- Phase 2: an eval round after AI-12 (it also covers phase 1's last prompt wording); the phone; the docs; the pull request.
+- Phase 2: the pull request, its review and merge.
 - Phases 3 to 8.
 
 ## For the owner (deferred: you weren't live)
@@ -46,6 +49,9 @@ Phase 2: the items are in; the build, the eval round, the phone and the pull req
 - **Old stars are tasks now.** Seven starred conversations the inbox never showed came in: *Happy New Year!* (2021), *Another password for your safe: code.org login* (2021, holds a password, and Claude has read it, as it reads every starred email), *Drum Homework: 10/11/2021*, *HOMEMADE CANDLES FOR PEOPLE* (2023), *Re: Acen told me to send everyone his email…* (2021, 9 messages), *Re: St John's Garden Website* (2025, 8 messages) and an untitled one (Aug 2025). Unstar any that aren't tasks.
 - **A starred conversation read as an Event is still off the plan and Tasks** (`TaskItem.justAnEmail`, unchanged by the plan): Claude read *Re: St John's Garden Website* as an Event ("Check for Analisa's Zoom link for Friday's call"), so it's hidden. Say if a starred event should show.
 - **Claude's 884 minutes for *german books/radio/tv*** (a note of resources) looks high; set its minutes on its sheet if so. AI-03 (phase 7) gives the model the limits.
+- **Long calendar events count as a few hours of each of their days until you're asked (DX-14).** Read to 90 days now, the all-day events of your own calendar further off than a week (half term, a trip, the Christmas holidays, among others) take 3 hours of each of their days, more where two overlap, until they're within the week, when the app asks about each as before. Holidays are likely free time: answer *Free* when asked, or tell the chat now ("half term is free"); I haven't, as the answers are yours. (The event names stay out of this file: the repository is public.)
+- **Email dates are plans until their emails are read again (PL-14, AI-12).** Claude's readings from before this phase don't say whether a date was the email's own, so no email's date is overdue now; phase 8 reads them again by the prompt's version. Only *Happy New Year!* (a 2021 newsletter with a guessed date in January) had one, read again: not quoted.
+- **The chat has a question of mine.** Testing *What gives?* asked Claude about *Hausaufgabe "Jugendkultur" – Reading Summary* (1 h 18 min left, 1 h free before Friday 09:00); its answer suggests asking for Monday, or trimming it. Clear it if it's in the way.
 - **Unstarring live.** The 18 unstarred inbox tasks finishing at the first sync shows it; unstar one yourself to see a task go at the next sync (the app can't change Gmail, and I didn't).
 
 ## Decisions made
