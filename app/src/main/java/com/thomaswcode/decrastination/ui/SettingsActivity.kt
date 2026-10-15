@@ -94,6 +94,11 @@ class SettingsActivity : ComponentActivity() {
             }
         }
         val form = Form(raw, typed = { key, text -> raw = raw + (key to text) }, valid = { key, ok -> invalid = if (ok) invalid - key else invalid + key })
+        // What a field does, under it, as the draft has it (UI-13).
+        val schoolCalendar by graph.school.state.collectAsStateWithLifecycle()
+        val tasksState by graph.tasks.state.collectAsStateWithLifecycle()
+        val today = java.time.Instant.ofEpochMilli(graph.clock.now()).atZone(graph.clock.zone()).toLocalDate()
+        val effect: @Composable (String) -> Unit = { field -> SettingsEffects.line(field, draft, tasksState.timetable, schoolCalendar, today)?.let { Note(it) } }
 
         Scaffold(
             topBar = { BackBar("Settings", this) },
@@ -181,7 +186,9 @@ class SettingsActivity : ComponentActivity() {
                 item { Section("Hours") }
                 item {
                     WindowField("School days: work", draft.weekdayHours, "weekdayHours", form) { draft = draft.copy(weekdayHours = it) }
+                    effect("weekdayHours")
                     WindowField("Weekends: work", draft.weekendHours, "weekendHours", form) { draft = draft.copy(weekendHours = it) }
+                    effect("weekendHours")
                     WindowField("Quiet hours (nothing blocked)", draft.quietHours, "quietHours", form, overnight = true) { draft = draft.copy(quietHours = it) }
                     TimeField("School days: blocking from", draft.weekdayBlockFromMin, "weekdayBlockFromMin", form) { draft = draft.copy(weekdayBlockFromMin = it) }
                     TimeField("Weekends and days off: blocking from", draft.weekendBlockFromMin, "weekendBlockFromMin", form) { draft = draft.copy(weekendBlockFromMin = it) }
@@ -213,12 +220,21 @@ class SettingsActivity : ComponentActivity() {
                 item { Section("Planning") }
                 item {
                     NumberField("Work cut into pieces of (minutes)", draft.boxMin, SettingsLimits.BOX_MIN, "boxMin", form) { draft = draft.copy(boxMin = it) }
+                    effect("boxMin")
                     NumberField("Finish this many days before a deadline", draft.marginDays, SettingsLimits.MARGIN_DAYS, "marginDays", form) { draft = draft.copy(marginDays = it) }
+                    effect("marginDays")
                     NumberField("Days given to undated work", draft.softDeadlineDays, SettingsLimits.SOFT_DEADLINE_DAYS, "softDeadlineDays", form) { draft = draft.copy(softDeadlineDays = it) }
                     NumberField("Undated work a day, at most (minutes)", draft.softMinPerDay, SettingsLimits.SOFT_MIN_PER_DAY, "softMinPerDay", form) { draft = draft.copy(softMinPerDay = it) }
+                    effect("softMinPerDay")
                     NumberField("Minutes of work for one of free time", draft.workMinPerFreeMin, SettingsLimits.WORK_MIN_PER_FREE_MIN, "workMinPerFreeMin", form) { draft = draft.copy(workMinPerFreeMin = it) }
+                    effect("workMinPerFreeMin")
                     NumberField("Pieces this long earn with a photo (minutes)", draft.photoFromMin, SettingsLimits.PHOTO_FROM_MIN, "photoFromMin", form) { draft = draft.copy(photoFromMin = it) }
+                    effect("photoFromMin")
                     NumberField("A day with nothing to do: free minutes", draft.freeAllowanceMin, SettingsLimits.FREE_ALLOWANCE_MIN, "freeAllowanceMin", form) { draft = draft.copy(freeAllowanceMin = it) }
+                    effect("freeAllowanceMin")
+                    NumberField("Outside breaks on a free day", draft.outsideBreaks, SettingsLimits.OUTSIDE_BREAKS, "outsideBreaks", form) { draft = draft.copy(outsideBreaks = it) }
+                    NumberField("Each outside break (minutes)", draft.outsideBreakMin, SettingsLimits.OUTSIDE_BREAK_MIN, "outsideBreakMin", form) { draft = draft.copy(outsideBreakMin = it) }
+                    effect("outsideBreaks")
                 }
 
                 item { Section("Anki") }
