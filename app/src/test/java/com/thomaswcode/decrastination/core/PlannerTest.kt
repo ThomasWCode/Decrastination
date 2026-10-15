@@ -940,6 +940,16 @@ class PlannerTest {
     }
 
     @Test
+    fun `a step's piece keeps its key when a step before it is done, so its slot's start is kept`() {
+        val steps = listOf(SubStep("Read", 20), SubStep("Write", 30))
+        val t = task("t", Fixtures.at("2026-10-20T09:00"), steps = steps)
+        val before = plan(listOf(t), "2026-10-08T17:00").chunksOf("teams:t").single { it.step == "Write" }.key
+        val after = plan(listOf(t.copy(subSteps = listOf(steps[0].copy(done = true), steps[1]))), "2026-10-08T17:00").chunksOf("teams:t").single().key
+        assertEquals("teams:t#1", after)
+        assertEquals(before, after)
+    }
+
+    @Test
     fun `today's work with no slot comes before tomorrow's slots`() {
         // Tuesday 21:50: Monday's evening gone but for ten minutes, a half hour due tonight has no
         // slot left today; it's still the next thing, not tomorrow's first slot.
