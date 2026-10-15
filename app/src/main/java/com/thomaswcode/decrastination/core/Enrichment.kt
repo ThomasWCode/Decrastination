@@ -45,6 +45,8 @@ data class Enrichment(
     val dropped: String? = null,
     /** The one question that would settle what the text can't (AI-10): put to you by Felix. Rarely any. */
     val question: String? = null,
+    /** A line for each step whose dates couldn't be, kept with none (AI-01): said on the task's sheet. */
+    val adjusted: List<String> = emptyList(),
 )
 
 /**

@@ -17,12 +17,22 @@ interface Enricher {
     /** What it says about [task] for [job], and what saying it cost. */
     suspend fun enrich(task: TaskItem, job: Enrichments.Job, now: Long): Result
 
+    /** [task] asked about again (AI-01), its first answer and the check that answer failed in [repair]; nothing, by default. */
+    suspend fun repair(task: TaskItem, job: Enrichments.Job, now: Long, repair: Repair): Result = Result(null)
+
+    /** An answer that failed a check, and the check, said so the model can put it right. */
+    data class Repair(val answer: String, val complaint: String)
+
     data class Result(
         /** Null when it had nothing to say or declined. */
         val enrichment: Enrichment?,
         val costUsd: Double = 0.0,
         /** The model declined to answer (its safety classifiers). */
         val refused: Boolean = false,
+        /** An answer to put back once (AI-01): [enrichment] is meanwhile its reading with what can be left out left out. */
+        val repair: Repair? = null,
+        /** This is the answer asked for again. */
+        val repaired: Boolean = false,
     )
 }
 

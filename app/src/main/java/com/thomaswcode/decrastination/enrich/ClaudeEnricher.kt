@@ -41,12 +41,59 @@ class ClaudeEnricher(
         .build()
 
     override suspend fun enrich(task: TaskItem, job: Enrichments.Job, now: Long): Enricher.Result {
+        val message = send(job) { addUserMessage(Prompts.describe(task, job, now, zone).take(Pricing.MAX_INPUT_CHARS)) }
+        val cost = Pricing.costUsd(message)
+        when (message.stopReason().orElse(null)) {
+            StopReason.REFUSAL -> return Enricher.Result(null, cost, refused = true)
+            // Cut off mid-answer: nothing to trust.
+            StopReason.MAX_TOKENS -> return Enricher.Result(null, cost)
+            else -> Unit
+        }
+        val text = textOf(message)
+        // By the model that answered: a fallback's answer isn't the asked-for model's (BUG-P3-001).
+        val answeredBy = message.model().asString().ifBlank { by }
+        val strict = Answers.read(job, text, task, answeredBy, now, zone, salvage = false)
+        val complaint = strict.complaint ?: return Enricher.Result(strict.enrichment, cost)
+        // A check it failed (AI-01): read with the dates that can't be left out meanwhile, and the
+        // answer and its problem kept to put back once ([repair]).
+        return Enricher.Result(Answers.parse(job, text, task, answeredBy, now, zone), cost, repair = Enricher.Repair(text, complaint))
+    }
+
+    /**
+     * The second time of asking (AI-01): the item, the model's first answer as its own turn, and
+     * what was wrong with it; read with the dates that can't be left out. The item is cut to leave
+     * room for the answer, so the call is within what every call's held to ([Pricing.MAX_INPUT_CHARS]);
+     * with too little, it isn't sent.
+     */
+    override suspend fun repair(task: TaskItem, job: Enrichments.Job, now: Long, repair: Enricher.Repair): Enricher.Result {
+        val asked = Prompts.repair(repair.complaint)
+        val room = Pricing.MAX_INPUT_CHARS - repair.answer.length - asked.length
+        if (room < MIN_REPAIR_ROOM) return Enricher.Result(null)
+        val message = send(job) {
+            addUserMessage(Prompts.describe(task, job, now, zone).take(room))
+            addAssistantMessage(repair.answer)
+            addUserMessage(asked)
+        }
+        val cost = Pricing.costUsd(message)
+        when (message.stopReason().orElse(null)) {
+            StopReason.REFUSAL -> return Enricher.Result(null, cost, refused = true, repaired = true)
+            StopReason.MAX_TOKENS -> return Enricher.Result(null, cost, repaired = true)
+            else -> Unit
+        }
+        val answeredBy = message.model().asString().ifBlank { by }
+        return Enricher.Result(Answers.parse(job, textOf(message), task, answeredBy, now, zone), cost, repaired = true)
+    }
+
+    private fun textOf(message: Message): String = message.content().mapNotNull { block -> block.text().orElse(null)?.text() }.joinToString("")
+
+    /** [job]'s request, its turns from [turns]: the system prompt and the profile, the effort, the schema, and the fallback on. */
+    private suspend fun send(job: Enrichments.Job, turns: MessageCreateParams.Builder.() -> Unit): Message {
         val student = profile()
         val params = MessageCreateParams.builder()
             .model(model)
             .maxTokens(MAX_TOKENS)
             .systemOfTextBlockParams(ModelCalls.systemBlocks(Prompts.system(job, student.year), student.text))
-            .addUserMessage(Prompts.describe(task, job, now, zone).take(Pricing.MAX_INPUT_CHARS))
+            .apply(turns)
             .outputConfig(
                 OutputConfig.builder()
                     .effort(ModelEffort.of(job))
@@ -57,18 +104,7 @@ class ClaudeEnricher(
             .putAdditionalHeader("anthropic-beta", FALLBACK_BETA)
             .putAdditionalBodyProperty("fallbacks", JsonValue.from("default"))
             .build()
-        val message = withContext(Dispatchers.IO) { client.messages().create(params) }
-        val cost = Pricing.costUsd(message)
-        when (message.stopReason().orElse(null)) {
-            StopReason.REFUSAL -> return Enricher.Result(null, cost, refused = true)
-            // Cut off mid-answer: nothing to trust.
-            StopReason.MAX_TOKENS -> return Enricher.Result(null, cost)
-            else -> Unit
-        }
-        val text = message.content().mapNotNull { block -> block.text().orElse(null)?.text() }.joinToString("")
-        // By the model that answered: a fallback's answer isn't the asked-for model's (BUG-P3-001).
-        val answeredBy = message.model().asString().ifBlank { by }
-        return Enricher.Result(Answers.parse(job, text, task, answeredBy, now, zone), cost)
+        return withContext(Dispatchers.IO) { client.messages().create(params) }
     }
 
     private fun schema(map: Map<String, Any>): JsonOutputFormat.Schema =
@@ -80,6 +116,9 @@ class ClaudeEnricher(
 
         /** Room for thinking at high effort and the answer; a call costs only what it uses. */
         const val MAX_TOKENS = 16_000L
+
+        /** The least of the item worth asking again with: less, and the first answer's reading stands. */
+        private const val MIN_REPAIR_ROOM = 4_000
     }
 }
 
