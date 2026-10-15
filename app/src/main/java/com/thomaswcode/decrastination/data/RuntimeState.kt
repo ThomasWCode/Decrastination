@@ -283,6 +283,8 @@ data class WeeklyReview(
     /** The changes it made to the settings (AI-18, LR-01), and each one's value before: next week's review reads them, and the Reviews page undoes them. */
     val changes: List<com.thomaswcode.decrastination.learn.ReviewInput.Change> = emptyList(),
     val settingsBefore: Map<String, Int> = emptyMap(),
+    /** The week's summary for home (NF-02), in the student's words: null till it's written. */
+    val summary: String? = null,
 )
 
 /**

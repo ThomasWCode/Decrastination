@@ -106,6 +106,13 @@ private fun ReviewCard(review: WeeklyReview, checkIn: CheckIn?, settings: Settin
                     if (tidyUndoable) TextButton(onClick = onUndoTidy) { Text("Undo") }
                 }
             }
+            // The week's summary for home (NF-02), and its email.
+            review.summary?.let { text ->
+                Text("The week's summary", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(text, style = MaterialTheme.typography.bodyMedium)
+                val context = androidx.compose.ui.platform.LocalContext.current
+                review.week?.let { week -> TextButton(onClick = { runCatching { context.startActivity(com.thomaswcode.decrastination.learn.Summary.email(settings.summaryEmail, week, text)) } }) { Text("Send it") } }
+            }
             checkIn?.let { c ->
                 fun said(text: String) = text.ifBlank { "-" }
                 Text(

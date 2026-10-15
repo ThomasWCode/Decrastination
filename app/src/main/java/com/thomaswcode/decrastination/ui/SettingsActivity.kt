@@ -345,6 +345,15 @@ class SettingsActivity : ComponentActivity() {
                         TimeField("Morning briefing, weekends", draft.briefingWeekendMin, "briefingWeekendMin", form) { draft = draft.copy(briefingWeekendMin = it) }
                         TimeField("Sunday check-in", draft.checkInMin, "checkInMin", form) { draft = draft.copy(checkInMin = it) }
                         Note("The week's review follows the check-in an hour and a half later, answered or not. Those held back by quiet hours or the day's four go with the next briefing.")
+                        // The weekly summary for home (NF-02): where it goes, and this week's to send now.
+                        TextField("Weekly summary goes to (an email address)", draft.summaryEmail, SUMMARY_EMAIL_MAX, "summaryEmail", form) { draft = draft.copy(summaryEmail = it) }
+                        val latest = graph.log.value.reviews.filter { it.summary != null }.maxByOrNull { it.at }
+                        if (latest?.summary != null && latest.week != null) {
+                            val context = androidx.compose.ui.platform.LocalContext.current
+                            androidx.compose.material3.TextButton(onClick = { runCatching { context.startActivity(com.thomaswcode.decrastination.learn.Summary.email(draft.summaryEmail, latest.week, latest.summary)) } }) { Text("Send this week's summary") }
+                        } else {
+                            Note("The summary is written after each Sunday's review, while Claude is on.")
+                        }
                     }
 
                     // A backup, and what couldn't be read at a start, as Setup has them.
@@ -410,6 +419,9 @@ private const val CALENDAR = "calendar"
 private const val NOTIFICATIONS = "notifications"
 private const val BACKUP = "backup"
 private const val RESET = "reset"
+
+/** The most of an email address the summary goes to (NF-02). */
+private const val SUMMARY_EMAIL_MAX = 120
 
 /** Its pages, every control of the old Setup, Settings and Protection pages on one of them (UI-18). */
 private val PAGES = listOf(

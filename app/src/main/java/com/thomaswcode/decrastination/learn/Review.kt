@@ -58,6 +58,8 @@ object Review {
         // The week's totals (PL-10), kept past its days.
         val rollup = Stats.rollup(graph.log.value, LocalDate.parse(week), zone)
         graph.log.update { it.copy(reviews = it.reviews + review, weeks = it.weeks.filterNot { w -> w.week == week } + rollup).trimmed(now) }
+        // The week's summary for home (NF-02), after its review: its own call, its failure the review's no matter.
+        runCatching { graph.writeSummary(week) }.onFailure { Log.w(AppGraph.TAG, "The week's summary failed", it) }
         Notify.post(
             context,
             ID,
