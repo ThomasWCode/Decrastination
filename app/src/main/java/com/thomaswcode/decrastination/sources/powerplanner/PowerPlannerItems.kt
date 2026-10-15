@@ -104,10 +104,16 @@ object PowerPlannerItems {
     /** A timetable time ("2026-09-05T12:20:00": its date means nothing) as the time of day it gives. */
     fun timeOf(text: String): LocalTime = parse(text).toLocalTime()
 
-    /** Every lesson on [day], by its start (DX-09): what the school day's windows are read from. */
-    fun lessonsOn(timetable: Timetable, day: LocalDate): List<Lesson> =
-        timetable.classes.flatMap { klass -> schedulesOn(klass, day, timetable).map { Lesson(klass.name, timeOf(it.startTime), timeOf(it.endTime)) } }
-            .sortedBy { it.start }
+    /**
+     * Every lesson on [day], by its start (DX-09): what the school day's windows are read from. With
+     * the timetable's week unknown (no week one given), only the lessons of both weeks are sure.
+     */
+    fun lessonsOn(timetable: Timetable, day: LocalDate): List<Lesson> {
+        val known = timetable.weekOneStartsOn?.let(::parse) != null
+        return timetable.classes.flatMap { klass ->
+            schedulesOn(klass, day, timetable).filter { known || it.scheduleWeek == BOTH_WEEKS }.map { Lesson(klass.name, timeOf(it.startTime), timeOf(it.endTime)) }
+        }.sortedBy { it.start }
+    }
 
     /** 1 or 2: weeks alternate from the week holding [weekOne]. Null when there's no rotation. */
     fun scheduleWeek(day: LocalDate, weekOne: LocalDate?): Int? {

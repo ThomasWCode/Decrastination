@@ -34,8 +34,8 @@ object SlotCalendar {
     /** A calendar on the phone, and whether events can be added to it. */
     data class DeviceCalendar(val id: Long, val name: String, val account: String, val writable: Boolean)
 
-    /** What a write left: each URI's start as it now stands, and the moves you made, taken or written back. */
-    data class Written(val starts: Map<String, Long>, val taken: List<SlotCalendarDiff.HandMove>, val refused: List<SlotCalendarDiff.HandMove>)
+    /** What a write left: each URI's start as it now stands, and the moves you made, taken or written back (with why). */
+    data class Written(val starts: Map<String, Long>, val taken: List<SlotCalendarDiff.HandMove>, val refused: List<Pair<SlotCalendarDiff.HandMove, String>>)
 
     fun allowed(context: Context): Boolean = context.checkSelfPermission(Manifest.permission.WRITE_CALENDAR) == PackageManager.PERMISSION_GRANTED
 
@@ -58,17 +58,17 @@ object SlotCalendar {
 
     /**
      * [plan]'s slots written to [calendarId] against what's there and [written] (each URI's start as
-     * last written); a hand move kept where [takes] says, else written back.
+     * last written); a hand move taken as [SlotCalendarDiff.judge] judges it, else written back.
      */
-    fun write(context: Context, calendarId: Long, plan: Plan, zone: ZoneId, written: Map<String, Long>, takes: (SlotCalendarDiff.HandMove) -> Boolean): Written {
+    fun write(context: Context, calendarId: Long, plan: Plan, zone: ZoneId, written: Map<String, Long>, refuses: (SlotCalendarDiff.HandMove) -> String?): Written {
         val from = plan.today.atStartOfDay(zone).toInstant().toEpochMilli()
         val to = plan.today.plusDays(SlotCalendarDiff.DAYS).atStartOfDay(zone).toInstant().toEpochMilli()
         val desired = SlotCalendarDiff.desired(plan, zone)
         val diff = SlotCalendarDiff.diff(desired, existing(context, calendarId, from, to, desired.map { it.uri }), written)
-        val (taken, refused) = diff.handMoves.partition(takes)
+        val (taken, refused) = SlotCalendarDiff.judge(diff.handMoves, refuses)
         val ops = ArrayList<ContentProviderOperation>()
         diff.inserts.forEach { ops += ContentProviderOperation.newInsert(Events.CONTENT_URI).withValues(values(context, calendarId, it, zone)).build() }
-        (diff.updates.map { it.existing.id to it.desired } + refused.map { it.existing.id to it.desired }).forEach { (id, want) ->
+        (diff.updates.map { it.existing.id to it.desired } + refused.map { it.first.existing.id to it.first.desired }).forEach { (id, want) ->
             ops += ContentProviderOperation.newUpdate(ContentUris.withAppendedId(Events.CONTENT_URI, id)).withValues(values(context, calendarId, want, zone)).build()
         }
         diff.deletes.forEach { ops += ContentProviderOperation.newDelete(ContentUris.withAppendedId(Events.CONTENT_URI, it.id)).build() }
@@ -87,12 +87,12 @@ object SlotCalendar {
         }.isSuccess
     }
 
-    /** Says a move of yours was written back, as its task is due before then. */
-    fun sayRefused(context: Context, move: SlotCalendarDiff.HandMove, zone: ZoneId) {
+    /** Says a move of yours was written back, and [why]. */
+    fun sayRefused(context: Context, move: SlotCalendarDiff.HandMove, zone: ZoneId, why: String) {
         val notification = NotificationCompat.Builder(context, Channels.CALENDAR)
             .setSmallIcon(R.drawable.ic_focus)
             .setContentTitle("Can't move “${move.desired.title}”")
-            .setContentText("Not to ${Instant.ofEpochMilli(move.existing.start).atZone(zone).format(WHEN)}: it's due before then, so it's back where it was.")
+            .setContentText("Not to ${Instant.ofEpochMilli(move.existing.start).atZone(zone).format(WHEN)}: $why, so it's back where it was.")
             .setAutoCancel(true)
             .build()
         Notify.post(context, move.desired.uri, MOVE_ID, notification)

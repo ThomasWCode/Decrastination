@@ -29,6 +29,40 @@ object SlotCalendarDiff {
 
     data class Diff(val inserts: List<Desired>, val updates: List<Update>, val deletes: List<Existing>, val handMoves: List<HandMove>)
 
+    /** Your moves as judged: those taken as your time, and those written back, with why. */
+    data class Judged(val taken: List<HandMove>, val refused: List<Pair<HandMove, String>>)
+
+    /** Why a second move of one task's pieces is written back. */
+    const val ONE_AT_A_TIME = "one of its pieces moves at a time, and an earlier one was"
+
+    /**
+     * Your [moves], earliest first: each taken unless [refuses] gives why not, or one of its task's
+     * was taken already, as a task's next piece has one time ([com.thomaswcode.decrastination.core.ChangeType.AtTime]):
+     * that one is written back and said, not lost to the other.
+     */
+    fun judge(moves: List<HandMove>, refuses: (HandMove) -> String?): Judged {
+        val taken = mutableListOf<HandMove>()
+        val refused = mutableListOf<Pair<HandMove, String>>()
+        val tasks = mutableSetOf<String?>()
+        for (move in moves.sortedBy { it.existing.start }) {
+            val why = refuses(move) ?: ONE_AT_A_TIME.takeIf { move.desired.taskId in tasks }
+            if (why != null) {
+                refused += move to why
+            } else {
+                taken += move
+                tasks += move.desired.taskId
+            }
+        }
+        return Judged(taken, refused)
+    }
+
+    /**
+     * [starts] as a write left them, but each of [taken] at its start as last written ([before]): a
+     * move counts as written only once its instruction is in, so one stopped short of it is found again.
+     */
+    fun pending(starts: Map<String, Long>, before: Map<String, Long>, taken: List<HandMove>): Map<String, Long> =
+        starts + taken.mapNotNull { move -> before[move.desired.uri]?.let { move.desired.uri to it } }
+
     /** [plan]'s slots, work and outside, from today for [DAYS] days, as events. */
     fun desired(plan: Plan, zone: ZoneId): List<Desired> = (0 until DAYS).flatMap { offset ->
         val date = plan.today.plusDays(offset)

@@ -71,6 +71,33 @@ class SlotCalendarDiffTest {
     }
 
     @Test
+    fun `of two moves of one task's pieces the earlier is taken, the other written back and said`() {
+        val hour = 3_600_000L
+        val written = mapOf(want("a").uri to five, want("b").uri to half)
+        // a dragged to 19:00, b to 18:00: b's the earlier, so its time is the task's.
+        val diff = SlotCalendarDiff.diff(listOf(want("a"), want("b", start = half)), listOf(event(1, "a", start = five + 2 * hour), event(2, "b", start = five + hour)), written)
+        val judged = SlotCalendarDiff.judge(diff.handMoves) { null }
+        assertEquals(listOf(2L), judged.taken.map { it.existing.id })
+        assertEquals(listOf(1L to SlotCalendarDiff.ONE_AT_A_TIME), judged.refused.map { it.first.existing.id to it.second })
+        // One refused for its own reason leaves the task's next move free to be taken.
+        val late = SlotCalendarDiff.judge(diff.handMoves) { if (it.existing.id == 2L) "it's due before then" else null }
+        assertEquals(listOf(1L), late.taken.map { it.existing.id })
+        assertEquals(listOf(2L to "it's due before then"), late.refused.map { it.first.existing.id to it.second })
+    }
+
+    @Test
+    fun `a move taken counts as written only once its instruction is in`() {
+        val written = mapOf(want("a").uri to five)
+        val moved = listOf(event(1, "a", start = half))
+        val diff = SlotCalendarDiff.diff(listOf(want("a")), moved, written)
+        // The write leaves a at your 17:30; what's kept till its instruction is in is the app's 17:00.
+        val pending = SlotCalendarDiff.pending(mapOf(want("a").uri to half), written, diff.handMoves)
+        assertEquals(mapOf(want("a").uri to five), pending)
+        // Stopped there, the next write finds the move again.
+        assertEquals(listOf(1L), SlotCalendarDiff.diff(listOf(want("a")), moved, pending).handMoves.map { it.existing.id })
+    }
+
+    @Test
     fun `the next seven days' slots are the events, a piece's and a break outside's`() {
         val today = LocalDate.parse("2026-10-13")
         val chunk = Chunk(

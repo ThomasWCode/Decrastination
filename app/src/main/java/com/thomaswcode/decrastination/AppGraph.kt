@@ -12,6 +12,7 @@ import com.thomaswcode.decrastination.block.Sessions
 import com.thomaswcode.decrastination.block.SlotAlarms
 import com.thomaswcode.decrastination.block.Slots
 import com.thomaswcode.decrastination.calendar.SlotCalendar
+import com.thomaswcode.decrastination.calendar.SlotCalendarDiff
 import com.thomaswcode.decrastination.core.About
 import com.thomaswcode.decrastination.core.Change
 import com.thomaswcode.decrastination.core.ChangeType
@@ -280,17 +281,26 @@ class AppGraph private constructor(context: Context) {
         if (!SlotCalendar.allowed(app)) return
         val zone = clock.zone()
         val byId = tasks.value.tasks.associateBy { it.id }
+        val before = runtime.value.calendarWritten
         val written = withContext(Dispatchers.IO) {
-            SlotCalendar.write(app, calendarId, made, zone, runtime.value.calendarWritten) { move ->
+            SlotCalendar.write(app, calendarId, made, zone, before) { move ->
                 val task = move.desired.taskId?.let(byId::get)
-                task != null && !Instructions.latePin(SlotCalendar.change(move, zone), task, zone)
+                when {
+                    task == null -> "its task is no longer there"
+                    Instructions.latePin(SlotCalendar.change(move, zone), task, zone) -> "it's due before then"
+                    else -> null
+                }
             }
         }
-        if (written.starts != runtime.value.calendarWritten) runtime.update { it.copy(calendarWritten = written.starts) }
-        written.refused.forEach { SlotCalendar.sayRefused(app, it, zone) }
+        // A move taken counts as written only once its instruction is in: stopped before, the next
+        // write finds it a move again, rather than putting it back.
+        val held = SlotCalendarDiff.pending(written.starts, before, written.taken)
+        if (held != before) runtime.update { it.copy(calendarWritten = held) }
+        written.refused.forEach { (move, why) -> SlotCalendar.sayRefused(app, move, zone, why) }
         for (move in written.taken) {
             val taskId = move.desired.taskId ?: continue
             addOwnChange(java.util.UUID.randomUUID().toString(), "Moved in the calendar", About(taskId = taskId, taskTitle = byId[taskId]?.title), SlotCalendar.change(move, zone))
+            runtime.update { it.copy(calendarWritten = it.calendarWritten + (move.desired.uri to move.existing.start)) }
         }
     }
 
@@ -308,6 +318,9 @@ class AppGraph private constructor(context: Context) {
      * the plan again for nothing.
      */
     private suspend fun keepSlots(made: Plan) {
+        // A slot whose grace went by before its alarm or a sweep could see it is missed first: once its
+        // start is replaced by where this plan moved it, nothing would know it was.
+        runCatching { slots.sweep() }.onFailure { Log.w(TAG, "Looking at missed slots failed", it) }
         val starts = made.todaySlots.filter { it.kind == SlotKind.Work }.associate { it.chunk!!.key to it.start }
         runtime.update { state ->
             val kept = state.slots.on(made.today).copy(previous = starts).reconciled(made)
