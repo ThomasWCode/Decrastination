@@ -307,7 +307,14 @@ class PlannerPropertyTest {
             val task = byId.getValue(short.taskId)
             assertTrue(task.hardDeadline && task.dueAt!! >= input.now, "seed=$seed: ${short.taskId} said not to fit, its deadline the app's or gone")
             val leftOut = plan.unplanned.any { it.taskId == task.id }
-            assertTrue(short.leftMin > short.freeMin || leftOut, "seed=$seed: ${task.id} said not to fit: ${short.leftMin} min left, ${short.freeMin} free")
+            // Or carried past its deadline's own last day (a per-day limit), whatever the minutes free.
+            val late = plan.buckets.any { b ->
+                b.chunks.any { c ->
+                    val due = java.time.Instant.ofEpochMilli(c.deadline).atZone(LONDON)
+                    c.taskId == task.id && b.date > (if (due.toLocalTime() < LocalTime.NOON) due.toLocalDate().minusDays(1) else due.toLocalDate())
+                }
+            }
+            assertTrue(short.leftMin > short.freeMin || leftOut || late, "seed=$seed: ${task.id} said not to fit: ${short.leftMin} min left, ${short.freeMin} free")
         }
     }
 
