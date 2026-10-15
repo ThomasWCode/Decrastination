@@ -72,7 +72,8 @@ The implementation of `docs/review_v2_improvements/impl/` on branch `v3`. Delete
 
 - AC-02 effort by job, AC-04 rest by what failed (busy 5, 15, 60 minutes; the server or a timeout 15, 60; no network or a request the API won't take none, that task the rules' till it changes; the key an hour), AC-05 a call's room taken under the lock and the call sent outside it, counting those in flight: 48fed00.
 - AI-05, AI-06 the student's profile as every call's second system block, the year group in the prompts from `yearGroupStart`, Settings → About you (the year, the textbook moved there, your lines, your classes' subjects); AC-01 the job's own block marked for the hour's cache: 02f9090.
-- AI-21 what's remembered: facts under a topic and standing instructions, kept by the chat on its own and said under its answer, an empty text forgetting; the facts' room 6 000 characters, the instructions 20; in the profile, in backups (format 5) and in Settings → What Felix remembers, with a forget each; the weekly tidy past 70 % of the room, its before and after with the review: this commit.
+- AI-21 what's remembered: facts under a topic and standing instructions, kept by the chat on its own and said under its answer, an empty text forgetting; the facts' room 6 000 characters, the instructions 20; in the profile, in backups (format 5) and in Settings → What Felix remembers, with a forget each; the weekly tidy past 70 % of the room, its before and after with the review: 687c7fd.
+- AI-22 Felix's prompt and call: his name and line from Settings → Felix (with when he asks into a slot and checks again), what he's told for each reason, his answer held to two sentences, three replies and five minutes at least before he checks again, his messages kept in the log: this commit.
 
 ## Current
 

@@ -130,6 +130,8 @@ data class ActivityLog(
     val days: List<DayRecord> = emptyList(),
     val checkIns: List<CheckIn> = emptyList(),
     val reviews: List<WeeklyReview> = emptyList(),
+    /** Felix's messages and the replies to them (AI-22, LR-03): the last [FELIX_KEEP_DAYS] days. */
+    val felix: List<FelixRecord> = emptyList(),
 ) {
     fun trimmed(now: Long): ActivityLog {
         val since = now - KEEP_DAYS * 24 * 3_600_000L
@@ -142,13 +144,36 @@ data class ActivityLog(
             days = days.filter { it.date >= sinceDay },
             checkIns = checkIns.filter { it.at >= since },
             reviews = reviews.filter { it.at >= since },
+            felix = felix.filter { it.at >= now - FELIX_KEEP_DAYS * 24 * 3_600_000L },
         )
     }
 
     companion object {
         const val KEEP_DAYS = 120L
+
+        /** His messages are many and matter for a few weeks: the review reads the last one's. */
+        const val FELIX_KEEP_DAYS = 30L
     }
 }
+
+/**
+ * A message of Felix's (AI-22, LR-03): when, why ([reason], a [com.thomaswcode.decrastination.enrich.FelixPrompts.Reason]),
+ * what he said and the replies he offered, the piece ([key]) or task it was about, when he'd check
+ * again, and the student's reply, when one came.
+ */
+@Serializable
+data class FelixRecord(
+    val id: String,
+    val at: Long,
+    val reason: String,
+    val text: String,
+    val replies: List<String> = emptyList(),
+    val key: String? = null,
+    val taskId: String? = null,
+    val nextCheckAt: Long? = null,
+    val replyText: String? = null,
+    val repliedAt: Long? = null,
+)
 
 /** How a slot went (LR-09): kept in its time or after its grace, missed, or moved on purpose. */
 @Serializable
