@@ -14,12 +14,10 @@ import com.thomaswcode.decrastination.core.WindowKind
 import com.thomaswcode.decrastination.data.ActivityLog
 import com.thomaswcode.decrastination.data.BlockRecord
 import com.thomaswcode.decrastination.data.CompletionRecord
-import com.thomaswcode.decrastination.data.EndedSession
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.PhotoDone
 import com.thomaswcode.decrastination.data.Rewarded
 import com.thomaswcode.decrastination.data.RuntimeState
-import com.thomaswcode.decrastination.data.SessionRecord
 import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.data.SlotOutcome
 import com.thomaswcode.decrastination.data.SlotRecord
@@ -38,9 +36,9 @@ import kotlinx.coroutines.sync.withLock
 
 /**
  * The blocker's state and decisions, apart from Android: what a blocked app or site meets now
- * (the plan, the policy, earned time, a focus session), and the bookkeeping that follows from
- * work being done. The focus service asks it on every app change; the block screen and the
- * plan start and stop sessions through it.
+ * (the plan, the policy, earned time), and the bookkeeping that follows from work being done:
+ * slots kept, missed and moved (LR-09), photo checks, completions. The focus service asks it on
+ * every app change; the Plan and the block screen keep slots through it.
  */
 class Focus(
     private val tasks: JsonStore<TaskState>,
@@ -84,13 +82,6 @@ class Focus(
 
     fun today(now: Long = clock.now()): LocalDate = Instant.ofEpochMilli(now).atZone(clock.zone()).toLocalDate()
 
-    /**
-     * Whether a session that ended at [endedAt] earns free time [now]: finished, on today's date.
-     * One finished on a day that's over (given late, the phone off at midnight) earns nothing, as
-     * that day's free time has gone.
-     */
-    fun earnsNow(completed: Boolean, endedAt: Long, now: Long = clock.now()): Boolean = completed && today(endedAt) == today(now)
-
     /** Whether a blocked app may be in front now. */
     fun verdict(now: Long = clock.now()): BlockPolicy.Verdict {
         val state = runtime.value
@@ -101,10 +92,8 @@ class Focus(
                 settings = settings.value,
                 pressure = plan(now).pressure,
                 creditLeftMs = creditLeftMs(now),
-                session = state.session,
                 overrideUntil = state.overrideUntil,
                 forceActiveUntil = state.forceActiveUntil,
-                uptime = clock.uptime(),
             ),
         )
     }
@@ -168,69 +157,8 @@ class Focus(
         log.update { it.copy(blocks = it.blocks + BlockRecord(now, target.name, reason.name)).trimmed(now) }
     }
 
-    val session: FocusSession? get() = runtime.value.session
-
     /**
-     * Starts a session on [taskId]'s chunk; one already running is ended first. [box] is the box
-     * length that cut the chunk ([com.thomaswcode.decrastination.core.Chunk.box]): only those
-     * sessions go to the box experiment, as a task done in one piece wasn't shaped by it.
-     */
-    suspend fun startSession(taskId: String, label: String, step: String?, minutes: Int, box: Int? = null, stepIndex: Int? = null): FocusSession {
-        val now = clock.now()
-        val uptime = clock.uptime()
-        // The one running ended and this one begun in the same step: two starts at once can't both
-        // find none running and each save theirs, losing one without its record.
-        var ended: EndedSession? = null
-        var session: FocusSession? = null
-        runtime.update { state ->
-            val running = state.session
-            // Its start told apart from the one it ends, even begun in the same millisecond: a
-            // session is known by its start ([TaskItem.sessionsCounted], the log), and two alike
-            // would have the second's minutes taken as counted already.
-            val at = if (running != null && running.startedAt >= now) running.startedAt + 1 else now
-            val begun = FocusSession(taskId, label, step, minutes.coerceIn(1, MAX_SESSION_MIN), at, uptime, box, whole = minutes <= MAX_SESSION_MIN, stepIndex = stepIndex)
-            session = begun
-            ended = running?.let { ending(it, now, uptime) }
-            state.copy(session = begun, finishing = state.finishing + listOfNotNull(ended))
-        }
-        ended?.let { finish(it) }
-        return session!!
-    }
-
-    /** [session] ended [now]: run its full time (its minutes all worked), or stopped early with what it ran. */
-    private fun ending(session: FocusSession, now: Long, uptime: Uptime?): EndedSession {
-        val completed = session.isDue(now, uptime)
-        val worked = if (completed) session.minutes else (session.ran(now, uptime) / 60_000L).toInt().coerceIn(0, session.minutes)
-        // A finished session ended when it was due, not when this ran (the phone off at its
-        // alarm, on again after midnight): its free time is that day's.
-        return EndedSession(session, worked, completed, if (completed) minOf(now, session.endsAt) else now)
-    }
-
-    /**
-     * Ends the session: a finished one ([FocusSession.endsAt] has passed) marks its step done (or
-     * adds its minutes to the task's) and earns its share of free time; one stopped early only
-     * adds the minutes worked. With [expected], only that session: one started since is left
-     * running. Returns what was recorded, or null if there was no session (or another).
-     */
-    suspend fun stopSession(expected: FocusSession? = null): SessionRecord? {
-        // Taken and cleared in one step, so two callers at once (the ticker, the alarm and Stop)
-        // can't both finish it: the second finds none. What it's owed is saved in that same step,
-        // so a stop before it's all given loses none of it.
-        val now = clock.now()
-        val uptime = clock.uptime()
-        var ended: EndedSession? = null
-        runtime.update { state ->
-            val session = state.session ?: return@update state
-            if (expected != null && session != expected) return@update state
-            val end = ending(session, now, uptime)
-            ended = end
-            state.copy(session = null, finishing = state.finishing + end)
-        }
-        return ended?.let { finish(it) }
-    }
-
-    /**
-     * Where in [task]'s list the step a session or photo check was on is, to tick: the one at [index]
+     * Where in [task]'s list the step a kept slot or photo check was on is, to tick: the one at [index]
      * if it's still that step and still to do; none if the list has changed under it, rather than
      * another of the same [title]. With no index (one saved before they were kept), the first still
      * to do of that title. -1 for none.
@@ -239,75 +167,6 @@ class Focus(
         if (index == null) return task.subSteps.indexOfFirst { !it.done && it.title == title }
         val step = task.subSteps.getOrNull(index) ?: return -1
         return if (!step.done && step.title == title) index else -1
-    }
-
-    /** Gives the sessions a stop left part-way ([RuntimeState.finishing]) what they're owed: at start-up. */
-    suspend fun finishSessions() {
-        runtime.value.finishing.forEach { finish(it) }
-    }
-
-    /**
-     * Gives [ended] its due, each part once however often this runs: its minutes and step to its
-     * task (which notes the session as counted), its record to the log (unless it's there), and
-     * its free time in the step that takes it off [RuntimeState.finishing]. A finished session
-     * earns free time only on its own day, as the rest of that day's.
-     */
-    private suspend fun finish(ended: EndedSession): SessionRecord {
-        val session = ended.session
-        var task: TaskItem? = null
-        tasks.update { state ->
-            state.copy(
-                tasks = state.tasks.map { t ->
-                    if (t.id != session.taskId) return@map t
-                    if (session.startedAt in t.sessionsCounted) return@map t.also { task = it }
-                    // A step longer than the session ran (cut to the most a session can be) isn't done:
-                    // its minutes count, and the planner takes them off what's left of it.
-                    val stepIndex = if (ended.completed && session.step != null && session.whole) stepAt(t, session.stepIndex, session.step) else -1
-                    val steps = if (stepIndex >= 0) t.subSteps.mapIndexed { i, s -> if (i == stepIndex) s.copy(done = true) else s } else t.subSteps
-                    t.copy(
-                        subSteps = steps,
-                        workedMin = t.workedMin + ended.workedMin,
-                        sessionsCounted = (t.sessionsCounted + session.startedAt).takeLast(MAX_COUNTED),
-                    ).also { task = it }
-                },
-                // A completion of the task saved for its reward counts the session too, in the same
-                // step: stopped before the reward, and the task reopened meanwhile, it's still there.
-                unrewarded = state.unrewarded.map { u ->
-                    if (u.id != session.taskId || session.startedAt in u.sessionsCounted) return@map u
-                    u.copy(workedMin = u.workedMin + ended.workedMin, sessionsCounted = (u.sessionsCounted + session.startedAt).takeLast(MAX_COUNTED))
-                },
-            )
-        }
-        val record = SessionRecord(
-            taskId = session.taskId,
-            kind = task?.kind ?: Kind.Admin,
-            className = task?.className,
-            label = session.label,
-            plannedMin = session.minutes,
-            // The box its task was cut into, when the session was on a box, not a step of its own.
-            box = session.box,
-            workedMin = ended.workedMin,
-            startedAt = session.startedAt,
-            endedAt = ended.endedAt,
-            completed = ended.completed,
-        )
-        log.update { state ->
-            if (state.sessions.any { it.taskId == session.taskId && it.startedAt == session.startedAt }) state
-            else state.copy(sessions = state.sessions + record).trimmed(ended.endedAt)
-        }
-        val now = clock.now()
-        val today = today(now)
-        val ratio = settings.value.workMinPerFreeMin
-        runtime.update { state ->
-            // Given already (another caller finished it first): nothing more.
-            if (ended !in state.finishing) return@update state
-            val earns = earnsNow(ended.completed, ended.endedAt, now)
-            state.copy(
-                finishing = state.finishing - ended,
-                credit = if (earns) state.credit.earn(today, Credit.forSession(session.minutes, ratio)) else state.credit.on(today),
-            )
-        }
-        return record
     }
 
     /**
@@ -350,7 +209,7 @@ class Focus(
                         kept = true
                         return@map t.copy(workedMin = t.workedMin + worked)
                     }
-                    // Its step, done, and its minutes worked: as a finished session's were, so more than
+                    // Its step, done, and its minutes worked: so more than
                     // the step's own come off the next steps.
                     val i = stepAt(t, index, chunk.step.orEmpty())
                     if (i < 0) return@map t
@@ -437,11 +296,11 @@ class Focus(
     }
 
     /**
-     * A piece of [taskId] the photo check found done (Phase 5): as a finished session on it would,
-     * its step is ticked (or its minutes added to the task's) and its share of free time earned.
-     * Saved first ([RuntimeState.photosDone]), so a stop part-way is finished at start-up.
+     * The piece [key] of [taskId] the photo check found done (Phase 5, BL-08): its slot kept, or a
+     * kept one's free time earned. Saved first ([RuntimeState.photosDone]), so a stop part-way is
+     * finished at start-up.
      */
-    suspend fun photoChecked(taskId: String, step: String?, minutes: Int, stepIndex: Int? = null, key: String? = null): Boolean {
+    suspend fun photoChecked(taskId: String, step: String?, minutes: Int, stepIndex: Int? = null, key: String): Boolean {
         val done = PhotoDone(UUID.randomUUID().toString(), taskId, step, minutes, clock.now(), stepIndex, key)
         runtime.update { it.copy(photosDone = it.photosDone + done) }
         return finishPhoto(done)
@@ -450,8 +309,8 @@ class Focus(
     /**
      * The block of an email or a task of your own at [index] you've done, ticked off in Tasks (still
      * [title], so a list changed meanwhile ticks nothing): either is yours to say, as archiving an
-     * email is. Marked as ticked by hand, so it earns no free time (that's for timed or photographed
-     * work). Says whether it was ticked.
+     * email is. Marked as ticked by hand, so it earns no free time (that's for kept slots). Says
+     * whether it was ticked.
      */
     suspend fun tickBlock(taskId: String, index: Int, title: String): Boolean {
         var ticked = false
@@ -482,88 +341,15 @@ class Focus(
     }
 
     /**
-     * Gives [done] its due, each part once however often this runs: its step or minutes to its task
-     * (which notes what it was given), its record to the log (unless it's there), and its free time
-     * (only while it's still waiting, which it stops being in the same step).
+     * Gives [done] its due, once however often this runs (BL-08): its slot kept, earning, if it isn't
+     * yet; if it was kept without earning (a longer piece's tick), it earns now, once. Kept since the
+     * photo was taken (a stop after, finished again at start-up): nothing more. One saved before a
+     * photo named its piece (none were waiting when sessions went) is let go.
      */
     private suspend fun finishPhoto(done: PhotoDone): Boolean {
-        // A piece's photo (BL-08): its slot kept, earning, if it isn't yet; if it was kept without
-        // earning (a longer piece's tick), it earns now, once. Kept since the photo was taken (a stop
-        // after, finished again at start-up): nothing more.
-        done.key?.let { key ->
-            val earned = photoEarns(key, done.at)
-            runtime.update { it.copy(photosDone = it.photosDone - done) }
-            return earned
-        }
-        // Applied only while the piece is still to do: the task open and, for a step, that step not
-        // ticked meanwhile (another check, a session, a sync). Free time only for what was.
-        var credited = 0
-        tasks.update { state ->
-            state.copy(
-                tasks = state.tasks.map { t ->
-                    if (t.id != done.taskId) return@map t
-                    // Given already (a stop came after): what it was given then.
-                    t.photosCounted[done.id]?.let { given ->
-                        credited = given
-                        return@map t
-                    }
-                    if (!t.isOpen) return@map t
-                    fun counted(minutes: Int) = (t.photosCounted + (done.id to minutes)).entries.toList().takeLast(MAX_COUNTED).associate { it.key to it.value }
-                    // One of its own steps: ticked, once.
-                    // By your minutes or the app's estimate, the less, as a completion is: raising a
-                    // task's minutes plans more time for it, but can't make a photo earn more.
-                    val calibration = runtime.value.calibration
-                    val theApps = t.copy(userEffortMin = null)
-                    if (done.step != null && t.subSteps.any { it.title == done.step }) {
-                        val i = stepAt(t, done.stepIndex, done.step)
-                        if (i < 0) return@map t
-                        credited = minOf(done.minutes, (t.subSteps[i].minutes * calibration.stepMultiplierFor(theApps)).roundToInt().coerceAtLeast(1))
-                        // What's kept is what's credited: a retry after a stop gives no more.
-                        return@map t.copy(
-                            subSteps = t.subSteps.mapIndexed { j, s -> if (j == i) s.copy(done = true) else s },
-                            photoMin = t.photoMin + credited,
-                            photosCounted = counted(credited),
-                        )
-                    }
-                    // A piece of time (the whole task, or a part the planner cut it into): counted
-                    // against what's left of it as the plan measures it (calibrated), so the same
-                    // work can't be counted past it.
-                    val left = minOf(Planner.remaining(t, calibration.multiplierFor(t)), Planner.remaining(theApps, calibration.multiplierFor(theApps))).roundToInt()
-                    if (left <= 0) return@map t
-                    credited = minOf(done.minutes, left)
-                    t.copy(photoMin = t.photoMin + credited, photosCounted = counted(credited))
-                },
-            )
-        }
-        if (credited > 0) {
-            // Recorded as the day's work, as a session's minutes are, and marked a photo, not timed.
-            val task = tasks.value.tasks.firstOrNull { it.id == done.taskId }
-            val record = SessionRecord(
-                taskId = done.taskId,
-                kind = task?.kind ?: Kind.Admin,
-                className = task?.className,
-                label = "Photo check: " + (done.step ?: task?.title.orEmpty()),
-                plannedMin = done.minutes,
-                workedMin = credited,
-                startedAt = done.at,
-                endedAt = done.at,
-                completed = true,
-                photo = true,
-                check = done.id,
-            )
-            log.update { state -> if (state.sessions.any { it.check == done.id }) state else state.copy(sessions = state.sessions + record).trimmed(done.at) }
-        }
-        val ratio = settings.value.workMinPerFreeMin
-        runtime.update { state ->
-            // Given already (another caller finished it first): nothing more.
-            if (done !in state.photosDone) return@update state
-            state.copy(
-                photosDone = state.photosDone - done,
-                // The day's, as a session's is: given after that day, it has gone with it.
-                credit = if (credited > 0) state.credit.earn(today(done.at), Credit.forSession(credited, ratio)) else state.credit,
-            )
-        }
-        return credited > 0
+        val earned = done.key?.let { photoEarns(it, done.at) } ?: false
+        runtime.update { it.copy(photosDone = it.photosDone - done) }
+        return earned
     }
 
     /** [key]'s photo found it done at [at] (BL-08): its slot kept and earning, or a kept slot's free time earned now. */
@@ -585,40 +371,33 @@ class Focus(
      * Gives what's owed for the completions syncs confirmed ([TaskState.unrewarded]), hands them to
      * [then] (which asks how each went), and only then clears them. Stopped before that, it's all
      * done again next time (after the next sync, or when the app starts): [onCompleted] gives each
-     * only once, and [then] must be safe to repeat. Says whether it ended a running session.
+     * only once, and [then] must be safe to repeat.
      */
-    suspend fun rewardCompletions(then: suspend (List<TaskItem>) -> Unit = {}): Boolean {
+    suspend fun rewardCompletions(then: suspend (List<TaskItem>) -> Unit = {}) {
         val waiting = tasks.value.unrewarded
-        if (waiting.isEmpty()) return false
-        val stopped = onCompleted(waiting)
+        if (waiting.isEmpty()) return
+        onCompleted(waiting)
         then(waiting)
         tasks.update { state -> state.copy(unrewarded = state.unrewarded.filterNot { t -> waiting.any { it.id == t.id && it.doneAt == t.doneAt } }) }
-        return stopped
     }
 
     /**
-     * Work a source confirmed done: free time for what was left of it, a record in the log, and
-     * an end to a session still running on it. Each is given once per completion however often
-     * it's offered: the free time with a ledger of what's had it ([RuntimeState.rewarded]), written
-     * in the same step; the record only if the log hasn't got it. Says whether it ended a session.
+     * Work a source confirmed done: free time for what was left of it, and a record in the log.
+     * Each is given once per completion however often it's offered: the free time with a ledger of
+     * what's had it ([RuntimeState.rewarded]), written in the same step; the record only if the log
+     * hasn't got it.
      */
-    suspend fun onCompleted(completed: List<TaskItem>): Boolean {
-        if (completed.isEmpty()) return false
-        // A task confirmed done while its session runs: the session ends now, its minutes count
-        // as work on the task (not as a finished session's credit as well as the completion's).
-        val sessionMin = runtime.value.session?.takeIf { s -> completed.any { it.id == s.taskId } }
-            ?.let { s -> stopSession(s)?.let { record -> s.taskId to record.workedMin } }
+    suspend fun onCompleted(completed: List<TaskItem>) {
+        if (completed.isEmpty()) return
         val now = clock.now()
         val today = today(now)
         val ratio = settings.value.workMinPerFreeMin
-        // What was worked on it, a session just ended included: as stored, where it's still this
-        // completion (a session ended on an earlier try is there already); once it has reopened
-        // (its minutes started again), as the completion had it.
-        fun worked(task: TaskItem): Int = tasks.value.tasks.firstOrNull { it.id == task.id && it.doneAt == task.doneAt }?.workedMin
-            ?: (task.workedMin + if (sessionMin?.first == task.id) sessionMin.second else 0)
+        // What was worked on it (its kept slots): as stored, where it's still this completion; once it
+        // has reopened (its minutes started again), as the completion had it.
+        fun worked(task: TaskItem): Int = tasks.value.tasks.firstOrNull { it.id == task.id && it.doneAt == task.doneAt }?.workedMin ?: task.workedMin
         fun key(task: TaskItem) = Rewarded(task.id, task.doneAt ?: task.lastSeenAt)
         // Its deck tasks, missed ones too: the read that closes an assignment drops its unfinished
-        // deck in the same sync, before this, and that deck's sessions earned their time already.
+        // deck in the same sync, before this, and that deck's slots earned their time already.
         val decks = AnkiRules.heldDecks(tasks.value.tasks, settings.value.ankiTextbook, missed = true)
         // Blocks you ticked off by hand: done, but not timed, so the completion's no measure of time.
         fun handMinutes(task: TaskItem): Int = tasks.value.tasks.firstOrNull { it.id == task.id && it.doneAt == task.doneAt }?.handMin ?: task.handMin
@@ -634,9 +413,9 @@ class Focus(
             // time is for the day the work was confirmed: given late (the app stopped first), after
             // that day is over, it has gone as the rest of that day's has.
             // Nor is a task of your own you said is done: no source confirms it (your call, 12 Oct); its
-            // sessions earned their time.
+            // slots earned their time.
             val earned = fresh.filter { it.kind != Kind.Info && it.kind != Kind.Event && it.source != Source.Own && today(it.doneAt ?: now) == today }.sumOf { task ->
-                // Less what sessions and photo checks already earned time for: as stored while it's still
+                // Less what its kept slots and photo checks already earned time for: as stored while it's still
                 // this completion, as the completion had it once the task has reopened.
                 val stored = tasks.value.tasks.firstOrNull { it.id == task.id && it.doneAt == task.doneAt }
                 val photos = stored?.photoMin ?: task.photoMin
@@ -645,12 +424,12 @@ class Focus(
                 /**
                  * What's owed for [t]: what was left of it, less what its decks and your ticks account
                  * for, all in the plan's units (the estimate as calibrated, its steps as scaled), as its
-                 * sessions earned theirs.
+                 * slots earned theirs.
                  */
                 fun owed(t: TaskItem): Double {
                     val multiplier = state.calibration.stepMultiplierFor(t)
                     // Vocabulary its deck tasks hold earns its time through them, not again here: all
-                    // of it once they're done, else as far as their sessions and photo checks went. No
+                    // of it once they're done, else as far as their kept slots and photo checks went. No
                     // more, as a deck left unfinished when the work closes is dropped, and mustn't take
                     // that time with it.
                     val delegated = t.subSteps.filter { it.ankiSections.isNotEmpty() }.sumOf { step ->
@@ -699,13 +478,13 @@ class Focus(
                         firstSeenAt = task.firstSeenAt,
                         doneAt = task.doneAt ?: now,
                         byHand = handMinutes(task) > 0,
-                        photo = photoMinutes(task) > 0,
+                        // Work a photo check found done: as minutes counted before (BL-08's), or a slot it kept.
+                        photo = photoMinutes(task) > 0 || state.slots.any { it.taskId == task.id && it.photo && it.at >= task.firstSeenAt },
                         yourEstimate = task.yourMinutes,
                     )
                 },
             ).trimmed(now)
         }
-        return sessionMin != null
     }
 
     companion object {
@@ -714,11 +493,7 @@ class Focus(
         /** Whether [task]'s blocks can be ticked off by hand: an email's, or one of your own's, which are yours to say. */
         fun tickable(task: TaskItem): Boolean = task.source == Source.Gmail || task.source == Source.Own
 
-        /** How many sessions a task remembers counting: far more than one piece of work has. */
-        private const val MAX_COUNTED = 100
-
         /** How long a completion stays in the ledger of those rewarded: far longer than any retry. */
         private const val REWARDED_KEPT_MS = 14 * 24 * 3_600_000L
-        const val MAX_SESSION_MIN = 180
     }
 }

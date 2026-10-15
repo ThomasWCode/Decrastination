@@ -58,6 +58,7 @@ The implementation of `docs/review_v2_improvements/impl/` on branch `v3`. Delete
 `impl/phase-4-done.md`, on a local branch (`v3-phase4`) on top of phase 3 while its last check waits for the phone:
 
 - LR-09 each slot's outcome the record (kept, kept late, missed, moved), and the days, Stats, the weekly review and school's yield read from it; the box experiment gone; with BL-08, a short piece earning on its tick and a longer one on its photo, today's slots earning no more than today's plan: this commit. The phone's data as of 06:45 loads whole under the new schema (checked locally against the copy, not committed).
+- AR-09 focus sessions gone: no Start, no session in the policy, the block screen, the widget or the chat (which says the slot under way instead); a session's records in the old files passed over as they load; a backup's slots kept on import, which LR-09 missed: this commit.
 
 ## Current
 

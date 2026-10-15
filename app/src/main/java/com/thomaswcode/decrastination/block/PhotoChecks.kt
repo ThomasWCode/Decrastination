@@ -69,8 +69,6 @@ object PhotoChecks {
         }
         val verdict = result.verdict ?: return "Claude couldn't say. Try a clearer photo."
         if (!verdict.done || verdict.confidence < PhotoChecker.ACCEPT) return "Not yet: ${verdict.reason}"
-        // A session on it started while this was checked (from another screen): that counts it.
-        if (graph.focus.session?.taskId == piece.taskId) return "Done, but a session on it started meanwhile: it counts the work when it ends. ${verdict.reason}"
         if (!graph.focus.photoChecked(piece.taskId, piece.step, piece.minutes, piece.stepIndex, piece.key)) return "Done, but it was already ticked off: ${verdict.reason}"
         return "Done: ${verdict.reason}"
     }

@@ -147,7 +147,7 @@ class JsonStore<T>(
                         "without your dad's authenticator, loosening waits the full delay till protection is armed again with a new one" + copied
                     "settings.json" -> "Settings"
                     "tasks.json" -> "The task list"
-                    "runtime.json" -> "The app's running state (free time, the session, calendar answers)"
+                    "runtime.json" -> "The app's running state (free time, today's slots, calendar answers)"
                     "log.json" -> "The activity log"
                     "instructions.json" -> "Your instructions"
                     else -> file

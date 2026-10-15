@@ -8,7 +8,6 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import com.thomaswcode.decrastination.block.Focus
-import com.thomaswcode.decrastination.block.Sessions
 import com.thomaswcode.decrastination.block.SlotAlarms
 import com.thomaswcode.decrastination.block.Slots
 import com.thomaswcode.decrastination.calendar.SlotCalendar
@@ -526,9 +525,8 @@ class AppGraph private constructor(context: Context) {
             settleCompletions()
             CalendarTime.refresh(app)
         }
-        // Any a stop left ungiven: completions, and sessions' endings.
+        // Any a stop left ungiven: completions, and photo checks.
         scope.launch {
-            focus.finishSessions()
             focus.finishPhotos()
             settleCompletions()
         }
@@ -540,7 +538,7 @@ class AppGraph private constructor(context: Context) {
         syncer.addAfterEverySync { pruneOwn() }
         // A question of yours still waiting (Claude was off, resting, or the app stopped): tried again.
         syncer.addAfterEverySync { if (chat.value.unanswered != null) answerChat() }
-        // One of your own whose steps are all done (ticked, or worked through in sessions) is finished.
+        // One of your own whose steps are all done (ticked, or kept in their slots) is finished.
         scope.launch {
             tasks.state.map { s -> s.tasks.filter { it.source == Source.Own && it.isOpen && it.subSteps.isNotEmpty() && it.subSteps.all { st -> st.done } }.map { it.id } }
                 .distinctUntilChanged().collect { ids -> ids.forEach { finishOwnTask(it) } }
@@ -653,13 +651,12 @@ class AppGraph private constructor(context: Context) {
     /**
      * The completions syncs saved: free time and the log, then "How was it?" for finished homework
      * and revision (asked, or kept till notifications show), and only then off the queue, so a stop
-     * part-way loses neither. A session on one ends with it, and so do its notification and alarm.
+     * part-way loses neither.
      */
     private suspend fun settleCompletions() {
-        val stopped = focus.rewardCompletions { completed ->
+        focus.rewardCompletions { completed ->
             runCatching { Assessment.ask(app, completed) }.onFailure { Log.w(TAG, "Couldn't ask how the work went", it) }
         }
-        if (stopped) Sessions.clear(app)
     }
 
     /** The rules' enrichment: always there, and the fallback for the model. */
@@ -726,7 +723,7 @@ class AppGraph private constructor(context: Context) {
             CalendarTime.refresh(app)
             Briefing.replanToday(app)
         }
-        return "Restored the settings, ${backup.log.completions.size} completions and ${backup.log.sessions.size} sessions, what the app had learned, and your calendar answers.$waits$told"
+        return "Restored the settings, ${backup.log.completions.size} completions and ${backup.log.slots.size} slots, what the app had learned, and your calendar answers.$waits$told"
     }
 
     /**
@@ -871,9 +868,6 @@ class AppGraph private constructor(context: Context) {
         for ((snapshot, _) in candidates) {
             // Read afresh: a sync since the run began may have closed or changed it.
             val task = tasks.value.tasks.firstOrNull { it.id == snapshot.id } ?: continue
-            // Being worked on in a focus session: its steps stay till the session ends, or the
-            // step it's on would be gone when it does. It's done at the next run after.
-            if (focus.session?.taskId == task.id) continue
             val job = Enrichments.jobFor(task) ?: continue
             if (!Enrichments.stale(task, enricher != null, RuleEnricher.BY, modelOff = claudeKey() == null)) continue
             val now = clock.now()
@@ -911,13 +905,12 @@ class AppGraph private constructor(context: Context) {
             }
             if (enrichment == null) enrichment = rules.enrich(task, job, now).enrichment
             val made = enrichment ?: continue
-            // Laid only over the task as it was read (changed during the call, the next run does it),
-            // and not over one a session started on during the call: its steps stay till it ends.
+            // Laid only over the task as it was read (changed during the call, the next run does it).
             var laid = false
             tasks.update { state ->
                 state.copy(
                     tasks = state.tasks.map {
-                        if (it.id == task.id && Enrichments.inputHash(it) == made.inputHash && focus.session?.taskId != task.id) it.withEnrichment(made).also { laid = true } else it
+                        if (it.id == task.id && Enrichments.inputHash(it) == made.inputHash) it.withEnrichment(made).also { laid = true } else it
                     },
                 )
             }
@@ -1006,8 +999,7 @@ class AppGraph private constructor(context: Context) {
 
     /**
      * Your own task [taskId] done, as you say (2.0.0): finished through the queue a source's
-     * confirmation goes through, so it's logged and asked about as any is, and a session on it ends;
-     * but it earns no free time ([Focus.onCompleted]), as nothing but you says it's done.
+     * confirmation goes through, so it's logged and asked about as any is; but it earns no free time ([Focus.onCompleted]), as nothing but you says it's done.
      */
     suspend fun finishOwnTask(taskId: String): Unit = withContext(NonCancellable) {
         val now = clock.now()
@@ -1032,12 +1024,10 @@ class AppGraph private constructor(context: Context) {
         }
     }
 
-    /** Your own task [taskId] gone, as if it never was. Not while a focus session runs on it. */
-    suspend fun deleteOwnTask(taskId: String): Boolean {
-        if (focus.session?.taskId == taskId) return false
+    /** Your own task [taskId] gone, as if it never was. */
+    suspend fun deleteOwnTask(taskId: String) {
         tasks.update { state -> state.copy(tasks = state.tasks.filterNot { it.id == taskId && it.source == Source.Own }) }
         forgetCards(setOf(taskId))
-        return true
     }
 
     /** Chat cards that added the tasks [gone] say so no more: they can be added again. */
@@ -1147,8 +1137,8 @@ class AppGraph private constructor(context: Context) {
 
     /**
      * What the chat tells Claude the app knows at [now] ([ChatPrompts.context]): the open tasks, the
-     * calendar and the changes in use; and beside them the plan as the Plan tab shows it then, a focus
-     * session under way included ([ChatPrompts.plan]). All of one [state], calendar [time] and
+     * calendar and the changes in use; and beside them the plan as the Plan tab shows it then, the
+     * slot under way included ([ChatPrompts.plan]). All of one [state], calendar [time] and
      * [applied] instructions, so the list and the plan agree, and with the answer's checks where the
      * caller passes it the same ones.
      */
@@ -1158,11 +1148,9 @@ class AppGraph private constructor(context: Context) {
         time: com.thomaswcode.decrastination.learn.EventJudge.Time = calendarTime,
         applied: List<Instruction> = instructions.value.applied,
     ): ChatPrompts.Context {
-        val session = focus.session
-        val left = session?.let { kotlin.math.ceil(it.leftMs(now, clock.uptime()) / 60_000.0).toInt() }
         return ChatPrompts.Context(
             known = ChatPrompts.context(state.tasks, time.events, applied, now, clock.zone()),
-            plan = ChatPrompts.plan(plan(state, now = now, applied = applied, time = time), clock.zone(), session, left),
+            plan = ChatPrompts.plan(plan(state, now = now, applied = applied, time = time), clock.zone()),
         )
     }
 
@@ -1313,7 +1301,8 @@ class AppGraph private constructor(context: Context) {
         val made = proposal.made
         if (made == null && proposal.before.isEmpty()) return@withLock
         val note = if (proposal.task != null) {
-            if (made == null || deleteOwnTask(made)) null else "Stop its focus session first"
+            made?.let { deleteOwnTask(it) }
+            null
         } else {
             // What it changed on your own tasks put back as it was (no instruction held those changes):
             // only the fields that still hold what it set, so a later change of yours stands. One that

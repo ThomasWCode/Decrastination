@@ -73,7 +73,7 @@ object Planner {
         val dayLoads: Map<LocalDate, Int> = emptyMap(),
         /** The most minutes of work a day holds, where your instructions limit it (0: none). */
         val dayCaps: Map<LocalDate, Int> = emptyMap(),
-        /** Minutes of focus sessions and photo checks today: they come off today's limit, where there's one. */
+        /** Minutes of today's kept slots (LR-09): they come off today's limit, where there's one. */
         val workedTodayMin: Int = 0,
         /**
          * Times you said you can't work (instructions): off a day's time as [busy] is, and, like a

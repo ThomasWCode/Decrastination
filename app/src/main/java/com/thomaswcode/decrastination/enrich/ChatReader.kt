@@ -7,7 +7,6 @@ import com.anthropic.models.messages.JsonOutputFormat
 import com.anthropic.models.messages.MessageCreateParams
 import com.anthropic.models.messages.OutputConfig
 import com.anthropic.models.messages.StopReason
-import com.thomaswcode.decrastination.block.FocusSession
 import com.thomaswcode.decrastination.core.About
 import com.thomaswcode.decrastination.core.Change
 import com.thomaswcode.decrastination.core.ChatMessage
@@ -207,14 +206,14 @@ object ChatPrompts {
 
     /**
      * [plan] as the Plan tab shows it, for questions about a day ("what's on tomorrow?"): the next
-     * thing to do, as its *Do now* card has it ([session]'s piece while one runs, [sessionLeftMin]
-     * left); the open work it leaves out, with why; the other events coming up; what's planned after
+     * thing to do, as its *Do now* card has it, with the slot under way ("Now: 17:00–17:30 …");
+     * the open work it leaves out, with why; the other events coming up; what's planned after
      * the fortnight, in a line naming its tasks; then each of the next [PLAN_DAYS] days, its minutes
      * against its working time, its work a task a line with the pieces that day, and its events from
      * *Coming up*. The days go last, the nearest first, so a plan cut to fit ([turns]) loses only its
      * far days; each summary is at most [PLAN_LIST] lines.
      */
-    fun plan(plan: Plan, zone: ZoneId, session: FocusSession? = null, sessionLeftMin: Int? = null): String = buildString {
+    fun plan(plan: Plan, zone: ZoneId): String = buildString {
         fun at(time: Long) = Instant.ofEpochMilli(time).atZone(zone).format(WHEN)
         fun piece(chunk: Chunk) = "${chunk.label.take(MAX_TITLE)} (${chunk.minutes} min)"
         fun event(task: TaskItem) = "${task.id} | ${task.title.take(MAX_TITLE)} | ${task.source.label}"
@@ -227,16 +226,13 @@ object ChatPrompts {
                 "task in one piece, on the roomiest day before its deadline), soft (no due date: spare time this week), packed (its days " +
                 "are too tight to spread it, so as late as they allow), noroom (no room before its deadline).",
         )
-        // As the Do now card: in a focus session, its piece and no "then".
-        val doing = session?.let { plan.pieceOf(it.taskId, it.stepIndex, it.step) }
-        val left = sessionLeftMin?.let { ", $it min left" }.orEmpty()
+        // As the Do now card: the slot under way, with its time, else the next thing; then the one after.
+        val then = plan.then?.let { "; then ${piece(it)}" }.orEmpty()
+        val doing = plan.slotAt(plan.now)
+        fun clock(time: Long) = Instant.ofEpochMilli(time).atZone(zone).format(CLOCK)
         when {
-            doing != null -> appendLine("Doing now, in a focus session: ${piece(doing)}$left")
-            session != null -> {
-                appendLine("In a focus session now: ${session.label.take(MAX_TITLE)}$left")
-                plan.next?.let { appendLine("Next to do: ${piece(it)}") }
-            }
-            else -> plan.next?.let { next -> appendLine("Next to do: ${piece(next)}" + plan.then?.let { "; then ${piece(it)}" }.orEmpty()) }
+            doing != null -> appendLine("Now: ${clock(doing.start)}–${clock(doing.end)} ${piece(doing.chunk!!)}$then")
+            else -> plan.next?.let { appendLine("Next to do: ${piece(it)}$then") }
         }
         val last = plan.today.plusDays(PLAN_DAYS - 1L)
         fun day(time: Long): LocalDate = Instant.ofEpochMilli(time).atZone(zone).toLocalDate()

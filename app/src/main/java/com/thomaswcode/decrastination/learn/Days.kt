@@ -4,7 +4,6 @@ import com.thomaswcode.decrastination.core.DayKind
 import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.SlotKind
 import com.thomaswcode.decrastination.data.ActivityLog
-import com.thomaswcode.decrastination.data.SessionRecord
 import java.time.LocalDate
 import java.time.ZoneId
 import kotlinx.serialization.Serializable
@@ -104,17 +103,6 @@ object Days {
     /** Minutes worked on each task from [start] until [end]: its kept slots' (LR-09), by when each was laid. */
     fun workedIn(log: ActivityLog, start: Long, end: Long): Map<String, Int> =
         log.slots.filter { it.outcome.kept && it.start >= start && it.start < end }.groupBy { it.taskId }.mapValues { (_, kept) -> kept.sumOf { it.workedMin } }.filterValues { it > 0 }
-
-    /**
-     * Minutes of [session] from [start] until [end]: a timed one's as far as its time fell in them
-     * (from its start, for the minutes it ran), a photo check's on the day it was taken.
-     */
-    fun minutesIn(session: SessionRecord, start: Long, end: Long): Int {
-        if (session.photo) return if (session.startedAt in start until end) session.workedMin else 0
-        val from = maxOf(session.startedAt, start)
-        val to = minOf(session.startedAt + session.workedMin * 60_000L, end)
-        return ((to - from) / 60_000L).toInt().coerceIn(0, session.workedMin.coerceAtLeast(0))
-    }
 
     /** At least this many finished days before the check says anything. */
     const val CHECK_DAYS = 10

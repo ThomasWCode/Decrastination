@@ -20,11 +20,9 @@ import com.thomaswcode.decrastination.core.SubStep
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.Uptime
 import com.thomaswcode.decrastination.data.ActivityLog
-import com.thomaswcode.decrastination.data.EndedSession
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.PhotoDone
 import com.thomaswcode.decrastination.data.RuntimeState
-import com.thomaswcode.decrastination.data.SessionRecord
 import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.data.TaskState
 import java.io.File
@@ -57,93 +55,6 @@ class FocusTest {
         id = "teams:$id", source = Source.Teams, sourceId = id, title = id, dueAt = due?.let(Fixtures::at), kind = kind,
         sourceEffortMin = effort, subSteps = steps, firstSeenAt = clock.time, lastSeenAt = clock.time,
     )
-
-    @Test
-    fun `a finished session marks its step done and earns a third of its minutes`() = runTest {
-        tasks.update { it.copy(tasks = listOf(task("t", steps = listOf(SubStep("Q1-8", 30), SubStep("Q9-16", 30))))) }
-        focus.startSession("teams:t", "t: Q1-8", "Q1-8", 30)
-        assertIs<BlockPolicy.Verdict.Block>(focus.verdict())
-        clock.time += 30 * 60_000L
-        val record = focus.stopSession()!!
-        assertTrue(record.completed)
-        assertEquals(listOf(true, false), tasks.value.tasks.single().subSteps.map { it.done })
-        assertEquals(10 * 60_000L, focus.creditLeftMs())
-        assertNull(runtime.value.session)
-        assertEquals(1, log.value.sessions.size)
-    }
-
-    @Test
-    fun `a session ended twice at once is finished once`() = runTest {
-        tasks.update { it.copy(tasks = listOf(task("t"))) }
-        focus.startSession("teams:t", "t", null, 30)
-        clock.time += 30 * 60_000L
-        val records = listOf(async { focus.stopSession() }, async { focus.stopSession() }).awaitAll()
-        assertEquals(1, records.count { it != null })
-        assertEquals(30, tasks.value.tasks.single().workedMin)
-        assertEquals(1, log.value.sessions.size)
-        assertEquals(10 * 60_000L, focus.creditLeftMs())
-    }
-
-    @Test
-    fun `a session's end is the uptime clock's, the date set either way`() {
-        val session = FocusSession("teams:t", "t", null, 30, startedAt = clock.time, startedUptime = Uptime(1, 0))
-        // Set forward half an hour after two minutes: not due.
-        assertEquals(false, session.isDue(clock.time + 30 * 60_000L, Uptime(1, 2 * 60_000L)))
-        // Set back an hour after the half hour: due all the same.
-        assertTrue(session.isDue(clock.time - 60 * 60_000L, Uptime(1, 30 * 60_000L)))
-        // Across a restart, the wall clock says.
-        assertTrue(session.isDue(clock.time + 30 * 60_000L, Uptime(2, 1_000L)))
-    }
-
-    @Test
-    fun `setting the date forward doesn't finish a session`() = runTest {
-        tasks.update { it.copy(tasks = listOf(task("t"))) }
-        clock.up = Uptime(1, 1_000_000L)
-        focus.startSession("teams:t", "t", null, 30)
-        // The wall clock jumps the half hour; the phone has been on for two minutes.
-        clock.time += 30 * 60_000L
-        clock.up = Uptime(1, 1_000_000L + 2 * 60_000L)
-        val record = focus.stopSession()!!
-        assertEquals(false, record.completed)
-        assertEquals(2, record.workedMin)
-        assertEquals(0L, focus.creditLeftMs())
-    }
-
-    @Test
-    fun `work confirmed done during its session ends the session, its minutes counted once`() = runTest {
-        tasks.update { it.copy(tasks = listOf(task("t", effort = 40))) }
-        focus.startSession("teams:t", "t", null, 30)
-        clock.time += 10 * 60_000L
-        focus.onCompleted(listOf(tasks.value.tasks.single().copy(status = Status.Done)))
-        assertNull(runtime.value.session)
-        assertEquals(10, tasks.value.tasks.single().workedMin)
-        // The 30 minutes left of the estimate, a minute for three: ten, and no session's credit.
-        assertEquals(10 * 60_000L, focus.creditLeftMs())
-        // And the completion's record counts the session's minutes.
-        assertEquals(10, log.value.completions.single().workedMin)
-    }
-
-    @Test
-    fun `a piece the photo check finds done is ticked off and earns its time`() = runTest {
-        tasks.update { it.copy(tasks = listOf(task("t", steps = listOf(SubStep("Q1-8", 30), SubStep("Q9-16", 30))))) }
-        focus.photoChecked("teams:t", "Q1-8", 30)
-        assertEquals(listOf(true, false), tasks.value.tasks.single().subSteps.map { it.done })
-        // Its minutes come off what's left, kept apart from timed ones.
-        assertEquals(30, tasks.value.tasks.single().photoMin)
-        assertEquals(0, tasks.value.tasks.single().workedMin)
-        assertEquals(10 * 60_000L, focus.creditLeftMs())
-    }
-
-    @Test
-    fun `a session stopped early counts its minutes but earns nothing`() = runTest {
-        tasks.update { it.copy(tasks = listOf(task("t"))) }
-        focus.startSession("teams:t", "t", null, 45)
-        clock.time += 20 * 60_000L
-        val record = focus.stopSession()!!
-        assertEquals(false, record.completed)
-        assertEquals(20, tasks.value.tasks.single().workedMin)
-        assertEquals(0L, focus.creditLeftMs())
-    }
 
     @Test
     fun `confirmed work earns time, reading emails doesn't`() = runTest {
@@ -185,27 +96,6 @@ class FocusTest {
         focus.onCompleted(listOf(raised))
         // By the app's estimate, 30 of its 60 minutes were left: a third of them.
         assertEquals(10 * 60_000L, focus.creditLeftMs())
-    }
-
-    @Test
-    fun `a photo of a task whose minutes you raised counts no more than the app's estimate`() = runTest {
-        tasks.update { it.copy(tasks = listOf(task("hw", effort = 30).copy(userEffortMin = 300))) }
-        assertTrue(focus.photoChecked("teams:hw", null, 300))
-        focus.finishPhotos()
-        // 30 of the app's minutes, not 300 of yours.
-        assertEquals(30, tasks.value.tasks.single().photoMin)
-    }
-
-    @Test
-    fun `a photo of a step whose minutes you raised keeps only what it credits`() = runTest {
-        val steps = listOf(SubStep("Q1-8", 30), SubStep("Q9-16", 30))
-        tasks.update { it.copy(tasks = listOf(task("hw", effort = 60, steps = steps).copy(userEffortMin = 300))) }
-        // The step as planned is 150 of your minutes; the app's estimate makes it 30.
-        assertTrue(focus.photoChecked("teams:hw", "Q1-8", 150, stepIndex = 0))
-        focus.finishPhotos()
-        val t = tasks.value.tasks.single()
-        assertEquals(30, t.photoMin)
-        assertEquals(listOf(30), t.photosCounted.values.toList())
     }
 
     @Test
@@ -286,97 +176,6 @@ class FocusTest {
     }
 
     @Test
-    fun `a session's ending saved before its due was given is given it at start-up, once`() = runTest {
-        tasks.update { it.copy(tasks = listOf(task("hw", effort = 90))) }
-        val session = FocusSession("teams:hw", "hw", null, 30, startedAt = clock.time - 30 * 60_000L)
-        // Stopped part-way: the session ended and saved, nothing yet given.
-        runtime.update { it.copy(finishing = listOf(EndedSession(session, 30, completed = true, endedAt = clock.time))) }
-        focus.finishSessions()
-        assertEquals(30, tasks.value.tasks.single().workedMin)
-        assertEquals(1, log.value.sessions.size)
-        assertEquals(10 * 60_000L, focus.creditLeftMs())
-        assertEquals(emptyList(), runtime.value.finishing)
-        // Run again: nothing more.
-        focus.finishSessions()
-        assertEquals(30, tasks.value.tasks.single().workedMin)
-        assertEquals(1, log.value.sessions.size)
-        assertEquals(10 * 60_000L, focus.creditLeftMs())
-    }
-
-    @Test
-    fun `stopped after a session's minutes and record were saved, only its free time is left to give`() = runTest {
-        val session = FocusSession("teams:hw", "hw", null, 30, startedAt = clock.time - 30 * 60_000L)
-        tasks.update { it.copy(tasks = listOf(task("hw", effort = 90).copy(workedMin = 30, sessionsCounted = listOf(session.startedAt)))) }
-        log.update {
-            it.copy(
-                sessions = listOf(
-                    SessionRecord(
-                        taskId = "teams:hw",
-                        kind = Kind.Homework,
-                        label = "hw",
-                        plannedMin = 30,
-                        workedMin = 30,
-                        startedAt = session.startedAt,
-                        endedAt = clock.time,
-                        completed = true,
-                    ),
-                ),
-            )
-        }
-        runtime.update { it.copy(finishing = listOf(EndedSession(session, 30, completed = true, endedAt = clock.time))) }
-        focus.finishSessions()
-        assertEquals(30, tasks.value.tasks.single().workedMin)
-        assertEquals(1, log.value.sessions.size)
-        assertEquals(10 * 60_000L, focus.creditLeftMs())
-        assertEquals(emptyList(), runtime.value.finishing)
-    }
-
-    @Test
-    fun `a photo check's success applies once, to a piece still to do`() = runTest {
-        tasks.update { it.copy(tasks = listOf(task("hw", effort = 60, steps = listOf(SubStep("Q1-8", 30), SubStep("Q9-16", 30))))) }
-        assertTrue(focus.photoChecked("teams:hw", "Q1-8", 30))
-        // A second check of the same piece (or one a session ticked meanwhile): nothing more.
-        assertFalse(focus.photoChecked("teams:hw", "Q1-8", 30))
-        assertEquals(30, tasks.value.tasks.single().photoMin)
-        assertEquals(10 * 60_000L, focus.creditLeftMs())
-    }
-
-    @Test
-    fun `a photo of a piece of time counts against what's left of the estimate, once`() = runTest {
-        tasks.update { it.copy(tasks = listOf(task("hw", effort = 90))) }
-        // A part the planner cut, with no step of its own: counted.
-        assertTrue(focus.photoChecked("teams:hw", "part 1 of 2", 45))
-        assertTrue(focus.photoChecked("teams:hw", "part 1 of 1", 45))
-        assertEquals(90, tasks.value.tasks.single().photoMin)
-        // All of the estimate counted: the same work can't earn again.
-        assertFalse(focus.photoChecked("teams:hw", null, 45))
-        assertEquals(30 * 60_000L, focus.creditLeftMs())
-    }
-
-    @Test
-    fun `a completion that ends a running session says so`() = runTest {
-        tasks.update { it.copy(tasks = listOf(task("hw", effort = 45))) }
-        focus.startSession("teams:hw", "hw", null, 30)
-        val done = tasks.value.tasks.single().copy(status = Status.Done, doneAt = clock.time)
-        assertTrue(focus.onCompleted(listOf(done)))
-        assertNull(focus.session)
-        assertEquals(false, focus.onCompleted(listOf(task("other", effort = 10).copy(status = Status.Done, doneAt = clock.time))))
-    }
-
-    @Test
-    fun `a photo's cap is the calibrated estimate, and its work is the day's`() = runTest {
-        // Twice its estimate, learned: a 90-minute task is 180 minutes of pieces.
-        runtime.update { it.copy(calibration = Calibration(multipliers = mapOf("Homework|" to 2.0))) }
-        tasks.update { it.copy(tasks = listOf(task("hw", effort = 90))) }
-        repeat(4) { assertTrue(focus.photoChecked("teams:hw", "part 1 of 4", 45)) }
-        assertFalse(focus.photoChecked("teams:hw", null, 45))
-        // Each one recorded as work, a photo's, not a timed session: kept apart from timed minutes.
-        assertEquals(4, log.value.sessions.count { it.photo })
-        assertEquals(0, tasks.value.tasks.single().workedMin)
-        assertEquals(180, tasks.value.tasks.single().photoMin)
-    }
-
-    @Test
     fun `a completion's estimate is what was left when it was first seen`() = runTest {
         val halfDone = task("pp", effort = 100).copy(status = Status.Done, doneAt = clock.time, sourceProgress = 0.5)
         focus.onCompleted(listOf(halfDone))
@@ -438,21 +237,20 @@ class FocusTest {
     }
 
     @Test
-    fun `a completion earns from the calibrated estimate, as the plan and its sessions do`() = runTest {
-        // Learned to take half its estimate: a 100-minute task is 50 minutes of pieces.
+    fun `a completion earns from the calibrated estimate, as the plan and its kept slots do`() = runTest {
+        // Learned to take half its estimate: a 100-minute task is 50 minutes of pieces, both kept.
         runtime.update { it.copy(calibration = Calibration(multipliers = mapOf("Homework|" to 0.5))) }
         tasks.update { it.copy(tasks = listOf(task("hw", effort = 100))) }
-        focus.startSession("teams:hw", "hw", null, 50)
-        clock.time += 50 * 60_000L
-        focus.stopSession()
-        val afterSession = focus.creditLeftMs()
+        repeat(2) { assertTrue(focus.keepSlot("teams:hw#-1#1")) }
+        assertEquals(50, tasks.value.tasks.single().workedMin)
+        val afterSlots = focus.creditLeftMs()
         focus.onCompleted(listOf(tasks.value.tasks.single().copy(status = Status.Done, doneAt = clock.time)))
-        // The session was all of it: the completion earns nothing more.
-        assertEquals(afterSession, focus.creditLeftMs())
-        // With no session, the completion earns for the 50 calibrated minutes: 50 / 3.
+        // The slots were all of it: the completion earns nothing more.
+        assertEquals(afterSlots, focus.creditLeftMs())
+        // With none kept, the completion earns for the 50 calibrated minutes: 50 / 3.
         tasks.update { it.copy(tasks = listOf(task("other", effort = 100))) }
         focus.onCompleted(listOf(task("other", effort = 100).copy(status = Status.Done, doneAt = clock.time)))
-        assertEquals(afterSession + 50 * 60_000L / 3, focus.creditLeftMs())
+        assertEquals(afterSlots + 50 * 60_000L / 3, focus.creditLeftMs())
     }
 
     @Test
@@ -471,57 +269,22 @@ class FocusTest {
     }
 
     @Test
-    fun `only a piece the box cut goes to the box experiment`() = runTest {
-        tasks.update { it.copy(tasks = listOf(task("t", effort = 90))) }
-        focus.startSession("teams:t", "t: part 1 of 2", "part 1 of 2", 45, box = 45)
-        assertEquals(45, runtime.value.session!!.box)
-        focus.startSession("teams:t", "t", null, 10)
-        assertNull(runtime.value.session!!.box)
-    }
-
-    @Test
-    fun `a finished session processed late is dated at its end, and its time isn't today's`() = runTest {
-        tasks.update { it.copy(tasks = listOf(task("hw", effort = 90))) }
-        val session = focus.startSession("teams:hw", "hw", null, 30)
-        // The phone was off at its alarm, and it's processed the next morning.
-        clock.time += 14 * 3_600_000L
-        focus.stopSession()
-        assertEquals(session.endsAt, log.value.sessions.single().endedAt)
-        assertEquals(0L, focus.creditLeftMs())
-    }
-
-    @Test
-    fun `a session finished on a day that's over earns nothing, and says so`() = runTest {
-        val yesterday = clock.time - 24 * 3_600_000L
-        assertTrue(focus.earnsNow(true, clock.time))
-        assertFalse(focus.earnsNow(true, yesterday))
-        assertFalse(focus.earnsNow(false, clock.time))
-    }
-
-    @Test
-    fun `a step longer than a session isn't ticked by one, its minutes count`() = runTest {
-        tasks.update { it.copy(tasks = listOf(task("t", effort = 240, steps = listOf(SubStep("Essay", 240))))) }
-        focus.startSession("teams:t", "t: Essay", "Essay", 240)
-        assertEquals(Focus.MAX_SESSION_MIN, focus.session!!.minutes)
-        clock.time += Focus.MAX_SESSION_MIN * 60_000L
-        focus.stopSession()
-        val t = tasks.value.tasks.single()
-        assertEquals(listOf(false), t.subSteps.map { it.done })
-        assertEquals(Focus.MAX_SESSION_MIN, t.workedMin)
-    }
-
-    @Test
-    fun `a photo check stopped part-way is finished at start-up, each part once`() = runTest {
-        // Saved, and its minutes given to the task, then the app stopped.
-        val done = PhotoDone("p1", "teams:hw", null, 45, clock.time)
-        tasks.update { it.copy(tasks = listOf(task("hw", effort = 90).copy(photoMin = 45, photosCounted = mapOf("p1" to 45)))) }
+    fun `a photo check stopped part-way is finished at start-up, once`() = runTest {
+        // Saved, then the app stopped before its piece was kept.
+        val done = PhotoDone("p1", "teams:hw", null, 30, clock.time, key = "teams:hw#-1#1")
+        tasks.update { it.copy(tasks = listOf(task("hw", effort = 30))) }
         runtime.update { it.copy(photosDone = listOf(done)) }
         focus.finishPhotos()
-        focus.finishPhotos()
-        assertEquals(45, tasks.value.tasks.single().photoMin)
-        assertEquals(1, log.value.sessions.count { it.photo })
-        assertEquals(15 * 60_000L, focus.creditLeftMs())
+        assertEquals(30, tasks.value.tasks.single().workedMin)
+        assertTrue(log.value.slots.single().let { it.photo && it.earned })
+        assertEquals(10 * 60_000L, focus.creditLeftMs())
         assertEquals(emptyList(), runtime.value.photosDone)
+        // Stopped again after keeping it, before letting the photo go: finished again, nothing more.
+        runtime.update { it.copy(photosDone = listOf(done)) }
+        focus.finishPhotos()
+        assertEquals(30, tasks.value.tasks.single().workedMin)
+        assertEquals(1, log.value.slots.size)
+        assertEquals(10 * 60_000L, focus.creditLeftMs())
     }
 
     @Test
@@ -548,33 +311,7 @@ class FocusTest {
     }
 
     @Test
-    fun `a session ended with its task's completion is counted in the saved completion too`() = runTest {
-        tasks.update { it.copy(tasks = listOf(task("hw", effort = 45))) }
-        focus.startSession("teams:hw", "hw", null, 30)
-        clock.time += 30 * 60_000L
-        val done = tasks.value.tasks.single().copy(status = Status.Done, doneAt = clock.time)
-        tasks.update { it.copy(tasks = listOf(done), unrewarded = listOf(done)) }
-        // The session ended (the reward's first step), then the app stopped, and the next read reopened the task.
-        focus.stopSession()
-        tasks.update { s -> s.copy(tasks = s.tasks.map { it.copy(status = Status.Open, doneAt = null, workedMin = 0) }) }
-        val sessionCredit = focus.creditLeftMs()
-        focus.rewardCompletions()
-        // 45 less the session's 30: 5 minutes more, not 15.
-        assertEquals(sessionCredit + 5 * 60_000L, focus.creditLeftMs())
-        assertEquals(30, log.value.completions.single().workedMin)
-    }
-
-    @Test
-    fun `a stop meant for one session doesn't end the one after it`() = runTest {
-        tasks.update { it.copy(tasks = listOf(task("a"), task("b"))) }
-        val first = focus.startSession("teams:a", "a", null, 30)
-        focus.startSession("teams:b", "b", null, 30)
-        assertNull(focus.stopSession(first))
-        assertEquals("teams:b", focus.session?.taskId)
-    }
-
-    @Test
-    fun `a block ticked by hand after a session on it keeps that session's minutes`() = runTest {
+    fun `a block ticked by hand after work on it keeps that work's minutes`() = runTest {
         val email = task("e", kind = Kind.Admin, effort = 60).copy(id = "gmail:e", source = Source.Gmail, subSteps = listOf(SubStep("A", 30), SubStep("B", 30)), workedMin = 10)
         tasks.update { it.copy(tasks = listOf(email)) }
         assertTrue(focus.tickBlock("gmail:e", 0, "A"))
@@ -647,84 +384,11 @@ class FocusTest {
     }
 
     @Test
-    fun `a session on the second of two steps of one name ticks that one`() = runTest {
-        tasks.update { it.copy(tasks = listOf(task("t", steps = listOf(SubStep("Practice", 30), SubStep("Practice", 60))))) }
-        focus.startSession("teams:t", "t: Practice", "Practice", 60, stepIndex = 1)
-        clock.time += 60 * 60_000L
-        focus.stopSession()
-        assertEquals(listOf(false, true), tasks.value.tasks.single().subSteps.map { it.done })
-    }
-
-    @Test
-    fun `a session whose step has moved ticks no other step, and keeps its minutes`() = runTest {
-        tasks.update { it.copy(tasks = listOf(task("t", steps = listOf(SubStep("A", 30), SubStep("B", 30))))) }
-        focus.startSession("teams:t", "t: B", "B", 30, stepIndex = 1)
-        // The steps changed meanwhile: B is first now, and another took its place.
-        tasks.update { s -> s.copy(tasks = s.tasks.map { it.copy(subSteps = listOf(SubStep("B", 30), SubStep("C", 30))) }) }
-        clock.time += 30 * 60_000L
-        focus.stopSession()
-        val task = tasks.value.tasks.single()
-        assertEquals(listOf(false, false), task.subSteps.map { it.done })
-        assertEquals(30, task.workedMin)
-    }
-
-    @Test
-    fun `a photo check ticks the step it was of, not the first of that name`() = runTest {
-        tasks.update { it.copy(tasks = listOf(task("hw", steps = listOf(SubStep("Q1-8", 30), SubStep("Q1-8", 30))))) }
-        assertTrue(focus.photoChecked("teams:hw", "Q1-8", 30, stepIndex = 1))
-        assertEquals(listOf(false, true), tasks.value.tasks.single().subSteps.map { it.done })
-    }
-
-    @Test
-    fun `two starts at once end the one between them with its record`() = runBlocking {
-        tasks.update { it.copy(tasks = listOf(task("a"), task("b"))) }
-        // The store held mid-write, so both starts wait for it together.
-        val entered = CountDownLatch(1)
-        val release = CountDownLatch(1)
-        val holder = thread { runBlocking { runtime.update { entered.countDown(); release.await(); it } } }
-        entered.await()
-        val scope = CoroutineScope(Dispatchers.Default)
-        val starts = listOf(scope.async { focus.startSession("teams:a", "a", null, 30) }, scope.async { focus.startSession("teams:b", "b", null, 30) })
-        Thread.sleep(200)
-        release.countDown()
-        val started = starts.awaitAll()
-        holder.join()
-        // One runs; the other was ended by it, with its record, not lost.
-        val running = runtime.value.session!!
-        assertTrue(running in started)
-        assertEquals(listOf(started.single { it != running }.taskId), log.value.sessions.map { it.taskId })
-        assertTrue(runtime.value.finishing.isEmpty())
-    }
-
-    @Test
-    fun `a session started in the same millisecond as the one it ends is told apart from it`() = runTest {
-        tasks.update { it.copy(tasks = listOf(task("t"))) }
-        val first = focus.startSession("teams:t", "t", null, 30)
-        val second = focus.startSession("teams:t", "t", null, 30)
-        assertTrue(second.startedAt > first.startedAt)
-        clock.time += 30 * 60_000L
-        focus.stopSession()
-        // Both recorded, and the second's minutes counted, not taken for the first's.
-        assertEquals(2, log.value.sessions.size)
-        assertEquals(30, tasks.value.tasks.single().workedMin)
-    }
-
-    @Test
     fun `a completion with work a photo check found done is marked so`() = runTest {
         tasks.update { it.copy(tasks = listOf(task("hw", effort = 40))) }
-        focus.photoChecked("teams:hw", null, 20)
+        assertTrue(focus.photoChecked("teams:hw", null, 20, key = "teams:hw#-1#1"))
         focus.onCompleted(listOf(tasks.value.tasks.single().copy(status = Status.Done, doneAt = clock.time)))
         assertTrue(log.value.completions.single().photo)
-    }
-
-    @Test
-    fun `a session's time left is by the clock that ends it`() {
-        val session = FocusSession("teams:t", "t", null, 30, startedAt = clock.time, startedUptime = Uptime(1, 0))
-        // Two minutes in by the uptime clock, though the date was set half an hour on.
-        assertEquals(28 * 60_000L, session.leftMs(clock.time + 32 * 60_000L, Uptime(1, 2 * 60_000L)))
-        assertEquals(0L, session.leftMs(clock.time + 40 * 60_000L, Uptime(1, 40 * 60_000L)))
-        // Across a restart, by the wall clock.
-        assertEquals(20 * 60_000L, session.leftMs(clock.time + 10 * 60_000L, Uptime(2, 1_000L)))
     }
 
     // --- Slots kept, missed and moved (LR-09); what a kept slot earns (BL-08) ---

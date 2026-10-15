@@ -1,7 +1,6 @@
 package com.thomaswcode.decrastination.data
 
 import com.thomaswcode.decrastination.block.Credit
-import com.thomaswcode.decrastination.block.FocusSession
 import com.thomaswcode.decrastination.block.TeamsAutoSync
 import com.thomaswcode.decrastination.core.Calibration
 import com.thomaswcode.decrastination.core.Kind
@@ -27,9 +26,6 @@ data class RuntimeState(
     val calendarWrittenTo: Long? = null,
     /** Calendars no longer written to whose events of the app's are still to be taken out (no permission, or a failure, the last time). */
     val calendarsToClear: List<Long> = emptyList(),
-    val session: FocusSession? = null,
-    /** Sessions ended whose due (the task's minutes and step, the log, free time) isn't all given yet. */
-    val finishing: List<EndedSession> = emptyList(),
     /** Photo checks found done whose due (the task's step or minutes, the log, free time) isn't all given yet. */
     val photosDone: List<PhotoDone> = emptyList(),
     /** Loosening changes waiting their delay. */
@@ -109,13 +105,12 @@ data class ProtectionState(
 )
 
 /**
- * What happened, for calibration, the weekly review and the stats (docs/scheduler.md §5): focus
- * sessions, completions, blocks and protection lapses. Kept in `log.json`, trimmed to
+ * What happened, for calibration, the weekly review and the stats (docs/scheduler.md §5): slots
+ * kept and missed, completions, blocks and protection lapses. Kept in `log.json`, trimmed to
  * [KEEP_DAYS] days.
  */
 @Serializable
 data class ActivityLog(
-    val sessions: List<SessionRecord> = emptyList(),
     /** Each slot's outcome (LR-09): the record the days, the calibration and the stats read. */
     val slots: List<SlotRecord> = emptyList(),
     val completions: List<CompletionRecord> = emptyList(),
@@ -130,7 +125,6 @@ data class ActivityLog(
         val since = now - KEEP_DAYS * 24 * 3_600_000L
         val sinceDay = java.time.Instant.ofEpochMilli(since).atZone(java.time.ZoneOffset.UTC).toLocalDate().toString()
         return ActivityLog(
-            sessions = sessions.filter { it.startedAt >= since },
             slots = slots.filter { it.at >= since },
             completions = completions.filter { it.doneAt >= since },
             blocks = blocks.filter { it.at >= since },
@@ -185,26 +179,6 @@ data class SlotRecord(
 )
 
 @Serializable
-data class SessionRecord(
-    val taskId: String,
-    val kind: Kind,
-    val className: String? = null,
-    val label: String,
-    val plannedMin: Int,
-    val workedMin: Int,
-    val startedAt: Long,
-    val endedAt: Long,
-    /** Ran its full length. */
-    val completed: Boolean,
-    /** The box length its task was being cut into, for the box experiment; null for a step of its own. */
-    val box: Int? = null,
-    /** Work a photo check found done, not a timed session: counted as the day's work, not as a session. */
-    val photo: Boolean = false,
-    /** The photo check it records ([PhotoDone.id]), so finishing it again doesn't record it twice. */
-    val check: String? = null,
-)
-
-@Serializable
 data class CompletionRecord(
     val taskId: String,
     val title: String,
@@ -213,7 +187,7 @@ data class CompletionRecord(
     val className: String? = null,
     /** The estimate it was planned with, before calibration. */
     val estimateMin: Int,
-    /** Minutes of focus sessions on it. */
+    /** Minutes worked on it: its kept slots' (focus sessions' before review v2). */
     val workedMin: Int,
     val dueAt: Long? = null,
     val firstSeenAt: Long,
@@ -274,10 +248,6 @@ data class PhotoDone(
 /** A daily alarm's run that failed: tried again [at], this being try [tries] (`Daily.failed`). */
 @Serializable
 data class DailyRetry(val at: Long, val tries: Int)
-
-/** A focus session as it ended: what it's owed, saved with its ending (`Focus.stopSession`). */
-@Serializable
-data class EndedSession(val session: FocusSession, val workedMin: Int, val completed: Boolean, val endedAt: Long)
 
 /** A finished task's "how was it?", kept to ask once notifications can be seen. */
 @Serializable

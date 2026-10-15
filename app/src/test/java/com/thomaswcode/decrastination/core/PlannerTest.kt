@@ -1351,15 +1351,6 @@ class PlannerTest {
     }
 
     @Test
-    fun `a session's piece is its own step, not its task's first`() {
-        val steps = listOf(SubStep("Read", 20), SubStep("Write", 30))
-        val plan = plan(listOf(task("t", Fixtures.at("2026-10-20T09:00"), steps = steps)), "2026-10-08T17:00")
-        assertEquals("Write", plan.pieceOf("teams:t", 1, "Write")?.step)
-        // Its step gone from the plan (ticked meanwhile): the task's first.
-        assertEquals("Read", plan.pieceOf("teams:t", 7, "Gone")?.step)
-    }
-
-    @Test
     fun `a waiting assignment's gap keeps the vocabulary its deck would hold`() {
         // Its vocabulary is a deck's, and the deck waits with it: the gap is the deck's cards (9 minutes)
         // and handing it in (5), not 5 minutes alone.
