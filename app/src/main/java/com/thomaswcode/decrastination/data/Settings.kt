@@ -26,8 +26,16 @@ data class Settings(
     val lunchWindows: List<Window> = listOf(Window(13 * 60 + 15, 13 * 60 + 40), Window(13 * 60 + 55, 14 * 60 + 35)),
     /** A school window with less free than this left isn't used. */
     val minSchoolSlotMin: Int = 15,
-    /** How long a piece of work is cut into, when it has no steps of its own (docs/scheduler.md §3). */
-    val boxMin: Int = 45,
+    /** How long a piece of work is cut into, when it has no steps of its own (docs/scheduler.md §3): 30 since PL-12. */
+    val boxMin: Int = 30,
+    /** The break after each piece's slot (PL-12), and the longer one once this much work has gone without one. */
+    val slotBreakMin: Int = 5,
+    val slotLongBreakMin: Int = 15,
+    val slotLongBreakAfterMin: Int = 90,
+    /** Breaks outside on a weekend or a day off (PL-12): how many, how long, and the times each is laid at or after. */
+    val outsideBreaks: Int = 3,
+    val outsideBreakMin: Int = 20,
+    val outsideTimes: List<Int> = listOf(9 * 60 + 30, 13 * 60, 16 * 60),
     /** Days before a deadline its work should be finished by, until calibration learns better. */
     val marginDays: Int = 1,
     /** Work with no deadline (an email, an undated task) is due this many days after it's first seen. */

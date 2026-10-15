@@ -8,6 +8,7 @@ import java.time.LocalDate
 import java.time.LocalTime
 import kotlin.random.Random
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
@@ -133,6 +134,14 @@ class PlannerPropertyTest {
         checkOverdue(seed, plan, input)
         checkWontFit(seed, plan, input)
         checkHome(seed, plan, input)
+        checkSlots(seed, plan, input, fresh = true)
+        // Laid out again with pins and the last plan's starts drawn on it (PL-12): the same rules, and the pins kept.
+        if (input.windows.isNotEmpty()) {
+            val again = input.copy(pins = drawPins(seed, plan, input), previousSlots = drawPrevious(seed, plan, input))
+            val replanned = Planner.plan(again)
+            checkSlots(seed, replanned, again, fresh = false)
+            checkPins(seed, replanned, again)
+        }
     }
 
     /**
@@ -338,6 +347,110 @@ class PlannerPropertyTest {
             val home = bucket.chunks.filter { it.where == Where.Home && !it.behind && !it.overdue && !byToday(it) }.sumOf { it.minutes }
             val evening = Planner.capacityOf(bucket.date, input).homeMin
             assertTrue(home <= evening, "seed=$seed: ${bucket.date} holds $home minutes of home work in its evening's $evening")
+        }
+    }
+
+    /** [minute] of [date] in London, epoch millis. */
+    private fun at(date: LocalDate, minute: Int): Long = date.atStartOfDay().plusMinutes(minute.toLong()).atZone(LONDON).toInstant().toEpochMilli()
+
+    /** [time] rounded up to the next five minutes, as the slotter starts today from it. */
+    private fun onFive(time: Long): Long = Math.floorDiv(time + 5 * MINUTE - 1, 5 * MINUTE) * (5 * MINUTE)
+
+    /** Up to three of [plan]'s pieces on days with windows pinned at a time within one of the day's windows, from now on, well apart. */
+    private fun drawPins(seed: Long, plan: Plan, input: Planner.Input): Map<String, Long> {
+        val random = Random(seed xor 0x5107L)
+        val choices = plan.buckets.filter { input.windows[it.date] != null }.flatMap { b -> b.chunks.map { b.date to it } }
+        val pins = HashMap<String, Long>()
+        val taken = mutableListOf<Pair<Long, Long>>()
+        if (choices.isEmpty()) return pins
+        repeat(3) {
+            val (date, chunk) = choices[random.nextInt(choices.size)]
+            val windows = input.windows.getValue(date).filter { it.minutes >= chunk.minutes }.takeIf { it.isNotEmpty() } ?: return@repeat
+            val window = windows[random.nextInt(windows.size)]
+            val start = at(date, window.startMin + 5 * random.nextInt((window.minutes - chunk.minutes) / 5 + 1))
+            val around = start - 20 * MINUTE to start + (chunk.minutes + 20) * MINUTE
+            if (start < input.now || chunk.key in pins || taken.any { it.first < around.second && around.first < it.second }) return@repeat
+            pins[chunk.key] = start
+            taken += around
+        }
+        return pins
+    }
+
+    /** About half of today's pieces given a start in the last plan, within one of today's windows: some gone by, some under way, some to come. */
+    private fun drawPrevious(seed: Long, plan: Plan, input: Planner.Input): Map<String, Long> {
+        val random = Random(seed xor 0x9e3L)
+        val today = plan.todayBucket ?: return emptyMap()
+        val windows = input.windows[today.date] ?: return emptyMap()
+        return today.chunks.filter { random.nextBoolean() }.mapNotNull { chunk ->
+            val fits = windows.filter { it.minutes >= chunk.minutes }.takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+            val window = fits[random.nextInt(fits.size)]
+            chunk.key to at(today.date, window.startMin + 5 * random.nextInt((window.minutes - chunk.minutes) / 5 + 1))
+        }.toMap()
+    }
+
+    /**
+     * Each day with windows is laid out in time (PL-12): every piece in a slot or unslotted, once;
+     * slots clear of each other and of busy time, each in a window of its own kind, work for home
+     * only in the evening (a pin aside: where you put it), with a break between pieces in one window;
+     * breaks outside only on a weekend's kind of day, as many as allowed; nothing over before now
+     * today, and with nothing kept, nothing started before it; a piece no earlier than it opens, and
+     * one due that day at a real deadline over by then.
+     */
+    private fun checkSlots(seed: Long, plan: Plan, input: Planner.Input, fresh: Boolean) {
+        val settings = input.settings
+        val busy = input.busy + input.hardBusy
+        val earliest = onFive(input.now)
+        for (bucket in plan.buckets) {
+            val windows = input.windows[bucket.date]
+            if (windows == null) {
+                assertTrue(bucket.slots.isEmpty() && bucket.unslotted.isEmpty(), "seed=$seed: ${bucket.date} is laid out with no windows")
+                continue
+            }
+            val work = bucket.slots.filter { it.kind == SlotKind.Work }
+            assertEquals(bucket.chunks.map { it.key }.sorted(), (work.map { it.chunk!!.key } + bucket.unslotted.map { it.key }).sorted(), "seed=$seed: ${bucket.date}'s pieces, slotted or not")
+            for ((a, b) in bucket.slots.sortedBy { it.start }.zipWithNext()) assertTrue(a.end <= b.start, "seed=$seed: ${bucket.date} has ${a.key} and ${b.key} overlapping")
+            fun windowOf(slot: Slot) = windows.indexOfFirst { at(bucket.date, it.startMin) <= slot.start && slot.end <= at(bucket.date, it.endMin) }
+            for (slot in bucket.slots) {
+                val window = windows.getOrNull(windowOf(slot))
+                assertTrue(window != null && window.kind == slot.window, "seed=$seed: ${bucket.date} ${slot.key} isn't within a window of its kind")
+                // The part of it from now on: one kept under way had its start in the last plan.
+                val from = maxOf(slot.start, earliest)
+                assertTrue(busy.none { it.start < slot.end && from < it.end }, "seed=$seed: ${bucket.date} ${slot.key} is in busy time")
+                assertTrue(slot.end > input.now, "seed=$seed: ${slot.key} is over before now")
+                if (fresh) assertTrue(slot.start >= earliest, "seed=$seed: ${slot.key} starts before now")
+                val chunk = slot.chunk ?: continue
+                if (slot.pinned) continue
+                assertTrue(chunk.where != Where.Home || !slot.window.atSchool, "seed=$seed: ${chunk.key}, for home, is at school (${slot.window})")
+                chunk.availableAt?.let { assertTrue(slot.start >= it, "seed=$seed: ${chunk.key} starts before it opens") }
+                if (chunk.hard && Planner.date(chunk.deadline, LONDON) == bucket.date) assertTrue(slot.end <= chunk.deadline, "seed=$seed: ${chunk.key} is over after its deadline")
+            }
+            for ((_, slots) in work.groupBy(::windowOf)) for ((a, b) in slots.sortedBy { it.start }.zipWithNext()) {
+                assertTrue(b.start - a.end >= settings.slotBreakMin * MINUTE, "seed=$seed: ${bucket.date} has no break between ${a.key} and ${b.key}")
+            }
+            val outside = bucket.slots.filter { it.kind == SlotKind.Outside }
+            val weekend = (input.dayKinds[bucket.date] ?: DayKind.of(bucket.date)) == DayKind.Weekend
+            assertTrue(weekend || outside.isEmpty(), "seed=$seed: ${bucket.date}, a school day, has a break outside")
+            assertTrue(outside.size <= settings.outsideBreaks && outside.all { it.end - it.start == settings.outsideBreakMin * MINUTE }, "seed=$seed: ${bucket.date}'s breaks outside, $outside")
+        }
+    }
+
+    /**
+     * A pin whose time is free holds its piece then (PL-12): within one window, clear of busy time
+     * and of breaks outside, in free time long enough for its kind of window to be used.
+     */
+    private fun checkPins(seed: Long, plan: Plan, input: Planner.Input) {
+        val busy = input.busy + input.hardBusy
+        val earliest = onFive(input.now)
+        for (bucket in plan.buckets) for (chunk in bucket.chunks) {
+            val pin = input.pins[chunk.key]?.takeIf { Planner.date(it, LONDON) == bucket.date } ?: continue
+            val end = pin + chunk.minutes * MINUTE
+            val window = input.windows[bucket.date].orEmpty().firstOrNull { at(bucket.date, it.startMin) <= pin && end <= at(bucket.date, it.endMin) } ?: continue
+            if (busy.any { it.start < end && pin < it.end } || bucket.slots.any { it.kind == SlotKind.Outside && it.start < end && pin < it.end }) continue
+            val lo = maxOf(at(bucket.date, window.startMin), earliest, busy.filter { it.end <= pin }.maxOfOrNull { it.end } ?: Long.MIN_VALUE)
+            val hi = minOf(at(bucket.date, window.endMin), busy.filter { it.start >= end }.minOfOrNull { it.start } ?: Long.MAX_VALUE)
+            if ((hi - lo) / MINUTE < if (window.kind.atSchool) input.settings.minSchoolSlotMin else 5) continue
+            val slot = bucket.slots.firstOrNull { it.chunk?.key == chunk.key }
+            assertTrue(slot != null && slot.start == pin && slot.pinned, "seed=$seed: ${chunk.key} pinned at ${java.time.Instant.ofEpochMilli(pin)}, laid at ${slot?.start?.let { java.time.Instant.ofEpochMilli(it) }}")
         }
     }
 

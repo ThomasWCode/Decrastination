@@ -87,6 +87,10 @@ object Planner {
         val windows: Map<LocalDate, List<DayWindow>> = emptyMap(),
         /** Each day's kind for its yield (PL-06): a day off school is a weekend's. By the date where absent. */
         val dayKinds: Map<LocalDate, DayKind> = emptyMap(),
+        /** Pieces you put at a time (PL-04), by [Chunk.key]: their slots start then. */
+        val pins: Map<String, Long> = emptyMap(),
+        /** Today's slots' starts in the last plan (PL-13), by [Chunk.key]: kept where still free. */
+        val previousSlots: Map<String, Long> = emptyMap(),
     )
 
     /** A day's time for work (PL-15): at home in the evening ([homeMin]), and all of it, school's included ([anyMin]). */
@@ -332,6 +336,7 @@ object Planner {
                 stepIndex = piece.index,
                 why = if (behind && !overdue && why != Why.Soft && noRoom) Why.NoRoom else why,
                 where = piece.where,
+                hard = item.hard,
             )
         }
 
@@ -729,7 +734,23 @@ object Planner {
             if (gap.minutes > room) wontFit += WontFit(task.id, task.title, gap.minutes, room, deadline)
         }
 
-        val buckets = days.map { DayBucket(it, capacity.getValue(it), placed.getValue(it).sortedWith(ORDER)) }
+        // Each day with windows laid out in time (PL-12): a slot for each piece, breaks, outside breaks
+        // on a weekend or a day off, your pins, and today's starts kept from the last plan.
+        val buckets = days.map { day ->
+            val chunks = placed.getValue(day).sortedWith(ORDER)
+            val windows = input.windows[day] ?: return@map DayBucket(day, capacity.getValue(day), chunks)
+            val (slots, unslotted) = Slotter.slot(
+                day, chunks, windows, input.busy + input.hardBusy, input.pins,
+                previous = if (day == today) input.previousSlots else emptyMap(),
+                now = input.now, zone = zone, settings = input.settings,
+                outside = (input.dayKinds[day] ?: DayKind.of(day)) == DayKind.Weekend,
+            ) { chunk ->
+                // A real deadline on this day: its piece done before the deadline's time.
+                val due = Instant.ofEpochMilli(chunk.deadline).atZone(zone)
+                if (chunk.hard && due.toLocalDate() == day) due.hour * 60 + due.minute else null
+            }
+            DayBucket(day, capacity.getValue(day), chunks, slots, unslotted)
+        }
         // A task's runs left out for the same reason are one line: their pieces and minutes together, the soonest opening.
         val gaps = unplanned.groupBy { it.taskId to it.reason }.values.map { same ->
             same.first().copy(minutes = same.sumOf { it.minutes }, pieces = same.sumOf { it.pieces }, at = same.mapNotNull { it.at }.minOrNull())

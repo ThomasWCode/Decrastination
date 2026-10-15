@@ -15,6 +15,10 @@ object SettingsLimits {
     val WORK_MIN_PER_FREE_MIN = 1..20
     val TEXTBOOK = 1..9
     val MIN_SCHOOL_SLOT_MIN = 5..60
+    val SLOT_BREAK_MIN = 0..60
+    val SLOT_LONG_BREAK_AFTER_MIN = 30..240
+    val OUTSIDE_BREAKS = 0..3
+    val OUTSIDE_BREAK_MIN = 5..120
     const val MAX_NAME = 60
     const val MAX_LUNCH_WINDOWS = 4
 
@@ -41,6 +45,8 @@ object SettingsLimits {
             check("the morning break", window(breakWindow, overnight = false))
             check("lunch", lunchWindows.size <= MAX_LUNCH_WINDOWS && lunchWindows.all { window(it, overnight = false) })
             check("the shortest school time used", minSchoolSlotMin in MIN_SCHOOL_SLOT_MIN)
+            check("the breaks between pieces", slotBreakMin in SLOT_BREAK_MIN && slotLongBreakMin in SLOT_BREAK_MIN && slotLongBreakAfterMin in SLOT_LONG_BREAK_AFTER_MIN)
+            check("the breaks outside", outsideBreaks in OUTSIDE_BREAKS && outsideBreakMin in OUTSIDE_BREAK_MIN && outsideTimes.size == 3 && outsideTimes.all { it in MINUTE_OF_DAY })
             check("the box length", boxMin in BOX_MIN)
             check("the safety margin", marginDays in MARGIN_DAYS)
             check("the days given to undated work", softDeadlineDays in SOFT_DEADLINE_DAYS)
