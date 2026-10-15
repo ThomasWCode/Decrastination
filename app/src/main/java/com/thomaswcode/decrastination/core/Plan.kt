@@ -94,8 +94,12 @@ data class Chunk(
     /** Its deadline is a real one (PL-14), which its slot on the deadline's day keeps before (PL-12). */
     val hard: Boolean = false,
 ) {
-    /** Which piece it is, across replans (PL-12): its task, its step's place, its part. */
-    val key: String get() = "$taskId#${stepIndex ?: -1}#$part"
+    /**
+     * Which piece it is, across replans (PL-12): its task and its step's place; a piece of time with
+     * no step of its own, its part. Not a step's part: that renumbers once a piece before it is kept,
+     * and its slot's kept start (PL-13) would be lost with it.
+     */
+    val key: String get() = if (stepIndex != null) "$taskId#$stepIndex" else "$taskId#-1#$part"
 
     val label: String get() = step?.let { "$title: $it" } ?: title
 
