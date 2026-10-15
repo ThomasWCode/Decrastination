@@ -179,7 +179,8 @@ object Mime {
         val first = props["DTSTART"] ?: return null
         val start = time(first, zone, zones) ?: return null
         val end = props["DTEND"]?.let { time(it, zone, zones) }?.takeIf { it.isAfter(start) }
-            ?: props["DURATION"]?.let { d -> runCatching { start.plus(Duration.parse(d.value.trim())) }.getOrNull() }?.takeIf { it.isAfter(start) }
+            // A duration of days or weeks (no time in it) is that many days on the calendar, whatever the clocks do.
+            ?: props["DURATION"]?.let { d -> runCatching { d.value.trim().let { v -> if ('T' in v) start.plus(Duration.parse(v)) else start.plus(java.time.Period.parse(v)) } }.getOrNull() }?.takeIf { it.isAfter(start) }
             ?: if (dateOnly(first)) start.plusDays(1) else start.plusHours(1)
         return Invite(
             summary = props["SUMMARY"]?.value?.let(::unescaped).orEmpty(),

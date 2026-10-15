@@ -531,5 +531,17 @@ class InstructionsTest {
         val teams = ticked.copy(id = "teams:x", source = Source.Teams)
         assertNull(com.thomaswcode.decrastination.enrich.InstructionAnswers.change(given.copy(taskId = teams.id), mapOf(teams.id to teams), emptyMap(), Fixtures.at("2026-10-12T17:00"), Fixtures.LONDON))
         assertEquals("only a task of the student's own has its steps changed", com.thomaswcode.decrastination.enrich.InstructionAnswers.problem(given.copy(taskId = teams.id), mapOf(teams.id to teams), emptyMap()))
+        // Its steps come to its 60 minutes; to 70 only with a Minutes change saying so.
+        val longer = change.copy(steps = change.steps!!.map { if (it.title == "Polish") it.copy(minutes = 20) else it })
+        val tasks = mapOf(own.id to ticked)
+        assertNull(com.thomaswcode.decrastination.enrich.InstructionAnswers.stepsProblem(listOf(change), tasks))
+        assertEquals("the steps for “Essay” add up to 70 minutes, not its 60, and nothing says its total changes", com.thomaswcode.decrastination.enrich.InstructionAnswers.stepsProblem(listOf(longer), tasks))
+        assertNull(com.thomaswcode.decrastination.enrich.InstructionAnswers.stepsProblem(listOf(longer, Change(ChangeType.Minutes, taskId = own.id, minutes = 70)), tasks))
+        // A step's date years ahead, or after the task's own: not taken.
+        val dated = ticked.copy(dueAt = Fixtures.at("2026-10-15T17:00"))
+        fun withDue(due: String) = given.copy(steps = given.steps.map { if (it.title == "Draft") it.copy(dueDate = due) else it })
+        assertNull(com.thomaswcode.decrastination.enrich.InstructionAnswers.change(withDue("2029-01-01"), mapOf(own.id to dated), emptyMap(), Fixtures.at("2026-10-12T17:00"), Fixtures.LONDON))
+        assertNull(com.thomaswcode.decrastination.enrich.InstructionAnswers.change(withDue("2026-10-16"), mapOf(own.id to dated), emptyMap(), Fixtures.at("2026-10-12T17:00"), Fixtures.LONDON))
+        assertTrue(com.thomaswcode.decrastination.enrich.InstructionAnswers.change(withDue("2026-10-15"), mapOf(own.id to dated), emptyMap(), Fixtures.at("2026-10-12T17:00"), Fixtures.LONDON) != null)
     }
 }
