@@ -1336,6 +1336,48 @@ class AppGraph private constructor(context: Context) {
         "${what.title}: reset. A copy of everything from before is in $saved."
     }
 
+    /**
+     * The [week]'s summary for home (NF-02), written by the model after its review and kept with it;
+     * then Felix's "The week's summary is ready" opens it in an email to send. Nothing while Claude
+     * can't be asked, or the week has no review. The summary, or null.
+     */
+    suspend fun writeSummary(week: String): String? {
+        val key = claudeKey() ?: return null
+        if (log.value.reviews.none { it.week == week }) return null
+        val zone = clock.zone()
+        val input = com.thomaswcode.decrastination.learn.Summary.input(log.value, instructions.value.applied, week, zone)
+        val writer = com.thomaswcode.decrastination.enrich.SummaryWriter(key, endpoint())
+        val called = callModel(
+            interactive = false,
+            record = com.thomaswcode.decrastination.enrich.ModelCalls.OnRecord(com.thomaswcode.decrastination.enrich.ModelEffort.Job.Summary, "the week's summary") { r: com.thomaswcode.decrastination.enrich.SummaryWriter.Result -> r.usage to com.thomaswcode.decrastination.enrich.ModelCalls.outcome(r.refused, r.text == null) },
+            cost = { r: com.thomaswcode.decrastination.enrich.SummaryWriter.Result -> r.costUsd to r.refused },
+        ) { at -> writer.write(profile(at).text, input) }
+        val text = (called as? Called.Answered)?.value?.text ?: return null
+        log.update { l -> l.copy(reviews = l.reviews.map { if (it.week == week) it.copy(summary = text) else it }) }
+        val now = clock.now()
+        val record = com.thomaswcode.decrastination.data.FelixRecord(java.util.UUID.randomUUID().toString(), now, com.thomaswcode.decrastination.enrich.FelixPrompts.Reason.Summary.name, SUMMARY_READY)
+        log.update { it.copy(felix = it.felix + record).trimmed(now) }
+        com.thomaswcode.decrastination.notify.Notify.post(
+            app,
+            SUMMARY_ID,
+            com.thomaswcode.decrastination.notify.Notify.builder(app, com.thomaswcode.decrastination.notify.Channels.FELIX)
+                .setSmallIcon(R.drawable.ic_focus)
+                .setContentTitle(settings.value.felixName)
+                .setContentText(SUMMARY_READY)
+                .setStyle(androidx.core.app.NotificationCompat.BigTextStyle().bigText("$SUMMARY_READY\n\n$text"))
+                .let { com.thomaswcode.decrastination.notify.Notify.opening(it, app, SUMMARY_ID, com.thomaswcode.decrastination.learn.Summary.email(settings.value.summaryEmail, week, text)) }
+                .setAutoCancel(true)
+                .build(),
+        )
+        return text
+    }
+
+    /** Felix's word that the summary's ready (NF-02). */
+    private val SUMMARY_READY = "The week's summary is ready; send it?"
+
+    /** The summary's notification. */
+    private val SUMMARY_ID = 4004
+
     /** The most of what a call was about that its record keeps (AC-07). */
     private val MAX_CALL_TITLE = 80
 

@@ -92,6 +92,8 @@ Items: LR-01, LR-02, LR-06, LR-08, PL-08, PL-09, PL-10, PL-11, NF-02, AC-06, AC-
 
 **Tests.** `Summary.input` text; nothing else is pure.
 
+*(As built: `summaryEmail` is empty by default, as the repository is public and an address in its code would be published; the owner sets it in Settings → Notifications, and the email opens with none until then. The summary is written right after the review, by the review's job, rather than at a time of its own; its notification opens the email.)*
+
 ---
 
 ## AR-01 Golden files
