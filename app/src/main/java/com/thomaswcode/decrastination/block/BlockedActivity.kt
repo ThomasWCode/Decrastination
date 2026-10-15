@@ -123,6 +123,8 @@ class BlockedActivity : ComponentActivity() {
             ) {
                 Text("Not now", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.SemiBold)
                 Text("${targetLabel()} is blocked. ${verdict.reason.headline}.", style = MaterialTheme.typography.bodyLarge)
+                // What finishing today earns (BL-04).
+                graph.focus.rewardLine(plan, now)?.let { Text(it, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary) }
                 if (next != null) {
                     NextCard(next, plan.now, zone)
                     PieceActions(graph, this@BlockedActivity, next, plan.now, photo) { message = it }

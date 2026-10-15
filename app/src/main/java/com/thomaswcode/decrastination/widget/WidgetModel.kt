@@ -33,6 +33,8 @@ data class WidgetModel(
     val more: Int,
     /** What's wrong, worst first: a source that can't be read, Teams not synced for a day. */
     val warning: String?,
+    /** What finishing today earns (BL-04): a line under the header. */
+    val reward: String? = null,
     /** The task a tap opens, if any. */
     val taskId: String?,
 ) {
@@ -48,7 +50,7 @@ data class WidgetModel(
          * [runtime] and [armed] add the blocker's side: protection trouble comes first among the
          * warnings, and free time is shown.
          */
-        fun from(plan: Plan, state: TaskState, zone: ZoneId, runtime: RuntimeState = RuntimeState(), armed: Boolean = false): WidgetModel {
+        fun from(plan: Plan, state: TaskState, zone: ZoneId, runtime: RuntimeState = RuntimeState(), armed: Boolean = false, reward: String? = null): WidgetModel {
             val now = plan.now
             val next = plan.next
             val today = plan.todayBucket?.chunks.orEmpty()
@@ -58,6 +60,7 @@ data class WidgetModel(
             fun tasks(chunks: List<Chunk>) = chunks.map { it.taskId }.distinct().size
             return WidgetModel(
                 headline = next?.let { "Do: ${it.label}" } ?: "Nothing due",
+                reward = reward,
                 label = next?.label,
                 badge = next?.let { badge(it, now, zone) },
                 urgent = next?.urgent == true,

@@ -69,7 +69,8 @@ class NextWidget : GlanceAppWidget() {
             val tasks by graph.tasks.state.collectAsState()
             val settings by graph.settings.state.collectAsState()
             val runtime by graph.runtime.state.collectAsState()
-            val model = WidgetModel.from(graph.plan(tasks, settings), tasks, graph.clock.zone(), runtime, settings.armed)
+            val plan = graph.plan(tasks, settings)
+            val model = WidgetModel.from(plan, tasks, graph.clock.zone(), runtime, settings.armed, reward = graph.focus.rewardLine(plan))
             GlanceTheme { Content(model) }
         }
     }
@@ -97,7 +98,7 @@ class NextWidget : GlanceAppWidget() {
                 Next(model, layout)
                 if (layout.summary) {
                     Text(
-                        model.summary,
+                        model.reward ?: model.summary,
                         maxLines = 1,
                         modifier = GlanceModifier.padding(top = 4.dp).clickable(app),
                         style = TextStyle(color = GlanceTheme.colors.onPrimaryContainer, fontSize = 12.sp),
@@ -121,6 +122,14 @@ class NextWidget : GlanceAppWidget() {
                 modifier = GlanceModifier.fillMaxWidth().padding(start = 8.dp, top = 10.dp, bottom = 6.dp).clickable(app),
                 style = TextStyle(color = GlanceTheme.colors.primary, fontSize = 13.sp, fontWeight = FontWeight.Bold),
             )
+            model.reward?.let {
+                Text(
+                    it,
+                    maxLines = 2,
+                    modifier = GlanceModifier.fillMaxWidth().padding(start = 8.dp, bottom = 6.dp).clickable(app),
+                    style = TextStyle(color = GlanceTheme.colors.onSurface, fontSize = 12.sp),
+                )
+            }
             if (layout.listLines > 0 && model.list.isNotEmpty()) {
                 LazyColumn(GlanceModifier.fillMaxWidth().defaultWeight().cornerRadius(16.dp)) {
                     items(model.list) { line -> ListRow(line) }

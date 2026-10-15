@@ -21,6 +21,7 @@ object SettingsLimits {
     val OUTSIDE_BREAK_MIN = 5..120
     const val MAX_CALENDARS_EXCLUDED = 100
     val PHOTO_FROM_MIN = 5..240
+    val FREE_ALLOWANCE_MIN = 0..240
     const val MAX_NAME = 60
     const val MAX_LUNCH_WINDOWS = 4
 
@@ -50,6 +51,7 @@ object SettingsLimits {
             check("the breaks between pieces", slotBreakMin in SLOT_BREAK_MIN && slotLongBreakMin in SLOT_BREAK_MIN && slotLongBreakAfterMin in SLOT_LONG_BREAK_AFTER_MIN)
             check("the breaks outside", outsideBreaks in OUTSIDE_BREAKS && outsideBreakMin in OUTSIDE_BREAK_MIN && outsideTimes.size == 3 && outsideTimes.all { it in MINUTE_OF_DAY })
             check("the length a piece earns with a photo from", photoFromMin in PHOTO_FROM_MIN)
+            check("an empty day's free time", freeAllowanceMin in FREE_ALLOWANCE_MIN)
             check("the calendars", (calendarWriteId == null || calendarWriteId > 0) && calendarsExcluded.size <= MAX_CALENDARS_EXCLUDED && calendarsExcluded.all { it > 0 })
             check("the box length", boxMin in BOX_MIN)
             check("the safety margin", marginDays in MARGIN_DAYS)

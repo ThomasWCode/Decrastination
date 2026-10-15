@@ -691,6 +691,8 @@ class FocusService : AccessibilityService() {
         if (spending == null) lookAtScreen()
         scope.launch {
             graph.applyDueChanges()
+            // A day with nothing to do starts with free time (BL-07), given once.
+            runCatching { graph.focus.grantAllowanceIfDue() }.onFailure { Log.w(TAG, "Giving the day's free time failed", it) }
             // A slot whose end went by while its alarm couldn't ring (PL-13).
             runCatching { graph.slots.sweep() }.onFailure { Log.w(TAG, "Looking at missed slots failed", it) }
             val now = SystemClock.elapsedRealtime()

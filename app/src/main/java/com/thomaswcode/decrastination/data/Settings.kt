@@ -41,6 +41,8 @@ data class Settings(
      * (BL-08): a short one's tick is taken at its word.
      */
     val photoFromMin: Int = 20,
+    /** The free time a day with nothing to do starts with (BL-07). */
+    val freeAllowanceMin: Int = 60,
     /** The calendar the plan's slots are written to (NF-07), by its id on the phone: none till you pick one. */
     val calendarWriteId: Long? = null,
     /** Calendars not read for busy time (DX-13), by id: the one written to never is. */

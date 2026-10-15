@@ -10,7 +10,13 @@ import kotlin.math.roundToLong
  * while a blocked app is in front. What's left at midnight is gone.
  */
 @Serializable
-data class Credit(val day: String = "", val earnedMs: Long = 0, val spentMs: Long = 0) {
+data class Credit(
+    val day: String = "",
+    val earnedMs: Long = 0,
+    val spentMs: Long = 0,
+    /** The day a day with nothing to do was given its free time (BL-07), so it's given once. */
+    val allowanceOn: String = "",
+) {
 
     val leftMs: Long get() = (earnedMs - spentMs).coerceAtLeast(0)
 

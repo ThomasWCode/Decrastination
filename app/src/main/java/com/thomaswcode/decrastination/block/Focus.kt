@@ -1,6 +1,7 @@
 package com.thomaswcode.decrastination.block
 
 import com.thomaswcode.decrastination.core.Kind
+import com.thomaswcode.decrastination.core.Chunk
 import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.Planner
 import com.thomaswcode.decrastination.core.SlotKind
@@ -27,6 +28,7 @@ import java.time.Instant
 import java.time.LocalDate
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicLong
+import com.thomaswcode.decrastination.ui.Format
 import kotlin.math.roundToInt
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -99,6 +101,54 @@ class Focus(
                 schoolDay = schoolDay(today(now)),
             ),
         )
+    }
+
+    /**
+     * A day with nothing to do starts with free time (BL-07): `freeAllowanceMin`, once, when nothing
+     * is planned today or overdue, no slot of today's was kept, missed or moved, and the morning's
+     * record of the day, if made yet, planned nothing. A day emptied by finishing its work, or by
+     * moving it away, earned or chose what it has.
+     */
+    suspend fun grantAllowanceIfDue(now: Long = clock.now()) {
+        val minutes = settings.value.freeAllowanceMin
+        if (minutes <= 0) return
+        val today = today(now)
+        val day = today.toString()
+        if (runtime.value.credit.on(today).allowanceOn == day) return
+        val plan = plan(now)
+        if (plan.todayBucket?.chunks.orEmpty().isNotEmpty() || plan.ordered.any { it.overdue }) return
+        if (log.value.slots.any { it.date == day } || log.value.days.any { it.date == day && it.plannedMin > 0 }) return
+        runtime.update { state ->
+            val credit = state.credit.on(today)
+            if (credit.allowanceOn == day) state else state.copy(credit = credit.copy(earnedMs = credit.earnedMs + minutes * 60_000L, allowanceOn = day))
+        }
+    }
+
+    /**
+     * What finishing today earns, where the block meets you (BL-04): today's pieces still to do,
+     * their minutes, and the free time they'd earn: the short ones' on their tick, the longer ones'
+     * with a photo. Once today's done, the free time there is; on a day with nothing to do, its
+     * allowance (BL-07). Null with nothing planned and none to spend.
+     */
+    fun rewardLine(plan: Plan, now: Long = clock.now()): String? {
+        val pieces = plan.todayBucket?.chunks.orEmpty()
+        val s = settings.value
+        if (pieces.isEmpty()) {
+            val free = (creditLeftMs(now) / 60_000L).toInt()
+            if (free <= 0) return null
+            val empty = runtime.value.credit.on(today(now)).allowanceOn == today(now).toString()
+            return if (empty) "Nothing planned today: ${Format.minutes(free)} free." else "Today's plan is done. ${Format.minutes(free)} free."
+        }
+        fun earned(of: List<Chunk>) = Credit.forSlot(of.sumOf { it.minutes }, s.workMinPerFreeMin).roundToInt()
+        val (short, long) = pieces.partition { it.minutes < s.photoFromMin }
+        val head = if (pieces.size == 1) "Finish today's slot" else "Finish today's ${pieces.size} slots"
+        val onTick = earned(short).takeIf { it > 0 }?.let { "${Format.minutes(it)} free" }
+        val photo = when (long.size) {
+            0 -> null
+            1 -> "with a photo of ${long.single().label.take(MAX_LABEL)}"
+            else -> "with photos of ${long.size} of them"
+        }?.let { "${Format.minutes(earned(long))} ${if (onTick != null) "more" else "free"} $it" }
+        return "$head (${Format.minutes(pieces.sumOf { it.minutes })}) → ${listOfNotNull(onTick, photo).joinToString(", ")}"
     }
 
     /**
@@ -509,5 +559,8 @@ class Focus(
 
         /** How long a completion stays in the ledger of those rewarded: far longer than any retry. */
         private const val REWARDED_KEPT_MS = 14 * 24 * 3_600_000L
+
+        /** The most of a piece's name a reward line quotes. */
+        private const val MAX_LABEL = 40
     }
 }

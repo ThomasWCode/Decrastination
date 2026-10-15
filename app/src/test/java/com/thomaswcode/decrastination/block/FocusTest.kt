@@ -556,4 +556,42 @@ class FocusTest {
         runtime.update { it.copy(slots = SlotState(monday.toString(), missed = listOf(missed)).moved("teams:t")) }
         assertEquals(BlockPolicy.Verdict.Spend, focus.verdict())
     }
+
+    // --- The reward where the block meets you (BL-04), and a day with nothing to do (BL-07) ---
+
+    @Test
+    fun `the reward line says what finishing today earns, short pieces on the tick and long ones with a photo`() = runTest {
+        clock.time = Fixtures.at("2026-10-12T17:00")
+        // Two short pieces today: a third of their minutes on their ticks.
+        tasks.update { it.copy(tasks = listOf(task("a", due = "2026-10-12T23:59", effort = 15), task("b", due = "2026-10-12T23:59", effort = 15))) }
+        assertEquals("Finish today's 2 slots (30 min) → 10 min free", focus.rewardLine(focus.plan()))
+        // And a long one: its share with a photo.
+        tasks.update { it.copy(tasks = it.tasks + task("statics", due = "2026-10-12T23:59", effort = 30)) }
+        assertEquals("Finish today's 3 slots (1 h) → 10 min free, 10 min more with a photo of statics", focus.rewardLine(focus.plan()))
+        tasks.update { it.copy(tasks = listOf(task("statics", due = "2026-10-12T23:59", effort = 30))) }
+        assertEquals("Finish today's slot (30 min) → 10 min free with a photo of statics", focus.rewardLine(focus.plan()))
+        // Nothing left today: what there is to spend; with none, nothing to say.
+        tasks.update { it.copy(tasks = emptyList()) }
+        assertNull(focus.rewardLine(focus.plan()))
+        runtime.update { it.copy(credit = it.credit.earn(monday, 25.0)) }
+        assertEquals("Today's plan is done. 25 min free.", focus.rewardLine(focus.plan()))
+    }
+
+    @Test
+    fun `a day with nothing to do starts with its free time, once, and a day with work or done with it doesn't`() = runTest {
+        clock.time = Fixtures.at("2026-10-12T09:00")
+        repeat(2) { focus.grantAllowanceIfDue() }
+        assertEquals(60 * 60_000L, focus.creditLeftMs())
+        assertEquals("Nothing planned today: 1 h free.", focus.rewardLine(focus.plan()))
+        // The next day, work planned: nothing given.
+        clock.time = Fixtures.at("2026-10-13T09:00")
+        tasks.update { it.copy(tasks = listOf(task("a", due = "2026-10-13T23:59"))) }
+        focus.grantAllowanceIfDue()
+        assertEquals(0L, focus.creditLeftMs())
+        // A piece of it kept, then the whole handed in: the day emptied by its work earns no allowance.
+        assertTrue(focus.keepSlot("teams:a#-1#1"))
+        tasks.update { state -> state.copy(tasks = state.tasks.map { it.copy(status = Status.Done, doneAt = clock.time) }) }
+        focus.grantAllowanceIfDue()
+        assertEquals(0L, focus.creditLeftMs())
+    }
 }
