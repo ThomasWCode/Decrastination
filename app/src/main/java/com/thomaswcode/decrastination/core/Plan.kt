@@ -220,17 +220,24 @@ data class Plan(
      * The single next thing to do: the first chunk that can be started now, today's before the
      * nearest day's; if none can, the first.
      */
-    val next: Chunk? get() = slotAt(now)?.chunk ?: nextSlot(now)?.chunk ?: ordered.firstOrNull { it.startable(now) } ?: ordered.firstOrNull()
+    val next: Chunk? get() = nextAfter(null)
 
-    /** And the one after it: the next slot's, or chosen as [next] is. */
-    val then: Chunk?
-        get() {
-            val first = next ?: return null
-            val slots = todaySlots.filter { it.kind == SlotKind.Work } + tomorrowBucket?.slots.orEmpty().filter { it.kind == SlotKind.Work }
-            val at = slots.indexOfFirst { it.chunk == first }
-            if (at >= 0) slots.getOrNull(at + 1)?.chunk?.let { return it }
-            return ordered.filter { it !== first && it != first }.let { rest -> rest.firstOrNull { it.startable(now) } ?: rest.firstOrNull() }
-        }
+    /** And the one after it, chosen as [next] is from what's left. */
+    val then: Chunk? get() = next?.let { nextAfter(it) }
+
+    /**
+     * The next thing to do, [first] aside: the slot under way, else today's next slot, else today's
+     * work with no slot (today's comes before tomorrow's), else tomorrow's first slot, else the
+     * first that can be started, else the first.
+     */
+    private fun nextAfter(first: Chunk?): Chunk? {
+        fun Chunk?.ok() = this != null && this != first
+        slotAt(now)?.chunk?.takeIf { it.ok() }?.let { return it }
+        todaySlots.firstOrNull { it.kind == SlotKind.Work && it.start >= now && it.chunk.ok() }?.chunk?.let { return it }
+        todayBucket?.chunks.orEmpty().firstOrNull { it.ok() && it.startable(now) }?.let { return it }
+        tomorrowBucket?.slots.orEmpty().firstOrNull { it.kind == SlotKind.Work && it.chunk.ok() }?.chunk?.let { return it }
+        return ordered.filter { it.ok() }.let { rest -> rest.firstOrNull { it.startable(now) } ?: rest.firstOrNull() }
+    }
 
     /** Today's slots, work and outside (PL-12). */
     val todaySlots: List<Slot> get() = todayBucket?.slots.orEmpty()

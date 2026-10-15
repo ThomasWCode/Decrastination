@@ -88,6 +88,10 @@ class BackupTest {
         assertEquals(true, imported.armed)
         assertEquals(false, imported.aiKeyActive)
         assertEquals(30, imported.boxMin)
+        // The calendars are this phone's: ids from another phone mean other calendars here.
+        val calendars = Backups.importedSettings(here.copy(calendarWriteId = 7L, calendarsExcluded = listOf(3L)), backup.copy(settings = backup.settings.copy(calendarWriteId = 12L, calendarsExcluded = listOf(5L, 6L))))
+        assertEquals(7L, calendars.calendarWriteId)
+        assertEquals(listOf(3L), calendars.calendarsExcluded)
     }
 
     @Test

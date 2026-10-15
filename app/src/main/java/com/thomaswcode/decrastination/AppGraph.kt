@@ -275,6 +275,7 @@ class AppGraph private constructor(context: Context) {
      * and you're told.
      */
     private suspend fun writeSlots(made: Plan) {
+        clearOldCalendars()
         val calendarId = settings.value.calendarWriteId ?: return
         if (!SlotCalendar.allowed(app)) return
         val zone = clock.zone()
@@ -291,6 +292,14 @@ class AppGraph private constructor(context: Context) {
             val taskId = move.desired.taskId ?: continue
             addOwnChange(java.util.UUID.randomUUID().toString(), "Moved in the calendar", About(taskId = taskId, taskTitle = byId[taskId]?.title), SlotCalendar.change(move, zone))
         }
+    }
+
+    /** The app's events taken out of calendars no longer written to, each kept on the list till that's done. */
+    private suspend fun clearOldCalendars() {
+        val waiting = runtime.value.calendarsToClear
+        if (waiting.isEmpty()) return
+        val cleared = withContext(Dispatchers.IO) { waiting.filter { SlotCalendar.clear(app, it) } }
+        if (cleared.isNotEmpty()) runtime.update { it.copy(calendarsToClear = it.calendarsToClear - cleared.toSet()) }
     }
 
     /**
@@ -548,8 +557,12 @@ class AppGraph private constructor(context: Context) {
             settings.state.map { it.calendarWriteId }.distinctUntilChanged().collect { id ->
                 val was = runtime.value.calendarWrittenTo
                 if (was == id) return@collect
-                if (was != null) withContext(Dispatchers.IO) { runCatching { SlotCalendar.clear(app, was) }.onFailure { Log.w(TAG, "Clearing the old calendar failed", it) } }
-                runtime.update { it.copy(calendarWrittenTo = id, calendarWritten = emptyMap()) }
+                // The old one kept on the list to clear till it is: without the permission now, or
+                // should the provider fail, it's tried again at the next replan.
+                runtime.update { state ->
+                    state.copy(calendarWrittenTo = id, calendarWritten = emptyMap(), calendarsToClear = (state.calendarsToClear + listOfNotNull(was)).distinct() - listOfNotNull(id).toSet())
+                }
+                clearOldCalendars()
                 watcher.poke()
             }
         }

@@ -429,16 +429,28 @@ object Planner {
          * The time [day] has for [item]'s [piece] (PL-15): a piece only for home, the evening's left; any
          * other, all the day's. With no piece named, the item's: the evening's where all its pieces are home's.
          */
+        // Each day's time before a deadline on it, and each item's minutes put on its real deadline's own day.
+        val beforeDeadline = HashMap<Pair<LocalDate, Long>, Capacity>()
+        val onDueDay = HashMap<Item, Int>()
         fun room(item: Item, day: LocalDate, piece: Int? = null): Int {
             val home = piece?.let { item.chunks[it].where == Where.Home } ?: item.home
             val left = (if (home) freeHome else free).getValue(day)
             val used = softUsed[day] ?: 0
             val mine = if (day == opening(item)) openingRoom(item) else Int.MAX_VALUE
-            return minOf(if (item.soft && used > 0) minOf(left, input.settings.softMinPerDay - used) else left, mine)
+            // On its real deadline's own day, only the time before the deadline (its slot must end by it),
+            // less what it's put there already.
+            val beforeDue = if (item.hard && day == date(item.deadline, zone)) {
+                val before = beforeDeadline.getOrPut(day to item.deadline) { capacitiesBefore(day, item.deadline, input) }
+                (if (home) before.homeMin else before.anyMin) - (onDueDay[item] ?: 0)
+            } else {
+                Int.MAX_VALUE
+            }
+            return minOf(if (item.soft && used > 0) minOf(left, input.settings.softMinPerDay - used) else left, mine, beforeDue)
         }
         /** [item]'s piece [piece] placed on [day]: its minutes off the day's time, the evening's only as far as they must be. */
         fun take(item: Item, day: LocalDate, piece: Int) {
             val minutes = item.chunks[piece].minutes
+            if (item.hard && day == date(item.deadline, zone)) onDueDay[item] = (onDueDay[item] ?: 0) + minutes
             val school = (free.getValue(day) - freeHome.getValue(day)).coerceAtLeast(0)
             val home = if (item.chunks[piece].where == Where.Home) minutes else (minutes - school).coerceAtLeast(0)
             free[day] = free.getValue(day) - minutes
@@ -451,6 +463,7 @@ object Planner {
         /** [take] undone: its minutes back where they were taken from. */
         fun give(item: Item, day: LocalDate, piece: Int) {
             val minutes = item.chunks[piece].minutes
+            if (item.hard && day == date(item.deadline, zone)) onDueDay[item] = (onDueDay[item] ?: 0) - minutes
             free[day] = free.getValue(day) + minutes
             freeHome[day] = freeHome.getValue(day) + (homeTaken.remove(item to piece) ?: 0)
             stepsOn.merge(item.task.id to day, -1, Int::plus)
@@ -504,7 +517,7 @@ object Planner {
          * it, flagged behind, may still be done in time.
          */
         fun freeUntilDue(item: Item, from: LocalDate): Int {
-            val last = minOf(horizon, lastDayBefore(item.deadline, input))
+            val last = minOf(horizon, lastDayBefore(item, input))
             val dueDay = date(item.deadline, zone)
             // As much of each day as it can have: on a day it can only start late, the time after its
             // start; on its deadline's own day, only the time before the deadline.
@@ -514,14 +527,14 @@ object Planner {
             }
         }
         /** [item]'s deadline is within the plan's reach: only then were all its days before it counted. */
-        fun reachable(item: Item): Boolean = lastDayBefore(item.deadline, input) <= horizon
+        fun reachable(item: Item): Boolean = lastDayBefore(item, input) <= horizon
         /**
          * Whether a piece of [item] behind on [day] had no room before its deadline itself: on a day
          * after it, its task [short] of time, or a margin no stricter than the deadline, so behind its
          * last usable day is behind the deadline. Else it's behind the safety margin only.
          */
         fun noRoom(item: Item, day: LocalDate, short: Boolean): Boolean =
-            day > lastDayBefore(item.deadline, input) || short || lastUsableDay(item, input) >= lastDayBefore(item.deadline, input)
+            day > lastDayBefore(item, input) || short || lastUsableDay(item, input) >= lastDayBefore(item, input)
         /** [item], [short] of time before its deadline still to come: said, once a task. */
         fun sayIfShort(item: Item, free: Int, short: Boolean) {
             // The time free before the first of its runs with this deadline took any: theirs together.
@@ -558,7 +571,7 @@ object Planner {
                 // Due today but only possible from a later day (a deck whose next cards come
                 // tomorrow): it misses its deadline, so it's behind.
                 val why = if (item.hard && item.deadline < input.now) Why.Overdue else if (item.soft) Why.Soft else Why.DueSoon
-                if (day > lastDayBefore(item.deadline, input)) short = true
+                if (day > lastDayBefore(item, input)) short = true
                 placed.getValue(day) += chunk(item, i, behind = day > date(item.deadline, zone), why = why, noRoom = noRoom(item, day, short))
             }
             // Due later today and short of the time before it: said (overdue work has missed it already).
@@ -627,8 +640,8 @@ object Planner {
             // Short of time before its deadline: a piece with no day, one carried past the deadline's day,
             // or one no single day before it held (put into the first, over its time), where the margin
             // is no stricter than the deadline, so its days were the deadline's.
-            val forced = behind.any { it } && lastUsableDay(item, input) >= lastDayBefore(item.deadline, input)
-            val short = reachable(item) && (item.minutes > freeBefore || forced || assigned.any { it == null || it > lastDayBefore(item.deadline, input) })
+            val forced = behind.any { it } && lastUsableDay(item, input) >= lastDayBefore(item, input)
+            val short = reachable(item) && (item.minutes > freeBefore || forced || assigned.any { it == null || it > lastDayBefore(item, input) })
             item.chunks.indices.forEach { i ->
                 val day = assigned[i] ?: return@forEach
                 placed.getValue(day) += chunk(item, i, behind = behind[i] || day > dueBy, why = why, noRoom = noRoom(item, day, short))
@@ -757,7 +770,7 @@ object Planner {
             }
             // Behind only where it can't start before its last usable day is past (a start after it).
             val dueBy = lastUsableDay(item, input)
-            val short = reachable(item) && (item.minutes > freeBefore || assigned.any { it!! > lastDayBefore(item.deadline, input) })
+            val short = reachable(item) && (item.minutes > freeBefore || assigned.any { it!! > lastDayBefore(item, input) })
             item.chunks.indices.forEach { i -> placed.getValue(assigned[i]!!) += chunk(item, i, behind = assigned[i]!! > dueBy, why = whys[i]!!, noRoom = noRoom(item, assigned[i]!!, short)) }
             sayIfShort(item, freeBefore, short)
             note(item, assigned)
@@ -850,16 +863,22 @@ object Planner {
     )
 
     /** The deadline's day less the margin; with no margin, a morning deadline's day is never usable. */
-    private fun lastUsableDay(item: Item, input: Input): LocalDate = item.pinnedDay ?: lastUsableDay(item.deadline, item.task.kind, input)
+    private fun lastUsableDay(item: Item, input: Input): LocalDate = item.pinnedDay ?: run {
+        val margin = input.calibration.marginDays[item.task.kind] ?: input.settings.marginDays
+        if (margin == 0) lastDayBefore(item, input) else lastUsableDay(item.deadline, item.task.kind, input)
+    }
 
     /** [day]'s time for work before [deadline] (on that day): its windows, or your hours, cut at the deadline's minute. */
-    private fun capacityBefore(day: LocalDate, deadline: Long, input: Input): Int {
+    private fun capacityBefore(day: LocalDate, deadline: Long, input: Input): Int = capacitiesBefore(day, deadline, input).anyMin
+
+    /** [day]'s time before [deadline], the evening's and all of it: its windows, or your hours, cut at the deadline's minute. */
+    private fun capacitiesBefore(day: LocalDate, deadline: Long, input: Input): Capacity {
         val due = Instant.ofEpochMilli(deadline).atZone(input.zone)
         val minute = due.hour * 60 + due.minute
         val hours = if (day.dayOfWeek == DayOfWeek.SATURDAY || day.dayOfWeek == DayOfWeek.SUNDAY) input.settings.weekendHours else input.settings.weekdayHours
         val windows = (input.windows[day] ?: listOf(DayWindow(hours.startMin, hours.endMin, WindowKind.Evening)))
             .mapNotNull { w -> w.takeIf { it.startMin < minute }?.copy(endMin = minOf(w.endMin, minute)) }
-        return capacityOf(day, input.copy(windows = input.windows + (day to windows))).anyMin
+        return capacityOf(day, input.copy(windows = input.windows + (day to windows)))
     }
 
     /**
@@ -867,12 +886,18 @@ object Planner {
      * has time before the deadline (PL-15, Q-52: a window starting early enough, as break does before
      * a 13:00 deadline; without windows, an afternoon or evening deadline's day), else the day before.
      */
-    fun lastDayBefore(deadline: Long, input: Input): LocalDate {
+    fun lastDayBefore(deadline: Long, input: Input): LocalDate = lastDayBefore(deadline, input, home = false)
+
+    /** [lastDayBefore] for work only for [home] (PL-15): its day counts only by an evening window before it. */
+    private fun lastDayBefore(deadline: Long, input: Input, home: Boolean): LocalDate {
         val due = Instant.ofEpochMilli(deadline).atZone(input.zone)
         val minute = due.hour * 60 + due.minute
-        val usable = input.windows[due.toLocalDate()]?.any { it.startMin + MIN_CHUNK <= minute } ?: (due.toLocalTime() >= NOON)
+        val usable = input.windows[due.toLocalDate()]?.any { (!home || it.kind == WindowKind.Evening) && it.startMin + MIN_CHUNK <= minute } ?: (due.toLocalTime() >= NOON)
         return if (usable) due.toLocalDate() else due.toLocalDate().minusDays(1)
     }
+
+    /** [item]'s [lastDayBefore]: by the windows its work can use. */
+    private fun lastDayBefore(item: Item, input: Input): LocalDate = lastDayBefore(item.deadline, input, item.home)
 
     private fun lastUsableDay(deadline: Long, kind: Kind, input: Input): LocalDate {
         val due = Instant.ofEpochMilli(deadline).atZone(input.zone)

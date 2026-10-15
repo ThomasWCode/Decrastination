@@ -64,7 +64,7 @@ object SlotCalendar {
         val from = plan.today.atStartOfDay(zone).toInstant().toEpochMilli()
         val to = plan.today.plusDays(SlotCalendarDiff.DAYS).atStartOfDay(zone).toInstant().toEpochMilli()
         val desired = SlotCalendarDiff.desired(plan, zone)
-        val diff = SlotCalendarDiff.diff(desired, existing(context, calendarId, from, to), written)
+        val diff = SlotCalendarDiff.diff(desired, existing(context, calendarId, from, to, desired.map { it.uri }), written)
         val (taken, refused) = diff.handMoves.partition(takes)
         val ops = ArrayList<ContentProviderOperation>()
         diff.inserts.forEach { ops += ContentProviderOperation.newInsert(Events.CONTENT_URI).withValues(values(context, calendarId, it, zone)).build() }
@@ -76,10 +76,15 @@ object SlotCalendar {
         return Written(desired.associate { it.uri to it.start } + taken.associate { it.desired.uri to it.existing.start }, taken, refused)
     }
 
-    /** The app's events in [calendarId], all of them: a calendar no longer written to is left as it was before. */
-    fun clear(context: Context, calendarId: Long) {
-        if (!allowed(context)) return
-        context.contentResolver.delete(Events.CONTENT_URI, "${Events.CALENDAR_ID} = ? AND ${Events.CUSTOM_APP_PACKAGE} = ?", arrayOf(calendarId.toString(), context.packageName))
+    /**
+     * The app's events in [calendarId], all of them: a calendar no longer written to is left as it
+     * was before. False when they can't be (no permission, or the provider failed), to be tried again.
+     */
+    fun clear(context: Context, calendarId: Long): Boolean {
+        if (!allowed(context)) return false
+        return runCatching {
+            context.contentResolver.delete(Events.CONTENT_URI, "${Events.CALENDAR_ID} = ? AND ${Events.CUSTOM_APP_PACKAGE} = ?", arrayOf(calendarId.toString(), context.packageName))
+        }.isSuccess
     }
 
     /** Says a move of yours was written back, as its task is due before then. */
@@ -93,11 +98,15 @@ object SlotCalendar {
         Notify.post(context, move.desired.uri, MOVE_ID, notification)
     }
 
-    /** The app's events in [calendarId] starting between [from] and [to], not deleted. */
-    private fun existing(context: Context, calendarId: Long, from: Long, to: Long): List<SlotCalendarDiff.Existing> {
+    /**
+     * The app's events in [calendarId], not deleted, starting between [from] and [to], or one of
+     * [uris] wherever it now is (one you moved out of the week is found by what it is).
+     */
+    private fun existing(context: Context, calendarId: Long, from: Long, to: Long, uris: List<String>): List<SlotCalendarDiff.Existing> {
         val projection = arrayOf(Events._ID, Events.DTSTART, Events.DTEND, Events.TITLE, Events.DESCRIPTION, Events.CUSTOM_APP_URI)
-        val selection = "${Events.CALENDAR_ID} = ? AND ${Events.CUSTOM_APP_PACKAGE} = ? AND ${Events.DTSTART} >= ? AND ${Events.DTSTART} < ? AND ${Events.DELETED} = 0"
-        val args = arrayOf(calendarId.toString(), context.packageName, from.toString(), to.toString())
+        val byUri = if (uris.isEmpty()) "" else " OR ${Events.CUSTOM_APP_URI} IN (${uris.joinToString(",") { "?" }})"
+        val selection = "${Events.CALENDAR_ID} = ? AND ${Events.CUSTOM_APP_PACKAGE} = ? AND ${Events.DELETED} = 0 AND ((${Events.DTSTART} >= ? AND ${Events.DTSTART} < ?)$byUri)"
+        val args = arrayOf(calendarId.toString(), context.packageName, from.toString(), to.toString()) + uris
         val found = mutableListOf<SlotCalendarDiff.Existing>()
         context.contentResolver.query(Events.CONTENT_URI, projection, selection, args, null)?.use { c ->
             while (c.moveToNext()) {

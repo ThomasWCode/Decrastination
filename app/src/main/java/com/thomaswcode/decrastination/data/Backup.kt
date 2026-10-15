@@ -239,7 +239,8 @@ object Backups {
      * so once armed a loosening one waits like any other.
      */
     fun importedSettings(asked: Settings, backup: Backup): Settings =
-        backup.settings.copy(armed = asked.armed, aiKeyActive = asked.aiKeyActive)
+        // The calendars are this phone's, by ids another phone's mean nothing to (NF-07, DX-13).
+        backup.settings.copy(armed = asked.armed, aiKeyActive = asked.aiKeyActive, calendarWriteId = asked.calendarWriteId, calendarsExcluded = asked.calendarsExcluded)
 
     /**
      * [current]'s usage with [imported]'s for the same month taken in: the higher of each count, so

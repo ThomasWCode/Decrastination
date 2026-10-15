@@ -898,6 +898,31 @@ class PlannerTest {
     }
 
     @Test
+    fun `a same-day deadline counts only by windows the work can use, and only their time before it`() {
+        // No margin, due Tuesday 13:00: homework for home can't use break, so Monday it is; work done
+        // anywhere has break's 30 minutes before it, so a 25-minute form goes in it, a 45-minute one doesn't.
+        val noMargin = Calibration(marginDays = mapOf(Kind.Homework to 0, Kind.Admin to 0))
+        val essay = task("essay", Fixtures.at("2026-10-13T13:00"), effort = 25)
+        assertEquals(listOf(LocalDate.parse("2026-10-12")), Planner.plan(windowed(listOf(essay), "2026-10-12T17:00").copy(calibration = noMargin)).dayOf("essay"))
+        val form = task("form", Fixtures.at("2026-10-13T13:00"), effort = 25, kind = Kind.Admin)
+        assertEquals(listOf(tuesday), Planner.plan(windowed(listOf(form), "2026-10-12T17:00").copy(calibration = noMargin)).dayOf("form"))
+        val long = form.copy(sourceEffortMin = 45)
+        assertEquals(listOf(LocalDate.parse("2026-10-12")), Planner.plan(windowed(listOf(long), "2026-10-12T17:00").copy(calibration = noMargin)).dayOf("form"))
+    }
+
+    @Test
+    fun `today's work with no slot comes before tomorrow's slots`() {
+        // Tuesday 21:50: Monday's evening gone but for ten minutes, a half hour due tonight has no
+        // slot left today; it's still the next thing, not tomorrow's first slot.
+        val tonight = task("tonight", Fixtures.at("2026-10-13T23:59"), effort = 30)
+        val tomorrow = task("tomorrow", Fixtures.at("2026-10-15T23:59"), effort = 30)
+        val windows = mapOf(tuesday to schoolDay, tuesday.plusDays(1) to schoolDay)
+        val plan = Planner.plan(windowed(listOf(tonight, tomorrow), "2026-10-13T21:50", windows = windows))
+        assertTrue(plan.todaySlots.none { it.chunk?.taskId == "teams:tonight" })
+        assertEquals("teams:tonight", plan.next?.taskId)
+    }
+
+    @Test
     fun `capacity is scaled by the day's kind's yield`() {
         // Weekends found to use half their free time (PL-06): Saturday's 840 minutes plan as 420;
         // Thursday's evening is as it was. A limit you set is of the work, after the yield.

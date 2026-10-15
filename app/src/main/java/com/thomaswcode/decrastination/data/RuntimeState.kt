@@ -24,6 +24,8 @@ data class RuntimeState(
     val calendarWritten: Map<String, Long> = emptyMap(),
     /** The calendar those were written to, so a change of calendar takes them out of the old one. */
     val calendarWrittenTo: Long? = null,
+    /** Calendars no longer written to whose events of the app's are still to be taken out (no permission, or a failure, the last time). */
+    val calendarsToClear: List<Long> = emptyList(),
     val session: FocusSession? = null,
     /** Sessions ended whose due (the task's minutes and step, the log, free time) isn't all given yet. */
     val finishing: List<EndedSession> = emptyList(),
