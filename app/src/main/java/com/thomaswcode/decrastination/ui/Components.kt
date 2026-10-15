@@ -142,14 +142,14 @@ fun Pill(text: String, container: Color = MaterialTheme.colorScheme.secondaryCon
 @Composable
 fun WarningPill(text: String) = Pill(text, MaterialTheme.colorScheme.errorContainer, MaterialTheme.colorScheme.onErrorContainer)
 
-/** A secondary screen's bar: its title, and a way back. */
+/** A secondary screen's bar: its title, and a way back ([onBack] in place of leaving it: a page within it). */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun BackBar(title: String, activity: Activity) {
+fun BackBar(title: String, activity: Activity, onBack: (() -> Unit)? = null) {
     TopAppBar(
         title = { Text(title) },
         navigationIcon = {
-            IconButton(onClick = { activity.finish() }) { Icon(painterResource(R.drawable.ic_arrow_back), contentDescription = "Back") }
+            IconButton(onClick = { onBack?.invoke() ?: activity.finish() }) { Icon(painterResource(R.drawable.ic_arrow_back), contentDescription = "Back") }
         },
     )
 }

@@ -56,12 +56,16 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+/** A part of the setup checklist: each but This phone is a page of Settings too (UI-18). */
+enum class SetupPart { Saved, Sources, Claude, Phone, Backup }
+
 /**
  * The setup checklist (PLAN.md Phase 1): what each part of the app needs, and whether it has it.
- * On its own page ([SetupActivity]), from the menu.
+ * On its own page ([SetupActivity]), from the attention mark and on the first run (UI-18); [parts]
+ * of it on Settings' pages, where the page scrolls ([scroll] false).
  */
 @Composable
-fun SetupScreen(graph: AppGraph, activity: Activity) {
+fun SetupScreen(graph: AppGraph, activity: Activity, parts: Set<SetupPart> = SetupPart.entries.toSet(), scroll: Boolean = true) {
     val state by graph.tasks.state.collectAsStateWithLifecycle()
     val secrets by graph.secrets.present.collectAsStateWithLifecycle()
     val runtime by graph.runtime.state.collectAsStateWithLifecycle()
@@ -131,9 +135,9 @@ fun SetupScreen(graph: AppGraph, activity: Activity) {
         }
     }
 
-    Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
+    Column(Modifier.fillMaxWidth().then(if (scroll) Modifier.verticalScroll(rememberScrollState()) else Modifier).padding(bottom = 24.dp)) {
         // A saved file that couldn't be read whole at a start (IMP-P1-003), till you've seen it.
-        if (runtime.unreadable.isNotEmpty()) {
+        if (SetupPart.Saved in parts && runtime.unreadable.isNotEmpty()) {
             Group("Saved data") {
                 runtime.unreadable.forEach { found ->
                     SetupItem(
@@ -145,7 +149,7 @@ fun SetupScreen(graph: AppGraph, activity: Activity) {
                 }
             }
         }
-        Group("Sources") {
+        if (SetupPart.Sources in parts) Group("Sources") {
             SetupItem(
                 title = "Teams Assignments widget",
                 done = state.status(Source.Teams).works,
@@ -172,7 +176,7 @@ fun SetupScreen(graph: AppGraph, activity: Activity) {
                 action = "Enter" to { editing = Credential.Gmail },
             )
         }
-        Group("Claude") {
+        if (SetupPart.Claude in parts) Group("Claude") {
             val usage = runtime.aiUsage.forMonth(AiUsage.monthOf(graph.clock.now(), graph.clock.zone()))
             SetupItem(
                 title = "Claude",
@@ -190,7 +194,7 @@ fun SetupScreen(graph: AppGraph, activity: Activity) {
                 action = "Enter key" to { enteringKey = true },
             )
         }
-        Group("This phone") {
+        if (SetupPart.Phone in parts) Group("This phone") {
             SetupItem(
                 title = "Calendar",
                 done = calendarAllowed,
@@ -206,7 +210,7 @@ fun SetupScreen(graph: AppGraph, activity: Activity) {
                 action = "Open" to { activity.startActivity(Intent(activity, ProtectionActivity::class.java)) },
             )
         }
-        Group("Backup") {
+        if (SetupPart.Backup in parts) Group("Backup") {
             SetupItem(
                 title = "Back up",
                 done = null,

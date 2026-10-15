@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
@@ -31,6 +32,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -41,7 +43,9 @@ import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.data.SettingsLimits
 import com.thomaswcode.decrastination.data.Window
 import com.thomaswcode.decrastination.enrich.AiUsage
+import com.thomaswcode.decrastination.enrich.ModelEffort
 import com.thomaswcode.decrastination.learn.Daily
+import com.thomaswcode.decrastination.protect.ProtectionPanel
 import com.thomaswcode.decrastination.protect.SettingsChanges
 import java.util.Locale
 import java.util.Optional
@@ -84,6 +88,9 @@ class SettingsActivity : ComponentActivity() {
         // The apps list's search (IMP-P2-009), kept through a turn of the phone.
         var find by rememberSaveable { mutableStateOf("") }
         val scope = rememberCoroutineScope()
+        // The page open (UI-18), kept through a turn of the phone; Back comes to the list, your edits kept till they're saved.
+        var section by rememberSaveable { mutableStateOf<String?>(null) }
+        androidx.activity.compose.BackHandler(enabled = section != null) { section = null }
         LaunchedEffect(Unit) { apps = withContext(Dispatchers.IO) { launchableApps() } }
         // A change made elsewhere meanwhile (Setup putting a key to use) shows at once, your edits
         // laid over it; saved, only what you changed goes, over what's asked for then (BUG-P2-014).
@@ -101,7 +108,7 @@ class SettingsActivity : ComponentActivity() {
         val effect: @Composable (String) -> Unit = { field -> SettingsEffects.line(field, draft, tasksState.timetable, schoolCalendar, today)?.let { Note(it) } }
 
         Scaffold(
-            topBar = { BackBar("Settings", this) },
+            topBar = { BackBar(PAGES.firstOrNull { it.key == section }?.title ?: "Settings", this, onBack = if (section != null) ({ section = null }) else null) },
             floatingActionButton = { FelixFab(this) },
             bottomBar = {
                 Column(Modifier.fillMaxWidth().padding(16.dp)) {
@@ -133,188 +140,212 @@ class SettingsActivity : ComponentActivity() {
             },
         ) { padding ->
             LazyColumn(Modifier.padding(padding).fillMaxSize()) {
-                item { Section("Claude") }
-                item {
-                    val usage = runtime.aiUsage.forMonth(AiUsage.monthOf(graph.clock.now(), graph.clock.zone()))
-                    SwitchRow("Use Claude for steps, estimates and email triage", draft.aiEnabled) { draft = draft.copy(aiEnabled = it) }
-                    Note(
-                        "Off, nothing is sent to Claude; the rules do what they can. On, it needs its API key (Setup); with no cap, it stops when the account's credit runs out. " +
-                            "This month: $%.2f in %d calls.".format(Locale.UK, usage.spentUsd, usage.calls),
-                    )
-                    OptionalNumberField("Monthly cap ($, blank for none)", draft.aiMonthlyCapUsd, SettingsLimits.CAP_USD, "aiMonthlyCapUsd", form) { draft = draft.copy(aiMonthlyCapUsd = it) }
-                }
-
-                // Who you are, as every call to Claude says it (AI-05).
-                item { Section("About you") }
-                item {
-                    NumberField("The September you went into Year 12", draft.yearGroupStart, SettingsLimits.YEAR_GROUP_START, "yearGroupStart", form) { draft = draft.copy(yearGroupStart = it) }
-                    NumberField("Current German textbook", draft.ankiTextbook, SettingsLimits.TEXTBOOK, "ankiTextbook", form) { draft = draft.copy(ankiTextbook = it) }
-                    OutlinedTextField(
-                        value = raw[PROFILE] ?: draft.profileLines.joinToString("\n"),
-                        onValueChange = { value ->
-                            raw = raw + (PROFILE to value)
-                            draft = draft.copy(profileLines = value.lines().map { it.trim().take(SettingsLimits.MAX_PROFILE_LINE) }.filter { it.isNotEmpty() }.take(SettingsLimits.MAX_PROFILE_LINES))
-                        },
-                        label = { Text("What you'd have Claude know, a line each") },
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                        minLines = 3,
-                    )
-                    // Each class code the sources give, and the subject it is: blank leaves it the code.
-                    for (code in (draft.classMap.keys + graph.tasks.value.tasks.mapNotNull { it.className?.trim()?.takeIf(String::isNotEmpty) }).distinct().sorted().take(SettingsLimits.MAX_CLASSES)) {
-                        OutlinedTextField(
-                            value = draft.classMap[code].orEmpty(),
-                            onValueChange = { subject -> draft = draft.copy(classMap = if (subject.isBlank()) draft.classMap - code else draft.classMap + (code to subject.take(SettingsLimits.MAX_NAME))) },
-                            label = { Text("$code is") },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                        )
-                    }
-                    Note("Sent to Claude with every call, with your school days and what's remembered.")
-                }
-
-                // The voice of the app's messages (AI-22, LR-03); what he remembers, and how he's to
-                // behave (AI-21), saved as each is added or forgotten.
-                item { Section("Felix") }
-                item {
-                    TextField("His name", draft.felixName, SettingsLimits.MAX_NAME, "felixName", form) { draft = draft.copy(felixName = it) }
-                    TextField("Who he is", draft.felixLine, SettingsLimits.MAX_FELIX_LINE, "felixLine", form) { draft = draft.copy(felixLine = it) }
-                    NumberField("He asks this far into a slot with nothing done (minutes)", draft.felixGraceMin, SettingsLimits.FELIX_GRACE_MIN, "felixGraceMin", form) { draft = draft.copy(felixGraceMin = it) }
-                    NumberField("He checks again after, if he doesn't say (minutes)", draft.felixDefaultCheckMin, SettingsLimits.FELIX_CHECK_MIN, "felixDefaultCheckMin", form) { draft = draft.copy(felixDefaultCheckMin = it) }
-                }
-                item { MemorySection(graph) }
-
-                item { Section("Hours") }
-                item {
-                    WindowField("School days: work", draft.weekdayHours, "weekdayHours", form) { draft = draft.copy(weekdayHours = it) }
-                    effect("weekdayHours")
-                    WindowField("Weekends: work", draft.weekendHours, "weekendHours", form) { draft = draft.copy(weekendHours = it) }
-                    effect("weekendHours")
-                    WindowField("Quiet hours (nothing blocked)", draft.quietHours, "quietHours", form, overnight = true) { draft = draft.copy(quietHours = it) }
-                    TimeField("School days: blocking from", draft.weekdayBlockFromMin, "weekdayBlockFromMin", form) { draft = draft.copy(weekdayBlockFromMin = it) }
-                    TimeField("Weekends and days off: blocking from", draft.weekendBlockFromMin, "weekendBlockFromMin", form) { draft = draft.copy(weekendBlockFromMin = it) }
-                }
-
-                // Days with no school and half-days (PL-16): saved as they're added or deleted.
-                item { Section("School") }
-                item { SchoolSection(graph) }
-
-                // The calendar written to and those read (NF-07, DX-13): saved as they're picked.
-                item { Section("Calendar") }
-                item { CalendarSection(graph, this@SettingsActivity) }
-
-                item { Section("Reminders") }
-                item {
-                    TimeField("Morning briefing, school days", draft.briefingWeekdayMin, "briefingWeekdayMin", form) { draft = draft.copy(briefingWeekdayMin = it) }
-                    TimeField("Morning briefing, weekends", draft.briefingWeekendMin, "briefingWeekendMin", form) { draft = draft.copy(briefingWeekendMin = it) }
-                    TimeField("Sunday check-in", draft.checkInMin, "checkInMin", form) { draft = draft.copy(checkInMin = it) }
-                    Note("The week's review follows the check-in an hour and a half later, answered or not.")
-                }
-
-                item { Section("Teams") }
-                item {
-                    SwitchRow("Sync Teams automatically", draft.teamsAutoSync) { draft = draft.copy(teamsAutoSync = it) }
-                    TimeField("First unlock after", draft.teamsFirstUnlockMin, "teamsFirstUnlockMin", form) { draft = draft.copy(teamsFirstUnlockMin = it) }
-                    NumberField("Then every (minutes)", draft.teamsSyncEveryMin, SettingsLimits.TEAMS_EVERY_MIN, "teamsSyncEveryMin", form) { draft = draft.copy(teamsSyncEveryMin = it) }
-                }
-
-                item { Section("Planning") }
-                item {
-                    NumberField("Work cut into pieces of (minutes)", draft.boxMin, SettingsLimits.BOX_MIN, "boxMin", form) { draft = draft.copy(boxMin = it) }
-                    effect("boxMin")
-                    NumberField("Finish this many days before a deadline", draft.marginDays, SettingsLimits.MARGIN_DAYS, "marginDays", form) { draft = draft.copy(marginDays = it) }
-                    effect("marginDays")
-                    NumberField("Days given to undated work", draft.softDeadlineDays, SettingsLimits.SOFT_DEADLINE_DAYS, "softDeadlineDays", form) { draft = draft.copy(softDeadlineDays = it) }
-                    NumberField("Undated work a day, at most (minutes)", draft.softMinPerDay, SettingsLimits.SOFT_MIN_PER_DAY, "softMinPerDay", form) { draft = draft.copy(softMinPerDay = it) }
-                    effect("softMinPerDay")
-                    NumberField("Minutes of work for one of free time", draft.workMinPerFreeMin, SettingsLimits.WORK_MIN_PER_FREE_MIN, "workMinPerFreeMin", form) { draft = draft.copy(workMinPerFreeMin = it) }
-                    effect("workMinPerFreeMin")
-                    NumberField("Pieces this long earn with a photo (minutes)", draft.photoFromMin, SettingsLimits.PHOTO_FROM_MIN, "photoFromMin", form) { draft = draft.copy(photoFromMin = it) }
-                    effect("photoFromMin")
-                    NumberField("A day with nothing to do: free minutes", draft.freeAllowanceMin, SettingsLimits.FREE_ALLOWANCE_MIN, "freeAllowanceMin", form) { draft = draft.copy(freeAllowanceMin = it) }
-                    effect("freeAllowanceMin")
-                    NumberField("Outside breaks on a free day", draft.outsideBreaks, SettingsLimits.OUTSIDE_BREAKS, "outsideBreaks", form) { draft = draft.copy(outsideBreaks = it) }
-                    NumberField("Each outside break (minutes)", draft.outsideBreakMin, SettingsLimits.OUTSIDE_BREAK_MIN, "outsideBreakMin", form) { draft = draft.copy(outsideBreakMin = it) }
-                    effect("outsideBreaks")
-                }
-
-                item { Section("Anki") }
-                item {
-                    TimeField("Daily cards due by", draft.ankiDeadlineMin, "ankiDeadlineMin", form) { draft = draft.copy(ankiDeadlineMin = it) }
-                    // What a card takes in each deck, as learned from time in AnkiDroid (DX-11).
-                    com.thomaswcode.decrastination.learn.AnkiProgress.lines(graph.runtime.value.calibration, graph.tasks.value.tasks).forEach {
-                        Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                }
-
-                item { Section("Blocked sites") }
-                item {
-                    OutlinedTextField(
-                        value = raw[SITES] ?: draft.blockedSites.joinToString("\n"),
-                        onValueChange = { value ->
-                            raw = raw + (SITES to value)
-                            draft = draft.copy(blockedSites = value.lines().map { it.trim().lowercase() }.filter { it.isNotEmpty() }.distinct())
-                        },
-                        label = { Text("One per line: a site, or a site and path") },
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                        minLines = 4,
-                    )
-                    Note("Covered in ${draft.checkedBrowsers.joinToString { browserName(it) }}, whose address bar is read.")
-                }
-
-                item { Section("Browsers") }
-                item {
-                    for (browser in browsers(draft)) {
-                        val blocked = browser in draft.blockedBrowsers
-                        SwitchRow("${browserName(browser)}: blocked outright", blocked) { on ->
-                            draft = draft.copy(
-                                blockedBrowsers = if (on) (draft.blockedBrowsers + browser).distinct() else draft.blockedBrowsers - browser,
-                                // Not blocked outright, one whose address bar can be read is watched for the sites again.
-                                checkedBrowsers = when {
-                                    on -> draft.checkedBrowsers - browser
-                                    browser in Blocklist.CHECKED_BROWSERS -> (draft.checkedBrowsers + browser).distinct()
-                                    else -> draft.checkedBrowsers
-                                },
-                            )
+                when (section) {
+                    // Its pages (UI-18), and what's waiting its hours, whichever page it's on.
+                    null -> {
+                        itemsIndexed(PAGES, key = { _, it -> it.key }) { index, page ->
+                            ListTile(index, PAGES.size, onClick = { section = page.key }) {
+                                Text(page.title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                                Text(page.says, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                        if (runtime.pending.isNotEmpty()) {
+                            item { Section("Waiting (protection is armed)") }
+                            items(runtime.pending, key = { it.id }) { change ->
+                                Note(
+                                    "${change.description}: applies about ${Format.at(change.applyAt, graph.clock.now(), graph.clock.zone())}, and is shown on its page as if it had. " +
+                                        "Set it back and save to cancel it; a parent code under Blocking and protection applies it now.",
+                                )
+                            }
                         }
                     }
-                    Note("A browser not blocked outright has its address bar read for the blocked sites, if it's one that can be (Chrome, Brave).")
-                }
 
-                item { Section("Blocked apps") }
-                // Browsers have their own switches above.
-                val shownBrowsers = browsers(draft).toSet()
-                // Known ones not installed keep a row once switched off, so they can be switched back.
-                val listed = (Blocklist.APPS + asked.blockedApps + draft.blockedApps).distinct()
-                    .filter { pkg -> apps.none { it.packageName == pkg } && pkg !in shownBrowsers }
-                    .map { App("${Blocklist.NAMES[it] ?: it} (not installed)", it) }
-                // Blocked ones first (as the screen opened or was last saved, so a row doesn't jump as
-                // it's switched), then the rest; the search finds one by name (IMP-P2-009).
-                val all = (listed + apps.filter { it.packageName != packageName && it.packageName !in shownBrowsers })
-                    .sortedWith(compareBy({ it.packageName !in base.blockedApps }, { it.label.lowercase() }))
-                val query = find.trim().lowercase()
-                item {
-                    OutlinedTextField(
-                        value = find,
-                        onValueChange = { find = it },
-                        label = { Text("Find an app") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
-                    )
-                }
-                items(all.filter { query.isEmpty() || query in it.label.lowercase() || query in it.packageName }, key = { it.packageName }) { app ->
-                    SwitchRow(app.label, app.packageName in draft.blockedApps) { on ->
-                        draft = draft.copy(blockedApps = if (on) (draft.blockedApps + app.packageName).distinct() else draft.blockedApps - app.packageName)
-                    }
-                }
-
-                if (runtime.pending.isNotEmpty()) {
-                    item { Section("Waiting (protection is armed)") }
-                    items(runtime.pending, key = { it.id }) { change ->
-                        Note(
-                            "${change.description}: applies about ${Format.at(change.applyAt, graph.clock.now(), graph.clock.zone())}, and is shown above as if it had. " +
-                                "Set it back and save to cancel it; a parent code on the protection screen applies it now.",
+                    // Who you are, as every call to Claude says it (AI-05).
+                    ABOUT -> item {
+                        NumberField("The September you went into Year 12", draft.yearGroupStart, SettingsLimits.YEAR_GROUP_START, "yearGroupStart", form) { draft = draft.copy(yearGroupStart = it) }
+                        NumberField("Current German textbook", draft.ankiTextbook, SettingsLimits.TEXTBOOK, "ankiTextbook", form) { draft = draft.copy(ankiTextbook = it) }
+                        OutlinedTextField(
+                            value = raw[PROFILE] ?: draft.profileLines.joinToString("\n"),
+                            onValueChange = { value ->
+                                raw = raw + (PROFILE to value)
+                                draft = draft.copy(profileLines = value.lines().map { it.trim().take(SettingsLimits.MAX_PROFILE_LINE) }.filter { it.isNotEmpty() }.take(SettingsLimits.MAX_PROFILE_LINES))
+                            },
+                            label = { Text("What you'd have Claude know, a line each") },
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                            minLines = 3,
                         )
+                        // Each class code the sources give, and the subject it is: blank leaves it the code.
+                        for (code in (draft.classMap.keys + graph.tasks.value.tasks.mapNotNull { it.className?.trim()?.takeIf(String::isNotEmpty) }).distinct().sorted().take(SettingsLimits.MAX_CLASSES)) {
+                            OutlinedTextField(
+                                value = draft.classMap[code].orEmpty(),
+                                onValueChange = { subject -> draft = draft.copy(classMap = if (subject.isBlank()) draft.classMap - code else draft.classMap + (code to subject.take(SettingsLimits.MAX_NAME))) },
+                                label = { Text("$code is") },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                            )
+                        }
+                        Note("Sent to Claude with every call, with your school days and what's remembered.")
                     }
+
+                    HOURS -> item {
+                        WindowField("School days: work", draft.weekdayHours, "weekdayHours", form) { draft = draft.copy(weekdayHours = it) }
+                        effect("weekdayHours")
+                        WindowField("Weekends: work", draft.weekendHours, "weekendHours", form) { draft = draft.copy(weekendHours = it) }
+                        effect("weekendHours")
+                        WindowField("Quiet hours (nothing blocked)", draft.quietHours, "quietHours", form, overnight = true) { draft = draft.copy(quietHours = it) }
+                        TimeField("School days: blocking from", draft.weekdayBlockFromMin, "weekdayBlockFromMin", form) { draft = draft.copy(weekdayBlockFromMin = it) }
+                        TimeField("Weekends and days off: blocking from", draft.weekendBlockFromMin, "weekendBlockFromMin", form) { draft = draft.copy(weekendBlockFromMin = it) }
+                    }
+
+                    // Days with no school and half-days (PL-16): saved as they're added or deleted.
+                    SCHOOL -> item { SchoolSection(graph) }
+
+                    PLANNING -> item {
+                        NumberField("Work cut into pieces of (minutes)", draft.boxMin, SettingsLimits.BOX_MIN, "boxMin", form) { draft = draft.copy(boxMin = it) }
+                        effect("boxMin")
+                        NumberField("Finish this many days before a deadline", draft.marginDays, SettingsLimits.MARGIN_DAYS, "marginDays", form) { draft = draft.copy(marginDays = it) }
+                        effect("marginDays")
+                        NumberField("Days given to undated work", draft.softDeadlineDays, SettingsLimits.SOFT_DEADLINE_DAYS, "softDeadlineDays", form) { draft = draft.copy(softDeadlineDays = it) }
+                        NumberField("Undated work a day, at most (minutes)", draft.softMinPerDay, SettingsLimits.SOFT_MIN_PER_DAY, "softMinPerDay", form) { draft = draft.copy(softMinPerDay = it) }
+                        effect("softMinPerDay")
+                        NumberField("Minutes of work for one of free time", draft.workMinPerFreeMin, SettingsLimits.WORK_MIN_PER_FREE_MIN, "workMinPerFreeMin", form) { draft = draft.copy(workMinPerFreeMin = it) }
+                        effect("workMinPerFreeMin")
+                        NumberField("Pieces this long earn with a photo (minutes)", draft.photoFromMin, SettingsLimits.PHOTO_FROM_MIN, "photoFromMin", form) { draft = draft.copy(photoFromMin = it) }
+                        effect("photoFromMin")
+                        NumberField("A day with nothing to do: free minutes", draft.freeAllowanceMin, SettingsLimits.FREE_ALLOWANCE_MIN, "freeAllowanceMin", form) { draft = draft.copy(freeAllowanceMin = it) }
+                        effect("freeAllowanceMin")
+                        NumberField("Outside breaks on a free day", draft.outsideBreaks, SettingsLimits.OUTSIDE_BREAKS, "outsideBreaks", form) { draft = draft.copy(outsideBreaks = it) }
+                        NumberField("Each outside break (minutes)", draft.outsideBreakMin, SettingsLimits.OUTSIDE_BREAK_MIN, "outsideBreakMin", form) { draft = draft.copy(outsideBreakMin = it) }
+                        effect("outsideBreaks")
+                    }
+
+                    // What the Protection page has (arming, what's in place, the parent code), and what's blocked.
+                    BLOCKING -> {
+                        item { ProtectionPanel(graph, this@SettingsActivity) }
+                        item { Section("Blocked sites") }
+                        item {
+                            OutlinedTextField(
+                                value = raw[SITES] ?: draft.blockedSites.joinToString("\n"),
+                                onValueChange = { value ->
+                                    raw = raw + (SITES to value)
+                                    draft = draft.copy(blockedSites = value.lines().map { it.trim().lowercase() }.filter { it.isNotEmpty() }.distinct())
+                                },
+                                label = { Text("One per line: a site, or a site and path") },
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                                minLines = 4,
+                            )
+                            Note("Covered in ${draft.checkedBrowsers.joinToString { browserName(it) }}, whose address bar is read.")
+                        }
+
+                        item { Section("Browsers") }
+                        item {
+                            for (browser in browsers(draft)) {
+                                val blocked = browser in draft.blockedBrowsers
+                                SwitchRow("${browserName(browser)}: blocked outright", blocked) { on ->
+                                    draft = draft.copy(
+                                        blockedBrowsers = if (on) (draft.blockedBrowsers + browser).distinct() else draft.blockedBrowsers - browser,
+                                        // Not blocked outright, one whose address bar can be read is watched for the sites again.
+                                        checkedBrowsers = when {
+                                            on -> draft.checkedBrowsers - browser
+                                            browser in Blocklist.CHECKED_BROWSERS -> (draft.checkedBrowsers + browser).distinct()
+                                            else -> draft.checkedBrowsers
+                                        },
+                                    )
+                                }
+                            }
+                            Note("A browser not blocked outright has its address bar read for the blocked sites, if it's one that can be (Chrome, Brave).")
+                        }
+
+                        item { Section("Blocked apps") }
+                        // Browsers have their own switches above.
+                        val shownBrowsers = browsers(draft).toSet()
+                        // Known ones not installed keep a row once switched off, so they can be switched back.
+                        val listed = (Blocklist.APPS + asked.blockedApps + draft.blockedApps).distinct()
+                            .filter { pkg -> apps.none { it.packageName == pkg } && pkg !in shownBrowsers }
+                            .map { App("${Blocklist.NAMES[it] ?: it} (not installed)", it) }
+                        // Blocked ones first (as the screen opened or was last saved, so a row doesn't jump as
+                        // it's switched), then the rest; the search finds one by name (IMP-P2-009).
+                        val all = (listed + apps.filter { it.packageName != packageName && it.packageName !in shownBrowsers })
+                            .sortedWith(compareBy({ it.packageName !in base.blockedApps }, { it.label.lowercase() }))
+                        val query = find.trim().lowercase()
+                        item {
+                            OutlinedTextField(
+                                value = find,
+                                onValueChange = { find = it },
+                                label = { Text("Find an app") },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                            )
+                        }
+                        items(all.filter { query.isEmpty() || query in it.label.lowercase() || query in it.packageName }, key = { it.packageName }) { app ->
+                            SwitchRow(app.label, app.packageName in draft.blockedApps) { on ->
+                                draft = draft.copy(blockedApps = if (on) (draft.blockedApps + app.packageName).distinct() else draft.blockedApps - app.packageName)
+                            }
+                        }
+                    }
+
+                    // The voice of the app's messages (AI-22, LR-03); what he remembers, and how he's to
+                    // behave (AI-21), saved as each is added or forgotten.
+                    FELIX -> {
+                        item {
+                            TextField("His name", draft.felixName, SettingsLimits.MAX_NAME, "felixName", form) { draft = draft.copy(felixName = it) }
+                            TextField("Who he is", draft.felixLine, SettingsLimits.MAX_FELIX_LINE, "felixLine", form) { draft = draft.copy(felixLine = it) }
+                            NumberField("He asks this far into a slot with nothing done (minutes)", draft.felixGraceMin, SettingsLimits.FELIX_GRACE_MIN, "felixGraceMin", form) { draft = draft.copy(felixGraceMin = it) }
+                            NumberField("He checks again after, if he doesn't say (minutes)", draft.felixDefaultCheckMin, SettingsLimits.FELIX_CHECK_MIN, "felixDefaultCheckMin", form) { draft = draft.copy(felixDefaultCheckMin = it) }
+                        }
+                        item { MemorySection(graph) }
+                    }
+
+                    // Its key, as Setup has it; on or off, its cap, and how hard it thinks.
+                    CLAUDE -> {
+                        item { SetupScreen(graph, this@SettingsActivity, setOf(SetupPart.Claude), scroll = false) }
+                        item {
+                            val usage = runtime.aiUsage.forMonth(AiUsage.monthOf(graph.clock.now(), graph.clock.zone()))
+                            SwitchRow("Use Claude for steps, estimates and email triage", draft.aiEnabled) { draft = draft.copy(aiEnabled = it) }
+                            Note(
+                                "Off, nothing is sent to Claude; the rules do what they can. On, it needs its API key, above; with no cap, it stops when the account's credit runs out. " +
+                                    "This month: $%.2f in %d calls.".format(Locale.UK, usage.spentUsd, usage.calls),
+                            )
+                            OptionalNumberField("Monthly cap ($, blank for none)", draft.aiMonthlyCapUsd, SettingsLimits.CAP_USD, "aiMonthlyCapUsd", form) { draft = draft.copy(aiMonthlyCapUsd = it) }
+                        }
+                        item {
+                            Section("How hard it thinks")
+                            ModelEffort.table().forEach { (effort, jobs) -> Note("$effort: $jobs") }
+                            Note("By job, not set here: high for what the plan is made from, medium for what someone's waiting for (AC-02).")
+                        }
+                    }
+
+                    // Each source as Setup has it, and how Teams and Anki are read.
+                    SOURCES -> {
+                        item { SetupScreen(graph, this@SettingsActivity, setOf(SetupPart.Sources), scroll = false) }
+                        item { Section("Teams") }
+                        item {
+                            SwitchRow("Sync Teams automatically", draft.teamsAutoSync) { draft = draft.copy(teamsAutoSync = it) }
+                            TimeField("First unlock after", draft.teamsFirstUnlockMin, "teamsFirstUnlockMin", form) { draft = draft.copy(teamsFirstUnlockMin = it) }
+                            NumberField("Then every (minutes)", draft.teamsSyncEveryMin, SettingsLimits.TEAMS_EVERY_MIN, "teamsSyncEveryMin", form) { draft = draft.copy(teamsSyncEveryMin = it) }
+                        }
+                        item { Section("Anki") }
+                        item {
+                            TimeField("Daily cards due by", draft.ankiDeadlineMin, "ankiDeadlineMin", form) { draft = draft.copy(ankiDeadlineMin = it) }
+                            // What a card takes in each deck, as learned from time in AnkiDroid (DX-11).
+                            com.thomaswcode.decrastination.learn.AnkiProgress.lines(graph.runtime.value.calibration, graph.tasks.value.tasks).forEach {
+                                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp))
+                            }
+                        }
+                    }
+
+                    // The calendar written to and those read (NF-07, DX-13; UI-11): saved as they're picked.
+                    CALENDAR -> item { CalendarSection(graph, this@SettingsActivity) }
+
+                    NOTIFICATIONS -> item {
+                        TimeField("Morning briefing, school days", draft.briefingWeekdayMin, "briefingWeekdayMin", form) { draft = draft.copy(briefingWeekdayMin = it) }
+                        TimeField("Morning briefing, weekends", draft.briefingWeekendMin, "briefingWeekendMin", form) { draft = draft.copy(briefingWeekendMin = it) }
+                        TimeField("Sunday check-in", draft.checkInMin, "checkInMin", form) { draft = draft.copy(checkInMin = it) }
+                        Note("The week's review follows the check-in an hour and a half later, answered or not. Those held back by quiet hours or the day's four go with the next briefing.")
+                    }
+
+                    // A backup, and what couldn't be read at a start, as Setup has them.
+                    BACKUP -> item { SetupScreen(graph, this@SettingsActivity, setOf(SetupPart.Saved, SetupPart.Backup), scroll = false) }
                 }
             }
         }
@@ -356,6 +387,36 @@ class SettingsActivity : ComponentActivity() {
 
 @Composable
 private fun Section(title: String) = SectionHeading(title)
+
+/** A page of Settings (UI-18): its key, its name, and what's on it. */
+private data class Page(val key: String, val title: String, val says: String)
+
+private const val ABOUT = "about"
+private const val HOURS = "hours"
+private const val SCHOOL = "school"
+private const val PLANNING = "planning"
+private const val BLOCKING = "blocking"
+private const val FELIX = "felix"
+private const val CLAUDE = "claude"
+private const val SOURCES = "sources"
+private const val CALENDAR = "calendar"
+private const val NOTIFICATIONS = "notifications"
+private const val BACKUP = "backup"
+
+/** Its pages, every control of the old Setup, Settings and Protection pages on one of them (UI-18). */
+private val PAGES = listOf(
+    Page(ABOUT, "About you", "Your year, your subjects, and what Claude should know"),
+    Page(HOURS, "Hours and windows", "When you work, quiet hours, and when blocking starts"),
+    Page(SCHOOL, "School", "Days with no school, and half-days"),
+    Page(PLANNING, "Planning", "Pieces, margins, undated work and free time"),
+    Page(BLOCKING, "Blocking and protection", "What's blocked, arming, and the parent code"),
+    Page(FELIX, "Felix", "His name, when he asks, and what he remembers"),
+    Page(CLAUDE, "Claude", "Its key, its cap, how hard it thinks, and this month's cost"),
+    Page(SOURCES, "Sources", "Teams, Power Planner, AnkiDroid and Gmail"),
+    Page(CALENDAR, "Calendar", "The calendars read, and the one your plan's written to"),
+    Page(NOTIFICATIONS, "Notifications", "The morning briefing and Sunday's check-in"),
+    Page(BACKUP, "Backup", "The settings, the log and what's learned, saved or restored"),
+)
 
 @Composable
 private fun Note(text: String) {
