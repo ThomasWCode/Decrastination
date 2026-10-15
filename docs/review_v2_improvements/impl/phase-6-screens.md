@@ -29,6 +29,8 @@ Items: UI-17, UI-18, UI-12, UI-01, UI-02, UI-03, UI-04, UI-05, UI-08, UI-09, UI-
 
 **Done when.** No `dynamicDarkColorScheme` reference remains; screenshots in light and dark match the icon's pink.
 
+
+*(As built, after Codex's third review: by day the primary is `PinkDeep`, as `Pink` on `Paper` reads at under 2:1; the pink and its pale shade fill the cards and mark the notifications.)*
 ---
 
 ## UI-17 Two screens: Day and Work

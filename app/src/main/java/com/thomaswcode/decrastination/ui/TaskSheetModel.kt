@@ -4,6 +4,7 @@ import com.thomaswcode.decrastination.core.Chunk
 import com.thomaswcode.decrastination.core.Instruction
 import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.Planner
+import com.thomaswcode.decrastination.core.TaskItem
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -29,8 +30,12 @@ object TaskSheetModel {
     /** The piece to tick, photograph or move next: the task's first in [plan]. */
     fun next(plan: Plan, taskId: String): Chunk? = plan.chunksOf(taskId).firstOrNull()
 
-    /** Whether [chunk] can go to [day]: not past its real deadline's day (UI-04's "due before then"). */
-    fun canGo(chunk: Chunk, day: LocalDate, zone: ZoneId): Boolean = !chunk.hard || day <= Planner.date(chunk.deadline, zone)
+    /**
+     * Whether [task]'s work can go to [day], as the plan keeps a day you give (`keptDay`): not before
+     * the day it can start, nor past its real deadline's (UI-04's "due before then").
+     */
+    fun canGo(task: TaskItem, day: LocalDate, zone: ZoneId): Boolean =
+        task.notBefore?.let { day >= Planner.date(it, zone) } != false && task.realDeadline?.let { day <= Planner.date(it, zone) } != false
 
     /** [p] as the sheet says it, from [today]: "Today 17:00–17:30, Q1: due today". */
     fun line(p: Planned, today: LocalDate, zone: ZoneId): String {

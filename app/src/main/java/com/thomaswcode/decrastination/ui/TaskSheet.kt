@@ -292,7 +292,7 @@ fun TaskSheet(
                         }
                     }) { Text("Later today") }
                     val tomorrow = today.plusDays(1)
-                    if (TaskSheetModel.canGo(piece, tomorrow, zone)) {
+                    if (TaskSheetModel.canGo(task, tomorrow, zone)) {
                         OutlinedButton(onClick = {
                             scope.launch {
                                 graph.addOwnChange(UUID.randomUUID().toString(), "Tomorrow", About(taskId = task.id, taskTitle = task.title), Change(ChangeType.OnDay, taskId = task.id, date = tomorrow.toString()))

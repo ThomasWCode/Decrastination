@@ -54,9 +54,10 @@ fun MoveSheet(graph: AppGraph, chunk: Chunk, plan: Plan, zone: ZoneId, onDone: (
     var problem by rememberSaveable { mutableStateOf<String?>(null) }
     // A time pins a task's next piece (PL-04): only that one can be given one; the rest go by their day.
     val next = plan.chunksOf(chunk.taskId).firstOrNull()?.key == chunk.key
-    // A real deadline's day is the last a piece can go to, and the day it can start the first (as the plan keeps a day).
-    val last = if (chunk.hard) Planner.date(chunk.deadline, zone) else null
-    val first = graph.tasks.value.tasks.firstOrNull { it.id == chunk.taskId }?.notBefore?.let { Planner.date(it, zone) }
+    // Its task's real deadline's day is the last its work can go to, and the day it can start the first (as the plan keeps a day).
+    val task = graph.tasks.value.tasks.firstOrNull { it.id == chunk.taskId }
+    val last = task?.realDeadline?.let { Planner.date(it, zone) }
+    val first = task?.notBefore?.let { Planner.date(it, zone) }
     fun apply(change: Change, said: String) {
         graph.scope.launch { graph.addOwnChange(UUID.randomUUID().toString(), said, About(taskId = chunk.taskId, taskTitle = chunk.title), change) }
         onDone(said)
@@ -86,12 +87,20 @@ fun MoveSheet(graph: AppGraph, chunk: Chunk, plan: Plan, zone: ZoneId, onDone: (
                     Text("Only its next piece takes a time: all of it can go to a day.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 OutlinedButton(onClick = {
-                    // Any time: a time you gave it before goes, as the plan would keep it on its day.
-                    graph.scope.launch {
-                        if (Instructions.quickInForce(graph.instructions.value.applied, chunk.taskId, ChangeType.AtTime)) graph.takeBackQuick(chunk.taskId, ChangeType.AtTime)
-                        graph.addOwnChange(UUID.randomUUID().toString(), "All of it on ${day.format(CHIP_DAY)}", About(taskId = chunk.taskId, taskTitle = chunk.title), Change(ChangeType.OnDay, taskId = chunk.taskId, date = day.toString()))
+                    val applied = graph.instructions.value.applied
+                    val quick = Instructions.quickInForce(applied, chunk.taskId, ChangeType.AtTime)
+                    val pinned = task?.userAtTime?.takeIf { Planner.date(it, zone) == day }
+                    if (pinned != null && !quick) {
+                        // A time from the chat holds it that day, over a day given after it: it's taken back where it was made.
+                        problem = "A time you gave in the chat holds it at ${Format.at(pinned, graph.clock.now(), zone)}: take that back in the chat's Your changes first."
+                    } else {
+                        // Any time: a time you gave it here before goes, as the plan would keep it on its day.
+                        graph.scope.launch {
+                            if (quick) graph.takeBackQuick(chunk.taskId, ChangeType.AtTime)
+                            graph.addOwnChange(UUID.randomUUID().toString(), "All of it on ${day.format(CHIP_DAY)}", About(taskId = chunk.taskId, taskTitle = chunk.title), Change(ChangeType.OnDay, taskId = chunk.taskId, date = day.toString()))
+                        }
+                        onDone("All of it on ${day.format(CHIP_DAY)}")
                     }
-                    onDone("All of it on ${day.format(CHIP_DAY)}")
                 }) { Text("All of it, any time that day") }
             }
             problem?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error) }
@@ -104,7 +113,6 @@ fun MoveSheet(graph: AppGraph, chunk: Chunk, plan: Plan, zone: ZoneId, onDone: (
             val time = day.atStartOfDay(zone).plusMinutes(minute.toLong()).toInstant().toEpochMilli()
             val now = graph.clock.now()
             // Only a time the plan will keep: none it would drop is said done.
-            val task = graph.tasks.value.tasks.firstOrNull { it.id == chunk.taskId }
             problem = when (task?.let { Planner.pinProblem(it, time, now, zone) }) {
                 null -> null
                 Planner.PinProblem.DayGone -> "That time's gone: pick a later one."

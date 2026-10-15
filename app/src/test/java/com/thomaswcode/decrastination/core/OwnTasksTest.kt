@@ -332,4 +332,14 @@ class OwnTasksTest {
         val anew = OwnTasks.edited(ticked, OwnTask(title = "Essay", steps = listOf(OwnStep("Plan", 30)), fromForm = true))
         assertEquals(listOf("Plan" to false), anew.subSteps.map { it.title to it.done })
     }
+
+    @Test
+    fun `a done step deleted takes its worked minutes with it`() {
+        val made = OwnTasks.create(OwnTask(title = "Essay", steps = listOf(OwnStep("Plan", 20), OwnStep("Write", 30))), "w", now)
+        val ticked = made.copy(subSteps = made.subSteps.map { if (it.title == "Plan") it.copy(done = true) else it }, workedMin = 20)
+        val draft = OwnTasks.draftOf(ticked)
+        val left = OwnTasks.edited(ticked, draft.copy(steps = draft.steps.drop(1), fromForm = true))
+        assertEquals(listOf("Write" to false), left.subSteps.map { it.title to it.done })
+        assertEquals(0, left.workedMin)
+    }
 }

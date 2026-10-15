@@ -50,11 +50,13 @@ class TaskSheetModelTest {
     }
 
     @Test
-    fun `a piece can't go past its real deadline's day`() {
-        val piece = TaskSheetModel.next(plan, "teams:a")!!
-        assertTrue(TaskSheetModel.canGo(piece.copy(hard = true), monday, LONDON))
-        assertFalse(TaskSheetModel.canGo(piece.copy(hard = true), monday.plusDays(1), LONDON))
-        assertTrue(TaskSheetModel.canGo(piece.copy(hard = false), monday.plusDays(1), LONDON))
+    fun `a task's work can't go past its real deadline's day, nor before it can start`() {
+        val a = task("a", 30)
+        assertTrue(TaskSheetModel.canGo(a, monday, LONDON))
+        assertFalse(TaskSheetModel.canGo(a, monday.plusDays(1), LONDON))
+        val later = a.copy(dueAt = Fixtures.at("2026-10-20T23:59"), notBefore = Fixtures.at("2026-10-14T00:00"))
+        assertFalse(TaskSheetModel.canGo(later, monday.plusDays(1), LONDON))
+        assertTrue(TaskSheetModel.canGo(later, monday.plusDays(2), LONDON))
     }
 
     @Test
