@@ -15,6 +15,7 @@ import androidx.work.workDataOf
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.R
 import com.thomaswcode.decrastination.notify.Channels
+import com.thomaswcode.decrastination.notify.Notify
 
 /**
  * The week's review as a job: with Claude on it waits on a model call, which can take longer than
@@ -28,7 +29,7 @@ class ReviewWorker(context: Context, params: WorkerParameters) : CoroutineWorker
     }
 
     override suspend fun getForegroundInfo(): ForegroundInfo {
-        val notification = NotificationCompat.Builder(applicationContext, Channels.SYNC)
+        val notification = Notify.builder(applicationContext, Channels.SYNC)
             .setSmallIcon(R.drawable.ic_refresh)
             .setContentTitle("Reviewing the week")
             .setOngoing(true)

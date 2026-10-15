@@ -16,6 +16,7 @@ import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.R
 import com.thomaswcode.decrastination.notify.Channels
 import java.util.concurrent.TimeUnit
+import com.thomaswcode.decrastination.notify.Notify
 
 /**
  * Enriches what's new or changed ([AppGraph.enrichNow]) as a job: the model's calls need the
@@ -37,7 +38,7 @@ class EnrichWorker(context: Context, params: WorkerParameters) : CoroutineWorker
     }
 
     override suspend fun getForegroundInfo(): ForegroundInfo {
-        val notification = NotificationCompat.Builder(applicationContext, Channels.SYNC)
+        val notification = Notify.builder(applicationContext, Channels.SYNC)
             .setSmallIcon(R.drawable.ic_refresh)
             .setContentTitle("Reading your tasks")
             .setOngoing(true)

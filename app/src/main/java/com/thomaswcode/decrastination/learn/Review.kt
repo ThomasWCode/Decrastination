@@ -58,7 +58,7 @@ object Review {
         Notify.post(
             context,
             ID,
-            NotificationCompat.Builder(context, Channels.WEEKLY)
+            Notify.builder(context, Channels.WEEKLY)
                 .setSmallIcon(R.drawable.ic_focus)
                 .setContentTitle("This week's review")
                 .setContentText(review.lines.first())

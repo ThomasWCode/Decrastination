@@ -18,6 +18,7 @@ import com.thomaswcode.decrastination.R
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.notify.Channels
 import java.util.concurrent.TimeUnit
+import com.thomaswcode.decrastination.notify.Notify
 
 /**
  * Reads the sources: every 15 minutes, WorkManager's shortest period (PLAN.md §4), and at once
@@ -45,7 +46,7 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
 
     /** Only asked for when an expedited job has to run as a foreground service: before Android 12. */
     override suspend fun getForegroundInfo(): ForegroundInfo {
-        val notification = NotificationCompat.Builder(applicationContext, Channels.SYNC)
+        val notification = Notify.builder(applicationContext, Channels.SYNC)
             .setSmallIcon(R.drawable.ic_refresh)
             .setContentTitle("Reading your tasks")
             .setOngoing(true)
