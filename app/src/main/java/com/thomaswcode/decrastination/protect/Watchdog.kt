@@ -232,7 +232,7 @@ object Watchdog {
         Notify.post(
             context,
             NOTIFICATION_ID,
-            NotificationCompat.Builder(context, Channels.PROTECTION)
+            Notify.builder(context, Channels.PROTECTION)
                 .setSmallIcon(R.drawable.ic_focus)
                 .setContentTitle(if (armed) "PROTECTION OFF" else "Blocking is off")
                 .setContentText(problems.first())

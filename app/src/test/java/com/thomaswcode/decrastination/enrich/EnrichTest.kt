@@ -772,6 +772,13 @@ class PhotoCheckerTest {
     }
 
     @Test
+    fun `how hard it thinks is said by job, the plan's readings high`() {
+        val table = ModelEffort.table().toMap()
+        assertEquals(listOf("High", "Medium"), ModelEffort.table().map { it.first })
+        assertTrue("emails" in table.getValue("High") && "the chat" in table.getValue("Medium"), table.toString())
+    }
+
+    @Test
     fun `a call from a month gone by is counted in the newer month, never taking the record back`() {
         val november = AiUsage("2026-11", spentUsd = 3.0, calls = 2)
         val late = november.forCall("2026-10").record(0.5, refused = false, at = Fixtures.at("2026-11-01T00:00"))

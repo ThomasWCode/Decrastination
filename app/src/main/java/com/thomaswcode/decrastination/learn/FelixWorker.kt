@@ -2,7 +2,6 @@ package com.thomaswcode.decrastination.learn
 
 import android.content.Context
 import android.util.Log
-import androidx.core.app.NotificationCompat
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingWorkPolicy
 import androidx.work.ForegroundInfo
@@ -11,7 +10,6 @@ import androidx.work.OutOfQuotaPolicy
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.thomaswcode.decrastination.AppGraph
-import com.thomaswcode.decrastination.R
 import com.thomaswcode.decrastination.notify.Channels
 
 /**
@@ -26,8 +24,7 @@ class FelixWorker(context: Context, params: WorkerParameters) : CoroutineWorker(
 
     override suspend fun getForegroundInfo(): ForegroundInfo = ForegroundInfo(
         NOTIFICATION_ID,
-        NotificationCompat.Builder(applicationContext, Channels.SYNC)
-            .setSmallIcon(R.drawable.ic_focus)
+        com.thomaswcode.decrastination.notify.Notify.builder(applicationContext, Channels.SYNC)
             .setContentTitle("Looking at the plan")
             .setOngoing(true)
             .build(),

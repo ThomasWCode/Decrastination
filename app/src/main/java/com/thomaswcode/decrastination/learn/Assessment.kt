@@ -96,7 +96,7 @@ object Assessment {
     private const val MAX_LATER = 20
 
     private fun post(context: Context, ask: AssessLater) {
-        val builder = NotificationCompat.Builder(context, Channels.FELIX)
+        val builder = Notify.builder(context, Channels.FELIX)
             .setSmallIcon(R.drawable.ic_focus)
             .setContentTitle("Done: ${ask.title}")
             .setContentText("How was it?")

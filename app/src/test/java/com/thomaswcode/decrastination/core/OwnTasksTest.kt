@@ -151,6 +151,18 @@ class OwnTasksTest {
     }
 
     @Test
+    fun `in the form, a renamed step keeps its tick, a new one of an old name has none, and where it's done goes on it`() {
+        val task = own(steps = listOf(OwnStep("Draft", 60), OwnStep("Redraft", 45)))
+        val firstDone = task.copy(subSteps = task.subSteps.mapIndexed { i, s -> if (i == 0) s.copy(done = true) else s })
+        // The first renamed, the second needing home, and a new "Draft" after them.
+        val draft = OwnTasks.draftOf(firstDone).let { d -> d.copy(steps = listOf(d.steps[0].copy(title = "First draft"), d.steps[1].copy(where = "home"), OwnStep("Draft", 20))) }
+        val edited = OwnTasks.edited(firstDone, draft)
+        assertEquals(listOf("First draft" to true, "Redraft" to false, "Draft" to false), edited.subSteps.map { it.title to it.done })
+        assertEquals(listOf(null, "home", null), edited.subSteps.map { it.where })
+        assertEquals(125, edited.sourceEffortMin)
+    }
+
+    @Test
     fun `steps of the same name keep their own ticks through an edit`() {
         val task = own(steps = listOf(OwnStep("Review", 20), OwnStep("Write", 30), OwnStep("Review", 20)))
         val firstDone = task.copy(subSteps = task.subSteps.mapIndexed { i, s -> if (i == 0) s.copy(done = true) else s })
@@ -311,5 +323,23 @@ class OwnTasksTest {
         assertEquals(listOf("a", "b"), rows.map { it.taskId })
         assertEquals(listOf(1, 2, 3), rows.first().pieces.map { it.part })
         assertEquals(90, rows.first().minutes)
+    }
+
+    @Test
+    fun `a step made anew in the form after every old one went has no tick, even with an old one's name`() {
+        val made = OwnTasks.create(OwnTask(title = "Essay", steps = listOf(OwnStep("Plan", 20), OwnStep("Write", 40))), "s", now)
+        val ticked = made.copy(subSteps = made.subSteps.map { if (it.title == "Plan") it.copy(done = true) else it })
+        val anew = OwnTasks.edited(ticked, OwnTask(title = "Essay", steps = listOf(OwnStep("Plan", 30)), fromForm = true))
+        assertEquals(listOf("Plan" to false), anew.subSteps.map { it.title to it.done })
+    }
+
+    @Test
+    fun `a done step deleted takes its worked minutes with it`() {
+        val made = OwnTasks.create(OwnTask(title = "Essay", steps = listOf(OwnStep("Plan", 20), OwnStep("Write", 30))), "w", now)
+        val ticked = made.copy(subSteps = made.subSteps.map { if (it.title == "Plan") it.copy(done = true) else it }, workedMin = 20)
+        val draft = OwnTasks.draftOf(ticked)
+        val left = OwnTasks.edited(ticked, draft.copy(steps = draft.steps.drop(1), fromForm = true))
+        assertEquals(listOf("Write" to false), left.subSteps.map { it.title to it.done })
+        assertEquals(0, left.workedMin)
     }
 }

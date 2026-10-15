@@ -2,6 +2,7 @@ package com.thomaswcode.decrastination.protect
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.app.Activity
 import android.app.admin.DevicePolicyManager
 import android.content.Intent
 import android.graphics.Bitmap
@@ -74,434 +75,440 @@ import com.thomaswcode.decrastination.ui.SectionHeading
 import com.thomaswcode.decrastination.ui.SetupItem
 import kotlinx.coroutines.launch
 
-/**
- * Protection (docs/scheduler.md §6): what's in place, arming and disarming it, the changes
- * waiting their 24 hours, and the parent code that applies one at once. Built but left unarmed
- * (Q20): arming asks for the device admin and your dad's scan of a QR code into his
- * authenticator app (Q17), which can be skipped; until he scans one there's no override, only
- * the wait.
- */
+/** [ProtectionPanel] on a page of its own: from an alert, the Work tab's trouble card and Setup. */
 class ProtectionActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         val graph = AppGraph.get(this)
-        setContent { AppTheme { Screen(graph) } }
-    }
-
-    private enum class Step { None, Explain, ParentCode, Confirm }
-
-    @Composable
-    private fun Screen(graph: AppGraph) {
-        val settings by graph.settings.state.collectAsStateWithLifecycle()
-        val runtime by graph.runtime.state.collectAsStateWithLifecycle()
-        val secrets by graph.secrets.present.collectAsStateWithLifecycle()
-        val connected by FocusService.connected.collectAsStateWithLifecycle()
-        val scope = rememberCoroutineScope()
-        var refresh by remember { mutableIntStateOf(0) }
-        // Kept through the screen being recreated (turned): the wizard isn't left half-done unseen.
-        var step by rememberSaveable { mutableStateOf(Step.None) }
-        var codeFor by remember { mutableStateOf<CodeTarget?>(null) }
-        val report = remember(refresh, runtime.protection) { Watchdog.report(this) }
-        val adminLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
-            refresh++
-            if (step == Step.Explain && Watchdog.isAdminActive(this)) step = Step.ParentCode
-        }
-        val notificationLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
-            refresh++
-            // Allowed now: alerts that couldn't be shown before are.
-            graph.reconcileAlerts()
-        }
-        val hasParentCode = Secret.TotpSecret in secrets
-        val now = graph.clock.now()
-
-        // The wizard left before arming: the device admin it asked for goes too, so uninstalling is
-        // allowed, as "Not armed" says.
-        fun abandon() {
-            step = Step.None
-            if (!graph.settings.value.armed && Watchdog.isAdminActive(this)) {
-                runCatching { getSystemService(DevicePolicyManager::class.java)?.removeActiveAdmin(Watchdog.admin(this)) }
-                refresh++
+        setContent {
+            AppTheme {
+                Surface(Modifier.fillMaxSize()) {
+                    Column(Modifier.fillMaxSize().safeDrawingPadding().verticalScroll(rememberScrollState())) {
+                        Text("Protection", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.padding(16.dp))
+                        ProtectionPanel(graph, this@ProtectionActivity)
+                        Spacer(Modifier.height(24.dp))
+                    }
+                }
             }
         }
-
-        Surface(Modifier.fillMaxSize()) {
-            Column(Modifier.fillMaxSize().safeDrawingPadding().verticalScroll(rememberScrollState())) {
-                Text("Protection", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.padding(16.dp))
-                Card(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = if (runtime.protection.problems.isEmpty()) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.errorContainer,
-                    ),
-                ) {
-                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text(if (settings.armed) "Armed" else "Not armed", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-                        Text(
-                            if (settings.armed) {
-                                "Changes that loosen blocking itself wait ${settings.loosenDelayHours} hours; your work (due dates, minutes, " +
-                                    "working hours, the plan) changes at once. The app's own pages in Settings are guarded, " +
-                                    "and switching the focus service off puts it straight back on."
-                            } else {
-                                "Blocking works, but nothing stops it being switched off or changed. Arm it when you're ready."
-                            },
-                            style = MaterialTheme.typography.bodyMedium,
-                        )
-                        runtime.protection.problems.forEach { Text("• $it", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error) }
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            if (settings.armed) {
-                                OutlinedButton(onClick = { scope.launch { graph.changeSettings { it.copy(armed = false) } } }) { Text("Disarm") }
-                                if (hasParentCode) {
-                                    OutlinedButton(onClick = { codeFor = CodeTarget.Unblock }) { Text("Unblock for an hour") }
-                                }
-                            } else {
-                                Button(onClick = { step = Step.Explain }) { Text("Arm protection") }
-                            }
-                        }
-                    }
-                }
-
-                if (runtime.overrideUntil?.let { it > now } == true) {
-                    Text("Unblocked by a parent code until ${Format.at(runtime.overrideUntil!!, now, graph.clock.zone())}", modifier = Modifier.padding(16.dp))
-                }
-
-                if (runtime.pending.isNotEmpty()) {
-                    SectionHeading("Waiting")
-                    runtime.pending.forEach { change ->
-                        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Column(Modifier.weight(1f)) {
-                                Text(change.description, style = MaterialTheme.typography.bodyLarge)
-                                Text("Applies ${Format.at(change.applyAt, now, graph.clock.zone())}", style = MaterialTheme.typography.bodySmall)
-                            }
-                            // Changed your mind: cancelling a loosening tightens, so it's at once.
-                            TextButton(onClick = { scope.launch { graph.cancelChange(change.id) } }) { Text("Cancel") }
-                            if (hasParentCode) TextButton(onClick = { codeFor = CodeTarget.Change(change.id, change.description) }) { Text("Parent code") }
-                        }
-                    }
-                }
-
-                Group("What's in place") {
-                    SetupItem(
-                        title = "Focus service",
-                        done = report.serviceEnabled && report.accessibilityOn,
-                        detail = when {
-                            report.serviceEnabled && connected -> "On: blocked apps are covered."
-                            report.serviceEnabled -> "On, starting."
-                            else -> "Off: nothing is blocked. Settings → Accessibility → Installed apps → Decrastination focus."
-                        },
-                        action = if (report.serviceEnabled) null else "Open" to { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) },
-                    )
-                    SetupItem(
-                        title = "Self-repair",
-                        done = report.canRepair,
-                        detail = if (report.canRepair) {
-                            "Granted: once armed, the watchdog switches the service back on and off any shortcut."
-                        } else {
-                            "Needs one command from a PC: adb shell pm grant $packageName android.permission.WRITE_SECURE_SETTINGS"
-                        },
-                    )
-                    SetupItem(
-                        title = "Device admin",
-                        done = report.adminActive,
-                        detail = if (report.adminActive) "Active: the app can't be uninstalled until it's deactivated." else "Not active. Arming asks for it.",
-                    )
-                    SetupItem(
-                        title = "On no accessibility shortcut",
-                        done = report.onShortcuts.isEmpty() && report.unreadableShortcuts.isEmpty(),
-                        detail = ProtectionCheck.shortcutsDetail(report),
-                    )
-                    val notifications = remember(refresh) { Notify.allowed(this@ProtectionActivity) }
-                    val alerts = remember(refresh) { Notify.shown(this@ProtectionActivity, Channels.PROTECTION) }
-                    SetupItem(
-                        title = "Notifications",
-                        done = alerts,
-                        detail = if (notifications && !alerts) "Allowed, but the Protection channel is off: its alerts wouldn't show." else "For focus sessions and protection alerts.",
-                        action = if (alerts) null else "Allow" to {
-                            if (notifications) {
-                                // Allowed, its channel off: that channel's own page.
-                                startActivity(
-                                    Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS)
-                                        .putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
-                                        .putExtra(Settings.EXTRA_CHANNEL_ID, Channels.PROTECTION),
-                                )
-                            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                                notificationLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                            } else {
-                                startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, packageName))
-                            }
-                        },
-                    )
-                    val unrestricted = getSystemService(PowerManager::class.java)?.isIgnoringBatteryOptimizations(packageName) == true
-                    SetupItem(
-                        title = "Battery: unrestricted",
-                        done = unrestricted,
-                        detail = if (unrestricted) "One UI won't put the app to sleep." else "One UI may stop the app in the background.",
-                        action = if (unrestricted) null else "Allow" to { requestUnrestricted() },
-                    )
-                    SetupItem(
-                        title = "Parent code",
-                        done = hasParentCode,
-                        detail = if (hasParentCode) "Set: a code from your dad's authenticator applies one waiting change." else "Not set: only the 24-hour wait.",
-                    )
-                }
-                Spacer(Modifier.height(24.dp))
-            }
-        }
-
-        when (step) {
-            Step.None -> Unit
-            Step.Explain -> AlertDialog(
-                onDismissRequest = { abandon() },
-                title = { Text("Arm protection?") },
-                text = {
-                    Text(
-                        "Once armed:\n" +
-                            "• Changes that loosen blocking itself (taking an app, site or browser off, longer quiet hours, a later start on " +
-                            "school days, more free time for your work, disarming) wait ${settings.loosenDelayHours} hours. " +
-                            "Your work, its due dates, minutes and hours included, is yours to change at once.\n" +
-                            "• Settings backs out of this app's pages: its accessibility switch, App info, storage, device admin and uninstall.\n" +
-                            "• The device admin stops it being uninstalled.\n" +
-                            "• The watchdog switches the focus service back on.\n\n" +
-                            "Next: the device admin, then your dad's authenticator app.",
-                    )
-                },
-                confirmButton = {
-                    TextButton(onClick = {
-                        if (Watchdog.isAdminActive(this)) {
-                            step = Step.ParentCode
-                        } else {
-                            adminLauncher.launch(
-                                Intent(DevicePolicyManager.ACTION_ADD_DEVICE_ADMIN)
-                                    .putExtra(DevicePolicyManager.EXTRA_DEVICE_ADMIN, Watchdog.admin(this))
-                                    .putExtra(DevicePolicyManager.EXTRA_ADD_EXPLANATION, "So Decrastination can't be uninstalled while protection is armed."),
-                            )
-                        }
-                    }) { Text("Continue") }
-                },
-                dismissButton = { TextButton(onClick = { abandon() }) { Text("Cancel") } },
-            )
-            Step.ParentCode -> ParentCodeDialog(
-                graph = graph,
-                onDone = { step = Step.Confirm },
-                onCancel = { abandon() },
-            )
-            Step.Confirm -> AlertDialog(
-                onDismissRequest = { abandon() },
-                title = { Text("Arm now?") },
-                text = {
-                    // What isn't in place yet (IMP-P1-006): it arms all the same, but you know what you're arming.
-                    val missing = buildList {
-                        if (!report.serviceEnabled || !report.accessibilityOn) add("The focus service is off: nothing is blocked till it's on")
-                        else if (!report.serviceRunning) add("The focus service is on but has stopped: nothing is blocked till it runs again")
-                        if (!report.canRepair) add("Self-repair isn't granted: the service switched off would stay off")
-                        if (!Notify.shown(this@ProtectionActivity, Channels.PROTECTION)) add("Protection alerts are off: you wouldn't be told if it stopped")
-                        if (getSystemService(PowerManager::class.java)?.isIgnoringBatteryOptimizations(packageName) != true) add("Battery isn't unrestricted: One UI may stop the app")
-                    }
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text(if (hasParentCode) "Your dad's code is set." else "No parent code: loosening will always wait the full ${settings.loosenDelayHours} hours.")
-                        if (missing.isNotEmpty()) {
-                            Text("Not in place yet (it arms all the same; What's in place has each):", fontWeight = FontWeight.Medium)
-                            missing.forEach { Text("• $it", color = MaterialTheme.colorScheme.error) }
-                        }
-                    }
-                },
-                confirmButton = {
-                    TextButton(onClick = {
-                        step = Step.None
-                        scope.launch {
-                            graph.changeSettings { it.copy(armed = true) }
-                            Watchdog.check(this@ProtectionActivity, repair = true)
-                        }
-                    }) { Text("Arm") }
-                },
-                dismissButton = { TextButton(onClick = { abandon() }) { Text("Not yet") } },
-            )
-        }
-
-        codeFor?.let { target ->
-            CodeDialog(graph, target, onClose = { codeFor = null })
-        }
-    }
-
-    private sealed interface CodeTarget {
-        data class Change(val id: String, val description: String) : CodeTarget
-        data object Unblock : CodeTarget
-    }
-
-    /**
-     * Your dad's authenticator, for arming: one already set (from arming before) is kept with a code
-     * from it, rather than scanned again (IMP-P2-012), unless a new one or none is asked for.
-     */
-    @Composable
-    private fun ParentCodeDialog(graph: AppGraph, onDone: () -> Unit, onCancel: () -> Unit) {
-        var fresh by rememberSaveable { mutableStateOf(!graph.secrets.has(Secret.TotpSecret)) }
-        val scope = rememberCoroutineScope()
-        if (fresh) {
-            NewParentCodeDialog(graph, onDone, onCancel)
-        } else {
-            KeepParentCodeDialog(
-                graph,
-                onKept = onDone,
-                onNew = { fresh = true },
-                // No parent code means none: the one kept would still unblock.
-                onNone = { scope.launch { graph.secrets.put(Secret.TotpSecret, null); onDone() } },
-                onCancel = onCancel,
-            )
-        }
-    }
-
-    /** The authenticator set already, kept once your dad types a code from it, seeing this. */
-    @Composable
-    private fun KeepParentCodeDialog(graph: AppGraph, onKept: () -> Unit, onNew: () -> Unit, onNone: () -> Unit, onCancel: () -> Unit) {
-        var code by remember { mutableStateOf("") }
-        var error by remember { mutableStateOf<String?>(null) }
-        val scope = rememberCoroutineScope()
-        AlertDialog(
-            onDismissRequest = onCancel,
-            title = { Text("Your dad's authenticator") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("It's set up already, from arming before. To keep it, he types the code his app shows now, seeing this.", style = MaterialTheme.typography.bodyMedium)
-                    OutlinedTextField(
-                        code,
-                        { code = it.filter(Char::isDigit).take(Totp.DIGITS); error = null },
-                        label = { Text("The code his app shows") },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    )
-                    error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-                    TextButton(onClick = onNew) { Text("Set up a new one instead") }
-                    TextButton(onClick = onNone) { Text("Skip: no parent code") }
-                }
-            },
-            confirmButton = {
-                TextButton(enabled = code.length == Totp.DIGITS, onClick = {
-                    // Checked, and used up, as any parent code is.
-                    scope.launch { graph.useParentCode(code)?.let { error = it } ?: onKept() }
-                }) { Text("Keep it") }
-            },
-            dismissButton = { TextButton(onClick = onCancel) { Text("Cancel") } },
-        )
-    }
-
-    /** Shows a new secret as a QR code for your dad's authenticator; saved once a code from it checks out. */
-    @Composable
-    private fun NewParentCodeDialog(graph: AppGraph, onDone: () -> Unit, onCancel: () -> Unit) {
-        // Kept through the screen being made again (a turn of the phone): a new one would leave the
-        // QR code your dad scanned matching nothing (BUG-P2-012). It's only saved once a code checks out.
-        val secret = rememberSaveable { Totp.newSecret() }
-        val qr = remember(secret) { qrBitmap(Totp.uri(secret), 720) }
-        var code by remember { mutableStateOf("") }
-        var error by remember { mutableStateOf<String?>(null) }
-        val scope = rememberCoroutineScope()
-        AlertDialog(
-            onDismissRequest = onCancel,
-            title = { Text("Your dad's authenticator") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("Ask him to scan this in his authenticator app (Google Authenticator, Microsoft Authenticator…). It's shown only now.", style = MaterialTheme.typography.bodyMedium)
-                    Image(qr.asImageBitmap(), contentDescription = "QR code for the authenticator", modifier = Modifier.size(220.dp).background(androidx.compose.ui.graphics.Color.White))
-                    Text(Totp.readable(secret), fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
-                    OutlinedTextField(
-                        code,
-                        { code = it.filter(Char::isDigit).take(Totp.DIGITS); error = null },
-                        label = { Text("The code his app shows") },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    )
-                    error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-                }
-            },
-            confirmButton = {
-                TextButton(enabled = code.length == Totp.DIGITS, onClick = {
-                    val step = Totp.matchingStep(secret, code, graph.clock.now())
-                    if (step == null) {
-                        error = "That isn't the code. Check his app has the new entry."
-                    } else {
-                        scope.launch {
-                            graph.secrets.put(Secret.TotpSecret, Totp.base32(secret))
-                            // Only the code checked is used up: the next one his app shows works.
-                            graph.runtime.update { it.copy(codeLock = CodeLock(lastUsedStep = step)) }
-                            onDone()
-                        }
-                    }
-                }) { Text("Check") }
-            },
-            dismissButton = {
-                // No parent code means none: one kept from an earlier arming would still unblock.
-                TextButton(onClick = { scope.launch { graph.secrets.put(Secret.TotpSecret, null); onDone() } }) { Text("Skip: no parent code") }
-            },
-        )
-    }
-
-    /** A code from your dad's app, for one waiting change or an hour's unblock. */
-    @Composable
-    private fun CodeDialog(graph: AppGraph, target: CodeTarget, onClose: () -> Unit) {
-        var code by remember { mutableStateOf("") }
-        var message by remember { mutableStateOf<String?>(null) }
-        val scope = rememberCoroutineScope()
-        AlertDialog(
-            onDismissRequest = onClose,
-            title = { Text(if (target == CodeTarget.Unblock) "Unblock for an hour" else "Apply now") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    // What the code will do, in full: a code can't say what it was given for, so your
-                    // dad has to see it here.
-                    Text(
-                        if (target is CodeTarget.Change) "It applies now: ${target.description}." else "It unblocks everything for an hour.",
-                        style = MaterialTheme.typography.bodyLarge,
-                    )
-                    Text(
-                        "For your dad to type in, from his authenticator app, seeing this. A code works for whatever it's typed into, " +
-                            "so it's never read out for something he can't see.",
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                    OutlinedTextField(
-                        code,
-                        { code = it.filter(Char::isDigit).take(Totp.DIGITS) },
-                        label = { Text("Code") },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    )
-                    message?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-                }
-            },
-            confirmButton = {
-                TextButton(enabled = code.length == Totp.DIGITS, onClick = {
-                    scope.launch {
-                        val result = applyWithCode(graph, target, code)
-                        if (result == null) onClose() else message = result
-                    }
-                }) { Text("Apply") }
-            },
-            dismissButton = { TextButton(onClick = onClose) { Text("Cancel") } },
-        )
-    }
-
-    /** Checks [code] and, if it's right, does what it was for. Returns what went wrong, or null. */
-    private suspend fun applyWithCode(graph: AppGraph, target: CodeTarget, code: String): String? {
-        // The code is used up first (with the unblock, if that's what it was for), then the change
-        // it allows is applied.
-        val unblock = if (target == CodeTarget.Unblock) graph.clock.now() + UNBLOCK_MS else null
-        graph.useParentCode(code, unblock)?.let { return it }
-        if (target is CodeTarget.Change) graph.applyNow(target.id)
-        return null
-    }
-
-    /** A sideloaded app, never on Play, whose blocker One UI mustn't put to sleep. */
-    @SuppressLint("BatteryLife")
-    private fun requestUnrestricted() {
-        startActivity(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, "package:$packageName".toUri()))
-    }
-
-    private fun qrBitmap(text: String, size: Int): Bitmap {
-        val matrix = QRCodeWriter().encode(text, BarcodeFormat.QR_CODE, size, size)
-        val bitmap = createBitmap(size, size)
-        for (x in 0 until size) for (y in 0 until size) bitmap[x, y] = if (matrix[x, y]) Color.BLACK else Color.WHITE
-        return bitmap
-    }
-
-    private companion object {
-        const val UNBLOCK_MS = 60 * 60_000L
     }
 }
+
+private enum class Step { None, Explain, ParentCode, Confirm }
+
+/**
+ * Protection (docs/scheduler.md §6): what's in place, arming and disarming it, the changes
+ * waiting their 24 hours, and the parent code that applies one at once. Built but left unarmed
+ * (Q20): arming asks for the device admin and your dad's scan of a QR code into his
+ * authenticator app (Q17), which can be skipped; until he scans one there's no override, only
+ * the wait. On its own page ([ProtectionActivity]) and as Settings' Blocking and protection page
+ * (UI-18), [activity] the one it's on.
+ */
+@Composable
+fun ProtectionPanel(graph: AppGraph, activity: ComponentActivity) {
+    val settings by graph.settings.state.collectAsStateWithLifecycle()
+    val runtime by graph.runtime.state.collectAsStateWithLifecycle()
+    val secrets by graph.secrets.present.collectAsStateWithLifecycle()
+    val connected by FocusService.connected.collectAsStateWithLifecycle()
+    val scope = rememberCoroutineScope()
+    var refresh by remember { mutableIntStateOf(0) }
+    // Kept through the screen being recreated (turned): the wizard isn't left half-done unseen.
+    var step by rememberSaveable { mutableStateOf(Step.None) }
+    var codeFor by remember { mutableStateOf<CodeTarget?>(null) }
+    val report = remember(refresh, runtime.protection) { Watchdog.report(activity) }
+    val adminLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+        refresh++
+        if (step == Step.Explain && Watchdog.isAdminActive(activity)) step = Step.ParentCode
+    }
+    val notificationLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
+        refresh++
+        // Allowed now: alerts that couldn't be shown before are.
+        graph.reconcileAlerts()
+    }
+    val hasParentCode = Secret.TotpSecret in secrets
+    val now = graph.clock.now()
+
+    // The wizard left before arming: the device admin it asked for goes too, so uninstalling is
+    // allowed, as "Not armed" says.
+    fun abandon() {
+        step = Step.None
+        if (!graph.settings.value.armed && Watchdog.isAdminActive(activity)) {
+            runCatching { activity.getSystemService(DevicePolicyManager::class.java)?.removeActiveAdmin(Watchdog.admin(activity)) }
+            refresh++
+        }
+    }
+
+    Column(Modifier.fillMaxWidth()) {
+        Card(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = if (runtime.protection.problems.isEmpty()) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.errorContainer,
+            ),
+        ) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(if (settings.armed) "Armed" else "Not armed", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                Text(
+                    if (settings.armed) {
+                        "Changes that loosen blocking itself wait ${settings.loosenDelayHours} hours; your work (due dates, minutes, " +
+                            "working hours, the plan) changes at once. The app's own pages in Settings are guarded, " +
+                            "and switching the focus service off puts it straight back on."
+                    } else {
+                        "Blocking works, but nothing stops it being switched off or changed. Arm it when you're ready."
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                runtime.protection.problems.forEach { Text("• $it", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error) }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (settings.armed) {
+                        OutlinedButton(onClick = { scope.launch { graph.changeSettings { it.copy(armed = false) } } }) { Text("Disarm") }
+                        if (hasParentCode) {
+                            OutlinedButton(onClick = { codeFor = CodeTarget.Unblock }) { Text("Unblock for an hour") }
+                        }
+                    } else {
+                        Button(onClick = { step = Step.Explain }) { Text("Arm protection") }
+                    }
+                }
+            }
+        }
+
+        if (runtime.overrideUntil?.let { it > now } == true) {
+            Text("Unblocked by a parent code until ${Format.at(runtime.overrideUntil!!, now, graph.clock.zone())}", modifier = Modifier.padding(16.dp))
+        }
+
+        if (runtime.pending.isNotEmpty()) {
+            SectionHeading("Waiting")
+            runtime.pending.forEach { change ->
+                Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(change.description, style = MaterialTheme.typography.bodyLarge)
+                        Text("Applies ${Format.at(change.applyAt, now, graph.clock.zone())}", style = MaterialTheme.typography.bodySmall)
+                    }
+                    // Changed your mind: cancelling a loosening tightens, so it's at once.
+                    TextButton(onClick = { scope.launch { graph.cancelChange(change.id) } }) { Text("Cancel") }
+                    if (hasParentCode) TextButton(onClick = { codeFor = CodeTarget.Change(change.id, change.description) }) { Text("Parent code") }
+                }
+            }
+        }
+
+        Group("What's in place") {
+            SetupItem(
+                title = "Focus service",
+                done = report.serviceEnabled && report.accessibilityOn,
+                detail = when {
+                    report.serviceEnabled && connected -> "On: blocked apps are covered."
+                    report.serviceEnabled -> "On, starting."
+                    else -> "Off: nothing is blocked. Settings → Accessibility → Installed apps → Decrastination focus."
+                },
+                action = if (report.serviceEnabled) null else "Open" to { activity.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) },
+            )
+            SetupItem(
+                title = "Self-repair",
+                done = report.canRepair,
+                detail = if (report.canRepair) {
+                    "Granted: once armed, the watchdog switches the service back on and off any shortcut."
+                } else {
+                    "Needs one command from a PC: adb shell pm grant ${activity.packageName} android.permission.WRITE_SECURE_SETTINGS"
+                },
+            )
+            SetupItem(
+                title = "Device admin",
+                done = report.adminActive,
+                detail = if (report.adminActive) "Active: the app can't be uninstalled until it's deactivated." else "Not active. Arming asks for it.",
+            )
+            SetupItem(
+                title = "On no accessibility shortcut",
+                done = report.onShortcuts.isEmpty() && report.unreadableShortcuts.isEmpty(),
+                detail = ProtectionCheck.shortcutsDetail(report),
+            )
+            val notifications = remember(refresh) { Notify.allowed(activity) }
+            val alerts = remember(refresh) { Notify.shown(activity, Channels.PROTECTION) }
+            SetupItem(
+                title = "Notifications",
+                done = alerts,
+                detail = if (notifications && !alerts) "Allowed, but the Protection channel is off: its alerts wouldn't show." else "For focus sessions and protection alerts.",
+                action = if (alerts) null else "Allow" to {
+                    if (notifications) {
+                        // Allowed, its channel off: that channel's own page.
+                        activity.startActivity(
+                            Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS)
+                                .putExtra(Settings.EXTRA_APP_PACKAGE, activity.packageName)
+                                .putExtra(Settings.EXTRA_CHANNEL_ID, Channels.PROTECTION),
+                        )
+                    } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        notificationLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    } else {
+                        activity.startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, activity.packageName))
+                    }
+                },
+            )
+            val unrestricted = activity.getSystemService(PowerManager::class.java)?.isIgnoringBatteryOptimizations(activity.packageName) == true
+            SetupItem(
+                title = "Battery: unrestricted",
+                done = unrestricted,
+                detail = if (unrestricted) "One UI won't put the app to sleep." else "One UI may stop the app in the background.",
+                action = if (unrestricted) null else "Allow" to { requestUnrestricted(activity) },
+            )
+            SetupItem(
+                title = "Parent code",
+                done = hasParentCode,
+                detail = if (hasParentCode) "Set: a code from your dad's authenticator applies one waiting change." else "Not set: only the 24-hour wait.",
+            )
+        }
+    }
+
+    when (step) {
+        Step.None -> Unit
+        Step.Explain -> AlertDialog(
+            onDismissRequest = { abandon() },
+            title = { Text("Arm protection?") },
+            text = {
+                Text(
+                    "Once armed:\n" +
+                        "• Changes that loosen blocking itself (taking an app, site or browser off, longer quiet hours, a later start on " +
+                        "school days, more free time for your work, disarming) wait ${settings.loosenDelayHours} hours. " +
+                        "Your work, its due dates, minutes and hours included, is yours to change at once.\n" +
+                        "• Settings backs out of this app's pages: its accessibility switch, App info, storage, device admin and uninstall.\n" +
+                        "• The device admin stops it being uninstalled.\n" +
+                        "• The watchdog switches the focus service back on.\n\n" +
+                        "Next: the device admin, then your dad's authenticator app.",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    if (Watchdog.isAdminActive(activity)) {
+                        step = Step.ParentCode
+                    } else {
+                        adminLauncher.launch(
+                            Intent(DevicePolicyManager.ACTION_ADD_DEVICE_ADMIN)
+                                .putExtra(DevicePolicyManager.EXTRA_DEVICE_ADMIN, Watchdog.admin(activity))
+                                .putExtra(DevicePolicyManager.EXTRA_ADD_EXPLANATION, "So Decrastination can't be uninstalled while protection is armed."),
+                        )
+                    }
+                }) { Text("Continue") }
+            },
+            dismissButton = { TextButton(onClick = { abandon() }) { Text("Cancel") } },
+        )
+        Step.ParentCode -> ParentCodeDialog(
+            graph = graph,
+            onDone = { step = Step.Confirm },
+            onCancel = { abandon() },
+        )
+        Step.Confirm -> AlertDialog(
+            onDismissRequest = { abandon() },
+            title = { Text("Arm now?") },
+            text = {
+                // What isn't in place yet (IMP-P1-006): it arms all the same, but you know what you're arming.
+                val missing = buildList {
+                    if (!report.serviceEnabled || !report.accessibilityOn) add("The focus service is off: nothing is blocked till it's on")
+                    else if (!report.serviceRunning) add("The focus service is on but has stopped: nothing is blocked till it runs again")
+                    if (!report.canRepair) add("Self-repair isn't granted: the service switched off would stay off")
+                    if (!Notify.shown(activity, Channels.PROTECTION)) add("Protection alerts are off: you wouldn't be told if it stopped")
+                    if (activity.getSystemService(PowerManager::class.java)?.isIgnoringBatteryOptimizations(activity.packageName) != true) add("Battery isn't unrestricted: One UI may stop the app")
+                }
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(if (hasParentCode) "Your dad's code is set." else "No parent code: loosening will always wait the full ${settings.loosenDelayHours} hours.")
+                    if (missing.isNotEmpty()) {
+                        Text("Not in place yet (it arms all the same; What's in place has each):", fontWeight = FontWeight.Medium)
+                        missing.forEach { Text("• $it", color = MaterialTheme.colorScheme.error) }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    step = Step.None
+                    scope.launch {
+                        graph.changeSettings { it.copy(armed = true) }
+                        Watchdog.check(activity, repair = true)
+                    }
+                }) { Text("Arm") }
+            },
+            dismissButton = { TextButton(onClick = { abandon() }) { Text("Not yet") } },
+        )
+    }
+
+    codeFor?.let { target ->
+        CodeDialog(graph, target, onClose = { codeFor = null })
+    }
+}
+
+private sealed interface CodeTarget {
+    data class Change(val id: String, val description: String) : CodeTarget
+    data object Unblock : CodeTarget
+}
+
+/**
+ * Your dad's authenticator, for arming: one already set (from arming before) is kept with a code
+ * from it, rather than scanned again (IMP-P2-012), unless a new one or none is asked for.
+ */
+@Composable
+private fun ParentCodeDialog(graph: AppGraph, onDone: () -> Unit, onCancel: () -> Unit) {
+    var fresh by rememberSaveable { mutableStateOf(!graph.secrets.has(Secret.TotpSecret)) }
+    val scope = rememberCoroutineScope()
+    if (fresh) {
+        NewParentCodeDialog(graph, onDone, onCancel)
+    } else {
+        KeepParentCodeDialog(
+            graph,
+            onKept = onDone,
+            onNew = { fresh = true },
+            // No parent code means none: the one kept would still unblock.
+            onNone = { scope.launch { graph.secrets.put(Secret.TotpSecret, null); onDone() } },
+            onCancel = onCancel,
+        )
+    }
+}
+
+/** The authenticator set already, kept once your dad types a code from it, seeing this. */
+@Composable
+private fun KeepParentCodeDialog(graph: AppGraph, onKept: () -> Unit, onNew: () -> Unit, onNone: () -> Unit, onCancel: () -> Unit) {
+    var code by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
+    AlertDialog(
+        onDismissRequest = onCancel,
+        title = { Text("Your dad's authenticator") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("It's set up already, from arming before. To keep it, he types the code his app shows now, seeing this.", style = MaterialTheme.typography.bodyMedium)
+                OutlinedTextField(
+                    code,
+                    { code = it.filter(Char::isDigit).take(Totp.DIGITS); error = null },
+                    label = { Text("The code his app shows") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                )
+                error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                TextButton(onClick = onNew) { Text("Set up a new one instead") }
+                TextButton(onClick = onNone) { Text("Skip: no parent code") }
+            }
+        },
+        confirmButton = {
+            TextButton(enabled = code.length == Totp.DIGITS, onClick = {
+                // Checked, and used up, as any parent code is.
+                scope.launch { graph.useParentCode(code)?.let { error = it } ?: onKept() }
+            }) { Text("Keep it") }
+        },
+        dismissButton = { TextButton(onClick = onCancel) { Text("Cancel") } },
+    )
+}
+
+/** Shows a new secret as a QR code for your dad's authenticator; saved once a code from it checks out. */
+@Composable
+private fun NewParentCodeDialog(graph: AppGraph, onDone: () -> Unit, onCancel: () -> Unit) {
+    // Kept through the screen being made again (a turn of the phone): a new one would leave the
+    // QR code your dad scanned matching nothing (BUG-P2-012). It's only saved once a code checks out.
+    val secret = rememberSaveable { Totp.newSecret() }
+    val qr = remember(secret) { qrBitmap(Totp.uri(secret), 720) }
+    var code by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
+    AlertDialog(
+        onDismissRequest = onCancel,
+        title = { Text("Your dad's authenticator") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("Ask him to scan this in his authenticator app (Google Authenticator, Microsoft Authenticator…). It's shown only now.", style = MaterialTheme.typography.bodyMedium)
+                Image(qr.asImageBitmap(), contentDescription = "QR code for the authenticator", modifier = Modifier.size(220.dp).background(androidx.compose.ui.graphics.Color.White))
+                Text(Totp.readable(secret), fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
+                OutlinedTextField(
+                    code,
+                    { code = it.filter(Char::isDigit).take(Totp.DIGITS); error = null },
+                    label = { Text("The code his app shows") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                )
+                error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            }
+        },
+        confirmButton = {
+            TextButton(enabled = code.length == Totp.DIGITS, onClick = {
+                val step = Totp.matchingStep(secret, code, graph.clock.now())
+                if (step == null) {
+                    error = "That isn't the code. Check his app has the new entry."
+                } else {
+                    scope.launch {
+                        graph.secrets.put(Secret.TotpSecret, Totp.base32(secret))
+                        // Only the code checked is used up: the next one his app shows works.
+                        graph.runtime.update { it.copy(codeLock = CodeLock(lastUsedStep = step)) }
+                        onDone()
+                    }
+                }
+            }) { Text("Check") }
+        },
+        dismissButton = {
+            // No parent code means none: one kept from an earlier arming would still unblock.
+            TextButton(onClick = { scope.launch { graph.secrets.put(Secret.TotpSecret, null); onDone() } }) { Text("Skip: no parent code") }
+        },
+    )
+}
+
+/** A code from your dad's app, for one waiting change or an hour's unblock. */
+@Composable
+private fun CodeDialog(graph: AppGraph, target: CodeTarget, onClose: () -> Unit) {
+    var code by remember { mutableStateOf("") }
+    var message by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
+    AlertDialog(
+        onDismissRequest = onClose,
+        title = { Text(if (target == CodeTarget.Unblock) "Unblock for an hour" else "Apply now") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                // What the code will do, in full: a code can't say what it was given for, so your
+                // dad has to see it here.
+                Text(
+                    if (target is CodeTarget.Change) "It applies now: ${target.description}." else "It unblocks everything for an hour.",
+                    style = MaterialTheme.typography.bodyLarge,
+                )
+                Text(
+                    "For your dad to type in, from his authenticator app, seeing this. A code works for whatever it's typed into, " +
+                        "so it's never read out for something he can't see.",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                OutlinedTextField(
+                    code,
+                    { code = it.filter(Char::isDigit).take(Totp.DIGITS) },
+                    label = { Text("Code") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                )
+                message?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            }
+        },
+        confirmButton = {
+            TextButton(enabled = code.length == Totp.DIGITS, onClick = {
+                scope.launch {
+                    val result = applyWithCode(graph, target, code)
+                    if (result == null) onClose() else message = result
+                }
+            }) { Text("Apply") }
+        },
+        dismissButton = { TextButton(onClick = onClose) { Text("Cancel") } },
+    )
+}
+
+/** Checks [code] and, if it's right, does what it was for. Returns what went wrong, or null. */
+private suspend fun applyWithCode(graph: AppGraph, target: CodeTarget, code: String): String? {
+    // The code is used up first (with the unblock, if that's what it was for), then the change
+    // it allows is applied.
+    val unblock = if (target == CodeTarget.Unblock) graph.clock.now() + UNBLOCK_MS else null
+    graph.useParentCode(code, unblock)?.let { return it }
+    if (target is CodeTarget.Change) graph.applyNow(target.id)
+    return null
+}
+
+/** A sideloaded app, never on Play, whose blocker One UI mustn't put to sleep. */
+@SuppressLint("BatteryLife")
+private fun requestUnrestricted(activity: Activity) {
+    activity.startActivity(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, "package:${activity.packageName}".toUri()))
+}
+
+private fun qrBitmap(text: String, size: Int): Bitmap {
+    val matrix = QRCodeWriter().encode(text, BarcodeFormat.QR_CODE, size, size)
+    val bitmap = createBitmap(size, size)
+    for (x in 0 until size) for (y in 0 until size) bitmap[x, y] = if (matrix[x, y]) Color.BLACK else Color.WHITE
+    return bitmap
+}
+
+private const val UNBLOCK_MS = 60 * 60_000L

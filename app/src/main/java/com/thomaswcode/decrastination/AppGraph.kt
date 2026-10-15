@@ -1069,6 +1069,37 @@ class AppGraph private constructor(context: Context) {
         applyInstruction(id)
     }
 
+    /**
+     * [key]'s piece later today (UI-03): to the first time after its slot (or now, or when its task
+     * can start) with its minutes free, around today's other slots and busy times, as a time you
+     * gave it (a change of yours, taken back in Your changes). Its task's next piece only, as a time
+     * pins that one (PL-04), and only a time the plan keeps (before its real deadline). The start, or
+     * null when today has none.
+     */
+    suspend fun laterToday(key: String): Long? {
+        val now = clock.now()
+        val zone = clock.zone()
+        val plan = plan(now = now)
+        val chunk = plan.ordered.firstOrNull { it.key == key } ?: return null
+        if (plan.chunksOf(chunk.taskId).firstOrNull()?.key != key) return null
+        val task = tasks.value.tasks.firstOrNull { it.id == chunk.taskId } ?: return null
+        val own = plan.todaySlots.firstOrNull { it.chunk?.key == key }
+        val windows = com.thomaswcode.decrastination.core.SchoolDays.windows(plan.today, settings.value, tasks.value.timetable, school.value)
+        val busy = calendarTime.busy + Instructions.busy(instructions.value.applied, zone, plan.today, plan.today)
+        val from = listOfNotNull(now, own?.end, task.notBefore).max()
+        val start = com.thomaswcode.decrastination.core.Slotter.firstFreeAfter(
+            plan.todaySlots.filter { it.chunk?.key != key }, windows, busy, from, chunk.minutes, chunk.where, plan.today, zone, settings.value.slotBreakMin,
+        )?.takeIf { Planner.pinProblem(task, it, now, zone) == null } ?: return null
+        val at = java.time.Instant.ofEpochMilli(start).atZone(zone)
+        addOwnChange(
+            java.util.UUID.randomUUID().toString(),
+            "Later today",
+            About(taskId = chunk.taskId, taskTitle = chunk.title),
+            Change(ChangeType.AtTime, taskId = chunk.taskId, date = at.toLocalDate().toString(), startMin = at.hour * 60 + at.minute, time = start),
+        )
+        return start
+    }
+
     /** Whether [instruction] is a quick change of [type] to [taskId] alone. */
     private fun isQuick(instruction: Instruction, taskId: String?, type: ChangeType): Boolean =
         instruction.quick && instruction.changes.singleOrNull()?.let { it.type == type && it.taskId == taskId } == true

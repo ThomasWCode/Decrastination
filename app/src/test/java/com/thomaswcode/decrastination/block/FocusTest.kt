@@ -828,4 +828,40 @@ class FocusTest {
         focus.grantAllowanceIfDue()
         assertEquals(0L, focus.creditLeftMs())
     }
+
+    @Test
+    fun `a kept slot taken back is to do again, its minutes and free time back`() = runTest {
+        val first = laid(task("t", due = "2026-10-12T23:59", steps = listOf(SubStep("Q1", 15), SubStep("Q2", 15)), effort = 30)).first()
+        clock.time = first.end
+        val since = clock.time
+        assertTrue(slotted.keepSlot(first.chunk!!.key))
+        assertEquals(5 * 60_000L, slotted.creditLeftMs())
+        assertTrue(slotted.unkeepSlot(first.chunk!!.key, since))
+        val t = tasks.value.tasks.single()
+        assertEquals(listOf(false, false), t.subSteps.map { it.done })
+        assertEquals(0, t.workedMin)
+        assertEquals(emptyList(), log.value.slots)
+        assertEquals(0L, slotted.creditLeftMs())
+        // And its slot where it was, so the next plan keeps it there rather than laying it anew.
+        assertEquals(first.start, runtime.value.slots.previous[first.chunk!!.key])
+        // Nothing kept since: nothing to take back.
+        assertFalse(slotted.unkeepSlot(first.chunk!!.key, since))
+    }
+
+    @Test
+    fun `a slot kept late and taken back is the miss it was`() = runTest {
+        val first = laid(task("t", due = "2026-10-12T23:59", steps = listOf(SubStep("Q1", 15), SubStep("Q2", 15)), effort = 30)).first()
+        val key = first.chunk!!.key
+        clock.time = first.end + Slotter.GRACE_MS + 60_000L
+        // Its end and grace gone by, its miss recorded (the alarm's); then ticked after all.
+        slotted.missSlot(key, Focus.Laid(first.start, first.end, first.window), now = clock.time)
+        val since = clock.time
+        assertTrue(slotted.keepSlot(key))
+        assertEquals(SlotOutcome.KeptLate, log.value.slots.single().outcome)
+        assertTrue(slotted.unkeepSlot(key, since))
+        val back = log.value.slots.single()
+        assertEquals(SlotOutcome.Missed to 0, back.outcome to back.workedMin)
+        assertEquals(first.end + Slotter.GRACE_MS, back.at)
+        assertTrue(runtime.value.slots.missed.any { it.key == key })
+    }
 }

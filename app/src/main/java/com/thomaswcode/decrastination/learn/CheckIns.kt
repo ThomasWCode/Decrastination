@@ -50,7 +50,7 @@ object CheckIns {
         Notify.post(
             context,
             ID,
-            NotificationCompat.Builder(context, Channels.WEEKLY)
+            Notify.builder(context, Channels.WEEKLY)
                 .setSmallIcon(R.drawable.ic_focus)
                 .setContentTitle("Sunday check-in")
                 .setContentText("Five quick questions about the week, before its review.")

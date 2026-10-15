@@ -84,7 +84,7 @@ object Briefing {
         Notify.post(
             context,
             ID,
-            NotificationCompat.Builder(context, Channels.BRIEFING)
+            Notify.builder(context, Channels.BRIEFING)
                 .setSmallIcon(R.drawable.ic_focus)
                 .setContentTitle(title)
                 .setContentText(lines.firstOrNull().orEmpty())

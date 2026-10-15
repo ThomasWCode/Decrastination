@@ -85,15 +85,22 @@ fun GroupTile(modifier: Modifier = Modifier, content: @Composable ColumnScope.()
     )
 }
 
-/** A section's heading: bold, in the theme's accent, with room above to part it from the last. */
+/** A section's heading: bold, in the theme's accent, with room above to part it from the last; in a sheet ([sheet]), at its edge. */
 @Composable
-fun SectionHeading(title: String, trailing: String? = null) {
+fun SectionHeading(title: String, trailing: String? = null, sheet: Boolean = false) {
     Row(
-        Modifier.fillMaxWidth().padding(start = 28.dp, end = 28.dp, top = 24.dp, bottom = 8.dp),
+        Modifier.fillMaxWidth().then(if (sheet) Modifier.padding(top = 8.dp) else Modifier.padding(start = 28.dp, end = 28.dp, top = 24.dp, bottom = 8.dp)),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, modifier = Modifier.weight(1f))
-        trailing?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        // The title its own width, never squeezed by a long line beside it ("Tod/ay"); the line the rest, wrapping there.
+        Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(end = 12.dp))
+        Text(
+            trailing.orEmpty(),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = androidx.compose.ui.text.style.TextAlign.End,
+            modifier = Modifier.weight(1f),
+        )
     }
 }
 
@@ -142,14 +149,14 @@ fun Pill(text: String, container: Color = MaterialTheme.colorScheme.secondaryCon
 @Composable
 fun WarningPill(text: String) = Pill(text, MaterialTheme.colorScheme.errorContainer, MaterialTheme.colorScheme.onErrorContainer)
 
-/** A secondary screen's bar: its title, and a way back. */
+/** A secondary screen's bar: its title, and a way back ([onBack] in place of leaving it: a page within it). */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun BackBar(title: String, activity: Activity) {
+fun BackBar(title: String, activity: Activity, onBack: (() -> Unit)? = null) {
     TopAppBar(
         title = { Text(title) },
         navigationIcon = {
-            IconButton(onClick = { activity.finish() }) { Icon(painterResource(R.drawable.ic_arrow_back), contentDescription = "Back") }
+            IconButton(onClick = { onBack?.invoke() ?: activity.finish() }) { Icon(painterResource(R.drawable.ic_arrow_back), contentDescription = "Back") }
         },
     )
 }

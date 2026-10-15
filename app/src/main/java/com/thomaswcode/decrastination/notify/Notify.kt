@@ -88,6 +88,10 @@ object Notify {
             NotificationManagerCompat.from(context).areNotificationsEnabled()
         }
 
+    /** A notification on [channel] in the app's look (UI-12): its icon, and the logo's pink. */
+    fun builder(context: Context, channel: String): NotificationCompat.Builder =
+        NotificationCompat.Builder(context, channel).setSmallIcon(com.thomaswcode.decrastination.R.drawable.ic_focus).setColor(com.thomaswcode.decrastination.ui.Colours.PINK_ARGB)
+
     /** Whether [channel]'s notifications reach the screen: allowed, and the channel not switched off. */
     fun shown(context: Context, channel: String): Boolean {
         if (!allowed(context)) return false
@@ -161,7 +165,7 @@ object Notify {
         )
         val manager = NotificationManagerCompat.from(context)
         for (h in held) {
-            val builder = NotificationCompat.Builder(context, h.channel)
+            val made = builder(context, h.channel)
                 .setSmallIcon(com.thomaswcode.decrastination.R.drawable.ic_focus)
                 .setContentTitle(h.title)
                 .setContentText(h.text)
@@ -171,10 +175,10 @@ object Notify {
             h.taps.forEach { tap ->
                 val label = tap.label ?: return@forEach
                 val reply = tap.reply
-                if (reply != null) intentOf(context, tap)?.let { builder.addAction(replyAction(context, label, tap.requestCode, it, reply)) }
-                else pending(context, tap)?.let { builder.addAction(0, label, it) }
+                if (reply != null) intentOf(context, tap)?.let { made.addAction(replyAction(context, label, tap.requestCode, it, reply)) }
+                else pending(context, tap)?.let { made.addAction(0, label, it) }
             }
-            if (h.tag != null) manager.notify(h.tag, h.id, builder.build()) else manager.notify(h.id, builder.build())
+            if (h.tag != null) manager.notify(h.tag, h.id, made.build()) else manager.notify(h.id, made.build())
         }
         graph.runtime.update { s -> s.copy(heldNotifications = s.heldNotifications - held.toSet()) }
     }

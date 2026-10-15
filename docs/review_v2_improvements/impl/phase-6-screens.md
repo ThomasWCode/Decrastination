@@ -29,6 +29,8 @@ Items: UI-17, UI-18, UI-12, UI-01, UI-02, UI-03, UI-04, UI-05, UI-08, UI-09, UI-
 
 **Done when.** No `dynamicDarkColorScheme` reference remains; screenshots in light and dark match the icon's pink.
 
+
+*(As built, after Codex's third review: by day the primary is `PinkDeep`, as `Pink` on `Paper` reads at under 2:1; the pink and its pale shade fill the cards and mark the notifications.)*
 ---
 
 ## UI-17 Two screens: Day and Work
@@ -56,6 +58,8 @@ Items: UI-17, UI-18, UI-12, UI-01, UI-02, UI-03, UI-04, UI-05, UI-08, UI-09, UI-
 **Steps.** `MENU = listOf("Reviews" to ReviewsActivity (phase 8; until then omit), "This week" to CheckInActivity, "Settings" to SettingsActivity)`. `SettingsActivity` becomes a sectioned page whose first screen is a list of sections, each opening its own page: About you (AI-05), Hours and windows, School (PL-16), Planning, Blocking and protection (the current `ProtectionActivity` content as a section page), Felix (name, line, standing instructions, memories; AI-21), Claude (key, cap, effort table read-only, cost this month: the current Setup's Claude section), Sources (the current Setup's sources), Calendar (UI-11), Notifications, Reset (phase 8, LR-08). `SetupActivity` stays reachable from the attention badge and the first run only.
 
 **Done when.** The menu has three entries; every former Setup/Settings/Protection control is reachable under Settings.
+
+*(As built: two entries till phase 8 brings Reviews; Backup is a page of its own, as Setup's backup had no other home among them; the first run reaches Setup by the attention mark, which shows while no source has been read; the Protection page stays for its alerts, its panel shared with Settings.)*
 
 ---
 
@@ -98,6 +102,8 @@ Done inside UI-17's week strip and `DayModel`; also the day header text "2 h 10 
 **Steps.** `WidgetModel.from(plan, …, now)`: `headline` = the current or next slot's time and label ("17:00–17:30 · Statics Prep"); `label` = the micro-plan's first line when present; `reward` (BL-04); `summary` = "Today: 1 of 4 kept, 1 h 20 left". A `TickAction : ActionCallback` with the slot key as a parameter calling `AppGraph.get(context).focus.keepSlot(key)` then `WidgetUpdater.update`. `nextRedrawAt` adds the next slot start and end.
 
 **Tests.** `WidgetModelTest`: headline and summary from a plan with slots.
+
+*(As built: the headline is the first row at every size, so the "DO NOW" caption over the old `label` went; the ✓ shows from a 2×1's width, beside ↻ where there's room for both.)*
 
 ---
 
@@ -144,6 +150,8 @@ Done in UI-17 step 5. `Groups.bySubject(tasks, classMap)`: tested.
 **Steps.** A "Steps" section: a list of rows (title field, minutes field, `where` toggle, drag handle via `Modifier.draggable` reorder or up/down buttons, delete), "Add a step"; the total shown and the task's minutes field disabled when steps exist (the sum rules). `OwnStep.where: String = "anywhere"`. `OwnTasks.edited` keeps ticks by title (it does) and carries `done` through a rename when the row's original index is passed (`OwnStep.wasIndex: Int?` transient field on the form's draft, applied in `apply`).
 
 **Tests.** `OwnTasksTest`: a renamed step keeps its tick when `wasIndex` says so.
+
+*(As built: `OwnStep.where` is nullable, null meaning as its task (so a step nobody set keeps its task's where); up and down buttons, not a drag; from the form, steps match by their place alone, so a new step with an old step's name has no tick of its own.)*
 
 ---
 

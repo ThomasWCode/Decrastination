@@ -1,7 +1,6 @@
 package com.thomaswcode.decrastination.notify
 
 import android.content.Context
-import androidx.core.app.NotificationCompat
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingWorkPolicy
 import androidx.work.ForegroundInfo
@@ -11,7 +10,6 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import com.thomaswcode.decrastination.AppGraph
-import com.thomaswcode.decrastination.R
 
 /**
  * A reply from Felix's notification answered (AI-24) as work of its own: the receiver that took it
@@ -28,8 +26,7 @@ class FelixReplyWorker(context: Context, params: WorkerParameters) : CoroutineWo
 
     override suspend fun getForegroundInfo(): ForegroundInfo = ForegroundInfo(
         NOTIFICATION_ID,
-        NotificationCompat.Builder(applicationContext, Channels.SYNC)
-            .setSmallIcon(R.drawable.ic_focus)
+        Notify.builder(applicationContext, Channels.SYNC)
             .setContentTitle("Answering your reply")
             .setOngoing(true)
             .build(),
