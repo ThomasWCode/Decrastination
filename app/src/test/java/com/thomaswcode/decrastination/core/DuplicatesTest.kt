@@ -52,4 +52,15 @@ class DuplicatesTest {
         assertEquals(listOf(20, 25), Duplicates.credited(listOf(teams, planner)).map { it.workedMin })
         assertEquals(listOf(20, 25), linked.map { it.workedMin })
     }
+
+    @Test
+    fun `a link to a task that's gone is let go, and the task's back`() {
+        val teams = task("t", Source.Teams, "Chapter 17 questions", "12.2-PH3", "2026-10-14T08:30")
+        val planner = task("p", Source.PowerPlanner, "Physics chapter 17 questions", "Physics", "2026-10-13T23:59").copy(userSameAs = teams.id)
+        assertEquals(teams.id, Duplicates.linksPresent(listOf(teams, planner))[1].userSameAs)
+        val alone = Duplicates.linksPresent(listOf(planner)).single()
+        assertEquals(null, alone.userSameAs)
+        assertEquals(false, alone.hidden)
+    }
 }
+

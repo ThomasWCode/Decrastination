@@ -226,7 +226,7 @@ class AppGraph private constructor(context: Context) {
         val tasks = state.tasks.map { task ->
             val o = overrides[task.id] ?: TaskOverrides.NONE
             if (o == task.overrides()) task else task.withOverrides(o)
-        }.let(com.thomaswcode.decrastination.core.Duplicates::credited)
+        }.let(com.thomaswcode.decrastination.core.Duplicates::linksPresent).let(com.thomaswcode.decrastination.core.Duplicates::credited)
         // Each day's windows, from the timetable's study periods and the school calendar (PL-15).
         val days = generateSequence(today) { it.plusDays(1) }.takeWhile { it <= reach }.toList()
         val calendar = school.value
@@ -1260,7 +1260,8 @@ class AppGraph private constructor(context: Context) {
 
     /** Your own task [taskId] gone, as if it never was. */
     suspend fun deleteOwnTask(taskId: String) {
-        tasks.update { state -> state.copy(tasks = state.tasks.filterNot { it.id == taskId && it.source == Source.Own }) }
+        // A task linked to it as the same work (DX-15) is back: the work it stood for has gone.
+        tasks.update { state -> state.copy(tasks = com.thomaswcode.decrastination.core.Duplicates.linksPresent(state.tasks.filterNot { it.id == taskId && it.source == Source.Own })) }
         forgetCards(setOf(taskId))
     }
 
@@ -1560,7 +1561,8 @@ class AppGraph private constructor(context: Context) {
     private suspend fun tellAnswer(answer: ChatMessage) {
         val record = com.thomaswcode.decrastination.data.FelixRecord(answer.id, answer.at, com.thomaswcode.decrastination.enrich.FelixPrompts.Reason.Reply.name, answer.text, answer.suggestedReplies)
         log.update { it.copy(felix = it.felix.filterNot { r -> r.id == record.id } + record).trimmed(clock.now()) }
-        val cards = answer.proposals.filter { it.state == ProposalState.Proposed }.map { answer.id to it }
+        // Only a card with something to make: one that shows a task (AI-14) opens it in the chat.
+        val cards = answer.proposals.filter { it.state == ProposalState.Proposed && (it.task != null || it.changes.isNotEmpty()) }.map { answer.id to it }
         com.thomaswcode.decrastination.notify.FelixNotifications.post(app, answer.id, settings.value.felixName, answer.text, answer.suggestedReplies, cards)
     }
 
@@ -1898,7 +1900,7 @@ class AppGraph private constructor(context: Context) {
                     val o = overrides[task.id] ?: TaskOverrides.NONE
                     val now = task.overrides()
                     if (o == now) task else task.withOverrides(o)
-                },
+                }.let(com.thomaswcode.decrastination.core.Duplicates::linksPresent),
             )
         }
     }

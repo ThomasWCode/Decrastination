@@ -206,6 +206,7 @@ object Prompts {
                 if (job == Enrichments.Job.Assignment && decks.isNotEmpty()) appendLine("Decks: " + decks.entries.sortedBy { it.key }.joinToString("; ") { "${it.key} ${it.value}" })
                 // The files the teacher attached, by name (DX-08): what "the booklet" is.
                 if (job == Enrichments.Job.Assignment) GmailThreads.attachmentsOf(task).takeIf { it.isNotEmpty() }?.let { files -> appendLine("Attachments: " + files.joinToString(", ") { it.label }) }
+                if (job == Enrichments.Job.Assignment) com.thomaswcode.decrastination.sources.teams.TeamsRows.linksOf(task).takeIf { it.isNotEmpty() }?.let { appendLine("Links: " + it.joinToString(", ")) }
             }
         }
         // What the student said to its questions (AI-10).

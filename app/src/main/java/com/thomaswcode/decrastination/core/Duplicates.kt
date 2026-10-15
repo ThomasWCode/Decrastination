@@ -32,6 +32,15 @@ object Duplicates {
     }
 
     /**
+     * [tasks] with each link to a task no longer among them let go: the work it was the same as gone
+     * (deleted, or finished long enough to be let go), this one's back on the plan and the lists.
+     */
+    fun linksPresent(tasks: List<TaskItem>): List<TaskItem> {
+        val ids = tasks.mapTo(HashSet()) { it.id }
+        return if (tasks.none { it.userSameAs != null && it.userSameAs !in ids }) tasks else tasks.map { if (it.userSameAs != null && it.userSameAs !in ids) it.copy(userSameAs = null) else it }
+    }
+
+    /**
      * [tasks] for the plan, each one kept as another's same work credited with that one's minutes
      * worked (its sessions' and its photos'), so work done under either comes off what's left. The
      * stored tasks keep their own: taking the change back takes the credit with it.

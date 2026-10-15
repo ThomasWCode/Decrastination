@@ -348,5 +348,13 @@ class MimeTest {
         val timed = Invite("Call", Fixtures.at("2026-10-16T18:00"), Fixtures.at("2026-10-16T19:00"))
         assertEquals(timed.start to timed.end, timed.calendarTimes(LONDON))
     }
+
+    @Test
+    fun `a day's duration over the clocks changing is still a day`() {
+        // 28 March 2027, the day the clocks go forward: a day long, midnight to midnight.
+        val day = Mime.invite("BEGIN:VCALENDAR\nBEGIN:VEVENT\nDTSTART;VALUE=DATE:20270328\nDURATION:P1D\nSUMMARY:Trip\nEND:VEVENT\nEND:VCALENDAR", LONDON)!!
+        assertEquals(Fixtures.at("2027-03-29T00:00"), day.end)
+        assertTrue(day.allDay(LONDON))
+    }
 }
 

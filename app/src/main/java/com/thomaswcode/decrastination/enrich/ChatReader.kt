@@ -9,6 +9,7 @@ import com.anthropic.models.messages.OutputConfig
 import com.anthropic.models.messages.StopReason
 import com.thomaswcode.decrastination.core.About
 import com.thomaswcode.decrastination.core.Change
+import com.thomaswcode.decrastination.core.ChangeType
 import com.thomaswcode.decrastination.core.ChatMessage
 import com.thomaswcode.decrastination.core.Chunk
 import com.thomaswcode.decrastination.core.InstantChanges
@@ -457,6 +458,13 @@ object ChatAnswers {
             InstructionAnswers.change(g, byId, titles, now, zone).also { if (it == null) leftOut += "a change (${InstructionAnswers.problem(g, byId, titles)})" }
         }
         if (answer.changes.size > MAX_CHANGES) leftOut += "${answer.changes.size - MAX_CHANGES} more changes than the app takes at once"
+        // A split whose steps don't come to its task's minutes, its total not said to change (AI-19): left out.
+        while (true) {
+            val problem = InstructionAnswers.stepsProblem(changes, byId) ?: break
+            val bad = changes.first { c -> c.type == ChangeType.Steps && InstructionAnswers.stepsProblem(listOf(c) + changes.filter { it.type == ChangeType.Minutes }, byId) != null }
+            leftOut += "a change ($problem)"
+            changes = changes - bad
+        }
         if (Instructions.makesCircle(changes, emptyList())) {
             leftOut += "changes that would have tasks wait for each other in a circle"
             changes = emptyList()

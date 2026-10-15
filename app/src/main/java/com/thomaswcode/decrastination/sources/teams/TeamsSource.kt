@@ -138,13 +138,15 @@ object TeamsRows {
     fun returned(row: Map<String, Any?>): Fetched? {
         val key = (row["key"] as? String)?.takeIf { it.isNotBlank() } ?: return null
         val title = (row["title"] as? String)?.takeIf { it.isNotBlank() } ?: "an assignment"
+        val returnedAt = row["returned_at"] as? Long
         return Fetched(
-            sourceId = "$key:feedback",
+            // Each time it comes back, its own: a resubmission returned again is feedback to read again.
+            sourceId = "$key:feedback" + (returnedAt?.let { ":$it" } ?: ""),
             title = "Read the feedback on $title",
             kind = Kind.Admin,
             detail = (row["feedback"] as? String).orEmpty(),
             className = (row["class_name"] as? String)?.takeIf { it.isNotBlank() },
-            dueAt = (row["returned_at"] as? Long)?.let { it + FEEDBACK_DAYS * DAY_MS },
+            dueAt = returnedAt?.let { it + FEEDBACK_DAYS * DAY_MS },
             sourceEffortMin = FEEDBACK_MIN,
             extra = mapOf(TaskItem.EXTRA_TICK_DONE to "true", EXTRA_FEEDBACK_ON to key),
         )

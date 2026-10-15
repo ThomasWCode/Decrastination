@@ -49,6 +49,9 @@ class TeamsRowsTest {
         assertEquals(listOf("https://example.com/notes"), TeamsRows.linksOf(task))
         val described = com.thomaswcode.decrastination.enrich.Prompts.describe(task, com.thomaswcode.decrastination.core.Enrichments.Job.Assignment, 0, Fixtures.LONDON)
         assertEquals(true, "Attachments: Statics booklet.pdf, Mark scheme.pdf" in described, described)
+        assertEquals(true, "Links: https://example.com/notes" in described, described)
+        // Its links are what it's read from too: changed, it's read again.
+        assertEquals(false, com.thomaswcode.decrastination.core.Enrichments.inputHash(task) == com.thomaswcode.decrastination.core.Enrichments.inputHash(task.copy(extra = task.extra - TeamsRows.EXTRA_LINKS)))
         // A widget before 0.4.0 gives neither.
         val older = TeamsRows.fetched(rows.first())!!
         assertNull(older.extra[com.thomaswcode.decrastination.sources.gmail.GmailThreads.EXTRA_ATTACHMENTS])
@@ -69,7 +72,9 @@ class TeamsRowsTest {
     fun `returned work with feedback is ten minutes' reading, due in three days, done by a tick`() {
         val row = mapOf("key" to "k1", "title" to "Statics Prep", "class_name" to "12.2-PH3", "returned_at" to Fixtures.at("2026-10-14T16:00"), "feedback" to "Good work; check your units in Q3.")
         val f = TeamsRows.returned(row)!!
-        assertEquals("k1:feedback", f.sourceId)
+        assertEquals("k1:feedback:${Fixtures.at("2026-10-14T16:00")}", f.sourceId)
+        // Returned again later: feedback of its own.
+        assertEquals("k1:feedback:${Fixtures.at("2026-10-21T16:00")}", TeamsRows.returned(row + ("returned_at" to Fixtures.at("2026-10-21T16:00")))!!.sourceId)
         assertEquals("Read the feedback on Statics Prep", f.title)
         assertEquals(Kind.Admin, f.kind)
         assertEquals("Good work; check your units in Q3.", f.detail)

@@ -28,6 +28,8 @@ object Ahead {
      */
     private suspend fun microPlans(graph: AppGraph, plan: Plan, now: Long, only: String? = null) {
         if (!planning.tryLock()) return
+        // Any written: the plan's made again, so its calendar events carry them.
+        var written = false
         try {
             graph.runtime.update { it.copy(microPlans = MicroPlans.kept(plan, it.microPlans)) }
             val caller = graph.microPlanner() ?: return
@@ -45,9 +47,11 @@ object Ahead {
                     is AppGraph.Called.Held -> return
                 }
                 graph.runtime.update { it.copy(microPlans = it.microPlans + (chunk.key to made)) }
+                if (made.first.isNotEmpty()) written = true
             }
         } finally {
             planning.unlock()
+            if (written) graph.watcher.poke()
         }
     }
 }

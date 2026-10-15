@@ -139,7 +139,8 @@ object Merge {
             }
         } + fresh.values.filter { it.id !in byId }
 
-        return Result(result, completed, reopened, added, missed)
+        // A link to the same work let go with the task it was to (DX-15).
+        return Result(Duplicates.linksPresent(result), completed, reopened, added, missed)
     }
 
     /**
