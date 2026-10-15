@@ -91,6 +91,8 @@ object Planner {
         val pins: Map<String, Long> = emptyMap(),
         /** Today's slots' starts in the last plan (PL-13), by [Chunk.key]: kept where still free. */
         val previousSlots: Map<String, Long> = emptyMap(),
+        /** Today's slots missed, their pieces undone (PL-13), by [Chunk.key]: moved, and saying so. */
+        val missedSlots: Set<String> = emptySet(),
     )
 
     /** A day's time for work (PL-15): at home in the evening ([homeMin]), and all of it, school's included ([anyMin]). */
@@ -365,8 +367,9 @@ object Planner {
             val part = item.offset + index + 1
             // Only a real deadline can be missed (PL-14): the app's own dates move on instead.
             val overdue = item.hard && item.deadline < input.now
+            val key = "${item.task.id}#${piece.index ?: -1}#$part"
             // Where you put it (PL-04): its time is the slotter's to keep.
-            if (piece.at != null) atPins["${item.task.id}#${piece.index ?: -1}#$part"] = piece.at
+            if (piece.at != null) atPins[key] = piece.at
             return Chunk(
                 taskId = item.task.id,
                 source = item.task.source,
@@ -391,6 +394,8 @@ object Planner {
                 why = when {
                     piece.pinned && !overdue -> Why.Pinned
                     behind && !overdue && why != Why.Soft && noRoom -> Why.NoRoom
+                    // Its slot went by undone (PL-13): moved on, and saying so.
+                    !overdue && key in input.missedSlots -> Why.Refitted
                     else -> why
                 },
                 where = piece.where,

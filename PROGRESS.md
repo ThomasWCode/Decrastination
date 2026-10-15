@@ -47,7 +47,8 @@ The implementation of `docs/review_v2_improvements/impl/` on branch `v3`. Delete
 - PL-04 a day for all of a task, a time for its next piece, from the chat or an instruction: 4df4141. 50 000 property seeds pass with days and times drawn on tasks.
 - PL-13 the plan made again as things change, slot alarms, missed slots moved and kept, today's slots stable: 8c801c1. 50 000 property seeds pass, with slots just over drawn in the last plan's starts.
 - NF-07 the next seven days' slots written to the calendar you pick, hand moves taken as your time, with DX-12 (location and description, optional events asked about) and DX-13 (calendars chosen for reading): 8445cfc.
-- Found on the phone: Ask Claude failed on every message (the API's 400, "too many parameters with union types": 17 nullable fields, its limit 16), as PL-16's end date on a change took the chat's schema over it. A new task's subject and notes are now empty strings for none (15), and `SchemaLimitsTest` holds every schema the app sends to the limit: this commit.
+- Found on the phone: Ask Claude failed on every message (the API's 400, "too many parameters with union types": 17 nullable fields, its limit 16), as PL-16's end date on a change took the chat's schema over it. A new task's subject and notes are now empty strings for none (15), and `SchemaLimitsTest` holds every schema the app sends to the limit: 8057cdf.
+- PL-07's last reason, phase 3's to add: a piece whose slot went by undone says it was moved when its time passed (`Why.Refitted`): this commit.
 
 ## Current
 
