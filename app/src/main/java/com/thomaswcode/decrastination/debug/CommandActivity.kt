@@ -134,6 +134,93 @@ class CommandActivity : Activity() {
             }
             "state" -> logState(graph)
             "anki-counts" -> logAnkiCounts()
+            // The plan's next seven days: each day's minutes, its slots and what has none (phase 3).
+            "plan" -> {
+                val plan = graph.plan()
+                val zone = graph.clock.zone()
+                fun hm(time: Long) = java.time.Instant.ofEpochMilli(time).atZone(zone).toLocalTime().toString()
+                for (bucket in plan.buckets.take(7)) {
+                    val slots = bucket.slots.joinToString { "${it.kind} ${hm(it.start)}-${hm(it.end)} ${it.key}${if (it.pinned) " pinned" else ""}" }
+                    Log.i(TAG, "plan ${bucket.date}: ${bucket.plannedMin} of ${bucket.capacityMin} min; slots [$slots]; unslotted ${bucket.unslotted.map { it.key }}")
+                }
+                Log.i(TAG, "plan next ${plan.next?.key}, then ${plan.then?.key}; kept ${graph.runtime.value.slots}; ${graph.runtime.value.calendarWritten.size} written to calendar ${graph.settings.value.calendarWriteId}")
+            }
+            // The app's events in the calendar written to, with their reminders (NF-07: it sets none,
+            // but a calendar's own default notifications could be laid on them as they sync).
+            "calendar-written" -> withContext(Dispatchers.IO) {
+                val calendarId = graph.settings.value.calendarWriteId ?: return@withContext Log.w(TAG, "No calendar written to")
+                val zone = graph.clock.zone()
+                contentResolver.query(
+                    android.provider.CalendarContract.Events.CONTENT_URI,
+                    arrayOf(android.provider.CalendarContract.Events._ID, android.provider.CalendarContract.Events.CUSTOM_APP_URI, android.provider.CalendarContract.Events.DTSTART, android.provider.CalendarContract.Events.HAS_ALARM),
+                    "${android.provider.CalendarContract.Events.CALENDAR_ID} = ? AND ${android.provider.CalendarContract.Events.CUSTOM_APP_PACKAGE} = ? AND ${android.provider.CalendarContract.Events.DELETED} = 0",
+                    arrayOf(calendarId.toString(), packageName), android.provider.CalendarContract.Events.DTSTART,
+                )?.use { c ->
+                    while (c.moveToNext()) {
+                        val reminders = android.provider.CalendarContract.Reminders.query(contentResolver, c.getLong(0), arrayOf(android.provider.CalendarContract.Reminders.MINUTES))?.use { it.count } ?: 0
+                        Log.i(TAG, "calendar-written ${c.getString(1)} at ${java.time.Instant.ofEpochMilli(c.getLong(2)).atZone(zone).toLocalDateTime()}, hasAlarm ${c.getInt(3)}, reminders $reminders")
+                    }
+                }
+            }
+            // A calendar sync asked for, for each Google account with a calendar here (as pulling to
+            // refresh in a calendar app does): a calendar just made at calendar.google.com comes down.
+            "calendar-sync" -> withContext(Dispatchers.IO) {
+                val accounts = mutableSetOf<Pair<String, String>>()
+                contentResolver.query(
+                    android.provider.CalendarContract.Calendars.CONTENT_URI,
+                    arrayOf(android.provider.CalendarContract.Calendars.ACCOUNT_NAME, android.provider.CalendarContract.Calendars.ACCOUNT_TYPE), null, null, null,
+                )?.use { c -> while (c.moveToNext()) accounts += c.getString(0).orEmpty() to c.getString(1).orEmpty() }
+                for ((name, type) in accounts.filter { it.second == "com.google" }) {
+                    val extras = android.os.Bundle().apply {
+                        putBoolean(android.content.ContentResolver.SYNC_EXTRAS_MANUAL, true)
+                        putBoolean(android.content.ContentResolver.SYNC_EXTRAS_EXPEDITED, true)
+                    }
+                    runCatching { android.content.ContentResolver.requestSync(android.accounts.Account(name, type), android.provider.CalendarContract.AUTHORITY, extras) }
+                        .onSuccess { Log.i(TAG, "Calendar sync asked for one account") }.onFailure { Log.w(TAG, "Calendar sync not asked for", it) }
+                }
+            }
+            // The calendar the plan's written to, picked by its name, as Settings → Calendar does (NF-07).
+            "calendar-pick" -> {
+                val name = intent.getStringExtra("name")
+                val calendar = com.thomaswcode.decrastination.calendar.SlotCalendar.calendars(this).firstOrNull { it.writable && it.name == name }
+                if (calendar == null) {
+                    Log.w(TAG, "No calendar named $name to write to")
+                } else {
+                    graph.changeSettings { it.copy(calendarWriteId = calendar.id) }
+                    Log.i(TAG, "Writing the plan to calendar ${calendar.id} ($name)")
+                }
+            }
+            // One of the app's own slot events moved (--ei by <minutes>) or deleted, as a hand in Google
+            // Calendar would, to check what the app makes of it (NF-07): --es key <slot key>.
+            "calendar-move", "calendar-delete" -> withContext(Dispatchers.IO) {
+                val key = intent.getStringExtra("key")
+                val calendarId = graph.settings.value.calendarWriteId
+                if (key == null || calendarId == null) return@withContext Log.w(TAG, "$command needs --es key and a calendar written to")
+                val events = android.provider.CalendarContract.Events.CONTENT_URI
+                val found = contentResolver.query(
+                    events, arrayOf(android.provider.CalendarContract.Events._ID, android.provider.CalendarContract.Events.DTSTART, android.provider.CalendarContract.Events.DTEND),
+                    "${android.provider.CalendarContract.Events.CALENDAR_ID} = ? AND ${android.provider.CalendarContract.Events.CUSTOM_APP_PACKAGE} = ? AND ${android.provider.CalendarContract.Events.CUSTOM_APP_URI} LIKE ? AND ${android.provider.CalendarContract.Events.DELETED} = 0",
+                    arrayOf(calendarId.toString(), packageName, "%/$key"), null,
+                )?.use { c -> if (c.moveToFirst()) Triple(c.getLong(0), c.getLong(1), c.getLong(2)) else null }
+                if (found == null) return@withContext Log.w(TAG, "No event of the app's for $key")
+                val (id, start, end) = found
+                val uri = android.content.ContentUris.withAppendedId(events, id)
+                if (command == "calendar-delete") {
+                    contentResolver.delete(uri, null, null)
+                    Log.i(TAG, "Deleted the event for $key")
+                } else {
+                    val by = intent.getIntExtra("by", 30) * 60_000L
+                    contentResolver.update(
+                        uri,
+                        android.content.ContentValues().apply {
+                            put(android.provider.CalendarContract.Events.DTSTART, start + by)
+                            put(android.provider.CalendarContract.Events.DTEND, end + by)
+                        },
+                        null, null,
+                    )
+                    Log.i(TAG, "Moved the event for $key by ${by / 60_000} min")
+                }
+            }
             "force-block" -> {
                 // Testing at night: blocking hours apply for this many minutes (tightening only).
                 val minutes = intent.getIntExtra("minutes", 10).coerceIn(0, 120)
@@ -244,6 +331,21 @@ class CommandActivity : Activity() {
                 }
             }
             "chat-clear" -> graph.clearChat().also { Log.i(TAG, "Chat cleared") }
+            // --es do apply|undo: the last reply's first card applied, or taken back, as its buttons do.
+            "chat-card" -> {
+                val message = graph.chat.value.messages.lastOrNull { it.proposals.isNotEmpty() }
+                val card = message?.proposals?.firstOrNull()
+                if (message == null || card == null) {
+                    Log.w(TAG, "chat-card: no card to act on")
+                } else {
+                    when (intent.getStringExtra("do")) {
+                        "apply" -> graph.applyProposal(message.id, card.id)
+                        "undo" -> graph.undoProposal(message.id, card.id)
+                    }
+                    val now = graph.chat.value.messages.firstOrNull { it.id == message.id }?.proposals?.firstOrNull { it.id == card.id }
+                    Log.i(TAG, "chat-card ${intent.getStringExtra("do")}: ${card.lines} -> ${now?.state}")
+                }
+            }
             "ai-endpoint" -> {
                 // --es base <url> sends the model's calls to a stand-in till the app restarts; none, to Anthropic again.
                 graph.modelEndpoint = intent.getStringExtra("base")

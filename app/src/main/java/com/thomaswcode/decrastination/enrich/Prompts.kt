@@ -6,6 +6,7 @@ import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.SubStep
 import com.thomaswcode.decrastination.core.TaskItem
+import com.thomaswcode.decrastination.core.Where
 import com.thomaswcode.decrastination.sources.anki.AnkiRules
 import com.thomaswcode.decrastination.sources.gmail.GmailThreads
 import java.time.Instant
@@ -63,7 +64,7 @@ object Prompts {
         Enrichments.Job.Assignment -> """
             You plan one homework assignment for $STUDENT, for a planner that schedules the work over the days before it's due and blocks distracting apps until it's done.
 
-            Split the work into the ordered steps the student will actually do, each with a realistic duration in minutes for a typical Year 12 student (the planner adjusts them to this one). Keep steps between 10 and 60 minutes where the work allows, and a short task as one step. A step has dates of its own only where the instructions give them (a draft due before the final version): from, the date before which it can't be started, and due, when it must be done by (YYYY-MM-DDTHH:MM, or the date alone); otherwise both null. Base the steps on the instructions. Learning numbered vocabulary sections is a step of its own, with nothing else in it, and those sections in its ankiSections: the planner leaves it out where the student's Anki decks hold them. Every other step has an empty ankiSections. Add a step for handing work in only where the instructions ask for it, in its place in the order.
+            Split the work into the ordered steps the student will actually do, each with a realistic duration in minutes for a typical Year 12 student (the planner adjusts them to this one). Keep steps between 10 and 60 minutes where the work allows, and a short task as one step. A step has dates of its own only where the instructions give them (a draft due before the final version): from, the date before which it can't be started, and due, when it must be done by (YYYY-MM-DDTHH:MM, or the date alone); otherwise both null. Base the steps on the instructions. Learning numbered vocabulary sections is a step of its own, with nothing else in it, and those sections in its ankiSections: the planner leaves it out where the student's Anki decks hold them. Every other step has an empty ankiSections. Add a step for handing work in only where the instructions ask for it, in its place in the order. Each step's where: "home" for a step that needs the laptop, books or quiet (an essay, an upload, a long problem set); "anywhere" for one that can be done at school in a free period with what's in the bag (a booklet, reading, vocabulary).
 
             Also give:
             - effortMin: the total minutes, the sum of the steps.
@@ -108,6 +109,8 @@ object Prompts {
             "title" to mapOf("type" to "string"),
             "minutes" to mapOf("type" to "integer"),
             ("ankiSections" to mapOf("type" to "array", "items" to mapOf("type" to "string"))).takeIf { vocabulary },
+            // An assignment's steps say where they can be done (PL-15).
+            ("where" to mapOf("type" to "string", "enum" to listOf("anywhere", "home"))).takeIf { vocabulary },
             "from" to nullable(mapOf("type" to "string", "format" to "date")),
             "due" to nullable(LOCAL_TIME),
         ).toTypedArray(),
@@ -185,7 +188,7 @@ object Answers {
     )
 
     @Serializable
-    private data class Step(val title: String, val minutes: Int, val ankiSections: List<String> = emptyList(), val from: String? = null, val due: String? = null)
+    private data class Step(val title: String, val minutes: Int, val ankiSections: List<String> = emptyList(), val from: String? = null, val due: String? = null, val where: String? = null)
 
     @Serializable
     private data class Split(val subSteps: List<Step>, val effortMin: Int, val ankiSections: List<String> = emptyList(), val testDate: String? = null)
@@ -340,7 +343,7 @@ object Answers {
             if (from != null && dueBy != null && from > dueBy) return no("a $noun starts after the task is due")
             if (due != null && opens != null && due < opens) return no("a $noun is due before the email can be started")
             val sections = if (vocabulary && AnkiRules.vocabularyOnly(step.title)) sections(step.ankiSections) else emptyList()
-            SubStep(step.title.trim().take(MAX_TITLE), step.minutes, ankiSections = sections, from = from, dueAt = due)
+            SubStep(step.title.trim().take(MAX_TITLE), step.minutes, ankiSections = sections, from = from, dueAt = due, where = Where.of(step.where)?.name?.lowercase())
         }
         for (i in read.indices) {
             val from = read[i].from ?: continue
@@ -381,7 +384,12 @@ object Answers {
             when (run.size) {
                 0 -> Unit
                 1 -> out += run.single()
-                else -> out += SubStep(("The rest: " + run.joinToString("; ") { it.title }).take(MAX_TITLE), run.sumOf { it.minutes })
+                // At home if any of it must be: the rest is done where its hardest part can be (PL-15).
+                else -> out += SubStep(
+                    ("The rest: " + run.joinToString("; ") { it.title }).take(MAX_TITLE),
+                    run.sumOf { it.minutes },
+                    where = if (run.any { Where.of(it.where) == Where.Home }) "home" else run.map { it.where }.distinct().singleOrNull(),
+                )
             }
             run.clear()
         }

@@ -70,8 +70,11 @@ object CalendarTime {
         Briefing.replanToday(context)
     }
 
-    /** The events between [from] and [to], the ones you've declined left out. */
-    fun read(context: Context, from: Long, to: Long): List<CalendarEvent> {
+    /** How much of an event's description is kept (DX-12). */
+    private const val DESCRIPTION_CHARS = 500
+
+    /** The events between [from] and [to], the ones you've declined and those of [excluded] calendars (DX-13) left out. */
+    fun read(context: Context, from: Long, to: Long, excluded: Set<Long> = emptySet()): List<CalendarEvent> {
         val uri = CalendarContract.Instances.CONTENT_URI.buildUpon().also {
             ContentUris.appendId(it, from)
             ContentUris.appendId(it, to)
@@ -85,9 +88,13 @@ object CalendarTime {
             CalendarContract.Instances.AVAILABILITY,
             CalendarContract.Instances.CALENDAR_DISPLAY_NAME,
             CalendarContract.Instances.SELF_ATTENDEE_STATUS,
+            CalendarContract.Instances.EVENT_LOCATION,
+            CalendarContract.Instances.DESCRIPTION,
         )
+        // Ids are numbers: put in the query as they are.
+        val selection = excluded.takeIf { it.isNotEmpty() }?.let { "${CalendarContract.Instances.CALENDAR_ID} NOT IN (${it.joinToString(",")})" }
         val events = mutableListOf<CalendarEvent>()
-        context.contentResolver.query(uri, projection, null, null, "${CalendarContract.Instances.BEGIN} ASC")?.use { c ->
+        context.contentResolver.query(uri, projection, selection, null, "${CalendarContract.Instances.BEGIN} ASC")?.use { c ->
             while (c.moveToNext()) {
                 if (c.getInt(7) == CalendarContract.Attendees.ATTENDEE_STATUS_DECLINED) continue
                 events += CalendarEvent(
@@ -98,6 +105,8 @@ object CalendarTime {
                     allDay = c.getInt(4) == 1,
                     busy = c.getInt(5) != CalendarContract.Events.AVAILABILITY_FREE,
                     calendar = c.getString(6).orEmpty(),
+                    location = c.getString(8).orEmpty(),
+                    description = c.getString(9).orEmpty().take(DESCRIPTION_CHARS),
                 )
             }
         }
@@ -116,7 +125,9 @@ object CalendarTime {
         // Your instructions about events over your answers to its questions; a question one of them
         // has answered since it was asked is withdrawn.
         val yours = Instructions.eventAnswers(graph.instructions.value.applied)
-        val events = runCatching { withContext(Dispatchers.IO) { read(context, now - DAY_MS, readUntil(now, graph.clock.zone())) } }
+        val settings = graph.settings.value
+        val excluded = (settings.calendarsExcluded + listOfNotNull(settings.calendarWriteId)).toSet()
+        val events = runCatching { withContext(Dispatchers.IO) { read(context, now - DAY_MS, readUntil(now, graph.clock.zone()), excluded) } }
             .onFailure { Log.w(AppGraph.TAG, "Can't read the calendar", it) }
             .getOrNull() ?: run {
             // Not read this time: the events last read, judged again with the answers as they are

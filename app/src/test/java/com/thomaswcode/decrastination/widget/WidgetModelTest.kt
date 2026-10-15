@@ -35,7 +35,8 @@ class WidgetModelTest {
 
     private fun model(tasks: List<TaskItem>, sources: Map<Source, SourceStatus> = emptyMap()): WidgetModel {
         val state = TaskState(tasks, sources)
-        return WidgetModel.from(Planner.plan(Planner.Input(tasks, now, LONDON, Settings())), state, LONDON)
+        // The box these tests were written for (30 since PL-12).
+        return WidgetModel.from(Planner.plan(Planner.Input(tasks, now, LONDON, Settings(boxMin = 45))), state, LONDON)
     }
 
     @Test

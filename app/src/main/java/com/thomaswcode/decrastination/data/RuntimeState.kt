@@ -18,6 +18,14 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class RuntimeState(
     val credit: Credit = Credit(),
+    /** Today's slot starts as the last plan laid them, and the slots missed (PL-13). */
+    val slots: com.thomaswcode.decrastination.core.SlotState = com.thomaswcode.decrastination.core.SlotState(),
+    /** Each slot event's start as the app last wrote it to the calendar, by its URI (NF-07): one since moved was moved by you. */
+    val calendarWritten: Map<String, Long> = emptyMap(),
+    /** The calendar those were written to, so a change of calendar takes them out of the old one. */
+    val calendarWrittenTo: Long? = null,
+    /** Calendars no longer written to whose events of the app's are still to be taken out (no permission, or a failure, the last time). */
+    val calendarsToClear: List<Long> = emptyList(),
     val session: FocusSession? = null,
     /** Sessions ended whose due (the task's minutes and step, the log, free time) isn't all given yet. */
     val finishing: List<EndedSession> = emptyList(),

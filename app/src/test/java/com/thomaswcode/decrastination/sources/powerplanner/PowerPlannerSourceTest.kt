@@ -74,6 +74,12 @@ class PowerPlannerSourceTest {
     }
 
     @Test
+    fun `a read carries the timetable it used`() = runTest {
+        secrets.put(mapOf(Secret.PowerPlannerUsername to "a", Secret.PowerPlannerPassword to "pw"))
+        assertEquals(Timetable("2026-08-24T00:00:00", emptyList()), source.read(context).timetable)
+    }
+
+    @Test
     fun `another account's login reads its own semester, not the cached one`() = runTest {
         secrets.put(mapOf(Secret.PowerPlannerUsername to "a", Secret.PowerPlannerPassword to "pw"))
         source.read(context)

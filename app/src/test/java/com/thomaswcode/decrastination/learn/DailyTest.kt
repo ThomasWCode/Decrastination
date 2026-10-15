@@ -30,7 +30,8 @@ import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 
 class DailyTest {
-    private val settings = Settings()
+    // The box the briefing's tests were written for (30 since PL-12).
+    private val settings = Settings(boxMin = 45)
 
     @Test
     fun `the briefing is at 7 on school days and half past 8 at weekends`() {
@@ -200,7 +201,7 @@ class ReviewInputTest {
         val text = ReviewInput.describe(log, Calibration(), Settings(), now, LONDON, week = "2026-10-05")
         assertTrue("- Statics Prep [Homework, 12.1 Physics]: due Fri 9 Oct 21:00, done Fri 9 Oct 20:00, estimate 40 min, timed 55 min. felt harder (\"the diagrams\")" in text, text)
         assertTrue("the week felt 3/5" in text, text)
-        assertTrue("Settings: boxMin 45, marginDays 1, softMinPerDay 60, workMinPerFreeMin 3." in text, text)
+        assertTrue("Settings: boxMin 30, marginDays 1, softMinPerDay 60, workMinPerFreeMin 3." in text, text)
         // Done by a date the app or Claude set: a plan, said to be one.
         val planned = log.copy(completions = log.completions.map { it.copy(hardDeadline = false) })
         assertTrue("Statics Prep [Homework, 12.1 Physics]: due Fri 9 Oct 21:00 (a plan, not a deadline), done Fri 9 Oct 20:00" in ReviewInput.describe(planned, Calibration(), Settings(), now, LONDON, week = "2026-10-05"))
@@ -209,14 +210,14 @@ class ReviewInputTest {
     @Test
     fun `only the settings the review may change move, and only within their bounds`() {
         val changes = listOf(
-            ReviewInput.Change("boxMin", 30, "shorter pieces got finished"),
+            ReviewInput.Change("boxMin", 25, "shorter pieces got finished"),
             ReviewInput.Change("marginDays", 9, "too far"),
             ReviewInput.Change("armed", 0, "not allowed"),
         )
         val applied = ReviewInput.apply(Settings(), changes)
-        assertEquals(30, applied.boxMin)
+        assertEquals(25, applied.boxMin)
         assertEquals(1, applied.marginDays)
-        assertEquals(Settings().copy(boxMin = 30), applied)
+        assertEquals(Settings().copy(boxMin = 25), applied)
     }
 }
 
