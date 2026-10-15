@@ -29,6 +29,8 @@
 
     <!-- The calendar as busy time (Q7): read only, never written. -->
     <uses-permission android:name="android.permission.READ_CALENDAR" />
+    <!-- The plan's slots, written to the calendar you pick (NF-07). -->
+    <uses-permission android:name="android.permission.WRITE_CALENDAR" />
 
     <!-- A focus session ends on time even when the focus service isn't running: a timer's alarm. -->
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />

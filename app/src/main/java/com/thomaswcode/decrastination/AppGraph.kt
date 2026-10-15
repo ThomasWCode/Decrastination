@@ -11,6 +11,7 @@ import com.thomaswcode.decrastination.block.Focus
 import com.thomaswcode.decrastination.block.Sessions
 import com.thomaswcode.decrastination.block.SlotAlarms
 import com.thomaswcode.decrastination.block.Slots
+import com.thomaswcode.decrastination.calendar.SlotCalendar
 import com.thomaswcode.decrastination.core.About
 import com.thomaswcode.decrastination.core.Change
 import com.thomaswcode.decrastination.core.ChangeType
@@ -257,6 +258,7 @@ class AppGraph private constructor(context: Context) {
         keep = ::keepSlots,
         hooks = listOf(
             { made -> SlotAlarms.arm(app, made, clock.now()) },
+            ::writeSlots,
             { _ -> WidgetUpdater.update(app) },
         ),
         onFailure = { Log.w(TAG, "Replanning failed", it) },
@@ -264,6 +266,30 @@ class AppGraph private constructor(context: Context) {
 
     /** Today's slots as they pass: begun, or missed (PL-13). */
     val slots = Slots(this)
+
+    /**
+     * [made]'s next seven days written to the calendar you picked (NF-07). A slot you've moved there
+     * is taken as your time for its task's next piece, where its deadline allows; else it's put back,
+     * and you're told.
+     */
+    private suspend fun writeSlots(made: Plan) {
+        val calendarId = settings.value.calendarWriteId ?: return
+        if (!SlotCalendar.allowed(app)) return
+        val zone = clock.zone()
+        val byId = tasks.value.tasks.associateBy { it.id }
+        val written = withContext(Dispatchers.IO) {
+            SlotCalendar.write(app, calendarId, made, zone, runtime.value.calendarWritten) { move ->
+                val task = move.desired.taskId?.let(byId::get)
+                task != null && !Instructions.latePin(SlotCalendar.change(move, zone), task, zone)
+            }
+        }
+        if (written.starts != runtime.value.calendarWritten) runtime.update { it.copy(calendarWritten = written.starts) }
+        written.refused.forEach { SlotCalendar.sayRefused(app, it, zone) }
+        for (move in written.taken) {
+            val taskId = move.desired.taskId ?: continue
+            addOwnChange(java.util.UUID.randomUUID().toString(), "Moved in the calendar", About(taskId = taskId, taskTitle = byId[taskId]?.title), SlotCalendar.change(move, zone))
+        }
+    }
 
     /**
      * [made]'s today kept for the next plan (PL-13): its work slots' starts, and which missed pieces
@@ -505,7 +531,29 @@ class AppGraph private constructor(context: Context) {
             if (tasks.value.tasks.any { Enrichments.jobFor(it) != null && Enrichments.stale(it, modelOn, RuleEnricher.BY, modelOff) }) EnrichWorker.enqueue(app)
         }
         scope.launch { CalendarTime.refresh(app) }
-        scope.launch { calendarChanged.debounce(CALENDAR_QUIET_MS).collect { CalendarTime.refresh(app) } }
+        // A change in the calendar: read again, and the plan made again, so a slot you've moved or
+        // deleted in the calendar written to (which isn't read) is seen (NF-07). The app's own write
+        // brings one replan more, which writes nothing.
+        scope.launch {
+            calendarChanged.debounce(CALENDAR_QUIET_MS).collect {
+                CalendarTime.refresh(app)
+                watcher.poke()
+            }
+        }
+        // The calendar written to, or those not read, changed (NF-07, DX-13): what was written to
+        // one no longer is goes from it, and the calendar's read again.
+        scope.launch {
+            settings.state.map { it.calendarWriteId }.distinctUntilChanged().collect { id ->
+                val was = runtime.value.calendarWrittenTo
+                if (was == id) return@collect
+                if (was != null) withContext(Dispatchers.IO) { runCatching { SlotCalendar.clear(app, was) }.onFailure { Log.w(TAG, "Clearing the old calendar failed", it) } }
+                runtime.update { it.copy(calendarWrittenTo = id, calendarWritten = emptyMap()) }
+                watcher.poke()
+            }
+        }
+        scope.launch {
+            settings.state.map { it.calendarWriteId to it.calendarsExcluded }.distinctUntilChanged().drop(1).collect { CalendarTime.refresh(app) }
+        }
         // Anki's deadline or textbook changed (saved, or a waiting change fallen due): its tasks are
         // made with them, so it's read again now.
         scope.launch {

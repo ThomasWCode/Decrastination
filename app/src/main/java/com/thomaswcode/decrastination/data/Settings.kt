@@ -36,6 +36,10 @@ data class Settings(
     val outsideBreaks: Int = 3,
     val outsideBreakMin: Int = 20,
     val outsideTimes: List<Int> = listOf(9 * 60 + 30, 13 * 60, 16 * 60),
+    /** The calendar the plan's slots are written to (NF-07), by its id on the phone: none till you pick one. */
+    val calendarWriteId: Long? = null,
+    /** Calendars not read for busy time (DX-13), by id: the one written to never is. */
+    val calendarsExcluded: List<Long> = emptyList(),
     /** Days before a deadline its work should be finished by, until calibration learns better. */
     val marginDays: Int = 1,
     /** Work with no deadline (an email, an undated task) is due this many days after it's first seen. */

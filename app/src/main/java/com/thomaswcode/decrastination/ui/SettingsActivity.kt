@@ -149,6 +149,10 @@ class SettingsActivity : ComponentActivity() {
                 item { Section("School") }
                 item { SchoolSection(graph) }
 
+                // The calendar written to and those read (NF-07, DX-13): saved as they're picked.
+                item { Section("Calendar") }
+                item { CalendarSection(graph, this@SettingsActivity) }
+
                 item { Section("Reminders") }
                 item {
                     TimeField("Morning briefing, school days", draft.briefingWeekdayMin, "briefingWeekdayMin", form) { draft = draft.copy(briefingWeekdayMin = it) }

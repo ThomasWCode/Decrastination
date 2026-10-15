@@ -16,6 +16,9 @@ data class CalendarEvent(
     val busy: Boolean = true,
     /** The calendar it's in ("Holidays in United Kingdom", "Birthdays"). */
     val calendar: String = "",
+    /** Where it is, and what it says of itself (DX-12): its description, cut short. */
+    val location: String = "",
+    val description: String = "",
 )
 
 /**
@@ -48,6 +51,8 @@ object EventJudge {
 
     private val TRAVEL = Regex("""\b(train|bus|coach|flight|plane|ferry|tube|metro)\b""", RegexOption.IGNORE_CASE)
     private val NOT_YOURS = Regex("""holiday|birthday|observance|week number""", RegexOption.IGNORE_CASE)
+    /** A timed event saying it may not be on, or not need you (DX-12). */
+    private val MAYBE = Regex("""\b(optional|tentative)\b""", RegexOption.IGNORE_CASE)
 
     /**
      * The key your answer is kept under: its name, so a weekly lesson is asked about once; one
@@ -76,6 +81,8 @@ object EventJudge {
         return when {
             // Marked free, a public holiday or a birthday, or travel you can work on.
             !event.busy || NOT_YOURS.containsMatchIn(event.calendar) || TRAVEL.containsMatchIn(event.title) -> Judgement.Free
+            // Optional, or tentative: how much of your time it takes is yours to say (DX-12).
+            !event.allDay && MAYBE.containsMatchIn(event.description) -> Judgement.Ask
             // All day, or most of one (an open day, a van hire booked 9 to 6): anything from nothing
             // to all of it. Ask.
             event.allDay || event.end - event.start >= LONG_MS -> Judgement.Ask
