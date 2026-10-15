@@ -760,6 +760,73 @@ class PlannerTest {
         assertTrue(Planner.plan(windowed(tasks, "2026-10-13T16:50", windows = emptyMap())).todayBucket!!.slots.isEmpty())
     }
 
+    // --- Pins: a day, a time (PL-04) ---
+
+    @Test
+    fun `a day you give for a task keeps all of it on that day`() {
+        // Ninety minutes due in ten days, put on Saturday: both pieces Saturday, where you put them.
+        val essay = task("essay", Fixtures.at("2026-10-18T23:59"), effort = 90).copy(userOnDay = "2026-10-10")
+        val plan = plan(listOf(essay), "2026-10-08T17:00")
+        assertEquals(listOf(LocalDate.parse("2026-10-10")), plan.dayOf("essay"))
+        assertTrue(plan.chunksOf("teams:essay").all { it.why == Why.Pinned && !it.behind }, "${plan.chunksOf("teams:essay").map { it.why }}")
+        assertEquals("Where you put it", plan.chunksOf("teams:essay").first().whyLine(LocalDate.parse("2026-10-08"), LONDON))
+        // A day gone by, or after its deadline, isn't kept to.
+        assertTrue(plan(listOf(essay.copy(userOnDay = "2026-10-07")), "2026-10-08T17:00").chunksOf("teams:essay").none { it.why == Why.Pinned })
+        assertTrue(plan(listOf(essay.copy(userOnDay = "2026-10-20")), "2026-10-08T17:00").chunksOf("teams:essay").none { it.why == Why.Pinned })
+    }
+
+    @Test
+    fun `a time you give for a task's next piece holds it then, the rest after it`() {
+        // Monday 17:00; the essay's next piece at 19:30 on Tuesday (a school day with windows), due Friday.
+        val essay = task("essay", Fixtures.at("2026-10-16T23:59"), effort = 90).copy(userAtTime = Fixtures.at("2026-10-13T19:30"))
+        val plan = Planner.plan(windowed(listOf(essay), "2026-10-12T17:00"))
+        val pinned = plan.chunksOf("teams:essay").single { it.why == Why.Pinned }
+        assertEquals(1, pinned.part)
+        val slot = plan.bucket(tuesday)!!.slotOf(pinned)!!
+        assertEquals(Fixtures.at("2026-10-13T19:30"), slot.start)
+        assertTrue(slot.pinned)
+        // The rest no earlier than it.
+        val days = plan.buckets.flatMap { b -> b.chunks.filter { it.taskId == "teams:essay" }.map { b.date } }
+        assertTrue(days.all { it >= tuesday }, "$days")
+        // A time at or past its deadline is left alone.
+        val late = essay.copy(userAtTime = Fixtures.at("2026-10-17T10:00"))
+        assertTrue(Planner.plan(windowed(listOf(late), "2026-10-12T17:00")).chunksOf("teams:essay").none { it.why == Why.Pinned })
+    }
+
+    @Test
+    fun `work you put on a day has its time before work due that day`() {
+        // Thursday 17:00, 300 minutes left: five hours due tonight, and an hour you put on today.
+        val tonight = task("tonight", Fixtures.at("2026-10-08T23:59"), effort = 300)
+        val essay = task("essay", Fixtures.at("2026-10-18T23:59"), effort = 60).copy(userOnDay = "2026-10-08")
+        val plan = plan(listOf(tonight, essay), "2026-10-08T17:00")
+        assertEquals(listOf(LocalDate.parse("2026-10-08")), plan.dayOf("essay"))
+        assertTrue(plan.chunksOf("teams:essay").none { it.behind })
+        // What's due tonight has the 240 minutes after it.
+        assertEquals(listOf(WontFit("teams:tonight", "tonight", 300, 240, Fixtures.at("2026-10-08T23:59"))), plan.wontFit)
+    }
+
+    @Test
+    fun `a day or a time before a task can start isn't kept to`() {
+        val essay = task("essay", Fixtures.at("2026-10-18T23:59"), effort = 60).copy(notBefore = Fixtures.at("2026-10-12T00:00"))
+        assertTrue(plan(listOf(essay.copy(userOnDay = "2026-10-10")), "2026-10-08T17:00").chunksOf("teams:essay").none { it.why == Why.Pinned })
+        assertTrue(plan(listOf(essay.copy(userAtTime = Fixtures.at("2026-10-10T19:00"))), "2026-10-08T17:00").chunksOf("teams:essay").none { it.why == Why.Pinned })
+        // From the day it can start, it is.
+        assertTrue(plan(listOf(essay.copy(userOnDay = "2026-10-13")), "2026-10-08T17:00").chunksOf("teams:essay").all { it.why == Why.Pinned })
+    }
+
+    @Test
+    fun `a time you give past a plan's date leaves the date behind`() {
+        // An email's date Claude read but didn't quote, Saturday; its next piece put on Monday at 19:00:
+        // Monday it is, and nothing of it late for Saturday.
+        val email = task("form", Fixtures.at("2026-10-10T23:59"), effort = 60, kind = Kind.Admin)
+            .copy(id = "gmail:form", source = Source.Gmail, sourceValues = SourceValues(Kind.Admin, Fixtures.at("2026-10-10T23:59"), null), userAtTime = Fixtures.at("2026-10-12T19:00"))
+        assertFalse(email.hardDeadline)
+        val plan = plan(listOf(email), "2026-10-08T17:00")
+        val days = plan.buckets.filter { b -> b.chunks.any { it.taskId == "gmail:form" } }.map { it.date }
+        assertEquals(LocalDate.parse("2026-10-12"), days.first())
+        assertTrue(plan.chunksOf("gmail:form").none { it.behind || it.overdue })
+    }
+
     @Test
     fun `capacity sums a day's windows, the evening's being what home work has`() {
         // 30 + 25 + 40 + 55 at school, 315 in the evening.

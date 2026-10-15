@@ -358,6 +358,48 @@ class InstructionsTest {
     }
 
     @Test
+    fun `a day for a task and a time for its next piece are read, said, and laid on the task`() {
+        // Friday 9 Oct: all of the essay on Sunday; the prep's next piece at 19:30 on Monday (PL-04).
+        val reading = parse(
+            """{"understood":true,"question":null,"changes":[
+              {"type":"OnDay","taskId":"teams:essay","afterTaskId":null,"eventKey":null,"eventTime":null,"minutes":null,"date":"2026-10-11","endDate":null,"weekday":null,"time":null,"endTime":null},
+              {"type":"AtTime","taskId":"teams:prep","afterTaskId":null,"eventKey":null,"eventTime":null,"minutes":null,"date":"2026-10-12","endDate":null,"weekday":null,"time":"19:30","endTime":null}
+            ]}""",
+        )
+        val changes = assertIs<InstructionAnswers.Reading.Changes>(reading).changes
+        assertEquals(Change(ChangeType.OnDay, taskId = "teams:essay", date = "2026-10-11"), changes[0])
+        assertEquals(Change(ChangeType.AtTime, taskId = "teams:prep", date = "2026-10-12", startMin = 19 * 60 + 30, time = Fixtures.at("2026-10-12T19:30")), changes[1])
+        val tasks = listOf(essay, prep).associateBy { it.id }
+        assertEquals("All of “essay” on Sun 11 Oct", Instructions.describe(changes[0], tasks, LONDON))
+        assertEquals("“prep” at 19:30 on Mon 12 Oct", Instructions.describe(changes[1], tasks, LONDON))
+        // Laid on the tasks.
+        val overrides = Instructions.taskOverrides(listOf(applied(*changes.toTypedArray())))
+        assertEquals("2026-10-11", overrides.getValue(essay.id).onDay)
+        assertEquals(Fixtures.at("2026-10-12T19:30"), prep.withOverrides(overrides.getValue(prep.id)).userAtTime)
+        assertEquals(overrides.getValue(prep.id), prep.withOverrides(overrides.getValue(prep.id)).overrides())
+        // A time on the day all of it is kept to keeps the day; a later day for all of it drops a time on another.
+        val both = Instructions.taskOverrides(listOf(applied(Change(ChangeType.OnDay, taskId = prep.id, date = "2026-10-12"), changes[1])))
+        assertEquals(TaskOverrides(onDay = "2026-10-12", atTime = Fixtures.at("2026-10-12T19:30")), both.getValue(prep.id))
+        val later = Instructions.taskOverrides(listOf(applied(changes[1]), applied(Change(ChangeType.OnDay, taskId = prep.id, date = "2026-10-11"), at = now + 1)))
+        assertEquals(TaskOverrides(onDay = "2026-10-11"), later.getValue(prep.id))
+        // A weekday isn't a day for a task, nor a time without one.
+        fun one(change: String) = parse("""{"understood":true,"question":null,"changes":[$change]}""")
+        assertIs<InstructionAnswers.Reading.Unclear>(one("""{"type":"OnDay","taskId":"teams:essay","afterTaskId":null,"eventKey":null,"eventTime":null,"minutes":null,"date":null,"endDate":null,"weekday":"Monday","time":null,"endTime":null}"""))
+        assertIs<InstructionAnswers.Reading.Unclear>(one("""{"type":"AtTime","taskId":"teams:essay","afterTaskId":null,"eventKey":null,"eventTime":null,"minutes":null,"date":"2026-10-11","endDate":null,"weekday":null,"time":null,"endTime":null}"""))
+    }
+
+    @Test
+    fun `a day or a time after a task's real deadline is late`() {
+        // The essay's due Monday 12 Oct, 09:00.
+        assertTrue(Instructions.latePin(Change(ChangeType.OnDay, taskId = essay.id, date = "2026-10-13"), essay, LONDON))
+        assertFalse(Instructions.latePin(Change(ChangeType.OnDay, taskId = essay.id, date = "2026-10-12"), essay, LONDON))
+        assertTrue(Instructions.latePin(Change(ChangeType.AtTime, taskId = essay.id, date = "2026-10-12", startMin = 600, time = Fixtures.at("2026-10-12T10:00")), essay, LONDON))
+        assertFalse(Instructions.latePin(Change(ChangeType.AtTime, taskId = essay.id, date = "2026-10-11", startMin = 1170, time = Fixtures.at("2026-10-11T19:30")), essay, LONDON))
+        // Undated, or a plan's date: never late.
+        assertFalse(Instructions.latePin(Change(ChangeType.OnDay, taskId = "teams:x", date = "2027-01-01"), task("x", null), LONDON))
+    }
+
+    @Test
     fun `the school calendar merges stretches that overlap or run on, and knows its days`() {
         val calendar = SchoolCalendar()
             .with(NoSchool("2026-10-26", "2026-10-28", "Half term"))

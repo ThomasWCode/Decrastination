@@ -58,6 +58,9 @@ class PlannerPropertyTest {
                 subSteps = steps,
                 stepsPerDay = if (chance(20)) 1 + random.nextInt(3) else null,
                 notBefore = if (chance(20)) now + random.nextLong(6) * DAY else null,
+                // A day for all of it, or a time for its next piece, as you'd give them (PL-04): some gone by, some after its deadline.
+                userOnDay = if (chance(5)) today.plusDays(random.nextLong(-1, 14)).toString() else null,
+                userAtTime = if (chance(5)) at(today.plusDays(random.nextLong(14)), LocalTime.of(8 + random.nextInt(15), 5 * random.nextInt(12))) else null,
                 firstSeenAt = now - random.nextLong(11) * DAY,
                 lastSeenAt = now,
             )
@@ -241,6 +244,8 @@ class PlannerPropertyTest {
         val placed = plan.buckets.flatMap { b -> b.chunks.map { b.date to it } }.groupBy { it.second.taskId }
         val leftOut = plan.unplanned.map { it.taskId }.toSet()
         return input.tasks.mapNotNull { task ->
+            // Put on a day or at a time (PL-04): where you put it, not spread.
+            if (task.userOnDay != null || task.userAtTime != null) return@mapNotNull null
             val due = task.dueAt?.takeIf { task.id !in leftOut } ?: return@mapNotNull null
             val pieces = placed[task.id].orEmpty()
             if (pieces.isEmpty() || pieces.any { (_, c) -> c.soft || c.behind || c.overdue || c.dueToday || c.dueSoon }) return@mapNotNull null
@@ -257,6 +262,14 @@ class PlannerPropertyTest {
         val bucket = plan.bucket(day) ?: return false
         if (task.notBefore?.let { it > input.now && Planner.date(it, input.zone) == day } == true) return false
         if (task.stepsPerDay?.let { limit -> bucket.chunks.count { it.taskId == task.id } >= limit } == true) return false
+        // Work for home has the evening's time (PL-15): what home work took of it, and what work done
+        // anywhere took past school's time.
+        if (chunk.where == Where.Home) {
+            val cap = Planner.capacityOf(day, input)
+            val anywhere = bucket.chunks.filter { it.where != Where.Home }.sumOf { it.minutes }
+            val evening = cap.homeMin - bucket.chunks.filter { it.where == Where.Home }.sumOf { it.minutes } - maxOf(0, anywhere - (cap.anyMin - cap.homeMin))
+            if (evening < chunk.minutes) return false
+        }
         return bucket.capacityMin - bucket.plannedMin >= chunk.minutes
     }
 
@@ -293,7 +306,14 @@ class PlannerPropertyTest {
      */
     private fun checkWhy(seed: Long, plan: Plan, input: Planner.Input) {
         val placing = setOf(Why.DueSoon, Why.Spread, Why.MinimumTouch, Why.RevisionGap, Why.MostRoom, Why.Packed)
+        val byId = input.tasks.associateBy { it.id }
         for (bucket in plan.buckets) for (chunk in bucket.chunks) {
+            // Where you put it (PL-04): only a task you put on a day or at a time, and never overdue work.
+            if (chunk.why == Why.Pinned) {
+                val task = byId.getValue(chunk.taskId)
+                assertTrue((task.userOnDay != null || task.userAtTime != null) && !chunk.overdue, "seed=$seed: ${chunk.taskId} part ${chunk.part} says Pinned")
+                continue
+            }
             val allowed = when {
                 chunk.overdue -> setOf(Why.Overdue)
                 chunk.soft -> setOf(Why.Soft)
@@ -305,7 +325,8 @@ class PlannerPropertyTest {
             assertTrue(chunk.why in allowed, "seed=$seed: ${chunk.taskId} part ${chunk.part} says ${chunk.why}, not one of $allowed")
             // A day apart is revision's alone (no test dates are drawn here).
             assertTrue(chunk.why != Why.RevisionGap || chunk.kind == Kind.Revision, "seed=$seed: ${chunk.taskId} part ${chunk.part}, ${chunk.kind}, says RevisionGap")
-            assertTrue(chunk.why != Why.MostRoom || chunk.parts == 1, "seed=$seed: ${chunk.taskId} part ${chunk.part} of ${chunk.parts} says MostRoom")
+            // A piece alone in its run: a task in one piece, or the rest of one after a piece at a time you gave (PL-04).
+            assertTrue(chunk.why != Why.MostRoom || chunk.parts == 1 || byId.getValue(chunk.taskId).userAtTime != null, "seed=$seed: ${chunk.taskId} part ${chunk.part} of ${chunk.parts} says MostRoom")
             // Placed after its deadline's own last day: there was no room before it.
             val lastDay = Planner.lastDayBefore(chunk.deadline, input)
             if (chunk.behind && !chunk.soft && bucket.date > lastDay) assertTrue(chunk.why == Why.NoRoom, "seed=$seed: ${chunk.taskId} part ${chunk.part} on ${bucket.date}, after its deadline's day, says ${chunk.why}")
@@ -359,7 +380,9 @@ class PlannerPropertyTest {
     /** Up to three of [plan]'s pieces on days with windows pinned at a time within one of the day's windows, from now on, well apart. */
     private fun drawPins(seed: Long, plan: Plan, input: Planner.Input): Map<String, Long> {
         val random = Random(seed xor 0x5107L)
-        val choices = plan.buckets.filter { input.windows[it.date] != null }.flatMap { b -> b.chunks.map { b.date to it } }
+        // Not a task with a time of its own (PL-04), whose own pin holds its piece.
+        val timed = input.tasks.filter { it.userAtTime != null }.map { it.id }.toSet()
+        val choices = plan.buckets.filter { input.windows[it.date] != null }.flatMap { b -> b.chunks.filter { it.taskId !in timed }.map { b.date to it } }
         val pins = HashMap<String, Long>()
         val taken = mutableListOf<Pair<Long, Long>>()
         if (choices.isEmpty()) return pins
@@ -409,15 +432,16 @@ class PlannerPropertyTest {
             val work = bucket.slots.filter { it.kind == SlotKind.Work }
             assertEquals(bucket.chunks.map { it.key }.sorted(), (work.map { it.chunk!!.key } + bucket.unslotted.map { it.key }).sorted(), "seed=$seed: ${bucket.date}'s pieces, slotted or not")
             for ((a, b) in bucket.slots.sortedBy { it.start }.zipWithNext()) assertTrue(a.end <= b.start, "seed=$seed: ${bucket.date} has ${a.key} and ${b.key} overlapping")
-            fun windowOf(slot: Slot) = windows.indexOfFirst { at(bucket.date, it.startMin) <= slot.start && slot.end <= at(bucket.date, it.endMin) }
+            // The part of a slot from now on: one under way (kept, or a pin) may have started before its window.
+            fun windowOf(slot: Slot) = windows.indexOfFirst { at(bucket.date, it.startMin) <= maxOf(slot.start, earliest) && slot.end <= at(bucket.date, it.endMin) }
             for (slot in bucket.slots) {
                 val window = windows.getOrNull(windowOf(slot))
                 assertTrue(window != null && window.kind == slot.window, "seed=$seed: ${bucket.date} ${slot.key} isn't within a window of its kind")
-                // The part of it from now on: one kept under way had its start in the last plan.
                 val from = maxOf(slot.start, earliest)
                 assertTrue(busy.none { it.start < slot.end && from < it.end }, "seed=$seed: ${bucket.date} ${slot.key} is in busy time")
                 assertTrue(slot.end > input.now, "seed=$seed: ${slot.key} is over before now")
-                if (fresh) assertTrue(slot.start >= earliest, "seed=$seed: ${slot.key} starts before now")
+                // A pin under way (a task's own time, PL-04) is kept where it started.
+                if (fresh && !slot.pinned) assertTrue(slot.start >= earliest, "seed=$seed: ${slot.key} starts before now")
                 val chunk = slot.chunk ?: continue
                 if (slot.pinned) continue
                 assertTrue(chunk.where != Where.Home || !slot.window.atSchool, "seed=$seed: ${chunk.key}, for home, is at school (${slot.window})")
@@ -446,6 +470,8 @@ class PlannerPropertyTest {
             val end = pin + chunk.minutes * MINUTE
             val window = input.windows[bucket.date].orEmpty().firstOrNull { at(bucket.date, it.startMin) <= pin && end <= at(bucket.date, it.endMin) } ?: continue
             if (busy.any { it.start < end && pin < it.end } || bucket.slots.any { it.kind == SlotKind.Outside && it.start < end && pin < it.end }) continue
+            // Nor near another pinned piece (a task's own time, PL-04), which may come first.
+            if (bucket.slots.any { it.pinned && it.chunk?.key != chunk.key && it.start < end + 20 * MINUTE && pin - 20 * MINUTE < it.end }) continue
             val lo = maxOf(at(bucket.date, window.startMin), earliest, busy.filter { it.end <= pin }.maxOfOrNull { it.end } ?: Long.MIN_VALUE)
             val hi = minOf(at(bucket.date, window.endMin), busy.filter { it.start >= end }.minOfOrNull { it.start } ?: Long.MAX_VALUE)
             if ((hi - lo) / MINUTE < if (window.kind.atSchool) input.settings.minSchoolSlotMin else 5) continue
