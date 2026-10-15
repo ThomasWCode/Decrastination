@@ -12,10 +12,27 @@ object Format {
     private val TIME = DateTimeFormatter.ofPattern("HH:mm", Locale.UK)
     private val WEEKDAY = DateTimeFormatter.ofPattern("EEE HH:mm", Locale.UK)
     private val DATE = DateTimeFormatter.ofPattern("EEE d MMM HH:mm", Locale.UK)
+    private val DAY = DateTimeFormatter.ofPattern("EEE d MMM", Locale.UK)
 
     /** A slot's time on its day (PL-12): "17:00–17:30". */
     fun span(start: Long, end: Long, zone: ZoneId): String =
         Instant.ofEpochMilli(start).atZone(zone).format(TIME) + "–" + Instant.ofEpochMilli(end).atZone(zone).format(TIME)
+
+    /**
+     * An invite's time and place (DX-02): "Fri 16 Oct 18:00–20:00, Main Hall"; over days, from one to
+     * the other; a day's, "Mon 26 Oct, all day"; days', "Mon 26 Oct to Fri 30 Oct".
+     */
+    fun invite(invite: com.thomaswcode.decrastination.core.Invite, zone: ZoneId): String {
+        val start = Instant.ofEpochMilli(invite.start).atZone(zone)
+        val end = Instant.ofEpochMilli(invite.end).atZone(zone)
+        val time = when {
+            invite.allDay(zone) && end.toLocalDate() == start.toLocalDate().plusDays(1) -> start.format(DAY) + ", all day"
+            invite.allDay(zone) -> start.format(DAY) + " to " + end.minusDays(1).format(DAY)
+            start.toLocalDate() == end.toLocalDate() -> start.format(DATE) + "–" + end.format(TIME)
+            else -> start.format(DATE) + " to " + end.format(DATE)
+        }
+        return listOfNotNull(time, invite.location?.takeIf { it.isNotBlank() }).joinToString(", ")
+    }
 
     /** "today 23:59", "tomorrow 08:30", "Fri 09:00" within a week, else "Mon 12 Oct 11:00". */
     fun at(time: Long, now: Long, zone: ZoneId): String {

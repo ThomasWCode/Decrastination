@@ -1,5 +1,8 @@
 package com.thomaswcode.decrastination.sources.gmail
 
+import com.thomaswcode.decrastination.Fixtures
+import com.thomaswcode.decrastination.Fixtures.LONDON
+import com.thomaswcode.decrastination.core.Invite
 import java.io.ByteArrayInputStream
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -269,5 +272,53 @@ class MimeTest {
         )
         assertEquals(listOf(Mime.Attachment("STEM Potential: how to apply", "message/rfc822", 16_384)), files)
         assertEquals("STEM Potential: how to apply (an email, 16 KB)", files.single().label)
+    }
+
+    @Test
+    fun `an invite's part is found inline or as a file, and a message without one has none`() {
+        val gmail = structure(
+            "(((\"TEXT\" \"PLAIN\" (\"CHARSET\" \"utf-8\") NIL NIL \"7BIT\" 300 9 NIL NIL NIL)" +
+                "(\"TEXT\" \"CALENDAR\" (\"CHARSET\" \"utf-8\" \"METHOD\" \"REQUEST\") NIL NIL \"BASE64\" 1200 16 NIL NIL NIL) \"ALTERNATIVE\" (\"BOUNDARY\" \"b1\") NIL NIL)" +
+                "(\"APPLICATION\" \"ICS\" (\"NAME\" \"invite.ics\") NIL NIL \"BASE64\" 1200 NIL (\"ATTACHMENT\" (\"FILENAME\" \"invite.ics\")) NIL) \"MIXED\" (\"BOUNDARY\" \"b0\") NIL NIL)",
+        )
+        assertEquals(Mime.TextPart("1.2", "calendar", "base64", "utf-8", size = 1200), Mime.invitePart(gmail))
+        // A booking's file, by its name alone.
+        val booking = structure(
+            "((\"TEXT\" \"PLAIN\" (\"CHARSET\" \"utf-8\") NIL NIL \"7BIT\" 300 9 NIL NIL NIL)" +
+                "(\"APPLICATION\" \"OCTET-STREAM\" (\"NAME\" \"open-day.ics\") NIL NIL \"BASE64\" 900 NIL (\"ATTACHMENT\" (\"FILENAME\" \"open-day.ics\")) NIL) \"MIXED\" (\"BOUNDARY\" \"b0\") NIL NIL)",
+        )
+        assertEquals("2", Mime.invitePart(booking)?.section)
+        assertNull(Mime.invitePart(structure("(\"TEXT\" \"PLAIN\" (\"CHARSET\" \"utf-8\") NIL NIL \"7BIT\" 120 4 NIL NIL NIL)")))
+    }
+
+    @Test
+    fun `an invite reads its event's times in a zone or in UTC, past the time zones and its alarm, and with no end it's an hour`() {
+        val ics = listOf(
+            "BEGIN:VCALENDAR", "METHOD:REQUEST",
+            "BEGIN:VTIMEZONE", "TZID:Europe/London", "BEGIN:STANDARD", "DTSTART:19701025T020000", "END:STANDARD", "END:VTIMEZONE",
+            "BEGIN:VEVENT",
+            "DTSTART;TZID=Europe/London:20261016T180000",
+            "DTEND;TZID=Europe/London:20261016T200000",
+            "SUMMARY:Sixth form open evening\\, Year 12",
+            "LOCATION:Main Hall",
+            "BEGIN:VALARM", "TRIGGER:-PT15M", "DESCRIPTION:Reminder", "END:VALARM",
+            "END:VEVENT", "END:VCALENDAR",
+        ).joinToString("\r\n")
+        assertEquals(Invite("Sixth form open evening, Year 12", Fixtures.at("2026-10-16T18:00"), Fixtures.at("2026-10-16T20:00"), "Main Hall"), Mime.invite(ics, LONDON))
+        val utc = "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nDTSTART:20261016T170000Z\r\nSUMMARY:Call\r\nEND:VEVENT\r\nEND:VCALENDAR"
+        assertEquals(Invite("Call", Fixtures.at("2026-10-16T18:00"), Fixtures.at("2026-10-16T19:00")), Mime.invite(utc, LONDON))
+    }
+
+    @Test
+    fun `an invite's folded lines are joined, a zone Java doesn't name is the student's, a date alone is all day, and one called off says so`() {
+        val outlook = "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nDTSTART;TZID=\"GMT Standard Time\":20261016T090000\r\nDURATION:PT1H30M\r\nSUMMARY:Visit to the\r\n  physics department\r\nEND:VEVENT\r\nEND:VCALENDAR"
+        assertEquals(Invite("Visit to the physics department", Fixtures.at("2026-10-16T09:00"), Fixtures.at("2026-10-16T10:30")), Mime.invite(outlook, LONDON))
+        val day = Mime.invite("BEGIN:VCALENDAR\nBEGIN:VEVENT\nDTSTART;VALUE=DATE:20261026\nSUMMARY:Sports day\nEND:VEVENT\nEND:VCALENDAR", LONDON)!!
+        assertEquals(Fixtures.at("2026-10-26T00:00") to Fixtures.at("2026-10-27T00:00"), day.start to day.end)
+        assertTrue(day.allDay(LONDON))
+        assertEquals(true, Mime.invite("BEGIN:VCALENDAR\nMETHOD:CANCEL\nBEGIN:VEVENT\nDTSTART:20261016T170000Z\nEND:VEVENT\nEND:VCALENDAR", LONDON)?.cancelled)
+        assertNull(Mime.invite("BEGIN:VCALENDAR\nBEGIN:VEVENT\nSUMMARY:No time\nEND:VEVENT\nEND:VCALENDAR", LONDON))
+        // Kept with its task, a bar in its name made a slash.
+        assertEquals(Invite("Trip / coach", 1, 2, "Gate 3"), Invite.read(Invite("Trip | coach", 1, 2, "Gate 3").stored))
     }
 }

@@ -180,7 +180,8 @@ data class TaskItem(
      * An email that only needs reading, or tells of an event (your call, 9 Oct): not a task. It's
      * kept, so archiving it still finishes it and a reply that asks something brings it back as a
      * task, but it's kept off the plan (so the widget, the briefing and blocking), the Tasks list,
-     * and the rewards for finishing work. Its kind is the enrichment's reading, or the rules'.
+     * and the rewards for finishing work. Its kind is the enrichment's reading, or the rules', or
+     * its invite's (DX-02); Work lists the events folded, to see and to add to the calendar.
      */
     val justAnEmail: Boolean get() = source == Source.Gmail && (kind == Kind.Info || kind == Kind.Event)
 
@@ -197,6 +198,8 @@ data class TaskItem(
             // The rules' date is a guess from its words, and Claude's is only a quote where it says so:
             // a reading of the email as it is now, not one its new content has made out of date.
             Source.Gmail -> Enrichments.current(this)?.takeIf { it.deadlineQuoted && it.deadline == dueAt }?.deadline
+                // An invite's start is the sender's own time (DX-02).
+                ?: invite?.start?.takeIf { it == dueAt }
             // A deck for homework has its assignments' deadline, not one of its own: their earliest real
             // one, as read with them (the planner reads them through it), as its date may be a test
             // date Claude read, a plan.

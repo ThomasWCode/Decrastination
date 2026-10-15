@@ -1,8 +1,16 @@
 package com.thomaswcode.decrastination.sources.gmail
 
+import com.thomaswcode.decrastination.core.Invite
 import kotlinx.serialization.Serializable
 import java.io.ByteArrayOutputStream
 import java.nio.charset.Charset
+import java.time.Duration
+import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.ZoneId
+import java.time.ZoneOffset
+import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
 import java.util.Base64
 import java.util.Locale
 
@@ -110,6 +118,134 @@ object Mime {
         // An attached email with no file name goes by its own subject, from its envelope.
         val subject = if (type == "message" && subtype == "rfc822") items.getOrNull(7)?.list?.getOrNull(1)?.string?.let(::decodeHeader)?.trim()?.takeIf { it.isNotEmpty() } else null
         out += Attachment(name ?: subject ?: if (type == "message") "an attached email" else "unnamed $type/$subtype", "$type/$subtype", size)
+    }
+
+    /**
+     * Where a message's calendar invite is (DX-02), from its BODYSTRUCTURE, walked as [textPart]
+     * walks it: its first `text/calendar` part, or one named `*.ics` (`application/ics`), attached
+     * or not. An attached email's own isn't this message's.
+     */
+    fun invitePart(structure: ImapValue): TextPart? = findInvite(structure, "")
+
+    private fun findInvite(node: ImapValue, prefix: String): TextPart? {
+        val items = node.list
+        if (items.isEmpty()) return null
+        if (items.first() is ImapValue.Items) {
+            items.takeWhile { it is ImapValue.Items }.forEachIndexed { i, child ->
+                findInvite(child, if (prefix.isEmpty()) "${i + 1}" else "$prefix.${i + 1}")?.let { return it }
+            }
+            return null
+        }
+        val type = items.getOrNull(0)?.string?.lowercase() ?: return null
+        val subtype = items.getOrNull(1)?.string?.lowercase() ?: return null
+        if (type == "message") return null
+        val disposition = items.getOrNull(if (type == "text") 9 else 8)?.list.orEmpty()
+        val name = parameter(disposition.getOrNull(1), "filename") ?: parameter(items.getOrNull(2), "name")
+        val calendar = (type == "text" && subtype == "calendar") || subtype == "ics" || name?.lowercase()?.endsWith(".ics") == true
+        if (!calendar) return null
+        val encoding = items.getOrNull(5)?.string?.lowercase() ?: "7bit"
+        return TextPart(prefix.ifEmpty { "1" }, "calendar", encoding, parameter(items.getOrNull(2), "charset"), items.getOrNull(6)?.string?.toLongOrNull())
+    }
+
+    /**
+     * [text], a calendar (RFC 5545), as the invite its first event is (DX-02): its `SUMMARY`, its
+     * `DTSTART`, its `DTEND` (else its `DURATION`; else an hour, or a day for a date alone) and its
+     * `LOCATION`, an alarm's lines inside it passed over; recurrence ignored, so its first time.
+     * Folded lines (a line break, then a space or a tab) are joined first. [Invite.cancelled] where
+     * the calendar or the event calls it off (`METHOD:CANCEL`, `STATUS:CANCELLED`). Null with no
+     * event, or none with a start.
+     */
+    fun invite(text: String, zone: ZoneId): Invite? {
+        val lines = text.replace("\r\n", "\n").replace("\n ", "").replace("\n\t", "").split('\n')
+        var method: String? = null
+        var inEvent = false
+        var nested = 0
+        val props = HashMap<String, Property>()
+        for (line in lines) {
+            val p = property(line) ?: continue
+            val value = p.value.trim().uppercase(Locale.ROOT)
+            when {
+                !inEvent && p.name == "BEGIN" && value == "VEVENT" -> inEvent = true
+                !inEvent && p.name == "METHOD" -> method = value
+                !inEvent -> Unit
+                p.name == "BEGIN" -> nested++
+                p.name == "END" && nested > 0 -> nested--
+                p.name == "END" -> break
+                nested == 0 -> props.putIfAbsent(p.name, p)
+            }
+        }
+        val first = props["DTSTART"] ?: return null
+        val start = time(first, zone) ?: return null
+        val end = props["DTEND"]?.let { time(it, zone) }?.takeIf { it.isAfter(start) }
+            ?: props["DURATION"]?.let { d -> runCatching { start.plus(Duration.parse(d.value.trim())) }.getOrNull() }?.takeIf { it.isAfter(start) }
+            ?: if (dateOnly(first)) start.plusDays(1) else start.plusHours(1)
+        return Invite(
+            summary = props["SUMMARY"]?.value?.let(::unescaped).orEmpty(),
+            start = start.toInstant().toEpochMilli(),
+            end = end.toInstant().toEpochMilli(),
+            location = props["LOCATION"]?.value?.let(::unescaped)?.takeIf { it.isNotEmpty() },
+            cancelled = method == "CANCEL" || props["STATUS"]?.value?.trim().equals("CANCELLED", ignoreCase = true),
+        )
+    }
+
+    /** A calendar's content line (RFC 5545 §3.1): its name, its parameters (a quoted one as it's meant, `TZID="(UTC+00:00) Dublin, …"`), its value. */
+    private class Property(val name: String, val params: Map<String, String>, val value: String)
+
+    private fun property(line: String): Property? {
+        var quoted = false
+        var from = 0
+        val pieces = mutableListOf<String>()
+        for (i in line.indices) {
+            when (line[i]) {
+                '"' -> quoted = !quoted
+                ';' -> if (!quoted) {
+                    pieces += line.substring(from, i)
+                    from = i + 1
+                }
+                ':' -> if (!quoted) {
+                    pieces += line.substring(from, i)
+                    val params = pieces.drop(1).mapNotNull { p -> p.split('=', limit = 2).takeIf { it.size == 2 }?.let { (k, v) -> k.trim().uppercase(Locale.ROOT) to v.trim().removeSurrounding("\"") } }.toMap()
+                    return Property(pieces.first().trim().uppercase(Locale.ROOT), params, line.substring(i + 1))
+                }
+            }
+        }
+        return null
+    }
+
+    private val ICS_TIME = DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss", Locale.ROOT)
+
+    private fun dateOnly(p: Property): Boolean = p.params["VALUE"].equals("DATE", ignoreCase = true) || p.value.trim().length == 8
+
+    /**
+     * A `DTSTART` or `DTEND` (RFC 5545 §3.3.5): UTC's `…Z`; a local time in its `TZID` where that
+     * names a zone, else in [zone] (a floating time, or a zone as Windows names it, `GMT Standard
+     * Time`); a date alone, its midnight in [zone].
+     */
+    private fun time(p: Property, zone: ZoneId): ZonedDateTime? = runCatching {
+        val v = p.value.trim()
+        when {
+            dateOnly(p) -> LocalDate.parse(v, DateTimeFormatter.BASIC_ISO_DATE).atStartOfDay(zone)
+            v.endsWith("Z", ignoreCase = true) -> LocalDateTime.parse(v.dropLast(1), ICS_TIME).atZone(ZoneOffset.UTC)
+            else -> LocalDateTime.parse(v, ICS_TIME).atZone(p.params["TZID"]?.let { id -> runCatching { ZoneId.of(id.removePrefix("/")) }.getOrNull() } ?: zone)
+        }
+    }.getOrNull()
+
+    /** A text value with its escapes undone (RFC 5545 §3.3.11): `\,`, `\;` and `\\` as themselves, `\n` a space here. */
+    private fun unescaped(value: String): String {
+        val out = StringBuilder()
+        var i = 0
+        while (i < value.length) {
+            val c = value[i]
+            if (c == '\\' && i + 1 < value.length) {
+                val next = value[i + 1]
+                out.append(if (next == 'n' || next == 'N') ' ' else next)
+                i += 2
+            } else {
+                out.append(c)
+                i++
+            }
+        }
+        return out.toString().replace(Regex(" {2,}"), " ").trim()
     }
 
     /**

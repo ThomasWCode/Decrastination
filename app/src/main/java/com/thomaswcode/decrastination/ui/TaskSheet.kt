@@ -45,7 +45,9 @@ import com.thomaswcode.decrastination.core.OwnTasks
 import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Status
+import com.thomaswcode.decrastination.core.Invite
 import com.thomaswcode.decrastination.core.TaskItem
+import com.thomaswcode.decrastination.core.invite
 import com.thomaswcode.decrastination.enrich.RuleEnricher
 import com.thomaswcode.decrastination.sources.gmail.GmailThreads
 import java.time.Instant
@@ -200,8 +202,12 @@ fun TaskSheet(
                 }
             }
             if (ticksHere) Steps(graph, task, now, zone)
+            // An invite the email carries (DX-02): its time, and a tap putting it in your calendar.
+            val invite = task.invite
+            invite?.let { Text("Invite: " + Format.invite(it, zone), style = MaterialTheme.typography.bodyLarge) }
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (!own) Button(onClick = { scope.launch { TaskOpener.open(activity, task)?.let { message = it } } }) { Text("Open in ${task.source.label}") }
+                invite?.let { i -> OutlinedButton(onClick = { message = addToCalendar(activity, i, task.title, zone) }) { Text("Add to calendar") } }
                 // Written work: a photo shows it done, once Claude is on (Q16).
                 if (next != null && photo != null && photo.available && next.photoCheckable) {
                     OutlinedButton(enabled = !photo.checking, onClick = { photo.take(next) }) { Text("Check with a photo") }
@@ -494,5 +500,25 @@ private fun Steps(graph: AppGraph, task: TaskItem, now: Long, zone: java.time.Zo
             )
             if (Focus.tickable(task) && task.isOpen && !step.done) TextButton(onClick = { scope.launch { graph.focus.tickBlock(task.id, index, step.title) } }) { Text("Done") }
         }
+    }
+}
+
+/**
+ * [invite] as a new event in your calendar app, filled in for you to save (DX-02): its name (else
+ * the email's [title]), its times and its place. What went wrong where no app takes it.
+ */
+private fun addToCalendar(activity: Activity, invite: Invite, title: String, zone: java.time.ZoneId): String? {
+    val intent = android.content.Intent(android.content.Intent.ACTION_INSERT)
+        .setData(android.provider.CalendarContract.Events.CONTENT_URI)
+        .putExtra(android.provider.CalendarContract.Events.TITLE, invite.summary.ifBlank { title })
+        .putExtra(android.provider.CalendarContract.EXTRA_EVENT_BEGIN_TIME, invite.start)
+        .putExtra(android.provider.CalendarContract.EXTRA_EVENT_END_TIME, invite.end)
+        .putExtra(android.provider.CalendarContract.EXTRA_EVENT_ALL_DAY, invite.allDay(zone))
+    invite.location?.let { intent.putExtra(android.provider.CalendarContract.Events.EVENT_LOCATION, it) }
+    return try {
+        activity.startActivity(intent)
+        null
+    } catch (e: android.content.ActivityNotFoundException) {
+        "No calendar app to add it to"
     }
 }
