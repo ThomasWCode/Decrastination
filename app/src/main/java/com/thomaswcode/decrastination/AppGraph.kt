@@ -812,7 +812,7 @@ class AppGraph private constructor(context: Context) {
     fun modelEnricher(): Enricher? = claudeKey()?.let { ClaudeEnricher(it, clock.zone(), endpoint(), profile = { profile() }) }
 
     /**
-     * A failed model call, counted in [month]: the model rests ([ModelHold.Resting]), and one showing
+     * A failed model call, counted in [month] (or a newer one counted since): the model rests ([ModelHold.Resting]), and one showing
      * that the key or the account can't be used ([KeyProblem]) is alerted, once a stretch of it,
      * not at each hourly retry. The rules stand in meanwhile.
      */
@@ -822,7 +822,7 @@ class AppGraph private constructor(context: Context) {
         val kind = Failures.classify(error)
         var rest = 0L
         val after = runtime.update { state ->
-            val usage = state.aiUsage.forMonth(month)
+            val usage = state.aiUsage.forCall(month)
             rest = usage.restAfter(kind, at, Failures.retryAfterMs(error))
             state.copy(
                 aiUsage = usage.failure(error.message ?: error.javaClass.simpleName, at, problem, rest, kind),
@@ -875,13 +875,18 @@ class AppGraph private constructor(context: Context) {
         if (ModelAlerts.keyProblem(app, problem)) runtime.update { it.copy(aiUsage = it.aiUsage.alerted(problem)) }
     }
 
-    /** A model call that went through, counted in [month]: its cost, and the key working again if it wasn't. */
+    /**
+     * A model call that went through, counted in [month] (or a newer one counted since): its cost,
+     * and the key working again if it wasn't, its alert then gone; not when a failure since, of a
+     * call sent after it, found the problem standing.
+     */
     suspend fun modelWorked(costUsd: Double, refused: Boolean, month: String, at: Long) {
         var mended = false
         runtime.update { state ->
-            val before = state.aiUsage.forMonth(month)
-            mended = before.keyProblem != null
-            state.copy(aiUsage = before.record(costUsd, refused, at))
+            val before = state.aiUsage.forCall(month)
+            val after = before.record(costUsd, refused, at)
+            mended = before.keyProblem != null && after.keyProblem == null
+            state.copy(aiUsage = after)
         }
         if (mended) ModelAlerts.keyFixed(app)
     }
@@ -921,7 +926,7 @@ class AppGraph private constructor(context: Context) {
             hold
         }
         if (held != null) return Called.Held(held)
-        // Counted in the month it's made in, as the cap was checked for.
+        // Counted in the month it's made in, as the cap was checked for (or a newer one counted since).
         val at = clock.now()
         val month = AiUsage.monthOf(at, clock.zone())
         return try {
@@ -1012,8 +1017,9 @@ class AppGraph private constructor(context: Context) {
                 )
             }
             if (!laid) continue
-            // A question it couldn't settle from the text (AI-10): Felix puts it.
-            made.question?.let { felix.queueQuestion(task.id, it, now) }
+            // A question it couldn't settle from the text (AI-10): Felix puts it. One waiting from an
+            // older reading goes, asked again as this one has it, or settled by it.
+            felix.queueQuestion(task.id, made.question, now)
             // A plan of the model's dropped (out of range, not adding up) is said once it's laid,
             // by droppedAlerts, as the tasks change.
             // Its deck tasks take their sections and due date from it.
@@ -1369,19 +1375,30 @@ class AppGraph private constructor(context: Context) {
             com.thomaswcode.decrastination.notify.FelixNotifications.post(app, id, name, "$said\n\nYour last message to me is still waiting for its answer: send this again once it's come.", emptyList())
             return false
         }
-        // Shown as sent, under his message, while he answers.
+        // Shown as sent, under his message, while he answers: as work of its own, as the receiver
+        // that took the reply is let go once this returns, and the app may go with it.
         com.thomaswcode.decrastination.notify.FelixNotifications.post(app, id, name, said, emptyList(), sent = words)
-        scope.launch {
-            answerChat()
-            val last = chat.value.messages.lastOrNull() ?: return@launch
-            when {
-                chatInFront -> com.thomaswcode.decrastination.notify.FelixNotifications.cancel(app)
-                last.from == Speaker.Claude && last.at >= now -> tellAnswer(last)
-                // Not answered (Claude off, resting, a failed call): why, where the reply was made.
-                last.from == Speaker.You && last.note != null -> com.thomaswcode.decrastination.notify.FelixNotifications.post(app, id, name, "$said\n\n${last.note}", emptyList(), sent = words)
-            }
-        }
+        com.thomaswcode.decrastination.notify.FelixReplyWorker.enqueue(app, id, words, now)
         return true
+    }
+
+    /**
+     * The chat's answer to a reply from Felix's notification ([replyToFelix]), as
+     * [com.thomaswcode.decrastination.notify.FelixReplyWorker] runs it: shown as his next
+     * notification, or why there's none, where the reply was made; nothing with the chat in front,
+     * which shows it.
+     */
+    suspend fun answerReply(id: String, words: String, since: Long) {
+        val name = settings.value.felixName
+        val said = log.value.felix.firstOrNull { it.id == id }?.text ?: chat.value.messages.firstOrNull { it.id == id }?.text.orEmpty()
+        answerChat()
+        val last = chat.value.messages.lastOrNull() ?: return
+        when {
+            chatInFront -> com.thomaswcode.decrastination.notify.FelixNotifications.cancel(app)
+            last.from == Speaker.Claude && last.at >= since -> tellAnswer(last)
+            // Not answered (Claude off, resting, a failed call): why, where the reply was made.
+            last.from == Speaker.You && last.note != null -> com.thomaswcode.decrastination.notify.FelixNotifications.post(app, id, name, "$said\n\n${last.note}", emptyList(), sent = words)
+        }
     }
 
     /** [answer], Felix's in the chat to a reply from a notification, as his next notification (AI-24), with its replies and cards; and on record. */

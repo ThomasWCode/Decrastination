@@ -92,4 +92,21 @@ class ProfileTest {
         val facts = text.substringAfter("Remembered:").lines().filter { it.startsWith("- ") }
         assertTrue(facts.sumOf { it.removePrefix("- ").length - 2 } <= com.thomaswcode.decrastination.core.Memories.FACT_BUDGET_CHARS)
     }
+
+    @Test
+    fun `the whole block is held to what the cap's dearest call counts on, the oldest facts going first`() {
+        val many = MemoryState(
+            facts = (1..2_000).map { Fact("t$it", "f", now + it) },
+            rules = (1..20).map { Rule("rule $it " + "x".repeat(290), now) },
+        )
+        val long = settings.copy(
+            classMap = (1..12).associate { "code-$it-" + "c".repeat(60) to "subject $it " + "s".repeat(60) },
+            profileLines = (1..20).map { "line $it " + "x".repeat(150) },
+        )
+        val text = Profile.block(long, listOf(maths), null, SchoolCalendar(), many, now, LONDON)
+        assertTrue(text.length <= Profile.MAX_BLOCK_CHARS, "${text.length}")
+        assertTrue("- rule 20 " in text)
+        assertTrue("- t2000: f" in text)
+        assertFalse("- t1: f\n" in text + "\n")
+    }
 }

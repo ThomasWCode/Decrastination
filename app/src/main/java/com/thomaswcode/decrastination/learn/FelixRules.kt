@@ -136,14 +136,31 @@ object FelixRules {
 
     /**
      * When to look again (LR-03, AC-10): the earliest of a slot's grace into it, a slot's end and
-     * grace (its miss then on record), and the check he set while there's work to come. Null with
-     * nothing ahead.
+     * grace (its miss then on record), and the check he set while there's work to come; and, with a
+     * grace longer than [AHEAD_MS], when the next slot's message is to be written ahead (with one
+     * shorter, its slot's start does that, with its plan). Null with nothing ahead.
      */
     fun next(plan: Plan, state: FelixState, settings: Settings, now: Long): Long? {
         val work = plan.buckets.flatMap { it.slots }.filter { it.kind == SlotKind.Work }
         val starts = work.map { it.start + settings.felixGraceMin * 60_000L }
         val ends = work.map { it.end + Slotter.GRACE_MS + MISS_LAG_MS }
         val check = state.nextCheckAt?.takeIf { work.any { it.end + Slotter.GRACE_MS > now } }
-        return (starts + ends + listOfNotNull(check)).filter { it > now }.minOrNull()
+        val ahead = upcoming(plan, settings, now)?.second?.minus(AHEAD_MS)?.takeIf { settings.felixGraceMin * 60_000L > AHEAD_MS }
+        return (starts + ends + listOfNotNull(check, ahead)).filter { it > now }.minOrNull()
+    }
+
+    /**
+     * Of the completions waiting to be asked about ([waiting], LR-05), those whose work no slot kept
+     * on their day saw: today's, and any from a day his messages couldn't be seen, asked once they
+     * can be. One with no time is today's.
+     */
+    fun toAsk(
+        waiting: List<com.thomaswcode.decrastination.data.AssessLater>,
+        slots: List<SlotRecord>,
+        now: Long,
+        zone: java.time.ZoneId,
+    ): List<com.thomaswcode.decrastination.data.AssessLater> {
+        val keptOn = slots.filter { it.outcome.kept }.mapTo(HashSet()) { it.taskId to it.date }
+        return waiting.filter { a -> (a.taskId to java.time.Instant.ofEpochMilli(a.doneAt ?: now).atZone(zone).toLocalDate().toString()) !in keptOn }
     }
 }

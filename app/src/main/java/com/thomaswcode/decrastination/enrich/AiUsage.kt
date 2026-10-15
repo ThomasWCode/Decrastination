@@ -47,6 +47,13 @@ data class AiUsage(
         )
 
     /**
+     * Where a call's outcome is counted (AC-05): its own month's, or a newer one's should that be
+     * counted since (calls overlapping a month's end), so the record never goes back a month, losing
+     * the newer one's spend and its cap with it.
+     */
+    fun forCall(month: String): AiUsage = forMonth(maxOf(month, this.month))
+
+    /**
      * Whether one more call stays under [capUsd] even at its dearest ([Pricing.WORST_CALL_USD]), with
      * [inFlight] calls sent and not back yet counted at theirs (AC-05); with no cap, always.
      */

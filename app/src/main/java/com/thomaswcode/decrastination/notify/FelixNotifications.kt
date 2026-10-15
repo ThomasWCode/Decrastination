@@ -32,7 +32,7 @@ object FelixNotifications {
      * [text], his message [id], from [name], with [replies] to choose from and [cards] (each with the
      * chat message it's on) to act on. [sent]: the reply just sent to it, shown under it while he
      * answers, without sounding again. [title] in his name's place, and [lines] under it (the
-     * morning's list, LR-04).
+     * morning's list, LR-04), on [channel] (the morning's: the briefing's, LR-07).
      */
     fun post(
         context: Context,
@@ -44,13 +44,8 @@ object FelixNotifications {
         sent: String? = null,
         title: String? = null,
         lines: List<String> = emptyList(),
+        channel: String = Channels.FELIX,
     ) {
-        val open = PendingIntent.getActivity(
-            context,
-            ID,
-            AskActivity.intent(context).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
-        )
         // Mutable, as the reply's words are put in it.
         val reply = PendingIntent.getBroadcast(
             context,
@@ -59,7 +54,7 @@ object FelixNotifications {
             PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
         val input = RemoteInput.Builder(KEY_REPLY).setLabel("Reply to $name").setChoices(replies.toTypedArray()).build()
-        val builder = NotificationCompat.Builder(context, Channels.FELIX)
+        val builder = NotificationCompat.Builder(context, channel)
             .setSmallIcon(R.drawable.ic_focus)
             .setContentTitle(title ?: name)
             .setContentText(text)
@@ -67,7 +62,7 @@ object FelixNotifications {
                 if (lines.isEmpty()) NotificationCompat.BigTextStyle().bigText(text)
                 else NotificationCompat.InboxStyle().setBigContentTitle(title ?: name).setSummaryText(text).also { style -> lines.forEach(style::addLine) },
             )
-            .setContentIntent(open)
+            .let { Notify.opening(it, context, ID, AskActivity.intent(context).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
             .setAutoCancel(true)
             .setOnlyAlertOnce(sent != null)
             .addAction(NotificationCompat.Action.Builder(R.drawable.ic_send, "Reply", reply).addRemoteInput(input).setAllowGeneratedReplies(false).build())
