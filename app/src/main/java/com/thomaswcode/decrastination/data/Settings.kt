@@ -24,6 +24,8 @@ data class Settings(
     val felixGraceMin: Int = 10,
     /** When he checks again if he doesn't say (Q-31), in minutes. */
     val felixDefaultCheckMin: Int = 20,
+    /** The screens' first-run hints you've put away (UI-17), by name. */
+    val hintsSeen: List<String> = emptyList(),
     /** When the daily Anki quota is due (21:30, decided 8 Oct). */
     val ankiDeadlineMin: Int = 21 * 60 + 30,
 
