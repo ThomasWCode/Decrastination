@@ -212,6 +212,8 @@ Settings added (all `NEVER` in LOOSER unless said):
 
 **Tests.** `Notify` is Android; put the counting in a pure `NotifyRules` with tests.
 
+*(As built: `Notify.post` keeps its signatures and reads the channel off the notification, so no caller changes; held ones are re-posted with their words, opening the app (a notification's own actions can't be kept in the file); the briefing isn't held by quiet hours, as its time is the student's and, held, it would wait for itself.)*
+
 ---
 
 ## AC-10 Work ahead
