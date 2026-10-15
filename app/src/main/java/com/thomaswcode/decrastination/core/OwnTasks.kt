@@ -245,9 +245,12 @@ object OwnTasks {
         // name by its turn (the second "Review" to the second). A step done stays done, one to do to do.
         val seen = HashMap<String, Int>()
         val byPlace = task.fromForm || task.steps.any { it.wasIndex != null }
+        val matched = HashSet<Int>()
         val steps = if (event) emptyList() else task.steps.take(MAX_STEPS).map { s ->
             val turn = seen.merge(s.title.trim(), 1, Int::plus)!! - 1
-            val was = if (byPlace) s.wasIndex?.let { old.subSteps.getOrNull(it) } else old.subSteps.filter { it.title == s.title.trim() }.getOrNull(turn)
+            val index = if (byPlace) s.wasIndex?.takeIf { it in old.subSteps.indices } else old.subSteps.withIndex().filter { it.value.title == s.title.trim() }.getOrNull(turn)?.index
+            index?.let { matched += it }
+            val was = index?.let { old.subSteps[it] }
             SubStep(
                 s.title.trim().take(MAX_TITLE), s.minutes, done = was?.done == true, byHand = was?.byHand == true, timedMin = was?.timedMin ?: 0,
                 from = s.from, dueAt = s.dueAt, where = Where.of(s.where)?.name?.lowercase(),
@@ -258,7 +261,11 @@ object OwnTasks {
             steps.isNotEmpty() -> steps.sumOf { it.minutes }
             else -> task.minutes
         }
+        // A step done and gone takes its worked minutes with it: the plan counts a done step's out of
+        // the worked time, so left in it they'd come off the steps still to do.
+        val gone = old.subSteps.withIndex().filter { it.index !in matched && it.value.done }.sumOf { (_, s) -> if (s.byHand) s.timedMin else s.minutes }
         return old.copy(
+            workedMin = (old.workedMin - gone).coerceAtLeast(0),
             title = task.title.trim().take(MAX_TITLE),
             detail = task.notes.trim().take(MAX_NOTES),
             className = task.className?.trim()?.take(MAX_CLASS)?.takeIf { it.isNotEmpty() },

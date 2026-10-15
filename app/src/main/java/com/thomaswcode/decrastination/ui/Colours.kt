@@ -23,8 +23,10 @@ object Colours {
     /** The notifications' accent, as Android takes it. */
     const val PINK_ARGB = 0xFFFFAAAA.toInt()
 
+    // By day the deep pink is the one read as text and controls (the pink on paper is under 2:1); the
+    // pink and its pale shade fill the cards and mark the notifications.
     val Light = lightColorScheme(
-        primary = Pink, onPrimary = Ink, primaryContainer = PinkPale, onPrimaryContainer = Ink,
+        primary = PinkDeep, onPrimary = Paper, primaryContainer = PinkPale, onPrimaryContainer = Ink,
         secondary = Rose, onSecondary = Paper, secondaryContainer = PinkPale, onSecondaryContainer = Ink,
         surface = Paper, onSurface = Ink, surfaceVariant = Color(0xFFF2EAEA), onSurfaceVariant = Color(0xFF4A4040),
         background = Paper, onBackground = Ink, outline = Color(0xFF8A7A7A),
