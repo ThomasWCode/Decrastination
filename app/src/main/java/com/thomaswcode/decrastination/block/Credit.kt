@@ -32,6 +32,10 @@ data class Credit(
     fun earn(today: LocalDate, minutes: Double): Credit =
         if (past(today)) this else on(today).let { it.copy(earnedMs = it.earnedMs + (minutes * 60_000).roundToLong()) }
 
+    /** [minutes] of what was earned [today] given back (a keep undone, UI-03): no more than is left unspent. */
+    fun takeBack(today: LocalDate, minutes: Double): Credit =
+        if (past(today)) this else on(today).let { it.copy(earnedMs = (it.earnedMs - (minutes * 60_000).roundToLong()).coerceAtLeast(it.spentMs)) }
+
     fun spend(today: LocalDate, ms: Long): Credit =
         if (past(today)) this else on(today).let { it.copy(spentMs = (it.spentMs + ms).coerceAtMost(it.earnedMs)) }
 
