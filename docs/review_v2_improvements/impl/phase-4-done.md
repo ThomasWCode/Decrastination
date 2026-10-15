@@ -123,7 +123,7 @@ Settings added (LOOSER lambda in brackets; all need LABELS and limits):
 
 **Files.** `block/Focus.kt`, `block/BlockedActivity.kt`, `ui/TodayScreen.kt` (`NextCard`), `widget/WidgetModel.kt`.
 
-**Steps.** `Focus.rewardLine(plan: Plan, now: Long): String?`: today's undone work slots, their minutes, the credit they'd earn (`forSlot` for pieces under `photoFromMin`; "with a photo" for the rest), e.g. "Finish today's 2 slots (50 min) → 15 min free now, 10 more with a photo of the statics". Null when today is done ("Today's plan is done. 25 min free."). Shown on the block screen under the headline, on the DO NOW card, and as `WidgetModel.reward: String?` (a line under the header). Phase 5 puts it in Felix's day-done message.
+**Steps.** `Focus.rewardLine(plan: Plan, now: Long): String?`: today's undone work slots, their minutes, the credit they'd earn (`forSlot` for pieces under `photoFromMin`; "with a photo" for the rest), e.g. "Finish today's 2 slots (50 min) → 15 min free now, 10 more with a photo of the statics". Null when today is done ("Today's plan is done. 25 min free."). Shown on the block screen under the headline, on the DO NOW card, and as `WidgetModel.reward: String?` (a line under the header). *(As built: in the widget's compact layout it takes the summary's line, so the sizes' fitting is as it was; in the larger, it's a line under the summary.)* Phase 5 puts it in Felix's day-done message.
 
 **Tests.** `FocusTest`: the line's three shapes (nothing left; short pieces; a long piece).
 
@@ -135,7 +135,7 @@ Settings added (LOOSER lambda in brackets; all need LABELS and limits):
 
 **Files.** `block/Credit.kt`, `block/Focus.kt`, `data/Settings.kt`.
 
-**Steps.** `Credit.allowanceOn: String = ""` (the date the allowance was given). In `Focus.creditLeftMs(now)`: if `plan(now).todayBucket.chunks.isEmpty()` and no overdue chunk anywhere and `credit.allowanceOn != today` → `runtime.update { credit = credit.on(today).copy(earnedMs = earnedMs + freeAllowanceMin * 60_000, allowanceOn = today) }` (do this in a suspend path: `Focus.grantAllowanceIfDue(now)` called from `FocusService.tick` and app start, not inside the non-suspending `creditLeftMs`). Shown on the DO NOW card: "Nothing planned today: 60 min free."
+**Steps.** `Credit.allowanceOn: String = ""` (the date the allowance was given). In `Focus.creditLeftMs(now)`: if `plan(now).todayBucket.chunks.isEmpty()` and no overdue chunk anywhere and `credit.allowanceOn != today` → `runtime.update { credit = credit.on(today).copy(earnedMs = earnedMs + freeAllowanceMin * 60_000, allowanceOn = today) }` (do this in a suspend path: `Focus.grantAllowanceIfDue(now)` called from `FocusService.tick` and app start, not inside the non-suspending `creditLeftMs`). Shown on the DO NOW card: "Nothing planned today: 60 min free." *(As built: as written, a day emptied by finishing its work, or by moving it away, would be given it too; it's given only where no slot of today's was kept, missed or moved and the morning's record planned nothing.)*
 
 **Tests.** `FocusTest`: granted once a day; not when anything is planned or overdue.
 
