@@ -229,6 +229,7 @@ class AskActivity : ComponentActivity() {
                         }
                     }
                     InputBar(
+                        name = settings.felixName,
                         draft = draft,
                         onDraft = { draft = it },
                         about = about.value,
@@ -503,7 +504,20 @@ private fun taskLine(task: OwnTask, now: Long, zone: ZoneId): String = listOfNot
 /** The box you write in, with what the message is about over it, and Send. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun InputBar(draft: String, onDraft: (String) -> Unit, about: About, onForget: () -> Unit, enabled: Boolean, now: Long, zone: ZoneId, onSend: () -> Unit) {
+private fun InputBar(name: String, draft: String, onDraft: (String) -> Unit, about: About, onForget: () -> Unit, enabled: Boolean, now: Long, zone: ZoneId, onSend: () -> Unit) {
+    // Your words by voice (UI-07): put in the box after what's there, not sent, so they're read first.
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val speech = remember {
+        Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+            .putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL, android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            .putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE, "en-GB")
+    }
+    val canSpeak = remember { speech.resolveActivity(context.packageManager) != null }
+    val listen = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()) { result ->
+        result.data?.getStringArrayListExtra(android.speech.RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()?.trim()?.takeIf { it.isNotEmpty() }?.let { heard ->
+            onDraft((if (draft.isBlank()) heard else "${draft.trimEnd()} $heard").take(ChatPrompts.MAX_TEXT))
+        }
+    }
     Surface(tonalElevation = 3.dp) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)) {
             if (about != About()) {
@@ -518,11 +532,16 @@ private fun InputBar(draft: String, onDraft: (String) -> Unit, about: About, onF
                 OutlinedTextField(
                     draft,
                     { onDraft(it.take(ChatPrompts.MAX_TEXT)) },
-                    placeholder = { Text("Tell Claude…") },
+                    placeholder = { Text("Tell $name…") },
                     maxLines = 5,
                     keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
                     modifier = Modifier.weight(1f),
                 )
+                if (canSpeak) {
+                    IconButton(onClick = { listen.launch(speech) }) {
+                        Icon(painterResource(R.drawable.ic_mic), contentDescription = "Say it")
+                    }
+                }
                 IconButton(enabled = enabled && draft.isNotBlank(), onClick = onSend) {
                     Icon(painterResource(R.drawable.ic_send), contentDescription = "Send")
                 }
