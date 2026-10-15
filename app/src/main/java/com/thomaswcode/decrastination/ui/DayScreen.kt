@@ -75,6 +75,9 @@ import kotlinx.coroutines.launch
  * between them, the moment it is, the pieces it has no time for, and what's been done (UI-08).
  * What the plan leaves out, and the sources, are on Work.
  */
+/** How soon a second Done of the same row is the same swipe seen again (UI-03). */
+private const val SWIPE_AGAIN_MS = 3_000L
+
 @Composable
 fun DayScreen(graph: AppGraph, activity: Activity) {
     val tasks by graph.tasks.state.collectAsStateWithLifecycle()
@@ -115,6 +118,8 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
     val day = chosen?.let(LocalDate::parse)?.takeIf { it >= plan.today && it <= plan.today.plusDays(WEEK - 1) } ?: plan.today
     val today = day == plan.today
     var sheetFor by rememberSaveable { mutableStateOf<String?>(null) }
+    // The last Done by swipe, so the row's dismissal seen again as it's put back keeps nothing and says nothing.
+    var lastDone by remember { mutableStateOf<Pair<String, Long>?>(null) }
     var changing by rememberSaveable { mutableStateOf<String?>(null) }
     var eventFor by rememberSaveable { mutableStateOf<String?>(null) }
     // A piece being moved by hand (UI-04), by its key; an instruction about the day being written.
@@ -198,6 +203,10 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
                     // Done, with an Undo while it's said (UI-03).
                     onDone = {
                         val chunk = row.slot.chunk ?: return@PlannedRow
+                        // One swipe, one Done.
+                        val at = android.os.SystemClock.elapsedRealtime()
+                        if (lastDone?.let { (key, t) -> key == chunk.key && at - t < SWIPE_AGAIN_MS } == true) return@PlannedRow
+                        lastDone = chunk.key to at
                         scope.launch {
                             val since = graph.clock.now()
                             if (!graph.focus.keepSlot(chunk.key, seenAt = now)) {
