@@ -94,7 +94,8 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
             value = graph.clock.now()
         }
     }
-    val plan = remember(tasks, settings, now, instructions, calendar) { graph.plan(tasks, settings, now) }
+    // Today's starts kept and missed (PL-13) are the plan's too: an Undo putting a slot back redraws it.
+    val plan = remember(tasks, settings, now, instructions, calendar, runtime.slots) { graph.plan(tasks, settings, now) }
     val zone = graph.clock.zone()
     val scope = rememberCoroutineScope()
     // How the last action went, and the task it's about, as the old Plan had it.
