@@ -25,6 +25,7 @@ import com.thomaswcode.decrastination.core.About
 import com.thomaswcode.decrastination.core.Change
 import com.thomaswcode.decrastination.core.ChangeType
 import com.thomaswcode.decrastination.core.Chunk
+import com.thomaswcode.decrastination.core.Instructions
 import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.Planner
 import java.time.LocalDate
@@ -53,8 +54,9 @@ fun MoveSheet(graph: AppGraph, chunk: Chunk, plan: Plan, zone: ZoneId, onDone: (
     var problem by rememberSaveable { mutableStateOf<String?>(null) }
     // A time pins a task's next piece (PL-04): only that one can be given one; the rest go by their day.
     val next = plan.chunksOf(chunk.taskId).firstOrNull()?.key == chunk.key
-    // A real deadline's day is the last a piece can go to.
+    // A real deadline's day is the last a piece can go to, and the day it can start the first (as the plan keeps a day).
     val last = if (chunk.hard) Planner.date(chunk.deadline, zone) else null
+    val first = graph.tasks.value.tasks.firstOrNull { it.id == chunk.taskId }?.notBefore?.let { Planner.date(it, zone) }
     fun apply(change: Change, said: String) {
         graph.scope.launch { graph.addOwnChange(UUID.randomUUID().toString(), said, About(taskId = chunk.taskId, taskTitle = chunk.title), change) }
         onDone(said)
@@ -66,15 +68,17 @@ fun MoveSheet(graph: AppGraph, chunk: Chunk, plan: Plan, zone: ZoneId, onDone: (
                 (0L until DAYS).map { plan.today.plusDays(it) }.forEach { day ->
                     val bucket = plan.bucket(day)
                     val late = last != null && day > last
+                    val early = first != null && day < first
                     FilterChip(
                         selected = chosen == day.toString(),
-                        enabled = !late,
+                        enabled = !late && !early,
                         onClick = { chosen = day.toString() },
                         label = { Text("${if (day == plan.today) "Today" else day.format(CHIP_DAY)} · ${Format.minutes(bucket?.plannedMin ?: 0)}") },
                     )
                 }
             }
             if (last != null) Text("No day after ${last.format(CHIP_DAY)}: due before then.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (first != null && first > plan.today) Text("No day before ${first.format(CHIP_DAY)}: it can't be started till then.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             chosen?.let(LocalDate::parse)?.let { day ->
                 if (next) {
                     Button(onClick = { timing = true }) { Text("This piece, at a time…") }
@@ -82,7 +86,12 @@ fun MoveSheet(graph: AppGraph, chunk: Chunk, plan: Plan, zone: ZoneId, onDone: (
                     Text("Only its next piece takes a time: all of it can go to a day.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 OutlinedButton(onClick = {
-                    apply(Change(ChangeType.OnDay, taskId = chunk.taskId, date = day.toString()), "All of it on ${day.format(CHIP_DAY)}")
+                    // Any time: a time you gave it before goes, as the plan would keep it on its day.
+                    graph.scope.launch {
+                        if (Instructions.quickInForce(graph.instructions.value.applied, chunk.taskId, ChangeType.AtTime)) graph.takeBackQuick(chunk.taskId, ChangeType.AtTime)
+                        graph.addOwnChange(UUID.randomUUID().toString(), "All of it on ${day.format(CHIP_DAY)}", About(taskId = chunk.taskId, taskTitle = chunk.title), Change(ChangeType.OnDay, taskId = chunk.taskId, date = day.toString()))
+                    }
+                    onDone("All of it on ${day.format(CHIP_DAY)}")
                 }) { Text("All of it, any time that day") }
             }
             problem?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error) }
