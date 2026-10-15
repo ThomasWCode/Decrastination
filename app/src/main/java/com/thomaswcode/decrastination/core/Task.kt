@@ -177,6 +177,12 @@ data class TaskItem(
     val isOpen: Boolean get() = status == Status.Open
 
     /**
+     * Done once you tick its piece off ([EXTRA_TICK_DONE]), as one of your own is, though a source
+     * lists it: a returned assignment's feedback to read (NF-06), which no source can say is read.
+     */
+    val tickDone: Boolean get() = extra[EXTRA_TICK_DONE] == "true"
+
+    /**
      * An email that only needs reading, or tells of an event (your call, 9 Oct): not a task. It's
      * kept, so archiving it still finishes it and a reply that asks something brings it back as a
      * task, but it's kept off the plan (so the widget, the briefing and blocking), the Tasks list,
@@ -272,6 +278,9 @@ data class TaskItem(
 
     companion object {
         fun id(source: Source, sourceId: String): String = "${source.name.lowercase()}:$sourceId"
+
+        /** Marks a task done by its tick ([tickDone]). */
+        const val EXTRA_TICK_DONE = "tickDone"
     }
 }
 

@@ -145,8 +145,8 @@ object Enrichments {
     /** What [task] needs, or null: done, derived (the Anki quota and decks), or an event. */
     fun jobFor(task: TaskItem): Job? = when {
         !task.isOpen || task.derived -> null
-        // You've said it isn't a task: nothing to read it for.
-        task.userNotATask -> null
+        // You've said it isn't a task: nothing to read it for. Nor feedback to read (NF-06): ten minutes, as it is.
+        task.userNotATask || task.tickDone -> null
         // Its text not read yet (more new emails than one read takes), or not as far as reads now
         // go (cut by an older, lower limit): asked about once it is (GmailThreads.textRead).
         task.source == Source.Gmail && !GmailThreads.textRead(task) -> null
