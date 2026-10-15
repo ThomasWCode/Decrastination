@@ -760,6 +760,20 @@ class PlannerTest {
         assertTrue(Planner.plan(windowed(tasks, "2026-10-13T16:50", windows = emptyMap())).todayBucket!!.slots.isEmpty())
     }
 
+    @Test
+    fun `a missed slot's piece moves to the next free time, the others staying where they were`() {
+        // Tuesday 16:50: three half hours due tomorrow night, at 16:50, 17:25 and 18:00.
+        val tasks = listOf("a", "b", "c").map { task(it, Fixtures.at("2026-10-14T23:59"), effort = 30) }
+        val first = Planner.plan(windowed(tasks, "2026-10-13T16:50")).todaySlots
+        fun hm(time: Long) = java.time.Instant.ofEpochMilli(time).atZone(LONDON).toLocalTime().toString()
+        assertEquals(listOf("16:50", "17:25", "18:00"), first.map { hm(it.start) })
+        // 17:30: a's slot went by undone, so its start isn't kept (PL-13); b's under way and c's stay.
+        val starts = first.associate { it.chunk!!.key to it.start }
+        val missed = first[0].chunk!!.key
+        val later = Planner.plan(windowed(tasks, "2026-10-13T17:30").copy(previousSlots = starts - missed)).todaySlots
+        assertEquals(listOf("b" to "17:25", "c" to "18:00", "a" to "18:35"), later.map { it.chunk!!.title to hm(it.start) })
+    }
+
     // --- Pins: a day, a time (PL-04) ---
 
     @Test

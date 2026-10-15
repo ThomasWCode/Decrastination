@@ -433,13 +433,17 @@ class PlannerPropertyTest {
             assertEquals(bucket.chunks.map { it.key }.sorted(), (work.map { it.chunk!!.key } + bucket.unslotted.map { it.key }).sorted(), "seed=$seed: ${bucket.date}'s pieces, slotted or not")
             for ((a, b) in bucket.slots.sortedBy { it.start }.zipWithNext()) assertTrue(a.end <= b.start, "seed=$seed: ${bucket.date} has ${a.key} and ${b.key} overlapping")
             // The part of a slot from now on: one under way (kept, or a pin) may have started before its window.
-            fun windowOf(slot: Slot) = windows.indexOfFirst { at(bucket.date, it.startMin) <= maxOf(slot.start, earliest) && slot.end <= at(bucket.date, it.endMin) }
+            fun windowOf(slot: Slot) = windows.indexOfFirst { at(bucket.date, it.startMin) <= (if (slot.end <= earliest) slot.start else maxOf(slot.start, earliest)) && slot.end <= at(bucket.date, it.endMin) }
             for (slot in bucket.slots) {
+                // One just over, kept for its grace (PL-13): the past, not checked against now.
+                if (slot.end <= earliest) {
+                    assertTrue(slot.end + Slotter.GRACE_MS > input.now && slot.chunk != null, "seed=$seed: ${slot.key} is long over")
+                    continue
+                }
                 val window = windows.getOrNull(windowOf(slot))
                 assertTrue(window != null && window.kind == slot.window, "seed=$seed: ${bucket.date} ${slot.key} isn't within a window of its kind")
                 val from = maxOf(slot.start, earliest)
                 assertTrue(busy.none { it.start < slot.end && from < it.end }, "seed=$seed: ${bucket.date} ${slot.key} is in busy time")
-                assertTrue(slot.end > input.now, "seed=$seed: ${slot.key} is over before now")
                 // A pin under way (a task's own time, PL-04) is kept where it started.
                 if (fresh && !slot.pinned) assertTrue(slot.start >= earliest, "seed=$seed: ${slot.key} starts before now")
                 val chunk = slot.chunk ?: continue
