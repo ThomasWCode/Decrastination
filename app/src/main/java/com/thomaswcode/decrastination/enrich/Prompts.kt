@@ -45,7 +45,21 @@ object Prompts {
     /** Who the prompts are for, by year group (AI-06). */
     private fun student(year: Int) = "a UK sixth-form student (Year $year)"
 
-    fun system(job: Enrichments.Job, year: Int = 12): String = when (job) {
+    /** [job]'s system prompt: what it's to do, then the limits its answer is checked against (AI-03). */
+    fun system(job: Enrichments.Job, year: Int = 12): String = brief(job, year) + "\n\n" + limits(job)
+
+    /**
+     * The limits the app checks [job]'s answer against (AI-03), said in its prompt from the checks'
+     * own values, so the model keeps to them rather than finding them out.
+     */
+    fun limits(job: Enrichments.Job): String = when (job) {
+        Enrichments.Job.Assignment ->
+            "Limits the app enforces: at most ${Answers.MAX_STEPS} steps; no step longer than ${Answers.MAX_STEP} minutes; a total of at most ${Answers.MAX_EFFORT / 60} hours; the steps must add up to effortMin exactly."
+        else ->
+            "Limits the app enforces: without blocks, effortMin at most ${Answers.MAX_EFFORT / 60} hours; at most $MAX_BLOCKS blocks, none longer than ${Answers.MAX_EFFORT} minutes, ${Answers.MAX_BLOCKS_EFFORT / 60} hours in all, adding up to effortMin exactly."
+    }
+
+    private fun brief(job: Enrichments.Job, year: Int): String = when (job) {
         Enrichments.Job.Email -> """
             You triage one email for a planner app used by ${student(year)}. The planner turns each obligation into scheduled work and blocks distracting apps until it's done, so overstating the work costs the student free time and understating it lets work slip. Every email you see was starred by the student: it is something to do. An email the student sent themselves is a note of something they mean to do.
 
@@ -88,38 +102,44 @@ object Prompts {
             "actionableFrom" to nullable(mapOf("type" to "string", "format" to "date")),
             "deadline" to nullable(LOCAL_TIME),
             "deadlineQuoted" to mapOf("type" to "boolean"),
-            "effortMin" to mapOf("type" to "integer"),
+            "effortMin" to described(mapOf("type" to "integer"), "The minutes in all; with blocks, their sum"),
             "nextStep" to mapOf("type" to "string"),
             "question" to nullable(mapOf("type" to "string")),
             "blocks" to mapOf("type" to "array", "items" to block(vocabulary = false)),
         )
         Enrichments.Job.Assignment -> obj(
             "subSteps" to mapOf("type" to "array", "items" to block(vocabulary = true)),
-            "effortMin" to mapOf("type" to "integer"),
+            "effortMin" to described(mapOf("type" to "integer"), "The sum of the steps' minutes"),
             "ankiSections" to mapOf("type" to "array", "items" to mapOf("type" to "string")),
             "testDate" to nullable(mapOf("type" to "string", "format" to "date")),
             "question" to nullable(mapOf("type" to "string")),
         )
         Enrichments.Job.Effort -> obj(
-            "effortMin" to mapOf("type" to "integer"),
+            "effortMin" to described(mapOf("type" to "integer"), "The minutes in all; with blocks, their sum"),
             "blocks" to mapOf("type" to "array", "items" to block(vocabulary = false)),
         )
     }
 
     private val LOCAL_TIME = mapOf("type" to "string", "description" to "Local date and time, YYYY-MM-DDTHH:MM, or the date alone, YYYY-MM-DD")
 
-    /** One block (or step) of work: its own dates where it has them; an assignment's, its vocabulary sections too. */
+    /**
+     * One block (or step) of work: its own dates where it has them; an assignment's, its vocabulary
+     * sections too. Each field says what it's for and its limit (AI-20), as the checks have it.
+     */
     private fun block(vocabulary: Boolean): Map<String, Any> = obj(
         *listOfNotNull(
             "title" to mapOf("type" to "string"),
-            "minutes" to mapOf("type" to "integer"),
-            ("ankiSections" to mapOf("type" to "array", "items" to mapOf("type" to "string"))).takeIf { vocabulary },
+            "minutes" to described(mapOf("type" to "integer"), "10 to 60 where the work allows; never over ${if (vocabulary) Answers.MAX_STEP else Answers.MAX_EFFORT}"),
+            ("ankiSections" to described(mapOf("type" to "array", "items" to mapOf("type" to "string")), "Only for a step that is nothing but learning numbered vocabulary sections")).takeIf { vocabulary },
             // An assignment's steps say where they can be done (PL-15).
-            ("where" to mapOf("type" to "string", "enum" to listOf("anywhere", "home"))).takeIf { vocabulary },
-            "from" to nullable(mapOf("type" to "string", "format" to "date")),
+            ("where" to described(mapOf("type" to "string", "enum" to listOf("anywhere", "home")), "home for a step that needs the laptop, books or quiet; anywhere for one that can be done at school in a free period")).takeIf { vocabulary },
+            "from" to described(nullable(mapOf("type" to "string", "format" to "date")), "The date before which this ${if (vocabulary) "step" else "block"} can't be done, only if the text gives one; never after the task's due date"),
             "due" to nullable(LOCAL_TIME),
         ).toTypedArray(),
     )
+
+    /** [schema] with what it's for said to the model. */
+    private fun described(schema: Map<String, Any>, text: String): Map<String, Any> = schema + ("description" to text)
 
     /** [job]'s schema as the JSON it's sent as. */
     fun schemaJson(job: Enrichments.Job): JsonElement = toJson(schema(job))
@@ -213,7 +233,7 @@ object Answers {
     @Serializable
     private data class Estimate(val effortMin: Int, val blocks: List<Step> = emptyList())
 
-    private const val MAX_EFFORT = 600
+    internal const val MAX_EFFORT = 600
 
     /** The longest question put to you. */
     private const val MAX_QUESTION = 200
@@ -228,9 +248,9 @@ object Answers {
      * hold months of applications (a calendar of five months' came to 13). Past it, an estimate
      * gone wrong.
      */
-    private const val MAX_BLOCKS_EFFORT = 1_200
-    private const val MAX_STEP = 240
-    private const val MAX_STEPS = 12
+    internal const val MAX_BLOCKS_EFFORT = 1_200
+    internal const val MAX_STEP = 240
+    internal const val MAX_STEPS = 12
     private const val MAX_TITLE = 80
     private const val MAX_NEXT_STEP = 120
     private const val STEPS_SLACK_MIN = 10
