@@ -15,15 +15,18 @@ import com.thomaswcode.decrastination.core.ChangeType
 import com.thomaswcode.decrastination.core.ChatMessage
 import com.thomaswcode.decrastination.core.ChatState
 import com.thomaswcode.decrastination.core.Enrichments
+import com.thomaswcode.decrastination.core.HalfDay
 import com.thomaswcode.decrastination.core.Instruction
 import com.thomaswcode.decrastination.core.InstructionState
 import com.thomaswcode.decrastination.core.InstructionStatus
+import com.thomaswcode.decrastination.core.NoSchool
 import com.thomaswcode.decrastination.core.Instructions
 import com.thomaswcode.decrastination.core.OwnTask
 import com.thomaswcode.decrastination.core.OwnTasks
 import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.Proposal
 import com.thomaswcode.decrastination.core.ProposalState
+import com.thomaswcode.decrastination.core.SchoolCalendar
 import com.thomaswcode.decrastination.core.Speaker
 import com.thomaswcode.decrastination.core.Planner
 import com.thomaswcode.decrastination.core.Source
@@ -125,17 +128,20 @@ class AppGraph private constructor(context: Context) {
     /** Your chat with Claude (2.0.0, Q29): what you said, its answers, and what became of its cards. */
     val chat = JsonStore(File(app.filesDir, "chat.json"), ChatState.serializer(), ::ChatState)
 
+    /** Days with no school and half-days (PL-16), told to the chat or added in Settings. */
+    val school = JsonStore(File(app.filesDir, "school.json"), SchoolCalendar.serializer(), ::SchoolCalendar)
+
     init {
         // Files that couldn't be read whole at this start: kept for Setup to say, till you've seen them.
         // On record before anything else runs, and only then is a bad file replaced by what was kept
         // of it: a start cut short before then finds it again, and says it (once: its copy is the same).
-        val found = listOfNotNull(tasks.problem, settings.problem, secrets.problem, runtime.problem, log.problem, instructions.problem, chat.problem)
+        val found = listOfNotNull(tasks.problem, settings.problem, secrets.problem, runtime.problem, log.problem, instructions.problem, chat.problem, school.problem)
         if (found.isNotEmpty()) {
             found.forEach { Log.w(TAG, "${it.file} couldn't be read whole; set aside as ${it.copy}") }
             runBlocking {
                 runCatching {
                     runtime.update { it.withUnreadable(found) }
-                }.onSuccess { listOf(tasks, settings, runtime, log, instructions, chat).forEach { it.keepRecovered() } }
+                }.onSuccess { listOf(tasks, settings, runtime, log, instructions, chat, school).forEach { it.keepRecovered() } }
                     .onFailure { Log.w(TAG, "Couldn't keep what was found unreadable", it) }
             }
         }
@@ -539,6 +545,7 @@ class AppGraph private constructor(context: Context) {
             aiUsage = runtime.value.aiUsage,
             instructions = instructions.value.applied,
             ownTasks = tasks.value.tasks.filter { it.source == Source.Own },
+            school = school.value,
         ),
     )
 
@@ -560,6 +567,8 @@ class AppGraph private constructor(context: Context) {
         val ownAdded = Backups.restoredOwnTasks(backup.ownTasks, tasks.value.tasks).map { it.id }.toSet()
         tasks.update { state -> state.copy(tasks = state.tasks + Backups.restoredOwnTasks(backup.ownTasks, state.tasks)) }
         if (ownAdded.isNotEmpty()) layTaskOverrides()
+        // The backup's days off and half-days beside those here (PL-16).
+        school.update { it.withAll(backup.school) }
         val own = ownAdded.size
         val told = buildList {
             if (own > 0) add("$own task${if (own == 1) "" else "s"} of your own")
@@ -1268,11 +1277,35 @@ class AppGraph private constructor(context: Context) {
     }
 
     private suspend fun setApplied(id: String) {
+        makeOnSchool(id)
         makeOnOwnTasks(id)
         instructions.update { state ->
             state.copy(instructions = state.instructions.map { if (it.id == id && it.state == InstructionStatus.Understood) it.copy(state = InstructionStatus.Applied, appliedAt = clock.now()) else it })
         }
         layInstructions()
+    }
+
+    /**
+     * [id]'s days off and half-days put in the school calendar (PL-16), and taken out of it: Settings
+     * lists them, and deleting one there is how one is taken back. One left with nothing else to do
+     * is done with, and goes.
+     */
+    private suspend fun makeOnSchool(id: String) {
+        val instruction = instructions.value.instructions.firstOrNull { it.id == id } ?: return
+        val made = instruction.changes.filter { Instructions.schoolEntry(it) != null }
+        if (made.isEmpty()) return
+        school.update { calendar ->
+            made.mapNotNull(Instructions::schoolEntry).fold(calendar) { c, entry ->
+                when (entry) {
+                    is NoSchool -> c.with(entry)
+                    is HalfDay -> c.with(entry)
+                    else -> c
+                }
+            }
+        }
+        instructions.update { state ->
+            state.copy(instructions = state.instructions.mapNotNull { i -> if (i.id != id) i else i.copy(changes = i.changes - made.toSet()).takeIf { it.changes.isNotEmpty() } })
+        }
     }
 
     /**

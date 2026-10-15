@@ -59,6 +59,8 @@ Worked example from tonight's data (22:00, Tue 7 Oct, capacity left tonight 0, t
 
 Today's bucket is hopelessly over capacity, so everything in it is `behind` and the block is strict until it clears. That is the honest picture.
 
+**The school calendar** (review v2, PL-16, `core/SchoolCalendar.kt`, `school.json`): days with no school (a holiday, half term, an INSET day) and half-days, told to the chat ("half term is 26 to 30 October" is one change over the stretch) or added in Settings → School, where each is deleted again. Stretches that overlap or run on from each other are one. Phase 3's windows read it: a day off is planned as a weekend is, and a half-day's school ends when it does. Backups keep it (format 3; an older backup is read with none).
+
 ## 4. Block policy
 
 ```
