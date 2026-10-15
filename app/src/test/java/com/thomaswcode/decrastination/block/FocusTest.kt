@@ -22,7 +22,10 @@ import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.Uptime
 import com.thomaswcode.decrastination.data.ActivityLog
 import com.thomaswcode.decrastination.data.JsonStore
+import com.thomaswcode.decrastination.data.Keeping
 import com.thomaswcode.decrastination.data.PhotoDone
+import com.thomaswcode.decrastination.data.SlotRecord
+import com.thomaswcode.decrastination.data.SourceStatus
 import com.thomaswcode.decrastination.data.RuntimeState
 import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.data.TaskState
@@ -638,5 +641,134 @@ class FocusTest {
         assertTrue(ahead.keepSlot("teams:later#-1#1"))
         assertEquals(0L, ahead.creditLeftMs())
         assertFalse(log.value.slots.single().earned)
+    }
+
+    // --- Codex's second review of phase 4 ---
+
+    @Test
+    fun `a slot kept part-way before a stop is carried through at start-up, once`() = runTest {
+        val (first, second) = laid(task("t", due = "2026-10-12T23:59", steps = listOf(SubStep("Q1", 15), SubStep("Q2", 15)), effort = 30))
+        clock.time = second.end
+        fun record(slot: Slot) = SlotRecord(
+            date = "2026-10-12", key = slot.chunk!!.key, taskId = "teams:t", kind = Kind.Homework, label = slot.chunk!!.label, plannedMin = 15,
+            start = slot.start, end = slot.end, window = slot.window, outcome = SlotOutcome.Kept, workedMin = 15, earned = true, at = clock.time,
+        )
+        // Stopped after its step was ticked, before its record and free time: those given, once.
+        tasks.update { state -> state.copy(tasks = state.tasks.map { t -> t.copy(subSteps = t.subSteps.mapIndexed { i, s -> if (i == 0) s.copy(done = true, timedMin = 15) else s }, workedMin = 15) }) }
+        runtime.update { it.copy(keeping = listOf(Keeping(record(first), 0, "Q1", workedBefore = 0, earningMin = 5.0))) }
+        repeat(2) { slotted.finishKeeps() }
+        assertEquals(15, tasks.value.tasks.single().workedMin)
+        assertEquals(listOf(record(first)), log.value.slots)
+        assertEquals(5 * 60_000L, slotted.creditLeftMs())
+        assertEquals(emptyList(), runtime.value.keeping)
+        assertFalse(first.chunk!!.key in runtime.value.slots.previous)
+        // Stopped before anything changed, a photo's keep: all of it, the photo let go with it, and nothing more from the photo.
+        val photo = PhotoDone("p", "teams:t", "Q2", 15, clock.time, 1, second.chunk!!.key)
+        runtime.update { it.copy(photosDone = listOf(photo), keeping = listOf(Keeping(record(second).copy(photo = true), 1, "Q2", workedBefore = 15, earningMin = 5.0, photo = photo))) }
+        slotted.finishKeeps()
+        slotted.finishPhotos()
+        assertEquals(listOf(true, true), tasks.value.tasks.single().subSteps.map { it.done })
+        assertEquals(30, tasks.value.tasks.single().workedMin)
+        assertEquals(2, log.value.slots.size)
+        assertEquals(10 * 60_000L, slotted.creditLeftMs())
+        assertEquals(emptyList(), runtime.value.photosDone)
+    }
+
+    @Test
+    fun `a day with nothing to do waits for today's reads before its free time`() = runTest {
+        clock.time = Fixtures.at("2026-10-12T09:00")
+        // Teams last read yesterday (the app just started): today's work may not be in yet.
+        tasks.update { it.copy(sources = mapOf(Source.Teams to SourceStatus(lastSuccessAt = Fixtures.at("2026-10-11T21:00")))) }
+        focus.grantAllowanceIfDue()
+        assertEquals(0L, focus.creditLeftMs())
+        // Read this morning, nothing in it: the day has nothing to do.
+        tasks.update { it.copy(sources = mapOf(Source.Teams to SourceStatus(lastSuccessAt = Fixtures.at("2026-10-12T08:55")))) }
+        focus.grantAllowanceIfDue()
+        assertEquals(60 * 60_000L, focus.creditLeftMs())
+    }
+
+    @Test
+    fun `a piece moved and laid again later has that slot's miss recorded too, each once`() = runTest {
+        val first = laid(task("t", due = "2026-10-12T23:59", effort = 15)).single()
+        val key = first.chunk!!.key
+        slotted.moveSlot(key, Focus.Laid(first.start, first.end, first.window))
+        val later = Focus.Laid(Fixtures.at("2026-10-12T20:00"), Fixtures.at("2026-10-12T20:15"), WindowKind.Evening)
+        clock.time = Fixtures.at("2026-10-12T20:30")
+        repeat(2) { slotted.missSlot(key, later) }
+        assertEquals(listOf(SlotOutcome.Moved to first.start, SlotOutcome.Missed to later.start), log.value.slots.map { it.outcome to it.start })
+    }
+
+    @Test
+    fun `a slot missed today that went to tomorrow, done tonight, earns as today's`() = runTest {
+        // Evenings all week; Wednesday's work laid on Monday at 17:00.
+        val week = (0L..4L).associate { monday.plusDays(it) to listOf(DayWindow(17 * 60, 22 * 60, WindowKind.Evening)) }
+        val twoDays = Focus(tasks, settings, runtime, log, clock) { state, s, now ->
+            Planner.plan(Planner.Input(state.tasks, now, LONDON, s, windows = week, previousSlots = runtime.value.slots.on(monday).previous))
+        }
+        clock.time = Fixtures.at("2026-10-12T16:00")
+        tasks.update { it.copy(tasks = listOf(task("t", due = "2026-10-14T23:59", effort = 15))) }
+        val first = twoDays.plan().todaySlots.single { it.kind == SlotKind.Work }
+        val key = first.chunk!!.key
+        runtime.update { it.copy(slots = SlotState(monday.toString(), previous = mapOf(key to first.start))) }
+        clock.time = first.end + Slotter.GRACE_MS + 60_000L
+        twoDays.missSlot(key, Focus.Laid(first.start, first.end, first.window))
+        runtime.update { it.copy(slots = it.slots.on(monday).missed(key, "teams:t", clock.time)) }
+        // Monday's hours over, it's tomorrow's in the plan, in a slot; done now, it's the slot missed, kept late, and earns.
+        clock.time = Fixtures.at("2026-10-12T22:45")
+        assertTrue(twoDays.plan().tomorrowBucket?.slots.orEmpty().any { it.chunk?.key == key })
+        assertTrue(twoDays.keepSlot(key))
+        val record = log.value.slots.single()
+        assertEquals(Triple(SlotOutcome.KeptLate, "2026-10-12", true), Triple(record.outcome, record.date, record.earned))
+        assertEquals(5 * 60_000L, twoDays.creditLeftMs())
+    }
+
+    @Test
+    fun `a slot missed after one kept closes the gap, and its new time opens no other`() = runTest {
+        val (first, second) = laid(task("t", due = "2026-10-12T23:59", steps = steps(), effort = 60))
+        clock.time = first.end
+        assertTrue(slotted.keepSlot(first.chunk!!.key))
+        runtime.update { it.copy(credit = it.credit.earn(monday, 10.0)) }
+        // The next goes by undone and is laid again later: today's work, blocked, not a gap till then.
+        clock.time = second.end + Slotter.GRACE_MS + 60_000L
+        slotted.missSlot(second.chunk!!.key, Focus.Laid(second.start, second.end, second.window))
+        runtime.update { it.copy(slots = it.slots.on(monday).missed(second.chunk!!.key, "teams:t", clock.time)) }
+        assertTrue(slotted.plan().todaySlots.filter { it.kind == SlotKind.Work }.all { it.start > clock.time })
+        assertNull(slotted.gapUntil())
+        assertEquals(BlockPolicy.Verdict.Block(BlockPolicy.Reason.TodayUndone), slotted.verdict())
+    }
+
+    @Test
+    fun `a task done again after reopening isn't marked photographed by its first time's photo`() = runTest {
+        tasks.update { it.copy(tasks = listOf(task("hw", effort = 40))) }
+        assertTrue(focus.photoChecked("teams:hw", null, 20, key = "teams:hw#-1#1"))
+        focus.onCompleted(listOf(tasks.value.tasks.single().copy(status = Status.Done, doneAt = clock.time)))
+        // Reopened, a piece of it ticked (timed), and done again: no photo this time round.
+        clock.time += 3_600_000L
+        tasks.update { state -> state.copy(tasks = state.tasks.map { it.copy(workedMin = 0) }) }
+        assertTrue(focus.keepSlot("teams:hw#-1#1"))
+        clock.time += 60_000L
+        focus.onCompleted(listOf(tasks.value.tasks.single().copy(status = Status.Done, doneAt = clock.time)))
+        assertEquals(listOf(true, false), log.value.completions.map { it.photo })
+    }
+
+    @Test
+    fun `a longer piece no photo can check earns once its source says it's done, and the line says so`() = runTest {
+        clock.time = Fixtures.at("2026-10-12T17:00")
+        tasks.update { it.copy(tasks = listOf(task("revise", kind = Kind.Revision, due = "2026-10-12T23:59", effort = 30))) }
+        assertEquals("Finish today's slot (30 min) → 10 min free once Teams says revise is done", focus.rewardLine(focus.plan()))
+        assertTrue(focus.keepSlot("teams:revise#-1#1"))
+        assertEquals(0L, focus.creditLeftMs())
+        // Teams says it's done: the slot kept earns by that, once however often it's said.
+        val done = tasks.value.tasks.single().copy(status = Status.Done, doneAt = clock.time)
+        repeat(2) { focus.onCompleted(listOf(done)) }
+        assertEquals(10 * 60_000L, focus.creditLeftMs())
+        assertTrue(log.value.slots.single().earned)
+        // AnkiDroid's cards counted are a deck piece's evidence: kept by them, it earns at once.
+        tasks.update { it.copy(tasks = listOf(task("vocab", kind = Kind.Revision, due = "2026-10-12T23:59", effort = 30))) }
+        assertTrue(focus.keepSlot("teams:vocab#-1#1", verified = true))
+        assertEquals(20 * 60_000L, focus.creditLeftMs())
+        // One of your own that isn't written work: nothing can check it, so the line promises nothing.
+        tasks.update { it.copy(tasks = listOf(task("plan", kind = Kind.Admin, due = "2026-10-12T23:59", effort = 30).copy(id = "own:plan", source = Source.Own))) }
+        assertEquals("Finish today's slot (30 min)", focus.rewardLine(focus.plan()))
     }
 }

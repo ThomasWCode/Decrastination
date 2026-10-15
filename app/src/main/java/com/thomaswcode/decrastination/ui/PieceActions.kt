@@ -115,17 +115,19 @@ fun PieceActions(graph: AppGraph, activity: Activity, piece: Chunk, now: Long, p
             }
         }) { Text("Open") }
         // This piece done (LR-09): its slot kept, earning its free time if it's short (a longer one's
-        // photo earns it, BL-08).
+        // photo earns it, or its source saying it's done, BL-08).
         FilledTonalButton(onClick = {
             scope.launch {
-                val earns = piece.minutes < graph.settings.value.photoFromMin
+                val by = graph.focus.earnsBy(piece)
                 val kept = graph.focus.keepSlot(piece.key, seenAt = now)
                 val free = Format.minutes(Credit.forSlot(piece.minutes, graph.settings.value.workMinPerFreeMin).roundToInt().coerceAtLeast(1))
                 say(
                     when {
                         !kept -> "That piece has changed since (done, or planned again)."
-                        earns -> "Done: $free free."
-                        else -> "Done. A photo check of it earns its $free free."
+                        by == Focus.EarnsBy.Tick -> "Done: $free free."
+                        by == Focus.EarnsBy.Photo -> "Done. A photo check of it earns its $free free."
+                        by == Focus.EarnsBy.Source -> "Done. Its $free free comes once ${piece.source.label} says it's done."
+                        else -> "Done. It earns no free time: a piece this long earns with a photo check, and this isn't written work."
                     },
                 )
             }

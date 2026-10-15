@@ -28,6 +28,8 @@ data class RuntimeState(
     val calendarsToClear: List<Long> = emptyList(),
     /** Photo checks found done whose due (the task's step or minutes, the log, free time) isn't all given yet. */
     val photosDone: List<PhotoDone> = emptyList(),
+    /** Slots being kept whose due (the task's step or minutes, the log, free time) isn't all given yet (LR-09). */
+    val keeping: List<Keeping> = emptyList(),
     /** The decks' counts read as AnkiDroid came and went (NF-03): the last [com.thomaswcode.decrastination.learn.AnkiProgress.KEEP]. */
     val ankiReadings: List<com.thomaswcode.decrastination.learn.AnkiReading> = emptyList(),
     /** Since when AnkiDroid has been in front, read coming in; null when it isn't. */
@@ -247,6 +249,24 @@ data class PhotoDone(
     val stepIndex: Int? = null,
     /** The piece it was for ([com.thomaswcode.decrastination.core.Chunk.key], LR-09): its slot is kept by it. */
     val key: String? = null,
+)
+
+/**
+ * A slot being kept (LR-09), saved before anything changes, so a stop part-way is carried through at
+ * start-up (`Focus.finishKeeps`): its [record]; its task's step ([stepIndex], still [step]), none for
+ * a box of time, and the minutes worked on the task before ([workedBefore]), so the task's change
+ * is made once; the free time it earns; the miss of it today it [replaces]; and the [photo] that
+ * kept it, let go with it.
+ */
+@Serializable
+data class Keeping(
+    val record: SlotRecord,
+    val stepIndex: Int?,
+    val step: String?,
+    val workedBefore: Int,
+    val earningMin: Double,
+    val replaces: SlotRecord? = null,
+    val photo: PhotoDone? = null,
 )
 
 /** A daily alarm's run that failed: tried again [at], this being try [tries] (`Daily.failed`). */

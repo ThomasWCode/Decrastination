@@ -190,6 +190,22 @@ class YieldTest {
     }
 
     @Test
+    fun `school's share counts slots kept in their time, not ticked before they began`() {
+        val days = generateSequence(LocalDate.parse("2026-10-16")) { it.minusDays(1) }.filter { DayKind.of(it) == DayKind.Weekday }.take(7)
+            .map { day(it.toString(), 100, 100).copy(schoolMin = 40) }.toList()
+        fun slots(at: (Long) -> Long) = days.map { d ->
+            val start = Fixtures.at("${d.date}T10:45")
+            SlotRecord(
+                date = d.date, key = "teams:a#-1#1", taskId = "teams:a", kind = Kind.Homework, label = "a", plannedMin = 40, start = start, end = start + 40 * 60_000L,
+                window = WindowKind.Break, outcome = SlotOutcome.Kept, workedMin = 40, at = at(start),
+            )
+        }
+        assertEquals(1.0, Calibrator.yields(days, slots { it + 30 * 60_000L }, sunday)[DayKind.School]!!, 1e-9)
+        // Ticked at home before school began: none of school's time used, as low as it goes.
+        assertEquals(Calibrator.MIN_YIELD, Calibrator.yields(days, slots { it - 3 * 3_600_000L }, sunday)[DayKind.School]!!, 1e-9)
+    }
+
+    @Test
     fun `the review says when a kind of day's yield moves`() {
         val log = ActivityLog(days = weekends(7) { 40 })
         val learned = Calibrator.learn(log, Calibration(), today = sunday)

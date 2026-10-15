@@ -16,6 +16,7 @@ import com.thomaswcode.decrastination.data.ActivityLog
 import com.thomaswcode.decrastination.data.BlockRecord
 import com.thomaswcode.decrastination.data.CompletionRecord
 import com.thomaswcode.decrastination.data.JsonStore
+import com.thomaswcode.decrastination.data.Keeping
 import com.thomaswcode.decrastination.data.PhotoDone
 import com.thomaswcode.decrastination.data.Rewarded
 import com.thomaswcode.decrastination.data.RuntimeState
@@ -104,10 +105,15 @@ class Focus(
         )
     }
 
-    /** The end of the gap after a slot kept today that [now] is in (BL-10), if it's in one. */
+    /**
+     * The end of the gap after a slot kept today that [now] is in (BL-10), if it's in one. None once
+     * a slot's been missed since: the gap ended when that one began, and its new time opens no other.
+     */
     fun gapUntil(now: Long = clock.now()): Long? {
         val today = today(now).toString()
-        val keptAt = log.value.slots.filter { it.outcome.kept && it.date == today }.maxOfOrNull { it.at }
+        val records = log.value.slots.filter { it.date == today }
+        val keptAt = records.filter { it.outcome.kept }.maxOfOrNull { it.at } ?: return null
+        if (records.any { it.outcome == SlotOutcome.Missed && it.at > keptAt }) return null
         return plan(now).gapUntil(now, keptAt)
     }
 
@@ -125,7 +131,9 @@ class Focus(
      * A day with nothing to do starts with free time (BL-07): `freeAllowanceMin`, once, when nothing
      * is planned today or overdue, no slot of today's was kept, missed or moved, and the morning's
      * record of the day, if made yet, planned nothing. A day emptied by finishing its work, or by
-     * moving it away, earned or chose what it has.
+     * moving it away, earned or chose what it has. Only once each source has been read today: the
+     * list from before (the app just started, a sync not run yet) may not hold today's work. One
+     * never read (not set up) holds none.
      */
     suspend fun grantAllowanceIfDue(now: Long = clock.now()) {
         val minutes = settings.value.freeAllowanceMin
@@ -133,6 +141,8 @@ class Focus(
         val today = today(now)
         val day = today.toString()
         if (runtime.value.credit.on(today).allowanceOn == day) return
+        val dayStart = today.atStartOfDay(clock.zone()).toInstant().toEpochMilli()
+        if (Source.SYNCED.any { source -> tasks.value.status(source).lastSuccessAt?.let { it < dayStart } == true }) return
         val plan = plan(now)
         if (plan.todayBucket?.chunks.orEmpty().isNotEmpty() || plan.ordered.any { it.overdue }) return
         if (log.value.slots.any { it.date == day } || log.value.days.any { it.date == day && it.plannedMin > 0 }) return
@@ -158,15 +168,42 @@ class Focus(
             return if (empty) "Nothing planned today: ${Format.minutes(free)} free." else "Today's plan is done. ${Format.minutes(free)} free."
         }
         fun earned(of: List<Chunk>) = Credit.forSlot(of.sumOf { it.minutes }, s.workMinPerFreeMin).roundToInt()
-        val (short, long) = pieces.partition { it.minutes < s.photoFromMin }
+        val by = pieces.groupBy(::earnsBy)
         val head = if (pieces.size == 1) "Finish today's slot" else "Finish today's ${pieces.size} slots"
-        val onTick = earned(short).takeIf { it > 0 }?.let { "${Format.minutes(it)} free" }
-        val photo = when (long.size) {
-            0 -> null
-            1 -> "with a photo of ${long.single().label.take(MAX_LABEL)}"
-            else -> "with photos of ${long.size} of them"
-        }?.let { "${Format.minutes(earned(long))} ${if (onTick != null) "more" else "free"} $it" }
-        return "$head (${Format.minutes(pieces.sumOf { it.minutes })}) → ${listOfNotNull(onTick, photo).joinToString(", ")}"
+        val onTick = by[EarnsBy.Tick]?.let(::earned)?.takeIf { it > 0 }?.let { "${Format.minutes(it)} free" }
+        val photo = by[EarnsBy.Photo]?.let { long ->
+            val what = if (long.size == 1) "with a photo of ${long.single().label.take(MAX_LABEL)}" else "with photos of ${long.size} of them"
+            "${Format.minutes(earned(long))} ${if (onTick != null) "more" else "free"} $what"
+        }
+        val confirmed = by[EarnsBy.Source]?.let { long ->
+            val what = if (long.size == 1) "once ${long.single().source.label} says ${long.single().label.take(MAX_LABEL)} is done" else "once their sources say ${long.size} of them are done"
+            "${Format.minutes(earned(long))} ${if (onTick != null || photo != null) "more" else "free"} $what"
+        }
+        val parts = listOfNotNull(onTick, photo, confirmed)
+        val line = "$head (${Format.minutes(pieces.sumOf { it.minutes })})"
+        return if (parts.isEmpty()) line else "$line → ${parts.joinToString(", ")}"
+    }
+
+    /** What lets a kept slot of [piece] earn (BL-08). */
+    enum class EarnsBy {
+        /** Short: its tick. */
+        Tick,
+
+        /** Longer, written work: a photo check of it. */
+        Photo,
+
+        /** Longer, not written work: its source saying it's done (Anki's cards counted, Teams handed in). */
+        Source,
+
+        /** Longer, one of your own that isn't written work: nothing can check it. */
+        Nothing,
+    }
+
+    fun earnsBy(piece: Chunk): EarnsBy = when {
+        piece.minutes < settings.value.photoFromMin -> EarnsBy.Tick
+        piece.photoCheckable -> EarnsBy.Photo
+        piece.source == Source.Own -> EarnsBy.Nothing
+        else -> EarnsBy.Source
     }
 
     /**
@@ -254,14 +291,15 @@ class Focus(
     /**
      * [key]'s piece done (LR-09): its step ticked and its minutes worked (a task in boxes, its minutes
      * worked), with [extraMin] more you say it took; the slot recorded kept, or kept late once its
-     * grace is over; its free time earned where it's a short piece, or [photo] shows it done (BL-08),
-     * never past today's plan; and its start no longer kept for the next plan. A piece ticked ahead
-     * of its slot, or with none, is kept all the same. [seenAt]: when the plan it was ticked on was
-     * made, so a second tap on it (a task in boxes has its next box under the same key) keeps
-     * nothing more. False when there's no such piece to keep.
+     * grace is over; its free time earned where it's a short piece, or [photo] shows it done, or
+     * [verified] its source (AnkiDroid's cards counted) (BL-08), never past today's plan; and its
+     * start no longer kept for the next plan. A piece ticked ahead of its slot, or with none, is kept
+     * all the same. [seenAt]: when the plan it was ticked on was made, so a second tap on it (a task
+     * in boxes has its next box under the same key) keeps nothing more. False when there's no such
+     * piece to keep.
      */
-    suspend fun keepSlot(key: String, extraMin: Int = 0, photo: Boolean = false, seenAt: Long? = null, now: Long = clock.now()): Boolean {
-        val kept = keeping.withLock { keep(key, extraMin, photo, seenAt, now) } ?: return false
+    suspend fun keepSlot(key: String, extraMin: Int = 0, photo: Boolean = false, verified: Boolean = false, seenAt: Long? = null, now: Long = clock.now()): Boolean {
+        val kept = keeping.withLock { keep(key, extraMin, photo, verified, seenAt, now) } ?: return false
         // One of your own it finished: finished as Done does, once its record is in.
         kept.ownDone?.let { onOwnTaskDone(it) }
         return true
@@ -273,42 +311,23 @@ class Focus(
     /** What keeping a slot leaves to do: one of your own it finished. */
     private class Kept(val ownDone: String?)
 
-    private suspend fun keep(key: String, extraMin: Int, photo: Boolean, seenAt: Long?, now: Long): Kept? {
+    private suspend fun keep(key: String, extraMin: Int, photo: Boolean, verified: Boolean, seenAt: Long?, now: Long, photoDone: PhotoDone? = null): Kept? {
         val plan = plan(now)
         val slot = (plan.todaySlots + plan.buckets.flatMap { it.slots }).firstOrNull { it.kind == SlotKind.Work && it.chunk?.key == key }
         val chunk = slot?.chunk ?: plan.ordered.firstOrNull { it.key == key } ?: return null
         // Kept since you saw it (a second tap, a sheet left open): a box's next piece has its key now.
         if (seenAt != null && log.value.slots.any { it.key == key && it.outcome.kept && it.at >= seenAt }) return null
+        val task = tasks.value.tasks.firstOrNull { it.id == chunk.taskId && it.isOpen } ?: return null
+        // Its step, where it's still that one and still to do (none for a box of time, or the whole task).
+        val index = chunk.stepIndex?.let { i -> stepAt(task, i, chunk.step.orEmpty()).takeIf { it >= 0 } ?: return null }
         val worked = chunk.minutes + extraMin.coerceAtLeast(0)
-        var kept = false
-        tasks.update { state ->
-            state.copy(
-                tasks = state.tasks.map { t ->
-                    if (t.id != chunk.taskId || !t.isOpen) return@map t
-                    val index = chunk.stepIndex
-                    if (index == null) {
-                        // A box of time (or the whole task): its minutes worked.
-                        kept = true
-                        return@map t.copy(workedMin = t.workedMin + worked)
-                    }
-                    // Its step, done, and its minutes worked: so more than
-                    // the step's own come off the next steps.
-                    val i = stepAt(t, index, chunk.step.orEmpty())
-                    if (i < 0) return@map t
-                    kept = true
-                    t.copy(subSteps = t.subSteps.mapIndexed { j, s -> if (j == i) s.copy(done = true, timedMin = worked) else s }, workedMin = t.workedMin + worked)
-                },
-            )
-        }
-        if (!kept) return null
-        val task = tasks.value.tasks.firstOrNull { it.id == chunk.taskId }
         val today = today(now)
         val ratio = settings.value.workMinPerFreeMin
-        // A piece of a later day's, ticked ahead, earns nothing today (BL-08: today's plan, not more).
-        val laidToday = (slot?.start ?: now).let { today(it) } == today
-        val earns = (photo || chunk.minutes < settings.value.photoFromMin) && laidToday
-        // A slot of it missed today (it was moved on): this is that slot, kept late, where it was laid.
+        // A slot of it missed today (it was moved on): this is that slot, kept late, where it was laid, and today's.
         val missed = log.value.slots.lastOrNull { it.key == key && it.date == today.toString() && it.outcome == SlotOutcome.Missed }
+        // A piece of a later day's, ticked ahead, earns nothing today (BL-08: today's plan, not more).
+        val laidToday = missed != null || today(slot?.start ?: now) == today
+        val earns = (photo || verified || earnsBy(chunk) == EarnsBy.Tick) && laidToday
         val record = SlotRecord(
             date = missed?.date ?: today(slot?.start ?: now).toString(),
             key = key,
@@ -327,40 +346,101 @@ class Focus(
             earned = earns,
             at = now,
         )
-        // A slot of it missed today and kept after all is one slot, kept late: the miss gives way.
-        log.update { state -> state.copy(slots = state.slots.filterNot { it.key == key && it.date == record.date && it.outcome == SlotOutcome.Missed } + record).trimmed(now) }
-        val earning = if (earns) minOf(Credit.forSlot(chunk.minutes, ratio), slotRoomMin(now, ratio, without = record)) else 0.0
-        runtime.update { state ->
+        val earning = if (earns) minOf(Credit.forSlot(chunk.minutes, ratio), slotRoomMin(now, ratio, keeping = record)) else 0.0
+        // On record before anything changes: a stop part-way is carried through at start-up.
+        val journal = Keeping(record, index, chunk.step, task.workedMin, earning, replaces = missed, photo = photoDone)
+        runtime.update { it.copy(keeping = it.keeping + journal) }
+        return finish(journal, now, recovering = false)
+    }
+
+    /**
+     * [k] carried through (LR-09), each step once however often it's run: the task's step ticked and
+     * its minutes worked, unless that's been done (its minutes moved on by just these); the slot's
+     * record, a miss of it today giving way, unless ([recovering] after a stop) it's in; then, in one
+     * write with the journal's end, its free time (on its own day only) and its start let go. Null,
+     * and the journal let go, when the task isn't as it was: changed since, or done.
+     */
+    private suspend fun finish(k: Keeping, now: Long, recovering: Boolean): Kept? {
+        val record = k.record
+        var carried = false
+        tasks.update { state ->
             state.copy(
-                credit = if (earning > 0) state.credit.earn(today, earning) else state.credit.on(today),
-                slots = state.slots.on(today).kept(key),
+                tasks = state.tasks.map { t ->
+                    if (t.id != record.taskId) return@map t
+                    val step = k.stepIndex?.let { t.subSteps.getOrNull(it) }
+                    when {
+                        // Done before a stop: only the rest is left.
+                        t.workedMin == k.workedBefore + record.workedMin && (k.stepIndex == null || step?.done == true) -> t.also { carried = true }
+                        !t.isOpen || t.workedMin != k.workedBefore -> t
+                        // A box of time (or the whole task): its minutes worked.
+                        k.stepIndex == null -> t.copy(workedMin = t.workedMin + record.workedMin).also { carried = true }
+                        // Its step, done, and its minutes worked: so more than the step's own come off the next steps.
+                        step == null || step.done || step.title != k.step -> t
+                        else -> t.copy(
+                            subSteps = t.subSteps.mapIndexed { j, s -> if (j == k.stepIndex) s.copy(done = true, timedMin = record.workedMin) else s },
+                            workedMin = t.workedMin + record.workedMin,
+                        ).also { carried = true }
+                    }
+                },
             )
         }
+        if (!carried) {
+            runtime.update { it.copy(keeping = it.keeping - k) }
+            return null
+        }
+        // A slot of it missed today and kept after all is one slot, kept late: that miss gives way.
+        log.update { state ->
+            if (recovering && state.slots.any { it.key == record.key && it.at == record.at && it.outcome.kept }) state
+            else state.copy(slots = state.slots.filterNot { it == k.replaces } + record).trimmed(now)
+        }
+        val today = today(now)
+        val day = today(record.at)
+        runtime.update { state ->
+            if (k !in state.keeping) {
+                state
+            } else {
+                state.copy(
+                    credit = if (k.earningMin > 0 && day == today) state.credit.earn(today, k.earningMin) else state.credit.on(today),
+                    slots = if (day == today) state.slots.on(today).kept(record.key) else state.slots,
+                    keeping = state.keeping - k,
+                    photosDone = k.photo?.let { state.photosDone - it } ?: state.photosDone,
+                )
+            }
+        }
         // One of your own finished by it: its last step (seen to as its steps are), or its minutes all worked.
+        val task = tasks.value.tasks.firstOrNull { it.id == record.taskId }
         return Kept(task?.takeIf { it.source == Source.Own && it.isOpen && it.subSteps.isEmpty() && Planner.remaining(it, runtime.value.calibration.multiplierFor(it)) <= 0 }?.id)
+    }
+
+    /** Carries through the slots a stop left part-way kept ([RuntimeState.keeping]): at start-up, before the photo checks. */
+    suspend fun finishKeeps() {
+        val now = clock.now()
+        for (k in runtime.value.keeping) keeping.withLock { finish(k, now, recovering = true) }?.ownDone?.let { onOwnTaskDone(it) }
     }
 
     /**
      * The free minutes today's slots can still earn (BL-08): today's plan (the pieces still in it and
-     * those kept today) at the ratio, less what kept slots have earned, [without] the one being kept.
-     * Work beyond the day's plan earns nothing more today; free time from elsewhere (a completion)
-     * stands beside it, not in it.
+     * those kept today, with the one [keeping], a slot missed today and moved on among them) at the
+     * ratio, less what kept slots have earned. Work beyond the day's plan earns nothing more today;
+     * free time from elsewhere (a completion) stands beside it, not in it.
      */
-    private fun slotRoomMin(now: Long, ratio: Int, without: SlotRecord? = null): Double {
+    private fun slotRoomMin(now: Long, ratio: Int, keeping: SlotRecord? = null): Double {
         val today = today(now).toString()
         val kept = log.value.slots.filter { it.outcome.kept && it.date == today }
-        val share = Credit.forSlot((plan(now).todayBucket?.plannedMin ?: 0) + kept.sumOf { it.plannedMin }, ratio)
-        val earned = kept.filter { it.earned && it != without }.sumOf { Credit.forSlot(it.plannedMin, ratio) }
+        val planned = plan(now).todayBucket
+        val keepingMin = keeping?.takeIf { k -> k.date == today && planned?.chunks.orEmpty().none { it.key == k.key } }?.plannedMin ?: 0
+        val share = Credit.forSlot((planned?.plannedMin ?: 0) + kept.sumOf { it.plannedMin } + keepingMin, ratio)
+        val earned = kept.filter { it.earned }.sumOf { Credit.forSlot(it.plannedMin, ratio) }
         return (share - earned).coerceAtLeast(0.0)
     }
 
     /**
-     * [key]'s slot went by undone (PL-13): recorded missed, once a day, as it was laid ([laid]: its
+     * [key]'s slot went by undone (PL-13): recorded missed, once a slot, as it was laid ([laid]: its
      * start, end and window, as its alarm had them; else as the plan now has the piece).
      */
     suspend fun missSlot(key: String, laid: Laid? = null, now: Long = clock.now()) = recordOutcome(key, SlotOutcome.Missed, laid, now)
 
-    /** [key]'s slot moved on purpose (a time, a day or a start you gave its task): recorded moved, once a day. */
+    /** [key]'s slot moved on purpose (a time, a day or a start you gave its task): recorded moved, once a slot. */
     suspend fun moveSlot(key: String, laid: Laid? = null, now: Long = clock.now()) = recordOutcome(key, SlotOutcome.Moved, laid, now)
 
     /** Where a slot was: its start, end and window. */
@@ -370,13 +450,16 @@ class Focus(
         val plan = plan(now)
         val slot = plan.todaySlots.firstOrNull { it.kind == SlotKind.Work && it.chunk?.key == key }
         val chunk = slot?.chunk ?: plan.ordered.firstOrNull { it.key == key } ?: return
-        val at = laid ?: slot?.let { Laid(it.start, it.end, it.window) } ?: Laid(now, now, WindowKind.Evening)
+        val known = laid ?: slot?.let { Laid(it.start, it.end, it.window) }
+        val at = known ?: Laid(now, now, WindowKind.Evening)
         val date = today(at.start).toString()
         val record = SlotRecord(
             date = date, key = key, taskId = chunk.taskId, kind = chunk.kind, className = tasks.value.tasks.firstOrNull { it.id == chunk.taskId }?.className,
             label = chunk.label, plannedMin = chunk.minutes, start = at.start, end = at.end, window = at.window, outcome = outcome, workedMin = 0, at = now,
         )
-        log.update { state -> if (state.slots.any { it.key == key && it.date == date }) state else state.copy(slots = state.slots + record).trimmed(now) }
+        // Once a slot (a second alarm, a sweep after it): a piece moved and laid again later has
+        // another, with its own outcome. Where it was isn't known, once a day.
+        log.update { state -> if (state.slots.any { it.key == key && it.date == date && (known == null || it.start == at.start) }) state else state.copy(slots = state.slots + record).trimmed(now) }
     }
 
     /**
@@ -431,24 +514,47 @@ class Focus(
      * photo named its piece (none were waiting when sessions went) is let go.
      */
     private suspend fun finishPhoto(done: PhotoDone): Boolean {
-        val earned = done.key?.let { photoEarns(it, done.at) } ?: false
+        val earned = done.key?.let { photoEarns(done, it) } ?: false
         runtime.update { it.copy(photosDone = it.photosDone - done) }
         return earned
     }
 
-    /** [key]'s photo found it done at [at] (BL-08): its slot kept and earning, or a kept slot's free time earned now. */
-    private suspend fun photoEarns(key: String, at: Long): Boolean {
+    /**
+     * [done]'s photo found [key] done (BL-08): its slot kept and earning, or a kept slot's free time
+     * earned now, given in the write that lets the photo go (so a stop after can't give it twice, or
+     * keep the next box of the same key with it).
+     */
+    private suspend fun photoEarns(done: PhotoDone, key: String): Boolean {
+        val at = done.at
         val today = today(at).toString()
         val unearned = log.value.slots.lastOrNull { it.key == key && it.outcome.kept && it.date == today && !it.earned }
-        if (unearned == null) return keepSlot(key, photo = true, seenAt = at, now = maxOf(at, clock.now()))
-        val ratio = settings.value.workMinPerFreeMin
-        val room = slotRoomMin(clock.now(), ratio)
-        var marked = false
-        log.update { state ->
-            state.copy(slots = state.slots.map { if (it == unearned && !it.earned) it.copy(earned = true, photo = true).also { marked = true } else it })
+        if (unearned == null) {
+            val kept = keeping.withLock { keep(key, 0, photo = true, verified = false, seenAt = at, now = maxOf(at, clock.now()), photoDone = done) } ?: return false
+            kept.ownDone?.let { onOwnTaskDone(it) }
+            return true
         }
-        if (marked) runtime.update { it.copy(credit = it.credit.earn(today(at), minOf(Credit.forSlot(unearned.plannedMin, ratio), room))) }
-        return marked
+        return keeping.withLock { earnKept(unearned, photo = true, letGo = done) }
+    }
+
+    /**
+     * [unearned], a slot kept today without earning, earns now (BL-08: its photo passed, or its
+     * source says it's done), within today's plan: given with [letGo]'s letting go where there's
+     * one, then marked on its record. False when its day is over, it's earned since (another photo),
+     * or [letGo] was let go already. Held under [keeping], as a keep is.
+     */
+    private suspend fun earnKept(unearned: SlotRecord, photo: Boolean, letGo: PhotoDone? = null): Boolean {
+        val now = clock.now()
+        val today = today(now)
+        val ratio = settings.value.workMinPerFreeMin
+        if (unearned.date != today.toString() || unearned !in log.value.slots) return false
+        val earning = minOf(Credit.forSlot(unearned.plannedMin, ratio), slotRoomMin(now, ratio))
+        var given = false
+        runtime.update { state ->
+            if (letGo != null && letGo !in state.photosDone) state
+            else state.copy(credit = state.credit.earn(today, earning), photosDone = letGo?.let { state.photosDone - it } ?: state.photosDone).also { given = true }
+        }
+        if (given) log.update { state -> state.copy(slots = state.slots.map { if (it == unearned) it.copy(earned = true, photo = it.photo || photo) else it }) }
+        return given
     }
 
     /**
@@ -491,6 +597,20 @@ class Focus(
         fun deckMinutes(task: TaskItem): Int = task.subSteps
             .filter { step -> step.ankiSections.isNotEmpty() && step.ankiSections.all { decks[task.id]?.containsKey(it) == true } }
             .sumOf { it.minutes }
+        // When this time round began for [task]: just after its completion before this one, else when it was first seen.
+        fun since(task: TaskItem): Long =
+            log.value.completions.filter { it.taskId == task.id && it.doneAt < (task.doneAt ?: now) }.maxOfOrNull { it.doneAt + 1 } ?: task.firstSeenAt
+        // Its slots kept today without earning, this time round, that no photo could check (longer
+        // pieces of work that isn't written, ticked: BL-08): its source saying it's done is their
+        // evidence, so they earn by it. Written work's is its photo.
+        val confirming = completed.filter { it.kind != Kind.Info && it.kind != Kind.Event && it.source != Source.Own && today(it.doneAt ?: now) == today }
+            .flatMap { task ->
+                log.value.slots.filter {
+                    it.taskId == task.id && it.outcome.kept && !it.earned && it.date == today.toString() && it.at >= since(task) &&
+                        !(it.kind == Kind.Homework && task.source != Source.Anki)
+                }
+            }
+        val room = slotRoomMin(now, ratio)
         runtime.update { state ->
             val fresh = completed.filter { key(it) !in state.rewarded }
             // Reading or archiving an email, or an event passing, isn't work that earns time. Free
@@ -534,11 +654,15 @@ class Focus(
                 val remaining = minOf(owed(counted), owed(counted.copy(userEffortMin = null)))
                 Credit.forCompletion(remaining.roundToInt().coerceAtLeast(0), ratio)
             }
+            // Its slots kept without earning: given with it, once, within today's plan.
+            val slotEarning = minOf(confirming.filter { slot -> fresh.any { it.id == slot.taskId } }.sumOf { Credit.forSlot(it.plannedMin, ratio) }, room)
             state.copy(
-                credit = state.credit.earn(today, earned),
+                credit = state.credit.earn(today, earned + slotEarning),
                 rewarded = (state.rewarded + fresh.map(::key)).distinct().filter { it.doneAt > now - REWARDED_KEPT_MS },
             )
         }
+        // Marked so on their records: those of one given before a stop again, no more.
+        if (confirming.isNotEmpty()) log.update { state -> state.copy(slots = state.slots.map { if (it in confirming) it.copy(earned = true) else it }) }
         log.update { state ->
             val unrecorded = completed.filter { it.status == Status.Done }
                 .filter { task -> state.completions.none { it.taskId == task.id && it.doneAt == (task.doneAt ?: now) } }
@@ -563,7 +687,7 @@ class Focus(
                         doneAt = task.doneAt ?: now,
                         byHand = handMinutes(task) > 0,
                         // Work a photo check found done: as minutes counted before (BL-08's), or a slot it kept.
-                        photo = photoMinutes(task) > 0 || state.slots.any { it.taskId == task.id && it.photo && it.at >= task.firstSeenAt },
+                        photo = photoMinutes(task) > 0 || state.slots.any { it.taskId == task.id && it.photo && it.at >= since(task) },
                         yourEstimate = task.yourMinutes,
                     )
                 },
