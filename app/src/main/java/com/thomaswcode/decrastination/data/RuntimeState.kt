@@ -1,12 +1,12 @@
 package com.thomaswcode.decrastination.data
 
 import com.thomaswcode.decrastination.block.Credit
-import com.thomaswcode.decrastination.block.FocusSession
 import com.thomaswcode.decrastination.block.TeamsAutoSync
 import com.thomaswcode.decrastination.core.Calibration
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Uptime
+import com.thomaswcode.decrastination.core.WindowKind
 import com.thomaswcode.decrastination.enrich.AiUsage
 import com.thomaswcode.decrastination.learn.CheckIn
 import com.thomaswcode.decrastination.learn.DayRecord
@@ -26,11 +26,16 @@ data class RuntimeState(
     val calendarWrittenTo: Long? = null,
     /** Calendars no longer written to whose events of the app's are still to be taken out (no permission, or a failure, the last time). */
     val calendarsToClear: List<Long> = emptyList(),
-    val session: FocusSession? = null,
-    /** Sessions ended whose due (the task's minutes and step, the log, free time) isn't all given yet. */
-    val finishing: List<EndedSession> = emptyList(),
     /** Photo checks found done whose due (the task's step or minutes, the log, free time) isn't all given yet. */
     val photosDone: List<PhotoDone> = emptyList(),
+    /** Slots being kept whose due (the task's step or minutes, the log, free time) isn't all given yet (LR-09). */
+    val keeping: List<Keeping> = emptyList(),
+    /** The decks' counts read as AnkiDroid came and went (NF-03): the last [com.thomaswcode.decrastination.learn.AnkiProgress.KEEP]. */
+    val ankiReadings: List<com.thomaswcode.decrastination.learn.AnkiReading> = emptyList(),
+    /** Since when AnkiDroid has been in front, read coming in; null when it isn't. */
+    val ankiFrontSince: Long? = null,
+    /** AnkiDroid time on deck tasks today not in a kept slot yet (NF-03): the visits before the one that finishes their cards. */
+    val ankiWorked: AnkiWorked = AnkiWorked(),
     /** Loosening changes waiting their delay. */
     val pending: List<PendingChange> = emptyList(),
     /** A parent code unblocked everything until then. */
@@ -108,13 +113,14 @@ data class ProtectionState(
 )
 
 /**
- * What happened, for calibration, the weekly review and the stats (docs/scheduler.md §5): focus
- * sessions, completions, blocks and protection lapses. Kept in `log.json`, trimmed to
+ * What happened, for calibration, the weekly review and the stats (docs/scheduler.md §5): slots
+ * kept and missed, completions, blocks and protection lapses. Kept in `log.json`, trimmed to
  * [KEEP_DAYS] days.
  */
 @Serializable
 data class ActivityLog(
-    val sessions: List<SessionRecord> = emptyList(),
+    /** Each slot's outcome (LR-09): the record the days, the calibration and the stats read. */
+    val slots: List<SlotRecord> = emptyList(),
     val completions: List<CompletionRecord> = emptyList(),
     val blocks: List<BlockRecord> = emptyList(),
     val protection: List<ProtectionRecord> = emptyList(),
@@ -127,7 +133,7 @@ data class ActivityLog(
         val since = now - KEEP_DAYS * 24 * 3_600_000L
         val sinceDay = java.time.Instant.ofEpochMilli(since).atZone(java.time.ZoneOffset.UTC).toLocalDate().toString()
         return ActivityLog(
-            sessions = sessions.filter { it.startedAt >= since },
+            slots = slots.filter { it.at >= since },
             completions = completions.filter { it.doneAt >= since },
             blocks = blocks.filter { it.at >= since },
             protection = protection.filter { it.at >= since },
@@ -142,24 +148,42 @@ data class ActivityLog(
     }
 }
 
+/** How a slot went (LR-09): kept in its time or after its grace, missed, or moved on purpose. */
 @Serializable
-data class SessionRecord(
+enum class SlotOutcome {
+    Kept,
+    KeptLate,
+    Missed,
+    Moved,
+    ;
+
+    /** Done, in its time or after. */
+    val kept: Boolean get() = this == Kept || this == KeptLate
+}
+
+/**
+ * A slot's outcome (LR-09): which piece ([key], its task's), when it was laid ([start] to [end], in
+ * a [window]), how it went, and what was worked: the planned minutes and any more you said. [earned]
+ * when it earned its free time (a short piece on its tick, a long one with its photo, BL-08); [at]
+ * when it was recorded. A piece ticked with no slot of its own is recorded at the tick.
+ */
+@Serializable
+data class SlotRecord(
+    val date: String,
+    val key: String,
     val taskId: String,
     val kind: Kind,
     val className: String? = null,
     val label: String,
     val plannedMin: Int,
+    val start: Long,
+    val end: Long,
+    val window: WindowKind,
+    val outcome: SlotOutcome,
     val workedMin: Int,
-    val startedAt: Long,
-    val endedAt: Long,
-    /** Ran its full length. */
-    val completed: Boolean,
-    /** The box length its task was being cut into, for the box experiment; null for a step of its own. */
-    val box: Int? = null,
-    /** Work a photo check found done, not a timed session: counted as the day's work, not as a session. */
     val photo: Boolean = false,
-    /** The photo check it records ([PhotoDone.id]), so finishing it again doesn't record it twice. */
-    val check: String? = null,
+    val earned: Boolean = false,
+    val at: Long,
 )
 
 @Serializable
@@ -171,7 +195,7 @@ data class CompletionRecord(
     val className: String? = null,
     /** The estimate it was planned with, before calibration. */
     val estimateMin: Int,
-    /** Minutes of focus sessions on it. */
+    /** Minutes worked on it: its kept slots' (focus sessions' before review v2). */
     val workedMin: Int,
     val dueAt: Long? = null,
     val firstSeenAt: Long,
@@ -225,15 +249,46 @@ data class PhotoDone(
     val at: Long,
     /** Its step's place in its task's list; null from before this was kept. */
     val stepIndex: Int? = null,
+    /** The piece it was for ([com.thomaswcode.decrastination.core.Chunk.key], LR-09): its slot is kept by it. */
+    val key: String? = null,
+    /** When the photo was taken (the check began): a slot of its key kept before then is another's. */
+    val takenAt: Long? = null,
 )
+
+/**
+ * A slot being kept (LR-09), saved before anything changes, so a stop part-way is carried through at
+ * start-up (`Focus.finishKeeps`): its [record]; its task's step ([stepIndex], still [step]), none for
+ * a box of time, and the minutes worked on the task before ([workedBefore]), so the task's change
+ * is made once; the free time it earns; the miss of it today it [replaces]; and the [photo] that
+ * kept it, let go with it. [earnOnly]: a slot kept already, earning now (its photo passed): the
+ * record it [replaces] marked, nothing done to the task.
+ */
+@Serializable
+data class Keeping(
+    val record: SlotRecord,
+    val stepIndex: Int?,
+    val step: String?,
+    val workedBefore: Int,
+    val earningMin: Double,
+    val replaces: SlotRecord? = null,
+    val photo: PhotoDone? = null,
+    val earnOnly: Boolean = false,
+)
+
+/** Minutes in AnkiDroid on each deck task on [date] (NF-03), kept till the visit that finishes its cards. */
+@Serializable
+data class AnkiWorked(val date: String = "", val minutes: Map<String, Int> = emptyMap()) {
+    /** As it stands on [date]: a new day starts empty. */
+    fun on(date: String): AnkiWorked = if (this.date == date) this else AnkiWorked(date)
+
+    fun plus(taskId: String, add: Int): AnkiWorked = copy(minutes = minutes + (taskId to (minutes[taskId] ?: 0) + add))
+
+    fun without(taskId: String): AnkiWorked = copy(minutes = minutes - taskId)
+}
 
 /** A daily alarm's run that failed: tried again [at], this being try [tries] (`Daily.failed`). */
 @Serializable
 data class DailyRetry(val at: Long, val tries: Int)
-
-/** A focus session as it ended: what it's owed, saved with its ending (`Focus.stopSession`). */
-@Serializable
-data class EndedSession(val session: FocusSession, val workedMin: Int, val completed: Boolean, val endedAt: Long)
 
 /** A finished task's "how was it?", kept to ask once notifications can be seen. */
 @Serializable

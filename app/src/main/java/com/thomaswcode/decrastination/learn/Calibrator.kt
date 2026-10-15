@@ -4,8 +4,9 @@ import com.thomaswcode.decrastination.core.Calibration
 import com.thomaswcode.decrastination.core.DayKind
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.data.ActivityLog
+import com.thomaswcode.decrastination.data.SlotOutcome
+import com.thomaswcode.decrastination.data.SlotRecord
 import com.thomaswcode.decrastination.data.CompletionRecord
-import com.thomaswcode.decrastination.data.SessionRecord
 import java.time.LocalDate
 import kotlin.random.Random
 
@@ -38,12 +39,6 @@ object Calibrator {
     private const val HOUR_MS = 3_600_000L
     private const val DAY_MS = 24 * HOUR_MS
 
-    val BOXES = listOf(25, 45, 60)
-
-    /** Samples after which a kind's box length is settled. */
-    const val BOX_SETTLED = 20
-    private const val EXPLORE = 0.2
-
     /** A kind of day's yield (PL-06): from its last [YIELD_LOOK_BACK] finished days with work, once it has [YIELD_DAYS]. */
     const val YIELD_DAYS = 7
     const val YIELD_LOOK_BACK = 14
@@ -57,20 +52,21 @@ object Calibrator {
     /** The calibration the log teaches, and what changed from [previous], in words. */
     data class Learned(val calibration: Calibration, val changes: List<String>)
 
-    fun learn(log: ActivityLog, previous: Calibration, defaultBox: Int, week: Long, today: LocalDate, defaultMargin: Int = MIN_MARGIN): Learned {
+    fun learn(log: ActivityLog, previous: Calibration, today: LocalDate, defaultMargin: Int = MIN_MARGIN): Learned {
         val multipliers = multipliers(log.completions)
         val margins = margins(log.completions, defaultMargin)
-        val boxes = boxes(log, defaultBox, week)
         val next = Calibration(
-            yields = yields(log.days, today),
-            yieldDays = yieldDays(log.days, today),
+            yields = yields(log.days, log.slots, today),
+            yieldDays = yieldDays(log.days, log.slots, today),
             multipliers = multipliers,
             marginDays = margins,
-            boxMin = boxes,
             timed = timed(log.completions),
             counted = true,
+            // Learned as AnkiDroid is used (DX-11), not from the log: kept as it stands.
+            ankiSecondsPerCard = previous.ankiSecondsPerCard,
+            ankiStretches = previous.ankiStretches,
         )
-        return Learned(next, describe(previous, next, defaultMargin, defaultBox))
+        return Learned(next, describe(previous, next, defaultMargin))
     }
 
     /**
@@ -79,15 +75,31 @@ object Calibrator {
      * [MAX_YIELD]; none for a kind with fewer than [YIELD_DAYS] such days. Each kind on its own
      * days, so a run of bad Saturdays doesn't move the weekdays.
      */
-    fun yields(days: List<DayRecord>, today: LocalDate): Map<DayKind, Double> = judgedDays(days, today).mapValues { (_, judged) ->
-        val ratios = judged.map { it.doneMin!!.toDouble() / it.plannedMin }.sorted()
-        val mid = ratios.size / 2
-        val median = if (ratios.size % 2 == 1) ratios[mid] else (ratios[mid - 1] + ratios[mid]) / 2
+    fun yields(days: List<DayRecord>, slots: List<SlotRecord>, today: LocalDate): Map<DayKind, Double> = ratios(days, slots, today).mapValues { (_, ratios) ->
+        val sorted = ratios.sorted()
+        val mid = sorted.size / 2
+        val median = if (sorted.size % 2 == 1) sorted[mid] else (sorted[mid - 1] + sorted[mid]) / 2
         median.coerceIn(MIN_YIELD, MAX_YIELD)
     }
 
     /** How many days each of [yields] rests on. */
-    fun yieldDays(days: List<DayRecord>, today: LocalDate): Map<DayKind, Int> = judgedDays(days, today).mapValues { it.value.size }
+    fun yieldDays(days: List<DayRecord>, slots: List<SlotRecord>, today: LocalDate): Map<DayKind, Int> = ratios(days, slots, today).mapValues { it.value.size }
+
+    /**
+     * Each kind of day's done over planned, a day each; and school's (LR-09): of a finished day's
+     * minutes laid in school's windows that morning, the share its kept slots there held, on its last
+     * [YIELD_LOOK_BACK] days with any, once it has [YIELD_DAYS].
+     */
+    private fun ratios(days: List<DayRecord>, slots: List<SlotRecord>, today: LocalDate): Map<DayKind, List<Double>> {
+        val byKind = judgedDays(days, today).mapValues { (_, judged) -> judged.map { it.doneMin!!.toDouble() / it.plannedMin } }
+        // Kept in their time: one missed there and done that evening wasn't school's time used, nor
+        // one ticked before it began (at home, ahead of the day) or after it ended (in its grace).
+        val kept = slots.filter { it.outcome == SlotOutcome.Kept && it.window.atSchool && it.at in it.start..it.end }.groupBy { it.date }.mapValues { (_, k) -> k.sumOf { it.plannedMin } }
+        val school = days.filter { it.schoolMin > 0 && it.doneMin != null && LocalDate.parse(it.date) <= today }
+            .sortedBy { it.date }.takeLast(YIELD_LOOK_BACK)
+            .map { minOf(1.0, (kept[it.date] ?: 0).toDouble() / it.schoolMin) }
+        return if (school.size >= YIELD_DAYS) byKind + (DayKind.School to school) else byKind
+    }
 
     /** Each kind's last finished days with work planned, where it has enough; an older record's kind by its date. */
     private fun judgedDays(days: List<DayRecord>, today: LocalDate): Map<DayKind, List<DayRecord>> =
@@ -194,46 +206,7 @@ object Calibrator {
         return result
     }
 
-    /**
-     * Box lengths per kind: an experiment over [BOXES]. A session's reward is having run its full
-     * length on work its source then confirmed done by the deadline. Until [BOX_SETTLED] sessions
-     * with a box, each week mostly takes the best so far and sometimes tries another (seeded by
-     * [week], so a replay agrees); after, the best.
-     */
-    fun boxes(log: ActivityLog, defaultBox: Int, week: Long): Map<Kind, Int> {
-        // Each session is judged by its own task's next completion after it, so a later round of
-        // a task done again isn't credited with an earlier round's finish.
-        val completions = log.completions.groupBy { it.taskId }.mapValues { (_, list) -> list.sortedBy { it.doneAt } }
-        /** The completion that tells how [session]'s work went: its task's next after it. */
-        fun outcome(session: SessionRecord) = completions[session.taskId]?.firstOrNull { it.doneAt >= session.startedAt }
-        fun rewarded(session: SessionRecord): Boolean {
-            if (!session.completed) return false
-            val next = outcome(session) ?: return false
-            return next.dueAt != null && next.doneAt <= next.dueAt
-        }
-        // Judged once its outcome is known: one cut short failed then; one run in full waits for
-        // its task's completion after it, and until then counts for no box, for or against. Done
-        // against a plan's date, or none, it counts for none either: only a real deadline says
-        // whether the work was done in time (PL-14).
-        fun judged(session: SessionRecord): Boolean = !session.completed || outcome(session)?.let { it.dueAt != null && it.hardDeadline } == true
-        // Your own box is a candidate too: with nothing to go on, it's kept.
-        val candidates = (BOXES + defaultBox).distinct()
-        val result = HashMap<Kind, Int>()
-        for ((kind, sessions) in log.sessions.filter { it.box != null && judged(it) }.groupBy { it.kind }) {
-            val byBox = sessions.groupBy { it.box!! }
-            fun mean(box: Int): Double = byBox[box]?.let { list -> list.count(::rewarded).toDouble() / list.size } ?: 0.5
-            val best = candidates.maxWith(compareBy<Int>({ mean(it) }, { if (it == defaultBox) 1 else 0 }))
-            // The seed scrambled first: small seeds a week apart would draw alike.
-            val random = Random(java.util.Random(week * 31 + kind.ordinal).nextLong())
-            // Settled on sessions at the boxes still tried: an old box of yours doesn't settle it.
-            val counted = sessions.count { it.box in candidates }
-            val choice = if (counted < BOX_SETTLED && random.nextDouble() < EXPLORE) candidates.filter { it != best }.random(random) else best
-            if (choice != defaultBox) result[kind] = choice
-        }
-        return result
-    }
-
-    private fun describe(previous: Calibration, next: Calibration, defaultMargin: Int, defaultBox: Int): List<String> = buildList {
+    private fun describe(previous: Calibration, next: Calibration, defaultMargin: Int): List<String> = buildList {
         for (kind in DayKind.entries) {
             val before = previous.yieldFor(kind)
             val after = next.yieldFor(kind)
@@ -250,10 +223,6 @@ object Calibrator {
             val before = previous.marginDays[kind] ?: defaultMargin
             val after = next.marginDays[kind] ?: defaultMargin
             if (before != after) add("${kind.label}: finished ${days(after)} early (was ${days(before)})")
-            // Each side as the planner sees it: no box of its own is the default's.
-            val boxBefore = previous.boxMin[kind] ?: defaultBox
-            val boxAfter = next.boxMin[kind] ?: defaultBox
-            if (boxBefore != boxAfter) add("${kind.label}: pieces of $boxAfter minutes")
         }
     }
 

@@ -53,7 +53,8 @@ data class Backup(
          * older version, which would restore the rest and quietly lose them, refuses it whole as from
          * a newer one; an older backup is read here with none.
          */
-        const val FORMAT = 3
+        /** 4 since slots replaced sessions in the log (LR-09, AR-09): an older app refuses it rather than losing them. */
+        const val FORMAT = 4
     }
 }
 
@@ -84,18 +85,21 @@ object Backups {
         val bad = buildList {
             addAll(SettingsLimits.problems(backup.settings))
             val log = backup.log
-            if (log.sessions.any { it.workedMin !in 0..DAY_MIN || it.plannedMin !in 0..DAY_MIN || it.startedAt < 0 }) add("a focus session's minutes")
+            if (log.slots.any { it.workedMin !in 0..DAY_MIN || it.plannedMin !in 0..DAY_MIN || it.start < 0 || it.end < it.start }) add("a slot's minutes")
             if (log.completions.any { it.estimateMin < 0 || it.workedMin < 0 }) add("a finished task's minutes")
             if (log.days.any { it.plannedMin < 0 || (it.doneMin ?: 0) < 0 || runCatching { java.time.LocalDate.parse(it.date) }.isFailure }) add("a day's plan")
             if (log.checkIns.any { it.feel !in 1..5 }) add("a check-in's answer")
             val calibration = backup.calibration
             if (calibration.multipliers.values.any { !it.isFinite() || it !in Calibrator.MIN_MULTIPLIER..Calibrator.MAX_MULTIPLIER }) add("what the app learned about estimates")
             if (calibration.marginDays.values.any { it !in SettingsLimits.MARGIN_DAYS }) add("what the app learned about margins")
-            if (calibration.boxMin.values.any { it !in SettingsLimits.BOX_MIN }) add("what the app learned about box lengths")
             // The days' yields (PL-06), as the review learns them: a half to all of a day, from a week or two of days.
             if (calibration.yields.values.any { !it.isFinite() || it !in Calibrator.MIN_YIELD..Calibrator.MAX_YIELD }) add("what the app learned about the days' time")
             if (calibration.yieldDays.values.any { it !in Calibrator.YIELD_DAYS..Calibrator.YIELD_LOOK_BACK } || calibration.yields.keys != calibration.yieldDays.keys) add("what the app learned about the days' time's evidence")
             if (!evidence(calibration)) add("what the app learned's evidence")
+            // What a card takes in AnkiDroid (DX-11): within the bounds it's learned in, each from its stretches.
+            if (calibration.ankiSecondsPerCard.values.any { !it.isFinite() || it !in com.thomaswcode.decrastination.learn.AnkiProgress.MIN_SECONDS..com.thomaswcode.decrastination.learn.AnkiProgress.MAX_SECONDS } ||
+                calibration.ankiSecondsPerCard.keys != calibration.ankiStretches.keys || calibration.ankiStretches.values.any { it !in 1..com.thomaswcode.decrastination.learn.AnkiProgress.STRETCHES }
+            ) add("what the app learned about Anki")
             if (backup.eventAnswers.values.any { !answer(it) }) add("a calendar answer")
             if (!backup.aiUsage.spentUsd.isFinite() || backup.aiUsage.spentUsd < 0 || backup.aiUsage.calls < 0) add("Claude's spending")
             if (backup.instructions.any { !wellFormed(it, backup.exportedAt) }) add("an instruction")
@@ -263,7 +267,8 @@ object Backups {
      * same day or week) isn't doubled, and this phone's own version of it wins.
      */
     fun mergeLog(current: ActivityLog, imported: ActivityLog, now: Long): ActivityLog = ActivityLog(
-        sessions = (current.sessions + imported.sessions).distinctBy { it.taskId to it.startedAt }.sortedBy { it.startedAt },
+        // A task in boxes keeps one key for its next box: two kept the same day are told apart by when.
+        slots = (current.slots + imported.slots).distinctBy { listOf(it.key, it.start, it.outcome, it.at) }.sortedBy { it.at },
         completions = (current.completions + imported.completions).distinctBy { it.taskId to it.doneAt }.sortedBy { it.doneAt },
         blocks = (current.blocks + imported.blocks).distinctBy { Triple(it.at, it.target, it.reason) }.sortedBy { it.at },
         protection = (current.protection + imported.protection).distinctBy { it.at }.sortedBy { it.at },

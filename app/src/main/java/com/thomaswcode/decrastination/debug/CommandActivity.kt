@@ -84,7 +84,7 @@ import kotlinx.serialization.json.JsonPrimitive
  *   `--ei minutes 45`, `--es kind Revision`), logging its id; `own-done`, `own-reopen` and
  *   `own-delete --es task <id>`; and `quick-minutes --es task <id> --ei minutes N` (`--ei minutes 0`
  *   takes it back), a task's minutes as its sheet sets them. `forget-task --es task own:<id>` leaves no
- *   trace of a test's task of your own: gone, and its completions, sessions and question with it.
+ *   trace of a test's task of your own: gone, and its completions, slots and question with it.
  * - Test hooks: `test-arm`, `test-disarm` (at once, unlike the app's own disarming), `remove-admin`,
  *   `clear-parent-code`, `offer-teams-sync` (the countdown banner now, whatever the rules), and
  *   `clean-up` (this app's notifications, a delayed Teams sync, forced blocking hours, the
@@ -355,9 +355,6 @@ class CommandActivity : Activity() {
                 val id = intent.getStringExtra("task")
                 if (graph.tasks.value.tasks.none { it.id == id }) {
                     Log.w(TAG, "enrich-task needs --es task <id> of a task")
-                } else if (graph.focus.session?.taskId == id) {
-                    // Its steps stay while a session works through them: try once it's ended.
-                    Log.w(TAG, "enrich-task: $id has a focus session under way; try again after it")
                 } else {
                     // Its enrichment forgotten, and the steps it gave: out of date, so this run asks for it
                     // again now, and its answer's steps aren't taken for the source's.
@@ -413,14 +410,14 @@ class CommandActivity : Activity() {
             }
             "own-done" -> intent.getStringExtra("task")?.let { graph.finishOwnTask(it) }.also { Log.i(TAG, "own-done") }
             "own-reopen" -> intent.getStringExtra("task")?.let { graph.reopenOwnTask(it) }.also { Log.i(TAG, "own-reopen") }
-            "own-delete" -> intent.getStringExtra("task")?.let { graph.deleteOwnTask(it) }.also { Log.i(TAG, "own-delete: $it") }
+            "own-delete" -> intent.getStringExtra("task")?.let { id -> graph.deleteOwnTask(id).also { Log.i(TAG, "own-delete: $id") } }
             "forget-task" -> {
                 val id = intent.getStringExtra("task")?.takeIf { it.startsWith("own:") }
                 if (id == null) {
                     Log.w(TAG, "forget-task needs --es task own:<id>: only a task of your own, never a source's record")
                 } else {
                     graph.log.value.completions.filter { it.taskId == id }.forEach { Assessment.withdraw(this, id, it.doneAt) }
-                    graph.log.update { log -> log.copy(completions = log.completions.filterNot { it.taskId == id }, sessions = log.sessions.filterNot { it.taskId == id }) }
+                    graph.log.update { log -> log.copy(completions = log.completions.filterNot { it.taskId == id }, slots = log.slots.filterNot { it.taskId == id }) }
                     graph.deleteOwnTask(id)
                     Log.i(TAG, "forget-task: $id gone, with its log")
                 }

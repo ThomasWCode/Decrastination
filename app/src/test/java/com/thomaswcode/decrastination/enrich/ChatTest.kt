@@ -2,7 +2,6 @@ package com.thomaswcode.decrastination.enrich
 
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.Fixtures.LONDON
-import com.thomaswcode.decrastination.block.FocusSession
 import com.thomaswcode.decrastination.core.About
 import com.thomaswcode.decrastination.core.Change
 import com.thomaswcode.decrastination.core.ChangeType
@@ -267,14 +266,13 @@ class ChatTest {
     }
 
     @Test
-    fun `in a focus session, the next thing is its piece, as the Do now card has it`() {
-        val session = FocusSession(taskId = bridge.id, label = "Bridge and Balances Beam Q's: part 2 of 3", step = "part 2 of 3", minutes = 33, startedAt = now)
-        val text = ChatPrompts.plan(plan, LONDON, session, 20)
-        assertTrue("\nDoing now, in a focus session: Bridge and Balances Beam Q's: part 2 of 3 (33 min), 20 min left\n" in text, text)
+    fun `a slot under way is what's being done now, with its time, as the Do now card has it`() {
+        val first = plan.todayBucket!!.chunks.first()
+        val slot = com.thomaswcode.decrastination.core.Slot(com.thomaswcode.decrastination.core.SlotKind.Work, first, now - 15 * 60_000L, now + 19 * 60_000L, com.thomaswcode.decrastination.core.WindowKind.Evening, pinned = false)
+        val laid = plan.copy(buckets = plan.buckets.mapIndexed { i, b -> if (i == 0) b.copy(slots = listOf(slot)) else b })
+        val text = ChatPrompts.plan(laid, LONDON)
+        assertTrue("\nNow: 22:30–23:04 Bridge and Balances Beam Q's: part 1 of 3 (34 min); then " in text, text)
         assertFalse("Next to do" in text, text)
-        // On a task the plan no longer has: said, then the plan's next, with no "then".
-        val gone = ChatPrompts.plan(plan, LONDON, session.copy(taskId = "teams:gone", label = "Gone"), 5)
-        assertTrue("\nIn a focus session now: Gone, 5 min left\nNext to do: Bridge and Balances Beam Q's: part 1 of 3 (34 min)\n" in gone, gone)
     }
 
     @Test

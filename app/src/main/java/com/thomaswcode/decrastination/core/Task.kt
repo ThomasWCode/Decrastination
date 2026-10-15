@@ -66,7 +66,7 @@ data class SubStep(
     val from: Long? = null,
     /** Its own deadline, before the task's: one of several dated items in one email or planner item. */
     val dueAt: Long? = null,
-    /** Ticked off by hand in Tasks, not by a session or a photo check: done, but earning nothing. */
+    /** Ticked off by hand in Tasks, not by keeping its slot or a photo check: done, but earning nothing. */
     val byHand: Boolean = false,
     /** Ticked by hand: the task's timed minutes not yet taken up by its other steps that it kept then, worked on it before the tick. */
     val timedMin: Int = 0,
@@ -115,7 +115,7 @@ data class TaskItem(
      * Anki deck's cards) ends near nothing, and its completion is for all of it.
      */
     val peakEffortMin: Int? = null,
-    /** Minutes of finished focus sessions spent on it. */
+    /** Minutes worked on it: its kept slots' (LR-09; focus sessions' before review v2). */
     val workedMin: Int = 0,
     /**
      * Minutes of it a photo check found done: they come off what's left like [workedMin], but
@@ -123,8 +123,6 @@ data class TaskItem(
      */
     val photoMin: Int = 0,
 
-    /** The sessions counted in [workedMin], by start time, so each is counted once. */
-    val sessionsCounted: List<Long> = emptyList(),
     /** The photo checks counted in [photoMin], by id, with the minutes each was given, so each is counted once. */
     val photosCounted: Map<String, Int> = emptyMap(),
     val subSteps: List<SubStep> = emptyList(),

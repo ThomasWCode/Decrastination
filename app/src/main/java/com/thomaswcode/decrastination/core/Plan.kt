@@ -249,18 +249,23 @@ data class Plan(
     /** Today's work slot at [time], if one is under way. */
     fun slotAt(time: Long): Slot? = todaySlots.firstOrNull { it.kind == SlotKind.Work && time >= it.start && time < it.end }
 
+    /**
+     * Free time between today's slots (BL-10): from a piece ticked done at [keptAt] till the next work
+     * slot today starts. A kept piece leaves the plan, so a work slot of today's already begun is one
+     * under way, or gone by undone: either closes the gap. Null outside one, or with no slot after.
+     */
+    fun gapUntil(now: Long, keptAt: Long?): Long? {
+        if (keptAt == null || keptAt > now) return null
+        val work = todaySlots.filter { it.kind == SlotKind.Work }
+        if (work.any { it.start <= now }) return null
+        return work.minOfOrNull { it.start }
+    }
+
     /** The first work slot today at or after [time], else tomorrow's first. */
     fun nextSlot(time: Long): Slot? =
         todaySlots.firstOrNull { it.kind == SlotKind.Work && it.start >= time } ?: tomorrowBucket?.slots.orEmpty().firstOrNull { it.kind == SlotKind.Work }
 
     fun chunksOf(taskId: String): List<Chunk> = ordered.filter { it.taskId == taskId }
-
-    /**
-     * The piece of [taskId] whose step is [stepIndex] and [step] (a focus session's), or, where the
-     * plan has moved on under it (a step ticked meanwhile), the task's first.
-     */
-    fun pieceOf(taskId: String, stepIndex: Int?, step: String?): Chunk? =
-        chunksOf(taskId).let { pieces -> pieces.firstOrNull { it.stepIndex == stepIndex && it.step == step } ?: pieces.firstOrNull() }
 }
 
 /**
@@ -280,8 +285,6 @@ data class Calibration(
     val multipliers: Map<String, Double> = emptyMap(),
     /** Safety margin in days, per kind. */
     val marginDays: Map<Kind, Int> = emptyMap(),
-    /** Box length in minutes, per kind. */
-    val boxMin: Map<Kind, Int> = emptyMap(),
     /** How many timed pieces each multiplier's key has had (IMP-P2-016), a class's below the bar included: what Stats says it rests on. */
     val timed: Map<String, Int> = emptyMap(),
     /**
@@ -290,6 +293,10 @@ data class Calibration(
      * Kept, not read from an empty [timed]: a review from your answers alone has none either.
      */
     val counted: Boolean = false,
+    /** Seconds a card, per AnkiDroid deck (DX-11), learned from time in AnkiDroid: the deck tasks' minutes go by it. */
+    val ankiSecondsPerCard: Map<Long, Double> = emptyMap(),
+    /** How many stretches in AnkiDroid each of [ankiSecondsPerCard] rests on. */
+    val ankiStretches: Map<Long, Int> = emptyMap(),
 ) {
     fun multiplier(kind: Kind, className: String?): Double =
         multipliers["${kind.name}|${className.orEmpty()}"] ?: multipliers["${kind.name}|"] ?: 1.0

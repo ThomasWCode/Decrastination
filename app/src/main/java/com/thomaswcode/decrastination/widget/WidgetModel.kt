@@ -33,6 +33,8 @@ data class WidgetModel(
     val more: Int,
     /** What's wrong, worst first: a source that can't be read, Teams not synced for a day. */
     val warning: String?,
+    /** What finishing today earns (BL-04): a line under the header. */
+    val reward: String? = null,
     /** The task a tap opens, if any. */
     val taskId: String?,
 ) {
@@ -46,12 +48,10 @@ data class WidgetModel(
 
         /**
          * [runtime] and [armed] add the blocker's side: protection trouble comes first among the
-         * warnings, a running focus session replaces the day's count, and free time is shown. A
-         * session's time left is by [uptime], the clock that ends it.
+         * warnings, and free time is shown.
          */
-        fun from(plan: Plan, state: TaskState, zone: ZoneId, runtime: RuntimeState = RuntimeState(), armed: Boolean = false, uptime: Uptime? = null): WidgetModel {
+        fun from(plan: Plan, state: TaskState, zone: ZoneId, runtime: RuntimeState = RuntimeState(), armed: Boolean = false, reward: String? = null): WidgetModel {
             val now = plan.now
-            val sessionLeft = runtime.session?.leftMs(now, uptime)
             val next = plan.next
             val today = plan.todayBucket?.chunks.orEmpty()
             val tomorrow = plan.tomorrowBucket?.chunks.orEmpty()
@@ -60,14 +60,13 @@ data class WidgetModel(
             fun tasks(chunks: List<Chunk>) = chunks.map { it.taskId }.distinct().size
             return WidgetModel(
                 headline = next?.let { "Do: ${it.label}" } ?: "Nothing due",
+                reward = reward,
                 label = next?.label,
                 badge = next?.let { badge(it, now, zone) },
                 urgent = next?.urgent == true,
                 minutes = next?.let { Format.minutes(it.minutes) },
                 then = plan.then?.let { "Then: ${it.label}" },
                 summary = when {
-                    runtime.session != null && sessionLeft != null && sessionLeft > 0 ->
-                        "Focus: ${runtime.session.label}, ${Format.minutes((sessionLeft / 60_000L).toInt().coerceAtLeast(1))} left"
                     today.isEmpty() && tomorrow.isEmpty() -> runtime.credit.on(plan.today).leftMs.takeIf { it > 0 }
                         ?.let { "Nothing due soon · ${Format.minutes((it / 60_000L).toInt())} of free time" }
                         ?: "Nothing due today or tomorrow"

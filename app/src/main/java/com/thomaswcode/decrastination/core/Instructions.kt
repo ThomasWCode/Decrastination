@@ -202,6 +202,24 @@ object Instructions {
         return false
     }
 
+    /**
+     * Today's slots [changes] move on purpose (LR-09), each recorded moved: a time, its task's next
+     * piece's; a day other than today, all of its task's today; a start, those before it. The rest
+     * stay to be kept or missed.
+     */
+    fun movedSlots(changes: List<Change>, plan: Plan): List<Slot> {
+        val work = plan.todaySlots.filter { it.kind == SlotKind.Work }
+        return changes.flatMap { change ->
+            val mine = work.filter { it.chunk?.taskId == change.taskId }
+            when (change.type) {
+                ChangeType.AtTime -> plan.chunksOf(change.taskId.orEmpty()).firstOrNull()?.let { next -> mine.filter { it.chunk?.key == next.key } }.orEmpty()
+                ChangeType.OnDay -> if (change.date != plan.today.toString()) mine else emptyList()
+                ChangeType.StartFrom -> mine.filter { slot -> change.time?.let { slot.start < it } == true }
+                else -> emptyList()
+            }
+        }.distinct()
+    }
+
     /** Each task's overrides from [applied] (in order: a later one's wins). */
     fun taskOverrides(applied: List<Instruction>): Map<String, TaskOverrides> {
         val out = HashMap<String, TaskOverrides>()

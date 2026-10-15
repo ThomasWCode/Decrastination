@@ -23,7 +23,6 @@ import kotlinx.coroutines.sync.withLock
  */
 object Review {
     private const val ID = 4003
-    private const val WEEK_MS = 7 * 24 * 3_600_000L
 
     suspend fun run(context: Context, ifDue: Boolean) {
         val graph = AppGraph.get(context)
@@ -37,8 +36,6 @@ object Review {
         val learned = Calibrator.learn(
             graph.log.value,
             graph.runtime.value.calibration,
-            graph.settings.value.boxMin,
-            week = now / WEEK_MS,
             today = graph.focus.today(now),
             defaultMargin = graph.settings.value.marginDays,
         )

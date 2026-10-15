@@ -491,4 +491,20 @@ class InstructionsTest {
         val change = ((InstructionPrompts.SCHEMA["properties"] as Map<String, Any>)["changes"] as Map<String, Any>)["items"] as Map<String, Any>
         assertEquals((change["properties"] as Map<*, *>).keys.toList(), change["required"])
     }
+
+    @Test
+    fun `a time moves only its task's next piece's slot, a day elsewhere all of today's, a start those before it`() {
+        val today = java.time.LocalDate.parse("2026-10-12")
+        fun chunk(step: Int) = Chunk(
+            taskId = "teams:t", source = Source.Teams, kind = Kind.Homework, title = "t", step = "s$step", minutes = 30, dueAt = Fixtures.at("2026-10-20T09:00"),
+            deadline = Fixtures.at("2026-10-20T09:00"), soft = false, overdue = false, dueToday = false, behind = false, part = step + 1, parts = 3, taskMinutes = 90, why = Why.Spread, stepIndex = step,
+        )
+        val pieces = (0..2).map(::chunk)
+        val slots = pieces.mapIndexed { i, c -> Slot(SlotKind.Work, c, Fixtures.at("2026-10-12T17:00") + i * 35 * 60_000L, Fixtures.at("2026-10-12T17:30") + i * 35 * 60_000L, WindowKind.Evening, pinned = false) }
+        val plan = Plan(Fixtures.at("2026-10-12T16:00"), today, listOf(DayBucket(today, 300, pieces, slots)), emptyList())
+        assertEquals(listOf(slots[0]), Instructions.movedSlots(listOf(Change(ChangeType.AtTime, taskId = "teams:t", date = "2026-10-12", time = Fixtures.at("2026-10-12T20:00"))), plan))
+        assertEquals(slots, Instructions.movedSlots(listOf(Change(ChangeType.OnDay, taskId = "teams:t", date = "2026-10-14")), plan))
+        assertEquals(emptyList(), Instructions.movedSlots(listOf(Change(ChangeType.OnDay, taskId = "teams:t", date = "2026-10-12")), plan))
+        assertEquals(slots.take(2), Instructions.movedSlots(listOf(Change(ChangeType.StartFrom, taskId = "teams:t", time = Fixtures.at("2026-10-12T18:00"))), plan))
+    }
 }

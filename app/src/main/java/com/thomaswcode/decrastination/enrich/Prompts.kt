@@ -220,9 +220,12 @@ object Answers {
     /** [minutes] in hours, for a reason given: "21 hours", "20.8 hours". */
     private fun hours(minutes: Int): String = if (minutes % 60 == 0) "${minutes / 60} hours" else "%.1f hours".format(Locale.UK, minutes / 60.0)
 
-    /** [step] in even parts no longer than a focus session ([Focus.MAX_SESSION_MIN]), numbered if there's more than one. */
-    private fun fitSessions(step: SubStep): List<SubStep> {
-        val parts = (step.minutes + Focus.MAX_SESSION_MIN - 1) / Focus.MAX_SESSION_MIN
+    /** The longest a step is planned in one piece: a longer one is cut into parts (three hours, as a focus session was). */
+    const val MAX_PART_MIN = 180
+
+    /** [step] in even parts no longer than [MAX_PART_MIN], numbered if there's more than one. */
+    private fun fitParts(step: SubStep): List<SubStep> {
+        val parts = (step.minutes + MAX_PART_MIN - 1) / MAX_PART_MIN
         if (parts <= 1) return listOf(step)
         val suffix = { i: Int -> " (${i + 1} of $parts)" }
         return (0 until parts).map { i ->
@@ -325,8 +328,8 @@ object Answers {
      * no title, minutes out of range (up to [maxMinutes]), a date that can't be read or is out of
      * range, a start after its own deadline or after its task's ([dueBy]), a deadline before its
      * task can be started ([opens]), or an order its dates forbid (a step that can't start till
-     * after one listed later is due). Each keeps its own dates; one longer than a focus session is
-     * cut into parts that keep them, so finishing a session never ticks off more than it did. A
+     * after one listed later is due). Each keeps its own dates; one longer than [MAX_PART_MIN] is
+     * cut into parts that keep them, so ticking a piece never ticks off more than it did. A
      * step tagged as vocabulary ([vocabulary] jobs only) that asks for anything else too stays
      * planned whole.
      */
@@ -349,7 +352,7 @@ object Answers {
             val from = read[i].from ?: continue
             if (read.drop(i + 1).any { later -> later.dueAt != null && later.dueAt < from }) return no("the ${noun}s' dates are out of order")
         }
-        return Checked(read.flatMap(::fitSessions))
+        return Checked(read.flatMap(::fitParts))
     }
 
     /**

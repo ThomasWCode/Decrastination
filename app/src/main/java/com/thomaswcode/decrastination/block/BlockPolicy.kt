@@ -11,12 +11,13 @@ import kotlinx.serialization.Serializable
  * Whether a blocked app (or site) may be used now (docs/scheduler.md §4, with the hours decided
  * on 8 Oct). Pure: everything it depends on comes in through [Input].
  *
- * 1. A focus session you started blocks throughout, whatever the hour.
- * 2. A parent-approved unblock (the override) lets everything through until it ends.
- * 3. Sleep (22:30–07:00) is never blocked, and nor are school hours: before 16:45 on a weekday.
- * 4. Otherwise: while anything is planned for today, blocking is strict (since PL-01 spreads later
- *    work over its window, today's bucket alone, not tomorrow's too).
- * 5. With nothing planned today, earned free time is spent while a blocked app is in front; with none
+ * 1. A parent-approved unblock (the override) lets everything through until it ends.
+ * 2. Sleep (22:30–07:00) is never blocked, and nor is the time before blocking starts: 16:45 on a
+ *    school day, 10:00 on a weekend or a day off (BL-02).
+ * 3. Otherwise: while today's work isn't done, blocking is strict (BL-01: today's pieces still to
+ *    do, or a slot missed today that went to tomorrow, BL-11).
+ *    Between today's slots, after one kept, earned time can be spent till the next starts (BL-10).
+ * 4. With nothing left today, earned free time is spent while a blocked app is in front; with none
  *    left, it's blocked until more is earned.
  */
 object BlockPolicy {
@@ -25,23 +26,23 @@ object BlockPolicy {
         val now: Long,
         val zone: ZoneId,
         val settings: Settings,
-        /** Something is in today's or tomorrow's bucket. */
+        /** Today's work isn't done (BL-01): pieces still to do today, or a slot missed today that went to tomorrow (BL-11). */
         val pressure: Boolean,
         val creditLeftMs: Long,
-        val session: FocusSession? = null,
         val overrideUntil: Long? = null,
         /** Testing from a PC (adb only): act as if within blocking hours until then. */
         val forceActiveUntil: Long? = null,
-        /** The uptime clock, which says whether a session's time is up (see [FocusSession.isDue]). */
-        val uptime: Uptime? = null,
+        /** A school day (BL-02): blocking starts at `weekdayBlockFromMin`; on a weekend or a day off, at `weekendBlockFromMin`. */
+        val schoolDay: Boolean = true,
+        /** In a gap after a kept slot (BL-10): till the next slot's start, free time can be spent. */
+        val gapUntil: Long? = null,
     )
 
     enum class Reason(val headline: String) {
-        Session("You're in a focus session"),
-        DueSoon("Work is planned for today"),
+        TodayUndone("Today's work isn't done"),
         NoFreeTime("No free time left today"),
         Quiet("Quiet hours"),
-        SchoolHours("School hours"),
+        BeforeBlock("Before blocking starts"),
         Override("Unblocked by a parent code"),
         FreeTime("Using earned free time"),
     }
@@ -62,15 +63,16 @@ object BlockPolicy {
 
     fun decide(input: Input): Verdict {
         val now = input.now
-        if (input.session != null && !input.session.isDue(now, input.uptime)) return Verdict.Block(Reason.Session)
         if (input.overrideUntil != null && now < input.overrideUntil) return Verdict.Allow(Reason.Override)
         val forced = input.forceActiveUntil != null && now < input.forceActiveUntil
         if (!forced) {
             if (isQuiet(now, input.zone, input.settings)) return Verdict.Allow(Reason.Quiet)
-            if (isSchoolHours(now, input.zone, input.settings)) return Verdict.Allow(Reason.SchoolHours)
+            if (isBeforeBlockStart(now, input.zone, input.settings, input.schoolDay)) return Verdict.Allow(Reason.BeforeBlock)
         }
+        // Between today's slots, after one kept (BL-10): its earned time, till the next starts.
+        if (input.gapUntil != null && now < input.gapUntil && input.creditLeftMs > 0) return Verdict.Spend
         return when {
-            input.pressure -> Verdict.Block(Reason.DueSoon)
+            input.pressure -> Verdict.Block(Reason.TodayUndone)
             input.creditLeftMs > 0 -> Verdict.Spend
             else -> Verdict.Block(Reason.NoFreeTime)
         }
@@ -78,50 +80,15 @@ object BlockPolicy {
 
     fun isQuiet(now: Long, zone: ZoneId, settings: Settings): Boolean = minuteOfDay(now, zone) in settings.quietHours
 
-    /** A weekday before blocking starts, outside sleep. */
-    fun isSchoolHours(now: Long, zone: ZoneId, settings: Settings): Boolean {
-        val day = Instant.ofEpochMilli(now).atZone(zone).dayOfWeek
-        if (day == DayOfWeek.SATURDAY || day == DayOfWeek.SUNDAY) return false
-        return !isQuiet(now, zone, settings) && minuteOfDay(now, zone) < settings.weekdayBlockFromMin
-    }
+    /**
+     * Before blocking starts, outside sleep (BL-02): on a [schoolDay] at `weekdayBlockFromMin` (the
+     * phone at school stays free, BL-09), on a weekend or a day off at `weekendBlockFromMin`.
+     */
+    fun isBeforeBlockStart(now: Long, zone: ZoneId, settings: Settings, schoolDay: Boolean): Boolean =
+        !isQuiet(now, zone, settings) && minuteOfDay(now, zone) < blockFromMin(settings, schoolDay)
+
+    /** When blocking starts on a day of its kind. */
+    fun blockFromMin(settings: Settings, schoolDay: Boolean): Int = if (schoolDay) settings.weekdayBlockFromMin else settings.weekendBlockFromMin
 
     fun minuteOfDay(now: Long, zone: ZoneId): Int = Instant.ofEpochMilli(now).atZone(zone).let { it.hour * 60 + it.minute }
-}
-
-/** A focus session on one chunk: blocked apps stay blocked until it ends (docs/scheduler.md §4). */
-@Serializable
-data class FocusSession(
-    val taskId: String,
-    val label: String,
-    /** The sub-step it works through, if the task has them; else the session adds to minutes worked. */
-    val step: String?,
-    val minutes: Int,
-    val startedAt: Long,
-    /** The uptime clock at the start, so setting the date forward can't finish it early. */
-    val startedUptime: Uptime? = null,
-    /** The box length that cut it, for the box experiment; null for a step of its own or a task done in one piece. */
-    val box: Int? = null,
-    /** False when its chunk was longer than a session can run: finished, it adds its minutes, not its step done. */
-    val whole: Boolean = true,
-    /** Its step's place in its task's list ([com.thomaswcode.decrastination.core.Chunk.stepIndex]); null from before this was kept. */
-    val stepIndex: Int? = null,
-) {
-    val endsAt: Long get() = startedAt + minutes * 60_000L
-
-    /** How long it has run: by the uptime clock where it can say (the same start of the phone), else the wall clock. */
-    fun ran(now: Long, uptime: Uptime?): Long = uptime?.since(startedUptime) ?: (now - startedAt)
-
-    /** How long it has to run, by the clock that ends it ([ran]): a countdown agrees with when it ends, the date set or not. */
-    fun leftMs(now: Long, uptime: Uptime?): Long = (minutes * 60_000L - ran(now, uptime)).coerceAtLeast(0)
-
-    /**
-     * Its time is up. By the uptime clock where it can say, so setting the date either way neither
-     * ends it early nor holds it; across a restart, by the wall clock.
-     */
-    fun isDue(now: Long, uptime: Uptime?): Boolean = ran(now, uptime) >= minutes * 60_000L - FINISH_SLACK_MS
-
-    companion object {
-        /** A session ended by its alarm a moment before its minutes are up still counts as finished. */
-        const val FINISH_SLACK_MS = 5_000L
-    }
 }

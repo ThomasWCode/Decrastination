@@ -104,6 +104,30 @@ class StoresTest {
         assertEquals(3, JsonStore(file, Settings.serializer(), ::Settings).value.ankiTextbook)
     }
 
+    @Test
+    fun `the state and log a build with focus sessions wrote load whole, their sessions ignored`() {
+        // As 2.0.0 wrote them (AR-09): a session under way, one ending, and the sessions' history.
+        val runtime = File(dir, "runtime.json").apply {
+            writeText(
+                """{"credit": {"day": "2026-10-15", "earnedMs": 600000}, "overrideUntil": 5,
+                   "session": {"taskId": "teams:t", "label": "t", "step": null, "minutes": 30, "startedAt": 1},
+                   "finishing": [{"session": {"taskId": "teams:t", "label": "t", "step": null, "minutes": 30, "startedAt": 1}, "workedMin": 30, "completed": true, "endedAt": 2}]}""",
+            )
+        }
+        val state = JsonStore(runtime, RuntimeState.serializer(), ::RuntimeState)
+        assertNull(state.problem)
+        assertEquals(600_000L to 5L, state.value.credit.earnedMs to state.value.overrideUntil)
+        val log = File(dir, "log.json").apply {
+            writeText(
+                """{"sessions": [{"taskId": "teams:t", "kind": "Homework", "label": "t", "plannedMin": 30, "workedMin": 30, "startedAt": 1, "endedAt": 2, "completed": true}],
+                   "blocks": [{"at": 3, "target": "com.google.android.youtube", "reason": "Session"}]}""",
+            )
+        }
+        val history = JsonStore(log, ActivityLog.serializer(), ::ActivityLog)
+        assertNull(history.problem)
+        assertEquals(listOf("Session"), history.value.blocks.map { it.reason })
+    }
+
     /** Stands in for the Keystore: reverses the bytes, so the file is at least not the plain JSON. */
     private object Reverse : SecretCipher {
         override fun encrypt(plain: ByteArray) = plain.reversedArray()

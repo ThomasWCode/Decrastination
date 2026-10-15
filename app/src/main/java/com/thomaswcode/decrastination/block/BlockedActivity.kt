@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.core.Chunk
+import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.ui.AppTheme
 import com.thomaswcode.decrastination.ui.Format
 import com.thomaswcode.decrastination.ui.PieceActions
@@ -45,8 +46,8 @@ import kotlinx.coroutines.delay
 
 /**
  * What a blocked app shows instead (PLAN.md Phase 3): why, the next thing to do, and the ways
- * to get on with it. **Open** goes to the task; **Start** runs a focus session on it; **Check
- * it's done** asks its source; **Refresh Teams** asks the Teams widget to sync. There's no way
+ * to get on with it. **Open** goes to the task; **Done** keeps its slot; **Check it's done**
+ * asks its source; **Refresh Teams** asks the Teams widget to sync. There's no way
  * through (docs/scheduler.md §6, layer 1). Back, and **Go home**, go to the home screen.
  *
  * Its own task (manifest), so neither Back nor Recents can reveal the app behind.
@@ -93,7 +94,6 @@ class BlockedActivity : ComponentActivity() {
         }
         val plan = remember(tasks, settings, now / 60_000) { graph.plan(tasks, settings, now) }
         val verdict = remember(tasks, settings, runtime, now / 10_000) { graph.focus.verdict(now) }
-        val session = runtime.session
         val zone = graph.clock.zone()
         var message by remember { mutableStateOf<String?>(null) }
         var why by remember { mutableStateOf(false) }
@@ -108,12 +108,11 @@ class BlockedActivity : ComponentActivity() {
             }
         }
         // Nothing is blocked any more (free time earned, quiet hours begun), or not this: let it through.
-        LaunchedEffect(verdict, session, targetBlocked) {
-            // Its target no longer blocked goes at once, session or not; otherwise once nothing's
-            // blocked and no session holds it.
-            if (!targetBlocked || (verdict !is BlockPolicy.Verdict.Block && session == null)) finish()
+        LaunchedEffect(verdict, targetBlocked) {
+            // Its target no longer blocked goes at once; otherwise once nothing's blocked.
+            if (!targetBlocked || verdict !is BlockPolicy.Verdict.Block) finish()
         }
-        val next = if (session != null) plan.pieceOf(session.taskId, session.stepIndex, session.step) ?: plan.next else plan.next
+        val next = plan.next
         // Shared with the Plan (IMP-P1-001): the same actions, the same rules.
         val photo = rememberPhotoCheck(graph, this, plan) { _, text -> message = text }
 
@@ -124,14 +123,8 @@ class BlockedActivity : ComponentActivity() {
             ) {
                 Text("Not now", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.SemiBold)
                 Text("${targetLabel()} is blocked. ${verdict.reason.headline}.", style = MaterialTheme.typography.bodyLarge)
-                if (session != null) {
-                    val left = session.leftMs(now, graph.clock.uptime()) / 1000
-                    Text(
-                        "Focus: ${session.label}, %d:%02d left".format(left / 60, left % 60),
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                    )
-                }
+                // What finishing today earns (BL-04).
+                graph.focus.rewardLine(plan, now)?.let { Text(it, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary) }
                 if (next != null) {
                     NextCard(next, plan.now, zone)
                     PieceActions(graph, this@BlockedActivity, next, plan.now, photo) { message = it }
@@ -144,7 +137,7 @@ class BlockedActivity : ComponentActivity() {
                     Text("Free time left today: ${Format.minutes((credit / 60_000).toInt())}", style = MaterialTheme.typography.bodyMedium)
                 }
                 TextButton(onClick = { why = !why }) { Text(if (why) "Hide why" else "Why am I blocked?") }
-                AnimatedVisibility(why) { Why(verdict.reason, plan.todayBucket?.chunks.orEmpty(), settings.workMinPerFreeMin) }
+                AnimatedVisibility(why) { Why(verdict.reason, plan.todayBucket?.chunks.orEmpty(), settings.workMinPerFreeMin, graph.focus.missedKeepsPressure(now), settings) }
                 OutlinedButton(onClick = ::goHome, modifier = Modifier.fillMaxWidth()) { Text("Go to the home screen") }
             }
         }
@@ -166,11 +159,12 @@ class BlockedActivity : ComponentActivity() {
     }
 
     @Composable
-    private fun Why(reason: BlockPolicy.Reason, today: List<Chunk>, ratio: Int) {
+    private fun Why(reason: BlockPolicy.Reason, today: List<Chunk>, ratio: Int, spilled: Boolean, settings: Settings) {
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             when (reason) {
-                BlockPolicy.Reason.DueSoon -> {
-                    Text("While anything is planned for today, blocking is strict. Today:", style = MaterialTheme.typography.bodyMedium)
+                BlockPolicy.Reason.TodayUndone -> {
+                    if (spilled) Text("A slot you missed went to tomorrow, so tonight stays blocked.", style = MaterialTheme.typography.bodyMedium)
+                    if (today.isNotEmpty()) Text("While today's work isn't done, blocking is strict. Today:", style = MaterialTheme.typography.bodyMedium)
                     today.take(12).forEach { Text("• ${it.label} (${Format.minutes(it.minutes)})", style = MaterialTheme.typography.bodySmall) }
                     if (today.size > 12) Text("and ${today.size - 12} more", style = MaterialTheme.typography.bodySmall)
                 }
@@ -178,10 +172,9 @@ class BlockedActivity : ComponentActivity() {
                     "Nothing is planned for today, but there's no free time left. Every $ratio minutes of work earns a minute; it's gone at midnight.",
                     style = MaterialTheme.typography.bodyMedium,
                 )
-                BlockPolicy.Reason.Session -> Text("You started a focus session: blocked apps stay blocked until it ends.", style = MaterialTheme.typography.bodyMedium)
                 else -> Text(reason.headline, style = MaterialTheme.typography.bodyMedium)
             }
-            Text("Nothing is blocked 22:30–07:00, or before 16:45 on school days.", style = MaterialTheme.typography.bodySmall)
+            Text("Nothing is blocked ${Format.clock(settings.quietHours.startMin)}–${Format.clock(settings.quietHours.endMin)}, or before ${Format.clock(settings.weekdayBlockFromMin)} on school days and ${Format.clock(settings.weekendBlockFromMin)} on other days.", style = MaterialTheme.typography.bodySmall)
         }
     }
 

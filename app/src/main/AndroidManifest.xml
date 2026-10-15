@@ -191,10 +191,6 @@
         </receiver>
 
         <receiver
-            android:name=".block.SessionReceiver"
-            android:exported="false" />
-
-        <receiver
             android:name=".block.SlotReceiver"
             android:exported="false" />
 

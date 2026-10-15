@@ -73,7 +73,7 @@ object Planner {
         val dayLoads: Map<LocalDate, Int> = emptyMap(),
         /** The most minutes of work a day holds, where your instructions limit it (0: none). */
         val dayCaps: Map<LocalDate, Int> = emptyMap(),
-        /** Minutes of focus sessions and photo checks today: they come off today's limit, where there's one. */
+        /** Minutes of today's kept slots (LR-09): they come off today's limit, where there's one. */
         val workedTodayMin: Int = 0,
         /**
          * Times you said you can't work (instructions): off a day's time as [busy] is, and, like a
@@ -978,7 +978,7 @@ object Planner {
         }
         if (task.effortMin <= 0) return emptyList()
         val remaining = remaining(task, multiplier).roundToInt().coerceAtLeast(minOf(MIN_CHUNK, task.effortMin))
-        val box = (input.calibration.boxMin[task.kind] ?: input.settings.boxMin).coerceAtLeast(MIN_CHUNK)
+        val box = input.settings.boxMin.coerceAtLeast(MIN_CHUNK)
             // No longer than the most time any day it can go on holds, where you've limited days: a
             // box too long for all of them would be planned on none.
             .let { box -> roomiest(task, input)?.takeIf { it in MIN_CHUNK until box } ?: box }
