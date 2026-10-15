@@ -11,6 +11,12 @@ import kotlinx.serialization.Serializable
 data class Settings(
     /** Which textbook's decks a German section number like "1.2" means (Q18): `Textbook 1::1.2`. */
     val ankiTextbook: Int = 1,
+    /** The September you went into Year 12 (AI-06): the year group the model's told goes by it. */
+    val yearGroupStart: Int = 2026,
+    /** What you'd have the model know about you (AI-05), a line each. */
+    val profileLines: List<String> = emptyList(),
+    /** Your classes' codes, as the sources give them, to the subject each is (AI-05). */
+    val classMap: Map<String, String> = emptyMap(),
     /** When the daily Anki quota is due (21:30, decided 8 Oct). */
     val ankiDeadlineMin: Int = 21 * 60 + 30,
 

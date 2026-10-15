@@ -291,13 +291,13 @@ class ChatTest {
 
     @Test
     fun `the prompts are whole, the change types in both, with no stray indent`() {
-        for (system in listOf(ChatPrompts.SYSTEM, InstructionPrompts.SYSTEM)) {
+        for (system in listOf(ChatPrompts.system(), InstructionPrompts.system())) {
             assertTrue("\n- Minutes: how long the whole task takes" in system, system)
             assertFalse(system.lines().any { it.startsWith(" ") }, system)
         }
         assertNotNull(ChatPrompts.SCHEMA["properties"])
         // Questions about a day go by the plan.
-        assertTrue("what's on a day, how full it is, what to do next and why something isn't planned from the plan" in ChatPrompts.SYSTEM)
+        assertTrue("what's on a day, how full it is, what to do next and why something isn't planned from the plan" in ChatPrompts.system())
     }
 
     @Test

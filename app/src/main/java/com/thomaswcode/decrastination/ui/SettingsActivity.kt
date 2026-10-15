@@ -137,6 +137,34 @@ class SettingsActivity : ComponentActivity() {
                     OptionalNumberField("Monthly cap ($, blank for none)", draft.aiMonthlyCapUsd, SettingsLimits.CAP_USD, "aiMonthlyCapUsd", form) { draft = draft.copy(aiMonthlyCapUsd = it) }
                 }
 
+                // Who you are, as every call to Claude says it (AI-05).
+                item { Section("About you") }
+                item {
+                    NumberField("The September you went into Year 12", draft.yearGroupStart, SettingsLimits.YEAR_GROUP_START, "yearGroupStart", form) { draft = draft.copy(yearGroupStart = it) }
+                    NumberField("Current German textbook", draft.ankiTextbook, SettingsLimits.TEXTBOOK, "ankiTextbook", form) { draft = draft.copy(ankiTextbook = it) }
+                    OutlinedTextField(
+                        value = raw[PROFILE] ?: draft.profileLines.joinToString("\n"),
+                        onValueChange = { value ->
+                            raw = raw + (PROFILE to value)
+                            draft = draft.copy(profileLines = value.lines().map { it.trim().take(SettingsLimits.MAX_PROFILE_LINE) }.filter { it.isNotEmpty() }.take(SettingsLimits.MAX_PROFILE_LINES))
+                        },
+                        label = { Text("What you'd have Claude know, a line each") },
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                        minLines = 3,
+                    )
+                    // Each class code the sources give, and the subject it is: blank leaves it the code.
+                    for (code in (draft.classMap.keys + graph.tasks.value.tasks.mapNotNull { it.className?.trim()?.takeIf(String::isNotEmpty) }).distinct().sorted().take(SettingsLimits.MAX_CLASSES)) {
+                        OutlinedTextField(
+                            value = draft.classMap[code].orEmpty(),
+                            onValueChange = { subject -> draft = draft.copy(classMap = if (subject.isBlank()) draft.classMap - code else draft.classMap + (code to subject.take(SettingsLimits.MAX_NAME))) },
+                            label = { Text("$code is") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                        )
+                    }
+                    Note("Sent to Claude with every call, with your school days and what's remembered.")
+                }
+
                 item { Section("Hours") }
                 item {
                     WindowField("School days: work", draft.weekdayHours, "weekdayHours", form) { draft = draft.copy(weekdayHours = it) }
@@ -183,7 +211,6 @@ class SettingsActivity : ComponentActivity() {
                 item { Section("Anki") }
                 item {
                     TimeField("Daily cards due by", draft.ankiDeadlineMin, "ankiDeadlineMin", form) { draft = draft.copy(ankiDeadlineMin = it) }
-                    NumberField("Current textbook", draft.ankiTextbook, SettingsLimits.TEXTBOOK, "ankiTextbook", form) { draft = draft.copy(ankiTextbook = it) }
                     // What a card takes in each deck, as learned from time in AnkiDroid (DX-11).
                     com.thomaswcode.decrastination.learn.AnkiProgress.lines(graph.runtime.value.calibration, graph.tasks.value.tasks).forEach {
                         Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -274,6 +301,7 @@ class SettingsActivity : ComponentActivity() {
 
     private companion object {
         const val SITES = "blockedSites"
+        const val PROFILE = "profileLines"
 
         /** The settings as their JSON, to keep a draft through the screen being made again. */
         val SETTINGS = Saver<Settings, String>(
