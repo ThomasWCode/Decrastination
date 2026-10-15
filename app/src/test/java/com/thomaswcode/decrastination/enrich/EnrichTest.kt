@@ -21,6 +21,7 @@ import kotlin.test.assertTrue
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonArray
@@ -186,6 +187,9 @@ class PromptsTest {
 class AnswersTest {
     private fun parse(job: Enrichments.Job, text: String, task: TaskItem = email()) = Answers.parse(job, text, task, "claude-opus-5-5", NOW, LONDON)
 
+    /** The first time of asking (AI-01): nothing left out, the check failed its complaint. */
+    private fun strict(job: Enrichments.Job, text: String, task: TaskItem = email()) = Answers.read(job, text, task, "claude-opus-5-5", NOW, LONDON, salvage = false)
+
     @Test
     fun `an email's triage is read, its dates in local time`() {
         val e = parse(Enrichments.Job.Email, """{"kind":"Admin","actionableFrom":null,"deadline":"2026-10-12T08:30","effortMin":10,"nextStep":"Sign the form and give it to Mr Hughes"}""")!!
@@ -344,13 +348,16 @@ class AnswersTest {
         assertEquals(Fixtures.at("2026-10-30T00:00"), blocks[0].from)
         assertEquals(Fixtures.at("2026-11-20T23:59"), blocks[0].dueAt)
         assertNull(blocks[1].from)
-        // A block that opens after it's due isn't to be trusted: the triage stands without them, its
-        // whole estimate planned and the drop said, so it's still something to do, not hidden.
-        val muddled = parse(Enrichments.Job.Email, calendar.replace("2026-11-20", "2026-10-29"))!!
-        assertNull(muddled.subSteps)
+        // A block that opens after it's due: put back to the model the first time of asking (AI-01),
+        // and asked again, kept with no dates of its own, saying so.
+        val wrong = calendar.replace("2026-11-20", "2026-10-29")
+        assertEquals("Block 1 ('Apply to STEM Potential') starts on 2026-10-30, after its own due time 2026-10-29T23:59", strict(Enrichments.Job.Email, wrong).complaint)
+        val muddled = parse(Enrichments.Job.Email, wrong)!!
+        assertEquals(listOf(null to null, null to Fixtures.at("2027-01-15T23:59")), muddled.subSteps!!.map { it.from to it.dueAt })
         assertEquals(Kind.Admin, muddled.kind)
         assertEquals(90, muddled.effortMin)
-        assertEquals("a block starts after it's due", muddled.dropped)
+        assertNull(muddled.dropped)
+        assertEquals(listOf("'Apply to STEM Potential': its start was after its own due time, so it's planned by the task's date"), muddled.adjusted)
     }
 
     @Test
@@ -360,14 +367,14 @@ class AnswersTest {
         val wild = parse(Enrichments.Job.Effort, """{"effortMin":1250,"blocks":[$blocks]}""")!!
         assertNull(wild.subSteps)
         assertNull(wild.effortMin)
-        assertEquals("20.8 hours of blocks, past the 20 the app takes from one task", wild.dropped)
-        // The email due on the 15th; a block opening on the 20th can't be done by then.
-        val late = parse(
-            Enrichments.Job.Email,
-            """{"kind":"Admin","actionableFrom":null,"deadline":"2026-10-15","effortMin":60,"nextStep":"Apply","blocks":[{"title":"Apply","minutes":60,"from":"2026-10-20","due":null}]}""",
-        )!!
-        assertNull(late.subSteps)
-        assertEquals("a block starts after the task is due", late.dropped)
+        assertEquals("the blocks come to 20.8 hours, over the 20 hours one task can take", wild.dropped)
+        // The email due on the 15th; a block opening on the 20th can't be done by then: put back,
+        // then kept by the email's own date.
+        val text = """{"kind":"Admin","actionableFrom":null,"deadline":"2026-10-15","effortMin":60,"nextStep":"Apply","blocks":[{"title":"Apply","minutes":60,"from":"2026-10-20","due":null}]}"""
+        assertEquals("Block 1 ('Apply') starts on 2026-10-20, after the due time 2026-10-15T23:59", strict(Enrichments.Job.Email, text).complaint)
+        val late = parse(Enrichments.Job.Email, text)!!
+        assertEquals(listOf(null), late.subSteps!!.map { it.from })
+        assertEquals(listOf("'Apply': its start was after the hand-in, so it's planned by the task's date"), late.adjusted)
     }
 
     @Test
@@ -377,10 +384,10 @@ class AnswersTest {
             """{"kind":"Admin","actionableFrom":"2026-12-01","deadline":"2026-12-31","effortMin":60,"nextStep":"Apply","blocks":[{"title":"Apply","minutes":60,"from":null,"due":"2026-11-15"}]}""",
         )!!
         assertNull(early.subSteps)
-        assertEquals("a block is due before the email can be started", early.dropped)
+        assertEquals("block 1 ('Apply') is due 2026-11-15T23:59, before the email can be started on 2026-12-01", early.dropped)
         val backwards = parse(Enrichments.Job.Effort, """{"effortMin":60,"blocks":[{"title":"A","minutes":30,"from":"2026-10-20","due":null},{"title":"B","minutes":30,"from":null,"due":"2026-10-12"}]}""")!!
         assertNull(backwards.subSteps)
-        assertEquals("the blocks' dates are out of order", backwards.dropped)
+        assertEquals("block 1 ('A') can't start till 2026-10-20, after block 2 ('B') is due 2026-10-12T23:59", backwards.dropped)
     }
 
     @Test
@@ -392,7 +399,7 @@ class AnswersTest {
         // One more than that isn't trusted.
         val over = parse(Enrichments.Job.Effort, """{"effortMin":${total + 10},"blocks":[${given(Prompts.MAX_BLOCKS + 1)}]}""")!!
         assertNull(over.subSteps)
-        assertEquals("31 blocks, past the 30 the app takes", over.dropped)
+        assertEquals("there are 31 blocks, over the 30 allowed", over.dropped)
     }
 
     @Test
@@ -415,17 +422,21 @@ class AnswersTest {
         fun block(title: String = "Apply", minutes: Int = 30, from: String? = null, due: String? = null) =
             """{"title":"$title","minutes":$minutes,"from":${from?.let { "\"$it\"" }},"due":${due?.let { "\"$it\"" }}}"""
         fun effort(vararg blocks: String) = parse(Enrichments.Job.Effort, """{"effortMin":${30 * blocks.size},"blocks":[${blocks.joinToString(",")}]}""")!!.dropped
-        assertEquals("a block has no title", effort(block(title = " ")))
-        assertEquals("a block has no minutes", parse(Enrichments.Job.Effort, """{"effortMin":30,"blocks":[${block(minutes = 0)}]}""")!!.dropped)
-        assertEquals("a block of 700 minutes, past the 600 one can take", parse(Enrichments.Job.Effort, """{"effortMin":700,"blocks":[${block(minutes = 700)}]}""")!!.dropped)
-        assertEquals("a block's date can't be read", effort(block(due = "soon")))
-        assertEquals("a block's date is out of range", effort(block(due = "2030-01-01")))
-        assertEquals("a block starts after it's due", effort(block(from = "2026-10-20", due = "2026-10-15")))
+        assertEquals("block 1 has no title", effort(block(title = " ")))
+        assertEquals("block 1 ('Apply') has no minutes", parse(Enrichments.Job.Effort, """{"effortMin":30,"blocks":[${block(minutes = 0)}]}""")!!.dropped)
+        assertEquals("block 1 ('Apply') is 700 minutes, over the 600 allowed", parse(Enrichments.Job.Effort, """{"effortMin":700,"blocks":[${block(minutes = 700)}]}""")!!.dropped)
+        // An unreadable date, or one out of range, isn't left out: it fails the reading still.
+        assertEquals("block 1 ('Apply') has a date that can't be read: 'soon'", effort(block(due = "soon")))
+        assertEquals("block 1 ('Apply') has a date out of range: 2030-01-01T23:59", effort(block(due = "2030-01-01")))
+        assertEquals("block 2 ('Apply') starts on 2026-10-20, after its own due time 2026-10-15T23:59", Answers.read(Enrichments.Job.Effort, """{"effortMin":60,"blocks":[${block()},${block(from = "2026-10-20", due = "2026-10-15")}]}""", email(), "m", NOW, LONDON, salvage = false).enrichment!!.dropped)
         // An assignment's steps say the same of a step, and of a total past one task's.
         val split = { steps: String, total: Int -> parse(Enrichments.Job.Assignment, """{"subSteps":[$steps],"effortMin":$total,"ankiSections":[],"testDate":null}""", assignment("Do it"))!!.dropped }
-        assertEquals("a step of 300 minutes, past the 240 one can take", split("""{"title":"Essay","minutes":300,"ankiSections":[],"from":null,"due":null}""", 300))
-        assertEquals("the steps add up to 60 minutes, not the 120 it gives in all", split("""{"title":"Essay","minutes":60,"ankiSections":[],"from":null,"due":null}""", 120))
+        assertEquals("step 1 ('Essay') is 300 minutes, over the 240 allowed", split("""{"title":"Essay","minutes":300,"ankiSections":[],"from":null,"due":null}""", 300))
+        assertEquals("the steps add up to 60 minutes, not the 120 effortMin gives", split("""{"title":"Essay","minutes":60,"ankiSections":[],"from":null,"due":null}""", 120))
         assertNull(split("""{"title":"Essay","minutes":60,"ankiSections":[],"from":null,"due":null}""", 60))
+        // Said to the model, it starts with a capital.
+        assertEquals("The steps add up to 60 minutes, not the 120 effortMin gives", strict(Enrichments.Job.Assignment, """{"subSteps":[{"title":"Essay","minutes":60,"ankiSections":[],"from":null,"due":null}],"effortMin":120,"ankiSections":[],"testDate":null}""", assignment("Do it")).complaint)
+        assertNull(strict(Enrichments.Job.Effort, """{"effortMin":35,"blocks":[]}""").complaint)
     }
 
     @Test
@@ -438,7 +449,7 @@ class AnswersTest {
         val off = parse(Enrichments.Job.Effort, """{"effortMin":200,"blocks":[{"title":"A","minutes":30,"from":null,"due":null}]}""")!!
         assertNull(off.subSteps)
         assertEquals(200, off.effortMin)
-        assertEquals("the blocks add up to 30 minutes, not the 200 it gives in all", off.dropped)
+        assertEquals("the blocks add up to 30 minutes, not the 200 effortMin gives", off.dropped)
         // Kept, or none given: nothing dropped.
         assertNull(e.dropped)
         assertNull(parse(Enrichments.Job.Effort, """{"effortMin":35,"blocks":[]}""")!!.dropped)
@@ -454,12 +465,14 @@ class AnswersTest {
 
     @Test
     fun `a step can't start after the test that's its task's deadline`() {
-        val e = parse(
-            Enrichments.Job.Assignment,
-            """{"subSteps":[{"title":"Revise","minutes":60,"ankiSections":[],"from":"2026-10-13","due":null}],"effortMin":60,"ankiSections":[],"testDate":"2026-10-12"}""",
-            assignment("Revise for the test"),
-        )!!
-        assertNull(e.subSteps)
+        val text = """{"subSteps":[{"title":"Revise","minutes":60,"ankiSections":[],"from":"2026-10-13","due":null}],"effortMin":60,"ankiSections":[],"testDate":"2026-10-12"}"""
+        // Put back the first time of asking; then kept, by the test's day.
+        assertEquals("Step 1 ('Revise') starts on 2026-10-13, after the due time 2026-10-12T08:30", strict(Enrichments.Job.Assignment, text, assignment("Revise for the test")).complaint)
+        val e = parse(Enrichments.Job.Assignment, text, assignment("Revise for the test"))!!
+        assertEquals(listOf("Revise" to null), e.subSteps!!.map { it.title to it.from })
+        assertEquals(listOf("'Revise': its start was after the hand-in, so it's planned by the task's date"), e.adjusted)
+        assertTrue("No step may start after the assignment's due time" in Prompts.system(Enrichments.Job.Assignment))
+        assertTrue("No block may start after the item's date" in Prompts.system(Enrichments.Job.Effort))
     }
 
     @Test
@@ -642,6 +655,35 @@ class ClaudeEnricherTest {
         assertEquals("claude-opus-5-5", e.by)
         assertEquals(Fixtures.at("2026-10-12T08:30"), e.deadline)
         assertEquals(0.0108, result.costUsd, 1e-9)
+    }
+
+    @Test
+    fun `an answer that fails a check is put back once, with the problem, and read again`() = runBlocking {
+        val bad = """{"effortMin":200,"blocks":[{"title":"A","minutes":30,"from":null,"due":null}]}"""
+        server.enqueue(reply(bad))
+        val task = assignment("Revise for the mock")
+        val first = enricher().enrich(task, Enrichments.Job.Effort, NOW)
+        server.takeRequest()
+        // Meanwhile, its reading as it can be: the total planned whole.
+        assertEquals("The blocks add up to 30 minutes, not the 200 effortMin gives", first.repair!!.complaint)
+        assertEquals(200, first.enrichment!!.effortMin)
+        server.enqueue(reply("""{"effortMin":60,"blocks":[{"title":"A","minutes":30,"from":null,"due":null},{"title":"B","minutes":30,"from":null,"due":null}]}"""))
+        val second = enricher().repair(task, Enrichments.Job.Effort, NOW, first.repair!!)
+        val messages = Json.parseToJsonElement(server.takeRequest().body.readUtf8()).jsonObject["messages"]!!.jsonArray
+        assertEquals(listOf("user", "assistant", "user"), messages.map { it.jsonObject["role"]!!.jsonPrimitive.content })
+        fun said(turn: JsonElement): String = turn.jsonObject["content"]!!.let { c -> if (c is JsonPrimitive) c.content else c.jsonArray.joinToString("") { it.jsonObject["text"]!!.jsonPrimitive.content } }
+        assertEquals(bad, said(messages[1]))
+        assertTrue(said(messages[2]).startsWith("Your answer had a problem: The blocks add up to 30 minutes"), said(messages[2]))
+        assertTrue(second.repaired)
+        assertEquals(listOf("A", "B"), second.enrichment!!.subSteps!!.map { it.title })
+        // Wrong again: dropped, said so.
+        server.enqueue(reply(bad))
+        val again = enricher().repair(task, Enrichments.Job.Effort, NOW, first.repair!!)
+        assertTrue(again.repaired)
+        assertEquals("the blocks add up to 30 minutes, not the 200 effortMin gives", again.enrichment!!.dropped)
+        // One that passes isn't put back.
+        server.enqueue(reply("""{"effortMin":35,"blocks":[]}"""))
+        assertNull(enricher().enrich(task, Enrichments.Job.Effort, NOW).repair)
     }
 
     @Test

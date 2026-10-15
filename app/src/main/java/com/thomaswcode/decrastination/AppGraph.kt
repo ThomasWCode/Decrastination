@@ -1004,7 +1004,24 @@ class AppGraph private constructor(context: Context) {
                     // Declined, or no answer it could read: the rules' say, under the model's name.
                     is Called.Answered -> {
                         calls++
-                        called.value.enrichment ?: rules.enrich(task, job, now).enrichment?.copy(by = model.by)
+                        val first = called.value
+                        // A check its answer failed (AI-01): put back once, as a call of its own (counted
+                        // under the cap, held by a rest); the first's reading stands if that doesn't come back.
+                        val again = first.repair?.takeIf { calls < MAX_MODEL_CALLS }?.let { repair ->
+                            when (val second = callModel(interactive = false, task = task, cost = { r: Enricher.Result -> r.costUsd to r.refused }) { model.repair(task, job, now, repair) }) {
+                                is Called.Answered -> second.value.also { calls++ }
+                                is Called.Failed -> {
+                                    calls++
+                                    if (Failures.classify(second.error) != Failure.BadRequest) enricher = null
+                                    null
+                                }
+                                is Called.Held -> {
+                                    enricher = null
+                                    null
+                                }
+                            }
+                        }
+                        again?.enrichment ?: first.enrichment ?: rules.enrich(task, job, now).enrichment?.copy(by = model.by)
                     }
                 }
             } else {

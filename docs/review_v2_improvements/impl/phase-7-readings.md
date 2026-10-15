@@ -18,6 +18,8 @@ Items: AI-01, AI-03, AI-07, AI-08, AI-09, AI-13, AI-14, AI-15, AI-16, AI-17, AI-
 
 **Tests.** `EnrichTest`: a bad `from` is salvaged with the line; an unparseable date still drops; `complaint` text for each check; `ClaudeEnricher` against `MockWebServer` (the existing fake server in `EnrichTest`): the second request carries the assistant turn and the complaint; two bad answers → dropped, `repaired = true`.
 
+*(As built: the second time of asking is a call of its own (`Enricher.repair`, sent by `enrichNow` through `callModel`), so the cap reserves for it and a rest holds it; its item is cut to leave room for the first answer within `MAX_INPUT_CHARS`. `Answers.read` returns `Parsed`; `Answers.parse` stays, the salvaging read's enrichment, for its callers. A step due after its task is salvaged too.)*
+
 ---
 
 ## AI-03 and AI-20 Limits in the prompt and in the schema
