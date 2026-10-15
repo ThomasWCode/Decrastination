@@ -79,7 +79,8 @@ The implementation of `docs/review_v2_improvements/impl/` on branch `v3`. Delete
 - LR-04 the morning briefing as Felix's message over the day's list, on a day with slots; the list alone otherwise: 27d6571.
 - LR-05 "How did it go?" as Felix's question once an evening, about the day's completions no kept slot saw, his replies the three answers; the old question with Claude off; its channel gone: fafb2fc.
 - LR-07 the routine notifications at most four a day and none in quiet hours, the rest held for the next briefing; Felix and protection unheld: 0079695.
-- AC-10 Felix's next "starting?" written ahead, ten minutes before it's due, and sent as it is if it still fits: this commit.
+- AC-10 Felix's next "starting?" written ahead, ten minutes before it's due, and sent as it is if it still fits: a29645c.
+- UI-06 his offered replies as chips in the chat; UI-16 the chat titled with his name and his button on every screen, the menu's Ask Claude gone: this commit.
 
 ## Current
 

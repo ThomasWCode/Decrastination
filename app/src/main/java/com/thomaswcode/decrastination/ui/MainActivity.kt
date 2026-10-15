@@ -110,6 +110,8 @@ class MainActivity : ComponentActivity() {
             runtime.protection.problems.isNotEmpty() || runtime.unreadable.isNotEmpty()
         var menu by remember { mutableStateOf(false) }
         Scaffold(
+            // Felix on every screen (UI-16): the Tasks tab has him above its New task.
+            floatingActionButton = { if (tab != 1) FelixFab(this@MainActivity) },
             topBar = {
                 TopAppBar(
                     title = { Text("Decrastination", fontWeight = FontWeight.Bold) },
@@ -168,7 +170,6 @@ class MainActivity : ComponentActivity() {
         private val MENU = listOf(
             "Setup" to SetupActivity::class.java,
             "Settings" to SettingsActivity::class.java,
-            "Ask Claude" to AskActivity::class.java,
             "Calendar" to CalendarActivity::class.java,
             "Blocking and protection" to ProtectionActivity::class.java,
             "This week" to CheckInActivity::class.java,

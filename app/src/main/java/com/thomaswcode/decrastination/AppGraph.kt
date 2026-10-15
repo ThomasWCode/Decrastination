@@ -741,7 +741,7 @@ class AppGraph private constructor(context: Context) {
         val told = buildList {
             if (own > 0) add("$own task${if (own == 1) "" else "s"} of your own")
             if (restored > 0) add("$restored instruction${if (restored == 1) "" else "s"} restored")
-            if (unclear > 0) add("$unclear left unapplied under Ask Claude's Your changes, as ${if (unclear == 1) "it" else "they"} would have tasks wait for each other in a circle")
+            if (unclear > 0) add("$unclear left unapplied under Your changes in Felix's chat, as ${if (unclear == 1) "it" else "they"} would have tasks wait for each other in a circle")
         }.takeIf { it.isNotEmpty() }?.joinToString(", ", prefix = " ", postfix = ".") ?: ""
         // This month's spend on Claude, armed or not: it can only rise, so the cap isn't given again.
         val month = AiUsage.monthOf(clock.now(), clock.zone())

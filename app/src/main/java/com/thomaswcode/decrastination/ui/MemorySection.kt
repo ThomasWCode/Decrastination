@@ -41,7 +41,7 @@ fun MemorySection(graph: AppGraph) {
 
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
         if (memory.facts.isEmpty() && memory.rules.isEmpty()) {
-            Text("Nothing yet. What you tell Ask Claude that's worth keeping (\"football is on Tuesdays\", \"don't message me before 8\") is kept here, and sent with every call.", style = small, color = quiet)
+            Text("Nothing yet. What you tell Felix that's worth keeping (\"football is on Tuesdays\", \"don't message me before 8\") is kept here, and sent with every call.", style = small, color = quiet)
         }
         if (memory.rules.isNotEmpty()) Text("How Felix should behave", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 8.dp))
         memory.rules.forEach { r -> Entry(r.text, "Forget") { scope.launch { graph.memory.update { it.copy(rules = it.rules - r) } } } }

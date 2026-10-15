@@ -192,7 +192,7 @@ class AskActivity : ComponentActivity() {
         Scaffold(
             topBar = {
                 TopAppBar(
-                    title = { Text("Ask Claude") },
+                    title = { Text(settings.felixName) },
                     navigationIcon = { IconButton(onClick = { finish() }) { Icon(painterResource(R.drawable.ic_arrow_back), contentDescription = "Back") } },
                     actions = {
                         Box {
@@ -218,6 +218,15 @@ class AskActivity : ComponentActivity() {
                 }
                 if (tab == 0) {
                     Chat(graph, chat.messages, byId, now, zone, claudeOn, onEdit = { m, p -> editing = "$m|$p" })
+                    // His replies to offer (UI-06), under his last message: a tap sends one, about what his message was.
+                    val last = chat.messages.lastOrNull()?.takeIf { it.from == Speaker.Claude }
+                    if (last != null && last.suggestedReplies.isNotEmpty() && chat.unanswered == null) {
+                        FlowRow(Modifier.fillMaxWidth().padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            last.suggestedReplies.forEach { reply ->
+                                androidx.compose.material3.SuggestionChip(onClick = { graph.scope.launch { graph.ask(reply, last.about) } }, label = { Text(reply) })
+                            }
+                        }
+                    }
                     InputBar(
                         draft = draft,
                         onDraft = { draft = it },
@@ -358,7 +367,7 @@ private fun androidx.compose.foundation.layout.ColumnScope.Chat(
                 }
                 if (messages.isEmpty()) {
                     Text(
-                        "Tell Claude about your work: a task to add, a deadline or how long something takes, a day you can't work. It answers with cards, and nothing changes until you tap Add or Apply.",
+                        "Tell ${graph.settings.value.felixName} about your work: a task to add, a deadline or how long something takes, a day you can't work. A change to a task you have is made at once (Undo takes it back); a new task, or days off, comes on a card for you to add.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -388,7 +397,7 @@ private fun Yours(graph: AppGraph, message: ChatMessage, now: Long, zone: ZoneId
             if (message.note == null) {
                 Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
-                    Text("Claude is thinking…", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("${graph.settings.value.felixName} is thinking…", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             } else {
                 Text(message.note, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 6.dp))
