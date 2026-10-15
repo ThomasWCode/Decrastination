@@ -92,7 +92,8 @@ The implementation of `docs/review_v2_improvements/impl/` on branch `v3`. Delete
 
 - UI-12 the logo's colours, light and dark, for the app, the widget and every notification (one `Notify.builder`), the block screen's headline on its pale pink: 7bd1484.
 - UI-01 times picked on a clock, a window's two ends with its length under them, a pick that can't be one saying why: 15289f3.
-- UI-13 each planning setting with a sentence of what it does, worked out from it (`SettingsEffects`): the evening and a school day's most, the margin by an example, the pieces, the ratio, the photo, undated work, an empty day, the outside breaks (whose fields Settings now has): this commit.
+- UI-13 each planning setting with a sentence of what it does, worked out from it (`SettingsEffects`): the evening and a school day's most, the margin by an example, the pieces, the ratio, the photo, undated work, an empty day, the outside breaks (whose fields Settings now has): ce43859.
+- UI-07 a mic in the chat's box, your words put in it (after what's there), not sent; the box asks you to tell Felix: this commit.
 
 ## Current
 
