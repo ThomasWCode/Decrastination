@@ -851,6 +851,8 @@ class FocusTest {
         assertEquals(0, t.workedMin)
         assertEquals(emptyList(), log.value.slots)
         assertEquals(0L, slotted.creditLeftMs())
+        // And its slot where it was, so the next plan keeps it there rather than laying it anew.
+        assertEquals(first.start, runtime.value.slots.previous[first.chunk!!.key])
         // Nothing kept since: nothing to take back.
         assertFalse(slotted.unkeepSlot(first.chunk!!.key, since))
     }
