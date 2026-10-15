@@ -1252,7 +1252,21 @@ class AppGraph private constructor(context: Context) {
         val instruction = instructions.value.instructions.firstOrNull { it.id == id && it.state == InstructionStatus.Understood } ?: return@withLock
         if (refuseCircle(instruction)) return@withLock
         if (refuseOnOwnTasks(instruction)) return@withLock
+        if (refuseLate(instruction)) return@withLock
         setApplied(id)
+    }
+
+    /**
+     * [instruction] would put a task's work after its real deadline (PL-04): it's marked unclear,
+     * saying so, rather than applied.
+     */
+    private suspend fun refuseLate(instruction: Instruction): Boolean {
+        val byId = tasks.value.tasks.associateBy { it.id }
+        if (instruction.changes.none { c -> c.taskId?.let(byId::get)?.let { Instructions.latePin(c, it, clock.zone()) } == true }) return false
+        instructions.update { state ->
+            state.copy(instructions = state.instructions.map { if (it.id == instruction.id) it.copy(state = InstructionStatus.Unclear, note = "It's due before then") else it })
+        }
+        return true
     }
 
     /**

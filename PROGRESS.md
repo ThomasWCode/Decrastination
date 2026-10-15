@@ -43,15 +43,16 @@ The implementation of `docs/review_v2_improvements/impl/` on branch `v3`. Delete
 - DX-09 the timetable kept with the tasks, and a day's lessons: 37e67f1.
 - PL-16 the school calendar (days off, half-days) from the chat or Settings: 160de65.
 - PL-15 a school day's time as windows, work for home kept to the evening: 00bfacc. 50 000 property seeds pass with windows and where drawn.
-- PL-12 every piece at a time, breaks between, outside breaks on free days (`core/Slotter.kt`): this commit. 50 000 property seeds pass with the slots checked, and again with pins and the last plan's starts drawn.
+- PL-12 every piece at a time, breaks between, outside breaks on free days (`core/Slotter.kt`): 9b7f719. 50 000 property seeds pass with the slots checked, and again with pins and the last plan's starts drawn.
+- PL-04 a day for all of a task, a time for its next piece, from the chat or an instruction: this commit. 50 000 property seeds pass with days and times drawn on tasks.
 
 ## Current
 
-Phase 3: PL-04 (pins) next.
+Phase 3: PL-13 (adjusting live: slot alarms, missed slots, the plan watcher) next.
 
 ## Outstanding
 
-- Phase 3: PL-04, PL-13, NF-07 (with DX-12, DX-13), an eval round for the Assignment job's `where`, the phone, the pull request.
+- Phase 3: PL-13, NF-07 (with DX-12, DX-13), an eval round for the Assignment job's `where`, the phone, the pull request.
 - Phases 4 to 8.
 
 ## For the owner (deferred: you weren't live)
@@ -93,6 +94,7 @@ Phase 3: PL-04 (pins) next.
 - **PL-16: an older backup is read, with no school calendar.** The phase file's step 6 says format 3 refuses older formats; its test says format 2 imports with an empty school calendar. As built the test holds: refusing them would lose a 2.0.0 backup's own tasks and instructions for want of something it never had. Days off told to the chat go in the school calendar, not the instruction, so its card has no *Undo* and says they're deleted in Settings → School; Settings saves them as they're added or deleted, not with its Save, as they aren't settings. The chat's "a stretch of days is one change per day" excepts NoSchool, which takes the stretch whole.
 - **PL-15: a task stays one item, each piece taking its own time.** The phase file splits a task with home and anywhere steps into two items. Tried, the property test found what that breaks: a task's order, the week's touch, revision's day apart and a per-day limit are kept within an item, so across the two they weren't (two runs putting four of a deck's three a day on one day; revision's last two pieces on one day; a week and more between pieces). As built the task is one item and each piece takes from its own pool: a home piece the evening's, an anywhere piece school's first. A per-day limit is now counted per task, across a task's runs by date too (a gap from before). Two more the property test found: the deadline's own day counts only its time before the deadline in what won't fit (with windows, a Saturday 08:30 deadline's day is usable, but not all of it), and a day's limit by a busy time of yours is judged on its windows' raw minutes, not after the 15-minute school threshold, which a minute passing can cross.
 - **PL-15's capacity:** time taken at no set time (an all-day event's few hours) comes off the evening first, as its time isn't known; each part then takes its yield. `boxMin` stays 45 until PL-12 makes it 30. The Assignment job's `where` is a prompt and schema change (for phase 8's version).
+- **PL-04 as built, by what the property test found.** The plan keeps a pinned task's `hard` and marks a pin past the deadline `NoRoom`; as built a task kept to a day is a deadline there only where its own is that day, and a pin that can't hold (its day gone, before the task can start, after its real deadline) is ignored, the work placed as it would be. Three more rules came from failing seeds: work put on a day is placed before everything else (else what's due sooner, or undated work, took the day first); a time past a plan's date leaves the date behind (the pinned piece's run had the earlier date as its deadline, so the work was late for a date the student had moved it past); a pinned task's box length is judged on its day (its soft week, rolling on as a minute passed, changed its boxes and moved its pieces).
 - **No version bump.** The plan names none; the build stays `2.0.0` (code 16) until the owner says otherwise. Installs are over the top with `-r`.
 - **A Windows-only test flake, left alone.** `PowerPlannerSourceTest` (and once `StoresTest`) sometimes fails on this PC with `AccessDeniedException` renaming `secrets.bin.tmp` in `%TEMP%` (something scanning the file mid-rename; 2 runs in about 10); re-runs pass, and neither CI's Linux nor the phone can see it. Not this plan's to fix.
-- **Prompt changes before phase 8's `Prompts.VERSION`:** (recorded here until phase 8 adds the version) the Email job's system prompt and schema changed in AI-02, DX-06 and AI-04, and again with the round 2 fixes; in phase 2, AI-12 (`deadlineQuoted`, quick actions undated); in phase 3, the Assignment job's `where` (PL-15).
+- **Prompt changes before phase 8's `Prompts.VERSION`:** (recorded here until phase 8 adds the version) the Email job's system prompt and schema changed in AI-02, DX-06 and AI-04, and again with the round 2 fixes; in phase 2, AI-12 (`deadlineQuoted`, quick actions undated); in phase 3, the Assignment job's `where` (PL-15), and the changes the instruction reader and the chat can make, `OnDay` and `AtTime` (PL-04).

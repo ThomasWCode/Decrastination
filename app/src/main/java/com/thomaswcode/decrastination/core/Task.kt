@@ -160,12 +160,15 @@ data class TaskItem(
     val sourceValues: SourceValues? = null,
     /**
      * Your instructions' say about it ([Instructions]), laid over the source's and the enrichment's
-     * at every merge: not a task; not before then; not until another task is done; due by then.
+     * at every merge: not a task; not before then; not until another task is done; due by then; all
+     * of it on one day (YYYY-MM-DD); its next piece at a time (PL-04).
      */
     val userNotATask: Boolean = false,
     val userFrom: Long? = null,
     val userAfter: String? = null,
     val userDueAt: Long? = null,
+    val userOnDay: String? = null,
+    val userAtTime: Long? = null,
 ) {
     val isOpen: Boolean get() = status == Status.Open
 

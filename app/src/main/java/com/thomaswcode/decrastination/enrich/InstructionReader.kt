@@ -63,6 +63,8 @@ object InstructionPrompts {
         - BusyTime: a stretch of time the student can't work: time (its start, HH:MM) and endTime (HH:MM), and date or weekday.
         - NoSchool: days with no school (a holiday, half term, an INSET day). Needs date and endDate (the same date for one day).
         - HalfDay: a school day that ends early. Needs date and endTime (HH:MM).
+        - OnDay: all of the task's remaining work goes on one day. Needs taskId and date.
+        - AtTime: the task's next piece starts at a set time. Needs taskId, date and time (HH:MM).
 
         Use the ids and event keys exactly as listed. Work out relative dates ("next Friday", "the weekend") from today; a weekday named alone ("on Saturday") means the next one, and only "every Saturday" or "on Saturdays" means each week. A stretch of days ("20 to 25 October", "this weekend") is one change per day, but for NoSchool, which takes the stretch whole. Leave every field a change type doesn't use null.
     """.trimIndent()
@@ -259,13 +261,20 @@ object InstructionAnswers {
                 val end = minute(g.endTime) ?: return null
                 Change(type, date = date, endMin = end)
             }
+            // A day or a time for a task (PL-04): a date, not a weekday.
+            ChangeType.OnDay -> task?.let { id -> day(g.copy(weekday = null), now)?.first?.let { Change(type, taskId = id, date = it) } }
+            ChangeType.AtTime -> task?.let { id ->
+                val date = day(g.copy(weekday = null), now)?.first ?: return null
+                val start = minute(g.time) ?: return null
+                at(date, g.time, LocalTime.MIDNIGHT, zone)?.takeIf { plausible(it, now) }?.let { Change(type, taskId = id, date = date, startMin = start, time = it) }
+            }
         }
     }
 
     /** Why [g] couldn't be used, in words. */
     internal fun problem(g: Given, tasks: Map<String, TaskItem>, events: Map<String, String>): String = when {
         ChangeType.entries.none { it.name == g.type } -> "a change of a kind the app doesn't make"
-        g.type in setOf("NotATask", "StartFrom", "DueBy", "Minutes", "After") && g.taskId !in tasks -> "it names a task that isn't listed"
+        g.type in setOf("NotATask", "StartFrom", "DueBy", "Minutes", "After", "OnDay", "AtTime") && g.taskId !in tasks -> "it names a task that isn't listed"
         g.type == "After" -> "it waits on a task that isn't listed"
         g.type == "EventTime" && g.eventKey !in events -> "it names an event that isn't in the calendar"
         else -> "a date, time or number in it is out of range"

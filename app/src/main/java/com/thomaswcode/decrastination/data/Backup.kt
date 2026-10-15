@@ -152,7 +152,7 @@ object Backups {
      * instructions here. One here wins: it's the newer.
      */
     fun restoredOwnTasks(backed: List<TaskItem>, here: List<TaskItem>): List<TaskItem> = backed.filter { b -> here.none { it.id == b.id } }
-        .map { it.copy(userNotATask = false, userFrom = null, userAfter = null, userDueAt = null, userEffortMin = null).enriched() }
+        .map { it.copy(userNotATask = false, userFrom = null, userAfter = null, userDueAt = null, userEffortMin = null, userOnDay = null, userAtTime = null).enriched() }
 
     /** The most changes one instruction holds, as Claude's reading of one is held to. */
     private const val MAX_CHANGES = 40
@@ -183,6 +183,9 @@ object Backups {
                 // Kept in the school calendar once applied, never in an instruction in use; well formed all the same.
                 ChangeType.NoSchool -> isDate(change.date) && (change.endDate == null || isDate(change.endDate) && change.endDate >= change.date!!)
                 ChangeType.HalfDay -> isDate(change.date) && change.endMin in 0..DAY_MIN
+                // A day or a time for a task (PL-04).
+                ChangeType.OnDay -> named(change.taskId) && isDate(change.date)
+                ChangeType.AtTime -> named(change.taskId) && isDate(change.date) && change.startMin in 0 until DAY_MIN && time(change.time)
             }
         }
     }
