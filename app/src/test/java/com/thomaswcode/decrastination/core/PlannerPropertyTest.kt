@@ -473,6 +473,11 @@ class PlannerPropertyTest {
             val pin = input.pins[chunk.key]?.takeIf { Planner.date(it, LONDON) == bucket.date } ?: continue
             val end = pin + chunk.minutes * MINUTE
             val window = input.windows[bucket.date].orEmpty().firstOrNull { at(bucket.date, it.startMin) <= pin && end <= at(bucket.date, it.endMin) } ?: continue
+            // Nor one its piece can't be done at: work for home in a school window, ending after its
+            // deadline that day, or before its task opens. It goes to the next start that can.
+            if (chunk.where == Where.Home && window.kind.atSchool) continue
+            if (chunk.hard && Planner.date(chunk.deadline, LONDON) == bucket.date && end > chunk.deadline) continue
+            if (chunk.availableAt?.let { pin < onFive(it) } == true) continue
             if (busy.any { it.start < end && pin < it.end } || bucket.slots.any { it.kind == SlotKind.Outside && it.start < end && pin < it.end }) continue
             // Nor near another pinned piece (a task's own time, PL-04), which may come first.
             if (bucket.slots.any { it.pinned && it.chunk?.key != chunk.key && it.start < end + 20 * MINUTE && pin - 20 * MINUTE < it.end }) continue

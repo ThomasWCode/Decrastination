@@ -87,6 +87,19 @@ class SlotterTest {
     }
 
     @Test
+    fun `a pin where its piece can't be done is laid where it can`() {
+        // Work for home pinned in a study period: the evening's first free time, still pinned.
+        val essay = chunk("essay", where = Where.Home)
+        val home = slot(tuesday, listOf(essay), listOf(w("14:35", "15:30", WindowKind.Study), w("16:45", "22:00")), pins = mapOf(essay.key to Fixtures.at("2026-10-13T14:40"))).first
+        assertEquals(listOf("essay 16:45–17:15"), home.described())
+        assertTrue(home.single().pinned)
+        // Pinned at 17:50, due at 18:00: it would end after its deadline, so it goes where it's done by then.
+        val form = chunk("form")
+        val due = slot(tuesday, listOf(form), listOf(w("16:45", "22:00")), pins = mapOf(form.key to Fixtures.at("2026-10-13T17:50"))) { 18 * 60 }.first
+        assertEquals(listOf("form 16:45–17:15"), due.described())
+    }
+
+    @Test
     fun `a pin moved never takes the time of one that fits`() {
         // a's 13:00 is the midday break outside's, so it moves; b's 13:30 is free and holds it.
         val pins = mapOf(chunk("a").key to Fixtures.at("2026-10-17T13:00"), chunk("b").key to Fixtures.at("2026-10-17T13:30"))

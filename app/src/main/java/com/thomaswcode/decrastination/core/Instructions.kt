@@ -205,6 +205,8 @@ object Instructions {
     /** Each task's overrides from [applied] (in order: a later one's wins). */
     fun taskOverrides(applied: List<Instruction>): Map<String, TaskOverrides> {
         val out = HashMap<String, TaskOverrides>()
+        // The day of each task's time in force: a day given after it keeps it where it's that day.
+        val timeOn = HashMap<String, String?>()
         for (change in applied.flatMap { it.changes }) {
             val id = change.taskId ?: continue
             val o = out[id] ?: TaskOverrides.NONE
@@ -214,9 +216,10 @@ object Instructions {
                 ChangeType.After -> o.copy(after = change.afterTaskId)
                 ChangeType.DueBy -> o.copy(dueAt = change.time)
                 ChangeType.Minutes -> o.copy(minutes = change.minutes)
-                // The later of a day for all of it and a time for its next piece wins, but a time on the day it's kept to.
-                ChangeType.OnDay -> o.copy(onDay = change.date, atTime = null)
-                ChangeType.AtTime -> o.copy(atTime = change.time, onDay = o.onDay?.takeIf { it == change.date })
+                // The later of a day for all of it and a time for its next piece wins, but a time on the day
+                // it's kept to stays, whichever came first.
+                ChangeType.OnDay -> o.copy(onDay = change.date, atTime = o.atTime?.takeIf { timeOn[id] == change.date })
+                ChangeType.AtTime -> o.copy(atTime = change.time, onDay = o.onDay?.takeIf { it == change.date }).also { timeOn[id] = change.date }
                 else -> o
             }
         }

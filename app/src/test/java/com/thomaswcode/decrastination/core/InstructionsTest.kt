@@ -382,6 +382,9 @@ class InstructionsTest {
         assertEquals(TaskOverrides(onDay = "2026-10-12", atTime = Fixtures.at("2026-10-12T19:30")), both.getValue(prep.id))
         val later = Instructions.taskOverrides(listOf(applied(changes[1]), applied(Change(ChangeType.OnDay, taskId = prep.id, date = "2026-10-11"), at = now + 1)))
         assertEquals(TaskOverrides(onDay = "2026-10-11"), later.getValue(prep.id))
+        // The day given after the time, for the time's own day: both kept, as in the other order.
+        val same = Instructions.taskOverrides(listOf(applied(changes[1]), applied(Change(ChangeType.OnDay, taskId = prep.id, date = "2026-10-12"), at = now + 1)))
+        assertEquals(TaskOverrides(onDay = "2026-10-12", atTime = Fixtures.at("2026-10-12T19:30")), same.getValue(prep.id))
         // A weekday isn't a day for a task, nor a time without one.
         fun one(change: String) = parse("""{"understood":true,"question":null,"changes":[$change]}""")
         assertIs<InstructionAnswers.Reading.Unclear>(one("""{"type":"OnDay","taskId":"teams:essay","afterTaskId":null,"eventKey":null,"eventTime":null,"minutes":null,"date":null,"endDate":null,"weekday":"Monday","time":null,"endTime":null}"""))

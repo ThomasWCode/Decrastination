@@ -153,12 +153,14 @@ object Slotter {
         // The outside breaks [slot] chose, laid first.
         for (slot in breaks) carve(free, slot.start, slot.end)
 
-        // Pinned: at their time where it's free (one under way kept); then those whose time wasn't, at
-        // the next free start that holds them, so a pin moved never takes another's time.
+        // Pinned: at their time where it's free (one under way kept) and the piece may be done then, as
+        // any piece: in a window for its kind of work, over by its deadline, its task open. Then those
+        // whose time wasn't, at the next free start that holds them, so a pin moved never takes
+        // another's time.
         val moved = mutableListOf<Pair<Chunk, Long>>()
         for (chunk in chunks) {
             val pin = pins[chunk.key]?.takeIf { it in day } ?: continue
-            val exact = holding(chunk, pin)
+            val exact = holding(chunk, pin)?.takeIf { allowed(chunk, it) && beforeDeadline(chunk, pin) && pin >= opens(chunk) }
             if (exact != null) place(chunk, pin, exact, pinned = true) else moved += chunk to pin
         }
         for ((chunk, pin) in moved) {

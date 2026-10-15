@@ -429,9 +429,12 @@ object Planner {
          * The time [day] has for [item]'s [piece] (PL-15): a piece only for home, the evening's left; any
          * other, all the day's. With no piece named, the item's: the evening's where all its pieces are home's.
          */
-        // Each day's time before a deadline on it, and each item's minutes put on its real deadline's own day.
+        // Each day's time before a deadline on it, and each item's minutes put on its real deadline's own
+        // day: all of them, and those of the evening's (a piece for home has only the evening's time, which
+        // its school work leaves it).
         val beforeDeadline = HashMap<Pair<LocalDate, Long>, Capacity>()
         val onDueDay = HashMap<Item, Int>()
+        val onDueDayHome = HashMap<Item, Int>()
         fun room(item: Item, day: LocalDate, piece: Int? = null): Int {
             val home = piece?.let { item.chunks[it].where == Where.Home } ?: item.home
             val left = (if (home) freeHome else free).getValue(day)
@@ -441,7 +444,7 @@ object Planner {
             // less what it's put there already.
             val beforeDue = if (item.hard && day == date(item.deadline, zone)) {
                 val before = beforeDeadline.getOrPut(day to item.deadline) { capacitiesBefore(day, item.deadline, input) }
-                (if (home) before.homeMin else before.anyMin) - (onDueDay[item] ?: 0)
+                if (home) before.homeMin - (onDueDayHome[item] ?: 0) else before.anyMin - (onDueDay[item] ?: 0)
             } else {
                 Int.MAX_VALUE
             }
@@ -450,9 +453,12 @@ object Planner {
         /** [item]'s piece [piece] placed on [day]: its minutes off the day's time, the evening's only as far as they must be. */
         fun take(item: Item, day: LocalDate, piece: Int) {
             val minutes = item.chunks[piece].minutes
-            if (item.hard && day == date(item.deadline, zone)) onDueDay[item] = (onDueDay[item] ?: 0) + minutes
             val school = (free.getValue(day) - freeHome.getValue(day)).coerceAtLeast(0)
             val home = if (item.chunks[piece].where == Where.Home) minutes else (minutes - school).coerceAtLeast(0)
+            if (item.hard && day == date(item.deadline, zone)) {
+                onDueDay[item] = (onDueDay[item] ?: 0) + minutes
+                onDueDayHome[item] = (onDueDayHome[item] ?: 0) + home
+            }
             free[day] = free.getValue(day) - minutes
             freeHome[day] = freeHome.getValue(day) - home
             homeTaken[item to piece] = home
@@ -463,9 +469,13 @@ object Planner {
         /** [take] undone: its minutes back where they were taken from. */
         fun give(item: Item, day: LocalDate, piece: Int) {
             val minutes = item.chunks[piece].minutes
-            if (item.hard && day == date(item.deadline, zone)) onDueDay[item] = (onDueDay[item] ?: 0) - minutes
+            val home = homeTaken.remove(item to piece) ?: 0
+            if (item.hard && day == date(item.deadline, zone)) {
+                onDueDay[item] = (onDueDay[item] ?: 0) - minutes
+                onDueDayHome[item] = (onDueDayHome[item] ?: 0) - home
+            }
             free[day] = free.getValue(day) + minutes
-            freeHome[day] = freeHome.getValue(day) + (homeTaken.remove(item to piece) ?: 0)
+            freeHome[day] = freeHome.getValue(day) + home
             stepsOn.merge(item.task.id to day, -1, Int::plus)
             if (item.soft) softUsed[day] = (softUsed[day] ?: 0) - minutes
             if (day == opening(item)) openingPlaced.getOrPut(day) { mutableListOf() } += item.notBefore!! to -minutes
@@ -1071,8 +1081,8 @@ object Planner {
 
     /**
      * [day]'s time for work (PL-15): each of its windows (or your hours that day, where it has none)
-     * less what's gone today and what the calendar takes; a school window with less than
-     * `minSchoolSlotMin` left isn't used. Time taken at no set time ([Input.dayLoads]) comes off the
+     * less what's gone today and what the calendar takes; a free stretch of a school window under
+     * `minSchoolSlotMin` isn't used, as the slotter lays nothing in one. Time taken at no set time ([Input.dayLoads]) comes off the
      * evening first. Each part is what a day of its kind holds of it, as learned (PL-06): the evening's
      * by the day's kind, school's by school's. A limit you set is of the whole day's work, after.
      */
@@ -1082,8 +1092,8 @@ object Planner {
         var evening = 0
         var school = 0
         for (window in windows) {
-            val minutes = freeIn(day, window.startMin, window.endMin, input)
-            if (!window.kind.atSchool) evening += minutes else if (minutes >= input.settings.minSchoolSlotMin) school += minutes
+            if (!window.kind.atSchool) evening += freeIn(day, window.startMin, window.endMin, input)
+            else school += freeIn(day, window.startMin, window.endMin, input, minStretch = input.settings.minSchoolSlotMin)
         }
         val load = input.dayLoads[day] ?: 0
         val homeLeft = (evening - load).coerceAtLeast(0)
@@ -1107,22 +1117,24 @@ object Planner {
      * they still mean those times) less what's gone, today, and what the calendar takes: its blocks
      * merged first, so two that overlap aren't taken off twice.
      */
-    private fun freeIn(day: LocalDate, startMin: Int, endMin: Int, input: Input): Int {
+    private fun freeIn(day: LocalDate, startMin: Int, endMin: Int, input: Input, minStretch: Int = 0): Int {
         val midnight = day.atStartOfDay()
         val end = midnight.plusMinutes(endMin.toLong()).atZone(input.zone).toInstant().toEpochMilli()
         val start = maxOf(midnight.plusMinutes(startMin.toLong()).atZone(input.zone).toInstant().toEpochMilli(), minOf(end, input.now))
         if (end <= start) return 0
         val clipped = (input.busy + input.hardBusy).map { maxOf(start, it.start) to minOf(end, it.end) }.filter { it.second > it.first }.sortedBy { it.first }
-        var taken = 0L
+        // Each free stretch between busy times, counted where it's [minStretch] minutes or more.
+        var free = 0L
         var reached = start
-        for ((from, to) in clipped) {
-            val begin = maxOf(from, reached)
-            if (to > begin) {
-                taken += to - begin
-                reached = to
-            }
+        fun stretch(until: Long) {
+            if (until - reached >= minStretch * 60_000L) free += until - reached
         }
-        return ((end - start - taken) / 60_000L).toInt()
+        for ((from, to) in clipped) {
+            if (from > reached) stretch(from)
+            reached = maxOf(reached, to)
+        }
+        if (end > reached) stretch(end)
+        return (free / 60_000L).toInt()
     }
 
     fun date(time: Long, zone: ZoneId): LocalDate = Instant.ofEpochMilli(time).atZone(zone).toLocalDate()

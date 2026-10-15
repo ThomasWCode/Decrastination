@@ -858,6 +858,14 @@ class PlannerTest {
     }
 
     @Test
+    fun `school time split by busy time into stretches too short to use isn't counted`() {
+        // A ten-minute call in the middle of break leaves two ten-minute stretches, under the 15 a
+        // school slot needs: none of break counts, so school has lunch and the study period's 120.
+        val call = Busy(Fixtures.at("2026-10-13T10:55"), Fixtures.at("2026-10-13T11:05"))
+        assertEquals(Planner.Capacity(315, 435), Planner.capacityOf(tuesday, windowed(emptyList(), "2026-10-13T08:00", busy = listOf(call))))
+    }
+
+    @Test
     fun `home work never takes school time, and work done anywhere takes school's first`() {
         // The evening taken by a lesson: only school's 150 minutes are free on Tuesday.
         val drums = Busy(Fixtures.at("2026-10-13T16:45"), Fixtures.at("2026-10-13T22:00"))
@@ -917,6 +925,18 @@ class PlannerTest {
         assertEquals(listOf(tuesday), Planner.plan(windowed(listOf(form), "2026-10-12T17:00").copy(calibration = noMargin)).dayOf("form"))
         val long = form.copy(sourceEffortMin = 45)
         assertEquals(listOf(LocalDate.parse("2026-10-12")), Planner.plan(windowed(listOf(long), "2026-10-12T17:00").copy(calibration = noMargin)).dayOf("form"))
+    }
+
+    @Test
+    fun `on its deadline's day a task's school work leaves its evening time for its home work`() {
+        // No margin, due Tuesday 17:15, Monday's evening gone: the write-up for home has the evening's
+        // half hour before the deadline, the reading after it (done anywhere) school's time, both Tuesday.
+        val noMargin = Calibration(marginDays = mapOf(Kind.Homework to 0))
+        val steps = listOf(SubStep("Write it up", 30), SubStep("Read the chapter", 30, where = "anywhere"))
+        val plan = Planner.plan(windowed(listOf(task("t", Fixtures.at("2026-10-13T17:15"), steps = steps)), "2026-10-12T21:55").copy(calibration = noMargin))
+        assertEquals(listOf(tuesday, tuesday), plan.buckets.flatMap { b -> b.chunks.filter { it.taskId == "teams:t" }.map { b.date } })
+        assertTrue(plan.chunksOf("teams:t").none { it.behind }, "${plan.chunksOf("teams:t").map { it.why }}")
+        assertEquals(emptyList(), plan.wontFit)
     }
 
     @Test
