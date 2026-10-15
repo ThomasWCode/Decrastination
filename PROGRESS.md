@@ -90,7 +90,8 @@ The implementation of `docs/review_v2_improvements/impl/` on branch `v3`. Delete
 
 `impl/phase-6-screens.md`, on a local branch (`v3-phase6`) on top of phase 5 while its pull request is reviewed:
 
-- UI-12 the logo's colours, light and dark, for the app, the widget and every notification (one `Notify.builder`), the block screen's headline on its pale pink: this commit.
+- UI-12 the logo's colours, light and dark, for the app, the widget and every notification (one `Notify.builder`), the block screen's headline on its pale pink: 7bd1484.
+- UI-01 times picked on a clock, a window's two ends with its length under them, a pick that can't be one saying why: this commit.
 
 ## Current
 
