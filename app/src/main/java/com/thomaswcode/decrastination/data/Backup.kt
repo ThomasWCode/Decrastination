@@ -45,6 +45,8 @@ data class Backup(
     val ownTasks: List<TaskItem> = emptyList(),
     /** The school calendar (PL-16): days off and half-days, none in a backup from before. */
     val school: SchoolCalendar = SchoolCalendar(),
+    /** What Felix remembers (AI-21): none in a backup from before. */
+    val memory: com.thomaswcode.decrastination.core.MemoryState = com.thomaswcode.decrastination.core.MemoryState(),
 ) {
     companion object {
         const val APP = "Decrastination"
@@ -53,8 +55,11 @@ data class Backup(
          * older version, which would restore the rest and quietly lose them, refuses it whole as from
          * a newer one; an older backup is read here with none.
          */
-        /** 4 since slots replaced sessions in the log (LR-09, AR-09): an older app refuses it rather than losing them. */
-        const val FORMAT = 4
+        /**
+         * 4 since slots replaced sessions in the log (LR-09, AR-09), 5 with what's remembered
+         * (AI-21): an older app refuses it rather than losing them.
+         */
+        const val FORMAT = 5
     }
 }
 
@@ -96,6 +101,14 @@ object Backups {
             if (calibration.yields.values.any { !it.isFinite() || it !in Calibrator.MIN_YIELD..Calibrator.MAX_YIELD }) add("what the app learned about the days' time")
             if (calibration.yieldDays.values.any { it !in Calibrator.YIELD_DAYS..Calibrator.YIELD_LOOK_BACK } || calibration.yields.keys != calibration.yieldDays.keys) add("what the app learned about the days' time's evidence")
             if (!evidence(calibration)) add("what the app learned's evidence")
+            // What's remembered as the app keeps it (AI-21): in its room, every fact with a topic, and
+            // each within the bounds it's kept to, as all of it goes with every call.
+            val memory = backup.memory
+            val kept = com.thomaswcode.decrastination.core.Memories
+            if (kept.chars(memory.facts) > kept.FACT_BUDGET_CHARS || memory.rules.size > kept.RULE_MAX ||
+                memory.facts.any { it.topic.isBlank() || it.text.isBlank() || it.topic.length > kept.MAX_TOPIC || it.text.length > kept.MAX_TEXT } ||
+                memory.rules.any { it.text.isBlank() || it.text.length > kept.MAX_TEXT }
+            ) add("what's remembered")
             // What a card takes in AnkiDroid (DX-11): within the bounds it's learned in, each from its stretches.
             if (calibration.ankiSecondsPerCard.values.any { !it.isFinite() || it !in com.thomaswcode.decrastination.learn.AnkiProgress.MIN_SECONDS..com.thomaswcode.decrastination.learn.AnkiProgress.MAX_SECONDS } ||
                 calibration.ankiSecondsPerCard.keys != calibration.ankiStretches.keys || calibration.ankiStretches.values.any { it !in 1..com.thomaswcode.decrastination.learn.AnkiProgress.STRETCHES }
@@ -263,6 +276,19 @@ object Backups {
     }
 
     /**
+     * What's remembered here, with the backup's added (AI-21): a fact of a topic not here, a rule not
+     * here; this phone's own wins, and what's past the room goes, oldest first.
+     */
+    fun mergedMemory(here: com.thomaswcode.decrastination.core.MemoryState, backup: com.thomaswcode.decrastination.core.MemoryState): com.thomaswcode.decrastination.core.MemoryState {
+        fun same(a: String, b: String) = a.trim().equals(b.trim(), ignoreCase = true)
+        // Each with its own time, so the room is kept oldest first, wherever each came from.
+        val facts = (here.facts + backup.facts.filter { f -> here.facts.none { same(it.topic, f.topic) } }.distinctBy { it.topic.trim().lowercase() }).sortedBy { it.at }.toMutableList()
+        while (facts.size > 1 && com.thomaswcode.decrastination.core.Memories.chars(facts) > com.thomaswcode.decrastination.core.Memories.FACT_BUDGET_CHARS) facts.removeAt(0)
+        val rules = (here.rules + backup.rules.filter { r -> here.rules.none { same(it.text, r.text) } }.distinctBy { it.text.trim().lowercase() }).take(com.thomaswcode.decrastination.core.Memories.RULE_MAX)
+        return com.thomaswcode.decrastination.core.MemoryState(facts, rules)
+    }
+
+    /**
      * [current] with [imported]'s records added. One already here (the same moment and task, the
      * same day or week) isn't doubled, and this phone's own version of it wins.
      */
@@ -275,5 +301,6 @@ object Backups {
         days = (current.days + imported.days).distinctBy { it.date }.sortedBy { it.date },
         checkIns = (current.checkIns + imported.checkIns).distinctBy { it.weekOf }.sortedBy { it.at },
         reviews = (current.reviews + imported.reviews).distinctBy { it.at }.sortedBy { it.at },
+        felix = (current.felix + imported.felix).distinctBy { it.id }.sortedBy { it.at },
     ).trimmed(now)
 }

@@ -1,7 +1,6 @@
 package com.thomaswcode.decrastination.learn
 
 import android.Manifest
-import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.ContentUris
 import android.content.Context
@@ -173,18 +172,19 @@ object CalendarTime {
             .setContentTitle("${event.title}, $day")
             .setContentText("How much of the day does it take? The plan leaves you that much less time.")
             .setAutoCancel(true)
+        // Kept with it, so held back (LR-07), it's asked with its answers still.
         ANSWERS.forEachIndexed { i, (label, answer) ->
-            val tap = PendingIntent.getBroadcast(
+            Notify.button(
+                builder,
                 context,
+                label,
                 i,
                 Intent(context, EventAnswerReceiver::class.java)
                     .setAction(ACTION_ANSWER)
                     .setData(Uri.fromParts("event", "$key#$i", null))
                     .putExtra(EXTRA_KEY, key)
                     .putExtra(EXTRA_ANSWER, answer),
-                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
             )
-            builder.addAction(0, label, tap)
         }
         Notify.post(context, tag, BASE_ID, builder.build())
     }

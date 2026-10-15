@@ -87,6 +87,35 @@ class SlotterTest {
     }
 
     @Test
+    fun `a pin off the five minutes lands at its own minute, and one before its piece opens at the opening`() {
+        // "Give me 15" at 19:17: 19:32, which its piece opens at (the time it was given), not 19:35.
+        val b = chunk("b", availableAt = Fixtures.at("2026-10-13T19:32"))
+        val (slots, _) = slot(tuesday, listOf(chunk("a"), b), listOf(w("17:00", "22:00")), now = "2026-10-13T17:00", pins = mapOf(b.key to Fixtures.at("2026-10-13T19:32")))
+        assertEquals(listOf("a 17:00–17:30", "b 19:32–20:02"), slots.described())
+        assertTrue(slots.last().pinned)
+        // Its piece opens at 19:45, after the pin: at the opening, in the free time that ran from before
+        // the pin, still pinned.
+        val late = chunk("b", availableAt = Fixtures.at("2026-10-13T19:45"))
+        val (moved, _) = slot(tuesday, listOf(chunk("a"), late), listOf(w("17:00", "22:00")), now = "2026-10-13T17:00", pins = mapOf(late.key to Fixtures.at("2026-10-13T19:30")))
+        assertEquals(listOf("a 17:00–17:30", "b 19:45–20:15"), moved.described())
+        assertTrue(moved.last().pinned)
+    }
+
+    @Test
+    fun `a pin gone by is laid as any piece, where the last plan put it, rather than moving on`() {
+        // Pinned at 19:00 and missed: at 19:52 it's at the first free time, no longer pinned, and kept
+        // there at 19:58, where it's under way, rather than going on to the next five minutes at each
+        // plan and never beginning (PL-13).
+        val b = chunk("b")
+        val pin = mapOf(b.key to Fixtures.at("2026-10-13T19:00"))
+        val (first, _) = slot(tuesday, listOf(b), listOf(w("17:00", "22:00")), now = "2026-10-13T19:52", pins = pin)
+        assertEquals(listOf("b 19:55–20:25"), first.described())
+        assertTrue(!first.single().pinned)
+        val (later, _) = slot(tuesday, listOf(b), listOf(w("17:00", "22:00")), now = "2026-10-13T19:58", pins = pin, previous = mapOf(b.key to first.single().start))
+        assertEquals(listOf("b 19:55–20:25"), later.described())
+    }
+
+    @Test
     fun `a pin where its piece can't be done is laid where it can`() {
         // Work for home pinned in a study period: the evening's first free time, still pinned.
         val essay = chunk("essay", where = Where.Home)

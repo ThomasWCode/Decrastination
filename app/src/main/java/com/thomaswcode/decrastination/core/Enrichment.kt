@@ -43,6 +43,8 @@ data class Enrichment(
      * rules never drop a plan.
      */
     val dropped: String? = null,
+    /** The one question that would settle what the text can't (AI-10): put to you by Felix. Rarely any. */
+    val question: String? = null,
 )
 
 /**
@@ -158,7 +160,8 @@ object Enrichments {
             (if (task.sourceValues != null) task.sourceValues.dueAt else task.dueAt)?.toString().orEmpty(),
             task.extra["from"].orEmpty(),
             task.extra["received"].orEmpty(),
-        ) + listOfNotNull(task.extra[GmailThreads.EXTRA_ATTACHMENTS])).joinToString("\n")
+            // Your answers to its questions (AI-10): only where there are some, so no other task's changes.
+        ) + listOfNotNull(task.extra[GmailThreads.EXTRA_ATTACHMENTS], task.answers.takeIf { it.isNotEmpty() }?.joinToString("\n"))).joinToString("\n")
         val digest = MessageDigest.getInstance("SHA-256").digest(text.toByteArray(Charsets.UTF_8))
         return digest.take(8).joinToString("") { "%02x".format(it) }
     }

@@ -125,6 +125,8 @@ data class TaskItem(
 
     /** The photo checks counted in [photoMin], by id, with the minutes each was given, so each is counted once. */
     val photosCounted: Map<String, Int> = emptyMap(),
+    /** Your answers to the model's questions about it (AI-10), oldest first: read with it from then on. */
+    val answers: List<String> = emptyList(),
     val subSteps: List<SubStep> = emptyList(),
     /**
      * Of [workedMin] and [photoMin], the minutes the source's own steps already leave out: an Anki

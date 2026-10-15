@@ -178,6 +178,9 @@
             android:name=".learn.EventAnswerReceiver"
             android:exported="false" />
         <receiver
+            android:name=".notify.FelixReplyReceiver"
+            android:exported="false" />
+        <receiver
             android:name=".protect.WatchdogReceiver"
             android:exported="false" />
         <receiver

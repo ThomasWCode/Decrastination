@@ -331,6 +331,29 @@ class CommandActivity : Activity() {
                 }
             }
             "chat-clear" -> graph.clearChat().also { Log.i(TAG, "Chat cleared") }
+            // Felix (LR-03): his state and today's messages; a look now; or a message for a reason, whatever the rules say (a paid call).
+            "felix" -> {
+                val state = graph.runtime.value.felix
+                Log.i(TAG, "felix: next check ${state.nextCheckAt?.let { java.time.Instant.ofEpochMilli(it).atZone(graph.clock.zone()).toLocalTime() }}, last sent ${state.lastSentAt}, activity ${state.activity.keys}")
+                graph.log.value.felix.takeLast(10).forEach { Log.i(TAG, "felix ${it.reason} ${it.key}: ${it.text.ifBlank { "(silent)" }} ${it.replies}${it.replyText?.let { r -> " / reply: $r" }.orEmpty()}") }
+            }
+            "felix-check" -> graph.felix.check().also { Log.i(TAG, "felix-check done") }
+            "felix-say" -> {
+                val reason = intent.getStringExtra("reason")?.let { name -> com.thomaswcode.decrastination.enrich.FelixPrompts.Reason.entries.firstOrNull { it.name.equals(name, ignoreCase = true) } }
+                if (reason == null) Log.w(TAG, "felix-say needs --es reason, one of ${com.thomaswcode.decrastination.enrich.FelixPrompts.Reason.entries.joinToString()}")
+                else Log.i(TAG, "felix-say $reason: ${graph.felix.say(reason)?.let { "${it.text.ifBlank { "(silent)" }} ${it.replies}" } ?: "Claude is off"}")
+            }
+            // What Felix remembers (AI-21): its standing instructions and facts, a line each.
+            "memory" -> graph.memory.value.let { m ->
+                Log.i(TAG, "memory: ${m.facts.size} facts, ${com.thomaswcode.decrastination.core.Memories.chars(m.facts)} of ${com.thomaswcode.decrastination.core.Memories.FACT_BUDGET_CHARS} characters; ${m.rules.size} rules")
+                m.rules.forEach { Log.i(TAG, "memory rule: ${it.text}") }
+                m.facts.forEach { Log.i(TAG, "memory fact: ${it.topic}: ${it.text}") }
+            }
+            // The weekly tidy now, due or not (a paid call), applied as Sunday's would be.
+            "memory-tidy" -> {
+                val tidy = com.thomaswcode.decrastination.learn.Review.tidyMemory(graph, graph.clock.now(), force = true)
+                Log.i(TAG, tidy?.let { "memory-tidy: ${com.thomaswcode.decrastination.learn.Review.tidyLine(it)}" } ?: "memory-tidy: nothing tidied (no facts, Claude held or failed, or no room made)")
+            }
             // --es do apply|undo: the last reply's first card applied, or taken back, as its buttons do.
             "chat-card" -> {
                 val message = graph.chat.value.messages.lastOrNull { it.proposals.isNotEmpty() }
@@ -344,6 +367,18 @@ class CommandActivity : Activity() {
                     }
                     val now = graph.chat.value.messages.firstOrNull { it.id == message.id }?.proposals?.firstOrNull { it.id == card.id }
                     Log.i(TAG, "chat-card ${intent.getStringExtra("do")}: ${card.lines} -> ${now?.state}")
+                }
+            }
+            "ai-effort" -> {
+                // --es job <Chat|Email|…> --es level <low|medium|high>, or level none: back to its own (AC-02); till the app restarts.
+                val job = intent.getStringExtra("job")?.let { name -> com.thomaswcode.decrastination.enrich.ModelEffort.Job.entries.firstOrNull { it.name.equals(name, ignoreCase = true) } }
+                val level = intent.getStringExtra("level")
+                when {
+                    job == null -> Log.w(TAG, "ai-effort needs --es job, one of ${com.thomaswcode.decrastination.enrich.ModelEffort.Job.entries.joinToString()}")
+                    level == "none" -> com.thomaswcode.decrastination.enrich.ModelEffort.overrides.remove(job).also { Log.i(TAG, "ai-effort: $job as its own again") }
+                    else -> runCatching { com.anthropic.models.messages.OutputConfig.Effort.of(level.orEmpty().lowercase()) }
+                        .onSuccess { com.thomaswcode.decrastination.enrich.ModelEffort.overrides[job] = it; Log.i(TAG, "ai-effort: $job at $it till the app restarts") }
+                        .onFailure { Log.w(TAG, "ai-effort needs --es level low, medium or high") }
                 }
             }
             "ai-endpoint" -> {

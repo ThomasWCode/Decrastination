@@ -23,7 +23,7 @@ import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.block.Credit
-import com.thomaswcode.decrastination.block.Focus
+import com.thomaswcode.decrastination.core.EarnsBy
 import com.thomaswcode.decrastination.block.PhotoChecks
 import com.thomaswcode.decrastination.core.Chunk
 import com.thomaswcode.decrastination.core.Plan
@@ -124,9 +124,9 @@ fun PieceActions(graph: AppGraph, activity: Activity, piece: Chunk, now: Long, p
                 say(
                     when {
                         !kept -> "That piece has changed since (done, or planned again)."
-                        by == Focus.EarnsBy.Tick -> "Done: $free free."
-                        by == Focus.EarnsBy.Photo -> "Done. A photo check of it earns its $free free."
-                        by == Focus.EarnsBy.Source -> "Done. Its $free free comes once ${piece.source.label} says it's done."
+                        by == EarnsBy.Tick -> "Done: $free free."
+                        by == EarnsBy.Photo -> "Done. A photo check of it earns its $free free."
+                        by == EarnsBy.Source -> "Done. Its $free free comes once ${piece.source.label} says it's done."
                         else -> "Done. It earns no free time: a piece this long earns with a photo check, and this isn't written work."
                     },
                 )

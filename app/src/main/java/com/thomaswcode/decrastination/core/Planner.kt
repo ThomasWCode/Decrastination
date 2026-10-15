@@ -367,7 +367,8 @@ object Planner {
             val part = item.offset + index + 1
             // Only a real deadline can be missed (PL-14): the app's own dates move on instead.
             val overdue = item.hard && item.deadline < input.now
-            val key = "${item.task.id}#${piece.index ?: -1}#$part"
+            // The key the piece will have (a step's by its task and step), which its pin and missed slot go by.
+            val key = Chunk.keyOf(item.task.id, piece.index, part)
             // Where you put it (PL-04): its time is the slotter's to keep.
             if (piece.at != null) atPins[key] = piece.at
             return Chunk(

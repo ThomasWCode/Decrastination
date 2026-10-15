@@ -51,6 +51,13 @@ object SettingsChanges {
      */
     private val LOOSER: Map<String, (Settings, Settings) -> Boolean> = mapOf(
         "ankiTextbook" to NEVER,
+        "yearGroupStart" to NEVER,
+        "profileLines" to NEVER,
+        "classMap" to NEVER,
+        "felixName" to NEVER,
+        "felixLine" to NEVER,
+        "felixGraceMin" to NEVER,
+        "felixDefaultCheckMin" to NEVER,
         "ankiDeadlineMin" to NEVER,
         "weekdayHours" to NEVER,
         "weekendHours" to NEVER,
@@ -96,6 +103,13 @@ object SettingsChanges {
 
     private val LABELS = mapOf(
         "ankiTextbook" to "Current German textbook",
+        "yearGroupStart" to "The September you went into Year 12",
+        "profileLines" to "What you'd have Claude know",
+        "classMap" to "Your classes",
+        "felixName" to "Felix's name",
+        "felixLine" to "Who Felix is",
+        "felixGraceMin" to "Felix asks this far into a slot (minutes)",
+        "felixDefaultCheckMin" to "Felix checks again after (minutes)",
         "ankiDeadlineMin" to "Anki deadline",
         "weekdayHours" to "School-day working hours",
         "weekendHours" to "Weekend working hours",

@@ -1,6 +1,5 @@
 package com.thomaswcode.decrastination.learn
 
-import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
@@ -48,12 +47,6 @@ object CheckIns {
     const val ID = 4002
 
     fun remind(context: Context) {
-        val open = PendingIntent.getActivity(
-            context,
-            ID,
-            Intent(context, CheckInActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
-        )
         Notify.post(
             context,
             ID,
@@ -61,7 +54,7 @@ object CheckIns {
                 .setSmallIcon(R.drawable.ic_focus)
                 .setContentTitle("Sunday check-in")
                 .setContentText("Five quick questions about the week, before its review.")
-                .setContentIntent(open)
+                .let { Notify.opening(it, context, ID, Intent(context, CheckInActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
                 .setAutoCancel(true)
                 .build(),
         )

@@ -112,9 +112,9 @@ object Slotter {
         }
         // The earliest it can start: when its task opens (a deck's cards at 04:00), on five minutes.
         fun opens(chunk: Chunk): Long = chunk.availableAt?.let(::onFive) ?: Long.MIN_VALUE
-        // Where in [interval] it can start: whole, in a window for its kind of work, before its deadline.
-        fun startIn(chunk: Chunk, interval: Interval): Long? {
-            val start = maxOf(interval.start, opens(chunk))
+        // Where in [interval] it can start, no earlier than [after]: whole, in a window for its kind of work, before its deadline.
+        fun startIn(chunk: Chunk, interval: Interval, after: Long = Long.MIN_VALUE): Long? {
+            val start = maxOf(interval.start, opens(chunk), after)
             return start.takeIf { it + chunk.minutes * MINUTE <= interval.end && allowed(chunk, interval) && beforeDeadline(chunk, it) }
         }
         // The free interval holding [start] on for it, from now on (one under way, the rest of it), till
@@ -160,11 +160,16 @@ object Slotter {
         val moved = mutableListOf<Pair<Chunk, Long>>()
         for (chunk in chunks) {
             val pin = pins[chunk.key]?.takeIf { it in day } ?: continue
-            val exact = holding(chunk, pin)?.takeIf { allowed(chunk, it) && beforeDeadline(chunk, pin) && pin >= opens(chunk) }
+            // Its time and grace gone by (its slot missed, PL-13): laid as any piece, where the last plan
+            // put it, so it isn't laid again at the next five minutes at every plan and never begins.
+            if (pin + chunk.minutes * MINUTE + GRACE_MS <= now) continue
+            // Its piece opens at the pin itself (the time you gave), to the minute: not at the next five.
+            val exact = holding(chunk, pin)?.takeIf { allowed(chunk, it) && beforeDeadline(chunk, pin) && pin >= (chunk.availableAt ?: Long.MIN_VALUE) }
             if (exact != null) place(chunk, pin, exact, pinned = true) else moved += chunk to pin
         }
         for ((chunk, pin) in moved) {
-            val later = free.filter { it.start >= pin }.firstNotNullOfOrNull { iv -> startIn(chunk, iv)?.let { iv to it } } ?: continue
+            // Free time running past the pin, from before it too, at a start no earlier than it.
+            val later = free.filter { it.end > pin }.firstNotNullOfOrNull { iv -> startIn(chunk, iv, after = pin)?.let { iv to it } } ?: continue
             place(chunk, later.second, later.first, pinned = true)
         }
         // Kept where they were: a start from the last plan whose time is still free from now on,

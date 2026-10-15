@@ -42,11 +42,12 @@ object Prompts {
     /** Blocks an email or a planner item can come back in: one email can hold months of applications. */
     const val MAX_BLOCKS = 30
 
-    private const val STUDENT = "a UK sixth-form student (Year 12)"
+    /** Who the prompts are for, by year group (AI-06). */
+    private fun student(year: Int) = "a UK sixth-form student (Year $year)"
 
-    fun system(job: Enrichments.Job): String = when (job) {
+    fun system(job: Enrichments.Job, year: Int = 12): String = when (job) {
         Enrichments.Job.Email -> """
-            You triage one email for a planner app used by $STUDENT. The planner turns each obligation into scheduled work and blocks distracting apps until it's done, so overstating the work costs the student free time and understating it lets work slip. Every email you see was starred by the student: it is something to do. An email the student sent themselves is a note of something they mean to do.
+            You triage one email for a planner app used by ${student(year)}. The planner turns each obligation into scheduled work and blocks distracting apps until it's done, so overstating the work costs the student free time and understating it lets work slip. Every email you see was starred by the student: it is something to do. An email the student sent themselves is a note of something they mean to do.
 
             Decide, from the email:
             - kind: "Admin" if it asks the student to do something (reply, sign, pay, fill in a form, bring or prepare something), or if it's information they starred to come back to (then the task is to read it and decide, and nextStep says what to decide); "Event" if it's about something happening at a set time that needs nothing beyond turning up (a trip, a call, an open evening).
@@ -55,6 +56,7 @@ object Prompts {
             - deadlineQuoted: true when deadline is a date the email itself gives or clearly implies as when it must be done by, or an Event's start; false when it's only a day the email suggests for doing it, and when deadline is null. Only a quoted deadline is shown as missed once it passes; any other date is a plan, moved when it passes.
             - effortMin: the minutes of the student's own work it needs, reading included: at least 5 for something only to read and decide.
             - nextStep: the one concrete next action, as an instruction under 12 words ("Reply to Mr Hughes confirming the trip").
+            - question: rarely: the one question that would settle a reading the text can't (which Friday; whether the test is the 12th or the 19th); otherwise null.
             - blocks: when the email holds more than one piece of work for the student, or dated items (a calendar of deadlines, an application that opens on a date), the pieces of work in order, each with its minutes (10 to 60 where the work allows: a long piece of work, like writing a proposal, is several blocks with the same dates; at most $MAX_BLOCKS blocks, longer ones if there's more work than that), from (the date before which it can't be done, or null) and due (when it must be done by, written as for deadline, only where the email gives one; otherwise null, and the block waits for the email's own deadline, or with none is planned within the week). A window the email gives only roughly ("applications open in December") runs from its first day to its last. The planner schedules each block in its own window, so one email can become work spread over months, kept after the email is archived. An email with blocks is Admin, and its effortMin is their total. Otherwise an empty list.
 
             You see the conversation the starred message is in, oldest message first (where a long one's earlier messages had to be cut short or left out, it says so); when there's more than one, each is headed by who sent it and when ("From you" for the student's own). The first message shown keeps what it quotes from earlier (cut short too, where it had to be); in the ones after it, quoted text and signatures are left out and marked in square brackets, as what they quote is shown above them. You don't see attachments, only their names (an attached email goes by its subject). Where what the email asks turns on an attachment or an earlier message you can't see, and its name doesn't tell you, don't guess what it asked: make nextStep say to read it first, naming it ("Read the attached consent form and decide"), and effortMin 10.
@@ -62,7 +64,7 @@ object Prompts {
             Work out relative dates ("next Friday") from when the message saying them was sent.
         """.trimIndent()
         Enrichments.Job.Assignment -> """
-            You plan one homework assignment for $STUDENT, for a planner that schedules the work over the days before it's due and blocks distracting apps until it's done.
+            You plan one homework assignment for ${student(year)}, for a planner that schedules the work over the days before it's due and blocks distracting apps until it's done.
 
             Split the work into the ordered steps the student will actually do, each with a realistic duration in minutes for a typical Year 12 student (the planner adjusts them to this one). Keep steps between 10 and 60 minutes where the work allows, and a short task as one step. A step has dates of its own only where the instructions give them (a draft due before the final version): from, the date before which it can't be started, and due, when it must be done by (YYYY-MM-DDTHH:MM, or the date alone); otherwise both null. Base the steps on the instructions. Learning numbered vocabulary sections is a step of its own, with nothing else in it, and those sections in its ankiSections: the planner leaves it out where the student's Anki decks hold them. Every other step has an empty ankiSections. Add a step for handing work in only where the instructions ask for it, in its place in the order. Each step's where: "home" for a step that needs the laptop, books or quiet (an essay, an upload, a long problem set); "anywhere" for one that can be done at school in a free period with what's in the bag (a booklet, reading, vocabulary).
 
@@ -70,9 +72,10 @@ object Prompts {
             - effortMin: the total minutes, the sum of the steps.
             - ankiSections: every vocabulary section the student is asked to learn, written like "1.2" (from "learn vocabulary 1.2" or "p46-47/ 2.2/2.3"); otherwise an empty list.
             - testDate: if the work prepares for a test or assessment on a stated date, that date (YYYY-MM-DD); otherwise null.
+            - question: rarely: the one question that would settle a reading the text can't (which Friday; whether the test is the 12th or the 19th); otherwise null.
         """.trimIndent()
         Enrichments.Job.Effort -> """
-            Estimate how many minutes of work $STUDENT needs to finish one item from their planner, from its title, class and details: a realistic total for a typical Year 12 student (the planner adjusts it to this one). A call, meeting or other appointment isn't work: give only the minutes needed to prepare for it, at least 1.
+            Estimate how many minutes of work ${student(year)} needs to finish one item from their planner, from its title, class and details: a realistic total for a typical Year 12 student (the planner adjusts it to this one). A call, meeting or other appointment isn't work: give only the minutes needed to prepare for it, at least 1.
 
             If it's big enough to be worth doing in parts (revising for a test, a project), also split it into blocks: the ordered pieces of work, 10 to 60 minutes each (at most $MAX_BLOCKS blocks), adding up to effortMin, each with from (the date before which it can't be done, YYYY-MM-DD) and due (when it must be done by, YYYY-MM-DDTHH:MM or the date alone) where the details give them, otherwise null. Otherwise blocks is an empty list.
         """.trimIndent()
@@ -87,6 +90,7 @@ object Prompts {
             "deadlineQuoted" to mapOf("type" to "boolean"),
             "effortMin" to mapOf("type" to "integer"),
             "nextStep" to mapOf("type" to "string"),
+            "question" to nullable(mapOf("type" to "string")),
             "blocks" to mapOf("type" to "array", "items" to block(vocabulary = false)),
         )
         Enrichments.Job.Assignment -> obj(
@@ -94,6 +98,7 @@ object Prompts {
             "effortMin" to mapOf("type" to "integer"),
             "ankiSections" to mapOf("type" to "array", "items" to mapOf("type" to "string")),
             "testDate" to nullable(mapOf("type" to "string", "format" to "date")),
+            "question" to nullable(mapOf("type" to "string")),
         )
         Enrichments.Job.Effort -> obj(
             "effortMin" to mapOf("type" to "integer"),
@@ -162,6 +167,8 @@ object Prompts {
                 appendLine("Due: " + (due?.let { at(it).format(DAY_TIME) } ?: "no date"))
             }
         }
+        // What the student said to its questions (AI-10).
+        task.answers.forEach { appendLine("The student says: $it") }
         val text = task.detail.trim()
         if (text.isNotEmpty()) {
             appendLine()
@@ -184,6 +191,7 @@ object Answers {
         val deadlineQuoted: Boolean = false,
         val effortMin: Int,
         val nextStep: String,
+        val question: String? = null,
         val blocks: List<Step> = emptyList(),
     )
 
@@ -191,12 +199,17 @@ object Answers {
     private data class Step(val title: String, val minutes: Int, val ankiSections: List<String> = emptyList(), val from: String? = null, val due: String? = null, val where: String? = null)
 
     @Serializable
-    private data class Split(val subSteps: List<Step>, val effortMin: Int, val ankiSections: List<String> = emptyList(), val testDate: String? = null)
+    private data class Split(val subSteps: List<Step>, val effortMin: Int, val ankiSections: List<String> = emptyList(), val testDate: String? = null, val question: String? = null)
 
     @Serializable
     private data class Estimate(val effortMin: Int, val blocks: List<Step> = emptyList())
 
     private const val MAX_EFFORT = 600
+
+    /** The longest question put to you. */
+    private const val MAX_QUESTION = 200
+
+    private fun question(text: String?): String? = text?.trim()?.takeIf { it.isNotEmpty() }?.take(MAX_QUESTION)
 
     /** The Email job's kinds (AI-02): Info, only to read, isn't one since only starred emails are read. */
     private val EMAIL_KINDS = mapOf("Admin" to Kind.Admin, "Event" to Kind.Event)
@@ -264,6 +277,7 @@ object Answers {
                     nextStep = t.nextStep.trim().takeIf { it.isNotEmpty() }?.take(MAX_NEXT_STEP),
                     subSteps = blocks,
                     dropped = checked.dropped,
+                    question = question(t.question),
                 )
             }
             Enrichments.Job.Assignment -> json.decodeFromString(Split.serializer(), text).let { s ->
@@ -311,6 +325,7 @@ object Answers {
                     // whole, already holds it.
                     ankiSections = if (usable && agree) sections else emptyList(),
                     testDate = testDate,
+                    question = question(s.question),
                 )
             }
             Enrichments.Job.Effort -> json.decodeFromString(Estimate.serializer(), text).let { e ->

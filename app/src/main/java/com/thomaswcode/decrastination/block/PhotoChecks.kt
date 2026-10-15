@@ -9,7 +9,6 @@ import androidx.core.graphics.scale
 import androidx.exifinterface.media.ExifInterface
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.core.Chunk
-import com.thomaswcode.decrastination.enrich.AiUsage
 import com.thomaswcode.decrastination.enrich.ModelHold
 import com.thomaswcode.decrastination.enrich.PhotoChecker
 import java.io.ByteArrayOutputStream
@@ -17,7 +16,6 @@ import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.NonCancellable
-import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 /** A photo of written work, checked by the model and, if it's done, the piece ticked off. */
@@ -47,27 +45,19 @@ object PhotoChecks {
         } finally {
             withContext(NonCancellable + Dispatchers.IO) { photo.delete() }
         }
-        // The cap checked and the cost recorded in one turn with every other model call.
-        val result = graph.modelCalls.withLock {
-            // Checked again here, just before sending: switched off, resting after a failed call
-            // (perhaps one made while this waited), or no room under the cap.
-            when (graph.modelHold()) {
-                ModelHold.Off -> return OFF
-                ModelHold.Resting -> return "Claude's last call failed, so it's left alone for an hour (Setup says why): the timer or the source will have to do."
-                ModelHold.Capped -> return "Claude's monthly cap is reached: the timer or the source will have to do."
-                null -> Unit
+        // Its room taken with every other model call's, then sent (AC-05).
+        val current = graph.photoChecker() ?: return OFF
+        val result = when (val called = graph.callModel(interactive = true, cost = { r: PhotoChecker.Result -> r.costUsd to r.refused }) { current.check(jpeg, piece.label) }) {
+            is AppGraph.Called.Held -> return when (called.hold) {
+                ModelHold.Off -> OFF
+                ModelHold.Resting -> "Claude's key isn't working (Setup says why): tick it Done, or the source will have to do."
+                ModelHold.Capped -> "Claude's monthly cap is reached: tick it Done, or the source will have to do."
             }
-            val current = graph.photoChecker() ?: return OFF
-            // The month it's made in, as the cap was checked for: it may have waited past midnight.
-            val now = graph.clock.now()
-            val month = AiUsage.monthOf(now, graph.clock.zone())
-            runCatching { current.check(jpeg, piece.label) }
-                .onFailure { e ->
-                    Log.w(AppGraph.TAG, "The photo check failed", e)
-                    graph.modelFailed(e, month, now)
-                }
-                .getOrElse { return "The check didn't go through (${it.message ?: "no connection"})." }
-                .also { r -> graph.modelWorked(r.costUsd, r.refused, month, now) }
+            is AppGraph.Called.Failed -> {
+                Log.w(AppGraph.TAG, "The photo check failed", called.error)
+                return "The check didn't go through (${called.error.message ?: "no connection"})."
+            }
+            is AppGraph.Called.Answered -> called.value
         }
         val verdict = result.verdict ?: return "Claude couldn't say. Try a clearer photo."
         if (!verdict.done || verdict.confidence < PhotoChecker.ACCEPT) return "Not yet: ${verdict.reason}"
