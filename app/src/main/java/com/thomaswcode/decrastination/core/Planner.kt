@@ -53,7 +53,8 @@ import kotlin.math.roundToInt
  *    week, ended undone, is followed by the next.
  * 11. Work with a real deadline still to come that has more left than the free time before it is
  *    said ([Plan.wontFit], PL-02), the day it becomes so: what's left, and what's free before the
- *    deadline itself (the safety margin aside).
+ *    deadline itself (the safety margin aside); work not open yet, where its days from its opening
+ *    can't hold it.
  *
  * Spreading means today's bucket holds a fair share of every task's days, not the whole of a far
  * task's work in its last ones; placing everything early would put every task in today and the
@@ -658,6 +659,19 @@ object Planner {
         val (undated, dated) = later.filterNot(::soon).partition { it.soft }
         dated.sortedWith(order).forEach(::placeSpread)
         undated.sortedWith(order).forEach { placeBack(it, Why.Soft) }
+
+        // Work not open yet with a real deadline: said not to fit where even its days from its opening,
+        // all of their time its own, can't hold it, so the warning comes before it opens.
+        for (gap in unplanned.filter { it.reason == Unplanned.Reason.NotOpen }) {
+            val task = byId[gap.taskId] ?: continue
+            val opens = task.availableFrom ?: continue
+            val deadline = task.deadlineAt(input.now)?.takeIf { task.hardAt(input.now) && it > opens } ?: continue
+            val last = lastDayBefore(deadline, zone)
+            if (last > horizon || wontFit.any { it.taskId == task.id }) continue
+            val first = date(opens, zone)
+            val room = generateSequence(first) { it.plusDays(1) }.takeWhile { it <= last }.sumOf { day -> if (day == first) capacityFrom(day, opens) else capacity.getValue(day) }
+            if (gap.minutes > room) wontFit += WontFit(task.id, task.title, gap.minutes, room, deadline)
+        }
 
         val buckets = days.map { DayBucket(it, capacity.getValue(it), placed.getValue(it).sortedWith(ORDER)) }
         // A task's runs left out for the same reason are one line: their pieces and minutes together, the soonest opening.

@@ -107,6 +107,8 @@ object InstructionPrompts {
      */
     fun describe(instruction: Instruction, tasks: List<TaskItem>, events: List<CalendarEvent>, now: Long, zone: ZoneId): String = buildString {
         fun at(time: Long) = Instant.ofEpochMilli(time).atZone(zone).format(WHEN)
+        // The deadline in force (PL-14), as the chat and the Tasks list have it: a plan's gone by, the real one behind it.
+        fun due(t: TaskItem) = (t.deadlineAt(now) ?: t.dueAt)?.let { at(it) + if (t.hardAt(now)) "" else " (a plan)" } ?: "no date"
         appendLine("Today: ${Instant.ofEpochMilli(now).atZone(zone).format(TODAY)} (${zone.id})")
         appendLine("Instruction: \"${instruction.text.trim().take(MAX_TEXT)}\"")
         val about = instruction.about
@@ -118,7 +120,7 @@ object InstructionPrompts {
                 appendLine("  From: ${task.source.label}" + (task.extra["from"]?.let { " ($it)" } ?: ""))
                 task.className?.let { appendLine("  Class: $it") }
                 // As it is now, an earlier instruction's date included, so "two days later" counts from it.
-                appendLine("  Due: " + (task.dueAt?.let(::at) ?: "no date") + (if (task.userDueAt != null) " (set by an earlier instruction)" else ""))
+                appendLine("  Due: " + due(task) + (if (task.userDueAt != null) " (set by an earlier instruction)" else ""))
                 appendLine("  Takes: ${task.effortMin} min in all" + (if (task.userEffortMin != null) " (set by an earlier instruction)" else "") + "; ${task.workedMin} min worked on it so far")
                 listOfNotNull(task.availableFrom, task.userFrom).maxOrNull()?.let { appendLine("  Can't start before: ${at(it)}") }
                 task.detail.trim().takeIf { it.isNotEmpty() }?.let { appendLine("  Details: " + it.take(MAX_DETAIL).replace("\n", "\n    ")) }
@@ -132,8 +134,8 @@ object InstructionPrompts {
         }
         appendLine()
         appendLine("Open tasks (id | title | from | due):")
-        tasks.filter { it.isOpen }.sortedBy { it.dueAt ?: Long.MAX_VALUE }.take(MAX_TASKS).forEach { t ->
-            appendLine("- ${t.id} | ${t.title.take(MAX_TITLE)} | ${t.source.label} | ${t.dueAt?.let(::at) ?: "no date"}")
+        tasks.filter { it.isOpen }.sortedBy { it.deadlineAt(now) ?: it.dueAt ?: Long.MAX_VALUE }.take(MAX_TASKS).forEach { t ->
+            appendLine("- ${t.id} | ${t.title.take(MAX_TITLE)} | ${t.source.label} | ${due(t)}")
         }
         appendLine()
         appendLine("Calendar events in the next fortnight (eventKey | title | when):")
