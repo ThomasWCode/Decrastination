@@ -6,6 +6,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import android.util.Log
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.SlotKind
@@ -60,13 +61,21 @@ object SlotAlarms {
  */
 class Slots(private val graph: AppGraph) {
     /** [key]'s slot has begun (phase 5 has more to do here). */
-    fun onStart(@Suppress("UNUSED_PARAMETER") key: String) = graph.watcher.poke()
+    fun onStart(key: String) {
+        Log.i(AppGraph.TAG, "Slot begun: $key")
+        graph.watcher.poke()
+    }
 
     /** [key]'s slot is over, and its grace: its piece still planned is missed, and moves. */
     suspend fun onEnd(key: String, now: Long = graph.clock.now()) {
         val plan = graph.plan(now = now)
         // Done (ticked, or finished in a session): nothing missed.
-        val chunk = plan.ordered.firstOrNull { it.key == key } ?: return
+        val chunk = plan.ordered.firstOrNull { it.key == key }
+        if (chunk == null) {
+            Log.i(AppGraph.TAG, "Slot over, its piece done: $key")
+            return
+        }
+        Log.i(AppGraph.TAG, "Slot missed: $key")
         graph.runtime.update { it.copy(slots = it.slots.on(plan.today).missed(key, chunk.taskId, now)) }
         graph.watcher.poke()
     }

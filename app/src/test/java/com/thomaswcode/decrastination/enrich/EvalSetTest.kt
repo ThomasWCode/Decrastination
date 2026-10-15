@@ -122,8 +122,10 @@ class EvalSetTest {
                 if (ok) passed++
                 rows += "| ${file.nameWithoutExtension} | ${if (ok) "pass" else "**fail**"} | " + checks.joinToString("; ") { (what, good) -> if (good) what else "**$what**" } + " |"
             }
-            // Every case in every round: one with no answer fails, rather than leaving a smaller round that passes.
-            cases.filter { it.id !in answered }.forEach { failed("${it.id}-$run", "no answer") }
+            // Every case of the jobs a round answers (a round can be one job's, where only its prompt
+            // changed): one with no answer fails, rather than leaving a smaller round that passes.
+            val jobs = answered.mapNotNull { byId[it]?.job }.toSet()
+            cases.filter { it.id !in answered && it.job in jobs }.forEach { failed("${it.id}-$run", "no answer") }
         }
         File(dir!!, "report.md").writeText(
             buildString {
@@ -156,6 +158,8 @@ class EvalSetTest {
         expect.mentions.forEach { m -> add("mentions $m" to titles.any { title -> m.lowercase().split('+').all { it.trim() in title } }) }
         expect.blocksAtLeast?.let { add("${e.subSteps?.size ?: 0} blocks (want ≥$it)" to ((e.subSteps?.size ?: 0) >= it)) }
         expect.ankiSections?.let { add("sections ${e.ankiSections} (want $it)" to (e.ankiSections.toSet() == it.toSet())) }
+        // Where each step can be done (PL-15), as read: shown, not judged (no labels yet; rounds before it have none).
+        if (case.job == Enrichments.Job.Assignment) e.subSteps?.let { steps -> add("where: " + steps.joinToString(", ") { "${it.title.take(24)} ${it.where ?: "-"}" } to true) }
         add(("plan kept" + (e.dropped?.let { ": dropped, $it" } ?: "")) to (e.dropped == null))
         // As the app would plan it: something placed or said, nothing lost.
         val plan = Planner.plan(Planner.Input(listOf(made), now, zone, Settings()))
