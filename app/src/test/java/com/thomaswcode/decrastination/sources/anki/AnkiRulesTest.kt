@@ -4,10 +4,12 @@ import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.Fixtures.LONDON
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.Source
+import com.thomaswcode.decrastination.core.SourceValues
 import com.thomaswcode.decrastination.core.TaskItem
 import java.time.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -208,6 +210,24 @@ class AnkiRulesTest {
         assertEquals(listOf("20 new cards", "20 new cards", "5 new cards"), deck12.subSteps!!.map { it.title })
         assertEquals("45 cards never studied. For: Familie und Ehe; Gefahren", deck12.detail)
         assertTrue(deck12.derived)
+    }
+
+    @Test
+    fun `a homework deck is due by its assignments' deadlines in force, a deadline only where theirs is`() {
+        // Teams says Friday 23 Oct; Claude read a test on Tuesday 6 Oct, gone by on Thursday 8 Oct.
+        val real = Fixtures.at("2026-10-23T23:59")
+        val test = Fixtures.at("2026-10-06T08:30")
+        val prep = assignment("Familie und Ehe", "Learn vocabulary column 1.2 Familie und Ehe", test).copy(sourceValues = SourceValues(Kind.Homework, real, null))
+        val deck = AnkiRules.homeworkDecks(decks, 1, listOf(prep), unseen = { 45 }, now = NOW, zone = LONDON).single()
+        assertEquals(real, deck.dueAt)
+        assertEquals(real.toString(), deck.extra[AnkiRules.EXTRA_REAL])
+        // So the day's vocabulary isn't held to homework for a date gone by.
+        assertFalse(AnkiRules.homeworkDueSoon(listOf(deck), NOW, LONDON))
+        // Before the test, it's due by it, as a plan.
+        assertEquals(test, AnkiRules.homeworkDecks(decks, 1, listOf(prep), unseen = { 45 }, now = Fixtures.at("2026-10-05T17:00"), zone = LONDON).single().dueAt)
+        // With no real deadline among its assignments, none is kept with it.
+        val undated = prep.copy(sourceValues = SourceValues(Kind.Homework, null, null), dueAt = Fixtures.at("2026-10-12T08:30"))
+        assertNull(AnkiRules.homeworkDecks(decks, 1, listOf(undated), unseen = { 45 }, now = NOW, zone = LONDON).single().extra[AnkiRules.EXTRA_REAL])
     }
 
     @Test

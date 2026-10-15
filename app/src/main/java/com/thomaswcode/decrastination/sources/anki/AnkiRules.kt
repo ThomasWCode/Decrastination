@@ -242,7 +242,9 @@ object AnkiRules {
     }
 
     /**
-     * A task for each deck an open assignment names, due with the earliest such assignment.
+     * A task for each deck an open assignment names, due with the earliest such assignment: by the
+     * deadlines in force now (a plan's gone by, the real one behind it, PL-14), the earliest of their
+     * real deadlines kept with it ([EXTRA_REAL]) so its date is a deadline only where theirs is.
      * [unseen] counts the deck's cards not yet seen (all of them, not just today's).
      */
     fun homeworkDecks(
@@ -284,7 +286,8 @@ object AnkiRules {
                 )
             }
         return finishing + wanted.map { (deck, linked) ->
-            val first = linked.minWith(compareBy(nullsLast()) { it.dueAt })
+            val first = linked.minWith(compareBy(nullsLast()) { it.deadlineAt(now) })
+            val real = linked.mapNotNull { it.realDeadline }.minOrNull()
             val left = unseen(deck)
             // Its options allow no new cards a day: Anki's next day brings none either, so nothing
             // waits for it. All its cards are one step, for a custom study session (or the limit
@@ -301,14 +304,15 @@ object AnkiRules {
                 detail = "$left cards never studied. For: " + linked.joinToString("; ") { it.title } +
                     if (none) ". Its New cards/day in AnkiDroid is 0, so Anki shows none of them: raise it, or use Custom study." else "",
                 className = first.className,
-                dueAt = first.dueAt,
+                dueAt = first.deadlineAt(now),
                 sourceEffortMin = effortMin(0, left).coerceAtLeast(1),
                 done = left == 0,
                 derived = true,
                 subSteps = newCardSteps(left, deck.new, deck.newPerDay),
                 stepsPerDay = 1,
                 notBefore = if (waits) nextRollover(now, zone) else null,
-                extra = mapOf(EXTRA_DECK_ID to deck.id.toString(), EXTRA_DECK_NAME to deck.name, EXTRA_FOR to linked.joinToString(",") { it.id }),
+                extra = mapOf(EXTRA_DECK_ID to deck.id.toString(), EXTRA_DECK_NAME to deck.name, EXTRA_FOR to linked.joinToString(",") { it.id }) +
+                    listOfNotNull(real?.let { EXTRA_REAL to it.toString() }),
             )
         }
     }
@@ -335,4 +339,7 @@ object AnkiRules {
     const val EXTRA_DECK_ID = "deckId"
     const val EXTRA_DECK_NAME = "deckName"
     const val EXTRA_FOR = "for"
+
+    /** A deck for homework: the earliest real deadline of its assignments (PL-14), epoch millis; absent where none has one. */
+    const val EXTRA_REAL = "real"
 }

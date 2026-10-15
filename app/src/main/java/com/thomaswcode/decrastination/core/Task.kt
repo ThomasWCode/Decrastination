@@ -188,9 +188,10 @@ data class TaskItem(
             // The rules' date is a guess from its words, and Claude's is only a quote where it says so:
             // a reading of the email as it is now, not one its new content has made out of date.
             Source.Gmail -> Enrichments.current(this)?.takeIf { it.deadlineQuoted && it.deadline == dueAt }?.deadline
-            // A deck for homework has its assignments' deadline, not one of its own: theirs to say (the
-            // planner reads them through it), as it may be a test date Claude read, a plan.
-            Source.Anki if extra[AnkiRules.EXTRA_FOR] != null -> null
+            // A deck for homework has its assignments' deadline, not one of its own: their earliest real
+            // one, as read with them (the planner reads them through it), as its date may be a test
+            // date Claude read, a plan.
+            Source.Anki if extra[AnkiRules.EXTRA_FOR] != null -> extra[AnkiRules.EXTRA_REAL]?.toLongOrNull()
             // Your own task's date is yours; a source's, its own (one kept from before Phase 4 has no source values).
             else -> if (sourceValues != null) sourceValues.dueAt else dueAt
         }

@@ -986,14 +986,30 @@ class PlannerTest {
     }
 
     @Test
-    fun `a homework deck's date is its assignments', not a deadline of its own`() {
+    fun `a homework deck's date is a deadline only where its assignments' is`() {
+        val due = Fixtures.at("2026-10-12T09:00")
         val deck = TaskItem(
-            id = "anki:deck", source = Source.Anki, sourceId = AnkiRules.DECK_PREFIX + "1", title = "Anki: Textbook 1::1.2", dueAt = Fixtures.at("2026-10-12T09:00"),
+            id = "anki:deck", source = Source.Anki, sourceId = AnkiRules.DECK_PREFIX + "1", title = "Anki: Textbook 1::1.2", dueAt = due,
             kind = Kind.Revision, sourceEffortMin = 9, derived = true, extra = mapOf(AnkiRules.EXTRA_FOR to "teams:a"),
-            sourceValues = SourceValues(Kind.Revision, Fixtures.at("2026-10-12T09:00"), null), firstSeenAt = 0, lastSeenAt = 0,
+            sourceValues = SourceValues(Kind.Revision, due, null), firstSeenAt = 0, lastSeenAt = 0,
         )
+        // Its date a test date Claude read for its assignment, none of theirs a deadline: a plan.
         assertNull(deck.realDeadline)
         assertFalse(deck.hardDeadline)
+        // Its assignment's own deadline, read with it: a deadline, in force once passed.
+        val hard = deck.copy(extra = deck.extra + (AnkiRules.EXTRA_REAL to due.toString()))
+        assertEquals(due, hard.realDeadline)
+        assertEquals(due, hard.deadlineAt(Fixtures.at("2026-10-13T17:00")))
+        assertTrue(hard.hardAt(Fixtures.at("2026-10-13T17:00")))
+    }
+
+    @Test
+    fun `work not open yet is said not to fit where its days from its opening can't hold it`() {
+        // Opens Friday 17:00, due Saturday 09:00: Friday's 300 minutes from then, for six hours.
+        val app = task("app", Fixtures.at("2026-10-10T09:00"), effort = 360, available = Fixtures.at("2026-10-09T17:00"))
+        assertEquals(listOf(WontFit("teams:app", "app", 360, 300, Fixtures.at("2026-10-10T09:00"))), plan(listOf(app), "2026-10-08T17:00").wontFit)
+        // Five hours fit.
+        assertEquals(emptyList(), plan(listOf(app.copy(sourceEffortMin = 300)), "2026-10-08T17:00").wontFit)
     }
 
     @Test
