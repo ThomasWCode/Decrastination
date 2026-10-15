@@ -144,6 +144,8 @@ data class ActivityLog(
     val reviews: List<WeeklyReview> = emptyList(),
     /** Felix's messages and the replies to them (AI-22, LR-03): the last [FELIX_KEEP_DAYS] days. */
     val felix: List<FelixRecord> = emptyList(),
+    /** Each reviewed week's totals (PL-10), kept [WEEKS_KEPT] weeks, past the [KEEP_DAYS] the rest is kept: Stats' longer periods read them. */
+    val weeks: List<WeekRollup> = emptyList(),
 ) {
     fun trimmed(now: Long): ActivityLog {
         val since = now - KEEP_DAYS * 24 * 3_600_000L
@@ -157,11 +159,15 @@ data class ActivityLog(
             checkIns = checkIns.filter { it.at >= since },
             reviews = reviews.filter { it.at >= since },
             felix = felix.filter { it.at >= now - FELIX_KEEP_DAYS * 24 * 3_600_000L },
+            weeks = weeks.sortedBy { it.week }.takeLast(WEEKS_KEPT),
         )
     }
 
     companion object {
         const val KEEP_DAYS = 120L
+
+        /** Two years of weeks. */
+        const val WEEKS_KEPT = 104
 
         /** His messages are many and matter for a few weeks: the review reads the last one's. */
         const val FELIX_KEEP_DAYS = 30L
@@ -270,6 +276,24 @@ data class WeeklyReview(
     val why: String? = null,
     /** What's remembered before and after the week's tidy, when there was one (AI-21): for the Reviews page to show, and undo. */
     val memoryTidy: MemoryTidyRecord? = null,
+)
+
+/**
+ * A week's totals (PL-10), written at its review: its kept slots' minutes, what was finished (and of
+ * that with a real deadline, how much by it), the blocks, the days whose plan was all done, and the
+ * slots kept and missed. [week] is its Monday.
+ */
+@Serializable
+data class WeekRollup(
+    val week: String,
+    val minutes: Int,
+    val finished: Int,
+    val onTime: Int,
+    val dated: Int = 0,
+    val blocks: Int,
+    val fullDays: Int,
+    val slotsKept: Int,
+    val slotsMissed: Int,
 )
 
 /** The facts remembered before a weekly tidy, and after it (AI-21). */
