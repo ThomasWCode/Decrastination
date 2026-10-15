@@ -1151,6 +1151,9 @@ class AppGraph private constructor(context: Context) {
         true
     }
 
+    /** Said on a message whose answer you let go (AC-08). */
+    private val CANCELLED = "Cancelled"
+
     /** The most of what a call was about that its record keeps (AC-07). */
     private val MAX_CALL_TITLE = 80
 
@@ -1381,6 +1384,27 @@ class AppGraph private constructor(context: Context) {
     /** Held while the chat is answered, so each message is answered once. */
     private val answering = Mutex()
 
+    private val sentAt = kotlinx.coroutines.flow.MutableStateFlow<Long?>(null)
+
+    /** When the chat's call in flight was sent (AC-08), for its "thinking… 12 s"; null with none. */
+    val answeringSince: kotlinx.coroutines.flow.StateFlow<Long?> get() = sentAt
+
+    /** The message whose answer you let go while its call ran (AC-08): that answer, when it comes, goes unused. */
+    @Volatile
+    private var letGo: String? = null
+
+    /**
+     * The answer being waited for let go (AC-08): your message says so, with its Try again. A call once
+     * sent is paid for and counted (AC-04), so it isn't closed: it comes back, its answer unused.
+     */
+    fun cancelAnswer() {
+        val waiting = chat.value.unanswered ?: return
+        if (sentAt.value == null) return
+        letGo = waiting.id
+        sentAt.value = null
+        scope.launch { chat.update { s -> s.copy(messages = s.messages.map { if (it.id == waiting.id && it.answeredAt == null) it.copy(note = CANCELLED, stuck = true) else it }) } }
+    }
+
     /**
      * Your [text] to Claude about [about] (2.0.0, Q29): kept as message [id], then answered
      * ([answerChat]). Not while one of yours still waits for its answer: false then, and nothing's kept.
@@ -1440,7 +1464,17 @@ class AppGraph private constructor(context: Context) {
             val called = callModel(interactive = true, record = com.thomaswcode.decrastination.enrich.ModelCalls.OnRecord(com.thomaswcode.decrastination.enrich.ModelEffort.Job.Chat, waiting.text) { r: ChatReader.Result -> r.usage to com.thomaswcode.decrastination.enrich.ModelCalls.outcome(r.refused, r.reading == null) }, cost = { r: ChatReader.Result -> r.costUsd to r.refused }) { at ->
                 // Being asked now: whatever it said before (a failed call) is gone.
                 chat.update { s -> s.copy(messages = s.messages.map { if (it.id == waiting.id) it.copy(note = null, stuck = false) else it }) }
-                ChatReader(key, clock.zone(), endpoint(), profile = profile(at), settings = settings.value).answer(chat.value.messages, state.tasks, time.events, chatContext(at, state, time, instructions.value.applied), at)
+                sentAt.value = at
+                try {
+                    ChatReader(key, clock.zone(), endpoint(), profile = profile(at), settings = settings.value).answer(chat.value.messages, state.tasks, time.events, chatContext(at, state, time, instructions.value.applied), at)
+                } finally {
+                    sentAt.value = null
+                }
+            }
+            // Let go while it ran (AC-08): the message says so already, and the answer goes unused.
+            if (letGo == waiting.id) {
+                letGo = null
+                return@withLock
             }
             val result = when (called) {
                 is Called.Held -> return@call because(called.hold)

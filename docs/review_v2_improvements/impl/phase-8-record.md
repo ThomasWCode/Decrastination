@@ -26,6 +26,8 @@ Items: LR-01, LR-02, LR-06, LR-08, PL-08, PL-09, PL-10, PL-11, NF-02, AC-06, AC-
 
 **Steps.** `AppGraph.answering: StateFlow<Long?>` (the start time of the call in flight); the chat shows "Felix is thinking… 12 s" and, after 10 s, a Cancel that cancels the `Job` (`answerChat` runs in a `Job` kept on the graph; cancellation closes the HTTP call) and marks the message `stuck` with the note "Cancelled".
 
+*(As built: `answeringSince`, as `answering` is the chat's lock; Cancel lets the answer go rather than closing the call. A call once sent is paid for and counted, whatever stops waiting for it (AC-04, as every call is), and the SDK's call blocks till it's done, so it's left to come back and its answer goes unused.)*
+
 ---
 
 ## AI-18 The review's input

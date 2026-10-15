@@ -397,9 +397,20 @@ private fun Yours(graph: AppGraph, message: ChatMessage, now: Long, zone: ZoneId
         }
         if (message.answeredAt == null) {
             if (message.note == null) {
+                // How long it's been asked (AC-08), and after a while a way to stop waiting.
+                val since by graph.answeringSince.collectAsStateWithLifecycle()
+                var clock by remember { mutableStateOf(graph.clock.now()) }
+                LaunchedEffect(since) {
+                    while (since != null) {
+                        clock = graph.clock.now()
+                        kotlinx.coroutines.delay(1_000)
+                    }
+                }
+                val seconds = since?.let { ((clock - it) / 1_000).coerceAtLeast(0) }
                 Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
-                    Text("${graph.settings.value.felixName} is thinking…", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("${graph.settings.value.felixName} is thinking…" + (seconds?.let { " $it s" } ?: ""), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (seconds != null && seconds >= CANCEL_AFTER_S) TextButton(onClick = { graph.cancelAnswer() }) { Text("Cancel") }
                 }
             } else {
                 Text(message.note, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 6.dp))
@@ -568,3 +579,7 @@ private fun InputBar(name: String, draft: String, onDraft: (String) -> Unit, abo
         }
     }
 }
+
+/** How long the chat's call runs before Cancel is offered (AC-08). */
+private const val CANCEL_AFTER_S = 10L
+
