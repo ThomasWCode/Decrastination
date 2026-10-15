@@ -171,6 +171,8 @@ data class TaskItem(
     val userDueAt: Long? = null,
     val userOnDay: String? = null,
     val userAtTime: Long? = null,
+    /** The task listed it's the same work as, which is kept (DX-15): this one's off the plan and the list. */
+    val userSameAs: String? = null,
 ) {
     val isOpen: Boolean get() = status == Status.Open
 
@@ -183,7 +185,7 @@ data class TaskItem(
     val justAnEmail: Boolean get() = source == Source.Gmail && (kind == Kind.Info || kind == Kind.Event)
 
     /** Not work to plan: an email that's just an email, or one you've said isn't a task. */
-    val hidden: Boolean get() = justAnEmail || userNotATask
+    val hidden: Boolean get() = justAnEmail || userNotATask || userSameAs != null
 
     /**
      * Its real deadline, where it has one (PL-14): yours; an email's own words as Claude quoted them

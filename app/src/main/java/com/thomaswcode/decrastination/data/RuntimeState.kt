@@ -77,6 +77,8 @@ data class RuntimeState(
     val droppedAlerted: Map<String, String> = emptyMap(),
     /** "How was it?" questions kept while notifications couldn't be seen, to ask once they can. */
     val assessLater: List<AssessLater> = emptyList(),
+    /** Pairs of tasks you've said aren't the same work (DX-15), by [com.thomaswcode.decrastination.core.Duplicates.key]: not asked about again. */
+    val notSame: List<String> = emptyList(),
     /** Today's and tomorrow's pieces' first steps (AI-15), by piece key: written ahead, as the plan has them. */
     val microPlans: Map<String, com.thomaswcode.decrastination.enrich.MicroPlan> = emptyMap(),
     /** Completions whose free time has been given, so each is given once (`Focus.onCompleted`); kept a fortnight. */

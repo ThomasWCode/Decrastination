@@ -101,6 +101,9 @@ enum class ChangeType {
 
     /** A task of your own's steps replaced with [Change.steps] (AI-19): made on the task itself, its ticks kept by name. */
     Steps,
+
+    /** The task is the same work as another listed one ([Change.afterTaskId]), which is kept (DX-15): this one's hidden. */
+    SameAs,
 }
 
 /** One change an instruction makes. Which fields mean anything depends on [type]. */
@@ -149,6 +152,8 @@ data class TaskOverrides(
     val onDay: String? = null,
     /** Its next piece at this time (PL-04). */
     val atTime: Long? = null,
+    /** The same work as this task, which is kept (DX-15): this one's hidden. */
+    val sameAs: String? = null,
 ) {
     companion object {
         val NONE = TaskOverrides()
@@ -243,8 +248,16 @@ object Instructions {
                 // it's kept to stays, whichever came first.
                 ChangeType.OnDay -> o.copy(onDay = change.date, atTime = o.atTime?.takeIf { timeOn[id] == change.date })
                 ChangeType.AtTime -> o.copy(atTime = change.time, onDay = o.onDay?.takeIf { it == change.date }).also { timeOn[id] = change.date }
+                ChangeType.SameAs -> o.copy(sameAs = change.afterTaskId)
                 else -> o
             }
+        }
+        // The same as one that's itself the same as another (or as this): not hidden, so no two
+        // said the same as each other are both off the plan.
+        val laid = out.toMap()
+        for ((id, o) in laid) {
+            val kept = o.sameAs ?: continue
+            if (kept == id || laid[kept]?.sameAs != null) out[id] = o.copy(sameAs = null)
         }
         return out
     }
@@ -362,6 +375,7 @@ object Instructions {
             ChangeType.OnDay -> "All of ${title(change.taskId)} on ${day(change)}"
             ChangeType.AtTime -> "${title(change.taskId)} at ${clock(change.startMin)} on ${day(change)}"
             ChangeType.Steps -> "${title(change.taskId)} in steps: " + change.steps.orEmpty().joinToString(", ") { "${it.title} (${it.minutes} min)" }
+            ChangeType.SameAs -> "${title(change.taskId)} is the same work as ${title(change.afterTaskId)}: only that one is planned"
         }
     }
 
@@ -398,7 +412,7 @@ object Instructions {
 }
 
 /** What [task]'s instructions say of it now, as [TaskOverrides] holds it. */
-fun TaskItem.overrides(): TaskOverrides = TaskOverrides(userNotATask, userFrom, userAfter, userDueAt, userEffortMin, userOnDay, userAtTime)
+fun TaskItem.overrides(): TaskOverrides = TaskOverrides(userNotATask, userFrom, userAfter, userDueAt, userEffortMin, userOnDay, userAtTime, userSameAs)
 
 /**
  * The task with [o] as its instructions' say: kept on it, and laid over what the source and the
@@ -415,6 +429,7 @@ fun TaskItem.withOverrides(o: TaskOverrides): TaskItem =
         userEffortMin = o.minutes,
         userOnDay = o.onDay,
         userAtTime = o.atTime,
+        userSameAs = o.sameAs,
     ).enriched()
 
 /**
@@ -423,10 +438,10 @@ fun TaskItem.withOverrides(o: TaskOverrides): TaskItem =
  * another day, or every week; days off; a half-day) are shown to confirm, as new tasks are. Pure.
  */
 object InstantChanges {
-    private val ON_A_TASK = setOf(ChangeType.AtTime, ChangeType.OnDay, ChangeType.StartFrom, ChangeType.DueBy, ChangeType.Minutes, ChangeType.NotATask, ChangeType.After, ChangeType.Steps)
+    private val ON_A_TASK = setOf(ChangeType.AtTime, ChangeType.OnDay, ChangeType.StartFrom, ChangeType.DueBy, ChangeType.Minutes, ChangeType.NotATask, ChangeType.After, ChangeType.Steps, ChangeType.SameAs)
 
     fun instant(change: Change, tasks: Map<String, TaskItem>, today: java.time.LocalDate): Boolean = when (change.type) {
-        in ON_A_TASK -> change.taskId in tasks && (change.type != ChangeType.After || change.afterTaskId in tasks)
+        in ON_A_TASK -> change.taskId in tasks && ((change.type != ChangeType.After && change.type != ChangeType.SameAs) || change.afterTaskId in tasks)
         ChangeType.BusyTime, ChangeType.DayLimit -> change.date == today.toString()
         ChangeType.EventTime -> true
         else -> false
