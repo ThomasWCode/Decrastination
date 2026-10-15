@@ -28,6 +28,8 @@ class ClaudeEnricher(
     private val zone: ZoneId,
     endpoint: String? = null,
     private val model: String = MODEL,
+    /** Who the student is (AI-05): read for each call, as it changes with what's remembered. */
+    private val profile: () -> Profile.Block = { Profile.Block.NONE },
 ) : Enricher {
     override val by = model
 
@@ -39,10 +41,11 @@ class ClaudeEnricher(
         .build()
 
     override suspend fun enrich(task: TaskItem, job: Enrichments.Job, now: Long): Enricher.Result {
+        val student = profile()
         val params = MessageCreateParams.builder()
             .model(model)
             .maxTokens(MAX_TOKENS)
-            .system(Prompts.system(job))
+            .systemOfTextBlockParams(ModelCalls.systemBlocks(Prompts.system(job, student.year), student.text))
             .addUserMessage(Prompts.describe(task, job, now, zone).take(Pricing.MAX_INPUT_CHARS))
             .outputConfig(
                 OutputConfig.builder()

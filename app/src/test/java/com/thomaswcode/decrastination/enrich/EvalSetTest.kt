@@ -80,6 +80,10 @@ class EvalSetTest {
                     appendLine("=== SYSTEM ===")
                     appendLine(Prompts.system(case.job))
                     appendLine()
+                    // The second system block every call sends (AI-05), here from the settings' defaults.
+                    appendLine("=== PROFILE ===")
+                    appendLine(Profile.block(com.thomaswcode.decrastination.data.Settings(), listOf(case.task), null, com.thomaswcode.decrastination.core.SchoolCalendar(), com.thomaswcode.decrastination.core.MemoryState(), nowOf(case), zone))
+                    appendLine()
                     appendLine("=== USER ===")
                     appendLine(redact(user))
                     appendLine()

@@ -138,6 +138,20 @@ class AppGraph private constructor(context: Context) {
     /** Days with no school and half-days (PL-16), told to the chat or added in Settings. */
     val school = JsonStore(File(app.filesDir, "school.json"), SchoolCalendar.serializer(), ::SchoolCalendar)
 
+    /** What Felix remembers (AI-21): facts, and standing instructions. */
+    val memory = JsonStore(File(app.filesDir, "memory.json"), com.thomaswcode.decrastination.core.MemoryState.serializer(), { com.thomaswcode.decrastination.core.MemoryState() })
+
+    /** Who the student is, as every model call sends it (AI-05): from the settings, the tasks, the timetable, the school calendar and what's remembered. */
+    fun profile(now: Long = clock.now()): com.thomaswcode.decrastination.enrich.Profile.Block {
+        val s = settings.value
+        val state = tasks.value
+        val zone = clock.zone()
+        return com.thomaswcode.decrastination.enrich.Profile.Block(
+            com.thomaswcode.decrastination.enrich.Profile.yearGroup(now, zone, s.yearGroupStart),
+            com.thomaswcode.decrastination.enrich.Profile.block(s, state.tasks, state.timetable, school.value, memory.value, now, zone),
+        )
+    }
+
     init {
         // Files that couldn't be read whole at this start: kept for Setup to say, till you've seen them.
         // On record before anything else runs, and only then is a bad file replaced by what was kept
@@ -766,10 +780,10 @@ class AppGraph private constructor(context: Context) {
     private fun endpoint(): String? = modelEndpoint?.also { Log.w(TAG, "Claude's calls go to $it, not Anthropic (debug ai-endpoint)") }
 
     /** The photo check, while Claude is switched on and has its key; else null. */
-    fun photoChecker(): PhotoChecker? = claudeKey()?.let { PhotoChecker(it, endpoint()) }
+    fun photoChecker(): PhotoChecker? = claudeKey()?.let { PhotoChecker(it, endpoint(), profile = profile()) }
 
     /** The model's weekly review, while Claude is switched on and has its key; else null. */
-    fun modelReviewer(): ClaudeReviewer? = claudeKey()?.let { ClaudeReviewer(it, endpoint()) }
+    fun modelReviewer(): ClaudeReviewer? = claudeKey()?.let { ClaudeReviewer(it, endpoint(), profile = profile()) }
 
     /** Claude's API key, while Claude is switched on and the key is in use; else null. */
     fun claudeKey(): String? {
@@ -778,7 +792,7 @@ class AppGraph private constructor(context: Context) {
         return secrets[Secret.AnthropicApiKey]?.takeIf { it.isNotBlank() }
     }
 
-    fun modelEnricher(): Enricher? = claudeKey()?.let { ClaudeEnricher(it, clock.zone(), endpoint()) }
+    fun modelEnricher(): Enricher? = claudeKey()?.let { ClaudeEnricher(it, clock.zone(), endpoint(), profile = { profile() }) }
 
     /**
      * A failed model call, counted in [month]: the model rests ([ModelHold.Resting]), and one showing
@@ -1180,7 +1194,7 @@ class AppGraph private constructor(context: Context) {
     /** When a failed call is tried again (AC-04): after its rest, or at the next chance where it has none. */
     private fun retryWords(): String = ModelHold.restLeftMin(runtime.value.aiUsage, clock.now()).let { if (it > 0) "it's tried again in $it min" else "it's tried again at the next chance" }
 
-    private fun instructionReader(): InstructionReader? = claudeKey()?.let { InstructionReader(it, clock.zone(), endpoint()) }
+    private fun instructionReader(): InstructionReader? = claudeKey()?.let { InstructionReader(it, clock.zone(), endpoint(), profile = profile()) }
 
     /** Held while the chat is answered, so each message is answered once. */
     private val answering = Mutex()
@@ -1244,7 +1258,7 @@ class AppGraph private constructor(context: Context) {
             val called = callModel(interactive = true, cost = { r: ChatReader.Result -> r.costUsd to r.refused }) { at ->
                 // Being asked now: whatever it said before (a failed call) is gone.
                 chat.update { s -> s.copy(messages = s.messages.map { if (it.id == waiting.id) it.copy(note = null, stuck = false) else it }) }
-                ChatReader(key, clock.zone(), endpoint()).answer(chat.value.messages, state.tasks, time.events, chatContext(at, state, time, instructions.value.applied), at)
+                ChatReader(key, clock.zone(), endpoint(), profile = profile(at)).answer(chat.value.messages, state.tasks, time.events, chatContext(at, state, time, instructions.value.applied), at)
             }
             val result = when (called) {
                 is Called.Held -> return@call because(called.hold)

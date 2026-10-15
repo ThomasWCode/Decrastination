@@ -58,9 +58,10 @@ object ChatPrompts {
     private val DAY = DateTimeFormatter.ofPattern("EEEE d MMMM yyyy", Locale.UK)
     private val CLOCK = DateTimeFormatter.ofPattern("HH:mm", Locale.UK)
 
-    val SYSTEM = (
+    /** The chat's instructions, for a student in Year [year] (AI-06). */
+    fun system(year: Int = 12): String = (
         """
-        You're the assistant in a UK sixth-form student's (Year 12) planner app, in a chat. The app gathers their homework (Teams), their own planner (Power Planner), emails that ask them for something (Gmail), German vocabulary (Anki) and tasks they add themselves; plans the work into the evenings before each is due, around their calendar; and blocks distracting apps while work is due.
+        You're the assistant in a UK sixth-form student's (Year $year) planner app, in a chat. The app gathers their homework (Teams), their own planner (Power Planner), emails that ask them for something (Gmail), German vocabulary (Anki) and tasks they add themselves; plans the work into the evenings before each is due, around their calendar; and blocks distracting apps while work is due.
 
         The student tells you about their work. You can:
         1. Add tasks of their own (newTasks): something to do that isn't listed ("write my UCAS statement by 1 December", "buy mum a present before Sunday"). Give a short title in their words; kind: Homework, Revision, Admin, or Event for something that happens at a time (an appointment, a match); subject if it's for one (else an empty string); dueDate and dueTime if they gave them (an event's start; no time means the end of that day); minutes for the whole thing (your best estimate if they didn't say, and say so in your reply); startDate if it can't be started before a day; notes only for something worth keeping (else an empty string); and steps only for a big task worth splitting, each with minutes (adding up to the task's) and its own dates where it has them.
@@ -411,7 +412,7 @@ object ChatAnswers {
 }
 
 /** Claude in the chat ([ChatPrompts]), as the enrichment's calls are made. */
-class ChatReader(apiKey: String, private val zone: ZoneId, endpoint: String? = null, val model: String = ClaudeEnricher.MODEL) {
+class ChatReader(apiKey: String, private val zone: ZoneId, endpoint: String? = null, val model: String = ClaudeEnricher.MODEL, private val profile: Profile.Block = Profile.Block.NONE) {
 
     data class Result(val reading: ChatAnswers.Reading?, val costUsd: Double, val refused: Boolean = false)
 
@@ -428,7 +429,7 @@ class ChatReader(apiKey: String, private val zone: ZoneId, endpoint: String? = n
         val builder = MessageCreateParams.builder()
             .model(model)
             .maxTokens(ClaudeEnricher.MAX_TOKENS)
-            .system(ChatPrompts.SYSTEM)
+            .systemOfTextBlockParams(ModelCalls.systemBlocks(ChatPrompts.system(profile.year), profile.text))
             .outputConfig(OutputConfig.builder().effort(ModelEffort.of(ModelEffort.Job.Chat)).format(JsonOutputFormat.builder().schema(schema).build()).build())
             .putAdditionalHeader("anthropic-beta", ClaudeEnricher.FALLBACK_BETA)
             .putAdditionalBodyProperty("fallbacks", JsonValue.from("default"))

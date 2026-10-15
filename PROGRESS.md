@@ -70,7 +70,8 @@ The implementation of `docs/review_v2_improvements/impl/` on branch `v3`. Delete
 
 `impl/phase-5-felix.md`, on a local branch (`v3-phase5`) on top of phase 4:
 
-- AC-02 effort by job, AC-04 rest by what failed (busy 5, 15, 60 minutes; the server or a timeout 15, 60; no network or a request the API won't take none, that task the rules' till it changes; the key an hour), AC-05 a call's room taken under the lock and the call sent outside it, counting those in flight: this commit.
+- AC-02 effort by job, AC-04 rest by what failed (busy 5, 15, 60 minutes; the server or a timeout 15, 60; no network or a request the API won't take none, that task the rules' till it changes; the key an hour), AC-05 a call's room taken under the lock and the call sent outside it, counting those in flight: 48fed00.
+- AI-05, AI-06 the student's profile as every call's second system block, the year group in the prompts from `yearGroupStart`, Settings → About you (the year, the textbook moved there, your lines, your classes' subjects); AC-01 the job's own block marked for the hour's cache: this commit.
 
 ## Current
 
