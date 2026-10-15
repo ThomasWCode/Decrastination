@@ -1,0 +1,28 @@
+{
+    "type": "object",
+    "properties": {
+        "facts": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "topic": {
+                        "type": "string"
+                    },
+                    "text": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "topic",
+                    "text"
+                ],
+                "additionalProperties": false
+            }
+        }
+    },
+    "required": [
+        "facts"
+    ],
+    "additionalProperties": false
+}

@@ -1,0 +1,59 @@
+{
+    "type": "object",
+    "properties": {
+        "effortMin": {
+            "type": "integer",
+            "description": "The minutes in all; with blocks, their sum"
+        },
+        "blocks": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "title": {
+                        "type": "string"
+                    },
+                    "minutes": {
+                        "type": "integer",
+                        "description": "10 to 60 where the work allows; never over 600"
+                    },
+                    "from": {
+                        "anyOf": [
+                            {
+                                "type": "string",
+                                "format": "date"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "description": "The date before which this block can't be done, only if the text gives one; never after the task's due date"
+                    },
+                    "due": {
+                        "anyOf": [
+                            {
+                                "type": "string",
+                                "description": "Local date and time, YYYY-MM-DDTHH:MM, or the date alone, YYYY-MM-DD"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    }
+                },
+                "required": [
+                    "title",
+                    "minutes",
+                    "from",
+                    "due"
+                ],
+                "additionalProperties": false
+            }
+        }
+    },
+    "required": [
+        "effortMin",
+        "blocks"
+    ],
+    "additionalProperties": false
+}

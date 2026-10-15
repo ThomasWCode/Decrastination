@@ -30,6 +30,12 @@ Same toolchain as the [Teams Assignments widget](https://github.com/ThomasWCode/
 ./gradlew installDebug
 ```
 
+Every prompt and schema Claude is sent has a golden copy in `app/src/test/resources/prompts/`, and the tests fail on any difference, with its diff. When a change is meant, write them again and commit them with it; where a reading's prompt or the profile changed, raise `Prompts.VERSION` too (a test asks for it), so the readings made by the old ones are made again:
+
+```bash
+./gradlew testDebugUnitTest -PupdateGolden=true
+```
+
 Debug builds are signed with a copy of the widget's committed `app/debug.keystore`. Sharing its key is what grants this app the widget's signature-level permission to read the assignments, so don't change it.
 
 ## Credentials and commands from a PC
