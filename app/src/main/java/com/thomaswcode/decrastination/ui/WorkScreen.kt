@@ -166,11 +166,19 @@ fun WorkScreen(graph: AppGraph, activity: Activity, opening: String? = null, onO
                 }
             }
             val groups = if (bySubject) Groups.bySubject(open, settings.classMap, now) else Groups.byDue(open, now, zone).map { (g, t) -> g.title to t }
+            // Work that looks the same from two sources (DX-15): said on each.
+            val pairs = com.thomaswcode.decrastination.core.Duplicates.candidates(state.tasks, settings.classMap, runtime.notSame)
+            val alike = pairs.flatMap { (a, b) -> listOf(a.id to b, b.id to a) }.groupBy({ it.first }, { it.second })
             for ((title, tasks) in groups) {
                 val key = "group-$title"
                 val expanded = key !in folded
                 item(key = key) { FoldingHeading(title, expanded, { toggle(key) }, summary = "${tasks.size}") }
-                if (expanded) itemsIndexed(tasks, key = { _, it -> it.id }) { index, task -> TaskTile(task, index, tasks.size, now, zone, byId) { sheetFor = task.id } }
+                if (expanded) itemsIndexed(tasks, key = { _, it -> it.id }) { index, task ->
+                    Column {
+                        TaskTile(task, index, tasks.size, now, zone, byId) { sheetFor = task.id }
+                        alike[task.id]?.firstOrNull()?.let { other -> SameLine(graph, task, other) }
+                    }
+                }
             }
             // Open work the plan leaves out, each with why (IMP-P1-002): folded, as it isn't for now.
             // Each fold of one source's too, where one is chosen.
@@ -185,11 +193,12 @@ fun WorkScreen(graph: AppGraph, activity: Activity, opening: String? = null, onO
                     }
                 }
             }
-            // Tasks you've said aren't: kept, off the plan, and here to check (taken back in Ask Claude).
-            val notTasks = state.tasks.filter { it.isOpen && it.userNotATask && (only == null || it.source.name == only) }.sortedWith(compareBy(nullsLast()) { it.dueAt })
+            // Tasks you've said aren't, or are the same work as another (DX-15): kept, off the plan, and
+            // here to check (taken back in Ask Claude).
+            val notTasks = state.tasks.filter { it.isOpen && (it.userNotATask || it.userSameAs != null) && (only == null || it.source.name == only) }.sortedWith(compareBy(nullsLast()) { it.dueAt })
             if (notTasks.isNotEmpty()) {
                 val expanded = NOT_TASKS !in folded
-                item(key = NOT_TASKS) { FoldingHeading("Not tasks, as you said", expanded, { toggle(NOT_TASKS) }, summary = "${notTasks.size}") }
+                item(key = NOT_TASKS) { FoldingHeading("Hidden, as you said", expanded, { toggle(NOT_TASKS) }, summary = "${notTasks.size}") }
                 if (expanded) itemsIndexed(notTasks, key = { _, it -> "not-" + it.id }) { index, task -> TaskTile(task, index, notTasks.size, now, zone, byId) { sheetFor = task.id } }
             }
             val finished = state.tasks.filter { !it.isOpen && !it.hidden && (only == null || it.source.name == only) }.sortedByDescending { it.doneAt ?: it.lastSeenAt }
@@ -271,6 +280,8 @@ private fun TaskTile(task: TaskItem, index: Int, count: Int, now: Long, zone: ja
     // A start you gave (or one of your own's): planned from then on, not hidden.
     val startsAt = (if (task.source == Source.Own) task.notBefore else task.userFrom)?.takeIf { task.isOpen && it > now }
     val steps = task.subSteps.takeIf { it.isNotEmpty() && task.isOpen }
+    // The same work as another, which is planned (DX-15).
+    val sameAs = task.userSameAs?.let { byId[it] }
     ListTile(index, count, onClick = onClick) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(
@@ -297,9 +308,11 @@ private fun TaskTile(task: TaskItem, index: Int, count: Int, now: Long, zone: ja
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
-        val tags = dropped != null || hiddenUntil != null || waits || task.userDueAt != null || task.userEffortMin != null || startsAt != null || steps != null
+        val tags = dropped != null || hiddenUntil != null || waits || task.userDueAt != null || task.userEffortMin != null || startsAt != null || steps != null || task.userNotATask || sameAs != null
         if (task.isOpen && tags) {
             FlowRow(Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                if (task.userNotATask) Pill("Not a task")
+                sameAs?.let { Pill("Same as “${it.title}”") }
                 if (dropped != null) WarningPill("Claude's plan dropped")
                 if (hiddenUntil != null) Pill("Hidden till ${Format.at(hiddenUntil, now, zone)}")
                 if (waits) Pill("Waits for another task")
@@ -311,3 +324,29 @@ private fun TaskTile(task: TaskItem, index: Int, count: Int, now: Long, zone: ja
         }
     }
 }
+
+/**
+ * [task] looks like the same work as [other] (DX-15): Same keeps [other] and takes [task] off the
+ * plan and the list (a change of yours, taken back in Your changes); Different isn't asked again.
+ */
+@Composable
+private fun SameLine(graph: AppGraph, task: TaskItem, other: TaskItem) {
+    Row(Modifier.fillMaxWidth().padding(start = 28.dp, end = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text("Looks like the same work as “${other.title}” from ${other.source.label}. Same?", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+        androidx.compose.material3.TextButton(onClick = {
+            graph.scope.launch {
+                graph.addOwnChange(
+                    java.util.UUID.randomUUID().toString(), "Same as “${other.title}”",
+                    com.thomaswcode.decrastination.core.About(taskId = task.id, taskTitle = task.title),
+                    com.thomaswcode.decrastination.core.Change(com.thomaswcode.decrastination.core.ChangeType.SameAs, taskId = task.id, afterTaskId = other.id),
+                )
+            }
+        }) { Text("Same") }
+        androidx.compose.material3.TextButton(onClick = {
+            graph.scope.launch { graph.runtime.update { it.copy(notSame = (it.notSame + com.thomaswcode.decrastination.core.Duplicates.key(task.id, other.id)).distinct().takeLast(MAX_NOT_SAME)) } }
+        }) { Text("Different") }
+    }
+}
+
+/** The most pairs said to be different kept: far more than there are. */
+private const val MAX_NOT_SAME = 200

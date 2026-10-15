@@ -203,7 +203,7 @@ object ChatPrompts {
     }
 
     /** What the app knows now: today, the open tasks, the fortnight's events, and the changes in use. The plan's sent beside it ([plan], [turns]). */
-    fun context(tasks: List<TaskItem>, events: List<CalendarEvent>, applied: List<Instruction>, now: Long, zone: ZoneId): String = buildString {
+    fun context(tasks: List<TaskItem>, events: List<CalendarEvent>, applied: List<Instruction>, now: Long, zone: ZoneId, classMap: Map<String, String> = emptyMap(), different: List<String> = emptyList()): String = buildString {
         fun at(time: Long) = Instant.ofEpochMilli(time).atZone(zone).format(WHEN)
         val byId = tasks.associateBy { it.id }
         appendLine("Today: ${Instant.ofEpochMilli(now).atZone(zone).format(TODAY)} (${zone.id})")
@@ -219,6 +219,13 @@ object ChatPrompts {
             appendLine("- ${t.id} | ${t.title.take(MAX_TITLE)} | ${t.source.label} | ${t.kind.label} | $due | ${t.effortMin} | ${t.workedMin + t.photoMin} | ${start?.let(::at) ?: "-"}")
             // Its steps by their place, for a tick (AI-14).
             t.subSteps.take(OwnTasks.MAX_STEPS).forEachIndexed { i, step -> appendLine("    step $i: ${step.title.take(MAX_TITLE)} (${step.minutes} min)${if (step.done) ", done" else ""}") }
+        }
+        // Work that looks the same from two sources (DX-15): a SameAs change keeps one.
+        val alike = com.thomaswcode.decrastination.core.Duplicates.candidates(tasks, classMap, different)
+        if (alike.isNotEmpty()) {
+            appendLine()
+            appendLine("Tasks that look like the same work (a SameAs change keeps one, if the student says so):")
+            alike.take(InstructionPrompts.MAX_TASKS).forEach { (a, b) -> appendLine("- ${a.id} | ${b.id}") }
         }
         appendLine()
         appendLine("Calendar events in the next fortnight (eventKey | title | when):")

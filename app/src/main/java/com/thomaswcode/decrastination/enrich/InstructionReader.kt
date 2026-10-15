@@ -66,6 +66,7 @@ object InstructionPrompts {
         - HalfDay: a school day that ends early. Needs date and endTime (HH:MM).
         - OnDay: all of the task's remaining work goes on one day. Needs taskId and date.
         - AtTime: the task's next piece starts at a set time. Needs taskId, date and time (HH:MM).
+        - SameAs: the task is the same work as another listed task, from another source, which is the one kept (this one is hidden). Needs taskId and afterTaskId (the one kept).
         - Steps: replace a task of the student's own's steps with these, adding up to its minutes. Needs taskId and steps (each with title, minutes, startDate and dueDate as YYYY-MM-DD or empty, and where: anywhere or home); only for tasks from Yours.
 
         Use the ids and event keys exactly as listed. Work out relative dates ("next Friday", "the weekend") from today; a weekday named alone ("on Saturday") means the next one, and only "every Saturday" or "on Saturdays" means each week. A stretch of days ("20 to 25 October", "this weekend") is one change per day, but for NoSchool, which takes the stretch whole. Leave every field a change type doesn't use null.
@@ -287,6 +288,8 @@ object InstructionAnswers {
                 val start = minute(g.time) ?: return null
                 at(date, g.time, LocalTime.MIDNIGHT, zone)?.takeIf { plausible(it, now) }?.let { Change(type, taskId = id, date = date, startMin = start, time = it) }
             }
+            // The same work as another listed task (DX-15), which is kept.
+            ChangeType.SameAs -> task?.let { id -> g.afterTaskId?.takeIf { it in tasks && it != id }?.let { Change(type, taskId = id, afterTaskId = it) } }
             // Only a task of your own's steps, each with its minutes and its dates readable (AI-19).
             ChangeType.Steps -> task?.takeIf { tasks.getValue(it).source == com.thomaswcode.decrastination.core.Source.Own }?.let { id ->
                 val steps = g.steps.takeIf { it.isNotEmpty() && it.size <= OwnTasks.MAX_STEPS }?.map { s ->
@@ -307,7 +310,8 @@ object InstructionAnswers {
     /** Why [g] couldn't be used, in words. */
     internal fun problem(g: Given, tasks: Map<String, TaskItem>, events: Map<String, String>): String = when {
         ChangeType.entries.none { it.name == g.type } -> "a change of a kind the app doesn't make"
-        g.type in setOf("NotATask", "StartFrom", "DueBy", "Minutes", "After", "OnDay", "AtTime", "Steps") && g.taskId !in tasks -> "it names a task that isn't listed"
+        g.type in setOf("NotATask", "StartFrom", "DueBy", "Minutes", "After", "OnDay", "AtTime", "Steps", "SameAs") && g.taskId !in tasks -> "it names a task that isn't listed"
+        g.type == "SameAs" -> "the task it's the same as isn't listed"
         g.type == "Steps" && tasks[g.taskId]?.source != com.thomaswcode.decrastination.core.Source.Own -> "only a task of the student's own has its steps changed"
         g.type == "Steps" -> "a step has no name or minutes, or a date that doesn't read"
         g.type == "After" -> "it waits on a task that isn't listed"

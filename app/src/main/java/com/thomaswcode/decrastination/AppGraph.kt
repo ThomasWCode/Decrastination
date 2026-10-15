@@ -226,7 +226,7 @@ class AppGraph private constructor(context: Context) {
         val tasks = state.tasks.map { task ->
             val o = overrides[task.id] ?: TaskOverrides.NONE
             if (o == task.overrides()) task else task.withOverrides(o)
-        }
+        }.let(com.thomaswcode.decrastination.core.Duplicates::credited)
         // Each day's windows, from the timetable's study periods and the school calendar (PL-15).
         val days = generateSequence(today) { it.plusDays(1) }.takeWhile { it <= reach }.toList()
         val calendar = school.value
@@ -1355,7 +1355,7 @@ class AppGraph private constructor(context: Context) {
         applied: List<Instruction> = instructions.value.applied,
     ): ChatPrompts.Context {
         return ChatPrompts.Context(
-            known = ChatPrompts.context(state.tasks, time.events, applied, now, clock.zone()),
+            known = ChatPrompts.context(state.tasks, time.events, applied, now, clock.zone(), settings.value.classMap, runtime.value.notSame),
             plan = ChatPrompts.plan(plan(state, now = now, applied = applied, time = time), clock.zone()),
         )
     }

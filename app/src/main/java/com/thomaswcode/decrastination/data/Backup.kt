@@ -203,6 +203,7 @@ object Backups {
                 // A day or a time for a task (PL-04).
                 ChangeType.OnDay -> named(change.taskId) && isDate(change.date)
                 ChangeType.AtTime -> named(change.taskId) && isDate(change.date) && change.startMin in 0 until DAY_MIN && time(change.time)
+                ChangeType.SameAs -> named(change.taskId) && named(change.afterTaskId) && change.afterTaskId != change.taskId
                 // A task of your own's steps (AI-19): some, each named, with its minutes.
                 ChangeType.Steps -> named(change.taskId) && change.steps.orEmpty().let { steps -> steps.size in 1..OwnTasks.MAX_STEPS && steps.all { it.title.isNotBlank() && it.minutes in OwnTasks.MINUTES } }
             }
