@@ -172,6 +172,10 @@ object Prompts {
     private val TODAY = DateTimeFormatter.ofPattern("EEEE d MMMM yyyy, HH:mm", Locale.UK)
     private val DAY_TIME = DateTimeFormatter.ofPattern("EEEE d MMMM yyyy HH:mm", Locale.UK)
 
+    /** Said before the item when the student photographed the work (AI-23). */
+    fun photo(job: Enrichments.Job): String = "The student photographed the work itself; estimate and split from what the photo shows" +
+        if (job == Enrichments.Job.Effort) "." else ", and say in reason what you saw."
+
     /** What's said to the model of its answer's [complaint], asked once more (AI-01). */
     fun repair(complaint: String): String = "Your answer had a problem: $complaint. Return the whole answer again with only that put right."
 

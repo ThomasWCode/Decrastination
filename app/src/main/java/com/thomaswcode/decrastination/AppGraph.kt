@@ -588,6 +588,7 @@ class AppGraph private constructor(context: Context) {
             if (tasks.value.tasks.any { Enrichments.jobFor(it) != null && Enrichments.stale(it, modelOn, RuleEnricher.BY, modelOff) }) EnrichWorker.enqueue(app)
         }
         scope.launch { CalendarTime.refresh(app) }
+        scope.launch(Dispatchers.IO) { runCatching { sweepPhotos() } }
         // A change in the calendar: read again, and the plan made again, so a slot you've moved or
         // deleted in the calendar written to (which isn't read) is seen (NF-07). The app's own write
         // brings one replan more, which writes nothing.
@@ -794,6 +795,44 @@ class AppGraph private constructor(context: Context) {
 
     /** The model's weekly review, while Claude is switched on and has its key; else null. */
     fun modelReviewer(): ClaudeReviewer? = claudeKey()?.let { ClaudeReviewer(it, endpoint(), profile = profile()) }
+
+    /** The photo-to-task reader (NF-01), while Claude is switched on and has its key; else null. */
+    fun photoTaskReader(): com.thomaswcode.decrastination.enrich.PhotoTaskReader? = claudeKey()?.let { com.thomaswcode.decrastination.enrich.PhotoTaskReader(it, endpoint(), profile = profile()) }
+
+    /** Where tasks' photos are kept (AI-23): the app's own files, one a task. */
+    private val photos: File get() = File(app.filesDir, "photos")
+
+    /**
+     * [jpeg], a photo of [taskId]'s work (AI-23), kept with it (in place of one before) and read
+     * with it: its reading redone now, where it's one the model reads.
+     */
+    suspend fun attachPhoto(taskId: String, jpeg: ByteArray) {
+        val file = File(photos, taskId.replace(Regex("[^A-Za-z0-9._-]"), "_") + ".jpg")
+        withContext(Dispatchers.IO) {
+            photos.mkdirs()
+            file.writeBytes(jpeg)
+        }
+        val hash = java.security.MessageDigest.getInstance("SHA-256").digest(jpeg).take(8).joinToString("") { "%02x".format(it) }
+        tasks.update { s -> s.copy(tasks = s.tasks.map { if (it.id == taskId) it.copy(photo = com.thomaswcode.decrastination.core.TaskPhoto(file.path, hash, clock.now())) else it }) }
+        scope.launch { runCatching { enrichNow(only = taskId) }.onFailure { Log.w(TAG, "Reading a task with its photo failed", it) } }
+    }
+
+    /** [jpeg] read into tasks of your own to check (NF-01): the reading, or why there's none. */
+    suspend fun readPhotoTasks(jpeg: ByteArray): Pair<com.thomaswcode.decrastination.enrich.PhotoTasks.Reading?, String?> {
+        val reader = photoTaskReader() ?: return null to "Claude is off: add it with New task."
+        val now = clock.now()
+        return when (val called = callModel(interactive = true, cost = { r: com.thomaswcode.decrastination.enrich.PhotoTaskReader.Result -> r.costUsd to r.refused }) { reader.read(jpeg, now, clock.zone()) }) {
+            is Called.Held -> null to "Claude can't be asked now: add it with New task."
+            is Called.Failed -> null to "The photo couldn't be read (${called.error.message ?: "no connection"})."
+            is Called.Answered -> called.value.reading?.let { it to null } ?: (null to if (called.value.refused) "Claude declined to read it." else "Claude couldn't read the photo: try a clearer one.")
+        }
+    }
+
+    /** The photos no task holds any more let go (AI-23): a task done and gone takes its photo with it. */
+    private fun sweepPhotos() {
+        val held = tasks.value.tasks.mapNotNull { it.photo?.path }.toSet()
+        photos.listFiles()?.filter { it.path !in held }?.forEach { it.delete() }
+    }
 
     /** The micro-plans' caller (AI-15), while Claude is switched on and has its key; else null. */
     fun microPlanner(): com.thomaswcode.decrastination.enrich.MicroPlanner? = claudeKey()?.let { com.thomaswcode.decrastination.enrich.MicroPlanner(it, endpoint()) }

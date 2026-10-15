@@ -134,6 +134,23 @@ fun TaskSheet(
     val next = TaskSheetModel.next(plan, task.id).takeIf { task.isOpen }
     // An email's steps and your own are ticked here; the rest are what their source says.
     val ticksHere = Focus.tickable(task) && task.subSteps.isNotEmpty()
+    // A photo of the work (AI-23), for a task Claude reads: kept with it, and read with it.
+    val shot = androidx.compose.runtime.remember { java.io.File(activity.cacheDir, "photos/work.jpg").also { it.parentFile?.mkdirs() } }
+    val camera = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.TakePicture()) { taken ->
+        if (!taken) {
+            shot.delete()
+            return@rememberLauncherForActivityResult
+        }
+        graph.scope.launch {
+            val jpeg = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { com.thomaswcode.decrastination.block.PhotoChecks.shrink(shot).also { shot.delete() } }
+            if (jpeg == null) {
+                message = "Couldn't read the photo."
+            } else {
+                graph.attachPhoto(task.id, jpeg)
+                said = if (graph.claudeKey() != null) "Photo kept: Claude reads the task again with it." else "Photo kept: it's read with the task once Claude is on."
+            }
+        }
+    }
     // Undo only where a quick change of yours is what's in force: one of Claude's since wins.
     fun quick(type: ChangeType) = Instructions.quickInForce(instructions.applied, task.id, type)
 
@@ -189,6 +206,12 @@ fun TaskSheet(
                 if (next != null && photo != null && photo.available && next.photoCheckable) {
                     OutlinedButton(enabled = !photo.checking, onClick = { photo.take(next) }) { Text("Check with a photo") }
                 }
+                // The work itself photographed, so Claude reads its size from it (AI-23).
+                if (task.isOpen && com.thomaswcode.decrastination.core.Enrichments.jobFor(task) != null) {
+                    OutlinedButton(onClick = { camera.launch(androidx.core.content.FileProvider.getUriForFile(activity, "${activity.packageName}.photos", shot)) }) {
+                        Text(if (task.photo == null) "Add a photo of the work" else "Photograph the work again")
+                    }
+                }
                 when {
                     own && task.isOpen -> Button(onClick = { scope.launch { graph.finishOwnTask(task.id) } }) { Text("All of it done") }
                     own -> Button(onClick = { scope.launch { graph.reopenOwnTask(task.id) } }) { Text("Not done") }
@@ -243,6 +266,8 @@ fun TaskSheet(
                     note = listOfNotNull(
                         if (!own && task.userEffortMin != null) "Yours: the app reckoned ${Format.minutes(task.appEffortMin)}" else null,
                         if (task.subSteps.isNotEmpty() && task.userEffortMin != null) "Its steps are scaled to match" else null,
+                        // Read from its photo (AI-23).
+                        if (task.photo != null && task.enrichment?.by != RuleEnricher.BY && task.enrichment?.inputHash == com.thomaswcode.decrastination.core.Enrichments.inputHash(task)) "From your photo" else null,
                         // The app's estimate as the plan takes it: by how long such work has taken you.
                         runtime.calibration.multiplierFor(task).takeIf { kotlin.math.abs(it - 1.0) >= 0.05 }?.let { m ->
                             "Planned as ${Format.minutes((task.effortMin * m).roundToInt())}: such work has taken you ${if (m > 1) "longer" else "less time"}"

@@ -41,7 +41,8 @@ class ClaudeEnricher(
         .build()
 
     override suspend fun enrich(task: TaskItem, job: Enrichments.Job, now: Long): Enricher.Result {
-        val message = send(job) { addUserMessage(Prompts.describe(task, job, now, zone, previous(task)).take(Pricing.MAX_INPUT_CHARS)) }
+        val photo = photoOf(task)
+        val message = send(job) { item(task, job, photo, Prompts.describe(task, job, now, zone, previous(task)).take(Pricing.MAX_INPUT_CHARS)) }
         val cost = Pricing.costUsd(message)
         when (message.stopReason().orElse(null)) {
             StopReason.REFUSAL -> return Enricher.Result(null, cost, refused = true)
@@ -69,8 +70,9 @@ class ClaudeEnricher(
         val asked = Prompts.repair(repair.complaint)
         val room = Pricing.MAX_INPUT_CHARS - repair.answer.length - asked.length
         if (room < MIN_REPAIR_ROOM) return Enricher.Result(null)
+        val photo = photoOf(task)
         val message = send(job) {
-            addUserMessage(Prompts.describe(task, job, now, zone, previous(task)).take(room))
+            item(task, job, photo, Prompts.describe(task, job, now, zone, previous(task)).take(room))
             addAssistantMessage(repair.answer)
             addUserMessage(asked)
         }
@@ -82,6 +84,26 @@ class ClaudeEnricher(
         }
         val answeredBy = message.model().asString().ifBlank { by }
         return Enricher.Result(Answers.parse(job, textOf(message), task, answeredBy, now, zone), cost, repaired = true)
+    }
+
+    /** [task]'s photo of its work (AI-23), from its file; none if it has none, or it can't be read. */
+    private suspend fun photoOf(task: TaskItem): ByteArray? = task.photo?.let { p -> withContext(Dispatchers.IO) { runCatching { java.io.File(p.path).readBytes() }.getOrNull() } }
+
+    /** The item as the user's turn: with [photo], the photo first and the model told what it is. */
+    private fun MessageCreateParams.Builder.item(task: TaskItem, job: Enrichments.Job, photo: ByteArray?, text: String) {
+        if (photo == null) {
+            addUserMessage(text)
+            return
+        }
+        val image = com.anthropic.models.messages.ImageBlockParam.builder()
+            .source(com.anthropic.models.messages.Base64ImageSource.builder().data(java.util.Base64.getEncoder().encodeToString(photo)).mediaType(com.anthropic.models.messages.Base64ImageSource.MediaType.IMAGE_JPEG).build())
+            .build()
+        addUserMessageOfBlockParams(
+            listOf(
+                com.anthropic.models.messages.ContentBlockParam.ofImage(image),
+                com.anthropic.models.messages.ContentBlockParam.ofText(com.anthropic.models.messages.TextBlockParam.builder().text(Prompts.photo(job) + "\n\n" + text).build()),
+            ),
+        )
     }
 
     /** [task]'s steps as planned before (AI-08): its own, or its last reading's. */

@@ -17,6 +17,7 @@ import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -514,6 +515,24 @@ class AnswersTest {
         assertEquals(setOf(piece.key), MicroPlans.kept(chunk, mapOf(piece.key to made, "gone#1" to made)).keys)
         val asked = MicroPlans.describe(piece, task)
         assertTrue("Task: ${task.title}" in asked && "Instructions:\n1. Read pages 40-44." in asked, asked)
+    }
+
+    @Test
+    fun `a photo of the work is read with its task, and a photo of homework read into tasks`() {
+        val task = assignment("Essay")
+        val photographed = task.copy(photo = com.thomaswcode.decrastination.core.TaskPhoto("/x.jpg", "ab12cd34ef56ab12", NOW))
+        // A task photographed is read again (AI-23).
+        assertNotEquals(Enrichments.inputHash(task), Enrichments.inputHash(photographed))
+        assertTrue("say in reason what you saw" in Prompts.photo(Enrichments.Job.Assignment))
+        val read = PhotoTasks.parse(
+            """{"tasks":[{"title":"Worksheet 5","subject":"Physics","dueDate":"2026-10-14","dueTime":"08:30","instructions":"Questions 1-6","minutes":45,"where":"anywhere","steps":[]},{"title":"","subject":"","dueDate":"","dueTime":"","instructions":"","minutes":0,"where":"home","steps":[]}],"question":"Is it due Wednesday or Thursday?"}""",
+            NOW, LONDON,
+        )!!
+        assertEquals(listOf("Worksheet 5"), read.tasks.map { it.title })
+        assertEquals(Fixtures.at("2026-10-14T08:30"), read.tasks.single().dueAt)
+        assertEquals("Physics" to "Questions 1-6", read.tasks.single().className to read.tasks.single().notes)
+        assertEquals(1, read.leftOut.size)
+        assertEquals("Is it due Wednesday or Thursday?", read.question)
     }
 
     @Test
