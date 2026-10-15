@@ -99,7 +99,7 @@ data class Chunk(
      * no step of its own, its part. Not a step's part: that renumbers once a piece before it is kept,
      * and its slot's kept start (PL-13) would be lost with it.
      */
-    val key: String get() = if (stepIndex != null) "$taskId#$stepIndex" else "$taskId#-1#$part"
+    val key: String get() = keyOf(taskId, stepIndex, part)
 
     val label: String get() = step?.let { "$title: $it" } ?: title
 
@@ -122,9 +122,15 @@ data class Chunk(
         }
     }
 
-    private companion object {
-        val DAY: DateTimeFormatter = DateTimeFormatter.ofPattern("EEE d MMM", Locale.UK)
-        val WEEKDAY: DateTimeFormatter = DateTimeFormatter.ofPattern("EEEE", Locale.UK)
+    companion object {
+        private val DAY: DateTimeFormatter = DateTimeFormatter.ofPattern("EEE d MMM", Locale.UK)
+        private val WEEKDAY: DateTimeFormatter = DateTimeFormatter.ofPattern("EEEE", Locale.UK)
+
+        /**
+         * A piece's [key] from what makes it, for the planner naming one before it's made (its pin,
+         * its missed slot): the one place it's made, so the two can't come apart.
+         */
+        fun keyOf(taskId: String, stepIndex: Int?, part: Int): String = if (stepIndex != null) "$taskId#$stepIndex" else "$taskId#-1#$part"
     }
 
     /** Bad news, shown in red wherever it appears: overdue, due today, or behind. */
