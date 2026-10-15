@@ -32,8 +32,10 @@ object Groups {
         val today = Instant.ofEpochMilli(now).atZone(zone).toLocalDate()
         val sunday = today.with(TemporalAdjusters.nextOrSame(DayOfWeek.SUNDAY))
         fun group(task: TaskItem): DueGroup {
-            val due = task.dueAt ?: return DueGroup.NoDate
-            if (due < now) return if (task.hardDeadline) DueGroup.Overdue else DueGroup.Today
+            // By the deadline in force, as the plan has it: a plan gone by is today's, or the real
+            // deadline's behind it (PL-14).
+            val due = task.deadlineAt(now) ?: return if (task.dueAt != null) DueGroup.Today else DueGroup.NoDate
+            if (due < now) return DueGroup.Overdue
             val day = Instant.ofEpochMilli(due).atZone(zone).toLocalDate()
             return when {
                 day == today -> DueGroup.Today
@@ -44,7 +46,7 @@ object Groups {
         }
         val grouped = tasks.groupBy(::group)
         return DueGroup.entries.mapNotNull { g ->
-            grouped[g]?.sortedWith(compareBy<TaskItem, Long?>(nullsLast()) { it.dueAt }.thenBy { it.title.lowercase() })?.let { g to it }
+            grouped[g]?.sortedWith(compareBy<TaskItem, Long?>(nullsLast()) { it.deadlineAt(now) ?: it.dueAt }.thenBy { it.title.lowercase() })?.let { g to it }
         }
     }
 

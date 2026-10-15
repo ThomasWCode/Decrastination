@@ -496,8 +496,9 @@ class PlannerTest {
         // Claude read Monday into it without quoting the email: a plan. Monday gone, it's undated
         // again, to the Monday after, and planned in that week.
         val guessed = Fixtures.at("2026-10-05T23:59")
-        val reading = Enrichment(inputHash = "", by = "claude", at = Fixtures.at("2026-10-01T12:00"), kind = Kind.Admin, deadline = guessed, deadlineQuoted = false)
-        val email = task("e", dueAt = guessed, kind = Kind.Admin, effort = 15).copy(id = "gmail:e", source = Source.Gmail, enrichment = reading)
+        val unread = task("e", dueAt = guessed, kind = Kind.Admin, effort = 15).copy(id = "gmail:e", source = Source.Gmail)
+        val reading = Enrichment(inputHash = Enrichments.inputHash(unread), by = "claude", at = Fixtures.at("2026-10-01T12:00"), kind = Kind.Admin, deadline = guessed, deadlineQuoted = false)
+        val email = unread.copy(enrichment = reading)
         assertFalse(email.hardDeadline)
         val plan = plan(listOf(email), "2026-10-08T17:00")
         val chunk = plan.ordered.single()
@@ -512,6 +513,8 @@ class PlannerTest {
         val late = plan(listOf(quoted), "2026-10-08T17:00").ordered.single()
         assertTrue(late.overdue)
         assertEquals(Why.Overdue, late.why)
+        // A quote in a reading of what the email said before (a reply since): not the email's words now.
+        assertFalse(quoted.copy(detail = "A reply came since").hardDeadline)
     }
 
     @Test
@@ -522,6 +525,11 @@ class PlannerTest {
         val assignment = task("prep", test, effort = 60).copy(sourceValues = SourceValues(Kind.Homework, own, null))
         assertFalse(assignment.hardDeadline)
         assertEquals(own, assignment.realDeadline)
+        // The deadline in force: the test until it passes, then Teams' own.
+        assertEquals(test, assignment.deadlineAt(Fixtures.at("2026-10-05T17:00")))
+        assertFalse(assignment.hardAt(Fixtures.at("2026-10-05T17:00")))
+        assertEquals(own, assignment.deadlineAt(Fixtures.at("2026-10-08T17:00")))
+        assertTrue(assignment.hardAt(Fixtures.at("2026-10-08T17:00")))
         // Before the test, it's planned by it; after, by Teams' own date, which can still be missed.
         assertTrue(plan(listOf(assignment), "2026-10-05T17:00").ordered.all { it.deadline == test && !it.overdue })
         val after = plan(listOf(assignment), "2026-10-08T17:00")
@@ -941,6 +949,8 @@ class PlannerTest {
         val plan = Planner.plan(input)
         assertTrue(plan.ordered.all { it.behind })
         assertEquals(emptyList(), plan.wontFit)
+        // Behind only the margin: its pieces say why they're where they are, not that there's no room.
+        assertTrue(plan.ordered.none { it.why == Why.NoRoom }, "${plan.ordered.map { it.why }}")
         // One that can only start at 21:00 has the hour after it, not the evening.
         val opening = task("late", Fixtures.at("2026-10-09T09:00"), effort = 120).copy(notBefore = Fixtures.at("2026-10-08T21:00"))
         assertEquals(listOf(WontFit("teams:late", "late", 120, 60, Fixtures.at("2026-10-09T09:00"))), Planner.plan(input.copy(tasks = listOf(opening))).wontFit)

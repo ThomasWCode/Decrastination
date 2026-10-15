@@ -295,6 +295,9 @@ class OwnTasksTest {
         val email = teams("email", "2026-10-12T09:00").copy(id = "gmail:email", source = Source.Gmail, enrichment = reading)
         val groups = Groups.byDue(listOf(teams("late", "2026-10-12T09:00"), email), now, LONDON)
         assertEquals(listOf(DueGroup.Overdue to listOf("late"), DueGroup.Today to listOf("email")), groups.map { (g, ts) -> g to ts.map { it.title } })
+        // A test date Claude read gone by, before Teams' own next Monday: under the real deadline's group.
+        val test = teams("prep", "2026-10-09T08:30").copy(sourceValues = SourceValues(Kind.Homework, Fixtures.at("2026-10-19T09:00"), null))
+        assertEquals(listOf(DueGroup.Later to listOf("prep")), Groups.byDue(listOf(test), now, LONDON).map { (g, ts) -> g to ts.map { it.title } })
     }
 
     @Test

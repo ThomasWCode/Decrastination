@@ -125,6 +125,23 @@ class CalibratorTest {
     }
 
     @Test
+    fun `work done by a plan's date judges no box, for or against`() {
+        // Twelve 25s on work done by real deadlines; twelve 60s on work done by dates the app set.
+        val real = (1..12).map { done("t$it") }
+        val planned = (1..12).map { done("p$it").copy(hardDeadline = false) }
+        val sessions = (1..12).flatMap { i ->
+            listOf(
+                SessionRecord("t$i", Kind.Homework, label = "t$i", plannedMin = 25, workedMin = 25, startedAt = 0, endedAt = 0, completed = true, box = 25),
+                SessionRecord("p$i", Kind.Homework, label = "p$i", plannedMin = 60, workedMin = 60, startedAt = 0, endedAt = 0, completed = true, box = 60),
+            )
+        }
+        val log = ActivityLog(sessions = sessions, completions = real + planned)
+        // The 60s count for nothing (PL-14), so twelve sessions don't settle it: some weeks still try another.
+        assertTrue((1L..40L).any { Calibrator.boxes(log, defaultBox = 45, week = it)[Kind.Homework] != 25 })
+        assertEquals(mapOf(Kind.Homework to 25), Calibrator.boxes(log.copy(completions = real + planned.map { it.copy(hardDeadline = true) }), defaultBox = 45, week = 7))
+    }
+
+    @Test
     fun `a box session waits for its task's outcome before it counts`() {
         // Twenty full sessions at 25 on work not done yet: no outcome, so nothing settled or steered.
         val pending = ActivityLog(sessions = (1..20).map { SessionRecord("t$it", Kind.Homework, label = "t", plannedMin = 25, workedMin = 25, startedAt = 0, endedAt = 0, completed = true, box = 25) })

@@ -43,15 +43,14 @@ class PlannerPropertyTest {
                 chance(15) -> at(today.minusDays(random.nextLong(6)), pick(LocalTime.of(8, 30), LocalTime.of(23, 59)))
                 else -> at(today.plusDays(1L + random.nextInt(30)), pick(LocalTime.of(8, 30), LocalTime.of(23, 59)))
             }
-            // An email's date is a real deadline only where Claude quoted it (AI-12).
-            val reading = if (source == Source.Gmail && dueAt != null) Enrichment(inputHash = "", by = "test", at = now, deadline = dueAt, deadlineQuoted = chance(50)) else null
-            return TaskItem(
+            // An email's date is a real deadline only where Claude quoted it (AI-12), in a reading of it as it is.
+            val quoted = if (source == Source.Gmail && dueAt != null) chance(50) else null
+            val task = TaskItem(
                 id = TaskItem.id(source, "t$index"),
                 source = source,
                 sourceId = "t$index",
                 title = "t$index",
                 dueAt = dueAt,
-                enrichment = reading,
                 availableFrom = if (chance(10)) now + HOUR + random.nextLong(10 * DAY) else null,
                 kind = pick(Kind.Homework, Kind.Revision, Kind.Admin),
                 sourceEffortMin = effort,
@@ -61,6 +60,7 @@ class PlannerPropertyTest {
                 firstSeenAt = now - random.nextLong(11) * DAY,
                 lastSeenAt = now,
             )
+            return quoted?.let { task.copy(enrichment = Enrichment(inputHash = Enrichments.inputHash(task), by = "test", at = now, deadline = dueAt, deadlineQuoted = it)) } ?: task
         }
 
         /** A stretch of [lo]..[hi] (minutes of the day), at least a quarter of an hour, on quarter hours. */
@@ -268,16 +268,22 @@ class PlannerPropertyTest {
      * work soft, work past its deadline short of room, work due soon due soon, the rest spread.
      */
     private fun checkWhy(seed: Long, plan: Plan) {
-        for (chunk in plan.ordered) {
+        val placing = setOf(Why.DueSoon, Why.Spread, Why.MinimumTouch, Why.RevisionGap, Why.MostRoom, Why.Packed)
+        for (bucket in plan.buckets) for (chunk in bucket.chunks) {
             val allowed = when {
                 chunk.overdue -> setOf(Why.Overdue)
                 chunk.soft -> setOf(Why.Soft)
-                chunk.behind -> setOf(Why.NoRoom)
+                // Behind the deadline itself, no room; behind only the safety margin, the reason it was placed.
+                chunk.behind -> placing + Why.NoRoom
                 chunk.dueSoon -> setOf(Why.DueSoon)
-                else -> setOf(Why.Spread, Why.MinimumTouch, Why.RevisionGap, Why.MostRoom, Why.Packed)
+                else -> placing - Why.DueSoon
             }
             assertTrue(chunk.why in allowed, "seed=$seed: ${chunk.taskId} part ${chunk.part} says ${chunk.why}, not one of $allowed")
             assertTrue(chunk.why != Why.MostRoom || chunk.parts == 1, "seed=$seed: ${chunk.taskId} part ${chunk.part} of ${chunk.parts} says MostRoom")
+            // Placed after its deadline's own last day: there was no room before it.
+            val due = java.time.Instant.ofEpochMilli(chunk.deadline).atZone(LONDON)
+            val lastDay = if (due.toLocalTime() < LocalTime.NOON) due.toLocalDate().minusDays(1) else due.toLocalDate()
+            if (chunk.behind && !chunk.soft && bucket.date > lastDay) assertTrue(chunk.why == Why.NoRoom, "seed=$seed: ${chunk.taskId} part ${chunk.part} on ${bucket.date}, after its deadline's day, says ${chunk.why}")
         }
     }
 

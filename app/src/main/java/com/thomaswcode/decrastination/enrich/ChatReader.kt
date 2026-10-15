@@ -178,7 +178,7 @@ object ChatPrompts {
         open.take(InstructionPrompts.MAX_TASKS).forEach { t ->
             val start = listOfNotNull(t.availableFrom, t.userFrom, t.notBefore).maxOrNull()?.takeIf { it > now }
             // A date the app or Claude set is a plan, not a deadline (PL-14): said, so it's not called overdue.
-            val due = t.dueAt?.let { at(it) + if (t.hardDeadline) "" else " (a plan)" } ?: "no date"
+            val due = (t.deadlineAt(now) ?: t.dueAt)?.let { at(it) + if (t.hardAt(now)) "" else " (a plan)" } ?: "no date"
             appendLine("- ${t.id} | ${t.title.take(MAX_TITLE)} | ${t.source.label} | ${t.kind.label} | $due | ${t.effortMin} | ${t.workedMin + t.photoMin} | ${start?.let(::at) ?: "-"}")
         }
         appendLine()
