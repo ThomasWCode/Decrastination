@@ -45,15 +45,16 @@ The implementation of `docs/review_v2_improvements/impl/` on branch `v3`. Delete
 - PL-15 a school day's time as windows, work for home kept to the evening: 00bfacc. 50 000 property seeds pass with windows and where drawn.
 - PL-12 every piece at a time, breaks between, outside breaks on free days (`core/Slotter.kt`): 9b7f719. 50 000 property seeds pass with the slots checked, and again with pins and the last plan's starts drawn.
 - PL-04 a day for all of a task, a time for its next piece, from the chat or an instruction: 4df4141. 50 000 property seeds pass with days and times drawn on tasks.
-- PL-13 the plan made again as things change, slot alarms, missed slots moved and kept, today's slots stable: this commit. 50 000 property seeds pass, with slots just over drawn in the last plan's starts.
+- PL-13 the plan made again as things change, slot alarms, missed slots moved and kept, today's slots stable: 8c801c1. 50 000 property seeds pass, with slots just over drawn in the last plan's starts.
+- NF-07 the next seven days' slots written to the calendar you pick, hand moves taken as your time, with DX-12 (location and description, optional events asked about) and DX-13 (calendars chosen for reading): this commit.
 
 ## Current
 
-Phase 3: NF-07 (every slot written to the Decrastination calendar, with DX-12 and DX-13) next.
+Phase 3: on the phone (the calendar's write permission, the Decrastination calendar picked), the eval round for the Assignment job's `where`, then the pull request.
 
 ## Outstanding
 
-- Phase 3: NF-07 (with DX-12, DX-13), an eval round for the Assignment job's `where`, the phone, the pull request.
+- Phase 3: an eval round for the Assignment job's `where`, the phone, the pull request.
 - Phases 4 to 8.
 
 ## For the owner (deferred: you weren't live)

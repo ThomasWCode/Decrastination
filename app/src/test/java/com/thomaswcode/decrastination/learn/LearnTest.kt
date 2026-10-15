@@ -304,6 +304,16 @@ class EventJudgeTest {
     }
 
     @Test
+    fun `a timed event saying it's optional or tentative is asked about`() {
+        // DX-12: its own words say it may not need you; an all-day one is asked about anyway.
+        assertEquals(EventJudge.Judgement.Ask, EventJudge.judge(event("Revision club").copy(description = "Optional: drop in if you can"), emptyMap()))
+        assertEquals(EventJudge.Judgement.Ask, EventJudge.judge(event("Planning call").copy(description = "Tentative, to be confirmed", location = "Zoom"), emptyMap()))
+        assertEquals(EventJudge.Judgement.Busy, EventJudge.judge(event("Drum lesson").copy(description = "Bring the optionality worksheet"), emptyMap()))
+        // Marked free, it's free whatever it says.
+        assertEquals(EventJudge.Judgement.Free, EventJudge.judge(event("Revision club", busy = false).copy(description = "Optional"), emptyMap()))
+    }
+
+    @Test
     fun `your answer holds for every event of that name`() {
         val answers = mapOf("van hire" to "load:${EventJudge.FEW_HOURS_MIN}")
         val time = EventJudge.time(listOf(event("Van Hire", allDay = true), event("Drum lesson")), answers, LONDON, askUntil = Long.MAX_VALUE)
