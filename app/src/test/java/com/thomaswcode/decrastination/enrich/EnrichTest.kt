@@ -589,9 +589,10 @@ class AiUsageTest {
         // dearer rates of a fallback's older Opus. Every call's input is cut to the most it covers,
         // and an email's text is well within it.
         // The profile sent with every call counted too, at its most.
-        val longest = Pricing.costUsd("claude-opus-4-8", input = 3L * (Pricing.MAX_INPUT_CHARS + Profile.MAX_BLOCK_CHARS) + 4_000, output = ClaudeEnricher.MAX_TOKENS)
+        // A photo check's three pictures among the rest (AI-17).
+        val longest = Pricing.costUsd("claude-opus-4-8", input = 3L * (Pricing.MAX_INPUT_CHARS + Profile.MAX_BLOCK_CHARS) + 3 * 3_300 + 1_000, output = ClaudeEnricher.MAX_TOKENS)
         assertTrue(longest <= Pricing.WORST_CALL_USD, "$longest > ${Pricing.WORST_CALL_USD}")
-        assertEquals(1.26, Pricing.WORST_CALL_USD, 1e-9)
+        assertEquals(1.295, Pricing.WORST_CALL_USD, 1e-9)
         assertTrue(Prompts.MAX_TEXT + 1_000 < Pricing.MAX_INPUT_CHARS)
     }
 
@@ -809,17 +810,19 @@ class PhotoCheckerTest {
                 ),
             )
             server.enqueue(MockResponse().setHeader("Content-Type", "application/json").setBody(body.toString()))
-            val result = PhotoChecker("test-key", endpoint = server.url("").toString().trimEnd('/')).check(byteArrayOf(1, 2, 3), "Chapter 17 review, part 2 of 3")
+            val result = PhotoChecker("test-key", endpoint = server.url("").toString().trimEnd('/')).check(listOf(byteArrayOf(1, 2, 3), byteArrayOf(4, 5, 6)), "The piece of work: Chapter 17 review, part 2 of 3, 30 min")
             val request = Json.parseToJsonElement(server.takeRequest().body.readUtf8()).jsonObject
             val content = request["messages"]!!.jsonArray.single().jsonObject["content"]!!.jsonArray
+            // A page each, then what they're of (AI-17).
+            assertEquals(listOf("image", "image", "text"), content.map { it.jsonObject["type"]!!.jsonPrimitive.content })
             val image = content.first().jsonObject
-            assertEquals("image", image["type"]!!.jsonPrimitive.content)
             assertEquals("image/jpeg", image["source"]!!.jsonObject["media_type"]!!.jsonPrimitive.content)
             assertEquals("AQID", image["source"]!!.jsonObject["data"]!!.jsonPrimitive.content)
-            assertTrue("Chapter 17 review, part 2 of 3" in content[1].toString())
+            assertTrue("Chapter 17 review, part 2 of 3" in content[2].toString())
             assertEquals(true, result.verdict!!.done)
             // A confidence past 1 is read as 1.
             assertEquals(1.0, result.verdict!!.confidence)
+            assertTrue("Blank or crossed-out pages, a photo of a screen, printed answers, or work for a different task are not done" in PhotoChecker.system())
         } finally {
             server.shutdown()
         }

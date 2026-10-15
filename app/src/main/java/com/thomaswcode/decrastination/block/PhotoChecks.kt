@@ -32,22 +32,26 @@ object PhotoChecks {
     /** The last check's outcome, by task, until a screen has shown it: one left while it ran shows it on coming back. */
     val unseen = MutableStateFlow<Pair<String, String>?>(null)
 
-    /** Checks [photo] against [piece], records the cost, and says how it went. The photo is deleted, whatever happens. */
-    suspend fun check(context: Context, graph: AppGraph, photo: File, piece: Chunk): String {
+    /**
+     * Checks [photos], the pages of [piece]'s work (AI-17), against it and its task (AI-16), records
+     * the cost, and says how it went. The photos are deleted, whatever happens.
+     */
+    suspend fun check(context: Context, graph: AppGraph, photos: List<File>, piece: Chunk): String {
         // When it was taken: a slot of its key kept before then isn't the one it shows.
         val takenAt = graph.clock.now()
         if (!piece.photoCheckable) {
-            withContext(NonCancellable + Dispatchers.IO) { photo.delete() }
+            withContext(NonCancellable + Dispatchers.IO) { photos.forEach { it.delete() } }
             return "Only written homework can be checked from a photo."
         }
-        val jpeg = try {
-            withContext(Dispatchers.IO) { shrink(photo) } ?: return "Couldn't read the photo."
+        val jpegs = try {
+            withContext(Dispatchers.IO) { photos.mapNotNull { shrink(it) } }.takeIf { it.isNotEmpty() } ?: return "Couldn't read the photo."
         } finally {
-            withContext(NonCancellable + Dispatchers.IO) { photo.delete() }
+            withContext(NonCancellable + Dispatchers.IO) { photos.forEach { it.delete() } }
         }
         // Its room taken with every other model call's, then sent (AC-05).
         val current = graph.photoChecker() ?: return OFF
-        val result = when (val called = graph.callModel(interactive = true, cost = { r: PhotoChecker.Result -> r.costUsd to r.refused }) { current.check(jpeg, piece.label) }) {
+        val about = PhotoChecker.context(piece, graph.tasks.value.tasks.firstOrNull { it.id == piece.taskId })
+        val result = when (val called = graph.callModel(interactive = true, cost = { r: PhotoChecker.Result -> r.costUsd to r.refused }) { current.check(jpegs, about) }) {
             is AppGraph.Called.Held -> return when (called.hold) {
                 ModelHold.Off -> OFF
                 ModelHold.Resting -> "Claude's key isn't working (Setup says why): tick it Done, or the source will have to do."
