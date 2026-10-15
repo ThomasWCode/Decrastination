@@ -154,6 +154,8 @@ class FocusService : AccessibilityService() {
 
     override fun onServiceConnected() {
         super.onServiceConnected()
+        // First: a new service has none till it's connected, and everything below reads it.
+        graph = AppGraph.get(this)
         // A stretch in AnkiDroid begun before the service stopped is let go (NF-03).
         graph.anki.reset()
         if (active) {
@@ -162,7 +164,6 @@ class FocusService : AccessibilityService() {
         }
         active = true
         if (!scope.isActive) scope = newScope()
-        graph = AppGraph.get(this)
         labels = GuardRules.Labels(
             app = getString(R.string.app_name),
             service = getString(R.string.focus_service_label),
