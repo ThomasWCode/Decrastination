@@ -116,6 +116,8 @@ Items: AI-01, AI-03, AI-07, AI-08, AI-09, AI-13, AI-14, AI-15, AI-16, AI-17, AI-
 
 **Tests.** `EnrichTest`: `inputHash` changes with the photo hash; `PhotoTasks` parse.
 
+*(As built: the photo is `TaskItem.photo` (its path and hash), not an `extra`, as a sync replaces a task's extras; the hash is kept with it. *Add a photo of the work* is on the sheets of tasks the model reads (`Enrichments.jobFor`), as yours aren't read. The photo-to-tasks schema's dates are plain strings, empty for none. Photos no task holds are deleted at a start.)*
+
 ---
 
 ## DX-08 Teams links and attachments

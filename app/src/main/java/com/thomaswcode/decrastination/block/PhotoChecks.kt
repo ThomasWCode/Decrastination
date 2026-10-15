@@ -74,7 +74,7 @@ object PhotoChecks {
      * a camera can store a portrait page as landscape pixels with a note to turn them (EXIF), which
      * decoding doesn't read, so the page went sideways (IMP-P2-014).
      */
-    private fun shrink(photo: File): ByteArray? {
+    fun shrink(photo: File): ByteArray? {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeFile(photo.path, bounds)
         val long = maxOf(bounds.outWidth, bounds.outHeight).takeIf { it > 0 } ?: return null

@@ -165,7 +165,7 @@ object Enrichments {
             task.extra["from"].orEmpty(),
             task.extra["received"].orEmpty(),
             // Your answers to its questions (AI-10): only where there are some, so no other task's changes.
-        ) + listOfNotNull(task.extra[GmailThreads.EXTRA_ATTACHMENTS], task.answers.takeIf { it.isNotEmpty() }?.joinToString("\n"))).joinToString("\n")
+        ) + listOfNotNull(task.extra[GmailThreads.EXTRA_ATTACHMENTS], task.answers.takeIf { it.isNotEmpty() }?.joinToString("\n"), task.photo?.hash)).joinToString("\n")
         val digest = MessageDigest.getInstance("SHA-256").digest(text.toByteArray(Charsets.UTF_8))
         return digest.take(8).joinToString("") { "%02x".format(it) }
     }

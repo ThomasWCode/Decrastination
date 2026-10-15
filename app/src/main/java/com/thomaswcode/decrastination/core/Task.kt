@@ -127,6 +127,8 @@ data class TaskItem(
     val photosCounted: Map<String, Int> = emptyMap(),
     /** Your answers to the model's questions about it (AI-10), oldest first: read with it from then on. */
     val answers: List<String> = emptyList(),
+    /** A photo of its work (AI-23), read with it from then on: kept here, not in [extra], so a sync keeps it. */
+    val photo: TaskPhoto? = null,
     val subSteps: List<SubStep> = emptyList(),
     /**
      * Of [workedMin] and [photoMin], the minutes the source's own steps already leave out: an Anki
@@ -314,3 +316,7 @@ data class Fetched(
     val notBefore: Long? = null,
     val extra: Map<String, String> = emptyMap(),
 )
+
+/** A photo of a task's work (AI-23): its file, the app's own ([path]), [hash] its SHA-256's first bytes, for the task's reading, and when. */
+@Serializable
+data class TaskPhoto(val path: String, val hash: String, val at: Long)

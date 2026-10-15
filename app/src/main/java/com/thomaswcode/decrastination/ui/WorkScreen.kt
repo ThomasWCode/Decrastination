@@ -82,6 +82,32 @@ fun WorkScreen(graph: AppGraph, activity: Activity, opening: String? = null, onO
     val trouble = trouble(state, runtime, now)
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     var said by rememberSaveable { mutableStateOf<String?>(null) }
+    // A photo of homework read into tasks (NF-01): what it read, the photo with it.
+    var photoReading by androidx.compose.runtime.remember { mutableStateOf<Pair<com.thomaswcode.decrastination.enrich.PhotoTasks.Reading, ByteArray>?>(null) }
+    var reading by rememberSaveable { mutableStateOf(false) }
+    val homework = androidx.compose.runtime.remember { java.io.File(activity.cacheDir, "photos/homework.jpg").also { it.parentFile?.mkdirs() } }
+    val camera = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.TakePicture()) { taken ->
+        if (!taken) {
+            homework.delete()
+            return@rememberLauncherForActivityResult
+        }
+        reading = true
+        said = "Reading the photo…"
+        graph.scope.launch {
+            try {
+                val jpeg = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { com.thomaswcode.decrastination.block.PhotoChecks.shrink(homework).also { homework.delete() } }
+                if (jpeg == null) {
+                    said = "Couldn't read the photo."
+                } else {
+                    val (got, why) = graph.readPhotoTasks(jpeg)
+                    said = why
+                    if (got != null) photoReading = got to jpeg
+                }
+            } finally {
+                reading = false
+            }
+        }
+    }
     // The screen's camera, for a photo of the work from a task's sheet (UI-09); what it said, about which task.
     var saidAbout by rememberSaveable { mutableStateOf<String?>(null) }
     val photo = rememberPhotoCheck(graph, activity, plan) { taskId, text ->
@@ -192,6 +218,12 @@ fun WorkScreen(graph: AppGraph, activity: Activity, opening: String? = null, onO
         Column(Modifier.align(Alignment.BottomEnd).padding(16.dp), horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(12.dp)) {
             // Or say it to Felix, who makes the card (Q29); here above New task, as Felix is on every screen (UI-16).
             FelixFab(activity)
+            // Or photograph it (NF-01), once Claude is on to read it.
+            if (settings.aiEnabled && settings.aiKeyActive) {
+                androidx.compose.material3.SmallFloatingActionButton(onClick = { if (!reading) camera.launch(androidx.core.content.FileProvider.getUriForFile(activity, "${activity.packageName}.photos", homework)) }) {
+                    Icon(painterResource(R.drawable.ic_camera), contentDescription = "Photograph homework")
+                }
+            }
             ExtendedFloatingActionButton(
                 onClick = { making = true },
                 icon = { Icon(painterResource(R.drawable.ic_add), contentDescription = null) },
@@ -201,6 +233,7 @@ fun WorkScreen(graph: AppGraph, activity: Activity, opening: String? = null, onO
     }
     sheetFor?.let { id -> TaskSheetHost(graph, activity, id, plan, photo, said.takeIf { saidAbout == id }) { sheetFor = null } }
     if (making) OwnTaskForm(graph, editing = null) { making = false }
+    photoReading?.let { (got, jpeg) -> PhotoTasksSheet(graph, got, jpeg) { photoReading = null } }
 }
 
 private const val FINISHED = "finished"
