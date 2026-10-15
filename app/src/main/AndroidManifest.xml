@@ -193,6 +193,10 @@
             android:exported="false" />
 
         <receiver
+            android:name=".block.SlotReceiver"
+            android:exported="false" />
+
+        <receiver
             android:name=".widget.NextWidgetReceiver"
             android:exported="false"
             android:label="@string/widget_label">

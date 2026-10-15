@@ -18,6 +18,8 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class RuntimeState(
     val credit: Credit = Credit(),
+    /** Today's slot starts as the last plan laid them, and the slots missed (PL-13). */
+    val slots: com.thomaswcode.decrastination.core.SlotState = com.thomaswcode.decrastination.core.SlotState(),
     val session: FocusSession? = null,
     /** Sessions ended whose due (the task's minutes and step, the log, free time) isn't all given yet. */
     val finishing: List<EndedSession> = emptyList(),

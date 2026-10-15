@@ -9,6 +9,8 @@ import android.os.Looper
 import android.util.Log
 import com.thomaswcode.decrastination.block.Focus
 import com.thomaswcode.decrastination.block.Sessions
+import com.thomaswcode.decrastination.block.SlotAlarms
+import com.thomaswcode.decrastination.block.Slots
 import com.thomaswcode.decrastination.core.About
 import com.thomaswcode.decrastination.core.Change
 import com.thomaswcode.decrastination.core.ChangeType
@@ -27,6 +29,7 @@ import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.Proposal
 import com.thomaswcode.decrastination.core.ProposalState
 import com.thomaswcode.decrastination.core.SchoolCalendar
+import com.thomaswcode.decrastination.core.SlotKind
 import com.thomaswcode.decrastination.core.Speaker
 import com.thomaswcode.decrastination.core.Planner
 import com.thomaswcode.decrastination.core.Source
@@ -96,6 +99,7 @@ import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
@@ -220,6 +224,8 @@ class AppGraph private constructor(context: Context) {
                 workedTodayMin = workedToday(now, zone),
                 windows = windows,
                 dayKinds = dayKinds,
+                // Today's pieces where the last plan laid them, where that's still free (PL-13).
+                previousSlots = runtime.value.slots.on(today).previous,
             ),
         )
     }
@@ -232,6 +238,45 @@ class AppGraph private constructor(context: Context) {
 
     /** The blocker's state and decisions (block/Focus.kt). */
     val focus = Focus(tasks, settings, runtime, log, clock) { state, s, now -> plan(state, s, now) }
+
+    /**
+     * The plan made again as what it depends on changes (PL-13): today's slot starts kept, then the
+     * slot alarms set to it and the widget redrawn.
+     */
+    val watcher = PlanWatcher(
+        scope = scope,
+        changes = merge(
+            tasks.state,
+            settings.state,
+            instructions.state,
+            calendarState,
+            school.state,
+            runtime.state.map { it.slots.previous to it.calibration }.distinctUntilChanged(),
+        ),
+        plan = { plan() },
+        keep = ::keepSlots,
+        hooks = listOf(
+            { made -> SlotAlarms.arm(app, made, clock.now()) },
+            { _ -> WidgetUpdater.update(app) },
+        ),
+        onFailure = { Log.w(TAG, "Replanning failed", it) },
+    )
+
+    /** Today's slots as they pass: begun, or missed (PL-13). */
+    val slots = Slots(this)
+
+    /**
+     * [made]'s today kept for the next plan (PL-13): its work slots' starts, and which missed pieces
+     * went to another day. Written only where that changes something, so keeping them doesn't make
+     * the plan again for nothing.
+     */
+    private suspend fun keepSlots(made: Plan) {
+        val starts = made.todaySlots.filter { it.kind == SlotKind.Work }.associate { it.chunk!!.key to it.start }
+        runtime.update { state ->
+            val kept = state.slots.on(made.today).copy(previous = starts).reconciled(made)
+            if (kept == state.slots) state else state.copy(slots = kept)
+        }
+    }
 
     /** Applies a settings change: at once, or, once armed, pending if it loosens blocking. */
     /**
@@ -514,6 +559,12 @@ class AppGraph private constructor(context: Context) {
             tasks.state.debounce(WIDGET_DEBOUNCE_MS).collect { state ->
                 runCatching { droppedAlerts(state.tasks) }.onFailure { Log.w(TAG, "Dropped-plan warnings failed", it) }
             }
+        }
+        // Slots whose end went by with the phone off, as if their alarms had rung; then the plan, made
+        // again as it changes, from now on (PL-13).
+        scope.launch {
+            runCatching { slots.sweep() }.onFailure { Log.w(TAG, "Looking at missed slots failed", it) }
+            watcher.start()
         }
         // Redraw the widget whenever what it shows may have changed.
         scope.launch {
@@ -1300,6 +1351,10 @@ class AppGraph private constructor(context: Context) {
     private suspend fun setApplied(id: String) {
         makeOnSchool(id)
         makeOnOwnTasks(id)
+        // A time, a day or a start you gave a task moves it on purpose: its missed slots are forgotten (PL-13).
+        val moved = instructions.value.instructions.firstOrNull { it.id == id }?.changes.orEmpty()
+            .filter { it.type == ChangeType.AtTime || it.type == ChangeType.OnDay || it.type == ChangeType.StartFrom }.mapNotNull { it.taskId }
+        if (moved.isNotEmpty()) runtime.update { state -> state.copy(slots = moved.fold(state.slots) { s, taskId -> s.moved(taskId) }) }
         instructions.update { state ->
             state.copy(instructions = state.instructions.map { if (it.id == id && it.state == InstructionStatus.Understood) it.copy(state = InstructionStatus.Applied, appliedAt = clock.now()) else it })
         }

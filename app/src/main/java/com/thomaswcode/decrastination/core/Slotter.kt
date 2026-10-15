@@ -12,6 +12,9 @@ import java.time.ZoneId
 object Slotter {
     private const val MINUTE = 60_000L
 
+    /** How long after its end a slot stays where it was, its piece still to tick, before it's missed and moves (PL-13). */
+    const val GRACE_MS = 10 * MINUTE
+
     /** The outside breaks given up when the work needs their time, by [Settings.outsideTimes]' place: midday's first, then the afternoon's, then the morning's. */
     private val GIVEN_UP = listOf(1, 2, 0)
 
@@ -23,7 +26,8 @@ object Slotter {
     /**
      * [chunks] (in the day's order) laid into [windows] on [date], around [busy]. In turn: outside
      * breaks where [outside]; pinned pieces ([pins], by [Chunk.key]) at their time, or the next free
-     * start; pieces at the time they had ([previous]) where it's still free, one under way included;
+     * start; pieces at the time they had ([previous]) where it's still free, one under way or just
+     * over ([GRACE_MS]) included;
      * the rest, in order, at the first free time each fits whole. A piece has a break of
      * `slotBreakMin` before it and after it in its window, or after it `slotLongBreakMin` once
      * `slotLongBreakAfterMin` of work has gone without a long one. What fits nowhere is unslotted, in order.
@@ -60,12 +64,19 @@ object Slotter {
             val start = maxOf(interval.start, opens(chunk))
             return start.takeIf { it + chunk.minutes * MINUTE <= interval.end && allowed(chunk, interval) && beforeDeadline(chunk, it) }
         }
-        // The free interval holding [start] on for it, from now on (one under way, the rest of it), while its time hasn't gone.
+        // The free interval holding [start] on for it, from now on (one under way, the rest of it), till
+        // its grace after its end is over: a slot just over stays where it was, its piece still to tick.
         fun holding(chunk: Chunk, start: Long): Interval? {
             val end = start + chunk.minutes * MINUTE
-            if (end <= now) return null
+            if (end + GRACE_MS <= now) return null
             val from = maxOf(start, onFive(now))
-            return free.firstOrNull { it.start <= from && end <= it.end }
+            // What of it is before now: clear of the slots laid and their breaks.
+            val gap = settings.slotBreakMin * MINUTE
+            if (start < from && work.any { (laid, _) -> laid.start < minOf(end, from) + gap && start - gap < laid.end }) return null
+            if (end > from) return free.firstOrNull { it.start <= from && end <= it.end }
+            // Over: the window it was in, if it's one of today's still.
+            val window = windows.firstOrNull { at(date, it.startMin, zone) <= start && end <= at(date, it.endMin, zone) } ?: return null
+            return Interval(start, end, window)
         }
         fun place(chunk: Chunk, start: Long, interval: Interval, pinned: Boolean) {
             val end = start + chunk.minutes * MINUTE

@@ -117,8 +117,10 @@ class SlotterTest {
         val previous = mapOf(chunk("a").key to Fixtures.at("2026-10-13T17:00"))
         val (slots, _) = slot(tuesday, listOf(chunk("a"), chunk("b")), listOf(w("17:00", "22:00")), now = "2026-10-13T17:12", previous = previous)
         assertEquals(listOf("a 17:00–17:30", "b 17:35–18:05"), slots.described())
-        // Once its time is over, it's laid afresh from now.
-        assertEquals(listOf("a 17:35–18:05", "b 18:10–18:40"), slot(tuesday, listOf(chunk("a"), chunk("b")), listOf(w("17:00", "22:00")), now = "2026-10-13T17:31", previous = previous).first.described())
+        // Just over, it stays where it was for its grace, its piece still to tick (PL-13)...
+        assertEquals(listOf("a 17:00–17:30", "b 17:35–18:05"), slot(tuesday, listOf(chunk("a"), chunk("b")), listOf(w("17:00", "22:00")), now = "2026-10-13T17:31", previous = previous).first.described())
+        // ...and once that's over, it's laid afresh from now.
+        assertEquals(listOf("a 17:45–18:15", "b 18:20–18:50"), slot(tuesday, listOf(chunk("a"), chunk("b")), listOf(w("17:00", "22:00")), now = "2026-10-13T17:41", previous = previous).first.described())
     }
 
     @Test
