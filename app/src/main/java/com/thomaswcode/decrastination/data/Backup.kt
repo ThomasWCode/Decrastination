@@ -90,7 +90,7 @@ object Backups {
             if (calibration.boxMin.values.any { it !in SettingsLimits.BOX_MIN }) add("what the app learned about box lengths")
             // The days' yields (PL-06), as the review learns them: a half to all of a day, from a week or two of days.
             if (calibration.yields.values.any { !it.isFinite() || it !in Calibrator.MIN_YIELD..Calibrator.MAX_YIELD }) add("what the app learned about the days' time")
-            if (calibration.yieldDays.values.any { it !in Calibrator.YIELD_DAYS..Calibrator.YIELD_LOOK_BACK } || !calibration.yields.keys.containsAll(calibration.yieldDays.keys)) add("what the app learned about the days' time's evidence")
+            if (calibration.yieldDays.values.any { it !in Calibrator.YIELD_DAYS..Calibrator.YIELD_LOOK_BACK } || calibration.yields.keys != calibration.yieldDays.keys) add("what the app learned about the days' time's evidence")
             if (!evidence(calibration)) add("what the app learned's evidence")
             if (backup.eventAnswers.values.any { !answer(it) }) add("a calendar answer")
             if (!backup.aiUsage.spentUsd.isFinite() || backup.aiUsage.spentUsd < 0 || backup.aiUsage.calls < 0) add("Claude's spending")

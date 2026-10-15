@@ -941,6 +941,43 @@ class PlannerTest {
     }
 
     @Test
+    fun `work a per-day limit carries past its deadline is said not to fit, however much time there is`() {
+        // Three steps of a deck one a day, due tomorrow night: the third goes to Saturday, past it.
+        val deck = task("deck", Fixtures.at("2026-10-09T23:59"), steps = (1..3).map { SubStep("20 new cards", 9) }).copy(stepsPerDay = 1)
+        val plan = plan(listOf(deck), "2026-10-08T17:00")
+        assertEquals(listOf("teams:deck"), plan.wontFit.map { it.taskId })
+        assertTrue(plan.wontFit.single().leftMin < plan.wontFit.single().freeMin)
+    }
+
+    @Test
+    fun `work for a test is spaced only as Claude reads the task now`() {
+        // Saturday 08:00, three pieces due Tuesday night (as revision pieces are spaced): for a test
+        // Claude read in its instructions, a day apart; the reading out of date (the text changed since), not.
+        val homework = task("t", Fixtures.at("2026-10-20T23:59"), effort = 135)
+        val reading = Enrichment(inputHash = Enrichments.inputHash(homework), by = "claude", at = 0, testDate = Fixtures.at("2026-10-21T08:30"))
+        fun days(task: TaskItem) = plan(listOf(task), "2026-10-17T08:00").let { p -> p.buckets.flatMap { b -> b.chunks.filter { it.taskId == "teams:t" }.map { b.date.toString() } } }
+        assertEquals(listOf("2026-10-17", "2026-10-18", "2026-10-19"), days(homework.copy(enrichment = reading)))
+        assertEquals(listOf("2026-10-17", "2026-10-18", "2026-10-18"), days(homework.copy(enrichment = reading, detail = "Changed since")))
+    }
+
+    @Test
+    fun `a deck's deadline is the earliest of its assignments' in force`() {
+        // A: a test date Claude read gone by, Teams' own on 23 Oct. B: a plan's date to come, 14 Oct.
+        // The deck's vocabulary is for B's date first, not A's real one.
+        val a = task("a", Fixtures.at("2026-10-06T08:30")).copy(sourceValues = SourceValues(Kind.Homework, Fixtures.at("2026-10-23T23:59"), null))
+        val b = task("b", Fixtures.at("2026-10-14T08:30")).copy(sourceValues = SourceValues(Kind.Homework, Fixtures.at("2026-10-27T23:59"), null))
+        val deck = TaskItem(
+            id = "anki:deck", source = Source.Anki, sourceId = AnkiRules.DECK_PREFIX + "1", title = "Anki: Textbook 1::1.2", dueAt = Fixtures.at("2026-10-23T23:59"),
+            kind = Kind.Revision, sourceEffortMin = 9, derived = true, subSteps = listOf(SubStep("20 new cards", 9)),
+            extra = mapOf(AnkiRules.EXTRA_FOR to "teams:a,teams:b", AnkiRules.EXTRA_DECK_NAME to "Textbook 1::1.2"),
+            firstSeenAt = Fixtures.at("2026-10-07T12:00"), lastSeenAt = Fixtures.at("2026-10-07T12:00"),
+        )
+        val chunk = plan(listOf(a, b, deck), "2026-10-08T17:00").chunksOf("anki:deck").single()
+        assertEquals(Fixtures.at("2026-10-14T08:30"), chunk.deadline)
+        assertFalse(chunk.overdue)
+    }
+
+    @Test
     fun `work inside its safety margin that still fits before its deadline isn't said not to fit`() {
         // Homework finished three days early, as learned: an hour due Saturday morning is behind
         // that margin on Thursday, but Thursday and Friday hold it before the deadline itself.
