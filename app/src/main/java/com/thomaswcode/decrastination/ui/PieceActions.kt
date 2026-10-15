@@ -99,6 +99,23 @@ fun rememberPhotoCheck(graph: AppGraph, activity: Activity, plan: Plan, say: (ta
 }
 
 /**
+ * [piece] done (LR-09), seen at [now]: its slot kept, earning its free time if it's short (a longer
+ * one's photo earns it, or its source saying it's done, BL-08). What to say of it.
+ */
+internal suspend fun keepPiece(graph: AppGraph, piece: Chunk, now: Long): String {
+    val by = graph.focus.earnsBy(piece)
+    val kept = graph.focus.keepSlot(piece.key, seenAt = now)
+    val free = Format.minutes(Credit.forSlot(piece.minutes, graph.settings.value.workMinPerFreeMin).roundToInt().coerceAtLeast(1))
+    return when {
+        !kept -> "That piece has changed since (done, or planned again)."
+        by == EarnsBy.Tick -> "Done: $free free."
+        by == EarnsBy.Photo -> "Done. A photo check of it earns its $free free."
+        by == EarnsBy.Source -> "Done. Its $free free comes once ${piece.source.label} says it's done."
+        else -> "Done. It earns no free time: a piece this long earns with a photo check, and this isn't written work."
+    }
+}
+
+/**
  * What can be done with [piece], wherever it's shown (the Plan, the block screen): **Open** goes to
  * the task; **Done** keeps its slot (LR-09); **Check it's done** asks its source (**All of it done**,
  * for one of your own, is your say); **Refresh Teams** asks the Teams widget to sync; **Photo check** sends a photo
@@ -114,24 +131,7 @@ fun PieceActions(graph: AppGraph, activity: Activity, piece: Chunk, now: Long, p
                 scope.launch { TaskOpener.open(activity, task)?.let(say) }
             }
         }) { Text("Open") }
-        // This piece done (LR-09): its slot kept, earning its free time if it's short (a longer one's
-        // photo earns it, or its source saying it's done, BL-08).
-        FilledTonalButton(onClick = {
-            scope.launch {
-                val by = graph.focus.earnsBy(piece)
-                val kept = graph.focus.keepSlot(piece.key, seenAt = now)
-                val free = Format.minutes(Credit.forSlot(piece.minutes, graph.settings.value.workMinPerFreeMin).roundToInt().coerceAtLeast(1))
-                say(
-                    when {
-                        !kept -> "That piece has changed since (done, or planned again)."
-                        by == EarnsBy.Tick -> "Done: $free free."
-                        by == EarnsBy.Photo -> "Done. A photo check of it earns its $free free."
-                        by == EarnsBy.Source -> "Done. Its $free free comes once ${piece.source.label} says it's done."
-                        else -> "Done. It earns no free time: a piece this long earns with a photo check, and this isn't written work."
-                    },
-                )
-            }
-        }) { Text("Done") }
+        FilledTonalButton(onClick = { scope.launch { say(keepPiece(graph, piece, now)) } }) { Text("Done") }
         if (piece.source == Source.Own) {
             // Yours: nothing to ask, so all of it done is your say (2.0.0), earning no free time.
             OutlinedButton(onClick = {
