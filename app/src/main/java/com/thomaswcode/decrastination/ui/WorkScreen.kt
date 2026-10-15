@@ -41,16 +41,23 @@ import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.data.SourceStatus
 import com.thomaswcode.decrastination.sources.gmail.GmailThreads
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 /**
- * Every task, by when it's due (2.0.0, Q30): Overdue, Today, Tomorrow, This week, Later, No due
- * date, each task a tile with its source as a tag. A tap opens it to change ([TaskSheet]); *New
- * task* makes one of your own. Below, folded: the tasks you said aren't, those finished lately, and
- * how each source's last read went.
+ * The Work (UI-17, UI-10): what makes the plan less than the whole picture first (a source that
+ * can't be read, protection off, Claude's key), then every open task by when it's due (Overdue,
+ * Today, Tomorrow, This week, Later, No due date) or by subject, from every source or one; each a
+ * tile, a tap opening it to change ([TaskSheet]); *New task* makes one of your own. Below, folded:
+ * the work the plan leaves out and why, the tasks you said aren't, those finished lately, and how
+ * each source's last read went.
  */
 @Composable
-fun TasksScreen(graph: AppGraph, activity: Activity, opening: String? = null, onOpened: () -> Unit = {}) {
+fun WorkScreen(graph: AppGraph, activity: Activity, opening: String? = null, onOpened: () -> Unit = {}) {
     val state by graph.tasks.state.collectAsStateWithLifecycle()
+    val settings by graph.settings.state.collectAsStateWithLifecycle()
+    val runtime by graph.runtime.state.collectAsStateWithLifecycle()
+    val instructions by graph.instructions.state.collectAsStateWithLifecycle()
+    val calendar by graph.calendarState.collectAsStateWithLifecycle()
     // The sections move with the clock as well as the data: deadlines pass, and midnight.
     val now by produceState(graph.clock.now()) {
         while (true) {
@@ -70,14 +77,53 @@ fun TasksScreen(graph: AppGraph, activity: Activity, opening: String? = null, on
         }
     }
     val byId = state.tasks.associateBy { it.id }
+    // What the plan leaves out, as the plan has it now.
+    val plan = androidx.compose.runtime.remember(state, settings, now, instructions, calendar) { graph.plan(state, settings, now) }
+    val trouble = trouble(state, runtime, now)
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    var said by rememberSaveable { mutableStateOf<String?>(null) }
+    // By due date or by subject, from every source or one (UI-10): kept through a turn of the phone.
+    var bySubject by rememberSaveable { mutableStateOf(false) }
+    var only by rememberSaveable { mutableStateOf<String?>(null) }
     // The due-date sections open; what's not for now folded, till you say otherwise.
-    var folded by rememberSaveable { mutableStateOf(listOf(FINISHED, NOT_TASKS, SOURCES)) }
+    var folded by rememberSaveable { mutableStateOf(listOf(FINISHED, NOT_TASKS, SOURCES, NOT_PLANNED)) }
     val toggle = { key: String -> folded = if (key in folded) folded - key else folded + key }
     Box(Modifier.fillMaxSize()) {
         // Room at the foot for both buttons (the chat's over New task), so the last row scrolls clear.
         LazyColumn(Modifier.fillMaxWidth(), contentPadding = PaddingValues(bottom = 160.dp)) {
+            item(key = "hint") { Hint(graph, "work", "Work is what: every task, by when it's due or by subject. Day is when: today's slots, on the first tab.") }
+            // Claude's key stopped working while it's on, and what else makes the plan less than all there is (IMP-P1-007).
+            runtime.aiUsage.keyProblem?.takeIf { settings.aiEnabled && settings.aiKeyActive }?.let { problem ->
+                item(key = "key") { KeyProblemCard(problem) { activity.startActivity(android.content.Intent(activity, SetupActivity::class.java)) } }
+            }
+            if (trouble.isNotEmpty()) {
+                item(key = "trouble") {
+                    TroubleCard(
+                        trouble,
+                        onSetup = { activity.startActivity(android.content.Intent(activity, SetupActivity::class.java)) },
+                        onProtection = { activity.startActivity(android.content.Intent(activity, com.thomaswcode.decrastination.protect.ProtectionActivity::class.java)) },
+                        onTeams = { scope.launch { said = graph.requestTeamsSync() ?: "The Teams widget is syncing Teams" } },
+                    )
+                }
+            }
+            said?.let { text -> item(key = "said") { Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.secondary, modifier = Modifier.padding(horizontal = 28.dp, vertical = 8.dp)) } }
+            // By due date or by subject; from every source, or one.
+            item(key = "ways") {
+                Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        androidx.compose.material3.FilterChip(selected = !bySubject, onClick = { bySubject = false }, label = { Text("By due date") })
+                        androidx.compose.material3.FilterChip(selected = bySubject, onClick = { bySubject = true }, label = { Text("By subject") })
+                    }
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        androidx.compose.material3.FilterChip(selected = only == null, onClick = { only = null }, label = { Text("All") })
+                        (Source.SYNCED + Source.Own).forEach { source ->
+                            androidx.compose.material3.FilterChip(selected = only == source.name, onClick = { only = if (only == source.name) null else source.name }, label = { Text(source.label) })
+                        }
+                    }
+                }
+            }
             // Emails that are just emails aren't tasks (your call, 9 Oct); those you said aren't are below.
-            val open = state.tasks.filter { it.isOpen && !it.hidden }
+            val open = state.tasks.filter { it.isOpen && !it.hidden && (only == null || it.source.name == only) }
             if (open.isEmpty()) {
                 item(key = "none") {
                     Text(
@@ -87,10 +133,23 @@ fun TasksScreen(graph: AppGraph, activity: Activity, opening: String? = null, on
                     )
                 }
             }
-            for ((group, tasks) in Groups.byDue(open, now, zone)) {
-                val expanded = group.name !in folded
-                item(key = "group-${group.name}") { FoldingHeading(group.title, expanded, { toggle(group.name) }, summary = "${tasks.size}") }
+            val groups = if (bySubject) Groups.bySubject(open, settings.classMap, now) else Groups.byDue(open, now, zone).map { (g, t) -> g.title to t }
+            for ((title, tasks) in groups) {
+                val key = "group-$title"
+                val expanded = key !in folded
+                item(key = key) { FoldingHeading(title, expanded, { toggle(key) }, summary = "${tasks.size}") }
                 if (expanded) itemsIndexed(tasks, key = { _, it -> it.id }) { index, task -> TaskTile(task, index, tasks.size, now, zone, byId) { sheetFor = task.id } }
+            }
+            // Open work the plan leaves out, each with why (IMP-P1-002): folded, as it isn't for now.
+            if (plan.unplanned.isNotEmpty()) {
+                val expanded = NOT_PLANNED !in folded
+                item(key = NOT_PLANNED) { FoldingHeading("Not planned", expanded, { toggle(NOT_PLANNED) }, summary = "${plan.unplanned.size}", detail = "Open work left out of the plan, and why") }
+                if (expanded) {
+                    val lastDay = plan.buckets.lastOrNull()?.date ?: plan.today
+                    itemsIndexed(plan.unplanned, key = { _, it -> "unplanned-${it.taskId}-${it.reason}" }) { index, gap ->
+                        UnplannedTile(gap, index, plan.unplanned.size, lastDay, plan.now, zone) { sheetFor = gap.taskId }
+                    }
+                }
             }
             // Tasks you've said aren't: kept, off the plan, and here to check (taken back in Ask Claude).
             val notTasks = state.tasks.filter { it.isOpen && it.userNotATask }.sortedWith(compareBy(nullsLast()) { it.dueAt })
@@ -137,6 +196,7 @@ fun TasksScreen(graph: AppGraph, activity: Activity, opening: String? = null, on
 }
 
 private const val FINISHED = "finished"
+private const val NOT_PLANNED = "not-planned"
 private const val NOT_TASKS = "not-tasks"
 private const val SOURCES = "sources"
 

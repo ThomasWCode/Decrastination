@@ -55,6 +55,20 @@ object Groups {
      * comes, with all its pieces that day under it, in their order.
      */
     fun byTask(chunks: List<Chunk>): List<TaskRow> = chunks.groupBy { it.taskId }.map { (id, pieces) -> TaskRow(id, pieces) }
+
+    /**
+     * [tasks] by subject (UI-10): a class's subject as Settings → About you names it ([classMap]),
+     * else its code, those with none last; each soonest due first, at [now].
+     */
+    fun bySubject(tasks: List<TaskItem>, classMap: Map<String, String>, now: Long): List<Pair<String, List<TaskItem>>> {
+        fun subject(task: TaskItem): String? = task.className?.trim()?.takeIf { it.isNotEmpty() }?.let { code -> classMap[code]?.trim()?.takeIf { it.isNotEmpty() } ?: code }
+        val grouped = tasks.groupBy(::subject)
+        val order = compareBy<TaskItem, Long?>(nullsLast()) { it.deadlineAt(now) ?: it.dueAt }.thenBy { it.title.lowercase() }
+        return grouped.keys.filterNotNull().sortedBy { it.lowercase() }.map { it to grouped.getValue(it).sortedWith(order) } +
+            listOfNotNull(grouped[null]?.let { NO_SUBJECT to it.sortedWith(order) })
+    }
+
+    const val NO_SUBJECT = "No subject"
 }
 
 /** One task's pieces on one day of the Plan: a row that opens into them. */

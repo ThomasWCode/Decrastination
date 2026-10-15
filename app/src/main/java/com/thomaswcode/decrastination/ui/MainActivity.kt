@@ -148,8 +148,8 @@ class MainActivity : ComponentActivity() {
                     TABS.forEachIndexed { i, name -> Tab(selected = tab == i, onClick = { tab = i }, text = { Text(name) }) }
                 }
                 when (tab) {
-                    0 -> TodayScreen(graph, this@MainActivity)
-                    1 -> TasksScreen(graph, this@MainActivity, askedTask.value) { askedTask.value = null }
+                    0 -> DayScreen(graph, this@MainActivity)
+                    1 -> WorkScreen(graph, this@MainActivity, askedTask.value) { askedTask.value = null }
                     else -> StatsScreen(graph)
                 }
             }
@@ -164,7 +164,8 @@ class MainActivity : ComponentActivity() {
         const val EXTRA_TASK = "task"
         const val TAB_TASKS = 1
         const val OPEN_SETUP = 3
-        private val TABS = listOf("Plan", "Tasks", "Stats")
+        /** Day is when, Work is what (UI-17). */
+        private val TABS = listOf("Day", "Work", "Stats")
 
         /** The menu: the pages kept out of the way. */
         private val MENU = listOf(
