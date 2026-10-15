@@ -156,6 +156,8 @@ internal fun NextCard(
             }
             Text("DO NOW", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
             Text(next.label, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
+            // Its first step (AI-15), as it's written ahead.
+            graph.runtime.value.microPlans[next.key]?.first?.takeIf { it.isNotEmpty() }?.let { Text("First: $it", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onPrimaryContainer) }
             Badges(next, plan.now, zone)
             graph.focus.rewardLine(plan)?.let { Text(it, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onPrimaryContainer) }
             plan.then?.let { Text("Then: ${it.label}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onPrimaryContainer) }
@@ -201,6 +203,8 @@ internal fun PieceSheet(
             )
             // Why it's on this day (PL-07).
             Text(chunk.whyLine(Instant.ofEpochMilli(now).atZone(zone).toLocalDate(), zone), style = MaterialTheme.typography.bodyMedium)
+            // Its first steps in full (AI-15).
+            graph.runtime.value.microPlans[chunk.key]?.let(com.thomaswcode.decrastination.enrich.MicroPlans::lines)?.forEach { Text(it, style = MaterialTheme.typography.bodyMedium) }
             PieceActions(graph, activity, chunk, now, photo, say)
             // Its due date, minutes or start: on the task's own sheet (2.0.0).
             TextButton(onClick = onChange) { Text("Change its due date, minutes…") }

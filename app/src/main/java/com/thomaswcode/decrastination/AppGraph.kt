@@ -314,7 +314,7 @@ class AppGraph private constructor(context: Context) {
         val byId = tasks.value.tasks.associateBy { it.id }
         val before = runtime.value.calendarWritten
         val written = withContext(Dispatchers.IO) {
-            SlotCalendar.write(app, calendarId, made, zone, before) { move ->
+            SlotCalendar.write(app, calendarId, made, zone, before, runtime.value.microPlans) { move ->
                 val task = move.desired.taskId?.let(byId::get)
                 when {
                     task == null -> "its task is no longer there"
@@ -794,6 +794,9 @@ class AppGraph private constructor(context: Context) {
 
     /** The model's weekly review, while Claude is switched on and has its key; else null. */
     fun modelReviewer(): ClaudeReviewer? = claudeKey()?.let { ClaudeReviewer(it, endpoint(), profile = profile()) }
+
+    /** The micro-plans' caller (AI-15), while Claude is switched on and has its key; else null. */
+    fun microPlanner(): com.thomaswcode.decrastination.enrich.MicroPlanner? = claudeKey()?.let { com.thomaswcode.decrastination.enrich.MicroPlanner(it, endpoint()) }
 
     /** Felix's caller (AI-22), while Claude is switched on and has its key; else null. */
     fun felixCaller(): com.thomaswcode.decrastination.enrich.FelixCaller? = claudeKey()?.let { com.thomaswcode.decrastination.enrich.FelixCaller(it, endpoint()) }

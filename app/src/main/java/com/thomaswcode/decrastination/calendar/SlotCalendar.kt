@@ -60,10 +60,10 @@ object SlotCalendar {
      * [plan]'s slots written to [calendarId] against what's there and [written] (each URI's start as
      * last written); a hand move taken as [SlotCalendarDiff.judge] judges it, else written back.
      */
-    fun write(context: Context, calendarId: Long, plan: Plan, zone: ZoneId, written: Map<String, Long>, refuses: (SlotCalendarDiff.HandMove) -> String?): Written {
+    fun write(context: Context, calendarId: Long, plan: Plan, zone: ZoneId, written: Map<String, Long>, micro: Map<String, com.thomaswcode.decrastination.enrich.MicroPlan> = emptyMap(), refuses: (SlotCalendarDiff.HandMove) -> String?): Written {
         val from = plan.today.atStartOfDay(zone).toInstant().toEpochMilli()
         val to = plan.today.plusDays(SlotCalendarDiff.DAYS).atStartOfDay(zone).toInstant().toEpochMilli()
-        val desired = SlotCalendarDiff.desired(plan, zone)
+        val desired = SlotCalendarDiff.desired(plan, zone, micro)
         val diff = SlotCalendarDiff.diff(desired, existing(context, calendarId, from, to, desired.map { it.uri }), written)
         val (taken, refused) = SlotCalendarDiff.judge(diff.handMoves, refuses)
         val ops = ArrayList<ContentProviderOperation>()
