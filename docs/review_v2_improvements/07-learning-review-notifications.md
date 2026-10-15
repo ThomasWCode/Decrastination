@@ -8,14 +8,14 @@ Revised after your notes and both rounds of answers. Note 6 is the centre of thi
 
 | ID | Improvement | Priority | Effort | Status |
 |---|---|---|---|---|
-| LR-01 | A page for the reviews: what they said, what they changed, undo | P1 | M | – |
-| LR-02 | The check-in from its notification, prefilled from the week | P2 | S | – |
+| LR-01 | A page for the reviews: what they said, what they changed, undo | P1 | M | –; Implemented (v3 phase 8) |
+| LR-02 | The check-in from its notification, prefilled from the week | P2 | S | –; Implemented (v3 phase 8) |
 | LR-03 | Felix: Claude-written, timed to your slots, answerable, paced by himself | P1 | L | Changed (note 6, Q-20, Q-31); Implemented (v3 phase 5) |
 | LR-04 | The morning message from Felix | P2 | S | Changed (Q-21); Implemented (v3 phase 5) |
 | LR-05 | "How did it go?" becomes Felix's question at the slot's end | P2 | S | Changed (note 1, Q-31); Implemented (v3 phase 5) |
-| LR-06 | Say what the calibration learned and why | P2 | S | Changed |
+| LR-06 | Say what the calibration learned and why | P2 | S | Changed; Implemented (v3 phase 8) |
 | LR-07 | Quiet hours, and a ceiling for everything but Felix | P2 | S | Changed (Q-31); Implemented (v3 phase 5) |
-| LR-08 | Reset: stats, calibration, memories, chat, in one place | P1 | S | New (note 7); settled (Q-34) |
+| LR-08 | Reset: stats, calibration, memories, chat, in one place | P1 | S | New (note 7); settled (Q-34); Implemented (v3 phase 8) |
 | LR-09 | Slot outcomes as the learning signal | P1 | M | New (note 1); Implemented (v3 phase 4) |
 
 ---
