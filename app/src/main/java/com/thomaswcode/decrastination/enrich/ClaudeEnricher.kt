@@ -30,6 +30,8 @@ class ClaudeEnricher(
     private val model: String = MODEL,
     /** Who the student is (AI-05): read for each call, as it changes with what's remembered. */
     private val profile: () -> Profile.Block = { Profile.Block.NONE },
+    /** The vocabulary decks' topics (DX-10), for an assignment's sections. */
+    private val decks: () -> Map<String, String> = { emptyMap() },
 ) : Enricher {
     override val by = model
 
@@ -42,7 +44,7 @@ class ClaudeEnricher(
 
     override suspend fun enrich(task: TaskItem, job: Enrichments.Job, now: Long): Enricher.Result {
         val photo = photoOf(task)
-        val message = send(job) { item(task, job, photo, Prompts.describe(task, job, now, zone, previous(task)).take(Pricing.MAX_INPUT_CHARS)) }
+        val message = send(job) { item(task, job, photo, Prompts.describe(task, job, now, zone, previous(task), decks()).take(Pricing.MAX_INPUT_CHARS)) }
         val cost = Pricing.costUsd(message)
         when (message.stopReason().orElse(null)) {
             StopReason.REFUSAL -> return Enricher.Result(null, cost, refused = true)
@@ -72,7 +74,7 @@ class ClaudeEnricher(
         if (room < MIN_REPAIR_ROOM) return Enricher.Result(null)
         val photo = photoOf(task)
         val message = send(job) {
-            item(task, job, photo, Prompts.describe(task, job, now, zone, previous(task)).take(room))
+            item(task, job, photo, Prompts.describe(task, job, now, zone, previous(task), decks()).take(room))
             addAssistantMessage(repair.answer)
             addUserMessage(asked)
         }

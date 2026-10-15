@@ -851,7 +851,7 @@ class AppGraph private constructor(context: Context) {
         return secrets[Secret.AnthropicApiKey]?.takeIf { it.isNotBlank() }
     }
 
-    fun modelEnricher(): Enricher? = claudeKey()?.let { ClaudeEnricher(it, clock.zone(), endpoint(), profile = { profile() }) }
+    fun modelEnricher(): Enricher? = claudeKey()?.let { ClaudeEnricher(it, clock.zone(), endpoint(), profile = { profile() }, decks = { tasks.value.deckTopics }) }
 
     /**
      * A failed model call, counted in [month] (or a newer one counted since): the model rests ([ModelHold.Resting]), and one showing
@@ -1088,8 +1088,9 @@ class AppGraph private constructor(context: Context) {
             // by droppedAlerts, as the tasks change.
             // Its deck tasks take their sections and due date from it.
             val after = task.withEnrichment(made)
-            val sections = AnkiRules.sectionsOf(after)
-            if (sections != AnkiRules.sectionsOf(task) || (sections.isNotEmpty() && after.dueAt != task.dueAt)) decksChanged = true
+            val topics = tasks.value.deckTopics
+            val sections = AnkiRules.sectionsOf(after, topics)
+            if (sections != AnkiRules.sectionsOf(task, topics) || (sections.isNotEmpty() && after.dueAt != task.dueAt)) decksChanged = true
         }
         // Sections the deck pattern missed, or a deadline moved: their deck tasks come from reading Anki again, now.
         if (decksChanged) SyncWorker.syncNow(app, setOf(Source.Anki))

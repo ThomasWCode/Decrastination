@@ -13,6 +13,8 @@ data class TaskState(
     val sources: Map<Source, SourceStatus> = emptyMap(),
     /** Which deck today's Anki quota takes its new cards from, fixed at the day's first read. */
     val ankiDay: AnkiDay? = null,
+    /** The textbook's vocabulary decks' topics, by section (DX-10): matched against homework, and told to the model. */
+    val deckTopics: Map<String, String> = emptyMap(),
     /**
      * Completions syncs confirmed, as they were when confirmed, whose free time and log record
      * aren't given yet. Saved with the tasks' move to done, so a stop before they're given can't

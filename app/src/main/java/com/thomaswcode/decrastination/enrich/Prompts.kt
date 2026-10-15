@@ -183,7 +183,7 @@ object Prompts {
      * The item, as the model reads it; with [previous], its steps as planned before (AI-08), so a
      * step whose work hasn't changed keeps its title, and with it its tick.
      */
-    fun describe(task: TaskItem, job: Enrichments.Job, now: Long, zone: ZoneId, previous: List<SubStep> = emptyList()): String = buildString {
+    fun describe(task: TaskItem, job: Enrichments.Job, now: Long, zone: ZoneId, previous: List<SubStep> = emptyList(), decks: Map<String, String> = emptyMap()): String = buildString {
         fun at(time: Long) = Instant.ofEpochMilli(time).atZone(zone)
         appendLine("Today: ${at(now).format(TODAY)}")
         when (job) {
@@ -202,6 +202,8 @@ object Prompts {
                 // What the source says, not what an older enrichment laid over it.
                 val due = if (task.sourceValues != null) task.sourceValues.dueAt else task.dueAt
                 appendLine("Due: " + (due?.let { at(it).format(DAY_TIME) } ?: "no date"))
+                // The vocabulary decks by topic (DX-10), so a section can be named by what it's about.
+                if (job == Enrichments.Job.Assignment && decks.isNotEmpty()) appendLine("Decks: " + decks.entries.sortedBy { it.key }.joinToString("; ") { "${it.key} ${it.value}" })
             }
         }
         // What the student said to its questions (AI-10).
