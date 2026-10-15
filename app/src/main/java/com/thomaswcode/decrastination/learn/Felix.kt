@@ -95,7 +95,8 @@ class Felix(private val graph: AppGraph) {
         val keptOn = today(now).filter { it.outcome.kept }.map { it.taskId }.toSet()
         val toAsk = graph.runtime.value.assessLater.filter { a -> a.taskId !in keptOn && (a.doneAt ?: 0L) >= dayStart }
         return FelixRules.due(
-            plan = graph.plan(now = now),
+            // The blocker's, kept for the minute: this runs every half minute.
+            plan = graph.focus.plan(now),
             state = graph.runtime.value.felix,
             today = today(now),
             sent = graph.log.value.felix.filter { it.at >= dayStart },
@@ -223,5 +224,5 @@ class Felix(private val graph: AppGraph) {
     }
 
     /** His next look, by alarm: the phone may be asleep through the service's ticks. */
-    private fun arm(now: Long) = SlotAlarms.armFelix(graph.app, FelixRules.next(graph.plan(now = now), graph.runtime.value.felix, graph.settings.value, now))
+    private fun arm(now: Long) = SlotAlarms.armFelix(graph.app, FelixRules.next(graph.focus.plan(now), graph.runtime.value.felix, graph.settings.value, now))
 }
