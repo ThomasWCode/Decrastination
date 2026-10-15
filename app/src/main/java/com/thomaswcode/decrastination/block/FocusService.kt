@@ -235,6 +235,8 @@ class FocusService : AccessibilityService() {
 
     /** [pkg] owns the window in use: block it, let it spend free time, or leave it. */
     private fun onFront(pkg: String, firstLook: Boolean) {
+        // AnkiDroid come or gone: the decks' counts read (NF-03).
+        graph.anki.seen(pkg)
         if (pkg == packageName) {
             // Time in this app isn't time on the blocked one, unless that's still on screen.
             stopSpendingUnlessAside()

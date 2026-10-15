@@ -98,7 +98,9 @@ object AnkiRules {
     /** Every due card, counting each top-level deck once: a parent's counts include its children's. */
     fun dueReviews(decks: List<Deck>): Int = decks.filter { it.isTopLevel }.sumOf { it.learn + it.review }
 
-    fun effortMin(reviews: Int, new: Int): Int = ceil((reviews * REVIEW_SECONDS + new * NEW_SECONDS) / 60.0).toInt()
+    /** Minutes for [reviews] and [new] cards: by the deck's own seconds a card where it's learned ([secondsPerCard], DX-11), else Anki's usual. */
+    fun effortMin(reviews: Int, new: Int, secondsPerCard: Double? = null): Int =
+        ceil((secondsPerCard?.let { (reviews + new) * it } ?: (reviews * REVIEW_SECONDS + new * NEW_SECONDS).toDouble()) / 60.0).toInt()
 
     /** `Textbook 1::1.2` → (1, 1, 2). */
     fun section(deck: Deck): Triple<Int, Int, Int>? =
@@ -182,6 +184,8 @@ object AnkiRules {
         homework: Set<Long> = emptySet(),
         /** Homework's vocabulary is due by tomorrow ([homeworkDueSoon]): no new cards today. */
         reviewsOnly: Boolean = false,
+        /** Seconds a card per deck, as learned (DX-11). */
+        rates: Map<Long, Double> = emptyMap(),
         unseen: (Deck) -> Int,
     ): Pair<Fetched?, AnkiDay> {
         val day = ankiDay(now, zone)
@@ -220,7 +224,7 @@ object AnkiRules {
             },
             className = "German",
             dueAt = dueAt,
-            sourceEffortMin = effortMin(reviews, newLeft).coerceAtLeast(1),
+            sourceEffortMin = effortMin(reviews, newLeft, today.deckId?.let(rates::get)).coerceAtLeast(1),
             done = reviews == 0 && newLeft == 0,
             derived = true,
             extra = buildMap {
@@ -254,6 +258,8 @@ object AnkiRules {
         unseen: (Deck) -> Int,
         now: Long,
         zone: ZoneId,
+        /** Seconds a card per deck, as learned (DX-11). */
+        rates: Map<Long, Double> = emptyMap(),
     ): List<Fetched> {
         val byName = decks.associateBy { it.name }
         val wanted = LinkedHashMap<Deck, MutableList<TaskItem>>()
@@ -305,10 +311,10 @@ object AnkiRules {
                     if (none) ". Its New cards/day in AnkiDroid is 0, so Anki shows none of them: raise it, or use Custom study." else "",
                 className = first.className,
                 dueAt = first.deadlineAt(now),
-                sourceEffortMin = effortMin(0, left).coerceAtLeast(1),
+                sourceEffortMin = effortMin(0, left, rates[deck.id]).coerceAtLeast(1),
                 done = left == 0,
                 derived = true,
-                subSteps = newCardSteps(left, deck.new, deck.newPerDay),
+                subSteps = newCardSteps(left, deck.new, deck.newPerDay, rates[deck.id]),
                 stepsPerDay = 1,
                 notBefore = if (waits) nextRollover(now, zone) else null,
                 extra = mapOf(EXTRA_DECK_ID to deck.id.toString(), EXTRA_DECK_NAME to deck.name, EXTRA_FOR to linked.joinToString(",") { it.id }) +
@@ -327,13 +333,13 @@ object AnkiRules {
      * they're 5, 20 and 20; with none left today (the deck waits for Anki's next day) they're 20 a
      * day from then.
      */
-    private fun newCardSteps(unseen: Int, today: Int, perDay: Int): List<SubStep> {
+    private fun newCardSteps(unseen: Int, today: Int, perDay: Int, secondsPerCard: Double? = null): List<SubStep> {
         if (unseen <= 0) return emptyList()
         // None a day: all of them, as one step (see homeworkDecks).
         val daily = if (perDay <= 0) unseen else perDay
         val first = minOf(unseen, if (today > 0) today else daily)
         val sizes = listOf(first) + (first until unseen step daily).map { minOf(daily, unseen - it) }
-        return sizes.map { cards -> SubStep("$cards new cards", effortMin(0, cards).coerceAtLeast(1)) }
+        return sizes.map { cards -> SubStep("$cards new cards", effortMin(0, cards, secondsPerCard).coerceAtLeast(1)) }
     }
 
     const val EXTRA_DECK_ID = "deckId"

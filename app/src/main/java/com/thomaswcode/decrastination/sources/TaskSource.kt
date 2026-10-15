@@ -27,6 +27,8 @@ data class ReadContext(
     /** Every stored task, all sources: Gmail reuses what it already knows, Anki reads what homework names. */
     val known: List<TaskItem>,
     val ankiDay: AnkiDay?,
+    /** Seconds a card, per deck, as learned (DX-11): the Anki tasks' minutes go by them. */
+    val ankiSecondsPerCard: Map<Long, Double> = emptyMap(),
 )
 
 data class SourceRead(

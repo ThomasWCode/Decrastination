@@ -11,7 +11,7 @@ All four are pure Kotlin with an injected `Clock`, no Android types, unit-tested
 
 ## 2. Effort
 
-`remainingMin = effortMin × multiplier(kind, class) × (1 − progress)`, floored at 5. Effort comes from, in order: your override, the LLM estimate, a per-kind default (Homework 40, Admin 15, Event 0, Anki from card counts: reviews × 8 s, new × 25 s).
+`remainingMin = effortMin × multiplier(kind, class) × (1 − progress)`, floored at 5. Effort comes from, in order: your override, the LLM estimate, a per-kind default (Homework 40, Admin 15, Event 0, Anki from card counts: reviews × 8 s, new × 25 s; since review v2's DX-11, the deck's own seconds a card where it's been learned from time in AnkiDroid, docs/data-sources.md §3).
 
 *As built since 2.0.0:* your override is a **Minutes** change (a quick change from a task's sheet, or an instruction Claude reads), the whole task's minutes as you reckon them. Your minutes, and a task of your own's, are planned as you gave them: the learned multiplier corrects the app's estimates, not yours, so it isn't laid over them (`Calibration.multiplierFor`). A task with steps has them scaled to add up to your minutes (`TaskItem.stepScale`). A task of your own (Q28) is planned like any: its *can't start before* is a start the work is planned from (`notBefore`), not a date it's hidden till; one whose steps are all done is finished.
 

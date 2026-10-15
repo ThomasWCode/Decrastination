@@ -293,6 +293,10 @@ data class Calibration(
      * Kept, not read from an empty [timed]: a review from your answers alone has none either.
      */
     val counted: Boolean = false,
+    /** Seconds a card, per AnkiDroid deck (DX-11), learned from time in AnkiDroid: the deck tasks' minutes go by it. */
+    val ankiSecondsPerCard: Map<Long, Double> = emptyMap(),
+    /** How many stretches in AnkiDroid each of [ankiSecondsPerCard] rests on. */
+    val ankiStretches: Map<Long, Int> = emptyMap(),
 ) {
     fun multiplier(kind: Kind, className: String?): Double =
         multipliers["${kind.name}|${className.orEmpty()}"] ?: multipliers["${kind.name}|"] ?: 1.0

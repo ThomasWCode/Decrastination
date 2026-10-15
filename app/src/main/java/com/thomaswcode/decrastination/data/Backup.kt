@@ -95,6 +95,10 @@ object Backups {
             if (calibration.yields.values.any { !it.isFinite() || it !in Calibrator.MIN_YIELD..Calibrator.MAX_YIELD }) add("what the app learned about the days' time")
             if (calibration.yieldDays.values.any { it !in Calibrator.YIELD_DAYS..Calibrator.YIELD_LOOK_BACK } || calibration.yields.keys != calibration.yieldDays.keys) add("what the app learned about the days' time's evidence")
             if (!evidence(calibration)) add("what the app learned's evidence")
+            // What a card takes in AnkiDroid (DX-11): within the bounds it's learned in, each from its stretches.
+            if (calibration.ankiSecondsPerCard.values.any { !it.isFinite() || it !in com.thomaswcode.decrastination.learn.AnkiProgress.MIN_SECONDS..com.thomaswcode.decrastination.learn.AnkiProgress.MAX_SECONDS } ||
+                calibration.ankiSecondsPerCard.keys != calibration.ankiStretches.keys || calibration.ankiStretches.values.any { it !in 1..com.thomaswcode.decrastination.learn.AnkiProgress.STRETCHES }
+            ) add("what the app learned about Anki")
             if (backup.eventAnswers.values.any { !answer(it) }) add("a calendar answer")
             if (!backup.aiUsage.spentUsd.isFinite() || backup.aiUsage.spentUsd < 0 || backup.aiUsage.calls < 0) add("Claude's spending")
             if (backup.instructions.any { !wellFormed(it, backup.exportedAt) }) add("an instruction")

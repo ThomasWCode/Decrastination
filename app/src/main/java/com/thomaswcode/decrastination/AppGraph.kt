@@ -171,6 +171,8 @@ class AppGraph private constructor(context: Context) {
         ),
         clock = clock,
         onFailure = { source, error -> Log.w(TAG, "Reading ${source.label} failed", error) },
+        // What a card takes, per deck, as learned (DX-11).
+        ankiRates = { runtime.value.calibration.ankiSecondsPerCard },
     )
 
     /** The plan now, from the stored tasks and settings. Cheap: dozens of tasks. */
@@ -273,6 +275,9 @@ class AppGraph private constructor(context: Context) {
 
     /** Today's slots as they pass: begun, or missed (PL-13). */
     val slots = Slots(this)
+
+    /** Time in AnkiDroid as work (NF-03, DX-11). */
+    val anki = com.thomaswcode.decrastination.block.AnkiWatch(this)
 
     /**
      * [made]'s next seven days written to the calendar you picked (NF-07). A slot you've moved there

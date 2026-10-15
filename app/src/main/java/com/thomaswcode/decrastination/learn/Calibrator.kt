@@ -62,6 +62,9 @@ object Calibrator {
             marginDays = margins,
             timed = timed(log.completions),
             counted = true,
+            // Learned as AnkiDroid is used (DX-11), not from the log: kept as it stands.
+            ankiSecondsPerCard = previous.ankiSecondsPerCard,
+            ankiStretches = previous.ankiStretches,
         )
         return Learned(next, describe(previous, next, defaultMargin))
     }
