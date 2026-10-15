@@ -8,17 +8,17 @@ Revised after your notes and both rounds of answers. Sessions go (note 1): you r
 
 | ID | Improvement | Priority | Effort | Status |
 |---|---|---|---|---|
-| BL-01 | Free time spendable once today's plan is done | P1 | S | – (Q-18 yes) |
-| BL-02 | A weekend "block from" time, like the weekday one | P2 | S | – (Q-18 yes) |
+| BL-01 | Free time spendable once today's plan is done | P1 | S | – (Q-18 yes); Implemented (v3 phase 4) |
+| BL-02 | A weekend "block from" time, like the weekday one | P2 | S | – (Q-18 yes); Implemented (v3 phase 4) |
 | BL-03 | Short starts and extensions | – | – | Withdrawn (note 1) |
-| BL-04 | The reward visible at the point of temptation | P1 | S | Changed |
+| BL-04 | The reward visible at the point of temptation | P1 | S | Changed; Implemented (v3 phase 4; in Felix's message with phase 5) |
 | BL-05 | Bank free time toward the weekend | – | – | Withdrawn (Q-19) |
 | BL-06 | Study use of a blocked app during a session | – | – | Withdrawn (Q-19, note 1) |
-| BL-07 | A day with nothing to do | P2 | S | – (Q-18 yes) |
-| BL-08 | Without sessions: a tick keeps a short slot; a long one needs a photo to earn | P1 | M | New (note 1); settled (Q-28) |
-| BL-09 | The phone at school while a slot is scheduled there | P2 | S | New (note 2); settled (Q-29) |
-| BL-10 | Free time between today's slots | P1 | S | New; settled (Q-47) |
-| BL-11 | A missed slot, or a moved one, and today's block | P1 | S | New; settled (Q-48) |
+| BL-07 | A day with nothing to do | P2 | S | – (Q-18 yes); Implemented (v3 phase 4) |
+| BL-08 | Without sessions: a tick keeps a short slot; a long one needs a photo to earn | P1 | M | New (note 1); settled (Q-28); Implemented (v3 phase 4) |
+| BL-09 | The phone at school while a slot is scheduled there | P2 | S | New (note 2); settled (Q-29): no change, so nothing built (v3 phase 4) |
+| BL-10 | Free time between today's slots | P1 | S | New; settled (Q-47); Implemented (v3 phase 4) |
+| BL-11 | A missed slot, or a moved one, and today's block | P1 | S | New; settled (Q-48); Implemented (v3 phase 4) |
 
 ---
 

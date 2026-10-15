@@ -62,16 +62,18 @@ The implementation of `docs/review_v2_improvements/impl/` on branch `v3`. Delete
 - BL-01 blocked while today's work isn't done, tomorrow's alone not; BL-02 blocking from 10:00 on a weekend or a day off (`weekendBlockFromMin`), by the school calendar; BL-11 a slot missed today that went to tomorrow keeping tonight blocked till the hours end, a move of yours not: 6eb0a34.
 - BL-04 the reward line on the block screen, the Do now card and the widget; BL-07 an hour of free time on a day with nothing to do: c40ef07.
 - BL-10 free time between today's slots after one kept, till the next starts: a569faa. Found with it, a step piece's key renumbered once a piece before it was kept, so its slot's kept start was lost (PL-13): fixed on phase 3's branch (585ba27), with a test here that keeping a piece leaves its task's next one in its slot.
-- NF-03 time in AnkiDroid as work: the decks read as it comes and goes, a deck task done by then has its slot kept, and Anki read again at once; DX-11 seconds a card learned per deck, the deck tasks' minutes going by them, shown in Settings → Anki: this commit.
+- NF-03 time in AnkiDroid as work: the decks read as it comes and goes, a deck task done by then has its slot kept, and Anki read again at once; DX-11 seconds a card learned per deck, the deck tasks' minutes going by them, shown in Settings → Anki: 9e03b44.
+- The record: README's phase 4 sentence, the review tables' items Implemented: this commit.
 
 ## Current
 
-Phase 3: the pull request, its Codex loop over, one check on the phone to come: PL-13's missed slot (today's 17:30 slot is missed at 18:10 if undone; the day's alarms record any other). The phone is away on school days from 07:40 to 18:00, so phase 4 is built meanwhile on a branch on top of phase 3, its phone checks from 18:00.
+Phase 3: the pull request, its Codex loop over, one check on the phone to come: PL-13's missed slot (today's 17:30 slot is missed at 18:10 if undone; the day's alarms record any other). Phase 4, built on a branch on top of phase 3 while the phone was away (07:40 to 18:00 on school days): all its items in, its pull request stacked on phase 3's for Codex meanwhile, and its checks on the phone from 18:00 (a tick writing its slot and Stats rising, the reward line, the credit, Saturday's and a day off's block from 10:00, free time in a gap and closing at the next slot, a missed slot keeping tonight blocked and a move not, an empty day's hour, and AnkiDroid ticking its piece).
 
 ## Outstanding
 
 - Phase 3: PL-13's check on the phone, the final build there, the merge.
-- Phases 4 to 8.
+- Phase 4: Codex's review, the checks on the phone above, the merge (after phase 3's, the pull request moved to main).
+- Phases 5 to 8.
 
 ## For the owner (deferred: you weren't live)
 
