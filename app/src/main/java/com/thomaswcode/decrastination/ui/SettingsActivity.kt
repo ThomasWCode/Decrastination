@@ -349,6 +349,7 @@ class SettingsActivity : ComponentActivity() {
 
                     // A backup, and what couldn't be read at a start, as Setup has them.
                     BACKUP -> item { SetupScreen(graph, this@SettingsActivity, setOf(SetupPart.Saved, SetupPart.Backup), scroll = false) }
+                    RESET -> item { ResetPage(graph) }
                 }
             }
         }
@@ -405,6 +406,7 @@ private const val SOURCES = "sources"
 private const val CALENDAR = "calendar"
 private const val NOTIFICATIONS = "notifications"
 private const val BACKUP = "backup"
+private const val RESET = "reset"
 
 /** Its pages, every control of the old Setup, Settings and Protection pages on one of them (UI-18). */
 private val PAGES = listOf(
@@ -419,6 +421,7 @@ private val PAGES = listOf(
     Page(CALENDAR, "Calendar", "The calendars read, and the one your plan's written to"),
     Page(NOTIFICATIONS, "Notifications", "The morning briefing and Sunday's check-in"),
     Page(BACKUP, "Backup", "The settings, the log and what's learned, saved or restored"),
+    Page(RESET, "Reset", "Stats, what's learned, what Felix remembers, the chat, your changes"),
 )
 
 @Composable
@@ -603,6 +606,50 @@ private fun LastCrash(activity: android.app.Activity) {
                 activity.getSystemService(android.content.ClipboardManager::class.java)?.setPrimaryClip(android.content.ClipData.newPlainText("The last crash", crash))
             }) { Text("Copy") }
         }
+    }
+}
+
+/**
+ * What can be reset (LR-08), a row each: asked first, saying what goes (your changes listed), a copy
+ * of everything saved before, and no parent code.
+ */
+@Composable
+private fun ResetPage(graph: AppGraph) {
+    val scope = rememberCoroutineScope()
+    var asking by remember { mutableStateOf<AppGraph.Reset?>(null) }
+    var said by remember { mutableStateOf<String?>(null) }
+    Column {
+        Note("A copy of everything the app keeps is saved to Documents/Decrastination before each, to import from Backup.")
+        AppGraph.Reset.entries.forEach { r ->
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f).padding(vertical = 6.dp)) {
+                    Text(r.title, style = MaterialTheme.typography.bodyLarge)
+                    Text(r.takes.replaceFirstChar(Char::uppercase), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                androidx.compose.material3.TextButton(onClick = { asking = r }) { Text("Reset") }
+            }
+        }
+        said?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.secondary) }
+    }
+    asking?.let { r ->
+        val changes = if (r == AppGraph.Reset.Instructions || r == AppGraph.Reset.Everything) graph.instructions.value.applied.map { it.text.take(80) } else emptyList()
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { asking = null },
+            title = { Text("Reset ${r.title.replaceFirstChar(Char::lowercase)}?") },
+            text = {
+                Text(
+                    "This goes: ${r.takes}." + (if (changes.isNotEmpty()) " Your changes: " + changes.joinToString("; ") { "“$it”" } + "." else "") +
+                        " A copy of everything is saved first.",
+                )
+            },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = {
+                    asking = null
+                    scope.launch { said = graph.reset(r) }
+                }) { Text("Reset") }
+            },
+            dismissButton = { androidx.compose.material3.TextButton(onClick = { asking = null }) { Text("Keep it") } },
+        )
     }
 }
 

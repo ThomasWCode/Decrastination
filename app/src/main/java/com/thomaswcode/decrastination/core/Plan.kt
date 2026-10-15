@@ -325,6 +325,8 @@ data class Calibration(
      * finished before then teaches nothing, so they start afresh, from the kind's figure.
      */
     val forgotten: Map<String, Long> = emptyMap(),
+    /** Learned only from what came after this (LR-08's reset of the calibration): null, from all of the log. */
+    val learnFrom: Long? = null,
 ) {
     fun multiplier(kind: Kind, className: String?): Double =
         multipliers["${kind.name}|${className.orEmpty()}"] ?: multipliers["${kind.name}|"] ?: 1.0
