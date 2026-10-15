@@ -14,7 +14,7 @@ The code's shape is good: a pure core with tests, Android at the edges, JSON sto
 | AR-06 | A crash record you can read on the phone | P2 | S | – |
 | AR-07 | A nightly backup to Documents/Decrastination | P2 | M | – |
 | AR-08 | Trim the work a sync does when nothing changed | P3 | S | – |
-| AR-09 | Removing sessions safely | P1 | M | New (note 1) |
+| AR-09 | Removing sessions safely | P1 | M | New (note 1); Implemented (v3 phase 4) |
 
 ---
 

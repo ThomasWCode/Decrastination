@@ -18,7 +18,7 @@ Revised after your answers: Gmail becomes starred-only (Q-04), which removes thr
 | DX-08 | Teams: the instructions' links and attachments | P2 | S | – |
 | DX-09 | Power Planner: the timetable, for free periods, lessons and the school day | P1 | M | Changed (Q-12); Implemented (v3 phase 3) |
 | DX-10 | Anki: deck descriptions, so topic-named homework finds its deck | P2 | S | – |
-| DX-11 | Anki: seconds per card from the counts around a slot | P2 | M | Changed (note 1) |
+| DX-11 | Anki: seconds per card from the counts around a slot | P2 | M | Changed (note 1); Implemented (v3 phase 4) |
 | DX-12 | Calendar: location and description for the event judge and the Day view | P2 | S | Implemented (v3 phase 3: read, an optional or tentative event asked about; the Day view with UI-17) |
 | DX-13 | Calendar: choose which calendars count | P1 | S | Implemented (v3 phase 3) |
 | DX-14 | Calendar: look as far ahead as the planner plans | P1 | S | Changed (now needed); Implemented (v3 phase 2) |
