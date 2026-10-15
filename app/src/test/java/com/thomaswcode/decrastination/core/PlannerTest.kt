@@ -772,6 +772,11 @@ class PlannerTest {
         val missed = first[0].chunk!!.key
         val later = Planner.plan(windowed(tasks, "2026-10-13T17:30").copy(previousSlots = starts - missed)).todaySlots
         assertEquals(listOf("b" to "17:25", "c" to "18:00", "a" to "18:35"), later.map { it.chunk!!.title to hm(it.start) })
+        // And it says why it moved.
+        val missedPlan = Planner.plan(windowed(tasks, "2026-10-13T17:30").copy(previousSlots = starts - missed, missedSlots = setOf(missed)))
+        assertEquals(Why.Refitted, missedPlan.ordered.single { it.key == missed }.why)
+        assertEquals("Moved when its time passed", missedPlan.ordered.single { it.key == missed }.whyLine(tuesday, LONDON))
+        assertTrue(missedPlan.ordered.filter { it.key != missed }.none { it.why == Why.Refitted })
     }
 
     // --- Pins: a day, a time (PL-04) ---

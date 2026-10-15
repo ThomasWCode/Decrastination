@@ -225,8 +225,10 @@ class AppGraph private constructor(context: Context) {
                 workedTodayMin = workedToday(now, zone),
                 windows = windows,
                 dayKinds = dayKinds,
-                // Today's pieces where the last plan laid them, where that's still free (PL-13).
+                // Today's pieces where the last plan laid them, where that's still free, and those whose
+                // slots went by undone (PL-13).
                 previousSlots = runtime.value.slots.on(today).previous,
+                missedSlots = runtime.value.slots.on(today).missed.map { it.key }.toSet(),
             ),
         )
     }
