@@ -3,10 +3,10 @@ package com.thomaswcode.decrastination.core
 import kotlinx.serialization.Serializable
 
 /**
- * Asking Claude (2.0.0, Q29): one chat for everything you'd say about your work. You write; Claude
- * answers, asks when something's missing, and puts what it would do on cards ([Proposal]): a new
- * task of your own, or changes to your tasks and days. Nothing changes until you tap a card's Add
- * or Apply. Kept in `chat.json`.
+ * Asking Claude (2.0.0, Q29), Felix since review v2 (AI-24): one chat for everything you'd say about
+ * your work. You write; he answers, asks when something's missing, and puts what he does on cards
+ * ([Proposal]): a change to a task you have is made at once, its card's Undo taking it back; a new
+ * task of your own, or days off, wait for the card's Add or Apply. Kept in `chat.json`.
  */
 @Serializable
 data class ChatState(val messages: List<ChatMessage> = emptyList()) {

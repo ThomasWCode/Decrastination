@@ -8,16 +8,16 @@ Facts used: Opus 5.5 is $4 in / $20 out per million tokens (cache reads $0.20); 
 
 | ID | Improvement | Priority | Effort | Status |
 |---|---|---|---|---|
-| AC-01 | Cache the stable prefix of each job | P3 | S | – |
-| AC-02 | Effort per job: HIGH for readings, MEDIUM where you're waiting | P1 | S | Changed (Q-10); confirmed (Q-37) |
+| AC-01 | Cache the stable prefix of each job | P3 | S | –; Implemented (v3 phase 5) |
+| AC-02 | Effort per job: HIGH for readings, MEDIUM where you're waiting | P1 | S | Changed (Q-10); confirmed (Q-37); Implemented (v3 phase 5) |
 | AC-03 | A cheaper model for email triage | – | – | Withdrawn (Q-10) |
-| AC-04 | Rest by what failed, not a flat hour for everything | P1 | M | – |
-| AC-05 | Interactive calls shouldn't queue behind enrichment | P1 | S | – |
+| AC-04 | Rest by what failed, not a flat hour for everything | P1 | M | –; Implemented (v3 phase 5) |
+| AC-05 | Interactive calls shouldn't queue behind enrichment | P1 | S | –; Implemented (v3 phase 5) |
 | AC-06 | A prompt version on every enrichment | P2 | S | – |
 | AC-07 | A record of recent calls you can read on the phone | P2 | M | – |
 | AC-08 | Progress while Claude thinks, and a way to give up | P2 | S | – |
 | AC-09 | Skip the model for emails a sender rule settles | – | – | Withdrawn (Q-11) |
-| AC-10 | Work ahead: enrich, micro-plan and nag text before they're needed | P1 | M | New |
+| AC-10 | Work ahead: enrich, micro-plan and nag text before they're needed | P1 | M | New; Implemented (v3 phase 5) |
 
 ---
 
