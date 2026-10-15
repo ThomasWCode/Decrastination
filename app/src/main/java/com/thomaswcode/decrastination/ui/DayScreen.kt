@@ -192,7 +192,7 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
                 is DayModel.Row.Window -> WindowRow(row, zone)
                 is DayModel.Row.Event -> EventRow(row.event, EventJudge.judge(row.event, answers), runtime.eventsAsked, now, zone) { eventFor = eventKey(row.event) }
                 is DayModel.Row.Planned -> PlannedRow(
-                    row, plan, zone, messageOf(row.slot.chunk?.taskId.orEmpty()),
+                    row, plan, zone, messageOf(row.slot.chunk?.taskId.orEmpty()), today,
                     onOpen = { row.slot.chunk?.let { sheetFor = it.key } },
                     onMove = { row.slot.chunk?.let { moving = it.key } },
                     // Done, with an Undo while it's said (UI-03).
@@ -208,7 +208,7 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
                         }
                     },
                     onLater = {
-                        val chunk = row.slot.chunk ?: return@PlannedRow
+                        val chunk = row.slot.chunk?.takeIf { today } ?: return@PlannedRow
                         scope.launch {
                             if (plan.chunksOf(chunk.taskId).firstOrNull()?.key != chunk.key) {
                                 // A time pins its task's next piece: this one goes by its day.
@@ -279,7 +279,7 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
     }
     eventFor?.let { key ->
         val event = calendar.events.firstOrNull { eventKey(it) == key }
-        if (event == null) LaunchedEffect(key) { eventFor = null } else EventSheet(graph, activity, event, answers, now, zone) { eventFor = null }
+        if (event == null) LaunchedEffect(key) { eventFor = null } else EventSheet(graph, activity, event, answers, Instructions.eventAnswers(instructions.applied).keys, now, zone) { eventFor = null }
     }
 }
 
@@ -403,7 +403,7 @@ private fun verdict(judgement: EventJudge.Judgement, asked: Boolean): String = w
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun PlannedRow(row: DayModel.Row.Planned, plan: Plan, zone: ZoneId, message: String?, onOpen: () -> Unit, onMove: () -> Unit, onDone: () -> Unit, onLater: () -> Unit) {
+private fun PlannedRow(row: DayModel.Row.Planned, plan: Plan, zone: ZoneId, message: String?, today: Boolean, onOpen: () -> Unit, onMove: () -> Unit, onDone: () -> Unit, onLater: () -> Unit) {
     val slot: Slot = row.slot
     val chunk = slot.chunk
     if (slot.kind == SlotKind.Outside || chunk == null) {
@@ -421,6 +421,8 @@ private fun PlannedRow(row: DayModel.Row.Planned, plan: Plan, zone: ZoneId, mess
     androidx.compose.material3.SwipeToDismissBox(
         state = swipe,
         modifier = Modifier.padding(horizontal = 12.dp, vertical = 3.dp),
+        // Later today is today's: another day's slot is held to move it.
+        enableDismissFromStartToEnd = today,
         backgroundContent = {
             val done = swipe.dismissDirection == androidx.compose.material3.SwipeToDismissBoxValue.EndToStart
             Row(
@@ -504,7 +506,7 @@ private fun NowRow(at: Long, zone: ZoneId) {
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun EventSheet(graph: AppGraph, activity: Activity, event: CalendarEvent, answers: Map<String, String>, now: Long, zone: ZoneId, onClose: () -> Unit) {
+internal fun EventSheet(graph: AppGraph, activity: Activity, event: CalendarEvent, answers: Map<String, String>, instructed: Set<String>, now: Long, zone: ZoneId, onClose: () -> Unit) {
     val key = EventJudge.key(event)
     var writing by rememberSaveable { mutableStateOf(false) }
     ModalBottomSheet(onDismissRequest = onClose) {
@@ -519,12 +521,17 @@ internal fun EventSheet(graph: AppGraph, activity: Activity, event: CalendarEven
             if (event.description.isNotBlank()) Text(event.description.take(600), style = MaterialTheme.typography.bodySmall, maxLines = 8, overflow = TextOverflow.Ellipsis)
             val judgement = EventJudge.judge(event, answers)
             Text("The plan counts it: ${verdict(judgement, false).lowercase()}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                CalendarTime.ANSWERS.forEach { (label, answer) ->
-                    OutlinedButton(onClick = { graph.scope.launch { CalendarTime.answer(activity.applicationContext, key, answer) } }) { Text(label) }
+            if (key in instructed) {
+                // Your instruction says how it counts, over any answer here: it's taken back where it was made.
+                Text("Your instruction says how it counts: take it back in the chat's Your changes to answer here.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            } else {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    CalendarTime.ANSWERS.forEach { (label, answer) ->
+                        OutlinedButton(onClick = { graph.scope.launch { CalendarTime.answer(activity.applicationContext, key, answer) } }) { Text(label) }
+                    }
                 }
+                Text("For every event of that name.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            Text("For every event of that name.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             TextButton(onClick = { writing = true }) { Text("An instruction about it") }
         }
     }

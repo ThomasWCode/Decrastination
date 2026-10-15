@@ -207,7 +207,7 @@ class NextWidget : GlanceAppWidget() {
                     ImageProvider(R.drawable.ic_check),
                     contentDescription = "Done",
                     colorFilter = ColorFilter.tint(GlanceTheme.colors.primary),
-                    modifier = GlanceModifier.size(28.dp).clickable(actionRunCallback<TickAction>(actionParametersOf(TickAction.KEY to key))),
+                    modifier = GlanceModifier.size(28.dp).clickable(actionRunCallback<TickAction>(actionParametersOf(TickAction.KEY to key, TickAction.SEEN to model.seenAt))),
                 )
             }
             if (layout.refresh) {
@@ -420,12 +420,14 @@ data class WidgetLayout(
 class TickAction : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
         val key = parameters[KEY] ?: return
-        AppGraph.get(context).focus.keepSlot(key)
+        // Kept since it was shown (a second tap before it's drawn again): nothing more.
+        AppGraph.get(context).focus.keepSlot(key, seenAt = parameters[SEEN])
         WidgetUpdater.update(context)
     }
 
     companion object {
         val KEY = ActionParameters.Key<String>("key")
+        val SEEN = ActionParameters.Key<Long>("seen")
     }
 }
 

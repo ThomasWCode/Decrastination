@@ -59,6 +59,8 @@ class WidgetModelTest {
         val model = WidgetModel.from(plan, TaskState(), LONDON, slots = listOf(kept))
         assertEquals("${Format.span(slot.start, slot.end, LONDON)} · essay", model.headline)
         assertEquals(slot.chunk!!.key, model.key)
+        // A tick keeps only what was shown: the plan's moment goes with it.
+        assertEquals(plan.now, model.seenAt)
         assertEquals("Today: 1 of 2 kept, 30 min left", model.summary)
         // Gone by but in its grace, it's still to tick: counted, with nothing left.
         assertEquals("Today: 1 of 2 kept, nothing left", WidgetModel.day(plan.copy(now = slot.end + 60_000L), listOf(kept)))

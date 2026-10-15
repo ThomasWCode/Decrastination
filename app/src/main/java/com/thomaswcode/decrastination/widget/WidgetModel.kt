@@ -43,6 +43,8 @@ data class WidgetModel(
     val taskId: String?,
     /** The piece the tick keeps (UI-05, LR-09), if any. */
     val key: String? = null,
+    /** When the plan it shows was made: a tick keeps only what it showed (a box's next piece has its key). */
+    val seenAt: Long = 0L,
 ) {
     /** A row of the list: [urgent] as the headline's badge is (overdue, due today, behind). */
     data class Line(val text: String, val minutes: String, val urgent: Boolean, val taskId: String)
@@ -105,6 +107,7 @@ data class WidgetModel(
                 warning = protection(runtime, armed) ?: warning(state, now),
                 taskId = next?.taskId,
                 key = next?.key,
+                seenAt = now,
             )
         }
 
