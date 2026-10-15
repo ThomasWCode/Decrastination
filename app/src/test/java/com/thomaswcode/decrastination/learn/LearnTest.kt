@@ -1,5 +1,8 @@
 package com.thomaswcode.decrastination.learn
 
+import com.thomaswcode.decrastination.core.WindowKind
+import com.thomaswcode.decrastination.data.SlotOutcome
+import com.thomaswcode.decrastination.data.SlotRecord
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.Fixtures.LONDON
 import com.thomaswcode.decrastination.core.Calibration
@@ -69,7 +72,7 @@ class CalibratorTest {
         assertNull(Calibrator.upgraded(now, one))
         assertNull(Calibrator.upgraded(Calibration(multipliers = mapOf("Homework|" to 1.1), counted = true), one))
         assertNull(Calibrator.upgraded(Calibration(), one))
-        assertTrue(Calibrator.learn(ActivityLog(), Calibration(), 25, week = 0, today = LocalDate.parse("2026-10-11")).calibration.counted)
+        assertTrue(Calibrator.learn(ActivityLog(), Calibration(), today = LocalDate.parse("2026-10-11")).calibration.counted)
     }
 
     @Test
@@ -108,85 +111,9 @@ class CalibratorTest {
     }
 
     @Test
-    fun `the box that ends in finished work wins once there are enough sessions, and a replay agrees`() {
-        val onTime = (1..12).map { done("t$it") }
-        val sessions = (1..12).flatMap { i ->
-            listOf(
-                SessionRecord("t$i", Kind.Homework, label = "t$i", plannedMin = 25, workedMin = 25, startedAt = 0, endedAt = 0, completed = true, box = 25),
-                SessionRecord("x$i", Kind.Homework, label = "x$i", plannedMin = 60, workedMin = 20, startedAt = 0, endedAt = 0, completed = false, box = 60),
-            )
-        }
-        val log = ActivityLog(sessions = sessions, completions = onTime)
-        assertEquals(mapOf(Kind.Homework to 25), Calibrator.boxes(log, defaultBox = 45, week = 7))
-        assertEquals(Calibrator.boxes(log, 45, week = 7), Calibrator.boxes(log, 45, week = 7))
-        // Done by a plan's date, not a real deadline: the 25s earn nothing, and the default stands (PL-14).
-        val planned = log.copy(completions = onTime.map { it.copy(hardDeadline = false) })
-        assertEquals(emptyMap(), Calibrator.boxes(planned, defaultBox = 45, week = 7))
-    }
-
-    @Test
-    fun `work done by a plan's date judges no box, for or against`() {
-        // Twelve 25s on work done by real deadlines; twelve 60s on work done by dates the app set.
-        val real = (1..12).map { done("t$it") }
-        val planned = (1..12).map { done("p$it").copy(hardDeadline = false) }
-        val sessions = (1..12).flatMap { i ->
-            listOf(
-                SessionRecord("t$i", Kind.Homework, label = "t$i", plannedMin = 25, workedMin = 25, startedAt = 0, endedAt = 0, completed = true, box = 25),
-                SessionRecord("p$i", Kind.Homework, label = "p$i", plannedMin = 60, workedMin = 60, startedAt = 0, endedAt = 0, completed = true, box = 60),
-            )
-        }
-        val log = ActivityLog(sessions = sessions, completions = real + planned)
-        // The 60s count for nothing (PL-14), so twelve sessions don't settle it: some weeks still try another.
-        assertTrue((1L..40L).any { Calibrator.boxes(log, defaultBox = 45, week = it)[Kind.Homework] != 25 })
-        assertEquals(mapOf(Kind.Homework to 25), Calibrator.boxes(log.copy(completions = real + planned.map { it.copy(hardDeadline = true) }), defaultBox = 45, week = 7))
-    }
-
-    @Test
-    fun `a box session waits for its task's outcome before it counts`() {
-        // Twenty full sessions at 25 on work not done yet: no outcome, so nothing settled or steered.
-        val pending = ActivityLog(sessions = (1..20).map { SessionRecord("t$it", Kind.Homework, label = "t", plannedMin = 25, workedMin = 25, startedAt = 0, endedAt = 0, completed = true, box = 25) })
-        val kept = (1L..40L).count { Calibrator.boxes(pending, defaultBox = 45, week = it).isEmpty() }
-        assertTrue(kept >= 25, "kept $kept of 40")
-    }
-
-    @Test
-    fun `your own box is a candidate, and with nothing to judge the others by, it stands most weeks`() {
-        // Twenty sessions at a box that's neither yours (30) nor one the experiment tries: nothing
-        // to judge them by, so yours is the best, and only the weeks it tries another move off it.
-        val other = ActivityLog(
-            sessions = (1..20).map { SessionRecord("b$it", Kind.Homework, label = "b", plannedMin = 40, workedMin = 40, startedAt = 0, endedAt = 0, completed = true, box = 40) },
-            // Each one's task since done, so each is judged.
-            completions = (1..20).map { done("b$it", doneAt = 1) },
-        )
-        val kept = (1L..40L).count { Calibrator.boxes(other, defaultBox = 30, week = it).isEmpty() }
-        assertTrue(kept >= 25, "kept $kept of 40 weeks")
-    }
-
-    @Test
-    fun `a session is judged by its own round of the task, not an earlier round's finish`() {
-        val due = Fixtures.at("2026-10-10T09:00")
-        // Done in time once, then reopened and done late: the second round's sessions didn't end well.
-        val rounds = listOf(done("t", dueAt = due, doneAt = due - HOUR), done("t", dueAt = due + 5 * DAY, doneAt = due + 6 * DAY))
-        val sessions = (1..20).map { SessionRecord("t", Kind.Homework, label = "t", plannedMin = 25, workedMin = 25, startedAt = due + 2 * DAY + it * HOUR, endedAt = 0, completed = true, box = 25) }
-        assertEquals(emptyMap(), Calibrator.boxes(ActivityLog(sessions = sessions, completions = rounds), defaultBox = 45, week = 7))
-    }
-
-    @Test
-    fun `an old box of yours doesn't settle the experiment`() {
-        // Twenty sessions at your old box of 40; you've since set 30.
-        val old = ActivityLog(
-            sessions = (1..20).map { SessionRecord("b$it", Kind.Homework, label = "b", plannedMin = 40, workedMin = 40, startedAt = 0, endedAt = 0, completed = true, box = 40) },
-            completions = (1..20).map { done("b$it", doneAt = 1) },
-        )
-        // Unsettled, some weeks try another box.
-        val tried = (1L..40L).map { Calibrator.boxes(old, defaultBox = 30, week = it)[Kind.Homework] }
-        assertTrue(tried.any { it != null && it != 30 })
-    }
-
-    @Test
     fun `a multiplier gone back to its fallback is said`() {
         val previous = Calibration(multipliers = mapOf("Homework|12.1 Physics" to 1.5))
-        val learned = Calibrator.learn(ActivityLog(), previous, defaultBox = 45, week = 1, today = LocalDate.parse("2026-10-11"))
+        val learned = Calibrator.learn(ActivityLog(), previous, today = LocalDate.parse("2026-10-11"))
         assertTrue(learned.changes.any { "Homework in 12.1 Physics takes ×1.00" in it }, learned.changes.toString())
     }
 
@@ -209,15 +136,8 @@ class CalibratorTest {
     }
 
     @Test
-    fun `a box length gone back to the default is said`() {
-        val previous = Calibration(boxMin = mapOf(Kind.Homework to 25))
-        val learned = Calibrator.learn(ActivityLog(), previous, defaultBox = 45, week = 1, today = LocalDate.parse("2026-10-11"))
-        assertTrue(learned.changes.any { "Homework: pieces of 45 minutes" in it }, learned.changes.toString())
-    }
-
-    @Test
     fun `what changed is said in words`() {
-        val learned = Calibrator.learn(ActivityLog(completions = listOf(done("a", worked = 80))), Calibration(), defaultBox = 45, week = 1, today = LocalDate.parse("2026-10-11"))
+        val learned = Calibrator.learn(ActivityLog(completions = listOf(done("a", worked = 80))), Calibration(), today = LocalDate.parse("2026-10-11"))
         // One timed piece: the kind's figure, not yet the class's own (IMP-P2-016).
         assertTrue(learned.changes.any { "Homework, any class takes ×1.30" in it }, learned.changes.toString())
         assertTrue(learned.changes.none { "12.1 Physics" in it }, learned.changes.toString())
@@ -239,46 +159,46 @@ class YieldTest {
     fun `a kind of day's yield is the median of done over planned, once it has seven days`() {
         // Six weekend days aren't enough; a seventh gives the median of the seven: 60 %.
         val shares = listOf(90, 40, 60, 100, 55, 70, 50)
-        assertNull(Calibrator.yields(weekends(6) { shares[it] }, sunday)[DayKind.Weekend])
-        assertEquals(0.6, Calibrator.yields(weekends(7) { shares[it] }, sunday)[DayKind.Weekend]!!, 1e-9)
-        assertEquals(7, Calibrator.yieldDays(weekends(7) { shares[it] }, sunday)[DayKind.Weekend])
+        assertNull(Calibrator.yields(weekends(6) { shares[it] }, emptyList(), sunday)[DayKind.Weekend])
+        assertEquals(0.6, Calibrator.yields(weekends(7) { shares[it] }, emptyList(), sunday)[DayKind.Weekend]!!, 1e-9)
+        assertEquals(7, Calibrator.yieldDays(weekends(7) { shares[it] }, emptyList(), sunday)[DayKind.Weekend])
         // A day with nothing planned, or not yet finished, isn't one to judge by.
         val idle = weekends(6) { shares[it] } + day("2026-10-03", 0, 0) + day("2026-09-27", 100, null)
-        assertNull(Calibrator.yields(idle, sunday)[DayKind.Weekend])
+        assertNull(Calibrator.yields(idle, emptyList(), sunday)[DayKind.Weekend])
         // Only the last fourteen of a kind count: older days are left out.
         val old = weekends(14) { 100 } + weekends(30) { 20 }.drop(14)
-        assertEquals(1.0, Calibrator.yields(old, sunday)[DayKind.Weekend]!!, 1e-9)
+        assertEquals(1.0, Calibrator.yields(old, emptyList(), sunday)[DayKind.Weekend]!!, 1e-9)
     }
 
     @Test
     fun `a yield is kept between a half and the whole of a day's free time`() {
         // Seven weekends at 40 %: half their time (PL-06's Done when); doing more than planned is all of it.
-        assertEquals(Calibrator.MIN_YIELD, Calibrator.yields(weekends(7) { 40 }, sunday)[DayKind.Weekend]!!, 1e-9)
-        assertEquals(Calibrator.MAX_YIELD, Calibrator.yields(weekends(7) { 130 }, sunday)[DayKind.Weekend]!!, 1e-9)
+        assertEquals(Calibrator.MIN_YIELD, Calibrator.yields(weekends(7) { 40 }, emptyList(), sunday)[DayKind.Weekend]!!, 1e-9)
+        assertEquals(Calibrator.MAX_YIELD, Calibrator.yields(weekends(7) { 130 }, emptyList(), sunday)[DayKind.Weekend]!!, 1e-9)
     }
 
     @Test
     fun `each kind of day learns its own, so bad Saturdays don't move the weekdays`() {
         val weekdays = generateSequence(LocalDate.parse("2026-10-16")) { it.minusDays(1) }.filter { DayKind.of(it) == DayKind.Weekday }.take(7)
             .map { day(it.toString(), 100, 100) }.toList()
-        val yields = Calibrator.yields(weekends(7) { 30 } + weekdays, sunday)
+        val yields = Calibrator.yields(weekends(7) { 30 } + weekdays, emptyList(), sunday)
         assertEquals(0.5, yields[DayKind.Weekend]!!, 1e-9)
         assertEquals(1.0, yields[DayKind.Weekday]!!, 1e-9)
         // A record kept before kinds were is told by its date; one saying its kind is taken at its word.
         assertEquals(DayKind.Weekend, DayKind.of(LocalDate.parse("2026-10-17")))
         val said = weekdays.map { it.copy(kind = DayKind.Weekend) }
-        assertNull(Calibrator.yields(said, sunday)[DayKind.Weekday])
+        assertNull(Calibrator.yields(said, emptyList(), sunday)[DayKind.Weekday])
     }
 
     @Test
     fun `the review says when a kind of day's yield moves`() {
         val log = ActivityLog(days = weekends(7) { 40 })
-        val learned = Calibrator.learn(log, Calibration(), defaultBox = 45, week = 1, today = sunday)
+        val learned = Calibrator.learn(log, Calibration(), today = sunday)
         assertEquals(0.5, learned.calibration.yieldFor(DayKind.Weekend), 1e-9)
         assertEquals(1.0, learned.calibration.yieldFor(DayKind.Weekday), 1e-9)
         assertTrue("Weekends hold about 50 % of their free time now (was 100 %)" in learned.changes, "${learned.changes}")
         // Learned again from the same days: nothing to say.
-        assertTrue(Calibrator.learn(log, learned.calibration, defaultBox = 45, week = 1, today = sunday).changes.none { "free time" in it })
+        assertTrue(Calibrator.learn(log, learned.calibration, today = sunday).changes.none { "free time" in it })
     }
 }
 
@@ -399,12 +319,19 @@ class CalendarQuestionsTest {
 }
 
 class DaysTest {
+    /** A slot of [taskId]'s kept with [worked] minutes, laid at [start] (LR-09). */
+    private fun kept(taskId: String, worked: Int, start: String) = SlotRecord(
+        date = start.take(10), key = "$taskId#-1#1", taskId = taskId, kind = Kind.Homework, label = taskId, plannedMin = worked,
+        start = Fixtures.at(start), end = Fixtures.at(start) + worked * 60_000L, window = WindowKind.Evening, outcome = SlotOutcome.Kept,
+        workedMin = worked, at = Fixtures.at(start) + worked * 60_000L,
+    )
+
     @Test
     fun `a day is done in full when its tasks were confirmed done or worked for their minutes`() {
         val day = DayRecord("2026-10-09", 70, listOf(DayChunk("teams:a", 40), DayChunk("teams:b", 30)))
         val log = ActivityLog(
             completions = listOf(done("teams:a", doneAt = Fixtures.at("2026-10-09T20:00"))),
-            sessions = listOf(SessionRecord("teams:b", Kind.Homework, label = "b", plannedMin = 30, workedMin = 20, startedAt = Fixtures.at("2026-10-09T18:00"), endedAt = 0, completed = false)),
+            slots = listOf(kept("teams:b", 20, "2026-10-09T18:00")),
         )
         val finished = Days.finish(day, log, LONDON)
         assertEquals(60, finished.doneMin)
@@ -420,9 +347,9 @@ class DaysTest {
 
     @Test
     fun `a day is finished by its own midnights, wherever the phone is now`() {
-        // Planned in London; a session at 23:30 there is that day's, though it's the next day in Tokyo.
+        // Planned in London; a slot at 21:30 there is that day's, though it's the next day in Tokyo.
         val day = DayRecord("2026-10-09", 30, listOf(DayChunk("teams:a", 30)), zone = "Europe/London")
-        val log = ActivityLog(sessions = listOf(SessionRecord("teams:a", Kind.Homework, label = "a", plannedMin = 30, workedMin = 30, startedAt = Fixtures.at("2026-10-09T23:30"), endedAt = 0, completed = true)))
+        val log = ActivityLog(slots = listOf(kept("teams:a", 30, "2026-10-09T21:30")))
         assertEquals(30, Days.finish(day, log, java.time.ZoneId.of("Asia/Tokyo")).doneMin)
     }
 
@@ -431,7 +358,7 @@ class DaysTest {
         val day = DayRecord("2026-10-09", 90, listOf(DayChunk("teams:a", 30), DayChunk("teams:b", 30), DayChunk("teams:c", 30)), zone = "Europe/London")
         val log = ActivityLog(
             completions = listOf(done("teams:a", doneAt = Fixtures.at("2026-10-09T17:30"))),
-            sessions = listOf(SessionRecord("teams:b", Kind.Homework, label = "b", plannedMin = 30, workedMin = 10, startedAt = Fixtures.at("2026-10-09T18:00"), endedAt = 0, completed = false)),
+            slots = listOf(kept("teams:b", 10, "2026-10-09T18:00")),
         )
         // The evening's event takes most of it: today now holds b's last 20 minutes; c has moved on.
         val again = Days.replan(day, listOf(DayChunk("teams:b", 20)), log, Fixtures.at("2026-10-09T18:30"), LONDON)
@@ -443,10 +370,11 @@ class DaysTest {
     }
 
     @Test
-    fun `a session across midnight counts on each day only its own minutes`() {
-        val log = ActivityLog(sessions = listOf(SessionRecord("teams:a", Kind.Homework, label = "a", plannedMin = 180, workedMin = 180, startedAt = Fixtures.at("2026-10-09T23:30"), endedAt = 0, completed = true)))
+    fun `a kept slot counts on the day it was laid, and a missed one not at all`() {
+        val missed = kept("teams:a", 30, "2026-10-09T19:00").copy(outcome = SlotOutcome.Missed, workedMin = 0)
+        val log = ActivityLog(slots = listOf(kept("teams:a", 30, "2026-10-09T23:00"), missed))
         assertEquals(30, Days.finish(DayRecord("2026-10-09", 60, listOf(DayChunk("teams:a", 60)), zone = "Europe/London"), log, LONDON).doneMin)
-        assertEquals(150, Days.finish(DayRecord("2026-10-10", 200, listOf(DayChunk("teams:a", 200)), zone = "Europe/London"), log, LONDON).doneMin)
+        assertEquals(0, Days.finish(DayRecord("2026-10-10", 60, listOf(DayChunk("teams:a", 60)), zone = "Europe/London"), log, LONDON).doneMin)
     }
 
     @Test

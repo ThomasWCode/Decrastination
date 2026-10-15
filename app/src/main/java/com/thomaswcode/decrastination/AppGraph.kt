@@ -234,14 +234,14 @@ class AppGraph private constructor(context: Context) {
         )
     }
 
-    /** Minutes of focus sessions and photo checks today, as the day's record counts them. */
+    /** Minutes worked in today's kept slots, as the day's record counts them (LR-09). */
     private fun workedToday(now: Long, zone: java.time.ZoneId): Int {
         val start = java.time.Instant.ofEpochMilli(now).atZone(zone).toLocalDate().atStartOfDay(zone).toInstant().toEpochMilli()
-        return log.value.sessions.sumOf { com.thomaswcode.decrastination.learn.Days.minutesIn(it, start, now + 1) }
+        return com.thomaswcode.decrastination.learn.Days.workedIn(log.value, start, now + 1).values.sum()
     }
 
     /** The blocker's state and decisions (block/Focus.kt). */
-    val focus = Focus(tasks, settings, runtime, log, clock) { state, s, now -> plan(state, s, now) }
+    val focus = Focus(tasks, settings, runtime, log, clock, onOwnTaskDone = { finishOwnTask(it) }) { state, s, now -> plan(state, s, now) }
 
     /**
      * The plan made again as what it depends on changes (PL-13): today's slot starts kept, then the
@@ -1427,10 +1427,15 @@ class AppGraph private constructor(context: Context) {
     private suspend fun setApplied(id: String) {
         makeOnSchool(id)
         makeOnOwnTasks(id)
-        // A time, a day or a start you gave a task moves it on purpose: its missed slots are forgotten (PL-13).
+        // A time, a day or a start you gave a task moves it on purpose: its slots today are recorded
+        // moved (LR-09), as they were, and its missed slots forgotten (PL-13).
         val moved = instructions.value.instructions.firstOrNull { it.id == id }?.changes.orEmpty()
             .filter { it.type == ChangeType.AtTime || it.type == ChangeType.OnDay || it.type == ChangeType.StartFrom }.mapNotNull { it.taskId }
-        if (moved.isNotEmpty()) runtime.update { state -> state.copy(slots = moved.fold(state.slots) { s, taskId -> s.moved(taskId) }) }
+        if (moved.isNotEmpty()) {
+            focus.plan().todaySlots.filter { it.kind == SlotKind.Work && it.chunk?.taskId in moved }
+                .forEach { slot -> focus.moveSlot(slot.key, Focus.Laid(slot.start, slot.end, slot.window)) }
+            runtime.update { state -> state.copy(slots = moved.fold(state.slots) { s, taskId -> s.moved(taskId) }) }
+        }
         instructions.update { state ->
             state.copy(instructions = state.instructions.map { if (it.id == id && it.state == InstructionStatus.Understood) it.copy(state = InstructionStatus.Applied, appliedAt = clock.now()) else it })
         }

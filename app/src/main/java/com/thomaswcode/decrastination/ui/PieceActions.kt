@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.thomaswcode.decrastination.AppGraph
+import com.thomaswcode.decrastination.block.Credit
 import com.thomaswcode.decrastination.block.Focus
 import com.thomaswcode.decrastination.block.PhotoChecks
 import com.thomaswcode.decrastination.block.Sessions
@@ -29,6 +30,7 @@ import com.thomaswcode.decrastination.core.Chunk
 import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.Source
 import java.io.File
+import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 
 /**
@@ -130,14 +132,30 @@ fun PieceActions(graph: AppGraph, activity: Activity, piece: Chunk, now: Long, p
         } else {
             OutlinedButton(onClick = { scope.launch { Sessions.end(activity, early = true) } }) { Text("Stop session") }
         }
+        // This piece done (LR-09): its slot kept, earning its free time if it's short (a longer one's
+        // photo earns it, BL-08).
+        FilledTonalButton(onClick = {
+            scope.launch {
+                val earns = piece.minutes < graph.settings.value.photoFromMin
+                val kept = graph.focus.keepSlot(piece.key, seenAt = now)
+                val free = Format.minutes(Credit.forSlot(piece.minutes, graph.settings.value.workMinPerFreeMin).roundToInt().coerceAtLeast(1))
+                say(
+                    when {
+                        !kept -> "That piece has changed since (done, or planned again)."
+                        earns -> "Done: $free free."
+                        else -> "Done. A photo check of it earns its $free free."
+                    },
+                )
+            }
+        }) { Text("Done") }
         if (piece.source == Source.Own) {
-            // Yours: nothing to ask, so done is your say (2.0.0), earning no free time.
+            // Yours: nothing to ask, so all of it done is your say (2.0.0), earning no free time.
             OutlinedButton(onClick = {
                 scope.launch {
                     graph.finishOwnTask(piece.taskId)
-                    say("Done. It earns no free time; its sessions earned theirs.")
+                    say("All of it done. It earns no free time; its pieces earned theirs.")
                 }
-            }) { Text("Done") }
+            }) { Text("All of it done") }
         } else OutlinedButton(onClick = {
             val task = tasks.tasks.firstOrNull { it.id == piece.taskId } ?: return@OutlinedButton
             say("Asking ${task.source.label}…")

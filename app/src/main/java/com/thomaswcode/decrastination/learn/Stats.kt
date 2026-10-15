@@ -3,6 +3,7 @@ package com.thomaswcode.decrastination.learn
 import com.thomaswcode.decrastination.core.Calibration
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.data.ActivityLog
+import com.thomaswcode.decrastination.data.SlotOutcome
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -10,8 +11,8 @@ import java.util.Locale
 
 /**
  * What the Stats tab shows (PLAN.md Phase 6), from the activity log: each recent day's finished
- * work, focus minutes and blocks, the period's totals, and the calibration in words. Pure, for
- * the tests.
+ * work, minutes of kept slots (LR-09) and blocks, the period's totals, and the calibration in
+ * words. Pure, for the tests.
  */
 object Stats {
     /** How far back the tab looks. */
@@ -20,7 +21,8 @@ object Stats {
     data class Day(
         val date: LocalDate,
         val completions: Int,
-        val focusMin: Int,
+        /** Minutes of work in the day's kept slots. */
+        val slotMin: Int,
         val blocks: Int,
         /** The morning's plan all done (true), not all (false), or not recorded or not over yet (null). */
         val planDone: Boolean?,
@@ -33,12 +35,13 @@ object Stats {
         /** Completions that had a real deadline (PL-14: not a date the app or Claude set), and of them, those confirmed done by it. */
         val dated: Int,
         val onTime: Int,
-        val sessions: Int,
-        /** Sessions run to their end. */
-        val sessionsFinished: Int,
+        /** Slots with an outcome (kept, kept late or missed; not moved), and of them those kept, and those that earned free time. */
+        val slotsPlanned: Int,
+        val slotsKept: Int,
+        val slotsEarned: Int = 0,
         /** Pieces a photo check found done. */
         val photoChecks: Int = 0,
-        val focusMin: Int,
+        val slotMin: Int,
         val blocks: Int,
         /** What was covered most, with how often: a package or a site. */
         val topBlocked: List<Pair<String, Int>>,
@@ -53,13 +56,10 @@ object Stats {
         fun dateOf(at: Long): LocalDate = Instant.ofEpochMilli(at).atZone(zone).toLocalDate()
         fun inRange(at: Long): Boolean = dateOf(at).let { !it.isBefore(first) && !it.isAfter(today) }
         val completions = log.completions.filter { inRange(it.doneAt) }
-        // Timed focus sessions; work a photo check found done is counted as such, apart. Their
-        // minutes go to the days they fell in: one across midnight is split between them.
-        val sessions = log.sessions.filter { inRange(it.startedAt) && !it.photo }
-        val timed = log.sessions.filter { !it.photo }
-        fun startOf(date: LocalDate): Long = date.atStartOfDay(zone).toInstant().toEpochMilli()
-        fun minutesOn(date: LocalDate): Int = timed.sumOf { Days.minutesIn(it, startOf(date), startOf(date.plusDays(1))) }
-        val photos = log.sessions.filter { inRange(it.startedAt) && it.photo }
+        // The slots with an outcome, by the day each was laid in (LR-09): a deliberate move is neither.
+        val slots = log.slots.filter { inRange(it.start) && it.outcome != SlotOutcome.Moved }
+        val kept = slots.filter { it.outcome.kept }
+        fun minutesOn(date: LocalDate): Int = kept.filter { dateOf(it.start) == date }.sumOf { it.workedMin }
         val blocks = log.blocks.filter { inRange(it.at) }
         val protection = log.protection.filter { inRange(it.at) }
         val plans = log.days.associateBy { it.date }
@@ -68,7 +68,7 @@ object Stats {
             Day(
                 date = date,
                 completions = completions.count { dateOf(it.doneAt) == date },
-                focusMin = minutesOn(date),
+                slotMin = minutesOn(date),
                 blocks = blocks.count { dateOf(it.at) == date },
                 planDone = plans[date.toString()]?.full,
             )
@@ -80,10 +80,11 @@ object Stats {
             completions = completions.size,
             dated = dated.size,
             onTime = dated.count { it.doneAt <= it.dueAt!! },
-            sessions = sessions.size,
-            sessionsFinished = sessions.count { it.completed },
-            photoChecks = photos.size,
-            focusMin = timed.sumOf { Days.minutesIn(it, startOf(first), startOf(today.plusDays(1))) },
+            slotsPlanned = slots.size,
+            slotsKept = kept.size,
+            slotsEarned = kept.count { it.earned },
+            photoChecks = kept.count { it.photo },
+            slotMin = kept.sumOf { it.workedMin },
             blocks = blocks.size,
             topBlocked = blocks.groupingBy { it.target }.eachCount().entries
                 .sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key })
@@ -115,13 +116,12 @@ object Stats {
         val margins = calibration.marginDays.entries.sortedBy { it.key.ordinal }.map { (kind, days) ->
             "${kind.label}: finished $days day${if (days == 1) "" else "s"} before the deadline"
         }
-        val boxes = calibration.boxMin.entries.sortedBy { it.key.ordinal }.map { (kind, minutes) -> "${kind.label}: cut into $minutes-minute pieces" }
         // How much of each kind of day's free time is used (PL-06), and the days it rests on.
         val yields = calibration.yields.entries.sortedBy { it.key.ordinal }.map { (kind, share) ->
             val n = calibration.yieldDays[kind] ?: 0
             "${kind.label}: about ${kotlin.math.round(share * 100).toInt()} % of the free time used" + if (n > 0) " (from $n days)" else ""
         }
-        return multipliers + coming + margins + boxes + yields
+        return multipliers + coming + margins + yields
     }
 
     private const val TOP = 5

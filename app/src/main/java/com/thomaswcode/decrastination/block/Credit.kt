@@ -33,6 +33,9 @@ data class Credit(val day: String = "", val earnedMs: Long = 0, val spentMs: Lon
         /** A finished focus session of [minutes] earns a third of them (with the default ratio). */
         fun forSession(minutes: Int, workMinPerFreeMin: Int): Double = minutes.toDouble() / workMinPerFreeMin.coerceAtLeast(1)
 
+        /** A kept slot of [minutes] earns a third of them (with the default ratio), BL-08. */
+        fun forSlot(minutes: Int, workMinPerFreeMin: Int): Double = minutes.toDouble() / workMinPerFreeMin.coerceAtLeast(1)
+
         /**
          * A task the source confirms done earns its remaining estimate at the same rate, the work
          * no session counted, up to 30 minutes (docs/scheduler.md §4's ceiling). There's no floor:

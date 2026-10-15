@@ -36,6 +36,11 @@ data class Settings(
     val outsideBreaks: Int = 3,
     val outsideBreakMin: Int = 20,
     val outsideTimes: List<Int> = listOf(9 * 60 + 30, 13 * 60, 16 * 60),
+    /**
+     * A piece this long or longer earns its free time when a photo shows it done, not on its tick
+     * (BL-08): a short one's tick is taken at its word.
+     */
+    val photoFromMin: Int = 20,
     /** The calendar the plan's slots are written to (NF-07), by its id on the phone: none till you pick one. */
     val calendarWriteId: Long? = null,
     /** Calendars not read for busy time (DX-13), by id: the one written to never is. */

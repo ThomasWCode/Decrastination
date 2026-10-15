@@ -65,6 +65,8 @@ object SettingsChanges {
         "outsideBreaks" to NEVER,
         "outsideBreakMin" to NEVER,
         "outsideTimes" to NEVER,
+        // A higher line means more pieces earn on a tick, without a photo.
+        "photoFromMin" to { old, new -> new.photoFromMin > old.photoFromMin },
         "calendarWriteId" to NEVER,
         "calendarsExcluded" to NEVER,
         "marginDays" to NEVER,
@@ -106,6 +108,7 @@ object SettingsChanges {
         "outsideBreaks" to "Breaks outside on a free day",
         "outsideBreakMin" to "Each break outside (minutes)",
         "outsideTimes" to "Breaks outside at or after",
+        "photoFromMin" to "Pieces this long earn with a photo (minutes)",
         "calendarWriteId" to "Calendar written to",
         "calendarsExcluded" to "Calendars not read",
         "marginDays" to "Safety margin (days)",

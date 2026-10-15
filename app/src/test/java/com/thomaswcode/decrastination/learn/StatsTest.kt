@@ -10,7 +10,9 @@ import com.thomaswcode.decrastination.data.ActivityLog
 import com.thomaswcode.decrastination.data.BlockRecord
 import com.thomaswcode.decrastination.data.CompletionRecord
 import com.thomaswcode.decrastination.data.ProtectionRecord
-import com.thomaswcode.decrastination.data.SessionRecord
+import com.thomaswcode.decrastination.data.SlotOutcome
+import com.thomaswcode.decrastination.data.SlotRecord
+import com.thomaswcode.decrastination.core.WindowKind
 import java.time.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -30,15 +32,11 @@ class StatsTest {
         doneAt = Fixtures.at(done),
     )
 
-    private fun session(start: String, minutes: Int, completed: Boolean) = SessionRecord(
-        taskId = "teams:t",
-        kind = Kind.Homework,
-        label = "t",
-        plannedMin = 30,
-        workedMin = minutes,
-        startedAt = Fixtures.at(start),
-        endedAt = Fixtures.at(start) + minutes * 60_000L,
-        completed = completed,
+    /** A 30-minute slot laid at [start], with how it went and the minutes worked in it. */
+    private fun slot(start: String, outcome: SlotOutcome, worked: Int = if (outcome.kept) 30 else 0, earned: Boolean = false, photo: Boolean = false) = SlotRecord(
+        date = start.take(10), key = "teams:t#-1#1", taskId = "teams:t", kind = Kind.Homework, label = "t", plannedMin = 30,
+        start = Fixtures.at(start), end = Fixtures.at(start) + 30 * 60_000L, window = WindowKind.Evening, outcome = outcome,
+        workedMin = worked, photo = photo, earned = earned, at = Fixtures.at(start) + 30 * 60_000L,
     )
 
     @Test
@@ -53,7 +51,13 @@ class StatsTest {
                 // Three weeks ago: out of the fortnight.
                 completion("old", "2026-09-18T18:00", due = null),
             ),
-            sessions = listOf(session("2026-10-09T17:00", 30, completed = true), session("2026-10-08T17:00", 12, completed = false)),
+            // Kept today, earning; yesterday one missed, one kept late with ten more minutes, one moved (neither).
+            slots = listOf(
+                slot("2026-10-09T17:00", SlotOutcome.Kept, earned = true),
+                slot("2026-10-08T17:00", SlotOutcome.Missed),
+                slot("2026-10-08T18:00", SlotOutcome.KeptLate, worked = 40, photo = true),
+                slot("2026-10-08T19:00", SlotOutcome.Moved),
+            ),
             blocks = listOf(
                 BlockRecord(Fixtures.at("2026-10-09T17:40"), "com.google.android.youtube", "DueSoon"),
                 BlockRecord(Fixtures.at("2026-10-09T18:40"), "com.google.android.youtube", "DueSoon"),
@@ -69,29 +73,29 @@ class StatsTest {
         // Two had real deadlines; one was met.
         assertEquals(2, stats.dated)
         assertEquals(1, stats.onTime)
-        assertEquals(2, stats.sessions)
-        assertEquals(0, stats.photoChecks)
-        assertEquals(1, stats.sessionsFinished)
-        assertEquals(42, stats.focusMin)
+        assertEquals(3, stats.slotsPlanned)
+        assertEquals(2, stats.slotsKept)
+        assertEquals(1, stats.slotsEarned)
+        assertEquals(1, stats.photoChecks)
+        assertEquals(70, stats.slotMin)
         assertEquals(listOf("com.google.android.youtube" to 2, "youtube.com" to 1), stats.topBlocked)
         assertEquals(1, stats.protectionProblems)
         assertEquals(1, stats.protectionRepaired)
         val today = stats.days[0]
-        assertEquals(listOf(1, 30, 2), listOf(today.completions, today.focusMin, today.blocks))
+        assertEquals(listOf(1, 30, 2), listOf(today.completions, today.slotMin, today.blocks))
         assertEquals(null, today.planDone)
         val yesterday = stats.days[1]
-        assertEquals(listOf(3, 12, 1), listOf(yesterday.completions, yesterday.focusMin, yesterday.blocks))
+        assertEquals(listOf(3, 40, 1), listOf(yesterday.completions, yesterday.slotMin, yesterday.blocks))
         assertEquals(true, yesterday.planDone)
     }
 
     @Test
-    fun `a session across midnight counts on each day only its own minutes`() {
-        // 23:30 to 02:30: 30 minutes on the 7th, 150 on the 8th.
-        val log = ActivityLog(sessions = listOf(session("2026-10-07T23:30", 180, completed = true)))
-        val summary = Stats.summary(log, now, LONDON)
-        assertEquals(30, summary.days.single { it.date.toString() == "2026-10-07" }.focusMin)
-        assertEquals(150, summary.days.single { it.date.toString() == "2026-10-08" }.focusMin)
-        assertEquals(180, summary.focusMin)
+    fun `a slot counts on the day it was laid, kept whenever it was ticked`() {
+        // Laid on the 7th at 21:30, ticked after midnight: the 7th's.
+        val late = slot("2026-10-07T21:30", SlotOutcome.KeptLate).copy(at = Fixtures.at("2026-10-08T00:20"))
+        val summary = Stats.summary(ActivityLog(slots = listOf(late)), now, LONDON)
+        assertEquals(30, summary.days.single { it.date.toString() == "2026-10-07" }.slotMin)
+        assertEquals(0, summary.days.single { it.date.toString() == "2026-10-08" }.slotMin)
     }
 
     @Test
@@ -99,7 +103,6 @@ class StatsTest {
         val calibration = Calibration(
             multipliers = mapOf("Homework|Physics" to 1.34, "Homework|" to 1.1, "Revision|" to 0.9),
             marginDays = mapOf(Kind.Revision to 2),
-            boxMin = mapOf(Kind.Homework to 45),
             timed = mapOf("Homework|Physics" to 4, "Homework|" to 6, "Homework|German" to 2),
             yields = mapOf(DayKind.Weekend to 0.55),
             yieldDays = mapOf(DayKind.Weekend to 9),
@@ -111,7 +114,6 @@ class StatsTest {
                 "Revision: takes 0.9× the estimate (from your answers)",
                 "Homework, German: 2 timed pieces so far; its own figure counts from 3",
                 "Revision: finished 2 days before the deadline",
-                "Homework: cut into 45-minute pieces",
                 "Weekends: about 55 % of the free time used (from 9 days)",
             ),
             Stats.calibrationLines(calibration),

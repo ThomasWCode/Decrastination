@@ -3,6 +3,14 @@ package com.thomaswcode.decrastination.block
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.Fixtures.LONDON
 import com.thomaswcode.decrastination.core.Calibration
+import java.time.LocalDate
+import com.thomaswcode.decrastination.data.SlotOutcome
+import com.thomaswcode.decrastination.core.WindowKind
+import com.thomaswcode.decrastination.core.Slotter
+import com.thomaswcode.decrastination.core.SlotState
+import com.thomaswcode.decrastination.core.SlotKind
+import com.thomaswcode.decrastination.core.Slot
+import com.thomaswcode.decrastination.core.DayWindow
 import com.thomaswcode.decrastination.core.FixedClock
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.Planner
@@ -717,5 +725,139 @@ class FocusTest {
         assertEquals(0L, session.leftMs(clock.time + 40 * 60_000L, Uptime(1, 40 * 60_000L)))
         // Across a restart, by the wall clock.
         assertEquals(20 * 60_000L, session.leftMs(clock.time + 10 * 60_000L, Uptime(2, 1_000L)))
+    }
+
+    // --- Slots kept, missed and moved (LR-09); what a kept slot earns (BL-08) ---
+
+    private val monday = LocalDate.parse("2026-10-12")
+    private val evening = mapOf(monday to listOf(DayWindow(17 * 60, 22 * 60, WindowKind.Evening)))
+    private val ownDone = mutableListOf<String>()
+    private fun input(state: TaskState, s: Settings, now: Long) =
+        Planner.Input(state.tasks, now, LONDON, s, windows = evening, previousSlots = runtime.value.slots.on(monday).previous)
+    private val slotted = Focus(tasks, settings, runtime, log, clock, onOwnTaskDone = { ownDone += it }) { state, s, now -> Planner.plan(input(state, s, now)) }
+
+    /** Monday 16:00 with [list] planned into the evening, its starts kept as the watcher keeps them: its work slots. */
+    private suspend fun laid(vararg list: TaskItem): List<Slot> {
+        clock.time = Fixtures.at("2026-10-12T16:00")
+        tasks.update { it.copy(tasks = list.toList()) }
+        val work = Planner.plan(input(tasks.value, settings.value, clock.time)).todaySlots.filter { it.kind == SlotKind.Work }
+        runtime.update { it.copy(slots = SlotState(monday.toString(), previous = work.associate { s -> s.chunk!!.key to s.start })) }
+        return work
+    }
+
+    private fun steps() = listOf(SubStep("Q1-8", 30), SubStep("Q9-16", 30))
+
+    @Test
+    fun `keeping a slot ticks its step, records it and adds its minutes`() = runTest {
+        val first = laid(task("t", due = "2026-10-12T23:59", steps = steps(), effort = 60)).first()
+        val key = first.chunk!!.key
+        clock.time = first.end
+        assertTrue(slotted.keepSlot(key, extraMin = 5))
+        val t = tasks.value.tasks.single()
+        assertEquals(listOf(true, false), t.subSteps.map { it.done })
+        assertEquals(35, t.subSteps[0].timedMin)
+        assertEquals(35, t.workedMin)
+        val record = log.value.slots.single()
+        assertEquals(SlotOutcome.Kept, record.outcome)
+        assertEquals(first.start to first.end, record.start to record.end)
+        assertEquals(30 to 35, record.plannedMin to record.workedMin)
+        // Off the starts the plan keeps; kept again, nothing, as its step is done.
+        assertFalse(key in runtime.value.slots.previous)
+        assertFalse(slotted.keepSlot(key))
+        assertEquals(1, log.value.slots.size)
+    }
+
+    @Test
+    fun `a missed slot is recorded once, and kept after it is kept late where it was laid`() = runTest {
+        val first = laid(task("t", due = "2026-10-12T23:59", steps = steps(), effort = 60)).first()
+        val key = first.chunk!!.key
+        // Its end and grace go by: missed, as its alarm says, and said again changes nothing.
+        clock.time = first.end + Slotter.GRACE_MS + 60_000L
+        repeat(2) { slotted.missSlot(key, Focus.Laid(first.start, first.end, first.window)) }
+        runtime.update { it.copy(slots = it.slots.on(monday).missed(key, first.chunk!!.taskId, clock.time)) }
+        assertEquals(SlotOutcome.Missed, log.value.slots.single().outcome)
+        // Ticked at 19:00 after all: the one slot it was, kept late, at its own time.
+        clock.time = Fixtures.at("2026-10-12T19:00")
+        assertTrue(slotted.keepSlot(key))
+        val record = log.value.slots.single()
+        assertEquals(SlotOutcome.KeptLate, record.outcome)
+        assertEquals(first.start to 30, record.start to record.workedMin)
+    }
+
+    @Test
+    fun `a slot can't be kept twice, by a second tap or two at once`() = runTest {
+        val first = laid(task("box", due = "2026-10-12T23:59", effort = 60)).first()
+        val key = first.chunk!!.key
+        val seen = clock.time
+        clock.time = first.end
+        val both = listOf(async { slotted.keepSlot(key, seenAt = seen) }, async { slotted.keepSlot(key, seenAt = seen) }).awaitAll()
+        assertEquals(1, both.count { it })
+        assertEquals(30, tasks.value.tasks.single().workedMin)
+        assertEquals(1, log.value.slots.size)
+        // The next box, its key the same now, is kept by a tick seen after the first.
+        assertTrue(slotted.keepSlot(key, seenAt = clock.time + 1))
+        assertEquals(60, tasks.value.tasks.single().workedMin)
+    }
+
+    @Test
+    fun `one of your own whose work a kept slot finishes is finished`() = runTest {
+        val own = task("mine", due = "2026-10-12T23:59", effort = 30).copy(id = "own:mine", source = Source.Own)
+        val first = laid(own).single()
+        clock.time = first.end
+        assertTrue(slotted.keepSlot(first.chunk!!.key))
+        assertEquals(listOf("own:mine"), ownDone)
+    }
+
+    @Test
+    fun `a short piece earns on its tick, a longer one when its photo passes, once`() = runTest {
+        val slots = laid(task("short", due = "2026-10-12T23:59", effort = 15), task("long", due = "2026-10-12T23:59", effort = 30))
+        val short = slots.single { it.chunk!!.taskId == "teams:short" }
+        val long = slots.single { it.chunk!!.taskId == "teams:long" }
+        clock.time = long.end
+        // Under `photoFromMin` (20): a third of its 15 minutes on the tick.
+        assertTrue(slotted.keepSlot(short.chunk!!.key))
+        assertEquals(5 * 60_000L, slotted.creditLeftMs())
+        // 30 minutes: nothing on the tick; ten when its photo passes, and only once.
+        assertTrue(slotted.keepSlot(long.chunk!!.key))
+        assertEquals(5 * 60_000L, slotted.creditLeftMs())
+        assertFalse(log.value.slots.single { it.taskId == "teams:long" }.earned)
+        assertTrue(slotted.photoChecked("teams:long", null, 30, key = long.chunk!!.key))
+        assertEquals(15 * 60_000L, slotted.creditLeftMs())
+        assertTrue(log.value.slots.single { it.taskId == "teams:long" }.let { it.earned && it.photo })
+        assertFalse(slotted.photoChecked("teams:long", null, 30, key = long.chunk!!.key))
+        assertEquals(15 * 60_000L, slotted.creditLeftMs())
+    }
+
+    @Test
+    fun `a photo before the tick keeps the slot and earns`() = runTest {
+        val long = laid(task("long", due = "2026-10-12T23:59", effort = 30)).single()
+        clock.time = long.start + 10 * 60_000L
+        assertTrue(slotted.photoChecked("teams:long", null, 30, key = long.chunk!!.key))
+        val record = log.value.slots.single()
+        assertTrue(record.photo && record.earned)
+        assertEquals(10 * 60_000L, slotted.creditLeftMs())
+        // A tick after it finds it kept: nothing more.
+        assertFalse(slotted.keepSlot(long.chunk!!.key, seenAt = clock.time))
+        assertEquals(10 * 60_000L, slotted.creditLeftMs())
+    }
+
+    @Test
+    fun `slots earn no more than today's plan, beside what else earned`() = runTest {
+        // Tuesday's piece ticked on Monday too: Monday's plan was the 15 minutes, so 5 earned from slots.
+        val tuesday = monday.plusDays(1)
+        val both = evening + (tuesday to listOf(DayWindow(17 * 60, 22 * 60, WindowKind.Evening)))
+        val ahead = Focus(tasks, settings, runtime, log, clock) { state, s, now ->
+            Planner.plan(Planner.Input(state.tasks, now, LONDON, s, windows = both, previousSlots = runtime.value.slots.on(monday).previous))
+        }
+        laid(task("a", due = "2026-10-12T23:59", effort = 15), task("b", due = "2026-10-13T23:59", effort = 15).copy(notBefore = Fixtures.at("2026-10-13T00:00")))
+        // Ten minutes earned already today by a completion, which stands beside the plan's share.
+        runtime.update { it.copy(credit = it.credit.earn(monday, 10.0)) }
+        clock.time = Fixtures.at("2026-10-12T18:00")
+        assertTrue(ahead.keepSlot("teams:a#-1#1"))
+        assertEquals(15 * 60_000L, ahead.creditLeftMs())
+        // Handed in (Teams says so), so nothing of today's plan is left: tomorrow's piece earns nothing today.
+        tasks.update { state -> state.copy(tasks = state.tasks.map { if (it.id == "teams:a") it.copy(status = Status.Done, doneAt = clock.time) else it }) }
+        assertTrue(ahead.keepSlot("teams:b#-1#1"))
+        assertEquals(15 * 60_000L, ahead.creditLeftMs())
     }
 }
