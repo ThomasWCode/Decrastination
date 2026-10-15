@@ -102,6 +102,20 @@ class SlotterTest {
     }
 
     @Test
+    fun `a pin gone by is laid as any piece, where the last plan put it, rather than moving on`() {
+        // Pinned at 19:00 and missed: at 19:52 it's at the first free time, no longer pinned, and kept
+        // there at 19:58, where it's under way, rather than going on to the next five minutes at each
+        // plan and never beginning (PL-13).
+        val b = chunk("b")
+        val pin = mapOf(b.key to Fixtures.at("2026-10-13T19:00"))
+        val (first, _) = slot(tuesday, listOf(b), listOf(w("17:00", "22:00")), now = "2026-10-13T19:52", pins = pin)
+        assertEquals(listOf("b 19:55–20:25"), first.described())
+        assertTrue(!first.single().pinned)
+        val (later, _) = slot(tuesday, listOf(b), listOf(w("17:00", "22:00")), now = "2026-10-13T19:58", pins = pin, previous = mapOf(b.key to first.single().start))
+        assertEquals(listOf("b 19:55–20:25"), later.described())
+    }
+
+    @Test
     fun `a pin where its piece can't be done is laid where it can`() {
         // Work for home pinned in a study period: the evening's first free time, still pinned.
         val essay = chunk("essay", where = Where.Home)
