@@ -30,9 +30,11 @@ import kotlin.test.Test
  * 3. `score` puts every answer through the app's own checks ([Answers.parse]) and the planner, as
  *    the app would, and writes `private/eval/report.md`: each case's kind, deadline, minutes,
  *    must-mention items, blocks and sections against its labels.
+ *
+ * [EvalRunTest] does 1 and 2 through the API instead, a paid call a case, then 3.
  */
 class EvalSetTest {
-    private val dir = listOf(File("../private/eval"), File("private/eval")).firstOrNull { File(it, "cases.json").exists() }
+    internal val dir = listOf(File("../private/eval"), File("private/eval")).firstOrNull { File(it, "cases.json").exists() }
     private val zone: ZoneId = ZoneId.of("Europe/London")
 
     /** One case: the task as stored, when it's asked about, and what a right answer has. */
@@ -63,11 +65,11 @@ class EvalSetTest {
     }
 
     /** The cases a right answer can pass: one labelled Info can't, since starred emails are never only to read (AI-02). */
-    private fun cases(): List<Case> = allCases().filterNot(::retired)
+    internal fun cases(): List<Case> = allCases().filterNot(::retired)
 
     private fun retired(case: Case) = case.expect.kind == "Info"
 
-    private fun nowOf(case: Case): Long = LocalDateTime.parse(case.now).atZone(zone).toInstant().toEpochMilli()
+    internal fun nowOf(case: Case): Long = LocalDateTime.parse(case.now).atZone(zone).toInstant().toEpochMilli()
 
     @Test
     fun dump() {

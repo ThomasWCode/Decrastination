@@ -1,0 +1,47 @@
+{
+    "type": "object",
+    "properties": {
+        "note": {
+            "type": "array",
+            "items": {
+                "type": "string"
+            }
+        },
+        "changes": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "setting": {
+                        "type": "string",
+                        "enum": [
+                            "boxMin",
+                            "marginDays",
+                            "softMinPerDay",
+                            "workMinPerFreeMin",
+                            "weekdayHoursStart",
+                            "weekdayHoursEnd"
+                        ]
+                    },
+                    "value": {
+                        "type": "integer"
+                    },
+                    "why": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "setting",
+                    "value",
+                    "why"
+                ],
+                "additionalProperties": false
+            }
+        }
+    },
+    "required": [
+        "note",
+        "changes"
+    ],
+    "additionalProperties": false
+}

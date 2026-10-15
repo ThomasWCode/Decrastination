@@ -77,6 +77,12 @@ data class RuntimeState(
     val droppedAlerted: Map<String, String> = emptyMap(),
     /** "How was it?" questions kept while notifications couldn't be seen, to ask once they can. */
     val assessLater: List<AssessLater> = emptyList(),
+    /** When the nightly backup was last written (AR-07): null before the first. */
+    val lastBackupAt: Long? = null,
+    /** The week's check-in as Felix asks it (LR-02), its answers so far: null when none is being asked. */
+    val checkInDraft: com.thomaswcode.decrastination.learn.CheckInFlow.Draft? = null,
+    /** The model's last calls (AC-07), oldest first: [CallRecord.MAX] of them. */
+    val calls: List<CallRecord> = emptyList(),
     /** Pairs of tasks you've said aren't the same work (DX-15), by [com.thomaswcode.decrastination.core.Duplicates.key]: not asked about again. */
     val notSame: List<String> = emptyList(),
     /** Today's and tomorrow's pieces' first steps (AI-15), by piece key: written ahead, as the plan has them. */
@@ -142,6 +148,8 @@ data class ActivityLog(
     val reviews: List<WeeklyReview> = emptyList(),
     /** Felix's messages and the replies to them (AI-22, LR-03): the last [FELIX_KEEP_DAYS] days. */
     val felix: List<FelixRecord> = emptyList(),
+    /** Each reviewed week's totals (PL-10), kept [WEEKS_KEPT] weeks, past the [KEEP_DAYS] the rest is kept: Stats' longer periods read them. */
+    val weeks: List<WeekRollup> = emptyList(),
 ) {
     fun trimmed(now: Long): ActivityLog {
         val since = now - KEEP_DAYS * 24 * 3_600_000L
@@ -155,11 +163,15 @@ data class ActivityLog(
             checkIns = checkIns.filter { it.at >= since },
             reviews = reviews.filter { it.at >= since },
             felix = felix.filter { it.at >= now - FELIX_KEEP_DAYS * 24 * 3_600_000L },
+            weeks = weeks.sortedBy { it.week }.takeLast(WEEKS_KEPT),
         )
     }
 
     companion object {
         const val KEEP_DAYS = 120L
+
+        /** Two years of weeks. */
+        const val WEEKS_KEPT = 104
 
         /** His messages are many and matter for a few weeks: the review reads the last one's. */
         const val FELIX_KEEP_DAYS = 30L
@@ -268,6 +280,29 @@ data class WeeklyReview(
     val why: String? = null,
     /** What's remembered before and after the week's tidy, when there was one (AI-21): for the Reviews page to show, and undo. */
     val memoryTidy: MemoryTidyRecord? = null,
+    /** The changes it made to the settings (AI-18, LR-01), and each one's value before: next week's review reads them, and the Reviews page undoes them. */
+    val changes: List<com.thomaswcode.decrastination.learn.ReviewInput.Change> = emptyList(),
+    val settingsBefore: Map<String, Int> = emptyMap(),
+    /** The week's summary for home (NF-02), in the student's words: null till it's written. */
+    val summary: String? = null,
+)
+
+/**
+ * A week's totals (PL-10), written at its review: its kept slots' minutes, what was finished (and of
+ * that with a real deadline, how much by it), the blocks, the days whose plan was all done, and the
+ * slots kept and missed. [week] is its Monday.
+ */
+@Serializable
+data class WeekRollup(
+    val week: String,
+    val minutes: Int,
+    val finished: Int,
+    val onTime: Int,
+    val dated: Int = 0,
+    val blocks: Int,
+    val fullDays: Int,
+    val slotsKept: Int,
+    val slotsMissed: Int,
 )
 
 /** The facts remembered before a weekly tidy, and after it (AI-21). */
@@ -392,3 +427,44 @@ data class DailyRetry(val at: Long, val tries: Int)
 /** A finished task's "how was it?", kept to ask once notifications can be seen. */
 @Serializable
 data class AssessLater(val taskId: String, val title: String, val doneAt: Long? = null)
+
+/**
+ * One model call as it went (AC-07): when, its job and what it was about, how hard it thought, its
+ * tokens (in, out, and read from the cache), how long it took, why it stopped, how it went (used,
+ * repaired, salvaged, dropped:<why>, refused, failed:<why>, empty), and what it cost.
+ */
+@Serializable
+data class CallRecord(
+    val at: Long,
+    val job: String,
+    val title: String? = null,
+    val effort: String,
+    val inTokens: Long = 0,
+    val outTokens: Long = 0,
+    val cacheRead: Long = 0,
+    val latencyMs: Long = 0,
+    val stop: String? = null,
+    val outcome: String,
+    val costUsd: Double = 0.0,
+) {
+    /** All of it as the record's row shows it opened, to copy. */
+    fun details(zone: java.time.ZoneId): String = buildString {
+        append(java.time.Instant.ofEpochMilli(at).atZone(zone).toLocalDateTime().withNano(0).toString().replace('T', ' '))
+        append(" · ").append(job)
+        title?.let { append(" · “").append(it).append('”') }
+        append('\n').append("Effort ").append(effort).append(" · ").append(inTokens).append(" in")
+        if (cacheRead > 0) append(" (").append(cacheRead).append(" from the cache)")
+        append(", ").append(outTokens).append(" out · ").append("%.1f s".format(java.util.Locale.UK, latencyMs / 1000.0))
+        stop?.let { append(" · ").append(it) }
+        append('\n').append(outcome).append(" · ").append("$%.4f".format(java.util.Locale.UK, costUsd))
+    }
+
+    companion object {
+        /** The most kept: the last hundred. */
+        const val MAX = 100
+    }
+}
+
+/** These calls and [call], by when each began (one comes back after another sent since), as many as are kept. */
+fun List<CallRecord>.plusCall(call: CallRecord): List<CallRecord> = (this + call).sortedBy { it.at }.takeLast(CallRecord.MAX)
+

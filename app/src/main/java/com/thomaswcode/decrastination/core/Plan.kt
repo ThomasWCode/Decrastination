@@ -326,6 +326,13 @@ data class Calibration(
     val ankiSecondsPerCard: Map<Long, Double> = emptyMap(),
     /** How many stretches in AnkiDroid each of [ankiSecondsPerCard] rests on. */
     val ankiStretches: Map<Long, Int> = emptyMap(),
+    /**
+     * Kinds and classes (`Kind|class`) you've had forgotten (LR-06), each with when: their work
+     * finished before then teaches nothing, so they start afresh, from the kind's figure.
+     */
+    val forgotten: Map<String, Long> = emptyMap(),
+    /** Learned only from what came after this (LR-08's reset of the calibration): null, from all of the log. */
+    val learnFrom: Long? = null,
 ) {
     fun multiplier(kind: Kind, className: String?): Double =
         multipliers["${kind.name}|${className.orEmpty()}"] ?: multipliers["${kind.name}|"] ?: 1.0

@@ -33,6 +33,10 @@ interface Enricher {
         val repair: Repair? = null,
         /** This is the answer asked for again. */
         val repaired: Boolean = false,
+        /** What its call used (AC-07). */
+        val usage: ModelCalls.Usage = ModelCalls.Usage.NONE,
+        /** The answer's text as it came back, where one did: the scored eval run's (AR-02). */
+        val answer: String? = null,
     )
 }
 

@@ -52,19 +52,37 @@ object Calibrator {
     /** The calibration the log teaches, and what changed from [previous], in words. */
     data class Learned(val calibration: Calibration, val changes: List<String>)
 
-    fun learn(log: ActivityLog, previous: Calibration, today: LocalDate, defaultMargin: Int = MIN_MARGIN): Learned {
-        val multipliers = multipliers(log.completions)
-        val margins = margins(log.completions, defaultMargin)
+    /** Of [completions], those [calibration] hasn't been told to forget (LR-06): a kind or class's from before it was. */
+    fun remembered(completions: List<CompletionRecord>, calibration: Calibration): List<CompletionRecord> =
+        completions.filterNot { r ->
+            calibration.learnFrom?.let { r.doneAt < it } == true || calibration.forgotten[Calibration.key(r.kind, r.className)]?.let { r.doneAt < it } == true
+        }
+
+    fun learn(whole: ActivityLog, previous: Calibration, today: LocalDate, zone: java.time.ZoneId = java.time.ZoneId.systemDefault(), defaultMargin: Int = MIN_MARGIN): Learned {
+        // What came before a reset of the calibration (LR-08) teaches nothing: its days and slots as well.
+        val from = previous.learnFrom
+        val log = if (from == null) {
+            whole
+        } else {
+            // Its days from the one after it: the reset's own is part before, part after.
+            val after = java.time.Instant.ofEpochMilli(from).atZone(zone).toLocalDate().toString()
+            whole.copy(slots = whole.slots.filter { it.at >= from }, days = whole.days.filter { it.date > after })
+        }
+        val completions = remembered(log.completions, previous)
+        val multipliers = multipliers(completions)
+        val margins = margins(completions, defaultMargin)
         val next = Calibration(
             yields = yields(log.days, log.slots, today),
             yieldDays = yieldDays(log.days, log.slots, today),
             multipliers = multipliers,
             marginDays = margins,
-            timed = timed(log.completions),
+            timed = timed(completions),
             counted = true,
             // Learned as AnkiDroid is used (DX-11), not from the log: kept as it stands.
             ankiSecondsPerCard = previous.ankiSecondsPerCard,
             ankiStretches = previous.ankiStretches,
+            forgotten = previous.forgotten,
+            learnFrom = previous.learnFrom,
         )
         return Learned(next, describe(previous, next, defaultMargin))
     }
@@ -127,7 +145,8 @@ object Calibrator {
      */
     fun upgraded(calibration: Calibration, completions: List<CompletionRecord>): Calibration? {
         if (calibration.counted || calibration.multipliers.isEmpty()) return null
-        return calibration.copy(multipliers = multipliers(completions), timed = timed(completions), counted = true)
+        val kept = remembered(completions, calibration)
+        return calibration.copy(multipliers = multipliers(kept), timed = timed(kept), counted = true)
     }
 
     /** Whether [record]'s minutes are how long it took: timed, and all of it (no blocks ticked by hand, no photo check). */

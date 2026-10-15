@@ -4,6 +4,8 @@ The v1 build ran while you were away (from 8 Oct 2026, evening). Anything that n
 
 ## In short
 
+**Now: version 3.0.0 (15 Oct)**, armed, with Claude on: what was tried on the phone and what's waiting for you are in *3.0.0: review v2*, at the end. What follows is from the v1 build.
+
 **Version 1.3.0 is on your phone (9 Oct, evening), armed, with Claude on**: the four sources sync, the plan and the widget are live, blocking starts at 16:45 on school days, and the morning briefing comes at 07:00. Done with you that evening:
 
 - **Protection armed with your dad**: the device admin, and his authenticator app's code. Changes that loosen blocking now wait 24 hours unless his code applies them.
@@ -211,3 +213,33 @@ Still waiting for you:
 - **Tried on the phone, 12 Oct** (#29, armed): the Plan grouped and opened; a piece's *Change…* to its task's page; a Teams task's minutes set to 1 h (the plan went 54 → 60 min) and undone; a task made with the form, turned to landscape and back with nothing lost, due Wed 18:59; *Done* (free time unchanged, logged as your estimate), *Not done*, *Delete*; Open on one of yours opening its page. Left as found: the test task and its log record gone (`forget-task`), your settings and instructions as they were.
 - **Ask Claude** (#30, Q29): the ⋮ menu's *Ask Claude* (in place of Instructions), the chat button over *New task* in Tasks, *Ask Claude about it* on a task's page, and the Calendar's box all open one chat. Say anything about your work: a task to add ("UCAS statement by 1 December, about 8 hours"), a deadline or how long something takes, a day or an evening you can't work, or a question ("what's due tomorrow?", or since #31 "what's on tomorrow?", "how busy is Saturday?", "what should I do first tonight?", answered from the Plan as it shows it). Claude answers in a line or two, asks when it needs to (which task, when), and puts what it would do on cards: a new task (*Add*, *Change first* to edit it in the form, *Set aside*) or changes (*Apply*, *Set aside*). Nothing changes until you tap, and *Undo* on a card takes it back. Its other tab, *Your changes*, lists the changes in use (taken back there) and any older instructions still to check. One call a message, a few cents. With Claude off, the chat says so and the form still adds tasks.
 - **Tried on the phone, 12 Oct** (#30, two real calls, about $0.05): "remind me to buy mum a birthday present before Sunday" came back as a card (Admin, due Sat 23:59, 45 min, the guess said) in under five seconds; *Add* made the task. "Actually it will only take 20 minutes" was read against it (Minutes, on the task), and *Apply* changed the task itself. *Undo* deleted the task; *Clear the chat* emptied it. Nothing left behind. The ten-message evaluation is in `docs/eval.md`.
+
+## 3.0.0: review v2
+
+Built from `docs/review_v2_improvements/impl/` in eight phases, each a pull request (#35 to #42, merged 14 and 15 Oct), each tried on the phone before its merge. What each phase does is in the README's status, `docs/scheduler.md` and `docs/data-sources.md`.
+
+- **Tried on the phone, 15 Oct** (phases 1 to 3 with you that morning, 3 to 8 that evening):
+  - **Phase 3**: a slot left undone past its end and ten minutes' grace moved off its time, the rest of the evening keeping theirs, and its calendar event went.
+  - **Phase 4**: the reward line saying which pieces need a photo; the block screen's reason ("A slot you missed went to tomorrow, so tonight stays blocked"); AnkiDroid counted without opening the app (three visits, the deck's piece ticked by the one that finished it, all their minutes counted); a tick on record and in Stats; free time in the gap after a ticked slot, a blocked app opening and covered again as the next slot began.
+  - **Phase 5**: Felix ten minutes into a slot with nothing done, with three replies; your "give me 15" moving the slot, and his answer; a change made at once in the chat; a *Remembered:* line (yours).
+  - **Phase 6**: every screen light and dark in the icon's pink; Day, Work and Stats; Settings' pages; a slot swiped done and back, *Later today*, and one held and moved to a day, then taken back in *Your changes*.
+  - **Phase 7**: a task's sheet (its steps, the plan's reasons, photos); the chat splitting a task of your own into steps, ticking one, and opening one.
+  - **Phase 8**: the night's backup in Documents/Decrastination, a second the same day replacing it, *Import* restoring it unchanged, Settings → Backup's time; the Reviews and Debug pages; Stats by term and subject; and the 20 open tasks Claude had read, read again by version 2 of the prompts (20 calls, $0.30 in all: two estimates smaller, one email's planning date found, and the quotes behind the readings).
+- **Found on the phone and fixed before the merges**, each with a test:
+  - The focus service stopped as it started, in phase 4 (its AnkiDroid watch was asked for before it was set), and Android switched it off: protection was off from 18:22 to 19:12 on the 15th, until the fixed build. Armed throughout, and Decrastination back among the accessibility services.
+  - A time for a step's piece ("give me 15") was kept under the piece's old name, so the plan never laid it; a time off the five minutes was never laid at its minute; a pin whose time was taken looked only at free time starting after it; and once its time had passed, the piece was laid five minutes on at every plan, so it never began, and the gap before it kept moving.
+  - *Undo* after a swipe left the piece without its time, one swipe ticked twice, Day wasn't drawn again after an Undo, and the day's heading was squeezed to "Tod/ay" by a long line beside it.
+- **Waiting for you:**
+  - **Felix's morning briefing**: see that it reads as his.
+  - **The widget's ✓**: tick your next finished piece with it once, rather than in the app.
+  - **A photo check**: the next written homework you finish, *Check with a photo* on its sheet (a few cents); and a photo of homework with the camera button, made into a task of your own.
+  - **Felix's question**: he asked, as the readings came in, whether a German assessment whose dates have passed has a new date. Answer him in the chat, or leave it.
+  - **The weekly summary's address (NF-02)**: the repository is public, so no address is in the code. Put the one you want in Settings → Notifications → *Weekly summary goes to*; until then the summary's email opens with none, for you to choose.
+  - **The screens at the largest font (UI-12)**: the phone's own setting, for every app (Settings → Display → Font size and style, the largest); then Day, Work, a task's sheet and Settings' pages.
+  - **A copy of the backup off the phone**: the night's backup stays on the phone; a sync app mirroring Documents/Decrastination, or *Export* now and then, keeps one elsewhere.
+  - **Starred conversations read as an Event** stay off the plan and Tasks (`TaskItem.justAnEmail`); since phase 7 they're listed, folded, at Work's foot (*Events in your email*). Say if a starred event should be on the plan too.
+  - **Long calendar events count as a few hours of each of their days until you're asked (DX-14)**: the all-day events of your calendar further off than a week (holidays among them) take 3 hours of each of their days until they're within the week, when the app asks about each. Holidays are likely free time: answer *Free* when asked, or tell the chat now.
+  - **The chat has messages of mine**, from the checks (the test tasks they name are gone, with their records). Clear the chat if they're in the way; what Felix remembers stays.
+  - **What my checks left**: one *Moved* on the 15th's record (a test of moving a slot by hand) and a few minutes of that day's free time, gone at midnight.
+- **Settled on the 15th**: the seven old starred conversations, unstarred by you, finished at the next sync, so none of them is read again; and the estimate for a note of German resources, 884 minutes, is 10 since the re-read.
+- **Questions for you** are on the PC, in `private/QUESTIONS.md`, kept out of the repository as some are about what's in it.

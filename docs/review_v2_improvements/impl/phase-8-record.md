@@ -26,6 +26,8 @@ Items: LR-01, LR-02, LR-06, LR-08, PL-08, PL-09, PL-10, PL-11, NF-02, AC-06, AC-
 
 **Steps.** `AppGraph.answering: StateFlow<Long?>` (the start time of the call in flight); the chat shows "Felix is thinking… 12 s" and, after 10 s, a Cancel that cancels the `Job` (`answerChat` runs in a `Job` kept on the graph; cancellation closes the HTTP call) and marks the message `stuck` with the note "Cancelled".
 
+*(As built: `answeringSince`, as `answering` is the chat's lock; Cancel lets the answer go rather than closing the call. A call once sent is paid for and counted, whatever stops waiting for it (AC-04, as every call is), and the SDK's call blocks till it's done, so it's left to come back and its answer goes unused.)*
+
 ---
 
 ## AI-18 The review's input
@@ -66,6 +68,8 @@ Items: LR-01, LR-02, LR-06, LR-08, PL-08, PL-09, PL-10, PL-11, NF-02, AC-06, AC-
 
 **Steps.** Rows: Stats (the activity log: `log.update { ActivityLog() }`; the calibration follows at the next review; also `runtime.calibration = Calibration()` now), Calibration only (`Calibration.learnFrom: Long = now` stored and honoured by `Calibrator.learn`, which ignores records before it), Memories and profile lines (`memory.update { MemoryState() }`, `profileLines = emptyList()`), Chat and Felix history (`clearChat()`, `runtime.felix = FelixState()`, `log.felix = emptyList()`), Instructions (lists what would go, then `instructions.update { InstructionState() }` and `layInstructions()`), Everything learned (all five). Each: an `AlertDialog` naming what's lost; before it, `exportBackup()` written as `reset-<date>.json` to `Documents/Decrastination` through `BackupFolder.write` (the writer AR-07 below specifies: build `data/BackupFolder.kt` here, AR-07 adds the worker), and to `filesDir/backups/` when that write fails. No parent code.
 
+*(As built: the copy is `reset-<date>-<time>.json`, so two resets in a day each keep theirs, and it holds the chat, which a reset can clear (the backup's format 6 has it; an import restores it where this phone's chat is empty).)*
+
 ---
 
 ## PL-08, PL-09, PL-10, PL-11 Stats and export
@@ -90,6 +94,8 @@ Items: LR-01, LR-02, LR-06, LR-08, PL-08, PL-09, PL-10, PL-11, NF-02, AC-06, AC-
 
 **Tests.** `Summary.input` text; nothing else is pure.
 
+*(As built: `summaryEmail` is empty by default, as the repository is public and an address in its code would be published; the owner sets it in Settings → Notifications, and the email opens with none until then. The summary is written right after the review, by the review's job, rather than at a time of its own; its notification opens the email.)*
+
 ---
 
 ## AR-01 Golden files
@@ -97,6 +103,8 @@ Items: LR-01, LR-02, LR-06, LR-08, PL-08, PL-09, PL-10, PL-11, NF-02, AC-06, AC-
 **Files.** New `app/src/test/.../enrich/GoldenPromptsTest.kt`, `app/src/test/resources/prompts/*.txt|*.schema.json`.
 
 **Steps.** Render every system prompt (`Prompts.system` × jobs + limits + examples, `ChatPrompts.SYSTEM`, `InstructionPrompts.SYSTEM`, `PhotoChecker.SYSTEM`, `ReviewInput.SYSTEM`, `FelixPrompts.system`, `MicroPlans.SYSTEM`, `PhotoTasks.SYSTEM`, `SummaryPrompts.SYSTEM`, `MemoryTidy.SYSTEM`, the profile block for fixture settings) and every schema (as JSON) with fixed inputs; compare to the resource files; on mismatch print a unified diff and fail; with `-PupdateGolden=true` (read `System.getProperty("updateGolden")`, passed through `build.gradle.kts`'s `tasks.withType<Test> { systemProperty(...) }`) rewrite them. A second test asserts `Prompts.VERSION` changed whenever any golden file differs from git's `HEAD` version (read via `git show HEAD:path` through `ProcessBuilder`; skip when git isn't available).
+
+*(As built: the version test asks only of the copies a reading is made by (the three jobs' prompts and schemas, `enrich-*`, and the profile), since `Prompts.VERSION` is theirs: a reading made by older ones is made again, a paid call a task, which a change to the chat's prompt doesn't call for. It compares what's made now with HEAD's copies, so it holds in the run that writes them again too. A copy new since HEAD has nothing to compare with.)*
 
 ---
 
@@ -106,6 +114,8 @@ Items: LR-01, LR-02, LR-06, LR-08, PL-08, PL-09, PL-10, PL-11, NF-02, AC-06, AC-
 
 **Steps.** A JUnit test gated by `System.getenv("CLAUDE_DECRASTINATION_API_KEY")` (skipped otherwise; the owner sets it on the machine the session runs on): for each case in `private/eval/cases.json`, call the real `ClaudeEnricher` with the key, effort from `-Peffort`, write the answer to `private/eval/answers/<id>-<run>.json`, then run the existing `score` logic; stop when the summed cost passes `EVAL_BUDGET_USD` (default 2). Run with `./gradlew :app:testDebugUnitTest --tests '*EvalRunTest*'` with the variable in the environment (Gradle test tasks inherit it; if not, pass it through `systemProperty` as the golden-file flag is). Document in `docs/eval.md`. Never in CI.
 
+*(As built: it runs only with `-PrunEval=true` as well as the key, since the key is in this PC's environment for the app's own testing: gated by the key alone, every test run here would be a paid round. The answer's text comes back on `Enricher.Result.answer`; the profile is the settings' defaults' with the case's task, as `dump`'s prompts have it; and the first answer is scored, as the app's reading is until a repair, which the run doesn't ask for. It stops before a call whose dearest case could pass the budget, rather than once it has. Round 6, its first: 10 of 10, $0.245.)*
+
 ---
 
 ## AR-03 The debug page
@@ -113,6 +123,8 @@ Items: LR-01, LR-02, LR-06, LR-08, PL-08, PL-09, PL-10, PL-11, NF-02, AC-06, AC-
 **Files.** New `ui/DebugActivity.kt` (debug builds: `if (BuildConfig.DEBUG)` in the menu), `debug/CommandActivity.kt`.
 
 **Steps.** Sections: recent calls (AC-07), the rendered prompt for a chosen task (`Prompts.system` + profile + `describe`), the chat context (`AppGraph.chatContext`), Felix's state and queue, store sizes and ages, the last sync's timings per source (`SourceStatus`), the watchdog's findings; every block copyable; buttons for the argument-less commands (`sync`, `enrich`, `briefing`, `review`, `calendar`, `protection`).
+
+*(As built: `backup-now` (AR-07) is among the buttons. `CommandActivity` ran only what came through its DUMP-guarded alias; it now runs those commands too when the app itself starts it (it isn't exported), on a debug build, and no others. Felix's queue is in his state (the questions waiting and the message to try again), shown with his last ten messages.)*
 
 ---
 
@@ -132,6 +144,8 @@ Items: LR-01, LR-02, LR-06, LR-08, PL-08, PL-09, PL-10, PL-11, NF-02, AC-06, AC-
 
 **Tests.** `BackupFolderTest`: `toPrune` keeps the newest 14 by the date in the name, never names a `reset-*` file, and names nothing at 14 or fewer. `BackupTest`: FORMAT 5 round trip, an older format refused.
 
+*(As built: FORMAT 6, as 5 was taken by what Felix remembers in phase 5; it adds Felix's state and today's slots, restored only where this phone has none of its own (Felix's) and on the same day (the slots). A newer format is refused, as before; an older one is still read, so backups from before stay importable.)*
+
 **Done when.** `backup-now` leaves `decrastination-<today>.json` under `/sdcard/Documents/Decrastination` (`adb shell ls`), a second run the same day replaces it rather than adding a copy, Import of that file from Setup restores it, and Settings → Backup shows the time. Keeping a copy off the phone is the owner's own doing and not this item's (Google Drive and OneDrive offer no folder to Android's folder picker; a sync app mirroring the folder, or Export by hand, does it).
 
 ---
@@ -142,8 +156,12 @@ Items: LR-01, LR-02, LR-06, LR-08, PL-08, PL-09, PL-10, PL-11, NF-02, AC-06, AC-
 
 **Steps.** `AnkiSource`: skip `unseenCards` for a deck whose `(counts, options)` equal the last read's (keep a map in the source instance). `PlanWatcher`: skip the hooks when `plan == lastPlan` (data-class equality). `SlotCalendar.write`: skip the query when the desired events equal the last written set.
 
+*(As built: the plan's hooks aren't skipped: a plan the same but for the time still needs the alarms armed for the next slot (only the next start and end are set), the widget's line moved on and what's due written ahead, so only the calendar write, the costly one, is. It skips while the calendar hasn't changed since it was last read, as well as the slots being the same: a slot moved or deleted there by hand is read on its change, as NF-07 needs.)*
+
 ---
 
 ## Closing the plan
 
 When every phase is done: delete `PROGRESS.md`; mark each item **Implemented** in the review documents' summary tables; make sure `README.md`, `docs/scheduler.md` and `docs/data-sources.md` read as a description of the app as it now is; bump `versionName` to `3.0.0` and `versionCode`; run the full CI command once more.
+
+*(As built, 15 Oct: `PROGRESS.md` deleted with phase 8's last commit; what it kept for you is in `docs/needs-you.md`'s *3.0.0: review v2*, and the plan's record is in the git history.)*

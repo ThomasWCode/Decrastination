@@ -15,7 +15,7 @@ import java.time.Duration
 class MicroPlanner(apiKey: String, endpoint: String? = null, val model: String = ClaudeEnricher.MODEL) {
 
     /** [text]: the answer as it came, for [MicroPlans.parse]; null when declined or cut off. */
-    data class Result(val text: String?, val costUsd: Double, val refused: Boolean = false)
+    data class Result(val text: String?, val costUsd: Double, val refused: Boolean = false, val usage: ModelCalls.Usage = ModelCalls.Usage.NONE)
 
     private val client: AnthropicClient = AnthropicOkHttpClient.builder()
         .apiKey(apiKey)
@@ -38,10 +38,11 @@ class MicroPlanner(apiKey: String, endpoint: String? = null, val model: String =
             .build()
         val message = withContext(Dispatchers.IO) { client.messages().create(params) }
         val cost = Pricing.costUsd(message)
+        val usage = ModelCalls.usage(message)
         return when (message.stopReason().orElse(null)) {
-            StopReason.REFUSAL -> Result(null, cost, refused = true)
-            StopReason.MAX_TOKENS -> Result(null, cost)
-            else -> Result(message.content().mapNotNull { it.text().orElse(null)?.text() }.joinToString(""), cost)
+            StopReason.REFUSAL -> Result(null, cost, refused = true, usage = usage)
+            StopReason.MAX_TOKENS -> Result(null, cost, usage = usage)
+            else -> Result(message.content().mapNotNull { it.text().orElse(null)?.text() }.joinToString(""), cost, usage = usage)
         }
     }
 }

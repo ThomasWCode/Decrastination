@@ -89,9 +89,12 @@ import kotlinx.serialization.json.JsonPrimitive
  *   `clear-parent-code`, `offer-teams-sync` (the countdown banner now, whatever the rules), and
  *   `clean-up` (this app's notifications, a delayed Teams sync, forced blocking hours, the
  *   watchdog's restarts, and reviews run at other times than Sunday evening, cleared).
+ * - The debug page (the menu's *Debug*, on a debug build) has a button for each command that takes
+ *   nothing ([PLAIN]), which starts this activity from inside the app.
  *
  * The manifest guards the alias with DUMP, which the adb shell holds and no ordinary app can, so
- * nothing else on the phone can reach these. The activity itself isn't exported.
+ * nothing else on the phone can reach these. The activity itself isn't exported: only the app
+ * starts it without the alias, as the debug page does, and then only for [PLAIN]'s, on a debug build.
  */
 class CommandActivity : Activity() {
 
@@ -99,10 +102,12 @@ class CommandActivity : Activity() {
         super.onCreate(savedInstanceState)
         val viaAlias = intent.component?.className == ALIAS
         val command = intent.getStringExtra("cmd")
+        // The debug page's buttons (AR-03): from the app itself, as the activity isn't exported.
+        val fromDebugPage = !viaAlias && com.thomaswcode.decrastination.BuildConfig.DEBUG && command in PLAIN
         // Starting another app's screen has to happen while this one is in front.
         if (viaAlias && command == "open") startActivity(OpenTaskActivity.intent(this, intent.getStringExtra("task")))
         finish()
-        if (!viaAlias || command == null) return
+        if (!(viaAlias || fromDebugPage) || command == null) return
         val graph = AppGraph.get(this)
         graph.scope.launch {
             runCatching { run(graph, command) }.onFailure { Log.w(TAG, "Command $command failed", it) }
@@ -271,6 +276,8 @@ class CommandActivity : Activity() {
             }
             "briefing" -> Briefing.run(this).also { Log.i(TAG, "Briefing posted") }
             "check-in" -> CheckIns.remind(this).also { Log.i(TAG, "Check-in reminder posted") }
+            // The nightly backup's work, once (AR-07).
+            "backup-now" -> Log.i(TAG, "Backup: ${if (graph.backupNow()) "written" else "not written"}; last ${graph.runtime.value.lastBackupAt}")
             "review" -> {
                 Review.run(this, ifDue = false)
                 Log.i(TAG, "Review: ${graph.log.value.reviews.lastOrNull()?.lines}; calibration ${graph.runtime.value.calibration}")
@@ -541,5 +548,8 @@ class CommandActivity : Activity() {
         const val TAG = "Decrastination"
         const val ALIAS = "com.thomaswcode.decrastination.debug.Command"
         const val IMPORT_FILE = "credentials.import"
+
+        /** The commands that take nothing: the debug page's buttons (AR-03). */
+        val PLAIN = listOf("sync", "enrich", "briefing", "review", "calendar", "protection", "backup-now")
     }
 }

@@ -119,6 +119,8 @@ class StatsTest {
             Stats.calibrationLines(calibration),
         )
         assertEquals(emptyList(), Stats.calibrationLines(Calibration()))
+        // A class's figure, and one coming, can be forgotten (LR-06); a kind's can't.
+        assertEquals(listOf(null, "Homework|Physics", null, "Homework|German", null, null), Stats.calibrationRows(calibration).map { it.forget })
     }
 
     @Test
@@ -130,4 +132,98 @@ class StatsTest {
         assertEquals(30, summary.days.single { it.date == LocalDate.parse("2026-10-09") }.slotMin)
         assertEquals(0, summary.days.single { it.date == LocalDate.parse("2026-10-10") }.slotMin)
     }
+
+    @Test
+    fun `each subject's minutes, pieces, deadlines met and time against the estimates, busiest first`() {
+        fun slotIn(start: String, className: String?, worked: Int) = slot(start, SlotOutcome.Kept, worked).copy(className = className)
+        val log = ActivityLog(
+            slots = listOf(slotIn("2026-10-08T17:00", "12.2-PH3", 45), slotIn("2026-10-07T17:00", "12.2-PH3", 30), slotIn("2026-10-07T18:00", "German", 20), slotIn("2026-10-06T18:00", null, 10)),
+            completions = listOf(
+                completion("p1", "2026-10-08T18:00", "2026-10-09T08:30").copy(className = "12.2-PH3", estimateMin = 40, workedMin = 60),
+                completion("g1", "2026-10-07T19:00", "2026-10-06T08:30").copy(className = "German"),
+            ),
+        )
+        val rows = Stats.bySubject(log, mapOf("12.2-PH3" to "Physics"), now, LONDON)
+        assertEquals(listOf("Physics", "German", Stats.OTHER), rows.map { it.subject })
+        assertEquals(Stats.SubjectRow("Physics", 75, 2, 1, 1, 1, 1.5), rows[0])
+        assertEquals(Stats.SubjectRow("German", 20, 1, 1, 0, 0, null), rows[1])
+    }
+
+    @Test
+    fun `slots by weekday and hour, and the weekday hours they suggest`() {
+        // Twelve kept on the weekdays of 5 to 9 October between 17:00 and 19:00, one late outlier at 22:00, one missed.
+        val kept = (0 until 12).map { i -> slot("2026-10-0${5 + i % 5}T1${7 + i % 2}:00", SlotOutcome.Kept) }
+        val log = ActivityLog(slots = kept + slot("2026-10-08T22:00", SlotOutcome.Kept) + slot("2026-10-08T17:00", SlotOutcome.Missed))
+        val heat = Stats.heat(log, now, LONDON)
+        assertEquals(1, heat[java.time.DayOfWeek.THURSDAY to 22]?.first)
+        assertEquals(1, heat[java.time.DayOfWeek.THURSDAY to 17]?.second)
+        val hours = Stats.suggestedWeekdayHours(heat)!!
+        assertEquals(17 * 60, hours.startMin)
+        assertEquals(19 * 60, hours.endMin)
+        // Too few to go by: none.
+        assertEquals(null, Stats.suggestedWeekdayHours(Stats.heat(ActivityLog(slots = kept.take(3)), now, LONDON)))
+    }
+
+    @Test
+    fun `a week's rollup, and a period past what the log keeps reading the rollups`() {
+        val log = ActivityLog(
+            slots = listOf(slot("2026-10-06T17:00", SlotOutcome.Kept), slot("2026-10-07T17:00", SlotOutcome.Missed)),
+            completions = listOf(completion("a", "2026-10-06T18:00", "2026-10-07T08:30")),
+            blocks = listOf(BlockRecord(Fixtures.at("2026-10-06T17:10"), "com.example", "x")),
+        )
+        val week = Stats.rollup(log, LocalDate.parse("2026-10-05"), LONDON)
+        assertEquals(com.thomaswcode.decrastination.data.WeekRollup("2026-10-05", 30, 1, 1, 1, 1, 0, 1, 1), week)
+        // A rollup from five months back: in a 26-week period's totals, not a 2-week one's.
+        val old = week.copy(week = "2026-05-04", minutes = 100, finished = 3)
+        val withOld = log.copy(weeks = listOf(old))
+        assertEquals(30 + 100, Stats.summary(withOld, now, LONDON, days = 26 * 7).slotMin)
+        assertEquals(30, Stats.summary(withOld, now, LONDON).slotMin)
+        // The week the log's end falls in (it keeps from 11 June): its rollup, whole, in place of
+        // the records left of it.
+        val boundary = week.copy(week = "2026-06-08", minutes = 200)
+        val partial = log.copy(weeks = listOf(boundary), slots = log.slots + slot("2026-06-12T17:00", SlotOutcome.Kept))
+        assertEquals(30 + 200, Stats.summary(partial, now, LONDON, days = 26 * 7).slotMin)
+        // A week with no rollup keeps what's left of its records.
+        assertEquals(30 + 30, Stats.summary(partial.copy(weeks = emptyList()), now, LONDON, days = 26 * 7).slotMin)
+        // A rollup written at its review, before a slot kept later that Sunday, made again while the
+        // log holds the week whole; one past that stays as it was.
+        val late = log.copy(weeks = listOf(week, boundary), slots = log.slots + slot("2026-10-11T19:00", SlotOutcome.Kept))
+        val refreshed = Stats.refreshedWeeks(late, now, LONDON)
+        assertEquals(60, refreshed.single { it.week == "2026-10-05" }.minutes)
+        assertEquals(200, refreshed.single { it.week == "2026-06-08" }.minutes)
+    }
+
+    @Test
+    fun `this term began after the last run of days without school`() {
+        // Made-up breaks: nine days in November, and the Christmas holidays.
+        val breaks = listOf(LocalDate.parse("2026-11-14")..LocalDate.parse("2026-11-22"), LocalDate.parse("2026-12-19")..LocalDate.parse("2027-01-03"))
+        fun school(d: LocalDate) = breaks.none { d in it } && d.dayOfWeek.value <= 5
+        assertEquals(LocalDate.parse("2026-11-23"), Stats.termStart(LocalDate.parse("2026-12-04"), ::school))
+        // On a weekend in term, and on the first day back.
+        assertEquals(LocalDate.parse("2026-11-23"), Stats.termStart(LocalDate.parse("2026-12-06"), ::school))
+        assertEquals(LocalDate.parse("2027-01-04"), Stats.termStart(LocalDate.parse("2027-01-04"), ::school))
+        // In the holidays, this term is the one before them, not a day long.
+        assertEquals(LocalDate.parse("2026-11-23"), Stats.termStart(LocalDate.parse("2026-12-30"), ::school))
+        // None in the time looked back: that far.
+        assertEquals(LocalDate.parse("2026-11-20").minusDays(120), Stats.termStart(LocalDate.parse("2026-11-20")) { it.dayOfWeek.value <= 5 })
+    }
+
+    @Test
+    fun `the record as CSV, cells with commas, quotes and line breaks quoted`() {
+        assertEquals("plain", com.thomaswcode.decrastination.learn.Export.cell("plain"))
+        assertEquals("\"a, b\"", com.thomaswcode.decrastination.learn.Export.cell("a, b"))
+        assertEquals("\"say \"\"hi\"\"\"", com.thomaswcode.decrastination.learn.Export.cell("say \"hi\""))
+        assertEquals("\"two\nlines\"", com.thomaswcode.decrastination.learn.Export.cell("two\nlines"))
+        // What a spreadsheet would take for a formula, shown as text; numbers as they are.
+        assertEquals("'=HYPERLINK(\"x\")".let { "\"" + it.replace("\"", "\"\"") + "\"" }, com.thomaswcode.decrastination.learn.Export.cell("=HYPERLINK(\"x\")"))
+        assertEquals("'+44 7700", com.thomaswcode.decrastination.learn.Export.cell("+44 7700"))
+        assertEquals("'@SUM(A1)", com.thomaswcode.decrastination.learn.Export.cell("@SUM(A1)"))
+        assertEquals("-5", com.thomaswcode.decrastination.learn.Export.cell("-5"))
+        assertEquals("0.75", com.thomaswcode.decrastination.learn.Export.cell("0.75"))
+        val files = com.thomaswcode.decrastination.learn.Export.csv(ActivityLog(completions = listOf(completion("a", "2026-10-06T18:00", null))), Calibration(), LONDON)
+        assertEquals(listOf("completions.csv", "slots.csv", "days.csv", "blocks.csv", "felix.csv", "calibration.csv"), files.keys.toList())
+        assertEquals("task,title,source,kind,class,estimate_min,worked_min,due,hard_deadline,first_seen,done,assessment,note,by_hand,photo,your_estimate", files.getValue("completions.csv").lineSequence().first())
+        assertEquals("a,a,Teams,Homework,,40,0,,true,2026-10-01T09:00,2026-10-06T18:00,,,false,false,false", files.getValue("completions.csv").lines()[1])
+    }
 }
+

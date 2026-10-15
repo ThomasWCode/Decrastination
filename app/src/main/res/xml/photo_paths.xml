@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The photo check's pages, up to three, in the cache, deleted once checked. -->
+<!-- The photo check's pages, up to three, in the cache, deleted once checked; and the record exported to share (PL-11). -->
 <paths>
     <cache-path name="photos" path="photos/" />
+    <cache-path name="exports" path="exports/" />
 </paths>

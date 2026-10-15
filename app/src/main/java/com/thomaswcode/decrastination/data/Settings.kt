@@ -15,6 +15,8 @@ data class Settings(
     val yearGroupStart: Int = 2026,
     /** What you'd have the model know about you (AI-05), a line each. */
     val profileLines: List<String> = emptyList(),
+    /** Where the weekly summary goes (NF-02), set in Settings → Notifications: none, and the email opens to choose. */
+    val summaryEmail: String = "",
     /** Your classes' codes, as the sources give them, to the subject each is (AI-05). */
     val classMap: Map<String, String> = emptyMap(),
     /** The voice of the app's messages (AI-22): his name, and the line that says who he is. */

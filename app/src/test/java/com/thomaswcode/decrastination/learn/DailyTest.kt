@@ -209,7 +209,7 @@ class ReviewInputTest {
         val text = ReviewInput.describe(log, Calibration(), Settings(), now, LONDON, week = "2026-10-05")
         assertTrue("- Statics Prep [Homework, 12.1 Physics]: due Fri 9 Oct 21:00, done Fri 9 Oct 20:00, estimate 40 min, timed 55 min. felt harder (\"the diagrams\")" in text, text)
         assertTrue("the week felt 3/5" in text, text)
-        assertTrue("Settings: boxMin 30, marginDays 1, softMinPerDay 60, workMinPerFreeMin 3." in text, text)
+        assertTrue("Settings: boxMin 30, marginDays 1, softMinPerDay 60, workMinPerFreeMin 3, weekdayHoursStart 1005, weekdayHoursEnd 1320." in text, text)
         // Done by a date the app or Claude set: a plan, said to be one.
         val planned = log.copy(completions = log.completions.map { it.copy(hardDeadline = false) })
         assertTrue("Statics Prep [Homework, 12.1 Physics]: due Fri 9 Oct 21:00 (a plan, not a deadline), done Fri 9 Oct 20:00" in ReviewInput.describe(planned, Calibration(), Settings(), now, LONDON, week = "2026-10-05"))
@@ -226,6 +226,43 @@ class ReviewInputTest {
         assertEquals(25, applied.boxMin)
         assertEquals(1, applied.marginDays)
         assertEquals(Settings().copy(boxMin = 25), applied)
+        // A school day's hours, within an hour of theirs (AI-18).
+        val hours = ReviewInput.apply(Settings(), listOf(ReviewInput.Change("weekdayHoursStart", Settings().weekdayHours.startMin - 45, "earlier starts went well"), ReviewInput.Change("weekdayHoursEnd", Settings().weekdayHours.endMin + 90, "too far")))
+        assertEquals(Settings().weekdayHours.copy(startMin = Settings().weekdayHours.startMin - 45), hours.weekdayHours)
+        // Two ends each within reach that would meet or cross: neither moves.
+        val short = Settings().copy(weekdayHours = com.thomaswcode.decrastination.data.Window(17 * 60, 18 * 60))
+        assertEquals(short.weekdayHours, ReviewInput.apply(short, listOf(ReviewInput.Change("weekdayHoursStart", 17 * 60 + 50, "later"), ReviewInput.Change("weekdayHoursEnd", 17 * 60 + 10, "earlier"))).weekdayHours)
+        assertEquals(com.thomaswcode.decrastination.data.Window(17 * 60 + 30, 18 * 60), ReviewInput.apply(short, listOf(ReviewInput.Change("weekdayHoursStart", 17 * 60 + 30, "later"))).weekdayHours)
+        assertEquals(false, ReviewInput.allowed(ReviewInput.Change("weekdayHoursEnd", Settings().weekdayHours.endMin + 90, "x"), Settings()))
+        assertEquals("weekdayHours", ReviewInput.fieldOf("weekdayHoursEnd"))
+        // Put back as it was, whatever the bounds (LR-01), and said in words.
+        assertEquals(90, ReviewInput.set(Settings(), "boxMin", 90).boxMin)
+        assertEquals("A piece's length 45 min → 30 min (shorter pieces got finished)", ReviewInput.changeText(ReviewInput.Change("boxMin", 30, "shorter pieces got finished"), 45))
+        assertEquals("A school day's start 16:45 → 16:00 (earlier starts went well)", ReviewInput.changeText(ReviewInput.Change("weekdayHoursStart", 960, "earlier starts went well"), 1005))
+    }
+
+    @Test
+    fun `the review reads last week's review and its changes, the days, the windows, Felix and the subjects`() {
+        val last = com.thomaswcode.decrastination.data.WeeklyReview(
+            Fixtures.at("2026-10-04T19:00"), listOf("Shorter pieces this week."), by = "claude", week = "2026-09-28",
+            changes = listOf(ReviewInput.Change("boxMin", 30, "shorter pieces got finished")), settingsBefore = mapOf("boxMin" to 45),
+        )
+        val slot = SlotRecord(
+            date = "2026-10-06", key = "teams:a#0", taskId = "teams:a", kind = Kind.Homework, className = "12.1 Physics", label = "a", plannedMin = 30,
+            start = Fixtures.at("2026-10-06T17:00"), end = Fixtures.at("2026-10-06T17:30"), window = com.thomaswcode.decrastination.core.WindowKind.Evening,
+            outcome = SlotOutcome.Kept, workedMin = 30, earned = true, at = Fixtures.at("2026-10-06T17:25"),
+        )
+        val felix = com.thomaswcode.decrastination.data.FelixRecord("f1", Fixtures.at("2026-10-06T17:10"), "SlotStart", "Ten minutes in: are you starting?", key = "teams:a#0", repliedAt = Fixtures.at("2026-10-06T17:12"))
+        val day = com.thomaswcode.decrastination.learn.DayRecord("2026-10-06", plannedMin = 60, chunks = emptyList(), doneMin = 30, full = false, kind = com.thomaswcode.decrastination.core.DayKind.Weekday)
+        val log = ActivityLog(reviews = listOf(last), slots = listOf(slot), felix = listOf(felix), days = listOf(day))
+        val text = ReviewInput.describe(log, Calibration(), Settings(boxMin = 30, classMap = mapOf("12.1 Physics" to "Physics")), Fixtures.at("2026-10-11T19:00"), LONDON, week = "2026-10-05")
+        assertTrue("Last week's review said: Shorter pieces this week." in text, text)
+        assertTrue("It changed: boxMin 45 to 30 (shorter pieces got finished), now 30" in text, text)
+        assertTrue("By window: Evening 1 kept, 0 missed, 0 moved" in text, text)
+        assertTrue("Pieces that earned free time: 1." in text, text)
+        assertTrue("- Tue 6 Oct (Weekday evenings): planned 60 min, done 30 min, not all of it" in text, text)
+        assertTrue("Felix: 1 messages, 1 replied to; of the 1 about a slot, 1 saw it kept after." in text, text)
+        assertTrue("- Physics: 30 min in 1 pieces" in text, text)
     }
 }
 

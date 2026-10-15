@@ -1,0 +1,219 @@
+{
+    "type": "object",
+    "properties": {
+        "understood": {
+            "type": "boolean"
+        },
+        "question": {
+            "anyOf": [
+                {
+                    "type": "string"
+                },
+                {
+                    "type": "null"
+                }
+            ]
+        },
+        "changes": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "type": {
+                        "type": "string",
+                        "enum": [
+                            "NotATask",
+                            "StartFrom",
+                            "After",
+                            "DueBy",
+                            "Minutes",
+                            "EventTime",
+                            "DayLimit",
+                            "BusyTime",
+                            "NoSchool",
+                            "HalfDay",
+                            "OnDay",
+                            "AtTime",
+                            "Steps",
+                            "SameAs"
+                        ]
+                    },
+                    "taskId": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    },
+                    "afterTaskId": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    },
+                    "eventKey": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    },
+                    "eventTime": {
+                        "anyOf": [
+                            {
+                                "type": "string",
+                                "enum": [
+                                    "free",
+                                    "busy",
+                                    "hours"
+                                ]
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    },
+                    "minutes": {
+                        "anyOf": [
+                            {
+                                "type": "integer"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    },
+                    "date": {
+                        "anyOf": [
+                            {
+                                "type": "string",
+                                "format": "date"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    },
+                    "endDate": {
+                        "anyOf": [
+                            {
+                                "type": "string",
+                                "format": "date"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    },
+                    "weekday": {
+                        "anyOf": [
+                            {
+                                "type": "string",
+                                "enum": [
+                                    "Monday",
+                                    "Tuesday",
+                                    "Wednesday",
+                                    "Thursday",
+                                    "Friday",
+                                    "Saturday",
+                                    "Sunday"
+                                ]
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    },
+                    "time": {
+                        "anyOf": [
+                            {
+                                "type": "string",
+                                "description": "HH:MM, 24-hour"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    },
+                    "endTime": {
+                        "anyOf": [
+                            {
+                                "type": "string",
+                                "description": "HH:MM, 24-hour"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    },
+                    "steps": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "title": {
+                                    "type": "string"
+                                },
+                                "minutes": {
+                                    "type": "integer"
+                                },
+                                "startDate": {
+                                    "type": "string"
+                                },
+                                "dueDate": {
+                                    "type": "string"
+                                },
+                                "where": {
+                                    "type": "string",
+                                    "enum": [
+                                        "anywhere",
+                                        "home"
+                                    ]
+                                }
+                            },
+                            "required": [
+                                "title",
+                                "minutes",
+                                "startDate",
+                                "dueDate",
+                                "where"
+                            ],
+                            "additionalProperties": false
+                        }
+                    }
+                },
+                "required": [
+                    "type",
+                    "taskId",
+                    "afterTaskId",
+                    "eventKey",
+                    "eventTime",
+                    "minutes",
+                    "date",
+                    "endDate",
+                    "weekday",
+                    "time",
+                    "endTime",
+                    "steps"
+                ],
+                "additionalProperties": false
+            }
+        }
+    },
+    "required": [
+        "understood",
+        "question",
+        "changes"
+    ],
+    "additionalProperties": false
+}

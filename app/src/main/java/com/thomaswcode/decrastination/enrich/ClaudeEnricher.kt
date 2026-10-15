@@ -46,10 +46,11 @@ class ClaudeEnricher(
         val photo = photoOf(task)
         val message = send(job) { item(task, job, photo, Prompts.describe(task, job, now, zone, previous(task), decks()).take(Pricing.MAX_INPUT_CHARS)) }
         val cost = Pricing.costUsd(message)
+        val usage = ModelCalls.usage(message)
         when (message.stopReason().orElse(null)) {
-            StopReason.REFUSAL -> return Enricher.Result(null, cost, refused = true)
+            StopReason.REFUSAL -> return Enricher.Result(null, cost, refused = true, usage = usage)
             // Cut off mid-answer: nothing to trust.
-            StopReason.MAX_TOKENS -> return Enricher.Result(null, cost)
+            StopReason.MAX_TOKENS -> return Enricher.Result(null, cost, usage = usage)
             else -> Unit
         }
         val text = textOf(message)
@@ -58,10 +59,10 @@ class ClaudeEnricher(
         val strict = Answers.read(job, text, task, answeredBy, now, zone, salvage = false)
         // A reading the photo was in says so (AI-23).
         fun seen(e: com.thomaswcode.decrastination.core.Enrichment?) = if (photo != null) e?.copy(fromPhoto = true) else e
-        val complaint = strict.complaint ?: return Enricher.Result(seen(strict.enrichment), cost)
+        val complaint = strict.complaint ?: return Enricher.Result(seen(strict.enrichment), cost, usage = usage, answer = text)
         // A check it failed (AI-01): read with the dates that can't be left out meanwhile, and the
         // answer and its problem kept to put back once ([repair]).
-        return Enricher.Result(seen(Answers.parse(job, text, task, answeredBy, now, zone)), cost, repair = Enricher.Repair(text, complaint))
+        return Enricher.Result(seen(Answers.parse(job, text, task, answeredBy, now, zone)), cost, repair = Enricher.Repair(text, complaint), usage = usage, answer = text)
     }
 
     /**
@@ -81,14 +82,16 @@ class ClaudeEnricher(
             addUserMessage(asked)
         }
         val cost = Pricing.costUsd(message)
+        val usage = ModelCalls.usage(message)
         when (message.stopReason().orElse(null)) {
-            StopReason.REFUSAL -> return Enricher.Result(null, cost, refused = true, repaired = true)
-            StopReason.MAX_TOKENS -> return Enricher.Result(null, cost, repaired = true)
+            StopReason.REFUSAL -> return Enricher.Result(null, cost, refused = true, repaired = true, usage = usage)
+            StopReason.MAX_TOKENS -> return Enricher.Result(null, cost, repaired = true, usage = usage)
             else -> Unit
         }
         val answeredBy = message.model().asString().ifBlank { by }
-        val read = Answers.parse(job, textOf(message), task, answeredBy, now, zone)
-        return Enricher.Result(if (photo != null) read?.copy(fromPhoto = true) else read, cost, repaired = true)
+        val text = textOf(message)
+        val read = Answers.parse(job, text, task, answeredBy, now, zone)
+        return Enricher.Result(if (photo != null) read?.copy(fromPhoto = true) else read, cost, repaired = true, usage = usage, answer = text)
     }
 
     /** [task]'s photo of its work (AI-23), from its file; none if it has none, or it can't be read. */
