@@ -39,6 +39,10 @@ data class ChatMessage(
     val stuck: Boolean = false,
     /** Claude's: what it remembered or forgot with it (AI-21), a line each. */
     val remembered: List<String> = emptyList(),
+    /** Felix's, put here from a notification he wrote (AI-24): why he wrote it ([com.thomaswcode.decrastination.enrich.FelixPrompts.Reason]). */
+    val reason: String? = null,
+    /** Claude's: up to three short replies you might send next, in your words (AI-24, UI-06). */
+    val suggestedReplies: List<String> = emptyList(),
 )
 
 /**
@@ -56,6 +60,8 @@ data class Proposal(
      */
     val lines: List<String> = emptyList(),
     val state: ProposalState = ProposalState.Proposed,
+    /** Made as it was given (AI-24): a change to what exists, applied at once, Undo taking it back. */
+    val instant: Boolean = false,
     val made: String? = null,
     /**
      * Your own tasks its changes were made on, by id, as they were before: what *Undo* puts back, as

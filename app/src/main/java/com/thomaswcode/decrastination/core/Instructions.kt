@@ -410,3 +410,19 @@ fun TaskItem.withOverrides(o: TaskOverrides): TaskItem =
         userOnDay = o.onDay,
         userAtTime = o.atTime,
     ).enriched()
+
+/**
+ * Which of the chat's changes are made at once (AI-24, Q-42): one to a task that already exists, a
+ * busy time or a limit today, or how an event's time counts. The rest (a busy time or a limit on
+ * another day, or every week; days off; a half-day) are shown to confirm, as new tasks are. Pure.
+ */
+object InstantChanges {
+    private val ON_A_TASK = setOf(ChangeType.AtTime, ChangeType.OnDay, ChangeType.StartFrom, ChangeType.DueBy, ChangeType.Minutes, ChangeType.NotATask, ChangeType.After)
+
+    fun instant(change: Change, tasks: Map<String, TaskItem>, today: java.time.LocalDate): Boolean = when (change.type) {
+        in ON_A_TASK -> change.taskId in tasks && (change.type != ChangeType.After || change.afterTaskId in tasks)
+        ChangeType.BusyTime, ChangeType.DayLimit -> change.date == today.toString()
+        ChangeType.EventTime -> true
+        else -> false
+    }
+}

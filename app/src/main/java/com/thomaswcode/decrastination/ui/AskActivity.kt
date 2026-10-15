@@ -144,10 +144,16 @@ class AskActivity : ComponentActivity() {
         super.onResume()
         // What waits for Claude (it was off, resting, or capped) is tried again on opening.
         val graph = AppGraph.get(this)
+        graph.chatInFront = true
         graph.scope.launch {
             graph.answerChat()
             graph.readInstructions()
         }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        AppGraph.get(this).chatInFront = false
     }
 
     @OptIn(ExperimentalMaterial3Api::class)
@@ -443,7 +449,16 @@ private fun ProposalCard(graph: AppGraph, messageId: String, proposal: Proposal,
             FlowRow(Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 when {
                     applied -> {
-                        Text(if (task != null) "Added" else "Applied", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.align(Alignment.CenterVertically))
+                        Text(
+                            when {
+                                task != null -> "Added"
+                                proposal.instant -> "Done at once"
+                                else -> "Applied"
+                            },
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.align(Alignment.CenterVertically),
+                        )
                         if (proposal.made != null || proposal.before.isNotEmpty()) TextButton(onClick = { scope.launch { graph.undoProposal(messageId, proposal.id) } }) { Text("Undo") }
                         // Days off and half-days go in the school calendar, and are taken back there (PL-16).
                         if (proposal.changes.any { Instructions.schoolEntry(it) != null }) {
