@@ -290,15 +290,18 @@ class PlannerPropertyTest {
         }
     }
 
-    /** What's said won't fit (PL-02) has a real deadline, and some of it is behind or left out; once a task. */
+    /**
+     * What's said won't fit (PL-02): a task with a real deadline still to come, once, with more left
+     * than was free before it, or some of it fitting nowhere.
+     */
     private fun checkWontFit(seed: Long, plan: Plan, input: Planner.Input) {
         val byId = input.tasks.associateBy { it.id }
         assertTrue(plan.wontFit.map { it.taskId }.let { it.size == it.toSet().size }, "seed=$seed: a task said twice not to fit")
         for (short in plan.wontFit) {
             val task = byId.getValue(short.taskId)
-            assertTrue(task.hardDeadline, "seed=$seed: ${short.taskId} said not to fit, its deadline the app's")
-            val missed = plan.chunksOf(short.taskId).any { it.behind } || plan.unplanned.any { it.taskId == task.id }
-            assertTrue(missed, "seed=$seed: ${task.id} said not to fit, all of it placed in time")
+            assertTrue(task.hardDeadline && task.dueAt!! >= input.now, "seed=$seed: ${short.taskId} said not to fit, its deadline the app's or gone")
+            val leftOut = plan.unplanned.any { it.taskId == task.id }
+            assertTrue(short.leftMin > short.freeMin || leftOut, "seed=$seed: ${task.id} said not to fit: ${short.leftMin} min left, ${short.freeMin} free")
         }
     }
 

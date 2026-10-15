@@ -259,7 +259,7 @@ data class Calibration(
 
 /**
  * A task with a real deadline its days can't hold (PL-02), said the day it's so: [leftMin] of it
- * to do, and [freeMin] free in the days it had before [deadline], before it took any.
+ * to do, and [freeMin] free before [deadline] itself at its turn, before it took any.
  */
 data class WontFit(val taskId: String, val title: String, val leftMin: Int, val freeMin: Int, val deadline: Long)
 

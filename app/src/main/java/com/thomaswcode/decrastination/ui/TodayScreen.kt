@@ -164,7 +164,7 @@ fun TodayScreen(graph: AppGraph, activity: Activity) {
             if (bucket.date == plan.today) {
                 itemsIndexed(plan.wontFit, key = { _, it -> "wontfit-${it.taskId}" }) { index, short ->
                     WontFitTile(short, index, plan.wontFit.size, plan.now, zone) {
-                        val text = "There isn't time for “${short.title}” by ${byDay(short.deadline, plan.now, zone)}: ${Format.minutes(short.leftMin)} left, " +
+                        val text = "There isn't time for “${short.title}” by ${Format.at(short.deadline, plan.now, zone)}: ${Format.minutes(short.leftMin)} left, " +
                             "${Format.minutes(short.freeMin)} free. What should I shorten, move or ask for more time on?"
                         activity.startActivity(AskActivity.intent(activity, About(taskId = short.taskId, taskTitle = short.title), text))
                     }
@@ -429,19 +429,6 @@ private fun UnplannedTile(gap: Unplanned, index: Int, count: Int, lastDay: Local
 }
 
 private val DAY = DateTimeFormatter.ofPattern("EEEE d MMMM", Locale.UK)
-private val WEEKDAY = DateTimeFormatter.ofPattern("EEEE", Locale.UK)
-
-/** A deadline's day as "before Friday" says it: its weekday within the week, else its date. */
-private fun byDay(deadline: Long, now: Long, zone: ZoneId): String {
-    val day = Instant.ofEpochMilli(deadline).atZone(zone).toLocalDate()
-    val days = java.time.temporal.ChronoUnit.DAYS.between(Instant.ofEpochMilli(now).atZone(zone).toLocalDate(), day)
-    return when (days) {
-        0L -> "today"
-        1L -> "tomorrow"
-        in 2L..6L -> day.format(WEEKDAY)
-        else -> day.format(DAY)
-    }
-}
 
 /** A real deadline that its days can't hold (PL-02): what's left, what was free, and *What gives?* to ask Claude. */
 @Composable
@@ -451,7 +438,7 @@ private fun WontFitTile(short: WontFit, index: Int, count: Int, now: Long, zone:
             Column(Modifier.weight(1f)) {
                 Text(short.title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Text(
-                    "${Format.minutes(short.leftMin)} left, ${Format.minutes(short.freeMin)} free before ${byDay(short.deadline, now, zone)}",
+                    "${Format.minutes(short.leftMin)} left, ${Format.minutes(short.freeMin)} free before ${Format.at(short.deadline, now, zone)}",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.error,
                 )

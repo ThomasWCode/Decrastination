@@ -917,6 +917,20 @@ class PlannerTest {
         assertEquals(emptyList(), plan(listOf(guessed), "2026-10-08T17:00", loads = loads).wontFit)
     }
 
+    @Test
+    fun `work inside its safety margin that still fits before its deadline isn't said not to fit`() {
+        // Homework finished three days early, as learned: an hour due Saturday morning is behind
+        // that margin on Thursday, but Thursday and Friday hold it before the deadline itself.
+        val late = Calibration(marginDays = mapOf(Kind.Homework to 3))
+        val input = Planner.Input(listOf(task("essay", Fixtures.at("2026-10-10T09:00"), effort = 60)), Fixtures.at("2026-10-08T17:00"), LONDON, settings, calibration = late)
+        val plan = Planner.plan(input)
+        assertTrue(plan.ordered.all { it.behind })
+        assertEquals(emptyList(), plan.wontFit)
+        // Due this morning, with its hours tonight: none of its time is before its deadline.
+        val morning = Planner.plan(input.copy(tasks = listOf(task("prep", Fixtures.at("2026-10-09T08:30"), effort = 60)), now = Fixtures.at("2026-10-09T01:00")))
+        assertEquals(listOf(WontFit("teams:prep", "prep", 60, 0, Fixtures.at("2026-10-09T08:30"))), morning.wontFit)
+    }
+
     // --- What's left out, and why (IMP-P1-002) ---
 
     @Test
