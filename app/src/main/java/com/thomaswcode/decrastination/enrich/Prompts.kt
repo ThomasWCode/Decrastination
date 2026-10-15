@@ -71,6 +71,7 @@ object Prompts {
             - effortMin: the minutes of the student's own work it needs, reading included: at least 5 for something only to read and decide.
             - nextStep: the one concrete next action, as an instruction under 12 words ("Reply to Mr Hughes confirming the trip").
             - question: rarely: the one question that would settle a reading the text can't (which Friday; whether the test is the 12th or the 19th); otherwise null.
+            - reason: the phrase in the email that gave the deadline or the kind, quoted (under 160 characters); empty if nothing did.
             - blocks: when the email holds more than one piece of work for the student, or dated items (a calendar of deadlines, an application that opens on a date), the pieces of work in order, each with its minutes (10 to 60 where the work allows: a long piece of work, like writing a proposal, is several blocks with the same dates; at most $MAX_BLOCKS blocks, longer ones if there's more work than that), from (the date before which it can't be done, or null) and due (when it must be done by, written as for deadline, only where the email gives one; otherwise null, and the block waits for the email's own deadline, or with none is planned within the week). A window the email gives only roughly ("applications open in December") runs from its first day to its last. The planner schedules each block in its own window, so one email can become work spread over months, kept after the email is archived. An email with blocks is Admin, and its effortMin is their total. Otherwise an empty list.
 
             You see the conversation the starred message is in, oldest message first (where a long one's earlier messages had to be cut short or left out, it says so); when there's more than one, each is headed by who sent it and when ("From you" for the student's own). The first message shown keeps what it quotes from earlier (cut short too, where it had to be); in the ones after it, quoted text and signatures are left out and marked in square brackets, as what they quote is shown above them. You don't see attachments, only their names (an attached email goes by its subject). Where what the email asks turns on an attachment or an earlier message you can't see, and its name doesn't tell you, don't guess what it asked: make nextStep say to read it first, naming it ("Read the attached consent form and decide"), and effortMin 10.
@@ -87,6 +88,7 @@ object Prompts {
             - ankiSections: every vocabulary section the student is asked to learn, written like "1.2" (from "learn vocabulary 1.2" or "p46-47/ 2.2/2.3"); otherwise an empty list.
             - testDate: if the work prepares for a test or assessment on a stated date, that date (YYYY-MM-DD); otherwise null.
             - question: rarely: the one question that would settle a reading the text can't (which Friday; whether the test is the 12th or the 19th); otherwise null.
+            - reason: the phrase in the instructions that gave the test date or the split, quoted (under 160 characters); empty if nothing did.
         """.trimIndent()
         Enrichments.Job.Effort -> """
             Estimate how many minutes of work ${student(year)} needs to finish one item from their planner, from its title, class and details: a realistic total for a typical Year 12 student (the planner adjusts it to this one). A call, meeting or other appointment isn't work: give only the minutes needed to prepare for it, at least 1.
@@ -105,6 +107,7 @@ object Prompts {
             "effortMin" to described(mapOf("type" to "integer"), "The minutes in all; with blocks, their sum"),
             "nextStep" to mapOf("type" to "string"),
             "question" to nullable(mapOf("type" to "string")),
+            "reason" to described(mapOf("type" to "string"), REASON),
             "blocks" to mapOf("type" to "array", "items" to block(vocabulary = false)),
         )
         Enrichments.Job.Assignment -> obj(
@@ -113,6 +116,7 @@ object Prompts {
             "ankiSections" to mapOf("type" to "array", "items" to mapOf("type" to "string")),
             "testDate" to nullable(mapOf("type" to "string", "format" to "date")),
             "question" to nullable(mapOf("type" to "string")),
+            "reason" to described(mapOf("type" to "string"), REASON),
         )
         Enrichments.Job.Effort -> obj(
             "effortMin" to described(mapOf("type" to "integer"), "The minutes in all; with blocks, their sum"),
@@ -121,6 +125,9 @@ object Prompts {
     }
 
     private val LOCAL_TIME = mapOf("type" to "string", "description" to "Local date and time, YYYY-MM-DDTHH:MM, or the date alone, YYYY-MM-DD")
+
+    /** What a reading's [Enrichment.reason] is (AI-09). */
+    private const val REASON = "The phrase in the text that gave the deadline, kind or test date, quoted, under 160 characters; empty if none did"
 
     /**
      * One block (or step) of work: its own dates where it has them; an assignment's, its vocabulary
@@ -168,8 +175,11 @@ object Prompts {
     /** What's said to the model of its answer's [complaint], asked once more (AI-01). */
     fun repair(complaint: String): String = "Your answer had a problem: $complaint. Return the whole answer again with only that put right."
 
-    /** The item, as the model reads it. */
-    fun describe(task: TaskItem, job: Enrichments.Job, now: Long, zone: ZoneId): String = buildString {
+    /**
+     * The item, as the model reads it; with [previous], its steps as planned before (AI-08), so a
+     * step whose work hasn't changed keeps its title, and with it its tick.
+     */
+    fun describe(task: TaskItem, job: Enrichments.Job, now: Long, zone: ZoneId, previous: List<SubStep> = emptyList()): String = buildString {
         fun at(time: Long) = Instant.ofEpochMilli(time).atZone(zone)
         appendLine("Today: ${at(now).format(TODAY)}")
         when (job) {
@@ -192,6 +202,11 @@ object Prompts {
         }
         // What the student said to its questions (AI-10).
         task.answers.forEach { appendLine("The student says: $it") }
+        if (previous.isNotEmpty()) {
+            val noun = if (job == Enrichments.Job.Assignment) "step" else "block"
+            appendLine("${noun.replaceFirstChar(Char::uppercase)}s as planned before (keep the exact title of any $noun whose work is unchanged; mark none as done):")
+            previous.forEachIndexed { i, step -> appendLine("${i + 1}. ${step.title} (${step.minutes} min)") }
+        }
         val text = task.detail.trim()
         if (text.isNotEmpty()) {
             appendLine()
@@ -221,6 +236,7 @@ object Answers {
         val effortMin: Int,
         val nextStep: String,
         val question: String? = null,
+        val reason: String = "",
         val blocks: List<Step> = emptyList(),
     )
 
@@ -228,7 +244,7 @@ object Answers {
     private data class Step(val title: String, val minutes: Int, val ankiSections: List<String> = emptyList(), val from: String? = null, val due: String? = null, val where: String? = null)
 
     @Serializable
-    private data class Split(val subSteps: List<Step>, val effortMin: Int, val ankiSections: List<String> = emptyList(), val testDate: String? = null, val question: String? = null)
+    private data class Split(val subSteps: List<Step>, val effortMin: Int, val ankiSections: List<String> = emptyList(), val testDate: String? = null, val question: String? = null, val reason: String = "")
 
     @Serializable
     private data class Estimate(val effortMin: Int, val blocks: List<Step> = emptyList())
@@ -239,6 +255,11 @@ object Answers {
     private const val MAX_QUESTION = 200
 
     private fun question(text: String?): String? = text?.trim()?.takeIf { it.isNotEmpty() }?.take(MAX_QUESTION)
+
+    /** The longest phrase a reading's reason quotes (AI-09). */
+    private const val MAX_REASON = 160
+
+    private fun reason(text: String): String? = text.trim().trim('"', '“', '”').trim().takeIf { it.isNotEmpty() }?.take(MAX_REASON)
 
     /** The Email job's kinds (AI-02): Info, only to read, isn't one since only starred emails are read. */
     private val EMAIL_KINDS = mapOf("Admin" to Kind.Admin, "Event" to Kind.Event)
@@ -328,6 +349,7 @@ object Answers {
                     dropped = checked.dropped,
                     adjusted = checked.adjusted,
                     question = question(t.question),
+                    reason = reason(t.reason),
                 )
             }
             Enrichments.Job.Assignment -> json.decodeFromString(Split.serializer(), text).let { s ->
@@ -377,6 +399,7 @@ object Answers {
                     ankiSections = if (usable && agree) sections else emptyList(),
                     testDate = testDate,
                     question = question(s.question),
+                    reason = reason(s.reason),
                 )
             }
             Enrichments.Job.Effort -> json.decodeFromString(Estimate.serializer(), text).let { e ->

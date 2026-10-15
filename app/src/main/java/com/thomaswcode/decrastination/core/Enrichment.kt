@@ -47,6 +47,8 @@ data class Enrichment(
     val question: String? = null,
     /** A line for each step whose dates couldn't be, kept with none (AI-01): said on the task's sheet. */
     val adjusted: List<String> = emptyList(),
+    /** The phrase in the text that gave the reading (AI-09), quoted: under its due date on the sheet. */
+    val reason: String? = null,
 )
 
 /**

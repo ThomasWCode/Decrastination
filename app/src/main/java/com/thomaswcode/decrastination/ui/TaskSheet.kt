@@ -224,11 +224,11 @@ fun TaskSheet(
                             else -> "Planned again: its date was " + Format.at(due, now, zone)
                         }
                     },
-                    note = when {
-                        own -> null
-                        task.userDueAt != null -> "Yours: ${task.source.label} says ${sourceDue?.let { Format.at(it, now, zone) } ?: "no date"}"
-                        else -> null
-                    },
+                    note = listOfNotNull(
+                        if (!own && task.userDueAt != null) "Yours: ${task.source.label} says ${sourceDue?.let { Format.at(it, now, zone) } ?: "no date"}" else null,
+                        // Where Claude's reading came from (AI-09).
+                        Enrichments.current(task)?.reason?.let { "Claude: “$it” in ${if (task.source == com.thomaswcode.decrastination.core.Source.Gmail) "the email" else "the instructions"}" },
+                    ).joinToString(". ").takeIf { it.isNotEmpty() },
                     urgent = task.isOpen && task.hardAt(now) && task.deadlineAt(now)?.let { it < now } == true,
                     onChange = if (changeable) ({ picking = OwnChange.DueOn }) else null,
                     undo = when {
