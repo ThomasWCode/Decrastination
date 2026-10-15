@@ -62,6 +62,7 @@ object FelixPrompts {
         zone: ZoneId,
         freeMin: Int? = null,
         record: SlotRecord? = null,
+        done: List<String> = emptyList(),
     ): String = buildString {
         fun clock(at: Long) = Instant.ofEpochMilli(at).atZone(zone).format(CLOCK)
         appendLine("Reason: $reason")
@@ -95,6 +96,7 @@ object FelixPrompts {
         appendLine("Today: $kept kept, $missed missed, ${toCome.size} to come$next")
         if (toCome.isNotEmpty()) appendLine("Left today: " + toCome.joinToString("; ") { "${it.chunk?.label} ${clock(it.start)}–${clock(it.end)}" })
         freeMin?.let { appendLine("Free time now: $it min") }
+        if (done.isNotEmpty()) appendLine("Done, as their sources say, with none of it timed in a slot: " + done.joinToString("; "))
         // His silences (he chose not to write, or the model couldn't be asked) aren't messages.
         val shown = recent.filter { it.text.isNotBlank() }.sortedBy { it.at }.takeLast(RECENT)
         if (shown.isNotEmpty()) {

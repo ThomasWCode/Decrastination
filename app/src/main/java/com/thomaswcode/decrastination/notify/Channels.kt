@@ -15,7 +15,8 @@ object Channels {
 
     // Each its own purpose (IMP-P2-019), so a routine one can be silenced and a question kept.
     const val BRIEFING = "briefing"
-    const val HOW_IT_WENT = "how-it-went"
+    /** "How was it?" after each completion, Felix's question since review v2 (LR-05): deleted once nothing's left on it. */
+    private const val HOW_IT_WENT = "how-it-went"
     const val CALENDAR = "calendar-questions"
     const val WEEKLY = "weekly"
     const val MODEL = "model"
@@ -47,9 +48,6 @@ object Channels {
                 NotificationChannel(BRIEFING, "Morning briefing", was).apply {
                     description = "Today's plan, each morning"
                 }.asWas(),
-                NotificationChannel(HOW_IT_WENT, "How it went", was).apply {
-                    description = "After finished homework or revision: harder, as expected or easier"
-                }.asWas(),
                 NotificationChannel(CALENDAR, "Calendar questions", was).apply {
                     description = "How much of its day an event the plan can't judge takes"
                 }.asWas(),
@@ -63,6 +61,10 @@ object Channels {
         // it's kept, with nothing new on it, and a later start deletes it.
         if (manager.getNotificationChannel(DAILY) != null && manager.activeNotifications.none { it.notification.channelId == DAILY }) {
             manager.deleteNotificationChannel(DAILY)
+        }
+        // Felix asks how it went (LR-05): its channel goes, as the old one did, once nothing's left on it.
+        if (manager.getNotificationChannel(HOW_IT_WENT) != null && manager.activeNotifications.none { it.notification.channelId == HOW_IT_WENT }) {
+            manager.deleteNotificationChannel(HOW_IT_WENT)
         }
         // Sessions are gone (AR-09): their channel, and a session's notification left on it, with them.
         if (manager.getNotificationChannel(SESSION) != null) manager.deleteNotificationChannel(SESSION)

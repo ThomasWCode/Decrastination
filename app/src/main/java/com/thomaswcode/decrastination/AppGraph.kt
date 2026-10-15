@@ -1344,6 +1344,12 @@ class AppGraph private constructor(context: Context) {
         val now = clock.now()
         val name = settings.value.felixName
         val record = log.value.felix.firstOrNull { it.id == id }
+        // One of the three answers to how the day's completions went (LR-05): on them, and that's all.
+        if (record != null && felix.answered(record, words)) {
+            log.update { l -> l.copy(felix = l.felix.map { if (it.id == id) it.copy(replyText = words, repliedAt = now) else it }) }
+            com.thomaswcode.decrastination.notify.FelixNotifications.cancel(app)
+            return true
+        }
         if (record != null) {
             val title = record.taskId?.let { t -> tasks.value.tasks.firstOrNull { it.id == t }?.title }
             chat.update { s ->

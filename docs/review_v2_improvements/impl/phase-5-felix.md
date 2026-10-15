@@ -198,7 +198,7 @@ Settings added (all `NEVER` in LOOSER unless said):
 
 **Files.** `learn/Assessment.kt`, `learn/Felix.kt`.
 
-**Steps.** `Assessment.ask` no longer posts per completion: it adds the completions to `assessLater`; `FelixRules.due` adds a `Completions` trigger at the first check after 19:00 when `assessLater` is non-empty and none of them has a kept slot today; the message carries three quick replies mapped to `Calibrator.HARDER`/`AS_EXPECTED`/`EASIER` (the receiver recognises these three texts and calls `Assessment.record` for each listed completion). `AssessActivity` stays for the note. The `HOW_IT_WENT` channel is deleted at start-up (like `DAILY`).
+**Steps.** `Assessment.ask` no longer posts per completion: it adds the completions to `assessLater`; `FelixRules.due` adds a `Completions` trigger at the first check after 19:00 when `assessLater` is non-empty and none of them has a kept slot today; the message carries three quick replies mapped to `Calibrator.HARDER`/`AS_EXPECTED`/`EASIER` (the receiver recognises these three texts and calls `Assessment.record` for each listed completion). `AssessActivity` stays for the note. The `HOW_IT_WENT` channel is deleted at start-up (like `DAILY`). *(As built: "none of them has a kept slot today" read as LR-05's proposal has it: the completions asked about are today's with no kept slot (work done outside the app's knowledge), the slot-end question covering the rest; the record keeps what it asked about (`FelixRecord.asks`) and a reply of one of the three answers goes on each, not to the chat; with Claude off, the old question still comes per completion, on Felix's channel, so the calibration keeps its answers.)*
 
 **Tests.** `FelixRulesTest`: the Completions trigger; `LearnTest`: `answered` unchanged.
 
