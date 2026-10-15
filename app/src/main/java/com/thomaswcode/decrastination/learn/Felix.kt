@@ -12,6 +12,7 @@ import com.thomaswcode.decrastination.enrich.FelixAnswers
 import com.thomaswcode.decrastination.enrich.FelixCaller
 import com.thomaswcode.decrastination.enrich.FelixPrompts
 import com.thomaswcode.decrastination.notify.FelixNotifications
+import kotlinx.coroutines.async
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.util.UUID
@@ -76,9 +77,12 @@ class Felix(private val graph: AppGraph) {
         val settings = graph.settings.value
         val profile = graph.profile(now)
         val user = FelixPrompts.describe(FelixPrompts.Reason.Morning, plan, null, null, today(now), graph.log.value.felix, null, settings, now, graph.clock.zone())
-        val called = kotlinx.coroutines.withTimeoutOrNull(MORNING_MS) {
+        // Asked in the app's scope, not the briefing's: past [MORNING_MS] the briefing goes without
+        // it, and the call, paid for, comes back and is counted all the same.
+        val call = graph.scope.async {
             graph.callModel(interactive = false, cost = { r: FelixCaller.Result -> r.costUsd to r.refused }) { caller.say(FelixPrompts.system(settings, profile.year), profile.text, user) }
         }
+        val called = kotlinx.coroutines.withTimeoutOrNull(MORNING_MS) { call.await() }
         val answer = (called as? AppGraph.Called.Answered)?.value?.answer?.takeIf { it.message.isNotBlank() } ?: return@withLock false
         val record = FelixRecord(UUID.randomUUID().toString(), now, FelixPrompts.Reason.Morning.name, answer.message, answer.replies)
         graph.log.update { it.copy(felix = it.felix + record).trimmed(now) }
@@ -122,9 +126,11 @@ class Felix(private val graph: AppGraph) {
     }
 
     /**
-     * [trigger]'s message: asked of the model with what it's about, posted if he wrote one (an empty
-     * one is his choice not to), and on record either way, so it isn't asked for again; his next
-     * check set by what he said (20 minutes if he didn't), and what he remembered kept.
+     * [trigger]'s message: asked of the model with what it's about, through a rest as it's due now,
+     * posted if he wrote one (an empty one is his choice not to, as is an answer refused or unread,
+     * paid for), and on record either way, so it isn't asked for again; his next check set by what
+     * he said (20 minutes if he didn't), and what he remembered kept. A call held or failed puts
+     * nothing on record: it's tried again past [FelixRules.RETRY_MS] while it's still to say.
      */
     private suspend fun write(trigger: FelixRules.Trigger, now: Long): FelixRecord? {
         val caller = graph.felixCaller() ?: return null
@@ -134,7 +140,8 @@ class Felix(private val graph: AppGraph) {
         val state = graph.runtime.value.felix
         val drafted = state.draft?.takeIf { FelixRules.fits(it, trigger, now, graph.log.value.felix.filter { r -> r.text.isNotBlank() }.maxOfOrNull { r -> r.at }) }
         if (state.draft != null) graph.runtime.update { it.copy(felix = it.felix.copy(draft = null)) }
-        val answer = drafted?.answer ?: ask(caller, trigger, now)
+        val called = if (drafted != null) null else ask(caller, trigger, now, interactive = true)
+        val answer = drafted?.answer ?: (called as? AppGraph.Called.Answered)?.value?.answer
         val text = answer?.message.orEmpty()
         val next = now + (answer?.nextCheckMin ?: settings.felixDefaultCheckMin).coerceAtLeast(FelixAnswers.MIN_CHECK_MIN) * 60_000L
         // Asking how the completions went, the replies are the three answers (LR-05).
@@ -145,9 +152,11 @@ class Felix(private val graph: AppGraph) {
             else -> answer?.replies.orEmpty()
         }
         val record = FelixRecord(UUID.randomUUID().toString(), now, trigger.reason.name, text, replies, trigger.key, trigger.taskId, next, asks = trigger.asks)
-        // A question or completions with no answer from the model (held, failed): kept to ask at his next look, nothing on record.
-        if (answer == null && (trigger.question != null || trigger.asks.isNotEmpty())) {
-            graph.runtime.update { it.copy(felix = it.felix.copy(nextCheckAt = next)) }
+        // Held or failed, or a question or completions with no answer it could read: nothing on
+        // record, tried again from his next look past the wait.
+        if ((drafted == null && called !is AppGraph.Called.Answered) || (answer == null && (trigger.question != null || trigger.asks.isNotEmpty()))) {
+            val retry = com.thomaswcode.decrastination.data.FelixRetry(trigger.reason.name, trigger.key, now + FelixRules.RETRY_MS)
+            graph.runtime.update { it.copy(felix = it.felix.copy(nextCheckAt = next, retry = retry)) }
             return null
         }
         graph.log.update { it.copy(felix = it.felix + record).trimmed(now) }
@@ -158,7 +167,15 @@ class Felix(private val graph: AppGraph) {
             val dayStart = graph.focus.today(now).atStartOfDay(zone).toInstant().toEpochMilli()
             graph.runtime.update { s -> s.copy(assessLater = s.assessLater.filter { a -> a !in trigger.asks && (a.doneAt ?: 0L) >= dayStart }) }
         }
-        graph.runtime.update { it.copy(felix = it.felix.copy(nextCheckAt = next, lastSentAt = if (text.isNotBlank()) now else it.felix.lastSentAt)) }
+        graph.runtime.update { s ->
+            s.copy(
+                felix = s.felix.copy(
+                    nextCheckAt = next,
+                    lastSentAt = if (text.isNotBlank()) now else s.felix.lastSentAt,
+                    retry = s.felix.retry?.takeUnless { it.reason == trigger.reason.name && it.key == trigger.key },
+                ),
+            )
+        }
         answer?.memories?.takeIf { it.isNotEmpty() }?.let { graph.remember(it) }
         if (text.isNotBlank()) FelixNotifications.post(graph.app, record.id, settings.felixName, text, record.replies)
         Log.i(AppGraph.TAG, "Felix, ${trigger.reason} about ${trigger.key}: ${if (text.isBlank()) "nothing" else "a message"}, next look in ${(next - now) / 60_000L} min")
@@ -207,17 +224,21 @@ class Felix(private val graph: AppGraph) {
         return true
     }
 
-    /** His answer for [trigger] as it stands at [at] (now, or when a draft's for), or null: held, failed, or none. */
-    private suspend fun ask(caller: FelixCaller, trigger: FelixRules.Trigger, at: Long): com.thomaswcode.decrastination.enrich.FelixAnswer? {
+    /**
+     * His answer for [trigger] as it stands at [at] (now, or when a draft's for), as the call went;
+     * [interactive], due now, it goes through a rest (AC-04: as the chat does, but for a key that
+     * failed or the cap).
+     */
+    private suspend fun ask(caller: FelixCaller, trigger: FelixRules.Trigger, at: Long, interactive: Boolean): AppGraph.Called<FelixCaller.Result> {
         val settings = graph.settings.value
         val profile = graph.profile(at)
         val task = trigger.taskId?.let { id -> graph.tasks.value.tasks.firstOrNull { it.id == id } }
         val recent = graph.log.value.felix.filter { it.text.isNotBlank() }
         val free = (graph.focus.creditLeftMs(at) / 60_000L).toInt().takeIf { trigger.reason == FelixPrompts.Reason.DayDone || trigger.reason == FelixPrompts.Reason.SlotKept }
         val user = FelixPrompts.describe(trigger.reason, graph.plan(), trigger.slot, task, today(at), recent, trigger.question?.question, settings, at, graph.clock.zone(), free, trigger.record, trigger.asks.map { it.title })
-        val called = graph.callModel(interactive = false, cost = { r: FelixCaller.Result -> r.costUsd to r.refused }) { caller.say(FelixPrompts.system(settings, profile.year), profile.text, user) }
+        val called = graph.callModel(interactive = interactive, cost = { r: FelixCaller.Result -> r.costUsd to r.refused }) { caller.say(FelixPrompts.system(settings, profile.year), profile.text, user) }
         if (called is AppGraph.Called.Failed) Log.w(AppGraph.TAG, "Felix's message failed", called.error)
-        return (called as? AppGraph.Called.Answered)?.value?.answer
+        return called
     }
 
     /**
@@ -243,7 +264,7 @@ class Felix(private val graph: AppGraph) {
         if (FelixRules.fits(graph.runtime.value.felix.draft, trigger, now, lastSent)) return
         if (!com.thomaswcode.decrastination.notify.Notify.shown(graph.app, com.thomaswcode.decrastination.notify.Channels.FELIX) || !graph.modelAvailable()) return
         val caller = graph.felixCaller() ?: return
-        val answer = ask(caller, trigger, at) ?: return
+        val answer = (ask(caller, trigger, at, interactive = false) as? AppGraph.Called.Answered)?.value?.answer ?: return
         graph.runtime.update { it.copy(felix = it.felix.copy(draft = com.thomaswcode.decrastination.data.FelixDraft(trigger.reason.name, trigger.key, answer, now))) }
         Log.i(AppGraph.TAG, "Felix wrote ahead for ${trigger.key}, due at ${java.time.Instant.ofEpochMilli(at).atZone(graph.clock.zone()).toLocalTime()}")
     }

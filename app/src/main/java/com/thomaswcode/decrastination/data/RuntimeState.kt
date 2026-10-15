@@ -339,6 +339,8 @@ data class FelixState(
     val activity: Map<String, Long> = emptyMap(),
     /** The model's questions about tasks waiting to be put (AI-10). */
     val questions: List<FelixQuestion> = emptyList(),
+    /** A message whose call didn't come back, to try again (LR-03). */
+    val retry: FelixRetry? = null,
 ) {
     /** [taskIds] seen done on [at]: the last day's kept. */
     fun withActivity(taskIds: Collection<String>, at: Long): FelixState =
@@ -351,6 +353,10 @@ data class FelixState(
         return copy(questions = if (was == null) questions + listOfNotNull(next) else questions.flatMap { if (it.taskId == taskId) listOfNotNull(next) else listOf(it) }.distinct())
     }
 }
+
+/** A message whose call didn't come back (held, failed): its reason and piece, tried again from [notBefore] (LR-03). */
+@Serializable
+data class FelixRetry(val reason: String, val key: String?, val notBefore: Long)
 
 /** A question of the model's about [taskId]'s reading (AI-10), from [at]. */
 @Serializable
@@ -369,7 +375,11 @@ data class HeldNotification(val channel: String, val id: Int, val tag: String? =
  * ([broadcast]) a receiver of its to send to, as [intent] (`Intent.toUri`) with [requestCode].
  */
 @Serializable
-data class HeldTap(val label: String? = null, val broadcast: Boolean = false, val requestCode: Int = 0, val intent: String)
+data class HeldTap(val label: String? = null, val broadcast: Boolean = false, val requestCode: Int = 0, val intent: String, val reply: HeldReply? = null)
+
+/** A button's reply box (Felix's, AI-24): its key, what it says, and the replies it offers; its intent mutable, to take the words. */
+@Serializable
+data class HeldReply(val key: String, val label: String, val choices: List<String> = emptyList())
 
 /** A daily alarm's run that failed: tried again [at], this being try [tries] (`Daily.failed`). */
 @Serializable

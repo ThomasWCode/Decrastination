@@ -37,6 +37,8 @@ data class AiUsage(
     val lastFailureClass: String? = null,
     /** When the calls of the last hour failed: past [Failures.MAX_AN_HOUR] of them, an hour's rest. */
     val failedAt: List<Long> = emptyList(),
+    /** When the latest call that went through was sent: one sent before it failing since says nothing new (AC-05). */
+    val lastWorkedAt: Long? = null,
 ) {
     /** This month's, or a new one's from nothing; a key problem, not being the month's, carries over. */
     fun forMonth(month: String): AiUsage =
@@ -44,6 +46,7 @@ data class AiUsage(
             month = month, keyProblem = keyProblem, keyProblemSince = keyProblemSince, keyAlerted = keyAlerted,
             // A rest, and the failures it's counted from, aren't the month's either.
             restUntil = restUntil, failuresInRow = failuresInRow, lastFailureClass = lastFailureClass, failedAt = failedAt,
+            lastWorkedAt = lastWorkedAt,
         )
 
     /**
@@ -65,16 +68,24 @@ data class AiUsage(
      * problem that failure found standing.
      */
     fun record(costUsd: Double, refused: Boolean, at: Long): AiUsage {
-        val counted = copy(spentUsd = spentUsd + costUsd, calls = calls + 1, refused = this.refused + if (refused) 1 else 0, lastCallAt = maxOf(lastCallAt ?: at, at))
+        val counted = copy(
+            spentUsd = spentUsd + costUsd, calls = calls + 1, refused = this.refused + if (refused) 1 else 0,
+            lastCallAt = maxOf(lastCallAt ?: at, at), lastWorkedAt = maxOf(lastWorkedAt ?: at, at),
+        )
         if (failedAt.any { it > at } || (keyProblemSince ?: Long.MIN_VALUE) > at) return counted
         return counted.copy(lastError = null, keyProblem = null, keyProblemSince = null, keyAlerted = false, restUntil = null, failuresInRow = 0)
     }
 
+    /** Whether a call sent at [at] is older than one that has gone through since (calls overlap, AC-05). */
+    fun stale(at: Long): Boolean = (lastWorkedAt ?: Long.MIN_VALUE) > at
+
     /**
-     * A failed call. One showing a problem with the key or the account ([problem]) begins a
-     * stretch of it, or carries on the one under way; any other (no network) leaves it as it was.
+     * A failed call, sent at [at]. One showing a problem with the key or the account ([problem])
+     * begins a stretch of it, or carries on the one under way; any other (no network) leaves it as
+     * it was. One older than a call that has gone through since ([stale]) is counted only: that
+     * call showed the model works, so no rest, streak or key problem comes of it.
      */
-    fun failure(error: String, at: Long, problem: KeyProblem? = null, restMs: Long = ModelHold.REST_MS, kind: Failure? = null): AiUsage = copy(
+    fun failure(error: String, at: Long, problem: KeyProblem? = null, restMs: Long = ModelHold.REST_MS, kind: Failure? = null): AiUsage = if (stale(at)) copy(failed = failed + 1) else copy(
         failed = failed + 1,
         lastError = error,
         lastCallAt = at,

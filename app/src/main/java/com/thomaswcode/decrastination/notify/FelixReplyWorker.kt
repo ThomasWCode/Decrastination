@@ -21,7 +21,8 @@ import com.thomaswcode.decrastination.R
 class FelixReplyWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
         val id = inputData.getString(KEY_ID) ?: return Result.success()
-        AppGraph.get(applicationContext).answerReply(id, inputData.getString(KEY_WORDS).orEmpty(), inputData.getLong(KEY_SINCE, 0L))
+        val asked = inputData.getString(KEY_ASKED) ?: return Result.success()
+        AppGraph.get(applicationContext).answerReply(id, asked, inputData.getString(KEY_WORDS).orEmpty())
         return Result.success()
     }
 
@@ -38,17 +39,17 @@ class FelixReplyWorker(context: Context, params: WorkerParameters) : CoroutineWo
         private const val NAME = "felix-reply"
         private const val KEY_ID = "id"
         private const val KEY_WORDS = "words"
-        private const val KEY_SINCE = "since"
+        private const val KEY_ASKED = "asked"
         private const val NOTIFICATION_ID = 1004
 
         /** The most of the reply kept to show under his message while he answers: the chat has it whole. */
         private const val MAX_WORDS = 1_000
 
-        /** The reply [words] to his message [id], sent at [since], answered as soon as it can be; one after another. */
-        fun enqueue(context: Context, id: String, words: String, since: Long) {
+        /** The reply [words] to his message [id], kept in the chat as [asked], answered as soon as it can be; one after another. */
+        fun enqueue(context: Context, id: String, asked: String, words: String) {
             val request = OneTimeWorkRequestBuilder<FelixReplyWorker>()
                 .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
-                .setInputData(workDataOf(KEY_ID to id, KEY_WORDS to words.take(MAX_WORDS), KEY_SINCE to since))
+                .setInputData(workDataOf(KEY_ID to id, KEY_ASKED to asked, KEY_WORDS to words.take(MAX_WORDS)))
                 .build()
             WorkManager.getInstance(context).enqueueUniqueWork(NAME, ExistingWorkPolicy.APPEND_OR_REPLACE, request)
         }

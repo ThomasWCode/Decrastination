@@ -178,4 +178,16 @@ class FelixRulesTest {
         assertEquals(listOf("teams:b"), state.withQuestion("teams:a", null, at("10:00")).questions.map { it.taskId })
         assertEquals(listOf("teams:a", "teams:b", "teams:c"), state.withQuestion("teams:c", "Which?", at("10:00")).questions.map { it.taskId })
     }
+
+    @Test
+    fun `a message whose call didn't come back is tried again past its wait, the rest going on meanwhile`() {
+        val missed = record(first.chunk!!.key, SlotOutcome.Missed, first.start, first.end + Slotter.GRACE_MS)
+        val now = first.end + Slotter.GRACE_MS + 60_000L
+        val retry = com.thomaswcode.decrastination.data.FelixRetry(Reason.SlotEnd.name, missed.key, now + FelixRules.RETRY_MS)
+        assertNull(due(now, FelixState(retry = retry), today = listOf(missed))?.takeIf { it.reason == Reason.SlotEnd })
+        assertEquals(Reason.SlotEnd, due(now + FelixRules.RETRY_MS, FelixState(retry = retry), today = listOf(missed))?.reason)
+        // His next look comes for it, with nothing else ahead.
+        val empty = Planner.plan(Planner.Input(emptyList(), at("16:00"), LONDON, settings, windows = evening))
+        assertEquals(now + FelixRules.RETRY_MS, FelixRules.next(empty, FelixState(retry = retry), settings, now))
+    }
 }

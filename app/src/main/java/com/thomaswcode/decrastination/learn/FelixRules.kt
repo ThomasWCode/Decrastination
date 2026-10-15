@@ -68,15 +68,17 @@ object FelixRules {
         if (quiet || busyNow) return null
         fun said(reason: Reason, key: String?, since: Long) = sent.filter { it.reason == reason.name && it.key == key && it.at >= since }
         fun fresh(record: SlotRecord) = now - record.at <= FRESH_MS
+        // One whose call didn't come back waits to be tried again; the rest go on meanwhile.
+        fun waiting(reason: Reason, key: String?) = state.retry?.let { it.reason == reason.name && it.key == key && now < it.notBefore } == true
         // A slot gone by undone, or ticked without the photo it needs to earn once its time is over.
         today.firstOrNull { r ->
-            fresh(r) && said(Reason.SlotEnd, r.key, r.start).isEmpty() &&
+            fresh(r) && said(Reason.SlotEnd, r.key, r.start).isEmpty() && !waiting(Reason.SlotEnd, r.key) &&
                 (r.outcome == SlotOutcome.Missed || (r.outcome.kept && !r.earned && needsPhoto(r) && now >= r.end))
         }?.let { return Trigger(Reason.SlotEnd, record = it) }
         // Today's last slot kept.
         val kept = today.filter { it.outcome.kept }
         val last = kept.maxByOrNull { it.at }
-        if (plan.todayBucket?.chunks.orEmpty().isEmpty() && last != null && fresh(last) && sent.none { it.reason == Reason.DayDone.name }) {
+        if (plan.todayBucket?.chunks.orEmpty().isEmpty() && last != null && fresh(last) && sent.none { it.reason == Reason.DayDone.name } && !waiting(Reason.DayDone, last.key)) {
             return Trigger(Reason.DayDone, record = last)
         }
         val paced = state.nextCheckAt?.let { now < it } == true
@@ -93,15 +95,21 @@ object FelixRules {
         plan.slotAt(now)?.let { slot ->
             val chunk = slot.chunk!!
             val done = (state.activity[chunk.taskId]?.let { it >= slot.start } == true) || kept.any { it.taskId == chunk.taskId && it.at >= slot.start }
-            if (!done && now >= slot.start + settings.felixGraceMin * 60_000L && said(Reason.SlotStart, chunk.key, slot.start).size < MAX_PER_SLOT) {
+            if (!done && now >= slot.start + settings.felixGraceMin * 60_000L && said(Reason.SlotStart, chunk.key, slot.start).size < MAX_PER_SLOT && !waiting(Reason.SlotStart, chunk.key)) {
                 return Trigger(Reason.SlotStart, slot = slot)
             }
         }
-        kept.firstOrNull { fresh(it) && Math.floorMod(it.key.hashCode(), 3) == 0 && said(Reason.SlotKept, it.key, it.start).isEmpty() }?.let {
+        kept.firstOrNull { fresh(it) && Math.floorMod(it.key.hashCode(), 3) == 0 && said(Reason.SlotKept, it.key, it.start).isEmpty() && !waiting(Reason.SlotKept, it.key) }?.let {
             return Trigger(Reason.SlotKept, record = it)
         }
         return null
     }
+
+    /**
+     * How soon a message whose call didn't come back (held, failed) is tried again: while it's still
+     * to say, no oftener, as one due goes through the model's rests.
+     */
+    const val RETRY_MS = 5 * 60_000L
 
     /** How far ahead his next message is written (AC-10). */
     const val AHEAD_MS = 10 * 60_000L
@@ -138,7 +146,8 @@ object FelixRules {
      * When to look again (LR-03, AC-10): the earliest of a slot's grace into it, a slot's end and
      * grace (its miss then on record), and the check he set while there's work to come; and, with a
      * grace longer than [AHEAD_MS], when the next slot's message is to be written ahead (with one
-     * shorter, its slot's start does that, with its plan). Null with nothing ahead.
+     * shorter, its slot's start does that, with its plan); and when a message whose call didn't come
+     * back is tried again. Null with nothing ahead.
      */
     fun next(plan: Plan, state: FelixState, settings: Settings, now: Long): Long? {
         val work = plan.buckets.flatMap { it.slots }.filter { it.kind == SlotKind.Work }
@@ -146,7 +155,7 @@ object FelixRules {
         val ends = work.map { it.end + Slotter.GRACE_MS + MISS_LAG_MS }
         val check = state.nextCheckAt?.takeIf { work.any { it.end + Slotter.GRACE_MS > now } }
         val ahead = upcoming(plan, settings, now)?.second?.minus(AHEAD_MS)?.takeIf { settings.felixGraceMin * 60_000L > AHEAD_MS }
-        return (starts + ends + listOfNotNull(check, ahead)).filter { it > now }.minOrNull()
+        return (starts + ends + listOfNotNull(check, ahead, state.retry?.notBefore)).filter { it > now }.minOrNull()
     }
 
     /**

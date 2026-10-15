@@ -781,6 +781,16 @@ class PhotoCheckerTest {
     }
 
     @Test
+    fun `a failure older than a call that has gone through since brings no rest`() {
+        val worked = AiUsage("2026-10").record(0.1, refused = false, at = NOW + 2_000)
+        val late = worked.failure("503", NOW + 1_000, KeyProblem.Rejected, restMs = 15 * 60_000L)
+        assertEquals(null to null, late.restUntil to late.keyProblem)
+        assertEquals(0 to 1, late.failuresInRow to late.failed)
+        // A newer one's failure rests it as ever.
+        assertEquals(NOW + 3_000 + 15 * 60_000L, worked.failure("503", NOW + 3_000, restMs = 15 * 60_000L).restUntil)
+    }
+
+    @Test
     fun `the cap counts the calls still in flight at their dearest`() {
         // Room under a $10 cap for two more calls at their dearest: one in flight leaves room for one, two for none.
         val worst = Pricing.WORST_CALL_USD
