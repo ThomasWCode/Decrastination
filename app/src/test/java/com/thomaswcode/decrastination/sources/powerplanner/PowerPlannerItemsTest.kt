@@ -63,6 +63,25 @@ class PowerPlannerItemsTest {
         assertNull(PowerPlannerItems.slot(german, LocalDate.of(2026, 10, 6), timetable))
     }
 
+    @Test
+    fun `a day's lessons come from every class's slots that day, by start, week by week`() {
+        // German as recorded, with a study period on week 1 Fridays and both weeks' Mondays.
+        val study = PpClass(
+            "study", "Study Period",
+            listOf(PpSchedule("2026-09-05T08:50:00", "2026-09-05T09:45:00", dayOfWeek = 5, scheduleWeek = 1), PpSchedule("2026-09-05T14:35:00", "2026-09-05T15:30:00", dayOfWeek = 1, scheduleWeek = 3)),
+        )
+        val both = timetable.copy(classes = timetable.classes + study)
+        // Friday 9 Oct, week 1: the study period, then German at 12:20.
+        assertEquals(
+            listOf(Lesson("Study Period", LocalTime.of(8, 50), LocalTime.of(9, 45)), Lesson("German", LocalTime.of(12, 20), LocalTime.of(13, 15))),
+            PowerPlannerItems.lessonsOn(both, LocalDate.of(2026, 10, 9)),
+        )
+        // Friday 16 Oct, week 2: German at 08:50 only. Monday 12 Oct, week 2: German, then the study period.
+        assertEquals(listOf(Lesson("German", LocalTime.of(8, 50), LocalTime.of(9, 45))), PowerPlannerItems.lessonsOn(both, LocalDate.of(2026, 10, 16)))
+        assertEquals(listOf("German", "Study Period"), PowerPlannerItems.lessonsOn(both, LocalDate.of(2026, 10, 12)).map { it.className })
+        assertEquals(emptyList(), PowerPlannerItems.lessonsOn(both, LocalDate.of(2026, 10, 10)))
+    }
+
     private fun task(date: String, classId: String? = timetable.classes.single().identifier, percent: Double = 0.0, type: Int = 5, end: String? = null) =
         PowerPlannerItems.fetched(PpItem("id", "x", null, date, end, classId, type, percent), semester, timetable, LONDON)!!
 

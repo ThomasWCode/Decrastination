@@ -134,6 +134,7 @@ class Syncer(
                 unrewarded = current.unrewarded + merged.completed.filterNot { it.hidden },
                 sources = current.sources + (source.source to SourceStatus(lastSuccessAt = now, lastAttemptAt = startedAt, dataAsOf = read.dataAsOf, note = read.note)),
                 ankiDay = read.ankiDay ?: current.ankiDay,
+                timetable = read.timetable ?: current.timetable,
             )
         }
         return report

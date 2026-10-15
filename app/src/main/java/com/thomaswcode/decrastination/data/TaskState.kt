@@ -3,6 +3,7 @@ package com.thomaswcode.decrastination.data
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.sources.anki.AnkiDay
+import com.thomaswcode.decrastination.sources.powerplanner.Timetable
 import kotlinx.serialization.Serializable
 
 /** Every task, open or recently finished, and how each source's last read went. Kept in `tasks.json`. */
@@ -18,6 +19,11 @@ data class TaskState(
      * lose them (`Focus.rewardCompletions`).
      */
     val unrewarded: List<TaskItem> = emptyList(),
+    /**
+     * Power Planner's timetable from its last good read (DX-09): the school days' study periods
+     * come from it, and a failed read leaves it as it was.
+     */
+    val timetable: Timetable? = null,
 ) {
     val open: List<TaskItem> get() = tasks.filter { it.isOpen }
 

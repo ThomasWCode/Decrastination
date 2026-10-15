@@ -63,6 +63,18 @@ class SyncerTest {
     }
 
     @Test
+    fun `the timetable read is kept, and a failed read leaves it as it was`() = runTest {
+        val timetable = com.thomaswcode.decrastination.sources.powerplanner.Timetable("2026-08-24T00:00:00", emptyList())
+        val planner = FakeSource(Source.PowerPlanner) { SourceRead(emptyList(), timetable = timetable) }
+        val syncer = syncer(listOf(planner))
+        syncer.sync()
+        assertEquals(timetable, tasks.value.timetable)
+        planner.answer = { throw java.io.IOException("No network") }
+        syncer.sync()
+        assertEquals(timetable, tasks.value.timetable)
+    }
+
+    @Test
     fun `a read that blocks is abandoned at the timeout, not waited for`() = runTest {
         // A blocking call ignores cancellation: the sync must give up on it anyway.
         val release = java.util.concurrent.CountDownLatch(1)

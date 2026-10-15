@@ -1,5 +1,6 @@
 package com.thomaswcode.decrastination.sources.powerplanner
 
+import com.thomaswcode.decrastination.core.Fetched
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.data.Secret
 import com.thomaswcode.decrastination.data.SecretStore
@@ -29,7 +30,7 @@ class PowerPlannerSource(private val api: PowerPlannerApi, private val secrets: 
 
     override suspend fun read(context: ReadContext): SourceRead = withContext(Dispatchers.IO) {
         val saved = savedLogin()
-        val items = if (saved != null) {
+        val (items, timetable) = if (saved != null) {
             try {
                 readWith(saved, context)
             } catch (_: PowerPlannerApi.ApiError) {
@@ -41,15 +42,16 @@ class PowerPlannerSource(private val api: PowerPlannerApi, private val secrets: 
         } else {
             readWith(freshLogin(), context)
         }
-        SourceRead(items)
+        SourceRead(items, timetable = timetable)
     }
 
-    private fun readWith(login: PowerPlannerApi.Login, context: ReadContext) = run {
+    /** The agenda's items, and the timetable they were read against. */
+    private fun readWith(login: PowerPlannerApi.Login, context: ReadContext): Pair<List<Fetched>, Timetable> = run {
         // A login typed into Setup may be another account's: its semester isn't this one's.
         val current = semester?.takeIf { it.accountId == login.accountId && context.now - it.readAt < TIMETABLE_MAX_AGE_MS }
             ?: api.selectedSemester(login).let { id -> Semester(login.accountId, id, api.classes(login, id), context.now) }.also { semester = it }
         val now = Instant.ofEpochMilli(context.now).truncatedTo(ChronoUnit.SECONDS).toString()
-        api.agenda(login, current.id, now).mapNotNull { PowerPlannerItems.fetched(it, current.id, current.timetable, context.zone) }
+        api.agenda(login, current.id, now).mapNotNull { PowerPlannerItems.fetched(it, current.id, current.timetable, context.zone) } to current.timetable
     }
 
     private fun savedLogin(): PowerPlannerApi.Login? {
