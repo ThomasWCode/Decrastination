@@ -117,16 +117,18 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
     var sheetFor by rememberSaveable { mutableStateOf<String?>(null) }
     var changing by rememberSaveable { mutableStateOf<String?>(null) }
     var eventFor by rememberSaveable { mutableStateOf<String?>(null) }
-    // A piece being moved by hand (UI-04), by its key.
+    // A piece being moved by hand (UI-04), by its key; an instruction about the day being written.
     var moving by rememberSaveable { mutableStateOf<String?>(null) }
+    var writingDay by rememberSaveable { mutableStateOf(false) }
     val answers = runtime.eventAnswers + Instructions.eventAnswers(instructions.applied)
     val model = remember(plan, day, calendar, log, school, settings, tasks) {
         DayModel.from(plan, day, calendar.events, log.slots, SchoolDays.windows(day, settings, tasks.timetable, school), now, zone)
     }
     val list = rememberLazyListState()
     val snackbar = remember { androidx.compose.material3.SnackbarHostState() }
-    // Before the day's rows: the strip, today's DO NOW card, the day's heading, its deadlines that won't fit.
-    val head = 3 + (if (today) 1 + plan.wontFit.size else 0)
+    // Before the day's rows: the strip, today's DO NOW card, the day's heading and what you've said
+    // about it, its deadlines that won't fit.
+    val head = 4 + (if (today) 1 + plan.wontFit.size else 0)
     // Today's moment in view, as today's first shown.
     LaunchedEffect(day) {
         if (today) model.rows.indexOfFirst { it is DayModel.Row.Now }.takeIf { it > 0 }?.let { list.scrollToItem(head + it - 1) }
@@ -153,6 +155,23 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
                     model.doneMin.takeIf { it > 0 }?.let { "${Format.minutes(it)} done" },
                 ).joinToString(" · "),
             )
+        }
+        // Your instructions about the day, its limit and busy times, and one more (the Calendar page's, UI-11).
+        item(key = "said-$day") {
+            val rules = instructions.applied.flatMap { it.changes }.filter { c ->
+                (c.type == com.thomaswcode.decrastination.core.ChangeType.DayLimit || c.type == com.thomaswcode.decrastination.core.ChangeType.BusyTime) &&
+                    (c.date == day.toString() || (c.date == null && c.weekday == day.dayOfWeek.value))
+            }
+            Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+                rules.forEach { rule ->
+                    Text(
+                        "Your instruction: " + Instructions.describe(rule, emptyMap(), zone),
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
+                    )
+                }
+                TextButton(onClick = { writingDay = true }) { Text("An instruction about this day…") }
+            }
         }
         if (today) {
             itemsIndexed(plan.wontFit, key = { _, it -> "wontfit-${it.taskId}" }) { index, short ->
@@ -236,6 +255,12 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
         }
     }
     changing?.let { id -> TaskSheetHost(graph, activity, id, plan, photo, messageOf(id)) { changing = null } }
+    if (writingDay) {
+        InstructionDialog("About ${dayName(day, plan.today)}", onDismiss = { writingDay = false }) { text ->
+            writingDay = false
+            sendInstruction(activity, text, About(day = day.toString()))
+        }
+    }
     moving?.let { key ->
         val chunk = plan.ordered.firstOrNull { it.key == key }
         if (chunk == null) {
