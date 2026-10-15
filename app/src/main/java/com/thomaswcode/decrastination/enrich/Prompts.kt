@@ -45,8 +45,8 @@ object Prompts {
     /** Who the prompts are for, by year group (AI-06). */
     private fun student(year: Int) = "a UK sixth-form student (Year $year)"
 
-    /** [job]'s system prompt: what it's to do, then the limits its answer is checked against (AI-03). */
-    fun system(job: Enrichments.Job, year: Int = 12): String = brief(job, year) + "\n\n" + limits(job)
+    /** [job]'s system prompt: what it's to do, the limits its answer is checked against (AI-03), and worked examples (AI-07). */
+    fun system(job: Enrichments.Job, year: Int = 12): String = brief(job, year) + "\n\n" + limits(job) + "\n\n" + Examples.text(job)
 
     /**
      * The limits the app checks [job]'s answer against (AI-03), said in its prompt from the checks'
