@@ -71,7 +71,7 @@ object Merge {
                     firstSeenAt = now,
                     lastSeenAt = now,
                     extra = f.extra,
-                    sourceValues = SourceValues(f.kind, f.dueAt, f.availableFrom),
+                    sourceValues = SourceValues(f.kind, f.dueAt, f.availableFrom, f.title),
                 ).let { if (f.done) it.copy(status = Status.Done, doneAt = now) else it }
                 if (f.done) {
                     fresh[id] = task
@@ -103,7 +103,7 @@ object Merge {
                 derived = f.derived,
                 lastSeenAt = now,
                 extra = f.extra,
-                sourceValues = SourceValues(f.kind, f.dueAt, f.availableFrom),
+                sourceValues = SourceValues(f.kind, f.dueAt, f.availableFrom, f.title),
             ).enriched()
             val next = when {
                 // Reported as it stood before it finished (see completion()).

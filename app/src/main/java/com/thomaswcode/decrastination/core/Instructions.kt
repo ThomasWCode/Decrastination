@@ -31,6 +31,12 @@ data class Instruction(
      * a newer one of the same kind for the same task replaces it, so they don't pile up.
      */
     val quick: Boolean = false,
+    /**
+     * Your answer to Felix's question about its task (AI-10), kept with the task too, which is read
+     * again with it: one Claude can't make a change of (it tells, rather than changes) is let go,
+     * not left for you to check (16 Oct).
+     */
+    val answer: Boolean = false,
 )
 
 @Serializable
@@ -99,11 +105,17 @@ enum class ChangeType {
     /** The task's next piece starts at [Change.time]: [Change.date] at [Change.startMin] (PL-04). */
     AtTime,
 
-    /** A task of your own's steps replaced with [Change.steps] (AI-19): made on the task itself, its ticks kept by name. */
+    /**
+     * A task's steps replaced with [Change.steps] (AI-19; any task's since 16 Oct, but Anki's, which
+     * are its cards): made on one of your own, laid over another's; its ticks kept by name.
+     */
     Steps,
 
     /** The task is the same work as another listed one ([Change.afterTaskId]), which is kept (DX-15): this one's hidden. */
     SameAs,
+
+    /** The task's name in the app is [Change.title] (16 Oct): made on one of your own; over another's, its source keeping its own. */
+    Rename,
 }
 
 /** One change an instruction makes. Which fields mean anything depends on [type]. */
@@ -132,6 +144,8 @@ data class Change(
     val endMin: Int? = null,
     /** [ChangeType.Steps]'s steps, in order (AI-19). */
     val steps: List<OwnStep>? = null,
+    /** [ChangeType.Rename]'s new name. */
+    val title: String? = null,
 )
 
 /** Your instructions. Kept in `instructions.json`. */
@@ -154,6 +168,10 @@ data class TaskOverrides(
     val atTime: Long? = null,
     /** The same work as this task, which is kept (DX-15): this one's hidden. */
     val sameAs: String? = null,
+    /** Its steps, in place of the source's and the enrichment's (16 Oct). */
+    val steps: List<OwnStep>? = null,
+    /** Its name in the app (16 Oct). */
+    val title: String? = null,
 ) {
     companion object {
         val NONE = TaskOverrides()
@@ -249,6 +267,8 @@ object Instructions {
                 ChangeType.OnDay -> o.copy(onDay = change.date, atTime = o.atTime?.takeIf { timeOn[id] == change.date })
                 ChangeType.AtTime -> o.copy(atTime = change.time, onDay = o.onDay?.takeIf { it == change.date }).also { timeOn[id] = change.date }
                 ChangeType.SameAs -> o.copy(sameAs = change.afterTaskId)
+                ChangeType.Steps -> o.copy(steps = change.steps)
+                ChangeType.Rename -> o.copy(title = change.title)
                 else -> o
             }
         }
@@ -376,6 +396,12 @@ object Instructions {
             ChangeType.AtTime -> "${title(change.taskId)} at ${clock(change.startMin)} on ${day(change)}"
             ChangeType.Steps -> "${title(change.taskId)} in steps: " + change.steps.orEmpty().joinToString(", ") { "${it.title} (${it.minutes} min)" }
             ChangeType.SameAs -> "${title(change.taskId)} is the same work as ${title(change.afterTaskId)}: only that one is planned"
+            ChangeType.Rename -> {
+                val task = change.taskId?.let { tasks[it] }
+                // Against its name as it is now; once this is the name in use, against its source's.
+                val was = task?.let { t -> t.sourceValues?.title?.takeIf { t.userTitle != null && t.userTitle == change.title } ?: t.title } ?: "a task no longer listed"
+                "“$was” renamed “${change.title}”"
+            }
         }
     }
 
@@ -413,16 +439,20 @@ object Instructions {
 }
 
 /** What [task]'s instructions say of it now, as [TaskOverrides] holds it. */
-fun TaskItem.overrides(): TaskOverrides = TaskOverrides(userNotATask, userFrom, userAfter, userDueAt, userEffortMin, userOnDay, userAtTime, userSameAs)
+fun TaskItem.overrides(): TaskOverrides = TaskOverrides(userNotATask, userFrom, userAfter, userDueAt, userEffortMin, userOnDay, userAtTime, userSameAs, userSteps, userTitle)
 
 /**
  * The task with [o] as its instructions' say: kept on it, and laid over what the source and the
  * enrichment say at every merge ([enriched]). The source's own values are kept first, if they
- * weren't yet, so taking an instruction back restores them.
+ * weren't yet, so taking an instruction back restores them. Steps and a name are laid over a
+ * source's task, never one derived from Anki's counts (its steps are its cards, its name their
+ * count); one of your own has them made on it ([OwnTasks.MADE_ON_IT]).
  */
-fun TaskItem.withOverrides(o: TaskOverrides): TaskItem =
-    copy(
-        sourceValues = sourceValues ?: SourceValues(kind, dueAt, availableFrom),
+fun TaskItem.withOverrides(o: TaskOverrides): TaskItem {
+    val laidOver = source != Source.Own && !derived
+    val steps = o.steps?.takeIf { laidOver && it.isNotEmpty() }
+    val laid = copy(
+        sourceValues = (sourceValues ?: SourceValues(kind, dueAt, availableFrom)).let { if (it.title == null) it.copy(title = title) else it },
         userNotATask = o.notATask,
         userFrom = o.from,
         userAfter = o.after,
@@ -431,20 +461,10 @@ fun TaskItem.withOverrides(o: TaskOverrides): TaskItem =
         userOnDay = o.onDay,
         userAtTime = o.atTime,
         userSameAs = o.sameAs,
-    ).enriched()
-
-/**
- * Which of the chat's changes are made at once (AI-24, Q-42): one to a task that already exists, a
- * busy time or a limit today, or how an event's time counts. The rest (a busy time or a limit on
- * another day, or every week; days off; a half-day) are shown to confirm, as new tasks are. Pure.
- */
-object InstantChanges {
-    private val ON_A_TASK = setOf(ChangeType.AtTime, ChangeType.OnDay, ChangeType.StartFrom, ChangeType.DueBy, ChangeType.Minutes, ChangeType.NotATask, ChangeType.After, ChangeType.Steps, ChangeType.SameAs)
-
-    fun instant(change: Change, tasks: Map<String, TaskItem>, today: java.time.LocalDate): Boolean = when (change.type) {
-        in ON_A_TASK -> change.taskId in tasks && ((change.type != ChangeType.After && change.type != ChangeType.SameAs) || change.afterTaskId in tasks)
-        ChangeType.BusyTime, ChangeType.DayLimit -> change.date == today.toString()
-        ChangeType.EventTime -> true
-        else -> false
-    }
+        userSteps = steps,
+        userTitle = o.title?.takeIf { laidOver },
+    )
+    // Your steps taken back: the enrichment's come back, as they're laid where there are none, their ticks kept by name.
+    if (userSteps == null || steps != null) return laid.enriched()
+    return laid.copy(subSteps = emptyList()).enriched().let { it.copy(subSteps = carryMarks(it.subSteps, subSteps)) }
 }

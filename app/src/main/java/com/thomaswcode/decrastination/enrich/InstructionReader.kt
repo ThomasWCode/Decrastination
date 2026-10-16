@@ -67,9 +67,10 @@ object InstructionPrompts {
         - OnDay: all of the task's remaining work goes on one day. Needs taskId and date.
         - AtTime: the task's next piece starts at a set time. Needs taskId, date and time (HH:MM).
         - SameAs: the task is the same work as another listed task, from another source, which is the one kept (this one is hidden). Needs taskId and afterTaskId (the one kept).
-        - Steps: replace a task of the student's own's steps with these, adding up to its minutes (for a new total, add a Minutes change with it too); dates within the task's. Needs taskId and steps (each with title, minutes, startDate and dueDate as YYYY-MM-DD or empty, and where: anywhere or home); only for tasks from Yours.
+        - Steps: replace a task's steps with these (any task's, from any source, but Anki's, whose steps are its cards), adding up to its minutes (for a new total, add a Minutes change with it too); dates within the task's. Needs taskId and steps (each with title, minutes, startDate and dueDate as YYYY-MM-DD or empty, and where: anywhere or home). One step is the whole task in one go.
+        - Rename: the task's name as the app shows it (its source keeps its own). Needs taskId and title (the new name).
 
-        Use the ids and event keys exactly as listed. Work out relative dates ("next Friday", "the weekend") from today; a weekday named alone ("on Saturday") means the next one, and only "every Saturday" or "on Saturdays" means each week. A stretch of days ("20 to 25 October", "this weekend") is one change per day, but for NoSchool, which takes the stretch whole. Leave every field a change type doesn't use null.
+        Use the ids and event keys exactly as listed. Work out relative dates ("next Friday", "the weekend") from today; a weekday named alone ("on Saturday") means the next one, and only "every Saturday" or "on Saturdays" means each week. A stretch of days ("20 to 25 October", "this weekend") is one change per day, but for NoSchool, which takes the stretch whole. Leave every field a change type doesn't use null, title an empty string and steps an empty list.
     """.trimIndent()
 
     /** The instructions' reader's, for a student in Year [year] (AI-06). */
@@ -99,6 +100,7 @@ object InstructionPrompts {
         "time" to nullable(mapOf("type" to "string", "description" to "HH:MM, 24-hour")),
         "endTime" to nullable(mapOf("type" to "string", "description" to "HH:MM, 24-hour")),
         // Plain strings, empty for none: the chat's schema holds 15 of the API's 16 unions.
+        "title" to STRING,
         "steps" to mapOf(
             "type" to "array",
             "items" to obj(
@@ -204,6 +206,7 @@ object InstructionAnswers {
         val weekday: String? = null,
         val time: String? = null,
         val endTime: String? = null,
+        val title: String = "",
         val steps: List<GivenStep> = emptyList(),
     )
 
@@ -291,8 +294,11 @@ object InstructionAnswers {
             }
             // The same work as another listed task (DX-15), which is kept.
             ChangeType.SameAs -> task?.let { id -> g.afterTaskId?.takeIf { it in tasks && it != id }?.let { Change(type, taskId = id, afterTaskId = it) } }
-            // Only a task of your own's steps, each with its minutes and its dates readable (AI-19).
-            ChangeType.Steps -> task?.takeIf { tasks.getValue(it).source == com.thomaswcode.decrastination.core.Source.Own }?.let { id ->
+            // A task's name in the app (16 Oct): not one derived from Anki's counts, whose name is their count.
+            ChangeType.Rename -> task?.takeIf { !tasks.getValue(it).derived }?.let { id -> g.title.trim().takeIf { it.isNotEmpty() }?.let { Change(type, taskId = id, title = it.take(OwnTasks.MAX_TITLE)) } }
+            // Any task's steps (16 Oct; your own's only before) but Anki's, which are its cards, each with
+            // its minutes and its dates readable (AI-19).
+            ChangeType.Steps -> task?.takeIf { !tasks.getValue(it).derived && tasks.getValue(it).source != com.thomaswcode.decrastination.core.Source.Anki }?.let { id ->
                 // A step's dates: readable, in range, its start not after its end, and neither after the task's day.
                 val dueDay = tasks.getValue(id).dueAt?.let { java.time.Instant.ofEpochMilli(it).atZone(zone).toLocalDate() }
                 fun dayOf(time: Long) = java.time.Instant.ofEpochMilli(time).atZone(zone).toLocalDate()
@@ -323,8 +329,12 @@ object InstructionAnswers {
         for (c in changes.filter { it.type == ChangeType.Steps }) {
             val task = tasks[c.taskId] ?: continue
             val sum = c.steps.orEmpty().sumOf { it.minutes }
-            val draft = OwnTasks.draftOf(task)
-            val total = if (draft.steps.isEmpty()) draft.minutes else draft.steps.sumOf { it.minutes }
+            // Your own task's minutes as the form has them; a source's task's, the estimate in force.
+            val total = if (task.source == com.thomaswcode.decrastination.core.Source.Own) {
+                OwnTasks.draftOf(task).let { draft -> if (draft.steps.isEmpty()) draft.minutes else draft.steps.sumOf { it.minutes } }
+            } else {
+                task.effortMin
+            }
             if (sum == total || changes.any { it.type == ChangeType.Minutes && it.taskId == c.taskId && it.minutes == sum }) continue
             return "the steps for “${task.title.take(60)}” add up to $sum minutes, not its $total, and nothing says its total changes"
         }
@@ -334,9 +344,10 @@ object InstructionAnswers {
     /** Why [g] couldn't be used, in words. */
     internal fun problem(g: Given, tasks: Map<String, TaskItem>, events: Map<String, String>): String = when {
         ChangeType.entries.none { it.name == g.type } -> "a change of a kind the app doesn't make"
-        g.type in setOf("NotATask", "StartFrom", "DueBy", "Minutes", "After", "OnDay", "AtTime", "Steps", "SameAs") && g.taskId !in tasks -> "it names a task that isn't listed"
+        g.type in setOf("NotATask", "StartFrom", "DueBy", "Minutes", "After", "OnDay", "AtTime", "Steps", "SameAs", "Rename") && g.taskId !in tasks -> "it names a task that isn't listed"
         g.type == "SameAs" -> "the task it's the same as isn't listed"
-        g.type == "Steps" && tasks[g.taskId]?.source != com.thomaswcode.decrastination.core.Source.Own -> "only a task of the student's own has its steps changed"
+        g.type in setOf("Steps", "Rename") && tasks[g.taskId]?.let { it.derived || (g.type == "Steps" && it.source == com.thomaswcode.decrastination.core.Source.Anki) } == true -> "an Anki task's steps and name come from its cards"
+        g.type == "Rename" -> "the new name is missing"
         g.type == "Steps" -> "a step has no name or minutes, or a date that doesn't read, is out of range or falls after the task's"
         g.type == "After" -> "it waits on a task that isn't listed"
         g.type == "EventTime" && g.eventKey !in events -> "it names an event that isn't in the calendar"

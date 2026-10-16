@@ -213,7 +213,7 @@ class Felix(private val graph: AppGraph) {
     suspend fun answered(record: FelixRecord, text: String): Boolean {
         if (record.reason == FelixPrompts.Reason.Question.name && record.taskId != null) {
             val task = graph.tasks.value.tasks.firstOrNull { it.id == record.taskId } ?: return false
-            graph.addInstruction(text, com.thomaswcode.decrastination.core.About(taskId = task.id, taskTitle = task.title))
+            graph.addInstruction(text, com.thomaswcode.decrastination.core.About(taskId = task.id, taskTitle = task.title), answer = true)
             graph.tasks.update { s -> s.copy(tasks = s.tasks.map { if (it.id == task.id) it.copy(answers = (it.answers + text.trim()).takeLast(MAX_ANSWERS)) else it }) }
             // Read again with it now, not at the next sync: it's what settles the reading.
             com.thomaswcode.decrastination.enrich.EnrichWorker.enqueue(graph.app)

@@ -48,6 +48,22 @@ data class SchoolCalendar(val noSchool: List<NoSchool> = emptyList(), val halfDa
 
     fun without(entry: HalfDay): SchoolCalendar = copy(halfDays = halfDays - entry)
 
+    /**
+     * This calendar with what a change took [before] to [after] taken back (a chat card's Undo, 16
+     * Oct): the stretches and half-days it added gone, and those it merged into them back. Null if
+     * one it added has gone since (deleted in Settings → School): taking it back would then bring
+     * back what you took out.
+     */
+    fun undone(before: SchoolCalendar, after: SchoolCalendar): SchoolCalendar? {
+        val addedOff = after.noSchool - before.noSchool.toSet()
+        val addedHalf = after.halfDays - before.halfDays.toSet()
+        if (!noSchool.containsAll(addedOff) || !halfDays.containsAll(addedHalf)) return null
+        return copy(
+            noSchool = (noSchool - addedOff.toSet() + (before.noSchool - after.noSchool.toSet())).distinct().sortedBy { it.from },
+            halfDays = (halfDays - addedHalf.toSet() + (before.halfDays - after.halfDays.toSet())).distinct().sortedBy { it.date },
+        )
+    }
+
     /** Every entry of [other] added to this one. */
     fun withAll(other: SchoolCalendar): SchoolCalendar =
         other.halfDays.fold(other.noSchool.fold(this) { calendar, entry -> calendar.with(entry) }) { calendar, entry -> calendar.with(entry) }

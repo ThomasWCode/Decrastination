@@ -839,6 +839,45 @@ class FocusTest {
     }
 
     @Test
+    fun `a step unticked is to do again, its kept slot taken back, or by hand only to do`() = runTest {
+        val first = laid(task("t", due = "2026-10-12T23:59", steps = listOf(SubStep("Q1", 15), SubStep("Q2", 15)), effort = 30)).first()
+        clock.time = first.end
+        assertTrue(slotted.keepSlot(first.chunk!!.key))
+        assertEquals(5 * 60_000L, slotted.creditLeftMs())
+        // Not by another name, nor one not done.
+        assertFalse(slotted.untickBlock("teams:t", 0, "Q9"))
+        assertFalse(slotted.untickBlock("teams:t", 1, "Q2"))
+        assertTrue(slotted.untickBlock("teams:t", 0, "Q1"))
+        assertEquals(listOf(false, false), tasks.value.tasks.single().subSteps.map { it.done })
+        assertEquals(0, tasks.value.tasks.single().workedMin)
+        assertEquals(0L, slotted.creditLeftMs())
+        // Ticked by hand (an email's): only to do again.
+        val email = task("e").copy(id = "gmail:e", source = Source.Gmail, subSteps = listOf(SubStep("Apply", 30)))
+        tasks.update { it.copy(tasks = listOf(email)) }
+        assertTrue(slotted.tickBlock("gmail:e", 0, "Apply"))
+        assertTrue(slotted.untickBlock("gmail:e", 0, "Apply"))
+        assertEquals(listOf(SubStep("Apply", 30)), tasks.value.tasks.single().subSteps)
+    }
+
+    @Test
+    fun `a tick that finished one of your own is taken back with it open again`() = runTest {
+        val own = task("mine", steps = listOf(SubStep("Draft", 30, done = true, byHand = true), SubStep("Redraft", 30, done = true, byHand = true)))
+            .copy(id = "own:mine", source = Source.Own, sourceId = "mine", status = Status.Done, doneAt = clock.time)
+        tasks.update { it.copy(tasks = listOf(own)) }
+        // Finished, it's only to be opened again so.
+        assertFalse(focus.untickBlock("own:mine", 1, "Redraft"))
+        assertTrue(focus.untickBlock("own:mine", 1, "Redraft", reopen = true))
+        val back = tasks.value.tasks.single()
+        assertTrue(back.isOpen)
+        assertEquals(listOf(true, false), back.subSteps.map { it.done })
+        // And one done by its tick (NF-06), finished by the chat's steps.
+        val feedback = own.copy(id = "teams:fb", source = Source.Teams, sourceId = "fb", extra = mapOf(TaskItem.EXTRA_TICK_DONE to "true"))
+        tasks.update { it.copy(tasks = listOf(feedback)) }
+        assertTrue(focus.untickBlock("teams:fb", 1, "Redraft", reopen = true))
+        assertTrue(tasks.value.tasks.single().isOpen)
+    }
+
+    @Test
     fun `a kept slot taken back is to do again, its minutes and free time back`() = runTest {
         val first = laid(task("t", due = "2026-10-12T23:59", steps = listOf(SubStep("Q1", 15), SubStep("Q2", 15)), effort = 30)).first()
         clock.time = first.end

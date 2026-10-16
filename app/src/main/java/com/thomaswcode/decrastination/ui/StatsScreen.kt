@@ -114,7 +114,7 @@ fun StatsScreen(graph: AppGraph) {
             dismissButton = { androidx.compose.material3.TextButton(onClick = { proposing = false }) { Text("Keep mine") } },
         )
     }
-    LazyColumn(Modifier.fillMaxWidth(), contentPadding = PaddingValues(bottom = 24.dp)) {
+    LazyColumn(Modifier.fillMaxWidth(), contentPadding = PaddingValues(bottom = FELIX_ROOM)) {
         item(key = "period") {
             androidx.compose.foundation.layout.FlowRow(Modifier.padding(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 listOf(Stats.DAYS to "2 weeks", SIX_WEEKS to "6 weeks", TERM to "This term").forEach { (value, label) ->

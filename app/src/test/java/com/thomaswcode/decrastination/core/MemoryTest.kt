@@ -2,6 +2,7 @@ package com.thomaswcode.decrastination.core
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 
 /** What Felix remembers (AI-21). */
 class MemoryTest {
@@ -45,5 +46,72 @@ class MemoryTest {
         // The first ten, oldest, went first.
         assertEquals(false, after.facts.any { it.topic == "topic 1" })
         assertEquals(true, after.facts.any { it.topic == "topic 30" })
+    }
+
+    @Test
+    fun `what remembering did is undone, a fact gone and the one it replaced back, one forgotten back, an instruction gone or back`() {
+        val (one, first) = Memories.edit(MemoryState(), listOf(Given("football", "on Tuesdays")), 1)
+        val (two, second) = Memories.edit(one, listOf(Given("Football", "on Wednesdays now")), 2)
+        assertEquals(Fact("football", "on Tuesdays", 1), second.single().factBefore)
+        assertEquals(one.facts, Memories.undo(two, second.single())!!.facts)
+        // The first can't be while the second stands: the fact isn't the one it kept.
+        assertNull(Memories.undo(two, first.single()))
+        val (gone, forgot) = Memories.edit(two, listOf(Given("football", "")), 3)
+        assertEquals(two.facts, Memories.undo(gone, forgot.single())!!.facts)
+        val (ruled, added) = Memories.edit(MemoryState(), listOf(Given(text = "be blunter", kind = Given.RULE)), 4)
+        assertEquals(emptyList(), Memories.undo(ruled, added.single())!!.rules)
+        val (dropped, drop) = Memories.edit(ruled, listOf(Given(topic = "Be blunter", kind = Given.RULE)), 5)
+        assertEquals(ruled.rules, Memories.undo(dropped, drop.single())!!.rules)
+        // A line only has nothing to undo; the lines are apply's.
+        assertNull(Memories.undo(MemoryState(), MemoryEdit("Too many standing instructions to add “x”: drop one first")))
+        assertEquals(listOf("Remembered: football: on Tuesdays"), first.map { it.line })
+    }
+
+    @Test
+    fun `a line from before what it did was kept is undone while what it names is still as it says`() {
+        val state = MemoryState(facts = listOf(Fact("piano practice", "only at home", 1)), rules = listOf(Rule("be blunter", 2)))
+        val fact = Memories.editOf("Remembered: piano practice: only at home", state)!!
+        assertEquals(emptyList(), Memories.undo(state, fact)!!.facts)
+        assertEquals(emptyList(), Memories.undo(state, Memories.editOf("Felix will: be blunter", state)!!)!!.rules)
+        assertNull(Memories.editOf("Remembered: piano practice: anywhere", state))
+        assertNull(Memories.editOf("Forgot: football", state))
+    }
+
+    @Test
+    fun `an undo takes only the very fact it kept, and brings back what its room pushed out`() {
+        val (one, first) = Memories.edit(MemoryState(), listOf(Given("football", "on Tuesdays")), 1)
+        // The same words kept again since: the newer one's to undo, not the first's.
+        val (again, second) = Memories.edit(one, listOf(Given("football", "on Tuesdays")), 2)
+        assertNull(Memories.undo(again, first.single()))
+        assertEquals(one.facts, Memories.undo(again, second.single())!!.facts)
+        // A fact that took the room of the oldest: undone, the oldest is back.
+        val long = "x".repeat(290)
+        val (full, _) = Memories.edit(MemoryState(), (1..20).map { Given("topic $it", long) }, 10)
+        val (over, edits) = Memories.edit(full, listOf(Given("topic new", long)), 20)
+        assertEquals(false, over.facts.any { it.topic == "topic 1" })
+        assertEquals(listOf("topic 1"), edits.single().evicted.map { it.topic })
+        assertEquals(full.facts.toSet(), Memories.undo(over, edits.single())!!.facts.toSet())
+    }
+
+    @Test
+    fun `facts remembered together each bring back only what their own room pushed out, within the room`() {
+        val long = "x".repeat(290)
+        val (full, _) = Memories.edit(MemoryState(), (1..20).map { Given("topic $it", long) }, 10)
+        val (over, edits) = Memories.edit(full, listOf(Given("new a", long), Given("new b", long)), 20)
+        assertEquals(listOf("topic 1"), edits[0].evicted.map { it.topic })
+        assertEquals(listOf("topic 2"), edits[1].evicted.map { it.topic })
+        val back = Memories.undo(over, edits[1])!!
+        assertEquals(true, back.facts.any { it.topic == "topic 2" } && back.facts.none { it.topic == "topic 1" || it.topic == "new b" })
+        assertEquals(true, Memories.chars(back.facts) <= Memories.FACT_BUDGET_CHARS)
+    }
+
+    @Test
+    fun `a fact forgotten isn't brought back past the room newer facts have filled since`() {
+        val long = "x".repeat(290)
+        val (full, _) = Memories.edit(MemoryState(), (1..20).map { Given("topic $it", long) }, 10)
+        val (gone, forgot) = Memories.edit(full, listOf(Given("topic 1", "")), 20)
+        assertEquals(full.facts.toSet(), Memories.undo(gone, forgot.single())!!.facts.toSet())
+        val (filled, _) = Memories.edit(gone, listOf(Given("newer", long)), 30)
+        assertNull(Memories.undo(filled, forgot.single()))
     }
 }

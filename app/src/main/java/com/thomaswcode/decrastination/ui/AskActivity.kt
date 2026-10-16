@@ -6,6 +6,9 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,6 +26,8 @@ import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
@@ -30,7 +35,6 @@ import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -58,7 +62,10 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -73,6 +80,8 @@ import com.thomaswcode.decrastination.core.Instruction
 import com.thomaswcode.decrastination.core.InstructionStatus
 import com.thomaswcode.decrastination.core.Instructions
 import com.thomaswcode.decrastination.core.Kind
+import com.thomaswcode.decrastination.core.Memories
+import com.thomaswcode.decrastination.core.MemoryEdit
 import com.thomaswcode.decrastination.core.OwnTask
 import com.thomaswcode.decrastination.core.Proposal
 import com.thomaswcode.decrastination.core.ProposalState
@@ -172,6 +181,8 @@ class AskActivity : ComponentActivity() {
         var draft by rememberSaveable { mutableStateOf("") }
         var menu by remember { mutableStateOf(false) }
         var clearing by remember { mutableStateOf(false) }
+        // What he remembers, from the menu, each to delete (your call, 16 Oct), as Settings → Felix has it.
+        var remembering by rememberSaveable { mutableStateOf(false) }
         // A card's task being changed before it's added: "<message id>|<proposal id>".
         var editing by rememberSaveable { mutableStateOf<String?>(null) }
         val claudeOn = settings.aiEnabled && settings.aiKeyActive
@@ -199,6 +210,10 @@ class AskActivity : ComponentActivity() {
                         Box {
                             IconButton(onClick = { menu = true }) { Icon(painterResource(R.drawable.ic_more_vert), contentDescription = "Menu") }
                             DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                                DropdownMenuItem(text = { Text("What ${settings.felixName} remembers") }, onClick = {
+                                    menu = false
+                                    remembering = true
+                                })
                                 DropdownMenuItem(text = { Text("Clear the chat") }, enabled = chat.messages.isNotEmpty(), onClick = {
                                     menu = false
                                     clearing = true
@@ -274,13 +289,25 @@ class AskActivity : ComponentActivity() {
         editing?.split('|', limit = 2)?.let { (messageId, proposalId) ->
             val proposal = chat.messages.firstOrNull { it.id == messageId }?.proposals?.firstOrNull { it.id == proposalId }
             val task = proposal?.task
-            if (task == null || proposal.state == ProposalState.Applied) {
+            // Added as it came (16 Oct): it's changed as any task of yours is, in the form.
+            val added = proposal?.made?.takeIf { proposal.state == ProposalState.Applied }?.let { id -> tasks.tasks.firstOrNull { it.id == id } }
+            if (added != null) {
+                OwnTaskForm(graph, added) { editing = null }
+            } else if (task == null || proposal.state == ProposalState.Applied) {
                 LaunchedEffect(editing) { editing = null }
             } else {
                 OwnTaskForm(graph, editing = null, initial = task, onSave = { changed ->
                     graph.applyProposal(messageId, proposalId, changed)
                     graph.chat.value.messages.firstOrNull { it.id == messageId }?.proposals?.firstOrNull { it.id == proposalId }?.state == ProposalState.Applied
                 }) { editing = null }
+            }
+        }
+        if (remembering) {
+            androidx.compose.material3.ModalBottomSheet(onDismissRequest = { remembering = false }) {
+                Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
+                    Text("What ${settings.felixName} remembers", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(horizontal = 16.dp))
+                    MemorySection(graph)
+                }
             }
         }
         if (clearing) {
@@ -354,8 +381,10 @@ private fun androidx.compose.foundation.layout.ColumnScope.Chat(
     onEdit: (messageId: String, proposalId: String) -> Unit,
 ) {
     val list = rememberLazyListState()
-    LaunchedEffect(messages.size, messages.lastOrNull()?.note) {
-        if (messages.isNotEmpty()) list.animateScrollToItem(messages.size + 1)
+    // Yours waiting for his answer, with nothing to say why (Claude off, resting, a failed call): he's typing.
+    val typing = messages.lastOrNull()?.let { it.from == Speaker.You && it.answeredAt == null && it.note == null } == true
+    LaunchedEffect(messages.size, messages.lastOrNull()?.note, typing) {
+        if (messages.isNotEmpty()) list.animateScrollToItem(messages.size + if (typing) 2 else 1)
     }
     LazyColumn(Modifier.weight(1f).fillMaxWidth(), state = list, contentPadding = PaddingValues(horizontal = 12.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         item(key = "intro") {
@@ -369,7 +398,7 @@ private fun androidx.compose.foundation.layout.ColumnScope.Chat(
                 }
                 if (messages.isEmpty()) {
                     Text(
-                        "Tell ${graph.settings.value.felixName} about your work: a task to add, a deadline or how long something takes, a day you can't work. A change to a task you have is made at once (Undo takes it back); a new task, or days off, comes on a card for you to add.",
+                        "Tell ${graph.settings.value.felixName} about your work: a task to add, a deadline or how long something takes, a day you can't work, a step done. Whatever he does is made at once, and its Undo takes it back.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -380,11 +409,12 @@ private fun androidx.compose.foundation.layout.ColumnScope.Chat(
         items(messages, key = { it.id }) { message ->
             if (message.from == Speaker.You) Yours(graph, message, now, zone) else Claudes(graph, message, tasks, now, zone, onEdit)
         }
+        if (typing) item(key = "typing") { Typing(graph) }
         item(key = "end") { Box(Modifier.size(1.dp)) }
     }
 }
 
-/** A message of yours, on the right: what it's about, your words, and, while it waits, why. */
+/** A message of yours, on the right: what it's about, your words, and, while it waits for a reason (Claude off, a failed call), why. */
 @Composable
 private fun Yours(graph: AppGraph, message: ChatMessage, now: Long, zone: ZoneId) {
     val scope = rememberCoroutineScope()
@@ -395,33 +425,74 @@ private fun Yours(graph: AppGraph, message: ChatMessage, now: Long, zone: ZoneId
                 Text(message.text, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onPrimaryContainer)
             }
         }
-        if (message.answeredAt == null) {
-            if (message.note == null) {
-                // How long it's been asked (AC-08), and after a while a way to stop waiting.
-                val since by graph.answeringSince.collectAsStateWithLifecycle()
-                var clock by remember { mutableStateOf(graph.clock.now()) }
-                LaunchedEffect(since) {
-                    while (since != null) {
-                        clock = graph.clock.now()
-                        kotlinx.coroutines.delay(1_000)
-                    }
-                }
-                val seconds = since?.let { ((clock - it) / 1_000).coerceAtLeast(0) }
-                Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
-                    Text("${graph.settings.value.felixName} is thinking…" + (seconds?.let { " $it s" } ?: ""), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    if (seconds != null && seconds >= CANCEL_AFTER_S) TextButton(onClick = { graph.cancelAnswer() }) { Text("Cancel") }
-                }
-            } else {
-                Text(message.note, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 6.dp))
-                Row {
-                    TextButton(onClick = { graph.scope.launch { graph.answerChat(retry = true) } }) { Text("Try again") }
-                    TextButton(onClick = { scope.launch { graph.withdrawQuestion() } }) { Text("Take back") }
-                }
+        // While it's answered, he's typing ([Typing]), under it.
+        if (message.answeredAt == null && message.note != null) {
+            Text(message.note, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 6.dp))
+            Row {
+                TextButton(onClick = { graph.scope.launch { graph.answerChat(retry = true) } }) { Text("Try again") }
+                TextButton(onClick = { scope.launch { graph.withdrawQuestion() } }) { Text("Take back") }
             }
         }
     }
 }
+
+/**
+ * Felix answering, on his side (your call, 16 Oct, in place of "Felix is thinking… 12 s"): three
+ * dots rising in turn in a bubble of his, as a messaging app shows someone typing; and once the
+ * call has run [CANCEL_AFTER_S], a way to stop waiting (AC-08).
+ */
+@Composable
+private fun Typing(graph: AppGraph) {
+    val since by graph.answeringSince.collectAsStateWithLifecycle()
+    var clock by remember { mutableStateOf(graph.clock.now()) }
+    LaunchedEffect(since) {
+        while (since != null) {
+            clock = graph.clock.now()
+            kotlinx.coroutines.delay(1_000)
+        }
+    }
+    val long = since?.let { (clock - it) / 1_000 >= CANCEL_AFTER_S } == true
+    val name = graph.settings.value.felixName
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh, shape = RoundedCornerShape(18.dp, 18.dp, 18.dp, 4.dp)) {
+            Dots(Modifier.padding(horizontal = 16.dp, vertical = 15.dp).semantics { contentDescription = "$name is typing" })
+        }
+        if (long) TextButton(onClick = { graph.cancelAnswer() }) { Text("Cancel") }
+    }
+}
+
+/** Three dots, each rising and brightening in turn, [DOT_STEP_MS] after the one before: a wave every [DOT_CYCLE_MS]. */
+@Composable
+private fun Dots(modifier: Modifier) {
+    val wave = androidx.compose.animation.core.rememberInfiniteTransition(label = "typing")
+    val colour = MaterialTheme.colorScheme.onSurfaceVariant
+    Row(modifier, horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) {
+        repeat(3) { i ->
+            val up by wave.animateFloat(
+                initialValue = 0f,
+                targetValue = 1f,
+                animationSpec = androidx.compose.animation.core.infiniteRepeatable(
+                    animation = androidx.compose.animation.core.tween(DOT_CYCLE_MS / 2, easing = androidx.compose.animation.core.FastOutSlowInEasing),
+                    repeatMode = androidx.compose.animation.core.RepeatMode.Reverse,
+                    initialStartOffset = androidx.compose.animation.core.StartOffset(i * DOT_STEP_MS),
+                ),
+                label = "dot $i",
+            )
+            Box(
+                Modifier.size(8.dp)
+                    .graphicsLayer {
+                        translationY = -up * 3.dp.toPx()
+                        alpha = 0.35f + 0.65f * up
+                    }
+                    .background(colour, androidx.compose.foundation.shape.CircleShape),
+            )
+        }
+    }
+}
+
+/** The typing dots' wave ([Dots]): one rise and fall, and how far behind the one before each dot rises. */
+private const val DOT_CYCLE_MS = 1_200
+private const val DOT_STEP_MS = 200
 
 /** A message of Claude's, on the left: its words, then a card for each thing it would do. */
 @Composable
@@ -430,16 +501,110 @@ private fun Claudes(graph: AppGraph, message: ChatMessage, tasks: Map<String, Ta
         Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh, shape = RoundedCornerShape(18.dp, 18.dp, 18.dp, 4.dp), modifier = Modifier.widthIn(max = 320.dp)) {
             Text(message.text, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp))
         }
+        // What he searched the web for, and the pages it found, each to open (16 Oct).
+        Searched(message)
         message.proposals.forEach { ProposalCard(graph, message.id, it, tasks, now, zone, onEdit) }
-        // What it remembered or forgot (AI-21), in small type under its words.
-        message.remembered.forEach { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 4.dp)) }
-        // What it did beyond its cards (AI-14), likewise.
+        // What it remembered or forgot (AI-21), in small type under its words, each with its Undo.
+        Remembered(graph, message)
+        // What it did beyond its cards (AI-14; 16 Oct, everything he does), likewise, each with its Undo.
+        Acts(graph, message)
+        // And what it says of them with nothing to undo (a change refused, where a time went).
         message.done.forEach { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 4.dp)) }
         message.note?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 4.dp)) }
     }
 }
 
-/** One thing Claude would do, with what you can do about it: add or apply it, change it first, set it aside, or undo it. */
+/** What [message]'s searches were for (16 Oct), in small type, and the pages they found, each a link to open. */
+@Composable
+private fun Searched(message: ChatMessage) {
+    if (message.searched.isEmpty() && message.sources.isEmpty()) return
+    val context = androidx.compose.ui.platform.LocalContext.current
+    Column(Modifier.padding(horizontal = 4.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        if (message.searched.isNotEmpty()) {
+            Text("Searched the web for " + message.searched.joinToString(", ") { "“$it”" }, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        message.sources.forEach { source ->
+            Text(
+                source.title.ifBlank { android.net.Uri.parse(source.url).host ?: source.url },
+                style = MaterialTheme.typography.bodySmall.copy(textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline),
+                color = MaterialTheme.colorScheme.primary,
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                modifier = Modifier.clickable {
+                    runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(source.url))) }
+                },
+            )
+        }
+    }
+}
+
+/**
+ * What [message] remembered or forgot (AI-21), a line each in small type, each with its Undo while
+ * it can be taken back (your call, 16 Oct): a fact gone, and the one it replaced back.
+ */
+@Composable
+private fun Remembered(graph: AppGraph, message: ChatMessage) {
+    val memory by graph.memory.state.collectAsStateWithLifecycle()
+    val scope = rememberCoroutineScope()
+    var said by remember(message.id) { mutableStateOf<String?>(null) }
+    // An answer from before what each line did was kept: its lines read against what's remembered now.
+    val edits = message.memoryEdits.ifEmpty { message.remembered.map { Memories.editOf(it, memory) ?: MemoryEdit(it) } }
+    val quiet = MaterialTheme.colorScheme.onSurfaceVariant
+    edits.forEachIndexed { i, edit ->
+        Row(Modifier.fillMaxWidth().padding(start = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                edit.line,
+                style = MaterialTheme.typography.bodySmall,
+                color = quiet,
+                textDecoration = if (edit.undone) androidx.compose.ui.text.style.TextDecoration.LineThrough else null,
+                modifier = Modifier.weight(1f),
+            )
+            when {
+                edit.undone -> Text("Undone", style = MaterialTheme.typography.labelMedium, color = quiet, modifier = Modifier.padding(horizontal = 12.dp))
+                Memories.undo(memory, edit) != null -> TextButton(onClick = { scope.launch { said = graph.undoMemory(message.id, i) } }) { Text("Undo") }
+            }
+        }
+    }
+    said?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(horizontal = 4.dp)) }
+}
+
+/**
+ * What [message]'s actions did (16 Oct: a step ticked or to do again, a task done, open again or
+ * deleted, a setting set), a line each in small type, each with its Undo while it can be taken back.
+ */
+@Composable
+private fun Acts(graph: AppGraph, message: ChatMessage) {
+    if (message.acts.isEmpty()) return
+    // Read as they change: whether each can still be taken back.
+    val tasks by graph.tasks.state.collectAsStateWithLifecycle()
+    val settings by graph.settings.state.collectAsStateWithLifecycle()
+    val chat by graph.chat.state.collectAsStateWithLifecycle()
+    val scope = rememberCoroutineScope()
+    var said by remember(message.id) { mutableStateOf<String?>(null) }
+    val quiet = MaterialTheme.colorScheme.onSurfaceVariant
+    message.acts.forEachIndexed { i, act ->
+        Row(Modifier.fillMaxWidth().padding(start = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                act.line,
+                style = MaterialTheme.typography.bodySmall,
+                color = quiet,
+                textDecoration = if (act.undone) androidx.compose.ui.text.style.TextDecoration.LineThrough else null,
+                modifier = Modifier.weight(1f),
+            )
+            when {
+                act.undone -> Text("Undone", style = MaterialTheme.typography.labelMedium, color = quiet, modifier = Modifier.padding(horizontal = 12.dp))
+                com.thomaswcode.decrastination.core.ChatActs.canUndo(act, tasks.tasks, settings, chat.messages) -> TextButton(onClick = { scope.launch { said = graph.undoAct(message.id, i) } }) { Text("Undo") }
+            }
+        }
+    }
+    said?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(horizontal = 4.dp)) }
+}
+
+/**
+ * One thing Felix did, made as it came (your call, 16 Oct), with what you can do about it: undo it,
+ * change a task it added, or make it again once undone. One from before then still waits to be added
+ * or applied, changed first, or set aside.
+ */
 @Composable
 private fun ProposalCard(graph: AppGraph, messageId: String, proposal: Proposal, tasks: Map<String, TaskItem>, now: Long, zone: ZoneId, onEdit: (String, String) -> Unit) {
     val scope = rememberCoroutineScope()
@@ -468,7 +633,8 @@ private fun ProposalCard(graph: AppGraph, messageId: String, proposal: Proposal,
                 }
                 return@Column
             }
-            val task = proposal.task
+            // Added, the task as it is now (changed since with Change, or on its page); else as he gave it.
+            val task = proposal.made?.takeIf { applied }?.let { tasks[it] }?.takeIf { it.source == com.thomaswcode.decrastination.core.Source.Own }?.let(com.thomaswcode.decrastination.core.OwnTasks::draftOf) ?: proposal.task
             if (task != null) {
                 Text(if (task.kind == Kind.Event) "New event of yours" else "New task of yours", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
                 Text(task.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
@@ -492,24 +658,29 @@ private fun ProposalCard(graph: AppGraph, messageId: String, proposal: Proposal,
                     applied -> {
                         Text(
                             when {
-                                task != null -> "Added"
-                                proposal.instant -> "Done at once"
+                                proposal.task != null -> "Added"
+                                proposal.instant -> "Done"
                                 else -> "Applied"
                             },
                             style = MaterialTheme.typography.labelLarge,
                             color = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.align(Alignment.CenterVertically),
                         )
-                        if (proposal.made != null || proposal.before.isNotEmpty()) TextButton(onClick = { scope.launch { graph.undoProposal(messageId, proposal.id) } }) { Text("Undo") }
-                        // Days off and half-days go in the school calendar, and are taken back there (PL-16).
-                        if (proposal.changes.any { Instructions.schoolEntry(it) != null }) {
-                            Text("Days off are deleted in Settings → School", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.align(Alignment.CenterVertically))
-                        }
+                        if (proposal.made != null || proposal.before.isNotEmpty() || proposal.schoolBefore != null) TextButton(onClick = { scope.launch { graph.undoProposal(messageId, proposal.id) } }) { Text("Undo") }
+                        // A task it added is yours to change, in the form, from here too.
+                        if (proposal.task != null && proposal.made in tasks) TextButton(onClick = { onEdit(messageId, proposal.id) }) { Text("Change") }
                     }
                     discarded -> {
                         Text("Set aside", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.align(Alignment.CenterVertically))
                         TextButton(onClick = { scope.launch { graph.discardProposal(messageId, proposal.id, discarded = false) } }) { Text("Bring back") }
                     }
+                    // Made as it came, and since undone, or not made (its note says why): made again here.
+                    proposal.instant -> {
+                        if (proposal.note == null) Text("Undone", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.align(Alignment.CenterVertically))
+                        TextButton(onClick = { scope.launch { graph.applyProposal(messageId, proposal.id) } }) { Text(if (proposal.note == null) "Redo" else "Try again") }
+                        if (proposal.task != null) TextButton(onClick = { onEdit(messageId, proposal.id) }) { Text("Change first") }
+                    }
+                    // From before everything was made as it came (16 Oct): still to add or apply.
                     else -> {
                         Button(onClick = { scope.launch { graph.applyProposal(messageId, proposal.id) } }) { Text(if (task != null) "Add" else "Apply") }
                         if (task != null) OutlinedButton(onClick = { onEdit(messageId, proposal.id) }) { Text("Change first") }

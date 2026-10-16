@@ -88,9 +88,9 @@ object Notify {
             NotificationManagerCompat.from(context).areNotificationsEnabled()
         }
 
-    /** A notification on [channel] in the app's look (UI-12): its icon, and the logo's pink. */
+    /** A notification on [channel] in the app's look: its icon, and the app's blue ([com.thomaswcode.decrastination.ui.Colours.BLUE_ARGB]). */
     fun builder(context: Context, channel: String): NotificationCompat.Builder =
-        NotificationCompat.Builder(context, channel).setSmallIcon(com.thomaswcode.decrastination.R.drawable.ic_focus).setColor(com.thomaswcode.decrastination.ui.Colours.PINK_ARGB)
+        NotificationCompat.Builder(context, channel).setSmallIcon(com.thomaswcode.decrastination.R.drawable.ic_focus).setColor(com.thomaswcode.decrastination.ui.Colours.BLUE_ARGB)
 
     /** Whether [channel]'s notifications reach the screen: allowed, and the channel not switched off. */
     fun shown(context: Context, channel: String): Boolean {

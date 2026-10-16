@@ -104,7 +104,7 @@ fun WorkScreen(graph: AppGraph, activity: Activity, opening: String? = null, onO
     val toggle = { key: String -> folded = if (key in folded) folded - key else folded + key }
     Box(Modifier.fillMaxSize()) {
         // Room at the foot for both buttons (the chat's over New task), so the last row scrolls clear.
-        LazyColumn(Modifier.fillMaxWidth(), contentPadding = PaddingValues(bottom = 160.dp)) {
+        LazyColumn(Modifier.fillMaxWidth(), contentPadding = PaddingValues(bottom = 200.dp)) {
             item(key = "hint") { Hint(graph, "work", "Work is what: every task, by when it's due or by subject. Day is when: today's slots, on the first tab.") }
             // Claude's key stopped working while it's on, and what else makes the plan less than all there is (IMP-P1-007).
             runtime.aiUsage.keyProblem?.takeIf { settings.aiEnabled && settings.aiKeyActive }?.let { problem ->
