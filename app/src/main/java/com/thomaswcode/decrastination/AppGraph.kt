@@ -921,8 +921,12 @@ class AppGraph private constructor(context: Context) {
 
     /** The photos no task holds any more let go (AI-23): a task done and gone takes its photo with it. */
     private fun sweepPhotos() {
-        // A task the chat deleted keeps its photo while its Undo can bring it back.
-        val undoable = chat.value.messages.flatMap { m -> m.acts.filter { !it.undone }.mapNotNull { it.was?.photo?.path } }
+        // A task the chat deleted keeps its photo while its Undo can bring it back: no other act's, nor one made again since.
+        val messages = chat.value.messages
+        val undoable = messages.flatMap { m ->
+            m.acts.filter { it.action.type == com.thomaswcode.decrastination.core.ChatAction.Type.Delete && com.thomaswcode.decrastination.core.ChatActs.canUndo(it, tasks.value.tasks, settings.value, messages) }
+                .mapNotNull { it.was?.photo?.path }
+        }
         val held = tasks.value.tasks.mapNotNull { it.photo?.path }.toSet() + undoable
         photos.listFiles()?.filter { it.path !in held }?.forEach { it.delete() }
     }

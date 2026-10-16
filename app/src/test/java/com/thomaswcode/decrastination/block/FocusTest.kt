@@ -870,6 +870,11 @@ class FocusTest {
         val back = tasks.value.tasks.single()
         assertTrue(back.isOpen)
         assertEquals(listOf(true, false), back.subSteps.map { it.done })
+        // And one done by its tick (NF-06), finished by the chat's steps.
+        val feedback = own.copy(id = "teams:fb", source = Source.Teams, sourceId = "fb", extra = mapOf(TaskItem.EXTRA_TICK_DONE to "true"))
+        tasks.update { it.copy(tasks = listOf(feedback)) }
+        assertTrue(focus.untickBlock("teams:fb", 1, "Redraft", reopen = true))
+        assertTrue(tasks.value.tasks.single().isOpen)
     }
 
     @Test

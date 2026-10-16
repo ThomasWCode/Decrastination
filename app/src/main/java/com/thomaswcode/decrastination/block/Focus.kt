@@ -542,11 +542,11 @@ class Focus(
      * his tick): one ticked by keeping its slot has that slot taken back ([unkeepSlot]: its record
      * gone, its minutes off the task, the free time it earned given back as far as it's left); one
      * ticked by hand is to do again, with the minutes it kept back on the steps after it. With
-     * [reopen], one of your own that its tick finished is open again with it to do, in the one
-     * write, so it isn't finished again at once. Says whether it was.
+     * [reopen], one of your own, or one done by its tick (NF-06), that its tick finished is open
+     * again with it to do, in the one write, so it isn't finished again at once. Says whether it was.
      */
     suspend fun untickBlock(taskId: String, index: Int, title: String, reopen: Boolean = false): Boolean {
-        val task = tasks.value.tasks.firstOrNull { it.id == taskId && (it.isOpen || (reopen && it.source == Source.Own && it.status == Status.Done)) } ?: return false
+        val task = tasks.value.tasks.firstOrNull { it.id == taskId && (it.isOpen || (reopen && (it.source == Source.Own || it.tickDone) && it.status == Status.Done)) } ?: return false
         val step = task.subSteps.getOrNull(index)?.takeIf { it.done && it.title == title } ?: return false
         val key = Chunk.keyOf(taskId, index, 0)
         val kept = log.value.slots.lastOrNull { it.key == key && it.outcome.kept }

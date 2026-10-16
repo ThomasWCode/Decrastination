@@ -104,4 +104,14 @@ class MemoryTest {
         assertEquals(true, back.facts.any { it.topic == "topic 2" } && back.facts.none { it.topic == "topic 1" || it.topic == "new b" })
         assertEquals(true, Memories.chars(back.facts) <= Memories.FACT_BUDGET_CHARS)
     }
+
+    @Test
+    fun `a fact forgotten isn't brought back past the room newer facts have filled since`() {
+        val long = "x".repeat(290)
+        val (full, _) = Memories.edit(MemoryState(), (1..20).map { Given("topic $it", long) }, 10)
+        val (gone, forgot) = Memories.edit(full, listOf(Given("topic 1", "")), 20)
+        assertEquals(full.facts.toSet(), Memories.undo(gone, forgot.single())!!.facts.toSet())
+        val (filled, _) = Memories.edit(gone, listOf(Given("newer", long)), 30)
+        assertNull(Memories.undo(filled, forgot.single()))
+    }
 }
