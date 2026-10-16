@@ -123,3 +123,45 @@ data class Act(
 
 @Serializable
 enum class ProposalState { Proposed, Applied, Discarded }
+
+/** Whether the chat's actions can still be taken back (16 Oct), as their Undo shows and makes them. Pure. */
+object ChatActs {
+
+    /**
+     * Whether [act] can still be taken back, with [tasks], [settings] and the chat's [messages] as
+     * they are: a step ticked still done (one of yours it finished, too); one unticked still to do;
+     * a task done still done; one opened again still as that left it ([asReopened]); one deleted
+     * still gone, and none of the cards that had added it made again since (Redo makes it anew); a
+     * setting still as it was set.
+     */
+    fun canUndo(act: Act, tasks: List<TaskItem>, settings: com.thomaswcode.decrastination.data.Settings, messages: List<ChatMessage>): Boolean {
+        if (act.undone) return false
+        val a = act.action
+        val task = tasks.firstOrNull { it.id == a.taskId }
+        val step = a.stepIndex?.let { task?.subSteps?.getOrNull(it) }
+        return when (a.type) {
+            ChatAction.Type.Open -> false
+            ChatAction.Type.TickStep -> task != null && step?.done == true && (task.isOpen || task.source == Source.Own)
+            ChatAction.Type.UntickStep -> task?.isOpen == true && step?.done == false
+            ChatAction.Type.Done -> task?.isOpen == false && (task.source == Source.Own || task.tickDone)
+            ChatAction.Type.Reopen -> task != null && act.was != null && asReopened(task, act.was)
+            ChatAction.Type.Delete -> act.was != null && task == null && !redone(act.cards, messages)
+            ChatAction.Type.Setting -> act.before != null && com.thomaswcode.decrastination.data.FelixSettings.field(a.setting.orEmpty())?.get(settings) == act.after
+        }
+    }
+
+    /**
+     * Whether [task] is as opening [was] again left it ([OwnTasks.reopened]): open, its steps' marks
+     * and its minutes worked unchanged. Anything done on it since stands, and the Undo is gone.
+     */
+    fun asReopened(task: TaskItem, was: TaskItem): Boolean {
+        val left = OwnTasks.reopened(was)
+        return task.isOpen && task.subSteps == left.subSteps && task.workedMin == left.workedMin && task.photoMin == left.photoMin
+    }
+
+    /** Whether any of [cards] ("message|card") is made again (added): a deleted task's Undo would then make a second. */
+    fun redone(cards: List<String>, messages: List<ChatMessage>): Boolean = cards.any { key ->
+        val (message, card) = key.split('|', limit = 2).let { it[0] to it.getOrElse(1) { "" } }
+        messages.firstOrNull { it.id == message }?.proposals?.firstOrNull { it.id == card }?.state == ProposalState.Applied
+    }
+}

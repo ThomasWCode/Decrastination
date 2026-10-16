@@ -578,6 +578,7 @@ private fun Acts(graph: AppGraph, message: ChatMessage) {
     // Read as they change: whether each can still be taken back.
     val tasks by graph.tasks.state.collectAsStateWithLifecycle()
     val settings by graph.settings.state.collectAsStateWithLifecycle()
+    val chat by graph.chat.state.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     var said by remember(message.id) { mutableStateOf<String?>(null) }
     val quiet = MaterialTheme.colorScheme.onSurfaceVariant
@@ -592,7 +593,7 @@ private fun Acts(graph: AppGraph, message: ChatMessage) {
             )
             when {
                 act.undone -> Text("Undone", style = MaterialTheme.typography.labelMedium, color = quiet, modifier = Modifier.padding(horizontal = 12.dp))
-                graph.canUndo(act, tasks.tasks, settings) -> TextButton(onClick = { scope.launch { said = graph.undoAct(message.id, i) } }) { Text("Undo") }
+                com.thomaswcode.decrastination.core.ChatActs.canUndo(act, tasks.tasks, settings, chat.messages) -> TextButton(onClick = { scope.launch { said = graph.undoAct(message.id, i) } }) { Text("Undo") }
             }
         }
     }

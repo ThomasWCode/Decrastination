@@ -599,9 +599,10 @@ class AppGraph private constructor(context: Context) {
         syncer.addAfterEverySync { pruneOwn() }
         // A question of yours still waiting (Claude was off, resting, or the app stopped): tried again.
         syncer.addAfterEverySync { if (chat.value.unanswered != null) answerChat() }
-        // One of your own whose steps are all done (ticked, or kept in their slots) is finished.
+        // One of your own whose steps are all done (ticked, or kept in their slots) is finished; and one
+        // done by its tick (NF-06) given steps of yours by the chat (16 Oct).
         scope.launch {
-            tasks.state.map { s -> s.tasks.filter { it.source == Source.Own && it.isOpen && it.subSteps.isNotEmpty() && it.subSteps.all { st -> st.done } }.map { it.id } }
+            tasks.state.map { s -> s.tasks.filter { (it.source == Source.Own || it.tickDone) && it.isOpen && it.subSteps.isNotEmpty() && it.subSteps.all { st -> st.done } }.map { it.id } }
                 .distinctUntilChanged().collect { ids -> ids.forEach { finishOwnTask(it) } }
         }
         // Instructions left waiting for Claude, once it can be asked (a new month under the cap
@@ -1707,6 +1708,13 @@ class AppGraph private constructor(context: Context) {
     private var letGo: String? = null
 
     /**
+     * A web search made for a message (16 Oct), by its id, kept till he's answered with what it
+     * found: an answer that failed is asked again with it, not looked up again (a paid search).
+     */
+    @Volatile
+    private var looked: Pair<String, com.thomaswcode.decrastination.enrich.Found>? = null
+
+    /**
      * The answer being waited for let go (AC-08): your message says so, with its Try again. A call once
      * sent is paid for and counted (AC-04), so it isn't closed: it comes back, its answer unused.
      */
@@ -1785,7 +1793,9 @@ class AppGraph private constructor(context: Context) {
                     sentAt.value = null
                 }
             }
-            val called = ask(null)
+            // A look already made for it, whose answer with it failed: asked again with what it found.
+            val before = looked?.takeIf { it.first == waiting.id }?.second
+            val called = ask(before)
             // Let go while it ran (AC-08): the message says so already, and the answer goes unused.
             if (letGo == waiting.id) {
                 letGo = null
@@ -1804,11 +1814,13 @@ class AppGraph private constructor(context: Context) {
                 return@call if (result.refused) "Claude declined to answer that: Try again, or put it another way" else "Claude's answer couldn't be read: Try again"
             }
             // What he asked to look up on the web (16 Oct), in a call of its own; then he's asked again
-            // with what it found, and that's his answer. Not found, his first stands, saying why.
-            var found: com.thomaswcode.decrastination.enrich.Found? = null
+            // with what it found, and that's his answer. Not found, his first stands, saying why; his
+            // answer with it failed, the message waits for its Try again, as a failed call leaves it.
+            var found = before
+            if (found != null) reading = reading.copy(research = null)
             var notLooked: String? = null
-            reading.research?.takeIf { settings.value.felixSearches }?.let { question ->
-                val looked = callModel(interactive = true, record = com.thomaswcode.decrastination.enrich.ModelCalls.OnRecord(com.thomaswcode.decrastination.enrich.ModelEffort.Job.Research, question) { r: com.thomaswcode.decrastination.enrich.WebResearcher.Result -> r.usage to com.thomaswcode.decrastination.enrich.ModelCalls.outcome(r.refused, r.found == null) }, cost = { r: com.thomaswcode.decrastination.enrich.WebResearcher.Result -> r.costUsd to r.refused }) { at ->
+            if (found == null) reading.research?.takeIf { settings.value.felixSearches }?.let { question ->
+                val search = callModel(interactive = true, record = com.thomaswcode.decrastination.enrich.ModelCalls.OnRecord(com.thomaswcode.decrastination.enrich.ModelEffort.Job.Research, question) { r: com.thomaswcode.decrastination.enrich.WebResearcher.Result -> r.usage to com.thomaswcode.decrastination.enrich.ModelCalls.outcome(r.refused, r.found == null) }, cost = { r: com.thomaswcode.decrastination.enrich.WebResearcher.Result -> r.costUsd to r.refused }) { at ->
                     sentAt.value = at
                     try {
                         com.thomaswcode.decrastination.enrich.WebResearcher(key, endpoint(), year = profile(at).year).look(question, waiting.text, at, clock.zone())
@@ -1820,34 +1832,41 @@ class AppGraph private constructor(context: Context) {
                     letGo = null
                     return@withLock
                 }
-                found = (looked as? Called.Answered)?.value?.found
+                found = (search as? Called.Answered)?.value?.found
                 val what = found
                 if (what == null) {
-                    if (looked is Called.Failed) Log.w(TAG, "Felix's web search failed", looked.error)
-                    notLooked = when (looked) {
-                        is Called.Held -> because(looked.hold)
+                    if (search is Called.Failed) Log.w(TAG, "Felix's web search failed", search.error)
+                    notLooked = when (search) {
+                        is Called.Held -> because(search.hold)
                         is Called.Failed -> "the search failed"
                         is Called.Answered -> when {
-                            looked.value.refused -> "Claude declined to search for it"
-                            looked.value.paused -> "the search ran too long"
+                            search.value.refused -> "Claude declined to search for it"
+                            search.value.paused -> "the search ran too long"
                             else -> "the search found nothing"
                         }
                     }
                     return@let
                 }
+                looked = waiting.id to what
                 val again = ask(what)
                 if (letGo == waiting.id) {
                     letGo = null
                     return@withLock
                 }
-                val answered = (again as? Called.Answered)?.value?.reading
-                if (answered == null) {
-                    if (again is Called.Failed) Log.w(TAG, "Claude's answer with what the search found failed", again.error)
-                    notLooked = "his answer with what it found couldn't be had"
-                } else {
-                    reading = answered.copy(research = null)
+                val second = when (again) {
+                    is Called.Held -> return@call because(again.hold)
+                    is Called.Failed -> {
+                        Log.w(TAG, "Claude's answer with what the search found failed", again.error)
+                        return@call "Claude's call failed: ${retryWords()}, or now with Try again"
+                    }
+                    is Called.Answered -> again.value
+                }
+                reading = second.reading?.copy(research = null) ?: run {
+                    stuck = true
+                    return@call if (second.refused) "Claude declined to answer that: Try again, or put it another way" else "Claude's answer couldn't be read: Try again"
                 }
             }
+            looked = null
             val reply = ChatMessage(
                 id = java.util.UUID.randomUUID().toString(),
                 from = Speaker.Claude,
@@ -1987,7 +2006,8 @@ class AppGraph private constructor(context: Context) {
             com.thomaswcode.decrastination.core.ChatAction.Type.UntickStep -> step?.done == false && task!!.isOpen && tick(task, a.stepIndex!!, step.title)
             com.thomaswcode.decrastination.core.ChatAction.Type.Done -> task?.isOpen == false && (task.source == Source.Own || task.tickDone) && run { reopenOwnTask(task.id); open(task.id) == true }
             com.thomaswcode.decrastination.core.ChatAction.Type.Reopen -> task?.isOpen == true && act.was != null && refinish(act.was)
-            com.thomaswcode.decrastination.core.ChatAction.Type.Delete -> act.was != null && task == null && run {
+            // Not once a card that had added it is made again: that's the task anew.
+            com.thomaswcode.decrastination.core.ChatAction.Type.Delete -> act.was != null && task == null && !com.thomaswcode.decrastination.core.ChatActs.redone(act.cards, chat.value.messages) && run {
                 restoreTask(act.was)
                 relink(act.cards, act.was.id)
                 open(act.was.id) != null
@@ -2011,18 +2031,19 @@ class AppGraph private constructor(context: Context) {
     }
 
     /**
-     * [was], one of your own the chat opened again, back as it was before, finished: its finish
-     * and its steps' ticks as they were, not finished anew (a second completion on record). False if
-     * it's finished since another way.
+     * [was], a task the chat opened again, back as it was before, finished: its finish and its
+     * steps' ticks as they were, not finished anew (a second completion on record). Only while it's as
+     * opening it left it ([com.thomaswcode.decrastination.core.ChatActs.asReopened]): work on it
+     * since, or a finish another way, stands, and false.
      */
     private suspend fun refinish(was: TaskItem): Boolean {
         var back = false
         tasks.update { state ->
             state.copy(
                 tasks = state.tasks.map { t ->
-                    if (t.id != was.id || !t.isOpen) return@map t
+                    if (t.id != was.id || !com.thomaswcode.decrastination.core.ChatActs.asReopened(t, was)) return@map t
                     back = true
-                    t.copy(status = was.status, doneAt = was.doneAt, subSteps = if (t.subSteps.map { it.title } == was.subSteps.map { it.title }) was.subSteps else t.subSteps)
+                    t.copy(status = was.status, doneAt = was.doneAt, subSteps = was.subSteps)
                 },
             )
         }
@@ -2034,24 +2055,6 @@ class AppGraph private constructor(context: Context) {
         if (cards.isEmpty()) return
         chat.update { s ->
             s.copy(messages = s.messages.map { m -> m.copy(proposals = m.proposals.map { p -> if ("${m.id}|${p.id}" in cards && p.state == ProposalState.Proposed && p.made == null) p.copy(state = ProposalState.Applied, made = id) else p }) })
-        }
-    }
-
-    /** Whether [act] can still be taken back ([undoAct]), with [tasks] and [settings] as they are: as the chat shows its Undo. */
-    fun canUndo(act: com.thomaswcode.decrastination.core.Act, tasks: List<TaskItem>, settings: Settings): Boolean {
-        if (act.undone) return false
-        val a = act.action
-        val task = tasks.firstOrNull { it.id == a.taskId }
-        val step = a.stepIndex?.let { task?.subSteps?.getOrNull(it) }
-        return when (a.type) {
-            com.thomaswcode.decrastination.core.ChatAction.Type.Open -> false
-            // One of yours its tick finished, too: opened again with it.
-            com.thomaswcode.decrastination.core.ChatAction.Type.TickStep -> task != null && step?.done == true && (task.isOpen || task.source == Source.Own)
-            com.thomaswcode.decrastination.core.ChatAction.Type.UntickStep -> task?.isOpen == true && step?.done == false
-            com.thomaswcode.decrastination.core.ChatAction.Type.Done -> task?.isOpen == false && (task.source == Source.Own || task.tickDone)
-            com.thomaswcode.decrastination.core.ChatAction.Type.Reopen -> task?.isOpen == true && act.was != null
-            com.thomaswcode.decrastination.core.ChatAction.Type.Delete -> act.was != null && task == null
-            com.thomaswcode.decrastination.core.ChatAction.Type.Setting -> act.before != null && com.thomaswcode.decrastination.data.FelixSettings.field(a.setting.orEmpty())?.get(settings) == act.after
         }
     }
 

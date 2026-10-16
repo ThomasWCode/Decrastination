@@ -92,4 +92,16 @@ class MemoryTest {
         assertEquals(listOf("topic 1"), edits.single().evicted.map { it.topic })
         assertEquals(full.facts.toSet(), Memories.undo(over, edits.single())!!.facts.toSet())
     }
+
+    @Test
+    fun `facts remembered together each bring back only what their own room pushed out, within the room`() {
+        val long = "x".repeat(290)
+        val (full, _) = Memories.edit(MemoryState(), (1..20).map { Given("topic $it", long) }, 10)
+        val (over, edits) = Memories.edit(full, listOf(Given("new a", long), Given("new b", long)), 20)
+        assertEquals(listOf("topic 1"), edits[0].evicted.map { it.topic })
+        assertEquals(listOf("topic 2"), edits[1].evicted.map { it.topic })
+        val back = Memories.undo(over, edits[1])!!
+        assertEquals(true, back.facts.any { it.topic == "topic 2" } && back.facts.none { it.topic == "topic 1" || it.topic == "new b" })
+        assertEquals(true, Memories.chars(back.facts) <= Memories.FACT_BUDGET_CHARS)
+    }
 }
