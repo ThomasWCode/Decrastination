@@ -252,3 +252,8 @@ Built from `docs/review_v2_improvements/impl/` in eight phases, each a pull requ
 - **Dropped**: the Exams page and recurring work (NF-04, NF-05, Q7).
 - **Returned work (NF-06)**: I looked in Teams on the 16th; nothing of yours has been returned yet (every completed card says *Submitted*), so the widget's half still waits for one. Settled as yours to tell me, or for me to look again, once something comes back with feedback.
 - **Questions for you** are on the PC, in `private/QUESTIONS.md`, kept out of the repository as some are about what's in it.
+
+## 3.0.2: an overdue task's card applies
+
+- **Found by you on the 16th:** a card from the chat moving an overdue task to today wouldn't apply: *Apply* did nothing, only "It's due before then" under it, and the answer above had said "Done". The rule that keeps work before its deadline (PL-04) took any time for work already overdue as too late. It now holds only while the deadline is ahead: for overdue work, any time from now is as soon as it can be.
+- **And a change refused** after the chat said it was made is said under the answer ("Not made: …").
