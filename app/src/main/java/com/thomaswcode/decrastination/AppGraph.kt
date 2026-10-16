@@ -1470,8 +1470,8 @@ class AppGraph private constructor(context: Context) {
     private val readingInstructions = Mutex()
 
     /**
-     * Writes down a new instruction about [about] and has Claude read it. It changes nothing until
-     * you apply it ([applyInstruction]).
+     * Writes down a new instruction about [about] and has Claude read it: applied once it's read
+     * (your call, 16 Oct), and taken back under Your changes.
      */
     suspend fun addInstruction(text: String, about: About): String {
         val id = java.util.UUID.randomUUID().toString()
@@ -1666,6 +1666,9 @@ class AppGraph private constructor(context: Context) {
                         },
                     )
                 }
+                // Made as soon as it's read (your call, 16 Oct: nothing of his waits for Apply), as the
+                // chat's are; one that can't be is marked unclear, saying why. Taken back under Your changes.
+                if (reading is InstructionAnswers.Reading.Changes) applyInstruction(next.id)
                 null
             }
             if (waiting != null) {
@@ -1745,7 +1748,7 @@ class AppGraph private constructor(context: Context) {
         applied: List<Instruction> = instructions.value.applied,
     ): ChatPrompts.Context {
         return ChatPrompts.Context(
-            known = ChatPrompts.context(state.tasks, time.events, applied, now, clock.zone(), settings.value.classMap, runtime.value.notSame),
+            known = ChatPrompts.context(state.tasks, time.events, applied, now, clock.zone(), settings.value.classMap, runtime.value.notSame, settings.value),
             plan = ChatPrompts.plan(plan(state, now = now, applied = applied, time = time), clock.zone()),
         )
     }
@@ -1799,9 +1802,11 @@ class AppGraph private constructor(context: Context) {
                 from = Speaker.Claude,
                 text = reading.reply,
                 at = clock.now(),
-                // Its changes to what exists made at once, on a card applied as it's made (AI-24); the rest to confirm.
-                proposals = com.thomaswcode.decrastination.enrich.ChatAnswers.cards(reading, tasks.value.tasks.associateBy { it.id }, java.time.Instant.ofEpochMilli(clock.now()).atZone(clock.zone()).toLocalDate(), clock.zone()),
+                // Everything on a card made as it comes (your call, 16 Oct), each with its Undo.
+                proposals = com.thomaswcode.decrastination.enrich.ChatAnswers.cards(reading, tasks.value.tasks.associateBy { it.id }, clock.zone()),
                 suggestedReplies = reading.suggestedReplies,
+                searched = reading.searched,
+                sources = reading.sources,
                 note = reading.leftOut.takeIf { it.isNotEmpty() }?.let { "Left out, as the app can't use it: ${it.joinToString("; ")}" },
             )
             var kept = false
@@ -1814,13 +1819,14 @@ class AppGraph private constructor(context: Context) {
                     s.copy(messages = (s.messages.map { if (it.id == waiting.id) it.copy(answeredAt = reply.at, note = null) else it } + reply).takeLast(MAX_CHAT))
                 }
             }
-            // What it remembered (AI-21), with an answer kept only, and said under it.
-            val lines = if (kept) remember(reading.memories) else emptyList()
-            if (lines.isNotEmpty()) chat.update { s -> s.copy(messages = s.messages.map { if (it.id == reply.id) it.copy(remembered = lines) else it }) }
-            // Its steps ticked (AI-14), said under it: before its changes, as its steps are the ones it was shown.
-            val done = if (kept) tickSteps(reading.actions) else emptyList()
-            if (done.isNotEmpty()) chat.update { s -> s.copy(messages = s.messages.map { if (it.id == reply.id) it.copy(done = done) else it }) }
-            // Its changes to what exists, made now, as if Apply were tapped: Undo takes them back.
+            // What it remembered (AI-21), with an answer kept only, and said under it with its Undo.
+            val edits = if (kept) remember(reading.memories) else emptyList()
+            if (edits.isNotEmpty()) chat.update { s -> s.copy(messages = s.messages.map { if (it.id == reply.id) it.copy(memoryEdits = edits) else it }) }
+            // Its actions (AI-14; 16 Oct, everything he does), said under it with their Undo: before its
+            // changes, as its steps are the ones it was shown.
+            val acts = if (kept) act(reading.actions) else emptyList()
+            if (acts.isNotEmpty()) chat.update { s -> s.copy(messages = s.messages.map { if (it.id == reply.id) it.copy(acts = acts) else it }) }
+            // Its cards, made now, as if Apply were tapped: Undo takes them back.
             if (kept) {
                 val instant = reply.proposals.filter { it.instant }
                 instant.forEach { applyProposal(reply.id, it.id) }
@@ -1842,28 +1848,145 @@ class AppGraph private constructor(context: Context) {
     }
 
     /**
-     * The chat's steps to tick (AI-14), at once, as it alters what exists (AI-24): its piece kept
-     * where the plan has one, today or another day (earning as a tick does), else ticked as on its
-     * sheet, where that can be. A line each that was, "Ticked: Q1, of Essay"; none for one that wasn't.
+     * The chat's actions (AI-14; your call, 16 Oct: everything he does), made at once, as it alters
+     * what exists (AI-24), each said under the answer with what its Undo needs ([undoAct]): a step
+     * ticked (its piece kept where the plan has one, today or another day, earning as a tick does,
+     * else ticked as on its sheet) or to do again; a task of yours done, open again or deleted; a
+     * setting set. None for one that couldn't be.
      */
-    private suspend fun tickSteps(actions: List<com.thomaswcode.decrastination.core.ChatAction>): List<String> {
-        val plan = plan()
-        return actions.filter { it.type == com.thomaswcode.decrastination.core.ChatAction.Type.TickStep }.mapNotNull { a ->
-            val task = tasks.value.tasks.firstOrNull { it.id == a.taskId } ?: return@mapNotNull null
-            val index = a.stepIndex ?: return@mapNotNull null
-            val step = task.subSteps.getOrNull(index)?.takeIf { !it.done } ?: return@mapNotNull null
-            val piece = (plan.todaySlots.mapNotNull { it.chunk } + plan.ordered).firstOrNull { it.taskId == task.id && it.stepIndex == index }
-            val ticked = if (piece != null) focus.keepSlot(piece.key) else runCatching { focus.tickBlock(task.id, index, step.title) }.getOrDefault(false)
-            "Ticked: ${step.title}, of ${task.title}".takeIf { ticked }
+    private suspend fun act(actions: List<com.thomaswcode.decrastination.core.ChatAction>): List<com.thomaswcode.decrastination.core.Act> {
+        fun said(line: String, a: com.thomaswcode.decrastination.core.ChatAction) = com.thomaswcode.decrastination.core.Act(line, a)
+        return actions.mapNotNull { a ->
+            val task = tasks.value.tasks.firstOrNull { it.id == a.taskId }
+            when (a.type) {
+                com.thomaswcode.decrastination.core.ChatAction.Type.Open -> null
+                com.thomaswcode.decrastination.core.ChatAction.Type.TickStep -> {
+                    val index = a.stepIndex ?: return@mapNotNull null
+                    val step = task?.subSteps?.getOrNull(index)?.takeIf { !it.done } ?: return@mapNotNull null
+                    val plan = plan()
+                    val piece = (plan.todaySlots.mapNotNull { it.chunk } + plan.ordered).firstOrNull { it.taskId == task.id && it.stepIndex == index }
+                    val ticked = if (piece != null) focus.keepSlot(piece.key) else runCatching { focus.tickBlock(task.id, index, step.title) }.getOrDefault(false)
+                    said("Ticked: ${step.title}, of ${task.title}", a).takeIf { ticked }
+                }
+                com.thomaswcode.decrastination.core.ChatAction.Type.UntickStep -> {
+                    val index = a.stepIndex ?: return@mapNotNull null
+                    val step = task?.subSteps?.getOrNull(index)?.takeIf { it.done } ?: return@mapNotNull null
+                    said("To do again: ${step.title}, of ${task.title}", a).takeIf { focus.untickBlock(task.id, index, step.title) }
+                }
+                com.thomaswcode.decrastination.core.ChatAction.Type.Done -> {
+                    if (task?.isOpen != true) return@mapNotNull null
+                    finishOwnTask(task.id)
+                    said("Done: ${task.title}", a).takeIf { tasks.value.tasks.firstOrNull { it.id == task.id }?.isOpen == false }
+                }
+                com.thomaswcode.decrastination.core.ChatAction.Type.Reopen -> {
+                    if (task == null || task.isOpen) return@mapNotNull null
+                    reopenOwnTask(task.id)
+                    said("Open again: ${task.title}", a).takeIf { tasks.value.tasks.firstOrNull { it.id == task.id }?.isOpen == true }
+                }
+                com.thomaswcode.decrastination.core.ChatAction.Type.Delete -> {
+                    if (task?.source != Source.Own) return@mapNotNull null
+                    deleteOwnTask(task.id)
+                    com.thomaswcode.decrastination.core.Act("Deleted: ${task.title}", a, deleted = task).takeIf { tasks.value.tasks.none { it.id == task.id } }
+                }
+                com.thomaswcode.decrastination.core.ChatAction.Type.Setting -> {
+                    val field = com.thomaswcode.decrastination.data.FelixSettings.field(a.setting.orEmpty()) ?: return@mapNotNull null
+                    var made: com.thomaswcode.decrastination.core.Act? = null
+                    changeSettings { s ->
+                        val (next, line) = com.thomaswcode.decrastination.data.FelixSettings.set(s, field.name, a.value.orEmpty()) ?: return@changeSettings s
+                        made = com.thomaswcode.decrastination.core.Act(line, a, before = field.get(s), after = field.get(next))
+                        next
+                    }
+                    made
+                }
+            }
         }
     }
 
-    /** [given] kept in what's remembered (AI-21), and a line for each thing that did. */
-    suspend fun remember(given: List<com.thomaswcode.decrastination.core.Given>): List<String> {
+    /**
+     * The [index]th of message [messageId]'s actions taken back ([act], its Undo): a step ticked to
+     * do again, or one unticked ticked again (by hand, earning nothing); a task done open again, or one
+     * opened finished again; one deleted back as it was; a setting back to its value before. Not
+     * once it's changed since (ticked, finished or deleted another way, set again): why, then.
+     */
+    suspend fun undoAct(messageId: String, index: Int): String? {
+        val act = chat.value.messages.firstOrNull { it.id == messageId }?.acts?.getOrNull(index)?.takeIf { !it.undone } ?: return null
+        val a = act.action
+        val task = tasks.value.tasks.firstOrNull { it.id == a.taskId }
+        val step = a.stepIndex?.let { i -> task?.subSteps?.getOrNull(i) }
+        fun open(id: String) = tasks.value.tasks.firstOrNull { it.id == id }?.isOpen
+        val undone = when (a.type) {
+            com.thomaswcode.decrastination.core.ChatAction.Type.Open -> false
+            com.thomaswcode.decrastination.core.ChatAction.Type.TickStep -> step?.done == true && focus.untickBlock(task!!.id, a.stepIndex!!, step.title)
+            com.thomaswcode.decrastination.core.ChatAction.Type.UntickStep -> step?.done == false && focus.tickBlock(task!!.id, a.stepIndex!!, step.title)
+            com.thomaswcode.decrastination.core.ChatAction.Type.Done -> task?.isOpen == false && task.source == Source.Own && run { reopenOwnTask(task.id); open(task.id) == true }
+            com.thomaswcode.decrastination.core.ChatAction.Type.Reopen -> task?.isOpen == true && run { finishOwnTask(task.id); open(task.id) == false }
+            com.thomaswcode.decrastination.core.ChatAction.Type.Delete -> act.deleted != null && task == null && run { restoreTask(act.deleted); open(act.deleted.id) != null }
+            com.thomaswcode.decrastination.core.ChatAction.Type.Setting -> {
+                val field = com.thomaswcode.decrastination.data.FelixSettings.field(a.setting.orEmpty())
+                var back = false
+                if (field != null && act.before != null) {
+                    changeSettings { s ->
+                        if (field.get(s) != act.after) return@changeSettings s
+                        field.set(s, act.before)?.also { back = true } ?: s
+                    }
+                }
+                back
+            }
+        }
+        if (!undone) return "It's changed since, so it can't be undone here"
+        chat.update { s -> s.copy(messages = s.messages.map { m -> if (m.id != messageId) m else m.copy(acts = m.acts.mapIndexed { i, x -> if (i == index) x.copy(undone = true) else x }) }) }
+        return null
+    }
+
+    /** Whether [act] can still be taken back ([undoAct]), with [tasks] and [settings] as they are: as the chat shows its Undo. */
+    fun canUndo(act: com.thomaswcode.decrastination.core.Act, tasks: List<TaskItem>, settings: Settings): Boolean {
+        if (act.undone) return false
+        val a = act.action
+        val task = tasks.firstOrNull { it.id == a.taskId }
+        val step = a.stepIndex?.let { task?.subSteps?.getOrNull(it) }
+        return when (a.type) {
+            com.thomaswcode.decrastination.core.ChatAction.Type.Open -> false
+            com.thomaswcode.decrastination.core.ChatAction.Type.TickStep -> task?.isOpen == true && step?.done == true
+            // Ticked again by hand, as only an email's or one of your own's can be.
+            com.thomaswcode.decrastination.core.ChatAction.Type.UntickStep -> task?.isOpen == true && step?.done == false && Focus.tickable(task)
+            com.thomaswcode.decrastination.core.ChatAction.Type.Done -> task?.isOpen == false && task.source == Source.Own
+            com.thomaswcode.decrastination.core.ChatAction.Type.Reopen -> task?.isOpen == true
+            com.thomaswcode.decrastination.core.ChatAction.Type.Delete -> act.deleted != null && task == null
+            com.thomaswcode.decrastination.core.ChatAction.Type.Setting -> act.before != null && com.thomaswcode.decrastination.data.FelixSettings.field(a.setting.orEmpty())?.get(settings) == act.after
+        }
+    }
+
+    /** [task], one of your own deleted, back as it was (a chat action's Undo), its instructions laid over it again. */
+    private suspend fun restoreTask(task: TaskItem) {
+        tasks.update { state -> if (state.tasks.any { it.id == task.id }) state else state.copy(tasks = com.thomaswcode.decrastination.core.Duplicates.linksPresent(state.tasks + task)) }
+        layTaskOverrides()
+    }
+
+    /** [given] kept in what's remembered (AI-21), and what each thing did ([com.thomaswcode.decrastination.core.MemoryEdit.line] says it). */
+    suspend fun remember(given: List<com.thomaswcode.decrastination.core.Given>): List<com.thomaswcode.decrastination.core.MemoryEdit> {
         if (given.isEmpty()) return emptyList()
-        var lines = emptyList<String>()
-        memory.update { state -> com.thomaswcode.decrastination.core.Memories.apply(state, given, clock.now()).also { lines = it.second }.first }
-        return lines
+        var edits = emptyList<com.thomaswcode.decrastination.core.MemoryEdit>()
+        memory.update { state -> com.thomaswcode.decrastination.core.Memories.edit(state, given, clock.now()).also { edits = it.second }.first }
+        return edits
+    }
+
+    /**
+     * What the [index]th of message [messageId]'s remembering did, taken back (its Undo, your call,
+     * 16 Oct): the fact gone and the one it replaced back, or what it forgot back. An answer from
+     * before what each did was kept has its lines read against what's remembered now
+     * ([com.thomaswcode.decrastination.core.Memories.editOf]). Null once it is; why not, if it can't be.
+     */
+    suspend fun undoMemory(messageId: String, index: Int): String? {
+        val message = chat.value.messages.firstOrNull { it.id == messageId } ?: return null
+        val edits = message.memoryEdits.ifEmpty {
+            message.remembered.map { com.thomaswcode.decrastination.core.Memories.editOf(it, memory.value) ?: com.thomaswcode.decrastination.core.MemoryEdit(it) }
+        }
+        val edit = edits.getOrNull(index)?.takeIf { !it.undone } ?: return null
+        var undone = false
+        memory.update { state -> com.thomaswcode.decrastination.core.Memories.undo(state, edit)?.also { undone = true } ?: state }
+        if (!undone) return "It's changed since: forget it in the list of what ${settings.value.felixName} remembers"
+        chat.update { s -> s.copy(messages = s.messages.map { m -> if (m.id != messageId) m else m.copy(memoryEdits = edits.mapIndexed { i, e -> if (i == index) e.copy(undone = true) else e }) }) }
+        return null
     }
 
     /** Whether the chat is on screen (AI-24): an answer there isn't a notification too. */
@@ -1978,6 +2101,9 @@ class AppGraph private constructor(context: Context) {
         var made: String? = null
         var note: String? = null
         var before = emptyMap<String, OwnTask>()
+        // The days off and half-days it puts in the school calendar (PL-16), for its Undo.
+        var schoolBefore: com.thomaswcode.decrastination.core.SchoolCalendar? = null
+        var schoolAfter: com.thomaswcode.decrastination.core.SchoolCalendar? = null
         val task = edited ?: proposal.task
         if (task != null) {
             val id = java.util.UUID.randomUUID().toString()
@@ -1990,7 +2116,12 @@ class AppGraph private constructor(context: Context) {
                 .mapNotNull { tid -> own[tid]?.let { tid to OwnTasks.draftOf(it) } }.toMap()
             val instruction = Instruction(id, asked?.text ?: message.text, asked?.about ?: About(), clock.now(), state = InstructionStatus.Understood, changes = proposal.changes)
             instructions.update { it.copy(instructions = it.instructions + instruction) }
+            val calendar = school.value
             applyInstruction(id)
+            if (school.value != calendar) {
+                schoolBefore = calendar
+                schoolAfter = school.value
+            }
             val after = instructions.value.instructions.firstOrNull { it.id == id }
             when {
                 // All made on tasks of your own, so there's nothing left of it to keep.
@@ -2011,7 +2142,7 @@ class AppGraph private constructor(context: Context) {
                             p
                         } else if (note == null) {
                             // As added: changed first, it's yours that the card shows and the chat recalls.
-                            p.copy(state = ProposalState.Applied, made = made, before = before, note = null, task = task ?: p.task)
+                            p.copy(state = ProposalState.Applied, made = made, before = before, note = null, task = task ?: p.task, schoolBefore = schoolBefore, schoolAfter = schoolAfter)
                         } else {
                             p.copy(note = note)
                         }
@@ -2022,13 +2153,13 @@ class AppGraph private constructor(context: Context) {
     }
 
     /**
-     * Card [proposalId] undone: the task it added deleted, or its changes taken back. One whose
-     * changes were made on tasks of your own can't be (they're changed on the tasks' pages).
+     * Card [proposalId] undone: the task it added deleted, or its changes taken back, those made on
+     * tasks of your own put back as they were, and its days off out of the school calendar.
      */
     suspend fun undoProposal(messageId: String, proposalId: String): Unit = proposing.withLock {
         val proposal = chat.value.messages.firstOrNull { it.id == messageId }?.proposals?.firstOrNull { it.id == proposalId && it.state == ProposalState.Applied } ?: return@withLock
         val made = proposal.made
-        if (made == null && proposal.before.isEmpty()) return@withLock
+        if (made == null && proposal.before.isEmpty() && proposal.schoolBefore == null) return@withLock
         val note = if (proposal.task != null) {
             made?.let { deleteOwnTask(it) }
             null
@@ -2042,14 +2173,18 @@ class AppGraph private constructor(context: Context) {
                 val back = OwnTasks.restored(OwnTasks.draftOf(t), was, proposal.changes.filter { it.taskId == id })
                 (t to back).takeIf { back != OwnTasks.draftOf(t) }
             }
+            // Its days off and half-days out of the school calendar, unless one has gone from it since.
+            val calendar = proposal.schoolBefore?.let { was -> school.value.undone(was, proposal.schoolAfter ?: return@let null) }
             val stuck = backs.mapNotNull { (t, back) -> OwnTasks.problem(back)?.let { "“${t.title}” can't go back: ${it.replaceFirstChar(Char::lowercase)}" } } +
                 // And its instruction, which taking back mustn't leave tasks waiting for each other in a circle.
                 listOfNotNull(made?.takeIf { m -> Instructions.makesCircle(emptyList(), instructions.value.applied.filterNot { it.id == m }) }
-                    ?.let { "taking its changes back would bring back an earlier instruction that has tasks waiting for each other in a circle" })
+                    ?.let { "taking its changes back would bring back an earlier instruction that has tasks waiting for each other in a circle" }) +
+                listOfNotNull("its days off have changed since: they're deleted in Settings → School".takeIf { proposal.schoolBefore != null && calendar == null })
             if (stuck.isNotEmpty()) {
-                stuck.joinToString("; ")
+                stuck.joinToString("; ").replaceFirstChar(Char::uppercase)
             } else {
                 backs.forEach { (t, back) -> saveOwnTask(t.sourceId, back) }
+                calendar?.let { c -> school.update { c } }
                 made?.let { deleteInstruction(it) }
                 made?.let { m -> instructions.value.instructions.firstOrNull { it.id == m }?.note }
             }
@@ -2060,7 +2195,7 @@ class AppGraph private constructor(context: Context) {
                 messages = s.messages.map { m ->
                     m.copy(proposals = m.proposals.map { p ->
                         when {
-                            m.id == messageId && p.id == proposalId -> if (note == null) p.copy(state = ProposalState.Proposed, made = null, before = emptyMap()) else p.copy(note = note)
+                            m.id == messageId && p.id == proposalId -> if (note == null) p.copy(state = ProposalState.Proposed, made = null, before = emptyMap(), schoolBefore = null, schoolAfter = null) else p.copy(note = note)
                             // Undone, its values are gone from the tasks: a card applied after it, which
                             // replaced them, puts back what this one replaced instead, if it's undone too.
                             note == null && p.state == ProposalState.Applied && p.before.keys.any { it in proposal.before } ->

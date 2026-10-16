@@ -327,38 +327,21 @@ class ChatTest {
     }
 
     @Test
-    fun `changes to what exists are made at once, the rest shown to confirm`() {
-        val other = bridge.copy(id = "teams:other", sourceId = "other")
-        val tasks = listOf(bridge, other).associateBy { it.id }
-        val today = LocalDate.parse("2026-10-12")
-        assertTrue(com.thomaswcode.decrastination.core.InstantChanges.instant(Change(ChangeType.AtTime, taskId = "teams:bridge"), tasks, today))
-        assertFalse(com.thomaswcode.decrastination.core.InstantChanges.instant(Change(ChangeType.AtTime, taskId = "teams:gone"), tasks, today))
-        assertTrue(com.thomaswcode.decrastination.core.InstantChanges.instant(Change(ChangeType.After, taskId = "teams:bridge", afterTaskId = "teams:other"), tasks, today))
-        assertFalse(com.thomaswcode.decrastination.core.InstantChanges.instant(Change(ChangeType.After, taskId = "teams:bridge", afterTaskId = "teams:gone"), tasks, today))
-        // A busy time or a limit today at once; another day's, or every week's, to confirm.
-        assertTrue(com.thomaswcode.decrastination.core.InstantChanges.instant(Change(ChangeType.BusyTime, date = "2026-10-12", startMin = 1080, endMin = 1140), tasks, today))
-        assertFalse(com.thomaswcode.decrastination.core.InstantChanges.instant(Change(ChangeType.BusyTime, date = "2026-10-13", startMin = 1080, endMin = 1140), tasks, today))
-        assertFalse(com.thomaswcode.decrastination.core.InstantChanges.instant(Change(ChangeType.BusyTime, weekday = 2, startMin = 1080, endMin = 1140), tasks, today))
-        assertTrue(com.thomaswcode.decrastination.core.InstantChanges.instant(Change(ChangeType.DayLimit, date = "2026-10-12", freeMin = 60), tasks, today))
-        assertTrue(com.thomaswcode.decrastination.core.InstantChanges.instant(Change(ChangeType.EventTime, eventKey = "match", eventAnswer = "free"), tasks, today))
-        assertFalse(com.thomaswcode.decrastination.core.InstantChanges.instant(Change(ChangeType.NoSchool, date = "2026-10-26", endDate = "2026-10-30"), tasks, today))
-        assertFalse(com.thomaswcode.decrastination.core.InstantChanges.instant(Change(ChangeType.HalfDay, date = "2026-10-16", endMin = 750), tasks, today))
-    }
-
-    @Test
-    fun `a reading's cards put what's made at once first, then new tasks, then what's to confirm`() {
+    fun `everything a reading gives is made as it comes, its changes on one card, then each new task, then a task to show`() {
         val reading = ChatAnswers.Reading(
-            reply = "Moved it to 19:30; I'd add the statement and the half term.",
+            reply = "Moved it to 19:30, and added the statement and the half term.",
             tasks = listOf(OwnTask(title = "Statement", minutes = 60)),
             changes = listOf(Change(ChangeType.AtTime, taskId = "teams:bridge", time = Fixtures.at("2026-10-13T19:30")), Change(ChangeType.NoSchool, date = "2026-10-26", endDate = "2026-10-30")),
             leftOut = emptyList(),
+            actions = listOf(com.thomaswcode.decrastination.core.ChatAction(com.thomaswcode.decrastination.core.ChatAction.Type.Open, "teams:bridge")),
         )
         var n = 0
-        val cards = ChatAnswers.cards(reading, mapOf(bridge.id to bridge), LocalDate.parse("2026-10-12"), LONDON) { "c${++n}" }
-        assertEquals(listOf("c1" to true, "c2" to false, "c3" to false), cards.map { it.id to it.instant })
-        assertEquals(listOf(ChangeType.AtTime), cards[0].changes.map { it.type })
+        val cards = ChatAnswers.cards(reading, mapOf(bridge.id to bridge), LONDON) { "c${++n}" }
+        // Days off and a new task too (your call, 16 Oct): nothing waits for Add or Apply.
+        assertEquals(listOf("c1" to true, "c2" to true), cards.take(2).map { it.id to it.instant })
+        assertEquals(listOf(ChangeType.AtTime, ChangeType.NoSchool), cards[0].changes.map { it.type })
         assertEquals("Statement", cards[1].task?.title)
-        assertEquals(listOf(ChangeType.NoSchool), cards[2].changes.map { it.type })
+        assertEquals("teams:bridge", cards[2].open)
     }
 
     @Test
@@ -367,7 +350,7 @@ class ChatTest {
         assertEquals(listOf("Thanks", "Undo that", "Move it to 20:00 instead, after football"), reading.suggestedReplies)
         val system = ChatPrompts.system(com.thomaswcode.decrastination.data.Settings(felixName = "Max", felixLine = "a coach"), 13)
         assertTrue(system.startsWith("You are Max: a coach, and this is the chat in a UK sixth-form student's (Year 13) planner app."), system)
-        assertTrue("is made as soon as you give it" in system && "give the change that puts it back" in system)
+        assertTrue("is made as soon as you give it" in system && "give what puts it back" in system && "never what you'd do" in system)
     }
 
     @Test
@@ -413,11 +396,69 @@ class ChatTest {
             reading.actions,
         )
         assertEquals(2, reading.leftOut.size)
-        val cards = ChatAnswers.cards(reading, mapOf(essay.id to essay), java.time.LocalDate.parse("2026-10-12"), LONDON)
+        val cards = ChatAnswers.cards(reading, mapOf(essay.id to essay), LONDON)
         assertEquals(listOf(essay.id), cards.mapNotNull { it.open })
         // Its steps are listed by their place, for that.
         val context = ChatPrompts.context(listOf(essay), emptyList(), emptyList(), now, LONDON)
         assertTrue("    step 0: Plan (20 min)\n    step 1: Write (40 min)" in context, context)
+    }
+
+    @Test
+    fun `a step to do again, a task of yours done, open again or deleted, and a setting are read, each only as it can be`() {
+        val essay = com.thomaswcode.decrastination.core.OwnTasks.create(
+            OwnTask(title = "Essay", steps = listOf(com.thomaswcode.decrastination.core.OwnStep("Plan", 20), com.thomaswcode.decrastination.core.OwnStep("Write", 40))),
+            "e", now,
+        ).let { t -> t.copy(subSteps = t.subSteps.mapIndexed { i, s -> if (i == 0) s.copy(done = true) else s }) }
+        val finished = com.thomaswcode.decrastination.core.OwnTasks.create(OwnTask(title = "Letter", minutes = 20), "l", now)
+            .copy(status = com.thomaswcode.decrastination.core.Status.Done, doneAt = now - 3_600_000L)
+        val settings = com.thomaswcode.decrastination.data.Settings()
+        fun action(type: String, task: String = "", step: Int = -1, setting: String = "", value: String = "") =
+            """{"type":"$type","taskId":"$task","stepIndex":$step,"setting":"$setting","value":"$value"}"""
+        val reading = ChatAnswers.parse(
+            """{"reply":"Done.","newTasks":[],"changes":[],"memories":[],"suggestedReplies":[],"actions":[""" + listOf(
+                action("untickStep", essay.id, 0), action("untickStep", essay.id, 1),
+                action("done", essay.id), action("done", bridge.id),
+                action("reopen", finished.id), action("delete", finished.id), action("delete", bridge.id),
+                action("setting", setting = "boxMin", value = "40"), action("setting", setting = "boxMin", value = "4000"), action("setting", setting = "blockedApps", value = "none"),
+            ).joinToString(",") + "]}",
+            listOf(essay, finished, bridge), emptyList(), About(), now, LONDON, settings,
+        )!!
+        assertEquals(
+            listOf(
+                com.thomaswcode.decrastination.core.ChatAction(com.thomaswcode.decrastination.core.ChatAction.Type.UntickStep, essay.id, 0),
+                com.thomaswcode.decrastination.core.ChatAction(com.thomaswcode.decrastination.core.ChatAction.Type.Done, essay.id),
+                com.thomaswcode.decrastination.core.ChatAction(com.thomaswcode.decrastination.core.ChatAction.Type.Reopen, finished.id),
+                com.thomaswcode.decrastination.core.ChatAction(com.thomaswcode.decrastination.core.ChatAction.Type.Delete, finished.id),
+                com.thomaswcode.decrastination.core.ChatAction(com.thomaswcode.decrastination.core.ChatAction.Type.Setting, "", setting = "boxMin", value = "40"),
+            ),
+            reading.actions.take(5),
+        )
+        assertEquals(5, reading.actions.size)
+        // A step not done, a Teams task marked done or deleted, a box of 4000 minutes, and a blocker's setting: each said, not taken.
+        assertEquals(5, reading.leftOut.size, reading.leftOut.toString())
+        assertTrue(reading.leftOut.any { "is done when Teams says so" in it }, reading.leftOut.toString())
+        assertTrue(reading.leftOut.any { "a setting the app doesn't let him change (blockedApps)" in it }, reading.leftOut.toString())
+        // He's told of their own finished lately, and of the settings he can change, with their values.
+        val context = ChatPrompts.context(listOf(essay, finished, bridge), emptyList(), emptyList(), now, LONDON, settings = settings)
+        assertTrue("Their own tasks finished in the last week (id | title | finished):\n- ${finished.id} | Letter | " in context, context)
+        assertTrue("- boxMin | A piece's length (minutes) | 30" in context, context)
+        assertTrue("- weekdayHours | School-day working hours | 16:45-22:00" in context, context)
+    }
+
+    @Test
+    fun `he searches the web only while he may, and keeps the pages found, each once`() {
+        assertTrue("6. Search the web (web_search)" in ChatPrompts.system(com.thomaswcode.decrastination.data.Settings()))
+        assertFalse("web_search" in ChatPrompts.system(com.thomaswcode.decrastination.data.Settings(felixSearches = false)))
+        val found = listOf(
+            "Essay prize" to "https://example.org/prize", "Essay prize again" to "https://example.org/prize",
+            "Not a page" to "ftp://example.org/x", "Rules" to "https://example.org/rules",
+            "A" to "https://a.example", "B" to "https://b.example", "C" to "https://c.example",
+        )
+        assertEquals(
+            listOf("https://example.org/prize", "https://example.org/rules", "https://a.example", "https://b.example"),
+            ChatAnswers.sources(found).map { it.url },
+        )
+        assertEquals("Essay prize", ChatAnswers.sources(found).first().title)
     }
 
     @Test

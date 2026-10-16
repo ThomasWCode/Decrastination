@@ -42,7 +42,7 @@ class OwnTasksTest {
         assertEquals(Fixtures.at("2026-10-16T17:00"), task.dueAt)
         assertEquals(90, task.effortMin)
         // What an instruction is laid over, and comes back to.
-        assertEquals(SourceValues(Kind.Homework, Fixtures.at("2026-10-16T17:00"), null), task.sourceValues)
+        assertEquals(SourceValues(Kind.Homework, Fixtures.at("2026-10-16T17:00"), null, "UCAS statement"), task.sourceValues)
         assertTrue(task.isOpen)
         // Your minutes are planned as you gave them.
         assertTrue(task.yourMinutes)

@@ -537,6 +537,32 @@ class Focus(
         return ticked
     }
 
+    /**
+     * The step of [taskId] at [index], still [title], to do again (16 Oct: Felix unticks it, or undoes
+     * his tick): one ticked by keeping its slot has that slot taken back ([unkeepSlot]: its record
+     * gone, its minutes off the task, the free time it earned given back as far as it's left); one
+     * ticked by hand is to do again, with the minutes it kept back on the steps after it. Says
+     * whether it was.
+     */
+    suspend fun untickBlock(taskId: String, index: Int, title: String): Boolean {
+        val task = tasks.value.tasks.firstOrNull { it.id == taskId && it.isOpen } ?: return false
+        val step = task.subSteps.getOrNull(index)?.takeIf { it.done && it.title == title } ?: return false
+        val key = Chunk.keyOf(taskId, index, 0)
+        val kept = log.value.slots.lastOrNull { it.key == key && it.outcome.kept }
+        if (!step.byHand && kept != null && unkeepSlot(key, kept.at)) return true
+        var unticked = false
+        tasks.update { state ->
+            state.copy(
+                tasks = state.tasks.map { t ->
+                    if (t.id != taskId || t.subSteps.getOrNull(index)?.let { it.done && it.title == title } != true) return@map t
+                    unticked = true
+                    t.copy(subSteps = t.subSteps.mapIndexed { j, s -> if (j == index) s.copy(done = false, byHand = false, timedMin = 0) else s })
+                },
+            )
+        }
+        return unticked
+    }
+
     /** Gives the photo checks a stop left part-way ([RuntimeState.photosDone]) what they're owed: at start-up. */
     suspend fun finishPhotos() {
         runtime.value.photosDone.forEach { finishPhoto(it) }

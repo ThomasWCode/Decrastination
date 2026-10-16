@@ -186,9 +186,16 @@ object Pricing {
 
     fun rates(model: String): Rates = if (model.startsWith(ClaudeEnricher.MODEL)) OPUS_5_5 else OLDER_OPUS
 
-    fun costUsd(model: String, input: Long, output: Long, cacheRead: Long = 0, cacheWrite: Long = 0): Double {
+    /**
+     * A web search's price (16 Oct): $10 a thousand, beside the tokens its results add (about 11 000
+     * for one, on the 16th). The chat's worst case is within [WORST_CALL_USD]'s: its three tokens a
+     * character leave room for [ChatPrompts.MAX_SEARCHES] searches' results.
+     */
+    const val WEB_SEARCH_USD = 0.01
+
+    fun costUsd(model: String, input: Long, output: Long, cacheRead: Long = 0, cacheWrite: Long = 0, searches: Long = 0): Double {
         val r = rates(model)
-        return (input * r.input + output * r.output + cacheRead * r.cacheRead + cacheWrite * r.cacheWrite) / 1_000_000.0
+        return (input * r.input + output * r.output + cacheRead * r.cacheRead + cacheWrite * r.cacheWrite) / 1_000_000.0 + searches * WEB_SEARCH_USD
     }
 
     fun costUsd(message: Message): Double {
@@ -199,6 +206,7 @@ object Pricing {
             output = usage.outputTokens(),
             cacheRead = usage.cacheReadInputTokens().orElse(0L),
             cacheWrite = usage.cacheCreationInputTokens().orElse(0L),
+            searches = usage.serverToolUse().map { it.webSearchRequests() }.orElse(0L),
         )
     }
 }

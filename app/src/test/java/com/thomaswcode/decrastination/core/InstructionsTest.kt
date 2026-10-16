@@ -530,10 +530,12 @@ class InstructionsTest {
         val made = OwnTasks.edited(ticked, draft)
         assertEquals(listOf("Plan" to true, "Draft" to false, "Polish" to false), made.subSteps.map { it.title to it.done })
         assertEquals(60, made.subSteps.sumOf { it.minutes })
-        // Not for a source's task.
+        // A source's task's too (16 Oct), but not one made from Anki's cards.
         val teams = ticked.copy(id = "teams:x", source = Source.Teams)
-        assertNull(com.thomaswcode.decrastination.enrich.InstructionAnswers.change(given.copy(taskId = teams.id), mapOf(teams.id to teams), emptyMap(), Fixtures.at("2026-10-12T17:00"), Fixtures.LONDON))
-        assertEquals("only a task of the student's own has its steps changed", com.thomaswcode.decrastination.enrich.InstructionAnswers.problem(given.copy(taskId = teams.id), mapOf(teams.id to teams), emptyMap()))
+        assertTrue(com.thomaswcode.decrastination.enrich.InstructionAnswers.change(given.copy(taskId = teams.id), mapOf(teams.id to teams), emptyMap(), Fixtures.at("2026-10-12T17:00"), Fixtures.LONDON) != null)
+        val deck = ticked.copy(id = "anki:deck", source = Source.Anki, derived = true)
+        assertNull(com.thomaswcode.decrastination.enrich.InstructionAnswers.change(given.copy(taskId = deck.id), mapOf(deck.id to deck), emptyMap(), Fixtures.at("2026-10-12T17:00"), Fixtures.LONDON))
+        assertEquals("an Anki task's steps and name come from its cards", com.thomaswcode.decrastination.enrich.InstructionAnswers.problem(given.copy(taskId = deck.id), mapOf(deck.id to deck), emptyMap()))
         // Its steps come to its 60 minutes; to 70 only with a Minutes change saying so.
         val longer = change.copy(steps = change.steps!!.map { if (it.title == "Polish") it.copy(minutes = 20) else it })
         val tasks = mapOf(own.id to ticked)
@@ -546,5 +548,76 @@ class InstructionsTest {
         assertNull(com.thomaswcode.decrastination.enrich.InstructionAnswers.change(withDue("2029-01-01"), mapOf(own.id to dated), emptyMap(), Fixtures.at("2026-10-12T17:00"), Fixtures.LONDON))
         assertNull(com.thomaswcode.decrastination.enrich.InstructionAnswers.change(withDue("2026-10-16"), mapOf(own.id to dated), emptyMap(), Fixtures.at("2026-10-12T17:00"), Fixtures.LONDON))
         assertTrue(com.thomaswcode.decrastination.enrich.InstructionAnswers.change(withDue("2026-10-15"), mapOf(own.id to dated), emptyMap(), Fixtures.at("2026-10-12T17:00"), Fixtures.LONDON) != null)
+    }
+
+    @Test
+    fun `steps for a source's task are laid over its own, kept through a sync, their ticks by name, and taken back`() {
+        val at = Fixtures.at("2026-10-12T17:00")
+        val reading = Enrichment("h", "claude", at, effortMin = 45, subSteps = listOf(SubStep("Find the clip", 15), SubStep("Upload", 15), SubStep("Link it", 15)))
+        val email = task("vid", "2026-10-17T23:59", effort = 45, source = Source.Gmail).let { it.copy(enrichment = reading.copy(inputHash = Enrichments.inputHash(it))).enriched() }
+            .let { t -> t.copy(subSteps = t.subSteps.mapIndexed { i, s -> if (i == 0) s.copy(done = true, byHand = true) else s }) }
+        assertEquals(3, email.subSteps.size)
+        val one = Change(ChangeType.Steps, taskId = email.id, steps = listOf(OwnStep("Find the clip", 10), OwnStep("Put it on the site", 20, where = "home")))
+        val laid = email.withOverrides(Instructions.taskOverrides(listOf(applied(one)))[email.id]!!)
+        assertEquals(listOf("Find the clip" to true, "Put it on the site" to false), laid.subSteps.map { it.title to it.done })
+        assertEquals("home", laid.subSteps[1].where)
+        // A sync's merge, and the enrichment read again, keep them.
+        val synced = Merge.apply(listOf(laid), Source.Gmail, listOf(Fetched("vid", "vid", Kind.Admin, dueAt = Fixtures.at("2026-10-17T23:59"))), at + 60_000L).tasks.single()
+        assertEquals(listOf("Find the clip", "Put it on the site"), synced.subSteps.map { it.title })
+        assertEquals(listOf("Find the clip", "Put it on the site"), synced.withEnrichment(reading.copy(inputHash = Enrichments.inputHash(synced), at = at + 120_000L)).subSteps.map { it.title })
+        // Taken back: the enrichment's again, the tick on the first kept by its name.
+        val back = synced.withOverrides(TaskOverrides.NONE)
+        assertEquals(listOf("Find the clip" to true, "Upload" to false, "Link it" to false), back.subSteps.map { it.title to it.done })
+        // Never over a deck's steps, which are its cards.
+        val deck = task("deck", null, source = Source.Anki).copy(derived = true, subSteps = listOf(SubStep("1.1", 10)))
+        assertEquals(listOf("1.1"), deck.withOverrides(TaskOverrides(steps = listOf(OwnStep("All", 10)))).subSteps.map { it.title })
+    }
+
+    @Test
+    fun `a name for a source's task is laid over its own, which a sync keeps beneath it, and isn't new content to read`() {
+        val at = Fixtures.at("2026-10-12T17:00")
+        val vectors = task("Vectors Practice", "2026-10-16T23:59").let { it.copy(sourceValues = it.sourceValues!!.copy(title = it.title)) }
+        val hash = Enrichments.inputHash(vectors)
+        val rename = Change(ChangeType.Rename, taskId = vectors.id, title = "Vectors practice")
+        assertEquals("“Vectors Practice” renamed “Vectors practice”", Instructions.describe(rename, mapOf(vectors.id to vectors), LONDON))
+        val renamed = vectors.withOverrides(Instructions.taskOverrides(listOf(applied(rename)))[vectors.id]!!)
+        assertEquals("Vectors practice", renamed.title)
+        // In use, it's said against its source's name.
+        assertEquals("“Vectors Practice” renamed “Vectors practice”", Instructions.describe(rename, mapOf(vectors.id to renamed), LONDON))
+        assertEquals(hash, Enrichments.inputHash(renamed))
+        val synced = Merge.apply(listOf(renamed), Source.Teams, listOf(Fetched(vectors.sourceId, "Vectors Practice", Kind.Homework, dueAt = vectors.dueAt)), at).tasks.single()
+        assertEquals("Vectors practice", synced.title)
+        assertEquals("Vectors Practice", synced.withOverrides(TaskOverrides.NONE).title)
+        // One kept from before names were kept has its own taken as its source's when it's first renamed.
+        val old = task("Essay", null).copy(sourceValues = SourceValues(Kind.Homework, null, null))
+        assertEquals("Essay", old.withOverrides(TaskOverrides(title = "Big essay")).withOverrides(TaskOverrides.NONE).title)
+        // Read from Claude: a name it gives; none, or for a task not listed, isn't taken.
+        val given = com.thomaswcode.decrastination.enrich.InstructionAnswers.Given("Rename", taskId = vectors.id, title = " Vectors practice ")
+        assertEquals(rename, com.thomaswcode.decrastination.enrich.InstructionAnswers.change(given, mapOf(vectors.id to vectors), emptyMap(), at, LONDON))
+        assertNull(com.thomaswcode.decrastination.enrich.InstructionAnswers.change(given.copy(title = " "), mapOf(vectors.id to vectors), emptyMap(), at, LONDON))
+        assertEquals("the new name is missing", com.thomaswcode.decrastination.enrich.InstructionAnswers.problem(given.copy(title = ""), mapOf(vectors.id to vectors), emptyMap()))
+    }
+
+    @Test
+    fun `a name for a task of your own is made on it, and put back by its card's Undo`() {
+        val own = OwnTasks.create(OwnTask(title = "Essay", minutes = 60), "e", now)
+        val rename = Change(ChangeType.Rename, taskId = own.id, title = "Philosophy essay")
+        assertEquals(listOf(rename), OwnTasks.madeOn(listOf(own), listOf(rename)))
+        val renamed = OwnTasks.changed(own, rename)
+        assertEquals("Philosophy essay", renamed.title)
+        assertEquals("Philosophy essay", renamed.sourceValues?.title)
+        val back = OwnTasks.restored(OwnTasks.draftOf(renamed), OwnTasks.draftOf(own), listOf(rename))
+        assertEquals("Essay", back.title)
+    }
+
+    @Test
+    fun `a day off taken back leaves the school calendar as it was, unless it's been deleted since`() {
+        val before = SchoolCalendar(noSchool = listOf(NoSchool("2026-10-26", "2026-10-27", "Half term")))
+        val after = before.with(NoSchool("2026-10-28", "2026-10-30")).with(HalfDay("2026-10-23", 750))
+        assertEquals(before, after.undone(before, after))
+        // A day off of yours added since stays; one it added that you've deleted since: not taken back.
+        val more = after.with(NoSchool("2026-12-21", "2026-12-21"))
+        assertEquals(before.with(NoSchool("2026-12-21", "2026-12-21")), more.undone(before, after))
+        assertNull(after.without(after.noSchool.first()).undone(before, after))
     }
 }
