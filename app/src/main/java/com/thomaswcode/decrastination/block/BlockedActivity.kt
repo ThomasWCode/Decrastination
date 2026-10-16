@@ -125,7 +125,7 @@ class BlockedActivity : ComponentActivity() {
                 Modifier.fillMaxSize().safeDrawingPadding().verticalScroll(rememberScrollState()).padding(24.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
-                // On the logo's pale pink (UI-12).
+                // On the app's pale blue by day, its navy by night ([com.thomaswcode.decrastination.ui.Colours]).
                 Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp)) {
                     Text("Not now", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
                 }
@@ -147,7 +147,7 @@ class BlockedActivity : ComponentActivity() {
                 AnimatedVisibility(why) { Why(verdict.reason, plan.todayBucket?.chunks.orEmpty(), settings.workMinPerFreeMin, graph.focus.missedKeepsPressure(now), settings) }
                 OutlinedButton(onClick = ::goHome, modifier = Modifier.fillMaxWidth()) { Text("Go to the home screen") }
                 // Room under it for Felix's button.
-                androidx.compose.foundation.layout.Spacer(Modifier.size(48.dp))
+                androidx.compose.foundation.layout.Spacer(Modifier.size(72.dp))
             }
         }
         FelixFab(
