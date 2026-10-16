@@ -58,4 +58,4 @@ Every main source file was read (core, enrich, sources, block, learn, protect, d
 - Architecture rewrites (v1's IMP-P2-023/024), search in Tasks (P2-010), a spend ledger (P2-013), the review proposing rather than applying (P2-015): declined in v1 and not reopened.
 - Sending earlier thread messages (P2-003): left as decided; AI-04 is the cheaper alternative.
 - A tutor in the chat, social features, a web view: considered in 09 and not recommended.
-- Exams and recurring work (NF-04, NF-05): deferred by you (Q-27); their first-version text is in the git history.
+- Exams and recurring work (NF-04, NF-05): deferred by you (Q-27), then dropped (16 Oct); their first-version text is in the git history.
