@@ -394,12 +394,15 @@ class InstructionsTest {
     @Test
     fun `a day or a time after a task's real deadline is late`() {
         // The essay's due Monday 12 Oct, 09:00.
-        assertTrue(Instructions.latePin(Change(ChangeType.OnDay, taskId = essay.id, date = "2026-10-13"), essay, LONDON))
-        assertFalse(Instructions.latePin(Change(ChangeType.OnDay, taskId = essay.id, date = "2026-10-12"), essay, LONDON))
-        assertTrue(Instructions.latePin(Change(ChangeType.AtTime, taskId = essay.id, date = "2026-10-12", startMin = 600, time = Fixtures.at("2026-10-12T10:00")), essay, LONDON))
-        assertFalse(Instructions.latePin(Change(ChangeType.AtTime, taskId = essay.id, date = "2026-10-11", startMin = 1170, time = Fixtures.at("2026-10-11T19:30")), essay, LONDON))
+        assertTrue(Instructions.latePin(Change(ChangeType.OnDay, taskId = essay.id, date = "2026-10-13"), essay, LONDON, Fixtures.at("2026-10-10T17:00")))
+        assertFalse(Instructions.latePin(Change(ChangeType.OnDay, taskId = essay.id, date = "2026-10-12"), essay, LONDON, Fixtures.at("2026-10-10T17:00")))
+        assertTrue(Instructions.latePin(Change(ChangeType.AtTime, taskId = essay.id, date = "2026-10-12", startMin = 600, time = Fixtures.at("2026-10-12T10:00")), essay, LONDON, Fixtures.at("2026-10-10T17:00")))
+        assertFalse(Instructions.latePin(Change(ChangeType.AtTime, taskId = essay.id, date = "2026-10-11", startMin = 1170, time = Fixtures.at("2026-10-11T19:30")), essay, LONDON, Fixtures.at("2026-10-10T17:00")))
         // Undated, or a plan's date: never late.
-        assertFalse(Instructions.latePin(Change(ChangeType.OnDay, taskId = "teams:x", date = "2027-01-01"), task("x", null), LONDON))
+        assertFalse(Instructions.latePin(Change(ChangeType.OnDay, taskId = "teams:x", date = "2027-01-01"), task("x", null), LONDON, Fixtures.at("2026-10-10T17:00")))
+        // Overdue already: today or later is as soon as it can be, not late.
+        assertFalse(Instructions.latePin(Change(ChangeType.OnDay, taskId = essay.id, date = "2026-10-16"), essay, LONDON, Fixtures.at("2026-10-16T18:30")))
+        assertFalse(Instructions.latePin(Change(ChangeType.AtTime, taskId = essay.id, date = "2026-10-16", startMin = 1080, time = Fixtures.at("2026-10-16T18:00")), essay, LONDON, Fixtures.at("2026-10-16T17:30")))
     }
 
     @Test

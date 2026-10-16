@@ -382,10 +382,11 @@ object Instructions {
     /**
      * Whether [change] puts [task]'s work after its real deadline (PL-04): all of it on a day after
      * the deadline's, or its next piece at or after the deadline. Then it isn't applied: it's due
-     * before then.
+     * before then. Not once the deadline has gone by at [now]: overdue work can't be put before it,
+     * and any time from now is as soon as it can be (16 Oct: an overdue task's card wouldn't apply).
      */
-    fun latePin(change: Change, task: TaskItem, zone: ZoneId): Boolean {
-        val real = task.realDeadline ?: return false
+    fun latePin(change: Change, task: TaskItem, zone: ZoneId, now: Long): Boolean {
+        val real = task.realDeadline?.takeIf { it > now } ?: return false
         return when (change.type) {
             ChangeType.OnDay -> date(change.date)?.let { it > Instant.ofEpochMilli(real).atZone(zone).toLocalDate() } == true
             ChangeType.AtTime -> change.time?.let { it >= real } == true
