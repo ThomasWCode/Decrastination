@@ -183,16 +183,11 @@ data class TaskItem(
     val tickDone: Boolean get() = extra[EXTRA_TICK_DONE] == "true"
 
     /**
-     * An email that only needs reading, or tells of an event (your call, 9 Oct): not a task. It's
-     * kept, so archiving it still finishes it and a reply that asks something brings it back as a
-     * task, but it's kept off the plan (so the widget, the briefing and blocking), the Tasks list,
-     * and the rewards for finishing work. Its kind is the enrichment's reading, or the rules', or
-     * its invite's (DX-02); Work lists the events folded, to see and to add to the calendar.
+     * Not work to plan: one you've said isn't a task, or is the same as another. Every starred email
+     * is a task (your call, 16 Oct, in place of 9 Oct's events and emails only to read), what to do
+     * about an event among them; where that isn't clear, Claude's reading asks (AI-10).
      */
-    val justAnEmail: Boolean get() = source == Source.Gmail && (kind == Kind.Info || kind == Kind.Event)
-
-    /** Not work to plan: an email that's just an email, or one you've said isn't a task. */
-    val hidden: Boolean get() = justAnEmail || userNotATask || userSameAs != null
+    val hidden: Boolean get() = userNotATask || userSameAs != null
 
     /**
      * Its real deadline, where it has one (PL-14): yours; an email's own words as Claude quoted them
