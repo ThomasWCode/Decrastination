@@ -641,7 +641,8 @@ private fun ResetPage(graph: AppGraph) {
     Column {
         Note("A copy of everything the app keeps is saved to Documents/Decrastination before each, to import from Backup.")
         AppGraph.Reset.entries.forEach { r ->
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            // The page's margin, as its note has (start only: the button's own padding is its end's).
+            Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f).padding(vertical = 6.dp)) {
                     Text(r.title, style = MaterialTheme.typography.bodyLarge)
                     Text(r.takes.replaceFirstChar(Char::uppercase), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -649,7 +650,7 @@ private fun ResetPage(graph: AppGraph) {
                 androidx.compose.material3.TextButton(onClick = { asking = r }) { Text("Reset") }
             }
         }
-        said?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.secondary) }
+        said?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.secondary, modifier = Modifier.padding(horizontal = 16.dp)) }
     }
     asking?.let { r ->
         val changes = if (r == AppGraph.Reset.Instructions || r == AppGraph.Reset.Everything) graph.instructions.value.applied.map { it.text.take(80) } else emptyList()
