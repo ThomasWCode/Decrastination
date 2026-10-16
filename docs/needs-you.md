@@ -4,7 +4,7 @@ The v1 build ran while you were away (from 8 Oct 2026, evening). Anything that n
 
 ## In short
 
-**Now: version 3.0.0 (15 Oct)**, armed, with Claude on: what was tried on the phone and what's waiting for you are in *3.0.0: review v2*, at the end. What follows is from the v1 build.
+**Now: version 3.0.0 (15 Oct, tagged `v3.0.0`)**, armed, with Claude on, its record begun afresh on the 16th: what was tried on the phone and what's waiting for you are in *3.0.0: review v2*, at the end. What follows is from the v1 build.
 
 **Version 1.3.0 is on your phone (9 Oct, evening), armed, with Claude on**: the four sources sync, the plan and the widget are live, blocking starts at 16:45 on school days, and the morning briefing comes at 07:00. Done with you that evening:
 
@@ -231,15 +231,16 @@ Built from `docs/review_v2_improvements/impl/` in eight phases, each a pull requ
   - *Undo* after a swipe left the piece without its time, one swipe ticked twice, Day wasn't drawn again after an Undo, and the day's heading was squeezed to "Tod/ay" by a long line beside it.
 - **Waiting for you:**
   - **Felix's morning briefing**: see that it reads as his.
-  - **The widget's ✓**: tick your next finished piece with it once, rather than in the app.
   - **A photo check**: the next written homework you finish, *Check with a photo* on its sheet (a few cents); and a photo of homework with the camera button, made into a task of your own.
-  - **Felix's question**: he asked, as the readings came in, whether a German assessment whose dates have passed has a new date. Answer him in the chat, or leave it.
-  - **The weekly summary's address (NF-02)**: the repository is public, so no address is in the code. Put the one you want in Settings → Notifications → *Weekly summary goes to*; until then the summary's email opens with none, for you to choose.
-  - **The screens at the largest font (UI-12)**: the phone's own setting, for every app (Settings → Display → Font size and style, the largest); then Day, Work, a task's sheet and Settings' pages.
   - **A copy of the backup off the phone**: the night's backup stays on the phone; a sync app mirroring Documents/Decrastination, or *Export* now and then, keeps one elsewhere.
   - **Starred conversations read as an Event** stay off the plan and Tasks (`TaskItem.justAnEmail`); since phase 7 they're listed, folded, at Work's foot (*Events in your email*). Say if a starred event should be on the plan too.
   - **Long calendar events count as a few hours of each of their days until you're asked (DX-14)**: the all-day events of your calendar further off than a week (holidays among them) take 3 hours of each of their days until they're within the week, when the app asks about each. Holidays are likely free time: answer *Free* when asked, or tell the chat now.
-  - **The chat has messages of mine**, from the checks (the test tasks they name are gone, with their records). Clear the chat if they're in the way; what Felix remembers stays.
-  - **What my checks left**: one *Moved* on the 15th's record (a test of moving a slot by hand) and a few minutes of that day's free time, gone at midnight.
 - **Settled on the 15th**: the seven old starred conversations, unstarred by you, finished at the next sync, so none of them is read again; and the estimate for a note of German resources, 884 minutes, is 10 since the re-read.
+- **Settled on the 16th**, with you:
+  - **The widget's ✓** ticked a piece from the home screen: its slot kept and the task done, as *Done* in the app keeps them, and Day went on to the next (a test task of mine, gone since).
+  - **The Teams widget's 0.4.0** (TeamsAssignmentsWidget #15) is merged and on the phone, installed over 0.3.1 with its data and Teams sign-in kept. A full resync opened every assignment and saved them all, and a task's sheet now names the files attached to it (DX-08), which Claude read it with again.
+  - **The weekly summary's address (NF-02)** is set on the phone, in Settings → Notifications; it's in no file here.
+  - **The screens at the largest font (UI-12)**: looked at by you.
+  - **The record begins on the 16th**: Settings → Reset → *Everything learned* cleared the stats, the reviews, what the app had learned, the chat, Felix's history and what he remembers, and every change in use, after the copy it saves first (in Documents/Decrastination). What the checks left went with it, the replies and the memory they asked of you among it; so did the evening of the 15th, its slots gone by while you tested. That morning's one completion, a sync's, was put back, and a test's free time taken off.
+  - **Tagged** `v3.0.0`, on main's 3.0.0 merge.
 - **Questions for you** are on the PC, in `private/QUESTIONS.md`, kept out of the repository as some are about what's in it.

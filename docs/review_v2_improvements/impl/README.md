@@ -53,6 +53,8 @@ JDK 17. The debug APK's keystore (`app/debug.keystore`) is committed on purpose:
 
 Two items (DX-08, NF-06) need the Teams widget's content provider to expose data it doesn't today. The widget is the owner's other project, `ThomasWCode/TeamsAssignmentsWidget` (`com.teamsassignments.widget`); its provider's contract is `provider/AssignmentsContract.kt` and it exposes `key, title, class_name, description, due_text, due_at, tab, detail_read_at, last_synced_at` (see `docs/data-sources.md` §1 here). It syncs by reading the Teams app's screens through an accessibility service, so anything new must come from what those screens show. When you reach those items: find the widget's checkout beside this repository (ask the owner for the path once if it isn't there), and change it under the same rules as here: a branch from its `main`, one commit per item, its own tests and CI green, a pull request against its `main` titled `Expose <what> for Decrastination (DX-08)` or `(NF-06)`, and no further action on that PR unless told. The widget's signature permission and keystore don't change. Decrastination's side reads the new columns when present and does nothing when they're absent, so the two PRs can merge in either order.
 
+*(As built: DX-08's half is TeamsAssignmentsWidget #15, version 0.4.0, merged with the owner's leave and on the phone on 16 Oct; NF-06's waits for a capture of returned work in Teams.)*
+
 ## What the agent must not do
 
 - Don't implement anything the review withdrew or deferred (listed in `../README.md`): sessions stay removed, no streaks, no exams page, no sender rules, no two weekend windows.
