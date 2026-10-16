@@ -1821,7 +1821,14 @@ class AppGraph private constructor(context: Context) {
             val done = if (kept) tickSteps(reading.actions) else emptyList()
             if (done.isNotEmpty()) chat.update { s -> s.copy(messages = s.messages.map { if (it.id == reply.id) it.copy(done = done) else it }) }
             // Its changes to what exists, made now, as if Apply were tapped: Undo takes them back.
-            if (kept) reply.proposals.filter { it.instant }.forEach { applyProposal(reply.id, it.id) }
+            if (kept) {
+                val instant = reply.proposals.filter { it.instant }
+                instant.forEach { applyProposal(reply.id, it.id) }
+                // A time the plan couldn't keep (PL-04): where the piece went, said under the answer,
+                // which names the time asked for.
+                val moved = com.thomaswcode.decrastination.enrich.ChatAnswers.movedPins(instant.flatMap { it.changes }, plan().buckets, clock.zone())
+                if (moved.isNotEmpty()) chat.update { s -> s.copy(messages = s.messages.map { if (it.id == reply.id) it.copy(done = it.done + moved) else it }) }
+            }
             null
         }
         // Why it waits, said once: written only when it changes, as this runs after every sync.

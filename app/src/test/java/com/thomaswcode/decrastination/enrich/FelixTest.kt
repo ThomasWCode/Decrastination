@@ -87,4 +87,19 @@ class FelixTest {
         assertEquals(FelixAnswer(), FelixAnswers.parse("""{"message":"","replies":[],"nextCheckMin":null,"memories":[]}"""))
         assertNull(FelixAnswers.parse("not JSON"))
     }
+
+    @Test
+    fun `a message past its room ends at its last whole sentence, the morning's with more room`() {
+        val first = "Ten slots today, starting with handing in the physics sheet at 10:55, then the translation question and the vocab in the lunch study period."
+        val second = "The evening runs from the essay plan at five to the statics questions at nine, with a break at seven for dinner, and nothing after half past nine."
+        val message = "$first $second"
+        assertTrue(message.length in (FelixAnswers.MAX_MESSAGE + 1)..FelixAnswers.MAX_MORNING, "${message.length}")
+        // Over a nag's 240: its first sentence whole, not cut mid-way with an ellipsis.
+        assertEquals(first, FelixAnswers.parse("""{"message":"$message","replies":[],"nextCheckMin":null,"memories":[]}""")!!.message)
+        // The morning's room holds both.
+        assertEquals(message, FelixAnswers.parse("""{"message":"$message","replies":[],"nextCheckMin":null,"memories":[]}""", FelixAnswers.MAX_MORNING)!!.message)
+        // A sentence too short to stand for the rest: cut at a word instead.
+        val short = "Go. " + "word ".repeat(80).trim()
+        assertTrue(FelixAnswers.parse("""{"message":"$short","replies":[],"nextCheckMin":null,"memories":[]}""")!!.message.endsWith("word…"))
+    }
 }

@@ -121,12 +121,12 @@ class PlannerTest {
     }
 
     @Test
-    fun `an email that only needs reading, or tells of an event, isn't planned or reminded of`() {
+    fun `every starred email is planned, but not one you've said isn't a task`() {
         fun email(id: String, kind: Kind) = task(id, null, effort = 10, kind = kind).copy(id = "gmail:$id", source = Source.Gmail)
         val call = task("call", Fixtures.at("2026-10-09T17:00"), kind = Kind.Event).copy(id = "powerplanner:call", source = Source.PowerPlanner)
-        val plan = plan(listOf(email("note", Kind.Admin), email("linkedin", Kind.Info), email("openday", Kind.Event), call), "2026-10-08T17:00")
-        assertEquals(setOf("gmail:note"), plan.ordered.map { it.taskId }.toSet())
-        // A planner item that's an event is still a reminder; an email about one isn't.
+        val plan = plan(listOf(email("note", Kind.Admin), email("linkedin", Kind.Info), email("spam", Kind.Admin).copy(userNotATask = true), call), "2026-10-08T17:00")
+        assertEquals(setOf("gmail:note", "gmail:linkedin"), plan.ordered.map { it.taskId }.toSet())
+        // A planner item that's an event is still a reminder.
         assertEquals(listOf("powerplanner:call"), plan.events.map { it.id })
     }
 

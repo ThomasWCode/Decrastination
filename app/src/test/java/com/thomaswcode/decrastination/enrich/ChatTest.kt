@@ -419,4 +419,21 @@ class ChatTest {
         val context = ChatPrompts.context(listOf(essay), emptyList(), emptyList(), now, LONDON)
         assertTrue("    step 0: Plan (20 min)\n    step 1: Write (40 min)" in context, context)
     }
+
+    @Test
+    fun `a time the plan couldn't keep is said where the piece went`() {
+        val day = LocalDate.of(2026, 10, 16)
+        fun at(h: Int, m: Int) = day.atTime(h, m).atZone(LONDON).toInstant().toEpochMilli()
+        val test = piece("own:t", "Widget test", null, 5, 1, 1, null)
+        val other = piece("own:u", "Essay", null, 30, 1, 1, null)
+        fun slot(chunk: Chunk, start: Long, pinned: Boolean) = com.thomaswcode.decrastination.core.Slot(com.thomaswcode.decrastination.core.SlotKind.Work, chunk, start, start + chunk.minutes * 60_000L, com.thomaswcode.decrastination.core.WindowKind.Study, pinned)
+        val buckets = listOf(DayBucket(day, 325, listOf(test, other), slots = listOf(slot(test, at(10, 45), pinned = true), slot(other, at(19, 0), pinned = true))))
+        fun pin(taskId: String, time: Long, date: String? = "2026-10-16") = Change(ChangeType.AtTime, taskId = taskId, time = time, date = date)
+        // 06:35 had nothing free, so the first free time after it (PL-04).
+        assertEquals(listOf("06:35 had no free time: it's at 10:45."), ChatAnswers.movedPins(listOf(pin("own:t", at(6, 35))), buckets, LONDON))
+        // Kept to the minute: nothing to say; nor of a change that isn't a time, or a day past the plan.
+        assertEquals(emptyList(), ChatAnswers.movedPins(listOf(pin("own:u", at(19, 0)), Change(ChangeType.Minutes, taskId = "own:u", minutes = 20), pin("own:u", at(9, 0), "2026-11-30")), buckets, LONDON))
+        // Not laid that day at all.
+        assertEquals(listOf("21:50 had no free time, nor any after it that day."), ChatAnswers.movedPins(listOf(pin("own:v", at(21, 50))), buckets, LONDON))
+    }
 }

@@ -198,7 +198,7 @@ class AnswersTest {
         fun triage(deadline: String, kind: String = "Admin") = """{"kind":"$kind","actionableFrom":null,"deadline":$deadline,"deadlineQuoted":true,"effortMin":10,"nextStep":"x","question":null,"reason":"","blocks":[]}"""
         assertEquals("Deadline \"Friday\" isn't a date (YYYY-MM-DD) or a local date and time (YYYY-MM-DDTHH:MM)", strict(Enrichments.Job.Email, triage("\"Friday\"")).complaint)
         assertEquals("Deadline 2028-10-16 is more than 400 days ahead, further than the app plans: give it only if the text says so", strict(Enrichments.Job.Email, triage("\"2028-10-16\"")).complaint)
-        assertEquals("Kind is \"Info\": it must be Admin or Event", strict(Enrichments.Job.Email, triage("null", kind = "Info")).complaint)
+        assertEquals("Kind is \"Info\": it must be Admin", strict(Enrichments.Job.Email, triage("null", kind = "Info")).complaint)
         assertTrue(strict(Enrichments.Job.Email, "{not json").complaint!!.startsWith("The answer isn't JSON the schema takes"))
         // An old email's long-gone date is no mistake: left out without a word.
         val old = strict(Enrichments.Job.Email, triage("\"2021-01-04\""))
@@ -260,12 +260,12 @@ class AnswersTest {
     }
 
     @Test
-    fun `a starred email read as only to read, or as any kind but Admin or Event, is no answer`() {
+    fun `a starred email read as only to read, or as any kind but Admin, is no answer, an older Event a task`() {
         // Starred, it's always something to do (AI-02): an Info answer is unreadable, and the rules stand.
         assertNull(parse(Enrichments.Job.Email, """{"kind":"Info","actionableFrom":null,"deadline":null,"effortMin":2,"nextStep":"Read and archive","blocks":[]}"""))
         assertNull(parse(Enrichments.Job.Email, """{"kind":"Homework","actionableFrom":null,"deadline":null,"effortMin":20,"nextStep":"Do it","blocks":[]}"""))
-        assertEquals(Kind.Event, parse(Enrichments.Job.Email, """{"kind":"Event","actionableFrom":null,"deadline":"2026-10-17T10:00","effortMin":5,"nextStep":"Go to the open day","blocks":[]}""")!!.kind)
-        assertEquals(listOf("Admin", "Event"), Prompts.schemaJson(Enrichments.Job.Email).jsonObject["properties"]!!.jsonObject["kind"]!!.jsonObject["enum"]!!.jsonArray.map { it.jsonPrimitive.content })
+        assertEquals(Kind.Admin, parse(Enrichments.Job.Email, """{"kind":"Event","actionableFrom":null,"deadline":"2026-10-17T10:00","effortMin":5,"nextStep":"Go to the open day","blocks":[]}""")!!.kind)
+        assertEquals(listOf("Admin"), Prompts.schemaJson(Enrichments.Job.Email).jsonObject["properties"]!!.jsonObject["kind"]!!.jsonObject["enum"]!!.jsonArray.map { it.jsonPrimitive.content })
     }
 
     @Test
@@ -676,9 +676,9 @@ class AiUsageTest {
         assertEquals(0, ModelAlerts.unshown(standing, mapOf("gmail:t1" to Enrichments.inputHash(task))).size)
         // Shown for an older content: this plan is another warning.
         assertEquals(1, ModelAlerts.unshown(standing, mapOf("gmail:t1" to "older")).size)
-        // Done, or its plan kept since, or just an email, not shown anywhere: nothing standing.
+        // Done, or its plan kept since, or said not to be a task, not shown anywhere: nothing standing.
         assertEquals(0, ModelAlerts.standing(listOf(dropped.copy(status = Status.Done))).size)
-        assertEquals(0, ModelAlerts.standing(listOf(dropped.copy(kind = Kind.Info))).size)
+        assertEquals(0, ModelAlerts.standing(listOf(dropped.copy(userNotATask = true))).size)
         assertEquals(0, ModelAlerts.standing(listOf(dropped.copy(enrichment = dropped.enrichment!!.copy(dropped = null)))).size)
     }
 

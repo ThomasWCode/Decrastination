@@ -93,12 +93,12 @@ object EmailRules {
         if (EVENT_WORDS.containsMatchIn(text)) {
             futureDates(text, today).firstOrNull()?.let { day ->
                 // Calendar days, not 24-hour steps: the clocks change in October and March.
+                // Starred, a task (16 Oct): what it needs of you before the day.
                 return Triage(
-                    kind = Kind.Event,
-                    effortMin = Kind.Event.defaultEffortMin,
-                    nextStep = "Keep for ${day.dayOfMonth} ${day.month.getDisplayName(TextStyle.SHORT, Locale.UK)}, then archive",
-                    availableFrom = day.minusDays(1).atStartOfDay(zone).toInstant().toEpochMilli(),
-                    dueAt = day.plusDays(2).atStartOfDay(zone).toInstant().toEpochMilli(),
+                    kind = Kind.Admin,
+                    effortMin = READ_AND_DECIDE_MIN,
+                    nextStep = "See what ${day.dayOfMonth} ${day.month.getDisplayName(TextStyle.SHORT, Locale.UK)} needs of you",
+                    dueAt = day.atStartOfDay(zone).toInstant().toEpochMilli(),
                 )
             }
         }
