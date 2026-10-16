@@ -101,15 +101,13 @@ object Memories {
             } else {
                 val fact = Fact(topic, text, now)
                 facts = facts + fact
-                edits += MemoryEdit("Remembered: $topic: $text", factBefore = had, factAfter = fact)
+                // Within their room: the oldest go first, kept with the fact that took it, for its Undo.
+                val held = facts
+                while (facts.size > 1 && chars(facts) > FACT_BUDGET_CHARS) facts = facts.sortedBy { it.at }.drop(1)
+                edits += MemoryEdit("Remembered: $topic: $text", factBefore = had, factAfter = fact, evicted = held - facts.toSet())
             }
         }
-        // Within their room: the oldest go first, kept with the last fact that took it, for its Undo.
-        val held = facts
         while (facts.size > 1 && chars(facts) > FACT_BUDGET_CHARS) facts = facts.sortedBy { it.at }.drop(1)
-        val evicted = held - facts.toSet()
-        val last = edits.indexOfLast { it.factAfter != null }
-        if (evicted.isNotEmpty() && last >= 0) edits[last] = edits[last].copy(evicted = evicted)
         return MemoryState(facts.sortedBy { it.at }, rules) to edits
     }
 
@@ -126,9 +124,12 @@ object Memories {
         edit.factAfter?.let { after ->
             val now = state.facts.firstOrNull { it == after } ?: return null
             val rest = state.facts - now
-            // Those it pushed out, where their topics are free still.
-            val back = (listOfNotNull(edit.factBefore) + edit.evicted).filter { f -> rest.none { same(it.topic, f.topic) } }.distinctBy { it.topic.trim().lowercase() }
-            return state.copy(facts = (rest + back).sortedBy { it.at })
+            var back = rest + listOfNotNull(edit.factBefore).filter { f -> rest.none { same(it.topic, f.topic) } }
+            // Those it pushed out, the newest first, where their topics are free still and they fit.
+            for (f in edit.evicted.sortedByDescending { it.at }) {
+                if (back.none { same(it.topic, f.topic) } && chars(back + f) <= FACT_BUDGET_CHARS) back = back + f
+            }
+            return state.copy(facts = back.sortedBy { it.at })
         }
         edit.factBefore?.let { before ->
             if (state.facts.any { same(it.topic, before.topic) }) return null
