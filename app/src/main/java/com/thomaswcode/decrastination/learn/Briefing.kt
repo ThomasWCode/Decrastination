@@ -76,8 +76,8 @@ object Briefing {
         }
         graph.runtime.update { it.copy(teamsAuto = it.teamsAuto.copy(morningUntil = now + MORNING_OFFER_MS)) }
         val (title, lines) = summary(plan)
-        // Felix's sentence on the day over the list (LR-04); the list alone without it.
-        if (runCatching { graph.felix.morning(title, lines, now) }.onFailure { android.util.Log.w(AppGraph.TAG, "Felix's morning message failed", it) }.getOrDefault(false)) {
+        // Felix's sentence or two on the day in place of the list (LR-04, 16 Oct); the list alone without it.
+        if (runCatching { graph.felix.morning(title, now) }.onFailure { android.util.Log.w(AppGraph.TAG, "Felix's morning message failed", it) }.getOrDefault(false)) {
             Notify.cancel(context, ID)
             return
         }

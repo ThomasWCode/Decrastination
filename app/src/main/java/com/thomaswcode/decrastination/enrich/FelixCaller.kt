@@ -25,7 +25,7 @@ class FelixCaller(apiKey: String, endpoint: String? = null, val model: String = 
         .build()
 
     /** His message for [user] (from [FelixPrompts.describe]), with his [system] and the student's [profile]. */
-    suspend fun say(system: String, profile: String, user: String): Result {
+    suspend fun say(system: String, profile: String, user: String, maxMessage: Int = FelixAnswers.MAX_MESSAGE): Result {
         val schema = JsonOutputFormat.Schema.builder().apply { FelixPrompts.SCHEMA.forEach { (k, v) -> putAdditionalProperty(k, JsonValue.from(v)) } }.build()
         val params = MessageCreateParams.builder()
             .model(model)
@@ -45,6 +45,6 @@ class FelixCaller(apiKey: String, endpoint: String? = null, val model: String = 
             else -> Unit
         }
         val text = message.content().mapNotNull { it.text().orElse(null)?.text() }.joinToString("")
-        return Result(FelixAnswers.parse(text), cost, model = message.model().asString().ifBlank { null }, usage = usage)
+        return Result(FelixAnswers.parse(text, maxMessage), cost, model = message.model().asString().ifBlank { null }, usage = usage)
     }
 }

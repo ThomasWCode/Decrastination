@@ -37,7 +37,7 @@ object FelixPrompts {
     fun system(settings: Settings, year: Int): String = """
         You are ${settings.felixName}: ${settings.felixLine}. You write the short messages the planner app sends a UK sixth-form student (Year $year) about their work. You get the reason for the message, the piece of work it's about with its first action, today's plan and what's been kept or missed, your recent messages and the student's replies, and the time.
 
-        Be concrete: name the piece and its first action. Two sentences at most. No guilt, no sarcasm, no emojis, no praise for nothing, no promise the app can't keep. Don't repeat what you said last time. When you want a reply, offer up to three short replies you'd accept, in the student's words. Say when you'll check again as nextCheckMin, and mean it: sooner for a piece just started, later in a long slot, never under 5. Reasons: SlotStart (the slot began and nothing's happened: ask if they're starting); SlotEnd (the slot ended with no tick: ask what happened, or for the photo if the piece needs one); SlotKept (a slot was kept: one line, and only sometimes); DayDone (today's last slot kept: say what's earned, briefly); Morning (the day's shape in a sentence or two); Question (put the question given, in your words); Completions (a source says work is done: ask harder, as expected or easier); Summary (Sunday: say the week's summary is ready to send); Reply (you're answering what they said).
+        Be concrete: name the piece and its first action. Two sentences at most, under 240 characters (the morning's under 480). No guilt, no sarcasm, no emojis, no praise for nothing, no promise the app can't keep. Don't repeat what you said last time. When you want a reply, offer up to three short replies you'd accept, in the student's words. Say when you'll check again as nextCheckMin, and mean it: sooner for a piece just started, later in a long slot, never under 5. Reasons: SlotStart (the slot began and nothing's happened: ask if they're starting); SlotEnd (the slot ended with no tick: ask what happened, or for the photo if the piece needs one); SlotKept (a slot was kept: one line, and only sometimes); DayDone (today's last slot kept: say what's earned, briefly); Morning (the day's shape in a sentence or two: it's the whole briefing, with no list of the day beside it); Question (put the question given, in your words); Completions (a source says work is done: ask harder, as expected or easier); Summary (Sunday: say the week's summary is ready to send); Reply (you're answering what they said).
 
         The student's standing instructions on how you behave (with what you're told about them) come before all of this: where one means you shouldn't write now, give an empty message. Remember (memories) a fact about them or a standing instruction only when their replies give one that isn't remembered yet; most messages need none.
     """.trimIndent()
@@ -128,6 +128,9 @@ data class FelixAnswer(val message: String = "", val replies: List<String> = emp
 /** His answer read and kept within its bounds. Pure. */
 object FelixAnswers {
     const val MAX_MESSAGE = 240
+
+    /** The morning's: it's the whole briefing, with no list of the day under it (LR-04, your call, 16 Oct). */
+    const val MAX_MORNING = 480
     const val MAX_REPLIES = 3
     const val MAX_REPLY = 40
     const val MIN_CHECK_MIN = 5
@@ -137,15 +140,29 @@ object FelixAnswers {
     private val json = Json { ignoreUnknownKeys = true }
 
     /** [text] as his answer, within bounds; null when it isn't one. */
-    fun parse(text: String): FelixAnswer? {
+    fun parse(text: String, maxMessage: Int = MAX_MESSAGE): FelixAnswer? {
         val answer = runCatching { json.decodeFromString(FelixAnswer.serializer(), text) }.getOrNull() ?: return null
         return FelixAnswer(
-            message = cut(answer.message.trim(), MAX_MESSAGE),
+            message = message(answer.message.trim(), maxMessage),
             replies = answer.replies.map { cut(it.trim(), MAX_REPLY) }.filter { it.isNotEmpty() }.distinct().take(MAX_REPLIES),
             nextCheckMin = answer.nextCheckMin?.coerceIn(MIN_CHECK_MIN, MAX_CHECK_MIN),
             memories = answer.memories.take(MAX_MEMORIES),
         )
     }
+
+    /**
+     * His message no longer than [max]: over it, ended at its last whole sentence that leaves at
+     * least half the room used, so it never stops mid-sentence (16 Oct: the morning's did); else cut
+     * at a word, with an ellipsis.
+     */
+    internal fun message(text: String, max: Int): String {
+        if (text.length <= max) return text
+        val room = text.take(max)
+        val end = SENTENCE_END.findAll(room).lastOrNull()?.let { it.range.first + 1 }
+        return if (end != null && end >= max / 2) room.take(end).trimEnd() else cut(text, max)
+    }
+
+    private val SENTENCE_END = Regex("""[.!?](?=\s|$)""")
 
     /** [text] no longer than [max]: cut at a word where it can be, with an ellipsis. */
     private fun cut(text: String, max: Int): String {
