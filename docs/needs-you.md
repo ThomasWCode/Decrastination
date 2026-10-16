@@ -261,3 +261,4 @@ Built from `docs/review_v2_improvements/impl/` in eight phases, each a pull requ
 ## 3.1.0: your list of the 16th
 
 - **Dark blue** in place of the pink (UI-12's, from the logo): by night, near-black with navy cards, bubbles and chat button under pale blue, and light-blue highlights; by day, navy on paper with pale blue cards. The widget and the notifications' accent follow. The app's icon stays the logo's pink, as you chose.
+- **Felix's button is bigger**: Material's standard size (56 dp) in place of its small one (40), on every screen; the lists leave room for it under their last row.

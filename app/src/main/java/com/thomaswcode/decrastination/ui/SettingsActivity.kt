@@ -140,7 +140,8 @@ class SettingsActivity : ComponentActivity() {
                 }
             },
         ) { padding ->
-            LazyColumn(Modifier.padding(padding).fillMaxSize()) {
+            // Room under the last row for Felix's button.
+            LazyColumn(Modifier.padding(padding).fillMaxSize(), contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = FELIX_ROOM)) {
                 when (section) {
                     // Its pages (UI-18), and what's waiting its hours, whichever page it's on.
                     null -> {
