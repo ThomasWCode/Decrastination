@@ -624,6 +624,10 @@ object ChatAnswers {
 /** How many times a turn its searching paused is sent back to go on (16 Oct). */
 private const val MAX_PAUSES = 2
 
+/** Claude's web search for the chat (16 Oct): [ChatPrompts.MAX_SEARCHES] searches at most, from the UK, in [zone]. */
+internal fun searchTool(zone: ZoneId): WebSearchTool20250305 =
+    WebSearchTool20250305.builder().maxUses(ChatPrompts.MAX_SEARCHES.toLong()).userLocation(UserLocation.builder().country("GB").timezone(zone.id).build()).build()
+
 /** Claude in the chat ([ChatPrompts]), as the enrichment's calls are made. */
 class ChatReader(
     apiKey: String,
@@ -656,9 +660,7 @@ class ChatReader(
             .putAdditionalBodyProperty("fallbacks", JsonValue.from("default"))
         // The web, searched as he decides (your call, 16 Oct), from the UK: with the answer as JSON, its
         // citations are left off (a live call on the 16th: they come back together).
-        if (settings.felixSearches) {
-            builder.addTool(WebSearchTool20250305.builder().maxUses(ChatPrompts.MAX_SEARCHES.toLong()).userLocation(UserLocation.builder().country("GB").timezone(zone.id).build()).build())
-        }
+        if (settings.felixSearches) builder.addTool(searchTool(zone))
         ChatPrompts.turns(messages, context.known, tasks.associateBy { it.id }, zone, plan = context.plan).forEach { (from, text) ->
             if (from == Speaker.You) builder.addUserMessage(text) else builder.addAssistantMessage(text)
         }
