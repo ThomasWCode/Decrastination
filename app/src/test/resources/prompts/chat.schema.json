@@ -393,6 +393,9 @@
                 ],
                 "additionalProperties": false
             }
+        },
+        "research": {
+            "type": "string"
         }
     },
     "required": [
@@ -401,7 +404,8 @@
         "changes",
         "memories",
         "suggestedReplies",
-        "actions"
+        "actions",
+        "research"
     ],
     "additionalProperties": false
 }
