@@ -6,6 +6,8 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -30,7 +32,6 @@ import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -58,7 +59,10 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -354,8 +358,10 @@ private fun androidx.compose.foundation.layout.ColumnScope.Chat(
     onEdit: (messageId: String, proposalId: String) -> Unit,
 ) {
     val list = rememberLazyListState()
-    LaunchedEffect(messages.size, messages.lastOrNull()?.note) {
-        if (messages.isNotEmpty()) list.animateScrollToItem(messages.size + 1)
+    // Yours waiting for his answer, with nothing to say why (Claude off, resting, a failed call): he's typing.
+    val typing = messages.lastOrNull()?.let { it.from == Speaker.You && it.answeredAt == null && it.note == null } == true
+    LaunchedEffect(messages.size, messages.lastOrNull()?.note, typing) {
+        if (messages.isNotEmpty()) list.animateScrollToItem(messages.size + if (typing) 2 else 1)
     }
     LazyColumn(Modifier.weight(1f).fillMaxWidth(), state = list, contentPadding = PaddingValues(horizontal = 12.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         item(key = "intro") {
@@ -380,11 +386,12 @@ private fun androidx.compose.foundation.layout.ColumnScope.Chat(
         items(messages, key = { it.id }) { message ->
             if (message.from == Speaker.You) Yours(graph, message, now, zone) else Claudes(graph, message, tasks, now, zone, onEdit)
         }
+        if (typing) item(key = "typing") { Typing(graph) }
         item(key = "end") { Box(Modifier.size(1.dp)) }
     }
 }
 
-/** A message of yours, on the right: what it's about, your words, and, while it waits, why. */
+/** A message of yours, on the right: what it's about, your words, and, while it waits for a reason (Claude off, a failed call), why. */
 @Composable
 private fun Yours(graph: AppGraph, message: ChatMessage, now: Long, zone: ZoneId) {
     val scope = rememberCoroutineScope()
@@ -395,33 +402,74 @@ private fun Yours(graph: AppGraph, message: ChatMessage, now: Long, zone: ZoneId
                 Text(message.text, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onPrimaryContainer)
             }
         }
-        if (message.answeredAt == null) {
-            if (message.note == null) {
-                // How long it's been asked (AC-08), and after a while a way to stop waiting.
-                val since by graph.answeringSince.collectAsStateWithLifecycle()
-                var clock by remember { mutableStateOf(graph.clock.now()) }
-                LaunchedEffect(since) {
-                    while (since != null) {
-                        clock = graph.clock.now()
-                        kotlinx.coroutines.delay(1_000)
-                    }
-                }
-                val seconds = since?.let { ((clock - it) / 1_000).coerceAtLeast(0) }
-                Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
-                    Text("${graph.settings.value.felixName} is thinking…" + (seconds?.let { " $it s" } ?: ""), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    if (seconds != null && seconds >= CANCEL_AFTER_S) TextButton(onClick = { graph.cancelAnswer() }) { Text("Cancel") }
-                }
-            } else {
-                Text(message.note, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 6.dp))
-                Row {
-                    TextButton(onClick = { graph.scope.launch { graph.answerChat(retry = true) } }) { Text("Try again") }
-                    TextButton(onClick = { scope.launch { graph.withdrawQuestion() } }) { Text("Take back") }
-                }
+        // While it's answered, he's typing ([Typing]), under it.
+        if (message.answeredAt == null && message.note != null) {
+            Text(message.note, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 6.dp))
+            Row {
+                TextButton(onClick = { graph.scope.launch { graph.answerChat(retry = true) } }) { Text("Try again") }
+                TextButton(onClick = { scope.launch { graph.withdrawQuestion() } }) { Text("Take back") }
             }
         }
     }
 }
+
+/**
+ * Felix answering, on his side (your call, 16 Oct, in place of "Felix is thinking… 12 s"): three
+ * dots rising in turn in a bubble of his, as a messaging app shows someone typing; and once the
+ * call has run [CANCEL_AFTER_S], a way to stop waiting (AC-08).
+ */
+@Composable
+private fun Typing(graph: AppGraph) {
+    val since by graph.answeringSince.collectAsStateWithLifecycle()
+    var clock by remember { mutableStateOf(graph.clock.now()) }
+    LaunchedEffect(since) {
+        while (since != null) {
+            clock = graph.clock.now()
+            kotlinx.coroutines.delay(1_000)
+        }
+    }
+    val long = since?.let { (clock - it) / 1_000 >= CANCEL_AFTER_S } == true
+    val name = graph.settings.value.felixName
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh, shape = RoundedCornerShape(18.dp, 18.dp, 18.dp, 4.dp)) {
+            Dots(Modifier.padding(horizontal = 16.dp, vertical = 15.dp).semantics { contentDescription = "$name is typing" })
+        }
+        if (long) TextButton(onClick = { graph.cancelAnswer() }) { Text("Cancel") }
+    }
+}
+
+/** Three dots, each rising and brightening in turn, [DOT_STEP_MS] after the one before: a wave every [DOT_CYCLE_MS]. */
+@Composable
+private fun Dots(modifier: Modifier) {
+    val wave = androidx.compose.animation.core.rememberInfiniteTransition(label = "typing")
+    val colour = MaterialTheme.colorScheme.onSurfaceVariant
+    Row(modifier, horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) {
+        repeat(3) { i ->
+            val up by wave.animateFloat(
+                initialValue = 0f,
+                targetValue = 1f,
+                animationSpec = androidx.compose.animation.core.infiniteRepeatable(
+                    animation = androidx.compose.animation.core.tween(DOT_CYCLE_MS / 2, easing = androidx.compose.animation.core.FastOutSlowInEasing),
+                    repeatMode = androidx.compose.animation.core.RepeatMode.Reverse,
+                    initialStartOffset = androidx.compose.animation.core.StartOffset(i * DOT_STEP_MS),
+                ),
+                label = "dot $i",
+            )
+            Box(
+                Modifier.size(8.dp)
+                    .graphicsLayer {
+                        translationY = -up * 3.dp.toPx()
+                        alpha = 0.35f + 0.65f * up
+                    }
+                    .background(colour, androidx.compose.foundation.shape.CircleShape),
+            )
+        }
+    }
+}
+
+/** The typing dots' wave ([Dots]): one rise and fall, and how far behind the one before each dot rises. */
+private const val DOT_CYCLE_MS = 1_200
+private const val DOT_STEP_MS = 200
 
 /** A message of Claude's, on the left: its words, then a card for each thing it would do. */
 @Composable
