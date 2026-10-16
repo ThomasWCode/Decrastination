@@ -233,7 +233,6 @@ Built from `docs/review_v2_improvements/impl/` in eight phases, each a pull requ
   - **Felix's morning briefing**: see that it reads as his.
   - **A photo check**: the next written homework you finish, *Check with a photo* on its sheet (a few cents); and a photo of homework with the camera button, made into a task of your own.
   - **A copy of the backup off the phone**: the night's backup stays on the phone; a sync app mirroring Documents/Decrastination, or *Export* now and then, keeps one elsewhere.
-  - **Starred conversations read as an Event** stay off the plan and Tasks (`TaskItem.justAnEmail`); since phase 7 they're listed, folded, at Work's foot (*Events in your email*). Say if a starred event should be on the plan too.
   - **Long calendar events count as a few hours of each of their days until you're asked (DX-14)**: the all-day events of your calendar further off than a week (holidays among them) take 3 hours of each of their days until they're within the week, when the app asks about each. Holidays are likely free time: answer *Free* when asked, or tell the chat now.
 - **Settled on the 15th**: the seven old starred conversations, unstarred by you, finished at the next sync, so none of them is read again; and the estimate for a note of German resources, 884 minutes, is 10 since the re-read.
 - **Settled on the 16th**, with you:
@@ -243,4 +242,13 @@ Built from `docs/review_v2_improvements/impl/` in eight phases, each a pull requ
   - **The screens at the largest font (UI-12)**: looked at by you.
   - **The record begins on the 16th**: Settings → Reset → *Everything learned* cleared the stats, the reviews, what the app had learned, the chat, Felix's history and what he remembers, and every change in use, after the copy it saves first (in Documents/Decrastination). What the checks left went with it, the replies and the memory they asked of you among it; so did the evening of the 15th, its slots gone by while you tested. That morning's one completion, a sync's, was put back, and a test's free time taken off.
   - **Tagged** `v3.0.0`, on main's 3.0.0 merge.
+
+## 3.0.1: your answers of the 16th
+
+- **Every starred email is a task** (Q3): an event's email too, what it needs of you before then; where it's unclear, Claude's reading asks you. Work's *Events in your email* list is gone, and the emails it held are on the plan. The prompts are at version 3, so the open tasks are read again once (about 20 calls, some 30 cents).
+- **The morning briefing is Felix's message whole** (Q12), with no list of the day under it, and he has 480 characters for it (240 for the rest), as his prompt now says. A message over its room ends at its last whole sentence rather than mid-way.
+- **The chat says where a time went** (Q12): asked for a time with no free time, the plan lays the piece at the first free time after it (PL-04), and a line under the answer says so ("06:35 had no free time: it's at 10:45").
+- **The Reset page** has the margin the other pages have (Q12).
+- **Dropped**: the Exams page and recurring work (NF-04, NF-05, Q7).
+- **Returned work (NF-06)**: I looked in Teams on the 16th; nothing of yours has been returned yet (every completed card says *Submitted*), so the widget's half still waits for one. Settled as yours to tell me, or for me to look again, once something comes back with feedback.
 - **Questions for you** are on the PC, in `private/QUESTIONS.md`, kept out of the repository as some are about what's in it.
