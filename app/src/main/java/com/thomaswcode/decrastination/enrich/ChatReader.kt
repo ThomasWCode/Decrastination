@@ -7,12 +7,13 @@ import com.anthropic.models.messages.JsonOutputFormat
 import com.anthropic.models.messages.MessageCreateParams
 import com.anthropic.models.messages.OutputConfig
 import com.anthropic.models.messages.StopReason
+import com.anthropic.models.messages.UserLocation
+import com.anthropic.models.messages.WebSearchTool20250305
 import com.thomaswcode.decrastination.core.About
 import com.thomaswcode.decrastination.core.Change
 import com.thomaswcode.decrastination.core.ChangeType
 import com.thomaswcode.decrastination.core.ChatMessage
 import com.thomaswcode.decrastination.core.Chunk
-import com.thomaswcode.decrastination.core.InstantChanges
 import com.thomaswcode.decrastination.core.Instruction
 import com.thomaswcode.decrastination.core.Instructions
 import com.thomaswcode.decrastination.core.Kind
@@ -61,6 +62,17 @@ object ChatPrompts {
     private val DAY = DateTimeFormatter.ofPattern("EEEE d MMMM yyyy", Locale.UK)
     private val CLOCK = DateTimeFormatter.ofPattern("HH:mm", Locale.UK)
 
+    /** The searches one answer may make (16 Oct): enough to look a thing up from two sides, and a third. */
+    const val MAX_SEARCHES = 3
+
+    /** The pages a message keeps of its searches': the first few, each once. */
+    const val MAX_SOURCES = 4
+
+    /** What searching the web is for (16 Oct), when he may ([Settings.felixSearches]). */
+    private val SEARCH = """
+        6. Search the web (web_search) when their message needs facts that neither they nor the app have given you: a competition's rules and dates, an exam board's specification, what an event involves. Then answer and act on what you found (its steps, dates and minutes), saying in a few words where it's from. Never search for what the lists here tell you, nor for anything about the student themselves; most messages need no search.
+    """.trimIndent()
+
     /** The chat's instructions, as Felix (AI-24; Q-44: the chat is him too), for a student in Year [year] (AI-06). */
     fun system(settings: Settings = Settings(), year: Int = 12): String = (
         """
@@ -72,9 +84,9 @@ object ChatPrompts {
 """ + InstructionPrompts.CHANGE_TYPES.prependIndent("        ") + """
         3. Answer questions about their work from what you're given, briefly: what's due when from the task list; what's on a day, how full it is, what to do next and why something isn't planned from the plan. The plan is what the app has them do and shows them, so say what it says rather than planning the work again yourself. The context gives the time now: a deadline later today is still ahead ("due at 16:00 today"), not past, and a slot marked past has gone by; say "overdue" only where the plan marks it so.
         4. Remember (memories): a fact about the student worth keeping for later (a preference, a pattern, something about their week: "football is on Tuesdays"), with a short topic, so a newer fact on the same topic replaces it; or, kind "rule", a standing instruction about how you should behave ("don't message before 8", "be blunter"). To forget one, give its topic (a rule's own words) and an empty text. Busy times, limits and days off are changes, not memories; most messages need none.
-        5. Act (actions): tickStep when the student says a step is done (taskId, and stepIndex from the list's steps); open to show them a task (taskId, stepIndex -1). Most messages need none.
-
-        Reply in one to three short sentences of plain UK English (asked what's on, a short list instead, a line a task). A change to a task that's already listed, a busy time or a limit today, or how an event counts is made as soon as you give it, so say what you've done ("Moved it to 19:30"); a new task or event, a busy time or a limit on another day, days off or a half-day are shown to the student to confirm, so say what you'd add. To undo a change, give the change that puts it back. When a reply from them is likely, offer up to three short ones in their words (suggestedReplies). If what you need is missing or unclear (which task they mean, or when), ask one short question and change nothing. Don't add a task that's already listed: change it instead. When their message is about a given task, event or day, it's about that unless they clearly name another. Do only what they asked for, and leave every field you don't use null.
+        5. Act (actions): tickStep when the student says a step is done, untickStep when one ticked isn't (taskId, and stepIndex from the list's steps); done when they've finished a task of their own (from Yours), or one whose tick finishes it; reopen for one of theirs finished by mistake (from the finished list); delete for a task of their own they no longer want (another source's they can only say isn't a task: NotATask); open to show them a task; setting to change one of the settings listed with their values (taskId empty, setting its name, value as the list writes it: a number, a time as HH:MM, hours as HH:MM-HH:MM). stepIndex is -1 but for steps, setting and value empty but for settings. A task from Teams, Power Planner, Gmail or Anki is done when its source says so (handed in, archived, studied), so it can't be marked done. Most messages need none.
+""" + (if (settings.felixSearches) SEARCH.prependIndent("        ") + "\n" else "") + """
+        Reply in one to three short sentences of plain UK English (asked what's on, a short list instead, a line a task). Everything you give is made as soon as you give it (a new task or event, a change, days off, a step ticked, a setting), so say what you've done ("Moved it to 19:30", "Added it, due Tuesday"), never what you'd do: the student has an Undo for each. To undo something yourself, give what puts it back. When a reply from them is likely, offer up to three short ones in their words (suggestedReplies). If what you need is missing or unclear (which task they mean, or when), ask one short question and change nothing. Don't add a task that's already listed: change it instead. When their message is about a given task, event or day, it's about that unless they clearly name another. Do only what they asked for, and leave every field you don't use null.
     """
         ).trimIndent()
 
@@ -111,11 +123,13 @@ object ChatPrompts {
         "kind" to mapOf("type" to "string", "enum" to listOf(com.thomaswcode.decrastination.core.Given.FACT, com.thomaswcode.decrastination.core.Given.RULE)),
     )
 
-    /** Something to do for the student (AI-14), plain fields so no union is added: stepIndex -1 for none. */
+    /** Something to do for the student (AI-14; 16 Oct, more of it), plain fields so no union is added: stepIndex -1, setting and value empty for none. */
     private val ACTION = InstructionPrompts.obj(
-        "type" to mapOf("type" to "string", "enum" to listOf("tickStep", "open")),
+        "type" to mapOf("type" to "string", "enum" to listOf("tickStep", "untickStep", "done", "reopen", "delete", "open", "setting")),
         "taskId" to STRING,
         "stepIndex" to INTEGER,
+        "setting" to STRING,
+        "value" to STRING,
     )
 
     val SCHEMA: Map<String, Any> = InstructionPrompts.obj(
@@ -188,7 +202,12 @@ object ChatPrompts {
                 ?: p.lines.takeIf { it.size == p.changes.size }?.joinToString("; ")
                 ?: p.changes.joinToString("; ") { Instructions.describe(it, tasks, zone) }
             val became = when (p.state) {
-                ProposalState.Proposed -> "not acted on yet"
+                // Made at once since 16 Oct: one not made says why; one the student took back, so.
+                ProposalState.Proposed -> when {
+                    p.note != null -> "not made: ${p.note}"
+                    p.instant -> "undone by the student"
+                    else -> "not acted on yet"
+                }
                 ProposalState.Applied -> if (p.instant) "made at once" else "the student applied it"
                 ProposalState.Discarded -> "the student discarded it"
             }
@@ -203,8 +222,12 @@ object ChatPrompts {
         else -> ""
     }
 
-    /** What the app knows now: today, the open tasks, the fortnight's events, and the changes in use. The plan's sent beside it ([plan], [turns]). */
-    fun context(tasks: List<TaskItem>, events: List<CalendarEvent>, applied: List<Instruction>, now: Long, zone: ZoneId, classMap: Map<String, String> = emptyMap(), different: List<String> = emptyList()): String = buildString {
+    /**
+     * What the app knows now: today, the open tasks, the fortnight's events, and the changes in use;
+     * since 16 Oct the student's own finished lately (to open again) and the [settings] he may change,
+     * with their values. The plan's sent beside it ([plan], [turns]).
+     */
+    fun context(tasks: List<TaskItem>, events: List<CalendarEvent>, applied: List<Instruction>, now: Long, zone: ZoneId, classMap: Map<String, String> = emptyMap(), different: List<String> = emptyList(), settings: Settings? = null): String = buildString {
         fun at(time: Long) = Instant.ofEpochMilli(time).atZone(zone).format(WHEN)
         val byId = tasks.associateBy { it.id }
         appendLine("Today: ${Instant.ofEpochMilli(now).atZone(zone).format(TODAY)} (${zone.id})")
@@ -243,7 +266,24 @@ object ChatPrompts {
             appendLine("Changes already in use:")
             inUse.take(InstructionPrompts.MAX_TASKS).forEach { appendLine("- " + Instructions.describe(it, byId, zone)) }
         }
+        // Their own finished lately (16 Oct), to open again if one wasn't.
+        val finished = tasks.filter { it.source == com.thomaswcode.decrastination.core.Source.Own && it.status == com.thomaswcode.decrastination.core.Status.Done && (it.doneAt ?: 0L) > now - FINISHED_MS }
+            .sortedByDescending { it.doneAt }
+        if (finished.isNotEmpty()) {
+            appendLine()
+            appendLine("Their own tasks finished in the last week (id | title | finished):")
+            finished.take(MAX_FINISHED).forEach { appendLine("- ${it.id} | ${it.title.take(MAX_TITLE)} | ${at(it.doneAt!!)}") }
+        }
+        if (settings != null) {
+            appendLine()
+            appendLine("Settings you can change (setting | what it is | its value now):")
+            com.thomaswcode.decrastination.data.FelixSettings.describe(settings).forEach { appendLine("- $it") }
+        }
     }.trimEnd()
+
+    /** How far back, and how many, of the student's own finished tasks the chat's told of (16 Oct). */
+    private const val FINISHED_MS = 7 * 24 * 3_600_000L
+    private const val MAX_FINISHED = 15
 
     /** The plan's days sent in full: a fortnight, as the calendar's events are. */
     const val PLAN_DAYS = 14
@@ -403,20 +443,30 @@ object ChatAnswers {
         val suggestedReplies: List<String> = emptyList(),
         /** Steps to tick and tasks to show (AI-14), each checked against what there is. */
         val actions: List<com.thomaswcode.decrastination.core.ChatAction> = emptyList(),
+        /** What it searched the web for (16 Oct), and the pages it found ([sources]). */
+        val searched: List<String> = emptyList(),
+        val sources: List<com.thomaswcode.decrastination.core.WebSource> = emptyList(),
     )
 
+    /** The pages [found] (title and address, in the order found), each once, the first [ChatPrompts.MAX_SOURCES] with an address. */
+    fun sources(found: List<Pair<String, String>>): List<com.thomaswcode.decrastination.core.WebSource> =
+        found.filter { (_, url) -> url.startsWith("https://") || url.startsWith("http://") }.distinctBy { it.second }.take(ChatPrompts.MAX_SOURCES)
+            .map { (title, url) -> com.thomaswcode.decrastination.core.WebSource(title.trim().take(MAX_SOURCE_TITLE), url) }
+
+    private const val MAX_SOURCE_TITLE = 120
+
     /**
-     * [reading]'s cards (AI-24): its changes to what exists ([InstantChanges]) on one card, applied as
-     * it's made, first; its new tasks, a card each; the rest of its changes on one card to confirm.
+     * [reading]'s cards, each made as it comes, with its Undo (your call, 16 Oct: nothing he does waits
+     * for a button; AI-24 had only changes to what exists made so): its changes on one card, first;
+     * then its new tasks, a card each; then a card for each task to show (AI-14), with its Open.
      */
-    fun cards(reading: Reading, tasks: Map<String, TaskItem>, today: LocalDate, zone: ZoneId, id: () -> String = { java.util.UUID.randomUUID().toString() }): List<com.thomaswcode.decrastination.core.Proposal> {
-        val (now, later) = reading.changes.partition { InstantChanges.instant(it, tasks, today) }
-        fun card(changes: List<Change>, instant: Boolean) = changes.takeIf { it.isNotEmpty() }?.let {
-            com.thomaswcode.decrastination.core.Proposal(id(), changes = it, lines = it.map { c -> Instructions.describe(c, tasks, zone) }, instant = instant)
+    fun cards(reading: Reading, tasks: Map<String, TaskItem>, zone: ZoneId, id: () -> String = { java.util.UUID.randomUUID().toString() }): List<com.thomaswcode.decrastination.core.Proposal> {
+        val changes = reading.changes.takeIf { it.isNotEmpty() }?.let {
+            com.thomaswcode.decrastination.core.Proposal(id(), changes = it, lines = it.map { c -> Instructions.describe(c, tasks, zone) }, instant = true)
         }
-        // A task to show, a card with its Open (AI-14).
+        val added = reading.tasks.map { com.thomaswcode.decrastination.core.Proposal(id(), task = it, instant = true) }
         val opens = reading.actions.filter { it.type == com.thomaswcode.decrastination.core.ChatAction.Type.Open }.map { com.thomaswcode.decrastination.core.Proposal(id(), open = it.taskId) }
-        return listOfNotNull(card(now, instant = true)) + reading.tasks.map { com.thomaswcode.decrastination.core.Proposal(id(), task = it) } + listOfNotNull(card(later, instant = false)) + opens
+        return listOfNotNull(changes) + added + opens
     }
 
     @Serializable
@@ -430,10 +480,10 @@ object ChatAnswers {
     )
 
     @Serializable
-    private data class GivenAction(val type: String = "", val taskId: String = "", val stepIndex: Int = -1)
+    private data class GivenAction(val type: String = "", val taskId: String = "", val stepIndex: Int = -1, val setting: String = "", val value: String = "")
 
-    /** The most actions one answer takes: a few at most is what's meant. */
-    private const val MAX_ACTIONS = 5
+    /** The most actions one answer takes: a few at most is what's meant (ten since there are more kinds, 16 Oct). */
+    private const val MAX_ACTIONS = 10
 
     @Serializable
     private data class NewTask(
@@ -466,7 +516,7 @@ object ChatAnswers {
     /** The most memories one answer gives: a few at most is what's meant. */
     private const val MAX_MEMORIES = 5
 
-    fun parse(text: String, tasks: List<TaskItem>, events: List<CalendarEvent>, about: About, now: Long, zone: ZoneId): Reading? {
+    fun parse(text: String, tasks: List<TaskItem>, events: List<CalendarEvent>, about: About, now: Long, zone: ZoneId, settings: Settings? = null): Reading? {
         val answer = runCatching { json.decodeFromString(Answer.serializer(), text) }.getOrNull() ?: return null
         val reply = answer.reply.trim().takeIf { it.isNotEmpty() } ?: return null
         val leftOut = mutableListOf<String>()
@@ -495,18 +545,39 @@ object ChatAnswers {
             changes = emptyList()
         }
         val replies = answer.suggestedReplies.map { it.trim().take(FelixAnswers.MAX_REPLY) }.filter { it.isNotEmpty() }.distinct().take(FelixAnswers.MAX_REPLIES)
-        // A step ticked, of a listed task's still to do; a listed task shown (AI-14).
-        val actions = answer.actions.take(MAX_ACTIONS).mapNotNull { a ->
-            val task = byId[a.taskId]
-            when {
-                task == null -> null.also { leftOut += "an action on a task that isn't listed" }
-                a.type == "open" -> com.thomaswcode.decrastination.core.ChatAction(com.thomaswcode.decrastination.core.ChatAction.Type.Open, task.id)
-                a.type == "tickStep" && task.isOpen && task.subSteps.getOrNull(a.stepIndex)?.done == false ->
-                    com.thomaswcode.decrastination.core.ChatAction(com.thomaswcode.decrastination.core.ChatAction.Type.TickStep, task.id, a.stepIndex)
-                else -> null.also { leftOut += "a step to tick that isn't one of “${task.title.take(60)}”'s still to do" }
-            }
-        }.distinct()
+        // A step ticked or unticked, a listed task shown (AI-14); a task of yours done, open again or
+        // deleted, a setting set (16 Oct): each only as the task, or the setting, can be.
+        val actions = answer.actions.take(MAX_ACTIONS).mapNotNull { a -> action(a, byId, settings, leftOut) }.distinct()
         return Reading(reply.take(ChatPrompts.MAX_TEXT), made, changes, leftOut, answer.memories.take(MAX_MEMORIES), replies, actions)
+    }
+
+    /** [a] as an action the app can take, checked against the tasks there are ([byId]) and the [settings]; null, and why in [leftOut], if it can't be. */
+    private fun action(a: GivenAction, byId: Map<String, TaskItem>, settings: Settings?, leftOut: MutableList<String>): com.thomaswcode.decrastination.core.ChatAction? {
+        fun act(t: com.thomaswcode.decrastination.core.ChatAction.Type, id: String, step: Int? = null) = com.thomaswcode.decrastination.core.ChatAction(t, id, step)
+        fun no(why: String) = null.also { leftOut += why }
+        if (a.type == "setting") {
+            val field = com.thomaswcode.decrastination.data.FelixSettings.field(a.setting) ?: return no("a setting the app doesn't let him change (${a.setting.trim().take(40)})")
+            if (settings != null && com.thomaswcode.decrastination.data.FelixSettings.set(settings, field.name, a.value) == null) return no("“${field.label}” set to “${a.value.trim().take(40)}”, which it can't be")
+            return com.thomaswcode.decrastination.core.ChatAction(com.thomaswcode.decrastination.core.ChatAction.Type.Setting, "", setting = field.name, value = a.value.trim())
+        }
+        val task = byId[a.taskId] ?: return no("an action on a task that isn't listed")
+        val name = "“${task.title.take(60)}”"
+        val own = task.source == com.thomaswcode.decrastination.core.Source.Own
+        val step = task.subSteps.getOrNull(a.stepIndex)
+        return when (a.type) {
+            "open" -> act(com.thomaswcode.decrastination.core.ChatAction.Type.Open, task.id)
+            "tickStep" -> if (task.isOpen && step?.done == false) act(com.thomaswcode.decrastination.core.ChatAction.Type.TickStep, task.id, a.stepIndex) else no("a step to tick that isn't one of $name's still to do")
+            "untickStep" -> if (task.isOpen && step?.done == true) act(com.thomaswcode.decrastination.core.ChatAction.Type.UntickStep, task.id, a.stepIndex) else no("a step to untick that isn't one of $name's done")
+            // Done by you: your own, or one done by its tick (NF-06); another is done when its source says.
+            "done" -> when {
+                !task.isOpen -> no("$name, finished already")
+                own || task.tickDone -> act(com.thomaswcode.decrastination.core.ChatAction.Type.Done, task.id)
+                else -> no("$name is done when ${task.source.label} says so")
+            }
+            "reopen" -> if (own && task.status == com.thomaswcode.decrastination.core.Status.Done) act(com.thomaswcode.decrastination.core.ChatAction.Type.Reopen, task.id) else no("$name to open again, which isn't one of their own finished")
+            "delete" -> if (own) act(com.thomaswcode.decrastination.core.ChatAction.Type.Delete, task.id) else no("$name to delete, which is from ${task.source.label}: only a task of their own is deleted")
+            else -> no("an action the app doesn't take")
+        }
     }
 
     private fun task(n: NewTask, now: Long, zone: ZoneId): OwnTask? {
@@ -550,6 +621,9 @@ object ChatAnswers {
     }
 }
 
+/** How many times a turn its searching paused is sent back to go on (16 Oct). */
+private const val MAX_PAUSES = 2
+
 /** Claude in the chat ([ChatPrompts]), as the enrichment's calls are made. */
 class ChatReader(
     apiKey: String,
@@ -580,19 +654,36 @@ class ChatReader(
             .outputConfig(OutputConfig.builder().effort(ModelEffort.of(ModelEffort.Job.Chat)).format(JsonOutputFormat.builder().schema(schema).build()).build())
             .putAdditionalHeader("anthropic-beta", ClaudeEnricher.FALLBACK_BETA)
             .putAdditionalBodyProperty("fallbacks", JsonValue.from("default"))
+        // The web, searched as he decides (your call, 16 Oct), from the UK: with the answer as JSON, its
+        // citations are left off (a live call on the 16th: they come back together).
+        if (settings.felixSearches) {
+            builder.addTool(WebSearchTool20250305.builder().maxUses(ChatPrompts.MAX_SEARCHES.toLong()).userLocation(UserLocation.builder().country("GB").timezone(zone.id).build()).build())
+        }
         ChatPrompts.turns(messages, context.known, tasks.associateBy { it.id }, zone, plan = context.plan).forEach { (from, text) ->
             if (from == Speaker.You) builder.addUserMessage(text) else builder.addAssistantMessage(text)
         }
-        val message = withContext(Dispatchers.IO) { client.messages().create(builder.build()) }
-        val cost = Pricing.costUsd(message)
-        val usage = ModelCalls.usage(message)
+        val replies = mutableListOf(withContext(Dispatchers.IO) { client.messages().create(builder.build()) })
+        // A turn its searching left paused (pause_turn) is sent back as it is to go on, twice at most.
+        while (replies.last().stopReason().orElse(null) == StopReason.PAUSE_TURN && replies.size <= MAX_PAUSES) {
+            builder.addMessage(replies.last())
+            replies += withContext(Dispatchers.IO) { client.messages().create(builder.build()) }
+        }
+        val message = replies.last()
+        val cost = replies.sumOf { Pricing.costUsd(it) }
+        val usage = replies.map { ModelCalls.usage(it) }.reduce { a, b -> ModelCalls.Usage(a.inTokens + b.inTokens, a.outTokens + b.outTokens, a.cacheRead + b.cacheRead, b.stop) }
         when (message.stopReason().orElse(null)) {
             StopReason.REFUSAL -> return Result(null, cost, refused = true, usage = usage)
-            StopReason.MAX_TOKENS -> return Result(null, cost, usage = usage)
+            StopReason.MAX_TOKENS, StopReason.PAUSE_TURN -> return Result(null, cost, usage = usage)
             else -> Unit
         }
-        val text = message.content().mapNotNull { it.text().orElse(null)?.text() }.joinToString("")
+        // Its answer: the words after its last search's results (any before them said on the way).
+        val blocks = message.content()
+        val text = blocks.drop(blocks.indexOfLast { it.isWebSearchToolResult() } + 1).mapNotNull { it.text().orElse(null)?.text() }.joinToString("")
+        val searched = replies.flatMap { r -> r.content().mapNotNull { b -> b.serverToolUse().orElse(null)?._input()?.asObject()?.orElse(null)?.get("query")?.asString()?.orElse(null)?.trim() } }
+            .filter { it.isNotEmpty() }.distinct()
+        val found = replies.flatMap { r -> r.content().mapNotNull { it.webSearchToolResult().orElse(null) }.flatMap { res -> res.content().resultBlocks().orElse(emptyList()).map { it.title() to it.url() } } }
         val about = messages.lastOrNull { it.from == Speaker.You }?.about ?: About()
-        return Result(ChatAnswers.parse(text, tasks, events, about, now, zone), cost, usage = usage)
+        val reading = ChatAnswers.parse(text, tasks, events, about, now, zone, settings)?.copy(searched = searched, sources = ChatAnswers.sources(found))
+        return Result(reading, cost, usage = usage)
     }
 }

@@ -706,6 +706,8 @@ class AiUsageTest {
     @Test
     fun `prices are Opus 5 point 5's, or the dearer older Opus's a fallback may use`() {
         assertEquals(0.0108, Pricing.costUsd("claude-opus-5-5", input = 1_200, output = 300), 1e-9)
+        // A web search (16 Oct) is a cent beside its tokens.
+        assertEquals(0.0308, Pricing.costUsd("claude-opus-5-5", input = 1_200, output = 300, searches = 2), 1e-9)
         assertEquals(0.0135, Pricing.costUsd("claude-opus-4-8", input = 1_200, output = 300), 1e-9)
     }
 }

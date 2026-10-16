@@ -2,6 +2,7 @@ package com.thomaswcode.decrastination.core
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 
 /** What Felix remembers (AI-21). */
 class MemoryTest {
@@ -45,5 +46,34 @@ class MemoryTest {
         // The first ten, oldest, went first.
         assertEquals(false, after.facts.any { it.topic == "topic 1" })
         assertEquals(true, after.facts.any { it.topic == "topic 30" })
+    }
+
+    @Test
+    fun `what remembering did is undone, a fact gone and the one it replaced back, one forgotten back, an instruction gone or back`() {
+        val (one, first) = Memories.edit(MemoryState(), listOf(Given("football", "on Tuesdays")), 1)
+        val (two, second) = Memories.edit(one, listOf(Given("Football", "on Wednesdays now")), 2)
+        assertEquals(Fact("football", "on Tuesdays", 1), second.single().factBefore)
+        assertEquals(one.facts, Memories.undo(two, second.single())!!.facts)
+        // The first can't be while the second stands: the fact isn't the one it kept.
+        assertNull(Memories.undo(two, first.single()))
+        val (gone, forgot) = Memories.edit(two, listOf(Given("football", "")), 3)
+        assertEquals(two.facts, Memories.undo(gone, forgot.single())!!.facts)
+        val (ruled, added) = Memories.edit(MemoryState(), listOf(Given(text = "be blunter", kind = Given.RULE)), 4)
+        assertEquals(emptyList(), Memories.undo(ruled, added.single())!!.rules)
+        val (dropped, drop) = Memories.edit(ruled, listOf(Given(topic = "Be blunter", kind = Given.RULE)), 5)
+        assertEquals(ruled.rules, Memories.undo(dropped, drop.single())!!.rules)
+        // A line only has nothing to undo; the lines are apply's.
+        assertNull(Memories.undo(MemoryState(), MemoryEdit("Too many standing instructions to add “x”: drop one first")))
+        assertEquals(listOf("Remembered: football: on Tuesdays"), first.map { it.line })
+    }
+
+    @Test
+    fun `a line from before what it did was kept is undone while what it names is still as it says`() {
+        val state = MemoryState(facts = listOf(Fact("piano practice", "only at home", 1)), rules = listOf(Rule("be blunter", 2)))
+        val fact = Memories.editOf("Remembered: piano practice: only at home", state)!!
+        assertEquals(emptyList(), Memories.undo(state, fact)!!.facts)
+        assertEquals(emptyList(), Memories.undo(state, Memories.editOf("Felix will: be blunter", state)!!)!!.rules)
+        assertNull(Memories.editOf("Remembered: piano practice: anywhere", state))
+        assertNull(Memories.editOf("Forgot: football", state))
     }
 }

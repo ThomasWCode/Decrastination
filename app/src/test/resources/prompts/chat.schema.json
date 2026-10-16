@@ -142,7 +142,8 @@
                             "OnDay",
                             "AtTime",
                             "Steps",
-                            "SameAs"
+                            "SameAs",
+                            "Rename"
                         ]
                     },
                     "taskId": {
@@ -263,6 +264,9 @@
                             }
                         ]
                     },
+                    "title": {
+                        "type": "string"
+                    },
                     "steps": {
                         "type": "array",
                         "items": {
@@ -311,6 +315,7 @@
                     "weekday",
                     "time",
                     "endTime",
+                    "title",
                     "steps"
                 ],
                 "additionalProperties": false
@@ -358,7 +363,12 @@
                         "type": "string",
                         "enum": [
                             "tickStep",
-                            "open"
+                            "untickStep",
+                            "done",
+                            "reopen",
+                            "delete",
+                            "open",
+                            "setting"
                         ]
                     },
                     "taskId": {
@@ -366,12 +376,20 @@
                     },
                     "stepIndex": {
                         "type": "integer"
+                    },
+                    "setting": {
+                        "type": "string"
+                    },
+                    "value": {
+                        "type": "string"
                     }
                 },
                 "required": [
                     "type",
                     "taskId",
-                    "stepIndex"
+                    "stepIndex",
+                    "setting",
+                    "value"
                 ],
                 "additionalProperties": false
             }

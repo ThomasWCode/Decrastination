@@ -27,6 +27,23 @@ data class Given(val topic: String = "", val text: String = "", val kind: String
     }
 }
 
+/**
+ * One thing remembering did (AI-21), kept on the answer that did it so its Undo there takes it back
+ * (your call, 16 Oct): a fact kept ([factAfter]) with the one of its topic it replaced
+ * ([factBefore]), or one forgotten ([factBefore] alone); a standing instruction added
+ * ([ruleAfter]) or dropped ([ruleBefore]). With none of them, a line only ("Too many…"), with
+ * nothing to undo. [line] says it as the answer's foot does; [undone] once Undo has taken it back.
+ */
+@Serializable
+data class MemoryEdit(
+    val line: String,
+    val factBefore: Fact? = null,
+    val factAfter: Fact? = null,
+    val ruleBefore: Rule? = null,
+    val ruleAfter: Rule? = null,
+    val undone: Boolean = false,
+)
+
 /** What's remembered, kept within its bounds (AI-21). Pure. */
 object Memories {
     /** The facts' room: about 1 500 tokens, the profile's share of them. */
@@ -46,11 +63,14 @@ object Memories {
      * replaces the one of its topic (trimmed, any case); a rule is added unless it's there already;
      * facts past [FACT_BUDGET_CHARS] lose their oldest; a rule past [RULE_MAX] isn't added, and says so.
      */
-    fun apply(state: MemoryState, given: List<Given>, now: Long): Pair<MemoryState, List<String>> {
+    fun apply(state: MemoryState, given: List<Given>, now: Long): Pair<MemoryState, List<String>> =
+        edit(state, given, now).let { (after, edits) -> after to edits.map { it.line } }
+
+    /** [apply], with what each line did, for its Undo ([undo]). */
+    fun edit(state: MemoryState, given: List<Given>, now: Long): Pair<MemoryState, List<MemoryEdit>> {
         var facts = state.facts
         var rules = state.rules
-        val lines = mutableListOf<String>()
-        fun same(a: String, b: String) = a.trim().equals(b.trim(), ignoreCase = true)
+        val edits = mutableListOf<MemoryEdit>()
         for (g in given) {
             val topic = g.topic.trim().take(MAX_TOPIC)
             val text = g.text.trim().take(MAX_TEXT)
@@ -59,29 +79,70 @@ object Memories {
                     val gone = rules.filter { same(it.text, topic) }
                     if (gone.isNotEmpty()) {
                         rules = rules - gone.toSet()
-                        lines += "Felix won't any more: ${gone.first().text}"
+                        edits += MemoryEdit("Felix won't any more: ${gone.first().text}", ruleBefore = gone.first())
                     }
                 } else if (rules.none { same(it.text, text) }) {
-                    if (rules.size >= RULE_MAX) lines += "Too many standing instructions to add “$text”: drop one first"
+                    if (rules.size >= RULE_MAX) edits += MemoryEdit("Too many standing instructions to add “$text”: drop one first")
                     else {
-                        rules = rules + Rule(text, now)
-                        lines += "Felix will: $text"
+                        val rule = Rule(text, now)
+                        rules = rules + rule
+                        edits += MemoryEdit("Felix will: $text", ruleAfter = rule)
                     }
                 }
                 continue
             }
             if (topic.isEmpty()) continue
-            val had = facts.any { same(it.topic, topic) }
+            val had = facts.firstOrNull { same(it.topic, topic) }
             facts = facts.filterNot { same(it.topic, topic) }
             if (text.isEmpty()) {
-                if (had) lines += "Forgot: $topic"
+                if (had != null) edits += MemoryEdit("Forgot: $topic", factBefore = had)
             } else {
-                facts = facts + Fact(topic, text, now)
-                lines += "Remembered: $topic: $text"
+                val fact = Fact(topic, text, now)
+                facts = facts + fact
+                edits += MemoryEdit("Remembered: $topic: $text", factBefore = had, factAfter = fact)
             }
         }
         // Within their room: the oldest go first.
         while (facts.size > 1 && chars(facts) > FACT_BUDGET_CHARS) facts = facts.sortedBy { it.at }.drop(1)
-        return MemoryState(facts.sortedBy { it.at }, rules) to lines
+        return MemoryState(facts.sortedBy { it.at }, rules) to edits
     }
+
+    /**
+     * [state] with [edit] taken back (its Undo under the answer that made it): a fact kept goes, and
+     * the one it replaced is back; one forgotten is back; an instruction added goes; one dropped is
+     * back. Null if it can't be: what it did has changed since (the fact rewritten or forgotten, the
+     * instruction gone), or what it would bring back is there already (a newer fact of its topic,
+     * the same instruction) or has no room ([RULE_MAX] instructions).
+     */
+    fun undo(state: MemoryState, edit: MemoryEdit): MemoryState? {
+        edit.factAfter?.let { after ->
+            val now = state.facts.firstOrNull { same(it.topic, after.topic) }?.takeIf { it.text == after.text } ?: return null
+            return state.copy(facts = (state.facts - now + listOfNotNull(edit.factBefore)).sortedBy { it.at })
+        }
+        edit.factBefore?.let { before ->
+            if (state.facts.any { same(it.topic, before.topic) }) return null
+            return state.copy(facts = (state.facts + before).sortedBy { it.at })
+        }
+        edit.ruleAfter?.let { after ->
+            val now = state.rules.firstOrNull { same(it.text, after.text) } ?: return null
+            return state.copy(rules = state.rules - now)
+        }
+        edit.ruleBefore?.let { before ->
+            if (state.rules.any { same(it.text, before.text) } || state.rules.size >= RULE_MAX) return null
+            return state.copy(rules = (state.rules + before).sortedBy { it.at })
+        }
+        return null
+    }
+
+    /**
+     * What [line] did, for an answer from before edits were kept (16 Oct): the fact or the standing
+     * instruction it names, while it's still as the line says, so its Undo forgets it (what it
+     * replaced wasn't kept). Null for any other line.
+     */
+    fun editOf(line: String, state: MemoryState): MemoryEdit? =
+        state.facts.firstOrNull { "Remembered: ${it.topic}: ${it.text}" == line }?.let { MemoryEdit(line, factAfter = it) }
+            ?: state.rules.firstOrNull { "Felix will: ${it.text}" == line }?.let { MemoryEdit(line, ruleAfter = it) }
+
+    /** The same topic, or the same instruction: trimmed, in any case. */
+    private fun same(a: String, b: String) = a.trim().equals(b.trim(), ignoreCase = true)
 }

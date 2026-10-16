@@ -35,7 +35,8 @@
                             "OnDay",
                             "AtTime",
                             "Steps",
-                            "SameAs"
+                            "SameAs",
+                            "Rename"
                         ]
                     },
                     "taskId": {
@@ -156,6 +157,9 @@
                             }
                         ]
                     },
+                    "title": {
+                        "type": "string"
+                    },
                     "steps": {
                         "type": "array",
                         "items": {
@@ -204,6 +208,7 @@
                     "weekday",
                     "time",
                     "endTime",
+                    "title",
                     "steps"
                 ],
                 "additionalProperties": false

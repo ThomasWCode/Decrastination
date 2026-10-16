@@ -839,6 +839,27 @@ class FocusTest {
     }
 
     @Test
+    fun `a step unticked is to do again, its kept slot taken back, or by hand only to do`() = runTest {
+        val first = laid(task("t", due = "2026-10-12T23:59", steps = listOf(SubStep("Q1", 15), SubStep("Q2", 15)), effort = 30)).first()
+        clock.time = first.end
+        assertTrue(slotted.keepSlot(first.chunk!!.key))
+        assertEquals(5 * 60_000L, slotted.creditLeftMs())
+        // Not by another name, nor one not done.
+        assertFalse(slotted.untickBlock("teams:t", 0, "Q9"))
+        assertFalse(slotted.untickBlock("teams:t", 1, "Q2"))
+        assertTrue(slotted.untickBlock("teams:t", 0, "Q1"))
+        assertEquals(listOf(false, false), tasks.value.tasks.single().subSteps.map { it.done })
+        assertEquals(0, tasks.value.tasks.single().workedMin)
+        assertEquals(0L, slotted.creditLeftMs())
+        // Ticked by hand (an email's): only to do again.
+        val email = task("e").copy(id = "gmail:e", source = Source.Gmail, subSteps = listOf(SubStep("Apply", 30)))
+        tasks.update { it.copy(tasks = listOf(email)) }
+        assertTrue(slotted.tickBlock("gmail:e", 0, "Apply"))
+        assertTrue(slotted.untickBlock("gmail:e", 0, "Apply"))
+        assertEquals(listOf(SubStep("Apply", 30)), tasks.value.tasks.single().subSteps)
+    }
+
+    @Test
     fun `a kept slot taken back is to do again, its minutes and free time back`() = runTest {
         val first = laid(task("t", due = "2026-10-12T23:59", steps = listOf(SubStep("Q1", 15), SubStep("Q2", 15)), effort = 30)).first()
         clock.time = first.end

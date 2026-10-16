@@ -294,6 +294,7 @@ class SettingsActivity : ComponentActivity() {
                             TextField("Who he is", draft.felixLine, SettingsLimits.MAX_FELIX_LINE, "felixLine", form) { draft = draft.copy(felixLine = it) }
                             NumberField("He asks this far into a slot with nothing done (minutes)", draft.felixGraceMin, SettingsLimits.FELIX_GRACE_MIN, "felixGraceMin", form) { draft = draft.copy(felixGraceMin = it) }
                             NumberField("He checks again after, if he doesn't say (minutes)", draft.felixDefaultCheckMin, SettingsLimits.FELIX_CHECK_MIN, "felixDefaultCheckMin", form) { draft = draft.copy(felixDefaultCheckMin = it) }
+                            SwitchRow("He searches the web when a message needs it (about 5¢ a search)", draft.felixSearches) { draft = draft.copy(felixSearches = it) }
                         }
                         item { MemorySection(graph) }
                     }
