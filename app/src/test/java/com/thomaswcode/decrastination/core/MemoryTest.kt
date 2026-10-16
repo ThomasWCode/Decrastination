@@ -76,4 +76,20 @@ class MemoryTest {
         assertNull(Memories.editOf("Remembered: piano practice: anywhere", state))
         assertNull(Memories.editOf("Forgot: football", state))
     }
+
+    @Test
+    fun `an undo takes only the very fact it kept, and brings back what its room pushed out`() {
+        val (one, first) = Memories.edit(MemoryState(), listOf(Given("football", "on Tuesdays")), 1)
+        // The same words kept again since: the newer one's to undo, not the first's.
+        val (again, second) = Memories.edit(one, listOf(Given("football", "on Tuesdays")), 2)
+        assertNull(Memories.undo(again, first.single()))
+        assertEquals(one.facts, Memories.undo(again, second.single())!!.facts)
+        // A fact that took the room of the oldest: undone, the oldest is back.
+        val long = "x".repeat(290)
+        val (full, _) = Memories.edit(MemoryState(), (1..20).map { Given("topic $it", long) }, 10)
+        val (over, edits) = Memories.edit(full, listOf(Given("topic new", long)), 20)
+        assertEquals(false, over.facts.any { it.topic == "topic 1" })
+        assertEquals(listOf("topic 1"), edits.single().evicted.map { it.topic })
+        assertEquals(full.facts.toSet(), Memories.undo(over, edits.single())!!.facts.toSet())
+    }
 }

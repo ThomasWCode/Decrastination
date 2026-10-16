@@ -541,14 +541,30 @@ class Focus(
      * The step of [taskId] at [index], still [title], to do again (16 Oct: Felix unticks it, or undoes
      * his tick): one ticked by keeping its slot has that slot taken back ([unkeepSlot]: its record
      * gone, its minutes off the task, the free time it earned given back as far as it's left); one
-     * ticked by hand is to do again, with the minutes it kept back on the steps after it. Says
-     * whether it was.
+     * ticked by hand is to do again, with the minutes it kept back on the steps after it. With
+     * [reopen], one of your own that its tick finished is open again with it to do, in the one
+     * write, so it isn't finished again at once. Says whether it was.
      */
-    suspend fun untickBlock(taskId: String, index: Int, title: String): Boolean {
-        val task = tasks.value.tasks.firstOrNull { it.id == taskId && it.isOpen } ?: return false
+    suspend fun untickBlock(taskId: String, index: Int, title: String, reopen: Boolean = false): Boolean {
+        val task = tasks.value.tasks.firstOrNull { it.id == taskId && (it.isOpen || (reopen && it.source == Source.Own && it.status == Status.Done)) } ?: return false
         val step = task.subSteps.getOrNull(index)?.takeIf { it.done && it.title == title } ?: return false
         val key = Chunk.keyOf(taskId, index, 0)
         val kept = log.value.slots.lastOrNull { it.key == key && it.outcome.kept }
+        if (!task.isOpen) {
+            var opened = false
+            tasks.update { state ->
+                state.copy(
+                    tasks = state.tasks.map { t ->
+                        if (t.id != taskId || t.isOpen || t.subSteps.getOrNull(index)?.let { it.done && it.title == title } != true) return@map t
+                        opened = true
+                        t.copy(status = Status.Open, doneAt = null, subSteps = t.subSteps.mapIndexed { j, s -> if (j == index) s.copy(done = false, byHand = false, timedMin = 0) else s })
+                    },
+                )
+            }
+            // Open now: its kept slot's record and free time taken back too.
+            if (opened && !step.byHand && kept != null) unkeepSlot(key, kept.at)
+            return opened
+        }
         if (!step.byHand && kept != null && unkeepSlot(key, kept.at)) return true
         var unticked = false
         tasks.update { state ->

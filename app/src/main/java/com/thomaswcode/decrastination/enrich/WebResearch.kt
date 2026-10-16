@@ -71,13 +71,11 @@ data class Found(val question: String, val text: String, val searched: List<Stri
 internal fun searchTool(zone: ZoneId): WebSearchTool20250305 =
     WebSearchTool20250305.builder().maxUses(ResearchPrompts.MAX_SEARCHES.toLong()).userLocation(UserLocation.builder().country("GB").timezone(zone.id).build()).build()
 
-/** How many times a look its searching paused is sent back to go on. */
-private const val MAX_PAUSES = 2
-
 /** Claude looking something up on the web for the chat ([ResearchPrompts]), as the enrichment's calls are made. */
 class WebResearcher(apiKey: String, endpoint: String? = null, val model: String = ClaudeEnricher.MODEL, private val year: Int = 12) {
 
-    data class Result(val found: Found?, val costUsd: Double, val refused: Boolean = false, val usage: ModelCalls.Usage = ModelCalls.Usage.NONE)
+    /** [paused]: its searching ran past the turn's limit (pause_turn), and it isn't sent on: one request a look, as the cap reserves. */
+    data class Result(val found: Found?, val costUsd: Double, val refused: Boolean = false, val usage: ModelCalls.Usage = ModelCalls.Usage.NONE, val paused: Boolean = false)
 
     private val client: AnthropicClient = AnthropicOkHttpClient.builder()
         .apiKey(apiKey)
@@ -88,35 +86,33 @@ class WebResearcher(apiKey: String, endpoint: String? = null, val model: String 
 
     /** What the web says for [question], asked about the student's [asked], at [now]; none found, a null [Result.found]. */
     suspend fun look(question: String, asked: String, now: Long, zone: ZoneId): Result {
-        val builder = MessageCreateParams.builder()
+        // Its few lines aren't cached: under the cache's least, and a look is seldom made twice in an hour.
+        val params = MessageCreateParams.builder()
             .model(model)
             .maxTokens(ClaudeEnricher.MAX_TOKENS)
-            .systemOfTextBlockParams(ModelCalls.systemBlocks(ResearchPrompts.system(year), ""))
+            .system(ResearchPrompts.system(year))
             .addUserMessage(ResearchPrompts.describe(question, asked, now, zone))
             .addTool(searchTool(zone))
             .outputConfig(OutputConfig.builder().effort(ModelEffort.of(ModelEffort.Job.Research)).build())
             .putAdditionalHeader("anthropic-beta", ClaudeEnricher.FALLBACK_BETA)
             .putAdditionalBodyProperty("fallbacks", JsonValue.from("default"))
-        val replies = mutableListOf(withContext(Dispatchers.IO) { client.messages().create(builder.build()) })
-        // A look its searching left paused (pause_turn) is sent back as it is to go on, twice at most.
-        while (replies.last().stopReason().orElse(null) == StopReason.PAUSE_TURN && replies.size <= MAX_PAUSES) {
-            builder.addMessage(replies.last())
-            replies += withContext(Dispatchers.IO) { client.messages().create(builder.build()) }
-        }
-        val message = replies.last()
-        val cost = replies.sumOf { Pricing.costUsd(it) }
-        val usage = replies.map { ModelCalls.usage(it) }.reduce { a, b -> ModelCalls.Usage(a.inTokens + b.inTokens, a.outTokens + b.outTokens, a.cacheRead + b.cacheRead, b.stop) }
+            .build()
+        val message = withContext(Dispatchers.IO) { client.messages().create(params) }
+        val cost = Pricing.costUsd(message)
+        val usage = ModelCalls.usage(message)
         when (message.stopReason().orElse(null)) {
             StopReason.REFUSAL -> return Result(null, cost, refused = true, usage = usage)
-            StopReason.MAX_TOKENS, StopReason.PAUSE_TURN -> return Result(null, cost, usage = usage)
+            StopReason.MAX_TOKENS -> return Result(null, cost, usage = usage)
+            // Searched past the turn's limit: not sent on, which would be a second request the cap didn't reserve.
+            StopReason.PAUSE_TURN -> return Result(null, cost, usage = usage, paused = true)
             else -> Unit
         }
         // Its answer: the words after its last search's results (any before them said on the way).
         val blocks = message.content()
         val text = blocks.drop(blocks.indexOfLast { it.isWebSearchToolResult() } + 1).mapNotNull { it.text().orElse(null)?.text() }.joinToString("").trim()
-        val searched = replies.flatMap { r -> r.content().mapNotNull { b -> b.serverToolUse().orElse(null)?._input()?.asObject()?.orElse(null)?.get("query")?.asString()?.orElse(null)?.trim() } }
+        val searched = blocks.mapNotNull { b -> b.serverToolUse().orElse(null)?._input()?.asObject()?.orElse(null)?.get("query")?.asString()?.orElse(null)?.trim() }
             .filter { it.isNotEmpty() }.distinct()
-        val pages = replies.flatMap { r -> r.content().mapNotNull { it.webSearchToolResult().orElse(null) }.flatMap { res -> res.content().resultBlocks().orElse(emptyList()).map { it.title() to it.url() } } }
+        val pages = blocks.mapNotNull { it.webSearchToolResult().orElse(null) }.flatMap { res -> res.content().resultBlocks().orElse(emptyList()).map { it.title() to it.url() } }
         val found = text.takeIf { it.isNotEmpty() }?.let { Found(question.trim().take(ResearchPrompts.MAX_QUESTION), it.take(ResearchPrompts.MAX_FOUND), searched, ResearchPrompts.sources(pages)) }
         return Result(found, cost, usage = usage)
     }
