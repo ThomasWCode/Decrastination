@@ -446,9 +446,10 @@ class ChatTest {
     }
 
     @Test
-    fun `he searches the web only while he may, and keeps the pages found, each once`() {
-        assertTrue("6. Search the web (web_search)" in ChatPrompts.system(com.thomaswcode.decrastination.data.Settings()))
-        assertFalse("web_search" in ChatPrompts.system(com.thomaswcode.decrastination.data.Settings(felixSearches = false)))
+    fun `he asks to look things up only while he may, and the search keeps the pages found, each once`() {
+        assertTrue("6. Look things up (research)" in ChatPrompts.system(com.thomaswcode.decrastination.data.Settings()))
+        assertFalse("Look things up" in ChatPrompts.system(com.thomaswcode.decrastination.data.Settings(felixSearches = false)))
+        assertTrue("6. research is always an empty string" in ChatPrompts.system(com.thomaswcode.decrastination.data.Settings(felixSearches = false)))
         val found = listOf(
             "Essay prize" to "https://example.org/prize", "Essay prize again" to "https://example.org/prize",
             "Not a page" to "ftp://example.org/x", "Rules" to "https://example.org/rules",
@@ -456,9 +457,17 @@ class ChatTest {
         )
         assertEquals(
             listOf("https://example.org/prize", "https://example.org/rules", "https://a.example", "https://b.example"),
-            ChatAnswers.sources(found).map { it.url },
+            ResearchPrompts.sources(found).map { it.url },
         )
-        assertEquals("Essay prize", ChatAnswers.sources(found).first().title)
+        assertEquals("Essay prize", ResearchPrompts.sources(found).first().title)
+        // What to look up is read from his answer; none, an empty string, is none.
+        assertEquals("Essay prize rules and dates", parse("""{"reply":"Looking it up.","newTasks":[],$none,"memories":[],"suggestedReplies":[],"actions":[],"research":" Essay prize rules and dates "}""")!!.research)
+        assertNull(parse("""{"reply":"Moved.","newTasks":[],$none,"memories":[],"suggestedReplies":[],"actions":[],"research":""}""")!!.research)
+        // Asked again, his newest turn carries what was found, to answer and act on.
+        val messages = listOf(ChatMessage("1", Speaker.You, "Look up the essay prize", now))
+        val looked = Found("Essay prize rules and dates", "Entries close 23 October 2026; 2,000 words.", listOf("essay prize 2026"), ResearchPrompts.sources(found))
+        val turn = ChatPrompts.turns(messages, "", emptyMap(), LONDON, found = looked).single().second
+        assertTrue("What a web search found for “Essay prize rules and dates”" in turn && "Entries close 23 October 2026; 2,000 words." in turn && "From: Essay prize; Rules" in turn, turn)
         // The tool as the live call of the 16th sent it: the basic search, three at most, from the UK.
         val tool = com.anthropic.core.jsonMapper().writeValueAsString(searchTool(LONDON))
         for (part in listOf("\"type\":\"web_search_20250305\"", "\"name\":\"web_search\"", "\"max_uses\":3", "\"country\":\"GB\"", "\"timezone\":\"Europe/London\"", "\"type\":\"approximate\"")) {

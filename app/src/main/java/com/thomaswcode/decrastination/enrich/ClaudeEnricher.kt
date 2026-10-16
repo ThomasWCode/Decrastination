@@ -188,8 +188,8 @@ object Pricing {
 
     /**
      * A web search's price (16 Oct): $10 a thousand, beside the tokens its results add (about 11 000
-     * for one, on the 16th). The chat's worst case is within [WORST_CALL_USD]'s: its three tokens a
-     * character leave room for [ChatPrompts.MAX_SEARCHES] searches' results.
+     * for one, on the 16th). A look's worst case is within [WORST_CALL_USD]'s: its input is a few
+     * lines, so the tokens it allows leave room for [ResearchPrompts.MAX_SEARCHES] searches' results.
      */
     const val WEB_SEARCH_USD = 0.01
 
