@@ -345,7 +345,8 @@ object GmailThreads {
             Fetched(
                 sourceId = conversation.threadId,
                 title = subject,
-                kind = if (invite != null) Kind.Event else triage.kind,
+                // Starred, a task (16 Oct): an invite's time is when it's due, and Add to calendar on its sheet.
+                kind = triage.kind,
                 detail = text,
                 dueAt = invite?.start ?: triage.dueAt,
                 availableFrom = triage.availableFrom,

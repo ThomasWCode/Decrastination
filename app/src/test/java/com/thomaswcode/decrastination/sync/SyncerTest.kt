@@ -150,13 +150,13 @@ class SyncerTest {
     }
 
     @Test
-    fun `an email that's just an email, archived, isn't work to reward`() = runTest {
+    fun `every starred email, archived, is finished work to reward`() = runTest {
         val gmail = FakeSource(Source.Gmail) { SourceRead(listOf(Fetched("n", "I want to connect", Kind.Info), Fetched("a", "Sign the form", Kind.Admin))) }
         val syncer = syncer(listOf(gmail))
         syncer.sync()
         gmail.answer = { SourceRead(listOf(Fetched("n", "I want to connect", Kind.Info, done = true), Fetched("a", "Sign the form", Kind.Admin, done = true))) }
         syncer.sync()
-        assertEquals(listOf("gmail:a"), tasks.value.unrewarded.map { it.id })
+        assertEquals(setOf("gmail:a", "gmail:n"), tasks.value.unrewarded.map { it.id }.toSet())
         // Finished all the same.
         assertEquals(Status.Done, tasks.value.tasks.first { it.id == "gmail:n" }.status)
     }

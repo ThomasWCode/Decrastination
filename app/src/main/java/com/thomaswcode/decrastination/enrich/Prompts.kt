@@ -38,7 +38,7 @@ object Prompts {
      * 1: everything before review v2's phase 8 (what the readings stored then carry); 2: phases 1
      * to 7's changes (PROGRESS.md listed them).
      */
-    const val VERSION = 2
+    const val VERSION = 3
 
     /**
      * Text past this is left out (and the model told). Room for a long email's own calendar of
@@ -72,14 +72,14 @@ object Prompts {
             You triage one email for a planner app used by ${student(year)}. The planner turns each obligation into scheduled work and blocks distracting apps until it's done, so overstating the work costs the student free time and understating it lets work slip. Every email you see was starred by the student: it is something to do. An email the student sent themselves is a note of something they mean to do.
 
             Decide, from the email:
-            - kind: "Admin" if it asks the student to do something (reply, sign, pay, fill in a form, bring or prepare something), or if it's information they starred to come back to (then the task is to read it and decide, and nextStep says what to decide); "Event" if it's about something happening at a set time that needs nothing beyond turning up (a trip, a call, an open evening).
+            - kind: always "Admin": the task is what the email asks of the student (reply, sign, pay, fill in a form, bring or prepare something); for information they starred to come back to, to read it and decide (nextStep says what to decide); for something happening at a set time (a trip, a call, an open evening), what it needs before then (put it in the calendar, reply, get something ready).
             - actionableFrom: the date (YYYY-MM-DD) before which nothing can be done, if the email says so (a form that opens next week); otherwise null.
-            - deadline: when it must be done by, only if the email states or clearly implies one (a day it suggests for doing it counts); for an Event, when it starts; otherwise null. Never invent one: a quick action with no date of its own (signing up, replying, asking someone) has deadline null, and the app plans it within the week. Write it as a local date and time (YYYY-MM-DDTHH:MM), or the date alone (YYYY-MM-DD) if it gives no time.
-            - deadlineQuoted: true when deadline is a date the email itself gives or clearly implies as when it must be done by, or an Event's start; false when it's only a day the email suggests for doing it, and when deadline is null. Only a quoted deadline is shown as missed once it passes; any other date is a plan, moved when it passes.
+            - deadline: when it must be done by, only if the email states or clearly implies one (a day it suggests for doing it counts); for something happening at a set time, when it starts, unless the email asks for something sooner; otherwise null. Never invent one: a quick action with no date of its own (signing up, replying, asking someone) has deadline null, and the app plans it within the week. Write it as a local date and time (YYYY-MM-DDTHH:MM), or the date alone (YYYY-MM-DD) if it gives no time.
+            - deadlineQuoted: true when deadline is a date the email itself gives or clearly implies as when it must be done by, or the start of what it's about; false when it's only a day the email suggests for doing it, and when deadline is null. Only a quoted deadline is shown as missed once it passes; any other date is a plan, moved when it passes.
             - effortMin: the minutes of the student's own work it needs, reading included: at least 5 for something only to read and decide.
             - nextStep: the one concrete next action, as an instruction under 12 words ("Reply to Mr Hughes confirming the trip").
-            - question: rarely: the one question that would settle a reading the text can't (which Friday; whether the test is the 12th or the 19th); otherwise null.
-            - reason: the phrase in the email that gave the deadline or the kind, quoted (under 160 characters); empty if nothing did.
+            - question: the one question that would settle a reading the text can't (which Friday; whether the test is the 12th or the 19th), or what the student means to do about it when the email doesn't make that clear; otherwise null.
+            - reason: the phrase in the email that gave the deadline or the task, quoted (under 160 characters); empty if nothing did.
             - blocks: when the email holds more than one piece of work for the student, or dated items (a calendar of deadlines, an application that opens on a date), the pieces of work in order, each with its minutes (10 to 60 where the work allows: a long piece of work, like writing a proposal, is several blocks with the same dates; at most $MAX_BLOCKS blocks, longer ones if there's more work than that), from (the date before which it can't be done, or null) and due (when it must be done by, written as for deadline, only where the email gives one; otherwise null, and the block waits for the email's own deadline, or with none is planned within the week). A window the email gives only roughly ("applications open in December") runs from its first day to its last. The planner schedules each block in its own window, so one email can become work spread over months, kept after the email is archived. An email with blocks is Admin, and its effortMin is their total. Otherwise an empty list.
 
             You see the conversation the starred message is in, oldest message first (where a long one's earlier messages had to be cut short or left out, it says so); when there's more than one, each is headed by who sent it and when ("From you" for the student's own). The first message shown keeps what it quotes from earlier (cut short too, where it had to be); in the ones after it, quoted text and signatures are left out and marked in square brackets, as what they quote is shown above them. You don't see attachments, only their names (an attached email goes by its subject). Where what the email asks turns on an attachment or an earlier message you can't see, and its name doesn't tell you, don't guess what it asked: make nextStep say to read it first, naming it ("Read the attached consent form and decide"), and effortMin 10.
@@ -108,7 +108,7 @@ object Prompts {
     /** The schema for [job]'s answer, as the API takes it: every object closed, every field required, optional ones nullable. */
     fun schema(job: Enrichments.Job): Map<String, Any> = when (job) {
         Enrichments.Job.Email -> obj(
-            "kind" to mapOf("type" to "string", "enum" to listOf("Admin", "Event")),
+            "kind" to mapOf("type" to "string", "enum" to listOf("Admin")),
             "actionableFrom" to nullable(mapOf("type" to "string", "format" to "date")),
             "deadline" to nullable(LOCAL_TIME),
             "deadlineQuoted" to mapOf("type" to "boolean"),
@@ -278,8 +278,11 @@ object Answers {
 
     private fun reason(text: String): String? = text.trim().trim('"', '“', '”').trim().takeIf { it.isNotEmpty() }?.take(MAX_REASON)
 
-    /** The Email job's kinds (AI-02): Info, only to read, isn't one since only starred emails are read. */
-    private val EMAIL_KINDS = mapOf("Admin" to Kind.Admin, "Event" to Kind.Event)
+    /**
+     * The Email job's kinds (AI-02): Admin, as a starred email is always something to do (16 Oct);
+     * an older answer's Event is read as one.
+     */
+    private val EMAIL_KINDS = mapOf("Admin" to Kind.Admin, "Event" to Kind.Admin)
 
     /**
      * The most an email or planner item in blocks is taken to be: twenty hours, as one email can
@@ -346,9 +349,9 @@ object Answers {
         val base = Enrichment(inputHash = Enrichments.inputHash(task), by = by, at = now, promptVersion = Prompts.VERSION)
         return when (job) {
             Enrichments.Job.Email -> json.decodeFromString(Triage.serializer(), text).let { t ->
-                // Starred, an email is always something to do (AI-02): Admin, or an Event. Any other
-                // kind is no answer at all, and the rules' reading stands.
-                val kind = EMAIL_KINDS[t.kind] ?: return null.also { problems += "kind is \"${t.kind.take(20)}\": it must be Admin or Event" }
+                // Starred, an email is always something to do (AI-02, 16 Oct): Admin. Any other kind is
+                // no answer at all, and the rules' reading stands.
+                val kind = EMAIL_KINDS[t.kind] ?: return null.also { problems += "kind is \"${t.kind.take(20)}\": it must be Admin" }
                 val total = effort(t.effortMin)
                 if (total == null && t.blocks.isEmpty()) problems += "effortMin is ${t.effortMin}, not from 1 to $MAX_EFFORT minutes"
                 val deadline = checkedTime("deadline", t.deadline, now, problems) { dateTime(it, zone) }

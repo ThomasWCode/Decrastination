@@ -101,8 +101,8 @@ private fun TaskItem.enrichedOnly(): TaskItem {
         // A reading from before starred-only reading may say an email is only to read; starred, it
         // never is (AI-02): the rules' kind stands until it's read again ([Enrichments.stale]).
         kind = when {
-            invited != null -> Kind.Event
-            source == Source.Gmail -> e.kind?.takeIf { it != Kind.Info } ?: base.kind
+            // Starred, always something to do (16 Oct): an event's email too, what it asks before it.
+            source == Source.Gmail -> Kind.Admin
             else -> base.kind
         },
         dueAt = due,

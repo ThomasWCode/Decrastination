@@ -27,11 +27,12 @@ class EnrichmentTest {
     private fun enrichment(task: TaskItem, by: String = "claude-opus-5-5") = Enrichment(Enrichments.inputHash(task), by, t0, promptVersion = com.thomaswcode.decrastination.enrich.Prompts.VERSION)
 
     @Test
-    fun `an email takes the enrichment's kind, and its deadline where the source has none`() {
+    fun `an email is a task whatever its reading's kind, and takes its deadline where the source has none`() {
         val task = email()
         val deadline = Fixtures.at("2026-10-12T09:00")
+        // An older reading's Event is a task too (16 Oct): every starred email is one.
         val enriched = task.copy(enrichment = enrichment(task).copy(kind = Kind.Event, deadline = deadline, effortMin = 5)).enriched()
-        assertEquals(Kind.Event, enriched.kind)
+        assertEquals(Kind.Admin, enriched.kind)
         assertEquals(deadline, enriched.dueAt)
         assertEquals(5, enriched.effortMin)
     }
@@ -62,10 +63,10 @@ class EnrichmentTest {
     @Test
     fun `a sync keeps the enrichment and lays it over the fresh values`() {
         val task = email()
-        val stored = task.copy(enrichment = enrichment(task).copy(kind = Kind.Event, effortMin = 2)).enriched()
+        val stored = task.copy(enrichment = enrichment(task).copy(kind = Kind.Admin, effortMin = 2)).enriched()
         val fetched = Fetched("t1", "Trip to Berlin", Kind.Admin, detail = task.detail, sourceEffortMin = 15)
         val merged = Merge.apply(listOf(stored), Source.Gmail, listOf(fetched), t0 + 60_000L).tasks.single()
-        assertEquals(Kind.Event, merged.kind)
+        assertEquals(Kind.Admin, merged.kind)
         assertEquals(2, merged.effortMin)
         assertEquals(stored.enrichment, merged.enrichment)
     }
@@ -111,8 +112,8 @@ class EnrichmentTest {
     @Test
     fun `an enrichment of content that has since changed isn't laid over it`() {
         val task = email().copy(sourceValues = SourceValues(Kind.Admin, null, null))
-        val later = task.withEnrichment(enrichment(task).copy(kind = Kind.Event, actionableFrom = Fixtures.at("2026-10-20T00:00")))
-        assertEquals(Kind.Event, later.kind)
+        val later = task.withEnrichment(enrichment(task).copy(kind = Kind.Admin, effortMin = 3, actionableFrom = Fixtures.at("2026-10-20T00:00")))
+        assertEquals(3, later.effortMin)
         // A new message in the thread: the source's say until it's enriched again.
         val changed = later.copy(detail = "Urgent: sign it today.").enriched()
         assertEquals(Kind.Admin, changed.kind)
