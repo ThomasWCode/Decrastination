@@ -257,3 +257,7 @@ Built from `docs/review_v2_improvements/impl/` in eight phases, each a pull requ
 
 - **Found by you on the 16th:** a card from the chat moving an overdue task to today wouldn't apply: *Apply* did nothing, only "It's due before then" under it, and the answer above had said "Done". The rule that keeps work before its deadline (PL-04) took any time for work already overdue as too late. It now holds only while the deadline is ahead: for overdue work, any time from now is as soon as it can be.
 - **And a change refused** after the chat said it was made is said under the answer ("Not made: …").
+
+## 3.1.0: your list of the 16th
+
+- **Dark blue** in place of the pink (UI-12's, from the logo): by night, near-black with navy cards, bubbles and chat button under pale blue, and light-blue highlights; by day, navy on paper with pale blue cards. The widget and the notifications' accent follow. The app's icon stays the logo's pink, as you chose.
