@@ -324,7 +324,7 @@ class AppGraph private constructor(context: Context) {
                     val task = move.desired.taskId?.let(byId::get)
                     when {
                         task == null -> "its task is no longer there"
-                        Instructions.latePin(SlotCalendar.change(move, zone), task, zone) -> "it's due before then"
+                        Instructions.latePin(SlotCalendar.change(move, zone), task, zone, clock.now()) -> "it's due before then"
                         else -> null
                     }
                 }
@@ -1827,7 +1827,11 @@ class AppGraph private constructor(context: Context) {
                 // A time the plan couldn't keep (PL-04): where the piece went, said under the answer,
                 // which names the time asked for.
                 val moved = com.thomaswcode.decrastination.enrich.ChatAnswers.movedPins(instant.flatMap { it.changes }, plan().buckets, clock.zone())
-                if (moved.isNotEmpty()) chat.update { s -> s.copy(messages = s.messages.map { if (it.id == reply.id) it.copy(done = it.done + moved) else it }) }
+                // One that couldn't be made after all, said under the answer that says it was (16 Oct).
+                val refused = chat.value.messages.firstOrNull { it.id == reply.id }?.proposals.orEmpty()
+                    .filter { p -> p.instant && p.state != ProposalState.Applied && p.note != null }.map { "Not made: ${it.note!!.replaceFirstChar(Char::lowercase)}." }
+                val lines = refused + moved
+                if (lines.isNotEmpty()) chat.update { s -> s.copy(messages = s.messages.map { if (it.id == reply.id) it.copy(done = it.done + lines) else it }) }
             }
             null
         }
@@ -2103,7 +2107,7 @@ class AppGraph private constructor(context: Context) {
      */
     private suspend fun refuseLate(instruction: Instruction): Boolean {
         val byId = tasks.value.tasks.associateBy { it.id }
-        if (instruction.changes.none { c -> c.taskId?.let(byId::get)?.let { Instructions.latePin(c, it, clock.zone()) } == true }) return false
+        if (instruction.changes.none { c -> c.taskId?.let(byId::get)?.let { Instructions.latePin(c, it, clock.zone(), clock.now()) } == true }) return false
         instructions.update { state ->
             state.copy(instructions = state.instructions.map { if (it.id == instruction.id) it.copy(state = InstructionStatus.Unclear, note = "It's due before then") else it })
         }
