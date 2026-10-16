@@ -184,7 +184,7 @@ object Backups {
      * instructions here. One here wins: it's the newer.
      */
     fun restoredOwnTasks(backed: List<TaskItem>, here: List<TaskItem>): List<TaskItem> = backed.filter { b -> here.none { it.id == b.id } }
-        .map { it.copy(userNotATask = false, userFrom = null, userAfter = null, userDueAt = null, userEffortMin = null, userOnDay = null, userAtTime = null).enriched() }
+        .map { it.copy(userNotATask = false, userFrom = null, userAfter = null, userDueAt = null, userEffortMin = null, userOnDay = null, userAtTime = null, userSteps = null, userTitle = null).enriched() }
 
     /** The most changes one instruction holds, as Claude's reading of one is held to. */
     private const val MAX_CHANGES = 40
@@ -219,8 +219,10 @@ object Backups {
                 ChangeType.OnDay -> named(change.taskId) && isDate(change.date)
                 ChangeType.AtTime -> named(change.taskId) && isDate(change.date) && change.startMin in 0 until DAY_MIN && time(change.time)
                 ChangeType.SameAs -> named(change.taskId) && named(change.afterTaskId) && change.afterTaskId != change.taskId
-                // A task of your own's steps (AI-19): some, each named, with its minutes.
+                // A task's steps (AI-19): some, each named, with its minutes.
                 ChangeType.Steps -> named(change.taskId) && change.steps.orEmpty().let { steps -> steps.size in 1..OwnTasks.MAX_STEPS && steps.all { it.title.isNotBlank() && it.minutes in OwnTasks.MINUTES } }
+                // A task's name (16 Oct): one, within a name's length.
+                ChangeType.Rename -> named(change.taskId) && change.title?.let { it.isNotBlank() && it.length <= OwnTasks.MAX_TITLE } == true
             }
         }
     }

@@ -65,10 +65,33 @@ data class Enrichment(
  * where the source gives none.
  */
 fun TaskItem.enriched(): TaskItem = enrichedOnly().let { t ->
-    // Your instructions over both: the deadline you gave. A start you gave isn't laid here: the
-    // planner places the work from then on ([TaskItem.userFrom]), so it's seen coming.
-    t.copy(dueAt = userDueAt ?: t.dueAt)
+    // Your instructions over both: the deadline you gave; your name for it and your steps (16 Oct),
+    // their ticks kept by name. A start you gave isn't laid here: the planner places the work from
+    // then on ([TaskItem.userFrom]), so it's seen coming.
+    t.copy(
+        dueAt = userDueAt ?: t.dueAt,
+        title = userTitle ?: sourceValues?.title ?: t.title,
+        subSteps = userSteps?.let { mine -> carryMarks(mine.map { it.asSubStep() }, t.subSteps) } ?: t.subSteps,
+    )
 }
+
+/**
+ * [steps], each with the marks (done, and ticked by hand) of the one of [before] at the same place
+ * among its name's (the second "Apply" the second's): two steps of one name aren't both ticked by
+ * one, and a mark stays on the step it was made on.
+ */
+internal fun carryMarks(steps: List<SubStep>, before: List<SubStep>): List<SubStep> {
+    val was = before.groupBy { it.title }
+    val seen = HashMap<String, Int>()
+    return steps.map { step ->
+        val place = seen.merge(step.title, 1, Int::plus)!! - 1
+        val old = was[step.title]?.getOrNull(place)
+        if (old?.done == true) step.copy(done = true, byHand = old.byHand, timedMin = old.timedMin) else step
+    }
+}
+
+/** A step you gave as the task keeps it: where it's done as the planner reads it (PL-15). */
+fun OwnStep.asSubStep(): SubStep = SubStep(title.trim().take(OwnTasks.MAX_TITLE), minutes, from = from, dueAt = dueAt, where = Where.of(where)?.name?.lowercase())
 
 private fun TaskItem.enrichedOnly(): TaskItem {
     // Always from what the source said, so a changed enrichment doesn't leave the last one's dates.
@@ -127,20 +150,10 @@ private fun TaskItem.stepsFromEnrichment(): Boolean = subSteps.isNotEmpty() && e
 
 fun TaskItem.withEnrichment(new: Enrichment): TaskItem {
     val fromEnrichment = stepsFromEnrichment()
-    // The steps as they were, by name: each new step takes the marks (done, and ticked by hand) of
-    // the old one at the same place among its name's (the second "Apply" the second's), so two
-    // steps of one name aren't both ticked by one, and a mark stays on the block it was made on.
-    val before = subSteps.groupBy { it.title }
+    // The steps as they were, by name: each new step takes the marks of the old one ([carryMarks]).
     val base = if (fromEnrichment) copy(subSteps = emptyList()) else this
     val next = base.copy(enrichment = new).enriched()
-    val seen = HashMap<String, Int>()
-    return next.copy(
-        subSteps = next.subSteps.map { step ->
-            val place = seen.merge(step.title, 1, Int::plus)!! - 1
-            val old = before[step.title]?.getOrNull(place)
-            if (old?.done == true) step.copy(done = true, byHand = old.byHand, timedMin = old.timedMin) else step
-        },
-    )
+    return next.copy(subSteps = carryMarks(next.subSteps, subSteps))
 }
 
 /** What there is to enrich, and how to tell when it has changed. */
@@ -171,7 +184,8 @@ object Enrichments {
     fun inputHash(task: TaskItem): String {
         val text = (listOf(
             task.source.name,
-            task.title,
+            // The source's name, not yours (16 Oct): renaming a task isn't new content to read.
+            task.sourceValues?.title ?: task.title,
             task.detail,
             task.className.orEmpty(),
             // A source with no deadline has none here, whatever the overlay says; only a task kept

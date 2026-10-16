@@ -25,9 +25,10 @@ import com.thomaswcode.decrastination.enrich.MemoryTidy
 import kotlinx.coroutines.launch
 
 /**
- * Settings' list of what Felix remembers (AI-21; phase 6 makes it Settings → Felix): the standing
- * instructions on how he behaves and the facts about you, each with a forget, and a way to add an
- * instruction in your own words. Saved at once, as the school calendar is: they're his, not settings.
+ * The list of what Felix remembers (AI-21; phase 6 makes it Settings → Felix; since 16 Oct, the
+ * chat's menu too): the standing instructions on how he behaves and the facts about you, each with
+ * its delete, and a way to add an instruction in your own words. Saved at once, as the school
+ * calendar is: they're his, not settings.
  */
 @Composable
 fun MemorySection(graph: AppGraph) {
@@ -44,9 +45,9 @@ fun MemorySection(graph: AppGraph) {
             Text("Nothing yet. What you tell Felix that's worth keeping (\"football is on Tuesdays\", \"don't message me before 8\") is kept here, and sent with every call.", style = small, color = quiet)
         }
         if (memory.rules.isNotEmpty()) Text("How Felix should behave", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 8.dp))
-        memory.rules.forEach { r -> Entry(r.text, "Forget") { scope.launch { graph.memory.update { it.copy(rules = it.rules - r) } } } }
+        memory.rules.forEach { r -> Entry(r.text, "Delete") { scope.launch { graph.memory.update { it.copy(rules = it.rules - r) } } } }
         if (memory.facts.isNotEmpty()) Text("Remembered, newest first", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 8.dp))
-        memory.facts.asReversed().forEach { f -> Entry("${f.topic}: ${f.text}", "Forget") { scope.launch { graph.memory.update { it.copy(facts = it.facts - f) } } } }
+        memory.facts.asReversed().forEach { f -> Entry("${f.topic}: ${f.text}", "Delete") { scope.launch { graph.memory.update { it.copy(facts = it.facts - f) } } } }
         if (memory.facts.isNotEmpty()) {
             val used = Memories.chars(memory.facts) * 100 / Memories.FACT_BUDGET_CHARS
             Text("$used% of the room for facts used. Past ${(MemoryTidy.DUE_SHARE * 100).toInt()}%, Sunday's review tidies them into fewer lines; past it all, the oldest go.", style = small, color = quiet)
@@ -62,7 +63,7 @@ fun MemorySection(graph: AppGraph) {
             TextButton(enabled = rule.isNotBlank(), onClick = {
                 val text = rule.trim()
                 rule = ""
-                scope.launch { said = graph.remember(listOf(Given(text = text, kind = Given.RULE))).joinToString("\n").ifEmpty { null } }
+                scope.launch { said = graph.remember(listOf(Given(text = text, kind = Given.RULE))).joinToString("\n") { it.line }.ifEmpty { null } }
             }) { Text("Add") }
         }
         said?.let { Text(it, style = small, color = quiet) }

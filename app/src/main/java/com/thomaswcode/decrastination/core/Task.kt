@@ -173,6 +173,13 @@ data class TaskItem(
     val userAtTime: Long? = null,
     /** The task listed it's the same work as, which is kept (DX-15): this one's off the plan and the list. */
     val userSameAs: String? = null,
+    /**
+     * Its steps as you gave them (your call, 16 Oct: any task's, not only your own's), laid over the
+     * source's and the enrichment's at every merge ([enriched]), their ticks kept by name.
+     */
+    val userSteps: List<OwnStep>? = null,
+    /** Its name as you gave it (16 Oct), over its source's, which is kept ([SourceValues.title]). */
+    val userTitle: String? = null,
 ) {
     val isOpen: Boolean get() = status == Status.Open
 
@@ -299,9 +306,12 @@ fun shareOut(total: Int, parts: List<Int>): List<Int> {
     return whole.map { it.coerceAtLeast(1) }
 }
 
-/** What a source said about a task's kind, deadline and start, kept so an overlay can be redone. */
+/**
+ * What a source said about a task's kind, deadline, start and name, kept so an overlay can be redone.
+ * [title] is null for one kept from before names could be given (16 Oct): its [TaskItem.title] is it.
+ */
 @Serializable
-data class SourceValues(val kind: Kind, val dueAt: Long? = null, val availableFrom: Long? = null)
+data class SourceValues(val kind: Kind, val dueAt: Long? = null, val availableFrom: Long? = null, val title: String? = null)
 
 /**
  * A source's view of one task, as read by a sync. [Merge] turns these into [TaskItem]s, keeping

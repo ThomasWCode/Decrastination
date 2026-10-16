@@ -74,7 +74,7 @@ class NextWidget : GlanceAppWidget() {
             val plan = graph.plan(tasks, settings)
             val today = plan.today.toString()
             val model = WidgetModel.from(plan, tasks, graph.clock.zone(), runtime, settings.armed, reward = graph.focus.rewardLine(plan), slots = log.slots.filter { it.date == today }, micro = runtime.microPlans)
-            // The logo's colours (UI-12), as the app's.
+            // The app's dark blue ([com.thomaswcode.decrastination.ui.Colours]), as the app has it.
             GlanceTheme(colors = androidx.glance.material3.ColorProviders(light = com.thomaswcode.decrastination.ui.Colours.Light, dark = com.thomaswcode.decrastination.ui.Colours.Dark)) { Content(model) }
         }
     }

@@ -8,10 +8,10 @@ import java.util.concurrent.ConcurrentHashMap
  * How hard the model thinks, by job (AC-02): high for the readings the plan is made from (an email,
  * an assignment, an estimate, an instruction, the week's review, a photo read as a task or for its
  * context); medium for the answers someone waits for (the chat, a reply, Felix, a piece's first
- * steps, a photo check, a summary, a tidy), which come sooner and cost less.
+ * steps, a photo check, a summary, a tidy, a web search), which come sooner and cost less.
  */
 object ModelEffort {
-    enum class Job { Email, Assignment, Effort, Instruction, Review, PhotoToTask, PhotoContext, Chat, Reply, Felix, MicroPlan, PhotoCheck, Summary, Tidy }
+    enum class Job { Email, Assignment, Effort, Instruction, Review, PhotoToTask, PhotoContext, Chat, Reply, Felix, MicroPlan, PhotoCheck, Summary, Tidy, Research }
 
     /** Set from a PC for testing (`ai-effort`), till the app restarts: never kept. */
     val overrides: MutableMap<Job, OutputConfig.Effort> = ConcurrentHashMap()
@@ -24,7 +24,7 @@ object ModelEffort {
         Job.Email to "emails", Job.Assignment to "assignments", Job.Effort to "estimates", Job.Instruction to "instructions",
         Job.Review to "the week's review", Job.PhotoToTask to "photos made tasks", Job.PhotoContext to "photos' context",
         Job.Chat to "the chat", Job.Reply to "replies", Job.Felix to "Felix", Job.MicroPlan to "first steps",
-        Job.PhotoCheck to "photo checks", Job.Summary to "the week's summary", Job.Tidy to "the tidy of what's remembered",
+        Job.PhotoCheck to "photo checks", Job.Summary to "the week's summary", Job.Tidy to "the tidy of what's remembered", Job.Research to "Felix's web searches",
     )
 
     /** The jobs by how hard it thinks on each, in words (Settings → Claude, UI-18): "High" and those, then "Medium". */

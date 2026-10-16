@@ -137,6 +137,7 @@ object OwnTasks {
         changes.lastOrNull { it.type == ChangeType.Steps }?.let { c -> if (sameSteps(d.steps, c.steps)) d = d.copy(steps = was.steps, minutes = was.minutes) }
         changes.lastOrNull { it.type == ChangeType.DueBy }?.let { c -> if (d.dueAt == c.time) d = d.copy(dueAt = was.dueAt) }
         changes.lastOrNull { it.type == ChangeType.StartFrom }?.let { c -> if (d.startFrom == c.time) d = d.copy(startFrom = was.startFrom) }
+        changes.lastOrNull { it.type == ChangeType.Rename }?.let { c -> if (d.title == c.title) d = d.copy(title = was.title) }
         changes.lastOrNull { it.type == ChangeType.Minutes }?.let { c ->
             val total = if (d.steps.isEmpty()) d.minutes else d.steps.sumOf { it.minutes }
             if (total == c.minutes) {
@@ -157,6 +158,7 @@ object OwnTasks {
         undone.lastOrNull { it.type == ChangeType.Steps }?.let { c -> if (sameSteps(d.steps, c.steps)) d = d.copy(steps = undoneWas.steps, minutes = undoneWas.minutes) }
         undone.lastOrNull { it.type == ChangeType.DueBy }?.let { c -> if (d.dueAt == c.time) d = d.copy(dueAt = undoneWas.dueAt) }
         undone.lastOrNull { it.type == ChangeType.StartFrom }?.let { c -> if (d.startFrom == c.time) d = d.copy(startFrom = undoneWas.startFrom) }
+        undone.lastOrNull { it.type == ChangeType.Rename }?.let { c -> if (d.title == c.title) d = d.copy(title = undoneWas.title) }
         undone.lastOrNull { it.type == ChangeType.Minutes }?.let { c ->
             val total = if (d.steps.isEmpty()) d.minutes else d.steps.sumOf { it.minutes }
             if (total == c.minutes) {
@@ -172,10 +174,10 @@ object OwnTasks {
         given != null && steps.map { it.title.trim() to it.minutes } == given.map { it.title.trim() to it.minutes }
 
     /** The changes an instruction makes to one of your own that are made on it, not laid over it. */
-    val MADE_ON_IT = setOf(ChangeType.DueBy, ChangeType.StartFrom, ChangeType.Minutes, ChangeType.Steps)
+    val MADE_ON_IT = setOf(ChangeType.DueBy, ChangeType.StartFrom, ChangeType.Minutes, ChangeType.Steps, ChangeType.Rename)
 
     /**
-     * [change] (a due date, a start, or minutes: [MADE_ON_IT]) made on your own [task] itself, as
+     * [change] (a due date, a start, minutes, its steps or its name: [MADE_ON_IT]) made on your own [task] itself, as
      * the form would make it: with no source behind it there's nothing for an override to come back
      * to, and the form can change it again. Minutes for one with steps scale them to match. [task]
      * as it was, if the change would leave it what the form wouldn't take.
@@ -230,6 +232,7 @@ object OwnTasks {
         return when (change.type) {
             ChangeType.DueBy -> draft.copy(dueAt = change.time)
             ChangeType.StartFrom -> draft.copy(startFrom = change.time)
+            ChangeType.Rename -> change.title?.trim()?.takeIf { it.isNotEmpty() }?.let { draft.copy(title = it.take(MAX_TITLE)) }
             // Its steps anew (AI-19), its minutes theirs: a step of an old name keeps its tick.
             ChangeType.Steps -> change.steps?.takeIf { it.isNotEmpty() }?.let { steps -> draft.copy(steps = steps.map { it.copy(wasIndex = null) }, minutes = steps.sumOf { it.minutes }) }
             ChangeType.Minutes -> {
@@ -286,7 +289,7 @@ object OwnTasks {
             // Anywhere unless you said home: only "home" is kept (PL-15).
             extra = if (Where.of(task.where) == Where.Home) old.extra + (EXTRA_WHERE to "home") else old.extra - EXTRA_WHERE,
             // As a source's: what an instruction is laid over, and taking one back comes back to.
-            sourceValues = SourceValues(task.kind, task.dueAt, null),
+            sourceValues = SourceValues(task.kind, task.dueAt, null, task.title.trim().take(MAX_TITLE)),
         ).enriched()
     }
 }
