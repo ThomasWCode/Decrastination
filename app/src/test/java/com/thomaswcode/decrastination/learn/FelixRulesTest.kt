@@ -107,13 +107,6 @@ class FelixRulesTest {
     }
 
     @Test
-    fun `the morning's title is his first sentence, the rest its text`() {
-        assertEquals("Study period at eleven, the statics at five." to "Nothing after seven.", FelixRules.sentences("Study period at eleven, the statics at five. Nothing after seven."))
-        assertEquals("A clear evening: vocab at five!" to "Then the statics. That's it.", FelixRules.sentences("A clear evening: vocab at five! Then the statics. That's it."))
-        assertEquals("One line only" to null, FelixRules.sentences(" One line only "))
-    }
-
-    @Test
     fun `the day's completions no slot saw are asked about once, in the evening, at his pace`() {
         val ask = listOf(com.thomaswcode.decrastination.data.AssessLater("teams:c", "German reading", at("16:00")))
         fun completions(now: Long, state: FelixState = FelixState(), sent: List<FelixRecord> = emptyList()) =

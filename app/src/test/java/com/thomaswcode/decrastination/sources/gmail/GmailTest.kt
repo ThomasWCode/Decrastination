@@ -67,17 +67,18 @@ class GmailTest {
     }
 
     @Test
-    fun `asking for nothing, a notification is to read and decide and a booking an event`() {
+    fun `asking for nothing, a notification is to read and decide and a booking a task`() {
         assertEquals(5, email("Your receipt", from = "noreply@shop.example", body = "Please do not reply to this email. To unsubscribe click here.").effortMin)
-        assertEquals(Kind.Event, email("Your e-tickets", from = "tickets@venue.example", body = "See you on 25 October. Please do not reply.").kind)
+        assertEquals(Kind.Admin, email("Your e-tickets", from = "tickets@venue.example", body = "See you on 25 October. Please do not reply.").kind)
     }
 
     @Test
-    fun `a booking with a date ahead is an event that appears the day before`() {
+    fun `a booking with a date ahead is a task due by its day`() {
         val triage = email("Essential information ahead of our Open Day", from = "opendays@warwick.ac.uk", body = "We look forward to seeing you on Saturday 10 October.")
-        assertEquals(Kind.Event, triage.kind)
-        assertEquals(Fixtures.at("2026-10-09T00:00"), triage.availableFrom)
-        assertEquals(Fixtures.at("2026-10-12T00:00"), triage.dueAt)
+        assertEquals(Kind.Admin, triage.kind)
+        assertEquals("See what 10 Oct needs of you", triage.nextStep)
+        assertNull(triage.availableFrom)
+        assertEquals(Fixtures.at("2026-10-10T00:00"), triage.dueAt)
     }
 
     @Test
@@ -88,8 +89,7 @@ class GmailTest {
             Fixtures.at("2026-10-20T12:00"),
             LONDON,
         )
-        assertEquals(Fixtures.at("2026-10-24T00:00"), triage.availableFrom)
-        assertEquals(Fixtures.at("2026-10-27T00:00"), triage.dueAt)
+        assertEquals(Fixtures.at("2026-10-25T00:00"), triage.dueAt)
     }
 
     @Test
@@ -402,20 +402,20 @@ class GmailTest {
     }
 
     @Test
-    fun `a conversation's invite, its newest message's, makes it that event at its time, a real one, unless Claude read a reply by a date`() {
+    fun `a conversation's invite, its newest message's, makes it a task due at its time, a real one, unless Claude read a reply by a date`() {
         val invite = Invite("Open evening", Fixtures.at("2026-10-16T18:00"), Fixtures.at("2026-10-16T20:00"), "Main Hall")
         assertEquals(invite, GmailThreads.invite(listOf(invite.copy(summary = "Moved"), null, invite, null)))
         assertNull(GmailThreads.invite(listOf(invite, invite.copy(cancelled = true))))
         val (c, _) = read(message(1, "t1", 100, "Open evening", "School", "office@school.example"))
         val task = Merge.apply(emptyList(), Source.Gmail, GmailThreads.fetched(listOf(c), mapOf(c.version to GmailThreads.Body("Come along", invite = invite)), now, LONDON), now).tasks.single()
-        assertEquals(Kind.Event to invite.start, task.kind to task.dueAt)
+        assertEquals(Kind.Admin to invite.start, task.kind to task.dueAt)
         assertEquals(invite, task.invite)
         assertTrue(task.hardDeadline)
         // Kept with the text, so a read that doesn't fetch it again keeps the invite.
         assertEquals(invite, GmailThreads.bodyOf(task).invite)
         // Claude's own time for the event gives way to the invite's; its reply by a date it quotes doesn't.
         val reading = Enrichment(Enrichments.inputHash(task), "claude", 0, kind = Kind.Event, deadline = Fixtures.at("2026-10-16T19:00"), deadlineQuoted = true)
-        assertEquals(Kind.Event to invite.start, task.copy(enrichment = reading).enriched().let { it.kind to it.dueAt })
+        assertEquals(Kind.Admin to invite.start, task.copy(enrichment = reading).enriched().let { it.kind to it.dueAt })
         val reply = reading.copy(kind = Kind.Admin, deadline = Fixtures.at("2026-10-12T23:59"))
         assertEquals(Kind.Admin to Fixtures.at("2026-10-12T23:59"), task.copy(enrichment = reply).enriched().let { it.kind to it.dueAt })
     }

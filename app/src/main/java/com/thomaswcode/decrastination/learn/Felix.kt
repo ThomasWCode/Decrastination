@@ -63,13 +63,13 @@ class Felix(private val graph: AppGraph) {
     }
 
     /**
-     * The morning's message (LR-04): his sentence or two on the day's shape, the first the title and
-     * the second the text over the briefing's [lines] (its facts, should the sentence be off), as the
-     * briefing: on its channel, under its ceiling (LR-07). False, the list going alone as before,
-     * with no slot today, the briefing not to be seen, Claude off or resting, no answer within
-     * [MORNING_MS], or an empty one. It sets no check: the day's slots do that.
+     * The morning's message (LR-04): his sentence or two on the day's shape, whole, under the
+     * briefing's [title], as the briefing: on its channel, under its ceiling (LR-07), with no list of
+     * the day beside it (your call, 16 Oct), so it has [FelixAnswers.MAX_MORNING] characters. False,
+     * the list going alone as before, with no slot today, the briefing not to be seen, Claude off or
+     * resting, no answer within [MORNING_MS], or an empty one. It sets no check: the day's slots do that.
      */
-    suspend fun morning(title: String, lines: List<String>, now: Long = graph.clock.now()): Boolean = writing.withLock {
+    suspend fun morning(title: String, now: Long = graph.clock.now()): Boolean = writing.withLock {
         val plan = graph.plan(now = now)
         if (plan.todaySlots.none { it.kind == com.thomaswcode.decrastination.core.SlotKind.Work }) return@withLock false
         if (!com.thomaswcode.decrastination.notify.Notify.shown(graph.app, com.thomaswcode.decrastination.notify.Channels.BRIEFING)) return@withLock false
@@ -80,15 +80,16 @@ class Felix(private val graph: AppGraph) {
         // Asked in the app's scope, not the briefing's: past [MORNING_MS] the briefing goes without
         // it, and the call, paid for, comes back and is counted all the same.
         val call = graph.scope.async {
-            graph.callModel(interactive = false, record = com.thomaswcode.decrastination.enrich.ModelCalls.OnRecord(com.thomaswcode.decrastination.enrich.ModelEffort.Job.Felix, "Morning") { r: FelixCaller.Result -> r.usage to com.thomaswcode.decrastination.enrich.ModelCalls.outcome(r.refused, r.answer == null) }, cost = { r: FelixCaller.Result -> r.costUsd to r.refused }) { caller.say(FelixPrompts.system(settings, profile.year), profile.text, user) }
+            graph.callModel(interactive = false, record = com.thomaswcode.decrastination.enrich.ModelCalls.OnRecord(com.thomaswcode.decrastination.enrich.ModelEffort.Job.Felix, "Morning") { r: FelixCaller.Result -> r.usage to com.thomaswcode.decrastination.enrich.ModelCalls.outcome(r.refused, r.answer == null) }, cost = { r: FelixCaller.Result -> r.costUsd to r.refused }) { caller.say(FelixPrompts.system(settings, profile.year), profile.text, user, maxMessage = FelixAnswers.MAX_MORNING) }
         }
         val called = kotlinx.coroutines.withTimeoutOrNull(MORNING_MS) { call.await() }
         val answer = (called as? AppGraph.Called.Answered)?.value?.answer?.takeIf { it.message.isNotBlank() } ?: return@withLock false
         val record = FelixRecord(UUID.randomUUID().toString(), now, FelixPrompts.Reason.Morning.name, answer.message, answer.replies)
         graph.log.update { it.copy(felix = it.felix + record).trimmed(now) }
         answer.memories.takeIf { it.isNotEmpty() }?.let { graph.remember(it) }
-        val (first, second) = FelixRules.sentences(answer.message)
-        FelixNotifications.post(graph.app, record.id, settings.felixName, second ?: title, answer.replies, title = first, lines = lines, channel = com.thomaswcode.decrastination.notify.Channels.BRIEFING)
+        // His message whole, under the day's title, with no list of the day beside it (your call,
+        // 16 Oct): the room is his.
+        FelixNotifications.post(graph.app, record.id, settings.felixName, answer.message, answer.replies, title = title, channel = com.thomaswcode.decrastination.notify.Channels.BRIEFING)
         true
     }
 

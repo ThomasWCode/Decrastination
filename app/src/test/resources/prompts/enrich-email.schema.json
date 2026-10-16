@@ -4,8 +4,7 @@
         "kind": {
             "type": "string",
             "enum": [
-                "Admin",
-                "Event"
+                "Admin"
             ]
         },
         "actionableFrom": {

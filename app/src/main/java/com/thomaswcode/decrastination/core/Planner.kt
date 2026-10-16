@@ -38,9 +38,8 @@ import kotlin.math.roundToInt
  *    most `softMinPerDay` of it a day, so the whole inbox, first seen at once, spreads over the week.
  * 6. A task that can only go so far a day ([TaskItem.stepsPerDay]: an Anki deck, which releases
  *    20 new cards a day) never has more steps than that on one day, overdue or not.
- * 7. An email that's just an email ([TaskItem.justAnEmail]: only to read, or about an event) isn't
- *    planned, nor reminded of; nor is a task you've said isn't one, or one you've said waits for
- *    another still open ([Instructions]).
+ * 7. A task you've said isn't one, or the same as another ([TaskItem.hidden]), isn't planned, nor
+ *    reminded of; nor is one you've said waits for another still open ([Instructions]).
  * 8. A day you've limited ([Input.dayCaps]) holds no more work than that, and a box is never longer
  *    than the most any day its task can go on holds, so a task isn't left off for want of a day
  *    big enough for one box.

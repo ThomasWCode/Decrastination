@@ -100,7 +100,7 @@ fun WorkScreen(graph: AppGraph, activity: Activity, opening: String? = null, onO
     var bySubject by rememberSaveable { mutableStateOf(false) }
     var only by rememberSaveable { mutableStateOf<String?>(null) }
     // The due-date sections open; what's not for now folded, till you say otherwise.
-    var folded by rememberSaveable { mutableStateOf(listOf(FINISHED, NOT_TASKS, SOURCES, NOT_PLANNED, EMAIL_EVENTS)) }
+    var folded by rememberSaveable { mutableStateOf(listOf(FINISHED, NOT_TASKS, SOURCES, NOT_PLANNED)) }
     val toggle = { key: String -> folded = if (key in folded) folded - key else folded + key }
     Box(Modifier.fillMaxSize()) {
         // Room at the foot for both buttons (the chat's over New task), so the last row scrolls clear.
@@ -183,15 +183,6 @@ fun WorkScreen(graph: AppGraph, activity: Activity, opening: String? = null, onO
                 item(key = NOT_TASKS) { FoldingHeading("Hidden, as you said", expanded, { toggle(NOT_TASKS) }, summary = "${notTasks.size}") }
                 if (expanded) itemsIndexed(notTasks, key = { _, it -> "not-" + it.id }) { index, task -> TaskTile(task, index, notTasks.size, now, zone, byId) { sheetFor = task.id } }
             }
-            // Emails of events (your call, 9 Oct, not tasks): off the plan and the lists, here to see,
-            // an invite's with its time and Add to calendar on its sheet (DX-02).
-            val emailEvents = state.tasks.filter { it.isOpen && it.justAnEmail && it.kind == com.thomaswcode.decrastination.core.Kind.Event && !it.userNotATask && it.userSameAs == null && (only == null || it.source.name == only) }
-                .sortedWith(compareBy(nullsLast()) { it.dueAt })
-            if (emailEvents.isNotEmpty()) {
-                val expanded = EMAIL_EVENTS !in folded
-                item(key = EMAIL_EVENTS) { FoldingHeading("Events in your email", expanded, { toggle(EMAIL_EVENTS) }, summary = "${emailEvents.size}") }
-                if (expanded) itemsIndexed(emailEvents, key = { _, it -> "event-" + it.id }) { index, task -> TaskTile(task, index, emailEvents.size, now, zone, byId) { sheetFor = task.id } }
-            }
             val finished = state.tasks.filter { !it.isOpen && !it.hidden && (only == null || it.source.name == only) }.sortedByDescending { it.doneAt ?: it.lastSeenAt }
             if (finished.isNotEmpty()) {
                 val expanded = FINISHED !in folded
@@ -239,7 +230,6 @@ fun WorkScreen(graph: AppGraph, activity: Activity, opening: String? = null, onO
 private const val FINISHED = "finished"
 private const val NOT_PLANNED = "not-planned"
 private const val NOT_TASKS = "not-tasks"
-private const val EMAIL_EVENTS = "email-events"
 private const val SOURCES = "sources"
 
 /** How reading [source] last went: when, its data's age, and why it failed, in red. */

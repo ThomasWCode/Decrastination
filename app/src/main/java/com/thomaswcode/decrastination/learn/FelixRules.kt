@@ -136,12 +136,6 @@ object FelixRules {
     fun fits(draft: com.thomaswcode.decrastination.data.FelixDraft?, trigger: Trigger, now: Long, lastSentAt: Long?): Boolean =
         draft != null && draft.reason == trigger.reason.name && draft.key == trigger.key && now - draft.at <= DRAFT_FRESH_MS && (lastSentAt == null || lastSentAt < draft.at)
 
-    /** [message]'s first sentence, and the rest if there's more (LR-04: the morning's title and text). */
-    fun sentences(message: String): Pair<String, String?> {
-        val parts = message.trim().split(Regex("(?<=[.!?])\\s+"), limit = 2)
-        return parts[0] to parts.getOrNull(1)?.trim()?.takeIf { it.isNotEmpty() }
-    }
-
     /**
      * When to look again (LR-03, AC-10): the earliest of a slot's grace into it, a slot's end and
      * grace (its miss then on record), and the check he set while there's work to come; and, with a

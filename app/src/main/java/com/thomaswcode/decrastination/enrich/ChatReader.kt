@@ -369,6 +369,31 @@ object ChatPrompts {
 /** Claude's answer in the chat, checked: its reply, the tasks and changes the app can make, and what it left out. */
 object ChatAnswers {
 
+    /**
+     * The times given at once ([changes]' AtTime) that the plan, laid as [buckets], put elsewhere
+     * (PL-04: a pin whose time isn't free goes to the first free time after it), a line each, as
+     * the answer names the time asked for: "06:35 had no free time: it's at 10:45." A minute or
+     * less apart is the time kept. Pure.
+     */
+    fun movedPins(changes: List<Change>, buckets: List<com.thomaswcode.decrastination.core.DayBucket>, zone: java.time.ZoneId): List<String> {
+        val hm = java.time.format.DateTimeFormatter.ofPattern("HH:mm", java.util.Locale.UK)
+        fun at(time: Long) = java.time.Instant.ofEpochMilli(time).atZone(zone)
+        return changes.filter { it.type == ChangeType.AtTime && it.taskId != null && it.time != null }.mapNotNull { c ->
+            val asked = c.time!!
+            val day = c.date?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: at(asked).toLocalDate()
+            // A day past the plan's week: nothing to say of it.
+            val bucket = buckets.firstOrNull { it.date == day } ?: return@mapNotNull null
+            val slots = bucket.slots
+                .filter { it.kind == com.thomaswcode.decrastination.core.SlotKind.Work && it.chunk?.taskId == c.taskId }
+            val laid = slots.firstOrNull { it.pinned } ?: slots.minByOrNull { kotlin.math.abs(it.start - asked) }
+            when {
+                laid == null -> "${at(asked).format(hm)} had no free time, nor any after it that day."
+                kotlin.math.abs(laid.start - asked) <= 60_000L -> null
+                else -> "${at(asked).format(hm)} had no free time: it's at ${at(laid.start).format(hm)}."
+            }
+        }.distinct()
+    }
+
     data class Reading(
         val reply: String,
         val tasks: List<OwnTask>,
