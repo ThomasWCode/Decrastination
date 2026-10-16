@@ -129,7 +129,7 @@ object ChatActs {
 
     /**
      * Whether [act] can still be taken back, with [tasks], [settings] and the chat's [messages] as
-     * they are: a step ticked still done (one of yours it finished, too); one unticked still to do;
+     * they are: a step ticked still done (one of yours, or one done by its tick, it finished, too); one unticked still to do;
      * a task done still done; one opened again still as that left it ([asReopened]); one deleted
      * still gone, and none of the cards that had added it made again since (Redo makes it anew); a
      * setting still as it was set.
@@ -141,7 +141,7 @@ object ChatActs {
         val step = a.stepIndex?.let { task?.subSteps?.getOrNull(it) }
         return when (a.type) {
             ChatAction.Type.Open -> false
-            ChatAction.Type.TickStep -> task != null && step?.done == true && (task.isOpen || task.source == Source.Own)
+            ChatAction.Type.TickStep -> task != null && step?.done == true && (task.isOpen || task.source == Source.Own || task.tickDone)
             ChatAction.Type.UntickStep -> task?.isOpen == true && step?.done == false
             ChatAction.Type.Done -> task?.isOpen == false && (task.source == Source.Own || task.tickDone)
             ChatAction.Type.Reopen -> task != null && act.was != null && asReopened(task, act.was)

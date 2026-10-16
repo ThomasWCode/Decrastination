@@ -44,6 +44,10 @@ class ChatActsTest {
     fun `a tick that finished one of yours can be undone, and a setting while it's as it was set`() {
         val tick = Act("Ticked: Write, of Essay", ChatAction(ChatAction.Type.TickStep, "own:e", 1))
         assertTrue(ChatActs.canUndo(tick, listOf(finished()), settings, emptyList()))
+        // One done by its tick (NF-06), given steps by the chat, too.
+        val feedback = finished().copy(id = "teams:fb", source = Source.Teams, extra = mapOf(TaskItem.EXTRA_TICK_DONE to "true"))
+        assertTrue(ChatActs.canUndo(tick.copy(action = ChatAction(ChatAction.Type.TickStep, feedback.id, 1)), listOf(feedback), settings, emptyList()))
+        assertFalse(ChatActs.canUndo(tick.copy(action = ChatAction(ChatAction.Type.TickStep, "teams:hw", 1)), listOf(feedback.copy(id = "teams:hw", extra = emptyMap())), settings, emptyList()))
         val box = Act("A piece's length (minutes): 30 → 40", ChatAction(ChatAction.Type.Setting, "", setting = "boxMin", value = "40"), before = "30", after = "40")
         assertTrue(ChatActs.canUndo(box, emptyList(), settings.copy(boxMin = 40), emptyList()))
         assertFalse(ChatActs.canUndo(box, emptyList(), settings.copy(boxMin = 45), emptyList()))

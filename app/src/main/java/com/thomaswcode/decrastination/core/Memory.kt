@@ -116,15 +116,17 @@ object Memories {
      * the one it replaced is back, with those its room pushed out; one forgotten is back; an
      * instruction added goes; one dropped is back. Null if it can't be: what it did has changed since
      * (the fact rewritten, kept again or forgotten, the instruction gone), or what it would bring back
-     * is there already (a newer fact of its topic, the same instruction) or has no room ([RULE_MAX]
-     * instructions). Only the very fact it kept is taken: the same words kept again since are a newer
-     * one's to undo.
+     * is there already (a newer fact of its topic, the same instruction) or has no room (the facts'
+     * [FACT_BUDGET_CHARS], [RULE_MAX] instructions). Only the very fact it kept is taken: the same
+     * words kept again since are a newer one's to undo.
      */
     fun undo(state: MemoryState, edit: MemoryEdit): MemoryState? {
         edit.factAfter?.let { after ->
             val now = state.facts.firstOrNull { it == after } ?: return null
             val rest = state.facts - now
             var back = rest + listOfNotNull(edit.factBefore).filter { f -> rest.none { same(it.topic, f.topic) } }
+            // The one it replaced, longer than the room has left since: not undone, as it can't be whole.
+            if (chars(back) > FACT_BUDGET_CHARS) return null
             // Those it pushed out, the newest first, where their topics are free still and they fit.
             for (f in edit.evicted.sortedByDescending { it.at }) {
                 if (back.none { same(it.topic, f.topic) } && chars(back + f) <= FACT_BUDGET_CHARS) back = back + f
@@ -132,7 +134,8 @@ object Memories {
             return state.copy(facts = back.sortedBy { it.at })
         }
         edit.factBefore?.let { before ->
-            if (state.facts.any { same(it.topic, before.topic) }) return null
+            // Not over what the room holds: newer facts have filled it since.
+            if (state.facts.any { same(it.topic, before.topic) } || chars(state.facts + before) > FACT_BUDGET_CHARS) return null
             return state.copy(facts = (state.facts + before).sortedBy { it.at })
         }
         edit.ruleAfter?.let { after ->
