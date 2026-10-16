@@ -920,7 +920,9 @@ class AppGraph private constructor(context: Context) {
 
     /** The photos no task holds any more let go (AI-23): a task done and gone takes its photo with it. */
     private fun sweepPhotos() {
-        val held = tasks.value.tasks.mapNotNull { it.photo?.path }.toSet()
+        // A task the chat deleted keeps its photo while its Undo can bring it back.
+        val undoable = chat.value.messages.flatMap { m -> m.acts.filter { !it.undone }.mapNotNull { it.was?.photo?.path } }
+        val held = tasks.value.tasks.mapNotNull { it.photo?.path }.toSet() + undoable
         photos.listFiles()?.filter { it.path !in held }?.forEach { it.delete() }
     }
 
@@ -1592,7 +1594,8 @@ class AppGraph private constructor(context: Context) {
      */
     suspend fun reopenOwnTask(taskId: String) {
         tasks.update { state ->
-            state.copy(tasks = state.tasks.map { t -> if (t.id == taskId && t.source == Source.Own && !t.isOpen) OwnTasks.reopened(t) else t })
+            // Or one done by its tick (NF-06), which only you say is done: a sync leaves it open again.
+            state.copy(tasks = state.tasks.map { t -> if (t.id == taskId && (t.source == Source.Own || t.tickDone) && !t.isOpen) OwnTasks.reopened(t) else t })
         }
     }
 
@@ -1824,7 +1827,11 @@ class AppGraph private constructor(context: Context) {
                     notLooked = when (looked) {
                         is Called.Held -> because(looked.hold)
                         is Called.Failed -> "the search failed"
-                        is Called.Answered -> if (looked.value.refused) "Claude declined to search for it" else "the search found nothing"
+                        is Called.Answered -> when {
+                            looked.value.refused -> "Claude declined to search for it"
+                            looked.value.paused -> "the search ran too long"
+                            else -> "the search found nothing"
+                        }
                     }
                     return@let
                 }
@@ -1909,10 +1916,7 @@ class AppGraph private constructor(context: Context) {
                 com.thomaswcode.decrastination.core.ChatAction.Type.TickStep -> {
                     val index = a.stepIndex ?: return@mapNotNull null
                     val step = task?.subSteps?.getOrNull(index)?.takeIf { !it.done } ?: return@mapNotNull null
-                    val plan = plan()
-                    val piece = (plan.todaySlots.mapNotNull { it.chunk } + plan.ordered).firstOrNull { it.taskId == task.id && it.stepIndex == index }
-                    val ticked = if (piece != null) focus.keepSlot(piece.key) else runCatching { focus.tickBlock(task.id, index, step.title) }.getOrDefault(false)
-                    said("Ticked: ${step.title}, of ${task.title}", a).takeIf { ticked }
+                    said("Ticked: ${step.title}, of ${task.title}", a).takeIf { tick(task, index, step.title) }
                 }
                 com.thomaswcode.decrastination.core.ChatAction.Type.UntickStep -> {
                     val index = a.stepIndex ?: return@mapNotNull null
@@ -1927,12 +1931,15 @@ class AppGraph private constructor(context: Context) {
                 com.thomaswcode.decrastination.core.ChatAction.Type.Reopen -> {
                     if (task == null || task.isOpen) return@mapNotNull null
                     reopenOwnTask(task.id)
-                    said("Open again: ${task.title}", a).takeIf { tasks.value.tasks.firstOrNull { it.id == task.id }?.isOpen == true }
+                    // As it was, finished, for its Undo: not finished anew, a second time on record.
+                    com.thomaswcode.decrastination.core.Act("Open again: ${task.title}", a, was = task).takeIf { tasks.value.tasks.firstOrNull { it.id == task.id }?.isOpen == true }
                 }
                 com.thomaswcode.decrastination.core.ChatAction.Type.Delete -> {
                     if (task?.source != Source.Own) return@mapNotNull null
+                    // The cards that added it, which its going sets back: linked again by its Undo.
+                    val cards = chat.value.messages.flatMap { m -> m.proposals.filter { it.made == task.id }.map { "${m.id}|${it.id}" } }
                     deleteOwnTask(task.id)
-                    com.thomaswcode.decrastination.core.Act("Deleted: ${task.title}", a, deleted = task).takeIf { tasks.value.tasks.none { it.id == task.id } }
+                    com.thomaswcode.decrastination.core.Act("Deleted: ${task.title}", a, was = task, cards = cards).takeIf { tasks.value.tasks.none { it.id == task.id } }
                 }
                 com.thomaswcode.decrastination.core.ChatAction.Type.Setting -> {
                     val field = com.thomaswcode.decrastination.data.FelixSettings.field(a.setting.orEmpty()) ?: return@mapNotNull null
@@ -1942,6 +1949,8 @@ class AppGraph private constructor(context: Context) {
                         made = com.thomaswcode.decrastination.core.Act(line, a, before = field.get(s), after = field.get(next))
                         next
                     }
+                    // The reminders' alarms at their new times, as the Settings screen sets them.
+                    if (made != null) com.thomaswcode.decrastination.learn.Daily.schedule(app)
                     made
                 }
             }
@@ -1949,10 +1958,21 @@ class AppGraph private constructor(context: Context) {
     }
 
     /**
+     * The chat's tick of [task]'s step [index], still [title]: its piece kept where the plan has one,
+     * today or another day (earning as a tick does), else ticked as on its sheet, where that can be.
+     */
+    private suspend fun tick(task: TaskItem, index: Int, title: String): Boolean {
+        val plan = plan()
+        val piece = (plan.todaySlots.mapNotNull { it.chunk } + plan.ordered).firstOrNull { it.taskId == task.id && it.stepIndex == index }
+        return if (piece != null) focus.keepSlot(piece.key) else runCatching { focus.tickBlock(task.id, index, title) }.getOrDefault(false)
+    }
+
+    /**
      * The [index]th of message [messageId]'s actions taken back ([act], its Undo): a step ticked to
-     * do again, or one unticked ticked again (by hand, earning nothing); a task done open again, or one
-     * opened finished again; one deleted back as it was; a setting back to its value before. Not
-     * once it's changed since (ticked, finished or deleted another way, set again): why, then.
+     * do again (one of yours it finished open again with it), or one unticked ticked again as the
+     * chat ticks one; a task done open again, or one opened back as it was, finished; one deleted
+     * back as it was, with the cards that added it; a setting back to its value before. Not once
+     * it's changed since (ticked, finished or deleted another way, set again): why, then.
      */
     suspend fun undoAct(messageId: String, index: Int): String? {
         val act = chat.value.messages.firstOrNull { it.id == messageId }?.acts?.getOrNull(index)?.takeIf { !it.undone } ?: return null
@@ -1962,11 +1982,16 @@ class AppGraph private constructor(context: Context) {
         fun open(id: String) = tasks.value.tasks.firstOrNull { it.id == id }?.isOpen
         val undone = when (a.type) {
             com.thomaswcode.decrastination.core.ChatAction.Type.Open -> false
-            com.thomaswcode.decrastination.core.ChatAction.Type.TickStep -> step?.done == true && focus.untickBlock(task!!.id, a.stepIndex!!, step.title)
-            com.thomaswcode.decrastination.core.ChatAction.Type.UntickStep -> step?.done == false && focus.tickBlock(task!!.id, a.stepIndex!!, step.title)
-            com.thomaswcode.decrastination.core.ChatAction.Type.Done -> task?.isOpen == false && task.source == Source.Own && run { reopenOwnTask(task.id); open(task.id) == true }
-            com.thomaswcode.decrastination.core.ChatAction.Type.Reopen -> task?.isOpen == true && run { finishOwnTask(task.id); open(task.id) == false }
-            com.thomaswcode.decrastination.core.ChatAction.Type.Delete -> act.deleted != null && task == null && run { restoreTask(act.deleted); open(act.deleted.id) != null }
+            // The step that finished one of yours: open again with it to do.
+            com.thomaswcode.decrastination.core.ChatAction.Type.TickStep -> step?.done == true && focus.untickBlock(task!!.id, a.stepIndex!!, step.title, reopen = true)
+            com.thomaswcode.decrastination.core.ChatAction.Type.UntickStep -> step?.done == false && task!!.isOpen && tick(task, a.stepIndex!!, step.title)
+            com.thomaswcode.decrastination.core.ChatAction.Type.Done -> task?.isOpen == false && (task.source == Source.Own || task.tickDone) && run { reopenOwnTask(task.id); open(task.id) == true }
+            com.thomaswcode.decrastination.core.ChatAction.Type.Reopen -> task?.isOpen == true && act.was != null && refinish(act.was)
+            com.thomaswcode.decrastination.core.ChatAction.Type.Delete -> act.was != null && task == null && run {
+                restoreTask(act.was)
+                relink(act.cards, act.was.id)
+                open(act.was.id) != null
+            }
             com.thomaswcode.decrastination.core.ChatAction.Type.Setting -> {
                 val field = com.thomaswcode.decrastination.data.FelixSettings.field(a.setting.orEmpty())
                 var back = false
@@ -1976,12 +2001,40 @@ class AppGraph private constructor(context: Context) {
                         field.set(s, act.before)?.also { back = true } ?: s
                     }
                 }
+                if (back) com.thomaswcode.decrastination.learn.Daily.schedule(app)
                 back
             }
         }
         if (!undone) return "It's changed since, so it can't be undone here"
         chat.update { s -> s.copy(messages = s.messages.map { m -> if (m.id != messageId) m else m.copy(acts = m.acts.mapIndexed { i, x -> if (i == index) x.copy(undone = true) else x }) }) }
         return null
+    }
+
+    /**
+     * [was], one of your own the chat opened again, back as it was before, finished: its finish
+     * and its steps' ticks as they were, not finished anew (a second completion on record). False if
+     * it's finished since another way.
+     */
+    private suspend fun refinish(was: TaskItem): Boolean {
+        var back = false
+        tasks.update { state ->
+            state.copy(
+                tasks = state.tasks.map { t ->
+                    if (t.id != was.id || !t.isOpen) return@map t
+                    back = true
+                    t.copy(status = was.status, doneAt = was.doneAt, subSteps = if (t.subSteps.map { it.title } == was.subSteps.map { it.title }) was.subSteps else t.subSteps)
+                },
+            )
+        }
+        return back
+    }
+
+    /** The chat's [cards] ("message|card") that added task [id], made again by a deletion's Undo: added, as they were. */
+    private suspend fun relink(cards: List<String>, id: String) {
+        if (cards.isEmpty()) return
+        chat.update { s ->
+            s.copy(messages = s.messages.map { m -> m.copy(proposals = m.proposals.map { p -> if ("${m.id}|${p.id}" in cards && p.state == ProposalState.Proposed && p.made == null) p.copy(state = ProposalState.Applied, made = id) else p }) })
+        }
     }
 
     /** Whether [act] can still be taken back ([undoAct]), with [tasks] and [settings] as they are: as the chat shows its Undo. */
@@ -1992,12 +2045,12 @@ class AppGraph private constructor(context: Context) {
         val step = a.stepIndex?.let { task?.subSteps?.getOrNull(it) }
         return when (a.type) {
             com.thomaswcode.decrastination.core.ChatAction.Type.Open -> false
-            com.thomaswcode.decrastination.core.ChatAction.Type.TickStep -> task?.isOpen == true && step?.done == true
-            // Ticked again by hand, as only an email's or one of your own's can be.
-            com.thomaswcode.decrastination.core.ChatAction.Type.UntickStep -> task?.isOpen == true && step?.done == false && Focus.tickable(task)
-            com.thomaswcode.decrastination.core.ChatAction.Type.Done -> task?.isOpen == false && task.source == Source.Own
-            com.thomaswcode.decrastination.core.ChatAction.Type.Reopen -> task?.isOpen == true
-            com.thomaswcode.decrastination.core.ChatAction.Type.Delete -> act.deleted != null && task == null
+            // One of yours its tick finished, too: opened again with it.
+            com.thomaswcode.decrastination.core.ChatAction.Type.TickStep -> task != null && step?.done == true && (task.isOpen || task.source == Source.Own)
+            com.thomaswcode.decrastination.core.ChatAction.Type.UntickStep -> task?.isOpen == true && step?.done == false
+            com.thomaswcode.decrastination.core.ChatAction.Type.Done -> task?.isOpen == false && (task.source == Source.Own || task.tickDone)
+            com.thomaswcode.decrastination.core.ChatAction.Type.Reopen -> task?.isOpen == true && act.was != null
+            com.thomaswcode.decrastination.core.ChatAction.Type.Delete -> act.was != null && task == null
             com.thomaswcode.decrastination.core.ChatAction.Type.Setting -> act.before != null && com.thomaswcode.decrastination.data.FelixSettings.field(a.setting.orEmpty())?.get(settings) == act.after
         }
     }
@@ -2416,7 +2469,7 @@ class AppGraph private constructor(context: Context) {
         instructions.update { state -> state.copy(instructions = state.instructions.filterNot { it.id == id }) }
         if (was?.state == InstructionStatus.Applied) layInstructions()
         // A chat card that made it, taken back here (under Your changes): the card says so, and the chat
-        // recalls it. What it made on your own tasks stands, still undone from the card.
+        // recalls it. What it made on your own tasks, and its days off, stand, still undone from the card.
         if (chat.value.messages.any { m -> m.proposals.any { it.made == id } }) {
             chat.update { s ->
                 s.copy(
@@ -2424,7 +2477,8 @@ class AppGraph private constructor(context: Context) {
                         m.copy(proposals = m.proposals.map { p ->
                             when {
                                 p.made != id -> p
-                                p.before.isEmpty() -> p.copy(state = ProposalState.Proposed, made = null)
+                                // Its days off stand too, still undone from the card.
+                                p.before.isEmpty() && p.schoolBefore == null -> p.copy(state = ProposalState.Proposed, made = null)
                                 else -> p.copy(made = null)
                             }
                         })

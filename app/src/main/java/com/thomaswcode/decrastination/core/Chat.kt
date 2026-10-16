@@ -106,14 +106,16 @@ data class ChatAction(val type: Type, val taskId: String, val stepIndex: Int? = 
 
 /**
  * What one of the chat's actions did (16 Oct), said under its answer as [line], with what its Undo
- * needs: the [action]; the task as it was before it went ([deleted]); a setting's value before and
- * after ([before], [after]). [undone] once Undo has taken it back.
+ * needs: the [action]; the task as it was before it ([was]: deleted, or finished before it was
+ * opened again), and the cards that had added a deleted one ([cards], "message|card"); a setting's
+ * value before and after ([before], [after]). [undone] once Undo has taken it back.
  */
 @Serializable
 data class Act(
     val line: String,
     val action: ChatAction,
-    val deleted: TaskItem? = null,
+    val was: TaskItem? = null,
+    val cards: List<String> = emptyList(),
     val before: String? = null,
     val after: String? = null,
     val undone: Boolean = false,

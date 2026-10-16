@@ -268,7 +268,7 @@ object ChatPrompts {
             inUse.take(InstructionPrompts.MAX_TASKS).forEach { appendLine("- " + Instructions.describe(it, byId, zone)) }
         }
         // Their own finished lately (16 Oct), to open again if one wasn't.
-        val finished = tasks.filter { it.source == com.thomaswcode.decrastination.core.Source.Own && it.status == com.thomaswcode.decrastination.core.Status.Done && (it.doneAt ?: 0L) > now - FINISHED_MS }
+        val finished = tasks.filter { (it.source == com.thomaswcode.decrastination.core.Source.Own || it.tickDone) && it.status == com.thomaswcode.decrastination.core.Status.Done && (it.doneAt ?: 0L) > now - FINISHED_MS }
             .sortedByDescending { it.doneAt }
         if (finished.isNotEmpty()) {
             appendLine()
@@ -568,7 +568,7 @@ object ChatAnswers {
                 own || task.tickDone -> act(com.thomaswcode.decrastination.core.ChatAction.Type.Done, task.id)
                 else -> no("$name is done when ${task.source.label} says so")
             }
-            "reopen" -> if (own && task.status == com.thomaswcode.decrastination.core.Status.Done) act(com.thomaswcode.decrastination.core.ChatAction.Type.Reopen, task.id) else no("$name to open again, which isn't one of their own finished")
+            "reopen" -> if ((own || task.tickDone) && task.status == com.thomaswcode.decrastination.core.Status.Done) act(com.thomaswcode.decrastination.core.ChatAction.Type.Reopen, task.id) else no("$name to open again, which isn't one of their own finished")
             "delete" -> if (own) act(com.thomaswcode.decrastination.core.ChatAction.Type.Delete, task.id) else no("$name to delete, which is from ${task.source.label}: only a task of their own is deleted")
             else -> no("an action the app doesn't take")
         }

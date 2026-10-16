@@ -860,6 +860,19 @@ class FocusTest {
     }
 
     @Test
+    fun `a tick that finished one of your own is taken back with it open again`() = runTest {
+        val own = task("mine", steps = listOf(SubStep("Draft", 30, done = true, byHand = true), SubStep("Redraft", 30, done = true, byHand = true)))
+            .copy(id = "own:mine", source = Source.Own, sourceId = "mine", status = Status.Done, doneAt = clock.time)
+        tasks.update { it.copy(tasks = listOf(own)) }
+        // Finished, it's only to be opened again so.
+        assertFalse(focus.untickBlock("own:mine", 1, "Redraft"))
+        assertTrue(focus.untickBlock("own:mine", 1, "Redraft", reopen = true))
+        val back = tasks.value.tasks.single()
+        assertTrue(back.isOpen)
+        assertEquals(listOf(true, false), back.subSteps.map { it.done })
+    }
+
+    @Test
     fun `a kept slot taken back is to do again, its minutes and free time back`() = runTest {
         val first = laid(task("t", due = "2026-10-12T23:59", steps = listOf(SubStep("Q1", 15), SubStep("Q2", 15)), effort = 30)).first()
         clock.time = first.end

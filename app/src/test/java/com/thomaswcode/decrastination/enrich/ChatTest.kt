@@ -438,6 +438,13 @@ class ChatTest {
         assertEquals(5, reading.leftOut.size, reading.leftOut.toString())
         assertTrue(reading.leftOut.any { "is done when Teams says so" in it }, reading.leftOut.toString())
         assertTrue(reading.leftOut.any { "a setting the app doesn't let him change (blockedApps)" in it }, reading.leftOut.toString())
+        // A returned piece of work done by its tick (NF-06) is theirs to open again too.
+        val feedback = bridge.copy(id = "teams:fb", sourceId = "fb", status = com.thomaswcode.decrastination.core.Status.Done, doneAt = now - 60_000L, extra = mapOf(TaskItem.EXTRA_TICK_DONE to "true"))
+        val reopened = ChatAnswers.parse(
+            """{"reply":"Opened.","newTasks":[],"changes":[],"memories":[],"suggestedReplies":[],"actions":[${action("reopen", feedback.id)}]}""",
+            listOf(feedback), emptyList(), About(), now, LONDON, settings,
+        )!!
+        assertEquals(listOf(com.thomaswcode.decrastination.core.ChatAction(com.thomaswcode.decrastination.core.ChatAction.Type.Reopen, feedback.id)), reopened.actions)
         // He's told of their own finished lately, and of the settings he can change, with their values.
         val context = ChatPrompts.context(listOf(essay, finished, bridge), emptyList(), emptyList(), now, LONDON, settings = settings)
         assertTrue("Their own tasks finished in the last week (id | title | finished):\n- ${finished.id} | Letter | " in context, context)
