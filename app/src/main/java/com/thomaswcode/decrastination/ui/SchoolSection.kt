@@ -116,7 +116,8 @@ fun SchoolSection(graph: AppGraph) {
 /** One row of a list saved at once (a day off, a half-day, a memory), and its delete, [action] said aloud. */
 @Composable
 internal fun Entry(text: String, action: String = "Delete", onDelete: () -> Unit) {
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+    // A little apart, so a long one's lines aren't read as the next's (16 Oct).
+    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(text, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
         IconButton(onClick = onDelete) { Icon(painterResource(R.drawable.ic_close), contentDescription = action) }
     }

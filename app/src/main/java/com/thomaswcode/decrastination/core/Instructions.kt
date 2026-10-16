@@ -31,6 +31,12 @@ data class Instruction(
      * a newer one of the same kind for the same task replaces it, so they don't pile up.
      */
     val quick: Boolean = false,
+    /**
+     * Your answer to Felix's question about its task (AI-10), kept with the task too, which is read
+     * again with it: one Claude can't make a change of (it tells, rather than changes) is let go,
+     * not left for you to check (16 Oct).
+     */
+    val answer: Boolean = false,
 )
 
 @Serializable

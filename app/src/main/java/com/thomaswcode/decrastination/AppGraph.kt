@@ -1473,9 +1473,9 @@ class AppGraph private constructor(context: Context) {
      * Writes down a new instruction about [about] and has Claude read it: applied once it's read
      * (your call, 16 Oct), and taken back under Your changes.
      */
-    suspend fun addInstruction(text: String, about: About): String {
+    suspend fun addInstruction(text: String, about: About, answer: Boolean = false): String {
         val id = java.util.UUID.randomUUID().toString()
-        instructions.update { it.copy(instructions = it.instructions + Instruction(id, text.trim().take(InstructionPrompts.MAX_TEXT), about, clock.now())) }
+        instructions.update { it.copy(instructions = it.instructions + Instruction(id, text.trim().take(InstructionPrompts.MAX_TEXT), about, clock.now(), answer = answer)) }
         scope.launch { readInstructions(interactive = true) }
         return id
     }
@@ -1653,14 +1653,15 @@ class AppGraph private constructor(context: Context) {
                 val reading = result.reading ?: InstructionAnswers.Reading.Unclear(if (result.refused) "Claude declined to read it" else "Claude's answer couldn't be used")
                 instructions.update { state ->
                     state.copy(
-                        instructions = state.instructions.map { i ->
+                        instructions = state.instructions.mapNotNull { i ->
                             // Only as it was sent: written again meanwhile, it's read again.
                             if (i.id != next.id || i.state != InstructionStatus.Reading || i.text != next.text) {
                                 i
                             } else {
                                 when (reading) {
                                     is InstructionAnswers.Reading.Changes -> i.copy(state = InstructionStatus.Understood, changes = reading.changes, note = null)
-                                    is InstructionAnswers.Reading.Unclear -> i.copy(state = InstructionStatus.Unclear, changes = emptyList(), note = reading.why)
+                                    // An answer to his question that changes nothing: it's with its task, and goes.
+                                    is InstructionAnswers.Reading.Unclear -> if (i.answer) null else i.copy(state = InstructionStatus.Unclear, changes = emptyList(), note = reading.why)
                                 }
                             }
                         },

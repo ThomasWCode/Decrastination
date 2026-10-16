@@ -459,6 +459,11 @@ class ChatTest {
             ChatAnswers.sources(found).map { it.url },
         )
         assertEquals("Essay prize", ChatAnswers.sources(found).first().title)
+        // The tool as the live call of the 16th sent it: the basic search, three at most, from the UK.
+        val tool = com.anthropic.core.jsonMapper().writeValueAsString(searchTool(LONDON))
+        for (part in listOf("\"type\":\"web_search_20250305\"", "\"name\":\"web_search\"", "\"max_uses\":3", "\"country\":\"GB\"", "\"timezone\":\"Europe/London\"", "\"type\":\"approximate\"")) {
+            assertTrue(part in tool, tool)
+        }
     }
 
     @Test
