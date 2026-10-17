@@ -14,11 +14,11 @@ How the app works in detail is in [spec/](spec/); how the work is done is in [de
 
 ## Sources
 
-- **D-6. Teams through the Teams Assignments widget app, never merged into this one.** Read-only, through its signature-protected provider (both apps share `app/debug.keystore`). The widget app must stay installed: it's the Teams reader; its home-screen widget itself is optional (17 Oct). Changes to it follow its own repository; this app reads a new column only when it's there. Applies: `sources/teams/`.
+- **D-6. Teams through the Teams Assignments widget app, kept as an app of its own** (17 Oct). Read-only, through its signature-protected provider (both apps share `app/debug.keystore`). The widget app must stay installed: it's the Teams reader; its home-screen widget itself is optional. Merging its backend into this one isn't worth it now; it's worth revisiting only if changes across both repositories become frequent. Changes to it follow its own repository; this app reads a new column only when it's there. Applies: `sources/teams/`.
 - **D-7. Sources are only ever read.** The only thing the app writes outside itself is its own events in the calendar you chose.
 - **D-8. Power Planner through its web API**, credentials encrypted, polled every 15 minutes (its rate limit accepted); its timetable is used, free periods being classes named "Study Period". Applies: `sources/powerplanner/`.
 - **D-9. AnkiDroid through its provider.** Homework is matched to decks by textbook section, with a current-textbook setting (Q18). The quota: every due review, 20 new cards from the current textbook's lowest deck, and decks homework names, due 21:30; on a day homework vocabulary is due, reviews only; counted in cards. Applies: `sources/anki/`.
-- **D-10. Gmail: only starred conversations, each a task** (3.0.1). IMAP with an app password; every starred conversation is something to do (an event's email included), read whole with its replies; unstarring finishes it (DX-03). (Not: the whole inbox, or only emails that ask for something.) Applies: `sources/gmail/`, `core/Merge.kt`.
+- **D-10. Gmail: only starred conversations, each a task** (3.0.1). IMAP with an app password; every starred conversation is something to do (an event's email included), read whole with its replies; unstarring finishes it (DX-03), and, as every starred email is Admin, that earns free time as any finished task does (17 Oct). (Not: the whole inbox, or only emails that ask for something.) Applies: `sources/gmail/`, `core/Merge.kt`.
 - **D-11. Teams syncs** on a tap, on the first unlock after the evening start, and every 3 hours; each automatic one shows a 10-second banner with Cancel and Delay, only while the phone's in use and never in quiet hours (Q21).
 - **D-12. The same work from two sources is linked by a tap, never automatically** (DX-15).
 - **D-13. Other wellbeing apps on the phone are left alone.**
@@ -41,10 +41,10 @@ How the app works in detail is in [spec/](spec/); how the work is done is in [de
 
 - **D-25. Work not due today or tomorrow is spread evenly to its deadline** by each day's free time, a piece at least once a week, with no daily maximum (PL-01). (Not: placed backwards from the deadline.)
 - **D-26. Work due today or tomorrow comes before overdue work.**
-- **D-27. A day's capacity is its free time times the share of it you really use**, learned per kind of day (between 0.5 and 1.0; 1.0 until seven such days) (PL-06).
+- **D-27. A day's capacity is its free time times the share of it you really use**, learned per kind of day (between 0.5 and 1.0; 1.0 until seven such days) (PL-06). A weekday off school is a weekend's day, planned with the weekend's share and teaching it (17 Oct). Applies: `Planner.capacityOf`, `learn/Days.record`.
 - **D-28. A weekend keeps one long window**; two weekend windows aren't built.
 - **D-29. Revision goes a day apart**; there's no evening-start preference.
-- **D-30. Work can be moved as often as you like, never past its due date**; overdue work can go to any time from now.
+- **D-30. Work can be moved as often as you like, never past its due date**; overdue work can go to any day or time from now, and is planned there, still marked overdue (17 Oct). Applies: `Instructions.latePin`, `Planner.keptDay`, `pinnedTime`, `pinProblem`.
 - **D-31. A deadline later the same day can use that day's school windows before it** (Q-52).
 - **D-32. The planner stays pure**: everything it uses comes in through `Planner.Input`.
 - **D-33. A piece's length (`boxMin`) is yours** (17 Oct): 60 minutes on your phone; the weekly review never changes it.
@@ -61,12 +61,12 @@ How the app works in detail is in [spec/](spec/); how the work is done is in [de
 - **D-41. Weekends and days off get three 20-minute breaks outside**, given up in number (the midday one first) but never shortened.
 - **D-42. Slots go to a calendar you made in Google Calendar** (one the app makes itself wouldn't sync). A slot you move there pins its piece at your time; an event you add takes the time from a slot; a slot's event you delete comes back only if its time is still free.
 - **D-43. The app never deletes an event of yours that it can tell from its own** (3.1.1–3.1.2, 17 Oct). A copy the calendar's sync makes of one of its events is deleted only when it matches a version the app itself wrote earlier (fingerprints in `calendar.json`); an event already there under a new slot's exact title, times and wording is never taken for one. The limit: one you make later as an exact copy of an earlier slot can't be told from a sync's copy. Applies: `calendar/SlotCalendarDiff.kt`.
-- **D-44. Calendar events count as busy time, judged one by one**: the app asks when it can't tell, and one answer covers every event of that name (Q7).
+- **D-44. Calendar events count as busy time, judged one by one**: the app asks when it can't tell, and one answer covers every event of that name (Q7). Until you answer, an event asked about takes all its time (17 Oct). Applies: `learn/EventJudge.kt`.
 
 ## Blocking and protection
 
 - **D-45. Blocking is an accessibility service and a full-screen block screen, with no bypass.**
-- **D-46. Once armed, only loosening blocking is guarded** (2.0.0, 12 Oct): disarming; taking apps, sites or browsers off the lists; longer quiet hours; a later school-day start; fewer work minutes per free minute; a shorter wait. Those take the 24-hour wait or the override code; everything about the work changes at once (due dates included). (Not: due-date changes needing the code.) Applies: `protect/`.
+- **D-46. Once armed, only loosening blocking is guarded** (2.0.0, 12 Oct): disarming; taking apps, sites or browsers off the lists; longer quiet hours; a later school-day start; fewer work minutes per free minute (the weekly review's own change aside, D-71); a shorter wait. Those take the 24-hour wait or the override code; everything about the work changes at once (due dates included). (Not: due-date changes needing the code.) Applies: `protect/`.
 - **D-47. The override is a code from an authenticator app a parent holds** (Q17); nothing is ever emailed. Protection is friction, not security.
 - **D-48. The self-repair permission is granted over adb** (Q19).
 - **D-49. What's blocked:** video and social apps, their sites in Chrome and Brave, and Firefox and Tor outright while blocking applies. Never blocked: calls, messages, study apps, maps and travel, banking, authenticators, AI assistants, health and support apps.
@@ -95,9 +95,9 @@ How the app works in detail is in [spec/](spec/); how the work is done is in [de
 ## Learning and review
 
 - **D-68. The app measures and calibrates**: a self-assessment after each completion and a Sunday check-in; slot outcomes are what it learns from.
-- **D-69. Your own reckoning teaches the pace nothing; a total Felix works out at your pace still does** (3.1.4, 17 Oct), measured against the app's estimate it came from, while the task's content is unchanged (`TaskItem.pacedTeaches`; a read for newer prompts keeps it, new content ends it).
+- **D-69. Your own reckoning teaches the pace nothing; a total Felix works out at your pace still does** (3.1.4, 17 Oct), measured against the app's estimate it came from, while the task's content is unchanged (`TaskItem.pacedTeaches`; a read for newer prompts keeps it, new content ends it). Steps you or Felix give without a new total are planned as given, and the task still teaches the pace against the app's estimate, its total.
 - **D-70. A class's own multiplier counts from its third timed piece**; its kind's until then (IMP-P2-016).
-- **D-71. The weekly review's bounded changes apply at once, armed or not**, and say what changed: the margin, undated minutes, the free-time ratio, school-day hours by up to an hour; never the piece length (D-33). Reviews that only propose were declined.
+- **D-71. The weekly review's bounded changes apply at once, armed or not**, and say what changed: the margin, undated minutes, the free-time ratio, school-day hours by up to an hour; never the piece length (D-33). Reviews that only propose were declined. The ratio can go anywhere in its range, so the review may loosen a stricter one you set without D-46's wait (17 Oct, as intended).
 - **D-72. Reset**: a row per area and *Everything learned*, a backup first, no code; never the key, the sources or protection.
 
 ## Notifications
@@ -115,8 +115,8 @@ How the app works in detail is in [spec/](spec/); how the work is done is in [de
 ## Privacy and the public repository
 
 - **D-79. The repository is public**: real data lives in the git-ignored `private/` and is never committed; the evaluation set stays there, only its harness committed. Nothing personal goes in code, tests, docs or PR text ([development.md](development.md#the-repository-is-public)).
-- **D-80. The existing fixtures' real teacher and class names may stay** (1.7.0), and so may the class group link in an assignment's instructions there (not sensitive, 17 Oct); new fixtures are made up, and nothing more personal is added.
-- **D-81. Rewriting the repository's history to remove data is your call** (open: see below).
+- **D-80. What's already in the repository may stay** (1.7.0; 17 Oct): the existing fixtures' real teacher and class names, the class group link in an assignment's instructions there (not sensitive), and the real email, appointment and homework text, family references and first name in some code comments, tests, strings and the weekly summary's prompt (`GmailSource`, `Mime`, `PowerPlannerItems`, `WidgetModel`, `AnkiRulesTest`, `Totp` among them), none of it to be cleared. New fixtures are made up, and nothing more personal is added.
+- **D-81. Rewriting the repository's history to remove data is your call**: answered in the cleanup plan's Q8 ([plan_targeted_cleanup/QUESTIONS.md](plan_targeted_cleanup/QUESTIONS.md)).
 
 ## Development
 
@@ -139,19 +139,5 @@ How the app works in detail is in [spec/](spec/); how the work is done is in [de
 
 What's still waiting for you:
 
-- **The cleanup plan's questions** ([plan_targeted_cleanup/QUESTIONS.md](plan_targeted_cleanup/QUESTIONS.md)): Q1–Q6, Q8 (whether to rewrite git's history to remove the account address), Q9 and Q10.
-- **Personal data still in the repository**: real email, appointment and homework text and family references in some code comments and tests (among them `GmailSource`, `Mime`, `PowerPlannerItems`, `WidgetModel` and `AnkiRulesTest`), a family relation named in some strings and the weekly summary's prompt, and a first name as the authenticator's default account label (`Totp`). Worth clearing in the cleanup's naming phase.
-- **Merging the Teams widget app's backend**: not now (17 Oct assessment, D-6); worth revisiting only if changes across both repositories become frequent.
-- **Returned work with feedback (NF-06)**: say when Teams returns a piece of work with feedback, so the widget app's half can be built.
+- **Returned work with feedback (NF-06)**: not to be built yet (17 Oct). This app's half is ready (`TeamsSource` reads the widget app's `/returned`); the widget app's isn't. A returned piece of work without feedback, like the old one in Teams, is enough for most of it: finding returned work (its card in Completed, its page's status and date, the Activity feed's "returned an assignment" row) and the widget app's `/returned` rows. Only one with feedback shows where the feedback sits on its page and how it's laid out (its heading, its text, points, whether a button hides it), so reading the feedback itself waits for one, or is built from a guess and checked when one comes.
 - **Not yet tried on the phone**: a photo check of written homework and photographing homework into a task; re-arming with the authenticator kept, and the *Arm now?* list (needs the parent); the free-time countdown; the widget's red ! at its smallest size.
-- **Your copy of the backups off the phone** (D-77).
-- **Two checks left from the review v2 build**: whether Felix's 07:00 briefing reads as his own message; and the app's questions about long calendar events (answer them, or tell Felix which are free).
-- **Found while writing the spec** (17 Oct), for you to decide:
-  - A day or a time given to overdue work is accepted (`Instructions.latePin`), so Felix says it's done, but the plan doesn't use it (`pinnedTime`, `keptDay`); Day's own moves refuse it (`pinProblem`). A bug to fix.
-  - A weekday off school is planned with the weekend's yield but teaches the weekday's (`Days.record`). Should it teach the weekend's?
-  - A calendar event the app has to ask about, within the next week, takes no time until you answer. Intended?
-  - Steps you or Felix give without a new total are planned as given, and the task still teaches the pace against the app's estimate (its total). Confirm that's wanted.
-  - The weekly review can set the work minutes per free minute anywhere in its range at once, armed or not (D-71), so a stricter value you set (say 10) can be loosened to 5 without the wait D-46 puts on you. Intended?
-  - Unstarring an email finishes it, and as every starred email is Admin, finishing it earns free time. Intended?
-  - Two prompts say what the code doesn't do: the instructions reader's says you check a reading before it's applied (D-67: it's applied at once), and the chat's says a new task's date with no time means the end of that day (an Event's is set to 09:00). To tidy.
-- **An old reply under *Your changes*** (from the evening of 16 Oct) to discard.

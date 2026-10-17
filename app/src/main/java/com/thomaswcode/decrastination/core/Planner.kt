@@ -283,7 +283,7 @@ object Planner {
         }
         // A time you gave for a task's next piece (PL-04): that piece a run of its own on the time's day,
         // from the time, so the rest follow it; none where its day has gone, or the time is at or past
-        // its real deadline [real].
+        // its real deadline [real] still to come.
         fun pinnedAt(task: TaskItem, pieces: List<Piece>, real: Long?): List<Piece> {
             val at = pinnedTime(task, real, input) ?: return pieces
             val first = pieces.firstOrNull() ?: return pieces
@@ -291,15 +291,16 @@ object Planner {
         }
         // A day you gave for all of a task (PL-04): each run of it from that day's start and by its end,
         // its last usable day whatever the margin, a deadline still only where its own is that day;
-        // none where the day has gone, or is after its real deadline's [real].
+        // none where the day has gone, or is after its real deadline's [real] still to come. A run
+        // already overdue keeps its deadline gone by, so it's still overdue on that day (D-30).
         fun keptTo(task: TaskItem, runs: List<Item>, real: Long?): List<Item> {
             // A run at a time you gave is on its day, whatever the margin.
             val timed = runs.map { item -> item.chunks.firstNotNullOfOrNull { it.at }?.let { item.pinnedTo(date(it, zone)) } ?: item }
             val day = keptDay(task, real, input) ?: return timed
             val (start, end) = dayOf(day.atStartOfDay(zone).toInstant().toEpochMilli())
             return timed.map { item ->
-                val within = item.deadline in start..end
-                item.pinnedTo(day, if (within) item.deadline else end, soft = false, item.chunks.map { it.pinned() }, item.hard && within, maxOf(item.notBefore ?: start, start))
+                val kept = item.deadline in start..end || (item.hard && item.deadline < input.now)
+                item.pinnedTo(day, if (kept) item.deadline else end, soft = false, item.chunks.map { it.pinned() }, item.hard && kept, maxOf(item.notBefore ?: start, start))
             }
         }
         val items = work.map { t -> startOf(t)?.let { from -> t.copy(notBefore = listOfNotNull(t.notBefore, from).maxOrNull()) } ?: t }
@@ -313,14 +314,19 @@ object Planner {
             // the time, its week counted from it, as from a plan's date gone by.
             val at = pinnedTime(task, real, input)
             val due = plannedDue(task.dueAt, real, input.now)?.takeIf { d -> at == null || d == real || d >= at }
-            val planned = if (due == task.dueAt) task else task.copy(dueAt = due)
+            // Overdue work at a time you gave (D-30) starts then: its deadline gone by can't hold the
+            // rest of it back, as a deadline still to come holds a start past it ([windows]).
+            val planned = (if (due == task.dueAt) task else task.copy(dueAt = due))
+                .let { t -> if (at != null && due != null && due < input.now) t.copy(notBefore = maxOf(t.notBefore ?: at, at)) else t }
             // A step's own dates gone by were a plan's too: it's done with its task's own.
             val pieces = pieces(task, input, held[task.id].orEmpty()).map { p -> if (p.due != null && p.due < input.now) p.undated() else p }
             val deadline = due ?: softWeek(at ?: task.dueAt ?: task.firstSeenAt, input)
             keptTo(task, windows(planned, deadline, soft = due == null, hard = due != null && due == real, pinnedAt(task, pieces, real)) { start -> softWeek(start, input) }, real)
         }.filter { it.chunks.isNotEmpty() }
 
-        val lastDeadline = items.maxOfOrNull { date(it.deadline, zone) } ?: today
+        // The latest day any work must reach: its deadline's, or the day you put it on (overdue work
+        // there keeps its deadline gone by, D-30).
+        val lastDeadline = items.maxOfOrNull { item -> maxOf(date(item.deadline, zone), item.pinnedDay ?: today) } ?: today
         // Far enough for the latest deadline, and for every step of a task limited per day to
         // have its own day (a deck of 300 unseen cards is 15 days of 20).
         val stepDays = items.maxOfOrNull { item ->
@@ -1073,12 +1079,13 @@ object Planner {
 
     /**
      * The day you gave for all of [task] (PL-04), where it's still to come, not before the day it can
-     * start, and not after its real deadline's ([real]).
+     * start, and not after its real deadline's ([real]) while that's still to come: overdue work can
+     * go to any day from today (D-30), as [Instructions.latePin] lets it.
      */
     private fun keptDay(task: TaskItem, real: Long?, input: Input): LocalDate? {
         val day = task.userOnDay?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: return null
         val start = task.notBefore?.let { date(it, input.zone) }
-        return day.takeIf { it >= date(input.now, input.zone) && (start == null || it >= start) && (real == null || it <= date(real, input.zone)) }
+        return day.takeIf { it >= date(input.now, input.zone) && (start == null || it >= start) && (real == null || real <= input.now || it <= date(real, input.zone)) }
     }
 
     /** Why a time won't be kept for a task's next piece ([pinProblem]). */
@@ -1086,27 +1093,29 @@ object Planner {
 
     /**
      * Why [at] wouldn't be kept as a time for [task]'s next piece (PL-04), as [pinnedTime] has it:
-     * its day gone, before the task can start, or at or past its real deadline; null if it would.
-     * Checked before a move by hand is made (UI-03, UI-04), so none is said done that the plan drops.
+     * its day gone, before the task can start, or at or past its real deadline still to come; null
+     * if it would (overdue work takes any time from now, D-30). Checked before a move by hand is
+     * made (UI-03, UI-04), so none is said done that the plan drops.
      */
     fun pinProblem(task: TaskItem, at: Long, now: Long, zone: ZoneId): PinProblem? {
         val end = date(at, zone).plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli() - 1
         return when {
             end < now -> PinProblem.DayGone
             task.notBefore?.let { at < it } == true -> PinProblem.NotYet
-            task.realDeadline?.let { at >= it } == true -> PinProblem.PastDeadline
+            task.realDeadline?.let { it > now && at >= it } == true -> PinProblem.PastDeadline
             else -> null
         }
     }
 
     /**
      * The time you gave for [task]'s next piece (PL-04), where its day hasn't gone, it's no earlier
-     * than the task can start, and it's before its real deadline ([real]).
+     * than the task can start, and it's before its real deadline ([real]) while that's still to
+     * come: overdue work takes any time from now (D-30), as [Instructions.latePin] lets it.
      */
     private fun pinnedTime(task: TaskItem, real: Long?, input: Input): Long? {
         val at = task.userAtTime ?: return null
         val end = date(at, input.zone).plusDays(1).atStartOfDay(input.zone).toInstant().toEpochMilli() - 1
-        return at.takeIf { end >= input.now && (task.notBefore == null || it >= task.notBefore) && (real == null || it < real) }
+        return at.takeIf { end >= input.now && (task.notBefore == null || it >= task.notBefore) && (real == null || real <= input.now || it < real) }
     }
 
     /**
