@@ -119,7 +119,7 @@ It runs again once Claude can be asked again (its rest over, `EnrichWorker.retry
 
 ## The prompts' version (AC-06)
 
-`Prompts.VERSION` is 6. Each reading keeps the version of the prompts that made it (`Enrichment.promptVersion`; 1 where none is stored).
+`Prompts.VERSION` is 7 (7: a long text's summary, D-93). Each reading keeps the version of the prompts that made it (`Enrichment.promptVersion`; 1 where none is stored).
 - With Claude on, an open task Claude read under an older version is read again once, within the run's 20 calls, the oldest first.
 - **Not a task with a step of its reading done** (`partDone`, `core/Enrichment.kt`): newer prompts could give its work as other steps, and a tick goes only to a step of its name, so work done would be planned again. It's read again only when its content changes or you ask.
 - Read for such a reason, Claude is told which steps are done: each listed "(N min, done)", to be kept exactly as it is (title and minutes, still in `effortMin`), with only the work left given in the others (AI-08, `Prompts.describe`).
