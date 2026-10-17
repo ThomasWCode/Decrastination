@@ -31,7 +31,7 @@ import kotlinx.coroutines.withContext
 /**
  * The phone's calendar as busy time (Q7, docs/spec/slots-and-calendar.md): the next fortnight's events, judged one
  * by one ([EventJudge]), given to the planner; an all-day event the rules can't judge is asked
- * about once, in a notification, within the week before it.
+ * about once, in a notification, within the week before it, and takes all its time till answered.
  */
 object CalendarTime {
     const val PERMISSION = Manifest.permission.READ_CALENDAR

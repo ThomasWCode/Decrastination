@@ -281,13 +281,14 @@ class EventJudgeTest {
 
     @Test
     fun `an all-day event past the week ahead counts as a few hours of its day, not a question`() {
-        // Seen on Thursday 8 Oct: the van hire on Saturday is asked about; a trip three weeks on
-        // isn't asked yet (DX-14), but takes its few hours out of its day meanwhile.
+        // Seen on Thursday 8 Oct: the van hire on Saturday is asked about, all of its day till you
+        // answer; a trip three weeks on isn't asked yet (DX-14), but takes its few hours out of its
+        // day meanwhile.
         val now = Fixtures.at("2026-10-08T17:00")
         val trip = CalendarEvent(5, "School trip", LocalDate.parse("2026-10-29").atStartOfDay(java.time.ZoneOffset.UTC).toInstant().toEpochMilli(), LocalDate.parse("2026-10-30").atStartOfDay(java.time.ZoneOffset.UTC).toInstant().toEpochMilli(), allDay = true)
         val time = EventJudge.time(listOf(event("Van hire", allDay = true), trip), emptyMap(), LONDON, askUntil = now + 7 * DAY)
         assertEquals(listOf("Van hire"), time.toAsk.map { it.title })
-        assertEquals(mapOf(LocalDate.parse("2026-10-29") to EventJudge.FEW_HOURS_MIN), time.dayLoads)
+        assertEquals(mapOf(LocalDate.parse("2026-10-10") to 24 * 60, LocalDate.parse("2026-10-29") to EventJudge.FEW_HOURS_MIN), time.dayLoads)
         // Answered, the answer holds there too.
         val answered = EventJudge.time(listOf(trip), mapOf(EventJudge.key(trip) to "busy"), LONDON, askUntil = now + 7 * DAY)
         assertEquals(mapOf(LocalDate.parse("2026-10-29") to 24 * 60), answered.dayLoads)
@@ -298,7 +299,20 @@ class EventJudgeTest {
         val time = EventJudge.time(listOf(event("Van hire", allDay = true), event("van hire ", allDay = true)), emptyMap(), LONDON, askUntil = Long.MAX_VALUE)
         assertEquals(2, time.toAsk.size)
         assertEquals(1, CalendarTime.questions(time.toAsk, emptySet(), start - 3_600_000L).size)
-        assertEquals(emptyMap(), time.dayLoads)
+        // Till you answer, all of its day (D-44).
+        assertEquals(mapOf(LocalDate.parse("2026-10-10") to 24 * 60), time.dayLoads)
+    }
+
+    @Test
+    fun `an event asked about takes all its time till you answer, then what you said`() {
+        // D-44: a nine-hour van hire on Saturday, not yet answered, takes its hours; answered "None", none.
+        val hire = event("Van hire", hours = 9)
+        val time = EventJudge.time(listOf(hire), emptyMap(), LONDON, askUntil = Long.MAX_VALUE)
+        assertEquals(listOf(hire), time.toAsk)
+        assertEquals(listOf(Busy(hire.start, hire.end)), time.busy)
+        val answered = EventJudge.time(listOf(hire), mapOf(EventJudge.key(hire) to "free"), LONDON, askUntil = Long.MAX_VALUE)
+        assertEquals(emptyList(), answered.busy)
+        assertEquals(emptyList(), answered.toAsk)
     }
 }
 
