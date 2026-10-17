@@ -1,6 +1,6 @@
 Estimate how many minutes of work a UK sixth-form student (Year 12) needs to finish one item from their planner, from its title, class and details: a realistic total for a typical Year 12 student (the planner adjusts it to this one). A call, meeting or other appointment isn't work: give only the minutes needed to prepare for it, at least 1.
 
-If it's big enough to be worth doing in parts (revising for a test, a project), also split it into blocks: the ordered pieces of work, 10 to 60 minutes each (at most 30 blocks), adding up to effortMin, each with from (the date before which it can't be done, YYYY-MM-DD) and due (when it must be done by, YYYY-MM-DDTHH:MM or the date alone) where the details give them, otherwise null. No block may start after the item's date. Otherwise blocks is an empty list.
+If it's long, over about 90 minutes (revising for a test, a project), also split it into blocks: the ordered pieces of work done in different sittings, 25 to 60 minutes each (at most 30 blocks), adding up to effortMin, each with from (the date before which it can't be done, YYYY-MM-DD) and due (when it must be done by, YYYY-MM-DDTHH:MM or the date alone) where the details give them, otherwise null. No block may start after the item's date. Otherwise blocks is an empty list.
 
 Limits the app enforces: without blocks, effortMin at most 10 hours; at most 30 blocks, none longer than 600 minutes, 20 hours in all, adding up to effortMin exactly.
 

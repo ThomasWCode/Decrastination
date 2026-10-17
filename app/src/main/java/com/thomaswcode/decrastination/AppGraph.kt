@@ -285,13 +285,21 @@ class AppGraph private constructor(context: Context) {
         keep = ::keepSlots,
         hooks = listOf(
             { made -> SlotAlarms.arm(app, made, clock.now()) },
-            ::writeSlots,
+            // The calendar once plans have been quiet a while ([toWrite]).
+            { made -> toWrite.tryEmit(made); Unit },
             { _ -> WidgetUpdater.update(app) },
             // Felix's next message written ahead (AC-10): by itself, as a model call takes a while.
             { made -> scope.launch { runCatching { com.thomaswcode.decrastination.enrich.Ahead.run(this@AppGraph, made, clock.now()) }.onFailure { Log.w(TAG, "Writing ahead failed", it) } }; Unit },
         ),
         onFailure = { Log.w(TAG, "Replanning failed", it) },
     )
+
+    /**
+     * The plan to write to the calendar, once plans have been quiet [CALENDAR_WRITE_QUIET_MS] (17 Oct):
+     * a burst of changes (a chat answer's, one after another) is one write, not an event inserted and
+     * changed again while the calendar's sync still has it in hand, which brought copies of it back.
+     */
+    private val toWrite = MutableSharedFlow<Plan>(extraBufferCapacity = 1, onBufferOverflow = kotlinx.coroutines.channels.BufferOverflow.DROP_OLDEST)
 
     /** Today's slots as they pass: begun, or missed (PL-13). */
     val slots = Slots(this)
@@ -688,6 +696,10 @@ class AppGraph private constructor(context: Context) {
         }.onFailure { Log.w(TAG, "Can't watch the Teams widget", it) }
         scope.launch {
             teamsChanged.debounce(TEAMS_QUIET_MS).collect { syncer.sync(setOf(Source.Teams, Source.Anki)) }
+        }
+        // The calendar written once plans have been quiet a while.
+        scope.launch {
+            toWrite.debounce(CALENDAR_WRITE_QUIET_MS).collect { made -> runCatching { writeSlots(made) }.onFailure { Log.w(TAG, "Writing the calendar failed", it) } }
         }
         // A key problem standing from before, whose alert couldn't be shown then.
         reconcileAlerts()
@@ -2546,6 +2558,9 @@ class AppGraph private constructor(context: Context) {
         private const val WIDGET_DEBOUNCE_MS = 1_000L
 
         private const val CALENDAR_QUIET_MS = 5_000L
+
+        /** How long plans are quiet before the calendar's written ([toWrite]). */
+        private const val CALENDAR_WRITE_QUIET_MS = 5_000L
 
         /** After a failed call, the model is left alone this long. */
 
