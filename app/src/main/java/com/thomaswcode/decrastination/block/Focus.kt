@@ -736,8 +736,10 @@ class Focus(
                     return Planner.remaining(t, state.calibration.multiplierFor(t)) - delegated - hand
                 }
                 // By your minutes or by the app's estimate, each in its own scale, the less: raising a
-                // task's minutes plans more time for it, but can't make finishing it earn more.
-                val remaining = minOf(owed(counted), owed(counted.copy(userEffortMin = null)))
+                // task's minutes plans more time for it, but can't make finishing it earn more. The app's
+                // estimate leaves out your steps as well as your minutes (#49's review): yours are planned
+                // as given, its by the pace learned.
+                val remaining = minOf(owed(counted), owed(counted.copy(userEffortMin = null, userSteps = null)))
                 Credit.forCompletion(remaining.roundToInt().coerceAtLeast(0), ratio)
             }
             // Its slots kept without earning: given with it, once, within today's plan.

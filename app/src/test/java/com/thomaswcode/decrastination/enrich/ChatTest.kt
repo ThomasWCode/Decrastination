@@ -3,6 +3,7 @@ package com.thomaswcode.decrastination.enrich
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.Fixtures.LONDON
 import com.thomaswcode.decrastination.core.About
+import com.thomaswcode.decrastination.core.Calibration
 import com.thomaswcode.decrastination.core.Change
 import com.thomaswcode.decrastination.core.ChangeType
 import com.thomaswcode.decrastination.core.ChatMessage
@@ -174,6 +175,24 @@ class ChatTest {
         val withEvents = ChatPrompts.context(emptyList(), listOf(drums, trip), emptyList(), now, LONDON)
         assertTrue("| Drums |" in withEvents, withEvents)
         assertFalse("| Trip |" in withEvents, withEvents)
+    }
+
+    @Test
+    fun `the context gives the student's pace, and what each task's minutes come to in the plan by it`() {
+        // Your call (17 Oct): Felix knows the pace, so he allows for it; minutes given are planned as given.
+        val pace = Calibration(multipliers = mapOf("Homework|" to 1.5, "Homework|Physics" to 1.25), timed = mapOf("Homework|" to 6, "Homework|Physics" to 3))
+        val physics = bridge.copy(id = "teams:physics", sourceId = "physics", title = "Physics", className = "Physics")
+        val given = bridge.copy(id = "teams:given", sourceId = "given", title = "Given", subSteps = listOf(com.thomaswcode.decrastination.core.SubStep("All of it", 100)), userSteps = listOf(com.thomaswcode.decrastination.core.OwnStep("All of it", 100)))
+        val context = ChatPrompts.context(listOf(bridge, physics, given), emptyList(), emptyList(), now, LONDON, calibration = pace)
+        assertTrue("- teams:bridge | Bridge and Balances Beam Q's | Teams | Homework | Tue 13 Oct 2026 08:30 | 100, planned as 150 at their pace | 0 | -" in context, context)
+        assertTrue("| Physics | Teams | Homework | Tue 13 Oct 2026 08:30 | 100, planned as 125 at their pace |" in context, context)
+        assertTrue("| Given | Teams | Homework | Tue 13 Oct 2026 08:30 | 100, as given |" in context, context)
+        assertTrue("- Homework | ×1.5 (from 6 timed)" in context, context)
+        assertTrue("- Homework, Physics | ×1.25 (from 3 timed)" in context, context)
+        // Nothing learned yet: said so, and the minutes as they are.
+        val none = ChatPrompts.context(listOf(bridge), emptyList(), emptyList(), now, LONDON, calibration = Calibration())
+        assertTrue("(nothing learned yet: the app's estimates are planned as they are)" in none, none)
+        assertTrue("| Tue 13 Oct 2026 08:30 | 100 | 0 | -" in none, none)
     }
 
     @Test

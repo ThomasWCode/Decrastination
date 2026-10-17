@@ -8,6 +8,7 @@ import com.anthropic.models.messages.MessageCreateParams
 import com.anthropic.models.messages.OutputConfig
 import com.anthropic.models.messages.StopReason
 import com.thomaswcode.decrastination.core.About
+import com.thomaswcode.decrastination.core.Calibration
 import com.thomaswcode.decrastination.core.Change
 import com.thomaswcode.decrastination.core.ChangeType
 import com.thomaswcode.decrastination.core.ChatMessage
@@ -35,6 +36,8 @@ import java.time.LocalTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import kotlin.math.abs
+import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
@@ -80,6 +83,7 @@ object ChatPrompts {
         1. Add tasks of their own (newTasks): something to do that isn't listed ("write my UCAS statement by 1 December", "buy mum a present before Sunday"). Give a short title in their words; kind: Homework, Revision, Admin, or Event for something that happens at a time (an appointment, a match); subject if it's for one (else an empty string); dueDate and dueTime if they gave them (an event's start; no time means the end of that day); minutes for the whole thing (your best estimate if they didn't say, and say so in your reply); startDate if it can't be started before a day; notes only for something worth keeping (else an empty string); and steps only for a big task worth splitting, each with minutes (adding up to the task's) and its own dates where it has them.
         2. Change their tasks and days (changes), with these:
 """ + InstructionPrompts.CHANGE_TYPES.prependIndent("        ") + """
+        Minutes you set (a new task's, a Minutes change, each step's) are planned exactly as you set them, never stretched by the student's pace: that's only for the app's own estimates (the context gives their pace, and what each task's minutes come to in the plan by it). So where you estimate, allow for their pace (steps for a task the app estimated, at their pace, come with a Minutes change for the new total); where they say how long something takes, use theirs.
         3. Answer questions about their work from what you're given, briefly: what's due when from the task list; what's on a day, how full it is, what to do next and why something isn't planned from the plan. The plan is what the app has them do and shows them, so say what it says rather than planning the work again yourself. The context gives the time now: a deadline later today is still ahead ("due at 16:00 today"), not past, and a slot marked past has gone by; say "overdue" only where the plan marks it so.
         4. Remember (memories): a fact about the student worth keeping for later (a preference, a pattern, something about their week: "football is on Tuesdays"), with a short topic, so a newer fact on the same topic replaces it; or, kind "rule", a standing instruction about how you should behave ("don't message before 8", "be blunter"). To forget one, give its topic (a rule's own words) and an empty text. Busy times, limits and days off are changes, not memories; most messages need none.
         5. Act (actions): tickStep when the student says a step is done, untickStep when one ticked isn't (taskId, and stepIndex from the list's steps); done when they've finished a task of their own (from Yours), or one whose tick finishes it; reopen for one of theirs finished by mistake (from the finished list); delete for a task of their own they no longer want (another source's they can only say isn't a task: NotATask); open to show them a task; setting to change one of the settings listed with their values (taskId empty, setting its name, value as the list writes it: a number, a time as HH:MM, hours as HH:MM-HH:MM). stepIndex is -1 but for steps, setting and value empty but for settings. A task from Teams, Power Planner, Gmail or Anki is done when its source says so (handed in, archived, studied), so it can't be marked done. Most messages need none.
@@ -226,14 +230,26 @@ object ChatPrompts {
     /**
      * What the app knows now: today, the open tasks, the fortnight's events, and the changes in use;
      * since 16 Oct the student's own finished lately (to open again) and the [settings] he may change,
-     * with their values. The plan's sent beside it ([plan], [turns]).
+     * with their values; since 17 Oct their pace as [calibration] has learned it, and what each task's
+     * minutes come to in the plan by it, so he allows for it in the minutes he sets (planned as he
+     * sets them). The plan's sent beside it ([plan], [turns]).
      */
-    fun context(tasks: List<TaskItem>, events: List<CalendarEvent>, applied: List<Instruction>, now: Long, zone: ZoneId, classMap: Map<String, String> = emptyMap(), different: List<String> = emptyList(), settings: Settings? = null): String = buildString {
+    fun context(tasks: List<TaskItem>, events: List<CalendarEvent>, applied: List<Instruction>, now: Long, zone: ZoneId, classMap: Map<String, String> = emptyMap(), different: List<String> = emptyList(), settings: Settings? = null, calibration: Calibration? = null): String = buildString {
         fun at(time: Long) = Instant.ofEpochMilli(time).atZone(zone).format(WHEN)
+        // A task's minutes, and where a pace is learned for its kind and class, what the plan makes of them:
+        // the app's estimate stretched by it, or minutes given (the student's, Felix's), as they are.
+        fun minutes(t: TaskItem): String {
+            val pace = calibration?.multiplier(t.kind, t.className) ?: 1.0
+            return when {
+                abs(pace - 1.0) < 0.005 -> "${t.effortMin}"
+                t.yourMinutes || t.yourSteps -> "${t.effortMin}, as given"
+                else -> "${t.effortMin}, planned as ${(t.effortMin * pace).roundToInt()} at their pace"
+            }
+        }
         val byId = tasks.associateBy { it.id }
         appendLine("Today: ${Instant.ofEpochMilli(now).atZone(zone).format(TODAY)} (${zone.id})")
         appendLine()
-        appendLine("Open tasks (id | title | from | kind | due, a real deadline unless marked a plan, which is never overdue and moves on once it passes | minutes in all | minutes worked so far | can't start before):")
+        appendLine("Open tasks (id | title | from | kind | due, a real deadline unless marked a plan, which is never overdue and moves on once it passes | minutes in all, with what the plan makes of them at their pace where it's learned | minutes worked so far | can't start before):")
         // By the date shown (the deadline in force, PL-14), so a plan's date gone by doesn't crowd nearer ones out of the list.
         val open = tasks.filter { it.isOpen && !it.hidden }.sortedBy { it.deadlineAt(now) ?: it.dueAt ?: Long.MAX_VALUE }
         if (open.isEmpty()) appendLine("(none)")
@@ -241,9 +257,22 @@ object ChatPrompts {
             val start = listOfNotNull(t.availableFrom, t.userFrom, t.notBefore).maxOrNull()?.takeIf { it > now }
             // A date the app or Claude set is a plan, not a deadline (PL-14): said, so it's not called overdue.
             val due = (t.deadlineAt(now) ?: t.dueAt)?.let { at(it) + if (t.hardAt(now)) "" else " (a plan)" } ?: "no date"
-            appendLine("- ${t.id} | ${t.title.take(MAX_TITLE)} | ${t.source.label} | ${t.kind.label} | $due | ${t.effortMin} | ${t.workedMin + t.photoMin} | ${start?.let(::at) ?: "-"}")
+            appendLine("- ${t.id} | ${t.title.take(MAX_TITLE)} | ${t.source.label} | ${t.kind.label} | $due | ${minutes(t)} | ${t.workedMin + t.photoMin} | ${start?.let(::at) ?: "-"}")
             // Its steps by their place, for a tick (AI-14).
             t.subSteps.take(OwnTasks.MAX_STEPS).forEachIndexed { i, step -> appendLine("    step $i: ${step.title.take(MAX_TITLE)} (${step.minutes} min)${if (step.done) ", done" else ""}") }
+        }
+        // Their pace (17 Oct): what the app's own estimates are planned by, never minutes given.
+        if (calibration != null) {
+            appendLine()
+            appendLine("Their pace, learned from work they've finished (kind, and class where it's its own | how long their work takes against the app's own estimates): the plan stretches only the app's estimates by it.")
+            val learned = calibration.multipliers.entries.sortedBy { it.key }
+            if (learned.isEmpty()) appendLine("(nothing learned yet: the app's estimates are planned as they are)")
+            learned.take(InstructionPrompts.MAX_TASKS).forEach { (key, pace) ->
+                val kind = Kind.entries.firstOrNull { it.name == key.substringBefore('|') }?.label ?: key.substringBefore('|')
+                val of = key.substringAfter('|').takeIf { it.isNotEmpty() }?.let { "$kind, ${it.take(MAX_TITLE)}" } ?: kind
+                val from = calibration.timed[key]?.let { " (from $it timed)" }.orEmpty()
+                appendLine("- $of | ×" + "%.2f".format(Locale.UK, pace).trimEnd('0').trimEnd('.') + from)
+            }
         }
         // Work that looks the same from two sources (DX-15): a SameAs change keeps one.
         val alike = com.thomaswcode.decrastination.core.Duplicates.candidates(tasks, classMap, different)
