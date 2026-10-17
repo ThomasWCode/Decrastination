@@ -103,6 +103,8 @@ data class TaskItem(
     val aiEffortMin: Int? = null,
     /** Your estimate of the whole task, from an instruction ([ChangeType.Minutes]), which beats every other. */
     val userEffortMin: Int? = null,
+    /** [userEffortMin] is the app's estimate at your pace, as Felix worked it out ([Change.paced], [pacedMinutes]). */
+    val userEffortPaced: Boolean = false,
     /** How far the source says it is (Power Planner's percent complete), 0 to 1. */
     val sourceProgress: Double = 0.0,
     /**
@@ -251,6 +253,14 @@ data class TaskItem(
      * not scaled by what the app has learned of its own estimates.
      */
     val yourMinutes: Boolean get() = userEffortMin != null || source == Source.Own
+
+    /**
+     * Your minutes are the app's own estimate at your pace, as Felix worked them out to size its
+     * steps (your call, 17 Oct), not your own reckoning: planned as given, like any of yours, but
+     * what's finished is measured against the app's estimate ([appEffortMin]), so the pace still
+     * learns from it. Only where the app made the estimate: never a task of your own.
+     */
+    val pacedMinutes: Boolean get() = userEffortPaced && userEffortMin != null && source != Source.Own
 
     /**
      * Its steps are yours: typed into a task of your own, or given any task by you or Felix (an

@@ -299,7 +299,7 @@ private fun TaskTile(task: TaskItem, index: Int, count: Int, now: Long, zone: ja
                 if (hiddenUntil != null) Pill("Hidden till ${Format.at(hiddenUntil, now, zone)}")
                 if (waits) Pill("Waits for another task")
                 if (task.userDueAt != null) Pill("Due date yours")
-                if (task.userEffortMin != null) Pill("Minutes yours")
+                if (task.userEffortMin != null) Pill(if (task.pacedMinutes) "Minutes at your pace" else "Minutes yours")
                 if (startsAt != null) Pill("Starts ${Format.at(startsAt, now, zone)}")
                 steps?.let { s -> Pill("${s.count { it.done }}/${s.size} steps") }
             }

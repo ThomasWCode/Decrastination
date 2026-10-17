@@ -270,7 +270,12 @@ fun TaskSheet(
                     "Takes",
                     "${Format.minutes(task.effortMin)} in all" + if (task.workedMin > 0) ", ${Format.minutes(task.workedMin)} worked" else "",
                     note = listOfNotNull(
-                        if (!own && task.userEffortMin != null) "Yours: the app reckoned ${Format.minutes(task.appEffortMin)}" else null,
+                        if (!own && task.userEffortMin != null) {
+                            // A total Felix worked out at your pace (17 Oct), or your own.
+                            if (task.pacedMinutes) "The app's ${Format.minutes(task.appEffortMin)} at your pace" else "Yours: the app reckoned ${Format.minutes(task.appEffortMin)}"
+                        } else {
+                            null
+                        },
                         if (task.subSteps.isNotEmpty() && task.userEffortMin != null) "Its steps are scaled to match" else null,
                         // Read from its photo (AI-23), with what Claude saw in it.
                         if (fromPhoto(task)) "From your photo" + (Enrichments.current(task)?.reason?.takeIf { it.isNotBlank() }?.let { ": “$it”" } ?: "") else null,
