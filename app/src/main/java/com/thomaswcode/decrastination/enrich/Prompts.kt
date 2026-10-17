@@ -41,9 +41,10 @@ object Prompts {
      * longer steps (3.1.1, your call, 17 Oct: a task in parts only where it is, its few minutes'
      * admin in the step it belongs to); 5: a piece of work whole, never split by what's in it, the
      * app cutting one over an hour into sittings (3.1.2, the same day); 6: whole up to a task's most,
-     * the schema saying so (3.1.2's review, before it was installed).
+     * the schema saying so (3.1.2's review, before it was installed); 7: a long text's summary, for
+     * Felix (3.2.0, D-93).
      */
-    const val VERSION = 6
+    const val VERSION = 7
 
     /**
      * Text past this is left out (and the model told). Room for a long email's own calendar of
@@ -85,6 +86,7 @@ object Prompts {
             - nextStep: the one concrete next action, as an instruction under 12 words ("Reply to Mr Hughes confirming the trip").
             - question: the one question that would settle a reading the text can't (which Friday; whether the test is the 12th or the 19th), or what the student means to do about it when the email doesn't make that clear; otherwise null.
             - reason: the phrase in the email that gave the deadline or the task, quoted (under 160 characters); empty if nothing did.
+            - summary: $EMAIL_SUMMARY
             - blocks: only when the email holds separate pieces of work with dates of their own (a calendar of deadlines, an application that opens on a date): the pieces of work in order, each with its minutes (at most $MAX_BLOCKS blocks, longer ones if there's more work than that), from (the date before which it can't be done, or null) and due (when it must be done by, written as for deadline, only where the email gives one; otherwise null, and the block waits for the email's own deadline, or with none is planned within the week). A window the email gives only roughly ("applications open in December") runs from its first day to its last. The planner schedules each block in its own window, so one email can become work spread over months, kept after the email is archived. An email with blocks is Admin, and its effortMin is their total. One job (filling in a form, writing a proposal, putting a video on a website), however long or however many small actions it takes, has no blocks: the app cuts long work into sittings itself, as it can't know how long each part of it takes. A few minutes' admin around the work (printing, uploading, replying to confirm) is never a block of its own: say it in nextStep. Otherwise an empty list.
 
             You see the conversation the starred message is in, oldest message first (where a long one's earlier messages had to be cut short or left out, it says so); when there's more than one, each is headed by who sent it and when ("From you" for the student's own). The first message shown keeps what it quotes from earlier (cut short too, where it had to be); in the ones after it, quoted text and signatures are left out and marked in square brackets, as what they quote is shown above them. You don't see attachments, only their names (an attached email goes by its subject). Where what the email asks turns on an attachment or an earlier message you can't see, and its name doesn't tell you, don't guess what it asked: make nextStep say to read it first, naming it ("Read the attached consent form and decide"), and effortMin 10.
@@ -102,13 +104,23 @@ object Prompts {
             - testDate: if the work prepares for a test or assessment on a stated date, that date (YYYY-MM-DD); otherwise null.
             - question: rarely: the one question that would settle a reading the text can't (which Friday; whether the test is the 12th or the 19th); otherwise null.
             - reason: the phrase in the instructions that gave the test date or the split, quoted (under 160 characters); empty if nothing did.
+            - summary: $TEXT_SUMMARY
         """.trimIndent()
         Enrichments.Job.Effort -> """
             Estimate how many minutes of work ${student(year)} needs to finish one item from their planner, from its title, class and details: a realistic total for a typical Year 12 student (the planner adjusts it to this one). A call, meeting or other appointment isn't work: give only the minutes needed to prepare for it, at least 1.
 
             Give blocks only where its details list pieces of work with dates of their own: the ordered pieces, each with its minutes (at most $MAX_BLOCKS blocks), adding up to effortMin, each with from (the date before which it can't be done, YYYY-MM-DD) and due (when it must be done by, YYYY-MM-DDTHH:MM or the date alone) where the details give them, otherwise null. No block may start after the item's date. Otherwise blocks is an empty list, however long the work is (revising for a test, a project): the app cuts long work into sittings itself, as it can't know how long each part of it takes.
+
+            Also give summary: $TEXT_SUMMARY
         """.trimIndent()
     }
+
+    /**
+     * What a reading's [Enrichment.summary] is (D-93): from all of a long text, for Felix, who's told
+     * it in place of the text where it's too long for his room; empty for a short one.
+     */
+    private const val EMAIL_SUMMARY = "only where the conversation runs past a short paragraph (about 600 characters), what it asks of the student, from all of it, in at most 400 characters: what to do and by when, what to bring, send or pay, and anything a later message changed (the newest message wins). The student's assistant in the app is told it in place of the conversation. Otherwise empty."
+    private const val TEXT_SUMMARY = "only where the text runs past a short paragraph (about 600 characters), what it asks of the student, from all of it, in at most 400 characters: the work and its parts, what's needed, any dates, how it's handed in. The student's assistant in the app is told it in place of the text. Otherwise empty."
 
     /** The schema for [job]'s answer, as the API takes it: every object closed, every field required, optional ones nullable. */
     fun schema(job: Enrichments.Job): Map<String, Any> = when (job) {
@@ -122,6 +134,7 @@ object Prompts {
             "question" to nullable(mapOf("type" to "string")),
             "reason" to described(mapOf("type" to "string"), REASON),
             "blocks" to mapOf("type" to "array", "items" to block(vocabulary = false)),
+            "summary" to described(mapOf("type" to "string"), SUMMARY),
         )
         Enrichments.Job.Assignment -> obj(
             "subSteps" to mapOf("type" to "array", "items" to block(vocabulary = true)),
@@ -130,12 +143,17 @@ object Prompts {
             "testDate" to nullable(mapOf("type" to "string", "format" to "date")),
             "question" to nullable(mapOf("type" to "string")),
             "reason" to described(mapOf("type" to "string"), REASON),
+            "summary" to described(mapOf("type" to "string"), SUMMARY),
         )
         Enrichments.Job.Effort -> obj(
             "effortMin" to described(mapOf("type" to "integer"), "The minutes in all; with blocks, their sum"),
             "blocks" to mapOf("type" to "array", "items" to block(vocabulary = false)),
+            "summary" to described(mapOf("type" to "string"), SUMMARY),
         )
     }
+
+    /** A reading's [Enrichment.summary], as its schema says it. */
+    private const val SUMMARY = "What a text longer than about 600 characters asks of the student, from all of it, in at most 400 characters; empty for a shorter one"
 
     private val LOCAL_TIME = mapOf("type" to "string", "description" to "Local date and time, YYYY-MM-DDTHH:MM, or the date alone, YYYY-MM-DD")
 
@@ -262,16 +280,17 @@ object Answers {
         val question: String? = null,
         val reason: String = "",
         val blocks: List<Step> = emptyList(),
+        val summary: String = "",
     )
 
     @Serializable
     private data class Step(val title: String, val minutes: Int, val ankiSections: List<String> = emptyList(), val from: String? = null, val due: String? = null, val where: String? = null)
 
     @Serializable
-    private data class Split(val subSteps: List<Step>, val effortMin: Int, val ankiSections: List<String> = emptyList(), val testDate: String? = null, val question: String? = null, val reason: String = "")
+    private data class Split(val subSteps: List<Step>, val effortMin: Int, val ankiSections: List<String> = emptyList(), val testDate: String? = null, val question: String? = null, val reason: String = "", val summary: String = "")
 
     @Serializable
-    private data class Estimate(val effortMin: Int, val blocks: List<Step> = emptyList())
+    private data class Estimate(val effortMin: Int, val blocks: List<Step> = emptyList(), val summary: String = "")
 
     internal const val MAX_EFFORT = 600
 
@@ -284,6 +303,11 @@ object Answers {
     private const val MAX_REASON = 160
 
     private fun reason(text: String): String? = text.trim().trim('"', '“', '”').trim().takeIf { it.isNotEmpty() }?.take(MAX_REASON)
+
+    /** The longest summary of a long text kept (D-93): its 400 and some slack, for a model that runs over. */
+    private const val MAX_SUMMARY = 500
+
+    private fun summary(text: String): String? = text.trim().takeIf { it.isNotEmpty() }?.take(MAX_SUMMARY)
 
     /**
      * The Email job's kinds (AI-02): Admin, as a starred email is always something to do (16 Oct);
@@ -398,6 +422,7 @@ object Answers {
                     adjusted = checked.adjusted,
                     question = question(t.question),
                     reason = reason(t.reason),
+                    summary = summary(t.summary),
                 )
             }
             Enrichments.Job.Assignment -> json.decodeFromString(Split.serializer(), text).let { s ->
@@ -449,6 +474,7 @@ object Answers {
                     testDate = testDate,
                     question = question(s.question),
                     reason = reason(s.reason),
+                    summary = summary(s.summary),
                 )
             }
             Enrichments.Job.Effort -> json.decodeFromString(Estimate.serializer(), text).let { e ->
@@ -456,7 +482,7 @@ object Answers {
                 // Big enough to do in parts: its blocks, each perhaps with its own dates (Q12).
                 val checked = trusted(steps(e.blocks, now, zone, vocabulary = false, maxMinutes = MAX_EFFORT, dueBy = sourceDue(task), noun = "block", salvage = salvage), e.effortMin, e.blocks.size)
                 val blocks = checked.steps?.let { sittings(it, task.subSteps) }
-                base.copy(effortMin = blocks?.sumOf { it.minutes } ?: total, subSteps = blocks, dropped = checked.dropped, adjusted = checked.adjusted)
+                base.copy(effortMin = blocks?.sumOf { it.minutes } ?: total, subSteps = blocks, dropped = checked.dropped, adjusted = checked.adjusted, summary = summary(e.summary))
             }
         }
     }

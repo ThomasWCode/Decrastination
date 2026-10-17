@@ -298,6 +298,12 @@
         },
         "research": {
             "type": "string"
+        },
+        "details": {
+            "type": "array",
+            "items": {
+                "type": "string"
+            }
         }
     },
     "required": [
@@ -307,7 +313,8 @@
         "memories",
         "suggestedReplies",
         "actions",
-        "research"
+        "research",
+        "details"
     ],
     "additionalProperties": false
 }

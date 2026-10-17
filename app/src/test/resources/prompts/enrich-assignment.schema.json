@@ -97,6 +97,10 @@
         "reason": {
             "type": "string",
             "description": "The phrase in the text that gave the deadline, kind or test date, quoted, under 160 characters; empty if none did"
+        },
+        "summary": {
+            "type": "string",
+            "description": "What a text longer than about 600 characters asks of the student, from all of it, in at most 400 characters; empty for a shorter one"
         }
     },
     "required": [
@@ -105,7 +109,8 @@
         "ankiSections",
         "testDate",
         "question",
-        "reason"
+        "reason",
+        "summary"
     ],
     "additionalProperties": false
 }

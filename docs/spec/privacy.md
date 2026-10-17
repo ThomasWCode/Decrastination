@@ -21,8 +21,8 @@ Each call's text is cut to 40 000 characters, the profile to 16 000. What else e
 | A photo of homework (NF-01) | The photo, and today's date |
 | A photo check | Up to three photos of the work; the piece, its task's title, subject, steps done and instructions (1 500 characters) |
 | A piece's first steps (AI-15) | The task's title and subject, the piece and its minutes, attachments by name, its instructions (1 500 characters) |
-| The chat | The last 12 messages; the open tasks with their steps, the fortnight's calendar events (titles and times), your changes, your own tasks finished lately, Felix's settings, your pace, the plan's next 14 days |
-| Felix's messages | The reason and the time, the piece and today's slots, the free time, work its source confirmed, his last six messages and your replies, a reading's question |
+| The chat | The last 12 messages; the open tasks with their steps, the fortnight's calendar events (titles and times), your changes, your own tasks finished lately, Felix's settings, your pace, the plan's next 14 days; each open task's own text (instructions, an email's conversation, notes: 600 characters each), with its attachments' names, links and an email's sender; the whole text (8 000) of the task a message is about, and of up to three he asks to read; an event's place and description, for a message about it |
+| Felix's messages | The reason and the time, the piece and today's slots, the free time, work its source confirmed, his last six messages and your replies, a reading's question; the piece's task's own text (1 500 characters), with its attachments' names and links |
 | An instruction | Your words; what they're about (a task's title, sender, class, due date, minutes and details); the open tasks and the fortnight's events |
 | The weekly review | The week's record: finished work (titles, kinds, classes, estimates, minutes), slots by hour and day, blocks, days, Felix's counts, your check-in answers, the planning settings, what's learned |
 | The week's summary (NF-02) | The week's numbers, finished and missed work, the review's note, Felix's counts, the changes you asked for |

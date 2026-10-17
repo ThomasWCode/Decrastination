@@ -10,6 +10,7 @@ import com.thomaswcode.decrastination.core.ChatMessage
 import com.thomaswcode.decrastination.core.ChatState
 import com.thomaswcode.decrastination.core.Chunk
 import com.thomaswcode.decrastination.core.Enrichment
+import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.core.DayBucket
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.Plan
@@ -23,6 +24,9 @@ import com.thomaswcode.decrastination.core.OwnTask
 import com.thomaswcode.decrastination.core.Unplanned
 import com.thomaswcode.decrastination.core.Why
 import com.thomaswcode.decrastination.learn.CalendarEvent
+import com.thomaswcode.decrastination.sources.gmail.GmailThreads
+import com.thomaswcode.decrastination.sources.gmail.Mime
+import com.thomaswcode.decrastination.sources.teams.TeamsRows
 import java.time.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -141,6 +145,129 @@ class ChatTest {
         // A question back, with nothing to do: read, with no cards.
         val question = parse("""{"reply":"When's the test, and in what?","newTasks":[],$none}""")!!
         assertTrue(question.tasks.isEmpty() && question.changes.isEmpty())
+    }
+
+    // --- Each task's own text (D-93) ---
+
+    private val sheet = bridge.copy(
+        id = "teams:sheet", sourceId = "sheet", title = "Forces worksheet", detail = "Answer questions 1 to 6.\nShow your working.",
+        extra = mapOf(TeamsRows.EXTRA_LINKS to "https://example.org/forces"),
+    )
+    private val letter = bridge.copy(
+        id = "gmail:letter", source = Source.Gmail, sourceId = "letter", title = "Trip form", kind = Kind.Admin, detail = "Please return the form. " + "x".repeat(1_000) + " Update: it's now due Monday.",
+        extra = mapOf(GmailThreads.EXTRA_FROM_NAME to "Ms Example", GmailThreads.EXTRA_ATTACHMENTS to GmailThreads.attachmentsExtra(listOf(Mime.Attachment("form.pdf", "application/pdf", 110_000)))),
+    )
+
+    @Test
+    fun `the context ends with each open task's own text, cut short, with what comes with it`() {
+        val counts = bridge.copy(id = "anki:quota", source = Source.Anki, sourceId = "quota", title = "Anki: 20 new", detail = "20 cards", derived = true)
+        val text = ChatPrompts.context(listOf(bridge, sheet, letter, counts), emptyList(), emptyList(), now, LONDON)
+        val section = text.substringAfter("The tasks' own text")
+        assertTrue("- teams:sheet | Teams; links: https://example.org/forces\n    Answer questions 1 to 6.\n    Show your working." in section, section)
+        assertTrue("- gmail:letter | Gmail, from Ms Example; attachments: form.pdf (107 KB)\n    Please return the form." in section, section)
+        // Cut, its start and its end are kept: an email's newest reply is at its end.
+        assertTrue("[… ${letter.detail.length - ChatPrompts.BRIEF_TEXT} characters left out …]" in section, section)
+        assertTrue("x Update: it's now due Monday." in section, section)
+        // Nothing of its own (the bridge), or Anki's counts: not listed.
+        assertFalse("teams:bridge" in section || "anki:quota" in section, section)
+    }
+
+    @Test
+    fun `a text too long for its room is its reading's summary, where the reading in force made one`() {
+        // D-93: the summary covers all of it, where the start and end would leave out the middle.
+        val read = letter.copy(enrichment = Enrichment(inputHash = Enrichments.inputHash(letter), by = "test", at = now, summary = "Return the form by Monday."))
+        val section = ChatPrompts.context(listOf(read), emptyList(), emptyList(), now, LONDON).substringAfter("The tasks' own text")
+        assertTrue("    Its reading's summary of all ${letter.detail.length} characters: Return the form by Monday." in section, section)
+        assertFalse("characters left out" in section, section)
+        // A message about it has it whole, the summary first where even that's cut.
+        val asked = ChatMessage("y1", Speaker.You, "What does it need?", now, about = About(taskId = read.id, taskTitle = read.title))
+        assertFalse("Its reading's summary" in ChatPrompts.turns(listOf(asked), "", mapOf(read.id to read), LONDON).single().second)
+        val long = read.copy(detail = "z".repeat(ChatPrompts.WHOLE_TEXT + 10)).let { it.copy(enrichment = read.enrichment!!.copy(inputHash = Enrichments.inputHash(it))) }
+        assertTrue("  Its reading's summary of all of it: Return the form by Monday.\n  zzz" in ChatPrompts.turns(listOf(asked), "", mapOf(long.id to long), LONDON).single().second)
+        // A reading for older content isn't its summary: its start and end instead.
+        val stale = read.copy(detail = read.detail + " Now it's Tuesday.")
+        assertTrue("characters left out" in ChatPrompts.context(listOf(stale), emptyList(), emptyList(), now, LONDON))
+    }
+
+    @Test
+    fun `a message about a task carries all of its text before your words, and what he asked to read after them`() {
+        val long = letter.copy(detail = "y".repeat(ChatPrompts.WHOLE_TEXT + 200), answers = listOf("It's for the Year 12 trip"))
+        val asked = ChatMessage("y1", Speaker.You, "What does it need?", now, about = About(taskId = long.id, taskTitle = long.title))
+        val turns = ChatPrompts.turns(listOf(asked), "CONTEXT", mapOf(long.id to long, sheet.id to sheet), LONDON, read = listOf(sheet))
+        val newest = turns.single().second
+        val about = newest.indexOf("The task this message is about, gmail:letter “Trip form” (Gmail, from Ms Example; attachments: form.pdf (107 KB)), in full:")
+        assertTrue(about > 0, newest)
+        assertTrue("[… 200 characters left out …]" in newest, newest)
+        assertTrue("y\nTheir answers to its questions: It's for the Year 12 trip" in newest, newest)
+        val words = newest.indexOf("(About the task gmail:letter, “Trip form”) What does it need?")
+        val read = newest.indexOf("The whole text of the tasks you asked to read")
+        assertTrue(about < words && words < read, newest)
+        assertTrue("- teams:sheet “Forces worksheet” (Teams; links: https://example.org/forces):\n  Answer questions 1 to 6." in newest, newest)
+    }
+
+    @Test
+    fun `a message about an event carries where it is and what it says`() {
+        val event = CalendarEvent(1, "Open day", Fixtures.at("2026-10-17T10:00"), Fixtures.at("2026-10-17T15:00"), allDay = false, location = "The main hall", description = "Talks every hour; bring a pen.")
+        val asked = ChatMessage("y1", Speaker.You, "Do I need to go?", now, about = About(eventKey = "open day", eventTitle = "Open day"))
+        val newest = ChatPrompts.turns(listOf(asked), "CONTEXT", emptyMap(), LONDON, events = listOf(event)).single().second
+        assertTrue("The event this message is about, “Open day” (eventKey open day): where: The main hall; its description: Talks every hour; bring a pen." in newest, newest)
+    }
+
+    @Test
+    fun `he asks to read only listed open tasks, three at most, never the one a message is about`() {
+        val others = (1..4).map { i -> sheet.copy(id = "teams:s$i", sourceId = "s$i") }
+        val reading = ChatAnswers.parse(
+            """{"reply":"Reading them.","newTasks":[],"changes":[],"memories":[],"suggestedReplies":[],"actions":[],"research":"",
+              "details":["teams:sheet","nope"," teams:s1","teams:s2","teams:s1","teams:s3","teams:s4"]}""",
+            listOf(sheet) + others, emptyList(), About(taskId = sheet.id), now, LONDON,
+        )!!
+        assertEquals(listOf("teams:s1", "teams:s2", "teams:s3"), reading.details)
+    }
+
+    @Test
+    fun `a search the texts show a need for, or texts a search does, take another round, but nothing twice`() {
+        val reading = parse("""{"reply":"Reading it.","newTasks":[],$none,"memories":[],"suggestedReplies":[],"actions":[],"research":"","details":[]}""")!!
+        // Texts first; then, having read them, the search they showed a need for.
+        assertEquals(ChatRounds.Next(null, listOf("teams:s1")), ChatRounds.next(reading.copy(details = listOf("teams:s1")), searched = false, searches = true, read = emptyList()))
+        assertEquals(ChatRounds.Next("the trip's date", listOf("teams:s1")), ChatRounds.next(reading.copy(research = "the trip's date"), searched = false, searches = true, read = listOf("teams:s1")))
+        // Both at once: one round.
+        assertEquals(ChatRounds.Next("q", listOf("a")), ChatRounds.next(reading.copy(research = "q", details = listOf("a")), searched = false, searches = true, read = emptyList()))
+        // A search made or tried isn't made again, none with searches off, and texts read aren't new.
+        assertNull(ChatRounds.next(reading.copy(research = "again"), searched = true, searches = true, read = listOf("teams:s1")))
+        assertNull(ChatRounds.next(reading.copy(research = "q"), searched = false, searches = false, read = emptyList()))
+        assertNull(ChatRounds.next(reading.copy(details = listOf("teams:s1")), searched = false, searches = true, read = listOf("teams:s1")))
+        // Three texts at most in all.
+        assertEquals(listOf("a", "b", "c"), ChatRounds.next(reading.copy(details = listOf("c", "d")), searched = false, searches = true, read = listOf("a", "b"))!!.read)
+    }
+
+    @Test
+    fun `the tasks he asked to read share their room, so none is left out`() {
+        val long = (1..3).map { i -> sheet.copy(id = "teams:l$i", sourceId = "l$i", title = "Long $i", detail = "Start $i. " + "w ".repeat(6_000) + "End $i.") }
+        val newest = ChatPrompts.turns(listOf(ChatMessage("y1", Speaker.You, "Which first?", now)), "CONTEXT", long.associateBy { it.id }, LONDON, read = long).single().second
+        for (i in 1..3) assertTrue("Start $i." in newest && "End $i." in newest, "$i")
+    }
+
+    @Test
+    fun `a message about a repeating event carries the occurrence it was asked about`() {
+        val first = CalendarEvent(1, "Drum lesson", Fixtures.at("2026-10-14T18:00"), Fixtures.at("2026-10-14T18:45"), allDay = false, description = "Bring the grade 3 book.")
+        val next = first.copy(id = 2, start = Fixtures.at("2026-10-21T18:00"), end = Fixtures.at("2026-10-21T18:45"), description = "Exam practice: bring the grade 4 book.")
+        val asked = ChatMessage("y1", Speaker.You, "What do I need?", now, about = About(eventKey = "drum lesson", eventTitle = "Drum lesson", eventStart = next.start))
+        fun newest(m: ChatMessage) = ChatPrompts.turns(listOf(m), "CONTEXT", emptyMap(), LONDON, events = listOf(first, next)).single().second
+        assertTrue("its description: Exam practice: bring the grade 4 book." in newest(asked), newest(asked))
+        // Without its start (a message from before it was kept): the first.
+        assertTrue("its description: Bring the grade 3 book." in newest(asked.copy(about = asked.about.copy(eventStart = null))))
+    }
+
+    @Test
+    fun `your words come whole, however much what they're about says`() {
+        val event = CalendarEvent(1, "Open day", Fixtures.at("2026-10-17T10:00"), Fixtures.at("2026-10-17T15:00"), allDay = false, location = "x".repeat(50_000), description = "y".repeat(50_000))
+        val asked = ChatMessage("y1", Speaker.You, "Do I need to go?", now, about = About(eventKey = "open day", eventTitle = "Open day"))
+        val newest = ChatPrompts.turns(listOf(asked), "CONTEXT", emptyMap(), LONDON, events = listOf(event)).single().second
+        assertTrue(newest.endsWith("(About the calendar event “Open day”, eventKey open day) Do I need to go?"), newest.takeLast(200))
+        assertTrue("where: " + "x".repeat(200) + ";" in newest && "x".repeat(201) !in newest, newest.take(300))
+        // However large it is, it's cut to the room your words leave.
+        val small = ChatPrompts.turns(listOf(asked), "", emptyMap(), LONDON, budget = 300, events = listOf(event)).single().second
+        assertTrue(small.endsWith("(About the calendar event “Open day”, eventKey open day) Do I need to go?") && "where: xxx" in small, small)
     }
 
     @Test
