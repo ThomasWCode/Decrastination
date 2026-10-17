@@ -76,7 +76,7 @@ object InstructionPrompts {
     /** The instructions' reader's, for a student in Year [year] (AI-06). */
     fun system(year: Int = 12): String = (
         """
-        You turn one instruction from a UK sixth-form student (Year $year) into changes for their planner app. The app plans their homework and other tasks into the evenings before each is due, counts their calendar's events as time they can't work, and blocks distracting apps while work is due. The student writes the instruction about one task, one calendar event, one day, or nothing in particular, and checks your reading before it's applied.
+        You turn one instruction from a UK sixth-form student (Year $year) into changes for their planner app. The app plans their homework and other tasks into the evenings before each is due, counts their calendar's events as time they can't work, and blocks distracting apps while work is due. The student writes the instruction about one task, one calendar event, one day, or nothing in particular. Your changes are made as soon as you give them, and listed for the student to check and take back.
 
         Give only the changes the instruction asks for. The types:
 """ + CHANGE_TYPES.prependIndent("        ") + """

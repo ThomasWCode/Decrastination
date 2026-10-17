@@ -49,11 +49,14 @@ data class CheckIn(
 
 object Days {
 
-    /** Today's plan as it stands, for the record. */
-    fun record(plan: Plan, zone: ZoneId): DayRecord {
+    /**
+     * Today's plan as it stands, for the record, as the [kind] of day it was planned as
+     * (`SchoolDays.kindOf`): a weekday off school is a weekend's, and teaches the weekend's yield (PL-06).
+     */
+    fun record(plan: Plan, zone: ZoneId, kind: DayKind): DayRecord {
         val chunks = plan.todayBucket?.chunks.orEmpty().map { DayChunk(it.taskId, it.minutes) }
         val school = plan.todaySlots.filter { it.kind == SlotKind.Work && it.window.atSchool }.sumOf { it.chunk!!.minutes }
-        return DayRecord(plan.today.toString(), chunks.sumOf { it.minutes }, chunks, zone = zone.id, kind = DayKind.of(plan.today), schoolMin = school)
+        return DayRecord(plan.today.toString(), chunks.sumOf { it.minutes }, chunks, zone = zone.id, kind = kind, schoolMin = school)
     }
 
     /**
@@ -78,12 +81,13 @@ object Days {
     }
 
     /**
-     * [old], today's record, made again once an answer about an event has changed what today holds:
-     * what was done of it already counts as planned and done (a finished task's pieces in full,
-     * another's kept slots so far), and the rest is what the plan has today now ([ahead]). So the day
-     * is judged by what it could hold once the event was known.
+     * [old], today's record, made again once an answer about an event, or an instruction, has changed
+     * what today holds: what was done of it already counts as planned and done (a finished task's
+     * pieces in full, another's kept slots so far), and the rest is what the plan has today now
+     * ([ahead]), as the [kind] of day it's planned as now (made a day off, a weekend's, PL-06). So the
+     * day is judged by what it could hold once the event was known.
      */
-    fun replan(old: DayRecord, ahead: List<DayChunk>, log: ActivityLog, now: Long, zone: ZoneId, aheadSchoolMin: Int = 0): DayRecord {
+    fun replan(old: DayRecord, ahead: List<DayChunk>, log: ActivityLog, now: Long, zone: ZoneId, aheadSchoolMin: Int = 0, kind: DayKind? = old.kind): DayRecord {
         val dayZone = old.zone?.let { runCatching { ZoneId.of(it) }.getOrNull() } ?: zone
         val start = LocalDate.parse(old.date).atStartOfDay(dayZone).toInstant().toEpochMilli()
         val done = log.completions.filter { it.doneAt in start..now }.map { it.taskId }.toSet()
@@ -100,7 +104,7 @@ object Days {
         val chunks = kept + ahead.filter { it.taskId !in done }
         // School's minutes as planned again: those kept there today, and what's laid there now.
         val school = log.slots.filter { it.date == old.date && it.outcome.kept && it.window.atSchool }.sumOf { it.plannedMin } + aheadSchoolMin
-        return old.copy(plannedMin = chunks.sumOf { it.minutes }, chunks = chunks, schoolMin = school)
+        return old.copy(plannedMin = chunks.sumOf { it.minutes }, chunks = chunks, schoolMin = school, kind = kind)
     }
 
     /** Minutes worked on each task in the slots laid on [date] and kept, whenever they were ticked (LR-09). */

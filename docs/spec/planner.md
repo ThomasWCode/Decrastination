@@ -98,7 +98,7 @@ A task's last usable day is its deadline's date less its kind's margin (`Calibra
 
 ## Placing the pieces
 
-The plan's days run from today to the latest deadline: at least 14 days, more where a task limited per day needs them, never more than 90 (`Planner.MAX_HORIZON_DAYS`).
+The plan's days run from today to the latest deadline or day you put work on: at least 14 days, more where a task limited per day needs them, never more than 90 (`Planner.MAX_HORIZON_DAYS`).
 Work is placed in this order, each taking its days' time before the next:
 
 1. Work you put on a day (PL-04).
@@ -155,8 +155,8 @@ Runs stay in order: none starts before the one before it, each is planned to be 
 Told to Felix or as an instruction, or made by moving a piece on Day or in the calendar, they're changes on the task (`userOnDay`, `userAtTime`):
 - **A day** (`OnDay`): all of the task on that day, placed before everything else; that day is its last usable day whatever the margin, and a deadline only where the task's own is that day.
 - **A time** (`AtTime`): its next piece a run of its own from that time, which the slotter keeps to the minute; the rest follow it.
-- Not kept: one whose day has gone, one before the task can start, a day after its real deadline's day, or a time at or after the deadline. The last two are refused as they're given ("It's due before then", `Instructions.latePin`).
-- Work already overdue takes any day or time from now, but it's due now, so it goes into today at its turn.
+- Not kept: one whose day has gone, one before the task can start, and, while the task's real deadline is still to come, a day after its day or a time at or after it. Those last two are refused as they're given ("It's due before then", `Instructions.latePin`; on Day, `Planner.pinProblem`).
+- Work already overdue takes any day or time from now (D-30): all of it on the day you gave, or its next piece at your time and the rest after it, none of it before. It's still overdue there, and says so.
 - A time past a plan's date makes the date moot: the work is undated from that time. A later day for all of it drops a time on another day, and keeps one on that day.
 
 ## Why a piece is on its day (PL-07)

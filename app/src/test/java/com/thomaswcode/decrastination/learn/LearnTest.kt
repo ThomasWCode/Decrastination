@@ -5,12 +5,18 @@ import com.thomaswcode.decrastination.data.SlotOutcome
 import com.thomaswcode.decrastination.data.SlotRecord
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.Fixtures.LONDON
+import com.thomaswcode.decrastination.core.Busy
 import com.thomaswcode.decrastination.core.Calibration
 import com.thomaswcode.decrastination.core.DayKind
 import com.thomaswcode.decrastination.core.Kind
+import com.thomaswcode.decrastination.core.NoSchool
+import com.thomaswcode.decrastination.core.Planner
+import com.thomaswcode.decrastination.core.SchoolCalendar
+import com.thomaswcode.decrastination.core.SchoolDays
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.data.ActivityLog
 import com.thomaswcode.decrastination.data.CompletionRecord
+import com.thomaswcode.decrastination.data.Settings
 import java.time.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -275,13 +281,14 @@ class EventJudgeTest {
 
     @Test
     fun `an all-day event past the week ahead counts as a few hours of its day, not a question`() {
-        // Seen on Thursday 8 Oct: the van hire on Saturday is asked about; a trip three weeks on
-        // isn't asked yet (DX-14), but takes its few hours out of its day meanwhile.
+        // Seen on Thursday 8 Oct: the van hire on Saturday is asked about, all of its day till you
+        // answer; a trip three weeks on isn't asked yet (DX-14), but takes its few hours out of its
+        // day meanwhile.
         val now = Fixtures.at("2026-10-08T17:00")
         val trip = CalendarEvent(5, "School trip", LocalDate.parse("2026-10-29").atStartOfDay(java.time.ZoneOffset.UTC).toInstant().toEpochMilli(), LocalDate.parse("2026-10-30").atStartOfDay(java.time.ZoneOffset.UTC).toInstant().toEpochMilli(), allDay = true)
         val time = EventJudge.time(listOf(event("Van hire", allDay = true), trip), emptyMap(), LONDON, askUntil = now + 7 * DAY)
         assertEquals(listOf("Van hire"), time.toAsk.map { it.title })
-        assertEquals(mapOf(LocalDate.parse("2026-10-29") to EventJudge.FEW_HOURS_MIN), time.dayLoads)
+        assertEquals(mapOf(LocalDate.parse("2026-10-10") to 24 * 60, LocalDate.parse("2026-10-29") to EventJudge.FEW_HOURS_MIN), time.dayLoads)
         // Answered, the answer holds there too.
         val answered = EventJudge.time(listOf(trip), mapOf(EventJudge.key(trip) to "busy"), LONDON, askUntil = now + 7 * DAY)
         assertEquals(mapOf(LocalDate.parse("2026-10-29") to 24 * 60), answered.dayLoads)
@@ -292,7 +299,20 @@ class EventJudgeTest {
         val time = EventJudge.time(listOf(event("Van hire", allDay = true), event("van hire ", allDay = true)), emptyMap(), LONDON, askUntil = Long.MAX_VALUE)
         assertEquals(2, time.toAsk.size)
         assertEquals(1, CalendarTime.questions(time.toAsk, emptySet(), start - 3_600_000L).size)
-        assertEquals(emptyMap(), time.dayLoads)
+        // Till you answer, all of its day (D-44).
+        assertEquals(mapOf(LocalDate.parse("2026-10-10") to 24 * 60), time.dayLoads)
+    }
+
+    @Test
+    fun `an event asked about takes all its time till you answer, then what you said`() {
+        // D-44: a nine-hour van hire on Saturday, not yet answered, takes its hours; answered "None", none.
+        val hire = event("Van hire", hours = 9)
+        val time = EventJudge.time(listOf(hire), emptyMap(), LONDON, askUntil = Long.MAX_VALUE)
+        assertEquals(listOf(hire), time.toAsk)
+        assertEquals(listOf(Busy(hire.start, hire.end)), time.busy)
+        val answered = EventJudge.time(listOf(hire), mapOf(EventJudge.key(hire) to "free"), LONDON, askUntil = Long.MAX_VALUE)
+        assertEquals(emptyList(), answered.busy)
+        assertEquals(emptyList(), answered.toAsk)
     }
 }
 
@@ -341,6 +361,15 @@ class DaysTest {
         start = Fixtures.at(start), end = Fixtures.at(start) + worked * 60_000L, window = WindowKind.Evening, outcome = SlotOutcome.Kept,
         workedMin = worked, at = Fixtures.at(start) + worked * 60_000L,
     )
+
+    @Test
+    fun `a weekday off school is recorded as a weekend's day, as it was planned`() {
+        // PL-06: planned with the weekend's yield, it teaches the weekend's.
+        val plan = Planner.plan(Planner.Input(emptyList(), Fixtures.at("2026-10-27T07:00"), LONDON, Settings()))
+        val off = SchoolCalendar(noSchool = listOf(NoSchool("2026-10-27", "2026-10-27")))
+        assertEquals(DayKind.Weekend, Days.record(plan, LONDON, SchoolDays.kindOf(plan.today, off)).kind)
+        assertEquals(DayKind.Weekday, Days.record(plan, LONDON, SchoolDays.kindOf(plan.today, SchoolCalendar())).kind)
+    }
 
     @Test
     fun `a day is done in full when its tasks were confirmed done or worked for their minutes`() {
@@ -427,6 +456,16 @@ class DaysReplanTest {
         start = Fixtures.at(laid), end = Fixtures.at(laid) + worked * 60_000L, window = window, outcome = SlotOutcome.Kept,
         workedMin = worked, at = Fixtures.at("2026-10-09T08:00"),
     )
+
+    @Test
+    fun `a day made a day off after its record is planned and kept as a weekend's`() {
+        // PL-06: told at 09:00 there's no school today, the day teaches the weekend's share.
+        val day = DayRecord("2026-10-09", 60, listOf(DayChunk("teams:a", 60)), zone = "Europe/London", kind = DayKind.Weekday)
+        val again = Days.replan(day, listOf(DayChunk("teams:a", 60)), ActivityLog(), Fixtures.at("2026-10-09T09:00"), LONDON, kind = DayKind.Weekend)
+        assertEquals(DayKind.Weekend, again.kind)
+        // Given none, it keeps its own.
+        assertEquals(DayKind.Weekday, Days.replan(day, emptyList(), ActivityLog(), Fixtures.at("2026-10-09T09:00"), LONDON).kind)
+    }
 
     @Test
     fun `a slot laid later today and ticked early counts as today's work, and replanning counts school's minutes again`() {

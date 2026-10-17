@@ -82,7 +82,7 @@ A stop part-way is finished at the next start (`Focus.finishKeeps`), before an e
 ## Moving a slot by hand
 
 On Day, a slot swiped right to left is done. Left to right, it's later today (`AppGraph.laterToday`, its task's next piece only): at the first free time after it with its minutes, around today's other slots, as an `AtTime` change.
-Held, it goes to a day of the next fortnight, at a time or any time that day (`ui/MoveSheet.kt`). Each move is a change of yours, taken back in *Your changes*; one the plan wouldn't keep is refused first (`Planner.pinProblem`).
+Held, it goes to a day of the next fortnight, at a time or any time that day (`ui/MoveSheet.kt`): not a day after a real deadline still to come, while overdue work can go to any (D-30). Each move is a change of yours, taken back in *Your changes*; one the plan wouldn't keep is refused first (`Planner.pinProblem`).
 
 ## Writing the calendar (NF-07)
 
@@ -105,7 +105,7 @@ Pick one you made at calendar.google.com: a calendar an app makes stays on the p
 A piece's event whose start is neither where the app last wrote it (`RuntimeState.calendarWritten`) nor where the plan has it now is one you moved.
 `SlotCalendarDiff.judge` takes moves earliest first, each as your time for its task's next piece (an `AtTime` change, "Moved in the calendar", made at once), unless:
 - its task is no longer there;
-- the time is at or after the task's real deadline ("it's due before then");
+- the time is at or after the task's real deadline, still to come ("it's due before then"; overdue work takes any time);
 - another of its task's pieces moved in the same write (one at a time).
 
 A move refused is written back, and a notification says why (`SlotCalendar.sayRefused`). A move taken counts as written only once its change is in (`SlotCalendarDiff.pending`).
@@ -145,7 +145,7 @@ It's tried again at each write till it works (the permission back, the provider 
 `EventJudge.time` gives the planner what each takes:
 - busy: its time (`Planner.Input.busy`); all day, all of each of its days;
 - a few hours: 180 minutes of its day at no set time (`dayLoads`; all day, each of its days; timed, its first);
-- to ask, starting within the week: asked once in a notification (*All of it*, *A few hours*, *None*), never in quiet hours nor while notifications can't be seen; it takes no time till you answer;
+- to ask, starting within the week: asked once in a notification (*All of it*, *A few hours*, *None*), never in quiet hours nor while notifications can't be seen; it takes all its time till you answer (all day, all of each of its days), so the plan counts on no time it may not have (D-44);
 - to ask, further off: a few hours of its day (of each, all day) meanwhile, so the spread before it leaves it room.
 
 Your answer holds for every event of that name (`RuntimeState.eventAnswers`); the plan, and today's record of it, are made again with it.

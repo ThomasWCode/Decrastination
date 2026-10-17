@@ -32,10 +32,11 @@ object TaskSheetModel {
 
     /**
      * Whether [task]'s work can go to [day], as the plan keeps a day you give (`keptDay`): not before
-     * the day it can start, nor past its real deadline's (UI-04's "due before then").
+     * the day it can start, nor past its real deadline's while that's still to come at [now] (UI-04's
+     * "due before then"); overdue, any day (D-30).
      */
-    fun canGo(task: TaskItem, day: LocalDate, zone: ZoneId): Boolean =
-        task.notBefore?.let { day >= Planner.date(it, zone) } != false && task.realDeadline?.let { day <= Planner.date(it, zone) } != false
+    fun canGo(task: TaskItem, day: LocalDate, now: Long, zone: ZoneId): Boolean =
+        task.notBefore?.let { day >= Planner.date(it, zone) } != false && task.realDeadline?.takeIf { it > now }?.let { day <= Planner.date(it, zone) } != false
 
     /** [p] as the sheet says it, from [today]: "Today 17:00–17:30, Q1: due today". */
     fun line(p: Planned, today: LocalDate, zone: ZoneId): String {

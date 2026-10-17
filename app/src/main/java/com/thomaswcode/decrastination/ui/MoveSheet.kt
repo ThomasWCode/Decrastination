@@ -42,9 +42,9 @@ private val CHIP_DAY = DateTimeFormatter.ofPattern("EEE d", Locale.UK)
 
 /**
  * A piece moved by hand (UI-04), from a long press on its slot: a day of the next fortnight, each with
- * its load (one after a real deadline can't be picked: due before then), then this piece at a time,
- * or all of its task that day; as a change of yours, taken back in Your changes. No drag between
- * rows: a sheet does it for less.
+ * its load (one after a real deadline still to come can't be picked: due before then; overdue work
+ * can go to any, D-30), then this piece at a time, or all of its task that day; as a change of
+ * yours, taken back in Your changes. No drag between rows: a sheet does it for less.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -54,9 +54,9 @@ fun MoveSheet(graph: AppGraph, chunk: Chunk, plan: Plan, zone: ZoneId, onDone: (
     var problem by rememberSaveable { mutableStateOf<String?>(null) }
     // A time pins a task's next piece (PL-04): only that one can be given one; the rest go by their day.
     val next = plan.chunksOf(chunk.taskId).firstOrNull()?.key == chunk.key
-    // Its task's real deadline's day is the last its work can go to, and the day it can start the first (as the plan keeps a day).
+    // Its task's real deadline's day, still to come, is the last its work can go to, and the day it can start the first (as the plan keeps a day).
     val task = graph.tasks.value.tasks.firstOrNull { it.id == chunk.taskId }
-    val last = task?.realDeadline?.let { Planner.date(it, zone) }
+    val last = task?.realDeadline?.takeIf { it > graph.clock.now() }?.let { Planner.date(it, zone) }
     val first = task?.notBefore?.let { Planner.date(it, zone) }
     fun apply(change: Change, said: String) {
         graph.scope.launch { graph.addOwnChange(UUID.randomUUID().toString(), said, About(taskId = chunk.taskId, taskTitle = chunk.title), change) }

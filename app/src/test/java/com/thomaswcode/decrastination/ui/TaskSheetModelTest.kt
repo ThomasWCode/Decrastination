@@ -52,11 +52,14 @@ class TaskSheetModelTest {
     @Test
     fun `a task's work can't go past its real deadline's day, nor before it can start`() {
         val a = task("a", 30)
-        assertTrue(TaskSheetModel.canGo(a, monday, LONDON))
-        assertFalse(TaskSheetModel.canGo(a, monday.plusDays(1), LONDON))
+        val now = Fixtures.at("2026-10-12T16:00")
+        assertTrue(TaskSheetModel.canGo(a, monday, now, LONDON))
+        assertFalse(TaskSheetModel.canGo(a, monday.plusDays(1), now, LONDON))
         val later = a.copy(dueAt = Fixtures.at("2026-10-20T23:59"), notBefore = Fixtures.at("2026-10-14T00:00"))
-        assertFalse(TaskSheetModel.canGo(later, monday.plusDays(1), LONDON))
-        assertTrue(TaskSheetModel.canGo(later, monday.plusDays(2), LONDON))
+        assertFalse(TaskSheetModel.canGo(later, monday.plusDays(1), now, LONDON))
+        assertTrue(TaskSheetModel.canGo(later, monday.plusDays(2), now, LONDON))
+        // Overdue, its deadline gone by, it can go to any day (D-30).
+        assertTrue(TaskSheetModel.canGo(a, monday.plusDays(1), Fixtures.at("2026-10-13T08:00"), LONDON))
     }
 
     @Test

@@ -6,6 +6,7 @@ import androidx.core.app.NotificationCompat
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.R
 import com.thomaswcode.decrastination.core.Plan
+import com.thomaswcode.decrastination.core.SchoolDays
 import com.thomaswcode.decrastination.notify.Channels
 import com.thomaswcode.decrastination.notify.Notify
 import com.thomaswcode.decrastination.ui.Format
@@ -52,11 +53,11 @@ object Briefing {
         val now = graph.clock.now()
         val zone = graph.clock.zone()
         val plan = graph.plan()
-        val record = Days.record(plan, zone)
+        val record = Days.record(plan, zone, SchoolDays.kindOf(plan.today, graph.school.value))
         val ahead = record.chunks
         graph.log.update { log ->
             val old = log.days.firstOrNull { it.date == plan.today.toString() && it.full == null } ?: return@update log
-            log.copy(days = log.days.map { if (it === old) Days.replan(old, ahead, log, now, zone, record.schoolMin) else it })
+            log.copy(days = log.days.map { if (it === old) Days.replan(old, ahead, log, now, zone, record.schoolMin, record.kind) else it })
         }
     }
 
@@ -69,7 +70,7 @@ object Briefing {
         val now = graph.clock.now()
         val zone = graph.clock.zone()
         val plan = graph.plan()
-        val today = Days.record(plan, zone)
+        val today = Days.record(plan, zone, SchoolDays.kindOf(plan.today, graph.school.value))
         graph.log.update { log ->
             val finished = log.days.map { day -> if (day.full == null && day.date < today.date) Days.finish(day, log, zone) else day }
             log.copy(days = finished.filterNot { it.date == today.date } + today).trimmed(now)
