@@ -329,12 +329,12 @@ class AppGraph private constructor(context: Context) {
         calendarTouched = false
         val byId = tasks.value.tasks.associateBy { it.id }
         val before = runtime.value.calendarWritten
-        // Each event's version remembered before it's written, so a copy the calendar's sync makes of
-        // it is known whatever happens after ([SlotCalendarDiff.isCopy]).
-        val versions = calendarVersions.update { it.copy(written = SlotCalendarDiff.remembered(it.written, desired.map { d -> SlotCalendarDiff.version(calendarId, d.title, d.start, d.end) })) }.written.toSet()
+        // A copy is one of the versions earlier writes made ([SlotCalendarDiff.isCopy]), never one of
+        // this write's: an event of yours under a slot's title at its times isn't the app's.
+        val known = calendarVersions.value.written.toSet()
         val written = try {
             withContext(Dispatchers.IO) {
-                SlotCalendar.write(app, calendarId, made, zone, before, versions, runtime.value.microPlans) { move ->
+                SlotCalendar.write(app, calendarId, made, zone, before, known, runtime.value.microPlans) { move ->
                     val task = move.desired.taskId?.let(byId::get)
                     when {
                         task == null -> "its task is no longer there"
@@ -348,6 +348,12 @@ class AppGraph private constructor(context: Context) {
             calendarTouched = true
             throw e
         }
+        // Each event's version remembered once it's written (not a move of yours taken: its event is
+        // at your time), so a copy the calendar's sync makes of it is known at the next write.
+        val moved = written.taken.map { it.desired.uri }.toSet()
+        runCatching {
+            calendarVersions.update { it.copy(written = SlotCalendarDiff.remembered(it.written, desired.filter { d -> d.uri !in moved }.map { d -> SlotCalendarDiff.version(calendarId, d.title, d.start, d.end) })) }
+        }.onFailure { Log.w(TAG, "Remembering what was written to the calendar failed", it) }
         // A move taken counts as written only once its instruction is in: stopped before, the next
         // write finds it a move again, rather than putting it back.
         val held = SlotCalendarDiff.pending(written.starts, before, written.taken)

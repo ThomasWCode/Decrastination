@@ -42,7 +42,8 @@ interface Enricher {
 
 /**
  * What can be said without a model: an assignment whose instructions list its parts ("1. Complete
- * the reading task…", "- Translation…") is cut into those parts, sharing its estimate. A part that's
+ * the reading task…", "- Translation…") is cut into those parts, sharing its estimate, one over an
+ * hour in sittings as the model's are ([Answers.sittings]). A part that's
  * learning numbered vocabulary sections is tagged with them: where Anki deck tasks hold them, the
  * planner leaves it out. An email's kind, estimate and next step already come from the email rules
  * at the source.
@@ -52,7 +53,7 @@ class RuleEnricher : Enricher {
 
     override suspend fun enrich(task: TaskItem, job: Enrichments.Job, now: Long): Enricher.Result {
         // The source's estimate (or yours), not one an out-of-date enrichment of the model's left.
-        val steps = if (job == Enrichments.Job.Assignment) steps(task.detail, task.copy(aiEffortMin = null).effortMin) else null
+        val steps = if (job == Enrichments.Job.Assignment) steps(task.detail, task.copy(aiEffortMin = null).effortMin)?.let { Answers.sittings(it, task.subSteps) } else null
         return Enricher.Result(Enrichment(inputHash = Enrichments.inputHash(task), by = BY, at = now, subSteps = steps))
     }
 
