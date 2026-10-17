@@ -259,11 +259,12 @@ object ChatPrompts {
             return buildString {
                 append("The task this message is about, ${task.id} “${task.title.take(MAX_TITLE)}” (${TaskText.about(task)}), in full:\n")
                 append(TaskText.whole(task, WHOLE_TEXT) ?: "  (no text of its own)")
-                if (task.answers.isNotEmpty()) append("\nTheir answers to its questions: ").append(task.answers.joinToString("; "))
+                if (task.answers.isNotEmpty()) append("\nTheir answers to its questions: ").append(task.answers.joinToString("; ").take(MAX_TEXT))
             }
         }
         val key = about.eventKey ?: return null
-        val event = events.firstOrNull { EventJudge.key(it) == key } ?: return null
+        // A repeating event's occurrences share their key: the one it was asked about, by its start.
+        val event = events.filter { EventJudge.key(it) == key }.let { same -> same.firstOrNull { it.start == about.eventStart } ?: same.firstOrNull() } ?: return null
         val parts = listOfNotNull(
             event.location.trim().takeIf { it.isNotEmpty() }?.let { "where: $it" },
             event.description.trim().takeIf { it.isNotEmpty() }?.let { "its description: " + it.take(EVENT_TEXT) },
@@ -272,14 +273,19 @@ object ChatPrompts {
         return "The event this message is about, “${event.title.take(MAX_TITLE)}” (eventKey $key): " + parts.joinToString("; ")
     }
 
-    /** The tasks he asked to read in full (D-93), as your newest turn carries them: [WHOLE_TEXT] each at most, [READ_TEXT] in all. */
+    /** The tasks he asked to read in full (D-93), as your newest turn carries them: [WHOLE_TEXT] each at most, about [READ_TEXT] in all. */
     private fun readText(read: List<TaskItem>): String = buildString {
         append("The whole text of the tasks you asked to read (answer and act on it, and leave details empty):")
+        val tasks = read.take(MAX_READ)
+        // Each an even share of the room the shorter ones leave, so none is left too little to be worth reading.
         var room = READ_TEXT
-        for (task in read.take(MAX_READ)) {
-            if (room <= 0) break
-            val body = TaskText.whole(task, minOf(WHOLE_TEXT, room)) ?: "  (no text of its own)"
-            room -= body.length
+        val shares = tasks.sortedBy { it.detail.trim().length }.mapIndexed { i, t ->
+            val share = minOf(WHOLE_TEXT, room / (tasks.size - i))
+            room -= minOf(share, t.detail.trim().length)
+            t.id to share
+        }.toMap()
+        for (task in tasks) {
+            val body = TaskText.whole(task, shares.getValue(task.id)) ?: "  (no text of its own)"
             append("\n- ${task.id} “${task.title.take(MAX_TITLE)}” (${TaskText.about(task)}):\n").append(body)
         }
     }
@@ -383,7 +389,7 @@ object ChatPrompts {
         val withText = open.take(InstructionPrompts.MAX_TASKS).filter { !it.derived && TaskText.has(it) }
         if (withText.isNotEmpty()) {
             appendLine()
-            appendLine("The tasks' own text (id | from, and what comes with it; then its text: an assignment's instructions, an email's conversation, a planner item's details, their notes), each at most $BRIEF_TEXT characters: a longer one as its reading's summary of all of it, or else its start and end (an email's newest replies are at its end):")
+            appendLine("The tasks' own text (id | from, and what comes with it; then its text: an assignment's instructions, an email's conversation, a planner item's details, their notes), each at most $BRIEF_TEXT characters: a longer one as its reading's summary (each says of how much), or else its start and end (an email's newest replies are at its end):")
             var room = MAX_TEXTS
             var shown = 0
             for (t in withText) {
@@ -536,6 +542,30 @@ object ChatPrompts {
 
     /** The most lines in each of the plan's summaries (what isn't planned, other events, later tasks), so they leave the days room. */
     const val PLAN_LIST = 20
+}
+
+/**
+ * What the chat's answer asks for before it's his: a web search (16 Oct) and tasks' whole texts
+ * (D-93), each round asking him again with what it brought. Pure.
+ */
+object ChatRounds {
+    /** The next round: what to search for, if anything, and the tasks to read, all of them so far. */
+    data class Next(val search: String?, val read: List<String>)
+
+    /**
+     * After [reading]: a search where it asks for one and none has been made or tried ([searched]),
+     * while searches are on ([searches]); and the tasks it asks to read added to those [read] already,
+     * [ChatPrompts.MAX_READ] at most in all. Null with nothing new to ask for: his answer is that one.
+     */
+    fun next(reading: ChatAnswers.Reading, searched: Boolean, searches: Boolean, read: List<String>): Next? {
+        val search = reading.research?.takeIf { !searched && searches }
+        val more = (read + reading.details).distinct().take(ChatPrompts.MAX_READ)
+        if (search == null && more.size == read.size) return null
+        return Next(search, more)
+    }
+
+    /** The most rounds a message takes after his first answer: a search and the texts, or each after the other. */
+    const val MAX_ROUNDS = 2
 }
 
 /** Claude's answer in the chat, checked: its reply, the tasks and changes the app can make, and what it left out. */

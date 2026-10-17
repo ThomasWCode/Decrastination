@@ -93,12 +93,11 @@ object FelixPrompts {
         } else if (task != null) {
             appendLine("Task: ${task.title}")
         }
-        // Its task's own text, cut short (D-93): what the work asks of them, to be concrete about.
-        if (task != null) {
-            TaskText.brief(task, TEXT)?.let { body ->
-                appendLine("Its task's own text (${TaskText.about(task)}):")
-                appendLine(body)
-            }
+        // Its task's own text, cut short (D-93): what the work asks of them, to be concrete about; a
+        // worksheet or link alone is the work too.
+        if (task != null && TaskText.has(task)) {
+            appendLine("Its task's own text (${TaskText.about(task)}):")
+            appendLine(TaskText.brief(task, TEXT) ?: "  (no text of its own)")
         }
         val kept = today.count { it.outcome.kept }
         val missed = today.count { it.outcome == SlotOutcome.Missed }
