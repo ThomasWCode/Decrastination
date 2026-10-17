@@ -1,7 +1,7 @@
 package com.thomaswcode.decrastination.protect
 
 /**
- * The watchdog's reading of the phone's accessibility settings (docs/scheduler.md §6, layer 5),
+ * The watchdog's reading of the phone's accessibility settings (docs/spec/blocking-and-protection.md, layer 5),
  * pure. The focus service must be in `enabled_accessibility_services`, with accessibility on, and
  * on none of the shortcuts that would let a key press switch it off. With WRITE_SECURE_SETTINGS
  * (granted over adb at setup, Q19) the watchdog can put all of that right itself.

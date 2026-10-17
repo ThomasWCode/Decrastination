@@ -27,7 +27,7 @@ enum class Source(val label: String, val synced: Boolean = true) {
 }
 
 /**
- * What sort of work a task is (PLAN.md §4). The planner orders a bucket by it, and calibration
+ * What sort of work a task is (docs/spec/planner.md). The planner orders a bucket by it, and calibration
  * learns an effort multiplier and a safety margin per kind.
  */
 @Serializable
@@ -76,7 +76,7 @@ data class SubStep(
 
 /**
  * One obligation from one source, in the shape every other part of the app works with
- * (PLAN.md §4). Times are epoch milliseconds.
+ * (docs/spec/sources.md). Times are epoch milliseconds.
  *
  * The source owns [title], [detail], [className], [dueAt], [availableFrom], [sourceEffortMin] and
  * [sourceProgress], and a sync overwrites them. Everything else is this app's own bookkeeping

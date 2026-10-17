@@ -39,7 +39,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
 /**
- * Layer 5 of the anti-tamper (docs/scheduler.md §6): checks that the focus service is on, on no
+ * Layer 5 of the anti-tamper (docs/spec/blocking-and-protection.md): checks that the focus service is on, on no
  * accessibility shortcut, and, once armed, that the device admin is active. Anything wrong shows
  * as a notification and on the widget, and is logged. Once armed, and with WRITE_SECURE_SETTINGS
  * (granted over adb, Q19), it switches the service back on and takes it off the shortcuts

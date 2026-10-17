@@ -19,7 +19,7 @@ import java.time.Duration
 import java.util.Base64
 
 /**
- * The photo check (docs/scheduler.md §3, chunk completion 2; Q16): photos of written work, a page
+ * The photo check (docs/spec/planner.md, chunk completion 2; Q16): photos of written work, a page
  * each (up to [MAX_PAGES], AI-17), and the piece they're for with its task's instructions (AI-16)
  * in, `{done, confidence, reason, seen}` out. A piece can't be confirmed done at its source, so
  * this stands in for the timer. Built, and offered only while Claude is on.

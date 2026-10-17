@@ -20,7 +20,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
 /**
- * AnkiDroid's own provider (`FlashCardsContract`, docs/data-sources.md §3), behind the runtime
+ * AnkiDroid's own provider (`FlashCardsContract`, docs/spec/sources.md), behind the runtime
  * permission AnkiDroid defines. Queries can block while AnkiDroid's process starts, so they run
  * off the main thread.
  */

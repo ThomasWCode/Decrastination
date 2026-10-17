@@ -8,7 +8,7 @@ import java.time.ZoneId
 import kotlinx.serialization.Serializable
 
 /**
- * Whether a blocked app (or site) may be used now (docs/scheduler.md §4, with the hours decided
+ * Whether a blocked app (or site) may be used now (docs/spec/blocking-and-protection.md, with the hours decided
  * on 8 Oct). Pure: everything it depends on comes in through [Input].
  *
  * 1. A parent-approved unblock (the override) lets everything through until it ends.

@@ -14,7 +14,7 @@ import kotlinx.serialization.json.Json
 import java.time.Duration
 
 /**
- * The weekly review by the model (docs/data-sources.md §5, job 4): the week in, a note and bounded
+ * The weekly review by the model (docs/spec/learning.md): the week in, a note and bounded
  * changes out ([ReviewInput]), as the enrichment's calls are made. Off until Claude is switched on.
  */
 class ClaudeReviewer(apiKey: String, endpoint: String? = null, val model: String = ClaudeEnricher.MODEL, private val profile: Profile.Block = Profile.Block.NONE) {

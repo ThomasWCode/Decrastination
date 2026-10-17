@@ -44,7 +44,7 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 /**
- * The last fortnight (PLAN.md Phase 6): what got finished, the slots kept, the blocks, what
+ * The last fortnight (docs/spec/learning.md): what got finished, the slots kept, the blocks, what
  * protection found, today's free time, and what the app has learned about your work. The numbers
  * as tiles to skim, the sentences behind them folded under "In full".
  */

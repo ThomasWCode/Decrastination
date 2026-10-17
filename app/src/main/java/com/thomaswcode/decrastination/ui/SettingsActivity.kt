@@ -55,7 +55,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * Everything you can change (PLAN.md Phase 4): hours, Teams, planning, Anki, what's blocked, and
+ * Everything you can change: hours, Teams, planning, Anki, what's blocked, and
  * Claude. Saved through [AppGraph.changeSettings], so once protection is armed a change that
  * loosens blocking waits its 24 hours and shows here until it applies.
  */

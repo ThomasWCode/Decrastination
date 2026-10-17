@@ -47,10 +47,10 @@ import com.thomaswcode.decrastination.widget.WidgetModel
 import kotlinx.coroutines.delay
 
 /**
- * What a blocked app shows instead (PLAN.md Phase 3): why, the next thing to do, and the ways
+ * What a blocked app shows instead (docs/spec/blocking-and-protection.md): why, the next thing to do, and the ways
  * to get on with it. **Open** goes to the task; **Done** keeps its slot; **Check it's done**
  * asks its source; **Refresh Teams** asks the Teams widget to sync. There's no way
- * through (docs/scheduler.md §6, layer 1). Back, and **Go home**, go to the home screen.
+ * through (docs/spec/blocking-and-protection.md, layer 1). Back, and **Go home**, go to the home screen.
  *
  * Its own task (manifest), so neither Back nor Recents can reveal the app behind.
  */

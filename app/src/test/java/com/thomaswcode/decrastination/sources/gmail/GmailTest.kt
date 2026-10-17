@@ -20,7 +20,7 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/** Made-up messages in the shapes Gmail's IMAP gave on 8 Oct and 14 Oct (docs/phase0-findings.md §4): the mailbox isn't committed. */
+/** Made-up messages in the shapes Gmail's IMAP gave on 8 Oct and 14 Oct (docs/spec/sources.md): the mailbox isn't committed. */
 class GmailTest {
     private val now = Fixtures.at("2026-10-08T23:00")
 

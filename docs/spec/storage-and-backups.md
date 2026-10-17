@@ -1,0 +1,137 @@
+# Storage and backups
+
+How the app keeps its state: JSON files in its own storage, one a concern, and the secrets in one encrypted file. What happens to a file that can't be read, the daily backup and restoring it, the resets, and the commands for testing from a PC.
+The app stores nothing off the phone but the plan's slots in the calendar it writes to ([slots-and-calendar.md](slots-and-calendar.md)); copies elsewhere are yours to make.
+
+## The stores
+
+`data/JsonStore.kt` is one piece of the app's state kept in a JSON file and shared as a `StateFlow` by everything in the app's one process: the sync, the focus service, the widget and the screens. `AppGraph` makes one of each.
+- `JsonStore.update` makes changes one at a time and writes only when something changed: to `<name>.tmp`, then renamed over the file, so a crash mid-write can't leave half a file.
+- Each store is written whole at every change.
+- Unknown keys are ignored and defaults written (`JsonStore.json`), so an older or newer file still loads. No store has a schema version: compatibility is by defaults.
+- A failed write is logged; the app carries on.
+
+## The files
+
+Under the app's `files/` folder:
+
+| File | What it holds |
+|---|---|
+| `tasks.json` | `TaskState`: every task, open or lately finished, with its text, steps, readings and your values over it; each source's last read; the day's Anki quota deck and the decks' topics; completions not yet rewarded; Power Planner's timetable |
+| `settings.json` | `Settings`: hours and school windows, planning, blocking, Felix, Claude, calendars, notifications, protection |
+| `runtime.json` | `RuntimeState`: free time, today's slots, keeps under way, Felix's state, waiting changes, the code lock, the watchdog's findings, Claude's month and last 100 calls, the calibration, calendar answers, micro-plans, held notifications, Anki readings |
+| `log.json` | `ActivityLog`: slots kept, missed and moved; completions; blocks; protection lapses; each day's plan; check-ins; weekly reviews; Felix's messages; each week's totals ([privacy.md](privacy.md)) |
+| `instructions.json` | `InstructionState`: your changes, each with its words, what it's about, its reading and its state |
+| `memory.json` | `MemoryState`: what Felix remembers ([felix.md](felix.md)) |
+| `chat.json` | `ChatState`: the chat, the newest 200 messages |
+| `school.json` | `SchoolCalendar`: days with no school, and half-days |
+| `calendar.json` | `CalendarVersions`: fingerprints of the event versions the app wrote to the calendar, the last 2 000, so a stray copy is told from an event of yours ([slots-and-calendar.md](slots-and-calendar.md)) |
+| `secrets.bin` | The credentials and keys, encrypted (`data/SecretStore.kt`, [privacy.md](privacy.md)) |
+
+Beside them:
+- `photos/`: a photo of the work for a task, one a task, let go once no task holds it (AI-23);
+- `crashes/`: the last three crashes (`data/Crashes.kt`, AR-06), the newest in Settings → Claude;
+- `backups/`: a reset's copy, where `Documents` can't be written;
+- `<name>.unreadable-<when>`: copies of files that couldn't be read (below);
+- the debug commands' files: `credentials.import` (only until it's imported), `ai-prompts.json` and `chat-context.txt`.
+
+The cache holds a photo check's pages till they're checked, and the record exported from Stats to share (PL-11).
+
+## A file that can't be read
+
+A store's file that can't be read whole (IMP-P1-003, `JsonStore.load`):
+- keeps each top-level field that still reads on its own, the rest from its defaults, so an update that can't read one field loses only that field (`JsonStore.salvage`);
+- is copied aside as `<name>.unreadable-<yyyyMMdd-HHmmss>`, the newest three of each kept, the one just made always among them (`JsonStore.setAside`);
+- sets `JsonStore.problem`.
+
+`AppGraph` puts every problem on record (`RuntimeState.unreadable`) ahead of anything else, and only then has each store write what it kept over the bad file (`JsonStore.keepRecovered`). A start cut short in between finds the file again, and says so again.
+Setup and Settings → Backup say what happened, and where the copy is, until you tap *Got it* (`AppGraph.forgetUnreadable`).
+
+Settings that can't be read at all start armed while the device admin is on, as only arming turns it on: a bad file never disarms protection ([blocking-and-protection.md](blocking-and-protection.md)).
+
+Secrets that can't be decrypted are told apart from none saved (`SecretStore`): the keystore is tried three times, and the file is left where it is with a copy beside it, so a keystore that comes back reads it all at the next start. Meanwhile Setup asks for the credentials again.
+
+## Backups
+
+`data/Backup.kt` (`Backup`, format 6, `Backups.encode`) holds what the sources can't give back:
+- the settings as asked for (waiting changes applied), the activity log, the calibration, your calendar answers, and Claude's month;
+- your changes in use, your own tasks, the school calendar, what Felix remembers, Felix's state, today's slots, and the chat.
+
+Never the passwords or keys, nor the sources' tasks, which the next sync reads again.
+
+**Each day** (AR-07): `data/BackupWorker.kt`, a daily job, writes all of it to `Documents/Decrastination/decrastination-<date>.json` (`AppGraph.backupNow`).
+- It goes through MediaStore (`data/BackupFolder.kt`, Android 10 and later), with no folder to pick and no permission, and outlasts clearing the app's data.
+- It replaces that day's file, keeps the newest 14, and notes the time for Settings → Backup; a failed write is tried again up to three times.
+
+**Export** writes the same to a file you choose, and **Import** reads one back (Settings → Backup, or Setup).
+A copy off the phone is yours to make: a sync app mirroring the folder, or Export. Android's own backup is off (`allowBackup` false; the extraction rules exclude everything).
+
+## Restoring
+
+`AppGraph.importBackup` restores nothing from a file that isn't one of this app's, is a newer format, is over 8 MB, or holds what the app never writes (`Backups.problem`: a setting out of the screen's range, negative minutes, a learned figure out of bounds, and so on). Otherwise:
+- the settings go through `changeSettings`, keeping this phone's protection, Claude's key in use and its calendars: once armed, one that loosens the blocker waits;
+- your changes come back as applying each here would (one that would make tasks wait for each other in a circle stays unclear, saying so); your own tasks not here are added, with your changes laid over them again;
+- the school calendar is merged; what's remembered is merged by topic and words, this phone's winning; the chat comes back only where this phone's is empty;
+- Felix's state comes back where this phone has none, and today's slots on the same day;
+- the log is merged with nothing doubled, this phone's winning; the calibration is the backup's; calendar answers merge, this phone's winning; Claude's month takes the higher of each count;
+- the reminders' alarms are set again, the calendar read again, and today's record made again.
+
+It then says what came back, and what waits.
+
+## Resets
+
+Settings → Reset (LR-08, `AppGraph.reset`) clears one part, after saving a copy of everything as `reset-<date>-<time>.json` in `Documents/Decrastination` (in the app's own `backups/` where that can't be written, which Settings → Backup restores from).
+Nothing goes until its copy is saved. None needs the parent code, and none touches Claude's key, the sources or protection.
+
+| Reset | What goes |
+|---|---|
+| Stats | The record (slots, completions, days, blocks, reviews, check-ins), and what's learned from it; Felix's messages stay |
+| What the app has learned | The calibration, learned afresh from now |
+| What Felix remembers | His facts and standing instructions, and your profile lines |
+| The chat and Felix's history | The chat, Felix's messages and what he's waiting to say |
+| Your changes | Every change in use |
+| Everything learned | All of these |
+
+Each asks first, naming what goes, your changes listed. A reset's copy is never pruned: import it to undo the reset.
+
+## Commands from a PC
+
+`debug/CommandActivity.kt` runs commands for setting up and testing over adb, each logged to `adb logcat -s Decrastination`:
+
+```
+adb shell am start -n com.thomaswcode.decrastination/.debug.Command --es cmd <name> [--es|--ei|--ez <key> <value> …]
+```
+
+The alias `.debug.Command` needs the `DUMP` permission, which the adb shell holds and no ordinary app can; the activity itself isn't exported.
+On a debug build the menu's *Debug* page (AR-03) has a button for each command that takes nothing (`CommandActivity.PLAIN`: `sync`, `enrich`, `briefing`, `review`, `calendar`, `protection`, `backup-now`).
+
+**Setting up and reading**
+- `import-credentials`: moves `files/credentials.import` (written there by `scripts/load_credentials.py`) into the encrypted store, then deletes it; values are never logged.
+- `sync` [`--es sources teams,gmail`]; `state` (each source's status and every task); `anki-counts`; `plan` (the next seven days' slots); `open --es task <id>`.
+
+**The calendar**
+- `calendar` [`--ez again true`], read now; `calendar-written`; `calendar-sync`; `calendar-pick --es name <calendar>`.
+- `calendar-move --es key <slot> --ei by <minutes>` and `calendar-delete --es key <slot>`, as a hand in the calendar would.
+
+**Blocking and protection**
+- `force-block --ei minutes <n>` (0 ends it; it only tightens); `protection` [`--ez repair true`]; `offer-teams-sync`.
+- `test-arm` and `test-disarm` (at once); `remove-admin`; `clear-parent-code`.
+- `clean-up`: this app's notifications, a delayed Teams sync, forced blocking, the watchdog's restarts, and reviews run at any time but Sunday evening.
+
+**Claude and readings**
+- `enrich`; `enrich-task --es task <id>`; `ai-prompts --ei count <n>` (writes `files/ai-prompts.json`).
+- `ai-check --es base <url>` (a stand-in server, a dummy key); `ai-endpoint --es base <url>` and `ai-effort --es job <job> --es level <low|medium|high|none>`, both till the app restarts.
+
+**The chat, Felix and instructions**
+- `chat-ask --es text "<words>"` (a paid call); `chat-context` (writes `files/chat-context.txt`); `chat-card --es do <apply|undo>`; `chat-clear`.
+- `felix` (his state and last messages); `felix-check`; `felix-say --es reason <reason>` (a paid call); `memory`; `memory-tidy` (a paid call).
+- `instruction --es text "<words>"` [`--es task <id>`, `--es event <key>` or `--es day <YYYY-MM-DD>`]; `instructions`; `instruction-discard --es id <id|all>`.
+
+**Tasks, settings and the week**
+- `own-add --es title "<name>"` [`--es due <YYYY-MM-DDTHH:MM>`, `--ei minutes <n>`, `--es kind <kind>`]; `own-done`, `own-reopen` and `own-delete --es task <id>`.
+- `forget-task --es task own:<id>` (a test's task of your own, with its completions and slots); `quick-minutes --es task <id> --ei minutes <n>` (0 takes it back).
+- `setting --es name <field> --es value <value>` (one Felix may change); `briefing`; `check-in`; `review`; `assess --es task <id>`; `backup-now`.
+
+Those that ask Claude are paid calls: `chat-ask`, `felix-say`, `memory-tidy` and `instruction`, and `enrich`, `enrich-task`, `briefing` and `review` while Claude is on. `ai-check` reaches only the stand-in.
+
+The files `ai-prompts` and `chat-context` write hold your tasks' text: pull them into the git-ignored `private/`, then delete them from the phone.

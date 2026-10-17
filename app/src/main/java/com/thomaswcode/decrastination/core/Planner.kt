@@ -11,7 +11,7 @@ import kotlin.math.ceil
 import kotlin.math.roundToInt
 
 /**
- * Places every open task's remaining work into day buckets (docs/scheduler.md §3). Pure:
+ * Places every open task's remaining work into day buckets (docs/spec/planner.md). Pure:
  * everything it depends on comes in through [Input].
  *
  * 1. Each study day from today has a capacity: your hours that day (Settings), less what's

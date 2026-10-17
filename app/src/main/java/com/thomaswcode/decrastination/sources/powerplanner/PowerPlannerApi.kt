@@ -12,9 +12,9 @@ import kotlinx.serialization.json.putJsonObject
 import java.io.IOException
 
 /**
- * Power Planner's web API, as its open-source web app uses it (docs/data-sources.md §2): every
+ * Power Planner's web API, as its open-source web app uses it (docs/spec/sources.md): every
  * call a JSON POST carrying the web app's "rate-limited development key". Verified with your
- * account on 8 Oct (docs/phase0-findings.md §2).
+ * account on 8 Oct (docs/spec/sources.md).
  */
 class PowerPlannerApi(private val http: Http) {
 

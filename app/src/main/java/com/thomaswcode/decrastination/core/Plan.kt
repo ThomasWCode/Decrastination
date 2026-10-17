@@ -49,7 +49,7 @@ enum class Why {
 
 /**
  * One piece of a task, placed on one day: a sub-step ("Q1–8"), or a box of the task's remaining
- * time when it has no steps (docs/scheduler.md §3).
+ * time when it has no steps (docs/spec/planner.md).
  */
 data class Chunk(
     val taskId: String,
@@ -266,7 +266,7 @@ data class Plan(
     val dueSoon: List<Chunk> get() = todayBucket?.chunks.orEmpty() + tomorrowBucket?.chunks.orEmpty()
 
     /**
-     * Something is planned today: blocking is strict (docs/scheduler.md §4). Today's bucket alone,
+     * Something is planned today: blocking is strict (docs/spec/blocking-and-protection.md). Today's bucket alone,
      * since later work is spread over its window (PL-01) and tomorrow always holds a share of it.
      */
     val pressure: Boolean get() = todayBucket?.chunks.orEmpty().isNotEmpty()
@@ -323,7 +323,7 @@ data class Plan(
 }
 
 /**
- * What the app has learned about how long things take you (docs/scheduler.md §5), applied by the
+ * What the app has learned about how long things take you (docs/spec/learning.md), applied by the
  * planner. Phase 5 learns it; until then every value is its default.
  */
 @Serializable
