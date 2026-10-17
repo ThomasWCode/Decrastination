@@ -95,13 +95,22 @@ class FocusTest {
     @Test
     fun `a total Felix works out at your pace still teaches the pace, measured against the app's estimate`() = runTest {
         // 17 Oct: 40 minutes of the app's, Felix's steps and total of 60 at a pace of 1.5; and two hours of your own reckoning.
-        val paced = task("paced", effort = 40, steps = listOf(SubStep("Past paper", 60)))
-            .copy(userSteps = listOf(com.thomaswcode.decrastination.core.OwnStep("Past paper", 60)), userEffortMin = 60, userEffortPaced = true, status = Status.Done, doneAt = clock.time)
+        val base = task("paced", effort = 40, steps = listOf(SubStep("Past paper", 60)))
+        val paced = base.copy(
+            userSteps = listOf(com.thomaswcode.decrastination.core.OwnStep("Past paper", 60)), userEffortMin = 60, userEffortPacedFrom = 40,
+            userEffortPacedHash = com.thomaswcode.decrastination.core.Enrichments.inputHash(base), status = Status.Done, doneAt = clock.time,
+        )
         val yours = task("yours", effort = 40).copy(userEffortMin = 120, status = Status.Done, doneAt = clock.time)
-        focus.onCompleted(listOf(paced, yours))
+        // #50's review: estimated anew at 80 since, its content the same (read again for newer prompts):
+        // still measured against the 40 Felix worked from. Its content changed: as a total of yours.
+        val anew = paced.copy(id = "teams:anew", sourceId = "anew", sourceEffortMin = 80)
+        val changed = paced.copy(id = "teams:changed", sourceId = "changed", detail = "Also questions 9 to 12.")
+        focus.onCompleted(listOf(paced, yours, anew, changed))
         val records = log.value.completions.associateBy { it.taskId }
         assertEquals(40 to false, records.getValue("teams:paced").let { it.estimateMin to it.yourEstimate })
         assertEquals(120 to true, records.getValue("teams:yours").let { it.estimateMin to it.yourEstimate })
+        assertEquals(40 to false, records.getValue("teams:anew").let { it.estimateMin to it.yourEstimate })
+        assertEquals(60 to true, records.getValue("teams:changed").let { it.estimateMin to it.yourEstimate })
     }
 
     @Test

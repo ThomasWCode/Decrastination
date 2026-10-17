@@ -249,7 +249,11 @@ object ChatPrompts {
             val pace = calibration?.multiplier(t.kind, t.className) ?: 1.0
             return when {
                 abs(pace - 1.0) < 0.005 -> "${t.effortMin}"
-                t.pacedMinutes -> "${t.effortMin}, as given: the app's ${t.appEffortMin} at their pace"
+                // Felix's paced total (#50's review): with the app's estimate now, where it's another, and
+                // whether the task has changed since, so he can set it again.
+                t.pacedMinutes -> "${t.effortMin}, as given: the app's ${t.userEffortPacedFrom} at their pace" +
+                    (if (t.appEffortMin != t.userEffortPacedFrom) ", which it now puts at ${t.appEffortMin}" else "") +
+                    (if (t.pacedTeaches) "" else ", the task changed since")
                 t.yourMinutes || t.yourSteps -> "${t.effortMin}, as given"
                 else -> "${t.effortMin}, planned as ${(t.effortMin * pace).roundToInt()} at their pace"
             }
