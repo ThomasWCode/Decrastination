@@ -11,8 +11,10 @@ import kotlin.test.assertTrue
  * large (400). Its stated limit: 16 parameters with union types (a nullable field is one); one
  * more and every call with it fails, as the chat's did once the school calendar's change added its
  * end date (PL-16). Beyond that the grammar's size is the API's own: unions inside a list's items
- * weigh most, and the chat's 15 there made it too large to compile. Whether each schema compiles
- * is only known from the API ([SchemaCompileTest], asked for by hand).
+ * weigh most, and the chat's 15 there made it too large to compile. The rules here are a tripwire,
+ * not a guarantee: the grammar's size depends on the whole schema (3.1.3's chat schema, under them
+ * both, was refused with one more list added), so whether a schema compiles is only known from
+ * the API ([SchemaCompileTest], asked for by hand, before any schema change is merged).
  */
 class SchemaLimitsTest {
     /** Parameters with a union type in [node]: an `anyOf`, or a list of types, wherever they're nested. */
