@@ -79,7 +79,7 @@ A new ability of Felix's after Phase 3 goes into his service, not `AppGraph`; on
 
 ## Decisions for you
 
-[QUESTIONS.md](QUESTIONS.md), ten of them: the order; Codex rounds for the cleanup's PRs; how long a finished task keeps its text; one Felix notification or one a message; whether his past messages go into the chat; which notifications are his voice; the docs' new shape; the account's address in a public doc; the optional Phase 8; and how to release the data changes.
+[QUESTIONS.md](QUESTIONS.md), ten of them, answered there on 17 Oct: the order; Codex rounds for the cleanup's PRs; how long a finished task keeps its text; one Felix notification or one a message; whether his past messages go into the chat; which notifications are his voice; the docs' new shape; the account's address in a public doc; the optional Phase 8; and how to release the data changes.
 
 ## Done when
 
@@ -99,4 +99,4 @@ A new ability of Felix's after Phase 3 goes into his service, not `AppGraph`; on
 - [05-felix-and-notifications.md](05-felix-and-notifications.md): the conversation, the outbox and the notifier.
 - [06-conventions-and-docs.md](06-conventions-and-docs.md): names, files, comments and docs.
 - [07-verification-and-risks.md](07-verification-and-risks.md): tests, phone checks and risks.
-- [QUESTIONS.md](QUESTIONS.md): what needs your call.
+- [QUESTIONS.md](QUESTIONS.md): the calls the plan needed, with your answers.
