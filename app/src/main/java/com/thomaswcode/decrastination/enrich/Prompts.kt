@@ -39,9 +39,10 @@ object Prompts {
      * to 7's changes (PROGRESS.md listed them); 3: every starred email a task (3.0.1); 4: fewer,
      * longer steps (3.1.1, your call, 17 Oct: a task in parts only where it is, its few minutes'
      * admin in the step it belongs to); 5: a piece of work whole, never split by what's in it, the
-     * app cutting one over an hour into sittings (3.1.2, the same day).
+     * app cutting one over an hour into sittings (3.1.2, the same day); 6: whole up to a task's most,
+     * the schema saying so (3.1.2's review, before it was installed).
      */
-    const val VERSION = 5
+    const val VERSION = 6
 
     /**
      * Text past this is left out (and the model told). Room for a long email's own calendar of
@@ -65,7 +66,7 @@ object Prompts {
      */
     fun limits(job: Enrichments.Job): String = when (job) {
         Enrichments.Job.Assignment ->
-            "Limits the app enforces: at most ${Answers.MAX_STEPS} steps; no step longer than ${Answers.MAX_STEP} minutes; a total of at most ${Answers.MAX_EFFORT / 60} hours; the steps must add up to effortMin exactly."
+            "Limits the app enforces: at most ${Answers.MAX_STEPS} steps; a total of at most ${Answers.MAX_EFFORT / 60} hours; the steps must add up to effortMin exactly."
         else ->
             "Limits the app enforces: without blocks, effortMin at most ${Answers.MAX_EFFORT / 60} hours; at most $MAX_BLOCKS blocks, none longer than ${Answers.MAX_EFFORT} minutes, ${Answers.MAX_BLOCKS_EFFORT / 60} hours in all, adding up to effortMin exactly."
     }
@@ -147,7 +148,7 @@ object Prompts {
     private fun block(vocabulary: Boolean): Map<String, Any> = obj(
         *listOfNotNull(
             "title" to mapOf("type" to "string"),
-            "minutes" to described(mapOf("type" to "integer"), "10 to 60 where the work allows; never over ${if (vocabulary) Answers.MAX_STEP else Answers.MAX_EFFORT}"),
+            "minutes" to described(mapOf("type" to "integer"), "All its work, however long (the app cuts one over ${Answers.MAX_PART_MIN} minutes into sittings itself); never over ${Answers.MAX_EFFORT}"),
             ("ankiSections" to described(mapOf("type" to "array", "items" to mapOf("type" to "string")), "Only for a step that is nothing but learning numbered vocabulary sections")).takeIf { vocabulary },
             // An assignment's steps say where they can be done (PL-15).
             ("where" to described(mapOf("type" to "string", "enum" to listOf("anywhere", "home")), "home for a step that needs the laptop, books or quiet; anywhere for one that can be done at school in a free period")).takeIf { vocabulary },
@@ -295,7 +296,8 @@ object Answers {
      * gone wrong.
      */
     internal const val MAX_BLOCKS_EFFORT = 1_200
-    internal const val MAX_STEP = 240
+
+    /** The most steps an assignment's reading gives: past it, the rest are folded ([fold]). Its sittings may be more. */
     internal const val MAX_STEPS = 12
     private const val MAX_TITLE = 80
     private const val MAX_NEXT_STEP = 120
@@ -339,6 +341,15 @@ object Answers {
         return (0 until parts).map { i -> step.copy(title = title(i), minutes = step.minutes / parts + if (i < step.minutes % parts) 1 else 0) }
     }
 
+    /**
+     * [steps] in sittings ([fitParts]), each part keeping its step's dates, so ticking a piece never
+     * ticks off more than it did; but not one that takes the mark of a step of [before] done
+     * ([com.thomaswcode.decrastination.core.carryMarks]): done, it isn't planned, and cut, the parts
+     * after its first would lose the mark (#48's review).
+     */
+    internal fun sittings(steps: List<SubStep>, before: List<SubStep>): List<SubStep> =
+        com.thomaswcode.decrastination.core.carryMarks(steps, before).zip(steps).flatMap { (marked, step) -> if (marked.done) listOf(step) else fitParts(step) }
+
     /** A test's day: work must be done before school that morning. */
     private val SCHOOL_STARTS: LocalTime = LocalTime.of(8, 30)
 
@@ -376,7 +387,7 @@ object Answers {
                 // Blocks of work, each perhaps with its own dates (Q12): not trusted, the triage stands
                 // without them, and the task says why.
                 val checked = trusted(steps(t.blocks, now, zone, vocabulary = false, maxMinutes = MAX_EFFORT, dueBy = deadline ?: sourceDue(task), opens = opens, noun = "block", salvage = salvage), t.effortMin, t.blocks.size)
-                val blocks = checked.steps
+                val blocks = checked.steps?.let { sittings(it, task.subSteps) }
                 base.copy(
                     // Blocks of work make it something to do, whatever else it says: the ones given,
                     // trusted or not. Dropped, its whole estimate is planned instead, and its warning
@@ -400,10 +411,11 @@ object Answers {
                 // trusted: the task's whole estimate is planned instead, none of it lost with that step.
                 val testDate = checkedTime("testDate", s.testDate, now, problems) { date(it, zone, SCHOOL_STARTS) }
                 // By the test, where there's one before the source's deadline: it's the task's then.
-                val read = steps(s.subSteps, now, zone, vocabulary = true, maxMinutes = MAX_STEP, dueBy = listOfNotNull(sourceDue(task), testDate).minOrNull(), salvage = salvage)
+                val read = steps(s.subSteps, now, zone, vocabulary = true, maxMinutes = MAX_EFFORT, dueBy = listOfNotNull(sourceDue(task), testDate).minOrNull(), salvage = salvage)
                 val usable = read.steps != null
                 val valid = read.steps.orEmpty()
-                // More steps than the planner takes: the rest folded, so none of the work goes (see [fold]).
+                // More steps than the model may give: the rest folded, so none of the work goes (see
+                // [fold]); cut into sittings only after, a fold too ([sittings]).
                 val steps = if (valid.size <= MAX_STEPS) valid else valid.take(MAX_STEPS - 1) + fold(valid.drop(MAX_STEPS - 1))
                 val sections = sections(s.ankiSections + steps.flatMap { it.ankiSections })
                 // All vocabulary (no steps, its sections named): a step for it all the same, at the
@@ -434,7 +446,7 @@ object Answers {
                 }
                 base.copy(
                     effortMin = total ?: sum.takeIf { agree && it > 0 },
-                    subSteps = planned.takeIf { agree }.orEmpty().ifEmpty { null },
+                    subSteps = planned.takeIf { agree }?.let { sittings(it, task.subSteps) }.orEmpty().ifEmpty { null },
                     dropped = dropped,
                     adjusted = read.adjusted,
                     // A split not trusted hands no vocabulary to a deck either: its total, planned
@@ -449,7 +461,7 @@ object Answers {
                 val total = effort(e.effortMin)
                 // Big enough to do in parts: its blocks, each perhaps with its own dates (Q12).
                 val checked = trusted(steps(e.blocks, now, zone, vocabulary = false, maxMinutes = MAX_EFFORT, dueBy = sourceDue(task), noun = "block", salvage = salvage), e.effortMin, e.blocks.size)
-                val blocks = checked.steps
+                val blocks = checked.steps?.let { sittings(it, task.subSteps) }
                 base.copy(effortMin = blocks?.sumOf { it.minutes } ?: total, subSteps = blocks, dropped = checked.dropped, adjusted = checked.adjusted)
             }
         }
@@ -463,8 +475,8 @@ object Answers {
      * listed later is due). Dates that can't be (a start after its own deadline, a start or a
      * deadline after its task's, [dueBy]) fail it too, unless it's to [salvage]: then the step keeps
      * its place and minutes with no dates, planned by its task's, and a line in [Checked.adjusted]
-     * says so. Each keeps its own dates; one longer than [MAX_PART_MIN] is cut into parts that keep
-     * them, so ticking a piece never ticks off more than it did. A step tagged as vocabulary
+     * says so. Each keeps its own dates; one over [MAX_PART_MIN] is cut into sittings after, once
+     * folded or trusted ([sittings]). A step tagged as vocabulary
      * ([vocabulary] jobs only) that asks for anything else too stays planned whole.
      */
     private fun steps(given: List<Step>, now: Long, zone: ZoneId, vocabulary: Boolean, maxMinutes: Int, dueBy: Long?, opens: Long? = null, noun: String = "step", salvage: Boolean = true): Checked {
@@ -503,7 +515,7 @@ object Answers {
             val j = read.indices.drop(i + 1).firstOrNull { later -> read[later].dueAt?.let { it < from } == true } ?: continue
             return no("${which(i, read[i].title)} can't start till ${at(from)}, after ${which(j, read[j].title)} is due ${at(read[j].dueAt!!)}")
         }
-        return Checked(read.flatMap(::fitParts), adjusted = adjusted)
+        return Checked(read, adjusted = adjusted)
     }
 
     /**

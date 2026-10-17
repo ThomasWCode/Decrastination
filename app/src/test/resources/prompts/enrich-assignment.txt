@@ -9,7 +9,7 @@ Also give:
 - question: rarely: the one question that would settle a reading the text can't (which Friday; whether the test is the 12th or the 19th); otherwise null.
 - reason: the phrase in the instructions that gave the test date or the split, quoted (under 160 characters); empty if nothing did.
 
-Limits the app enforces: at most 12 steps; no step longer than 240 minutes; a total of at most 10 hours; the steps must add up to effortMin exactly.
+Limits the app enforces: at most 12 steps; a total of at most 10 hours; the steps must add up to effortMin exactly.
 
 Examples (made up, to show the form of an answer):
 

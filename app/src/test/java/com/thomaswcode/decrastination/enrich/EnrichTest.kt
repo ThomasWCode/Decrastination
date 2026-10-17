@@ -56,6 +56,16 @@ class RuleEnricherTest {
     }
 
     @Test
+    fun `the rules' parts over an hour are in sittings too`() = runBlocking {
+        val task = assignment("1. Write the essay\n2. Make the poster").copy(sourceEffortMin = 240)
+        val steps = RuleEnricher().enrich(task, Enrichments.Job.Assignment, NOW).enrichment!!.subSteps!!
+        assertEquals(
+            listOf("Write the essay" to 60, "Continue and finish: Write the essay" to 60, "Make the poster" to 60, "Continue and finish: Make the poster" to 60),
+            steps.map { it.title to it.minutes },
+        )
+    }
+
+    @Test
     fun `the rules share the source's estimate, not a stale one of the model's`() = runBlocking {
         val task = assignment("1. Complete the reading task\n2. Mark it").copy(sourceEffortMin = 40, aiEffortMin = 120)
         val steps = RuleEnricher().enrich(task, Enrichments.Job.Assignment, NOW).enrichment!!.subSteps!!
@@ -333,6 +343,38 @@ class AnswersTest {
     }
 
     @Test
+    fun `one piece of work is taken whole up to a task's most, then cut into sittings`() {
+        val e = parse(Enrichments.Job.Assignment, """{"subSteps":[{"title":"Coursework draft","minutes":300,"ankiSections":[],"from":null,"due":null}],"effortMin":300,"ankiSections":[],"testDate":null}""", assignment("Write the draft."))!!
+        assertNull(e.dropped)
+        assertEquals(List(5) { 60 }, e.subSteps!!.map { it.minutes })
+        assertEquals("Continue and finish: Coursework draft", e.subSteps!!.last().title)
+    }
+
+    @Test
+    fun `steps past the most are folded before they're cut into sittings, so a fold is cut too`() {
+        // Twelve given, the last two hours: all kept, it in two sittings.
+        val short = (1..11).joinToString(",") { """{"title":"Question $it","minutes":10,"ankiSections":[],"from":null,"due":null}""" }
+        val twelve = parse(Enrichments.Job.Assignment, """{"subSteps":[$short,{"title":"Write up","minutes":120,"ankiSections":[],"from":null,"due":null}],"effortMin":230,"ankiSections":[],"testDate":null}""", assignment("Do it."))!!
+        assertEquals(13, twelve.subSteps!!.size)
+        assertEquals(listOf("Write up" to 60, "Continue and finish: Write up" to 60), twelve.subSteps!!.takeLast(2).map { it.title to it.minutes })
+        // Fourteen: the last three folded into one, and that cut too, no sitting over an hour.
+        val fourteen = parse(Enrichments.Job.Assignment, """{"subSteps":[$short,{"title":"Plan","minutes":10,"ankiSections":[],"from":null,"due":null},{"title":"Draft","minutes":100,"ankiSections":[],"from":null,"due":null},{"title":"Check","minutes":10,"ankiSections":[],"from":null,"due":null}],"effortMin":230,"ankiSections":[],"testDate":null}""", assignment("Do it."))!!
+        assertTrue(fourteen.subSteps!!.all { it.minutes <= Answers.MAX_PART_MIN }, fourteen.subSteps.toString())
+        assertEquals(230, fourteen.subSteps!!.sumOf { it.minutes })
+        assertTrue(fourteen.subSteps!![11].title.startsWith("The rest: Plan"))
+    }
+
+    @Test
+    fun `a step done before is kept whole, so all its work keeps its tick`() {
+        // Read by older prompts as a two-hour step, done; read again, it's given as it was.
+        val given = assignment("Revise for the test.").let { t -> t.withEnrichment(Enrichment(Enrichments.inputHash(t), "claude-opus-5-5", NOW, effortMin = 210, subSteps = listOf(SubStep("Revise", 120), SubStep("Practice paper", 90)), promptVersion = 4)) }
+        val task = given.copy(subSteps = given.subSteps.mapIndexed { i, s -> if (i == 0) s.copy(done = true) else s })
+        val e = parse(Enrichments.Job.Assignment, """{"subSteps":[{"title":"Revise","minutes":120,"ankiSections":[],"from":null,"due":null},{"title":"Practice paper","minutes":90,"ankiSections":[],"from":null,"due":null}],"effortMin":210,"ankiSections":[],"testDate":null}""", task)!!
+        assertEquals(listOf("Revise" to 120, "Practice paper" to 45, "Continue and finish: Practice paper" to 45), e.subSteps!!.map { it.title to it.minutes })
+        assertEquals(listOf(true, false, false), task.withEnrichment(e).subSteps.map { it.done })
+    }
+
+    @Test
     fun `vocabulary past the step limit keeps its own step and sections, the rest folds`() {
         val questions = (1..12).joinToString(",") { """{"title":"Question $it","minutes":10,"ankiSections":[]}""" }
         val words = """{"title":"Learn vocabulary 2.3","minutes":20,"ankiSections":["2.3"]}"""
@@ -450,7 +492,7 @@ class AnswersTest {
         assertEquals("block 2 ('Apply') starts on 2026-10-20, after its own due time 2026-10-15T23:59", Answers.read(Enrichments.Job.Effort, """{"effortMin":60,"blocks":[${block()},${block(from = "2026-10-20", due = "2026-10-15")}]}""", email(), "m", NOW, LONDON, salvage = false).enrichment!!.dropped)
         // An assignment's steps say the same of a step, and of a total past one task's.
         val split = { steps: String, total: Int -> parse(Enrichments.Job.Assignment, """{"subSteps":[$steps],"effortMin":$total,"ankiSections":[],"testDate":null}""", assignment("Do it"))!!.dropped }
-        assertEquals("step 1 ('Essay') is 300 minutes, over the 240 allowed", split("""{"title":"Essay","minutes":300,"ankiSections":[],"from":null,"due":null}""", 300))
+        assertEquals("step 1 ('Essay') is 700 minutes, over the 600 allowed", split("""{"title":"Essay","minutes":700,"ankiSections":[],"from":null,"due":null}""", 700))
         assertEquals("the steps add up to 60 minutes, not the 120 effortMin gives", split("""{"title":"Essay","minutes":60,"ankiSections":[],"from":null,"due":null}""", 120))
         assertNull(split("""{"title":"Essay","minutes":60,"ankiSections":[],"from":null,"due":null}""", 60))
         // Said to the model, it starts with a capital.
@@ -565,13 +607,13 @@ class AnswersTest {
     @Test
     fun `the limits the answers are checked against are said in the prompts and the schemas`() {
         assertEquals(
-            "Limits the app enforces: at most 12 steps; no step longer than 240 minutes; a total of at most 10 hours; the steps must add up to effortMin exactly.",
+            "Limits the app enforces: at most 12 steps; a total of at most 10 hours; the steps must add up to effortMin exactly.",
             Prompts.limits(Enrichments.Job.Assignment),
         )
         assertTrue(Prompts.limits(Enrichments.Job.Assignment) in Prompts.system(Enrichments.Job.Assignment))
         assertTrue("at most 30 blocks, none longer than 600 minutes, 20 hours in all" in Prompts.system(Enrichments.Job.Email))
         val step = Prompts.schemaJson(Enrichments.Job.Assignment).jsonObject["properties"]!!.jsonObject["subSteps"]!!.jsonObject["items"]!!.jsonObject["properties"]!!.jsonObject
-        assertEquals("10 to 60 where the work allows; never over 240", step["minutes"]!!.jsonObject["description"]!!.jsonPrimitive.content)
+        assertEquals("All its work, however long (the app cuts one over 60 minutes into sittings itself); never over 600", step["minutes"]!!.jsonObject["description"]!!.jsonPrimitive.content)
         assertTrue("never after the task's due date" in step["from"]!!.jsonObject["description"]!!.jsonPrimitive.content)
     }
 
