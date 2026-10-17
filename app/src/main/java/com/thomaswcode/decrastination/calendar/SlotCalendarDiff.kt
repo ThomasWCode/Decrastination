@@ -54,6 +54,19 @@ object SlotCalendarDiff {
     fun isCopy(calendarId: Long, title: String, description: String, start: Long, end: Long, versions: Set<Long>): Boolean =
         looksWritten(description) && version(calendarId, title, start, end) in versions
 
+    /**
+     * Of [desired]'s versions, those an event of yours already has in [calendarId] ([unmarked]: none
+     * of the app's marks, in its words), under a slot's title at its times before the app has ever
+     * written that version (not one of [versions]), so it can't be a copy of one. Not remembered
+     * ([remembered]) while it's there, so no write takes it for one (#48's third review): remembered,
+     * the next write would have deleted it.
+     */
+    fun yours(calendarId: Long, desired: List<Desired>, unmarked: List<Existing>, versions: Set<Long>): Set<Long> {
+        val wanted = desired.map { version(calendarId, it.title, it.start, it.end) }.toSet()
+        return unmarked.filter { !it.marked && looksWritten(it.description) }.map { version(calendarId, it.title, it.start, it.end) }
+            .filter { it in wanted && it !in versions }.toSet()
+    }
+
     /** How many versions are remembered ([remembered]): some days of a plan's changes, as a copy comes back within minutes. */
     const val MAX_VERSIONS = 2_000
 

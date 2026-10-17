@@ -34,8 +34,12 @@ object SlotCalendar {
     /** A calendar on the phone, and whether events can be added to it. */
     data class DeviceCalendar(val id: Long, val name: String, val account: String, val writable: Boolean)
 
-    /** What a write left: each URI's start as it now stands, and the moves you made, taken or written back (with why). */
-    data class Written(val starts: Map<String, Long>, val taken: List<SlotCalendarDiff.HandMove>, val refused: List<Pair<SlotCalendarDiff.HandMove, String>>)
+    /**
+     * What a write left: each URI's start as it now stands, and the moves you made, taken or written
+     * back (with why); and the versions it wrote that an event of yours already has, not to be
+     * remembered ([SlotCalendarDiff.yours]).
+     */
+    data class Written(val starts: Map<String, Long>, val taken: List<SlotCalendarDiff.HandMove>, val refused: List<Pair<SlotCalendarDiff.HandMove, String>>, val yours: Set<Long> = emptySet())
 
     fun allowed(context: Context): Boolean = context.checkSelfPermission(Manifest.permission.WRITE_CALENDAR) == PackageManager.PERMISSION_GRANTED
 
@@ -59,13 +63,17 @@ object SlotCalendar {
     /**
      * [plan]'s slots written to [calendarId] against what's there and [written] (each URI's start as
      * last written); a hand move taken as [SlotCalendarDiff.judge] judges it, else written back. A
-     * copy of one of its events is known by [versions], those it has written ([SlotCalendarDiff.isCopy]).
+     * copy of one of its events is known by [versions], those it has written ([SlotCalendarDiff.isCopy]);
+     * an event of yours under a slot's title at its times, there before it, is said ([Written.yours]).
      */
     fun write(context: Context, calendarId: Long, plan: Plan, zone: ZoneId, written: Map<String, Long>, versions: Set<Long>, micro: Map<String, com.thomaswcode.decrastination.enrich.MicroPlan> = emptyMap(), refuses: (SlotCalendarDiff.HandMove) -> String?): Written {
         val from = plan.today.atStartOfDay(zone).toInstant().toEpochMilli()
         val to = plan.today.plusDays(SlotCalendarDiff.DAYS).atStartOfDay(zone).toInstant().toEpochMilli()
         val desired = SlotCalendarDiff.desired(plan, zone, micro)
-        val diff = SlotCalendarDiff.diff(desired, existing(context, calendarId, from, to, desired.map { it.uri }, versions), written)
+        // Those with none of its marks in its words: copies of its own, to delete, and events of yours.
+        val unmarked = unmarked(context, calendarId)
+        val copies = unmarked.filter { SlotCalendarDiff.isCopy(calendarId, it.title, it.description, it.start, it.end, versions) }
+        val diff = SlotCalendarDiff.diff(desired, existing(context, calendarId, from, to, desired.map { it.uri }) + copies, written)
         val (taken, refused) = SlotCalendarDiff.judge(diff.handMoves, refuses)
         val ops = ArrayList<ContentProviderOperation>()
         diff.inserts.forEach { ops += ContentProviderOperation.newInsert(Events.CONTENT_URI).withValues(values(context, calendarId, it, zone)).build() }
@@ -74,7 +82,7 @@ object SlotCalendar {
         }
         diff.deletes.forEach { ops += ContentProviderOperation.newDelete(ContentUris.withAppendedId(Events.CONTENT_URI, it.id)).build() }
         if (ops.isNotEmpty()) context.contentResolver.applyBatch(CalendarContract.AUTHORITY, ops)
-        return Written(desired.associate { it.uri to it.start } + taken.associate { it.desired.uri to it.existing.start }, taken, refused)
+        return Written(desired.associate { it.uri to it.start } + taken.associate { it.desired.uri to it.existing.start }, taken, refused, SlotCalendarDiff.yours(calendarId, desired, unmarked, versions))
     }
 
     /**
@@ -86,24 +94,24 @@ object SlotCalendar {
         return runCatching {
             context.contentResolver.delete(Events.CONTENT_URI, "${Events.CALENDAR_ID} = ? AND ${Events.CUSTOM_APP_PACKAGE} = ?", arrayOf(calendarId.toString(), context.packageName))
             // And copies of its events that lost the app's marks (17 Oct), by their words and [versions].
-            val copies = copies(context, calendarId, versions).map { it.id }
+            val copies = unmarked(context, calendarId).filter { SlotCalendarDiff.isCopy(calendarId, it.title, it.description, it.start, it.end, versions) }.map { it.id }
             if (copies.isNotEmpty()) context.contentResolver.applyBatch(CalendarContract.AUTHORITY, ArrayList(copies.map { ContentProviderOperation.newDelete(ContentUris.withAppendedId(Events.CONTENT_URI, it)).build() }))
         }.isSuccess
     }
 
     /**
-     * The events in [calendarId] with no app's marks that are copies of its own ([SlotCalendarDiff.isCopy]:
-     * in its words, under a title and at times it wrote there, [versions]), brought back without them
-     * by the calendar's sync, whenever they are.
+     * The events in [calendarId] with no app's marks in its words ([SlotCalendarDiff.looksWritten]),
+     * whenever they are: copies of its own the calendar's sync brought back without them
+     * ([SlotCalendarDiff.isCopy]), or events of yours so worded ([SlotCalendarDiff.yours]).
      */
-    private fun copies(context: Context, calendarId: Long, versions: Set<Long>): List<SlotCalendarDiff.Existing> {
+    private fun unmarked(context: Context, calendarId: Long): List<SlotCalendarDiff.Existing> {
         val projection = arrayOf(Events._ID, Events.DTSTART, Events.DTEND, Events.TITLE, Events.DESCRIPTION)
         val selection = "${Events.CALENDAR_ID} = ? AND ${Events.CUSTOM_APP_PACKAGE} IS NULL AND ${Events.DELETED} = 0"
         val found = mutableListOf<SlotCalendarDiff.Existing>()
         context.contentResolver.query(Events.CONTENT_URI, projection, selection, arrayOf(calendarId.toString()), null)?.use { c ->
             while (c.moveToNext()) {
-                val (title, description) = c.getString(3).orEmpty() to c.getString(4).orEmpty()
-                if (SlotCalendarDiff.isCopy(calendarId, title, description, c.getLong(1), c.getLong(2), versions)) found += SlotCalendarDiff.Existing(c.getLong(0), "", c.getLong(1), c.getLong(2), title, description, marked = false)
+                val description = c.getString(4).orEmpty()
+                if (SlotCalendarDiff.looksWritten(description)) found += SlotCalendarDiff.Existing(c.getLong(0), "", c.getLong(1), c.getLong(2), c.getString(3).orEmpty(), description, marked = false)
             }
         }
         return found
@@ -122,10 +130,9 @@ object SlotCalendar {
 
     /**
      * The app's events in [calendarId], not deleted, starting between [from] and [to], or one of
-     * [uris] wherever it now is (one you moved out of the week is found by what it is); and the
-     * copies of its events that lost its marks, wherever they are ([copies]), to delete.
+     * [uris] wherever it now is (one you moved out of the week is found by what it is).
      */
-    private fun existing(context: Context, calendarId: Long, from: Long, to: Long, uris: List<String>, versions: Set<Long>): List<SlotCalendarDiff.Existing> {
+    private fun existing(context: Context, calendarId: Long, from: Long, to: Long, uris: List<String>): List<SlotCalendarDiff.Existing> {
         val projection = arrayOf(Events._ID, Events.DTSTART, Events.DTEND, Events.TITLE, Events.DESCRIPTION, Events.CUSTOM_APP_URI)
         val byUri = if (uris.isEmpty()) "" else " OR ${Events.CUSTOM_APP_URI} IN (${uris.joinToString(",") { "?" }})"
         val selection = "${Events.CALENDAR_ID} = ? AND ${Events.CUSTOM_APP_PACKAGE} = ? AND ${Events.DELETED} = 0 AND ((${Events.DTSTART} >= ? AND ${Events.DTSTART} < ?)$byUri)"
@@ -137,7 +144,7 @@ object SlotCalendar {
                 found += SlotCalendarDiff.Existing(c.getLong(0), uri, c.getLong(1), c.getLong(2), c.getString(3).orEmpty(), c.getString(4).orEmpty())
             }
         }
-        return found + copies(context, calendarId, versions)
+        return found
     }
 
     private fun values(context: Context, calendarId: Long, want: SlotCalendarDiff.Desired, zone: ZoneId) = ContentValues().apply {

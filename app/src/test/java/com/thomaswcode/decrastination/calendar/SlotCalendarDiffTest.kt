@@ -155,6 +155,25 @@ class SlotCalendarDiffTest {
     }
 
     @Test
+    fun `an event of yours at a slot's title and times before it's written is never remembered, so never taken for a copy`() {
+        // #48's third review: yours there first, in the app's words, under a slot's title at its times.
+        val end = five + 30 * 60_000L
+        val slot = want("a")
+        val mine = Existing(9, "", five, end, "Essay", "Gmail. Mine, worded so.", marked = false)
+        val version = SlotCalendarDiff.version(22, "Essay", five, end)
+        val yours = SlotCalendarDiff.yours(22, listOf(slot), listOf(mine), versions = emptySet())
+        assertEquals(setOf(version), yours)
+        // Not remembered at this write, so the next doesn't take it for a copy.
+        val remembered = SlotCalendarDiff.remembered(emptyList(), listOf(version).filterNot { it in yours })
+        assertFalse(SlotCalendarDiff.isCopy(22, mine.title, mine.description, mine.start, mine.end, remembered.toSet()))
+        // A copy of a version written before is still one, never yours; nor is an event of the app's.
+        val earlier = SlotCalendarDiff.version(22, "Essay", half, half + 30 * 60_000L)
+        val copy = Existing(10, "", half, half + 30 * 60_000L, "Essay", "Teams. Spread over the 3 days to its deadline.", marked = false)
+        assertEquals(emptySet(), SlotCalendarDiff.yours(22, listOf(slot, want("b", start = half)), listOf(copy), setOf(earlier)))
+        assertEquals(emptySet(), SlotCalendarDiff.yours(22, listOf(slot), listOf(event(11, "a")), emptySet()))
+    }
+
+    @Test
     fun `the versions written are remembered once each, the latest last, the oldest let go`() {
         assertEquals(listOf(1L, 3L, 2L, 4L), SlotCalendarDiff.remembered(listOf(1, 2, 3), listOf(2, 4, 4)))
         val full = (1L..SlotCalendarDiff.MAX_VERSIONS.toLong()).toList()
