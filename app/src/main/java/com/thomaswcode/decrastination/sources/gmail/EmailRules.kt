@@ -9,7 +9,7 @@ import java.time.format.TextStyle
 import java.util.Locale
 
 /**
- * The rules that triage a starred conversation when the AI is off (docs/data-sources.md §4): what
+ * The rules that triage a starred conversation when the AI is off (docs/spec/sources.md): what
  * kind of task it is, roughly how long it takes, and when it becomes relevant. Pure, for the tests.
  *
  * - A note you sent yourself (Gmail labels it `\Sent`): something to deal with, 10 minutes.

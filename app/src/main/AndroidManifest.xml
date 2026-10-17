@@ -2,7 +2,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- The Teams Assignments widget's provider (docs/data-sources.md §1). Signature-level, so it
+    <!-- The Teams Assignments widget's provider (docs/spec/sources.md). Signature-level, so it
          is granted without asking because both apps are signed with the same key. Defined here
          as well as there, identically, so the order the two are installed in doesn't matter. -->
     <permission
@@ -12,7 +12,7 @@
         android:protectionLevel="signature" />
     <uses-permission android:name="com.teamsassignments.widget.permission.READ_ASSIGNMENTS" />
 
-    <!-- AnkiDroid's provider (docs/data-sources.md §3): a runtime permission, granted once. -->
+    <!-- AnkiDroid's provider (docs/spec/sources.md): a runtime permission, granted once. -->
     <uses-permission android:name="com.ichi2.anki.permission.READ_WRITE_DATABASE" />
 
     <!-- Power Planner's web API and Gmail's IMAP. -->
@@ -21,7 +21,7 @@
     <!-- Focus sessions and protection alerts. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
-    <!-- The watchdog and the periodic jobs after a reboot (docs/scheduler.md §6, layer 5). -->
+    <!-- The watchdog and the periodic jobs after a reboot (docs/spec/blocking-and-protection.md). -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <!-- Asking One UI not to put the app to sleep. -->

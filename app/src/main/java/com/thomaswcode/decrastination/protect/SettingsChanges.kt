@@ -10,7 +10,7 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
 
-/** A change that loosens blocking itself, waiting its 24 hours (docs/scheduler.md §6, layer 4). */
+/** A change that loosens blocking itself, waiting its 24 hours (docs/spec/blocking-and-protection.md, layer 4). */
 @Serializable
 data class PendingChange(
     val id: String,
@@ -29,7 +29,7 @@ data class PendingChange(
 )
 
 /**
- * Layer 4 of the anti-tamper (docs/scheduler.md §6): once protection is armed, any change that
+ * Layer 4 of the anti-tamper (docs/spec/blocking-and-protection.md): once protection is armed, any change that
  * loosens blocking waits [Settings.loosenDelayHours] before it applies, shown as pending; one that
  * tightens applies at once; a parent code (layer 6) applies one pending change at once. Before
  * arming, everything applies at once (Q20). Pure.

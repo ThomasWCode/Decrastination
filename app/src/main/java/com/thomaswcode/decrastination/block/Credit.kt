@@ -5,7 +5,7 @@ import java.time.LocalDate
 import kotlin.math.roundToLong
 
 /**
- * Earned free time for one day (docs/scheduler.md §4; about a minute per three of work, Q22).
+ * Earned free time for one day (docs/spec/blocking-and-protection.md; about a minute per three of work, Q22).
  * Earned whenever work is done; spendable only when nothing is planned for today, and only
  * while a blocked app is in front. What's left at midnight is gone.
  */
@@ -45,7 +45,7 @@ data class Credit(
 
         /**
          * A task the source confirms done earns its remaining estimate at the same rate, the work
-         * no kept slot counted, up to 30 minutes (docs/scheduler.md §4's ceiling). There's no floor:
+         * no kept slot counted, up to 30 minutes (docs/spec/blocking-and-protection.md's ceiling). There's no floor:
          * with one, archiving a pile of emails would earn five minutes each.
          */
         fun forCompletion(remainingMin: Int, workMinPerFreeMin: Int): Double =

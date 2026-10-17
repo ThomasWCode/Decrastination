@@ -32,7 +32,7 @@ class AnkiRulesTest {
 
     @Test
     fun `the sections German homework names are found, and only in vocabulary work`() {
-        // The texts of 7 Oct (docs/data-sources.md §3).
+        // The texts of 7 Oct (docs/spec/sources.md).
         assertEquals(listOf(1 to 2), AnkiRules.linkedSections("Learn vocabulary column 1.2 Familie und Ehe - both ways.\nPage 15 - exercises 4 and 5."))
         assertEquals(listOf(2 to 2, 2 to 3), AnkiRules.linkedSections("Hausaufgaben\n1. Learn vocabulary p46-47/ 2.2/2.3 ( vocabulary test ! )"))
         assertEquals(emptyList(), AnkiRules.linkedSections("Learn vocabulary - verschiedene Familienformen"))

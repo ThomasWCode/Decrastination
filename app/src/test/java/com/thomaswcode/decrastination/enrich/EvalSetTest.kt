@@ -19,7 +19,7 @@ import java.time.ZoneId
 import kotlin.test.Test
 
 /**
- * The private evaluation set (IMP-P1-004, docs/eval.md): a dozen of your real emails and
+ * The private evaluation set (IMP-P1-004, docs/development.md): a dozen of your real emails and
  * assignments, each with the right answer, in `private/eval/` (never committed). Run only where
  * that folder is, so on this PC; skipped everywhere else, CI included.
  *

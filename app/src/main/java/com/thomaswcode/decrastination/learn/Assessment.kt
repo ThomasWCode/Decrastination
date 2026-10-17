@@ -44,7 +44,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 /**
- * The quick self-assessment after each verified completion (docs/scheduler.md §5, item 5): harder,
+ * The quick self-assessment after each verified completion (docs/spec/learning.md, item 5): harder,
  * as expected or easier, and a line if you like. It feeds the effort multipliers and the weekly
  * review. Since review v2 (LR-05) it's Felix's question, once an evening, about the day's work done
  * outside the app's knowledge; with Claude off, a notification of its own per completion, as before.

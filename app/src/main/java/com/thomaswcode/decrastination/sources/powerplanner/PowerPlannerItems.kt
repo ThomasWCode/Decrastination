@@ -10,7 +10,7 @@ import java.time.ZoneId
 import java.time.temporal.ChronoUnit
 
 /**
- * Power Planner's agenda items as tasks, pure (docs/data-sources.md §2, docs/phase0-findings.md §2).
+ * Power Planner's agenda items as tasks, pure (docs/spec/sources.md).
  *
  * An item's `Date` is local time, and its seconds carry the time option (the web app's
  * `viewItems.ts`, `timeOption`). A task with a class: `:00` start of class, `:01` before class,

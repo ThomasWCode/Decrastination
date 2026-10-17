@@ -26,7 +26,7 @@ class PowerPlannerItemsTest {
 
     @Test
     fun `a German task due before class is due at the class's start that day`() {
-        // 25 Sep is a Friday of week 1, when German starts at 12:20 (docs/phase0-findings.md §2).
+        // 25 Sep is a Friday of week 1, when German starts at 12:20 (docs/spec/sources.md).
         val task = PowerPlannerItems.fetched(item("Pg 60"), semester, timetable, LONDON)!!
         assertEquals(Fixtures.at("2026-09-25T12:20"), task.dueAt)
         assertEquals(Kind.Homework, task.kind)
