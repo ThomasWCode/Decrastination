@@ -63,6 +63,30 @@ class InstructionsTest {
     }
 
     @Test
+    fun `a total Felix works out at your pace is kept as paced through a sync, and a later one of yours isn't`() {
+        val essay = task("essay", "2026-10-12T09:00")
+        val paced = applied(Change(ChangeType.Minutes, taskId = essay.id, minutes = 90, pacedFrom = 60, pacedHash = Enrichments.inputHash(essay)))
+        val laid = essay.withOverrides(Instructions.taskOverrides(listOf(paced)).getValue(essay.id))
+        assertEquals(Triple(90, true, true), Triple(laid.effortMin, laid.pacedMinutes, laid.pacedTeaches))
+        assertTrue("“essay”: takes 1 h 30 min in all at your pace" in Instructions.describe(paced.changes.single(), mapOf(essay.id to essay), LONDON))
+        // A sync keeps it, as it keeps your other changes.
+        fun synced(estimate: Int, detail: String = "") =
+            Merge.apply(listOf(laid), Source.Teams, listOf(Fetched("essay", "essay", Kind.Homework, detail = detail, dueAt = Fixtures.at("2026-10-12T09:00"), sourceEffortMin = estimate)), now).tasks.single()
+        assertTrue(synced(60).pacedTeaches)
+        // Estimated anew, its content the same (#50's review: as a re-read for newer prompts is): still the pace.
+        assertEquals(Triple(90, true, true), synced(120).let { Triple(it.effortMin, it.pacedMinutes, it.pacedTeaches) })
+        // Its content changed (new instructions): still Felix's total, but the work may have changed, so not the pace.
+        assertEquals(Triple(90, true, false), synced(60, detail = "Also questions 9 to 12.").let { Triple(it.effortMin, it.pacedMinutes, it.pacedTeaches) })
+        // Your own reckoning after it: yours, not paced; and taken back, neither.
+        val yours = applied(Change(ChangeType.Minutes, taskId = essay.id, minutes = 120), at = now + 1)
+        val mine = essay.withOverrides(Instructions.taskOverrides(listOf(paced, yours)).getValue(essay.id))
+        assertEquals(120 to false, mine.effortMin to mine.pacedMinutes)
+        assertFalse(laid.withOverrides(TaskOverrides.NONE).pacedMinutes)
+        // Never on a task of your own, whose estimate is yours.
+        assertFalse(task("mine", "2026-10-12T09:00", source = Source.Own).withOverrides(TaskOverrides(minutes = 90, minutesPacedFrom = 60)).pacedMinutes)
+    }
+
+    @Test
     fun `a later instruction's change to a task wins over an earlier one's`() {
         val first = applied(Change(ChangeType.StartFrom, taskId = "teams:a", time = 1L), at = now)
         val second = applied(Change(ChangeType.StartFrom, taskId = "teams:a", time = 2L), Change(ChangeType.NotATask, taskId = "teams:a"), at = now + 1)

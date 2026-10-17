@@ -146,6 +146,15 @@ data class Change(
     val steps: List<OwnStep>? = null,
     /** [ChangeType.Rename]'s new name. */
     val title: String? = null,
+    /**
+     * [ChangeType.Minutes]'s total is the app's own estimate at your pace, as Felix worked it out
+     * (17 Oct), not your own reckoning; this is that estimate of the app's, its minutes then (#50's
+     * review). Planned as given, but what's finished still teaches the pace, measured against this,
+     * while the task is as it was then ([pacedHash], [TaskItem.pacedTeaches]).
+     */
+    val pacedFrom: Int? = null,
+    /** The task's content when it was paced ([Enrichments.inputHash]): read again for newer prompts alone, it's the same. */
+    val pacedHash: String? = null,
 )
 
 /** Your instructions. Kept in `instructions.json`. */
@@ -172,6 +181,10 @@ data class TaskOverrides(
     val steps: List<OwnStep>? = null,
     /** Its name in the app (16 Oct). */
     val title: String? = null,
+    /** [minutes] are the app's estimate at your pace, from this estimate of the app's ([Change.pacedFrom]). */
+    val minutesPacedFrom: Int? = null,
+    /** The task's content then ([Change.pacedHash]). */
+    val minutesPacedHash: String? = null,
 ) {
     companion object {
         val NONE = TaskOverrides()
@@ -261,7 +274,7 @@ object Instructions {
                 ChangeType.StartFrom -> o.copy(from = change.time)
                 ChangeType.After -> o.copy(after = change.afterTaskId)
                 ChangeType.DueBy -> o.copy(dueAt = change.time)
-                ChangeType.Minutes -> o.copy(minutes = change.minutes)
+                ChangeType.Minutes -> o.copy(minutes = change.minutes, minutesPacedFrom = change.pacedFrom, minutesPacedHash = change.pacedHash)
                 // The later of a day for all of it and a time for its next piece wins, but a time on the day
                 // it's kept to stays, whichever came first.
                 ChangeType.OnDay -> o.copy(onDay = change.date, atTime = o.atTime?.takeIf { timeOn[id] == change.date })
@@ -364,7 +377,7 @@ object Instructions {
                 // Against the estimate as it is now; once this is the one in use, against the app's own.
                 val inUse = task?.userEffortMin != null && task.userEffortMin == change.minutes
                 val was = if (inUse) task?.appEffortMin else task?.effortMin
-                "${title(change.taskId)}: takes ${hours(change.minutes ?: 0)} in all" +
+                "${title(change.taskId)}: takes ${hours(change.minutes ?: 0)} in all" + (if (change.pacedFrom != null) " at your pace" else "") +
                     when {
                         was == null -> ""
                         inUse -> " (the app's estimate: ${hours(was)})"
@@ -439,7 +452,7 @@ object Instructions {
 }
 
 /** What [task]'s instructions say of it now, as [TaskOverrides] holds it. */
-fun TaskItem.overrides(): TaskOverrides = TaskOverrides(userNotATask, userFrom, userAfter, userDueAt, userEffortMin, userOnDay, userAtTime, userSameAs, userSteps, userTitle)
+fun TaskItem.overrides(): TaskOverrides = TaskOverrides(userNotATask, userFrom, userAfter, userDueAt, userEffortMin, userOnDay, userAtTime, userSameAs, userSteps, userTitle, userEffortPacedFrom, userEffortPacedHash)
 
 /**
  * The task with [o] as its instructions' say: kept on it, and laid over what the source and the
@@ -458,6 +471,8 @@ fun TaskItem.withOverrides(o: TaskOverrides): TaskItem {
         userAfter = o.after,
         userDueAt = o.dueAt,
         userEffortMin = o.minutes,
+        userEffortPacedFrom = o.minutesPacedFrom?.takeIf { o.minutes != null },
+        userEffortPacedHash = o.minutesPacedHash?.takeIf { o.minutes != null },
         userOnDay = o.onDay,
         userAtTime = o.atTime,
         userSameAs = o.sameAs,
