@@ -254,7 +254,8 @@ data class TaskItem(
 
     /**
      * Its steps are yours: typed into a task of your own, or given any task by you or Felix (an
-     * instruction): planned as you gave them, however long, never cut into sittings (your call, 17 Oct).
+     * instruction): planned as you gave them, at their own minutes (not stretched by the pace learned
+     * of the app's estimates) and however long, never cut into sittings (your call, 17 Oct).
      */
     val yourSteps: Boolean get() = userSteps != null || source == Source.Own
 

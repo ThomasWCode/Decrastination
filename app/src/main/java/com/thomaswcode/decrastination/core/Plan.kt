@@ -367,9 +367,11 @@ data class Calibration(
 
     /**
      * What [task]'s estimate is multiplied by: what's been learned of the app's estimates for its
-     * kind and class; your own minutes ([TaskItem.yourMinutes]) as they are, as you meant them.
+     * kind and class; your own minutes ([TaskItem.yourMinutes]), and steps you or Felix gave
+     * ([TaskItem.yourSteps], your call, 17 Oct), as they are, as you meant them: the pace is for the
+     * app's own estimates, and Felix is told it, to allow for it when he sets times.
      */
-    fun multiplierFor(task: TaskItem): Double = if (task.yourMinutes) 1.0 else multiplier(task.kind, task.className)
+    fun multiplierFor(task: TaskItem): Double = if (task.yourMinutes || task.yourSteps) 1.0 else multiplier(task.kind, task.className)
 
     /** What each of [task]'s steps' minutes is multiplied by: [multiplierFor], with its steps scaled to your minutes. */
     fun stepMultiplierFor(task: TaskItem): Double = multiplierFor(task) * task.stepScale
