@@ -93,6 +93,17 @@ class FocusTest {
     }
 
     @Test
+    fun `with your steps and minutes, finishing earns no more than the app's estimate at the pace learned`() = runTest {
+        // #49's review: 40 minutes of the app's at a pace of 1.5 is an hour; your steps and minutes say 80.
+        runtime.update { it.copy(calibration = Calibration(multipliers = mapOf(Calibration.key(Kind.Homework, null) to 1.5))) }
+        val steps = listOf(SubStep("Past paper", 80))
+        val given = task("hw", effort = 40, steps = steps).copy(userSteps = listOf(com.thomaswcode.decrastination.core.OwnStep("Past paper", 80)), userEffortMin = 80, status = Status.Done, doneAt = clock.time)
+        focus.onCompleted(listOf(given))
+        // The less of the two, each in its own scale: the app's hour, a third of it.
+        assertEquals(20 * 60_000L, focus.creditLeftMs())
+    }
+
+    @Test
     fun `with your minutes raised and a step ticked, each estimate takes off its own share`() = runTest {
         // Two 30-minute steps, raised to two hours, one ticked off by hand.
         val steps = listOf(SubStep("Q1-8", 30, done = true, byHand = true), SubStep("Q9-16", 30))
