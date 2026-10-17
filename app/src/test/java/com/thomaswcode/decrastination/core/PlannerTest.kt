@@ -244,8 +244,9 @@ class PlannerTest {
         fun dayOf(step: String) = plan.buckets.first { b -> b.chunks.any { it.step == step } }.date
         // Saturday holds both now (840 minutes): the draft first in the day, as it's first in order.
         assertTrue(dayOf("Draft") <= dayOf("Final"), "draft ${dayOf("Draft")}, final ${dayOf("Final")}")
-        assertEquals(listOf(1, 2), plan.chunksOf("teams:e").map { it.part })
-        assertEquals(setOf(2), plan.chunksOf("teams:e").map { it.parts }.toSet())
+        // Each in four sittings of 50 (3.1.2), numbered on across the runs.
+        assertEquals((1..8).toList(), plan.chunksOf("teams:e").map { it.part })
+        assertEquals(setOf(8), plan.chunksOf("teams:e").map { it.parts }.toSet())
     }
 
     @Test
@@ -551,8 +552,10 @@ class PlannerTest {
 
     @Test
     fun `an undated chunk bigger than the allowance still finds a day`() {
-        val big = task("big", null, effort = 90, kind = Kind.Admin, steps = listOf(SubStep("all of it", 90)))
-        val plan = plan(listOf(big), "2026-10-08T17:00")
+        // Half an hour of undated work a day, and a piece of 45 minutes (a step of the app's over an
+        // hour is in sittings since 3.1.2, so none is bigger than the hour it allows by default).
+        val big = task("big", null, effort = 45, kind = Kind.Admin, steps = listOf(SubStep("all of it", 45)))
+        val plan = Planner.plan(Planner.Input(listOf(big), Fixtures.at("2026-10-08T17:00"), LONDON, settings.copy(softMinPerDay = 30)))
         assertEquals(1, plan.ordered.size)
         assertFalse(plan.ordered.single().behind)
     }
@@ -670,14 +673,14 @@ class PlannerTest {
     @Test
     fun `work whose last usable day comes first is placed first`() {
         // The essay is due later but has a three-day margin, so its last usable day (Wednesday)
-        // comes before the other's (Friday): it claims its days first, Tuesday the earlier of its
-        // two equal evenings, and the form's three pieces fit after it.
+        // comes before the other's (Friday): it claims its days first, its sittings (3.1.2) over its
+        // two evenings, and the form's fit after it.
         val margins = Calibration(marginDays = mapOf(Kind.Admin to 0, Kind.Homework to 3))
         val admin = task("form", Fixtures.at("2026-10-16T23:00"), kind = Kind.Admin, steps = listOf(SubStep("a", 310), SubStep("b", 310), SubStep("c", 310)))
         val essay = task("essay", Fixtures.at("2026-10-17T09:00"), steps = listOf(SubStep("all", 310)))
         val input = Planner.Input(listOf(admin, essay), Fixtures.at("2026-10-13T16:45"), LONDON, settings, calibration = margins)
         val plan = Planner.plan(input)
-        assertEquals(listOf(LocalDate.parse("2026-10-13")), plan.dayOf("essay"))
+        assertEquals(listOf("2026-10-13", "2026-10-14").map(LocalDate::parse), plan.dayOf("essay"))
         assertTrue(plan.ordered.none { it.behind })
     }
 
@@ -968,6 +971,97 @@ class PlannerTest {
         val after = plan(listOf(t.copy(subSteps = listOf(steps[0].copy(done = true), steps[1]))), "2026-10-08T17:00").chunksOf("teams:t").single().key
         assertEquals("teams:t#1", after)
         assertEquals(before, after)
+    }
+
+    @Test
+    fun `a step over an hour as planned is in sittings, only its last ticking it`() {
+        // An hour's step at a 1.5 calibration is 90 minutes as planned (#48's review): two sittings of
+        // 45, the first the step, the last "Continue and finish", each with its step's own title to tick by.
+        val input = Planner.Input(
+            listOf(task("t", Fixtures.at("2026-10-20T09:00"), effort = 60, steps = listOf(SubStep("Write the essay", 60)))),
+            Fixtures.at("2026-10-08T17:00"),
+            LONDON,
+            settings,
+            calibration = Calibration(multipliers = mapOf(Calibration.key(Kind.Homework, null) to 1.5)),
+        )
+        val pieces = Planner.plan(input).chunksOf("teams:t")
+        assertEquals(listOf("Write the essay" to 45, "Continue and finish: Write the essay" to 45), pieces.map { it.shown to it.minutes })
+        assertEquals(listOf("teams:t#0#1", "teams:t#0"), pieces.map { it.key })
+        assertEquals(listOf(null, 0), pieces.map { it.ticks })
+        assertEquals(listOf("Write the essay", "Write the essay"), pieces.map { it.step })
+    }
+
+    @Test
+    fun `sittings read at an hour are cut again where the plan has them longer, named as they go on`() {
+        // Claude's two sittings of an hour at a 1.5 calibration: four of 45, the work begun once and finished once.
+        val steps = listOf(SubStep("Write the essay", 60), SubStep("Continue and finish: Write the essay", 60))
+        val input = Planner.Input(
+            listOf(task("t", Fixtures.at("2026-10-20T09:00"), effort = 120, steps = steps)),
+            Fixtures.at("2026-10-08T17:00"),
+            LONDON,
+            settings,
+            calibration = Calibration(multipliers = mapOf(Calibration.key(Kind.Homework, null) to 1.5)),
+        )
+        val pieces = Planner.plan(input).chunksOf("teams:t")
+        assertEquals(
+            listOf("Write the essay", "Continue: Write the essay", "Continue: Write the essay", "Continue and finish: Write the essay"),
+            pieces.map { it.shown },
+        )
+        assertEquals(listOf("teams:t#0#1", "teams:t#0", "teams:t#1#1", "teams:t#1"), pieces.map { it.key })
+        assertTrue(pieces.all { it.minutes == 45 })
+    }
+
+    @Test
+    fun `your minutes shared out over Claude's steps are in sittings too`() {
+        // Claude's two half-hour steps, the task said to take four hours: two hours each as planned, two sittings each.
+        val t = task("t", Fixtures.at("2026-10-20T09:00"), effort = 60, steps = listOf(SubStep("Read", 30), SubStep("Write", 30))).copy(userEffortMin = 240)
+        val pieces = plan(listOf(t), "2026-10-08T17:00").chunksOf("teams:t")
+        assertEquals(listOf("Read" to 60, "Continue and finish: Read" to 60, "Write" to 60, "Continue and finish: Write" to 60), pieces.map { it.shown to it.minutes })
+    }
+
+    @Test
+    fun `steps you gave are planned as you gave them, however long`() {
+        // Your call (17 Oct): a task of your own's hour and a half, and two hours given a Teams task as
+        // one step (by you, or Felix): each one piece, never cut back into sittings.
+        val own = task("mine", Fixtures.at("2026-10-20T09:00"), effort = 90, steps = listOf(SubStep("Revise chapter 3", 90))).copy(id = "own:mine", source = Source.Own, sourceId = "mine")
+        val given = task("t", Fixtures.at("2026-10-20T09:00"), effort = 60, steps = listOf(SubStep("Write the essay", 120))).copy(userSteps = listOf(OwnStep("Write the essay", 120)))
+        val plan = plan(listOf(own, given), "2026-10-08T17:00")
+        assertEquals(listOf("Revise chapter 3" to 90), plan.chunksOf("own:mine").map { it.shown to it.minutes })
+        assertEquals(listOf("Write the essay" to 120), plan.chunksOf("teams:t").map { it.shown to it.minutes })
+        assertTrue(plan.ordered.all { it.sitting == null })
+    }
+
+    @Test
+    fun `a step read before sittings is planned in them, and a done one stays done`() {
+        // Read by older prompts (#48's review): half an hour done, three hours still to do in one step.
+        val steps = listOf(SubStep("Read the sources", 30, done = true), SubStep("Write the essay", 180))
+        val pieces = plan(listOf(task("t", Fixtures.at("2026-10-20T09:00"), effort = 210, steps = steps)), "2026-10-08T17:00").chunksOf("teams:t")
+        assertEquals(listOf("Write the essay" to 60, "Continue: Write the essay" to 60, "Continue and finish: Write the essay" to 60), pieces.map { it.shown to it.minutes })
+        assertEquals(listOf("teams:t#1#2", "teams:t#1#1", "teams:t#1"), pieces.map { it.key })
+    }
+
+    @Test
+    fun `a sitting kept leaves the rest of its step called and keyed as they were`() {
+        val t = task("t", Fixtures.at("2026-10-20T09:00"), effort = 180, steps = listOf(SubStep("Write the essay", 180)))
+        val before = plan(listOf(t), "2026-10-08T17:00").chunksOf("teams:t")
+        // Its first sitting kept: its hour worked on the step, so two are left, as they were.
+        val after = plan(listOf(t.copy(workedMin = 60)), "2026-10-08T17:00").chunksOf("teams:t")
+        assertEquals(before.drop(1).map { Triple(it.key, it.shown, it.minutes) }, after.map { Triple(it.key, it.shown, it.minutes) })
+        // Ten minutes off it from the step before's overrun: not begun, so its first sitting is still its own.
+        val spilt = plan(listOf(t.copy(workedMin = 10)), "2026-10-08T17:00").chunksOf("teams:t")
+        assertEquals(listOf("Write the essay", "Continue: Write the essay", "Continue and finish: Write the essay"), spilt.map { it.shown })
+        assertEquals(170, spilt.sumOf { it.minutes })
+    }
+
+    @Test
+    fun `a sitting's title says where it is in its work, a long one's carried on cut short`() {
+        val long = "W".repeat(80)
+        // Claude's first sitting of a long title, the next cut short to fit: it doesn't finish its work.
+        assertFalse(Sittings.finishes(long, Sittings.CONTINUE + long.take(70)))
+        assertTrue(Sittings.finishes("Read", "Write"))
+        assertTrue(Sittings.finishes("Read", null))
+        assertEquals(listOf("Continue: Read", "Continue and finish: Read"), Sittings.titles("Continue and finish: Read", 2, finishes = true))
+        assertEquals(listOf("Continue: Read", "Continue: Read"), Sittings.titles("Continue: Read", 2, finishes = false))
     }
 
     @Test

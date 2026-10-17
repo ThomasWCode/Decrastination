@@ -4,6 +4,7 @@ import com.thomaswcode.decrastination.block.Focus
 import com.thomaswcode.decrastination.core.Enrichment
 import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.core.Kind
+import com.thomaswcode.decrastination.core.Sittings
 import com.thomaswcode.decrastination.core.SubStep
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.Where
@@ -321,24 +322,17 @@ object Answers {
      * longer one is cut into even sittings, as the app can't know which part of the work takes how
      * long, so they're split by time, never by what's in them ([fitParts]).
      */
-    const val MAX_PART_MIN = 60
+    const val MAX_PART_MIN = Sittings.MAX_MIN
 
     /**
      * [step] in even sittings no longer than [MAX_PART_MIN]: the first the step itself, then
-     * "Continue: …", and the last "Continue and finish: …".
+     * "Continue: …", and the last "Continue and finish: …" ([Sittings], which the planner cuts by too).
      */
     internal fun fitParts(step: SubStep): List<SubStep> {
-        val parts = (step.minutes + MAX_PART_MIN - 1) / MAX_PART_MIN
+        val parts = Sittings.count(step.minutes)
         if (parts <= 1) return listOf(step)
-        fun title(i: Int): String {
-            val prefix = when (i) {
-                0 -> return step.title
-                parts - 1 -> "Continue and finish: "
-                else -> "Continue: "
-            }
-            return prefix + step.title.take(MAX_TITLE - prefix.length)
-        }
-        return (0 until parts).map { i -> step.copy(title = title(i), minutes = step.minutes / parts + if (i < step.minutes % parts) 1 else 0) }
+        val minutes = Sittings.even(step.minutes, parts)
+        return Sittings.titles(step.title, parts, finishes = true).mapIndexed { i, title -> step.copy(title = title.take(MAX_TITLE), minutes = minutes[i]) }
     }
 
     /**

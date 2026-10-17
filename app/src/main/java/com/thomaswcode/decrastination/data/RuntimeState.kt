@@ -337,8 +337,9 @@ data class PhotoDone(
 
 /**
  * A slot being kept (LR-09), saved before anything changes, so a stop part-way is carried through at
- * start-up (`Focus.finishKeeps`): its [record]; its task's step ([stepIndex], still [step]), none for
- * a box of time, and the minutes worked on the task before ([workedBefore]), so the task's change
+ * start-up (`Focus.finishKeeps`): its [record]; its task's step to tick ([stepIndex], still [step]),
+ * none for a box of time or a sitting before its step's last, and the minutes worked on the task
+ * before ([workedBefore]), so the task's change
  * is made once; the free time it earns; the miss of it today it [replaces]; and the [photo] that
  * kept it, let go with it. [earnOnly]: a slot kept already, earning now (its photo passed): the
  * record it [replaces] marked, nothing done to the task.

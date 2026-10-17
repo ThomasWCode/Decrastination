@@ -42,7 +42,7 @@ object MicroPlans {
     fun describe(chunk: Chunk, task: TaskItem): String = buildString {
         appendLine("Task: ${task.title}")
         task.className?.let { appendLine("Subject: $it") }
-        appendLine("This piece: ${chunk.step ?: if (chunk.parts > 1) "part ${chunk.part} of ${chunk.parts} of the whole task" else "the whole task"}, ${chunk.minutes} min")
+        appendLine("This piece: ${chunk.shown ?: if (chunk.parts > 1) "part ${chunk.part} of ${chunk.parts} of the whole task" else "the whole task"}, ${chunk.minutes} min")
         GmailThreads.attachmentsOf(task).takeIf { it.isNotEmpty() }?.let { files -> appendLine("Attachments: " + files.joinToString(", ") { it.label }) }
         task.detail.trim().takeIf { it.isNotEmpty() }?.let {
             appendLine()
@@ -53,11 +53,11 @@ object MicroPlans {
 
     /**
      * What a piece's micro-plan is written for: its task as it is, and the piece as [describe] says
-     * it (which, its step's name, its minutes, of how many parts), so a step renamed or a piece
-     * resized is written for again.
+     * it (which, its step's name or its sitting's, its minutes, of how many parts), so a step
+     * renamed or a piece resized is written for again.
      */
     fun hashOf(task: TaskItem, chunk: Chunk): String =
-        Enrichments.inputHash(task) + "#" + (chunk.stepIndex ?: -chunk.part) + "#" + Integer.toHexString("${chunk.step.orEmpty()}|${chunk.minutes}|${chunk.parts}".hashCode())
+        Enrichments.inputHash(task) + "#" + (chunk.stepIndex ?: -chunk.part) + "#" + Integer.toHexString("${chunk.shown.orEmpty()}|${chunk.minutes}|${chunk.parts}".hashCode())
 
     @Serializable
     private data class Answer(val first: String = "", val next: List<String> = emptyList(), val doneWhen: String = "")

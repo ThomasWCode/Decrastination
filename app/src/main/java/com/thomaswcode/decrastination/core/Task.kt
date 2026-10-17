@@ -253,6 +253,12 @@ data class TaskItem(
     val yourMinutes: Boolean get() = userEffortMin != null || source == Source.Own
 
     /**
+     * Its steps are yours: typed into a task of your own, or given any task by you or Felix (an
+     * instruction): planned as you gave them, however long, never cut into sittings (your call, 17 Oct).
+     */
+    val yourSteps: Boolean get() = userSteps != null || source == Source.Own
+
+    /**
      * What each of its steps' minutes counts as: where you gave the whole task's minutes, its steps
      * are scaled to add up to them.
      */

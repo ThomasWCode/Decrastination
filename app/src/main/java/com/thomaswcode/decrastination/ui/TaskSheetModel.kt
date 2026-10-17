@@ -46,7 +46,7 @@ object TaskSheetModel {
             else -> p.day.format(DATE)
         }
         val time = if (p.start != null && p.end != null) " " + Format.span(p.start, p.end, zone) else ""
-        val piece = p.chunk.step ?: if (p.chunk.parts > 1) "part ${p.chunk.part} of ${p.chunk.parts}" else null
+        val piece = p.chunk.shown ?: if (p.chunk.parts > 1) "part ${p.chunk.part} of ${p.chunk.parts}" else null
         return listOfNotNull(day + time, piece).joinToString(", ") + ": " + p.why.replaceFirstChar(Char::lowercase)
     }
 

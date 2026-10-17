@@ -56,7 +56,7 @@ data class Chunk(
     val source: Source,
     val kind: Kind,
     val title: String,
-    /** The sub-step's own title, or "part 2 of 3"; null for a task done in one go. */
+    /** The sub-step's own title (a sitting's, its step's: [shown] says which), or "part 2 of 3"; null for a task done in one go. */
     val step: String?,
     val minutes: Int,
     /** The task's real deadline, if it has one. */
@@ -93,15 +93,27 @@ data class Chunk(
     val where: Where = Where.Anywhere,
     /** Its deadline is a real one (PL-14), which its slot on the deadline's day keeps before (PL-12). */
     val hard: Boolean = false,
+    /**
+     * Which of its step's sittings it is, where the planner cut a step over an hour as planned
+     * (3.1.2's review); null for a step in one piece, a box, or a whole task.
+     */
+    val sitting: Sitting? = null,
 ) {
     /**
-     * Which piece it is, across replans (PL-12): its task and its step's place; a piece of time with
-     * no step of its own, its part. Not a step's part: that renumbers once a piece before it is kept,
-     * and its slot's kept start (PL-13) would be lost with it.
+     * Which piece it is, across replans (PL-12): its task and its step's place (a sitting before its
+     * step's last, with how many come after it); a piece of time with no step of its own, its part.
+     * Not a step's part: that renumbers once a piece before it is kept, and its slot's kept start
+     * (PL-13) would be lost with it.
      */
-    val key: String get() = keyOf(taskId, stepIndex, part)
+    val key: String get() = keyOf(taskId, stepIndex, part, sitting?.after)
 
-    val label: String get() = step?.let { "$title: $it" } ?: title
+    /** Its step as it's done in this piece: a sitting's title ("Continue: Write the essay"), else [step]. */
+    val shown: String? get() = sitting?.title ?: step
+
+    val label: String get() = shown?.let { "$title: $it" } ?: title
+
+    /** The step keeping it ticks: [stepIndex], but none for a sitting before its step's last ([Sitting]). */
+    val ticks: Int? get() = stepIndex?.takeIf { (sitting?.after ?: 0) == 0 }
 
     /** [why] as its sheet says it, from [today]: "Spread over the 12 days to its deadline". */
     fun whyLine(today: LocalDate, zone: ZoneId): String {
@@ -128,9 +140,14 @@ data class Chunk(
 
         /**
          * A piece's [key] from what makes it, for the planner naming one before it's made (its pin,
-         * its missed slot): the one place it's made, so the two can't come apart.
+         * its missed slot): the one place it's made, so the two can't come apart. A step's "id#2", a
+         * sitting before its last "id#2#1" ([after] of its step's after it), a piece of time "id#-1#3".
          */
-        fun keyOf(taskId: String, stepIndex: Int?, part: Int): String = if (stepIndex != null) "$taskId#$stepIndex" else "$taskId#-1#$part"
+        fun keyOf(taskId: String, stepIndex: Int?, part: Int, after: Int? = null): String = when {
+            stepIndex == null -> "$taskId#-1#$part"
+            after != null && after > 0 -> "$taskId#$stepIndex#$after"
+            else -> "$taskId#$stepIndex"
+        }
     }
 
     /** Bad news, shown in red wherever it appears: overdue, due today, or behind. */
@@ -149,6 +166,14 @@ data class Chunk(
         else -> EarnsBy.Source
     }
 }
+
+/**
+ * One of a step's sittings ([Chunk.sitting]), as the planner cuts a step over an hour as planned
+ * ([Sittings]; 3.1.2's review): [after], how many of its step's come after it, so keeping one
+ * renumbers none of the rest; and its [title]. Its last is the step's, keeping it ticks the step;
+ * keeping one before it counts its minutes as worked on the step, as a session stopped early does.
+ */
+data class Sitting(val after: Int, val title: String)
 
 /** What lets a kept slot earn (BL-08). */
 enum class EarnsBy {

@@ -195,7 +195,7 @@ fun TaskSheet(
             next?.let { piece ->
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
-                        Text("Next: ${piece.step ?: if (piece.parts > 1) "part ${piece.part} of ${piece.parts}" else piece.title}", style = MaterialTheme.typography.bodyLarge)
+                        Text("Next: ${piece.shown ?: if (piece.parts > 1) "part ${piece.part} of ${piece.parts}" else piece.title}", style = MaterialTheme.typography.bodyLarge)
                         Text(Format.minutes(piece.minutes), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     FilledTonalButton(onClick = { scope.launch { said = keepPiece(graph, piece, now) } }) { Text("Done") }
