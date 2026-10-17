@@ -192,7 +192,8 @@ object Prompts {
 
     /**
      * The item, as the model reads it; with [previous], its steps as planned before (AI-08), so a
-     * step whose work hasn't changed keeps its title, and with it its tick.
+     * step whose work hasn't changed keeps its title, and with it its tick; one done said to be, to
+     * be kept as it is (#47's review), as fewer, longer steps would otherwise take its work in.
      */
     fun describe(task: TaskItem, job: Enrichments.Job, now: Long, zone: ZoneId, previous: List<SubStep> = emptyList(), decks: Map<String, String> = emptyMap()): String = buildString {
         fun at(time: Long) = Instant.ofEpochMilli(time).atZone(zone)
@@ -224,8 +225,9 @@ object Prompts {
         task.answers.forEach { appendLine("The student says: $it") }
         if (previous.isNotEmpty()) {
             val noun = if (job == Enrichments.Job.Assignment) "step" else "block"
-            appendLine("${noun.replaceFirstChar(Char::uppercase)}s as planned before (keep the exact title of any $noun whose work is unchanged; mark none as done):")
-            previous.forEachIndexed { i, step -> appendLine("${i + 1}. ${step.title} (${step.minutes} min)") }
+            val done = if (previous.any { it.done }) "; a $noun marked done is done: keep it as it is, its exact title and minutes (still counted in effortMin), and give only the work left in the others" else "; mark none as done"
+            appendLine("${noun.replaceFirstChar(Char::uppercase)}s as planned before (keep the exact title of any $noun whose work is unchanged$done):")
+            previous.forEachIndexed { i, step -> appendLine("${i + 1}. ${step.title} (${step.minutes} min${if (step.done) ", done" else ""})") }
         }
         val text = task.detail.trim()
         if (text.isNotEmpty()) {

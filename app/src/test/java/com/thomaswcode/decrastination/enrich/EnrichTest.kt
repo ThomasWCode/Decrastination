@@ -493,6 +493,9 @@ class AnswersTest {
         val asked = Prompts.describe(assignment("Essay"), Enrichments.Job.Assignment, NOW, LONDON, listOf(SubStep("Plan", 20), SubStep("Write", 60)))
         assertTrue("Steps as planned before (keep the exact title of any step whose work is unchanged; mark none as done):\n1. Plan (20 min)\n2. Write (60 min)" in asked, asked)
         assertFalse("planned before" in Prompts.describe(assignment("Essay"), Enrichments.Job.Assignment, NOW, LONDON))
+        // One done is said to be, to be kept as it is: its tick goes only to a step of its name.
+        val done = Prompts.describe(assignment("Essay"), Enrichments.Job.Assignment, NOW, LONDON, listOf(SubStep("Plan", 20, done = true), SubStep("Write", 60)))
+        assertTrue("Steps as planned before (keep the exact title of any step whose work is unchanged; a step marked done is done: keep it as it is, its exact title and minutes (still counted in effortMin), and give only the work left in the others):\n1. Plan (20 min, done)\n2. Write (60 min)" in done, done)
         // The decks by topic, for an assignment (DX-10).
         assertTrue("Decks: 1.3 Holidays and travel; 1.4 School" in Prompts.describe(assignment("Vocab"), Enrichments.Job.Assignment, NOW, LONDON, decks = mapOf("1.4" to "School", "1.3" to "Holidays and travel")))
     }

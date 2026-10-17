@@ -9,7 +9,7 @@ import java.time.ZoneId
  * differ is updated; one of the app's no longer a slot is deleted; and a piece's event you've moved
  * (its start no longer what the app wrote, nor what the plan has now) is a hand move, for the app to
  * take as your time, not to put back. A copy of one of its events that's lost the app's marks is
- * deleted ([looksWritten], 17 Oct). Pure.
+ * deleted ([isCopy], 17 Oct). Pure.
  */
 object SlotCalendarDiff {
     const val URI_PREFIX = "decrastination://slot/"
@@ -22,7 +22,7 @@ object SlotCalendarDiff {
 
     /**
      * One of the app's events, as the calendar has it now. Not [marked]: a copy of one that's lost the
-     * app's marks (its URI and package), found by its words ([looksWritten]), to delete.
+     * app's marks (its URI and package), found by its words and a version the app wrote ([isCopy]), to delete.
      */
     data class Existing(val id: Long, val uri: String, val start: Long, val end: Long, val title: String, val description: String, val marked: Boolean = true)
 
@@ -31,13 +31,37 @@ object SlotCalendarDiff {
 
     /**
      * Whether an event's [description] is in the words [desired] writes: a piece's, its source first
-     * ("Teams. Due …"), or a break outside's. In the calendar written to, an event so worded that's
-     * lost the app's marks is a copy of one of its own (17 Oct: the calendar's sync, run while the app
-     * changed an event it was still sending, brought it back as a new event, the app's marks left
-     * off), stale as its slot moves on: deleted, never left over the plan.
+     * ("Teams. Due …"), or a break outside's. Only one of the signs of a copy ([isCopy]): an event of
+     * yours could be worded so.
      */
     fun looksWritten(description: String): Boolean =
         description == OUTSIDE || com.thomaswcode.decrastination.core.Source.entries.any { description.startsWith(it.label + ". ") }
+
+    /** One version of an event as the app writes it to [calendarId], as a fingerprint of its title and times. */
+    fun version(calendarId: Long, title: String, start: Long, end: Long): Long {
+        val digest = java.security.MessageDigest.getInstance("SHA-256").digest("$calendarId\n$title\n$start\n$end".toByteArray(Charsets.UTF_8))
+        return java.nio.ByteBuffer.wrap(digest, 0, 8).long
+    }
+
+    /**
+     * Whether an event of [calendarId] that has none of the app's marks is a copy of one of its own:
+     * in its words ([looksWritten]), and under a title and at times the app wrote there ([versions],
+     * as [version]). 17 Oct: the calendar's sync, run while the app changed an event it was still
+     * sending, brought it back as a new event, the app's marks left off, stale as its slot moved on;
+     * such a copy is deleted, never left over the plan. Its words alone aren't enough (#47's
+     * review): an event of yours worded like one is never deleted.
+     */
+    fun isCopy(calendarId: Long, title: String, description: String, start: Long, end: Long, versions: Set<Long>): Boolean =
+        looksWritten(description) && version(calendarId, title, start, end) in versions
+
+    /** How many versions are remembered ([remembered]): some days of a plan's changes, as a copy comes back within minutes. */
+    const val MAX_VERSIONS = 2_000
+
+    /** [kept] with [written] remembered, each once, the latest last; past [MAX_VERSIONS], the oldest go. */
+    fun remembered(kept: List<Long>, written: List<Long>): List<Long> {
+        val fresh = written.distinct()
+        return ((kept - fresh.toSet()) + fresh).takeLast(MAX_VERSIONS)
+    }
 
     data class Update(val existing: Existing, val desired: Desired)
 
