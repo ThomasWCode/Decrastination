@@ -12,6 +12,7 @@ A personal, sideloaded app for one phone, version 3.1.4.
 | [`docs/decisions.md`](docs/decisions.md) | The owner's decisions that govern how the app is developed, numbered |
 | [`docs/development.md`](docs/development.md) | How changes are made, reviewed, checked on the phone and shipped; the public repository's rules |
 | [`docs/plan_targeted_cleanup/`](docs/plan_targeted_cleanup/README.md) | The planned restructuring of the code, phase by phase, with its open questions |
+| [`docs/plan_v4/`](docs/plan_v4/README.md) | The planned changes to Felix for 4.x (the chat as his one voice, notes and reminders, memory that expires, his voice, emails finished in Gmail), with its open questions |
 | [`fixtures/README.md`](fixtures/README.md) | The test fixtures and where they came from |
 
 ## Build and install
