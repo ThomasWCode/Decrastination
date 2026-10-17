@@ -31,6 +31,12 @@ Every prompt and schema Claude is sent has a golden copy in `app/src/test/resour
 ./gradlew testDebugUnitTest -PupdateGolden=true --tests '*GoldenPromptsTest*'
 ```
 
+The API compiles every schema into a grammar and refuses one too large, which no test can tell from the schema alone. After any change to a schema, have it compile them all before merging (one call for each schema, about a cent each; a refused one costs nothing; the key from the environment):
+
+```bash
+./gradlew testDebugUnitTest --tests '*SchemaCompileTest*' -PcheckSchemas=true
+```
+
 Debug builds are signed with a copy of the widget's committed `app/debug.keystore`. Sharing its key is what grants this app the widget's signature-level permission to read the assignments, so don't change it.
 
 ## Credentials and commands from a PC
