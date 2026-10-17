@@ -40,7 +40,7 @@ With your newest message, from one snapshot of the tasks, the calendar and your 
 ## What he can do
 
 Everything he gives is made as his answer comes, each with its Undo (next section).
-- **New tasks of your own** (`newTasks`, at most ten): title, kind (Homework, Revision, Admin or Event), subject, due date and time, start, minutes, notes, and steps for a big one. Each is checked as the form checks one (`OwnTasks.problem`), its dates from a month back to just over a year ahead.
+- **New tasks of your own** (`newTasks`, at most ten): title, kind (Homework, Revision, Admin or Event), subject, due date and time (with no time, an event's is 09:00, anything else's the end of the day), start, minutes, notes, and steps for a big one. Each is checked as the form checks one (`OwnTasks.problem`), its dates from a month back to just over a year ahead.
 - **Changes** (`changes`, at most 40), of an instruction's types (`InstructionPrompts.CHANGE_TYPES`): a task isn't one, can't start until a date, waits for another, is due by a date, takes N minutes, goes on one day, has its next piece at a time, is another's work, has these steps or this name;
 - and for days and events: how long an event takes, a day's limit, busy times, days off and half-days (into the school calendar, PL-16).
 - **Steps** for any task but Anki's, whose steps are its cards (AI-19): laid over the source's and the reading's (`TaskItem.userSteps`), ticks kept by name. They must add up to the task's minutes, or come with a Minutes change for the new total, or they're left out.
