@@ -1814,17 +1814,21 @@ class AppGraph private constructor(context: Context) {
             // One snapshot of the tasks, the calendar and your changes: what Claude's shown is what its answer's checked against.
             val state = tasks.value
             val time = calendarTime
-            // His answer, with what a web search he asked for found ([found], 16 Oct).
-            suspend fun ask(found: com.thomaswcode.decrastination.enrich.Found?) = callModel(interactive = true, record = com.thomaswcode.decrastination.enrich.ModelCalls.OnRecord(com.thomaswcode.decrastination.enrich.ModelEffort.Job.Chat, waiting.text) { r: ChatReader.Result -> r.usage to com.thomaswcode.decrastination.enrich.ModelCalls.outcome(r.refused, r.reading == null) }, cost = { r: ChatReader.Result -> r.costUsd to r.refused }) { at ->
+            // His answer, with what a web search he asked for found ([found], 16 Oct), and the tasks whose
+            // whole text he asked to [read] (D-93).
+            suspend fun ask(found: com.thomaswcode.decrastination.enrich.Found?, read: List<TaskItem> = emptyList()) = callModel(interactive = true, record = com.thomaswcode.decrastination.enrich.ModelCalls.OnRecord(com.thomaswcode.decrastination.enrich.ModelEffort.Job.Chat, waiting.text) { r: ChatReader.Result -> r.usage to com.thomaswcode.decrastination.enrich.ModelCalls.outcome(r.refused, r.reading == null) }, cost = { r: ChatReader.Result -> r.costUsd to r.refused }) { at ->
                 // Being asked now: whatever it said before (a failed call) is gone.
                 chat.update { s -> s.copy(messages = s.messages.map { if (it.id == waiting.id) it.copy(note = null, stuck = false) else it }) }
                 sentAt.value = at
                 try {
-                    ChatReader(key, clock.zone(), endpoint(), profile = profile(at), settings = settings.value).answer(chat.value.messages, state.tasks, time.events, chatContext(at, state, time, instructions.value.applied), at, found)
+                    ChatReader(key, clock.zone(), endpoint(), profile = profile(at), settings = settings.value).answer(chat.value.messages, state.tasks, time.events, chatContext(at, state, time, instructions.value.applied), at, found, read)
                 } finally {
                     sentAt.value = null
                 }
             }
+            // The tasks an answer asks to read in full, as they are in the snapshot it was shown.
+            fun wanted(r: com.thomaswcode.decrastination.enrich.ChatAnswers.Reading): List<TaskItem> = r.details.mapNotNull { id -> state.tasks.firstOrNull { it.id == id } }
+            var read = emptyList<TaskItem>()
             // A look already made for it, whose answer with it failed: asked again with what it found.
             val before = looked?.takeIf { it.first == waiting.id }?.second
             val called = ask(before)
@@ -1880,7 +1884,9 @@ class AppGraph private constructor(context: Context) {
                     return@let
                 }
                 looked = waiting.id to what
-                val again = ask(what)
+                // Asked for a task's whole text too: read with what it found, in the one call.
+                read = wanted(reading)
+                val again = ask(what, read)
                 if (letGo == waiting.id) {
                     letGo = null
                     return@withLock
@@ -1889,6 +1895,28 @@ class AppGraph private constructor(context: Context) {
                     is Called.Held -> return@call because(again.hold)
                     is Called.Failed -> {
                         Log.w(TAG, "Claude's answer with what the search found failed", again.error)
+                        return@call "Claude's call failed: ${retryWords()}, or now with Try again"
+                    }
+                    is Called.Answered -> again.value
+                }
+                reading = second.reading?.copy(research = null) ?: run {
+                    stuck = true
+                    return@call if (second.refused) "Claude declined to answer that: Try again, or put it another way" else "Claude's answer couldn't be read: Try again"
+                }
+            }
+            // The tasks whose whole text he asked to read (D-93): asked again with them, once, and
+            // that's his answer.
+            if (read.isEmpty()) wanted(reading).takeIf { it.isNotEmpty() }?.let { toRead ->
+                read = toRead
+                val again = ask(found, toRead)
+                if (letGo == waiting.id) {
+                    letGo = null
+                    return@withLock
+                }
+                val second = when (again) {
+                    is Called.Held -> return@call because(again.hold)
+                    is Called.Failed -> {
+                        Log.w(TAG, "Claude's answer with the tasks it read failed", again.error)
                         return@call "Claude's call failed: ${retryWords()}, or now with Try again"
                     }
                     is Called.Answered -> again.value
@@ -1911,7 +1939,8 @@ class AppGraph private constructor(context: Context) {
                 sources = found?.sources.orEmpty(),
                 note = reading.leftOut.takeIf { it.isNotEmpty() }?.let { "Left out, as the app can't use it: ${it.joinToString("; ")}" },
                 // Asked to look something up, and it couldn't be: his first answer stands, saying why.
-                done = listOfNotNull(notLooked?.let { "Not looked up: $it." }),
+                // What he read in full to answer (D-93), said under it.
+                done = listOfNotNull(notLooked?.let { "Not looked up: $it." }, read.takeIf { it.isNotEmpty() }?.let { r -> "Read in full: " + r.joinToString("; ") { "“${it.title}”" } + "." }),
             )
             var kept = false
             chat.update { s ->
