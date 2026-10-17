@@ -62,8 +62,21 @@ object Examples {
             1. Learn vocabulary 2.1 and 2.2 for the unit test on Thursday 15 October.
             2. Read the article on page 34 and answer questions 1-5 in full sentences.
             """.trimIndent(),
-            """{"subSteps":[{"title":"Learn vocabulary 2.1 and 2.2","minutes":30,"ankiSections":["2.1","2.2"],"where":"anywhere","from":null,"due":null},{"title":"Read the article on page 34","minutes":20,"ankiSections":[],"where":"anywhere","from":null,"due":null},{"title":"Answer questions 1-5 in full sentences","minutes":25,"ankiSections":[],"where":"home","from":null,"due":null}],"effortMin":75,"ankiSections":["2.1","2.2"],"testDate":"2026-10-15","question":null,"reason":"for the unit test on Thursday 15 October"}""",
+            """{"subSteps":[{"title":"Learn vocabulary 2.1 and 2.2","minutes":30,"ankiSections":["2.1","2.2"],"where":"anywhere","from":null,"due":null},{"title":"Read the article on page 34 and answer questions 1-5 in full sentences","minutes":45,"ankiSections":[],"where":"home","from":null,"due":null}],"effortMin":75,"ankiSections":["2.1","2.2"],"testDate":"2026-10-15","question":null,"reason":"for the unit test on Thursday 15 October"}""",
             due = "2026-10-13T08:30",
+        ),
+        Example(
+            """
+            Today: Friday 9 October 2026, 17:00
+            Title: Past paper 1
+            Class: Biology
+            Due: Wednesday 14 October 2026 08:30
+
+            Details:
+            Print the attached past paper and answer questions 1-6 on pages 2-5. Mark your answers with the mark scheme on Teams, then upload a photo of your marked work.
+            """.trimIndent(),
+            """{"subSteps":[{"title":"Past paper 1, questions 1-6 (print it first), then mark it and upload a photo","minutes":55,"ankiSections":[],"where":"home","from":null,"due":null}],"effortMin":55,"ankiSections":[],"testDate":null,"question":null,"reason":""}""",
+            due = "2026-10-14T08:30",
         ),
         Example(
             """

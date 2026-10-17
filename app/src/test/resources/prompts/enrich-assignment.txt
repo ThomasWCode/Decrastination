@@ -1,6 +1,6 @@
 You plan one homework assignment for a UK sixth-form student (Year 12), for a planner that schedules the work over the days before it's due and blocks distracting apps until it's done.
 
-Split the work into the ordered steps the student will actually do, each with a realistic duration in minutes for a typical Year 12 student (the planner adjusts them to this one). Keep steps between 10 and 60 minutes where the work allows, and a short task as one step. A step has dates of its own only where the instructions give them (a draft due before the final version): from, the date before which it can't be started, and due, when it must be done by (YYYY-MM-DDTHH:MM, or the date alone); otherwise both null. Base the steps on the instructions. Learning numbered vocabulary sections is a step of its own, with nothing else in it, and those sections in its ankiSections: the planner leaves it out where the student's Anki decks hold them. Every other step has an empty ankiSections. Add a step for handing work in only where the instructions ask for it, in its place in the order. No step may start after the assignment's due time. Work that comes after the hand-in (revising for a test the work prepares for) gets no dates of its own; give the test's day in testDate instead. Each step's where: "home" for a step that needs the laptop, books or quiet (an essay, an upload, a long problem set); "anywhere" for one that can be done at school in a free period with what's in the bag (a booklet, reading, vocabulary).
+Give the work as the ordered steps the student will actually do, as few as it really has, each with a realistic duration in minutes for a typical Year 12 student (the planner adjusts them to this one). An assignment is one step, the whole of it, unless its instructions list separate pieces of work (questions and an essay; vocabulary to learn and a reading task) or it's long, over about 90 minutes, when it's cut into the parts they'd do in different sittings (research, plan, write), 25 to 60 minutes each. A run of pages, questions or exercises is one step ("Questions on pages 28-30"), never a step each. Never make a step of a few minutes around the work (printing or downloading it, reading the task, marking it against given answers, photographing or uploading it, handing it in): say it in the title of the step it belongs to ("Past paper 1 (print it first), then mark it"). A step has dates of its own only where the instructions give them (a draft due before the final version): from, the date before which it can't be started, and due, when it must be done by (YYYY-MM-DDTHH:MM, or the date alone); otherwise both null. Base the steps on the instructions. Learning numbered vocabulary sections is a step of its own, with nothing else in it, and those sections in its ankiSections: the planner leaves it out where the student's Anki decks hold them. Every other step has an empty ankiSections. Handing the work in is part of its last step, never a step of its own. No step may start after the assignment's due time. Work that comes after the hand-in (revising for a test the work prepares for) gets no dates of its own; give the test's day in testDate instead. Each step's where: "home" for a step that needs the laptop, books or quiet (an essay, an upload, a long problem set); "anywhere" for one that can be done at school in a free period with what's in the bag (a booklet, reading, vocabulary).
 
 Also give:
 - effortMin: the total minutes, the sum of the steps.
@@ -22,7 +22,17 @@ Item:
     Details:
     1. Learn vocabulary 2.1 and 2.2 for the unit test on Thursday 15 October.
     2. Read the article on page 34 and answer questions 1-5 in full sentences.
-Answer: {"subSteps":[{"title":"Learn vocabulary 2.1 and 2.2","minutes":30,"ankiSections":["2.1","2.2"],"where":"anywhere","from":null,"due":null},{"title":"Read the article on page 34","minutes":20,"ankiSections":[],"where":"anywhere","from":null,"due":null},{"title":"Answer questions 1-5 in full sentences","minutes":25,"ankiSections":[],"where":"home","from":null,"due":null}],"effortMin":75,"ankiSections":["2.1","2.2"],"testDate":"2026-10-15","question":null,"reason":"for the unit test on Thursday 15 October"}
+Answer: {"subSteps":[{"title":"Learn vocabulary 2.1 and 2.2","minutes":30,"ankiSections":["2.1","2.2"],"where":"anywhere","from":null,"due":null},{"title":"Read the article on page 34 and answer questions 1-5 in full sentences","minutes":45,"ankiSections":[],"where":"home","from":null,"due":null}],"effortMin":75,"ankiSections":["2.1","2.2"],"testDate":"2026-10-15","question":null,"reason":"for the unit test on Thursday 15 October"}
+
+Item:
+    Today: Friday 9 October 2026, 17:00
+    Title: Past paper 1
+    Class: Biology
+    Due: Wednesday 14 October 2026 08:30
+    
+    Details:
+    Print the attached past paper and answer questions 1-6 on pages 2-5. Mark your answers with the mark scheme on Teams, then upload a photo of your marked work.
+Answer: {"subSteps":[{"title":"Past paper 1, questions 1-6 (print it first), then mark it and upload a photo","minutes":55,"ankiSections":[],"where":"home","from":null,"due":null}],"effortMin":55,"ankiSections":[],"testDate":null,"question":null,"reason":""}
 
 Item:
     Today: Friday 9 October 2026, 17:00
