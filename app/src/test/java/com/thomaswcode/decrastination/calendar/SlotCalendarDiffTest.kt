@@ -138,4 +138,31 @@ class SlotCalendarDiffTest {
         assertFalse(SlotCalendarDiff.looksWritten("Teamsheet for Saturday"))
         assertFalse(SlotCalendarDiff.looksWritten(""))
     }
+
+    @Test
+    fun `a copy is one the app wrote, under its title at its times, and an event of yours in its words isn't`() {
+        val end = five + 30 * 60_000L
+        val words = "Gmail. Due Mon 19 Oct."
+        val versions = setOf(SlotCalendarDiff.version(22, "Essay", five, end))
+        assertTrue(SlotCalendarDiff.isCopy(22, "Essay", words, five, end, versions))
+        // Worded like one, but never written: yours, kept. Nor one at another time, of another name, or in another calendar.
+        assertFalse(SlotCalendarDiff.isCopy(22, "Dentist", words, five, end, versions))
+        assertFalse(SlotCalendarDiff.isCopy(22, "Essay", words, half, half + 30 * 60_000L, versions))
+        assertFalse(SlotCalendarDiff.isCopy(7, "Essay", words, five, end, versions))
+        // At a time the app wrote, but not in its words.
+        assertFalse(SlotCalendarDiff.isCopy(22, "Essay", "Bring the signed form", five, end, versions))
+        assertEquals(SlotCalendarDiff.version(22, "Essay", five, end), SlotCalendarDiff.version(22, "Essay", five, end))
+    }
+
+    @Test
+    fun `the versions written are remembered once each, the latest last, the oldest let go`() {
+        assertEquals(listOf(1L, 3L, 2L, 4L), SlotCalendarDiff.remembered(listOf(1, 2, 3), listOf(2, 4, 4)))
+        val full = (1L..SlotCalendarDiff.MAX_VERSIONS.toLong()).toList()
+        val next = SlotCalendarDiff.remembered(full, listOf(0L))
+        assertEquals(SlotCalendarDiff.MAX_VERSIONS, next.size)
+        assertEquals(listOf(2L, 3L), next.take(2))
+        assertEquals(0L, next.last())
+        // Written again, nothing changes.
+        assertEquals(next, SlotCalendarDiff.remembered(next, listOf(0L)))
+    }
 }

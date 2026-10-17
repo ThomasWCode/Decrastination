@@ -142,6 +142,9 @@ class AppGraph private constructor(context: Context) {
     /** What Felix remembers (AI-21): facts, and standing instructions. */
     val memory = JsonStore(File(app.filesDir, "memory.json"), com.thomaswcode.decrastination.core.MemoryState.serializer(), { com.thomaswcode.decrastination.core.MemoryState() })
 
+    /** The versions of its events the app has written to calendars, so a copy of one is known ([SlotCalendarDiff.isCopy]). */
+    val calendarVersions = JsonStore(File(app.filesDir, "calendar.json"), com.thomaswcode.decrastination.data.CalendarVersions.serializer(), { com.thomaswcode.decrastination.data.CalendarVersions() })
+
     /**
      * Who the student is, as every model call sends it (AI-05): from the settings, the tasks, the
      * timetable, the school calendar and what's [remembered].
@@ -160,13 +163,13 @@ class AppGraph private constructor(context: Context) {
         // Files that couldn't be read whole at this start: kept for Setup to say, till you've seen them.
         // On record before anything else runs, and only then is a bad file replaced by what was kept
         // of it: a start cut short before then finds it again, and says it (once: its copy is the same).
-        val found = listOfNotNull(tasks.problem, settings.problem, secrets.problem, runtime.problem, log.problem, instructions.problem, chat.problem, school.problem, memory.problem)
+        val found = listOfNotNull(tasks.problem, settings.problem, secrets.problem, runtime.problem, log.problem, instructions.problem, chat.problem, school.problem, memory.problem, calendarVersions.problem)
         if (found.isNotEmpty()) {
             found.forEach { Log.w(TAG, "${it.file} couldn't be read whole; set aside as ${it.copy}") }
             runBlocking {
                 runCatching {
                     runtime.update { it.withUnreadable(found) }
-                }.onSuccess { listOf(tasks, settings, runtime, log, instructions, chat, school, memory).forEach { it.keepRecovered() } }
+                }.onSuccess { listOf(tasks, settings, runtime, log, instructions, chat, school, memory, calendarVersions).forEach { it.keepRecovered() } }
                     .onFailure { Log.w(TAG, "Couldn't keep what was found unreadable", it) }
             }
         }
@@ -326,9 +329,12 @@ class AppGraph private constructor(context: Context) {
         calendarTouched = false
         val byId = tasks.value.tasks.associateBy { it.id }
         val before = runtime.value.calendarWritten
+        // Each event's version remembered before it's written, so a copy the calendar's sync makes of
+        // it is known whatever happens after ([SlotCalendarDiff.isCopy]).
+        val versions = calendarVersions.update { it.copy(written = SlotCalendarDiff.remembered(it.written, desired.map { d -> SlotCalendarDiff.version(calendarId, d.title, d.start, d.end) })) }.written.toSet()
         val written = try {
             withContext(Dispatchers.IO) {
-                SlotCalendar.write(app, calendarId, made, zone, before, runtime.value.microPlans) { move ->
+                SlotCalendar.write(app, calendarId, made, zone, before, versions, runtime.value.microPlans) { move ->
                     val task = move.desired.taskId?.let(byId::get)
                     when {
                         task == null -> "its task is no longer there"
@@ -359,7 +365,8 @@ class AppGraph private constructor(context: Context) {
     private suspend fun clearOldCalendars() {
         val waiting = runtime.value.calendarsToClear
         if (waiting.isEmpty()) return
-        val cleared = withContext(Dispatchers.IO) { waiting.filter { SlotCalendar.clear(app, it) } }
+        val versions = calendarVersions.value.written.toSet()
+        val cleared = withContext(Dispatchers.IO) { waiting.filter { SlotCalendar.clear(app, it, versions) } }
         if (cleared.isNotEmpty()) runtime.update { it.copy(calendarsToClear = it.calendarsToClear - cleared.toSet()) }
     }
 
