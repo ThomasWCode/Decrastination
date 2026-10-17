@@ -19,7 +19,7 @@ A personal, sideloaded app for one phone, version 3.1.4.
 Same toolchain as the [Teams Assignments widget](https://github.com/ThomasWCode/TeamsAssignmentsWidget): Gradle 9.3.1, AGP 9.0.1 with built-in Kotlin 2.2.10, JDK 17, `minSdk` 26, `targetSdk` 36.
 
 ```bash
-./gradlew --no-daemon -Pkotlin.compiler.execution.strategy=in-process testDebugUnitTest lintDebug assembleDebug
+./gradlew testDebugUnitTest lintDebug assembleDebug
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
