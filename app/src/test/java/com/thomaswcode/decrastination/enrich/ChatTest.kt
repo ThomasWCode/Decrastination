@@ -259,6 +259,18 @@ class ChatTest {
     }
 
     @Test
+    fun `your words come whole, however much what they're about says`() {
+        val event = CalendarEvent(1, "Open day", Fixtures.at("2026-10-17T10:00"), Fixtures.at("2026-10-17T15:00"), allDay = false, location = "x".repeat(50_000), description = "y".repeat(50_000))
+        val asked = ChatMessage("y1", Speaker.You, "Do I need to go?", now, about = About(eventKey = "open day", eventTitle = "Open day"))
+        val newest = ChatPrompts.turns(listOf(asked), "CONTEXT", emptyMap(), LONDON, events = listOf(event)).single().second
+        assertTrue(newest.endsWith("(About the calendar event “Open day”, eventKey open day) Do I need to go?"), newest.takeLast(200))
+        assertTrue("where: " + "x".repeat(200) + ";" in newest && "x".repeat(201) !in newest, newest.take(300))
+        // However large it is, it's cut to the room your words leave.
+        val small = ChatPrompts.turns(listOf(asked), "", emptyMap(), LONDON, budget = 300, events = listOf(event)).single().second
+        assertTrue(small.endsWith("(About the calendar event “Open day”, eventKey open day) Do I need to go?") && "where: xxx" in small, small)
+    }
+
+    @Test
     fun `the conversation is sent from one of yours, with Claude's cards and what became of them, and now's context on the newest`() {
         fun you(text: String) = ChatMessage(text, Speaker.You, text, now, answeredAt = now)
         val card = Proposal("p", task = OwnTask(title = "Revise mechanics", kind = Kind.Revision, minutes = 180), state = ProposalState.Applied)

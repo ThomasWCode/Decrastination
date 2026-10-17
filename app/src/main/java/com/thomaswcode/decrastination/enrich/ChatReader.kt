@@ -199,9 +199,11 @@ object ChatPrompts {
             listOf(folded.first().first to before + "\n\n" + folded.first().second) + folded.drop(1)
         }
         // After what it's about, in full; with what a web search found for it (16 Oct) and the tasks
-        // he asked to read, to answer and act on.
-        val about = aboutText(recent.last { it.from == Speaker.You }.about, tasks, events)
-        val newest = listOfNotNull(about, texts.last().second, found?.let(ResearchPrompts::told), read.takeIf { it.isNotEmpty() }?.let(::readText)).joinToString("\n\n").take(budget)
+        // he asked to read, to answer and act on. What it's about never at your words' cost: cut
+        // to the room they leave, however much it says.
+        val words = texts.last().second
+        val about = aboutText(recent.last { it.from == Speaker.You }.about, tasks, events)?.take((budget - words.length - 2).coerceAtLeast(0))?.takeIf { it.isNotEmpty() }
+        val newest = listOfNotNull(about, words, found?.let(ResearchPrompts::told), read.takeIf { it.isNotEmpty() }?.let(::readText)).joinToString("\n\n").take(budget)
         // The turns before it, newest first, while they fit their share, starting again with one of yours.
         var left = (budget - newest.length) / 4
         val earlier = texts.dropLast(1).reversed().takeWhile { (_, t) -> (t.length <= left).also { if (it) left -= t.length } }.reversed()
@@ -266,7 +268,7 @@ object ChatPrompts {
         // A repeating event's occurrences share their key: the one it was asked about, by its start.
         val event = events.filter { EventJudge.key(it) == key }.let { same -> same.firstOrNull { it.start == about.eventStart } ?: same.firstOrNull() } ?: return null
         val parts = listOfNotNull(
-            event.location.trim().takeIf { it.isNotEmpty() }?.let { "where: $it" },
+            event.location.trim().takeIf { it.isNotEmpty() }?.let { "where: " + it.take(EVENT_PLACE) },
             event.description.trim().takeIf { it.isNotEmpty() }?.let { "its description: " + it.take(EVENT_TEXT) },
         )
         if (parts.isEmpty()) return null
@@ -416,7 +418,8 @@ object ChatPrompts {
     const val MAX_READ = 3
     private const val READ_TEXT = 16_000
 
-    /** An event's description, as a message about it carries it. */
+    /** An event's place and its description, as a message about it carries them. */
+    private const val EVENT_PLACE = 200
     private const val EVENT_TEXT = 500
 
     /** How far back, and how many, of the student's own finished tasks the chat's told of (16 Oct). */
