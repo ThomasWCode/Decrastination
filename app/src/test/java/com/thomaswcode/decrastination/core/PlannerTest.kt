@@ -1032,6 +1032,19 @@ class PlannerTest {
     }
 
     @Test
+    fun `steps you or Felix gave are planned at their own minutes, not stretched by the learned pace`() {
+        // Your call (17 Oct): the pace is for the app's own estimates. At 1.5, Claude's hour is 90
+        // minutes; two hours you or Felix gave a Teams task stay two hours.
+        val pace = Calibration(multipliers = mapOf(Calibration.key(Kind.Homework, null) to 1.5))
+        val claude = task("c", Fixtures.at("2026-10-20T09:00"), effort = 60, steps = listOf(SubStep("Read", 60)))
+        val given = task("g", Fixtures.at("2026-10-20T09:00"), effort = 120, steps = listOf(SubStep("Past paper", 120))).copy(userSteps = listOf(OwnStep("Past paper", 120)))
+        val plan = Planner.plan(Planner.Input(listOf(claude, given), Fixtures.at("2026-10-08T17:00"), LONDON, settings, calibration = pace))
+        assertEquals(90, plan.chunksOf("teams:c").sumOf { it.minutes })
+        assertEquals(listOf(120), plan.chunksOf("teams:g").map { it.minutes })
+        assertEquals(1.0, pace.multiplierFor(given))
+    }
+
+    @Test
     fun `a step read before sittings is planned in them, and a done one stays done`() {
         // Read by older prompts (#48's review): half an hour done, three hours still to do in one step.
         val steps = listOf(SubStep("Read the sources", 30, done = true), SubStep("Write the essay", 180))
