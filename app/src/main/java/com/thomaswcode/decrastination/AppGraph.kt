@@ -1740,18 +1740,16 @@ class AppGraph private constructor(context: Context) {
     private var letGo: String? = null
 
     /**
-     * A web search made for a message (16 Oct), by its id, kept till he's answered with what it
-     * found: an answer that failed is asked again with it, not looked up again (a paid search).
+     * What a message's answer has been given beyond its context, by the message's [id], kept till
+     * he's answered with it: what a web search [found] (16 Oct), or why one made found nothing
+     * ([notLooked]), and the tasks [read] in full (D-93). An answer with them that failed is asked
+     * again with them, never searching or asking for them again, as each is paid for; a search held
+     * back (Claude off or resting, the cap) isn't kept, so it can be made later.
      */
-    @Volatile
-    private var looked: Pair<String, com.thomaswcode.decrastination.enrich.Found>? = null
+    private data class Gathered(val id: String, val found: com.thomaswcode.decrastination.enrich.Found?, val notLooked: String?, val read: List<String>)
 
-    /**
-     * The tasks a message's answer asked to read in full (D-93), by the message's id, kept till he's
-     * answered with their texts: an answer that failed is asked again with them, not for them again.
-     */
     @Volatile
-    private var readFor: Pair<String, List<String>>? = null
+    private var gathered: Gathered? = null
 
     /**
      * The answer being waited for let go (AC-08): your message says so, with its Try again. A call once
@@ -1835,11 +1833,11 @@ class AppGraph private constructor(context: Context) {
             }
             // The tasks of [ids], as they are in the snapshot his answers are checked against.
             fun tasksOf(ids: List<String>): List<TaskItem> = ids.mapNotNull { id -> state.tasks.firstOrNull { it.id == id } }
-            // A look already made for it, or tasks already read for it (D-93), whose answer with them
-            // failed: asked again with them, not looked up or asked for again.
-            val before = looked?.takeIf { it.first == waiting.id }?.second
-            var read = tasksOf(readFor?.takeIf { it.first == waiting.id }?.second.orEmpty())
-            val called = ask(before, read)
+            // What it was given before, for an answer with it that failed ([Gathered]): asked again
+            // with it, not looked up or asked for again.
+            val before = gathered?.takeIf { it.id == waiting.id }
+            var read = tasksOf(before?.read.orEmpty())
+            val called = ask(before?.found, read)
             // Let go while it ran (AC-08): the message says so already, and the answer goes unused.
             if (letGo == waiting.id) {
                 letGo = null
@@ -1863,8 +1861,10 @@ class AppGraph private constructor(context: Context) {
             // ([ChatRounds]); never more, as each is paid for. Not found, his answer stands, saying
             // why; his answer with them failed, the message waits for its Try again with them, as a
             // failed call leaves it.
-            var found = before
-            var notLooked: String? = null
+            var found = before?.found
+            var notLooked = before?.notLooked
+            // Why a search made found nothing, kept with the rest; one held back isn't, so it can be made later.
+            var tried = before?.notLooked
             for (round in 1..com.thomaswcode.decrastination.enrich.ChatRounds.MAX_ROUNDS) {
                 val next = com.thomaswcode.decrastination.enrich.ChatRounds.next(reading, searched = found != null || notLooked != null, searches = settings.value.felixSearches, read = read.map { it.id }) ?: break
                 var looks = false
@@ -1893,20 +1893,18 @@ class AppGraph private constructor(context: Context) {
                                 else -> "the search found nothing"
                             }
                         }
+                        if (search !is Called.Held) tried = notLooked
                     } else {
                         found = what
-                        looked = waiting.id to what
                         looks = true
                     }
                 }
                 val more = tasksOf(next.read)
                 val reads = more.size > read.size
-                if (reads) {
-                    read = more
-                    readFor = waiting.id to more.map { it.id }
-                }
+                if (reads) read = more
                 // Nothing new to answer with (a search that found nothing, no texts asked for): his answer stands.
                 if (!looks && !reads) break
+                gathered = Gathered(waiting.id, found, tried, read.map { it.id })
                 val again = ask(found, read)
                 if (letGo == waiting.id) {
                     letGo = null
@@ -1926,8 +1924,7 @@ class AppGraph private constructor(context: Context) {
                 }
             }
             reading = reading.copy(research = null, details = emptyList())
-            looked = null
-            readFor = null
+            gathered = null
             val reply = ChatMessage(
                 id = java.util.UUID.randomUUID().toString(),
                 from = Speaker.Claude,

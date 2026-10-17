@@ -84,7 +84,7 @@ When a message needs facts neither you nor the app have given him (a competition
 - He's asked again with what it found added to your newest turn (`ResearchPrompts.told`); that answer is the one kept and acted on, unless what it found shows a need to read a task in full (above): then he's asked once more with that too.
 - Under it: what he searched for, and the first four pages found as links (`ChatMessage.searched`, `sources`).
 - A look that can't be made says why ("Not looked up: …"), and his first answer stands.
-- It's a call apart because the search tool beside the chat's answer schema makes a grammar the API refuses as too large. What a search found is kept till he's answered with it, so a failed answer is asked again without searching again.
+- It's a call apart because the search tool beside the chat's answer schema makes a grammar the API refuses as too large. What a search found, or why one made found nothing, is kept till he's answered with it, so a failed answer is asked again without searching again; a search held back (Claude off or resting, the cap) can be made later.
 
 ## His messages
 
