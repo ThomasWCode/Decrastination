@@ -225,6 +225,40 @@ class ChatTest {
     }
 
     @Test
+    fun `a search the texts show a need for, or texts a search does, take another round, but nothing twice`() {
+        val reading = parse("""{"reply":"Reading it.","newTasks":[],$none,"memories":[],"suggestedReplies":[],"actions":[],"research":"","details":[]}""")!!
+        // Texts first; then, having read them, the search they showed a need for.
+        assertEquals(ChatRounds.Next(null, listOf("teams:s1")), ChatRounds.next(reading.copy(details = listOf("teams:s1")), searched = false, searches = true, read = emptyList()))
+        assertEquals(ChatRounds.Next("the trip's date", listOf("teams:s1")), ChatRounds.next(reading.copy(research = "the trip's date"), searched = false, searches = true, read = listOf("teams:s1")))
+        // Both at once: one round.
+        assertEquals(ChatRounds.Next("q", listOf("a")), ChatRounds.next(reading.copy(research = "q", details = listOf("a")), searched = false, searches = true, read = emptyList()))
+        // A search made or tried isn't made again, none with searches off, and texts read aren't new.
+        assertNull(ChatRounds.next(reading.copy(research = "again"), searched = true, searches = true, read = listOf("teams:s1")))
+        assertNull(ChatRounds.next(reading.copy(research = "q"), searched = false, searches = false, read = emptyList()))
+        assertNull(ChatRounds.next(reading.copy(details = listOf("teams:s1")), searched = false, searches = true, read = listOf("teams:s1")))
+        // Three texts at most in all.
+        assertEquals(listOf("a", "b", "c"), ChatRounds.next(reading.copy(details = listOf("c", "d")), searched = false, searches = true, read = listOf("a", "b"))!!.read)
+    }
+
+    @Test
+    fun `the tasks he asked to read share their room, so none is left out`() {
+        val long = (1..3).map { i -> sheet.copy(id = "teams:l$i", sourceId = "l$i", title = "Long $i", detail = "Start $i. " + "w ".repeat(6_000) + "End $i.") }
+        val newest = ChatPrompts.turns(listOf(ChatMessage("y1", Speaker.You, "Which first?", now)), "CONTEXT", long.associateBy { it.id }, LONDON, read = long).single().second
+        for (i in 1..3) assertTrue("Start $i." in newest && "End $i." in newest, "$i")
+    }
+
+    @Test
+    fun `a message about a repeating event carries the occurrence it was asked about`() {
+        val first = CalendarEvent(1, "Drum lesson", Fixtures.at("2026-10-14T18:00"), Fixtures.at("2026-10-14T18:45"), allDay = false, description = "Bring the grade 3 book.")
+        val next = first.copy(id = 2, start = Fixtures.at("2026-10-21T18:00"), end = Fixtures.at("2026-10-21T18:45"), description = "Exam practice: bring the grade 4 book.")
+        val asked = ChatMessage("y1", Speaker.You, "What do I need?", now, about = About(eventKey = "drum lesson", eventTitle = "Drum lesson", eventStart = next.start))
+        fun newest(m: ChatMessage) = ChatPrompts.turns(listOf(m), "CONTEXT", emptyMap(), LONDON, events = listOf(first, next)).single().second
+        assertTrue("its description: Exam practice: bring the grade 4 book." in newest(asked), newest(asked))
+        // Without its start (a message from before it was kept): the first.
+        assertTrue("its description: Bring the grade 3 book." in newest(asked.copy(about = asked.about.copy(eventStart = null))))
+    }
+
+    @Test
     fun `the conversation is sent from one of yours, with Claude's cards and what became of them, and now's context on the newest`() {
         fun you(text: String) = ChatMessage(text, Speaker.You, text, now, answeredAt = now)
         val card = Proposal("p", task = OwnTask(title = "Revise mechanics", kind = Kind.Revision, minutes = 180), state = ProposalState.Applied)

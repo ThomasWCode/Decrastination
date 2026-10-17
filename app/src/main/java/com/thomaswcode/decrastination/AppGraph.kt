@@ -1747,6 +1747,13 @@ class AppGraph private constructor(context: Context) {
     private var looked: Pair<String, com.thomaswcode.decrastination.enrich.Found>? = null
 
     /**
+     * The tasks a message's answer asked to read in full (D-93), by the message's id, kept till he's
+     * answered with their texts: an answer that failed is asked again with them, not for them again.
+     */
+    @Volatile
+    private var readFor: Pair<String, List<String>>? = null
+
+    /**
      * The answer being waited for let go (AC-08): your message says so, with its Try again. A call once
      * sent is paid for and counted (AC-04), so it isn't closed: it comes back, its answer unused.
      */
@@ -1826,12 +1833,13 @@ class AppGraph private constructor(context: Context) {
                     sentAt.value = null
                 }
             }
-            // The tasks an answer asks to read in full, as they are in the snapshot it was shown.
-            fun wanted(r: com.thomaswcode.decrastination.enrich.ChatAnswers.Reading): List<TaskItem> = r.details.mapNotNull { id -> state.tasks.firstOrNull { it.id == id } }
-            var read = emptyList<TaskItem>()
-            // A look already made for it, whose answer with it failed: asked again with what it found.
+            // The tasks of [ids], as they are in the snapshot his answers are checked against.
+            fun tasksOf(ids: List<String>): List<TaskItem> = ids.mapNotNull { id -> state.tasks.firstOrNull { it.id == id } }
+            // A look already made for it, or tasks already read for it (D-93), whose answer with them
+            // failed: asked again with them, not looked up or asked for again.
             val before = looked?.takeIf { it.first == waiting.id }?.second
-            val called = ask(before)
+            var read = tasksOf(readFor?.takeIf { it.first == waiting.id }?.second.orEmpty())
+            val called = ask(before, read)
             // Let go while it ran (AC-08): the message says so already, and the answer goes unused.
             if (letGo == waiting.id) {
                 letGo = null
@@ -1849,44 +1857,57 @@ class AppGraph private constructor(context: Context) {
                 stuck = true
                 return@call if (result.refused) "Claude declined to answer that: Try again, or put it another way" else "Claude's answer couldn't be read: Try again"
             }
-            // What he asked to look up on the web (16 Oct), in a call of its own; then he's asked again
-            // with what it found, and that's his answer. Not found, his first stands, saying why; his
-            // answer with it failed, the message waits for its Try again, as a failed call leaves it.
+            // What he asked to look up on the web (16 Oct), in a call of its own, and the tasks whose
+            // whole text he asked to read (D-93): he's asked again with them, and that's his answer.
+            // A search the texts showed a need for, or texts the search did, take one more round
+            // ([ChatRounds]); never more, as each is paid for. Not found, his answer stands, saying
+            // why; his answer with them failed, the message waits for its Try again with them, as a
+            // failed call leaves it.
             var found = before
-            if (found != null) reading = reading.copy(research = null)
             var notLooked: String? = null
-            if (found == null) reading.research?.takeIf { settings.value.felixSearches }?.let { question ->
-                val search = callModel(interactive = true, record = com.thomaswcode.decrastination.enrich.ModelCalls.OnRecord(com.thomaswcode.decrastination.enrich.ModelEffort.Job.Research, question) { r: com.thomaswcode.decrastination.enrich.WebResearcher.Result -> r.usage to com.thomaswcode.decrastination.enrich.ModelCalls.outcome(r.refused, r.found == null) }, cost = { r: com.thomaswcode.decrastination.enrich.WebResearcher.Result -> r.costUsd to r.refused }) { at ->
-                    sentAt.value = at
-                    try {
-                        com.thomaswcode.decrastination.enrich.WebResearcher(key, endpoint(), year = profile(at).year).look(question, waiting.text, at, clock.zone())
-                    } finally {
-                        sentAt.value = null
-                    }
-                }
-                if (letGo == waiting.id) {
-                    letGo = null
-                    return@withLock
-                }
-                found = (search as? Called.Answered)?.value?.found
-                val what = found
-                if (what == null) {
-                    if (search is Called.Failed) Log.w(TAG, "Felix's web search failed", search.error)
-                    notLooked = when (search) {
-                        is Called.Held -> because(search.hold)
-                        is Called.Failed -> "the search failed"
-                        is Called.Answered -> when {
-                            search.value.refused -> "Claude declined to search for it"
-                            search.value.paused -> "the search ran too long"
-                            else -> "the search found nothing"
+            for (round in 1..com.thomaswcode.decrastination.enrich.ChatRounds.MAX_ROUNDS) {
+                val next = com.thomaswcode.decrastination.enrich.ChatRounds.next(reading, searched = found != null || notLooked != null, searches = settings.value.felixSearches, read = read.map { it.id }) ?: break
+                var looks = false
+                next.search?.let { question ->
+                    val search = callModel(interactive = true, record = com.thomaswcode.decrastination.enrich.ModelCalls.OnRecord(com.thomaswcode.decrastination.enrich.ModelEffort.Job.Research, question) { r: com.thomaswcode.decrastination.enrich.WebResearcher.Result -> r.usage to com.thomaswcode.decrastination.enrich.ModelCalls.outcome(r.refused, r.found == null) }, cost = { r: com.thomaswcode.decrastination.enrich.WebResearcher.Result -> r.costUsd to r.refused }) { at ->
+                        sentAt.value = at
+                        try {
+                            com.thomaswcode.decrastination.enrich.WebResearcher(key, endpoint(), year = profile(at).year).look(question, waiting.text, at, clock.zone())
+                        } finally {
+                            sentAt.value = null
                         }
                     }
-                    return@let
+                    if (letGo == waiting.id) {
+                        letGo = null
+                        return@withLock
+                    }
+                    val what = (search as? Called.Answered)?.value?.found
+                    if (what == null) {
+                        if (search is Called.Failed) Log.w(TAG, "Felix's web search failed", search.error)
+                        notLooked = when (search) {
+                            is Called.Held -> because(search.hold)
+                            is Called.Failed -> "the search failed"
+                            is Called.Answered -> when {
+                                search.value.refused -> "Claude declined to search for it"
+                                search.value.paused -> "the search ran too long"
+                                else -> "the search found nothing"
+                            }
+                        }
+                    } else {
+                        found = what
+                        looked = waiting.id to what
+                        looks = true
+                    }
                 }
-                looked = waiting.id to what
-                // Asked for a task's whole text too: read with what it found, in the one call.
-                read = wanted(reading)
-                val again = ask(what, read)
+                val more = tasksOf(next.read)
+                val reads = more.size > read.size
+                if (reads) {
+                    read = more
+                    readFor = waiting.id to more.map { it.id }
+                }
+                // Nothing new to answer with (a search that found nothing, no texts asked for): his answer stands.
+                if (!looks && !reads) break
+                val again = ask(found, read)
                 if (letGo == waiting.id) {
                     letGo = null
                     return@withLock
@@ -1894,39 +1915,19 @@ class AppGraph private constructor(context: Context) {
                 val second = when (again) {
                     is Called.Held -> return@call because(again.hold)
                     is Called.Failed -> {
-                        Log.w(TAG, "Claude's answer with what the search found failed", again.error)
+                        Log.w(TAG, "Claude's answer with what it looked up or read failed", again.error)
                         return@call "Claude's call failed: ${retryWords()}, or now with Try again"
                     }
                     is Called.Answered -> again.value
                 }
-                reading = second.reading?.copy(research = null) ?: run {
+                reading = second.reading ?: run {
                     stuck = true
                     return@call if (second.refused) "Claude declined to answer that: Try again, or put it another way" else "Claude's answer couldn't be read: Try again"
                 }
             }
-            // The tasks whose whole text he asked to read (D-93): asked again with them, once, and
-            // that's his answer.
-            if (read.isEmpty()) wanted(reading).takeIf { it.isNotEmpty() }?.let { toRead ->
-                read = toRead
-                val again = ask(found, toRead)
-                if (letGo == waiting.id) {
-                    letGo = null
-                    return@withLock
-                }
-                val second = when (again) {
-                    is Called.Held -> return@call because(again.hold)
-                    is Called.Failed -> {
-                        Log.w(TAG, "Claude's answer with the tasks it read failed", again.error)
-                        return@call "Claude's call failed: ${retryWords()}, or now with Try again"
-                    }
-                    is Called.Answered -> again.value
-                }
-                reading = second.reading?.copy(research = null) ?: run {
-                    stuck = true
-                    return@call if (second.refused) "Claude declined to answer that: Try again, or put it another way" else "Claude's answer couldn't be read: Try again"
-                }
-            }
+            reading = reading.copy(research = null, details = emptyList())
             looked = null
+            readFor = null
             val reply = ChatMessage(
                 id = java.util.UUID.randomUUID().toString(),
                 from = Speaker.Claude,

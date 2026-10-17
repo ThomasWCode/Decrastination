@@ -92,6 +92,10 @@ class FelixTest {
         assertTrue("  Its reading's summary of all ${sheet.detail.length} characters: Questions 1 to 6, handed in on Friday." in told, told)
         // With none of its own, nothing's said of it.
         assertTrue("own text" !in FelixPrompts.describe(FelixPrompts.Reason.Question, plan, null, task("Statics", 30), emptyList(), emptyList(), "Which?", settings, now, LONDON))
+        // A link (or a worksheet attached) with no text is the work too: said, with what comes with it.
+        val linked = task("Statics", 30).copy(extra = mapOf(TeamsRows.EXTRA_LINKS to "https://example.org/sheet"))
+        val bare = FelixPrompts.describe(FelixPrompts.Reason.Question, plan, null, linked, emptyList(), emptyList(), "Which?", settings, now, LONDON)
+        assertTrue("Its task's own text (Teams; links: https://example.org/sheet):\n  (no text of its own)" in bare, bare)
     }
 
     @Test
