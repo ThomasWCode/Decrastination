@@ -272,7 +272,12 @@ fun TaskSheet(
                     note = listOfNotNull(
                         if (!own && task.userEffortMin != null) {
                             // A total Felix worked out at your pace (17 Oct), or your own.
-                            if (task.pacedMinutes) "The app's ${Format.minutes(task.appEffortMin)} at your pace" else "Yours: the app reckoned ${Format.minutes(task.appEffortMin)}"
+                            if (task.pacedMinutes) {
+                                "The app's ${Format.minutes(task.userEffortPacedFrom ?: task.appEffortMin)} at your pace" +
+                                    if (task.userEffortPacedFrom == null || task.userEffortPacedFrom == task.appEffortMin) "" else ", which it now reckons ${Format.minutes(task.appEffortMin)}"
+                            } else {
+                                "Yours: the app reckoned ${Format.minutes(task.appEffortMin)}"
+                            }
                         } else {
                             null
                         },

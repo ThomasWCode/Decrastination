@@ -180,7 +180,8 @@ class ChatTest {
     @Test
     fun `a total Felix works out at the student's pace is read as paced, and the instructions' reader is never asked for one`() {
         val reading = parse("""{"reply":"Split, at your pace.","changes":[{"type":"Minutes","taskId":"teams:bridge","minutes":150,"paced":true}]}""")!!
-        assertEquals(Change(ChangeType.Minutes, taskId = "teams:bridge", minutes = 150, paced = true), reading.changes.single())
+        // With the app's estimate it came from, as it is now (#50's review).
+        assertEquals(Change(ChangeType.Minutes, taskId = "teams:bridge", minutes = 150, pacedFrom = 100, pacedHash = com.thomaswcode.decrastination.core.Enrichments.inputHash(bridge)), reading.changes.single())
         // The chat's schema has it; the instructions' reader's hasn't, as it reads the student's own words.
         assertTrue("paced" in ChatPrompts.SCHEMA.toString())
         assertFalse("paced" in InstructionPrompts.SCHEMA.toString())
@@ -197,8 +198,13 @@ class ChatTest {
         assertTrue("| Physics | Teams | Homework | Tue 13 Oct 2026 08:30 | 100, planned as 125 at their pace |" in context, context)
         assertTrue("| Given | Teams | Homework | Tue 13 Oct 2026 08:30 | 100, as given |" in context, context)
         // A total Felix worked out at their pace, said so, with the app's estimate it came from.
-        val paced = bridge.copy(id = "teams:paced", sourceId = "paced", title = "Paced", userEffortMin = 150, userEffortPaced = true)
-        assertTrue("| Paced | Teams | Homework | Tue 13 Oct 2026 08:30 | 150, as given: the app's 100 at their pace |" in ChatPrompts.context(listOf(paced), emptyList(), emptyList(), now, LONDON, calibration = pace))
+        val unpaced = bridge.copy(id = "teams:paced", sourceId = "paced", title = "Paced", userEffortMin = 150, userEffortPacedFrom = 100)
+        val paced = unpaced.copy(userEffortPacedHash = com.thomaswcode.decrastination.core.Enrichments.inputHash(unpaced))
+        fun line(t: TaskItem) = ChatPrompts.context(listOf(t), emptyList(), emptyList(), now, LONDON, calibration = pace)
+        assertTrue("| Paced | Teams | Homework | Tue 13 Oct 2026 08:30 | 150, as given: the app's 100 at their pace |" in line(paced), line(paced))
+        // The app's estimate changed since, or the task itself: said, so he can set it again.
+        assertTrue("| 150, as given: the app's 100 at their pace, which it now puts at 120 |" in line(paced.copy(sourceEffortMin = 120)))
+        assertTrue("| 150, as given: the app's 100 at their pace, the task changed since |" in line(paced.copy(detail = "Also questions 9 to 12.")))
         assertTrue("- Homework | ×1.5 (from 6 timed)" in context, context)
         assertTrue("- Homework, Physics | ×1.25 (from 3 timed)" in context, context)
         // Nothing learned yet: said so, and the minutes as they are.

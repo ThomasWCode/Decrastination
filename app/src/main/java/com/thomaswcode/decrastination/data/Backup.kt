@@ -184,7 +184,7 @@ object Backups {
      * instructions here. One here wins: it's the newer.
      */
     fun restoredOwnTasks(backed: List<TaskItem>, here: List<TaskItem>): List<TaskItem> = backed.filter { b -> here.none { it.id == b.id } }
-        .map { it.copy(userNotATask = false, userFrom = null, userAfter = null, userDueAt = null, userEffortMin = null, userEffortPaced = false, userOnDay = null, userAtTime = null, userSteps = null, userTitle = null).enriched() }
+        .map { it.copy(userNotATask = false, userFrom = null, userAfter = null, userDueAt = null, userEffortMin = null, userEffortPacedFrom = null, userEffortPacedHash = null, userOnDay = null, userAtTime = null, userSteps = null, userTitle = null).enriched() }
 
     /** The most changes one instruction holds, as Claude's reading of one is held to. */
     private const val MAX_CHANGES = 40
