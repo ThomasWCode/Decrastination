@@ -17,23 +17,24 @@ What a job is sent is `Prompts.describe`; what it answers is `Prompts.schema`, e
 
 **Email**: a starred conversation, always something to do (AI-02).
 - Sent: today, when its newest message came, who from ("the student (a note to self)" for one of yours), the subject, how many messages, attachments by name (AI-04), your answers, its blocks as last planned, and the text up to 16 000 characters (`Prompts.MAX_TEXT`), the rest said to be left out.
-- Returns: `kind` (only "Admin"), `actionableFrom`, `deadline`, `deadlineQuoted` (AI-12), `effortMin` (reading included; at least 5 for one only to read and decide), `nextStep` (one concrete action), `question` (AI-10), `reason` and `blocks`.
+- Returns: `kind` (only "Admin"), `actionableFrom`, `deadline`, `deadlineQuoted` (AI-12), `effortMin` (reading included; at least 5 for one only to read and decide), `nextStep` (one concrete action), `question` (AI-10), `reason`, `blocks` and `summary`.
 - Blocks only for separate pieces of work with dates of their own, a calendar of deadlines (Q12): each with its minutes, `from` and `due`. One job, however long, has none. A rough window runs from its first day to its last.
 - Where what it asks turns on an attachment or an earlier message Claude can't see, its next step says to read that first, naming it, at 10 minutes.
 
 **Assignment**: a Teams assignment.
 - Sent: today, its title, class and the source's due time, the Anki decks by topic (DX-10), its reference materials by name and its links (DX-08), your answers, its steps as last planned, and its instructions.
-- Returns: `subSteps` (each with title, minutes, `ankiSections`, `where`, `from` and `due`), `effortMin` (their sum), `ankiSections`, `testDate`, `question` and `reason`.
+- Returns: `subSteps` (each with title, minutes, `ankiSections`, `where`, `from` and `due`), `effortMin` (their sum), `ankiSections`, `testDate`, `question`, `reason` and `summary`.
 - Revising for a test after the hand-in gets no step: its day goes in `testDate`, read as 08:30 that day, which brings the task's date forward when it's earlier than the source's.
 
 **Effort**: a Power Planner task.
-- Sent: today, its title, class, due date and details. Returns `effortMin`, and `blocks` only where its details list pieces of work with dates of their own.
+- Sent: today, its title, class, due date and details. Returns `effortMin`, `blocks` only where its details list pieces of work with dates of their own, and `summary`.
 - An appointment isn't work: only the time to prepare for it, at least a minute.
 
 Every job:
 - Its prompt (`Prompts.system`) is its brief, the limits its answer is checked against, from the checks' own values (`Prompts.limits`, AI-03), and made-up worked examples (`enrich/Examples.kt`, AI-07), each an answer the checks pass whole.
 - Each schema field says what it's for and its limit (AI-20). The year group comes from the profile (AI-06).
 - `reason` quotes the phrase that gave the date, kind or test date, at most 160 characters (AI-09), shown under the due date on the task's sheet.
+- `summary`, last (D-93): for a text over about 600 characters, what it asks of the student from all of it, in at most 400 characters (500 kept): an email's what to do and by when, what to bring, send or pay, and what a later message changed; an assignment's work, parts, needs, dates and hand-in. Empty for a shorter text. Felix is told it in place of a text too long for his room ([felix.md](felix.md)); the readings made before it have none, and his room keeps the text's start and end instead.
 
 ## Steps: as few as the work has
 
@@ -118,7 +119,7 @@ It runs again once Claude can be asked again (its rest over, `EnrichWorker.retry
 
 ## The prompts' version (AC-06)
 
-`Prompts.VERSION` is 6. Each reading keeps the version of the prompts that made it (`Enrichment.promptVersion`; 1 where none is stored).
+`Prompts.VERSION` is 7 (7: a long text's summary, D-93). Each reading keeps the version of the prompts that made it (`Enrichment.promptVersion`; 1 where none is stored).
 - With Claude on, an open task Claude read under an older version is read again once, within the run's 20 calls, the oldest first.
 - **Not a task with a step of its reading done** (`partDone`, `core/Enrichment.kt`): newer prompts could give its work as other steps, and a tick goes only to a step of its name, so work done would be planned again. It's read again only when its content changes or you ask.
 - Read for such a reason, Claude is told which steps are done: each listed "(N min, done)", to be kept exactly as it is (title and minutes, still in `effortMin`), with only the work left given in the others (AI-08, `Prompts.describe`).

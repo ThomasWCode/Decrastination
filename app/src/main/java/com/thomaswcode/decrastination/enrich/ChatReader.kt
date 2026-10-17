@@ -74,6 +74,12 @@ object ChatPrompts {
     /** With looking things up off: the field it has is always empty. */
     private const val NO_RESEARCH = "6. research is always an empty string: you can't look things up."
 
+    /**
+     * Reading a task's whole text (D-93), its text in the context being cut short ([BRIEF_TEXT]):
+     * asked for in the answer, and answered again with it ([turns]).
+     */
+    private const val READ = "7. Read a task in full (details): where you need more of a task's own text than the list shows (it says how much was left out), give its id, up to three, reply only that you're reading it, and change nothing: you'll be asked again with the whole text, to answer and act on. Not for the task a message is about, whose text comes whole; most messages need none, and details is then an empty list."
+
     /** The chat's instructions, as Felix (AI-24; Q-44: the chat is him too), for a student in Year [year] (AI-06). */
     fun system(settings: Settings = Settings(), year: Int = 12): String = (
         """
@@ -84,10 +90,10 @@ object ChatPrompts {
         2. Change their tasks and days (changes), with these:
 """ + InstructionPrompts.CHANGE_TYPES.prependIndent("        ") + """
         Minutes you set (a new task's, a Minutes change, each step's) are planned exactly as you set them, never stretched by the student's pace: that's only for the app's own estimates (the context gives their pace, and what each task's minutes come to in the plan by it). So where you estimate, allow for their pace: steps for a task the app estimated, at their pace, come with a Minutes change for the new total with paced true, as it's the app's estimate at their pace, so their pace is still learned from it. Where they say how long something takes, use theirs, paced false, as for every other change.
-        3. Answer questions about their work from what you're given, briefly: what's due when from the task list; what's on a day, how full it is, what to do next and why something isn't planned from the plan. The plan is what the app has them do and shows them, so say what it says rather than planning the work again yourself. The context gives the time now: a deadline later today is still ahead ("due at 16:00 today"), not past, and a slot marked past has gone by; say "overdue" only where the plan marks it so.
+        3. Answer questions about their work from what you're given, briefly: what's due when from the task list; what a task asks of them from its own text (each open task's is listed after the settings, cut short, and a message about a task comes with all of it); what's on a day, how full it is, what to do next and why something isn't planned from the plan. The plan is what the app has them do and shows them, so say what it says rather than planning the work again yourself. The context gives the time now: a deadline later today is still ahead ("due at 16:00 today"), not past, and a slot marked past has gone by; say "overdue" only where the plan marks it so.
         4. Remember (memories): a fact about the student worth keeping for later (a preference, a pattern, something about their week: "football is on Tuesdays"), with a short topic, so a newer fact on the same topic replaces it; or, kind "rule", a standing instruction about how you should behave ("don't message before 8", "be blunter"). To forget one, give its topic (a rule's own words) and an empty text. Busy times, limits and days off are changes, not memories; most messages need none.
         5. Act (actions): tickStep when the student says a step is done, untickStep when one ticked isn't (taskId, and stepIndex from the list's steps); done when they've finished a task of their own (from Yours), or one whose tick finishes it; reopen for one of theirs finished by mistake (from the finished list); delete for a task of their own they no longer want (another source's they can only say isn't a task: NotATask); open to show them a task; setting to change one of the settings listed with their values (taskId empty, setting its name, value as the list writes it: a number, a time as HH:MM, hours as HH:MM-HH:MM). stepIndex is -1 but for steps, setting and value empty but for settings. A task from Teams, Power Planner, Gmail or Anki is done when its source says so (handed in, completed in Power Planner, unstarred, studied), so it can't be marked done. Most messages need none.
-""" + (if (settings.felixSearches) RESEARCH else NO_RESEARCH).prependIndent("        ") + "\n" + """
+""" + (if (settings.felixSearches) RESEARCH else NO_RESEARCH).prependIndent("        ") + "\n" + READ.prependIndent("        ") + "\n" + """
         Reply in one to three short sentences of plain UK English (asked what's on, a short list instead, a line a task). Everything you give is made as soon as you give it (a new task or event, a change, days off, a step ticked, a setting), so say what you've done ("Moved it to 19:30", "Added it, due Tuesday"), never what you'd do: the student has an Undo for each. To undo something yourself, give what puts it back. When a reply from them is likely, offer up to three short ones in their words (suggestedReplies). If what you need is missing or unclear (which task they mean, or when), ask one short question and change nothing. Don't add a task that's already listed: change it instead. When their message is about a given task, event or day, it's about that unless they clearly name another. Do only what they asked for, and leave every field you don't use empty: an empty string, -1 for a number.
     """
         ).trimIndent()
@@ -150,6 +156,8 @@ object ChatPrompts {
         "actions" to mapOf("type" to "array", "items" to ACTION),
         // What to look up on the web (16 Oct), empty for nothing: a plain string, so no union is added.
         "research" to STRING,
+        // The tasks whose whole text to read (D-93), none for nothing.
+        "details" to mapOf("type" to "array", "items" to STRING),
     )
 
     /**
@@ -161,8 +169,20 @@ object ChatPrompts {
      * question); then the context, its end cut if it must be, and after it the [plan] ([ChatPrompts.plan]).
      * Where both can't be whole, the plan keeps at least a third of their room (its near days first),
      * so a long list of tasks can't push it out: the list loses its end, and the plan its far days.
+     * Your newest words come after what they're about, in full ([aboutText], D-93), and before what
+     * a web search [found] and the tasks he asked to [read] whole ([readText]).
      */
-    fun turns(messages: List<ChatMessage>, context: String, tasks: Map<String, TaskItem>, zone: ZoneId, budget: Int = Pricing.MAX_INPUT_CHARS, plan: String = "", found: Found? = null): List<Pair<Speaker, String>> {
+    fun turns(
+        messages: List<ChatMessage>,
+        context: String,
+        tasks: Map<String, TaskItem>,
+        zone: ZoneId,
+        budget: Int = Pricing.MAX_INPUT_CHARS,
+        plan: String = "",
+        found: Found? = null,
+        read: List<TaskItem> = emptyList(),
+        events: List<CalendarEvent> = emptyList(),
+    ): List<Pair<Speaker, String>> {
         val last = messages.takeLast(HISTORY)
         // Before any of yours: an answer cut off from its question by the window goes; a message of
         // Felix's own (a notification you answered, [ChatMessage.reason]) is said in your first turn,
@@ -178,8 +198,12 @@ object ChatPrompts {
             val before = lead.joinToString("\n") { "(You'd written to them: “${it.text.trim().take(MAX_TEXT)}”)" }
             listOf(folded.first().first to before + "\n\n" + folded.first().second) + folded.drop(1)
         }
-        // With what a web search found for it (16 Oct), to answer and act on.
-        val newest = (texts.last().second + (found?.let { "\n\n" + ResearchPrompts.told(it) } ?: "")).take(budget)
+        // After what it's about, in full; with what a web search found for it (16 Oct) and the tasks
+        // he asked to read, to answer and act on. What it's about never at your words' cost: cut
+        // to the room they leave, however much it says.
+        val words = texts.last().second
+        val about = aboutText(recent.last { it.from == Speaker.You }.about, tasks, events)?.take((budget - words.length - 2).coerceAtLeast(0))?.takeIf { it.isNotEmpty() }
+        val newest = listOfNotNull(about, words, found?.let(ResearchPrompts::told), read.takeIf { it.isNotEmpty() }?.let(::readText)).joinToString("\n\n").take(budget)
         // The turns before it, newest first, while they fit their share, starting again with one of yours.
         var left = (budget - newest.length) / 4
         val earlier = texts.dropLast(1).reversed().takeWhile { (_, t) -> (t.length <= left).also { if (it) left -= t.length } }.reversed()
@@ -224,6 +248,47 @@ object ChatPrompts {
                 ProposalState.Discarded -> "the student discarded it"
             }
             "\n[Suggested: $what — $became]"
+        }
+    }
+
+    /**
+     * What [about] names, in full (D-93): a task's whole text, at most [WHOLE_TEXT] characters of it,
+     * with your answers to its questions; an event's place and description. Null where there's none.
+     */
+    private fun aboutText(about: About, tasks: Map<String, TaskItem>, events: List<CalendarEvent>): String? {
+        about.taskId?.let(tasks::get)?.let { task ->
+            if (!TaskText.has(task) && task.answers.isEmpty()) return null
+            return buildString {
+                append("The task this message is about, ${task.id} “${task.title.take(MAX_TITLE)}” (${TaskText.about(task)}), in full:\n")
+                append(TaskText.whole(task, WHOLE_TEXT) ?: "  (no text of its own)")
+                if (task.answers.isNotEmpty()) append("\nTheir answers to its questions: ").append(task.answers.joinToString("; ").take(MAX_TEXT))
+            }
+        }
+        val key = about.eventKey ?: return null
+        // A repeating event's occurrences share their key: the one it was asked about, by its start.
+        val event = events.filter { EventJudge.key(it) == key }.let { same -> same.firstOrNull { it.start == about.eventStart } ?: same.firstOrNull() } ?: return null
+        val parts = listOfNotNull(
+            event.location.trim().takeIf { it.isNotEmpty() }?.let { "where: " + it.take(EVENT_PLACE) },
+            event.description.trim().takeIf { it.isNotEmpty() }?.let { "its description: " + it.take(EVENT_TEXT) },
+        )
+        if (parts.isEmpty()) return null
+        return "The event this message is about, “${event.title.take(MAX_TITLE)}” (eventKey $key): " + parts.joinToString("; ")
+    }
+
+    /** The tasks he asked to read in full (D-93), as your newest turn carries them: [WHOLE_TEXT] each at most, about [READ_TEXT] in all. */
+    private fun readText(read: List<TaskItem>): String = buildString {
+        append("The whole text of the tasks you asked to read (answer and act on it, and leave details empty):")
+        val tasks = read.take(MAX_READ)
+        // Each an even share of the room the shorter ones leave, so none is left too little to be worth reading.
+        var room = READ_TEXT
+        val shares = tasks.sortedBy { it.detail.trim().length }.mapIndexed { i, t ->
+            val share = minOf(WHOLE_TEXT, room / (tasks.size - i))
+            room -= minOf(share, t.detail.trim().length)
+            t.id to share
+        }.toMap()
+        for (task in tasks) {
+            val body = TaskText.whole(task, shares.getValue(task.id)) ?: "  (no text of its own)"
+            append("\n- ${task.id} “${task.title.take(MAX_TITLE)}” (${TaskText.about(task)}):\n").append(body)
         }
     }
 
@@ -321,7 +386,41 @@ object ChatPrompts {
             appendLine("Settings you can change (setting | what it is | its value now):")
             com.thomaswcode.decrastination.data.FelixSettings.describe(settings).forEach { appendLine("- $it") }
         }
+        // Each open task's own text, cut short (D-93): what it asks of them, and what comes with it.
+        // Last, so it's what a context too long for its room loses first ([turns]).
+        val withText = open.take(InstructionPrompts.MAX_TASKS).filter { !it.derived && TaskText.has(it) }
+        if (withText.isNotEmpty()) {
+            appendLine()
+            appendLine("The tasks' own text (id | from, and what comes with it; then its text: an assignment's instructions, an email's conversation, a planner item's details, their notes), each at most $BRIEF_TEXT characters: a longer one as its reading's summary (each says of how much), or else its start and end (an email's newest replies are at its end):")
+            var room = MAX_TEXTS
+            var shown = 0
+            for (t in withText) {
+                val entry = "- ${t.id} | ${TaskText.about(t)}" + (TaskText.brief(t, BRIEF_TEXT, "    ")?.let { "\n$it" } ?: "")
+                if (entry.length > room) break
+                appendLine(entry)
+                room -= entry.length
+                shown++
+            }
+            if (shown < withText.size) appendLine("- …and ${withText.size - shown} more, left out for room")
+        }
     }.trimEnd()
+
+    /** Each open task's own text as the context gives it, at most (D-93). */
+    const val BRIEF_TEXT = 600
+
+    /** All of their texts in the context, at most. */
+    private const val MAX_TEXTS = 12_000
+
+    /** A task's whole text, as a message about it, or his asking to read it, carries it (D-93). */
+    const val WHOLE_TEXT = 8_000
+
+    /** The tasks one answer can ask to read in full, and all of their texts together, at most. */
+    const val MAX_READ = 3
+    private const val READ_TEXT = 16_000
+
+    /** An event's place and its description, as a message about it carries them. */
+    private const val EVENT_PLACE = 200
+    private const val EVENT_TEXT = 500
 
     /** How far back, and how many, of the student's own finished tasks the chat's told of (16 Oct). */
     private const val FINISHED_MS = 7 * 24 * 3_600_000L
@@ -448,6 +547,30 @@ object ChatPrompts {
     const val PLAN_LIST = 20
 }
 
+/**
+ * What the chat's answer asks for before it's his: a web search (16 Oct) and tasks' whole texts
+ * (D-93), each round asking him again with what it brought. Pure.
+ */
+object ChatRounds {
+    /** The next round: what to search for, if anything, and the tasks to read, all of them so far. */
+    data class Next(val search: String?, val read: List<String>)
+
+    /**
+     * After [reading]: a search where it asks for one and none has been made or tried ([searched]),
+     * while searches are on ([searches]); and the tasks it asks to read added to those [read] already,
+     * [ChatPrompts.MAX_READ] at most in all. Null with nothing new to ask for: his answer is that one.
+     */
+    fun next(reading: ChatAnswers.Reading, searched: Boolean, searches: Boolean, read: List<String>): Next? {
+        val search = reading.research?.takeIf { !searched && searches }
+        val more = (read + reading.details).distinct().take(ChatPrompts.MAX_READ)
+        if (search == null && more.size == read.size) return null
+        return Next(search, more)
+    }
+
+    /** The most rounds a message takes after his first answer: a search and the texts, or each after the other. */
+    const val MAX_ROUNDS = 2
+}
+
 /** Claude's answer in the chat, checked: its reply, the tasks and changes the app can make, and what it left out. */
 object ChatAnswers {
 
@@ -487,6 +610,8 @@ object ChatAnswers {
         val actions: List<com.thomaswcode.decrastination.core.ChatAction> = emptyList(),
         /** What it asks to look up on the web first (16 Oct, [WebResearcher]): its answer is then only that it's looking. */
         val research: String? = null,
+        /** The tasks whose whole text it asks to read first (D-93): its answer is then only that it's reading. */
+        val details: List<String> = emptyList(),
     )
 
     /**
@@ -512,6 +637,7 @@ object ChatAnswers {
         val suggestedReplies: List<String> = emptyList(),
         val actions: List<GivenAction> = emptyList(),
         val research: String = "",
+        val details: List<String> = emptyList(),
     )
 
     @Serializable
@@ -588,7 +714,9 @@ object ChatAnswers {
         // A step ticked or unticked, a listed task shown (AI-14); a task of yours done, open again or
         // deleted, a setting set (16 Oct): each only as the task, or the setting, can be.
         val actions = answer.actions.take(MAX_ACTIONS).mapNotNull { a -> action(a, byId, settings, leftOut) }.distinct()
-        return Reading(reply.take(ChatPrompts.MAX_TEXT), made, changes, leftOut, answer.memories.take(MAX_MEMORIES), replies, actions, answer.research.trim().take(ResearchPrompts.MAX_QUESTION).takeIf { it.isNotEmpty() })
+        // Tasks to read in full (D-93): listed and open, not the one the message is about (it came whole).
+        val details = answer.details.map(String::trim).filter { id -> id != about.taskId && byId[id]?.let { it.isOpen && !it.hidden } == true }.distinct().take(ChatPrompts.MAX_READ)
+        return Reading(reply.take(ChatPrompts.MAX_TEXT), made, changes, leftOut, answer.memories.take(MAX_MEMORIES), replies, actions, answer.research.trim().take(ResearchPrompts.MAX_QUESTION).takeIf { it.isNotEmpty() }, details)
     }
 
     /** [a] as an action the app can take, checked against the tasks there are ([byId]) and the [settings]; null, and why in [leftOut], if it can't be. */
@@ -683,9 +811,10 @@ class ChatReader(
 
     /**
      * Claude's answer to the last of [messages] (yours), with what the app knows now ([context]:
-     * [ChatPrompts.context] and [ChatPrompts.plan]), and what a web search it asked for [found].
+     * [ChatPrompts.context] and [ChatPrompts.plan]), what a web search it asked for [found], and the
+     * tasks whose whole text it asked to [read] (D-93).
      */
-    suspend fun answer(messages: List<ChatMessage>, tasks: List<TaskItem>, events: List<CalendarEvent>, context: ChatPrompts.Context, now: Long, found: Found? = null): Result {
+    suspend fun answer(messages: List<ChatMessage>, tasks: List<TaskItem>, events: List<CalendarEvent>, context: ChatPrompts.Context, now: Long, found: Found? = null, read: List<TaskItem> = emptyList()): Result {
         val schema = JsonOutputFormat.Schema.builder().apply { ChatPrompts.SCHEMA.forEach { (k, v) -> putAdditionalProperty(k, JsonValue.from(v)) } }.build()
         val builder = MessageCreateParams.builder()
             .model(model)
@@ -694,7 +823,7 @@ class ChatReader(
             .outputConfig(OutputConfig.builder().effort(ModelEffort.of(ModelEffort.Job.Chat)).format(JsonOutputFormat.builder().schema(schema).build()).build())
             .putAdditionalHeader("anthropic-beta", ClaudeEnricher.FALLBACK_BETA)
             .putAdditionalBodyProperty("fallbacks", JsonValue.from("default"))
-        ChatPrompts.turns(messages, context.known, tasks.associateBy { it.id }, zone, plan = context.plan, found = found).forEach { (from, text) ->
+        ChatPrompts.turns(messages, context.known, tasks.associateBy { it.id }, zone, plan = context.plan, found = found, read = read, events = events).forEach { (from, text) ->
             if (from == Speaker.You) builder.addUserMessage(text) else builder.addAssistantMessage(text)
         }
         val message = withContext(Dispatchers.IO) { client.messages().create(builder.build()) }

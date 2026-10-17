@@ -49,11 +49,16 @@
                 ],
                 "additionalProperties": false
             }
+        },
+        "summary": {
+            "type": "string",
+            "description": "What a text longer than about 600 characters asks of the student, from all of it, in at most 400 characters; empty for a shorter one"
         }
     },
     "required": [
         "effortMin",
-        "blocks"
+        "blocks",
+        "summary"
     ],
     "additionalProperties": false
 }

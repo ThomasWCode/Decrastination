@@ -34,9 +34,14 @@ With your newest message, from one snapshot of the tasks, the calendar and your 
 - tasks that look like the same work (DX-15), the fortnight's calendar events, the changes in use, your own tasks finished in the last week, and the settings he may change, with their values;
 - **your pace**: the multipliers the calibration has learned, by kind and class, with how many timed tasks each rests on, or that nothing's learned yet;
 - what each task's minutes come to in the plan: "planned as 54 at their pace" for the app's estimates, "as given" for your minutes and for steps you or he gave, and a paced total as below;
+- **each open task's own text** (D-93, `enrich/TaskText.kt`): an assignment's instructions, an email's conversation, a planner item's details, your notes, each at most 600 characters (`ChatPrompts.BRIEF_TEXT`, 12 000 in all), with what's attached, its links and an email's sender; last in the context, so it's what a long one loses first. A longer text is its reading's summary of all of it (`Enrichment.summary`, [readings.md](readings.md)); past the 16 000 characters a reading sees (`Prompts.MAX_TEXT`), of its start, with its end after it; with none (Claude off when it was read, or read before summaries), its start and its end, saying how much of the middle was left out: a conversation is kept oldest first, so its end holds the newest replies;
 - `ChatPrompts.plan`: the plan as Day shows it: the slot under way or the next thing to do, today's slots each past, now or ahead (AI-13), what isn't planned and why, other events, and what's planned past the fortnight;
 - then each of the plan's next 14 days, with its minutes against its working time and each piece's reason;
 - the profile every call carries (AI-05, AI-06; [privacy.md](privacy.md)).
+
+What your message is about comes with it in full, before your words (D-93): a task's whole text (`ChatPrompts.WHOLE_TEXT`, 8 000 characters; past that, its reading's summary, then its start and end) with your answers to its questions, or an event's place and description.
+
+**Reading a task in full** (`details`, D-93): where he needs more of a task's text than the context gives, his answer names it (three at most, never the one the message is about, which came whole) and says only that he's reading it; he's asked again with their whole texts (each an even share of 16 000 characters, 8 000 at most) after your words, and that answer is his, with "Read in full: …" under it. Asked for a web search too, he's asked once with both; where the texts show a need for a search, or the search for a text, once more, never more (`ChatRounds`). The texts he read are kept till he's answered with them, so a failed answer is asked again with them, not for them again.
 
 ## What he can do
 
@@ -76,10 +81,10 @@ Minutes he sets (a new task's, a Minutes change, each step's) are planned exactl
 
 When a message needs facts neither you nor the app have given him (a competition's rules, a specification), and `felixSearches` is on, his answer asks to look something up (`research`, a few words) and says only that he's looking (AI-24).
 - A call of its own then searches (`enrich/WebResearch.kt`, `WebResearcher.look`): Claude's web search tool, at most three searches, located in the UK, with no profile, never about you, answering in at most 15 lines.
-- He's asked again with what it found added to your newest turn (`ResearchPrompts.told`); that second answer is the one kept and acted on.
+- He's asked again with what it found added to your newest turn (`ResearchPrompts.told`); that answer is the one kept and acted on, unless what it found shows a need to read a task in full (above): then he's asked once more with that too.
 - Under it: what he searched for, and the first four pages found as links (`ChatMessage.searched`, `sources`).
 - A look that can't be made says why ("Not looked up: …"), and his first answer stands.
-- It's a call apart because the search tool beside the chat's answer schema makes a grammar the API refuses as too large. What a search found is kept till he's answered with it, so a failed answer is asked again without searching again.
+- It's a call apart because the search tool beside the chat's answer schema makes a grammar the API refuses as too large. What a search found, or why one made found nothing, is kept till he's answered with it, so a failed answer is asked again without searching again; a search held back (Claude off or resting, the cap) can be made later.
 
 ## His messages
 
@@ -94,6 +99,7 @@ When a message needs facts neither you nor the app have given him (a competition
 
 Each is written by `FelixCaller.say` (AI-22, medium effort) from `enrich/FelixPrompts.kt` (`FelixPrompts.describe`), told:
 - the reason and the time; the piece with its minutes, slot and what earns its free time, and its first action (AI-15);
+- its task's own text, up to 1 500 characters (`FelixPrompts.TEXT`): a longer one as its reading's summary, else its start and end; with what's attached (D-93);
 - today's slots kept, missed and to come; the free time; his last six messages and your replies; and the question.
 
 What comes back, and what's done with it:

@@ -13,6 +13,7 @@ import com.thomaswcode.decrastination.data.FelixRecord
 import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.data.SlotOutcome
 import com.thomaswcode.decrastination.data.SlotRecord
+import com.thomaswcode.decrastination.sources.teams.TeamsRows
 import java.time.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -74,6 +75,27 @@ class FelixTest {
         // A short piece earns on its tick; a longer one that isn't written work, by its source.
         val short = plan.todaySlots.first { it.chunk?.title == "Vocab" }
         assertTrue("earns its free time on its tick" in FelixPrompts.describe(FelixPrompts.Reason.SlotEnd, plan, short, null, emptyList(), emptyList(), null, settings, now, LONDON))
+    }
+
+    @Test
+    fun `his message is told its task's own text, cut short, with what comes with it`() {
+        // D-93: as much of the instructions as a piece's first steps are read from.
+        val sheet = task("Statics", 30).copy(detail = "Answer questions 1 to 6.\n" + "x".repeat(2_000) + "\nHand it in on Friday.", extra = mapOf(TeamsRows.EXTRA_LINKS to "https://example.org/sheet"))
+        val text = FelixPrompts.describe(FelixPrompts.Reason.Question, plan, null, sheet, emptyList(), emptyList(), "Which questions?", settings, now, LONDON)
+        assertTrue("Its task's own text (Teams; links: https://example.org/sheet):\n  Answer questions 1 to 6." in text, text)
+        // Its start and its end, the middle left out.
+        assertTrue("  [… ${sheet.detail.length - FelixPrompts.TEXT} characters left out …]" in text, text)
+        assertTrue("\n  Hand it in on Friday." in text, text)
+        // Where its reading summarised all of it, that in place of the start and end.
+        val summarised = sheet.copy(enrichment = com.thomaswcode.decrastination.core.Enrichment(inputHash = com.thomaswcode.decrastination.core.Enrichments.inputHash(sheet), by = "test", at = now, summary = "Questions 1 to 6, handed in on Friday."))
+        val told = FelixPrompts.describe(FelixPrompts.Reason.Question, plan, null, summarised, emptyList(), emptyList(), "Which questions?", settings, now, LONDON)
+        assertTrue("  Its reading's summary of all ${sheet.detail.length} characters: Questions 1 to 6, handed in on Friday." in told, told)
+        // With none of its own, nothing's said of it.
+        assertTrue("own text" !in FelixPrompts.describe(FelixPrompts.Reason.Question, plan, null, task("Statics", 30), emptyList(), emptyList(), "Which?", settings, now, LONDON))
+        // A link (or a worksheet attached) with no text is the work too: said, with what comes with it.
+        val linked = task("Statics", 30).copy(extra = mapOf(TeamsRows.EXTRA_LINKS to "https://example.org/sheet"))
+        val bare = FelixPrompts.describe(FelixPrompts.Reason.Question, plan, null, linked, emptyList(), emptyList(), "Which?", settings, now, LONDON)
+        assertTrue("Its task's own text (Teams; links: https://example.org/sheet):\n  (no text of its own)" in bare, bare)
     }
 
     @Test

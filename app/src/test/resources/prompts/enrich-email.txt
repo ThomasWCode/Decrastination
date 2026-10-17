@@ -9,6 +9,7 @@ Decide, from the email:
 - nextStep: the one concrete next action, as an instruction under 12 words ("Reply to Mr Hughes confirming the trip").
 - question: the one question that would settle a reading the text can't (which Friday; whether the test is the 12th or the 19th), or what the student means to do about it when the email doesn't make that clear; otherwise null.
 - reason: the phrase in the email that gave the deadline or the task, quoted (under 160 characters); empty if nothing did.
+- summary: only where the conversation runs past a short paragraph (about 600 characters), what it asks of the student, from all of it, in at most 400 characters: what to do and by when, what to bring, send or pay, and anything a later message changed (the newest message wins). The student's assistant in the app is told it in place of the conversation. Otherwise empty.
 - blocks: only when the email holds separate pieces of work with dates of their own (a calendar of deadlines, an application that opens on a date): the pieces of work in order, each with its minutes (at most 30 blocks, longer ones if there's more work than that), from (the date before which it can't be done, or null) and due (when it must be done by, written as for deadline, only where the email gives one; otherwise null, and the block waits for the email's own deadline, or with none is planned within the week). A window the email gives only roughly ("applications open in December") runs from its first day to its last. The planner schedules each block in its own window, so one email can become work spread over months, kept after the email is archived. An email with blocks is Admin, and its effortMin is their total. One job (filling in a form, writing a proposal, putting a video on a website), however long or however many small actions it takes, has no blocks: the app cuts long work into sittings itself, as it can't know how long each part of it takes. A few minutes' admin around the work (printing, uploading, replying to confirm) is never a block of its own: say it in nextStep. Otherwise an empty list.
 
 You see the conversation the starred message is in, oldest message first (where a long one's earlier messages had to be cut short or left out, it says so); when there's more than one, each is headed by who sent it and when ("From you" for the student's own). The first message shown keeps what it quotes from earlier (cut short too, where it had to be); in the ones after it, quoted text and signatures are left out and marked in square brackets, as what they quote is shown above them. You don't see attachments, only their names (an attached email goes by its subject). Where what the email asks turns on an attachment or an earlier message you can't see, and its name doesn't tell you, don't guess what it asked: make nextStep say to read it first, naming it ("Read the attached consent form and decide"), and effortMin 10.
@@ -27,7 +28,7 @@ Item:
     
     Email:
     Please complete the online consent form for the Year 12 geography field trip by 9am on Wednesday 14 October. Late forms can't be accepted.
-Answer: {"kind":"Admin","actionableFrom":null,"deadline":"2026-10-14T09:00","deadlineQuoted":true,"effortMin":15,"nextStep":"Fill in the field trip consent form online","question":null,"reason":"by 9am on Wednesday 14 October","blocks":[]}
+Answer: {"kind":"Admin","actionableFrom":null,"deadline":"2026-10-14T09:00","deadlineQuoted":true,"effortMin":15,"nextStep":"Fill in the field trip consent form online","question":null,"reason":"by 9am on Wednesday 14 October","blocks":[],"summary":""}
 
 Item:
     Today: Friday 9 October 2026, 17:00
@@ -37,7 +38,7 @@ Item:
     
     Email:
     Three open days worth booking: Bristol (book by 20 October), Exeter (book by 1 November) and Bath (book by 15 November). Each takes about ten minutes to register for.
-Answer: {"kind":"Admin","actionableFrom":null,"deadline":"2026-11-15","deadlineQuoted":true,"effortMin":30,"nextStep":"Register for the Bristol open day","question":null,"reason":"Bristol (book by 20 October), Exeter (book by 1 November) and Bath (book by 15 November)","blocks":[{"title":"Register for the Bristol open day","minutes":10,"from":null,"due":"2026-10-20"},{"title":"Register for the Exeter open day","minutes":10,"from":null,"due":"2026-11-01"},{"title":"Register for the Bath open day","minutes":10,"from":null,"due":"2026-11-15"}]}
+Answer: {"kind":"Admin","actionableFrom":null,"deadline":"2026-11-15","deadlineQuoted":true,"effortMin":30,"nextStep":"Register for the Bristol open day","question":null,"reason":"Bristol (book by 20 October), Exeter (book by 1 November) and Bath (book by 15 November)","blocks":[{"title":"Register for the Bristol open day","minutes":10,"from":null,"due":"2026-10-20"},{"title":"Register for the Exeter open day","minutes":10,"from":null,"due":"2026-11-01"},{"title":"Register for the Bath open day","minutes":10,"from":null,"due":"2026-11-15"}],"summary":""}
 
 Item:
     Today: Friday 9 October 2026, 17:00
@@ -47,4 +48,4 @@ Item:
     
     Email:
     https://example.com/recordings/forces
-Answer: {"kind":"Admin","actionableFrom":null,"deadline":null,"deadlineQuoted":false,"effortMin":10,"nextStep":"Watch the recording","question":null,"reason":"","blocks":[]}
+Answer: {"kind":"Admin","actionableFrom":null,"deadline":null,"deadlineQuoted":false,"effortMin":10,"nextStep":"Watch the recording","question":null,"reason":"","blocks":[],"summary":""}
