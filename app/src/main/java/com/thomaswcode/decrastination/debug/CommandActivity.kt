@@ -274,6 +274,14 @@ class CommandActivity : Activity() {
                 open.filter { it.subSteps.isNotEmpty() && it.enrichment?.subSteps != null }
                     .forEach { Log.i(TAG, "  ${it.title}: ${it.subSteps.joinToString(" | ") { s -> "${s.title} (${s.minutes})" }}") }
             }
+            // One of the settings Felix may change (data/FelixSettings.kt), by name and value, as he sets it.
+            "setting" -> {
+                val name = intent.getStringExtra("name").orEmpty()
+                val value = intent.getStringExtra("value").orEmpty()
+                var said: String? = null
+                graph.changeSettings { s -> com.thomaswcode.decrastination.data.FelixSettings.set(s, name, value)?.also { said = it.second }?.first ?: s }
+                Log.i(TAG, "setting: " + (said ?: "$name not set to $value"))
+            }
             "briefing" -> Briefing.run(this).also { Log.i(TAG, "Briefing posted") }
             "check-in" -> CheckIns.remind(this).also { Log.i(TAG, "Check-in reminder posted") }
             // The nightly backup's work, once (AR-07).

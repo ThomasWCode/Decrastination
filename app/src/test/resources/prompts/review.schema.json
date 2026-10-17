@@ -15,7 +15,6 @@
                     "setting": {
                         "type": "string",
                         "enum": [
-                            "boxMin",
                             "marginDays",
                             "softMinPerDay",
                             "workMinPerFreeMin",
