@@ -446,6 +446,46 @@ class FocusTest {
     }
 
     @Test
+    fun `a step in sittings is kept a sitting at a time, only its last ticking it`() = runTest {
+        // An hour and a half read before sittings (#48's review): two of 45, the first's minutes worked on the step.
+        val (first, last) = laid(task("t", due = "2026-10-12T23:59", steps = listOf(SubStep("Essay", 90)), effort = 90))
+        assertEquals(listOf("Essay", "Continue and finish: Essay"), listOf(first, last).map { it.chunk!!.shown })
+        clock.time = first.end
+        assertTrue(slotted.keepSlot(first.chunk!!.key))
+        tasks.value.tasks.single().let { assertEquals(false to 45, it.subSteps.single().done to it.workedMin) }
+        // The rest keeps its key, its name and its slot.
+        val next = Planner.plan(input(tasks.value, settings.value, clock.time)).todaySlots.single { it.kind == SlotKind.Work }
+        assertEquals(Triple(last.chunk!!.key, last.chunk!!.shown, last.start), Triple(next.chunk!!.key, next.chunk!!.shown, next.start))
+        clock.time = next.end
+        assertTrue(slotted.keepSlot(next.chunk!!.key))
+        tasks.value.tasks.single().let { assertEquals(true to 90, it.subSteps.single().done to it.workedMin) }
+        assertEquals(listOf(45, 45), log.value.slots.map { it.workedMin })
+    }
+
+    @Test
+    fun `a step's last sitting kept ahead ticks it with its sittings' minutes, and taken back gives them back`() = runTest {
+        // Ticked ahead of its first (or by the chat): the step done, as one piece of it would have been.
+        val (first, last) = laid(task("t", due = "2026-10-12T23:59", steps = listOf(SubStep("Essay", 90)), effort = 90))
+        clock.time = first.end
+        val since = clock.time
+        assertTrue(slotted.keepSlot(last.chunk!!.key))
+        tasks.value.tasks.single().let { assertEquals(true to 90, it.subSteps.single().done to it.workedMin) }
+        assertTrue(slotted.unkeepSlot(last.chunk!!.key, since))
+        tasks.value.tasks.single().let { assertEquals(false to 0, it.subSteps.single().done to it.workedMin) }
+    }
+
+    @Test
+    fun `a sitting taken back gives back its minutes alone`() = runTest {
+        val first = laid(task("t", due = "2026-10-12T23:59", steps = listOf(SubStep("Essay", 90)), effort = 90)).first()
+        clock.time = first.end
+        val since = clock.time
+        assertTrue(slotted.keepSlot(first.chunk!!.key))
+        assertTrue(slotted.unkeepSlot(first.chunk!!.key, since))
+        tasks.value.tasks.single().let { assertEquals(false to 0, it.subSteps.single().done to it.workedMin) }
+        assertEquals(emptyList(), log.value.slots)
+    }
+
+    @Test
     fun `a missed slot is recorded once, and kept after it is kept late where it was laid`() = runTest {
         val first = laid(task("t", due = "2026-10-12T23:59", steps = steps(), effort = 60)).first()
         val key = first.chunk!!.key

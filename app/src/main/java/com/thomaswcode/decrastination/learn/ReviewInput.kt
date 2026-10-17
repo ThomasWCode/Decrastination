@@ -24,9 +24,11 @@ object ReviewInput {
     @Serializable
     data class Answer(val note: List<String>, val changes: List<Change> = emptyList())
 
-    /** What the model may change, and between what. Nothing about blocking or protection. */
+    /**
+     * What the model may change, and between what. Nothing about blocking or protection; nor, since
+     * 17 Oct, a piece's length, which is yours: work's cut only past it (an hour, your call).
+     */
     val BOUNDS: Map<String, IntRange> = mapOf(
-        "boxMin" to 25..60,
         "marginDays" to 0..3,
         "softMinPerDay" to 30..120,
         "workMinPerFreeMin" to 2..5,
@@ -61,7 +63,7 @@ object ReviewInput {
 
         You also get last week's review and what it changed, each day's plan and how much of it got done, the slots by window, what earned free time, Felix's messages and what followed them, and the week by subject.
 
-        Write a note of at most five short lines for the student: open with one line on last week's change and how it went (or that there was none), then what the week shows, specific and kind, with numbers where they help ("German took 1.4× its estimates; its pieces now start earlier"). Then propose changes only to these settings, and only where the week gives a reason: boxMin (minutes a piece of work is cut into, 25–60), marginDays (days before a deadline to finish, 0–3), softMinPerDay (minutes of undated work a day, 30–120), workMinPerFreeMin (minutes of work for one of free time, 2–5), weekdayHoursStart and weekdayHoursEnd (a school day's working hours, in minutes after midnight, each within $HOURS_REACH minutes of its current value). Give each change a short reason. No change is a fine answer.
+        Write a note of at most five short lines for the student: open with one line on last week's change and how it went (or that there was none), then what the week shows, specific and kind, with numbers where they help ("German took 1.4× its estimates; its pieces now start earlier"). Then propose changes only to these settings, and only where the week gives a reason: marginDays (days before a deadline to finish, 0–3), softMinPerDay (minutes of undated work a day, 30–120), workMinPerFreeMin (minutes of work for one of free time, 2–5), weekdayHoursStart and weekdayHoursEnd (a school day's working hours, in minutes after midnight, each within $HOURS_REACH minutes of its current value). Give each change a short reason. No change is a fine answer.
     """.trimIndent()
 
     fun schema(): Map<String, Any> = mapOf(

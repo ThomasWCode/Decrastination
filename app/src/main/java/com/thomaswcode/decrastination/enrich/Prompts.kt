@@ -4,6 +4,7 @@ import com.thomaswcode.decrastination.block.Focus
 import com.thomaswcode.decrastination.core.Enrichment
 import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.core.Kind
+import com.thomaswcode.decrastination.core.Sittings
 import com.thomaswcode.decrastination.core.SubStep
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.Where
@@ -38,9 +39,11 @@ object Prompts {
      * 1: everything before review v2's phase 8 (what the readings stored then carry); 2: phases 1
      * to 7's changes (PROGRESS.md listed them); 3: every starred email a task (3.0.1); 4: fewer,
      * longer steps (3.1.1, your call, 17 Oct: a task in parts only where it is, its few minutes'
-     * admin in the step it belongs to).
+     * admin in the step it belongs to); 5: a piece of work whole, never split by what's in it, the
+     * app cutting one over an hour into sittings (3.1.2, the same day); 6: whole up to a task's most,
+     * the schema saying so (3.1.2's review, before it was installed).
      */
-    const val VERSION = 4
+    const val VERSION = 6
 
     /**
      * Text past this is left out (and the model told). Room for a long email's own calendar of
@@ -64,7 +67,7 @@ object Prompts {
      */
     fun limits(job: Enrichments.Job): String = when (job) {
         Enrichments.Job.Assignment ->
-            "Limits the app enforces: at most ${Answers.MAX_STEPS} steps; no step longer than ${Answers.MAX_STEP} minutes; a total of at most ${Answers.MAX_EFFORT / 60} hours; the steps must add up to effortMin exactly."
+            "Limits the app enforces: at most ${Answers.MAX_STEPS} steps; a total of at most ${Answers.MAX_EFFORT / 60} hours; the steps must add up to effortMin exactly."
         else ->
             "Limits the app enforces: without blocks, effortMin at most ${Answers.MAX_EFFORT / 60} hours; at most $MAX_BLOCKS blocks, none longer than ${Answers.MAX_EFFORT} minutes, ${Answers.MAX_BLOCKS_EFFORT / 60} hours in all, adding up to effortMin exactly."
     }
@@ -82,7 +85,7 @@ object Prompts {
             - nextStep: the one concrete next action, as an instruction under 12 words ("Reply to Mr Hughes confirming the trip").
             - question: the one question that would settle a reading the text can't (which Friday; whether the test is the 12th or the 19th), or what the student means to do about it when the email doesn't make that clear; otherwise null.
             - reason: the phrase in the email that gave the deadline or the task, quoted (under 160 characters); empty if nothing did.
-            - blocks: only when the email holds separate pieces of work with dates of their own (a calendar of deadlines, an application that opens on a date), or more than about 90 minutes of work, cut into the parts the student would do in different sittings, 25 to 60 minutes each (a proposal: research, plan, write): the pieces of work in order, each with its minutes (at most $MAX_BLOCKS blocks, longer ones if there's more work than that), from (the date before which it can't be done, or null) and due (when it must be done by, written as for deadline, only where the email gives one; otherwise null, and the block waits for the email's own deadline, or with none is planned within the week). A window the email gives only roughly ("applications open in December") runs from its first day to its last. The planner schedules each block in its own window, so one email can become work spread over months, kept after the email is archived. An email with blocks is Admin, and its effortMin is their total. One job (filling in a form, putting a video on a website), however many small actions it takes, has no blocks unless it's over about 90 minutes; a few minutes' admin around the work (printing, uploading, replying to confirm) is never a block of its own: say it in nextStep. Otherwise an empty list.
+            - blocks: only when the email holds separate pieces of work with dates of their own (a calendar of deadlines, an application that opens on a date): the pieces of work in order, each with its minutes (at most $MAX_BLOCKS blocks, longer ones if there's more work than that), from (the date before which it can't be done, or null) and due (when it must be done by, written as for deadline, only where the email gives one; otherwise null, and the block waits for the email's own deadline, or with none is planned within the week). A window the email gives only roughly ("applications open in December") runs from its first day to its last. The planner schedules each block in its own window, so one email can become work spread over months, kept after the email is archived. An email with blocks is Admin, and its effortMin is their total. One job (filling in a form, writing a proposal, putting a video on a website), however long or however many small actions it takes, has no blocks: the app cuts long work into sittings itself, as it can't know how long each part of it takes. A few minutes' admin around the work (printing, uploading, replying to confirm) is never a block of its own: say it in nextStep. Otherwise an empty list.
 
             You see the conversation the starred message is in, oldest message first (where a long one's earlier messages had to be cut short or left out, it says so); when there's more than one, each is headed by who sent it and when ("From you" for the student's own). The first message shown keeps what it quotes from earlier (cut short too, where it had to be); in the ones after it, quoted text and signatures are left out and marked in square brackets, as what they quote is shown above them. You don't see attachments, only their names (an attached email goes by its subject). Where what the email asks turns on an attachment or an earlier message you can't see, and its name doesn't tell you, don't guess what it asked: make nextStep say to read it first, naming it ("Read the attached consent form and decide"), and effortMin 10.
 
@@ -91,7 +94,7 @@ object Prompts {
         Enrichments.Job.Assignment -> """
             You plan one homework assignment for ${student(year)}, for a planner that schedules the work over the days before it's due and blocks distracting apps until it's done.
 
-            Give the work as the ordered steps the student will actually do, as few as it really has, each with a realistic duration in minutes for a typical Year 12 student (the planner adjusts them to this one). An assignment is one step, the whole of it, unless its instructions list separate pieces of work (questions and an essay; vocabulary to learn and a reading task) or it's long, over about 90 minutes, when it's cut into the parts they'd do in different sittings (research, plan, write), 25 to 60 minutes each. A run of pages, questions or exercises is one step ("Questions on pages 28-30"), never a step each. Never make a step of a few minutes around the work (printing or downloading it, reading the task, marking it against given answers, photographing or uploading it, handing it in): say it in the title of the step it belongs to ("Past paper 1 (print it first), then mark it"). A step has dates of its own only where the instructions give them (a draft due before the final version): from, the date before which it can't be started, and due, when it must be done by (YYYY-MM-DDTHH:MM, or the date alone); otherwise both null. Base the steps on the instructions. Learning numbered vocabulary sections is a step of its own, with nothing else in it, and those sections in its ankiSections: the planner leaves it out where the student's Anki decks hold them. Every other step has an empty ankiSections. Handing the work in is part of its last step, never a step of its own. No step may start after the assignment's due time. Work that comes after the hand-in (revising for a test the work prepares for) gets no dates of its own; give the test's day in testDate instead. Each step's where: "home" for a step that needs the laptop, books or quiet (an essay, an upload, a long problem set); "anywhere" for one that can be done at school in a free period with what's in the bag (a booklet, reading, vocabulary).
+            Give the work as the ordered steps the student will actually do, as few as it really has, each with a realistic duration in minutes for a typical Year 12 student (the planner adjusts them to this one). An assignment is one step, the whole of it, unless its instructions list separate pieces of work (questions and an essay; vocabulary to learn and a reading task). Never split one piece of work by what's in it (pages 35-39, then 40-43; the first third of the questions; research, then write): give it whole, however long, as the app can't know how long each part takes, and cuts a step over 60 minutes into sittings itself (the first the work, the last "Continue and finish"). A run of pages, questions or exercises is one step ("Questions on pages 28-30"), never a step each. Never make a step of a few minutes around the work (printing or downloading it, reading the task, marking it against given answers, photographing or uploading it, handing it in): say it in the title of the step it belongs to ("Past paper 1 (print it first), then mark it"). A step has dates of its own only where the instructions give them (a draft due before the final version): from, the date before which it can't be started, and due, when it must be done by (YYYY-MM-DDTHH:MM, or the date alone); otherwise both null. Base the steps on the instructions. Learning numbered vocabulary sections is a step of its own, with nothing else in it, and those sections in its ankiSections: the planner leaves it out where the student's Anki decks hold them. Every other step has an empty ankiSections. Handing the work in is part of its last step, never a step of its own. No step may start after the assignment's due time. Work that comes after the hand-in (revising for a test the work prepares for) gets no dates of its own; give the test's day in testDate instead. Each step's where: "home" for a step that needs the laptop, books or quiet (an essay, an upload, a long problem set); "anywhere" for one that can be done at school in a free period with what's in the bag (a booklet, reading, vocabulary).
 
             Also give:
             - effortMin: the total minutes, the sum of the steps.
@@ -103,7 +106,7 @@ object Prompts {
         Enrichments.Job.Effort -> """
             Estimate how many minutes of work ${student(year)} needs to finish one item from their planner, from its title, class and details: a realistic total for a typical Year 12 student (the planner adjusts it to this one). A call, meeting or other appointment isn't work: give only the minutes needed to prepare for it, at least 1.
 
-            If it's long, over about 90 minutes (revising for a test, a project), also split it into blocks: the ordered pieces of work done in different sittings, 25 to 60 minutes each (at most $MAX_BLOCKS blocks), adding up to effortMin, each with from (the date before which it can't be done, YYYY-MM-DD) and due (when it must be done by, YYYY-MM-DDTHH:MM or the date alone) where the details give them, otherwise null. No block may start after the item's date. Otherwise blocks is an empty list.
+            Give blocks only where its details list pieces of work with dates of their own: the ordered pieces, each with its minutes (at most $MAX_BLOCKS blocks), adding up to effortMin, each with from (the date before which it can't be done, YYYY-MM-DD) and due (when it must be done by, YYYY-MM-DDTHH:MM or the date alone) where the details give them, otherwise null. No block may start after the item's date. Otherwise blocks is an empty list, however long the work is (revising for a test, a project): the app cuts long work into sittings itself, as it can't know how long each part of it takes.
         """.trimIndent()
     }
 
@@ -146,7 +149,7 @@ object Prompts {
     private fun block(vocabulary: Boolean): Map<String, Any> = obj(
         *listOfNotNull(
             "title" to mapOf("type" to "string"),
-            "minutes" to described(mapOf("type" to "integer"), "10 to 60 where the work allows; never over ${if (vocabulary) Answers.MAX_STEP else Answers.MAX_EFFORT}"),
+            "minutes" to described(mapOf("type" to "integer"), "All its work, however long (the app cuts one over ${Answers.MAX_PART_MIN} minutes into sittings itself); never over ${Answers.MAX_EFFORT}"),
             ("ankiSections" to described(mapOf("type" to "array", "items" to mapOf("type" to "string")), "Only for a step that is nothing but learning numbered vocabulary sections")).takeIf { vocabulary },
             // An assignment's steps say where they can be done (PL-15).
             ("where" to described(mapOf("type" to "string", "enum" to listOf("anywhere", "home")), "home for a step that needs the laptop, books or quiet; anywhere for one that can be done at school in a free period")).takeIf { vocabulary },
@@ -191,7 +194,8 @@ object Prompts {
 
     /**
      * The item, as the model reads it; with [previous], its steps as planned before (AI-08), so a
-     * step whose work hasn't changed keeps its title, and with it its tick.
+     * step whose work hasn't changed keeps its title, and with it its tick; one done said to be, to
+     * be kept as it is (#47's review), as fewer, longer steps would otherwise take its work in.
      */
     fun describe(task: TaskItem, job: Enrichments.Job, now: Long, zone: ZoneId, previous: List<SubStep> = emptyList(), decks: Map<String, String> = emptyMap()): String = buildString {
         fun at(time: Long) = Instant.ofEpochMilli(time).atZone(zone)
@@ -223,8 +227,9 @@ object Prompts {
         task.answers.forEach { appendLine("The student says: $it") }
         if (previous.isNotEmpty()) {
             val noun = if (job == Enrichments.Job.Assignment) "step" else "block"
-            appendLine("${noun.replaceFirstChar(Char::uppercase)}s as planned before (keep the exact title of any $noun whose work is unchanged; mark none as done):")
-            previous.forEachIndexed { i, step -> appendLine("${i + 1}. ${step.title} (${step.minutes} min)") }
+            val done = if (previous.any { it.done }) "; a $noun marked done is done: keep it as it is, its exact title and minutes (still counted in effortMin), and give only the work left in the others" else "; mark none as done"
+            appendLine("${noun.replaceFirstChar(Char::uppercase)}s as planned before (keep the exact title of any $noun whose work is unchanged$done):")
+            previous.forEachIndexed { i, step -> appendLine("${i + 1}. ${step.title} (${step.minutes} min${if (step.done) ", done" else ""})") }
         }
         val text = task.detail.trim()
         if (text.isNotEmpty()) {
@@ -292,7 +297,8 @@ object Answers {
      * gone wrong.
      */
     internal const val MAX_BLOCKS_EFFORT = 1_200
-    internal const val MAX_STEP = 240
+
+    /** The most steps an assignment's reading gives: past it, the rest are folded ([fold]). Its sittings may be more. */
     internal const val MAX_STEPS = 12
     private const val MAX_TITLE = 80
     private const val MAX_NEXT_STEP = 120
@@ -311,18 +317,32 @@ object Answers {
     /** [minutes] in hours, for a reason given: "21 hours", "20.8 hours". */
     private fun hours(minutes: Int): String = if (minutes % 60 == 0) "${minutes / 60} hours" else "%.1f hours".format(Locale.UK, minutes / 60.0)
 
-    /** The longest a step is planned in one piece: a longer one is cut into parts (three hours, as a focus session was). */
-    const val MAX_PART_MIN = 180
+    /**
+     * The longest a step is planned in one sitting (your call, 17 Oct: an hour; three before): a
+     * longer one is cut into even sittings, as the app can't know which part of the work takes how
+     * long, so they're split by time, never by what's in them ([fitParts]).
+     */
+    const val MAX_PART_MIN = Sittings.MAX_MIN
 
-    /** [step] in even parts no longer than [MAX_PART_MIN], numbered if there's more than one. */
-    private fun fitParts(step: SubStep): List<SubStep> {
-        val parts = (step.minutes + MAX_PART_MIN - 1) / MAX_PART_MIN
+    /**
+     * [step] in even sittings no longer than [MAX_PART_MIN]: the first the step itself, then
+     * "Continue: …", and the last "Continue and finish: …" ([Sittings], which the planner cuts by too).
+     */
+    internal fun fitParts(step: SubStep): List<SubStep> {
+        val parts = Sittings.count(step.minutes)
         if (parts <= 1) return listOf(step)
-        val suffix = { i: Int -> " (${i + 1} of $parts)" }
-        return (0 until parts).map { i ->
-            step.copy(title = step.title.take(MAX_TITLE - suffix(i).length) + suffix(i), minutes = step.minutes / parts + if (i < step.minutes % parts) 1 else 0)
-        }
+        val minutes = Sittings.even(step.minutes, parts)
+        return Sittings.titles(step.title, parts, finishes = true).mapIndexed { i, title -> step.copy(title = title.take(MAX_TITLE), minutes = minutes[i]) }
     }
+
+    /**
+     * [steps] in sittings ([fitParts]), each part keeping its step's dates, so ticking a piece never
+     * ticks off more than it did; but not one that takes the mark of a step of [before] done
+     * ([com.thomaswcode.decrastination.core.carryMarks]): done, it isn't planned, and cut, the parts
+     * after its first would lose the mark (#48's review).
+     */
+    internal fun sittings(steps: List<SubStep>, before: List<SubStep>): List<SubStep> =
+        com.thomaswcode.decrastination.core.carryMarks(steps, before).zip(steps).flatMap { (marked, step) -> if (marked.done) listOf(step) else fitParts(step) }
 
     /** A test's day: work must be done before school that morning. */
     private val SCHOOL_STARTS: LocalTime = LocalTime.of(8, 30)
@@ -361,7 +381,7 @@ object Answers {
                 // Blocks of work, each perhaps with its own dates (Q12): not trusted, the triage stands
                 // without them, and the task says why.
                 val checked = trusted(steps(t.blocks, now, zone, vocabulary = false, maxMinutes = MAX_EFFORT, dueBy = deadline ?: sourceDue(task), opens = opens, noun = "block", salvage = salvage), t.effortMin, t.blocks.size)
-                val blocks = checked.steps
+                val blocks = checked.steps?.let { sittings(it, task.subSteps) }
                 base.copy(
                     // Blocks of work make it something to do, whatever else it says: the ones given,
                     // trusted or not. Dropped, its whole estimate is planned instead, and its warning
@@ -385,10 +405,11 @@ object Answers {
                 // trusted: the task's whole estimate is planned instead, none of it lost with that step.
                 val testDate = checkedTime("testDate", s.testDate, now, problems) { date(it, zone, SCHOOL_STARTS) }
                 // By the test, where there's one before the source's deadline: it's the task's then.
-                val read = steps(s.subSteps, now, zone, vocabulary = true, maxMinutes = MAX_STEP, dueBy = listOfNotNull(sourceDue(task), testDate).minOrNull(), salvage = salvage)
+                val read = steps(s.subSteps, now, zone, vocabulary = true, maxMinutes = MAX_EFFORT, dueBy = listOfNotNull(sourceDue(task), testDate).minOrNull(), salvage = salvage)
                 val usable = read.steps != null
                 val valid = read.steps.orEmpty()
-                // More steps than the planner takes: the rest folded, so none of the work goes (see [fold]).
+                // More steps than the model may give: the rest folded, so none of the work goes (see
+                // [fold]); cut into sittings only after, a fold too ([sittings]).
                 val steps = if (valid.size <= MAX_STEPS) valid else valid.take(MAX_STEPS - 1) + fold(valid.drop(MAX_STEPS - 1))
                 val sections = sections(s.ankiSections + steps.flatMap { it.ankiSections })
                 // All vocabulary (no steps, its sections named): a step for it all the same, at the
@@ -419,7 +440,7 @@ object Answers {
                 }
                 base.copy(
                     effortMin = total ?: sum.takeIf { agree && it > 0 },
-                    subSteps = planned.takeIf { agree }.orEmpty().ifEmpty { null },
+                    subSteps = planned.takeIf { agree }?.let { sittings(it, task.subSteps) }.orEmpty().ifEmpty { null },
                     dropped = dropped,
                     adjusted = read.adjusted,
                     // A split not trusted hands no vocabulary to a deck either: its total, planned
@@ -434,7 +455,7 @@ object Answers {
                 val total = effort(e.effortMin)
                 // Big enough to do in parts: its blocks, each perhaps with its own dates (Q12).
                 val checked = trusted(steps(e.blocks, now, zone, vocabulary = false, maxMinutes = MAX_EFFORT, dueBy = sourceDue(task), noun = "block", salvage = salvage), e.effortMin, e.blocks.size)
-                val blocks = checked.steps
+                val blocks = checked.steps?.let { sittings(it, task.subSteps) }
                 base.copy(effortMin = blocks?.sumOf { it.minutes } ?: total, subSteps = blocks, dropped = checked.dropped, adjusted = checked.adjusted)
             }
         }
@@ -448,8 +469,8 @@ object Answers {
      * listed later is due). Dates that can't be (a start after its own deadline, a start or a
      * deadline after its task's, [dueBy]) fail it too, unless it's to [salvage]: then the step keeps
      * its place and minutes with no dates, planned by its task's, and a line in [Checked.adjusted]
-     * says so. Each keeps its own dates; one longer than [MAX_PART_MIN] is cut into parts that keep
-     * them, so ticking a piece never ticks off more than it did. A step tagged as vocabulary
+     * says so. Each keeps its own dates; one over [MAX_PART_MIN] is cut into sittings after, once
+     * folded or trusted ([sittings]). A step tagged as vocabulary
      * ([vocabulary] jobs only) that asks for anything else too stays planned whole.
      */
     private fun steps(given: List<Step>, now: Long, zone: ZoneId, vocabulary: Boolean, maxMinutes: Int, dueBy: Long?, opens: Long? = null, noun: String = "step", salvage: Boolean = true): Checked {
@@ -488,7 +509,7 @@ object Answers {
             val j = read.indices.drop(i + 1).firstOrNull { later -> read[later].dueAt?.let { it < from } == true } ?: continue
             return no("${which(i, read[i].title)} can't start till ${at(from)}, after ${which(j, read[j].title)} is due ${at(read[j].dueAt!!)}")
         }
-        return Checked(read.flatMap(::fitParts), adjusted = adjusted)
+        return Checked(read, adjusted = adjusted)
     }
 
     /**
