@@ -40,122 +40,55 @@
                         ]
                     },
                     "taskId": {
-                        "anyOf": [
-                            {
-                                "type": "string"
-                            },
-                            {
-                                "type": "null"
-                            }
-                        ]
+                        "type": "string"
                     },
                     "afterTaskId": {
-                        "anyOf": [
-                            {
-                                "type": "string"
-                            },
-                            {
-                                "type": "null"
-                            }
-                        ]
+                        "type": "string"
                     },
                     "eventKey": {
-                        "anyOf": [
-                            {
-                                "type": "string"
-                            },
-                            {
-                                "type": "null"
-                            }
-                        ]
+                        "type": "string"
                     },
                     "eventTime": {
-                        "anyOf": [
-                            {
-                                "type": "string",
-                                "enum": [
-                                    "free",
-                                    "busy",
-                                    "hours"
-                                ]
-                            },
-                            {
-                                "type": "null"
-                            }
+                        "type": "string",
+                        "enum": [
+                            "free",
+                            "busy",
+                            "hours",
+                            ""
                         ]
                     },
                     "minutes": {
-                        "anyOf": [
-                            {
-                                "type": "integer"
-                            },
-                            {
-                                "type": "null"
-                            }
-                        ]
+                        "type": "integer",
+                        "description": "-1 for none"
                     },
                     "date": {
-                        "anyOf": [
-                            {
-                                "type": "string",
-                                "format": "date"
-                            },
-                            {
-                                "type": "null"
-                            }
-                        ]
+                        "type": "string",
+                        "description": "YYYY-MM-DD, or empty"
                     },
                     "endDate": {
-                        "anyOf": [
-                            {
-                                "type": "string",
-                                "format": "date"
-                            },
-                            {
-                                "type": "null"
-                            }
-                        ]
+                        "type": "string",
+                        "description": "YYYY-MM-DD, or empty"
                     },
                     "weekday": {
-                        "anyOf": [
-                            {
-                                "type": "string",
-                                "enum": [
-                                    "Monday",
-                                    "Tuesday",
-                                    "Wednesday",
-                                    "Thursday",
-                                    "Friday",
-                                    "Saturday",
-                                    "Sunday"
-                                ]
-                            },
-                            {
-                                "type": "null"
-                            }
+                        "type": "string",
+                        "enum": [
+                            "Monday",
+                            "Tuesday",
+                            "Wednesday",
+                            "Thursday",
+                            "Friday",
+                            "Saturday",
+                            "Sunday",
+                            ""
                         ]
                     },
                     "time": {
-                        "anyOf": [
-                            {
-                                "type": "string",
-                                "description": "HH:MM, 24-hour"
-                            },
-                            {
-                                "type": "null"
-                            }
-                        ]
+                        "type": "string",
+                        "description": "HH:MM, 24-hour, or empty"
                     },
                     "endTime": {
-                        "anyOf": [
-                            {
-                                "type": "string",
-                                "description": "HH:MM, 24-hour"
-                            },
-                            {
-                                "type": "null"
-                            }
-                        ]
+                        "type": "string",
+                        "description": "HH:MM, 24-hour, or empty"
                     },
                     "title": {
                         "type": "string"

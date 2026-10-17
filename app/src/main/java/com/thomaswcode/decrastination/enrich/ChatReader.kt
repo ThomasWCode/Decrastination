@@ -88,31 +88,31 @@ object ChatPrompts {
         4. Remember (memories): a fact about the student worth keeping for later (a preference, a pattern, something about their week: "football is on Tuesdays"), with a short topic, so a newer fact on the same topic replaces it; or, kind "rule", a standing instruction about how you should behave ("don't message before 8", "be blunter"). To forget one, give its topic (a rule's own words) and an empty text. Busy times, limits and days off are changes, not memories; most messages need none.
         5. Act (actions): tickStep when the student says a step is done, untickStep when one ticked isn't (taskId, and stepIndex from the list's steps); done when they've finished a task of their own (from Yours), or one whose tick finishes it; reopen for one of theirs finished by mistake (from the finished list); delete for a task of their own they no longer want (another source's they can only say isn't a task: NotATask); open to show them a task; setting to change one of the settings listed with their values (taskId empty, setting its name, value as the list writes it: a number, a time as HH:MM, hours as HH:MM-HH:MM). stepIndex is -1 but for steps, setting and value empty but for settings. A task from Teams, Power Planner, Gmail or Anki is done when its source says so (handed in, completed in Power Planner, unstarred, studied), so it can't be marked done. Most messages need none.
 """ + (if (settings.felixSearches) RESEARCH else NO_RESEARCH).prependIndent("        ") + "\n" + """
-        Reply in one to three short sentences of plain UK English (asked what's on, a short list instead, a line a task). Everything you give is made as soon as you give it (a new task or event, a change, days off, a step ticked, a setting), so say what you've done ("Moved it to 19:30", "Added it, due Tuesday"), never what you'd do: the student has an Undo for each. To undo something yourself, give what puts it back. When a reply from them is likely, offer up to three short ones in their words (suggestedReplies). If what you need is missing or unclear (which task they mean, or when), ask one short question and change nothing. Don't add a task that's already listed: change it instead. When their message is about a given task, event or day, it's about that unless they clearly name another. Do only what they asked for, and leave every field you don't use null.
+        Reply in one to three short sentences of plain UK English (asked what's on, a short list instead, a line a task). Everything you give is made as soon as you give it (a new task or event, a change, days off, a step ticked, a setting), so say what you've done ("Moved it to 19:30", "Added it, due Tuesday"), never what you'd do: the student has an Undo for each. To undo something yourself, give what puts it back. When a reply from them is likely, offer up to three short ones in their words (suggestedReplies). If what you need is missing or unclear (which task they mean, or when), ask one short question and change nothing. Don't add a task that's already listed: change it instead. When their message is about a given task, event or day, it's about that unless they clearly name another. Do only what they asked for, and leave every field you don't use empty: an empty string, -1 for a number.
     """
         ).trimIndent()
 
     private val STRING = InstructionPrompts.STRING
-    private val DATE = mapOf("type" to "string", "format" to "date")
-    private val TIME = mapOf("type" to "string", "description" to "HH:MM, 24-hour")
+    private val DATE = InstructionPrompts.DATE
+    private val TIME = InstructionPrompts.TIME
     private val INTEGER = mapOf("type" to "integer")
 
+    // Plain fields, empty for none, as the changes' are: a nullable field is a union, and unions in
+    // a list make the grammar the API compiles from the schema too large (SchemaLimitsTest).
     private val STEP = InstructionPrompts.obj(
         "title" to STRING,
         "minutes" to INTEGER,
-        "startDate" to InstructionPrompts.nullable(DATE),
-        "dueDate" to InstructionPrompts.nullable(DATE),
+        "startDate" to DATE,
+        "dueDate" to DATE,
     )
 
     private val TASK = InstructionPrompts.obj(
         "title" to STRING,
         "kind" to mapOf("type" to "string", "enum" to OwnTasks.KINDS.map { it.name }),
-        // Plain strings, empty for none: a schema holds at most 16 nullable fields (the API's limit,
-        // SchemaLimitsTest), and the changes' take most of them.
         "subject" to STRING,
-        "dueDate" to InstructionPrompts.nullable(DATE),
-        "dueTime" to InstructionPrompts.nullable(TIME),
-        "startDate" to InstructionPrompts.nullable(DATE),
+        "dueDate" to DATE,
+        "dueTime" to TIME,
+        "startDate" to DATE,
         "minutes" to INTEGER,
         "notes" to STRING,
         "steps" to mapOf("type" to "array", "items" to STEP),
@@ -531,10 +531,15 @@ object ChatAnswers {
         val minutes: Int = 0,
         val notes: String? = null,
         val steps: List<NewStep> = emptyList(),
-    )
+    ) {
+        /** As given, but an empty date or time is none: the schema has no nullable fields. */
+        fun normalised(): NewTask = copy(dueDate = dueDate.filled(), dueTime = dueTime.filled(), startDate = startDate.filled(), steps = steps.map(NewStep::normalised))
+    }
 
     @Serializable
-    private data class NewStep(val title: String = "", val minutes: Int = 0, val startDate: String? = null, val dueDate: String? = null)
+    private data class NewStep(val title: String = "", val minutes: Int = 0, val startDate: String? = null, val dueDate: String? = null) {
+        fun normalised(): NewStep = copy(startDate = startDate.filled(), dueDate = dueDate.filled())
+    }
 
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -555,7 +560,7 @@ object ChatAnswers {
         val answer = runCatching { json.decodeFromString(Answer.serializer(), text) }.getOrNull() ?: return null
         val reply = answer.reply.trim().takeIf { it.isNotEmpty() } ?: return null
         val leftOut = mutableListOf<String>()
-        val made = answer.newTasks.take(MAX_TASKS).mapNotNull { n ->
+        val made = answer.newTasks.take(MAX_TASKS).map(NewTask::normalised).mapNotNull { n ->
             val task = task(n, now, zone)
             val problem = if (task == null) "a date in it doesn't read, or is out of range" else OwnTasks.problem(task)
             if (problem != null) leftOut += "the task “${n.title.trim().take(60)}” (${problem.replaceFirstChar(Char::lowercase)})"
@@ -564,7 +569,7 @@ object ChatAnswers {
         if (answer.newTasks.size > MAX_TASKS) leftOut += "${answer.newTasks.size - MAX_TASKS} more tasks than the app takes at once"
         val byId = tasks.associateBy { it.id }
         val titles = events.associate { EventJudge.key(it) to it.title } + listOfNotNull(about.eventKey?.let { it to (about.eventTitle ?: it) })
-        var changes = answer.changes.take(MAX_CHANGES).mapNotNull { g ->
+        var changes = answer.changes.take(MAX_CHANGES).map(InstructionAnswers.Given::normalised).mapNotNull { g ->
             InstructionAnswers.change(g, byId, titles, now, zone).also { if (it == null) leftOut += "a change (${InstructionAnswers.problem(g, byId, titles)})" }
         }
         if (answer.changes.size > MAX_CHANGES) leftOut += "${answer.changes.size - MAX_CHANGES} more changes than the app takes at once"
@@ -644,7 +649,7 @@ object ChatAnswers {
             className = n.subject?.trim()?.takeIf { it.isNotEmpty() },
             dueAt = due,
             startFrom = start,
-            minutes = n.minutes,
+            minutes = n.minutes.coerceAtLeast(0),
             steps = steps,
         )
     }

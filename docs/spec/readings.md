@@ -126,6 +126,7 @@ It runs again once Claude can be asked again (its rest over, `EnrichWorker.retry
 - **The version is raised** with any change to a reading's prompt, schema or examples, or to the profile's shape.
 - `GoldenPromptsTest` (AR-01) keeps a golden copy of every prompt and schema in `app/src/test/resources/prompts/` and fails on any difference, with its diff; `-PupdateGolden=true` writes them again.
 - Where an `enrich-*` copy or `profile.txt` differs from HEAD's, the same test fails unless `Prompts.VERSION` differs from HEAD's too.
+- **Every schema compiles.** The API turns a schema into a grammar that holds the answer to it as it's written, and refuses one whose grammar is too large. A nullable field is a union in it, and unions inside a list's items weigh most: the chat's and the instructions reader's lists have none, an unused field being empty (a number -1). `SchemaLimitsTest` holds every schema to 16 unions and two inside a list; `SchemaCompileTest`, asked for with `-PcheckSchemas=true`, has the API compile each one ([development.md](../development.md#building-and-testing)).
 
 ## Questions (AI-10)
 
