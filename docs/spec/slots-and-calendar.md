@@ -145,7 +145,7 @@ It's tried again at each write till it works (the permission back, the provider 
 `EventJudge.time` gives the planner what each takes:
 - busy: its time (`Planner.Input.busy`); all day, all of each of its days;
 - a few hours: 180 minutes of its day at no set time (`dayLoads`; all day, each of its days; timed, its first);
-- to ask, starting within the week: asked once in a notification (*All of it*, *A few hours*, *None*), never in quiet hours nor while notifications can't be seen; it takes no time till you answer;
+- to ask, starting within the week: asked once in a notification (*All of it*, *A few hours*, *None*), never in quiet hours nor while notifications can't be seen; it takes all its time till you answer (all day, all of each of its days), so the plan counts on no time it may not have (D-44);
 - to ask, further off: a few hours of its day (of each, all day) meanwhile, so the spread before it leaves it room.
 
 Your answer holds for every event of that name (`RuntimeState.eventAnswers`); the plan, and today's record of it, are made again with it.

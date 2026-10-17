@@ -92,9 +92,10 @@ object EventJudge {
 
     /**
      * What the planner takes: the busy intervals, and the minutes of each day taken at no set time;
-     * and the events as read, for the calendar's page and your instructions about them. One that
-     * would be asked about but starts after [askUntil] (DX-14: questions keep to the week ahead)
-     * counts as a few hours of its day meanwhile, so the plan beyond it leaves it room.
+     * and the events as read, for the calendar's page and your instructions about them. One to ask
+     * about takes all its time until you answer (D-44), so the plan counts on no time it may not
+     * have; one that would be asked about but starts after [askUntil] (DX-14: questions keep to the
+     * week ahead) counts as a few hours of its day meanwhile, so the plan beyond it leaves it room.
      */
     data class Time(val busy: List<Busy>, val dayLoads: Map<LocalDate, Int>, val toAsk: List<CalendarEvent>, val events: List<CalendarEvent> = emptyList())
 
@@ -102,21 +103,23 @@ object EventJudge {
         val busy = mutableListOf<Busy>()
         val loads = HashMap<LocalDate, Int>()
         val ask = mutableListOf<CalendarEvent>()
+        // All its time: all of each of an all-day event's days, a timed one's own hours.
+        fun takeAll(event: CalendarEvent) {
+            if (event.allDay) days(event, zone).forEach { loads[it] = 24 * 60 } else busy += Busy(event.start, event.end)
+        }
         for (event in events) {
             val judged = judge(event, answers)
             when (val judgement = if (judged == Judgement.Ask && event.start > askUntil) Judgement.Load(FEW_HOURS_MIN) else judged) {
                 Judgement.Free -> Unit
-                Judgement.Busy -> if (event.allDay) {
-                    // All of each of its days.
-                    days(event, zone).forEach { loads[it] = 24 * 60 }
-                } else {
-                    busy += Busy(event.start, event.end)
-                }
+                Judgement.Busy -> takeAll(event)
                 // An all-day event's load on each of its days; a timed one's once, on the day it starts.
                 is Judgement.Load -> (if (event.allDay) days(event, zone) else days(event, zone).take(1)).forEach { day ->
                     loads[day] = ((loads[day] ?: 0) + judgement.minutes).coerceAtMost(24 * 60)
                 }
-                Judgement.Ask -> ask += event
+                Judgement.Ask -> {
+                    ask += event
+                    takeAll(event)
+                }
             }
         }
         // Every one to ask about: which of them is asked (not over yet, one per name) is decided
