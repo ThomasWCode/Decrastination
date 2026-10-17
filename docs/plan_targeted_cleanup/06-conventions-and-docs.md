@@ -46,7 +46,7 @@ How code is named, laid out and commented once the cleanup is done, and how the 
 | Where | What |
 |---|---|
 | `README.md` | what the app is, how to build and install it, where everything else is |
-| `docs/spec/` | how the app works now, one area a file: `sources.md`, `readings.md`, `planner.md`, `slots-and-calendar.md`, `blocking-and-protection.md`, `felix.md`, `learning.md`, `storage-and-backups.md`, `privacy.md`; and `requirement-ids.md`, what each id the code cites asks of the app |
+| `docs/spec/` | how the app works now, one area a file: `sources.md`, `readings.md`, `planner.md`, `slots-and-calendar.md`, `blocking-and-protection.md`, `felix.md` (with `felix-inputs.md`, everything Felix is sent), `learning.md`, `storage-and-backups.md`, `privacy.md`; and `requirement-ids.md`, what each id the code cites asks of the app |
 | `docs/decisions.md` | your decisions, numbered (D-1…), dated, each with what it means for the code and where it applies; and what's still open for you |
 | `docs/development.md` | how changes are made, reviewed, checked on the phone and shipped; the public repository's rules |
 | `docs/plan_targeted_cleanup/` | this plan |

@@ -8,7 +8,7 @@ A personal, sideloaded app for one phone, version 3.1.4.
 
 | | |
 |---|---|
-| [`docs/spec/`](docs/spec/) | How the app works now, an area a file: sources, Claude's readings, the planner, slots and the calendar, blocking and protection, Felix, learning, storage and backups, privacy; and the requirement ids the code cites |
+| [`docs/spec/`](docs/spec/) | How the app works now, an area a file: sources, Claude's readings, the planner, slots and the calendar, blocking and protection, Felix (and everything he's sent), learning, storage and backups, privacy; and the requirement ids the code cites |
 | [`docs/decisions.md`](docs/decisions.md) | The owner's decisions that govern how the app is developed, numbered |
 | [`docs/development.md`](docs/development.md) | How changes are made, reviewed, checked on the phone and shipped; the public repository's rules |
 | [`docs/plan_targeted_cleanup/`](docs/plan_targeted_cleanup/README.md) | The planned restructuring of the code, phase by phase, with its open questions |
