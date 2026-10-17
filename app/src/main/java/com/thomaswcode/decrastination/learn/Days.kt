@@ -49,11 +49,14 @@ data class CheckIn(
 
 object Days {
 
-    /** Today's plan as it stands, for the record. */
-    fun record(plan: Plan, zone: ZoneId): DayRecord {
+    /**
+     * Today's plan as it stands, for the record, as the [kind] of day it was planned as
+     * (`SchoolDays.kindOf`): a weekday off school is a weekend's, and teaches the weekend's yield (PL-06).
+     */
+    fun record(plan: Plan, zone: ZoneId, kind: DayKind): DayRecord {
         val chunks = plan.todayBucket?.chunks.orEmpty().map { DayChunk(it.taskId, it.minutes) }
         val school = plan.todaySlots.filter { it.kind == SlotKind.Work && it.window.atSchool }.sumOf { it.chunk!!.minutes }
-        return DayRecord(plan.today.toString(), chunks.sumOf { it.minutes }, chunks, zone = zone.id, kind = DayKind.of(plan.today), schoolMin = school)
+        return DayRecord(plan.today.toString(), chunks.sumOf { it.minutes }, chunks, zone = zone.id, kind = kind, schoolMin = school)
     }
 
     /**

@@ -5,12 +5,18 @@ import com.thomaswcode.decrastination.data.SlotOutcome
 import com.thomaswcode.decrastination.data.SlotRecord
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.Fixtures.LONDON
+import com.thomaswcode.decrastination.core.Busy
 import com.thomaswcode.decrastination.core.Calibration
 import com.thomaswcode.decrastination.core.DayKind
 import com.thomaswcode.decrastination.core.Kind
+import com.thomaswcode.decrastination.core.NoSchool
+import com.thomaswcode.decrastination.core.Planner
+import com.thomaswcode.decrastination.core.SchoolCalendar
+import com.thomaswcode.decrastination.core.SchoolDays
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.data.ActivityLog
 import com.thomaswcode.decrastination.data.CompletionRecord
+import com.thomaswcode.decrastination.data.Settings
 import java.time.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -341,6 +347,15 @@ class DaysTest {
         start = Fixtures.at(start), end = Fixtures.at(start) + worked * 60_000L, window = WindowKind.Evening, outcome = SlotOutcome.Kept,
         workedMin = worked, at = Fixtures.at(start) + worked * 60_000L,
     )
+
+    @Test
+    fun `a weekday off school is recorded as a weekend's day, as it was planned`() {
+        // PL-06: planned with the weekend's yield, it teaches the weekend's.
+        val plan = Planner.plan(Planner.Input(emptyList(), Fixtures.at("2026-10-27T07:00"), LONDON, Settings()))
+        val off = SchoolCalendar(noSchool = listOf(NoSchool("2026-10-27", "2026-10-27")))
+        assertEquals(DayKind.Weekend, Days.record(plan, LONDON, SchoolDays.kindOf(plan.today, off)).kind)
+        assertEquals(DayKind.Weekday, Days.record(plan, LONDON, SchoolDays.kindOf(plan.today, SchoolCalendar())).kind)
+    }
 
     @Test
     fun `a day is done in full when its tasks were confirmed done or worked for their minutes`() {

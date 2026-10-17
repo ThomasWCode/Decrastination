@@ -75,7 +75,7 @@ Each kind of day learns how much of its free time gets used (`DayKind`: weekday 
 
 Each kind learns from its own days, so a run of bad Saturdays doesn't move the weekdays. Until a kind has its 7 days, it's all of its free time.
 The planner multiplies each day's evening by its kind's yield, and its school windows by school's; a limit you set on a day is of the work, after the yield.
-A day's record has its kind by its date (`DayKind.of`), so a weekday off school, planned with the weekend's yield, teaches the weekday's.
+A day's record has the kind it was planned as (`SchoolDays.kindOf`, D-27): a weekday off school is a weekend's, planned with the weekend's yield and teaching it. A record made before kinds were kept is told by its date (`DayKind.of`).
 
 ## AnkiDroid's seconds a card (DX-11)
 
