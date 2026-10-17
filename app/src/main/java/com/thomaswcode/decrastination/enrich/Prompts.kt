@@ -38,9 +38,10 @@ object Prompts {
      * 1: everything before review v2's phase 8 (what the readings stored then carry); 2: phases 1
      * to 7's changes (PROGRESS.md listed them); 3: every starred email a task (3.0.1); 4: fewer,
      * longer steps (3.1.1, your call, 17 Oct: a task in parts only where it is, its few minutes'
-     * admin in the step it belongs to).
+     * admin in the step it belongs to); 5: a piece of work whole, never split by what's in it, the
+     * app cutting one over an hour into sittings (3.1.2, the same day).
      */
-    const val VERSION = 4
+    const val VERSION = 5
 
     /**
      * Text past this is left out (and the model told). Room for a long email's own calendar of
@@ -82,7 +83,7 @@ object Prompts {
             - nextStep: the one concrete next action, as an instruction under 12 words ("Reply to Mr Hughes confirming the trip").
             - question: the one question that would settle a reading the text can't (which Friday; whether the test is the 12th or the 19th), or what the student means to do about it when the email doesn't make that clear; otherwise null.
             - reason: the phrase in the email that gave the deadline or the task, quoted (under 160 characters); empty if nothing did.
-            - blocks: only when the email holds separate pieces of work with dates of their own (a calendar of deadlines, an application that opens on a date), or more than about 90 minutes of work, cut into the parts the student would do in different sittings, 25 to 60 minutes each (a proposal: research, plan, write): the pieces of work in order, each with its minutes (at most $MAX_BLOCKS blocks, longer ones if there's more work than that), from (the date before which it can't be done, or null) and due (when it must be done by, written as for deadline, only where the email gives one; otherwise null, and the block waits for the email's own deadline, or with none is planned within the week). A window the email gives only roughly ("applications open in December") runs from its first day to its last. The planner schedules each block in its own window, so one email can become work spread over months, kept after the email is archived. An email with blocks is Admin, and its effortMin is their total. One job (filling in a form, putting a video on a website), however many small actions it takes, has no blocks unless it's over about 90 minutes; a few minutes' admin around the work (printing, uploading, replying to confirm) is never a block of its own: say it in nextStep. Otherwise an empty list.
+            - blocks: only when the email holds separate pieces of work with dates of their own (a calendar of deadlines, an application that opens on a date): the pieces of work in order, each with its minutes (at most $MAX_BLOCKS blocks, longer ones if there's more work than that), from (the date before which it can't be done, or null) and due (when it must be done by, written as for deadline, only where the email gives one; otherwise null, and the block waits for the email's own deadline, or with none is planned within the week). A window the email gives only roughly ("applications open in December") runs from its first day to its last. The planner schedules each block in its own window, so one email can become work spread over months, kept after the email is archived. An email with blocks is Admin, and its effortMin is their total. One job (filling in a form, writing a proposal, putting a video on a website), however long or however many small actions it takes, has no blocks: the app cuts long work into sittings itself, as it can't know how long each part of it takes. A few minutes' admin around the work (printing, uploading, replying to confirm) is never a block of its own: say it in nextStep. Otherwise an empty list.
 
             You see the conversation the starred message is in, oldest message first (where a long one's earlier messages had to be cut short or left out, it says so); when there's more than one, each is headed by who sent it and when ("From you" for the student's own). The first message shown keeps what it quotes from earlier (cut short too, where it had to be); in the ones after it, quoted text and signatures are left out and marked in square brackets, as what they quote is shown above them. You don't see attachments, only their names (an attached email goes by its subject). Where what the email asks turns on an attachment or an earlier message you can't see, and its name doesn't tell you, don't guess what it asked: make nextStep say to read it first, naming it ("Read the attached consent form and decide"), and effortMin 10.
 
@@ -91,7 +92,7 @@ object Prompts {
         Enrichments.Job.Assignment -> """
             You plan one homework assignment for ${student(year)}, for a planner that schedules the work over the days before it's due and blocks distracting apps until it's done.
 
-            Give the work as the ordered steps the student will actually do, as few as it really has, each with a realistic duration in minutes for a typical Year 12 student (the planner adjusts them to this one). An assignment is one step, the whole of it, unless its instructions list separate pieces of work (questions and an essay; vocabulary to learn and a reading task) or it's long, over about 90 minutes, when it's cut into the parts they'd do in different sittings (research, plan, write), 25 to 60 minutes each. A run of pages, questions or exercises is one step ("Questions on pages 28-30"), never a step each. Never make a step of a few minutes around the work (printing or downloading it, reading the task, marking it against given answers, photographing or uploading it, handing it in): say it in the title of the step it belongs to ("Past paper 1 (print it first), then mark it"). A step has dates of its own only where the instructions give them (a draft due before the final version): from, the date before which it can't be started, and due, when it must be done by (YYYY-MM-DDTHH:MM, or the date alone); otherwise both null. Base the steps on the instructions. Learning numbered vocabulary sections is a step of its own, with nothing else in it, and those sections in its ankiSections: the planner leaves it out where the student's Anki decks hold them. Every other step has an empty ankiSections. Handing the work in is part of its last step, never a step of its own. No step may start after the assignment's due time. Work that comes after the hand-in (revising for a test the work prepares for) gets no dates of its own; give the test's day in testDate instead. Each step's where: "home" for a step that needs the laptop, books or quiet (an essay, an upload, a long problem set); "anywhere" for one that can be done at school in a free period with what's in the bag (a booklet, reading, vocabulary).
+            Give the work as the ordered steps the student will actually do, as few as it really has, each with a realistic duration in minutes for a typical Year 12 student (the planner adjusts them to this one). An assignment is one step, the whole of it, unless its instructions list separate pieces of work (questions and an essay; vocabulary to learn and a reading task). Never split one piece of work by what's in it (pages 35-39, then 40-43; the first third of the questions; research, then write): give it whole, however long, as the app can't know how long each part takes, and cuts a step over 60 minutes into sittings itself (the first the work, the last "Continue and finish"). A run of pages, questions or exercises is one step ("Questions on pages 28-30"), never a step each. Never make a step of a few minutes around the work (printing or downloading it, reading the task, marking it against given answers, photographing or uploading it, handing it in): say it in the title of the step it belongs to ("Past paper 1 (print it first), then mark it"). A step has dates of its own only where the instructions give them (a draft due before the final version): from, the date before which it can't be started, and due, when it must be done by (YYYY-MM-DDTHH:MM, or the date alone); otherwise both null. Base the steps on the instructions. Learning numbered vocabulary sections is a step of its own, with nothing else in it, and those sections in its ankiSections: the planner leaves it out where the student's Anki decks hold them. Every other step has an empty ankiSections. Handing the work in is part of its last step, never a step of its own. No step may start after the assignment's due time. Work that comes after the hand-in (revising for a test the work prepares for) gets no dates of its own; give the test's day in testDate instead. Each step's where: "home" for a step that needs the laptop, books or quiet (an essay, an upload, a long problem set); "anywhere" for one that can be done at school in a free period with what's in the bag (a booklet, reading, vocabulary).
 
             Also give:
             - effortMin: the total minutes, the sum of the steps.
@@ -103,7 +104,7 @@ object Prompts {
         Enrichments.Job.Effort -> """
             Estimate how many minutes of work ${student(year)} needs to finish one item from their planner, from its title, class and details: a realistic total for a typical Year 12 student (the planner adjusts it to this one). A call, meeting or other appointment isn't work: give only the minutes needed to prepare for it, at least 1.
 
-            If it's long, over about 90 minutes (revising for a test, a project), also split it into blocks: the ordered pieces of work done in different sittings, 25 to 60 minutes each (at most $MAX_BLOCKS blocks), adding up to effortMin, each with from (the date before which it can't be done, YYYY-MM-DD) and due (when it must be done by, YYYY-MM-DDTHH:MM or the date alone) where the details give them, otherwise null. No block may start after the item's date. Otherwise blocks is an empty list.
+            Give blocks only where its details list pieces of work with dates of their own: the ordered pieces, each with its minutes (at most $MAX_BLOCKS blocks), adding up to effortMin, each with from (the date before which it can't be done, YYYY-MM-DD) and due (when it must be done by, YYYY-MM-DDTHH:MM or the date alone) where the details give them, otherwise null. No block may start after the item's date. Otherwise blocks is an empty list, however long the work is (revising for a test, a project): the app cuts long work into sittings itself, as it can't know how long each part of it takes.
         """.trimIndent()
     }
 
@@ -311,17 +312,29 @@ object Answers {
     /** [minutes] in hours, for a reason given: "21 hours", "20.8 hours". */
     private fun hours(minutes: Int): String = if (minutes % 60 == 0) "${minutes / 60} hours" else "%.1f hours".format(Locale.UK, minutes / 60.0)
 
-    /** The longest a step is planned in one piece: a longer one is cut into parts (three hours, as a focus session was). */
-    const val MAX_PART_MIN = 180
+    /**
+     * The longest a step is planned in one sitting (your call, 17 Oct: an hour; three before): a
+     * longer one is cut into even sittings, as the app can't know which part of the work takes how
+     * long, so they're split by time, never by what's in them ([fitParts]).
+     */
+    const val MAX_PART_MIN = 60
 
-    /** [step] in even parts no longer than [MAX_PART_MIN], numbered if there's more than one. */
-    private fun fitParts(step: SubStep): List<SubStep> {
+    /**
+     * [step] in even sittings no longer than [MAX_PART_MIN]: the first the step itself, then
+     * "Continue: …", and the last "Continue and finish: …".
+     */
+    internal fun fitParts(step: SubStep): List<SubStep> {
         val parts = (step.minutes + MAX_PART_MIN - 1) / MAX_PART_MIN
         if (parts <= 1) return listOf(step)
-        val suffix = { i: Int -> " (${i + 1} of $parts)" }
-        return (0 until parts).map { i ->
-            step.copy(title = step.title.take(MAX_TITLE - suffix(i).length) + suffix(i), minutes = step.minutes / parts + if (i < step.minutes % parts) 1 else 0)
+        fun title(i: Int): String {
+            val prefix = when (i) {
+                0 -> return step.title
+                parts - 1 -> "Continue and finish: "
+                else -> "Continue: "
+            }
+            return prefix + step.title.take(MAX_TITLE - prefix.length)
         }
+        return (0 until parts).map { i -> step.copy(title = title(i), minutes = step.minutes / parts + if (i < step.minutes % parts) 1 else 0) }
     }
 
     /** A test's day: work must be done before school that morning. */

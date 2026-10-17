@@ -320,13 +320,16 @@ class AnswersTest {
     }
 
     @Test
-    fun `a step longer than a focus session is cut into even parts that each fit one`() {
+    fun `a step longer than an hour is cut into even sittings, then Continue, the last Continue and finish`() {
         val e = parse(
             Enrichments.Job.Assignment,
             """{"subSteps":[{"title":"Write the essay","minutes":220,"ankiSections":[]},{"title":"Check it","minutes":20,"ankiSections":[]}],"effortMin":240,"ankiSections":[],"testDate":null}""",
             assignment("Essay"),
         )!!
-        assertEquals(listOf("Write the essay (1 of 2)" to 110, "Write the essay (2 of 2)" to 110, "Check it" to 20), e.subSteps!!.map { it.title to it.minutes })
+        assertEquals(
+            listOf("Write the essay" to 55, "Continue: Write the essay" to 55, "Continue: Write the essay" to 55, "Continue and finish: Write the essay" to 55, "Check it" to 20),
+            e.subSteps!!.map { it.title to it.minutes },
+        )
     }
 
     @Test
@@ -408,8 +411,8 @@ class AnswersTest {
 
     @Test
     fun `blocks are counted as given, before a long one is cut into parts`() {
-        fun given(count: Int) = (listOf("""{"title":"Long","minutes":181,"from":null,"due":null}""") + (2..count).map { """{"title":"B$it","minutes":10,"from":null,"due":null}""" }).joinToString(",")
-        val total = 181 + (Prompts.MAX_BLOCKS - 1) * 10
+        fun given(count: Int) = (listOf("""{"title":"Long","minutes":61,"from":null,"due":null}""") + (2..count).map { """{"title":"B$it","minutes":10,"from":null,"due":null}""" }).joinToString(",")
+        val total = 61 + (Prompts.MAX_BLOCKS - 1) * 10
         val e = parse(Enrichments.Job.Effort, """{"effortMin":$total,"blocks":[${given(Prompts.MAX_BLOCKS)}]}""")!!
         assertEquals(Prompts.MAX_BLOCKS + 1, e.subSteps!!.size)
         // One more than that isn't trusted.
@@ -701,6 +704,19 @@ class AiUsageTest {
         assertEquals(1, usage.failed)
         assertEquals(0.03, usage.spentUsd, 1e-9)
         assertEquals("timeout", usage.lastError)
+    }
+
+    @Test
+    fun `work over an hour is cut into even sittings by time, never by what's in it`() {
+        val step = com.thomaswcode.decrastination.core.SubStep("Write the essay", 100)
+        assertEquals(listOf("Write the essay" to 50, "Continue and finish: Write the essay" to 50), Answers.fitParts(step).map { it.title to it.minutes })
+        assertEquals(
+            listOf("Write the essay" to 50, "Continue: Write the essay" to 50, "Continue and finish: Write the essay" to 50),
+            Answers.fitParts(step.copy(minutes = 150)).map { it.title to it.minutes },
+        )
+        // An hour or less is one sitting.
+        assertEquals(listOf(step.copy(minutes = 60)), Answers.fitParts(step.copy(minutes = 60)))
+        assertEquals(listOf(31, 30), Answers.fitParts(step.copy(minutes = 61)).map { it.minutes })
     }
 
     @Test

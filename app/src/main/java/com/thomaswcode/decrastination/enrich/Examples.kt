@@ -81,6 +81,19 @@ object Examples {
         Example(
             """
             Today: Friday 9 October 2026, 17:00
+            Title: Exercise 6B
+            Class: Maths
+            Due: Friday 16 October 2026 08:30
+
+            Details:
+            Complete all of exercise 6B (questions 1-20) and check your answers in the back of the book.
+            """.trimIndent(),
+            """{"subSteps":[{"title":"Exercise 6B, questions 1-20, then check the answers in the back","minutes":100,"ankiSections":[],"where":"anywhere","from":null,"due":null}],"effortMin":100,"ankiSections":[],"testDate":null,"question":null,"reason":""}""",
+            due = "2026-10-16T08:30",
+        ),
+        Example(
+            """
+            Today: Friday 9 October 2026, 17:00
             Title: Worksheet 4
             Class: Physics
             Due: Monday 12 October 2026 08:30
@@ -116,7 +129,7 @@ object Examples {
             Details:
             Paper 1: algebra, functions and calculus.
             """.trimIndent(),
-            """{"effortMin":120,"blocks":[{"title":"Revise algebra","minutes":40,"from":null,"due":null},{"title":"Revise functions","minutes":40,"from":null,"due":null},{"title":"Revise calculus","minutes":40,"from":null,"due":null}]}""",
+            """{"effortMin":120,"blocks":[]}""",
             due = "2026-10-23T08:30",
         ),
     )

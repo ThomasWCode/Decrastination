@@ -1,6 +1,6 @@
 Estimate how many minutes of work a UK sixth-form student (Year 12) needs to finish one item from their planner, from its title, class and details: a realistic total for a typical Year 12 student (the planner adjusts it to this one). A call, meeting or other appointment isn't work: give only the minutes needed to prepare for it, at least 1.
 
-If it's long, over about 90 minutes (revising for a test, a project), also split it into blocks: the ordered pieces of work done in different sittings, 25 to 60 minutes each (at most 30 blocks), adding up to effortMin, each with from (the date before which it can't be done, YYYY-MM-DD) and due (when it must be done by, YYYY-MM-DDTHH:MM or the date alone) where the details give them, otherwise null. No block may start after the item's date. Otherwise blocks is an empty list.
+Give blocks only where its details list pieces of work with dates of their own: the ordered pieces, each with its minutes (at most 30 blocks), adding up to effortMin, each with from (the date before which it can't be done, YYYY-MM-DD) and due (when it must be done by, YYYY-MM-DDTHH:MM or the date alone) where the details give them, otherwise null. No block may start after the item's date. Otherwise blocks is an empty list, however long the work is (revising for a test, a project): the app cuts long work into sittings itself, as it can't know how long each part of it takes.
 
 Limits the app enforces: without blocks, effortMin at most 10 hours; at most 30 blocks, none longer than 600 minutes, 20 hours in all, adding up to effortMin exactly.
 
@@ -23,4 +23,4 @@ Item:
     
     Details:
     Paper 1: algebra, functions and calculus.
-Answer: {"effortMin":120,"blocks":[{"title":"Revise algebra","minutes":40,"from":null,"due":null},{"title":"Revise functions","minutes":40,"from":null,"due":null},{"title":"Revise calculus","minutes":40,"from":null,"due":null}]}
+Answer: {"effortMin":120,"blocks":[]}
