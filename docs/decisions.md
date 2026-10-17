@@ -145,6 +145,7 @@ What's still waiting for you:
 - **Returned work with feedback (NF-06)**: say when Teams returns a piece of work with feedback, so the widget app's half can be built.
 - **Not yet tried on the phone**: a photo check of written homework and photographing homework into a task; re-arming with the authenticator kept, and the *Arm now?* list (needs the parent); the free-time countdown; the widget's red ! at its smallest size.
 - **Your copy of the backups off the phone** (D-77).
+- **Two checks left from the review v2 build**: whether Felix's 07:00 briefing reads as his own message; and the app's questions about long calendar events (answer them, or tell Felix which are free).
 - **Found while writing the spec** (17 Oct), for you to decide:
   - A day or a time given to overdue work is accepted (`Instructions.latePin`), so Felix says it's done, but the plan doesn't use it (`pinnedTime`, `keptDay`); Day's own moves refuse it (`pinProblem`). A bug to fix.
   - A weekday off school is planned with the weekend's yield but teaches the weekday's (`Days.record`). Should it teach the weekend's?
