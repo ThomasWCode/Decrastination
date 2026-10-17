@@ -258,7 +258,7 @@ object ChatPrompts {
             if (!TaskText.has(task) && task.answers.isEmpty()) return null
             return buildString {
                 append("The task this message is about, ${task.id} “${task.title.take(MAX_TITLE)}” (${TaskText.about(task)}), in full:\n")
-                append(TaskText.body(task, WHOLE_TEXT) ?: "  (no text of its own)")
+                append(TaskText.whole(task, WHOLE_TEXT) ?: "  (no text of its own)")
                 if (task.answers.isNotEmpty()) append("\nTheir answers to its questions: ").append(task.answers.joinToString("; "))
             }
         }
@@ -278,7 +278,7 @@ object ChatPrompts {
         var room = READ_TEXT
         for (task in read.take(MAX_READ)) {
             if (room <= 0) break
-            val body = TaskText.body(task, minOf(WHOLE_TEXT, room)) ?: "  (no text of its own)"
+            val body = TaskText.whole(task, minOf(WHOLE_TEXT, room)) ?: "  (no text of its own)"
             room -= body.length
             append("\n- ${task.id} “${task.title.take(MAX_TITLE)}” (${TaskText.about(task)}):\n").append(body)
         }
@@ -383,11 +383,11 @@ object ChatPrompts {
         val withText = open.take(InstructionPrompts.MAX_TASKS).filter { !it.derived && TaskText.has(it) }
         if (withText.isNotEmpty()) {
             appendLine()
-            appendLine("The tasks' own text (id | from, and what comes with it; then its text: an assignment's instructions, an email's conversation, a planner item's details, their notes), each at most $BRIEF_TEXT characters, a longer one's start and end (an email's newest replies are at its end):")
+            appendLine("The tasks' own text (id | from, and what comes with it; then its text: an assignment's instructions, an email's conversation, a planner item's details, their notes), each at most $BRIEF_TEXT characters: a longer one as its reading's summary of all of it, or else its start and end (an email's newest replies are at its end):")
             var room = MAX_TEXTS
             var shown = 0
             for (t in withText) {
-                val entry = "- ${t.id} | ${TaskText.about(t)}" + (TaskText.body(t, BRIEF_TEXT, "    ")?.let { "\n$it" } ?: "")
+                val entry = "- ${t.id} | ${TaskText.about(t)}" + (TaskText.brief(t, BRIEF_TEXT, "    ")?.let { "\n$it" } ?: "")
                 if (entry.length > room) break
                 appendLine(entry)
                 room -= entry.length

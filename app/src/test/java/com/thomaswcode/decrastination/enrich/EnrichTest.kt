@@ -229,6 +229,15 @@ class AnswersTest {
     }
 
     @Test
+    fun `a reading's summary of a long text is kept, none for a short one`() {
+        // D-93: what Felix is told in place of a text too long for his room.
+        val e = parse(Enrichments.Job.Email, """{"kind":"Admin","actionableFrom":null,"deadline":null,"effortMin":10,"nextStep":"x","summary":"  Return the form by Friday; bring a packed lunch.  "}""")!!
+        assertEquals("Return the form by Friday; bring a packed lunch.", e.summary)
+        assertNull(parse(Enrichments.Job.Email, """{"kind":"Admin","actionableFrom":null,"deadline":null,"effortMin":10,"nextStep":"x","summary":""}""")!!.summary)
+        assertEquals(500, parse(Enrichments.Job.Effort, """{"effortMin":30,"blocks":[],"summary":"${"y".repeat(700)}"}""")!!.summary!!.length)
+    }
+
+    @Test
     fun `whether an email's deadline is its own words is read and kept (AI-12)`() {
         val quoted = parse(Enrichments.Job.Email, """{"kind":"Admin","actionableFrom":null,"deadline":"2026-10-16","deadlineQuoted":true,"effortMin":10,"nextStep":"Hand in the form","blocks":[]}""")!!
         assertTrue(quoted.deadlineQuoted)
@@ -815,7 +824,7 @@ class ClaudeEnricherTest {
         assertEquals("high", config["effort"]!!.jsonPrimitive.content)
         val format = config["format"]!!.jsonObject
         assertEquals("json_schema", format["type"]!!.jsonPrimitive.content)
-        assertEquals(listOf("kind", "actionableFrom", "deadline", "deadlineQuoted", "effortMin", "nextStep", "question", "reason", "blocks"), format["schema"]!!.jsonObject["required"]!!.jsonArray.map { it.jsonPrimitive.content })
+        assertEquals(listOf("kind", "actionableFrom", "deadline", "deadlineQuoted", "effortMin", "nextStep", "question", "reason", "blocks", "summary"), format["schema"]!!.jsonObject["required"]!!.jsonArray.map { it.jsonPrimitive.content })
         assertTrue("triage one email" in body["system"].toString(), body["system"].toString().take(120))
         assertTrue("Subject: Berlin trip form" in body["messages"].toString())
         // No thinking setting: Opus 5.5 always thinks, and rejects one that turns it off.

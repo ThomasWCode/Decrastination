@@ -8,6 +8,7 @@ Also give:
 - testDate: if the work prepares for a test or assessment on a stated date, that date (YYYY-MM-DD); otherwise null.
 - question: rarely: the one question that would settle a reading the text can't (which Friday; whether the test is the 12th or the 19th); otherwise null.
 - reason: the phrase in the instructions that gave the test date or the split, quoted (under 160 characters); empty if nothing did.
+- summary: only where the text runs past a short paragraph (about 600 characters), what it asks of the student, from all of it, in at most 400 characters: the work and its parts, what's needed, any dates, how it's handed in. The student's assistant in the app is told it in place of the text. Otherwise empty.
 
 Limits the app enforces: at most 12 steps; a total of at most 10 hours; the steps must add up to effortMin exactly.
 
@@ -22,7 +23,7 @@ Item:
     Details:
     1. Learn vocabulary 2.1 and 2.2 for the unit test on Thursday 15 October.
     2. Read the article on page 34 and answer questions 1-5 in full sentences.
-Answer: {"subSteps":[{"title":"Learn vocabulary 2.1 and 2.2","minutes":30,"ankiSections":["2.1","2.2"],"where":"anywhere","from":null,"due":null},{"title":"Read the article on page 34 and answer questions 1-5 in full sentences","minutes":45,"ankiSections":[],"where":"home","from":null,"due":null}],"effortMin":75,"ankiSections":["2.1","2.2"],"testDate":"2026-10-15","question":null,"reason":"for the unit test on Thursday 15 October"}
+Answer: {"subSteps":[{"title":"Learn vocabulary 2.1 and 2.2","minutes":30,"ankiSections":["2.1","2.2"],"where":"anywhere","from":null,"due":null},{"title":"Read the article on page 34 and answer questions 1-5 in full sentences","minutes":45,"ankiSections":[],"where":"home","from":null,"due":null}],"effortMin":75,"ankiSections":["2.1","2.2"],"testDate":"2026-10-15","question":null,"reason":"for the unit test on Thursday 15 October","summary":""}
 
 Item:
     Today: Friday 9 October 2026, 17:00
@@ -32,7 +33,7 @@ Item:
     
     Details:
     Print the attached past paper and answer questions 1-6 on pages 2-5. Mark your answers with the mark scheme on Teams, then upload a photo of your marked work.
-Answer: {"subSteps":[{"title":"Past paper 1, questions 1-6 (print it first), then mark it and upload a photo","minutes":55,"ankiSections":[],"where":"home","from":null,"due":null}],"effortMin":55,"ankiSections":[],"testDate":null,"question":null,"reason":""}
+Answer: {"subSteps":[{"title":"Past paper 1, questions 1-6 (print it first), then mark it and upload a photo","minutes":55,"ankiSections":[],"where":"home","from":null,"due":null}],"effortMin":55,"ankiSections":[],"testDate":null,"question":null,"reason":"","summary":""}
 
 Item:
     Today: Friday 9 October 2026, 17:00
@@ -42,7 +43,7 @@ Item:
     
     Details:
     Complete all of exercise 6B (questions 1-20) and check your answers in the back of the book.
-Answer: {"subSteps":[{"title":"Exercise 6B, questions 1-20, then check the answers in the back","minutes":100,"ankiSections":[],"where":"anywhere","from":null,"due":null}],"effortMin":100,"ankiSections":[],"testDate":null,"question":null,"reason":""}
+Answer: {"subSteps":[{"title":"Exercise 6B, questions 1-20, then check the answers in the back","minutes":100,"ankiSections":[],"where":"anywhere","from":null,"due":null}],"effortMin":100,"ankiSections":[],"testDate":null,"question":null,"reason":"","summary":""}
 
 Item:
     Today: Friday 9 October 2026, 17:00
@@ -52,4 +53,4 @@ Item:
     
     Details:
     Complete worksheet 4 on momentum, questions 1-8.
-Answer: {"subSteps":[{"title":"Complete worksheet 4, questions 1-8","minutes":40,"ankiSections":[],"where":"anywhere","from":null,"due":null}],"effortMin":40,"ankiSections":[],"testDate":null,"question":null,"reason":""}
+Answer: {"subSteps":[{"title":"Complete worksheet 4, questions 1-8","minutes":40,"ankiSections":[],"where":"anywhere","from":null,"due":null}],"effortMin":40,"ankiSections":[],"testDate":null,"question":null,"reason":"","summary":""}

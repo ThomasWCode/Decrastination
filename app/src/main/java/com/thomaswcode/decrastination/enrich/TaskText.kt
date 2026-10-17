@@ -39,6 +39,30 @@ object TaskText {
     /** How far back or on a cut looks for a space. */
     private const val WORD = 40
 
+    /**
+     * Its text as the chat's list and his own messages give it: whole where it fits in [max]; past
+     * it, what its reading made of all of it ([com.thomaswcode.decrastination.core.Enrichment.summary])
+     * where there's one, else its start and end ([body]).
+     */
+    fun brief(task: TaskItem, max: Int, indent: String = "  "): String? {
+        val length = task.detail.trim().length
+        if (length > max) summary(task)?.let { return "${indent}Its reading's summary of all $length characters: $it" }
+        return body(task, max, indent)
+    }
+
+    /**
+     * Its whole text as a message about it, or his asking to read it, carries it: within [max]; past
+     * it, its start and end, after its reading's summary of all of it where there's one.
+     */
+    fun whole(task: TaskItem, max: Int, indent: String = "  "): String? {
+        val shown = body(task, max, indent) ?: return null
+        val summary = summary(task)?.takeIf { task.detail.trim().length > max } ?: return shown
+        return "${indent}Its reading's summary of all of it: $summary\n$shown"
+    }
+
+    /** What the task's reading in force made of its text, where it made anything. */
+    private fun summary(task: TaskItem): String? = com.thomaswcode.decrastination.core.Enrichments.current(task)?.summary?.takeIf { it.isNotBlank() }
+
     /** Whether it has anything of its own to tell: its text, or what's attached to it. */
     fun has(task: TaskItem): Boolean = task.detail.isNotBlank() || GmailThreads.attachmentsOf(task).isNotEmpty() || TeamsRows.linksOf(task).isNotEmpty()
 

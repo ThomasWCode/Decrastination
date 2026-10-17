@@ -2,6 +2,8 @@ Estimate how many minutes of work a UK sixth-form student (Year 12) needs to fin
 
 Give blocks only where its details list pieces of work with dates of their own: the ordered pieces, each with its minutes (at most 30 blocks), adding up to effortMin, each with from (the date before which it can't be done, YYYY-MM-DD) and due (when it must be done by, YYYY-MM-DDTHH:MM or the date alone) where the details give them, otherwise null. No block may start after the item's date. Otherwise blocks is an empty list, however long the work is (revising for a test, a project): the app cuts long work into sittings itself, as it can't know how long each part of it takes.
 
+Also give summary: only where the text runs past a short paragraph (about 600 characters), what it asks of the student, from all of it, in at most 400 characters: the work and its parts, what's needed, any dates, how it's handed in. The student's assistant in the app is told it in place of the text. Otherwise empty.
+
 Limits the app enforces: without blocks, effortMin at most 10 hours; at most 30 blocks, none longer than 600 minutes, 20 hours in all, adding up to effortMin exactly.
 
 Examples (made up, to show the form of an answer):
@@ -13,7 +15,7 @@ Item:
     
     Details:
     Bring your CV.
-Answer: {"effortMin":5,"blocks":[]}
+Answer: {"effortMin":5,"blocks":[],"summary":""}
 
 Item:
     Today: Friday 9 October 2026, 17:00
@@ -23,4 +25,4 @@ Item:
     
     Details:
     Paper 1: algebra, functions and calculus.
-Answer: {"effortMin":120,"blocks":[]}
+Answer: {"effortMin":120,"blocks":[],"summary":""}
