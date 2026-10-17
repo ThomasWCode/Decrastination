@@ -57,7 +57,7 @@ object Briefing {
         val ahead = record.chunks
         graph.log.update { log ->
             val old = log.days.firstOrNull { it.date == plan.today.toString() && it.full == null } ?: return@update log
-            log.copy(days = log.days.map { if (it === old) Days.replan(old, ahead, log, now, zone, record.schoolMin) else it })
+            log.copy(days = log.days.map { if (it === old) Days.replan(old, ahead, log, now, zone, record.schoolMin, record.kind) else it })
         }
     }
 
