@@ -355,6 +355,33 @@ class InstructionsTest {
     }
 
     @Test
+    fun `a field given empty is none, as the schema has no nullable fields`() {
+        // The same reading as nulls give, with an empty string for an unused field and -1 for an unused number.
+        fun change(type: String, taskId: String = "", after: String = "", event: String = "", eventTime: String = "", minutes: Int = -1, date: String = "", endDate: String = "", weekday: String = "", time: String = "", endTime: String = "") =
+            """{"type":"$type","taskId":"$taskId","afterTaskId":"$after","eventKey":"$event","eventTime":"$eventTime","minutes":$minutes,"date":"$date","endDate":"$endDate","weekday":"$weekday","time":"$time","endTime":"$endTime","title":"","steps":[]}"""
+        val reading = parse(
+            """{"understood":true,"question":null,"changes":[
+              ${change("After", taskId = "teams:prep", after = "teams:essay")},
+              ${change("DueBy", taskId = "teams:essay", date = "2026-10-16")},
+              ${change("StartFrom", taskId = "teams:prep", date = "2026-10-12")},
+              ${change("EventTime", event = "drum lesson", eventTime = "hours", minutes = 90)},
+              ${change("DayLimit", minutes = 0, weekday = "Saturday")},
+              ${change("NoSchool", date = "2026-10-14")}
+            ]}""",
+        )
+        val changes = assertIs<InstructionAnswers.Reading.Changes>(reading).changes
+        assertEquals(Change(ChangeType.After, taskId = "teams:prep", afterTaskId = "teams:essay"), changes[0])
+        assertEquals(Fixtures.at("2026-10-16T23:59"), changes[1].time)
+        // No time: the start of the day.
+        assertEquals(Fixtures.at("2026-10-12T00:00"), changes[2].time)
+        assertEquals("load:90", changes[3].eventAnswer)
+        // A day's limit of none at all is 0, not none.
+        assertEquals(Change(ChangeType.DayLimit, weekday = 6, freeMin = 0), changes[4])
+        // No end date: the one day.
+        assertEquals(Change(ChangeType.NoSchool, date = "2026-10-14", endDate = "2026-10-14"), changes[5])
+    }
+
+    @Test
     fun `days off and half-days are read as dates, and said`() {
         // Half term as one change over its days; a half-day ending at 12:30 (PL-16).
         val reading = parse(

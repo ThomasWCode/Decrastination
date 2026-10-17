@@ -125,7 +125,7 @@ How the app works in detail is in [spec/](spec/); how the work is done is in [de
 - **D-84. Merged with a merge commit** (`Merge #N: <title>`), the branch deleted, a release tagged `vX.Y.Z`.
 - **D-85. No attribution, co-author or session lines** in commits or PR descriptions.
 - **D-86. Every change of behaviour has unit tests**; CI runs the tests, lint and assemble; no test is switched off.
-- **D-87. A prompt or schema change updates the golden copies; one to what a reading is made by raises `Prompts.VERSION`.**
+- **D-87. A prompt or schema change updates the golden copies; one to what a reading is made by raises `Prompts.VERSION`.** A changed schema is compiled by the API before it's released (`SchemaCompileTest`, 17 Oct), and a list's fields are never nullable.
 - **D-88. A new setting needs a default, a range, a label and a field on its screen**, and its place in protection's list if it can loosen blocking.
 - **D-89. The docs change with the code**, in the same PR: the spec for behaviour, this file for decisions. Comments say what and why, and cite requirement ids and decisions.
 - **D-90. Not built:** focus sessions, streaks, an exams page, recurring work, rules by sender, two weekend windows, task search, a free-time ledger, reviews that only propose. A rewrite of the app isn't wanted; its restructuring is planned instead ([plan_targeted_cleanup/](plan_targeted_cleanup/README.md)).
