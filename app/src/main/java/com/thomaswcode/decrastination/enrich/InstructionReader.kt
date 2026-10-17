@@ -87,7 +87,8 @@ object InstructionPrompts {
     """
         ).trimIndent()
 
-    internal val CHANGE = obj(
+    /** A change's fields, as [CHANGE] has them; the chat's has one more ([ChatPrompts]). */
+    internal val CHANGE_FIELDS: List<Pair<String, Any>> = listOf(
         "type" to mapOf("type" to "string", "enum" to ChangeType.entries.map { it.name }),
         "taskId" to nullable(STRING),
         "afterTaskId" to nullable(STRING),
@@ -112,6 +113,8 @@ object InstructionPrompts {
             ),
         ),
     )
+
+    internal val CHANGE = obj(*CHANGE_FIELDS.toTypedArray())
 
     val SCHEMA: Map<String, Any> = obj(
         "understood" to mapOf("type" to "boolean"),
@@ -208,6 +211,8 @@ object InstructionAnswers {
         val endTime: String? = null,
         val title: String = "",
         val steps: List<GivenStep> = emptyList(),
+        /** The chat's only ([ChatPrompts]): a Minutes total that's the app's estimate at the student's pace. */
+        val paced: Boolean = false,
     )
 
     /** A step of a [ChangeType.Steps] change, its dates empty for none. */
@@ -253,7 +258,7 @@ object InstructionAnswers {
             ChangeType.StartFrom -> task?.let { id -> at(g.date, g.time, LocalTime.MIDNIGHT, zone)?.takeIf { plausible(it, now) }?.let { Change(type, taskId = id, time = it) } }
             ChangeType.DueBy -> task?.let { id -> at(g.date, g.time, LocalTime.of(23, 59), zone)?.takeIf { plausible(it, now) }?.let { Change(type, taskId = id, time = it) } }
             // At least a minute for each of its steps, as yours are shared out over them.
-            ChangeType.Minutes -> task?.let { id -> g.minutes?.takeIf { it in OwnTasks.minutesFor(tasks.getValue(id)) }?.let { Change(type, taskId = id, minutes = it) } }
+            ChangeType.Minutes -> task?.let { id -> g.minutes?.takeIf { it in OwnTasks.minutesFor(tasks.getValue(id)) }?.let { Change(type, taskId = id, minutes = it, paced = g.paced) } }
             ChangeType.After -> task?.let { id -> g.afterTaskId?.takeIf { it in tasks && it != id }?.let { Change(type, taskId = id, afterTaskId = it) } }
             ChangeType.EventTime -> g.eventKey?.takeIf { it in events }?.let { key ->
                 val answer = when (g.eventTime) {

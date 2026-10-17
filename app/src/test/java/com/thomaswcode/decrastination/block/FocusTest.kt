@@ -93,6 +93,18 @@ class FocusTest {
     }
 
     @Test
+    fun `a total Felix works out at your pace still teaches the pace, measured against the app's estimate`() = runTest {
+        // 17 Oct: 40 minutes of the app's, Felix's steps and total of 60 at a pace of 1.5; and two hours of your own reckoning.
+        val paced = task("paced", effort = 40, steps = listOf(SubStep("Past paper", 60)))
+            .copy(userSteps = listOf(com.thomaswcode.decrastination.core.OwnStep("Past paper", 60)), userEffortMin = 60, userEffortPaced = true, status = Status.Done, doneAt = clock.time)
+        val yours = task("yours", effort = 40).copy(userEffortMin = 120, status = Status.Done, doneAt = clock.time)
+        focus.onCompleted(listOf(paced, yours))
+        val records = log.value.completions.associateBy { it.taskId }
+        assertEquals(40 to false, records.getValue("teams:paced").let { it.estimateMin to it.yourEstimate })
+        assertEquals(120 to true, records.getValue("teams:yours").let { it.estimateMin to it.yourEstimate })
+    }
+
+    @Test
     fun `with your steps and minutes, finishing earns no more than the app's estimate at the pace learned`() = runTest {
         // #49's review: 40 minutes of the app's at a pace of 1.5 is an hour; your steps and minutes say 80.
         runtime.update { it.copy(calibration = Calibration(multipliers = mapOf(Calibration.key(Kind.Homework, null) to 1.5))) }

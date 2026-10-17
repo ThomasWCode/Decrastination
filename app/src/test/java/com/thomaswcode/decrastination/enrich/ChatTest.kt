@@ -178,6 +178,15 @@ class ChatTest {
     }
 
     @Test
+    fun `a total Felix works out at the student's pace is read as paced, and the instructions' reader is never asked for one`() {
+        val reading = parse("""{"reply":"Split, at your pace.","changes":[{"type":"Minutes","taskId":"teams:bridge","minutes":150,"paced":true}]}""")!!
+        assertEquals(Change(ChangeType.Minutes, taskId = "teams:bridge", minutes = 150, paced = true), reading.changes.single())
+        // The chat's schema has it; the instructions' reader's hasn't, as it reads the student's own words.
+        assertTrue("paced" in ChatPrompts.SCHEMA.toString())
+        assertFalse("paced" in InstructionPrompts.SCHEMA.toString())
+    }
+
+    @Test
     fun `the context gives the student's pace, and what each task's minutes come to in the plan by it`() {
         // Your call (17 Oct): Felix knows the pace, so he allows for it; minutes given are planned as given.
         val pace = Calibration(multipliers = mapOf("Homework|" to 1.5, "Homework|Physics" to 1.25), timed = mapOf("Homework|" to 6, "Homework|Physics" to 3))
@@ -187,6 +196,9 @@ class ChatTest {
         assertTrue("- teams:bridge | Bridge and Balances Beam Q's | Teams | Homework | Tue 13 Oct 2026 08:30 | 100, planned as 150 at their pace | 0 | -" in context, context)
         assertTrue("| Physics | Teams | Homework | Tue 13 Oct 2026 08:30 | 100, planned as 125 at their pace |" in context, context)
         assertTrue("| Given | Teams | Homework | Tue 13 Oct 2026 08:30 | 100, as given |" in context, context)
+        // A total Felix worked out at their pace, said so, with the app's estimate it came from.
+        val paced = bridge.copy(id = "teams:paced", sourceId = "paced", title = "Paced", userEffortMin = 150, userEffortPaced = true)
+        assertTrue("| Paced | Teams | Homework | Tue 13 Oct 2026 08:30 | 150, as given: the app's 100 at their pace |" in ChatPrompts.context(listOf(paced), emptyList(), emptyList(), now, LONDON, calibration = pace))
         assertTrue("- Homework | ×1.5 (from 6 timed)" in context, context)
         assertTrue("- Homework, Physics | ×1.25 (from 3 timed)" in context, context)
         // Nothing learned yet: said so, and the minutes as they are.
