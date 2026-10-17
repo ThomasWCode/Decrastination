@@ -13,8 +13,8 @@ import kotlin.test.assertTrue
 /**
  * Every schema the app sends, compiled by the API as the app's calls have it (docs/development.md):
  * the API refuses a schema whose grammar is too large, which no test can tell from the schema alone
- * ([SchemaLimitsTest]). A call a schema with one token out, about a cent each (one refused costs
- * nothing), so it runs only when asked, `-PcheckSchemas=true`, with the key in the environment:
+ * ([SchemaLimitsTest]). One call for each schema, with one token out: about a cent each (one refused
+ * costs nothing), so it runs only when asked, `-PcheckSchemas=true`, with the key in the environment:
  * after any change to a schema, before it's released.
  */
 class SchemaCompileTest {
