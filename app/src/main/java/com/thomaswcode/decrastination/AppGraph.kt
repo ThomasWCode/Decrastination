@@ -2007,11 +2007,12 @@ class AppGraph private constructor(context: Context) {
 
     /**
      * The chat's tick of [task]'s step [index], still [title]: its piece kept where the plan has one,
-     * today or another day (earning as a tick does), else ticked as on its sheet, where that can be.
+     * today or another day (earning as a tick does; in sittings, its last, which ticks it), else
+     * ticked as on its sheet, where that can be.
      */
     private suspend fun tick(task: TaskItem, index: Int, title: String): Boolean {
         val plan = plan()
-        val piece = (plan.todaySlots.mapNotNull { it.chunk } + plan.ordered).firstOrNull { it.taskId == task.id && it.stepIndex == index }
+        val piece = (plan.todaySlots.mapNotNull { it.chunk } + plan.ordered).firstOrNull { it.taskId == task.id && it.ticks == index }
         return if (piece != null) focus.keepSlot(piece.key) else runCatching { focus.tickBlock(task.id, index, title) }.getOrDefault(false)
     }
 

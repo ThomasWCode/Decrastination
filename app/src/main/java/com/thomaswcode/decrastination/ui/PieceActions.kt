@@ -42,14 +42,15 @@ class PhotoCheck(val available: Boolean, val checking: Boolean, val take: (Chunk
 
 /**
  * A piece of the plan being photographed: its task, its step's place and name (or "part 1 of 2"),
+ * and which of the step's sittings it is ([after], as [com.thomaswcode.decrastination.core.Sitting.after]);
  * the pages taken so far (AI-17), and when the first was: a slot of its key kept before then isn't
  * the one the photos show.
  */
-private data class PhotoPiece(val taskId: String, val stepIndex: Int?, val step: String?, val pages: Int = 0, val takenAt: Long? = null)
+private data class PhotoPiece(val taskId: String, val stepIndex: Int?, val step: String?, val pages: Int = 0, val takenAt: Long? = null, val after: Int? = null)
 
 private val PIECE = Saver<PhotoPiece?, ArrayList<String?>>(
-    save = { p -> p?.let { arrayListOf(it.taskId, it.stepIndex?.toString(), it.step, it.pages.toString(), it.takenAt?.toString()) } },
-    restore = { saved -> PhotoPiece(saved[0]!!, saved[1]?.toInt(), saved[2], saved.getOrNull(3)?.toInt() ?: 0, saved.getOrNull(4)?.toLongOrNull()) },
+    save = { p -> p?.let { arrayListOf(it.taskId, it.stepIndex?.toString(), it.step, it.pages.toString(), it.takenAt?.toString(), it.after?.toString()) } },
+    restore = { saved -> PhotoPiece(saved[0]!!, saved[1]?.toInt(), saved[2], saved.getOrNull(3)?.toInt() ?: 0, saved.getOrNull(4)?.toLongOrNull(), saved.getOrNull(5)?.toIntOrNull()) },
 )
 
 /**
@@ -82,7 +83,7 @@ fun rememberPhotoCheck(graph: AppGraph, activity: Activity, plan: Plan, say: (ta
     fun check(wanted: PhotoPiece) {
         photoFor = null
         val pages = (1..wanted.pages).map(::page)
-        val piece = plan.chunksOf(wanted.taskId).firstOrNull { it.stepIndex == wanted.stepIndex && it.step == wanted.step }
+        val piece = plan.chunksOf(wanted.taskId).firstOrNull { it.stepIndex == wanted.stepIndex && it.step == wanted.step && it.sitting?.after == wanted.after }
         if (piece == null || checker == null) {
             pages.forEach { it.delete() }
             if (piece == null) say(wanted.taskId, "That piece has changed since the photo was taken (done, or planned again), so it wasn't checked.")
@@ -139,7 +140,7 @@ fun rememberPhotoCheck(graph: AppGraph, activity: Activity, plan: Plan, say: (ta
     }
     return PhotoCheck(checker != null, running != null) { piece ->
         (1..PhotoChecker.MAX_PAGES).forEach { page(it).delete() }
-        photoFor = PhotoPiece(piece.taskId, piece.stepIndex, piece.step)
+        photoFor = PhotoPiece(piece.taskId, piece.stepIndex, piece.step, after = piece.sitting?.after)
         launcher.launch(uriOf(page(1)))
     }
 }

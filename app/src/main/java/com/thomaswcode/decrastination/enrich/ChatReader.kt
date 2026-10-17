@@ -397,7 +397,7 @@ object ChatPrompts {
                     pieces.mapNotNull { it.availableAt }.minOrNull()?.let { "can't start before ${at(it)}" },
                 )
                 // Why each piece is on its day, as a short code (PL-07): the sheet's sentence would take the plan's room.
-                val parts = pieces.joinToString { "${it.step?.take(MAX_TITLE) ?: "all of it"} (${it.minutes} min) [why: ${it.why.name.lowercase()}]" }
+                val parts = pieces.joinToString { "${it.shown?.take(MAX_TITLE) ?: "all of it"} (${it.minutes} min) [why: ${it.why.name.lowercase()}]" }
                 appendLine("  - $id | ${first.title.take(MAX_TITLE)} | ${pieces.sumOf { it.minutes }} min: $parts | ${flags.joinToString(" | ")}")
             }
         }
