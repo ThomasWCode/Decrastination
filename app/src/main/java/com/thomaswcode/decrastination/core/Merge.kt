@@ -7,7 +7,7 @@ package com.thomaswcode.decrastination.core
  *   minutes worked, sub-steps, estimates, the enrichment, laid over the fresh values again). One the
  *   source lists as finished becomes [Status.Done].
  * - An open task the source no longer lists is done: handed in, ticked, or an email unstarred
- *   (PLAN.md §1; DX-03: the star is the state, so an email's blocks or its reading still to come
+ *   (docs/spec/sources.md; DX-03: the star is the state, so an email's blocks or its reading still to come
  *   don't keep it). A [TaskItem.derived] one (the Anki quota) was missed instead: only its counts
  *   can say it's done.
  * - A done task the source lists again is open again: a hand-in undone, an email starred again.

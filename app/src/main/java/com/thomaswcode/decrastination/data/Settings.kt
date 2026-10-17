@@ -45,7 +45,7 @@ data class Settings(
     val lunchWindows: List<Window> = listOf(Window(13 * 60 + 15, 13 * 60 + 40), Window(13 * 60 + 55, 14 * 60 + 35)),
     /** A school window with less free than this left isn't used. */
     val minSchoolSlotMin: Int = 15,
-    /** How long a piece of work is cut into, when it has no steps of its own (docs/scheduler.md §3): 30 since PL-12. */
+    /** How long a piece of work is cut into, when it has no steps of its own (docs/spec/planner.md): 30 since PL-12. */
     val boxMin: Int = 30,
     /** The break after each piece's slot (PL-12), and the longer one once this much work has gone without one. */
     val slotBreakMin: Int = 5,
@@ -99,7 +99,7 @@ data class Settings(
     val teamsSyncEveryMin: Int = 180,
 
     /**
-     * Claude for email triage, assignment steps and estimates (docs/data-sources.md §5): built, but
+     * Claude for email triage, assignment steps and estimates (docs/spec/readings.md): built, but
      * off until you switch it on and give it an API key. Without it, the rules do what they can.
      */
     val aiEnabled: Boolean = false,
@@ -124,7 +124,7 @@ data class Settings(
     /** The Sunday check-in's reminder; the week's review follows it. */
     val checkInMin: Int = 19 * 60 + 30,
 
-    /** Anti-tamper (docs/scheduler.md §6) is built but off until you arm it (Q20). */
+    /** Anti-tamper (docs/spec/blocking-and-protection.md) is built but off until you arm it (Q20). */
     val armed: Boolean = false,
     /** How long a change that loosens blocking waits, once armed. */
     val loosenDelayHours: Int = 24,

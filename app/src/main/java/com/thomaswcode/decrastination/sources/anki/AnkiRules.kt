@@ -42,7 +42,7 @@ data class AnkiDay(
 )
 
 /**
- * The Anki tasks (docs/data-sources.md §3), from the deck counts, pure:
+ * The Anki tasks (docs/spec/sources.md), from the deck counts, pure:
  *
  * - **The daily quota**: every due review, plus the new cards of the lowest-numbered section deck
  *   of the current textbook that still has some (your answer, 7 Oct; the textbook, Q18). Due at

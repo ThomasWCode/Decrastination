@@ -18,7 +18,7 @@ import kotlinx.coroutines.withContext
 
 /**
  * The Teams Assignments widget's provider (its `provider/AssignmentsContract.kt`, 0.3.0 on;
- * docs/data-sources.md §1). Signature-protected: granted only because this app is signed with
+ * docs/spec/sources.md). Signature-protected: granted only because this app is signed with
  * the widget's key. Queries and calls block while the widget's process starts, so they run off
  * the main thread.
  */

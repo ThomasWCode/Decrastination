@@ -11,7 +11,7 @@ import java.time.LocalDate
 import kotlin.random.Random
 
 /**
- * What the app learns from how the work actually went (docs/scheduler.md §5, items 1–3), worked out
+ * What the app learns from how the work actually went (docs/spec/learning.md, items 1–3), worked out
  * afresh from the activity log each time, so there's no hidden state to drift: replaying the same
  * log gives the same calibration. Every value is bounded.
  */

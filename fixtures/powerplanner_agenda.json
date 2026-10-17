@@ -1,5 +1,5 @@
 {
- "_about": "Power Planner web API responses captured on 8 Oct 2026 by scripts/powerplanner_probe.py --save, redacted for a public repo: real field names, types, ids and dates; the personal task renamed; of the 18 classes only German, with its four timetable slots and no rooms. See docs/phase0-findings.md section 2.",
+ "_about": "Power Planner web API responses captured on 8 Oct 2026 by scripts/powerplanner_probe.py --save, redacted for a public repo: real field names, types, ids and dates; the personal task renamed; of the 18 classes only German, with its four timetable slots and no rooms. See docs/spec/sources.md.",
  "selectedSemester": {
   "SelectedSemesterId": "5e905d29-0cdc-46ac-99a5-e0779faa1af1",
   "Error": null

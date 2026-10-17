@@ -52,7 +52,7 @@ import com.thomaswcode.decrastination.ui.MainActivity
 import com.thomaswcode.decrastination.ui.OpenTaskActivity
 
 /**
- * The next thing to do, on the home screen (PLAN.md Phase 2): a "Do:" line, its badge and
+ * The next thing to do, on the home screen: a "Do:" line, its badge and
  * minutes, a "Then:" line, and ↻. A tap opens the task where it lives. It grows from a card
  * holding the next thing at 2×1 to that card over the rest of today's list at 4×3 and up.
  */

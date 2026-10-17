@@ -13,7 +13,7 @@ import java.util.Locale
 import kotlinx.serialization.Serializable
 
 /**
- * The weekly review as the model sees it (docs/scheduler.md §5, item 7): the week's log, your
+ * The weekly review as the model sees it (docs/spec/learning.md, item 7): the week's log, your
  * answers, and the calibration in; a note and changes to a few bounded settings out. Pure.
  */
 object ReviewInput {

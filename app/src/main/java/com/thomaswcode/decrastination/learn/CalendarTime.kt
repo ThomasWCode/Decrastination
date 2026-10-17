@@ -29,7 +29,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * The phone's calendar as busy time (Q7, PLAN.md Phase 5): the next fortnight's events, judged one
+ * The phone's calendar as busy time (Q7, docs/spec/slots-and-calendar.md): the next fortnight's events, judged one
  * by one ([EventJudge]), given to the planner; an all-day event the rules can't judge is asked
  * about once, in a notification, within the week before it.
  */

@@ -72,7 +72,7 @@ data class Conversation(
 }
 
 /**
- * Your starred emails as tasks, one per conversation (docs/data-sources.md §4). A conversation is
+ * Your starred emails as tasks, one per conversation (docs/spec/sources.md). A conversation is
  * a task while any message of it is starred, and every message of it is read, starred or not, yours
  * included (the owner, 14 Oct): the star is the decision, and the rest of the conversation is what
  * it's about. Unstarred (or deleted), it's done; starred again, the same task reopens. Pure, for the
@@ -502,7 +502,7 @@ object StarredConversations {
 }
 
 /**
- * Gmail over IMAP with an app password (docs/data-sources.md §4), read-only: see [ImapClient].
+ * Gmail over IMAP with an app password (docs/spec/sources.md), read-only: see [ImapClient].
  * A read examines All Mail, finds the starred messages in it, and lists every message of their
  * conversations, so a reply of yours or an earlier message nobody starred is read too (DX-03). A
  * conversation with nothing new in it is built from what's stored, without fetching its envelopes

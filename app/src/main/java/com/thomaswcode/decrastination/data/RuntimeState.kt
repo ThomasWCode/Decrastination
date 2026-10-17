@@ -63,7 +63,7 @@ data class RuntimeState(
     val uptimeMark: Uptime? = null,
     /** What the model has cost this month. */
     val aiUsage: AiUsage = AiUsage(),
-    /** What the app has learned about how long things take you (docs/scheduler.md §5). */
+    /** What the app has learned about how long things take you (docs/spec/learning.md). */
     val calibration: Calibration = Calibration(),
     /** Your answers about calendar events, by name: "free", "busy" or "load:<minutes>" (Q7). */
     val eventAnswers: Map<String, String> = emptyMap(),
@@ -131,7 +131,7 @@ data class ProtectionState(
 )
 
 /**
- * What happened, for calibration, the weekly review and the stats (docs/scheduler.md §5): slots
+ * What happened, for calibration, the weekly review and the stats (docs/spec/learning.md): slots
  * kept and missed, completions, blocks and protection lapses. Kept in `log.json`, trimmed to
  * [KEEP_DAYS] days.
  */

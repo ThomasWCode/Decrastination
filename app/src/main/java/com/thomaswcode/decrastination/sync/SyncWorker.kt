@@ -21,7 +21,7 @@ import java.util.concurrent.TimeUnit
 import com.thomaswcode.decrastination.notify.Notify
 
 /**
- * Reads the sources: every 15 minutes, WorkManager's shortest period (PLAN.md §4), and at once
+ * Reads the sources: every 15 minutes, WorkManager's shortest period (docs/spec/sources.md), and at once
  * when asked ([syncNow]). No network constraint: Teams and Anki are read on the phone itself, and
  * a source that needs the network and hasn't got it just records the failure until the next run.
  *

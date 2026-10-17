@@ -60,7 +60,7 @@ import kotlinx.coroutines.withContext
 enum class SetupPart { Saved, Sources, Claude, Phone, Backup }
 
 /**
- * The setup checklist (PLAN.md Phase 1): what each part of the app needs, and whether it has it.
+ * The setup checklist: what each part of the app needs, and whether it has it.
  * On its own page ([SetupActivity]), from the attention mark and on the first run (UI-18); [parts]
  * of it on Settings' pages, where the page scrolls ([scroll] false).
  */

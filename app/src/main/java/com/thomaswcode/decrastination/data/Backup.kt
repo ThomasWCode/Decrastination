@@ -21,7 +21,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
 /**
- * What a backup keeps (PLAN.md Phase 6): the settings, the activity log, what the app has learned,
+ * What a backup keeps (docs/spec/storage-and-backups.md): the settings, the activity log, what the app has learned,
  * your answers about calendar events and, since 1.7.0, your instructions in use: what the sources
  * can't give back. Never the passwords or keys, which stay in this phone's encrypted store, nor the
  * tasks, which the next sync reads again.

@@ -42,7 +42,7 @@ import com.thomaswcode.decrastination.ui.AppTheme
 import com.thomaswcode.decrastination.ui.Format
 import kotlinx.coroutines.launch
 
-/** The Sunday check-in's reminder (docs/scheduler.md §5, item 6). */
+/** The Sunday check-in's reminder (docs/spec/learning.md, item 6). */
 object CheckIns {
     const val ID = 4002
 

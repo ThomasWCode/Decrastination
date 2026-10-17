@@ -13,7 +13,7 @@ import java.time.ZoneId
 import java.util.Locale
 
 /**
- * What the Stats tab shows (PLAN.md Phase 6), from the activity log: each recent day's finished
+ * What the Stats tab shows (docs/spec/learning.md), from the activity log: each recent day's finished
  * work, minutes of kept slots (LR-09) and blocks, the period's totals, and the calibration in
  * words. Pure, for the tests.
  */

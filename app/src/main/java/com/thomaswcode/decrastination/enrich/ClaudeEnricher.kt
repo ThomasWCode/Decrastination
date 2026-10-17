@@ -17,7 +17,7 @@ import java.time.Duration
 import java.time.ZoneId
 
 /**
- * The model's enrichment (docs/data-sources.md §5): Claude Opus 5.5 at high effort, its answer held
+ * The model's enrichment (docs/spec/readings.md): Claude Opus 5.5 at high effort, its answer held
  * to a JSON schema ([Prompts]), with the API's server-side fallback on for a request the model's
  * safety classifiers decline. Off until switched on in Settings; [AiUsage] keeps it under the
  * monthly cap, from each call's token counts ([Pricing]). [baseUrl] points it elsewhere: the tests'
