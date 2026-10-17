@@ -837,6 +837,26 @@ class PlannerTest {
     }
 
     @Test
+    fun `overdue work goes to a day or a time you give it, any from now, and stays overdue`() {
+        // D-30. Due Wednesday noon, Thursday 17:00 now, put on Saturday: all of it Saturday, overdue there.
+        val essay = task("essay", Fixtures.at("2026-10-07T12:00"), effort = 90).copy(userOnDay = "2026-10-10")
+        val onDay = plan(listOf(essay), "2026-10-08T17:00")
+        assertEquals(listOf(LocalDate.parse("2026-10-10")), onDay.dayOf("essay"))
+        assertTrue(onDay.chunksOf("teams:essay").all { it.overdue }, "${onDay.chunksOf("teams:essay").map { it.overdue }}")
+        // Due last Friday, Monday 17:00 now, its next piece at 19:30 on Tuesday: then, the rest no earlier.
+        val late = task("late", Fixtures.at("2026-10-09T23:59"), effort = 90).copy(userAtTime = Fixtures.at("2026-10-13T19:30"))
+        val timed = Planner.plan(windowed(listOf(late), "2026-10-12T17:00"))
+        val slot = timed.bucket(tuesday)!!.slotOf(timed.chunksOf("teams:late").first())!!
+        assertEquals(Fixtures.at("2026-10-13T19:30"), slot.start)
+        assertTrue(slot.pinned)
+        val days = timed.buckets.flatMap { b -> b.chunks.filter { it.taskId == "teams:late" }.map { b.date } }
+        assertTrue(days.isNotEmpty() && days.all { it >= tuesday }, "$days")
+        assertTrue(timed.chunksOf("teams:late").all { it.overdue })
+        // A move by hand to a time from now is kept as an instruction's is (Instructions.latePin).
+        assertNull(Planner.pinProblem(late, Fixtures.at("2026-10-13T19:30"), Fixtures.at("2026-10-12T17:00"), LONDON))
+    }
+
+    @Test
     fun `work you put on a day has its time before work due that day`() {
         // Thursday 17:00, 300 minutes left: five hours due tonight, and an hour you put on today.
         val tonight = task("tonight", Fixtures.at("2026-10-08T23:59"), effort = 300)

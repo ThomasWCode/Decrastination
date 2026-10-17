@@ -135,5 +135,5 @@ It holds Felix's changes, the quick changes made on a task's sheet without Claud
 - `InstructionPrompts` reads your own words about a task, an event, a day or nothing in particular into changes of the chat's types, given the open tasks and the fortnight's events (`InstructionPrompts.describe`).
 - It reads an instruction you write again, and your answer to Felix's question about a task.
 - `InstructionAnswers.parse` checks the reading: if one change can't be made, none are, and it says why.
-- A reading is applied as soon as it's read, armed or not, and listed for you to check and take back. One that would make tasks wait for each other in a circle, put work after its deadline, or leave one of your own as the form wouldn't take it is marked unclear instead.
+- A reading is applied as soon as it's read, armed or not, and listed for you to check and take back. One that would make tasks wait for each other in a circle, put work after a deadline still to come (overdue work can go to any time, D-30), or leave one of your own as the form wouldn't take it is marked unclear instead.
 - It's never told your pace, and its schema has no `paced`: its totals are always your own reckoning (`Change.pacedFrom` empty).
