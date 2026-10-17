@@ -763,8 +763,9 @@ class Focus(
                         kind = task.kind,
                         className = task.className,
                         // What was left of it when first seen: progress it already had isn't work done here,
-                        // nor is vocabulary its decks hold (their own records learn from it).
-                        estimateMin = (task.effortMin * (1 - task.sourceProgress.coerceIn(0.0, 1.0)) - deckMinutes(task)).roundToInt().coerceAtLeast(1),
+                        // nor is vocabulary its decks hold (their own records learn from it). A total Felix
+                        // worked out at your pace, against the app's estimate it came from (17 Oct; #50's review).
+                        estimateMin = ((if (task.pacedTeaches) task.userEffortPacedFrom ?: task.appEffortMin else task.effortMin) * (1 - task.sourceProgress.coerceIn(0.0, 1.0)) - deckMinutes(task)).roundToInt().coerceAtLeast(1),
                         workedMin = worked(task),
                         // The deadline in force when it was done (a plan's gone by gives way to the real one
                         // behind it); one split into dated blocks with none of its own, its last block's.
@@ -776,7 +777,9 @@ class Focus(
                         byHand = handMinutes(task) > 0,
                         // Work a photo check found done: as minutes counted before (BL-08's), or a slot it kept.
                         photo = photoMinutes(task) > 0 || state.slots.any { it.taskId == task.id && it.photo && it.at >= since(task) },
-                        yourEstimate = task.yourMinutes,
+                        // Your own reckoning teaches the app's estimates nothing; a total at your pace, of the
+                        // task as it was when paced, still does.
+                        yourEstimate = task.yourMinutes && !task.pacedTeaches,
                     )
                 },
             ).trimmed(now)

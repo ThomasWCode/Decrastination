@@ -103,6 +103,10 @@ data class TaskItem(
     val aiEffortMin: Int? = null,
     /** Your estimate of the whole task, from an instruction ([ChangeType.Minutes]), which beats every other. */
     val userEffortMin: Int? = null,
+    /** [userEffortMin] is the app's estimate at your pace, as Felix worked it out from this estimate of the app's ([Change.pacedFrom], [pacedMinutes]). */
+    val userEffortPacedFrom: Int? = null,
+    /** The task's content when it was paced ([Change.pacedHash], [pacedTeaches]). */
+    val userEffortPacedHash: String? = null,
     /** How far the source says it is (Power Planner's percent complete), 0 to 1. */
     val sourceProgress: Double = 0.0,
     /**
@@ -251,6 +255,22 @@ data class TaskItem(
      * not scaled by what the app has learned of its own estimates.
      */
     val yourMinutes: Boolean get() = userEffortMin != null || source == Source.Own
+
+    /**
+     * Your minutes are the app's own estimate at your pace, as Felix worked them out to size its
+     * steps (your call, 17 Oct), not your own reckoning: planned as given, like any of yours. Only
+     * where the app made the estimate: never a task of your own.
+     */
+    val pacedMinutes: Boolean get() = userEffortPacedFrom != null && userEffortMin != null && source != Source.Own
+
+    /**
+     * What's finished teaches the pace, as the app's own tasks do, measured against the estimate
+     * Felix worked from ([userEffortPacedFrom]): your minutes [pacedMinutes], of the task as it was
+     * then (#50's review). Read again for newer prompts alone (or *Read again*), its content's the
+     * same and the estimate he worked from stands, whatever the new one; once its content has
+     * changed (new instructions, a new email), the work may have too, and it's as your own.
+     */
+    val pacedTeaches: Boolean get() = pacedMinutes && userEffortPacedFrom != null && userEffortPacedHash != null && userEffortPacedHash == Enrichments.inputHash(this)
 
     /**
      * Its steps are yours: typed into a task of your own, or given any task by you or Felix (an

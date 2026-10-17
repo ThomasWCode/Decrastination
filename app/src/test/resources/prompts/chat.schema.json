@@ -301,6 +301,9 @@
                             ],
                             "additionalProperties": false
                         }
+                    },
+                    "paced": {
+                        "type": "boolean"
                     }
                 },
                 "required": [
@@ -316,7 +319,8 @@
                     "time",
                     "endTime",
                     "title",
-                    "steps"
+                    "steps",
+                    "paced"
                 ],
                 "additionalProperties": false
             }

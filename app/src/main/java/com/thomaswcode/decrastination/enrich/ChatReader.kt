@@ -83,7 +83,7 @@ object ChatPrompts {
         1. Add tasks of their own (newTasks): something to do that isn't listed ("write my UCAS statement by 1 December", "buy mum a present before Sunday"). Give a short title in their words; kind: Homework, Revision, Admin, or Event for something that happens at a time (an appointment, a match); subject if it's for one (else an empty string); dueDate and dueTime if they gave them (an event's start; no time means the end of that day); minutes for the whole thing (your best estimate if they didn't say, and say so in your reply); startDate if it can't be started before a day; notes only for something worth keeping (else an empty string); and steps only for a big task worth splitting, each with minutes (adding up to the task's) and its own dates where it has them.
         2. Change their tasks and days (changes), with these:
 """ + InstructionPrompts.CHANGE_TYPES.prependIndent("        ") + """
-        Minutes you set (a new task's, a Minutes change, each step's) are planned exactly as you set them, never stretched by the student's pace: that's only for the app's own estimates (the context gives their pace, and what each task's minutes come to in the plan by it). So where you estimate, allow for their pace (steps for a task the app estimated, at their pace, come with a Minutes change for the new total); where they say how long something takes, use theirs.
+        Minutes you set (a new task's, a Minutes change, each step's) are planned exactly as you set them, never stretched by the student's pace: that's only for the app's own estimates (the context gives their pace, and what each task's minutes come to in the plan by it). So where you estimate, allow for their pace: steps for a task the app estimated, at their pace, come with a Minutes change for the new total with paced true, as it's the app's estimate at their pace, so their pace is still learned from it. Where they say how long something takes, use theirs, paced false, as for every other change.
         3. Answer questions about their work from what you're given, briefly: what's due when from the task list; what's on a day, how full it is, what to do next and why something isn't planned from the plan. The plan is what the app has them do and shows them, so say what it says rather than planning the work again yourself. The context gives the time now: a deadline later today is still ahead ("due at 16:00 today"), not past, and a slot marked past has gone by; say "overdue" only where the plan marks it so.
         4. Remember (memories): a fact about the student worth keeping for later (a preference, a pattern, something about their week: "football is on Tuesdays"), with a short topic, so a newer fact on the same topic replaces it; or, kind "rule", a standing instruction about how you should behave ("don't message before 8", "be blunter"). To forget one, give its topic (a rule's own words) and an empty text. Busy times, limits and days off are changes, not memories; most messages need none.
         5. Act (actions): tickStep when the student says a step is done, untickStep when one ticked isn't (taskId, and stepIndex from the list's steps); done when they've finished a task of their own (from Yours), or one whose tick finishes it; reopen for one of theirs finished by mistake (from the finished list); delete for a task of their own they no longer want (another source's they can only say isn't a task: NotATask); open to show them a task; setting to change one of the settings listed with their values (taskId empty, setting its name, value as the list writes it: a number, a time as HH:MM, hours as HH:MM-HH:MM). stepIndex is -1 but for steps, setting and value empty but for settings. A task from Teams, Power Planner, Gmail or Anki is done when its source says so (handed in, archived, studied), so it can't be marked done. Most messages need none.
@@ -134,10 +134,17 @@ object ChatPrompts {
         "value" to STRING,
     )
 
+    /**
+     * A change as the chat gives it: the instructions' reader's, and whether a Minutes total is the
+     * app's estimate at the student's pace (17 Oct), so the pace still learns from the task. A plain
+     * boolean, so no union is added.
+     */
+    private val CHANGE = InstructionPrompts.obj(*(InstructionPrompts.CHANGE_FIELDS + ("paced" to mapOf("type" to "boolean"))).toTypedArray())
+
     val SCHEMA: Map<String, Any> = InstructionPrompts.obj(
         "reply" to STRING,
         "newTasks" to mapOf("type" to "array", "items" to TASK),
-        "changes" to mapOf("type" to "array", "items" to InstructionPrompts.CHANGE),
+        "changes" to mapOf("type" to "array", "items" to CHANGE),
         "memories" to mapOf("type" to "array", "items" to MEMORY),
         "suggestedReplies" to mapOf("type" to "array", "items" to STRING),
         "actions" to mapOf("type" to "array", "items" to ACTION),
@@ -242,6 +249,11 @@ object ChatPrompts {
             val pace = calibration?.multiplier(t.kind, t.className) ?: 1.0
             return when {
                 abs(pace - 1.0) < 0.005 -> "${t.effortMin}"
+                // Felix's paced total (#50's review): with the app's estimate now, where it's another, and
+                // whether the task has changed since, so he can set it again.
+                t.pacedMinutes -> "${t.effortMin}, as given: the app's ${t.userEffortPacedFrom} at their pace" +
+                    (if (t.appEffortMin != t.userEffortPacedFrom) ", which it now puts at ${t.appEffortMin}" else "") +
+                    (if (t.pacedTeaches) "" else ", the task changed since")
                 t.yourMinutes || t.yourSteps -> "${t.effortMin}, as given"
                 else -> "${t.effortMin}, planned as ${(t.effortMin * pace).roundToInt()} at their pace"
             }
