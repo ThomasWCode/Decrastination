@@ -16,6 +16,8 @@ import com.thomaswcode.decrastination.core.Why
 import java.time.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 /** The plan's slots written to the calendar (NF-07): what a write changes. */
 class SlotCalendarDiffTest {
@@ -117,5 +119,23 @@ class SlotCalendarDiffTest {
         assertEquals(listOf("Essay: Draft", "Outside"), desired.map { it.title })
         assertEquals("Teams. Spread over the 3 days to its deadline.", desired.first().description)
         assertEquals(listOf("teams:essay", null), desired.map { it.taskId })
+        // Every event's words are the app's: a copy that loses its marks is found by them.
+        assertTrue(desired.all { SlotCalendarDiff.looksWritten(it.description) })
+    }
+
+    @Test
+    fun `a copy of one of the app's events that lost its marks is deleted, found by its words`() {
+        val copy = Existing(9, "", five, five + 30 * 60_000L, "Essay", "Teams. Spread over the 3 days to its deadline.", marked = false)
+        val diff = SlotCalendarDiff.diff(listOf(want("a")), listOf(event(1, "a"), copy), mapOf(want("a").uri to five))
+        assertEquals(listOf(9L), diff.deletes.map { it.id })
+        assertEquals(emptyList(), diff.inserts)
+        assertEquals(emptyList(), diff.handMoves)
+        // The app's words: a piece's, its source first, or a break outside's; not an event of yours.
+        assertTrue(SlotCalendarDiff.looksWritten("Yours. Undated: fills spare time this week. First: Open your vocab book"))
+        assertTrue(SlotCalendarDiff.looksWritten("Power Planner. Due Mon 19 Oct."))
+        assertTrue(SlotCalendarDiff.looksWritten("A break outside."))
+        assertFalse(SlotCalendarDiff.looksWritten("Bring the signed form"))
+        assertFalse(SlotCalendarDiff.looksWritten("Teamsheet for Saturday"))
+        assertFalse(SlotCalendarDiff.looksWritten(""))
     }
 }
