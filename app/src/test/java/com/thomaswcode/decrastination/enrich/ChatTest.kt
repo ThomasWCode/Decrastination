@@ -104,6 +104,17 @@ class ChatTest {
     }
 
     @Test
+    fun `a new task's step with no minutes is no step, so the task is left out, saying why`() {
+        // An unused number is -1 in the schema; a step's minutes are always used, so -1 there is wrong.
+        val reading = parse(
+            """{"reply":"Added it.","newTasks":[{"title":"Essay","kind":"Homework","subject":"","dueDate":"2026-10-20","dueTime":"","startDate":"","minutes":60,"notes":"",
+              "steps":[{"title":"Draft","minutes":-1,"startDate":"","dueDate":""}]}],"changes":[],"memories":[],"suggestedReplies":[],"actions":[],"research":""}""",
+        )!!
+        assertTrue(reading.tasks.isEmpty())
+        assertTrue(reading.leftOut.single().startsWith("the task “Essay” (each step needs a name"), "${reading.leftOut}")
+    }
+
+    @Test
     fun `what can't be used is left out and said, the rest kept`() {
         val reading = parse(
             """{"reply":"Here you go.",
