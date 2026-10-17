@@ -57,7 +57,7 @@ The agent never taps the phone: where a check needs a tap (a notification openin
 | A move changes behaviour unseen | 3 | medium | medium | moves verbatim, with delegates; the plan snapshot; the phone check |
 | Clashes with the coming feature work | all | medium | low | features land between phases; small PRs; Felix's service moved after his features |
 | Paid calls in checks | all | low | low | `ai-check` against a local stub; a paid call only where the phase needs one, said in the PR |
-| The PC's memory during builds | all | low | low | one warm Gradle daemon and Kotlin's beside it, each capped, giving back memory it isn't using and stopping after 15 idle minutes (`gradle.properties`); `./gradlew --stop` after each session's builds |
+| The PC's memory during builds | all | low | low | one warm Gradle daemon and Kotlin's beside it, each capped, giving back memory it isn't using and stopping after an idle hour (`gradle.properties`); `./gradlew --stop` after each session's builds |
 | The phone's away (school days, 07:40–18:00) | all | certain | time | installs and checks in the evening or at the weekend |
 | Features wait too long | all | medium | medium | the lighter route: Phases 0–2 first (the chat work's ground and the gateway), the rest between features |
 
