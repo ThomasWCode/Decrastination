@@ -2,7 +2,9 @@
 
 Everything the app sends the model as Felix, call by call, and how it changes with the circumstances. How he behaves is in [felix.md](felix.md).
 
-The exact prompts and schemas are the golden copies in [`app/src/test/resources/prompts/`](../../app/src/test/resources/prompts/), which `GoldenPromptsTest` holds the code to; the prompts below are those copies as of 3.2.0, with his default name and line. Every other example here is made up, as the repository is public, but each was made by the app's own code from that made-up data, so its shape is exact.
+The exact prompts and schemas are the golden copies in [`app/src/test/resources/prompts/`](../../app/src/test/resources/prompts/), which `GoldenPromptsTest` holds the code to; the prompts below are those copies, with his default name and line. Every other example here is made up, as the repository is public, but each was made by the app's own code from that made-up data, so its shape is exact.
+
+`FelixInputsDocTest` writes every example and prompt here, each into the fence after its `<!-- generated: … -->` or `<!-- golden: … -->` mark, and fails when one is out of date. After a change to what Felix is sent, `./gradlew testDebugUnitTest --tests '*FelixInputsDocTest*' -PupdateDocs=true` writes them again; the words around them are edited here.
 
 ## The calls
 
@@ -36,6 +38,7 @@ Who you are, the second system block of the chat and of his own messages (AI-05,
 
 The part before the standing instructions is at most 2,000 characters, cut from the end (your own lines first), and the whole at most 16,000. For example:
 
+<!-- generated: profile -->
 ```text
 About the student
 Year 12 at a UK sixth form. Subjects: Physics (12X/Ph1), Maths (12X/Ma1), Chemistry (12X/Ch1).
@@ -99,7 +102,7 @@ What the app knows when you send (`ChatPrompts.context`):
 - **The changes in use**, in words.
 - **Your own tasks finished in the last week**, up to 15, to open again.
 - **The settings he may change**, with their values now (`FelixSettings`).
-- **The tasks' own text** (D-93, `TaskText`): each open task's (but Anki's counts) that has any, by the deadline in force: its source, an email's sender, its attachments' names and its links, then its text (an assignment's instructions, an email's conversation, a planner item's details, your notes), at most 600 characters; 12,000 characters in all. A longer text is its reading's summary of all of it: the reading writes one for a text over about 600 characters, at no extra call ([readings.md](readings.md#the-three-jobs)). With none (Claude off when it was read, or read before summaries), its start and its end, saying how much of the middle was left out: a conversation is kept oldest first, so its end holds the newest replies, where a changed date or a new ask turns up. The task in full and the tasks he reads are whole up to 8,000 characters; past that, the summary first, then the start and end. It comes last, so a context too long for its room loses it first.
+- **The tasks' own text** (D-93, `TaskText`): each open task's (but Anki's counts) that has any, by the deadline in force: its source, an email's sender, its attachments' names and its links, then its text (an assignment's instructions, an email's conversation, a planner item's details, your notes), at most 600 characters; 12,000 characters in all. A longer text is its reading's summary of all of it: the reading writes one for a text over about 600 characters, at no extra call ([readings.md](readings.md#the-three-jobs)). A text past the 16,000 characters a reading sees has its summary said to be of its start, with its end after it. With none (Claude off when it was read, or read before summaries), its start and its end, saying how much of the middle was left out: a conversation is kept oldest first, so its end holds the newest replies, where a changed date or a new ask turns up. The task in full and the tasks he reads are whole up to 8,000 characters; past that, the summary first, then the start and end. It comes last, so a context too long for its room loses it first.
 
 Not sent: a task's reading, but as its minutes and steps; a finished task's text.
 
@@ -122,12 +125,14 @@ A Tuesday at 17:20. The evening before, you'd asked what was due, and his answer
 
 **Yours, the evening before:**
 
+<!-- generated: chat turn 0: You -->
 ```text
 What's due this week?
 ```
 
 **His:**
 
+<!-- generated: chat turn 1: Claude -->
 ```text
 The worksheet's due Thursday morning and the vectors on Friday. I've put the vectors' first half on Wednesday at 18:00.
 [Suggested: “Vectors exercise 4B” at 18:00 on Wed 14 Oct — made at once]
@@ -135,6 +140,7 @@ The worksheet's due Thursday morning and the vectors on Friday. I've put the vec
 
 **Yours, now** (the context, the plan, then your words; the plan's last days, all "nothing planned", are cut here):
 
+<!-- generated, quiet days folded: chat turn 2: You -->
 ```text
 Today: Tuesday 13 October 2026, 17:20 (Europe/London)
 
@@ -184,7 +190,7 @@ Settings you can change (setting | what it is | its value now):
 - ankiDeadlineMin | Anki deadline | 21:30
 - ankiTextbook | Current German textbook | 1
 
-The tasks' own text (id | from, and what comes with it; then its text: an assignment's instructions, an email's conversation, a planner item's details, their notes), each at most 600 characters: a longer one as its reading's summary of all of it, or else its start and end (an email's newest replies are at its end):
+The tasks' own text (id | from, and what comes with it; then its text: an assignment's instructions, an email's conversation, a planner item's details, their notes), each at most 600 characters: a longer one as its reading's summary (each says of how much), or else its start and end (an email's newest replies are at its end):
 - teams:t1 | Teams; links: https://example.org/rates-sheet
     Answer questions 1 to 8 on the sheet. For question 5, use the results table from Monday's practical.
     Show your working for the calculations.
@@ -228,6 +234,7 @@ The task this message is about, powerplanner:p1 “Vectors exercise 4B” (Power
 
 **A reply from his notification** starts your turn with his message (the context and the plan as above):
 
+<!-- generated: reply turn 0: You -->
 ```text
 (the context, as above)
 
@@ -240,8 +247,9 @@ Give me ten minutes
 
 ### Reading a task in full
 
-Where he needs more of a task's text than the context gives, his answer names it in `details` (three at most, listed and open, never the one the message is about, which came whole) and says only that he's reading it. He's then asked again, as before, with their whole texts after your words (8,000 characters each, 16,000 in all), and that answer is his, with "Read in full: …" under it. Asked for a web search as well, he's asked once with both. He's asked again only once a message:
+Where he needs more of a task's text than the context gives, his answer names it in `details` (three at most, listed and open, never the one the message is about, which came whole) and says only that he's reading it. He's then asked again, as before, with their whole texts after your words (each an even share of 16,000 characters, 8,000 at most), and that answer is his, with "Read in full: …" under it. Asked for a web search as well, he's asked once with both. Where the texts show a need for a search, or a search for a text, he's asked once more, never more (`ChatRounds`), and never for the same search or text twice. What he read is kept till he's answered with it, so a failed answer is asked again with it, not for it. Asked again with the trip's form:
 
+<!-- generated: chat turn with read -->
 ```text
 (the context)
 
@@ -284,6 +292,7 @@ Everything in it is made at once, with an Undo (D-60); what can't be used is sai
 
 With searches off, its item 6 reads instead: "6. research is always an empty string: you can't look things up."
 
+<!-- golden: chat.txt -->
 ```text
 You are Felix: a strict friend who knows your week and wants the work done, and this is the chat in a UK sixth-form student's (Year 12) planner app. The app gathers their homework (Teams), their own planner (Power Planner), emails they've starred (Gmail), German vocabulary (Anki) and tasks they add themselves; plans the work into the evenings before each is due, around their calendar; and blocks distracting apps while work is due.
 
@@ -325,6 +334,7 @@ When the chat's answer gives `research`, and Settings → Felix has searches on 
 - **Tool**: the API's web search, at most three searches, from the UK, in your time zone. No schema: it answers in words, of which 3,000 characters are kept, with the first four pages it read.
 - Not cached: its few lines are under the cache's least.
 
+<!-- generated: research user -->
 ```text
 Today: Tuesday 13 October 2026
 The student wrote: “What happens at the open day on Saturday?”
@@ -333,6 +343,7 @@ Look up: the open day's programme and times
 
 The chat is then asked again, as before, with what it found after your words; its answer is his:
 
+<!-- generated: chat turn with research -->
 ```text
 (the context)
 
@@ -350,6 +361,7 @@ From: Open day programme
 
 The search's prompt:
 
+<!-- generated: research system -->
 ```text
 You look things up on the web for the assistant in a UK sixth-form student's (Year 12) planner app, to plan their work by. Search for what it asks (a few searches at most), then answer in plain UK English in at most 15 short lines: the facts that matter for planning the work (what's asked of them, its dates and deadlines, its rules, word or time limits, what they'll need, how it's judged), each as you found it, and say where something is unsure or wasn't found. Give a date as its day, month and year. Don't plan the work or give advice, don't make anything up, and never search for anything about the student themselves.
 ```
@@ -396,6 +408,7 @@ All on the same made-up Tuesday, planned at 16:50: the worksheet's first piece i
 
 **SlotStart**, ten minutes into the worksheet's slot, nothing done on it:
 
+<!-- generated: felix SlotStart -->
 ```text
 Reason: SlotStart
 Now: Tuesday 13 October 2026, 17:00
@@ -413,6 +426,7 @@ Recent, oldest first:
 
 **SlotEnd**, the slot gone by undone:
 
+<!-- generated: felix SlotEnd (missed) -->
 ```text
 Reason: SlotEnd
 Now: Tuesday 13 October 2026, 17:26
@@ -429,6 +443,7 @@ Recent, oldest first:
 
 **SlotEnd**, the piece ticked, but its 30 minutes are over the 20 that need a photo to earn (`photoFromMin`):
 
+<!-- generated: felix SlotEnd (kept, photo needed) -->
 ```text
 Reason: SlotEnd
 Now: Tuesday 13 October 2026, 17:22
@@ -445,6 +460,7 @@ Recent, oldest first:
 
 **SlotKept**, with 15 minutes of free time now:
 
+<!-- generated: felix SlotKept -->
 ```text
 Reason: SlotKept
 Now: Tuesday 13 October 2026, 17:21
@@ -462,6 +478,7 @@ Recent, oldest first:
 
 **DayDone**, today's last slot kept, at 21:40:
 
+<!-- generated: felix DayDone -->
 ```text
 Reason: DayDone
 Now: Tuesday 13 October 2026, 21:40
@@ -478,6 +495,7 @@ Recent, oldest first:
 
 **Morning**, at 07:00 (planned then, the day's slots start at 16:45):
 
+<!-- generated: felix Morning -->
 ```text
 Reason: Morning
 Now: Tuesday 13 October 2026, 07:00
@@ -490,6 +508,7 @@ Recent, oldest first:
 
 **Question**, a reading's question about the worksheet:
 
+<!-- generated: felix Question -->
 ```text
 Reason: Question
 Now: Tuesday 13 October 2026, 17:00
@@ -507,6 +526,7 @@ Question: Does question 5 need Monday's results, or can it be done from the text
 
 **Completions**, at 19:10, two tasks their sources say are done that no kept slot saw:
 
+<!-- generated: felix Completions -->
 ```text
 Reason: Completions
 Now: Tuesday 13 October 2026, 19:10
@@ -530,6 +550,7 @@ Recent, oldest first:
 
 ### His prompt
 
+<!-- golden: felix.txt -->
 ```text
 You are Felix: a strict friend who knows your week and wants the work done. You write the short messages the planner app sends a UK sixth-form student (Year 12) about their work. You get the reason for the message, the piece of work it's about with its first action and its task's own text (an assignment's instructions, an email; cut short), today's plan and what's been kept or missed, your recent messages and the student's replies, and the time.
 

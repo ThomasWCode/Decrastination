@@ -65,11 +65,16 @@ android {
 // ./gradlew testDebugUnitTest --tests '*EvalRunTest*' -PrunEval=true [-Peffort=high]
 // Every schema compiled by the API, after a schema changes (SchemaCompileTest), only when asked:
 // ./gradlew testDebugUnitTest --tests '*SchemaCompileTest*' -PcheckSchemas=true
+// docs/spec/felix-inputs.md written again from what the app sends (FelixInputsDocTest):
+// ./gradlew testDebugUnitTest --tests '*FelixInputsDocTest*' -PupdateDocs=true
 tasks.withType<Test>().configureEach {
     systemProperty("updateGolden", providers.gradleProperty("updateGolden").getOrElse("false"))
     systemProperty("runEval", providers.gradleProperty("runEval").getOrElse("false"))
     systemProperty("checkSchemas", providers.gradleProperty("checkSchemas").getOrElse("false"))
     systemProperty("effort", providers.gradleProperty("effort").getOrElse(""))
+    systemProperty("updateDocs", providers.gradleProperty("updateDocs").getOrElse("false"))
+    // The doc FelixInputsDocTest holds to the code: a change to it alone runs the tests again.
+    inputs.file(layout.projectDirectory.file("../docs/spec/felix-inputs.md")).withPropertyName("felixInputsDoc").withPathSensitivity(PathSensitivity.RELATIVE)
 }
 
 dependencies {
