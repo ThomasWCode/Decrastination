@@ -8,7 +8,7 @@ A personal, sideloaded app for one phone, version 3.1.4.
 
 | | |
 |---|---|
-| [`docs/spec/`](docs/spec/) | How the app works now, an area a file: sources, Claude's readings, the planner, slots and the calendar, blocking and protection, Felix, learning, storage and backups, privacy; and the requirement ids the code cites |
+| [`docs/spec/`](docs/spec/) | How the app works now, an area a file: sources, Claude's readings, the planner, slots and the calendar, blocking and protection, Felix (and everything he's sent), learning, storage and backups, privacy; and the requirement ids the code cites |
 | [`docs/decisions.md`](docs/decisions.md) | The owner's decisions that govern how the app is developed, numbered |
 | [`docs/development.md`](docs/development.md) | How changes are made, reviewed, checked on the phone and shipped; the public repository's rules |
 | [`docs/plan_targeted_cleanup/`](docs/plan_targeted_cleanup/README.md) | The planned restructuring of the code, phase by phase, with its open questions |
@@ -29,6 +29,12 @@ Every prompt and schema Claude is sent has a golden copy in `app/src/test/resour
 
 ```bash
 ./gradlew testDebugUnitTest -PupdateGolden=true --tests '*GoldenPromptsTest*'
+```
+
+The API compiles every schema into a grammar and refuses one too large, which no test can tell from the schema alone. After any change to a schema, have it compile them all before merging (one call for each schema, about a cent each; a refused one costs nothing; the key from the environment):
+
+```bash
+./gradlew testDebugUnitTest --tests '*SchemaCompileTest*' -PcheckSchemas=true
 ```
 
 Debug builds are signed with a copy of the widget's committed `app/debug.keystore`. Sharing its key is what grants this app the widget's signature-level permission to read the assignments, so don't change it.

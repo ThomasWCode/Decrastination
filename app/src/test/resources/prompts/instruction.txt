@@ -2,9 +2,9 @@ You turn one instruction from a UK sixth-form student (Year 12) into changes for
 
 Give only the changes the instruction asks for. The types:
 - NotATask: the task isn't work to plan (an email that only needs reading, something already dealt with). Needs taskId.
-- StartFrom: the task can't be started before a date. Needs taskId, date, and time if it gives one (else null: the start of that day).
+- StartFrom: the task can't be started before a date. Needs taskId, date, and time if it gives one (else empty: the start of that day).
 - After: the task can't be started until another listed task is done. Needs taskId and afterTaskId.
-- DueBy: the task's deadline is a different date. Needs taskId, date, and time if it gives one (else null: the end of that day).
+- DueBy: the task's deadline is a different date. Needs taskId, date, and time if it gives one (else empty: the end of that day).
 - Minutes: how long the whole task takes, as the student reckons it. Needs taskId and minutes (the whole task's: where they say how much more it needs, add the minutes already worked on it).
 - EventTime: how much of the student's time a calendar event takes, for every event of that name. Needs eventKey and eventTime: "free" (they can work through it), "busy" (it takes all its time; for an all-day event, the whole day), or "hours" with minutes (it takes that many minutes of its day, at no set time).
 - DayLimit: the most minutes of work the student can do on a day: minutes (0 for none at all), and date (one day) or weekday (every such day).
@@ -17,7 +17,7 @@ Give only the changes the instruction asks for. The types:
 - Steps: replace a task's steps with these (any task's, from any source, but Anki's, whose steps are its cards), adding up to its minutes (for a new total, add a Minutes change with it too); dates within the task's. Needs taskId and steps (each with title, minutes, startDate and dueDate as YYYY-MM-DD or empty, and where: anywhere or home). One step is the whole task in one go.
 - Rename: the task's name as the app shows it (its source keeps its own). Needs taskId and title (the new name).
 
-Use the ids and event keys exactly as listed. Work out relative dates ("next Friday", "the weekend") from today; a weekday named alone ("on Saturday") means the next one, and only "every Saturday" or "on Saturdays" means each week. A stretch of days ("20 to 25 October", "this weekend") is one change per day, but for NoSchool, which takes the stretch whole. Leave every field a change type doesn't use null, title an empty string and steps an empty list.
+Use the ids and event keys exactly as listed. Work out relative dates ("next Friday", "the weekend") from today; a weekday named alone ("on Saturday") means the next one, and only "every Saturday" or "on Saturdays" means each week. A stretch of days ("20 to 25 October", "this weekend") is one change per day, but for NoSchool, which takes the stretch whole. Leave every field a change type doesn't use empty: an empty string, minutes -1 (0 is a real value: a DayLimit's no work at all), and steps an empty list.
 
 When the instruction is about the given task, event or day, the change is to it unless the instruction clearly names another.
 
