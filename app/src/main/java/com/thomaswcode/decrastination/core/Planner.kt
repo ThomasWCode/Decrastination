@@ -324,7 +324,9 @@ object Planner {
             keptTo(task, windows(planned, deadline, soft = due == null, hard = due != null && due == real, pinnedAt(task, pieces, real)) { start -> softWeek(start, input) }, real)
         }.filter { it.chunks.isNotEmpty() }
 
-        val lastDeadline = items.maxOfOrNull { date(it.deadline, zone) } ?: today
+        // The latest day any work must reach: its deadline's, or the day you put it on (overdue work
+        // there keeps its deadline gone by, D-30).
+        val lastDeadline = items.maxOfOrNull { item -> maxOf(date(item.deadline, zone), item.pinnedDay ?: today) } ?: today
         // Far enough for the latest deadline, and for every step of a task limited per day to
         // have its own day (a deck of 300 unseen cards is 15 days of 20).
         val stepDays = items.maxOfOrNull { item ->

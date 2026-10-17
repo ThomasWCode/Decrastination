@@ -458,6 +458,16 @@ class DaysReplanTest {
     )
 
     @Test
+    fun `a day made a day off after its record is planned and kept as a weekend's`() {
+        // PL-06: told at 09:00 there's no school today, the day teaches the weekend's share.
+        val day = DayRecord("2026-10-09", 60, listOf(DayChunk("teams:a", 60)), zone = "Europe/London", kind = DayKind.Weekday)
+        val again = Days.replan(day, listOf(DayChunk("teams:a", 60)), ActivityLog(), Fixtures.at("2026-10-09T09:00"), LONDON, kind = DayKind.Weekend)
+        assertEquals(DayKind.Weekend, again.kind)
+        // Given none, it keeps its own.
+        assertEquals(DayKind.Weekday, Days.replan(day, emptyList(), ActivityLog(), Fixtures.at("2026-10-09T09:00"), LONDON).kind)
+    }
+
+    @Test
     fun `a slot laid later today and ticked early counts as today's work, and replanning counts school's minutes again`() {
         // Ticked at 08:00: the 17:00 slot and the 10:45 one at school.
         val log = ActivityLog(slots = listOf(kept("teams:a#-1#1", "2026-10-09T17:00", 30, WindowKind.Evening), kept("teams:b#-1#1", "2026-10-09T10:45", 20, WindowKind.Break)))

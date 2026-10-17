@@ -843,6 +843,13 @@ class PlannerTest {
         val onDay = plan(listOf(essay), "2026-10-08T17:00")
         assertEquals(listOf(LocalDate.parse("2026-10-10")), onDay.dayOf("essay"))
         assertTrue(onDay.chunksOf("teams:essay").all { it.overdue }, "${onDay.chunksOf("teams:essay").map { it.overdue }}")
+        // Three weeks on, past the fortnight the plan reaches without it: that day still, a time likewise.
+        val far = plan(listOf(essay.copy(userOnDay = "2026-10-29")), "2026-10-08T17:00")
+        assertEquals(listOf(LocalDate.parse("2026-10-29")), far.dayOf("essay"))
+        assertTrue(far.unplanned.none { it.taskId == "teams:essay" }, "${far.unplanned}")
+        val farTime = plan(listOf(essay.copy(userOnDay = null, userAtTime = Fixtures.at("2026-10-29T19:00"))), "2026-10-08T17:00")
+        assertEquals(LocalDate.parse("2026-10-29"), farTime.dayOf("essay").firstOrNull())
+        assertTrue(farTime.unplanned.none { it.taskId == "teams:essay" }, "${farTime.unplanned}")
         // Due last Friday, Monday 17:00 now, its next piece at 19:30 on Tuesday: then, the rest no earlier.
         val late = task("late", Fixtures.at("2026-10-09T23:59"), effort = 90).copy(userAtTime = Fixtures.at("2026-10-13T19:30"))
         val timed = Planner.plan(windowed(listOf(late), "2026-10-12T17:00"))

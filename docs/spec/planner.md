@@ -98,7 +98,7 @@ A task's last usable day is its deadline's date less its kind's margin (`Calibra
 
 ## Placing the pieces
 
-The plan's days run from today to the latest deadline: at least 14 days, more where a task limited per day needs them, never more than 90 (`Planner.MAX_HORIZON_DAYS`).
+The plan's days run from today to the latest deadline or day you put work on: at least 14 days, more where a task limited per day needs them, never more than 90 (`Planner.MAX_HORIZON_DAYS`).
 Work is placed in this order, each taking its days' time before the next:
 
 1. Work you put on a day (PL-04).
