@@ -82,7 +82,7 @@ A stop part-way is finished at the next start (`Focus.finishKeeps`), before an e
 ## Moving a slot by hand
 
 On Day, a slot swiped right to left is done. Left to right, it's later today (`AppGraph.laterToday`, its task's next piece only): at the first free time after it with its minutes, around today's other slots, as an `AtTime` change.
-Held, it goes to a day of the next fortnight, at a time or any time that day (`ui/MoveSheet.kt`). Each move is a change of yours, taken back in *Your changes*; one the plan wouldn't keep is refused first (`Planner.pinProblem`).
+Held, it goes to a day of the next fortnight, at a time or any time that day (`ui/MoveSheet.kt`): not a day after a real deadline still to come, while overdue work can go to any (D-30). Each move is a change of yours, taken back in *Your changes*; one the plan wouldn't keep is refused first (`Planner.pinProblem`).
 
 ## Writing the calendar (NF-07)
 
@@ -105,7 +105,7 @@ Pick one you made at calendar.google.com: a calendar an app makes stays on the p
 A piece's event whose start is neither where the app last wrote it (`RuntimeState.calendarWritten`) nor where the plan has it now is one you moved.
 `SlotCalendarDiff.judge` takes moves earliest first, each as your time for its task's next piece (an `AtTime` change, "Moved in the calendar", made at once), unless:
 - its task is no longer there;
-- the time is at or after the task's real deadline ("it's due before then");
+- the time is at or after the task's real deadline, still to come ("it's due before then"; overdue work takes any time);
 - another of its task's pieces moved in the same write (one at a time).
 
 A move refused is written back, and a notification says why (`SlotCalendar.sayRefused`). A move taken counts as written only once its change is in (`SlotCalendarDiff.pending`).
