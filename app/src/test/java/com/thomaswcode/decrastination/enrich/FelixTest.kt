@@ -86,6 +86,10 @@ class FelixTest {
         // Its start and its end, the middle left out.
         assertTrue("  [… ${sheet.detail.length - FelixPrompts.TEXT} characters left out …]" in text, text)
         assertTrue("\n  Hand it in on Friday." in text, text)
+        // Where its reading summarised all of it, that in place of the start and end.
+        val summarised = sheet.copy(enrichment = com.thomaswcode.decrastination.core.Enrichment(inputHash = com.thomaswcode.decrastination.core.Enrichments.inputHash(sheet), by = "test", at = now, summary = "Questions 1 to 6, handed in on Friday."))
+        val told = FelixPrompts.describe(FelixPrompts.Reason.Question, plan, null, summarised, emptyList(), emptyList(), "Which questions?", settings, now, LONDON)
+        assertTrue("  Its reading's summary of all ${sheet.detail.length} characters: Questions 1 to 6, handed in on Friday." in told, told)
         // With none of its own, nothing's said of it.
         assertTrue("own text" !in FelixPrompts.describe(FelixPrompts.Reason.Question, plan, null, task("Statics", 30), emptyList(), emptyList(), "Which?", settings, now, LONDON))
     }

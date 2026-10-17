@@ -10,6 +10,7 @@ import com.thomaswcode.decrastination.core.ChatMessage
 import com.thomaswcode.decrastination.core.ChatState
 import com.thomaswcode.decrastination.core.Chunk
 import com.thomaswcode.decrastination.core.Enrichment
+import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.core.DayBucket
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.Plan
@@ -158,6 +159,23 @@ class ChatTest {
         assertTrue("x Update: it's now due Monday." in section, section)
         // Nothing of its own (the bridge), or Anki's counts: not listed.
         assertFalse("teams:bridge" in section || "anki:quota" in section, section)
+    }
+
+    @Test
+    fun `a text too long for its room is its reading's summary, where the reading in force made one`() {
+        // D-93: the summary covers all of it, where the start and end would leave out the middle.
+        val read = letter.copy(enrichment = Enrichment(inputHash = Enrichments.inputHash(letter), by = "test", at = now, summary = "Return the form by Monday."))
+        val section = ChatPrompts.context(listOf(read), emptyList(), emptyList(), now, LONDON).substringAfter("The tasks' own text")
+        assertTrue("    Its reading's summary of all ${letter.detail.length} characters: Return the form by Monday." in section, section)
+        assertFalse("characters left out" in section, section)
+        // A message about it has it whole, the summary first where even that's cut.
+        val asked = ChatMessage("y1", Speaker.You, "What does it need?", now, about = About(taskId = read.id, taskTitle = read.title))
+        assertFalse("Its reading's summary" in ChatPrompts.turns(listOf(asked), "", mapOf(read.id to read), LONDON).single().second)
+        val long = read.copy(detail = "z".repeat(ChatPrompts.WHOLE_TEXT + 10)).let { it.copy(enrichment = read.enrichment!!.copy(inputHash = Enrichments.inputHash(it))) }
+        assertTrue("  Its reading's summary of all of it: Return the form by Monday.\n  zzz" in ChatPrompts.turns(listOf(asked), "", mapOf(long.id to long), LONDON).single().second)
+        // A reading for older content isn't its summary: its start and end instead.
+        val stale = read.copy(detail = read.detail + " Now it's Tuesday.")
+        assertTrue("characters left out" in ChatPrompts.context(listOf(stale), emptyList(), emptyList(), now, LONDON))
     }
 
     @Test

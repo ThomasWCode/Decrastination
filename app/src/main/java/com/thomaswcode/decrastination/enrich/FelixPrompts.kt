@@ -95,7 +95,7 @@ object FelixPrompts {
         }
         // Its task's own text, cut short (D-93): what the work asks of them, to be concrete about.
         if (task != null) {
-            TaskText.body(task, TEXT)?.let { body ->
+            TaskText.brief(task, TEXT)?.let { body ->
                 appendLine("Its task's own text (${TaskText.about(task)}):")
                 appendLine(body)
             }
