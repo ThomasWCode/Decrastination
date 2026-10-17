@@ -63,7 +63,7 @@
                     },
                     "minutes": {
                         "type": "integer",
-                        "description": "10 to 60 where the work allows; never over 600"
+                        "description": "All its work, however long (the app cuts one over 60 minutes into sittings itself); never over 600"
                     },
                     "from": {
                         "anyOf": [

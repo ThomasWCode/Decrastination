@@ -20,7 +20,9 @@ import kotlin.math.roundToInt
  *    `boxMin`. Remaining time is the estimate × your calibration multiplier × (1 − progress), less
  *    the minutes already worked, and never under 5 ("finish and hand in"). Sub-steps still to do
  *    go the same way: the minutes worked past the steps ticked off, or the source's progress
- *    where that leaves less, come off the next ones.
+ *    where that leaves less, come off the next ones; and one of the app's still over an hour as
+ *    planned is in sittings ([Sittings], 3.1.2's review), only its last ticking it (steps you gave
+ *    are as you gave them).
  * 3. Work due later today or tomorrow comes first, as its deadlines can still be met: it takes
  *    today's time before work already past its deadline. A task with some brings its overdue
  *    blocks along, ahead of it in their order. Then overdue work goes straight into today, oldest
@@ -150,12 +152,14 @@ object Planner {
         /** On a day you put it on, or at a time you gave ([at]) (PL-04). */
         val pinned: Boolean = false,
         val at: Long? = null,
+        /** Which of its step's sittings it is, where it's cut into them ([sittings]). */
+        val sitting: Sitting? = null,
     ) {
         /** Without its own dates: a step's dates gone by were a plan's (PL-14), so it's done with its task's own. */
-        fun undated() = Piece(step, minutes, box, index = index, where = where)
+        fun undated() = Piece(step, minutes, box, index = index, where = where, sitting = sitting)
 
         /** On the day you put it on (PL-04). */
-        fun pinned() = Piece(step, minutes, box, from, due, index, where, pinned = true, at = at)
+        fun pinned() = Piece(step, minutes, box, from, due, index, where, pinned = true, at = at, sitting = sitting)
     }
 
     /**
@@ -283,7 +287,7 @@ object Planner {
         fun pinnedAt(task: TaskItem, pieces: List<Piece>, real: Long?): List<Piece> {
             val at = pinnedTime(task, real, input) ?: return pieces
             val first = pieces.firstOrNull() ?: return pieces
-            return listOf(Piece(first.step, first.minutes, first.box, from = at, due = dayOf(at).second, index = first.index, where = first.where, pinned = true, at = at)) + pieces.drop(1)
+            return listOf(Piece(first.step, first.minutes, first.box, from = at, due = dayOf(at).second, index = first.index, where = first.where, pinned = true, at = at, sitting = first.sitting)) + pieces.drop(1)
         }
         // A day you gave for all of a task (PL-04): each run of it from that day's start and by its end,
         // its last usable day whatever the margin, a deadline still only where its own is that day;
@@ -367,7 +371,7 @@ object Planner {
             // Only a real deadline can be missed (PL-14): the app's own dates move on instead.
             val overdue = item.hard && item.deadline < input.now
             // The key the piece will have (a step's by its task and step), which its pin and missed slot go by.
-            val key = Chunk.keyOf(item.task.id, piece.index, part)
+            val key = Chunk.keyOf(item.task.id, piece.index, part, piece.sitting?.after)
             // Where you put it (PL-04): its time is the slotter's to keep.
             if (piece.at != null) atPins[key] = piece.at
             return Chunk(
@@ -400,6 +404,7 @@ object Planner {
                 },
                 where = piece.where,
                 hard = item.hard,
+                sitting = piece.sitting,
             )
         }
 
@@ -967,14 +972,19 @@ object Planner {
             // share of all the steps. Where that's less than the steps still to do, the difference
             // comes off them in order, as minutes worked do. The smaller of the two, as for a task
             // without steps ([remaining]): the same work isn't taken off twice.
-            if (task.sourceProgress <= 0.0) return pieces
-            val bySource = (own.sumOf { planned[it.index].toDouble() } * (1 - task.sourceProgress.coerceAtMost(1.0))).roundToInt()
-            var over = pieces.sumOf { it.minutes } - bySource
-            return pieces.map { piece ->
-                val off = minOf(over, (piece.minutes - MIN_CHUNK).coerceAtLeast(0)).coerceAtLeast(0)
-                over -= off
-                if (off == 0) piece else Piece(piece.step, piece.minutes - off, from = piece.from, due = piece.due, index = piece.index, where = piece.where)
+            val progressed = if (task.sourceProgress <= 0.0) {
+                pieces
+            } else {
+                val bySource = (own.sumOf { planned[it.index].toDouble() } * (1 - task.sourceProgress.coerceAtMost(1.0))).roundToInt()
+                var over = pieces.sumOf { it.minutes } - bySource
+                pieces.map { piece ->
+                    val off = minOf(over, (piece.minutes - MIN_CHUNK).coerceAtLeast(0)).coerceAtLeast(0)
+                    over -= off
+                    if (off == 0) piece else Piece(piece.step, piece.minutes - off, from = piece.from, due = piece.due, index = piece.index, where = piece.where)
+                }
             }
+            // A step still over an hour as planned, in sittings (3.1.2's review).
+            return progressed.flatMap { sittings(it, task, planned) }
         }
         if (task.effortMin <= 0) return emptyList()
         val remaining = remaining(task, multiplier).roundToInt().coerceAtLeast(minOf(MIN_CHUNK, task.effortMin))
@@ -988,6 +998,29 @@ object Planner {
             val minutes = remaining / count + if (i < remaining % count) 1 else 0
             // The box only where it cut the task: in one piece, its length was the task's own.
             Piece(null, minutes, box = box.takeIf { count > 1 }, where = where)
+        }
+    }
+
+    /**
+     * [piece] of a step of [task]'s in sittings where the step is over an hour as planned
+     * ([planned]: the calibration's minutes, or yours shared out over its steps; or a step read
+     * before sittings), as Claude's are cut when read ([Sittings], 3.1.2's review). What's left of
+     * it in even sittings of an hour at most, each named for its place among the whole step's, so
+     * keeping one leaves the rest called and keyed as they were ([Sitting.after]). Its last is the
+     * step's; the others' minutes, kept, are worked on it, so they come off it as a session stopped
+     * early's do. Not a step you gave ([TaskItem.yourSteps]): that's planned as you gave it, however
+     * long (your call, 17 Oct).
+     */
+    private fun sittings(piece: Piece, task: TaskItem, planned: List<Int>): List<Piece> {
+        if (task.yourSteps) return listOf(piece)
+        val index = piece.index ?: return listOf(piece)
+        val whole = Sittings.count(planned[index])
+        if (whole <= 1) return listOf(piece)
+        val title = task.subSteps[index].title
+        val titles = Sittings.titles(title, whole, Sittings.finishes(title, task.subSteps.getOrNull(index + 1)?.title))
+        val left = Sittings.count(piece.minutes)
+        return Sittings.even(piece.minutes, left).mapIndexed { i, minutes ->
+            Piece(piece.step, minutes, from = piece.from, due = piece.due, index = index, where = piece.where, sitting = Sitting(left - 1 - i, titles[whole - left + i]))
         }
     }
 

@@ -148,6 +148,14 @@ fun TaskItem.withoutEnrichment(): TaskItem = copy(enrichment = null, subSteps = 
 
 private fun TaskItem.stepsFromEnrichment(): Boolean = subSteps.isNotEmpty() && enrichment?.subSteps?.map { it.title } == subSteps.map { it.title }
 
+/**
+ * Whether some of the steps its enrichment gave are done: newer prompts could give its work as other
+ * steps (fewer, longer, since 3.1.1), and a mark goes only to a step of its name ([carryMarks]), so
+ * work done would be planned again (#47's review). Not read again for newer prompts alone, then:
+ * only when its text changes or you ask, when the steps done are said to be ([com.thomaswcode.decrastination.enrich.Prompts.describe]).
+ */
+private fun TaskItem.partDone(): Boolean = stepsFromEnrichment() && subSteps.any { it.done }
+
 fun TaskItem.withEnrichment(new: Enrichment): TaskItem {
     val fromEnrichment = stepsFromEnrichment()
     // The steps as they were, by name: each new step takes the marks of the old one ([carryMarks]).
@@ -207,13 +215,14 @@ object Enrichments {
      * model is now on, or done by the model when it's now switched off ([modelOff]: what it read goes
      * with it, and the rules' reading stands instead); or an email read, before starred-only reading,
      * as only to read (AI-02), which a starred one never is; or, the model on, an open task the model
-     * read by older prompts (AC-06). Resting or refused, the model's older reading stands.
+     * read by older prompts (AC-06), unless some of the steps it gave are done ([partDone]). Resting
+     * or refused, the model's older reading stands.
      */
     fun stale(task: TaskItem, modelOn: Boolean, rules: String, modelOff: Boolean = false): Boolean {
         val e = task.enrichment ?: return true
         return e.inputHash != inputHash(task) || (modelOn && e.by == rules) || (modelOff && e.by != rules) ||
             (task.source == Source.Gmail && e.kind == Kind.Info) ||
-            (modelOn && e.by != rules && task.isOpen && e.promptVersion < com.thomaswcode.decrastination.enrich.Prompts.VERSION)
+            (modelOn && e.by != rules && task.isOpen && e.promptVersion < com.thomaswcode.decrastination.enrich.Prompts.VERSION && !task.partDone())
     }
 
     /**
@@ -223,7 +232,7 @@ object Enrichments {
     fun staleOnlyByVersion(task: TaskItem, rules: String): Boolean {
         val e = task.enrichment ?: return false
         return e.by != rules && e.inputHash == inputHash(task) && e.promptVersion < com.thomaswcode.decrastination.enrich.Prompts.VERSION &&
-            !(task.source == Source.Gmail && e.kind == Kind.Info)
+            !(task.source == Source.Gmail && e.kind == Kind.Info) && !task.partDone()
     }
 
     /**

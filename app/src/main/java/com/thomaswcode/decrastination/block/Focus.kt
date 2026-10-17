@@ -304,7 +304,12 @@ class Focus(
         val task = tasks.value.tasks.firstOrNull { it.id == chunk.taskId && it.isOpen } ?: return null
         // Its step, where it's still that one and still to do (none for a box of time, or the whole task).
         val index = chunk.stepIndex?.let { i -> stepAt(task, i, chunk.step.orEmpty()).takeIf { it >= 0 } ?: return null }
-        val worked = chunk.minutes + extraMin.coerceAtLeast(0)
+        // A sitting before its step's last ticks nothing: its minutes are worked on the step, as a
+        // session stopped early's are. The last ticks it, with the step's sittings not kept before it
+        // (ticked ahead, or by the chat), as one piece of it would have been (3.1.2's review).
+        val ticks = index?.takeIf { chunk.ticks != null }
+        val rest = if (ticks == null) 0 else plan.chunksOf(chunk.taskId).filter { it.stepIndex == chunk.stepIndex && it.key != key }.sumOf { it.minutes }
+        val worked = chunk.minutes + rest + extraMin.coerceAtLeast(0)
         val today = today(now)
         val ratio = settings.value.workMinPerFreeMin
         // A slot of it missed today (it was moved on): this is that slot, kept late, where it was laid, and today's.
@@ -332,7 +337,7 @@ class Focus(
         )
         val earning = if (earns) minOf(Credit.forSlot(chunk.minutes, ratio), slotRoomMin(now, ratio, keeping = record)) else 0.0
         // On record before anything changes: a stop part-way is carried through at start-up.
-        val journal = Keeping(record, index, chunk.step, task.workedMin, earning, replaces = missed, photo = photoDone)
+        val journal = Keeping(record, ticks, chunk.step, task.workedMin, earning, replaces = missed, photo = photoDone)
         runtime.update { it.copy(keeping = it.keeping + journal) }
         return finish(journal, now, recovering = false)
     }
@@ -423,8 +428,10 @@ class Focus(
     suspend fun unkeepSlot(key: String, since: Long, now: Long = clock.now()): Boolean = keeping.withLock {
         val record = log.value.slots.lastOrNull { it.key == key && it.outcome.kept && it.at >= since } ?: return@withLock false
         if (tasks.value.tasks.firstOrNull { it.id == record.taskId }?.isOpen != true) return@withLock false
-        // A step's key is its task and its place ("id#2"); a box's has its part after a -1 ("id#-1#1").
-        val stepIndex = key.removePrefix(record.taskId + "#").substringBefore('#').toIntOrNull()?.takeIf { it >= 0 }
+        // A step's key is its task and its place ("id#2"); a sitting before its step's last has how
+        // many come after it too ("id#2#1"), and a box its part after a -1 ("id#-1#1"): only a step's
+        // tick is taken back, the others' minutes alone.
+        val stepIndex = key.removePrefix(record.taskId + "#").toIntOrNull()?.takeIf { it >= 0 }
         tasks.update { state ->
             state.copy(
                 tasks = state.tasks.map { t ->

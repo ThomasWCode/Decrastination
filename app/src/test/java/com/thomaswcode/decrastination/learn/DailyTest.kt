@@ -218,14 +218,16 @@ class ReviewInputTest {
     @Test
     fun `only the settings the review may change move, and only within their bounds`() {
         val changes = listOf(
-            ReviewInput.Change("boxMin", 25, "shorter pieces got finished"),
+            ReviewInput.Change("softMinPerDay", 45, "less undated work got done"),
             ReviewInput.Change("marginDays", 9, "too far"),
             ReviewInput.Change("armed", 0, "not allowed"),
+            // A piece's length is yours since 17 Oct: the review leaves it.
+            ReviewInput.Change("boxMin", 25, "shorter pieces got finished"),
         )
-        val applied = ReviewInput.apply(Settings(), changes)
-        assertEquals(25, applied.boxMin)
+        val applied = ReviewInput.apply(Settings(boxMin = 60), changes)
+        assertEquals(45, applied.softMinPerDay)
         assertEquals(1, applied.marginDays)
-        assertEquals(Settings().copy(boxMin = 25), applied)
+        assertEquals(Settings(boxMin = 60).copy(softMinPerDay = 45), applied)
         // A school day's hours, within an hour of theirs (AI-18).
         val hours = ReviewInput.apply(Settings(), listOf(ReviewInput.Change("weekdayHoursStart", Settings().weekdayHours.startMin - 45, "earlier starts went well"), ReviewInput.Change("weekdayHoursEnd", Settings().weekdayHours.endMin + 90, "too far")))
         assertEquals(Settings().weekdayHours.copy(startMin = Settings().weekdayHours.startMin - 45), hours.weekdayHours)

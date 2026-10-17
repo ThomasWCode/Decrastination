@@ -283,6 +283,21 @@ class EnrichmentTest {
     }
 
     @Test
+    fun `a reading by older prompts with some of its steps done isn't read again for them alone`() {
+        val task = assignment()
+        val read = Enrichment(Enrichments.inputHash(task), "claude-opus-5-5", t0, effortMin = 50, subSteps = listOf(SubStep("Page 7-9", 30), SubStep("Page 10-11", 20)), promptVersion = 1)
+        val given = task.withEnrichment(read)
+        assertEquals(listOf("Page 7-9", "Page 10-11"), given.subSteps.map { it.title })
+        assertTrue(Enrichments.stale(given, modelOn = true, rules = "rules"))
+        // One done: newer prompts could give its work as other steps, and its mark would go with it.
+        val partDone = given.copy(subSteps = given.subSteps.mapIndexed { i, s -> if (i == 0) s.copy(done = true) else s })
+        assertFalse(Enrichments.stale(partDone, modelOn = true, rules = "rules"))
+        assertFalse(Enrichments.staleOnlyByVersion(partDone, "rules"))
+        // Its text changed, it's read again, as any task is.
+        assertTrue(Enrichments.stale(partDone.copy(detail = "Page 7-12 of booklet."), modelOn = true, rules = "rules"))
+    }
+
+    @Test
     fun `a model's reading of the text as it is, by older prompts, is stale only by its version`() {
         val task = assignment()
         val read = com.thomaswcode.decrastination.core.Enrichment(Enrichments.inputHash(task), "claude-opus-5-5", 0, effortMin = 40, promptVersion = 1)

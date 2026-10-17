@@ -114,11 +114,11 @@ class SettingsChangesTest {
         // Waiting: your own looser ratio, and a removed app.
         val waiting = SettingsChanges.propose(armed, armed.copy(workMinPerFreeMin = 2, blockedApps = armed.blockedApps.drop(1)), emptyList(), now, ::newId).pending
         assertEquals(setOf("workMinPerFreeMin", "blockedApps"), waiting.map { it.field }.toSet())
-        // The review loosens the ratio and the box: both at once, its ratio over the one waiting.
-        val review = listOf(ReviewInput.Change("workMinPerFreeMin", 4, ""), ReviewInput.Change("boxMin", 30, ""))
-        val outcome = SettingsChanges.atOnce(armed, waiting, setOf("workMinPerFreeMin", "boxMin")) { ReviewInput.apply(it, review) }
+        // The review tightens the ratio and lowers the undated work: both at once, its ratio over the one waiting.
+        val review = listOf(ReviewInput.Change("workMinPerFreeMin", 4, ""), ReviewInput.Change("softMinPerDay", 90, ""))
+        val outcome = SettingsChanges.atOnce(armed, waiting, setOf("workMinPerFreeMin", "softMinPerDay")) { ReviewInput.apply(it, review) }
         assertEquals(4, outcome.settings.workMinPerFreeMin)
-        assertEquals(30, outcome.settings.boxMin)
+        assertEquals(90, outcome.settings.softMinPerDay)
         // The app's removal keeps its wait; nothing else moves.
         assertEquals(listOf("blockedApps"), outcome.pending.map { it.field })
         assertEquals(armed.blockedApps, outcome.settings.blockedApps)
