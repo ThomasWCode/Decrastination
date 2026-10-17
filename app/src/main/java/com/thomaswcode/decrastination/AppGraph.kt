@@ -349,10 +349,13 @@ class AppGraph private constructor(context: Context) {
             throw e
         }
         // Each event's version remembered once it's written (not a move of yours taken: its event is
-        // at your time), so a copy the calendar's sync makes of it is known at the next write.
+        // at your time), so a copy the calendar's sync makes of it is known at the next write. Not
+        // one an event of yours already had (#48's third review): remembered, the next write would
+        // take yours for a copy.
         val moved = written.taken.map { it.desired.uri }.toSet()
         runCatching {
-            calendarVersions.update { it.copy(written = SlotCalendarDiff.remembered(it.written, desired.filter { d -> d.uri !in moved }.map { d -> SlotCalendarDiff.version(calendarId, d.title, d.start, d.end) })) }
+            val versions = desired.filter { d -> d.uri !in moved }.map { d -> SlotCalendarDiff.version(calendarId, d.title, d.start, d.end) }.filterNot { it in written.yours }
+            calendarVersions.update { it.copy(written = SlotCalendarDiff.remembered(it.written, versions)) }
         }.onFailure { Log.w(TAG, "Remembering what was written to the calendar failed", it) }
         // A move taken counts as written only once its instruction is in: stopped before, the next
         // write finds it a move again, rather than putting it back.
