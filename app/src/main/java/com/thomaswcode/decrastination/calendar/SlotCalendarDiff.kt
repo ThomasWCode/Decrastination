@@ -8,7 +8,8 @@ import java.time.ZoneId
  * there is inserted (one you deleted too: it isn't there); one of the app's whose time or words
  * differ is updated; one of the app's no longer a slot is deleted; and a piece's event you've moved
  * (its start no longer what the app wrote, nor what the plan has now) is a hand move, for the app to
- * take as your time, not to put back. Pure.
+ * take as your time, not to put back. A copy of one of its events that's lost the app's marks is
+ * deleted ([looksWritten], 17 Oct). Pure.
  */
 object SlotCalendarDiff {
     const val URI_PREFIX = "decrastination://slot/"
@@ -19,8 +20,24 @@ object SlotCalendarDiff {
     /** A slot as an event: its URI, its words, its times; [taskId] for a piece of work, null for a break outside. */
     data class Desired(val uri: String, val title: String, val description: String, val start: Long, val end: Long, val taskId: String?)
 
-    /** One of the app's events, as the calendar has it now. */
-    data class Existing(val id: Long, val uri: String, val start: Long, val end: Long, val title: String, val description: String)
+    /**
+     * One of the app's events, as the calendar has it now. Not [marked]: a copy of one that's lost the
+     * app's marks (its URI and package), found by its words ([looksWritten]), to delete.
+     */
+    data class Existing(val id: Long, val uri: String, val start: Long, val end: Long, val title: String, val description: String, val marked: Boolean = true)
+
+    /** A break outside's words, as [desired] writes them. */
+    const val OUTSIDE = "A break outside."
+
+    /**
+     * Whether an event's [description] is in the words [desired] writes: a piece's, its source first
+     * ("Teams. Due …"), or a break outside's. In the calendar written to, an event so worded that's
+     * lost the app's marks is a copy of one of its own (17 Oct: the calendar's sync, run while the app
+     * changed an event it was still sending, brought it back as a new event, the app's marks left
+     * off), stale as its slot moves on: deleted, never left over the plan.
+     */
+    fun looksWritten(description: String): Boolean =
+        description == OUTSIDE || com.thomaswcode.decrastination.core.Source.entries.any { description.startsWith(it.label + ". ") }
 
     data class Update(val existing: Existing, val desired: Desired)
 
@@ -72,7 +89,7 @@ object SlotCalendarDiff {
                 uri = "$URI_PREFIX$date/${slot.key}",
                 title = chunk?.label ?: "Outside",
                 // With its first step (AI-15), where one's written.
-                description = chunk?.let { c -> "${c.source.label}. ${c.whyLine(plan.today, zone)}." + (micro[c.key]?.first?.takeIf { it.isNotEmpty() }?.let { " First: $it" } ?: "") } ?: "A break outside.",
+                description = chunk?.let { c -> "${c.source.label}. ${c.whyLine(plan.today, zone)}." + (micro[c.key]?.first?.takeIf { it.isNotEmpty() }?.let { " First: $it" } ?: "") } ?: OUTSIDE,
                 start = slot.start,
                 end = slot.end,
                 taskId = chunk?.taskId,
@@ -82,7 +99,9 @@ object SlotCalendarDiff {
 
     /** [desired] against the app's [existing] events, [written] holding each URI's start as the app last wrote it. */
     fun diff(desired: List<Desired>, existing: List<Existing>, written: Map<String, Long>): Diff {
-        val there = existing.groupBy { it.uri }
+        // Copies that have lost the app's marks: found by their words alone, and deleted.
+        val copies = existing.filterNot { it.marked }
+        val there = existing.filter { it.marked }.groupBy { it.uri }
         val wanted = desired.map { it.uri }.toSet()
         val inserts = mutableListOf<Desired>()
         val updates = mutableListOf<Update>()
@@ -96,8 +115,8 @@ object SlotCalendarDiff {
                 event.start != want.start || event.end != want.end || event.title != want.title || event.description != want.description -> updates += Update(event, want)
             }
         }
-        // The app's events no longer a slot, and a second copy of one that is.
-        val deletes = existing.filter { it.uri !in wanted } + there.filterKeys { it in wanted }.values.flatMap { it.drop(1) }
+        // The app's events no longer a slot, a second copy of one that is, and those that lost its marks.
+        val deletes = there.filterKeys { it !in wanted }.values.flatten() + there.filterKeys { it in wanted }.values.flatMap { it.drop(1) } + copies
         return Diff(inserts, updates, deletes, moves)
     }
 }
