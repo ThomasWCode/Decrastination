@@ -1792,7 +1792,7 @@ class AppGraph private constructor(context: Context) {
         applied: List<Instruction> = instructions.value.applied,
     ): ChatPrompts.Context {
         return ChatPrompts.Context(
-            known = ChatPrompts.context(state.tasks, time.events, applied, now, clock.zone(), settings.value.classMap, runtime.value.notSame, settings.value),
+            known = ChatPrompts.context(state.tasks, time.events, applied, now, clock.zone(), settings.value.classMap, runtime.value.notSame, settings.value, runtime.value.calibration),
             plan = ChatPrompts.plan(plan(state, now = now, applied = applied, time = time), clock.zone()),
         )
     }
