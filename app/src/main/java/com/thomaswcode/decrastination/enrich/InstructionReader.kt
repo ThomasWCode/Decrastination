@@ -29,6 +29,9 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
+/** The string, if it's filled in: an unused field is empty, as the answers' schemas have no nullable fields. */
+internal fun String?.filled(): String? = this?.takeIf { it.isNotBlank() }
+
 /**
  * What Claude is asked to read an instruction ([Instruction]) into, and how its answer is checked.
  * Pure, so the wording, the schema and the checks are tested without the API.
@@ -55,9 +58,9 @@ object InstructionPrompts {
     /** The changes Claude can make, and how it reads dates for them: an instruction's and the chat's. */
     internal val CHANGE_TYPES = """
         - NotATask: the task isn't work to plan (an email that only needs reading, something already dealt with). Needs taskId.
-        - StartFrom: the task can't be started before a date. Needs taskId, date, and time if it gives one (else null: the start of that day).
+        - StartFrom: the task can't be started before a date. Needs taskId, date, and time if it gives one (else empty: the start of that day).
         - After: the task can't be started until another listed task is done. Needs taskId and afterTaskId.
-        - DueBy: the task's deadline is a different date. Needs taskId, date, and time if it gives one (else null: the end of that day).
+        - DueBy: the task's deadline is a different date. Needs taskId, date, and time if it gives one (else empty: the end of that day).
         - Minutes: how long the whole task takes, as the student reckons it. Needs taskId and minutes (the whole task's: where they say how much more it needs, add the minutes already worked on it).
         - EventTime: how much of the student's time a calendar event takes, for every event of that name. Needs eventKey and eventTime: "free" (they can work through it), "busy" (it takes all its time; for an all-day event, the whole day), or "hours" with minutes (it takes that many minutes of its day, at no set time).
         - DayLimit: the most minutes of work the student can do on a day: minutes (0 for none at all), and date (one day) or weekday (every such day).
@@ -70,7 +73,7 @@ object InstructionPrompts {
         - Steps: replace a task's steps with these (any task's, from any source, but Anki's, whose steps are its cards), adding up to its minutes (for a new total, add a Minutes change with it too); dates within the task's. Needs taskId and steps (each with title, minutes, startDate and dueDate as YYYY-MM-DD or empty, and where: anywhere or home). One step is the whole task in one go.
         - Rename: the task's name as the app shows it (its source keeps its own). Needs taskId and title (the new name).
 
-        Use the ids and event keys exactly as listed. Work out relative dates ("next Friday", "the weekend") from today; a weekday named alone ("on Saturday") means the next one, and only "every Saturday" or "on Saturdays" means each week. A stretch of days ("20 to 25 October", "this weekend") is one change per day, but for NoSchool, which takes the stretch whole. Leave every field a change type doesn't use null, title an empty string and steps an empty list.
+        Use the ids and event keys exactly as listed. Work out relative dates ("next Friday", "the weekend") from today; a weekday named alone ("on Saturday") means the next one, and only "every Saturday" or "on Saturdays" means each week. A stretch of days ("20 to 25 October", "this weekend") is one change per day, but for NoSchool, which takes the stretch whole. Leave every field a change type doesn't use empty: an empty string, minutes -1 (0 is a real value: a DayLimit's no work at all), and steps an empty list.
     """.trimIndent()
 
     /** The instructions' reader's, for a student in Year [year] (AI-06). */
@@ -87,20 +90,30 @@ object InstructionPrompts {
     """
         ).trimIndent()
 
-    /** A change's fields, as [CHANGE] has them; the chat's has one more ([ChatPrompts]). */
+    /** A date's field, empty for none (no format: an empty one wouldn't be a date). */
+    internal val DATE = mapOf("type" to "string", "description" to "YYYY-MM-DD, or empty")
+
+    /** A time's field, empty for none. */
+    internal val TIME = mapOf("type" to "string", "description" to "HH:MM, 24-hour, or empty")
+
+    /**
+     * A change's fields, as [CHANGE] has them; the chat's has one more ([ChatPrompts]). None is
+     * nullable: the API compiles a schema into a grammar, a nullable field is a union in it, and
+     * unions in a list of changes make the chat's grammar too large to compile. An unused string
+     * is empty and a number -1, read as none ([InstructionAnswers.Given.normalised]).
+     */
     internal val CHANGE_FIELDS: List<Pair<String, Any>> = listOf(
         "type" to mapOf("type" to "string", "enum" to ChangeType.entries.map { it.name }),
-        "taskId" to nullable(STRING),
-        "afterTaskId" to nullable(STRING),
-        "eventKey" to nullable(STRING),
-        "eventTime" to nullable(mapOf("type" to "string", "enum" to listOf("free", "busy", "hours"))),
-        "minutes" to nullable(mapOf("type" to "integer")),
-        "date" to nullable(mapOf("type" to "string", "format" to "date")),
-        "endDate" to nullable(mapOf("type" to "string", "format" to "date")),
-        "weekday" to nullable(mapOf("type" to "string", "enum" to DayOfWeek.entries.map { it.name.lowercase().replaceFirstChar(Char::uppercase) })),
-        "time" to nullable(mapOf("type" to "string", "description" to "HH:MM, 24-hour")),
-        "endTime" to nullable(mapOf("type" to "string", "description" to "HH:MM, 24-hour")),
-        // Plain strings, empty for none: the chat's schema holds 15 of the API's 16 unions.
+        "taskId" to STRING,
+        "afterTaskId" to STRING,
+        "eventKey" to STRING,
+        "eventTime" to mapOf("type" to "string", "enum" to listOf("free", "busy", "hours", "")),
+        "minutes" to mapOf("type" to "integer", "description" to "-1 for none"),
+        "date" to DATE,
+        "endDate" to DATE,
+        "weekday" to mapOf("type" to "string", "enum" to DayOfWeek.entries.map { it.name.lowercase().replaceFirstChar(Char::uppercase) } + ""),
+        "time" to TIME,
+        "endTime" to TIME,
         "title" to STRING,
         "steps" to mapOf(
             "type" to "array",
@@ -213,7 +226,14 @@ object InstructionAnswers {
         val steps: List<GivenStep> = emptyList(),
         /** The chat's only ([ChatPrompts]): a Minutes total that's the app's estimate at the student's pace. */
         val paced: Boolean = false,
-    )
+    ) {
+        /** As given, but an empty string or a minutes of -1 is none: the schema has no nullable fields ([InstructionPrompts.CHANGE_FIELDS]). */
+        fun normalised(): Given = copy(
+            taskId = taskId.filled(), afterTaskId = afterTaskId.filled(), eventKey = eventKey.filled(), eventTime = eventTime.filled(),
+            minutes = minutes?.takeIf { it >= 0 }, date = date.filled(), endDate = endDate.filled(), weekday = weekday.filled(),
+            time = time.filled(), endTime = endTime.filled(),
+        )
+    }
 
     /** A step of a [ChangeType.Steps] change, its dates empty for none. */
     @Serializable
@@ -240,7 +260,7 @@ object InstructionAnswers {
         val byId = tasks.associateBy { it.id }
         // The event it's about counts even if it's past the fortnight read.
         val titles = events.associate { EventJudge.key(it) to it.title } + listOfNotNull(about.eventKey?.let { it to (about.eventTitle ?: it) })
-        val changes = answer.changes.map { g ->
+        val changes = answer.changes.map(Given::normalised).map { g ->
             change(g, byId, titles, now, zone) ?: return Reading.Unclear("Claude's reading couldn't be used: ${problem(g, byId, titles)}")
         }
         stepsProblem(changes, byId)?.let { return Reading.Unclear("Claude's reading couldn't be used: $it") }

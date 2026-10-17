@@ -74,7 +74,7 @@ class EvalRunTest {
 
     private fun dollars(usd: Double) = "$" + String.format(Locale.UK, "%.3f", usd)
 
-    private companion object {
+    internal companion object {
         const val KEY = "CLAUDE_DECRASTINATION_API_KEY"
     }
 }

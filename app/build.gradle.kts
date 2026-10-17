@@ -12,8 +12,8 @@ android {
         applicationId = "com.thomaswcode.decrastination"
         minSdk = 26
         targetSdk = 36
-        versionCode = 25
-        versionName = "3.1.5"
+        versionCode = 26
+        versionName = "3.1.6"
     }
 
     signingConfigs {
@@ -63,9 +63,12 @@ android {
 // The golden prompts written again (AR-01, GoldenPromptsTest): ./gradlew testDebugUnitTest -PupdateGolden=true
 // The scored eval run through the API (AR-02, EvalRunTest, docs/development.md), only when asked:
 // ./gradlew testDebugUnitTest --tests '*EvalRunTest*' -PrunEval=true [-Peffort=high]
+// Every schema compiled by the API, after a schema changes (SchemaCompileTest), only when asked:
+// ./gradlew testDebugUnitTest --tests '*SchemaCompileTest*' -PcheckSchemas=true
 tasks.withType<Test>().configureEach {
     systemProperty("updateGolden", providers.gradleProperty("updateGolden").getOrElse("false"))
     systemProperty("runEval", providers.gradleProperty("runEval").getOrElse("false"))
+    systemProperty("checkSchemas", providers.gradleProperty("checkSchemas").getOrElse("false"))
     systemProperty("effort", providers.gradleProperty("effort").getOrElse(""))
 }
 

@@ -81,6 +81,36 @@ class ChatTest {
     }
 
     @Test
+    fun `an answer's empty fields are none, as its schema has no nullable fields`() {
+        // A task with no date, its step undated; a change with no time or minutes; an event's minutes -1 held at none.
+        val reading = parse(
+            """{"reply":"Added them.","newTasks":[
+                {"title":"Revise vectors","kind":"Revision","subject":"","dueDate":"","dueTime":"","startDate":"","minutes":45,"notes":"","steps":[{"title":"Read the notes","minutes":45,"startDate":"","dueDate":""}]},
+                {"title":"Match","kind":"Event","subject":"","dueDate":"2026-10-17","dueTime":"","startDate":"","minutes":-1,"notes":"","steps":[]}],
+              "changes":[{"type":"DueBy","taskId":"teams:bridge","afterTaskId":"","eventKey":"","eventTime":"","minutes":-1,"date":"2026-10-14","endDate":"","weekday":"","time":"","endTime":"","title":"","steps":[],"paced":false}],
+              "memories":[],"suggestedReplies":[],"actions":[],"research":""}""",
+        )!!
+        assertTrue(reading.leftOut.isEmpty(), "${reading.leftOut}")
+        val (revise, match) = reading.tasks
+        assertNull(revise.dueAt)
+        assertNull(revise.steps.single().from)
+        assertEquals(Fixtures.at("2026-10-17T09:00"), match.dueAt)
+        assertEquals(0, match.minutes)
+        assertEquals(Change(ChangeType.DueBy, taskId = "teams:bridge", time = Fixtures.at("2026-10-14T23:59")), reading.changes.single())
+    }
+
+    @Test
+    fun `a new task's step with no minutes is no step, so the task is left out, saying why`() {
+        // An unused number is -1 in the schema; a step's minutes are always used, so -1 there is wrong.
+        val reading = parse(
+            """{"reply":"Added it.","newTasks":[{"title":"Essay","kind":"Homework","subject":"","dueDate":"2026-10-20","dueTime":"","startDate":"","minutes":60,"notes":"",
+              "steps":[{"title":"Draft","minutes":-1,"startDate":"","dueDate":""}]}],"changes":[],"memories":[],"suggestedReplies":[],"actions":[],"research":""}""",
+        )!!
+        assertTrue(reading.tasks.isEmpty())
+        assertTrue(reading.leftOut.single().startsWith("the task “Essay” (each step needs a name"), "${reading.leftOut}")
+    }
+
+    @Test
     fun `what can't be used is left out and said, the rest kept`() {
         val reading = parse(
             """{"reply":"Here you go.",
