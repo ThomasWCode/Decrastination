@@ -14,7 +14,7 @@ import kotlin.test.Test
 import kotlin.test.fail
 
 /**
- * A scored eval run through the API (AR-02, docs/eval.md): each case of the private set
+ * A scored eval run through the API (AR-02, docs/development.md): each case of the private set
  * ([EvalSetTest], `private/eval/cases.json`) asked of Claude as the app asks it, through the real
  * [ClaudeEnricher] with the key, its answer written to `private/eval/answers/<id>-<run>.json` (the
  * run numbered on from the last), then the lot scored as [EvalSetTest.score] does. A paid call a

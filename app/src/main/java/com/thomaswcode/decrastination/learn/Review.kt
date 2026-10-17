@@ -18,7 +18,7 @@ import com.thomaswcode.decrastination.notify.Channels
 import com.thomaswcode.decrastination.notify.Notify
 
 /**
- * The weekly review (docs/scheduler.md §5, item 7): on Sunday evening, after the check-in (or
+ * The weekly review (docs/spec/learning.md, item 7): on Sunday evening, after the check-in (or
  * without it), the calibration is learned afresh from the log, the capacity checked, and, once
  * Claude is on, the week goes to the model for a note and bounded changes, which apply at once,
  * armed or not (your call, 11 Oct). Until then the note is the rules': what changed, in words.

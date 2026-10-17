@@ -18,7 +18,7 @@ import kotlinx.coroutines.withContext
  * - Teams: the widget opens the assignment itself (`call("open", key)`), as a tap on its row does.
  * - Anki: the deck is selected, then studied (a homework deck) or shown in the list (the quota).
  * - Gmail: the app, with the subject to look for: it can't be opened on one conversation.
- * - Power Planner: the app; it has no link to one item (docs/data-sources.md §2).
+ * - Power Planner: the app; it has no link to one item (docs/spec/sources.md).
  */
 object TaskOpener {
     const val TEAMS = "com.microsoft.teams"

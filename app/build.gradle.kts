@@ -19,7 +19,7 @@ android {
     signingConfigs {
         // A copy of the Teams Assignments widget's committed debug key. Sharing its key is what
         // grants this app the widget's signature-level READ_ASSIGNMENTS permission (see
-        // docs/data-sources.md §1); being committed, it also lets APKs built by CI and on any
+        // docs/spec/sources.md); being committed, it also lets APKs built by CI and on any
         // machine install over each other. It only signs debug builds of this sideloaded app.
         getByName("debug") {
             storeFile = file("debug.keystore")
@@ -61,7 +61,7 @@ android {
 }
 
 // The golden prompts written again (AR-01, GoldenPromptsTest): ./gradlew testDebugUnitTest -PupdateGolden=true
-// The scored eval run through the API (AR-02, EvalRunTest, docs/eval.md), only when asked:
+// The scored eval run through the API (AR-02, EvalRunTest, docs/development.md), only when asked:
 // ./gradlew testDebugUnitTest --tests '*EvalRunTest*' -PrunEval=true [-Peffort=high]
 tasks.withType<Test>().configureEach {
     systemProperty("updateGolden", providers.gradleProperty("updateGolden").getOrElse("false"))

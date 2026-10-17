@@ -7,8 +7,8 @@ import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.sources.anki.AnkiRules
 
 /**
- * Says more about a task than its source does (docs/data-sources.md §5): the rules always, the
- * model when it's switched on (PLAN.md Phase 4).
+ * Says more about a task than its source does (docs/spec/readings.md): the rules always, the
+ * model when it's switched on (docs/spec/readings.md).
  */
 interface Enricher {
     /** Who this is, as [Enrichment.by] records it. */

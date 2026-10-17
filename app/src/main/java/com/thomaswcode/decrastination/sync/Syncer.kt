@@ -42,7 +42,7 @@ data class SyncReport(
 }
 
 /**
- * Reads each source and merges what it lists into the stored tasks (PLAN.md §4, `SyncWorker`).
+ * Reads each source and merges what it lists into the stored tasks (docs/spec/sources.md, `SyncWorker`).
  * Sources are isolated: one that fails keeps its tasks as they were and records why, and the rest
  * carry on. Anki is read last, since the decks it tracks are the ones the other sources' homework
  * names. One sync runs at a time.

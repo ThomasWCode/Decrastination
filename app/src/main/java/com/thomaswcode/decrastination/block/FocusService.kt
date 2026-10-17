@@ -35,8 +35,8 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 /**
- * The blocker (docs/scheduler.md §4 and §6; proved as Phase 0's spike, docs/phase0-findings.md
- * §5). An accessibility service: it hears every app come to the front, and covers a blocked one
+ * The blocker (docs/spec/blocking-and-protection.md; proved as
+ * Phase 0's spike). An accessibility service: it hears every app come to the front, and covers a blocked one
  * with [BlockedActivity] when [Focus] says so:
  *
  * - **Apps and browsers**: a blocked app, or Firefox or Tor, the moment it owns the window in use

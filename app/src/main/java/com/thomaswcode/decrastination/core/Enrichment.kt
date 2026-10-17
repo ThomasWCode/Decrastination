@@ -5,7 +5,7 @@ import java.security.MessageDigest
 import kotlinx.serialization.Serializable
 
 /**
- * What the enrichment (docs/data-sources.md §5) says about a task beyond what its source does: an
+ * What the enrichment (docs/spec/readings.md) says about a task beyond what its source does: an
  * email's real kind and deadline, an assignment's steps, an estimate. Kept on the task
  * ([TaskItem.enrichment]) and laid over the source's values at every merge ([enriched]), so a sync
  * never undoes it; made again when the task's content changes ([Enrichments.inputHash]).
@@ -167,7 +167,7 @@ fun TaskItem.withEnrichment(new: Enrichment): TaskItem {
 /** What there is to enrich, and how to tell when it has changed. */
 object Enrichments {
 
-    /** The three jobs of docs/data-sources.md §5 that run on tasks. */
+    /** The three jobs of docs/spec/readings.md that run on tasks. */
     enum class Job { Email, Assignment, Effort }
 
     /** What [task] needs, or null: done, derived (the Anki quota and decks), or an event. */

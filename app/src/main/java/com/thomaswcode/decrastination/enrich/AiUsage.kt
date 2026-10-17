@@ -6,7 +6,7 @@ import java.time.YearMonth
 import java.time.ZoneId
 
 /**
- * What the model has cost this month (docs/data-sources.md §5): each call's price from its token
+ * What the model has cost this month (docs/spec/readings.md): each call's price from its token
  * counts, against the cap set in Settings. Kept in `runtime.json`; a new month starts at nothing.
  */
 @Serializable

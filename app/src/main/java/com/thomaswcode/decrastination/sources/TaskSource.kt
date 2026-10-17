@@ -9,7 +9,7 @@ import com.thomaswcode.decrastination.sources.powerplanner.Timetable
 import java.time.ZoneId
 
 /**
- * One of the four places tasks come from (PLAN.md §1). A read returns everything the source has
+ * One of the four places tasks come from (docs/spec/sources.md). A read returns everything the source has
  * now, or throws: a failure must never look like an empty list, since [com.thomaswcode.decrastination.core.Merge]
  * takes a task missing from a read as done.
  */

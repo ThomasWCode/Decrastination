@@ -99,7 +99,7 @@ class ProtectionActivity : ComponentActivity() {
 private enum class Step { None, Explain, ParentCode, Confirm }
 
 /**
- * Protection (docs/scheduler.md §6): what's in place, arming and disarming it, the changes
+ * Protection (docs/spec/blocking-and-protection.md): what's in place, arming and disarming it, the changes
  * waiting their 24 hours, and the parent code that applies one at once. Built but left unarmed
  * (Q20): arming asks for the device admin and your dad's scan of a QR code into his
  * authenticator app (Q17), which can be skipped; until he scans one there's no override, only

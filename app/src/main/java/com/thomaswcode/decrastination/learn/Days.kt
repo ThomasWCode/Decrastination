@@ -14,7 +14,7 @@ data class DayChunk(val taskId: String, val minutes: Int)
 
 /**
  * A day's plan as it stood at the morning briefing, and, the next morning, whether it was all done
- * (docs/scheduler.md §5, item 4).
+ * (docs/spec/learning.md, item 4).
  */
 @Serializable
 data class DayRecord(
@@ -33,7 +33,7 @@ data class DayRecord(
     val schoolMin: Int = 0,
 )
 
-/** The Sunday check-in (docs/scheduler.md §5, item 6): five questions, a scale or a line each. */
+/** The Sunday check-in (docs/spec/learning.md, item 6): five questions, a scale or a line each. */
 @Serializable
 data class CheckIn(
     /** The Monday of the week it's about. */

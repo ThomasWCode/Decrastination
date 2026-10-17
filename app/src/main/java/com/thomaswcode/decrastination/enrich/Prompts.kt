@@ -27,7 +27,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 
 /**
- * What the model is asked (docs/data-sources.md §5), one job at a time: the instructions, the
+ * What the model is asked (docs/spec/readings.md), one job at a time: the instructions, the
  * item, and the JSON schema its answer must follow. Pure, so the wording and the schemas are
  * tested and can be tried out without the API.
  */

@@ -11,7 +11,7 @@ import com.thomaswcode.decrastination.notify.Channels
 import com.thomaswcode.decrastination.notify.Notify
 import com.thomaswcode.decrastination.ui.MainActivity
 
-/** Claude's warnings (docs/data-sources.md §5): a plan of its dropped, and its key no longer working. */
+/** Claude's warnings (docs/spec/readings.md): a plan of its dropped, and its key no longer working. */
 object ModelAlerts {
     /** One a task, told apart by its id as the tag. */
     private const val DROPPED_ID = 5001

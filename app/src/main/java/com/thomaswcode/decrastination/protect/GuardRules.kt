@@ -1,7 +1,7 @@
 package com.thomaswcode.decrastination.protect
 
 /**
- * Layer 2 of the anti-tamper (docs/scheduler.md §6): given the texts a Settings, Device Care or
+ * Layer 2 of the anti-tamper (docs/spec/blocking-and-protection.md): given the texts a Settings, Device Care or
  * package-installer window shows, whether to press Back. Active only once protection is armed.
  * It only ever matches this app's own pages and the reset pages, so the rest of Settings, other
  * apps' pages included, stays usable:
