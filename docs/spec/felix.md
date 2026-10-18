@@ -16,7 +16,7 @@ The chat is his one visible voice (D-95): every word in his name is a message th
 
 ## The chat
 
-`ui/AskActivity.kt` has two tabs, *Chat* and *Your changes*; its menu has *What Felix remembers* and *Clear the chat*. The chat holds every message of his, what he writes unasked among them, and every one is kept (D-96):
+`ui/AskActivity.kt` has two tabs, *Chat* and *Your changes*; its menu has *What Felix remembers* and *Clear the chat*. The chat is on screen only on its tab: *Your changes* shown, it's left as on leaving the screen, and back, opened again; every way into the screen, his notification's tap among them, shows the *Chat* tab. The chat holds every message of his, what he writes unasked among them, and every one is kept (D-96):
 - the live window in `chat.json`: the newest 200 messages or those of the last 60 days, whichever keeps more, and every one of his still unread; what's past it and read moves to `chat-archive.json`, oldest first, the archive written before the window is trimmed (`Outbox.moveWindow`);
 - clearing the chat empties both, and leaves what it made and his state;
 - it reads as a messaging app's (`ui/ChatScreenState.kt`): each day's date over its first message ("Today", "Yesterday", "Tuesday 13 October"), the time under each, and a *New messages* line over the first of his messages unread when it was opened, for that visit;
