@@ -254,10 +254,14 @@ class ReviewInputTest {
             start = Fixtures.at("2026-10-06T17:00"), end = Fixtures.at("2026-10-06T17:30"), window = com.thomaswcode.decrastination.core.WindowKind.Evening,
             outcome = SlotOutcome.Kept, workedMin = 30, earned = true, at = Fixtures.at("2026-10-06T17:25"),
         )
-        val felix = com.thomaswcode.decrastination.data.FelixRecord("f1", Fixtures.at("2026-10-06T17:10"), "SlotStart", "Ten minutes in: are you starting?", key = "teams:a#0", repliedAt = Fixtures.at("2026-10-06T17:12"))
+        // His message in the chat about the slot, and your reply to it.
+        val felix = listOf(
+            com.thomaswcode.decrastination.core.ChatMessage("f1", com.thomaswcode.decrastination.core.Speaker.Claude, "Ten minutes in: are you starting?", Fixtures.at("2026-10-06T17:10"), kind = com.thomaswcode.decrastination.core.MessageKind.SlotStart, pieceKey = "teams:a#0"),
+            com.thomaswcode.decrastination.core.ChatMessage("y1", com.thomaswcode.decrastination.core.Speaker.You, "yes", Fixtures.at("2026-10-06T17:12"), replyTo = "f1", answeredAt = Fixtures.at("2026-10-06T17:12")),
+        )
         val day = com.thomaswcode.decrastination.learn.DayRecord("2026-10-06", plannedMin = 60, chunks = emptyList(), doneMin = 30, full = false, kind = com.thomaswcode.decrastination.core.DayKind.Weekday)
-        val log = ActivityLog(reviews = listOf(last), slots = listOf(slot), felix = listOf(felix), days = listOf(day))
-        val text = ReviewInput.describe(log, Calibration(), Settings(boxMin = 30, classMap = mapOf("12.1 Physics" to "Physics")), Fixtures.at("2026-10-11T19:00"), LONDON, week = "2026-10-05")
+        val log = ActivityLog(reviews = listOf(last), slots = listOf(slot), days = listOf(day))
+        val text = ReviewInput.describe(log, Calibration(), Settings(boxMin = 30, classMap = mapOf("12.1 Physics" to "Physics")), Fixtures.at("2026-10-11T19:00"), LONDON, week = "2026-10-05", messages = felix)
         assertTrue("Last week's review said: Shorter pieces this week." in text, text)
         assertTrue("It changed: boxMin 45 to 30 (shorter pieces got finished), now 30" in text, text)
         assertTrue("By window: Evening 1 kept, 0 missed, 0 moved" in text, text)

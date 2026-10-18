@@ -1,6 +1,7 @@
 package com.thomaswcode.decrastination.data
 
 import com.thomaswcode.decrastination.core.Calibration
+import com.thomaswcode.decrastination.core.ChatArchive
 import com.thomaswcode.decrastination.core.ChatState
 import com.thomaswcode.decrastination.core.Instruction
 import com.thomaswcode.decrastination.core.InstructionState
@@ -71,8 +72,14 @@ class BackupService(
         fun delete(name: String): Boolean
     }
 
-    /** A backup of what the sources can't give back, as text ([Backups]). */
-    fun exportBackup(): String = Backups.encode(
+    /**
+     * A backup of what the sources can't give back, as text ([Backups]): the chat's earlier messages
+     * in it while it fits what Import reads, the oldest left out first ([Backups.fitted]).
+     */
+    fun exportBackup(): String = encoded().first
+
+    /** [exportBackup], and how many of the chat's earliest messages it leaves out for room: said in Settings → Backup. */
+    fun encoded(): Pair<String, Int> = Backups.fitted(
         Backup(
             exportedAt = clock.now(),
             versionName = versionName,
@@ -87,9 +94,9 @@ class BackupService(
             ownTasks = stores.tasks.value.tasks.filter { it.source == Source.Own },
             school = stores.school.value,
             memory = stores.memory.value,
-            felix = stores.runtime.value.felix,
             slots = stores.runtime.value.slots,
             chat = stores.chat.value,
+            archive = stores.chatArchive.value,
             versions = stores.shapes.mapValues { it.value.version },
         ),
     )
@@ -131,11 +138,17 @@ class BackupService(
         // The backup's days off and half-days beside those here (PL-16); and what it remembered (AI-21).
         stores.replace(stores.school) { it.withAll(backup.school) }
         stores.replace(stores.memory) { Backups.mergedMemory(it, backup.memory) }
-        // The chat where this phone's is empty (a reset's copy brings it back, LR-08): not a message
-        // of yours still waiting for its answer, which would be sent, words from then, as it opens.
+        // The chat where this phone's is empty (a reset's copy brings it back, LR-08), with its earlier
+        // messages: not a message of yours still waiting for its answer, which would be sent, words
+        // from then, as it opens. Felix's state with it, or where this phone has none of its own.
         val backedChat = backup.chat.let { c -> c.unanswered?.let { w -> c.copy(messages = c.messages.filterNot { it.id == w.id }) } ?: c }
         var chatBack = 0
-        stores.replace(stores.chat) { s -> if (s.messages.isEmpty() && backedChat.messages.isNotEmpty()) backedChat.also { chatBack = it.messages.size } else s }
+        stores.replace(stores.chat) { s ->
+            // This phone's state of his, where it has one, wins: a chat cleared here keeps it.
+            val felix = if (s.felix == FelixState()) backedChat.felix else s.felix
+            if (s.messages.isEmpty() && backedChat.messages.isNotEmpty()) backedChat.copy(felix = felix).also { chatBack = it.messages.size } else s.copy(felix = felix)
+        }
+        if (chatBack > 0) stores.replace(stores.chatArchive) { a -> if (a.messages.isEmpty()) backup.archive else a }
         val own = ownAdded.size
         val told = buildList {
             if (own > 0) add("$own task${if (own == 1) "" else "s"} of your own")
@@ -143,13 +156,10 @@ class BackupService(
             if (restored > 0) add("$restored instruction${if (restored == 1) "" else "s"} restored")
             if (unclear > 0) add("$unclear left unapplied under Your changes in Felix's chat, as ${if (unclear == 1) "it" else "they"} would have tasks wait for each other in a circle")
         }.takeIf { it.isNotEmpty() }?.joinToString(", ", prefix = " ", postfix = ".") ?: ""
-        // Felix's state where this phone has none of its own; today's slots, restored the same day (AR-07).
+        // Today's slots, restored the same day (AR-07).
         val today = Instant.ofEpochMilli(clock.now()).atZone(clock.zone()).toLocalDate().toString()
         stores.replace(stores.runtime) { s ->
-            s.copy(
-                felix = if (s.felix == FelixState()) backup.felix else s.felix,
-                slots = if (backup.slots.date == today && s.slots.on(LocalDate.parse(today)).let { it.previous.isEmpty() && it.missed.isEmpty() }) backup.slots else s.slots,
-            )
+            s.copy(slots = if (backup.slots.date == today && s.slots.on(LocalDate.parse(today)).let { it.previous.isEmpty() && it.missed.isEmpty() }) backup.slots else s.slots)
         }
         // This month's spend on Claude, armed or not: it can only rise, so the cap isn't given again.
         val month = AiUsage.monthOf(clock.now(), clock.zone())
@@ -210,8 +220,7 @@ class BackupService(
         val all = what == Reset.Everything
         if (all || what == Reset.Stats) {
             resets.incrementAndGet()
-            // Felix's messages are the chat's to reset, not Stats'.
-            stores.replace(stores.log) { ActivityLog(felix = it.felix) }
+            stores.replace(stores.log, ActivityLog())
             stores.replace(stores.runtime) { it.copy(calibration = Calibration()) }
         }
         if (what == Reset.Calibration) stores.replace(stores.runtime) { it.copy(calibration = Calibration(learnFrom = now)) }
@@ -220,9 +229,9 @@ class BackupService(
             changeSettings { it.copy(profileLines = emptyList()) }
         }
         if (all || what == Reset.Chat) {
+            // The chat, its earlier messages, and his state with it: what he's waiting to say, the check-in's answers so far.
             stores.replace(stores.chat, ChatState())
-            stores.replace(stores.runtime) { it.copy(felix = FelixState(), checkInDraft = null) }
-            stores.replace(stores.log) { it.copy(felix = emptyList()) }
+            stores.replace(stores.chatArchive, ChatArchive())
             // His notification too, a check-in's question among them: nothing's left to answer it.
             cancelFelix()
         }

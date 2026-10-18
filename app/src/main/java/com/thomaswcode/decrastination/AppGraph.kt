@@ -58,8 +58,8 @@ import com.thomaswcode.decrastination.enrich.RuleEnricher
 import com.thomaswcode.decrastination.felix.AndroidFelixPorts
 import com.thomaswcode.decrastination.felix.Conversation
 import com.thomaswcode.decrastination.felix.FelixNotifications
-import com.thomaswcode.decrastination.felix.FelixPrompts
 import com.thomaswcode.decrastination.felix.Looks
+import com.thomaswcode.decrastination.felix.Outbox
 import com.thomaswcode.decrastination.learn.Assessment
 import com.thomaswcode.decrastination.learn.Briefing
 import com.thomaswcode.decrastination.learn.Calibrator
@@ -245,9 +245,12 @@ class AppGraph private constructor(context: Context) {
     /** What Felix's service asks of Android: his notification, and the work and alarms that outlive what asked. */
     private val felixPorts = AndroidFelixPorts(app)
 
+    /** Where every message in Felix's name is written, the chat first, and his one notification made from it. */
+    private val outbox = Outbox(chat, stores.chatArchive, settings, notifier, felixPorts, chatOnScreen = { conversation.chatInFront }, clock)
+
     /** The voice of the app's messages (LR-03). */
     val looks: Looks = Looks(
-        tasks, settings, runtime, log, clock, scope, gateway, notifier, focus, planning, felixPorts,
+        tasks, settings, runtime, log, chat, clock, scope, gateway, focus, planning, felixPorts, outbox,
         calendarTime = { calendarTime },
         profile = { conversation.profile(it) },
         remember = { conversation.remember(it) },
@@ -257,10 +260,10 @@ class AppGraph private constructor(context: Context) {
 
     /**
      * Felix's conversation ([Conversation]): the chat, his answers and what they make, what he
-     * remembers, the replies from his notification and the week's check-in.
+     * remembers, the replies from his notification, the week's check-in, and what the app says in his name.
      */
     val conversation: Conversation = Conversation(
-        tasks, settings, runtime, log, instructions, chat, school, memory, clock, scope, gateway, notifier, focus, planning, felixPorts,
+        tasks, settings, runtime, log, instructions, chat, school, memory, clock, scope, gateway, notifier, focus, planning, felixPorts, outbox,
         owners = object : Conversation.Owners {
             override suspend fun saveOwnTask(sourceId: String, task: OwnTask): Boolean = this@AppGraph.saveOwnTask(sourceId, task)
             override suspend fun finishOwnTask(taskId: String) { this@AppGraph.finishOwnTask(taskId) }
@@ -270,6 +273,11 @@ class AppGraph private constructor(context: Context) {
             override suspend fun deleteInstruction(id: String) { this@AppGraph.deleteInstruction(id) }
             override suspend fun layTaskOverrides() { this@AppGraph.layTaskOverrides() }
             override suspend fun changeSettings(change: (Settings) -> Settings) { this@AppGraph.changeSettings(change) }
+            override suspend fun answerEvent(key: String, words: String): Boolean {
+                val answer = CalendarTime.ANSWERS.firstOrNull { it.first.equals(words.trim(), ignoreCase = true) }?.second ?: return false
+                CalendarTime.answer(app, key, answer)
+                return true
+            }
         },
         calendarTime = { calendarTime },
         answered = { record, words -> looks.answered(record, words) },
@@ -555,8 +563,8 @@ class AppGraph private constructor(context: Context) {
             // Only then is the day judged empty: a slot kept as the app stopped is work done.
             runCatching { focus.grantAllowanceIfDue() }.onFailure { Log.w(TAG, "Giving the day's free time failed", it) }
         }
-        // "How was it?" questions kept while notifications were off, once they're on.
-        syncer.addAfterEverySync { Assessment.askLater(app) }
+        // "How was it?" questions kept for his evening question, asked in the app's words once Claude's off.
+        syncer.addAfterEverySync { conversation.askKept() }
         // A task back after aging out of the list (or new) takes the overrides its instructions give.
         syncer.addAfterEverySync { layTaskOverrides() }
         // Your own tasks long done go, as a source's do.
@@ -673,6 +681,12 @@ class AppGraph private constructor(context: Context) {
         }
         // The files older shapes came from, a week after their migration, at a start that's got this far.
         scope.launch(Dispatchers.IO) { runCatching { stores.letGoOfOldShapes() }.onFailure { Log.w(TAG, "Letting go of old shapes failed", it) } }
+        // The notifications Felix's messages have taken the place of, one still showing or held from
+        // before let go; then his own, made from the chat as it is.
+        scope.launch {
+            runCatching { notifier.retire(NoticeId.RETIRED) }.onFailure { Log.w(TAG, "Letting go of the retired notifications failed", it) }
+            outbox.notify(clock.now())
+        }
         // Redraw the widget whenever what it shows may have changed.
         scope.launch {
             combine(tasks.state, settings.state, runtime.state) { _, _, _ -> }.drop(1).debounce(WIDGET_DEBOUNCE_MS).collect {
@@ -775,7 +789,7 @@ class AppGraph private constructor(context: Context) {
         // A task the chat deleted keeps its photo while its Undo can bring it back: no other act's, nor one made again since.
         val messages = chat.value.messages
         val undoable = messages.flatMap { m ->
-            m.acts.filter { it.action.type == com.thomaswcode.decrastination.core.ChatAction.Type.Delete && com.thomaswcode.decrastination.core.ChatActs.canUndo(it, tasks.value.tasks, settings.value, messages) }
+            m.acts.filter { it.action?.type == com.thomaswcode.decrastination.core.ChatAction.Type.Delete && com.thomaswcode.decrastination.core.ChatActs.canUndo(it, tasks.value.tasks, settings.value, messages) }
                 .mapNotNull { it.was?.photo?.path }
         }
         val held = tasks.value.tasks.mapNotNull { it.photo?.path }.toSet() + undoable
@@ -956,14 +970,14 @@ class AppGraph private constructor(context: Context) {
 
     /**
      * The [week]'s summary for home (NF-02), written by the model after its review and kept with it;
-     * then Felix's "The week's summary is ready" opens it in an email to send. Nothing while Claude
-     * can't be asked, or the week has no review. The summary, or null.
+     * then Felix's offer to send it, in the chat with the button that opens it in an email. Nothing
+     * while Claude can't be asked, or the week has no review. The summary, or null.
      */
     suspend fun writeSummary(week: String): String? {
         val client = gateway.client(com.thomaswcode.decrastination.enrich.ModelEffort.Job.Summary) ?: return null
         if (log.value.reviews.none { it.week == week }) return null
         val zone = clock.zone()
-        val input = com.thomaswcode.decrastination.learn.Summary.input(log.value, instructions.value.applied, week, zone)
+        val input = com.thomaswcode.decrastination.learn.Summary.input(log.value, instructions.value.applied, week, zone, chat.value.messages)
         val writer = com.thomaswcode.decrastination.enrich.SummaryWriter(client)
         val called = gateway.call(
             interactive = false,
@@ -972,28 +986,10 @@ class AppGraph private constructor(context: Context) {
         ) { at -> writer.write(conversation.profile(at).text, input) }
         val text = (called as? Called.Answered)?.value?.text ?: return null
         log.update { l -> l.copy(reviews = l.reviews.map { if (it.week == week) it.copy(summary = text) else it }) }
-        val now = clock.now()
-        val record = com.thomaswcode.decrastination.data.FelixRecord(java.util.UUID.randomUUID().toString(), now, FelixPrompts.Reason.Summary.name, SUMMARY_READY)
-        log.update { it.copy(felix = it.felix + record).trimmed(now) }
-        // In quiet hours on the week's channel, held with the routine ones till the morning (LR-07).
-        val quiet = com.thomaswcode.decrastination.block.BlockPolicy.isQuiet(now, zone, settings.value)
-        notifier.post(
-            NoticeId.Summary,
-            com.thomaswcode.decrastination.notify.Notify.builder(app, if (quiet) com.thomaswcode.decrastination.notify.Channels.WEEKLY else com.thomaswcode.decrastination.notify.Channels.FELIX)
-                .setSmallIcon(R.drawable.ic_focus)
-                .setContentTitle(settings.value.felixName)
-                .setContentText(SUMMARY_READY)
-                .setStyle(androidx.core.app.NotificationCompat.BigTextStyle().bigText("$SUMMARY_READY\n\n$text"))
-                // Through the Reviews page, which opens the email: a tap held through quiet hours is the app's own.
-                .let { com.thomaswcode.decrastination.notify.Notify.opening(it, app, NoticeId.Summary.code(), android.content.Intent(app, com.thomaswcode.decrastination.ui.ReviewsActivity::class.java).putExtra(com.thomaswcode.decrastination.ui.ReviewsActivity.EXTRA_SEND, week).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) }
-                .setAutoCancel(true)
-                .build(),
-        )
+        // His offer in the chat, held from his notification in quiet hours till the morning (LR-07).
+        conversation.summaryReady(week)
         return text
     }
-
-    /** Felix's word that the summary's ready (NF-02). */
-    private val SUMMARY_READY = "The week's summary is ready; send it?"
 
     /** Held while instructions are read, so each is read once. */
     private val readingInstructions = Mutex()

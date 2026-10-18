@@ -268,20 +268,38 @@ class BackupTest {
     }
 
     @Test
-    fun `format 6 keeps Felix's state and today's slots, and a newer one is refused`() {
+    fun `format 7 keeps the chat with Felix's state, its earlier messages and today's slots, and a newer one is refused`() {
+        val chat = com.thomaswcode.decrastination.core.ChatState(listOf(com.thomaswcode.decrastination.core.ChatMessage("m1", com.thomaswcode.decrastination.core.Speaker.You, "move the physics to Thursday", 5)), felix = FelixState(nextCheckAt = 42))
+        val archive = com.thomaswcode.decrastination.core.ChatArchive(listOf(com.thomaswcode.decrastination.core.ChatMessage("m0", com.thomaswcode.decrastination.core.Speaker.You, "what's due?", 1)))
         val backup = Backup(
-            exportedAt = 1, settings = com.thomaswcode.decrastination.data.Settings(), log = ActivityLog(),
-            felix = FelixState(nextCheckAt = 42), slots = com.thomaswcode.decrastination.core.SlotState("2026-10-15", previous = mapOf("teams:a#0" to 7L)),
+            exportedAt = 1, settings = com.thomaswcode.decrastination.data.Settings(), log = ActivityLog(), chat = chat, archive = archive,
+            slots = com.thomaswcode.decrastination.core.SlotState("2026-10-15", previous = mapOf("teams:a#0" to 7L)),
         )
         val back = Backups.decode(Backups.encode(backup), emptyMap())!!
-        assertEquals(6, back.format)
-        assertEquals(42L, back.felix.nextCheckAt)
-        // The chat as well (LR-08's copy before a reset); none in one from before.
-        val chat = com.thomaswcode.decrastination.core.ChatState(listOf(com.thomaswcode.decrastination.core.ChatMessage("m1", com.thomaswcode.decrastination.core.Speaker.You, "move the physics to Thursday", 5)))
-        assertEquals(chat, Backups.decode(Backups.encode(backup.copy(chat = chat)), emptyMap())!!.chat)
+        assertEquals(7, back.format)
+        assertEquals(chat, back.chat)
+        assertEquals(42L, back.chat.felix.nextCheckAt)
+        assertEquals(archive, back.archive)
+        // None in one from before.
         assertEquals(com.thomaswcode.decrastination.core.ChatState(), Backups.decode("""{"app":"Decrastination","format":5,"exportedAt":0,"settings":{},"log":{}}""", emptyMap())!!.chat)
         assertEquals(mapOf("teams:a#0" to 7L), back.slots.previous)
-        assertEquals(null, Backups.decode(Backups.encode(backup).replace("\"format\": 6", "\"format\": 7"), emptyMap()))
+        assertEquals(null, Backups.decode(Backups.encode(backup).replace("\"format\": 7", "\"format\": 8"), emptyMap()))
+    }
+
+    @Test
+    fun `a backup past what Import reads leaves the chat's earliest messages out, as few as it takes`() {
+        fun message(i: Int) = com.thomaswcode.decrastination.core.ChatMessage("m$i", com.thomaswcode.decrastination.core.Speaker.You, "x".repeat(1_000), i.toLong())
+        val backup = Backup(exportedAt = 1, settings = com.thomaswcode.decrastination.data.Settings(), log = ActivityLog(), archive = com.thomaswcode.decrastination.core.ChatArchive((1..40).map(::message)))
+        val whole = Backups.encode(backup).toByteArray().size
+        // Room for all of it: nothing left out.
+        assertEquals(0, Backups.fitted(backup, cap = whole).second)
+        // Room for about half: the oldest left out, the newest kept, and it fits.
+        val (text, left) = Backups.fitted(backup, cap = whole / 2)
+        assertTrue(left in 1 until 40 && text.toByteArray().size <= whole / 2, "$left left out")
+        val kept = Backups.decode(text, emptyMap())!!.archive.messages
+        assertEquals((left + 1..40).map { "m$it" }, kept.map { it.id })
+        // One fewer left out wouldn't fit.
+        assertTrue(Backups.encode(backup.copy(archive = backup.archive.copy(messages = backup.archive.messages.drop(left - 1)))).toByteArray().size > whole / 2)
     }
 }
 

@@ -1,5 +1,7 @@
 package com.thomaswcode.decrastination.felix
 
+import com.thomaswcode.decrastination.core.ChatHistory
+import com.thomaswcode.decrastination.core.ChatMessage
 import com.thomaswcode.decrastination.core.EarnsBy
 import com.thomaswcode.decrastination.core.Given
 import com.thomaswcode.decrastination.core.Kind
@@ -7,7 +9,6 @@ import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.Slot
 import com.thomaswcode.decrastination.core.SlotKind
 import com.thomaswcode.decrastination.core.TaskItem
-import com.thomaswcode.decrastination.data.FelixRecord
 import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.data.SlotOutcome
 import com.thomaswcode.decrastination.data.SlotRecord
@@ -52,8 +53,8 @@ object FelixPrompts {
      * What he's told for one message: the [reason]; the time; the [slot]'s piece (its minutes, its
      * time, and what earns it its free time) and its first action, or the slot on [record] (missed,
      * or kept), or the [task] it's about, with the task's own text cut at [TEXT] (D-93); today's
-     * slots kept, missed and to come, and the free time there is ([freeMin]); his [recent] messages
-     * and the replies to them; and, for a Question, the [question] to put.
+     * slots kept, missed and to come, and the free time there is ([freeMin]); his last messages of his
+     * own from the chat, [recent], with your replies to them; and, for a Question, the [question] to put.
      */
     fun describe(
         reason: Reason,
@@ -61,7 +62,7 @@ object FelixPrompts {
         slot: Slot?,
         task: TaskItem?,
         today: List<SlotRecord>,
-        recent: List<FelixRecord>,
+        recent: List<ChatMessage>,
         question: String?,
         settings: Settings,
         now: Long,
@@ -110,13 +111,13 @@ object FelixPrompts {
         if (toCome.isNotEmpty()) appendLine("Left today: " + toCome.joinToString("; ") { "${it.chunk?.label} ${clock(it.start)}–${clock(it.end)}" })
         freeMin?.let { appendLine("Free time now: $it min") }
         if (done.isNotEmpty()) appendLine("Done, as their sources say, with none of it timed in a slot: " + done.joinToString("; "))
-        // His silences (he chose not to write, or the model couldn't be asked) aren't messages.
-        val shown = recent.filter { it.text.isNotBlank() }.sortedBy { it.at }.takeLast(RECENT)
+        // His own messages, written unasked: his silences (he chose not to write) aren't messages.
+        val shown = ChatHistory.his(recent).filter { it.text.isNotBlank() }.sortedBy { it.at }.takeLast(RECENT)
         if (shown.isNotEmpty()) {
             appendLine("Recent, oldest first:")
-            for (r in shown) {
-                appendLine("- ${Instant.ofEpochMilli(r.at).atZone(zone).format(WHEN)}, you (${r.reason}): ${r.text}")
-                r.replyText?.let { reply -> appendLine("- ${Instant.ofEpochMilli(r.repliedAt ?: r.at).atZone(zone).format(WHEN)}, they replied: $reply") }
+            for (m in shown) {
+                appendLine("- ${Instant.ofEpochMilli(m.at).atZone(zone).format(WHEN)}, you (${m.kind}): ${m.text}")
+                ChatHistory.replyOf(m, recent)?.let { reply -> appendLine("- ${Instant.ofEpochMilli(reply.at).atZone(zone).format(WHEN)}, they replied: ${reply.text}") }
             }
         }
         question?.let { appendLine("Question: $it") }

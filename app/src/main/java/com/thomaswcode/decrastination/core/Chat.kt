@@ -1,25 +1,42 @@
 package com.thomaswcode.decrastination.core
 
+import com.thomaswcode.decrastination.data.AssessLater
+import com.thomaswcode.decrastination.data.FelixState
 import kotlinx.serialization.Serializable
 
 /**
  * Asking Claude (2.0.0, Q29), Felix since review v2 (AI-24): one chat for everything you'd say about
  * your work. You write; he answers, asks when something's missing, and puts what he does on cards
  * ([Proposal]): everything is made at once, its card's Undo taking it back (your call, 16 Oct; a new
- * task or days off waited for the card's Add or Apply before). Kept in `chat.json`.
+ * task or days off waited for the card's Add or Apply before). Every word in his name is a message
+ * here first, what he writes unasked among them (docs/plan_v4/05-the-chat.md): this is the live
+ * window of the conversation, kept in `chat.json`, and what's past it is in [ChatArchive].
  */
 @Serializable
 data class ChatState(
     val messages: List<ChatMessage> = emptyList(),
+    /** When you last left the chat, or opened it from his notification: his messages after it are unread. */
+    val readAt: Long = 0,
+    /** His state between looks (LR-03): his next check, what he wrote ahead, what waits to be asked, the check-in's answers so far. */
+    val felix: FelixState = FelixState(),
     /** The shape this is in ([com.thomaswcode.decrastination.data.Migration]): raised with each change of it. */
-    val version: Int = 1,
+    val version: Int = 2,
 ) {
-    /** Your last message, if Claude hasn't answered it yet. */
-    val unanswered: ChatMessage? get() = messages.lastOrNull()?.takeIf { it.from == Speaker.You && it.answeredAt == null }
+    /** Your last message, if Claude hasn't answered it yet: a message of his written since, unasked, doesn't answer it. */
+    val unanswered: ChatMessage? get() = messages.lastOrNull { it.from == Speaker.You }?.takeIf { it.answeredAt == null }
 }
 
 @Serializable
 enum class Speaker { You, Claude }
+
+/**
+ * Why a message was written (docs/plan_v4/05-the-chat.md §1): [Chat] for yours and his answers to you;
+ * else why he wrote unasked: his looks at a slot (`SlotStart`, `SlotEnd`, `SlotKept`), the day done,
+ * the morning, a reading's question, how the day's completions went, the week's check-in, review and
+ * summary, a calendar event's question; a reminder and a note of the app's (Stages 8a and 8b).
+ */
+@Serializable
+enum class MessageKind { Chat, Morning, SlotStart, SlotEnd, SlotKept, DayDone, Question, Completions, CheckIn, Review, Summary, EventQuestion, Reminder, Note }
 
 @Serializable
 data class ChatMessage(
@@ -27,11 +44,28 @@ data class ChatMessage(
     val from: Speaker,
     val text: String,
     val at: Long,
-    /** What your message was written about: a task, an event or a day (from its page), or nothing in particular. */
+    /** What your message was written about: a task, an event or a day (from its page), or nothing in particular. His: what he wrote about. */
     val about: About = About(),
+    /** Why it was written: a message of his written unasked has a kind of its own. */
+    val kind: MessageKind = MessageKind.Chat,
+    /** His, in the app's own words, with no call made (a check-in's question, the morning's list, a calendar event's question). */
+    val byApp: Boolean = false,
+    /** The message this one answers: a reply from his notification, or one of his chips. */
+    val replyTo: String? = null,
+    /** His, about a piece of the plan: its key (PL-13). */
+    val pieceKey: String? = null,
+    /** His: when he said he'd look again. */
+    val nextCheckAt: Long? = null,
+    /** His Completions message's completions (LR-05): one of its three answers goes on each. */
+    val asks: List<AssessLater> = emptyList(),
+    /** His, in the app's words: the button it carries under it, "review" (the week's) or "summary:<week>" (to send). */
+    val opens: String? = null,
     /** Claude's: what it would do, each on a card. */
     val proposals: List<Proposal> = emptyList(),
-    /** Yours: when Claude answered it; null while it waits. */
+    /**
+     * Yours: when Claude answered it; null while it waits. His question (a check-in's, a reading's, how
+     * work went, a calendar event's): when it was answered, here or elsewhere, so it leaves his notification.
+     */
     val answeredAt: Long? = null,
     /** Yours, while it waits: why (Claude off, resting, a failed call). Claude's: what it suggested that the app couldn't use. */
     val note: String? = null,
@@ -41,16 +75,14 @@ data class ChatMessage(
      * never by itself.
      */
     val stuck: Boolean = false,
-    /** Claude's, before 16 Oct: what it remembered or forgot with it (AI-21), a line each. Since, [memoryEdits]. */
-    val remembered: List<String> = emptyList(),
     /** Claude's: what it remembered or forgot with it (AI-21), each with what its Undo takes back. */
     val memoryEdits: List<MemoryEdit> = emptyList(),
-    /** Claude's: what it did with it beyond its cards (AI-14: a step ticked), a line each, with nothing to undo; since 16 Oct what has its Undo is in [acts]. */
-    val done: List<String> = emptyList(),
-    /** Claude's: what its actions did (a step ticked or unticked, a task done, open again or deleted, a setting set), each with its Undo. */
+    /**
+     * Claude's: what its actions did (a step ticked or unticked, a task done, open again or deleted, a
+     * setting set), each with its Undo; and what came of the answer with nothing to undo (a time the
+     * plan couldn't keep, a text read in full, something not made), a line each.
+     */
     val acts: List<Act> = emptyList(),
-    /** Felix's, put here from a notification he wrote (AI-24): why he wrote it ([com.thomaswcode.decrastination.felix.FelixPrompts.Reason]). */
-    val reason: String? = null,
     /** Claude's: up to three short replies you might send next, in your words (AI-24, UI-06). */
     val suggestedReplies: List<String> = emptyList(),
     /** Claude's: what he searched the web for to answer it (16 Oct), and the pages the searches found, the first few. */
@@ -61,6 +93,38 @@ data class ChatMessage(
 /** A page a web search found ([ChatMessage.sources]): its title and where it is. */
 @Serializable
 data class WebSource(val title: String, val url: String)
+
+/**
+ * The conversation before the live window ([ChatState]), oldest first: every message kept for you to
+ * read, never sent to the model, read only on scrolling back. Kept in `chat-archive.json`.
+ */
+@Serializable
+data class ChatArchive(
+    val messages: List<ChatMessage> = emptyList(),
+    /** The shape this is in ([com.thomaswcode.decrastination.data.Migration]): raised with each change of it. */
+    val version: Int = 1,
+)
+
+/** The conversation read as a thread. Pure. */
+object ChatHistory {
+    /** How long after a message of his a message of yours with no [ChatMessage.replyTo] is taken as your reply to it. */
+    const val REPLY_WITHIN_MS = 10 * 60_000L
+
+    /** His own messages in [messages], written unasked (not his answers to you), as they were kept on record. */
+    fun his(messages: List<ChatMessage>): List<ChatMessage> = messages.filter { it.from == Speaker.Claude && it.kind != MessageKind.Chat }
+
+    /**
+     * Your reply to [message], his, in [messages]: the message of yours that says it answers it
+     * ([ChatMessage.replyTo]); or else the next of yours within [REPLY_WITHIN_MS] that answers nothing
+     * else, where his [message] is the last of his with words before it.
+     */
+    fun replyOf(message: ChatMessage, messages: List<ChatMessage>): ChatMessage? {
+        messages.firstOrNull { it.from == Speaker.You && it.replyTo == message.id }?.let { return it }
+        val next = messages.filter { it.from == Speaker.You && it.replyTo == null && it.at > message.at && it.at - message.at <= REPLY_WITHIN_MS }.minByOrNull { it.at } ?: return null
+        val lastOfHis = messages.filter { it.from == Speaker.Claude && it.text.isNotBlank() && it.at <= next.at }.maxByOrNull { it.at }
+        return next.takeIf { lastOfHis?.id == message.id }
+    }
+}
 
 /**
  * One thing Claude would do: add [task], a task of your own, or make [changes] (as an instruction
@@ -112,17 +176,20 @@ data class ChatAction(val type: Type, val taskId: String, val stepIndex: Int? = 
  * What one of the chat's actions did (16 Oct), said under its answer as [line], with what its Undo
  * needs: the [action]; the task as it was before it ([was]: deleted, or finished before it was
  * opened again), and the cards that had added a deleted one ([cards], "message|card"); a setting's
- * value before and after ([before], [after]). [undone] once Undo has taken it back.
+ * value before and after ([before], [after]). [undone] once Undo has taken it back. With no [action],
+ * a line saying what came of the answer, with nothing to undo; a [problem] where something wasn't
+ * made or looked up.
  */
 @Serializable
 data class Act(
     val line: String,
-    val action: ChatAction,
+    val action: ChatAction? = null,
     val was: TaskItem? = null,
     val cards: List<String> = emptyList(),
     val before: String? = null,
     val after: String? = null,
     val undone: Boolean = false,
+    val problem: Boolean = false,
 )
 
 @Serializable
@@ -140,7 +207,7 @@ object ChatActs {
      */
     fun canUndo(act: Act, tasks: List<TaskItem>, settings: com.thomaswcode.decrastination.data.Settings, messages: List<ChatMessage>): Boolean {
         if (act.undone) return false
-        val a = act.action
+        val a = act.action ?: return false
         val task = tasks.firstOrNull { it.id == a.taskId }
         val step = a.stepIndex?.let { task?.subSteps?.getOrNull(it) }
         return when (a.type) {

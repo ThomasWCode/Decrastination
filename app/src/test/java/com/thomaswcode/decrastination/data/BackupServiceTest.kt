@@ -55,7 +55,7 @@ class BackupServiceTest {
         /** Every JSON store's state, by file. */
         fun states(): Map<String, Any?> = mapOf(
             "tasks.json" to stores.tasks.value, "settings.json" to stores.settings.value, "runtime.json" to stores.runtime.value, "log.json" to stores.log.value,
-            "instructions.json" to stores.instructions.value, "chat.json" to stores.chat.value, "school.json" to stores.school.value,
+            "instructions.json" to stores.instructions.value, "chat.json" to stores.chat.value, "chat-archive.json" to stores.chatArchive.value, "school.json" to stores.school.value,
             "memory.json" to stores.memory.value, "calendar.json" to stores.calendarVersions.value,
         )
     }
@@ -78,7 +78,8 @@ class BackupServiceTest {
         assertEquals(was.memory.value, now.memory.value)
         // The chat but the message of yours still waiting, which would be sent with words from then.
         assertEquals(was.chat.value.messages.dropLast(1), now.chat.value.messages)
-        assertEquals(was.runtime.value.felix, now.runtime.value.felix)
+        assertEquals(was.chat.value.felix, now.chat.value.felix)
+        assertEquals(was.chatArchive.value, now.chatArchive.value)
         assertEquals(was.runtime.value.calibration, now.runtime.value.calibration)
         assertEquals(was.runtime.value.eventAnswers, now.runtime.value.eventAnswers)
         assertEquals(was.runtime.value.slots, now.runtime.value.slots)
@@ -102,7 +103,7 @@ class BackupServiceTest {
         val full = Phone(full = true)
         val backup = Backups.decode(full.service.exportBackup(), full.stores.shapes)!!
         assertEquals(full.stores.shapes.mapValues { it.value.version }, backup.versions)
-        assertTrue(backup.versions.values.all { it == 1 })
+        assertEquals(setOf("chat.json", "log.json", "runtime.json"), backup.versions.filterValues { it > 1 }.keys)
     }
 
     @Test
@@ -113,7 +114,7 @@ class BackupServiceTest {
         val said = phone.service.reset(Reset.Stats)
         val copy = phone.folder.files.keys.single { it.startsWith("reset-2026-10-18-") }
         assertTrue(said.endsWith("Documents/Decrastination/$copy."), said)
-        assertEquals(ActivityLog(felix = log.felix), phone.stores.log.value)
+        assertEquals(ActivityLog(), phone.stores.log.value)
         assertEquals(Calibration(), phone.stores.runtime.value.calibration)
         assertEquals(1, phone.service.resets.get())
         phone.service.importBackup(phone.folder.files.getValue(copy))

@@ -8,7 +8,6 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.OutOfQuotaPolicy
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
-import androidx.work.workDataOf
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.notify.Channels
 import com.thomaswcode.decrastination.notify.NoticeId
@@ -17,13 +16,11 @@ import com.thomaswcode.decrastination.notify.Notify
 /**
  * A reply from Felix's notification answered (AI-24) as work of its own: the receiver that took it
  * is let go at once, and the app may go with it, so the answer, which is paid for, would be lost
- * half made.
+ * half made. The reply is in the chat already, waiting for it.
  */
 class FelixReplyWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
-        val id = inputData.getString(KEY_ID) ?: return Result.success()
-        val asked = inputData.getString(KEY_ASKED) ?: return Result.success()
-        AppGraph.get(applicationContext).conversation.answerReply(id, asked, inputData.getString(KEY_WORDS).orEmpty())
+        AppGraph.get(applicationContext).conversation.answerReply()
         return Result.success()
     }
 
@@ -37,18 +34,11 @@ class FelixReplyWorker(context: Context, params: WorkerParameters) : CoroutineWo
 
     companion object {
         private const val NAME = "felix-reply"
-        private const val KEY_ID = "id"
-        private const val KEY_WORDS = "words"
-        private const val KEY_ASKED = "asked"
 
-        /** The most of the reply kept to show under his message while he answers: the chat has it whole. */
-        private const val MAX_WORDS = 1_000
-
-        /** The reply [words] to his message [id], kept in the chat as [asked], answered as soon as it can be; one after another. */
-        fun enqueue(context: Context, id: String, asked: String, words: String) {
+        /** The reply waiting in the chat answered as soon as it can be; one after another. */
+        fun enqueue(context: Context) {
             val request = OneTimeWorkRequestBuilder<FelixReplyWorker>()
                 .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
-                .setInputData(workDataOf(KEY_ID to id, KEY_ASKED to asked, KEY_WORDS to words.take(MAX_WORDS)))
                 .build()
             WorkManager.getInstance(context).enqueueUniqueWork(NAME, ExistingWorkPolicy.APPEND_OR_REPLACE, request)
         }

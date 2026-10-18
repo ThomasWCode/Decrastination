@@ -66,6 +66,7 @@ private fun DebugPage(graph: AppGraph, activity: Activity) {
     val runtime by graph.runtime.state.collectAsStateWithLifecycle()
     val state by graph.tasks.state.collectAsStateWithLifecycle()
     val log by graph.log.state.collectAsStateWithLifecycle()
+    val chat by graph.chat.state.collectAsStateWithLifecycle()
     val zone = graph.clock.zone()
     val now = graph.clock.now()
     // Made again on a tap: the context and the plan are the costly ones.
@@ -106,8 +107,8 @@ private fun DebugPage(graph: AppGraph, activity: Activity) {
                 Block(
                     activity,
                     "Felix",
-                    "State: ${runtime.felix}\n\nLast messages:\n" + log.felix.takeLast(10).joinToString("\n") { r ->
-                        "${Instant.ofEpochMilli(r.at).atZone(zone).toLocalDateTime().withNano(0)} ${r.reason}: ${r.text}" + (r.replyText?.let { " → $it" } ?: "")
+                    "State: ${chat.felix}\nRead to: ${chat.readAt}\n\nLast messages:\n" + com.thomaswcode.decrastination.core.ChatHistory.his(chat.messages).takeLast(10).joinToString("\n") { m ->
+                        "${Instant.ofEpochMilli(m.at).atZone(zone).toLocalDateTime().withNano(0)} ${m.kind}: ${m.text}" + (com.thomaswcode.decrastination.core.ChatHistory.replyOf(m, chat.messages)?.let { " → ${it.text}" } ?: "")
                     }.ifEmpty { "none" },
                 )
             }

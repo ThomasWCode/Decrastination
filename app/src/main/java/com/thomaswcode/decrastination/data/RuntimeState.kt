@@ -32,8 +32,6 @@ data class RuntimeState(
     val photosDone: List<PhotoDone> = emptyList(),
     /** Slots being kept whose due (the task's step or minutes, the log, free time) isn't all given yet (LR-09). */
     val keeping: List<Keeping> = emptyList(),
-    /** Felix's pace and what he's seen done (LR-03). */
-    val felix: FelixState = FelixState(),
     /** The routine notifications gone today, by date (LR-07): only today's kept. */
     val notifiedToday: Map<String, Int> = emptyMap(),
     /** Those held back by the ceiling or quiet hours (LR-07), to go at the next briefing. */
@@ -77,12 +75,8 @@ data class RuntimeState(
      * they can; a later plan dropped for changed content is another warning.
      */
     val droppedAlerted: Map<String, String> = emptyMap(),
-    /** "How was it?" questions kept while notifications couldn't be seen, to ask once they can. */
-    val assessLater: List<AssessLater> = emptyList(),
     /** When the nightly backup was last written (AR-07): null before the first. */
     val lastBackupAt: Long? = null,
-    /** The week's check-in as Felix asks it (LR-02), its answers so far: null when none is being asked. */
-    val checkInDraft: CheckInFlow.Draft? = null,
     /** The model's last calls (AC-07), oldest first: [CallRecord.MAX] of them. */
     val calls: List<CallRecord> = emptyList(),
     /** Pairs of tasks you've said aren't the same work (DX-15), by [com.thomaswcode.decrastination.core.Duplicates.key]: not asked about again. */
@@ -99,7 +93,7 @@ data class RuntimeState(
      */
     val unreadableSeen: List<String> = emptyList(),
     /** The shape this is in ([Migration]): raised with each change of it, a migration bringing older files to it. */
-    val version: Int = 1,
+    val version: Int = 2,
 ) {
     /** With [found] (this start's) on Setup's list: each once, and none you've seen. */
     fun withUnreadable(found: List<JsonStore.Unreadable>): RuntimeState {
@@ -150,12 +144,10 @@ data class ActivityLog(
     val days: List<DayRecord> = emptyList(),
     val checkIns: List<CheckIn> = emptyList(),
     val reviews: List<WeeklyReview> = emptyList(),
-    /** Felix's messages and the replies to them (AI-22, LR-03): the last [FELIX_KEEP_DAYS] days. */
-    val felix: List<FelixRecord> = emptyList(),
     /** Each reviewed week's totals (PL-10), kept [WEEKS_KEPT] weeks, past the [KEEP_DAYS] the rest is kept: Stats' longer periods read them. */
     val weeks: List<WeekRollup> = emptyList(),
     /** The shape this is in ([Migration]): raised with each change of it, a migration bringing older files to it. */
-    val version: Int = 1,
+    val version: Int = 2,
 ) {
     fun trimmed(now: Long): ActivityLog {
         val since = now - KEEP_DAYS * 24 * 3_600_000L
@@ -168,7 +160,6 @@ data class ActivityLog(
             days = days.filter { it.date >= sinceDay },
             checkIns = checkIns.filter { it.at >= since },
             reviews = reviews.filter { it.at >= since },
-            felix = felix.filter { it.at >= now - FELIX_KEEP_DAYS * 24 * 3_600_000L },
             weeks = weeks.sortedBy { it.week }.takeLast(WEEKS_KEPT),
             version = version,
         )
@@ -179,32 +170,8 @@ data class ActivityLog(
 
         /** Two years of weeks. */
         const val WEEKS_KEPT = 104
-
-        /** His messages are many and matter for a few weeks: the review reads the last one's. */
-        const val FELIX_KEEP_DAYS = 30L
     }
 }
-
-/**
- * A message of Felix's (AI-22, LR-03): when, why ([reason], a [com.thomaswcode.decrastination.felix.FelixPrompts.Reason]),
- * what he said and the replies he offered, the piece ([key]) or task it was about, when he'd check
- * again, and the student's reply, when one came.
- */
-@Serializable
-data class FelixRecord(
-    val id: String,
-    val at: Long,
-    val reason: String,
-    val text: String,
-    val replies: List<String> = emptyList(),
-    val key: String? = null,
-    val taskId: String? = null,
-    val nextCheckAt: Long? = null,
-    val replyText: String? = null,
-    val repliedAt: Long? = null,
-    /** The completions a Completions message asks about (LR-05): a reply of one of its three answers goes on each. */
-    val asks: List<AssessLater> = emptyList(),
-)
 
 /** How a slot went (LR-09): kept in its time or after its grace, missed, or moved on purpose. */
 @Serializable
@@ -377,6 +344,7 @@ data class AnkiWorked(val date: String = "", val minutes: Map<String, Int> = emp
 /**
  * Felix between looks (LR-03): when he said he'd check again, when he last wrote, a message he wrote
  * ahead (AC-10), and when something was last seen done on each task (opened, studied in AnkiDroid).
+ * The conversation's ([com.thomaswcode.decrastination.core.ChatState.felix]), in `chat.json`.
  */
 @Serializable
 data class FelixState(
@@ -388,6 +356,10 @@ data class FelixState(
     val questions: List<FelixQuestion> = emptyList(),
     /** A message whose call didn't come back, to try again (LR-03). */
     val retry: FelixRetry? = null,
+    /** Completions waiting to be asked how they went, in his evening question (LR-05). */
+    val assessLater: List<AssessLater> = emptyList(),
+    /** The week's check-in as he asks it (LR-02), its answers so far: null when none is being asked. */
+    val checkInDraft: CheckInFlow.Draft? = null,
 ) {
     /** [taskIds] seen done on [at]: the last day's kept. */
     fun withActivity(taskIds: Collection<String>, at: Long): FelixState =
@@ -432,7 +404,7 @@ data class HeldReply(val key: String, val label: String, val choices: List<Strin
 @Serializable
 data class DailyRetry(val at: Long, val tries: Int)
 
-/** A finished task's "how was it?", kept to ask once notifications can be seen. */
+/** A finished task's "how was it?" (LR-05): what he asks about, and when it was finished. */
 @Serializable
 data class AssessLater(val taskId: String, val title: String, val doneAt: Long? = null)
 

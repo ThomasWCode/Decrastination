@@ -2,11 +2,8 @@ package com.thomaswcode.decrastination.learn
 
 import java.time.LocalDate
 import android.content.Context
-import android.content.Intent
 import android.util.Log
-import androidx.core.app.NotificationCompat
 import com.thomaswcode.decrastination.AppGraph
-import com.thomaswcode.decrastination.R
 import com.thomaswcode.decrastination.data.MemoryTidyRecord
 import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.data.WeeklyReview
@@ -16,10 +13,6 @@ import com.thomaswcode.decrastination.enrich.MemoryTidier
 import com.thomaswcode.decrastination.enrich.MemoryTidy
 import com.thomaswcode.decrastination.enrich.ModelEffort
 import com.thomaswcode.decrastination.enrich.ModelHold
-import com.thomaswcode.decrastination.notify.Channels
-import com.thomaswcode.decrastination.notify.NoticeId
-import com.thomaswcode.decrastination.notify.Notify
-import com.thomaswcode.decrastination.ui.CheckInActivity
 
 /**
  * The weekly review (docs/spec/learning.md, item 7): on Sunday evening, after the check-in (or
@@ -72,19 +65,10 @@ object Review {
             Log.i(AppGraph.TAG, "The record was reset while the week's review was out: it isn't kept")
             return
         }
+        // Its note's first line in the chat, in Felix's name, with the button that opens the review.
+        graph.conversation.reviewed(review.lines.first())
         // The week's summary for home (NF-02), after its review: its own call, its failure the review's no matter.
         runCatching { graph.writeSummary(week) }.onFailure { Log.w(AppGraph.TAG, "The week's summary failed", it) }
-        graph.notifier.post(
-            NoticeId.Review,
-            Notify.builder(context, Channels.WEEKLY)
-                .setSmallIcon(R.drawable.ic_focus)
-                .setContentTitle("This week's review")
-                .setContentText(review.lines.first())
-                .setStyle(NotificationCompat.BigTextStyle().bigText(review.lines.joinToString("\n")))
-                .let { Notify.opening(it, context, NoticeId.Review.code(), Intent(context, CheckInActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
-                .setAutoCancel(true)
-                .build(),
-        )
     }
 
     /**
@@ -104,7 +88,7 @@ object Review {
     private suspend fun modelReview(graph: AppGraph, now: Long, week: String, generation: Int): Outcome {
         val reviewer = graph.gateway.client(ModelEffort.Job.Review)?.let { ClaudeReviewer(it, profile = graph.conversation.profile()) } ?: return Outcome(why = because(ModelHold.Off))
         val zone = graph.clock.zone()
-        val input = ReviewInput.describe(graph.log.value, graph.runtime.value.calibration, graph.settings.value, now, zone, week)
+        val input = ReviewInput.describe(graph.log.value, graph.runtime.value.calibration, graph.settings.value, now, zone, week, graph.chat.value.messages)
         // Its room taken with every other model call's, then sent (AC-05). A failure is recorded
         // (Setup shows it; the model rests), then the rules' review stands.
         val current = graph.gateway.client(ModelEffort.Job.Review)?.let { ClaudeReviewer(it, profile = graph.conversation.profile()) } ?: return Outcome(why = because(ModelHold.Off))

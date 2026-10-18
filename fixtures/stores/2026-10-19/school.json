@@ -1,0 +1,15 @@
+{
+    "noSchool": [
+        {
+            "from": "2026-10-26",
+            "to": "2026-10-30",
+            "label": "Half term"
+        }
+    ],
+    "halfDays": [
+        {
+            "date": "2026-10-23",
+            "endsAtMin": 750
+        }
+    ]
+}

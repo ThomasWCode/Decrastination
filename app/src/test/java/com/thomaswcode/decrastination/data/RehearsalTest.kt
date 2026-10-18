@@ -1,11 +1,11 @@
 package com.thomaswcode.decrastination.data
 
+import com.thomaswcode.decrastination.core.ChatArchive
 import com.thomaswcode.decrastination.core.ChatState
 import com.thomaswcode.decrastination.core.InstructionState
 import com.thomaswcode.decrastination.core.Instructions
 import com.thomaswcode.decrastination.core.MemoryState
 import com.thomaswcode.decrastination.core.SchoolCalendar
-import com.thomaswcode.decrastination.core.Speaker
 import com.thomaswcode.decrastination.core.Status
 import com.thomaswcode.decrastination.core.TaskOverrides
 import com.thomaswcode.decrastination.core.overrides
@@ -17,7 +17,10 @@ import kotlin.test.assertTrue
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
 import org.junit.Assume.assumeTrue
 
 /**
@@ -32,9 +35,10 @@ import org.junit.Assume.assumeTrue
 class RehearsalTest {
     /**
      * [file] as read: its [value] (null: not there), whether it read whole, the keys and list items it holds
-     * that the app doesn't keep ([dropped]), and the lists it holds, by path, with their items in all ([lists]).
+     * that the app doesn't keep ([dropped]), the lists it holds, by path, with their items in all ([lists]),
+     * and its [json] (as the file holds it before; as the app writes it after), for what moves between stores.
      */
-    private class Read(val file: String, val value: Any?, val problem: JsonStore.Unreadable?, val roundTrip: Boolean, val dropped: List<String> = emptyList(), val lists: Map<String, Int> = emptyMap())
+    private class Read(val file: String, val value: Any?, val problem: JsonStore.Unreadable?, val roundTrip: Boolean, val dropped: List<String> = emptyList(), val lists: Map<String, Int> = emptyMap(), val json: JsonObject? = null)
 
     /** [file] in [dir] as it is: its text decoded as written, no migration run, read again the same. */
     private fun <T> before(dir: File, file: String, serializer: KSerializer<T>): Read {
@@ -42,10 +46,11 @@ class RehearsalTest {
         if (!source.isFile) return Read(file, null, null, roundTrip = true)
         val text = source.readText()
         // Its lists read from its JSON, not by this build's types, which drop a field a migration renames.
-        val lists = runCatching { lists(JsonStore.json.parseToJsonElement(text)) }.getOrDefault(emptyMap())
+        val json = runCatching { JsonStore.json.parseToJsonElement(text) as? JsonObject }.getOrNull()
+        val lists = json?.let(::lists).orEmpty()
         val value = runCatching { JsonStore.json.decodeFromString(serializer, text) }.getOrNull()
-            ?: return Read(file, null, JsonStore.Unreadable(file, null, kept = false, at = 0), roundTrip = false, lists = lists)
-        return Read(file, value, null, roundTrip = again(serializer, value) == value, lists = lists)
+            ?: return Read(file, null, JsonStore.Unreadable(file, null, kept = false, at = 0), roundTrip = false, lists = lists, json = json)
+        return Read(file, value, null, roundTrip = again(serializer, value) == value, lists = lists, json = json)
     }
 
     /**
@@ -57,7 +62,7 @@ class RehearsalTest {
         val written = JsonStore.json.encodeToString(serializer, store.value)
         val writtenJson = JsonStore.json.parseToJsonElement(written)
         val dropped = migrated?.let { dropped(it, writtenJson) }.orEmpty()
-        return Read(store.name, store.value, store.problem, roundTrip = JsonStore.json.decodeFromString(serializer, written) == store.value, dropped = dropped, lists = lists(writtenJson))
+        return Read(store.name, store.value, store.problem, roundTrip = JsonStore.json.decodeFromString(serializer, written) == store.value, dropped = dropped, lists = lists(writtenJson), json = writtenJson as? JsonObject)
     }
 
     private fun <T> again(serializer: KSerializer<T>, value: T): T = JsonStore.json.decodeFromString(serializer, JsonStore.json.encodeToString(serializer, value))
@@ -110,6 +115,7 @@ class RehearsalTest {
             before(files, "log.json", ActivityLog.serializer()),
             before(files, "instructions.json", InstructionState.serializer()),
             before(files, "chat.json", ChatState.serializer()),
+            before(files, "chat-archive.json", ChatArchive.serializer()),
             before(files, "school.json", SchoolCalendar.serializer()),
             before(files, "memory.json", MemoryState.serializer()),
             before(files, "calendar.json", CalendarVersions.serializer()),
@@ -128,11 +134,15 @@ class RehearsalTest {
         // The stores alone: the folder can hold the debug commands' files too (ai-prompts.json, a list).
         STORES.map { File(files, it) }.filter { it.isFile }.forEach { it.copyTo(File(copy, it.name)) }
         val versions = copy.listFiles().orEmpty().mapNotNull { f -> runCatching { JsonStore.json.parseToJsonElement(f.readText()) as JsonObject }.getOrNull()?.let { f.name to Migration.versionOf(it) } }.toMap()
+        // The files as the moves between stores leave them at a start, on a copy of their own (inside this one, which goes with it).
+        val moved = File(copy, "moved").apply { mkdirs() }
+        STORES.map { File(files, it) }.filter { it.isFile }.forEach { it.copyTo(File(moved, it.name)) }
+        Stores.MOVES.forEach { it.run(moved) }
         val stores = Stores(copy, NoKeystore)
         fun there(name: String) = File(files, name).isFile
-        // Each file as its migrations leave it: what the store decodes, and should write back whole.
+        // Each file as the moves and its migrations leave it: what the store decodes, and should write back whole.
         fun migrated(name: String): JsonElement? = runCatching {
-            val json = JsonStore.json.parseToJsonElement(File(files, name).readText()) as JsonObject
+            val json = JsonStore.json.parseToJsonElement(File(moved, name).readText()) as JsonObject
             stores.shapes.getValue(name).let { Migration.upgrade(json, it.version, it.migrations) }
         }.getOrNull()
         fun <T> after(store: JsonStore<T>, serializer: KSerializer<T>, name: String) = after(store, serializer, there(name), migrated(name))
@@ -140,6 +150,7 @@ class RehearsalTest {
             after(stores.tasks, TaskState.serializer(), "tasks.json"), after(stores.settings, Settings.serializer(), "settings.json"),
             after(stores.runtime, RuntimeState.serializer(), "runtime.json"), after(stores.log, ActivityLog.serializer(), "log.json"),
             after(stores.instructions, InstructionState.serializer(), "instructions.json"), after(stores.chat, ChatState.serializer(), "chat.json"),
+            after(stores.chatArchive, ChatArchive.serializer(), "chat-archive.json"),
             after(stores.school, SchoolCalendar.serializer(), "school.json"), after(stores.memory, MemoryState.serializer(), "memory.json"),
             after(stores.calendarVersions, CalendarVersions.serializer(), "calendar.json"),
         )
@@ -147,10 +158,13 @@ class RehearsalTest {
         val was = describe(reads)
         val nightly = nightly(root, stores.shapes)
         val now = describe(migrated)
-        // Each store's lists before (from its file) and after (from what the app writes): a difference is data moved or lost.
+        // Each store's lists before (from its file) and after (from what the app writes): a difference is data moved or
+        // lost. Those a migration moves are compared through it instead, in the counts above ([MOVED]).
         val lists = reads.zip(migrated).flatMap { (b, a) ->
-            (b.lists.keys + a.lists.keys).sorted().filter { b.lists[it] != a.lists[it] }.map { "  ${b.file} ${it}: ${b.lists[it] ?: "none"} before, ${a.lists[it] ?: "none"} after" }
+            (b.lists.keys + a.lists.keys).sorted().filter { b.lists[it] != a.lists[it] && "${b.file} $it" !in MOVED }.map { "  ${b.file} ${it}: ${b.lists[it] ?: "none"} before, ${a.lists[it] ?: "none"} after" }
         }
+        // Nothing of the chat's, nor any of Felix's records, gone: every message and record by its id in the chat after.
+        val gone = ids(reads, "chat.json") + records(reads.json("log.json")).mapNotNull { it.string("id") } - ids(migrated, "chat.json")
         val report = buildString {
             appendLine("Migrations: ${ran.ifEmpty { listOf("none to run") }.joinToString("; ")}")
             appendLine("== Before, each file as it is, read by this build's types")
@@ -159,7 +173,8 @@ class RehearsalTest {
             append(now)
             appendLine("== The lists in the files, counted from their JSON: ${reads.sumOf { it.lists.size }} before, ${migrated.sumOf { it.lists.size }} after")
             lists.forEach { appendLine(it) }
-            appendLine(if (was == now && lists.isEmpty()) "== The same before and after" else "== THE COUNTS DIFFER: compare them above")
+            if (gone.isNotEmpty()) appendLine("== ${gone.size} messages or records of Felix's not in the chat after")
+            appendLine(if (was == now && lists.isEmpty() && gone.isEmpty()) "== The same before and after" else "== THE COUNTS DIFFER: compare them above")
             append(nightly.report)
         }
         File(root, "rehearsal.txt").writeText(report)
@@ -175,7 +190,47 @@ class RehearsalTest {
         // And any difference in the counts, before and after (docs/plan_v4/04-data-and-migrations.md §On the real
         // data): a migration that moves, renames or merges data teaches this rehearsal where it goes, so the counts
         // are compared through the move; the check is never loosened to let one through.
-        assertTrue(was == now && lists.isEmpty(), "The counts differ before and after: see rehearsal.txt")
+        assertTrue(was == now && lists.isEmpty() && gone.isEmpty(), "The counts differ before and after: see rehearsal.txt")
+    }
+
+    private fun List<Read>.json(file: String): JsonObject? = firstOrNull { it.file == file }?.json
+
+    private fun JsonObject.string(key: String): String? = (this[key] as? JsonPrimitive)?.takeIf { it !is JsonNull }?.contentOrNull
+
+    private fun JsonObject.list(key: String): List<JsonObject> = (this[key] as? JsonArray).orEmpty().mapNotNull { it as? JsonObject }
+
+    /** The ids of [file]'s messages in [reads], from its JSON. */
+    private fun ids(reads: List<Read>, file: String): Set<String> = reads.json(file)?.list("messages").orEmpty().mapNotNull { it.string("id") }.toSet()
+
+    /** Felix's records in the log as its file holds them: none once they're the chat's (4.0.0). */
+    private fun records(log: JsonObject?): List<JsonObject> = log?.list("felix").orEmpty()
+
+    /**
+     * The conversation and Felix's state in counts that hold through 4.0.0's move of his records and state
+     * into the chat (docs/plan_v4/04-data-and-migrations.md §On the real data): his messages, his records
+     * not in the chat among them (by id), with and without words; your replies to him (a record's, or
+     * a message of yours answering one); the replies he offered and the completions he asked about; the
+     * lines under his answers, whatever list they're in; and his state, the runtime's or the chat's.
+     */
+    private fun conversation(reads: List<Read>): String = buildString {
+        val chat = reads.json("chat.json") ?: return@buildString
+        val messages = chat.list("messages")
+        val records = records(reads.json("log.json"))
+        val inChat = messages.mapNotNull { it.string("id") }.toSet()
+        val his = messages.filter { it.string("from") == "Claude" } + records.filter { it.string("id") !in inChat }
+        val replies = records.count { it.string("replyText") != null }.takeIf { records.isNotEmpty() } ?: messages.count { it.string("from") == "You" && it.string("replyTo") != null }
+        fun size(m: JsonObject, key: String) = (m[key] as? JsonArray)?.size ?: 0
+        // A record's completions go on its message, in the chat already or made of it.
+        val asked = messages.sumOf { size(it, "asks") } + records.sumOf { size(it, "asks") }
+        appendLine("Felix's messages: ${his.size}, ${his.count { it.string("text").isNullOrBlank() }} silent; your replies to them $replies; replies offered ${his.sumOf { size(it, "suggestedReplies") + size(it, "replies") }}; completions asked about $asked")
+        // A message's lines of before are among its acts and edits now: its lines with nothing to undo after its
+        // acts, and what it remembered as lines where it kept no edits.
+        appendLine("  acts and lines under his answers ${messages.sumOf { size(it, "acts") + size(it, "done") }}; what he remembered with them ${messages.sumOf { size(it, "memoryEdits").takeIf { n -> n > 0 } ?: size(it, "remembered") }}")
+        val runtime = reads.json("runtime.json")
+        val state = chat["felix"] as? JsonObject ?: runtime?.get("felix") as? JsonObject ?: JsonObject(emptyMap())
+        val asks = (chat["felix"] as? JsonObject)?.let { size(it, "assessLater") } ?: runtime?.let { size(it, "assessLater") } ?: 0
+        val draft = ((chat["felix"] as? JsonObject)?.get("checkInDraft") ?: runtime?.get("checkInDraft"))?.let { it !is JsonNull } == true
+        appendLine("  his state: questions ${size(state, "questions")}, completions to ask about $asks, check-in under way $draft, tasks seen worked on ${(state["activity"] as? JsonObject)?.size ?: 0}, written ahead ${state["draft"].let { it != null && it !is JsonNull }}, to try again ${state["retry"].let { it != null && it !is JsonNull }}")
     }
 
     /** No keystore off the phone: the secrets aren't copied, so it's never asked. */
@@ -217,16 +272,16 @@ class RehearsalTest {
             }
         }
         of<ChatState>("chat.json")?.let { chat ->
-            appendLine("Chat: ${chat.messages.size} messages, his ${chat.messages.count { it.from == Speaker.Claude }}, yours ${chat.messages.count { it.from == Speaker.You }}; one waiting ${chat.unanswered != null}; ids unique ${chat.messages.map { it.id }.toSet().size == chat.messages.size}")
-            appendLine("  with cards ${chat.messages.count { it.proposals.isNotEmpty() }}, acts ${chat.messages.sumOf { it.acts.size }}, memory edits ${chat.messages.sumOf { it.memoryEdits.size }}; of before: remembered ${chat.messages.count { it.remembered.isNotEmpty() }}, done ${chat.messages.count { it.done.isNotEmpty() }}, reason ${chat.messages.count { it.reason != null }}")
+            appendLine("Chat: one waiting ${chat.unanswered != null}; ids unique ${chat.messages.map { it.id }.toSet().size == chat.messages.size}; with cards ${chat.messages.count { it.proposals.isNotEmpty() }}")
         }
+        append(conversation(reads))
+        of<ChatArchive>("chat-archive.json")?.let { appendLine("The chat's earlier messages: ${it.messages.size}") }
         of<ActivityLog>("log.json")?.let { log ->
             appendLine("Log: slots ${log.slots.size}, completions ${log.completions.size}, days ${log.days.size}, check-ins ${log.checkIns.size}, reviews ${log.reviews.size}, weeks ${log.weeks.size}")
-            appendLine("  Felix's records ${log.felix.size} (replied to ${log.felix.count { it.replyText != null }}, silent ${log.felix.count { it.text.isBlank() }}); by reason ${log.felix.groupingBy { it.reason }.eachCount().toSortedMap()}")
         }
         of<RuntimeState>("runtime.json")?.let { runtime ->
             appendLine("Runtime: the month ${runtime.aiUsage.month}, spent \$${"%.2f".format(java.util.Locale.UK, runtime.aiUsage.spentUsd)} in ${runtime.aiUsage.calls} calls; calls kept ${runtime.calls.size}; Anki readings ${runtime.ankiReadings.size}; micro-plans ${runtime.microPlans.size}")
-            appendLine("  today's slots ${runtime.slots.previous.size}, missed ${runtime.slots.missed.size}; changes waiting ${runtime.pending.size}; held notifications ${runtime.heldNotifications.size}; Felix's questions ${runtime.felix.questions.size}; check-in draft ${runtime.checkInDraft != null}")
+            appendLine("  today's slots ${runtime.slots.previous.size}, missed ${runtime.slots.missed.size}; changes waiting ${runtime.pending.size}; held notifications ${runtime.heldNotifications.size}")
         }
         of<MemoryState>("memory.json")?.let { appendLine("Memory: facts ${it.facts.size}, rules ${it.rules.size}") }
         of<SchoolCalendar>("school.json")?.let { appendLine("School: days off ${it.noSchool.size}, half-days ${it.halfDays.size}") }
@@ -246,7 +301,7 @@ class RehearsalTest {
         val problem = Backups.problem(backup)
         return Nightly(buildString {
             appendLine("Nightly backup ${file.name}: format ${backup.format}; problem: ${problem ?: "none"}")
-            appendLine("  instructions ${backup.instructions.size}, own tasks ${backup.ownTasks.size}, chat ${backup.chat.messages.size}, log slots ${backup.log.slots.size} completions ${backup.log.completions.size} Felix ${backup.log.felix.size}, memory ${backup.memory.facts.size}+${backup.memory.rules.size}")
+            appendLine("  instructions ${backup.instructions.size}, own tasks ${backup.ownTasks.size}, chat ${backup.chat.messages.size} and ${backup.archive.messages.size} earlier, log slots ${backup.log.slots.size} completions ${backup.log.completions.size}, memory ${backup.memory.facts.size}+${backup.memory.rules.size}")
         }, problem)
     }
 
@@ -255,6 +310,17 @@ class RehearsalTest {
         val REQUIRED = listOf("tasks.json", "settings.json", "runtime.json", "log.json")
 
         /** Every store's file, the secrets aside (they can't be read off the phone). */
-        val STORES = REQUIRED + listOf("instructions.json", "chat.json", "school.json", "memory.json", "calendar.json")
+        val STORES = REQUIRED + listOf("instructions.json", "chat.json", "chat-archive.json", "school.json", "memory.json", "calendar.json")
+
+        /**
+         * The lists 4.0.0's move reshapes, by file and path: Felix's records and their lists from the log into
+         * the chat's messages, the completions to ask about from the runtime into his state there, a message's
+         * lines of before into its acts and edits. Compared through the move in [conversation], not as lists.
+         */
+        val MOVED = setOf(
+            "log.json felix", "log.json felix[].replies", "log.json felix[].asks", "runtime.json assessLater",
+            "chat.json messages", "chat.json messages[].suggestedReplies", "chat.json messages[].asks",
+            "chat.json messages[].acts", "chat.json messages[].done", "chat.json messages[].memoryEdits", "chat.json messages[].remembered",
+        )
     }
 }

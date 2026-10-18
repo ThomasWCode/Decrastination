@@ -371,17 +371,20 @@ class CommandActivity : Activity() {
                 }
             }
             "chat-clear" -> graph.conversation.clearChat().also { Log.i(TAG, "Chat cleared") }
-            // Felix (LR-03): his state and today's messages; a look now; or a message for a reason, whatever the rules say (a paid call).
+            // Felix (LR-03): his state and his last messages of his own, from the chat; a look now; or a message for a reason, whatever the rules say (a paid call).
             "felix" -> {
-                val state = graph.runtime.value.felix
-                Log.i(TAG, "felix: next check ${state.nextCheckAt?.let { java.time.Instant.ofEpochMilli(it).atZone(graph.clock.zone()).toLocalTime() }}, last sent ${state.lastSentAt}, activity ${state.activity.keys}")
-                graph.log.value.felix.takeLast(10).forEach { Log.i(TAG, "felix ${it.reason} ${it.key}: ${it.text.ifBlank { "(silent)" }} ${it.replies}${it.replyText?.let { r -> " / reply: $r" }.orEmpty()}") }
+                val chat = graph.chat.value
+                val state = chat.felix
+                Log.i(TAG, "felix: next check ${state.nextCheckAt?.let { java.time.Instant.ofEpochMilli(it).atZone(graph.clock.zone()).toLocalTime() }}, last sent ${state.lastSentAt}, activity ${state.activity.keys}, questions ${state.questions.size}, to ask how it went ${state.assessLater.size}, check-in ${state.checkInDraft?.step}; read to ${chat.readAt}")
+                com.thomaswcode.decrastination.core.ChatHistory.his(chat.messages).takeLast(10).forEach { m ->
+                    Log.i(TAG, "felix ${m.kind}${if (m.byApp) " (the app's words)" else ""} ${m.pieceKey}: ${m.text.ifBlank { "(silent)" }} ${m.suggestedReplies}${com.thomaswcode.decrastination.core.ChatHistory.replyOf(m, chat.messages)?.let { r -> " / reply: ${r.text}" }.orEmpty()}")
+                }
             }
             "felix-check" -> graph.looks.check().also { Log.i(TAG, "felix-check done") }
             "felix-say" -> {
                 val reason = intent.getStringExtra("reason")?.let { name -> FelixPrompts.Reason.entries.firstOrNull { it.name.equals(name, ignoreCase = true) } }
                 if (reason == null) Log.w(TAG, "felix-say needs --es reason, one of ${FelixPrompts.Reason.entries.joinToString()}")
-                else Log.i(TAG, "felix-say $reason: ${graph.looks.say(reason)?.let { "${it.text.ifBlank { "(silent)" }} ${it.replies}" } ?: "Claude is off"}")
+                else Log.i(TAG, "felix-say $reason: ${graph.looks.say(reason)?.let { "${it.text.ifBlank { "(silent)" }} ${it.suggestedReplies}" } ?: "Claude is off"}")
             }
             // What Felix remembers (AI-21): its standing instructions and facts, a line each.
             "memory" -> graph.memory.value.let { m ->
@@ -491,7 +494,7 @@ class CommandActivity : Activity() {
                 if (id == null) {
                     Log.w(TAG, "forget-task needs --es task own:<id>: only a task of your own, never a source's record")
                 } else {
-                    graph.log.value.completions.filter { it.taskId == id }.forEach { Assessment.withdraw(this, id, it.doneAt) }
+                    graph.conversation.forgetAsks(id)
                     graph.log.update { log -> log.copy(completions = log.completions.filterNot { it.taskId == id }, slots = log.slots.filterNot { it.taskId == id }) }
                     graph.deleteOwnTask(id)
                     Log.i(TAG, "forget-task: $id gone, with its log")
