@@ -178,7 +178,7 @@ Day shows "6 h left, 4 h free before Sat 09:00", with *What gives?* to ask Felix
 
 ## What's left out (IMP-P1-002)
 
-`Plan.unplanned` lists the open work in no day, with why (`Unplanned.Reason`), folded at the foot of Work:
+`Plan.unplanned` lists the open work in no day, with why (`Unplanned.Reason`), folded on Work, below the tasks:
 - `NotOpen`: its source, or Claude's reading, says it can't start yet;
 - `Waits`: you said it waits for another task still open;
 - `OpensLater`: it, or a run of its blocks, opens after the plan's last day;
