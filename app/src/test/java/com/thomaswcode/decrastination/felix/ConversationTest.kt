@@ -308,6 +308,8 @@ class ConversationTest {
         felix.stores.chatArchive.update { it.copy(messages = listOf(question)) }
         assertEquals(Conversation.Asked.Answer, conversation.send(CalendarTime.ANSWERS[0].first, replyTo = "e1"))
         assertEquals(listOf("open day" to CalendarTime.ANSWERS[0].second), felix.owners.events)
+        // Answered there, so it takes no second answer.
+        assertNotNull(felix.stores.chatArchive.value.messages.single().answeredAt)
         assertEquals(0, felix.server.requestCount)
     }
 
@@ -323,6 +325,20 @@ class ConversationTest {
         felix.outbox.send(ChatMessage("n1", Speaker.Felix, "the worksheet's up at 17:00", now, kind = MessageKind.SlotStart))
         assertTrue(conversation.replyFromNotification("on it", "n1"))
         assertEquals(1, felix.ports.later)
+    }
+
+    @Test
+    fun `of messages that waited together, those he wasn't sent still wait, for an answer of their own`() = runBlocking {
+        stores.settings.update { it.copy(aiEnabled = false) }
+        (1..14).forEach { assertTrue(conversation.ask("question $it")) }
+        felix.settle()
+        stores.settings.update { it.copy(aiEnabled = true) }
+        felix.answers(felix.chatAnswer("All of them, in order."))
+        conversation.answerChat()
+        val mine = stores.chat.value.messages.filter { it.from == Speaker.You }
+        // He's sent the conversation's last twelve: the first two weren't in it, and still wait.
+        assertEquals((1..14).map { it > 2 }, mine.map { it.answeredAt != null })
+        assertEquals("question 2", stores.chat.value.unanswered?.text)
     }
 
     @Test
