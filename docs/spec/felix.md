@@ -127,7 +127,7 @@ Three more come at set times:
 - **The summary** (NF-02): after the review, "The week's summary is ready; send it?", with *Send it*, which opens it in your email app, addressed, with its subject and words (`Summary.email`).
 
 The app asks two more things in his name, in its own words, each answered from his chips with no call:
-- **A calendar event the plan can't judge** (Q7, `learn/CalendarTime.kt`): "Open day, Saturday 24 October: how much of the day does it take?", with *All of it*, *A few hours* and *None*; answered for every event of that name. Answered elsewhere (an event's sheet on Day, an instruction), it leaves his notification.
+- **A calendar event the plan can't judge** (Q7, `learn/CalendarTime.kt`): "Open day, Saturday 24 October: how much of the day does it take? The plan leaves you that much less time.", with *All of it*, *A few hours* and *None*; answered for every event of that name. Answered elsewhere (an event's sheet on Day, an instruction), it leaves his notification.
 - **How finished work went, with Claude off** (LR-05, `learn/Assessment.kt`): a message for each completion, with *Harder*, *As expected* and *Easier*. With Claude on, they wait for his evening question.
 
 ## Notifications and replies
