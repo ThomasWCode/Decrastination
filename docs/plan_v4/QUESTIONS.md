@@ -9,6 +9,11 @@ Everything implementing the plan has needed from you, from 18 Oct 2026: question
   - Done (18 Oct): merged in order, #57 to #62.
 - **A2. Words the privacy scan should refuse.** `scripts/scan-public.sh` refuses, beside email addresses and phone numbers, every word in the git-ignored `private/scan-words.txt`. It holds only the phone's serial number so far: add, a line each, any names you want kept out of the public repository (family, teachers, the school, the Gmail account's name before the @).
   - DONE
+- **A3. Stage 5's checks that need your taps.** Everything else in Stage 5 was checked on the phone with you on 18 Oct, or by the scripts after its last install (the services, crashes, the calendar, and the Chat and Your changes tabs switched by guarded taps). These four were left, for whenever they come up; none needs a session of its own:
+  1. With more of his messages unread than a screen holds, open the chat (his button, not his notification): it opens at the *New messages* line, not at its foot. (Too few were unread on 18 Oct.)
+  2. Leave the chat on *Your changes*, then tap his notification: the *Chat* tab shows, at the message.
+  3. Open a message's fold, go to *Your changes* and back: every fold is closed, and what came meanwhile is under the *New messages* line.
+  4. Once the chat has more than 200 messages and some over 60 days old (weeks away), scroll back past them: the older rows show under *Earlier messages* with no Undo or buttons of their own.
 
 ## Questions
 
@@ -38,3 +43,11 @@ Found while writing Stage 4's test of his looks; not changed there, as it's a mo
 - **B.** Leave it: work not begun moves to the next day.
 - ANSWER: A
   - Done (18 Oct): 3.3.5, the planner keeps a piece kept today on today (`Planner.keptToday`), with a test.
+
+### I4. The chat's archive is read at every start
+
+Stage 5 keeps every message: the newest in `chat.json`, the rest in `chat-archive.json` (D-96). The plan meant the archive to be read only on scrolling back; as built, it's read with the other stores whenever the app starts and kept in memory, as every store is (`JsonStore` reads its file as it's made). It's empty today, but at about 800 bytes a message and 15 to 35 messages a day, it'd be some 5 to 10 MB after a year: read at each start of the app's process and held in memory, for screens that seldom look at it. D-96 says "kept for you and shown on scrolling back", which is true either way.
+
+- **A (recommended).** Read it only when it's needed (scrolling back, a reply to an old message, the export, a backup), in a small PR of its own when you say, or within Stage 7's store split.
+- **B.** Leave it: look again if starts become slow.
+- ANSWER:

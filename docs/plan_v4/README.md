@@ -1,6 +1,6 @@
 # Decrastination 4.x: the cleanup and Felix as the app's one voice, in one order
 
-One plan for the next run of work, merged on 18 Oct 2026 from two: the targeted cleanup (written 17 Oct: the code and its stores restructured without changing what the app does) and the Felix plan (written 18 Oct: everything he says in one WhatsApp-like chat, notes and reminders, memory that expires, a teenager's voice, a starred email finished in Gmail). Written against `main` at e6cd54b (3.2.0) and measured on 18 Oct ([01](01-current-state.md)); every question either plan asked is answered and applied ([ANSWERS.md](ANSWERS.md) is the record; the "Q3: A" marks through the documents point into it); Stages 0 to 4 are in (#57 to #61: Stage 0, then 3.3.0 to 3.3.3), with 3.3.4 beside them (#62, the secrets' write tried again as the stores' is, [QUESTIONS.md](QUESTIONS.md) I2), and 5a is next. [14](14-your-part.md) says which stages need your phone and which need you.
+One plan for the next run of work, merged on 18 Oct 2026 from two: the targeted cleanup (written 17 Oct: the code and its stores restructured without changing what the app does) and the Felix plan (written 18 Oct: everything he says in one WhatsApp-like chat, notes and reminders, memory that expires, a teenager's voice, a starred email finished in Gmail). Written against `main` at e6cd54b (3.2.0) and measured on 18 Oct ([01](01-current-state.md)); every question either plan asked is answered and applied ([ANSWERS.md](ANSWERS.md) is the record; the "Q3: A" marks through the documents point into it); Stages 0 to 5 are in (#57 to #61: Stage 0, then 3.3.0 to 3.3.3; #69 to #71: 4.0.0 to 4.0.2), with 3.3.4 to 3.3.6 beside them (#62, the secrets' write tried again as the stores' is, [QUESTIONS.md](QUESTIONS.md) I2; #67, a piece under way kept today, I3; #68, the open items settled), and 6a is next, when you say. [14](14-your-part.md) says which stages need your phone and which need you.
 
 The order is the merge's one real decision: the cleanup comes first where a feature would otherwise be built on the mess, and between features where it only has to be done at all. [03](03-stages.md) lays out every stage and PR in order, with what each needs from the ones before it and what it leaves for the ones after; nothing in it relies on anything later.
 
@@ -10,16 +10,16 @@ At 3.2.0, when this was written ([01](01-current-state.md)): the planner, the sl
 
 **The structure, where this fortnight's changes met** ([01](01-current-state.md) has the evidence):
 
-- `AppGraph.kt` did everything else: 2,628 lines, 117 functions, ten stores, thirteen concerns, no tests of its own; 51 other files reached into it, most straight into its stores. (Since 3.3.3: 1,446 lines, 64 functions.)
-- Felix had two homes: what he said unprompted was a record in the log and a notification; the chat had only his answers. Seven places produced messages in his name, each building its own notification, and most shared one id, so each new one replaced the last.
+- `AppGraph.kt` did everything else: 2,628 lines, 117 functions, ten stores, thirteen concerns, no tests of its own; 51 other files reached into it, most straight into its stores. (Since 3.3.3: 1,446 lines, 64 functions; at 4.0.2, 1,443 and 65.)
+- Felix had two homes: what he said unprompted was a record in the log and a notification; the chat had only his answers. Seven places produced messages in his name, each building its own notification, and most shared one id, so each new one replaced the last. (One since 4.0.0: every message of his is in the chat first, and his one notification is made from it.)
 - "Who set this?" was spread over twelve `user…` fields, mirrored by position; a step's origin was told from its title.
 - Eleven classes built their own Claude client; 18 notification ids lived in 17 files. (One gateway, `enrich/ModelGateway.kt`, since 3.3.1; one id registry, `notify/NoticeId.kt`, since 3.3.0.)
 - `tasks.json` was 590 KB, most of it finished tasks, rewritten whole at every tick; `runtime.json` mixed the half-minute state with logs; no store had a version. (A version on every store since 3.3.2, D-94.)
 
 **What Felix can be asked, and how he reaches you**:
 
-- His messages are lost: tap a notification and the chat opens without it. His notifications replace each other.
-- The chat buries what he did under cards and lines; a message that does three things is a screen long.
+- His messages are lost: tap a notification and the chat opens without it. His notifications replace each other. (Since 4.0.0, every one is kept in the chat, and his one notification opens it at the message.)
+- The chat buries what he did under cards and lines; a message that does three things is a screen long. (Folded under a chevron since 4.0.2.)
 - He can't be asked what a friend with his access could do: no reminder at a time, no "ping me when I sit down to the physics", no note on a task. "Remind me to buy mum a present before Sunday" is one of the empty chat's own examples, and today it makes a task.
 - He remembers for ever or not at all: "don't message me tonight" is a standing instruction until you delete it.
 - He sounds like a planner app: "I'll put this in as a task for: Friday" rather than "alr cool, let's do that then".
@@ -74,9 +74,11 @@ Every PR is a release ([development.md](../development.md)): cleanup-only releas
 | 3 | Stores and backups, with versions and migrations | 3.3.2, done (#60) | cleanup | 0 | 1 |
 | 4 | Felix's code in one place: the Conversation and Planning services, moved; his files split | 3.3.3, done (#61) | cleanup | 1, 2, 3 | 1 |
 | — | The secrets' write tried again as the stores' is ([QUESTIONS.md](QUESTIONS.md) I2) | 3.3.4, done (#62) | fix | — | — |
-| 5a | The chat as his one voice: every message in it, the outbox, one notification, the archive | 4.0.0 | feature, data | 0, 1, 3, 4 | 2 |
-| 5b | WhatsApp-like: read state, dates, earlier messages, swipe to reply, one entrance for replies | 4.0.1 | feature | 5a | 1½ |
-| 5c | The extras folded; the label that slides out | 4.0.2 | feature | 5b | ½ |
+| — | A piece under way stays today's when the plan is made again ([QUESTIONS.md](QUESTIONS.md) I3) | 3.3.5, done (#67) | fix | — | — |
+| — | The open items settled: the chat names the tabs that exist; the briefing's quiet-hours rule and 6c's check written down | 3.3.6, done (#68) | fix | — | — |
+| 5a | The chat as his one voice: every message in it, the outbox, one notification, the archive | 4.0.0, done (#69) | feature, data | 0, 1, 3, 4 | 2 |
+| 5b | WhatsApp-like: read state, dates, earlier messages, swipe to reply, one entrance for replies | 4.0.1, done (#70) | feature | 5a | 1½ |
+| 5c | The extras folded; the label that slides out | 4.0.2, done (#71) | feature | 5b | ½ |
 | 6a | `CalendarWriter` | 4.0.3 | cleanup | 3 | ½ |
 | 6b | `Protection`, and the Settings screen's state holder | 4.0.4 | cleanup | 3 | 1 |
 | 6c | `Instructions` and `OwnTasks`, and the task sheet's state holder | 4.0.5 | cleanup | 3 | 1 |
@@ -92,12 +94,12 @@ Every PR is a release ([development.md](../development.md)): cleanup-only releas
 | 11 | Emails done | 4.3.0 | feature, data | 1, 3, 6d, 7 | 1½ |
 | 12 | The sweep: imports, comments, the architecture test complete, baselines compared | 4.3.1 | cleanup | all | ½ |
 
-About twenty-three days in 23 PRs (22 releases), 3.3.4 among them, evenings and weekends. After it, the conversation digest as 4.4.0 ([13](13-summaries.md)). You've said you won't use the app until the whole of it is in (Q21): each release is still built and checked on the phone, but nothing between releases has to serve a day's use.
+About twenty-three days in 25 PRs (24 releases), 3.3.4 to 3.3.6 among them, evenings and weekends. After it, the conversation digest as 4.4.0 ([13](13-summaries.md)). You've said you won't use the app until the whole of it is in (Q21): each release is still built and checked on the phone, but nothing between releases has to serve a day's use.
 
 ## What changes substantially
 
 - **Felix's code lives in `felix/`**, a service built like `Focus`, with tests on temporary stores; `AppGraph` shrinks to wiring, under 400 lines, its members the services.
-- **`chat.json` is the conversation**: every message of his with a kind, what it's about, the replies it offered and his next check; your read position; his state. The log stops keeping his records. Every message is kept for you; the older ones in an archive read only on scrolling back; what he's sent of it is the recent window. [05](05-the-chat.md).
+- **`chat.json` is the conversation**: every message of his with a kind, what it's about, the replies it offered and his next check; your read position; his state. The log stops keeping his records. Every message is kept for you; the older ones in an archive, shown on scrolling back; what he's sent of it is the recent window. [05](05-the-chat.md).
 - **One notification for him**, in Android's messaging style, holding his unread messages, rebuilt from the chat, cleared when the chat opens, tapped, opening the chat at the first unread. Notifications are named in one place and never replace each other.
 - **The chat screen** gains dates, times, a read divider, swipe to reply with a quote, a folded tail under his bubbles with a chevron, and a label that slides out for five seconds saying what a new message did.
 - **Two new things he keeps**: notes on tasks (or on every task of a class, subject or source) and reminders, in a store of their own, each set from the chat with an Undo, shown on the task's sheet and in his context; a reminder delivered in his words for the moment, written ahead. [07](07-notes-and-reminders.md).

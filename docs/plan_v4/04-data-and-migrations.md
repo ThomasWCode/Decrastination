@@ -4,7 +4,7 @@ What's kept where after the plan, the types the features add, and how each chang
 
 ## The stores, now and after
 
-| File | Now | After | Owner | Changes | Stage |
+| File | At 3.2.0 | After | Owner | Changes | Stage |
 |---|---|---|---|---|---|
 | `tasks.json` | every task, finished ones with their whole text (590 KB) | open tasks whole; finished ones as records, their text dropped a fortnight after they're finished | Sync (Readings, Instructions and OwnTasks through it) | at each sync, tick or reading | 7 |
 | `runtime.json` | 38 fields, from the half-minute state to logs (98 KB) | what's left: the daily runs, the last backup, Teams' auto-sync, duplicates told apart, the stores' problems, the notifier's counts and held list | small owners | rarely | 5a, 7 |
@@ -14,7 +14,7 @@ What's kept where after the plan, the types the features add, and how each chang
 | `anki.json` | | Anki's readings, when AnkiDroid came to the front, the minutes worked in it | Focus (Anki's watch) | as AnkiDroid is used | 7 |
 | `calendar.json` | the versions written | also what was written where, the calendars to clear, your answers about events | CalendarWriter | at each write | 7 |
 | `chat.json` | your messages and Felix's answers (30 KB, 25 messages) | every message of Felix's too, with its kind; your read position; his state (next check, drafts, retry, questions, completions to ask about, the check-in's draft); the live window only | Conversation | at each message | 5a |
-| `chat-archive.json` | | the messages past the window, oldest first, never sent to the model, read on scrolling back | Conversation | as the window moves | 5a |
+| `chat-archive.json` | | the messages past the window, oldest first, never sent to the model, shown on scrolling back | Conversation | as the window moves | 5a |
 | `felix.json` | | notes on tasks; reminders with their drafts | Conversation | as they're set, drafted, sent | 8a |
 | `memory.json` | facts and rules (1 KB) | the same, each able to carry an until, a fact a task | Conversation | at each memory edit | 10a |
 | `gmail-writes.json` | | the Gmail writes journaled and not yet made, and the receipts of those made, kept while their Undo stands | Sync | at a finish, a try, an undo | 11 |
@@ -60,7 +60,7 @@ Before 3.3.2 a store was read by its serializer alone, with defaults for what's 
 
 - **On each message**: `kind` (from the stored `reason`, else `Chat`), `byApp`, `replyTo`, `pieceKey`, `nextCheckAt`, `asks`, `opens`; `remembered` becomes `memoryEdits` (as the screen already reads it, `Memories.editOf`), `done` becomes `acts` with nothing to undo; the three old fields go.
 - **On the state**: `readAt` (set to the newest message's time, so nothing's unread on the day of the update) and `felix` (from `RuntimeState.felix`, `assessLater` and `checkInDraft`, which go).
-- **From the log**: each `FelixRecord` of the last 30 days becomes a message of his: `id` and `at` as they were, `text`, `replies` as its suggested replies, `reason` as its kind, `key` as `pieceKey`, `taskId` as what it's about, `nextCheckAt` and `asks` as themselves; a record's `replyText` becomes a message of yours at `repliedAt` with `replyTo` the record's id. Merged by id, never doubled: a record whose id the chat already has (today's `replyToFelix` copies a record into the chat under its own id when you reply, and `tellAnswer` keeps a record under an answer's chat id) keeps the chat's message and only fills in what the message lacks (`kind`, `pieceKey`, `nextCheckAt`, `asks`); and a reply that's already in the chat as a message of yours after it (the reply `replyToFelix` sent) gets `replyTo` set rather than a second copy. `ActivityLog.felix` and `FELIX_KEEP_DAYS` go.
+- **From the log**: each `FelixRecord` of the last 30 days becomes a message of his: `id` and `at` as they were, `text`, `replies` as its suggested replies, `reason` as its kind, `key` as `pieceKey`, `taskId` as what it's about, `nextCheckAt` and `asks` as themselves; a record's `replyText` becomes a message of yours at `repliedAt` with `replyTo` the record's id. Merged by id, never doubled: a record whose id the chat already has (3.3.x's `replyToFelix` copied a record into the chat under its own id when you replied, and `tellAnswer` kept a record under an answer's chat id) keeps the chat's message and only fills in what the message lacks (`kind`, `pieceKey`, `nextCheckAt`, `asks`); and a reply that's already in the chat as a message of yours after it (the reply `replyToFelix` sent) gets `replyTo` set rather than a second copy. `ActivityLog.felix` and `FELIX_KEEP_DAYS` go.
 - **The window and the archive**: `chat.json` keeps the last 200 messages or 60 days, whichever keeps more, and every unread message whatever its age (so the notification, the badge and the opening position, all read from the window, never lose one); what's past it and read moves to `chat-archive.json` (`ChatArchive`, oldest first, append-only) by the outbox after each message: the archive's `update` first, then the live store's trim, so a crash between leaves a duplicate (dropped by id at the next move), never a hole. The first move after the update makes them; no migration of their own.
 - **`Speaker.Felix`** (5b) with `@SerialName("Claude")`, so the stored value doesn't change.
 
@@ -130,7 +130,7 @@ data class ChatMessage(
     val searched: List<String> = emptyList(), val sources: List<WebSource> = emptyList(),
 )
 
-/** The messages before the live window: oldest first, never sent to the model, read on scrolling back. */
+/** The messages before the live window: oldest first, never sent to the model, shown on scrolling back. */
 @Serializable
 data class ChatArchive(val messages: List<ChatMessage> = emptyList(), val version: Int = 1)
 

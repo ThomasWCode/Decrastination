@@ -41,14 +41,14 @@ Stage by stage, what each PR needs from your phone and from you, for what and fo
 
 ## In sum
 
-- **The phone** is needed for 22 of the 23 PRs, for the install and its check: a plugged-in, unlocked phone on the desk for an evening does several PRs if their reviews are done by then. Two stages want it free of use for an hour (6b, on a weekend) or online for a minute's write (11).
+- **The phone** is needed for 24 of the 25 PRs, for the install and its check: a plugged-in, unlocked phone on the desk for an evening does several PRs if their reviews are done by then. Two stages want it free of use for an hour (6b, on a weekend) or online for a minute's write (11).
 - **You** are needed for seven moments, about an hour and a half at the phone in all: 5a, 5b, 5c (ten, ten and five minutes; one evening if the three PRs are stacked and reviewed by then), 8a (fifteen minutes spread over an evening), 11 (twenty minutes with Gmail), and 10b twice by message (a read before, a read after). Four more are helpful but not needed (3, 6b, 7, 12): five minutes each, or slower guarded taps.
 - **No decision waits on you** during the work: every question is answered, and the three things that could go wrong mid-PR have their fallback chosen.
 
 ## How to batch it
 
 1. **Stages 0–4** (six PRs, the ground; done): three phone evenings with no need of you; the five minutes of taps in Stage 3 whenever you're passing.
-2. **Stage 5** (the chat): three short sessions with you, or one evening for all three.
+2. **Stage 5** (the chat; done, in one evening with you): three short sessions with you, or one evening for all three.
 3. **Stages 6 and 7** (seven PRs, the services and the data release): three or four phone evenings; 6b on a weekend with you nearby; a five-minute look after 7.
 4. **Stage 8** (reminders and the gaps): one evening with you for 8a's fifteen minutes, a glance the next day for the SlotStart reminder; 8b needs only the phone.
 5. **Stages 9 and 10**: the voice's text read by you before 10b starts (no phone), a session after it lands; 9 and 10a need only the phone.
