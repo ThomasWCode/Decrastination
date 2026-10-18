@@ -1,6 +1,6 @@
 # Summaries for him: an evaluation
 
-You asked (18 Oct) whether constant summarisation calls would be a good idea: models summarise the emails, the chat log and so on, the summaries are stored, and he's sent those instead of the raw data. This is an evaluation, not a plan: what he reads raw today, what's summarised already, where a summary would help, what it would cost, and a recommendation. Q28 asks what to do with it; if taken, it becomes a document of its own with steps, tests and a phone check like the others.
+You asked (18 Oct) whether constant summarisation calls would be a good idea: models summarise the emails, the chat log and so on, the summaries are stored, and he's sent those instead of the raw data. This is an evaluation, not a plan: what he reads raw today, what's summarised already, where a summary would help, what it would cost, and a recommendation. Decided (Q28: A): nothing in 4.0.0 to 4.3.0; the conversation digest below as a small 4.4.0 once you've lived with the new chat a few weeks, when it gets a document of its own with steps, tests and a phone check like the others.
 
 ## What he reads today, and how much of it
 
@@ -38,4 +38,4 @@ So the biggest raw input, the emails and the assignments, is condensed already: 
 
 ## Recommendation
 
-Not in 4.0.0 to 4.3.0. Build the digest as a small 4.4.0 once the chat holds everything and you've lived with the 12-message window a few weeks: by then it's clear whether what he forgets is the thread of the talk (the digest fixes that) or facts about you (memory's job, [04](04-memory-that-expires.md)). Everything else on the list is done already or isn't worth a call. Q28 asks for your call; if you'd rather have it with the chat work, it's a PR of its own after 4.0.0-C.
+Not in 4.0.0 to 4.3.0. Build the digest as a small 4.4.0 once the chat holds everything and you've lived with the 12-message window a few weeks: by then it's clear whether what he forgets is the thread of the talk (the digest fixes that) or facts about you (memory's job, [04](04-memory-that-expires.md)). Everything else on the list is done already or isn't worth a call. Your call (Q28: A): as recommended, a later 4.4.0.

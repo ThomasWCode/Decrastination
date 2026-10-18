@@ -1,6 +1,6 @@
 # Questions for you
 
-What the plan needs you to decide before, or as, it starts. Each has a recommendation. Your answers of 17 and 18 Oct (Q2–Q10) are applied in the plan's documents; Q1 is taken from plan_v4's Q1 (see its note); Q11 and Q12 are new.
+What the plan needs you to decide before, or as, it starts. Each has a recommendation. Your answers of 17 and 18 Oct (Q2–Q12) are applied in the plan's documents; Q1 is taken from plan_v4's Q1 (see its note); Q11 you left to the plan, which takes its recommendation (A).
 
 ## Q1. The order
 
@@ -88,7 +88,8 @@ Phase 8 (the `:core` module and the state holders) now goes with Phase 3. The mo
 
 - **A (recommended).** The `:core` module as Phase 3's last PR (3g), after 3f; each screen's state holder as its service lands (the chat's with plan_v4's 4.0.0-B, Settings' with 3c, the task sheet's with 3d).
 - **B.** The module first, before 3a, so every service is written against it from the start.
-- ANSWER:
+- ANSWER: I do not know enough about this: your call.
+- Taken (18 Oct): A. The module is the one PR that touches every `core/` file at once, so it goes when nothing else is moving, after 3f; each state holder lands with its screen's service, so no screen is reworked twice.
 
 ## Q12. The review step in `docs/development.md` (your Q2)
 
@@ -96,4 +97,4 @@ Your Q2 answer adds one `@claude review` per PR that gets up to three Codex roun
 
 - **A (recommended).** Put it in `docs/development.md` §Changes, pull requests and reviews beside the Codex rule (D-83's companion), in the first PR of either plan.
 - **B.** Keep it to the two plans' documents.
-- ANSWER:
+- ANSWER: A

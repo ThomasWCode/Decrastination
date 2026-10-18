@@ -44,7 +44,7 @@ The agent never taps the phone: where a check needs a tap (a notification openin
 
 - **Moves** (Phase 3's first commits, Phase 6): one Codex round, the PR saying it's a move, so its findings are about the move.
 - **Phases that change data or behaviour** (1b, 4, 5): up to three rounds, stopping at a round with at most one P2, as for the releases of the last week.
-- **One `@claude review`** on every PR that gets up to three Codex rounds (Q2): it answers in one comment, not a comment a point; each point is handled, then its comment gets the reply "Resolved". Whether this goes into `docs/development.md` as every PR's rule is Q12.
+- **One `@claude review`** on every PR that gets up to three Codex rounds (Q2): it answers in one comment, not a comment a point; each point is handled, then its comment gets the reply "Resolved". It's every PR's rule, in [`docs/development.md`](../development.md#changes-pull-requests-and-reviews) (Q12: A).
 - Both as you decided (Q2: A, with the Claude review).
 
 ## Risks
