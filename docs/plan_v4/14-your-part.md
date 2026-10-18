@@ -4,7 +4,7 @@ Stage by stage, what each PR needs from your phone and from you, for what and fo
 
 ## The rules this follows
 
-- **Every release is installed and checked on the phone before it merges** ([development.md](../development.md) §The phone): over adb from the PC, the app never uninstalled, a backup of the APK and the data first (`keep_before.sh`), the focus service checked after. So every stage but Stage 0 needs the phone connected, plugged in and unlocked, as in every session so far: evenings and weekends, since it's away on school days (07:40–18:00).
+- **Every release is installed and checked on the phone before it merges** ([development.md](../development.md) §The phone): over adb from the PC, the app never uninstalled, a backup of the APK and the data first (`keep_before.sh`), the focus service checked after. So every stage but Stage 0 needs the phone connected, plugged in and unlocked, as in every session so far: evenings and weekends, since it's away on school days.
 - **What only you can do**: anything in the notification shade (tap his notification, reply from it, a chip in it, Snooze); a gesture (a swipe); another app (Gmail, Teams); aeroplane mode; the phone off and on; a judgement of taste (his voice's examples); your mailbox. These are marked **needed**.
 - **What I can do with the guarded scripts, slower**: a tap inside Decrastination (`private/tools/tap.sh`, which refuses unless the app is in front), reading the screen from screenshots, when you're not using the phone. Where a check is only that, you're marked **helpful**: five minutes of yours, or a slower quarter-hour of mine.
 - **Replies to his messages from the PC**: Stage 5b gives the `chat-ask` command `--es replyTo <id>`, so a routed reply (a check-in answer, "leave me alone tonight", *Done* on a reminder) can be checked without a tap. The notification's own reply box still needs you, once, in 5a.
@@ -20,13 +20,13 @@ Stage by stage, what each PR needs from your phone and from you, for what and fo
 | 1 | 3.3.0 | **needed**: install and check; a briefing and a free-time notice by debug command | no |
 | 2 | 3.3.1 | **needed**: install and check; `ai-check` against the stub (free); one `chat-ask` and one `enrich-task` (paid, cents) | no |
 | 3 | 3.3.2 | **needed**: install; `backup-now`; an Import and a Reset of Stats with its copy restored | **helpful**, 5 min: the Import and the Reset are taps in Settings (else guarded taps with screenshots) |
-| 4 | 3.3.3 | **needed**: install; `chat-ask` and `felix-say` (paid, cents), `check-in`, `briefing`, `undo`, `chat-card`; the plan snapshot | no |
+| 4 | 3.3.3 | **needed**: install; `chat-ask` and `felix-say` (paid, cents), `check-in`, `briefing`, `chat-card --es do apply`, then `--es do undo`; the plan snapshot | no |
 | 5a | 4.0.0 | **needed**: the latest backup pulled for the migration's rehearsal first; install; `felix-say` twice (paid); `briefing`, `check-in`, `assess` | **needed**, 10 min: tap his notification (the chat opens at the message), reply from its box with a chip, see the old records in the chat at their times; the check-in's chips |
 | 5b | 4.0.1 | **needed**: install | **needed**, 10 min: a swipe-reply, a long-press, scroll up past the top for earlier messages, the badge on his button |
 | 5c | 4.0.2 | **needed**: install; one `chat-ask` that makes a change (paid) | **needed**, 5 min: the chevron, the label sliding out and back, Undo inside the fold, leave and return |
 | 6a | 4.0.3 | **needed**: install; `calendar-written`, `calendar-sync` | no |
 | 6b | 4.0.4 | **needed**: install on a weekend, the phone not in use for an hour; `test-arm`, `test-disarm`, `force-block` | **helpful**: nearby, in case blocking misfires (undone from the PC with `test-disarm`) |
-| 6c | 4.0.5 | **needed**: install; `instruction`, `apply`, `undo`, `own-add`, `own-done`, `own-reopen`, `own-delete` | no |
+| 6c | 4.0.5 | **needed**: install; `instruction`, `instructions`, `instruction-discard`, `quick-minutes` (0 takes it back), `own-add`, `own-done`, `own-reopen`, `own-delete` | no |
 | 6d | 4.0.6 | **needed**: install; `sync`, `enrich-task` (paid, cents) | no |
 | 6e | 4.0.7 | **needed**: install; `review` (paid: the review's call and the summary's, cents); the check-in answered from the PC | no |
 | 6f | 4.0.8 | **needed**: install and the script | no |
@@ -41,13 +41,13 @@ Stage by stage, what each PR needs from your phone and from you, for what and fo
 
 ## In sum
 
-- **The phone** is needed for 21 of the 22 PRs, for the install and its check: a plugged-in, unlocked phone on the desk for an evening does several PRs if their reviews are done by then. Two stages want it free of use for an hour (6b, on a weekend) or online for a minute's write (11).
+- **The phone** is needed for 22 of the 23 PRs, for the install and its check: a plugged-in, unlocked phone on the desk for an evening does several PRs if their reviews are done by then. Two stages want it free of use for an hour (6b, on a weekend) or online for a minute's write (11).
 - **You** are needed for seven moments, about an hour and a half at the phone in all: 5a, 5b, 5c (ten, ten and five minutes; one evening if the three PRs are stacked and reviewed by then), 8a (fifteen minutes spread over an evening), 11 (twenty minutes with Gmail), and 10b twice by message (a read before, a read after). Four more are helpful but not needed (3, 6b, 7, 12): five minutes each, or slower guarded taps.
 - **No decision waits on you** during the work: every question is answered, and the three things that could go wrong mid-PR have their fallback chosen.
 
 ## How to batch it
 
-1. **Stages 0–4** (five PRs, the ground): three phone evenings with no need of you; the five minutes of taps in Stage 3 whenever you're passing.
+1. **Stages 0–4** (six PRs, the ground; done): three phone evenings with no need of you; the five minutes of taps in Stage 3 whenever you're passing.
 2. **Stage 5** (the chat): three short sessions with you, or one evening for all three.
 3. **Stages 6 and 7** (seven PRs, the services and the data release): three or four phone evenings; 6b on a weekend with you nearby; a five-minute look after 7.
 4. **Stage 8** (reminders and the gaps): one evening with you for 8a's fifteen minutes, a glance the next day for the SlotStart reminder; 8b needs only the phone.

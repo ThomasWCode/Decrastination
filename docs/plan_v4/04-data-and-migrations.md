@@ -39,10 +39,10 @@ On today's numbers, the half-minute state's file would be a few kilobytes instea
 
 ## Versions and migrations (Stage 3)
 
-Today a store is read by its serializer, with defaults for what's missing and fields kept from older shapes (28 notes in the code say "from before"). From Stage 3 each store has a version and a list of migrations, and no field is kept only so old files read: it's migrated away and deleted.
+Before 3.3.2 a store was read by its serializer alone, with defaults for what's missing and fields kept from older shapes (28 notes in the code say "from before"); since then each store has a version and a list of migrations, and no field is kept only so old files read: it's migrated away and deleted.
 
 1. **A version in each state class** (`val version: Int = 1`); a file without one is version 1.
-2. **Migrations on the JSON, before decoding**: `Migration(from, to) { obj: JsonObject -> JsonObject }`, run in order by `JsonStore` as it loads. Working on the JSON lets a migration rename, move or drop fields that the new class no longer has.
+2. **Migrations on the JSON, before decoding**: `Migration(from) { obj: JsonObject -> JsonObject }` (to `from + 1`), run in order by `JsonStore` as it loads. Working on the JSON lets a migration rename, move or drop fields that the new class no longer has.
 3. **The old file kept**: once migrated, the file it came from is kept as `<name>.v<from>` until a week after the next successful start, and the new one written atomically as now.
 4. **One release, many stores.** A migration that moves fields between stores (Felix's state into the chat in 5a, the `runtime.json` split in 7) is made by `Stores` at start, before any service reads: it reads the old file, writes the new ones, and only then trims the old.
 5. **Backups go through the same migrations.** A backup carries its parts' versions; restoring an older one migrates them first, so a backup made before a change restores after it.
@@ -51,7 +51,7 @@ Today a store is read by its serializer, with defaults for what's missing and fi
 ### Testing a migration
 
 - **From every shape it may meet.** Stage 0's fixtures are the first shape; each migration adds its output's, and its test runs every older fixture through every migration since.
-- **On the real data, never committed.** The rehearsal ([03](03-stages.md) §Stage 0) migrates the latest phone backup in the scratch folder and prints counts before and after: tasks, open ones, steps ticked, your values, instructions in use, chat messages, pins, the month's spend. Any difference stops the release. Its "before" is each file read with the new build's types, so a migration that moves, renames or merges data (5a's Felix records into the chat and its archive, 7's split of `runtime.json`) shows as a difference even when nothing is lost: that migration's PR teaches the rehearsal where its data goes, so the counts are compared through the move, and never loosens the check to let a migration through.
+- **On the real data, never committed.** The rehearsal ([03](03-stages.md) §Stage 0) migrates the latest phone backup, unpacked into the git-ignored `private/rehearsal/<name>/`, and prints counts before and after: tasks, open ones, steps ticked, your values, instructions in use, chat messages, pins, the month's spend. Any difference stops the release. Its "before" is each file read with the new build's types, so a migration that moves, renames or merges data (5a's Felix records into the chat and its archive, 7's split of `runtime.json`) shows as a difference even when nothing is lost: that migration's PR teaches the rehearsal where its data goes, so the counts are compared through the move, and never loosens the check to let a migration through.
 - **Idempotent.** Each migration run twice gives what it gives once.
 
 ## The data changes, one by one, in order

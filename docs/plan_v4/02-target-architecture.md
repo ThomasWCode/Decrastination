@@ -40,7 +40,7 @@ What stays: making the stores (through `Stores`), the gateway, the notifier and 
 
 ## The services
 
-| Service | Owns | Made from (now) | Called by | Stage |
+| Service | Owns | Made from (at 3.2.0) | Called by | Stage |
 |---|---|---|---|---|
 | **Conversation** (Felix, `felix/`) | `chat.json` (the window) and `chat-archive.json`; `memory.json`; `felix.json` (notes and reminders); his state (next check, drafts, retry, questions, completions to ask about, the check-in's draft); the chat's retry state (`Gathered`); `chatInFront`; the outbox | the chat functions in `AppGraph`, `learn/Felix.kt`, the check-in flow, `enrich/ChatReader.kt`, `enrich/FelixPrompts.kt`, `enrich/FelixCaller.kt`, `notify/Felix*`; then 5a's outbox, 5b's replies, 8a's notes and reminders, 10a's expiry | screens, workers, the notification's receiver, the slot and reminder alarms | 4, then 5, 8, 10 |
 | **Planning** (`plan/`) | the plan watcher, today's slot starts, writing ahead | `AppGraph.plan()`, `workedToday`, `keepSlots`, `PlanWatcher`, `Ahead` | the focus, the widget, screens, the Conversation | 4 |
@@ -55,34 +55,50 @@ What stays: making the stores (through `Stores`), the gateway, the notifier and 
 | **Learning** (`learn/`) | `log.json`, `learning.json` (the calibration, from Stage 7) | the review, `Stats`, `Calibrator`, `forgetCalibration`, `undoReviewChange`, `undoTidy`, `writeSummary`, `Assessment.record` | workers, screens, the Conversation's replies | 6e |
 | **Backups** (`data/BackupService`) | the backup folder, reset copies | `exportBackup`, `backupNow`, `importBackup`, `restoreInstructions`, `reset`, `restoreResetCopy` | screens, the backup worker | 3 |
 
-Each service is a class in the package that already holds its concern. Felix's is the exception: today he's spread over `learn/`, `enrich/`, `notify/` and `AppGraph`, and he gets a package of his own, `felix/`, holding the service, his looks, the outbox, his rules and prompts and callers, the chat's prompts and answers, the replies' routing, his words, and the receivers and workers that carry a reply ([03](03-stages.md) §Stage 4 lists the files). What the chat work adds (5), reminders and notes (8a), the gaps (8b), memory's expiry (10a) and the voice (10b) are written inside it.
+Each service is a class in the package that already holds its concern. Felix's is the exception: he has had a package of his own since 3.3.3, `felix/`: the service (`Conversation`), his looks (`Looks`), his rules, prompts and caller, the check-in's flow, the chat's prompts, answers, rounds and reader, his notification and his port to Android (`FelixPorts`), and the receiver and workers that carry a reply or a look ([03](03-stages.md) §Stage 4 lists the files). The outbox and his words join it in 5a, the replies' routing in 5b. What the chat work adds (5), reminders and notes (8a), the gaps (8b), memory's expiry (10a) and the voice (10b) are written inside it.
 
 ## The platform
 
 ### `Stores` (Stage 3)
 
-Every `JsonStore` is made in one place, with its file name, its schema version and its migrations ([04](04-data-and-migrations.md) §Versions and migrations). It reports the files that couldn't be read (as `AppGraph.found` does now), keeps the reset copies, and hands each service its stores. Backups and resets go through it, so a new store (the archive, `felix.json`, the journal) can't be left out of either.
+Every `JsonStore` is made in one place, `data/Stores.kt`, with its file name, its schema version and its migrations ([04](04-data-and-migrations.md) §Versions and migrations). It reports the files that couldn't be read whole (`Stores.problems`), says of each store what a backup keeps of it and which resets change it (`Stores.all`), and has the one way round a store's owner, `Stores.replace`, which the backup service alone calls; `AppGraph` hands each service its stores from it. The reset copies are the backup service's (`data/BackupService.kt`). So a new store (the archive, `felix.json`, the journal) can't be left out of a backup or a reset.
 
 ### `ModelGateway` (Stage 2)
 
-One class for every call to Claude:
+One class for every call to Claude. As built in 3.3.1 (`enrich/ModelGateway.kt`):
 
 ```kotlin
 class ModelGateway(
-    private val key: () -> String?,          // the key in use, from the secrets
-    private val endpoint: String?,           // the debug endpoint, or null
-    private val usage: JsonStore<ModelState>,// the month's spend, the calls, the failures (model.json from Stage 7)
+    private val settings: JsonStore<Settings>,    // Claude on, its key in use, the monthly cap
+    private val savedKey: () -> String?,          // the API key kept in the secrets, or null
+    private val runtime: JsonStore<RuntimeState>, // the month's spend, the calls, the failures (model.json from Stage 7)
+    private val tasks: JsonStore<TaskState>,      // for the dropped plans' alerts
     private val clock: WallClock,
-    private val alerts: ModelAlerts,
+    private val alerts: Alerts,                   // ModelAlerts on the phone, a list in a test
+    private val scope: CoroutineScope,
+    private val retryAfter: (Long) -> Unit,       // what only the rules have read, asked again once a rest is over
 ) {
+    var endpoint: String?                         // debug only (ai-endpoint): a stand-in for Anthropic, till a restart
+    fun client(job: ModelEffort.Job): AnthropicClient?
+    fun claudeKey(): String?
+    fun hold(interactive: Boolean = false): ModelHold?
     fun available(): Boolean
-    fun hold(interactive: Boolean): ModelHold?
-    suspend fun <T> call(job: ModelEffort.Job, interactive: Boolean, task: TaskItem? = null, send: suspend (AnthropicClient) -> T): Called<T>
+    suspend fun <T> call(interactive: Boolean, task: TaskItem? = null, record: ModelCalls.OnRecord<T>? = null, cost: (T) -> Pair<Double, Boolean>, send: suspend (at: Long) -> T): Called<T>
+    suspend fun worked(costUsd: Double, refused: Boolean, month: String, at: Long)
+    suspend fun failed(error: Throwable, month: String, at: Long, task: TaskItem? = null)
+    fun reconcileAlerts()
+    suspend fun droppedAlerts(all: List<TaskItem>)
+    fun because(hold: ModelHold): String          // since 3.3.3
+    fun retryWords(): String                      // since 3.3.3
+
+    companion object {
+        fun build(key: String, endpoint: String? = null): AnthropicClient
+    }
 }
 ```
 
-- One `AnthropicClient` for each key and endpoint, made once and remade only when the key changes; timeouts by job (`ModelEffort.Job` names them all: the three readings, instructions, the review, photos, the chat and its replies, Felix, micro-plans, photo checks, the summary, the tidy, research; later the digest).
-- The readers (`ClaudeEnricher`, `ChatReader`, `FelixCaller`, …) stop building clients: each takes the client in `send`, or the gateway in its constructor.
+- One `AnthropicClient` for each key and endpoint, made once and remade only when the key or the endpoint changes; timeouts by job (`ModelEffort.Job` names them all: the three readings, instructions, the review, photos, the chat and its replies, Felix, micro-plans, photo checks, the summary, the tidy, research; later the digest).
+- The readers (`ClaudeEnricher`, `ChatReader`, `FelixCaller`, …) stop building clients: each takes the one `client(job)` gives, in its constructor, and is asked through `call`.
 - `callModel`'s holds, the cap, the record of calls, the key's problems and the alerts move here unchanged, with `AppGraph.Called` and `ModelHold`. A reminder's draft (8a) and the digest (13) are calls like any other.
 
 ### `Notifier` (Stage 1)
