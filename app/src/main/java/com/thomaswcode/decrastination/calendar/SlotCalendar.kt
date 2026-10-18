@@ -10,11 +10,13 @@ import android.provider.CalendarContract
 import android.provider.CalendarContract.Calendars
 import android.provider.CalendarContract.Events
 import androidx.core.app.NotificationCompat
+import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.R
 import com.thomaswcode.decrastination.core.Change
 import com.thomaswcode.decrastination.core.ChangeType
 import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.notify.Channels
+import com.thomaswcode.decrastination.notify.NoticeId
 import com.thomaswcode.decrastination.notify.Notify
 import java.time.Instant
 import java.time.ZoneId
@@ -28,7 +30,6 @@ import java.util.Locale
  * batch a write, so a replan's write is cheap and an unchanged plan writes nothing.
  */
 object SlotCalendar {
-    private const val MOVE_ID = 4300
     private val WHEN = DateTimeFormatter.ofPattern("EEE d MMM HH:mm", Locale.UK)
 
     /** A calendar on the phone, and whether events can be added to it. */
@@ -125,7 +126,7 @@ object SlotCalendar {
             .setContentText("Not to ${Instant.ofEpochMilli(move.existing.start).atZone(zone).format(WHEN)}: $why, so it's back where it was.")
             .setAutoCancel(true)
             .build()
-        Notify.post(context, move.desired.uri, MOVE_ID, notification)
+        AppGraph.get(context).notifier.post(NoticeId.CalendarMove, notification, move.desired.uri)
     }
 
     /**

@@ -5,7 +5,6 @@ import android.app.admin.DevicePolicyManager
 import android.content.Intent
 import android.os.Bundle
 import android.util.Log
-import androidx.core.app.NotificationManagerCompat
 import androidx.core.net.toUri
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.block.FocusService
@@ -246,7 +245,7 @@ class CommandActivity : Activity() {
             }
             "clean-up" -> {
                 // After testing: this app's notifications gone, and no Teams sync left waiting.
-                NotificationManagerCompat.from(this).cancelAll()
+                graph.notifier.cancelAll()
                 // Reviews run from here (any but a Sunday evening's) were tests: dropped.
                 val zone = graph.clock.zone()
                 graph.log.update { log ->

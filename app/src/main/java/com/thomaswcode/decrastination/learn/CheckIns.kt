@@ -37,6 +37,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.R
 import com.thomaswcode.decrastination.notify.Channels
+import com.thomaswcode.decrastination.notify.NoticeId
 import com.thomaswcode.decrastination.notify.Notify
 import com.thomaswcode.decrastination.ui.AppTheme
 import com.thomaswcode.decrastination.ui.Format
@@ -44,8 +45,6 @@ import kotlinx.coroutines.launch
 
 /** The Sunday check-in's reminder (docs/spec/learning.md, item 6). */
 object CheckIns {
-    const val ID = 4002
-
     /**
      * The week's check-in begun (LR-02): Felix asks its first question in his notification, the rest
      * as each is answered ([AppGraph.checkInReply]); the form, This week, takes them all at once.
@@ -54,14 +53,13 @@ object CheckIns {
     suspend fun remind(context: Context) {
         val graph = AppGraph.get(context)
         if (graph.askCheckIn()) return
-        Notify.post(
-            context,
-            ID,
+        graph.notifier.post(
+            NoticeId.CheckIn,
             Notify.builder(context, Channels.WEEKLY)
                 .setSmallIcon(R.drawable.ic_focus)
                 .setContentTitle("Sunday check-in")
                 .setContentText("Five quick questions about the week, before its review.")
-                .let { Notify.opening(it, context, ID, Intent(context, CheckInActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+                .let { Notify.opening(it, context, NoticeId.CheckIn.code(), Intent(context, CheckInActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
                 .setAutoCancel(true)
                 .build(),
         )
@@ -119,7 +117,7 @@ class CheckInActivity : ComponentActivity() {
                                     added = true
                                     log.copy(checkIns = log.checkIns + CheckIn(week, now, feel, avoided.trim(), inTheWay.trim(), change.trim(), energy.trim())).trimmed(now)
                                 }
-                                Notify.cancel(this@CheckInActivity, CheckIns.ID)
+                                AppGraph.get(this@CheckInActivity).notifier.cancel(NoticeId.CheckIn)
                                 // Felix's questions, should he have begun them: the form has the answers.
                                 if (added) graph.endCheckInFlow()
                                 if (!added) return@launch
