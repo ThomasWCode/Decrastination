@@ -237,6 +237,19 @@ class ConversationTest {
     }
 
     @Test
+    fun `how work went, handed over again after a stop, is asked once`() = runBlocking {
+        val ask = AssessLater("teams:sheet", "Forces worksheet", now - 3_600_000L)
+        // Kept with Claude on; then, Claude off, the completions handed over again (twice) and the kept ones asked.
+        conversation.askHowItWent(listOf(ask))
+        stores.settings.update { it.copy(aiEnabled = false) }
+        conversation.askHowItWent(listOf(ask))
+        conversation.askHowItWent(listOf(ask))
+        conversation.askKept()
+        assertEquals(listOf(listOf(ask)), his().filter { it.kind == MessageKind.Completions }.map { it.asks })
+        assertTrue(stores.chat.value.felix.assessLater.isEmpty())
+    }
+
+    @Test
     fun `the week's review and its summary are his messages, each with its button`() = runBlocking {
         conversation.reviewed("Nothing to change this week: the estimates held.")
         conversation.summaryReady("2026-10-12")

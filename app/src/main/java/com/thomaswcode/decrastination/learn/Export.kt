@@ -12,8 +12,8 @@ import java.util.zip.ZipOutputStream
 
 /**
  * The record as CSV files (PL-11), to share: what was finished, each slot, each day, the blocks,
- * Felix's own messages (from the chat's [messages]) and the calibration, a file each; times local, as
- * the app shows them. Pure but for [zip].
+ * Felix's own messages (from the chat's [messages], its archive's with its window's) and the
+ * calibration, a file each; times local, as the app shows them. Pure but for [zip].
  */
 object Export {
     /** File name to its CSV text. */
