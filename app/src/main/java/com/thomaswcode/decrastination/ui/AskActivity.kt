@@ -650,7 +650,7 @@ private fun SwipeToReply(onReply: () -> Unit, content: @Composable () -> Unit) {
  * the chat at ([flash]) tinted for a moment.
  */
 @Composable
-private fun Bubble(message: ChatMessage, colour: Color, shape: Shape, flash: Boolean, onReply: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
+private fun Bubble(message: ChatMessage, colour: Color, shape: Shape, flash: Boolean, onReply: () -> Unit, onTap: () -> Unit = {}, content: @Composable ColumnScope.() -> Unit) {
     val context = LocalContext.current
     var menu by remember { mutableStateOf(false) }
     val tint by animateColorAsState(if (flash) MaterialTheme.colorScheme.tertiaryContainer else colour, label = "flash")
@@ -659,7 +659,7 @@ private fun Bubble(message: ChatMessage, colour: Color, shape: Shape, flash: Boo
             color = tint,
             contentColor = contentColorFor(colour),
             shape = shape,
-            modifier = Modifier.widthIn(max = 320.dp).clip(shape).combinedClickable(onClick = {}, onLongClick = { menu = true }),
+            modifier = Modifier.widthIn(max = 320.dp).clip(shape).combinedClickable(onClick = onTap, onLongClick = { menu = true }),
         ) {
             Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), content = content)
         }
@@ -794,7 +794,8 @@ private fun Claudes(graph: AppGraph, screen: ChatScreenState, message: ChatMessa
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Column {
             Labelled(screen, message) {
-                Bubble(message, MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(18.dp, 18.dp, 18.dp, 4.dp), flash, onReply) {
+                // A tap on the bubble opens or closes what's folded, as its chevron does: a bigger place to tap.
+                Bubble(message, MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(18.dp, 18.dp, 18.dp, 4.dp), flash, onReply, onTap = { if (folds) screen.toggle(message.id) }) {
                     Text(message.text, style = MaterialTheme.typography.bodyLarge)
                     if (folds) Chevron(open, ChatSummary.problems(message) > 0, Modifier.align(Alignment.End)) { screen.toggle(message.id) }
                 }
@@ -835,13 +836,15 @@ private fun Chevron(open: Boolean, problem: Boolean, modifier: Modifier, onToggl
 /**
  * [bubble] with [message]'s label behind it (Q5: A), where it gets one ([ChatScreenState.labels]):
  * [LABEL_IN_MS] after it's shown the label slides out from under the bubble's edge, to its right where
- * there's room, else below it; it stays [LABEL_STAYS_MS] and slides back. Drawn under the bubble, so it
- * comes out from behind it, and over nothing else, so the list doesn't move. Tapped, it opens what's folded.
+ * there's room, else below it, from its start; it stays [LABEL_STAYS_MS] and slides back, and is gone.
+ * Drawn under the bubble, so it comes out from behind it, and over nothing else, so the list doesn't move;
+ * never wider than the row, its end cut. Tapped, it opens what's folded.
  */
 @Composable
 private fun Labelled(screen: ChatScreenState, message: ChatMessage, bubble: @Composable () -> Unit) {
     val line = remember(message) { ChatSummary.line(message) }
-    val shows = remember(message.id) { screen.labels(message) }
+    // Looked at again once its line has something in it: an answer's changes and acts are kept after its words.
+    val shows = remember(message.id, line.isEmpty) { screen.labels(message) }
     if (!shows) {
         bubble()
         return
@@ -858,19 +861,30 @@ private fun Labelled(screen: ChatScreenState, message: ChatMessage, bubble: @Com
     val gap = with(LocalDensity.current) { 6.dp.roundToPx() }
     BoxWithConstraints {
         val room = constraints.maxWidth
+        val widest = maxWidth
         var bubbleSize by remember { mutableStateOf(IntSize.Zero) }
         var labelSize by remember { mutableStateOf(IntSize.Zero) }
         val beside = bubbleSize.width + gap + labelSize.width <= room
         Box {
-            Box(Modifier.matchParentSize()) {
-                Label(
-                    line,
-                    Modifier.align(Alignment.BottomEnd)
-                        .wrapContentSize(Alignment.BottomEnd, unbounded = true)
-                        .onSizeChanged { labelSize = it }
-                        .offset { if (beside) IntOffset(((labelSize.width + gap) * slide).roundToInt(), 0) else IntOffset(0, ((labelSize.height + gap) * slide).roundToInt()) }
-                        .graphicsLayer { alpha = (slide * 3f).coerceAtMost(1f) },
-                ) { screen.unfold(message.id) }
+            // Only while it's out or sliding: back behind the bubble, it's gone, for a tap and TalkBack too.
+            if (out || slide > 0f) {
+                Box(Modifier.matchParentSize()) {
+                    Label(
+                        line,
+                        Modifier.align(Alignment.TopStart)
+                            .wrapContentSize(Alignment.TopStart, unbounded = true)
+                            .widthIn(max = widest)
+                            .onSizeChanged { labelSize = it }
+                            .offset {
+                                // From behind the bubble's end, its bottom edge level with the bubble's, to beside it;
+                                // or from behind its bottom, at its start, to below it.
+                                val x = maxOf(0, bubbleSize.width - labelSize.width)
+                                val y = maxOf(0, bubbleSize.height - labelSize.height)
+                                if (beside) IntOffset(x + ((bubbleSize.width + gap - x) * slide).roundToInt(), y) else IntOffset(0, y + ((bubbleSize.height + gap - y) * slide).roundToInt())
+                            }
+                            .graphicsLayer { alpha = (slide * 3f).coerceAtMost(1f) },
+                    ) { screen.unfold(message.id) }
+                }
             }
             Box(Modifier.onSizeChanged { bubbleSize = it }) { bubble() }
         }
@@ -893,6 +907,7 @@ private fun Label(line: ChatSummary.Line, modifier: Modifier, onOpen: () -> Unit
             },
             style = MaterialTheme.typography.labelMedium,
             maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
         )
     }

@@ -154,6 +154,10 @@ class ChatScreenStateTest {
         val arrived = said("arrived", "2026-10-18T18:05")
         assertTrue(screen.labels(arrived))
         assertFalse(screen.labels(arrived.copy(from = Speaker.You)))
+        // An answer whose changes are kept after its words: none while it has nothing to say, one once it has.
+        val words = his("words", "2026-10-18T18:06")
+        assertFalse(screen.labels(words))
+        assertTrue(screen.labels(said("words", "2026-10-18T18:06")))
         // Once a visit.
         screen.labelled("unread")
         assertFalse(screen.labels(unread))
