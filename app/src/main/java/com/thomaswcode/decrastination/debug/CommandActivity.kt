@@ -11,6 +11,7 @@ import com.thomaswcode.decrastination.block.FocusService
 import com.thomaswcode.decrastination.block.TeamsAutoSync
 import com.thomaswcode.decrastination.core.About
 import com.thomaswcode.decrastination.core.ChangeType
+import com.thomaswcode.decrastination.core.ChatHistory
 import com.thomaswcode.decrastination.core.ChatMessage
 import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.core.Fact
@@ -376,8 +377,8 @@ class CommandActivity : Activity() {
                 val chat = graph.chat.value
                 val state = chat.felix
                 Log.i(TAG, "felix: next check ${state.nextCheckAt?.let { java.time.Instant.ofEpochMilli(it).atZone(graph.clock.zone()).toLocalTime() }}, last sent ${state.lastSentAt}, activity ${state.activity.keys}, questions ${state.questions.size}, to ask how it went ${state.assessLater.size}, check-in ${state.checkInDraft?.step}; read to ${chat.readAt}")
-                com.thomaswcode.decrastination.core.ChatHistory.his(chat.messages).takeLast(10).forEach { m ->
-                    Log.i(TAG, "felix ${m.kind}${if (m.byApp) " (the app's words)" else ""} ${m.pieceKey}: ${m.text.ifBlank { "(silent)" }} ${m.suggestedReplies}${com.thomaswcode.decrastination.core.ChatHistory.replyOf(m, chat.messages)?.let { r -> " / reply: ${r.text}" }.orEmpty()}")
+                ChatHistory.his(chat.messages).takeLast(10).forEach { m ->
+                    Log.i(TAG, "felix ${m.kind}${if (m.byApp) " (the app's words)" else ""} ${m.pieceKey}: ${m.text.ifBlank { "(silent)" }} ${m.suggestedReplies}${ChatHistory.replyOf(m, chat.messages)?.let { r -> " / reply: ${r.text}" }.orEmpty()}")
                 }
             }
             "felix-check" -> graph.looks.check().also { Log.i(TAG, "felix-check done") }

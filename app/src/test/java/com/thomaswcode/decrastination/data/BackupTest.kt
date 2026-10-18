@@ -4,6 +4,9 @@ import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.core.Calibration
 import com.thomaswcode.decrastination.core.Change
 import com.thomaswcode.decrastination.core.ChangeType
+import com.thomaswcode.decrastination.core.ChatArchive
+import com.thomaswcode.decrastination.core.ChatMessage
+import com.thomaswcode.decrastination.core.ChatState
 import com.thomaswcode.decrastination.core.DayKind
 import com.thomaswcode.decrastination.core.HalfDay
 import com.thomaswcode.decrastination.core.Instruction
@@ -13,7 +16,9 @@ import com.thomaswcode.decrastination.core.NoSchool
 import com.thomaswcode.decrastination.core.OwnTask
 import com.thomaswcode.decrastination.core.OwnTasks
 import com.thomaswcode.decrastination.core.SchoolCalendar
+import com.thomaswcode.decrastination.core.SlotState
 import com.thomaswcode.decrastination.core.Source
+import com.thomaswcode.decrastination.core.Speaker
 import com.thomaswcode.decrastination.enrich.AiUsage
 import java.io.ByteArrayInputStream
 import kotlin.test.Test
@@ -269,11 +274,11 @@ class BackupTest {
 
     @Test
     fun `format 7 keeps the chat with Felix's state, its earlier messages and today's slots, and a newer one is refused`() {
-        val chat = com.thomaswcode.decrastination.core.ChatState(listOf(com.thomaswcode.decrastination.core.ChatMessage("m1", com.thomaswcode.decrastination.core.Speaker.You, "move the physics to Thursday", 5)), felix = FelixState(nextCheckAt = 42))
-        val archive = com.thomaswcode.decrastination.core.ChatArchive(listOf(com.thomaswcode.decrastination.core.ChatMessage("m0", com.thomaswcode.decrastination.core.Speaker.You, "what's due?", 1)))
+        val chat = ChatState(listOf(ChatMessage("m1", Speaker.You, "move the physics to Thursday", 5)), felix = FelixState(nextCheckAt = 42))
+        val archive = ChatArchive(listOf(ChatMessage("m0", Speaker.You, "what's due?", 1)))
         val backup = Backup(
-            exportedAt = 1, settings = com.thomaswcode.decrastination.data.Settings(), log = ActivityLog(), chat = chat, archive = archive,
-            slots = com.thomaswcode.decrastination.core.SlotState("2026-10-15", previous = mapOf("teams:a#0" to 7L)),
+            exportedAt = 1, settings = Settings(), log = ActivityLog(), chat = chat, archive = archive,
+            slots = SlotState("2026-10-15", previous = mapOf("teams:a#0" to 7L)),
         )
         val back = Backups.decode(Backups.encode(backup), emptyMap())!!
         assertEquals(7, back.format)
@@ -281,15 +286,15 @@ class BackupTest {
         assertEquals(42L, back.chat.felix.nextCheckAt)
         assertEquals(archive, back.archive)
         // None in one from before.
-        assertEquals(com.thomaswcode.decrastination.core.ChatState(), Backups.decode("""{"app":"Decrastination","format":5,"exportedAt":0,"settings":{},"log":{}}""", emptyMap())!!.chat)
+        assertEquals(ChatState(), Backups.decode("""{"app":"Decrastination","format":5,"exportedAt":0,"settings":{},"log":{}}""", emptyMap())!!.chat)
         assertEquals(mapOf("teams:a#0" to 7L), back.slots.previous)
         assertEquals(null, Backups.decode(Backups.encode(backup).replace("\"format\": 7", "\"format\": 8"), emptyMap()))
     }
 
     @Test
     fun `a backup past what Import reads leaves the chat's earliest messages out, as few as it takes`() {
-        fun message(i: Int) = com.thomaswcode.decrastination.core.ChatMessage("m$i", com.thomaswcode.decrastination.core.Speaker.You, "x".repeat(1_000), i.toLong())
-        val backup = Backup(exportedAt = 1, settings = com.thomaswcode.decrastination.data.Settings(), log = ActivityLog(), archive = com.thomaswcode.decrastination.core.ChatArchive((1..40).map(::message)))
+        fun message(i: Int) = ChatMessage("m$i", Speaker.You, "x".repeat(1_000), i.toLong())
+        val backup = Backup(exportedAt = 1, settings = Settings(), log = ActivityLog(), archive = ChatArchive((1..40).map(::message)))
         val whole = Backups.encode(backup).toByteArray().size
         // Room for all of it: nothing left out.
         assertEquals(0, Backups.fitted(backup, cap = whole).second)

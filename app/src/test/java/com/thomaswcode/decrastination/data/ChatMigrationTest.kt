@@ -3,6 +3,7 @@ package com.thomaswcode.decrastination.data
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.core.About
 import com.thomaswcode.decrastination.core.ChatState
+import com.thomaswcode.decrastination.core.MemoryEdit
 import com.thomaswcode.decrastination.core.MessageKind
 import com.thomaswcode.decrastination.core.Speaker
 import java.io.File
@@ -151,7 +152,7 @@ class ChatMigrationTest {
         val (fact, rule, forgot) = message.memoryEdits
         assertEquals("bus", fact.factAfter?.topic)
         assertEquals("be blunter", rule.ruleAfter?.text)
-        assertEquals(com.thomaswcode.decrastination.core.MemoryEdit("Forgot: football"), forgot)
+        assertEquals(MemoryEdit("Forgot: football"), forgot)
     }
 
     @Test
