@@ -73,7 +73,7 @@ A copy off the phone is yours to make: a sync app mirroring the folder, or Expor
 
 ## Restoring
 
-`BackupService.importBackup` restores nothing from a file that isn't one of this app's, is a newer format, has a part from a store newer than this build's, is over 8 MB, or holds what the app never writes (`Backups.problem`: a setting out of the screen's range, negative minutes, a learned figure out of bounds, and so on). A backup's parts from a store of an older version are brought to this build's shape first, by that store's migrations (`Backups.decode`). Otherwise:
+`BackupService.importBackup` restores nothing from a file that isn't one of this app's, is a newer format, carries a store newer than this build's (a store it doesn't carry, as `calendar.json`, may be newer), has a part its store's migrations can't bring to this build's shape (a step missing, or a migration failing on it), is over 8 MB, or holds what the app never writes (`Backups.problem`: a setting out of the screen's range, negative minutes, a learned figure out of bounds, and so on). A backup's parts from a store of an older version are brought to this build's shape first, by that store's migrations (`Backups.decode`). Otherwise:
 - the settings go through `changeSettings`, keeping this phone's protection, Claude's key in use and its calendars: once armed, one that loosens the blocker waits;
 - your changes come back as applying each here would (one that would make tasks wait for each other in a circle stays unclear, saying so); your own tasks not here are added, with your changes laid over them again;
 - the school calendar is merged; what's remembered is merged by topic and words, this phone's winning; the chat comes back only where this phone's is empty;
