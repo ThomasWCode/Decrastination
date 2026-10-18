@@ -1,7 +1,7 @@
 package com.thomaswcode.decrastination.learn
 
 import android.content.Intent
-import android.net.Uri
+import androidx.core.net.toUri
 import com.thomaswcode.decrastination.core.ChatHistory
 import com.thomaswcode.decrastination.core.ChatMessage
 import com.thomaswcode.decrastination.core.Instruction
@@ -67,6 +67,6 @@ object Summary {
             .putExtra(Intent.EXTRA_EMAIL, listOfNotNull(to.trim().takeIf { it.isNotEmpty() }).toTypedArray())
             .putExtra(Intent.EXTRA_SUBJECT, "Week of " + LocalDate.parse(week).format(DAY))
             .putExtra(Intent.EXTRA_TEXT, text)
-            .apply { selector = Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:")) }
+            .apply { selector = Intent(Intent.ACTION_SENDTO, "mailto:".toUri()) }
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
 }
