@@ -27,7 +27,7 @@ A feature PR, and a cleanup PR that changes behaviour on purpose (5a's message r
 | 5c | `ChatSummary.line` and `problems`; a bare answer |
 | 6 | each service's flows: the calendar's copy and move rules through its port; armed and unarmed protection; an instruction applied, refused, deleted and a quick change taken back; own tasks; a sync with one source failing; a reading due and refused; a review from a fixed log; the third rule by the module |
 | 7 | every flag of 3.1.2 to 3.1.4 over `mine`; ticks following an id through a re-read that reorders; origins; each migration from every fixture shape, twice; a backup from before restored after; the rehearsal's invariants |
-| 8a | `Reminders.next/due`; the parse's checks; the acts and their Undo; delivery with and without a draft; drafting through a fake caller; the sheet's model; the context; the store in a backup and Reset; `SchemaLimitsTest`; `SchemaCompileTest -PcheckSchemas=true` |
+| 8a | `Reminders.next/due`; `Notes.forTask` (a standing note by subject, class, source and title); the parse's checks; the acts and their Undo; delivery with and without a draft; drafting through a fake caller; the sheet's model; the context; the store in a backup and Reset; `SchemaLimitsTest`; `SchemaCompileTest -PcheckSchemas=true` |
 | 8b | each gap's parse, act and Undo; the context line; the schemas compiled again |
 | 9 | all as before, under new names |
 | 10a | `Memories.expired`; `edit` and `undo` with the until; the tidy skipping; `Profile.block`; both parsers; both schemas compiled; `profile.txt` and `ReadingPrompts.VERSION` |
@@ -48,7 +48,7 @@ After every install, read-only, by `scripts/phone-check.sh` (Stage 0):
 - what's in front (the home screen, not a screen left open);
 - the stores' sizes, against the last run.
 
-Then the stage's own checks ([03](03-stages.md)), through the debug commands where they can be. The agent never taps the phone: where a check needs a tap (a notification opening the chat at a message, a swipe, a chip), you make it, and say what you saw. A backup of the APK and the data comes before every install (`keep_before.sh`), and the app is never uninstalled. The phone's away on school days (07:40–18:00): installs and checks are evenings and weekends.
+Then the stage's own checks ([03](03-stages.md)), through the debug commands where they can be. The notification shade, a gesture, another app, aeroplane mode and the power button are yours: where a check needs one, you make it and say what you saw; a tap inside the app can go through the guarded `tap.sh` with screenshots when you're not using the phone ([14](14-your-part.md) says which is which, stage by stage). A backup of the APK and the data comes before every install (`keep_before.sh`), and the app is never uninstalled. The phone's away on school days (07:40–18:00): installs and checks are evenings and weekends.
 
 ## Reviews
 

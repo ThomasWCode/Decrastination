@@ -28,7 +28,7 @@ Each row: what you'd text; what happens today; what this plan makes of it, and w
 | "Remind me about the form when I next sit down to the physics" | nothing of the kind | a reminder at that task's next slot's start |
 | "Before the essay's due, remind me to print it" | nothing | a reminder a set time before the task's deadline |
 | "Make a note on the essay: use the second source" | nothing; `notes` exist only on a task of your own, through the form | a note on any task, shown on its sheet and told to him whenever the task comes up |
-| "Tell me to do Ms Peters' assignments on sheets, not in my book" | a standing instruction in his memory, which every prompt sees; no source names a teacher, so only once you've said which class is hers, and the link to the task in front of him is the model's to make | the same, or a standing note the app attaches to every matching task by code, if Q31 is A ([07](07-notes-and-reminders.md) §Standing notes) |
+| "Tell me to do Ms Peters' assignments on sheets, not in my book" | a standing instruction in his memory, which every prompt sees; no source names a teacher, so only once you've said which class is hers, and the link to the task in front of him is the model's to make | a standing note the app attaches to every matching task by code: on each sheet, under each in his context, in his slot message for each ([07](07-notes-and-reminders.md) §Standing notes; Q31: A) |
 | "What have I asked you to remind me of?" | nothing | listed in his context; he answers |
 | "Cancel that" / "push it to 8" | nothing | an action on the reminder; a new time is a change to it |
 | "Remind me again in 20 minutes" (from a reminder) | nothing | Snooze, a chip on the reminder, no call; the message at the new time written again |

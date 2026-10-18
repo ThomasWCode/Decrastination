@@ -14,7 +14,7 @@ Each stage says what it **needs** (always from earlier stages: nothing here reli
 4. **Names are settled before the prompts are rewritten.** The readings' prompts are renamed (9) before memory and the voice (10) change them, so those diffs are only the change.
 5. **The write outside the phone comes last** (11), and the sweep (12) leaves the code as [11](11-conventions-and-docs.md) wants it.
 
-[README](README.md) §The order has the table; the days add up to about twenty.
+[README](README.md) §The order has the table; the days add up to about twenty-one. [14](14-your-part.md) says, stage by stage, when the phone and you are needed.
 
 ## Stage 0: the safety net (no release)
 
@@ -109,7 +109,7 @@ The design is [05](05-the-chat.md); the stores' change is [04](04-data-and-migra
 3. **Read state**: `readAt` set in `onPause` and on a notification's tap (`AskActivity.intent(context, openAt)`); the divider; the list scrolled to `openAt` or `firstUnread`; the badge on `FelixFab` (and `BlockedActivity`'s) from an `unread` flow the service exposes.
 4. **Earlier messages**: `ChatArchive` read on demand, 100 a page, held by the state holder, never put into `ChatState`.
 5. **Long-press and swipe**: `combinedClickable` for Reply and Copy; `AnchoredDraggable` with one anchor at a third of the width and a haptic on crossing it, around each bubble; the reply strip over the box; `Conversation.ask(text, about, id, replyTo)`.
-6. **One entrance**: `felix/Replies.kt`, `route(message, words)` pure ([05](05-the-chat.md) §5's table); `Conversation.ask` calls it when `replyTo` is set; `FelixReplyReceiver` calls `ask(words, replyTo = id)`; `replyToFelix` and `answerReply` go (`FelixReplyWorker` stays, running `answerChat` after the receiver's gone).
+6. **One entrance**: `felix/Replies.kt`, `route(message, words)` pure ([05](05-the-chat.md) §5's table); `Conversation.ask` calls it when `replyTo` is set; `FelixReplyReceiver` calls `ask(words, replyTo = id)`; `replyToFelix` and `answerReply` go (`FelixReplyWorker` stays, running `answerChat` after the receiver's gone). The `chat-ask` debug command gains `--es replyTo <message id>`, so a routed reply can be checked from the PC without a tap ([14](14-your-part.md)).
 7. **The model told**: `ChatPrompts.turns` prefixes the quote where the replied-to message isn't the one before; `text()` marks `byApp` messages "(the app wrote this for you)"; one sentence in `ChatPrompts.system`; `chat.txt` and `felix-inputs.md` regenerated.
 8. **`Speaker.Felix`** with `@SerialName("Claude")`; `decisions.md` (one entrance for replies).
 
@@ -162,9 +162,8 @@ The design is [05](05-the-chat.md); the stores' change is [04](04-data-and-migra
 7. **The replies**: `Replies.route` for kind `Reminder`: *Done*, the two snoozes (the alarm re-armed), anything else a chat turn with the quote.
 8. **Notes shown**: `TaskSheet`'s About lists them with a delete and "Add a note" (`By.You`); `FelixPrompts.describe` adds "Notes on it: …" and "Their reminder for this slot: …"; `Ahead.microPlans` passes the task's notes with its instructions in `MicroPlanner.plan`'s user text.
 9. **Kept and cleared**: the backup (`Backup.felixStore`, format 7, checked by `Backups.problem`); Reset → "The chat and Felix's history" clears it; the debug page and the `felix` command show it; pruning in the nightly run (`Daily`).
-10. **The docs**: `felix.md` §What he can do and §His messages; `felix-inputs.md` with a reminder's and a note's example; `decisions.md`.
-
-If Q31 (standing notes) is A: `Note.taskId` becomes optional beside a `scope` (subject or class, source, title contains), `Notes.forTask(task)` pure, three plain strings in the schema's `notes`, one sentence in the prompt, "Note for every chemistry task" on each matching sheet and under each matching task in his context; half a day more, in this PR.
+10. **Standing notes** (Q31: A): `Note.taskId` optional beside `scope: NoteScope?` (subject or class, source, title contains); `Notes.forTask(task, notes)` pure, tested first; the schema's `notes` gains the three plain strings (no union); the prompt's note item says a note can be for a task or for every task of a class, subject or source; the sheet shows "Note for every chemistry task: …"; the context, `FelixPrompts.describe` and the micro-planner take them through `forTask`, as a per-task note.
+11. **The docs**: `felix.md` §What he can do and §His messages; `felix-inputs.md` with a reminder's, a note's and a standing note's example; `decisions.md`.
 
 **Tests** and **phone check**: [07](07-notes-and-reminders.md). **Leaves**: notes in his context; the store 10a's task-bound facts sit beside.
 
@@ -250,11 +249,11 @@ The conversation digest, 4.4.0 ([13](13-summaries.md), Q28): planned on its own 
 | 5 | 3 | 4 |
 | 6 | 6 | 3 |
 | 7 | 1 | 2½ |
-| 8 | 2 | 3½ |
+| 8 | 2 | 4 |
 | 9 | 1 | ½ |
 | 10 | 2 | 1½ |
 | 11 | 1 | 1½ |
 | 12 | 1 | ½ |
-| | 22 (21 releases) | about 20 |
+| | 22 (21 releases) | about 21 |
 
 Evenings and weekends, as every release ([12](12-verification-and-risks.md) §Risks: the phone's away on school days).

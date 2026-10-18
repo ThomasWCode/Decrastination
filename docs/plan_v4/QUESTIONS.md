@@ -1,6 +1,6 @@
 # Questions, and your answers
 
-Every call either plan needed, with your answers as you wrote them, kept here as the record; nothing in the plan is open but Q31. Part A is the cleanup's questions (C-Q1 to C-Q12, answered 17 and 18 Oct 2026), Part B the Felix plan's (Q1 to Q30, answered 18 Oct), Part C the calls the merge of 18 Oct made on its own, for you to veto, and Q31.
+Every call either plan needed, with your answers as you wrote them, kept here as the record; nothing in the plan is open. Part A is the cleanup's questions (C-Q1 to C-Q12, answered 17 and 18 Oct 2026), Part B the Felix plan's (Q1 to Q30, answered 18 Oct), Part C the calls the merge of 18 Oct made on its own, for you to veto, and Q31 (answered 18 Oct).
 
 ---
 
@@ -377,4 +377,4 @@ You asked (18 Oct) whether he can keep a note that goes beyond one assignment: "
 
 - **A (recommended).** In 8a, half a day more: `Note.taskId` optional beside a `scope` (subject or class, source, title contains); `Notes.forTask(task)` attaches a standing note to every matching task by code; it shows on each matching task's sheet, sits under each in his context, goes into his slot message and to the micro-planner, as a per-task note does. You'd still tell him once which class is hers.
 - **B.** Not now: a memory rule does most of it; revisit after 4.x.
-- ANSWER:
+- ANSWER (given in the chat, 18 Oct): A.

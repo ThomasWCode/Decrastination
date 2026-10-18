@@ -1,6 +1,6 @@
 # Decrastination 4.x: the cleanup and Felix as the app's one voice, in one order
 
-One plan for the next run of work, merged on 18 Oct 2026 from two: the targeted cleanup (written 17 Oct: the code and its stores restructured without changing what the app does) and the Felix plan (written 18 Oct: everything he says in one WhatsApp-like chat, notes and reminders, memory that expires, a teenager's voice, a starred email finished in Gmail). Written against `main` at e6cd54b (3.2.0) and measured on 18 Oct ([01](01-current-state.md)); every question either plan asked is answered ([QUESTIONS.md](QUESTIONS.md), one still open: Q31); nothing is implemented.
+One plan for the next run of work, merged on 18 Oct 2026 from two: the targeted cleanup (written 17 Oct: the code and its stores restructured without changing what the app does) and the Felix plan (written 18 Oct: everything he says in one WhatsApp-like chat, notes and reminders, memory that expires, a teenager's voice, a starred email finished in Gmail). Written against `main` at e6cd54b (3.2.0) and measured on 18 Oct ([01](01-current-state.md)); every question either plan asked is answered ([QUESTIONS.md](QUESTIONS.md)); nothing is implemented. [14](14-your-part.md) says which stages need your phone and which need you.
 
 The order is the merge's one real decision: the cleanup comes first where a feature would otherwise be built on the mess, and between features where it only has to be done at all. [03](03-stages.md) lays out every stage and PR in order, with what each needs from the ones before it and what it leaves for the ones after; nothing in it relies on anything later.
 
@@ -83,7 +83,7 @@ Every PR is a release ([development.md](../development.md)): cleanup-only releas
 | 6e | `Learning` | 4.0.7 | cleanup | 3, 5a | ½ |
 | 6f | The `:core` module | 4.0.8 | cleanup | 6a–6e | ½ |
 | 7 | Who set what (`Mine`, `By`, steps with ids) and the stores split, trimmed: one data release | 4.0.9 | cleanup, data | 0, 3, 6 | 2½ |
-| 8a | Notes and reminders | 4.1.0 | feature, data | 2, 3, 4, 5, 7 | 2½ |
+| 8a | Notes, standing notes and reminders | 4.1.0 | feature, data | 2, 3, 4, 5, 7 | 3 |
 | 8b | The gaps: keep a piece, check a source, open where it lives, free time in his context | 4.1.1 | feature | 5, 6d, 8a | 1 |
 | 9 | Names: the readings' prompts renamed, files and tests split | 4.1.2 | cleanup | 6 | ½ |
 | 10a | Memory that expires | 4.2.0 | feature, data | 3, 4, 7, 9 | 1 |
@@ -91,7 +91,7 @@ Every PR is a release ([development.md](../development.md)): cleanup-only releas
 | 11 | Emails done | 4.3.0 | feature, data | 1, 3, 6d, 7 | 1½ |
 | 12 | The sweep: imports, comments, the architecture test complete, baselines compared | 4.3.1 | cleanup | all | ½ |
 
-About twenty days in 22 PRs (21 releases), evenings and weekends. After it, the conversation digest as 4.4.0 ([13](13-summaries.md)). You've said you won't use the app until the whole of it is in (Q21): each release is still built and checked on the phone, but nothing between releases has to serve a day's use.
+About twenty-one days in 22 PRs (21 releases), evenings and weekends. After it, the conversation digest as 4.4.0 ([13](13-summaries.md)). You've said you won't use the app until the whole of it is in (Q21): each release is still built and checked on the phone, but nothing between releases has to serve a day's use.
 
 ## What changes substantially
 
@@ -99,7 +99,7 @@ About twenty days in 22 PRs (21 releases), evenings and weekends. After it, the 
 - **`chat.json` is the conversation**: every message of his with a kind, what it's about, the replies it offered and his next check; your read position; his state. The log stops keeping his records. Every message is kept for you; the older ones in an archive read only on scrolling back; what he's sent of it is the recent window. [05](05-the-chat.md).
 - **One notification for him**, in Android's messaging style, holding his unread messages, rebuilt from the chat, cleared when the chat opens, tapped, opening the chat at the first unread. Notifications are named in one place and never replace each other.
 - **The chat screen** gains dates, times, a read divider, swipe to reply with a quote, a folded tail under his bubbles with a chevron, and a label that slides out for five seconds saying what a new message did.
-- **Two new things he keeps**: notes on tasks and reminders, in a store of their own, each set from the chat with an Undo, shown on the task's sheet and in his context; a reminder delivered in his words for the moment, written ahead. [07](07-notes-and-reminders.md).
+- **Two new things he keeps**: notes on tasks (or on every task of a class, subject or source) and reminders, in a store of their own, each set from the chat with an Undo, shown on the task's sheet and in his context; a reminder delivered in his words for the moment, written ahead. [07](07-notes-and-reminders.md).
 - **Memory with a shelf life**: a fact or a rule can carry an until, or belong to a task, and goes when that passes. [08](08-memory-that-expires.md).
 - **His prompts say how he talks**, with the register pinned by examples; the fixed lines in his name follow; a message that's just talk gets a reply and nothing else; the week's summary email is about you in the third person. [09](09-his-voice.md).
 - **Gmail gets one write**: finishing a starred email's work unstars and archives its conversation, journaled and retried, undone within a grace. D-7's "only ever read" is amended. [10](10-emails-done.md).
@@ -113,7 +113,7 @@ Numbered in `docs/decisions.md` by the PRs that apply them (the next free number
 
 - The chat is Felix's one visible voice; a notification is made from it and never beside it (5a). A reply from a notification and one in the chat are the same turn, routed by the message it answers (5b).
 - The chat keeps every message for you; what he's sent of it is the recent window (5a).
-- He keeps notes and reminders at your asking, made at once with an Undo; a reminder is delivered in his words for the moment, written ahead, or as you set it when he can't write (8a).
+- He keeps notes and reminders at your asking, made at once with an Undo; a note can stand for every task of a class, subject or source; a reminder is delivered in his words for the moment, written ahead, or as you set it when he can't write (8a).
 - What he remembers can expire: by a date, or with a task; nothing of it is yours to prune (10a).
 - His voice is a sixth-former's, set by his prompts and pinned by examples; his name and line stay the knobs (D-57). A message that's just talk gets a reply and nothing else. The week's summary email is about you in the third person, never in his voice (10b).
 - Finishing a starred email's work in the app unstars and archives it in Gmail (amending D-7, D-10 and D-54), behind a switch; a write that can't be made is the app's own notification, not his (11).
@@ -127,6 +127,7 @@ Numbered in `docs/decisions.md` by the PRs that apply them (the next free number
 - His bubble shows a chevron and nothing under it until opened; a new message's label slides out and back; a message that's just talk has neither.
 - Scrolling up past the chat's oldest message loads the earlier ones; `chat-context` shows only the window.
 - "Remind me at 7 to…" sets a reminder (not a task) that arrives at 7 as his message written for that moment (your words, when he couldn't write); "remind me when I next sit down to…" arrives at that slot's start.
+- "Tell me to do her assignments on sheets" lands on every task of that class: on each sheet, under each in his context, in his slot message for each.
 - "Don't message me tonight" is gone by morning without your deleting it.
 - The private chat and Felix evals pass at the rate they pass today after the voice change.
 - Ticking the last piece of a starred email unstars and archives it within a minute online, and after reconnecting offline; Undo within the grace leaves Gmail untouched.
@@ -148,4 +149,5 @@ Numbered in `docs/decisions.md` by the PRs that apply them (the next free number
 - [11-conventions-and-docs.md](11-conventions-and-docs.md): names, files, code, comments, tests and docs, from Stage 1 on.
 - [12-verification-and-risks.md](12-verification-and-risks.md): how each PR is shown to work; tests, phone checks, reviews, risks, rolling back.
 - [13-summaries.md](13-summaries.md): the summaries evaluation; the conversation digest as 4.4.0.
-- [QUESTIONS.md](QUESTIONS.md): every call either plan needed, with your answers; the merge's own calls; Q31 open.
+- [14-your-part.md](14-your-part.md): which stages need your phone and which need you, for what and for how long; how to batch them.
+- [QUESTIONS.md](QUESTIONS.md): every call either plan needed, with your answers; the merge's own calls.
