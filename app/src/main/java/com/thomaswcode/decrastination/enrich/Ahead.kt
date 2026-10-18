@@ -46,12 +46,12 @@ object Ahead {
                 val profile = graph.profile(now).text
                 val called = graph.callModel(interactive = false, task = task, record = ModelCalls.OnRecord(ModelEffort.Job.MicroPlan, task.title) { r: MicroPlanner.Result -> r.usage to ModelCalls.outcome(r.refused, r.text == null) }, cost = { r: MicroPlanner.Result -> r.costUsd to r.refused }) { caller.plan(profile, MicroPlans.describe(chunk, task)) }
                 val made = when (called) {
-                    is AppGraph.Called.Answered -> called.value.text?.let { MicroPlans.parse(it, chunk, task, now) } ?: MicroPlans.none(chunk, task, now)
-                    is AppGraph.Called.Failed -> {
+                    is Called.Answered -> called.value.text?.let { MicroPlans.parse(it, chunk, task, now) } ?: MicroPlans.none(chunk, task, now)
+                    is Called.Failed -> {
                         Log.w(AppGraph.TAG, "A piece's first steps failed", called.error)
                         return
                     }
-                    is AppGraph.Called.Held -> return
+                    is Called.Held -> return
                 }
                 graph.runtime.update { it.copy(microPlans = it.microPlans + (chunk.key to made)) }
                 if (made.first.isNotEmpty()) written = true
