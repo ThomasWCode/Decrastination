@@ -33,7 +33,7 @@ A feature PR, and a cleanup PR that changes behaviour on purpose (5a's message r
 | 10a | `Memories.expired`; `edit` and `undo` with the until; the tidy skipping; `Profile.block`; both parsers; both schemas compiled; `profile.txt` and `ReadingPrompts.VERSION` |
 | 10b | the goldens; `FelixWords` and the chips' two forms; `summary.txt`; the private evals re-run (paid, by hand) |
 | 11 | `GmailFinish.due`; the grace and undo rules; `ImapWriter` over a fake stream and the reader's command list; the worker's outcomes through a fake writer; the merge after an unstar; the switch off |
-| 12 | the architecture test complete: only the notifier posts, only the gateway builds a client, `core` pure, one writer a store |
+| 12 | the architecture test complete: only the notifier posts, only the gateway builds a client, `core` pure, one writer a store (with `Stores.replace` its one named exception, for restores and resets) |
 
 The paid checks: `SchemaCompileTest` by the API (a cent a schema) in 8a, 8b, 10a; the private evals ($2) in 10b; `felix-say` and `chat-ask` on the phone (a few cents each) in 4, 5, 8, 10. Everything else is free.
 

@@ -28,7 +28,7 @@ The same app, organised so that each concern has one home, owns its data, and ca
 ## The rules
 
 1. **`core` stays pure**: no Android, no stores, no services. It's that way now; Stage 6f makes it a module of its own so the compiler holds it.
-2. **One writer a store.** Each store belongs to one service, which alone calls `update` on it. Others read its `StateFlow`, or call the service.
+2. **One writer a store.** Each store belongs to one service, which alone calls `update` on it. Others read its `StateFlow`, or call the service. The one exception is `Stores` itself, which replaces whole stores for a restore or a reset (`Stores.replace`, called by the backup service and nothing else); the architecture test names it.
 3. **Services are built like `Focus`**: stores, the clock and small interfaces for Android's effects (notifications, the calendar provider, work, alarms, content resolvers) in the constructor. `AppGraph` passes the real ones; tests pass fakes and stores on temporary files.
 4. **Screens call services.** A composable may read flows and call a service's function; it never calls `update` on a store. The largest screens (the chat, Settings, the task sheet) get a state holder, a plain class tested without Compose, as each is worked on (the chat's in Stage 5b).
 5. **No cycles.** A service may call another's functions (the Conversation acts on instructions, your own tasks and the focus); none calls back into one that called it. Where two need each other, the later one takes a callback, as `Focus` takes `onOwnTaskDone`.
@@ -105,7 +105,7 @@ Small interfaces for what Android does, so services can be tested:
 
 The details, the types and every migration are in [04](04-data-and-migrations.md); in short:
 
-- **Your values in one place** (Stage 7). `TaskItem.mine: Mine` replaces the twelve `user…` fields; `Mine` is the same type the instructions fold into (today's `TaskOverrides`), so the copy across goes. Each value says who set it (`By.You` from the instructions screen or a sheet's quick change, `By.Felix` from the chat), which an `Instruction` records from then on. `yourMinutes`, `yourSteps`, `pacedMinutes` and `pacedTeaches` become short functions of `mine` (and `source == Own`), in one file, with one test each.
+- **Your values in one place** (Stage 7). `TaskItem.mine: Mine` replaces the twelve `user…` fields; `Mine` is the same type the instructions fold into (today's `TaskOverrides`), so the copy across goes. Each value is wrapped with who set it (`Set<T>(value, by)`: `By.You` from the instructions screen or a sheet's quick change, `By.Felix` from the chat), which an `Instruction` records from then on; an instruction from before counts as yours. `yourMinutes`, `yourSteps`, `pacedMinutes` and `pacedTeaches` become short functions of `mine` (and `source == Own`), in one file, with one test each.
 - **Steps with an id and an origin** (Stage 7). `SubStep.id` (stable: made once, kept through edits) and `SubStep.origin` (`Source`, `Reading`, `Rules`, `Yours`, `Felix`, `OwnTask`). "Are these the reading's steps?" asks the origin, not the titles; a tick follows the id. Slot keys can then use the step's id instead of its place (a later, separate change, as it moves today's kept starts once).
 - **The conversation** (Stage 5a): every message with a kind, who wrote it, what it answers; the read position; his state; the window and the archive.
 - **Notes and reminders** (8a), **memory with an until** (10a), **the Gmail write journal** (11): each a small versioned store or a field with a default.
