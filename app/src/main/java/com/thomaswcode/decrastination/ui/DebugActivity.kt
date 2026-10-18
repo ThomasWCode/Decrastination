@@ -39,6 +39,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.thomaswcode.decrastination.AppGraph
+import com.thomaswcode.decrastination.core.ChatHistory
 import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.debug.CommandActivity
 import com.thomaswcode.decrastination.enrich.Prompts
@@ -107,8 +108,8 @@ private fun DebugPage(graph: AppGraph, activity: Activity) {
                 Block(
                     activity,
                     "Felix",
-                    "State: ${chat.felix}\nRead to: ${chat.readAt}\n\nLast messages:\n" + com.thomaswcode.decrastination.core.ChatHistory.his(chat.messages).takeLast(10).joinToString("\n") { m ->
-                        "${Instant.ofEpochMilli(m.at).atZone(zone).toLocalDateTime().withNano(0)} ${m.kind}: ${m.text}" + (com.thomaswcode.decrastination.core.ChatHistory.replyOf(m, chat.messages)?.let { " → ${it.text}" } ?: "")
+                    "State: ${chat.felix}\nRead to: ${chat.readAt}\n\nLast messages:\n" + ChatHistory.his(chat.messages).takeLast(10).joinToString("\n") { m ->
+                        "${Instant.ofEpochMilli(m.at).atZone(zone).toLocalDateTime().withNano(0)} ${m.kind}: ${m.text}" + (ChatHistory.replyOf(m, chat.messages)?.let { " → ${it.text}" } ?: "")
                     }.ifEmpty { "none" },
                 )
             }

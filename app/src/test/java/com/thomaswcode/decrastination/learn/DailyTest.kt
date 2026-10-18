@@ -1,5 +1,8 @@
 package com.thomaswcode.decrastination.learn
 
+import com.thomaswcode.decrastination.core.ChatMessage
+import com.thomaswcode.decrastination.core.MessageKind
+import com.thomaswcode.decrastination.core.Speaker
 import com.thomaswcode.decrastination.core.WindowKind
 import com.thomaswcode.decrastination.data.SlotOutcome
 import com.thomaswcode.decrastination.data.SlotRecord
@@ -256,8 +259,8 @@ class ReviewInputTest {
         )
         // His message in the chat about the slot, and your reply to it.
         val felix = listOf(
-            com.thomaswcode.decrastination.core.ChatMessage("f1", com.thomaswcode.decrastination.core.Speaker.Claude, "Ten minutes in: are you starting?", Fixtures.at("2026-10-06T17:10"), kind = com.thomaswcode.decrastination.core.MessageKind.SlotStart, pieceKey = "teams:a#0"),
-            com.thomaswcode.decrastination.core.ChatMessage("y1", com.thomaswcode.decrastination.core.Speaker.You, "yes", Fixtures.at("2026-10-06T17:12"), replyTo = "f1", answeredAt = Fixtures.at("2026-10-06T17:12")),
+            ChatMessage("f1", Speaker.Claude, "Ten minutes in: are you starting?", Fixtures.at("2026-10-06T17:10"), kind = MessageKind.SlotStart, pieceKey = "teams:a#0"),
+            ChatMessage("y1", Speaker.You, "yes", Fixtures.at("2026-10-06T17:12"), replyTo = "f1", answeredAt = Fixtures.at("2026-10-06T17:12")),
         )
         val day = com.thomaswcode.decrastination.learn.DayRecord("2026-10-06", plannedMin = 60, chunks = emptyList(), doneMin = 30, full = false, kind = com.thomaswcode.decrastination.core.DayKind.Weekday)
         val log = ActivityLog(reviews = listOf(last), slots = listOf(slot), days = listOf(day))

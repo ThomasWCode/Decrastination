@@ -9,6 +9,7 @@ import com.thomaswcode.decrastination.core.FixedClock
 import com.thomaswcode.decrastination.core.MessageKind
 import com.thomaswcode.decrastination.core.Speaker
 import com.thomaswcode.decrastination.data.ChatMigration
+import com.thomaswcode.decrastination.data.FelixState
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.notify.NoticeId
@@ -162,7 +163,7 @@ class OutboxTest {
 
     @Test
     fun `clearing the chat empties its archive too, and keeps his state`() = runBlocking {
-        chat.update { ChatState(listOf(his("a")), felix = com.thomaswcode.decrastination.data.FelixState(nextCheckAt = 42)) }
+        chat.update { ChatState(listOf(his("a")), felix = FelixState(nextCheckAt = 42)) }
         archive.update { ChatArchive(listOf(his("z", 1))) }
         outbox.clear()
         assertTrue(chat.value.messages.isEmpty() && archive.value.messages.isEmpty())
