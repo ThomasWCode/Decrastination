@@ -1,36 +1,36 @@
 # Where the code is now
 
-Measured on `main` at b8469fc (3.1.4, 17 Oct 2026), and on the phone's data the same afternoon (sizes and counts only, read with `run-as`; nothing on the phone was changed).
+Measured on `main` at e6cd54b (3.2.0), re-measured on 18 Oct 2026 after 3.1.5 to 3.2.0 landed (first measured at b8469fc, 3.1.4, on 17 Oct), and on the phone's data on 18 Oct (sizes and counts only, read with `run-as`; nothing on the phone was changed).
 
 ## In numbers
 
 | | |
 |---|---|
-| App code | 31,866 lines of Kotlin in 159 files |
-| Tests | 13,375 lines, 850 tests (1 skipped: the paid eval) |
-| Largest files | `AppGraph.kt` 2,601; `core/Planner.kt` 1,192; `block/FocusService.kt` 857; `block/Focus.kt` 801; `ui/AskActivity.kt` 756; `ui/SettingsActivity.kt` 710; `enrich/ChatReader.kt` 707 |
-| `AppGraph` | 116 functions, ten stores (nine JSON files and the secrets), 268 inline fully qualified names, no tests (its constructor needs an Android `Context`) |
-| Its users | 56 files; most-used members `graph.clock` (120 uses), `graph.runtime` (90), `graph.focus` (58), `graph.settings` (57), `graph.tasks` (40), `graph.log` (33) |
+| App code | 32,208 lines of Kotlin in 160 files |
+| Tests | 14,022 lines, 874 tests (1 skipped: the paid eval) |
+| Largest files | `AppGraph.kt` 2,628; `core/Planner.kt` 1,201; `block/FocusService.kt` 857; `enrich/ChatReader.kt` 841; `block/Focus.kt` 801; `ui/AskActivity.kt` 756; `ui/SettingsActivity.kt` 710; `sources/gmail/GmailSource.kt` 686 |
+| `AppGraph` | 117 functions, ten stores (nine JSON files and the secrets), 198 inline fully qualified names, no tests (its constructor needs an Android `Context`) |
+| Its users | 51 files; most-used members `graph.clock` (121 uses), `graph.runtime` (90), `graph.focus` (58), `graph.settings` (57), `graph.tasks` (40), `graph.log` (33) |
 | `TaskItem` | 43 stored fields (12 of them your overrides, `user…`) and about 16 derived ones |
 | `RuntimeState` / `Settings` | 38 and 51 fields |
 | Claude clients | built in 11 classes, a new one each time one's asked for |
-| Notification ids | 13 constants in 12 files |
-| Inline fully qualified names | 1,037 in the app's code |
-| Version history in comments | 55 tags ("#48's second review", "since 3.1.2", "your call, 17 Oct") |
+| Notification ids | 18 constants in 17 files (17 distinct numbers: 4200 is used twice) |
+| Inline fully qualified names | 437 in the app's code, 637 with the tests (each use outside an import line counted) |
+| Version history in comments | 54 tags ("#48's second review", "since 3.1.2", "your call, 17 Oct") and 28 "from before" notes |
 | Docs | were `data-sources.md` 83 KB, `scheduler.md` 66 KB, `needs-you.md` 55 KB, `PLAN.md` 30 KB, with lines up to 2,809 characters; restructured on 17 Oct into `docs/spec/`, `docs/decisions.md` and `docs/development.md` |
 
-By package: `ui` 6,621 lines, `core` 4,200, `enrich` 3,925, `learn` 2,959, `block` 2,913, the root (`AppGraph` and two more) 2,681, `sources` 2,948 in all, `data` 1,730, `protect` 1,516, `widget` 724, `debug` 563, `notify` 484, `calendar` 321, `sync` 242.
+By package: `ui` 6,622 lines, `enrich` 4,217, `core` 4,214, `learn` 2,967, `block` 2,913, the root (`AppGraph` and two more) 2,708, `sources` 2,948 in all, `data` 1,730, `protect` 1,516, `widget` 724, `debug` 563, `notify` 484, `calendar` 321, `sync` 242, `net` 39.
 
-On the phone:
+On the phone (18 Oct):
 
 | Store | Size | What fills it |
 |---|---|---|
-| `tasks.json` | 585 KB | 177 tasks: 141 done (509 KB, 252 KB of it their text), 25 open (78 KB), 11 missed; 130 are emails |
-| `runtime.json` | 93 KB | Anki readings 57 KB, the last calls 24 KB, micro-plans 10 KB, the rest small |
-| `chat.json` | 27 KB | 22 messages, 11 of them Felix's |
-| `log.json` | 13 KB | Felix's records 7.6 KB, slots 3.4 KB |
-| `instructions.json` | 13 KB | 12 instructions, 11 in use |
-| `calendar.json`, `settings.json`, `memory.json` | 2 KB each or less | |
+| `tasks.json` | 590 KB | 178 tasks: 142 done, 24 open, 12 missed; 130 are emails, 29 Teams, 14 Anki, 3 your own, 2 Power Planner |
+| `runtime.json` | 98 KB | Anki readings, the last calls and micro-plans most of it (57, 24 and 10 KB on 17 Oct), the rest small |
+| `chat.json` | 30 KB | 25 messages, 13 of them Felix's |
+| `log.json` | 23 KB | 35 of Felix's records (27 replied to, the check-in's questions among them), 12 slot records |
+| `instructions.json` | 13 KB | 11 instructions in use |
+| `calendar.json`, `settings.json`, `memory.json` | 3 KB, 2 KB, 1 KB | |
 
 The app's process: about 127 MB resident, which is fine.
 
@@ -62,14 +62,14 @@ Every store is public and changed from wherever it's needed: 41 lines of `AppGra
 ### 2. Felix has two homes, and his notifications replace each other
 
 - What Felix says unprompted (the morning, a slot's start or end, a question, how completions went, the check-in, the weekly review's thanks) is a `FelixRecord` in `log.json`, kept 30 days, and a notification.
-- The chat (`chat.json`) has his answers to what you write there. A record goes into the chat only when you reply to its notification (`AppGraph.replyToFelix` copies it in). On the phone: 15 records in 30 days, 2 replied to, none in the chat. Tapping one of the others opens a chat that doesn't have it.
-- Five places produce his messages: `learn/Felix.kt` (his looks and the morning), `learn/Briefing.kt` (the morning's title), the check-in flow in `AppGraph` and `learn/CheckIns.kt`, `learn/Review.kt`, and `AppGraph.tellAnswer` (an answer to a notification's reply). Each builds its own notification.
-- `notify/FelixNotifications.kt` posts every one under one fixed id, 4200, by design ("One at a time: a newer one takes its place"). That's why a new message of his removes the one before.
+- The chat (`chat.json`) has his answers to what you write there. A record goes into the chat only when you reply to its notification (`AppGraph.replyToFelix` copies it in). On the phone (18 Oct): 35 records in 30 days, 27 replied to (the check-in's questions among them), 1 in the chat. Tapping one of the others opens a chat that doesn't have it.
+- Seven places produce messages in his name, each building its own notification: `learn/Felix.kt` (his looks and the morning), `learn/Briefing.kt` (the morning's title and list), the check-in flow in `AppGraph` and `learn/CheckIns.kt`, `learn/Review.kt`, `AppGraph.writeSummary` ("The week's summary is ready; send it?": a record of his, and a notification under its own id, 4004, on his channel or the week's), `learn/Assessment.kt` ("How did it go?", on his channel, 4100 tagged), and `AppGraph.tellAnswer` (an answer to a notification's reply).
+- `notify/FelixNotifications.kt` posts every one of his looks, the morning, the check-in and the answers under one fixed id, 4200, by design ("One at a time: a newer one takes its place"). That's why a new message of his removes the one before.
 - His state is in three places: the log's records, `RuntimeState.felix` (his next check, a draft, a retry, the questions waiting) and the chat.
 
 ### 3. Notifications are named all over
 
-Thirteen ids are private constants in twelve files: the workers' 1001–1005, free time's 2003 and 2004, the watchdog's 3001, the daily ones 4001–4004 (one of them in `AppGraph`), assessment 4100, calendar questions 4200 (with a tag), Felix 4200 (without one, so distinct only by the tag), calendar moves 4300, model alerts 5001 and 5002. Pending intents' request codes are made from the ids (`ID + 1 + i`), so they can collide unseen. The channel rules (`NotifyRules`: a ceiling of four a day for routine ones, quiet hours, held ones sent with the briefing) are applied in `Notify.post`, but every caller builds its notification itself.
+Eighteen ids are constants in seventeen files (seventeen distinct numbers): the workers' 1001–1005, free time's 2003 and 2004, the watchdog's 3001, the daily ones 4001–4004 (the summary's, 4004, in `AppGraph`), assessment 4100, calendar questions 4200 (with a tag), Felix 4200 (without one, so distinct only by the tag), calendar moves 4300, model alerts 5001 and 5002. Pending intents' request codes are made from the ids (`ID + 1 + i`), so they can collide unseen. The channel rules (`NotifyRules`: a ceiling of four a day for routine ones, quiet hours, held ones sent with the briefing) are applied in `Notify.post`, but every caller builds its notification itself.
 
 ### 4. Claude's calls are wired eleven times
 
@@ -93,16 +93,16 @@ A task's steps can be the source's (Anki's), a reading's (Claude's or the rules'
 
 ### 8. The stores have grown unevenly
 
-- `tasks.json` holds every task ever seen. Finished ones are kept (a source listing one again opens it again, and stats and the reopen list read them), and with them their whole text: 509 of its 585 KB. `JsonStore` writes a store whole, atomically, at every change, so a tick rewrites 585 KB.
-- `runtime.json` holds what changes every half minute (slots, credit, slots being kept) beside logs that only grow (Anki readings 57 KB, the last hundred calls 24 KB), so every half-minute change rewrites 93 KB.
+- `tasks.json` holds every task ever seen. Finished ones are kept (a source listing one again opens it again, and stats and the reopen list read them), and with them their whole text: 509 of its 585 KB on 17 Oct (590 KB on 18 Oct). `JsonStore` writes a store whole, atomically, at every change, so a tick rewrites 590 KB.
+- `runtime.json` holds what changes every half minute (slots, credit, slots being kept) beside logs that only grow (Anki readings 57 KB, the last hundred calls 24 KB, on 17 Oct), so every half-minute change rewrites 98 KB.
 - No store has a schema version. Compatibility is by defaults and by fields kept from before: 38 notes in the code say "from before" or "before 16 Oct", such as `ChatMessage.remembered` beside `memoryEdits` and `done` beside `acts`.
 
 ### 9. Names have drifted
 
 - The persona is Felix, but a chat message's speaker is `Speaker.Claude`, and "Claude" in the code means both the model and him.
 - The enrichment's prompts are `Prompts` and `Answers`, beside `ChatPrompts`, `InstructionPrompts`, `FelixPrompts` and `SummaryPrompts`.
-- Files hold several things each: `ChatReader.kt` has `ChatPrompts`, `ChatAnswers` and the reader; `InstructionReader.kt` the same; `EnrichTest.kt` holds seven test classes.
-- 1,037 inline fully qualified names (`com.thomaswcode.decrastination.enrich.ModelCalls.OnRecord(…)`), 268 of them in `AppGraph`: edits made in place, without the imports.
+- Files hold several things each: `ChatReader.kt` has `ChatPrompts`, `ChatRounds`, `ChatAnswers` and the reader (841 lines); `InstructionReader.kt` the same; `EnrichTest.kt` holds seven test classes.
+- 437 inline fully qualified names (`com.thomaswcode.decrastination.enrich.ModelCalls.OnRecord(…)`), 198 of them in `AppGraph`: edits made in place, without the imports.
 
 ### 10. The screens reach into everything
 
@@ -110,7 +110,7 @@ A task's steps can be the source's (Anki's), a reading's (Claude's or the rules'
 
 ### 11. History has crept into the code and the docs
 
-- 55 comments carry when and why a thing changed ("#48's third review"), which is history that git and the PRs already keep; the requirement ids (PL-12, AI-19: 944 of them) are useful and stay.
+- 54 comments carry when and why a thing changed ("#48's third review"), and 28 more keep a field or a branch "from before", which is history that git and the PRs already keep; the requirement ids (PL-12, AI-19: 944 of them) are useful and stay.
 - The docs mixed how the app works now with how it came to: `needs-you.md` had a section for every release, and `data-sources.md` and `scheduler.md` added "since 3.1.2" sentences to long paragraphs. Fixed on 17 Oct: the docs now say what the app does today (`docs/spec/`), with your decisions in `docs/decisions.md`.
 - One heading in the old `data-sources.md` (§4) named the Gmail account's address, in a public repository; it left with the file, and git's history keeps it (Q8).
 
@@ -121,4 +121,14 @@ A task's steps can be the source's (Anki's), a reading's (Claude's or the rules'
 - **`JsonStore`**: atomic writes, a file that can't be read set aside and what can be kept of it recovered.
 - **Golden prompt tests**, with a guard that raises `Prompts.VERSION` when a reading's prompt changes.
 - **`Focus`**: its stores and clock injected, driven by `FocusTest` on temporary files. It's the pattern for the services.
-- **The debug commands** (49 of them) that make phone checks possible without touching the screen.
+- **The debug commands** (50 of them) that make phone checks possible without touching the screen.
+
+### 13. Since 3.1.4: what 3.1.5 to 3.2.0 added (17 Oct)
+
+Nothing that changes a phase; the numbers moved, the structure didn't. What the plan should know of:
+
+- **`ChatRounds`** (3.2.0): the chat's answer can take a second round for a web search or a task's whole text, and `AppGraph` holds the retry's state in memory (`Gathered`: what a failed answer had looked up or read). It's the Conversation service's ([02](02-target-architecture.md)).
+- **The readings write a summary** of a long text (D-93, `Enrichment.summary`), which `enrich/TaskText.kt` gives the chat and his messages in place of the text: no new store, no new call. (plan_v4's [08](../plan_v4/08-summaries.md) builds on it.)
+- **The schemas are guarded twice**: `SchemaLimitsTest` (at most 16 unions, two inside a list) as a tripwire, and `SchemaCompileTest -PcheckSchemas=true`, which has the API compile every schema, as the guard before a merge.
+- **A doc kept by a test**: `FelixInputsDocTest -PupdateDocs=true` writes `docs/spec/felix-inputs.md` from the code's own examples, the first case of Phase 7's "kept in step" rule being enforced.
+- `Prompts.VERSION` is 7; the warm, capped Gradle daemons are in `gradle.properties`; the tests are 874.

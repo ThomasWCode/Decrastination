@@ -6,14 +6,15 @@ What's kept where after the cleanup, and how each change to stored data is made 
 
 | File | Now | After | Owner | Changes |
 |---|---|---|---|---|
-| `tasks.json` | every task, finished ones with their whole text (585 KB) | open tasks whole; finished ones as records, their text dropped after a while (Phase 5b) | Sync (Readings, Instructions and OwnTasks through it) | at each sync, tick or reading |
-| `runtime.json` | 38 fields, from the half-minute state to logs (93 KB) | what's left: the daily runs, the last backup, Teams' auto-sync, duplicates told apart, the stores' problems | small owners | rarely |
+| `tasks.json` | every task, finished ones with their whole text (590 KB) | open tasks whole; finished ones as records, their text dropped a fortnight after they're finished (Phase 5b, Q3) | Sync (Readings, Instructions and OwnTasks through it) | at each sync, tick or reading |
+| `runtime.json` | 38 fields, from the half-minute state to logs (98 KB) | what's left: the daily runs, the last backup, Teams' auto-sync, duplicates told apart, the stores' problems | small owners | rarely |
 | `session.json` | | credit, today's slots, slots being kept, photo checks under way, completions rewarded | Focus | every half minute |
 | `protection.json` | | changes waiting, the override, armed, the code's lock, protection's state, forced blocking, the uptime mark | Protection | on a change |
 | `model.json` | | the month's usage, the last calls, failed readings, dropped-plan alerts, micro-plans | ModelGateway | at each call |
 | `anki.json` | | Anki's readings, when AnkiDroid came to the front, the minutes worked in it | Focus (Anki's watch) | as AnkiDroid is used |
 | `calendar.json` | the versions written | also what was written where, the calendars to clear, your answers about events | CalendarWriter | at each write |
-| `chat.json` | your messages and Felix's answers | every message of Felix's too, and his state (next check, draft, retry, questions, completions to ask about, the check-in's draft) | Conversation | at each message |
+| `chat.json` | your messages and Felix's answers | every message of Felix's too, and his state (next check, draft, retry, questions, completions to ask about, the check-in's draft); the live window only, the rest in its archive | Conversation | at each message |
+| `chat-archive.json` | | the messages past the chat's window, oldest first, never sent to the model, read on scrolling back (plan_v4 Q8) | Conversation | as the window moves |
 | `log.json` | slots, completions, blocks, days, check-ins, reviews, Felix's records | the same, without Felix's records | Learning | at each slot and completion |
 | `learning.json` | | the calibration (from `runtime.json`) | Learning | at the review |
 | `instructions.json`, `settings.json`, `memory.json`, `school.json`, `secrets.bin` | | as now | Instructions, (all), Conversation, Planning, Stores | |
@@ -55,7 +56,7 @@ Today a store is read by its serializer, with defaults for what's missing and fi
 
 ### Felix's records into the chat (Phase 1b)
 
-Each `FelixRecord` becomes a message of his: `id` and `at` as they were, `text`, `replies` as its suggested replies, `reason` as its kind, `key` and `taskId` as what it's about, and `nextCheckAt`, `asks` and the reply he got as its own fields. `FelixRules` reads today's messages from the chat. The log's list is either copied in once (the last 30 days) or left to age out (Q5), then dropped from `ActivityLog`.
+Each `FelixRecord` becomes a message of his: `id` and `at` as they were, `text`, `replies` as its suggested replies, `reason` as its kind, `key` and `taskId` as what it's about, and `nextCheckAt`, `asks` and the reply he got as its own fields. `FelixRules` reads today's messages from the chat. The log's list is copied in once, the last 30 days (Q5: A), then dropped from `ActivityLog`.
 
 ### Tasks v2: your values and steps (Phase 4)
 
@@ -64,9 +65,9 @@ Each `FelixRecord` becomes a message of his: `id` and `at` as they were, `text`,
 
 ### Finished tasks trimmed (Phase 5b)
 
-A task finished more than *N* days ago (your call: 30 is suggested) keeps what the rest of the app reads of it: its identity, title, class, kind, dates and status, its estimates and minutes worked, its steps' titles, minutes and ticks, your values and its source's values. It drops its text (`detail`), its reading, its answers, its photo and its source's bulky extras (an email's text, messages and ids). On today's numbers that's about 450 of the 585 KB.
+A task finished more than 14 days ago (Q3: B) keeps what the rest of the app reads of it: its identity, title, class, kind, dates and status, its estimates and minutes worked, its steps' titles, minutes and ticks, your values and its source's values. It drops its text (`detail`), its reading, its answers, its photo and its source's bulky extras (an email's text, messages and ids). On 17 Oct's numbers that was about 450 of the 585 KB; the file is 590 KB on 18 Oct.
 
-If a source lists it again (a hand-in undone, an email starred again), the sync brings its text back and it's read again, a paid call, as for a task seen for the first time. That's the one behaviour this changes, and only for work finished a month before.
+If a source lists it again (a hand-in undone, an email starred again), the sync brings its text back and it's read again, a paid call, as for a task seen for the first time. That's the one behaviour this changes, and only for work finished a fortnight before.
 
 ### The chat's old fields (Phase 6)
 

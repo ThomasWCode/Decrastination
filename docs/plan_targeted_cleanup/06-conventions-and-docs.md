@@ -50,6 +50,7 @@ How code is named, laid out and commented once the cleanup is done, and how the 
 | `docs/decisions.md` | your decisions, numbered (D-1…), dated, each with what it means for the code and where it applies; and what's still open for you |
 | `docs/development.md` | how changes are made, reviewed, checked on the phone and shipped; the public repository's rules |
 | `docs/plan_targeted_cleanup/` | this plan |
+| `docs/plan_v4/` | the Felix plan for 4.x, which builds on this one |
 
 Nothing else: the old plans, reviews, findings and per-release notes were deleted once their decisions and still-true facts had moved, and there's no change log or history folder; git's tags and the PR descriptions hold what changed when.
 
@@ -62,5 +63,5 @@ Nothing else: the old plans, reviews, findings and per-release notes were delete
 
 ### Privacy in the docs
 
-- The heading of the old `data-sources.md`'s Gmail section named the account's address. It left the docs with that file; git's history still has it, and removing it from there means rewriting the repository's history (your call, Q8).
+- The heading of the old `data-sources.md`'s Gmail section named the account's address. It left the docs with that file; git's history still has it, and removing it from there would mean rewriting the repository's history; it's left as it is (Q8: A).
 - `scripts/scan-public.sh`: the scan done by hand before each push, as a script (email addresses, phone numbers, and any word listed in a git-ignored file of names from your data), run on the diff before committing.

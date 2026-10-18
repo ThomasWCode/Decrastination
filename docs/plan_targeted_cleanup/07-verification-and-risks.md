@@ -6,7 +6,7 @@ How each phase is shown to keep the app working, and what could go wrong.
 
 A phase that claims to keep behaviour shows it four ways:
 
-1. **Every test passes**, the 850 of today and the new ones, with none removed but by a stated reason.
+1. **Every test passes**, the 874 of today and the new ones, with none removed but by a stated reason.
 2. **The plan snapshot is unchanged** (Phase 0): a fixed state planned the same, to the piece and the minute.
 3. **The goldens are unchanged**: no prompt or schema differs, unless the PR says why.
 4. **The phone check passes** after the install, and the phase's own checks with it.
@@ -44,7 +44,8 @@ The agent never taps the phone: where a check needs a tap (a notification openin
 
 - **Moves** (Phase 3's first commits, Phase 6): one Codex round, the PR saying it's a move, so its findings are about the move.
 - **Phases that change data or behaviour** (1b, 4, 5): up to three rounds, stopping at a round with at most one P2, as for the releases of the last week.
-- Your call on both (Q2).
+- **One `@claude review`** on every PR that gets up to three Codex rounds (Q2): it answers in one comment, not a comment a point; each point is handled, then its comment gets the reply "Resolved". Whether this goes into `docs/development.md` as every PR's rule is Q12.
+- Both as you decided (Q2: A, with the Claude review).
 
 ## Risks
 

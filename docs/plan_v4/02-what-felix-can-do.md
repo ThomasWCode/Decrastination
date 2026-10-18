@@ -24,7 +24,7 @@ Each row: what you'd text; what happens today; what this plan makes of it, and w
 
 | You'd say | Today | After |
 |---|---|---|
-| "Remind me at 7 to call gran" | a task of your own, due 19:00 (the empty chat's own example suggests this) | a reminder at 19:00, his message then ([03](03-notes-and-reminders.md)) |
+| "Remind me at 7 to call gran" | a task of your own, due 19:00 (the empty chat's own example suggests this) | a reminder at 19:00, his message written for that moment just before it, or your words when he can't write ([03](03-notes-and-reminders.md); Q9: B, Q24) |
 | "Remind me about the form when I next sit down to the physics" | nothing of the kind | a reminder at that task's next slot's start |
 | "Before the essay's due, remind me to print it" | nothing | a reminder a set time before the task's deadline |
 | "Make a note on the essay: use the second source" | nothing; `notes` exist only on a task of your own, through the form | a note on any task, shown on its sheet and told to him whenever the task comes up |
@@ -62,8 +62,8 @@ Each row: what you'd text; what happens today; what this plan makes of it, and w
 |---|---|---|
 | "What's due this week / what's on Tuesday / why isn't X planned / what does the email say / who's it from" | ✓ | ✓ |
 | "How much free time have I got?" / "Why am I blocked?" | ✗: the chat's context has no free time and no blocking state (his own messages get free time for SlotKept and DayDone only) | one line in the context: free time now, whether blocking applies and why (`Focus.rewardLine`'s facts) (G5) |
-| "How did this week go?" | ✗: no stats in his context | the week's numbers in his context when you ask about the week, through the `details`-like round (G6), or always as two lines (Q17) |
-| "What's on next month?" | the fortnight's events only | events to the plan's reach, named by month when asked (G7, optional) |
+| "How did this week go?" | ✗: no stats in his context | not now (G6, not taken in Q17): the week's numbers would come through a `details`-like round, a later release |
+| "What's on next month?" | the fortnight's events only | not now (G7, not taken in Q17) |
 | "When will I be done tonight?" | ✓ (today's slots) | ✓ |
 
 ### Him, and the app
@@ -77,14 +77,14 @@ Each row: what you'd text; what happens today; what this plan makes of it, and w
 
 ## 3. Closing the gaps
 
-Each is small, and most are one new action in the chat's schema plus a line of context. Which to take is Q17.
+Each is small, and most are one new action in the chat's schema plus a line of context. Taken (Q17): G1, G2 as the stop, G3 and G5; G6 and G7 wait for a later release.
 
 - **G1. Keep and unkeep a piece.** `keepPiece` (taskId, and the piece's key as the plan lists it) → `Focus.keepSlot`; `unkeepPiece` → `Focus.unkeepSlot`. The context's plan already names each piece; the task list gains each open task's next piece key where it has no steps. Undo as a tick's.
 - **G2. Check a source.** `sync` (source) → `SyncWorker.syncNow(sources)`; his reply says it's reading, and the message is asked again when the read's done (a round, as a web search is), or he's told to say "I've asked Teams to read; it'll show in a minute" and stop. The round is dearer (a second call); the stop is simpler. Recommended: the stop, with a `byApp` Note message when the read changes the task ("Teams says the worksheet's handed in").
 - **G3. Open where it lives.** `open` gains `where`: "app" (the sheet, as now) or "source" (`TaskOpener.open`).
 - **G5. Free time and blocking in his context.** A line after the plan's "Now:": "Blocking: on until today's work's done (2 pieces, 1 h); free time 12 min" from `Focus`'s state, which `ChatPrompts.plan` is given.
-- **G6. The week's numbers.** When your message is about the week (he asks for them as he asks to read a task: `details` with "stats"), a second round with `Stats`' period summary (kept minutes, completions, deadlines met, slots kept and missed, by subject) in 20 lines. Or two lines always, cheaper in rounds and dearer in tokens.
-- **G7. The calendar further out.** Optional: events to the plan's reach (90 days) when the message names a month.
+- **G6. The week's numbers** (not now). When your message is about the week (he asks for them as he asks to read a task: `details` with "stats"), a second round with `Stats`' period summary (kept minutes, completions, deadlines met, slots kept and missed, by subject) in 20 lines. Or two lines always, cheaper in rounds and dearer in tokens.
+- **G7. The calendar further out** (not now). Events to the plan's reach (90 days) when the message names a month.
 
 Not closed, by design: anything D-61 forbids; anything needing the camera or a file picker; the calendar's choice; Setup.
 
@@ -97,5 +97,16 @@ What makes it seem he manages it all, beyond the abilities:
 - **"Your changes"** stays as the list to take back, one tap from the chat (Q20); the aim says nothing but the chat needs touching, and the tab is part of the chat's screen. The quick changes on a task's sheet (without Claude) stay too: they're the no-cost route.
 - **A notification is the chat**: replying from it is the same as typing in it ([01](01-the-chat.md) §4).
 - **Undo in his words**: he already undoes by giving what puts a thing back; with reminders and notes, "cancel that" and "delete the note" are actions with their own Undo.
+- **Just talking is answered as talk**: a message with nothing to do gets his reply and nothing else, no card and no fold ([05](05-his-voice.md) §Just talking).
 
 Ideas in the same direction, not planned, noted so they aren't lost: a photo sent in the chat as a photo check of the piece under way or a photo of homework (NF-01); *Undo all of it* on a message; the widget's tap opening the chat with the piece as its subject; a message to him from the lock screen's quick reply with no notification showing (an Android shortcut). Each is a feature of its own, asked about when wanted.
+
+## Implementation (4.1.0-E)
+
+One PR after D, a commit a gap, each with its test, its prompt line and its golden:
+
+1. **G1, keep and unkeep a piece.** `ChatAction.Type.KeepPiece` and `UnkeepPiece`; the schema's action `type` enum gains `keepPiece` and `unkeepPiece` (enum values, no union); `ChatAnswers.action` reads `value` as the piece's key and refuses one the plan it was shown doesn't list; `AppGraph.act` (his service's, after the cleanup's 3f) → `focus.keepSlot(key)` and `focus.unkeepSlot(key, since)`, the `Act` lines "Kept: today's bit of “Essay”" and "Not kept after all: …", Undo the reverse (`ChatActs.canUndo`: not once the slot's record has changed since). `ChatPrompts.plan` already names pinned pieces by key; it adds the key to today's slots and to the next piece of each task without steps. Prompt item 5 gains: "keepPiece when they've done today's piece of a task with no steps (value its key from the plan), unkeepPiece when they haven't after all".
+2. **G2, check a source (the stop).** `ChatAction.Type.Sync`, `setting` carrying the source's name; `AppGraph.act` → `SyncWorker.syncNow(app, setOf(source))`, the line "Asked Teams to read", no Undo; his reply says it's reading. A `Syncer` listener (`addListener`) in his service posts a `Note` message through the outbox when that read changes the task he was asked about (done, reopened, newly listed): "teams says the worksheet's handed in". Prompt: "sync when they say a source has changed (handed in, starred, studied): value the source's name; say it'll show in a minute, and change nothing else about it".
+3. **G3, open where it lives.** `open` gains `value` "app" or "source" (a string, as now); "source" → `TaskOpener.open(app, task)`, which already tells him it was opened (`noteActivity`); "app" the sheet, as now. Prompt: "open … where it lives (value source) when they ask for Teams, Gmail, Power Planner or AnkiDroid".
+4. **G5, free time and blocking.** `ChatPrompts.plan` takes a line from `Focus` ("Blocking: on until today's work's done (2 pieces, 1 h); free time 12 min", from `Focus.verdict`, `rewardLine` and `creditLeftMs`), passed in by `AppGraph.chatContext`; `FelixInputsDocTest`'s page shows it.
+5. The goldens (`chat.txt`, `chat.schema.json`), `SchemaLimitsTest` (no new union), `SchemaCompileTest -PcheckSchemas=true` with its result in the PR; `felix.md` §What he can do.
