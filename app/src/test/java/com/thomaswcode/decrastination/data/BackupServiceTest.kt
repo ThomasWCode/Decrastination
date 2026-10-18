@@ -160,6 +160,23 @@ class BackupServiceTest {
     }
 
     @Test
+    fun `restored into a chat that isn't empty, his messages read there are read here, and what's unread stays so`() = runTest {
+        val from = Phone(full = false)
+        val read = ChatMessage("n1", Speaker.Felix, "Ten minutes in: starting?", 100, kind = MessageKind.SlotStart)
+        val unread = ChatMessage("n2", Speaker.Felix, "Half an hour left.", 400, kind = MessageKind.SlotEnd)
+        from.stores.replace(from.stores.chat, ChatState(listOf(read, unread), readAt = 300))
+        val to = Phone(full = false)
+        val here = ChatMessage("h1", Speaker.Felix, "Kept the slot: nice.", 220, kind = MessageKind.SlotKept)
+        to.stores.replace(to.stores.chat, ChatState(listOf(here), readAt = 50))
+        to.service.importBackup(from.service.exportBackup())
+        settle()
+        val chat = to.stores.chat.value
+        assertEquals(listOf("n1", "h1", "n2"), chat.messages.map { it.id })
+        // Read up to just before this phone's own unread: n1 read, as it was there; h1 and n2 not.
+        assertEquals(219L, chat.readAt)
+    }
+
+    @Test
     fun `where Documents can't take the copy, it goes in the app's own files, listed and restored from there`() = runTest {
         val phone = Phone(full = true)
         phone.folder.available = false

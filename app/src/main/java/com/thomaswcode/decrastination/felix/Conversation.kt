@@ -262,7 +262,9 @@ class Conversation(
             chat.update { s -> s.copy(felix = s.felix.copy(assessLater = (s.felix.assessLater + asks).distinctBy { a -> a.taskId to a.doneAt }.takeLast(MAX_ASKS))) }
             return
         }
-        asks.forEach { outbox.send(howItWent(it)) }
+        // Handed over again after a stop (`Focus.rewardCompletions`): one asked already isn't asked twice,
+        // and one kept while Claude was on is let go of as it's asked.
+        asks.filterNot(::asked).forEach { ask -> outbox.send(howItWent(ask)) { it.copy(assessLater = it.assessLater - ask) } }
     }
 
     /** Those kept for his evening question asked now, a message each, as Claude is off: kept while it was on. */
@@ -271,8 +273,19 @@ class Conversation(
         val kept = chat.value.felix.assessLater
         if (kept.isEmpty()) return
         // Each let go of in the same write that asks it: a stop between leaves the rest kept, to be asked.
-        kept.forEach { ask -> outbox.send(howItWent(ask)) { it.copy(assessLater = it.assessLater - ask) } }
+        // One asked already is only let go of.
+        kept.forEach { ask ->
+            if (asked(ask)) {
+                chat.update { s -> s.copy(felix = s.felix.copy(assessLater = s.felix.assessLater - ask)) }
+            } else {
+                outbox.send(howItWent(ask)) { it.copy(assessLater = it.assessLater - ask) }
+            }
+        }
     }
+
+    /** Whether how [ask]'s work went has been asked already, in a message of his in the chat. */
+    private fun asked(ask: AssessLater): Boolean =
+        chat.value.messages.any { m -> m.kind == MessageKind.Completions && m.asks.any { it.taskId == ask.taskId && it.doneAt == ask.doneAt } }
 
     /** How [ask]'s work went, as his message in the app's words: the three answers its replies, each kept on it ([Looks.answered]). */
     private fun howItWent(ask: AssessLater) = ChatMessage(
