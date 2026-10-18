@@ -67,9 +67,6 @@ class ModelGateway(
     @Volatile
     var endpoint: String? = null
 
-    /** [endpoint], said loudly each time a client is made with it. */
-    fun endpoint(): String? = endpoint?.also { Log.w(TAG, "Claude's calls go to $it, not Anthropic (debug ai-endpoint)") }
-
     /** The one client, and the key and endpoint it was made for: made again only when either changes. */
     private var made: Triple<String, String?, AnthropicClient>? = null
 
@@ -81,8 +78,13 @@ class ModelGateway(
     @Synchronized
     fun client(job: ModelEffort.Job): AnthropicClient? {
         val key = claudeKey() ?: return null
+        // Read once: the client is made for the endpoint it's kept under.
         val at = endpoint
-        val client = made?.takeIf { it.first == key && it.second == at }?.third ?: build(key, endpoint()).also { made = Triple(key, at, it) }
+        val client = made?.takeIf { it.first == key && it.second == at }?.third ?: build(key, at).also {
+            made = Triple(key, at, it)
+            // Said loudly each time a client is made with one.
+            if (at != null) Log.w(TAG, "Claude's calls go to $at, not Anthropic (debug ai-endpoint)")
+        }
         return client.withOptions { it.timeout(ModelEffort.timeout(job)) }
     }
 
@@ -208,12 +210,13 @@ class ModelGateway(
             hold
         }
         if (held != null) return Called.Held(held)
-        // Counted in the month it's made in, as the cap was checked for (or a newer one counted since).
-        val at = clock.now()
-        val month = AiUsage.monthOf(at, clock.zone())
-        // Sent, it's paid for: it comes back and is counted, whatever cancels its caller meanwhile (a
-        // job stopped), which goes on at its next suspension.
+        // In flight from here: whatever follows, the count is let go.
         return try {
+            // Counted in the month it's made in, as the cap was checked for (or a newer one counted since).
+            val at = clock.now()
+            val month = AiUsage.monthOf(at, clock.zone())
+            // Sent, it's paid for: it comes back and is counted, whatever cancels its caller meanwhile (a
+            // job stopped), which goes on at its next suspension.
             withContext<Called<T>>(NonCancellable) {
                 try {
                     val value = send(at)

@@ -14,6 +14,9 @@ import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertTrue
 import kotlinx.serialization.KSerializer
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
 import org.junit.Assume.assumeTrue
 
 /**
@@ -25,7 +28,8 @@ import org.junit.Assume.assumeTrue
  * to the test's output, never anything the stores hold. Skipped without `-PrehearseFrom`.
  */
 class RehearsalTest {
-    private class Read(val file: String, val value: Any?, val problem: JsonStore.Unreadable?, val roundTrip: Boolean)
+    /** [file] as read: its [value] (null: not there), whether it read whole, and the keys it holds that the app doesn't keep ([dropped]). */
+    private class Read(val file: String, val value: Any?, val problem: JsonStore.Unreadable?, val roundTrip: Boolean, val dropped: List<String> = emptyList())
 
     /** [file] in [dir] as it is: its text decoded as written, no migration run, read again the same. */
     private fun <T> before(dir: File, file: String, serializer: KSerializer<T>): Read {
@@ -36,11 +40,25 @@ class RehearsalTest {
         return Read(file, value, null, roundTrip = again(serializer, value) == value)
     }
 
-    /** [store] as the app reads it at start: through its migrations, recovered where it doesn't read whole. */
-    private fun <T> after(store: JsonStore<T>, serializer: KSerializer<T>, there: Boolean): Read =
-        if (!there) Read(store.name, null, null, roundTrip = true) else Read(store.name, store.value, store.problem, roundTrip = again(serializer, store.value) == store.value)
+    /**
+     * [store] as the app reads it at start: through its migrations, recovered where it doesn't read whole;
+     * with the keys of [migrated] (its file as the migrations leave it) that what it writes lacks.
+     */
+    private fun <T> after(store: JsonStore<T>, serializer: KSerializer<T>, there: Boolean, migrated: JsonElement?): Read {
+        if (!there) return Read(store.name, null, null, roundTrip = true)
+        val written = JsonStore.json.encodeToString(serializer, store.value)
+        val dropped = migrated?.let { dropped(it, JsonStore.json.parseToJsonElement(written)) }.orEmpty()
+        return Read(store.name, store.value, store.problem, roundTrip = JsonStore.json.decodeFromString(serializer, written) == store.value, dropped = dropped)
+    }
 
     private fun <T> again(serializer: KSerializer<T>, value: T): T = JsonStore.json.decodeFromString(serializer, JsonStore.json.encodeToString(serializer, value))
+
+    /** The keys in [file] that [written] lacks, each by its path (a list's items as `[]`), never its value. */
+    private fun dropped(file: JsonElement, written: JsonElement, path: String = ""): List<String> = when {
+        file is JsonObject && written is JsonObject -> file.flatMap { (key, value) -> written[key]?.let { dropped(value, it, "$path.$key") } ?: listOf("$path.$key") }
+        file is JsonArray && written is JsonArray -> file.zip(written).flatMap { (a, b) -> dropped(a, b, "$path[]") }
+        else -> emptyList()
+    }.distinct()
 
     @Test
     fun `the phone's stores read and migrated, what they hold counted before and after`() {
@@ -60,18 +78,33 @@ class RehearsalTest {
             before(files, "memory.json", MemoryState.serializer()),
             before(files, "calendar.json", CalendarVersions.serializer()),
         )
-        // As the app will read them, on a copy of the stores alone (the secrets can't be read off the phone).
+        // As the app will read them, on a copy of the stores alone (the secrets can't be read off the phone),
+        // the copy, the phone's own data, deleted once read.
         val copy = Files.createTempDirectory("rehearsal").toFile()
+        try {
+            rehearse(root, files, copy, reads)
+        } finally {
+            copy.deleteRecursively()
+        }
+    }
+
+    private fun rehearse(root: File, files: File, copy: File, reads: List<Read>) {
         files.listFiles { f -> f.isFile && f.name.endsWith(".json") }.orEmpty().forEach { it.copyTo(File(copy, it.name)) }
         val versions = copy.listFiles().orEmpty().associate { it.name to Migration.versionOf(JsonStore.json.parseToJsonElement(it.readText()) as kotlinx.serialization.json.JsonObject) }
         val stores = Stores(copy, NoKeystore)
         fun there(name: String) = File(files, name).isFile
+        // Each file as its migrations leave it: what the store decodes, and should write back whole.
+        fun migrated(name: String): JsonElement? = runCatching {
+            val json = JsonStore.json.parseToJsonElement(File(files, name).readText()) as JsonObject
+            stores.shapes.getValue(name).let { Migration.upgrade(json, it.version, it.migrations) }
+        }.getOrNull()
+        fun <T> after(store: JsonStore<T>, serializer: KSerializer<T>, name: String) = after(store, serializer, there(name), migrated(name))
         val migrated = listOf(
-            after(stores.tasks, TaskState.serializer(), there("tasks.json")), after(stores.settings, Settings.serializer(), there("settings.json")),
-            after(stores.runtime, RuntimeState.serializer(), there("runtime.json")), after(stores.log, ActivityLog.serializer(), there("log.json")),
-            after(stores.instructions, InstructionState.serializer(), there("instructions.json")), after(stores.chat, ChatState.serializer(), there("chat.json")),
-            after(stores.school, SchoolCalendar.serializer(), there("school.json")), after(stores.memory, MemoryState.serializer(), there("memory.json")),
-            after(stores.calendarVersions, CalendarVersions.serializer(), there("calendar.json")),
+            after(stores.tasks, TaskState.serializer(), "tasks.json"), after(stores.settings, Settings.serializer(), "settings.json"),
+            after(stores.runtime, RuntimeState.serializer(), "runtime.json"), after(stores.log, ActivityLog.serializer(), "log.json"),
+            after(stores.instructions, InstructionState.serializer(), "instructions.json"), after(stores.chat, ChatState.serializer(), "chat.json"),
+            after(stores.school, SchoolCalendar.serializer(), "school.json"), after(stores.memory, MemoryState.serializer(), "memory.json"),
+            after(stores.calendarVersions, CalendarVersions.serializer(), "calendar.json"),
         )
         val ran = stores.shapes.filter { (name, shape) -> (versions[name] ?: shape.version) < shape.version }.map { (name, shape) -> "$name ${versions[name]} to ${shape.version}" }
         val was = describe(reads)
@@ -87,8 +120,13 @@ class RehearsalTest {
         }
         File(root, "rehearsal.txt").writeText(report)
         println(report)
-        // What stops a release: a store that doesn't read whole as the app will read it, or loses something read and written again.
+        // What stops a release: a backup without a store every phone has (it isn't the phone's data), or a
+        // store that, as the app will read it, doesn't read whole, changes read and written again, or holds
+        // what the app doesn't keep.
+        val missing = REQUIRED.filter { file -> reads.single { it.file == file }.value == null && !File(files, file).isFile }
+        assertTrue(missing.isEmpty(), "The backup has no $missing, which every phone has: not a rehearsal of its data")
         assertTrue(migrated.none { it.problem != null } && migrated.all { it.roundTrip }, "A store didn't read whole, or changed read and written again: see rehearsal.txt")
+        assertTrue(migrated.all { it.dropped.isEmpty() }, "A store holds what the app doesn't keep: see rehearsal.txt")
     }
 
     /** No keystore off the phone: the secrets aren't copied, so it's never asked. */
@@ -106,6 +144,8 @@ class RehearsalTest {
         appendLine("Stores: ${reads.count { it.value != null }} of ${reads.size} there; read whole: ${reads.count { it.value != null && it.problem == null }}; the same written again: ${reads.count { it.value != null && it.roundTrip }}")
         reads.filter { it.problem != null }.forEach { appendLine("  ${it.file} didn't read whole${if (it.problem!!.kept) ", some of it kept" else ""}") }
         reads.filter { !it.roundTrip }.forEach { appendLine("  ${it.file} changed read and written again") }
+        reads.filter { it.value == null }.forEach { appendLine("  ${it.file} isn't there${if (it.file in REQUIRED) ": every phone has it" else ""}") }
+        reads.filter { it.dropped.isNotEmpty() }.forEach { appendLine("  ${it.file} holds what the app doesn't keep: ${it.dropped.joinToString()}") }
         val tasks = of<TaskState>("tasks.json")
         val instructions = of<InstructionState>("instructions.json")
         if (tasks != null) {
@@ -153,5 +193,10 @@ class RehearsalTest {
             appendLine("Nightly backup ${file.name}: format ${backup.format}; problem: ${Backups.problem(backup) ?: "none"}")
             appendLine("  instructions ${backup.instructions.size}, own tasks ${backup.ownTasks.size}, chat ${backup.chat.messages.size}, log slots ${backup.log.slots.size} completions ${backup.log.completions.size} Felix ${backup.log.felix.size}, memory ${backup.memory.facts.size}+${backup.memory.rules.size}")
         }
+    }
+
+    private companion object {
+        /** The stores the app writes at its first start: a backup without one isn't a phone's. */
+        val REQUIRED = listOf("tasks.json", "settings.json", "runtime.json", "log.json")
     }
 }
