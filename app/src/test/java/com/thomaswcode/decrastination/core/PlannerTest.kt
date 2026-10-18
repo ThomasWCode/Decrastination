@@ -772,8 +772,35 @@ class PlannerTest {
         assertEquals(listOf("16:45"), first.map { hm(it.start) })
         // 16:50, its start kept: under way, it stays where it was, not moved to tomorrow.
         val starts = first.associate { it.chunk!!.key to it.start }
-        val later = Planner.plan(windowed(tasks, "2026-10-13T16:50").copy(previousSlots = starts)).todaySlots
-        assertEquals(listOf("16:45"), later.map { hm(it.start) })
+        val later = Planner.plan(windowed(tasks, "2026-10-13T16:50").copy(previousSlots = starts))
+        assertEquals(listOf("16:45"), later.todaySlots.map { hm(it.start) })
+        // Kept there, and said so: tomorrow had more room.
+        assertEquals(Why.Kept, later.todaySlots.single().chunk!!.why)
+    }
+
+    @Test
+    fun `a slot under way near the evening's end stays today with less than its length left`() {
+        // Tuesday, a half hour due Thursday, its slot kept at 21:45; at 21:55 only five minutes of the evening are left.
+        val tasks = listOf(task("hw", Fixtures.at("2026-10-15T23:59"), effort = 30))
+        val key = Planner.plan(windowed(tasks, "2026-10-13T16:30")).todaySlots.single().chunk!!.key
+        val later = Planner.plan(windowed(tasks, "2026-10-13T21:55").copy(previousSlots = mapOf(key to Fixtures.at("2026-10-13T21:45"))))
+        assertEquals(listOf(key), later.todayBucket!!.chunks.map { it.key })
+        assertEquals(Why.Kept, later.todayBucket!!.chunks.single().why)
+    }
+
+    @Test
+    fun `undated work kept today stays today rather than going back to its soft week`() {
+        // Undated work goes as late as its soft week allows; one whose slot today has begun stays today.
+        // Seen today: its soft week is ahead of it.
+        val tasks = listOf(task("u", null, effort = 30, firstSeen = Fixtures.at("2026-10-13T12:00")))
+        val week = (0L..6L).associate { tuesday.plusDays(it) to schoolDay }
+        val alone = Planner.plan(windowed(tasks, "2026-10-13T17:05", windows = week))
+        // Without its slot kept, it goes later in its week.
+        assertTrue(alone.todayBucket?.chunks.orEmpty().isEmpty())
+        val key = alone.buckets.flatMap { it.chunks }.single().key
+        val later = Planner.plan(windowed(tasks, "2026-10-13T17:05", windows = week).copy(previousSlots = mapOf(key to Fixtures.at("2026-10-13T17:00"))))
+        assertEquals(listOf(key), later.todayBucket!!.chunks.map { it.key })
+        assertEquals(Why.Kept, later.todayBucket!!.chunks.single().why)
     }
 
     @Test
