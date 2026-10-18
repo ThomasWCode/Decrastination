@@ -148,7 +148,9 @@ class BackupService(
         // messages: not a message of yours still waiting for its answer, which would be sent, words
         // from then, as it opens. Felix's state with it, or where this phone has none of its own. Into a
         // chat that isn't empty, his own messages it hasn't, with your replies to them, by id, as the
-        // log's records of them were merged before 4.0.0: none of his is lost.
+        // log's records of them were merged before 4.0.0: none of his is lost. Those read there are read
+        // here, as far as that goes without passing one of his unread here, so his notification doesn't
+        // bring them back as new.
         val backedChat = backup.chat.let { c -> c.unanswered?.let { w -> c.copy(messages = c.messages.filterNot { it.id == w.id }) } ?: c }
         var chatBack = 0
         var hisBack = 0
@@ -163,7 +165,9 @@ class BackupService(
                 val ids = his.mapTo(HashSet()) { it.id }
                 val replies = backedChat.messages.filter { it.from == Speaker.You && it.replyTo in ids && it.id !in here }
                 hisBack = his.size
-                s.copy(felix = felix, messages = (s.messages + his + replies).sortedBy { it.at })
+                val unreadHere = s.messages.filter { it.from != Speaker.You && it.at > s.readAt }.minOfOrNull { it.at }
+                val readAt = maxOf(s.readAt, minOf(backedChat.readAt, (unreadHere ?: Long.MAX_VALUE) - 1))
+                s.copy(felix = felix, messages = (s.messages + his + replies).sortedBy { it.at }, readAt = readAt)
             }
         }
         if (chatBack > 0) stores.replace(stores.chatArchive) { a -> if (a.messages.isEmpty()) backup.archive else a }

@@ -135,7 +135,7 @@ The Reviews page (LR-01) lists each review with its note, each change with *Undo
 - the last eight weeks' slots by weekday and hour (PL-09, `Stats.heat`), with *Set weekday hours from this* (`Stats.suggestedWeekdayHours`, the outlying tenth at each end left out), asked before it's set;
 - each reviewed week's totals (PL-10), read for what's older than the record's 120 days;
 - what's been learned, in words, each class's figure with *Forget* (`Stats.calibrationRows`), and each deck's seconds a card (`AnkiProgress.lines`);
-- *Export the record as CSV* (PL-11, `learn/Export.kt`): completions, slots, days, blocks, Felix's messages and the calibration, zipped to share.
+- *Export the record as CSV* (PL-11, `learn/Export.kt`): completions, slots, days, blocks, Felix's messages (the archive's with the chat's) and the calibration, zipped to share.
 
 ## The daily jobs
 
