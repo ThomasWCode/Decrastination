@@ -79,7 +79,7 @@ A task finished more than 14 days ago (C-Q3; `Merge.KEEP_FINISHED_MS` is the sam
 
 ### `felix.json` (v1), Stage 8a
 
-Notes (on a task, or standing, for every task a scope matches) and reminders, versioned from the start; in the backup (format 7) and in Reset → "The chat and Felix's history". Not on `TaskItem`: a merge rewrites tasks and must not be able to drop them; keyed by task id, which is stable across syncs and reopenings, or by a scope the matcher reads at each use.
+Notes (on a task, or standing, for every task a scope matches) and reminders, versioned from the start; in the backup (format 8) and in Reset → "The chat and Felix's history". Not on `TaskItem`: a merge rewrites tasks and must not be able to drop them; keyed by task id, which is stable across syncs and reopenings, or by a scope the matcher reads at each use.
 
 ### Memory (v2), Stage 10a
 
@@ -87,7 +87,7 @@ Notes (on a task, or standing, for every task a scope matches) and reminders, ve
 
 ### `gmail-writes.json` (v1), Stage 11
 
-The journal of writes to Gmail: the pending ones, in no backup (a pending write is this phone's and this hour's), and the receipts of completed ones, which the backup does carry (format 7), since a restored chat still holds the act whose Undo needs them; cleared by nothing in Reset.
+The journal of writes to Gmail: the pending ones, in no backup (a pending write is this phone's and this hour's), and the receipts of completed ones, which the backup does carry (format 9), since a restored chat still holds the act whose Undo needs them; cleared by nothing in Reset.
 
 ## The types, after
 
@@ -207,4 +207,4 @@ data class GmailWrite(
 
 - JSON, written whole and atomically. Once the stores are split, the largest written often is `tasks.json`'s open part, about 80 KB, which is fine; the archive is written only when the window moves.
 - `secrets.bin`, encrypted by the keystore as now.
-- The backup's format, but for the versions it carries, the archive (while it fits the backup's cap, the oldest left out first) and `felix.json` (format 7).
+- The backup's format, but for the versions it carries, the archive (format 7, while it fits the backup's cap, the oldest left out first), `felix.json` (format 8) and the Gmail journal's receipts (format 9).

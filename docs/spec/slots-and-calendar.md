@@ -136,7 +136,7 @@ It's tried again at each write till it works (the permission back, the provider 
 - It's read again when the calendar changes (once quiet 5 seconds), after each sync, and at the morning briefing; a failed read judges the last events read again.
 
 `EventJudge.judge` judges each event:
-- your answer for events of that name comes first (an instruction's over a notification's);
+- your answer for events of that name comes first (an instruction's over one given to Felix's question);
 - marked free, in a holidays, birthdays or observances calendar, or travel (a train, bus, coach, flight or ferry): free;
 - a timed event whose description says it's optional or tentative: asked about;
 - all day, or four hours or more: asked about;
@@ -145,7 +145,7 @@ It's tried again at each write till it works (the permission back, the provider 
 `EventJudge.time` gives the planner what each takes:
 - busy: its time (`Planner.Input.busy`); all day, all of each of its days;
 - a few hours: 180 minutes of its day at no set time (`dayLoads`; all day, each of its days; timed, its first);
-- to ask, starting within the week: asked once in a notification (*All of it*, *A few hours*, *None*), never in quiet hours nor while notifications can't be seen; it takes all its time till you answer (all day, all of each of its days), so the plan counts on no time it may not have (D-44);
+- to ask, starting within the week: asked once, as Felix's message in the chat, its chips *All of it*, *A few hours* and *None* (in quiet hours it waits for the morning to be in his notification); it takes all its time till you answer (all day, all of each of its days), so the plan counts on no time it may not have (D-44);
 - to ask, further off: a few hours of its day (of each, all day) meanwhile, so the spread before it leaves it room.
 
 Your answer holds for every event of that name (`RuntimeState.eventAnswers`); the plan, and today's record of it, are made again with it.

@@ -10,7 +10,7 @@ You asked (18 Oct) whether constant summarisation calls would be a good idea: mo
 | Each open task's own text (an assignment's instructions, an email) | `ChatPrompts.context` through `TaskText.brief` | **condensed already**: a text over about 600 characters gets the reading's summary (D-93, 3.2.0: `Enrichment.summary`, written by the reading at no extra call); a shorter one goes whole; the task a message is about and the ones he asks to read go whole | `BRIEF_TEXT` 600 each, `MAX_TEXTS` 12,000 in all; `WHOLE_TEXT` 8,000; `READ_TEXT` 16,000, three at most |
 | The plan's next 14 days, why each piece is where it is | `ChatPrompts.plan` | structured | `PLAN_LIST` 20 lines |
 | The calendar's fortnight, the changes in use, the settings, your finished tasks of the week | `ChatPrompts.context` | structured | short |
-| The chat so far | `ChatPrompts.turns` | **raw, cut**: the last 12 messages (`HISTORY`), within a quarter of the room | a few thousand characters |
+| The chat so far | `ChatPrompts.turns` | **raw, cut**: the conversation's last 12 messages (`HISTORY`) and his last two nudges with your replies (`NUDGES`, D-97), within a quarter of the room | a few thousand characters |
 | What he remembers, and the profile | `Profile.block` | **condensed already**: the facts are a summary, and the weekly tidy rewrites them when they pass 70 % of their 6,000 characters | 2,000 + 6,000, within 16,000 |
 | His own messages' context | `FelixPrompts.describe` | the piece's task text to `TEXT` (1,500, the reading's summary where there is one); his last six messages and your replies | short |
 | The week, for the review and the summary email | `ReviewInput`, `Summary.input` | numbers and lists from the log | short, weekly |

@@ -21,8 +21,8 @@ Each call's text is cut to 40 000 characters, the profile to 16 000. What else e
 | A photo of homework (NF-01) | The photo, and today's date |
 | A photo check | Up to three photos of the work; the piece, its task's title, subject, steps done and instructions (1 500 characters) |
 | A piece's first steps (AI-15) | The task's title and subject, the piece and its minutes, attachments by name, its instructions (1 500 characters) |
-| The chat | The last 12 messages; the open tasks with their steps, the fortnight's calendar events (titles and times), your changes, your own tasks finished lately, Felix's settings, your pace, the plan's next 14 days; each open task's own text (instructions, an email's conversation, notes: 600 characters each), with its attachments' names, links and an email's sender; the whole text (8 000) of the task a message is about, and of up to three he asks to read; an event's place and description, for a message about it |
-| Felix's messages | The reason and the time, the piece and today's slots, the free time, work its source confirmed, his last six messages and your replies, a reading's question; the piece's task's own text (1 500 characters), with its attachments' names and links |
+| The chat | The conversation's last 12 messages and his last two nudges with your replies; the open tasks with their steps, the fortnight's calendar events (titles and times), your changes, your own tasks finished lately, Felix's settings, your pace, the plan's next 14 days; each open task's own text (instructions, an email's conversation, notes: 600 characters each), with its attachments' names, links and an email's sender; the whole text (8 000) of the task a message is about, and of up to three he asks to read; an event's place and description, for a message about it |
+| Felix's messages | The reason and the time, the piece and today's slots, the free time, work its source confirmed, his last six messages of his own and your replies, a reading's question; the piece's task's own text (1 500 characters), with its attachments' names and links |
 | An instruction | Your words; what they're about (a task's title, sender, class, due date, minutes and details); the open tasks and the fortnight's events |
 | The weekly review | The week's record: finished work (titles, kinds, classes, estimates, minutes), slots by hour and day, blocks, days, Felix's counts, your check-in answers, the planning settings, what's learned |
 | The week's summary (NF-02) | The week's numbers, finished and missed work, the review's note, Felix's counts, the changes you asked for |
@@ -47,8 +47,8 @@ Nothing else: no analytics, no crash reports (crashes are written down on the ph
 | What | Where | How long |
 |---|---|---|
 | Tasks, their text and readings | `tasks.json` | A finished task while its source still lists it, then a fortnight; one its source stops listing is finished then; your own, a fortnight once done |
-| The activity log | `log.json` | 120 days; Felix's messages 30 days; each week's totals two years |
-| The chat | `chat.json` | The newest 200 messages, till you clear it |
+| The activity log | `log.json` | 120 days; each week's totals two years |
+| The chat | `chat.json`, `chat-archive.json` | Every message, Felix's among them, till you clear it: the newest 200 or 60 days' in `chat.json`, the rest in `chat-archive.json` |
 | What Felix remembers | `memory.json` | Facts within 6 000 characters, the oldest out first; up to 20 standing instructions; till you delete them |
 | Your changes | `instructions.json` | Till you take them back |
 | Claude's calls | `runtime.json` | The last 100: job, what it's about, tokens, time, outcome, cost |
@@ -77,9 +77,9 @@ Two keys are in the code, neither of them yours: Power Planner's web API is call
 `log.json` (`ActivityLog`) is the record the stats, the calibration, the weekly review and Felix read:
 - each slot kept, missed or moved; each finished task (title, kind, class, estimate, minutes worked, due and done times, your answer to how it went);
 - each block (when, what, why); each protection lapse; each day's plan and how much got done;
-- the check-ins, in your words; the weekly reviews, with their summary; Felix's messages and your replies; each week's totals.
+- the check-ins, in your words; the weekly reviews, with their summary; each week's totals.
 
-It's trimmed at each change: 120 days, Felix's messages 30. It goes in every backup; Stats' export shares it as CSV; Settings → Reset → Stats clears it but for Felix's messages, which Reset → "The chat and Felix's history" clears ([storage-and-backups.md](storage-and-backups.md)).
+It's trimmed at each change: 120 days. It goes in every backup; Stats' export shares it as CSV, with Felix's own messages from the chat and your replies; Settings → Reset → Stats clears it, and Reset → "The chat and Felix's history" clears the chat ([storage-and-backups.md](storage-and-backups.md)).
 Android's own log (`adb logcat -s Decrastination`) gets the app's notes too: the debug commands log task titles, never a secret's value.
 
 ## The public repository

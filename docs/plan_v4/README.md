@@ -110,7 +110,7 @@ About twenty-three days in 23 PRs (22 releases), 3.3.4 among them, evenings and 
 
 ## Decisions it adds
 
-Numbered in `docs/decisions.md` by the PRs that apply them (the next free number is D-95; D-94 is 3.3.2's):
+Numbered in `docs/decisions.md` by the PRs that apply them (the next free number is D-98; D-94 is 3.3.2's, D-95 to D-97 4.0.0's):
 
 - The chat is Felix's one visible voice; a notification is made from it and never beside it (5a). A reply from a notification and one in the chat are the same turn, routed by the message it answers (5b).
 - The chat keeps every message for you; what he's sent of it is the recent window (5a).
