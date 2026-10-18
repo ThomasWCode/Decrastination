@@ -76,7 +76,7 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         // Back from notification settings, say: alerts that couldn't be shown before can be now.
-        AppGraph.get(this).reconcileAlerts()
+        AppGraph.get(this).gateway.reconcileAlerts()
     }
 
     override fun onNewIntent(intent: Intent) {

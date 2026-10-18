@@ -149,7 +149,7 @@ fun TaskSheet(
                 message = "Couldn't read the photo."
             } else {
                 graph.attachPhoto(task.id, jpeg)
-                said = if (graph.claudeKey() != null) "Photo kept: Claude reads the task again with it." else "Photo kept: it's read with the task once Claude is on."
+                said = if (graph.gateway.claudeKey() != null) "Photo kept: Claude reads the task again with it." else "Photo kept: it's read with the task once Claude is on."
             }
         }
     }
@@ -351,7 +351,7 @@ fun TaskSheet(
                 if (changeable && !task.userNotATask) OutlinedButton(onClick = { confirming = "not-a-task" }) { Text("Not a task") }
                 if (task.isOpen) OutlinedButton(onClick = onInstruct) { Text("Ask ${graph.settings.value.felixName} about it") }
                 // Claude's reading made again, as the task is now (AC-06).
-                if (task.isOpen && Enrichments.jobFor(task) != null && graph.claudeKey() != null) {
+                if (task.isOpen && Enrichments.jobFor(task) != null && graph.gateway.claudeKey() != null) {
                     OutlinedButton(
                         onClick = {
                             scope.launch {

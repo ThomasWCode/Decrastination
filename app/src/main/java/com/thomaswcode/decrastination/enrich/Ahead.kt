@@ -40,11 +40,11 @@ object Ahead {
         try {
             val tasks = graph.tasks.value.tasks.associateBy { it.id }
             graph.runtime.update { it.copy(microPlans = MicroPlans.kept(plan, it.microPlans, tasks)) }
-            val caller = graph.microPlanner() ?: return
+            val caller = graph.gateway.client(ModelEffort.Job.MicroPlan)?.let { MicroPlanner(it) } ?: return
             for ((chunk, task) in MicroPlans.due(plan, tasks, graph.runtime.value.microPlans).filter { only == null || it.first.key == only }.take(MicroPlans.MAX_A_RUN)) {
-                if (!graph.modelAvailable()) return
+                if (!graph.gateway.available()) return
                 val profile = graph.profile(now).text
-                val called = graph.callModel(interactive = false, task = task, record = ModelCalls.OnRecord(ModelEffort.Job.MicroPlan, task.title) { r: MicroPlanner.Result -> r.usage to ModelCalls.outcome(r.refused, r.text == null) }, cost = { r: MicroPlanner.Result -> r.costUsd to r.refused }) { caller.plan(profile, MicroPlans.describe(chunk, task)) }
+                val called = graph.gateway.call(interactive = false, task = task, record = ModelCalls.OnRecord(ModelEffort.Job.MicroPlan, task.title) { r: MicroPlanner.Result -> r.usage to ModelCalls.outcome(r.refused, r.text == null) }, cost = { r: MicroPlanner.Result -> r.costUsd to r.refused }) { caller.plan(profile, MicroPlans.describe(chunk, task)) }
                 val made = when (called) {
                     is Called.Answered -> called.value.text?.let { MicroPlans.parse(it, chunk, task, now) } ?: MicroPlans.none(chunk, task, now)
                     is Called.Failed -> {
