@@ -12,6 +12,7 @@ import com.thomaswcode.decrastination.core.overrides
 import java.io.File
 import java.nio.file.Files
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.json.JsonArray
@@ -25,12 +26,13 @@ import org.junit.Assume.assumeTrue
  * `private/rehearsal/<name>/` (its `files/`, and the nightly backup beside them where there is one),
  * read as each file is, then as the app will read it, through [Stores] with the migrations there are,
  * on a copy; only counts and invariants are written, before and after, to `rehearsal.txt` there and
- * to the test's output, never anything the stores hold. Skipped without `-PrehearseFrom`.
+ * to the test's output, never anything the stores hold. Skipped without `-PrehearseFrom`; its
+ * comparison of a file with what its store writes is tested on its own.
  */
 class RehearsalTest {
     /**
-     * [file] as read: its [value] (null: not there), whether it read whole, the keys it holds that the app
-     * doesn't keep ([dropped]), and the lists it holds, by path, with their items in all ([lists]).
+     * [file] as read: its [value] (null: not there), whether it read whole, the keys and list items it holds
+     * that the app doesn't keep ([dropped]), and the lists it holds, by path, with their items in all ([lists]).
      */
     private class Read(val file: String, val value: Any?, val problem: JsonStore.Unreadable?, val roundTrip: Boolean, val dropped: List<String> = emptyList(), val lists: Map<String, Int> = emptyMap())
 
@@ -72,12 +74,27 @@ class RehearsalTest {
         }
     }.toSortedMap()
 
-    /** The keys in [file] that [written] lacks, each by its path (a list's items as `[]`), never its value. */
+    /**
+     * The keys in [file] that [written] lacks, each by its path (a list's items as `[]`), never its value;
+     * and a list [written] holds fewer items of, with how many it lost.
+     */
     private fun dropped(file: JsonElement, written: JsonElement, path: String = ""): List<String> = when {
         file is JsonObject && written is JsonObject -> file.flatMap { (key, value) -> written[key]?.let { dropped(value, it, "$path.$key") } ?: listOf("$path.$key") }
-        file is JsonArray && written is JsonArray -> file.zip(written).flatMap { (a, b) -> dropped(a, b, "$path[]") }
+        // Item by item as far as both go; the file's items past the end of what's written are lost whole.
+        file is JsonArray && written is JsonArray -> file.zip(written).flatMap { (a, b) -> dropped(a, b, "$path[]") } +
+            if (file.size > written.size) listOf("$path[] ${file.size - written.size} of ${file.size}") else emptyList()
         else -> emptyList()
     }.distinct()
+
+    @Test
+    fun `a key, or a list's items, that a store doesn't write back is what it drops`() {
+        fun json(text: String) = JsonStore.json.parseToJsonElement(text)
+        assertEquals(emptyList<String>(), dropped(json("""{"a":[{"b":1},{"b":2}]}"""), json("""{"a":[{"b":1},{"b":2}]}""")))
+        assertEquals(listOf(".a[].c"), dropped(json("""{"a":[{"b":1,"c":2}]}"""), json("""{"a":[{"b":1}]}""")))
+        // A record gone from the end of a list: its keys are never compared, so the list's length tells.
+        assertEquals(listOf(".a[] 1 of 2"), dropped(json("""{"a":[{"b":1},{"b":2,"c":3}]}"""), json("""{"a":[{"b":1}]}""")))
+        assertEquals(listOf(".a[].d[] 2 of 3"), dropped(json("""{"a":[{"d":[1,2,3]}]}"""), json("""{"a":[{"d":[1]}]}""")))
+    }
 
     @Test
     fun `the phone's stores read and migrated, what they hold counted before and after`() {
@@ -128,6 +145,7 @@ class RehearsalTest {
         )
         val ran = stores.shapes.filter { (name, shape) -> (versions[name] ?: shape.version) < shape.version }.map { (name, shape) -> "$name ${versions[name]} to ${shape.version}" }
         val was = describe(reads)
+        val nightly = nightly(root, stores.shapes)
         val now = describe(migrated)
         // Each store's lists before (from its file) and after (from what the app writes): a difference is data moved or lost.
         val lists = reads.zip(migrated).flatMap { (b, a) ->
@@ -142,17 +160,22 @@ class RehearsalTest {
             appendLine("== The lists in the files, counted from their JSON: ${reads.sumOf { it.lists.size }} before, ${migrated.sumOf { it.lists.size }} after")
             lists.forEach { appendLine(it) }
             appendLine(if (was == now && lists.isEmpty()) "== The same before and after" else "== THE COUNTS DIFFER: compare them above")
-            append(nightly(root, stores.shapes))
+            append(nightly.report)
         }
         File(root, "rehearsal.txt").writeText(report)
         println(report)
         // What stops a release: a backup without a store every phone has (it isn't the phone's data), or a
         // store that, as the app will read it, doesn't read whole, changes read and written again, or holds
-        // what the app doesn't keep.
+        // what the app doesn't keep; or a nightly backup beside the stores that this version wouldn't restore.
         val missing = REQUIRED.filter { file -> reads.single { it.file == file }.value == null && !File(files, file).isFile }
         assertTrue(missing.isEmpty(), "The backup has no $missing, which every phone has: not a rehearsal of its data")
         assertTrue(migrated.none { it.problem != null } && migrated.all { it.roundTrip }, "A store didn't read whole, or changed read and written again: see rehearsal.txt")
         assertTrue(migrated.all { it.dropped.isEmpty() }, "A store holds what the app doesn't keep: see rehearsal.txt")
+        assertTrue(nightly.problem == null, "The nightly backup wouldn't be restored (${nightly.problem}): see rehearsal.txt")
+        // And any difference in the counts, before and after (docs/plan_v4/04-data-and-migrations.md §On the real
+        // data): a migration that moves, renames or merges data teaches this rehearsal where it goes, so the counts
+        // are compared through the move; the check is never loosened to let one through.
+        assertTrue(was == now && lists.isEmpty(), "The counts differ before and after: see rehearsal.txt")
     }
 
     /** No keystore off the phone: the secrets aren't copied, so it's never asked. */
@@ -211,14 +234,18 @@ class RehearsalTest {
         of<Settings>("settings.json")?.let { appendLine("Settings: armed ${it.armed}, Claude ${it.aiEnabled && it.aiKeyActive}, classes ${it.classMap.size}") }
     }
 
+    /** The newest nightly backup's [report], and its [problem]: why Import wouldn't restore it, or null (none there too). */
+    private class Nightly(val report: String, val problem: String? = null)
+
     /** The newest nightly backup beside the stores, if there's one: read as Import reads it, its parts brought to [shapes], counted. */
-    private fun nightly(root: File, shapes: Map<String, Shape>): String {
-        val file = root.listFiles { f -> f.name.startsWith("decrastination-") && f.name.endsWith(".json") }.orEmpty().maxByOrNull { it.name } ?: return "Nightly backup: none beside the stores\n"
-        val backup = Backups.decode(file.readText(), shapes) ?: return "Nightly backup ${file.name}: not one this version reads\n"
-        return buildString {
-            appendLine("Nightly backup ${file.name}: format ${backup.format}; problem: ${Backups.problem(backup) ?: "none"}")
+    private fun nightly(root: File, shapes: Map<String, Shape>): Nightly {
+        val file = root.listFiles { f -> f.name.startsWith("decrastination-") && f.name.endsWith(".json") }.orEmpty().maxByOrNull { it.name } ?: return Nightly("Nightly backup: none beside the stores\n")
+        val backup = Backups.decode(file.readText(), shapes) ?: return Nightly("Nightly backup ${file.name}: not one this version reads\n", "not one this version reads")
+        val problem = Backups.problem(backup)
+        return Nightly(buildString {
+            appendLine("Nightly backup ${file.name}: format ${backup.format}; problem: ${problem ?: "none"}")
             appendLine("  instructions ${backup.instructions.size}, own tasks ${backup.ownTasks.size}, chat ${backup.chat.messages.size}, log slots ${backup.log.slots.size} completions ${backup.log.completions.size} Felix ${backup.log.felix.size}, memory ${backup.memory.facts.size}+${backup.memory.rules.size}")
-        }
+        }, problem)
     }
 
     private companion object {

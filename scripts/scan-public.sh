@@ -23,11 +23,14 @@ if ! git diff --unified=0 --no-color $RANGE > "$DIFF"; then
   echo "git diff $RANGE failed: nothing was scanned"
   exit 2
 fi
-# Each added line as file:text, the file from the diff's own headers.
+# Each added line as file:text, the file from the diff's own headers. A header is read only between a
+# file's "diff --git" line and its first hunk: in a hunk, an added line that starts "++ " reads "+++"
+# too, and is scanned as the others are, whatever the file's name looks like.
 awk '
-  /^\+\+\+ b\// { file = substr($0, 7); next }
-  /^\+\+\+ / { file = ""; next }
-  /^\+/ && file != "" { print file ":" substr($0, 2) }' "$DIFF" > "$ADDED"
+  /^diff --git / { hunk = 0; file = "?"; next }
+  /^@@/ { hunk = 1; next }
+  !hunk && /^\+\+\+ / { file = substr($0, 5); sub(/^"?b\//, "", file); sub(/"?\t?$/, "", file); next }
+  hunk && /^\+/ { print file ":" substr($0, 2) }' "$DIFF" > "$ADDED"
 rm -f "$DIFF"
 HITS=$(awk -v words="$WORDS" '
   BEGIN {
