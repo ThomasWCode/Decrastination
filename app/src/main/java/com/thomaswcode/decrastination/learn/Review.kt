@@ -38,7 +38,7 @@ object Review {
         val week = Daily.checkInWeek(now, zone, graph.settings.value.checkInMin)
         if (ifDue && reviewed(graph.log.value.reviews, week, Daily.lastCheckIn(now, zone, graph.settings.value.checkInMin))) return
         // A reset of the record while this is out (LR-08) lets what it makes go.
-        val generation = graph.resets.get()
+        val generation = graph.backups.resets.get()
         val learned = Calibrator.learn(
             graph.log.value,
             graph.runtime.value.calibration,
@@ -64,7 +64,7 @@ object Review {
         val rollup = Stats.rollup(graph.log.value, LocalDate.parse(week), zone)
         var kept = false
         graph.log.update { l ->
-            if (graph.resets.get() != generation) l
+            if (graph.backups.resets.get() != generation) l
             else l.copy(reviews = l.reviews + review, weeks = Stats.refreshedWeeks(l, now, zone).filterNot { w -> w.week == week } + rollup).trimmed(now).also { kept = true }
         }
         if (!kept) {
@@ -118,7 +118,7 @@ object Review {
         // What each was, kept with the review (AI-18, LR-01): next week's reads it, and its page undoes it.
         val before = changes.mapNotNull { c -> ReviewInput.valueOf(settings, c.setting)?.let { c.setting to it } }.toMap()
         // Not after a reset of the record that came while Claude was asked (LR-08): the review's let go.
-        if (graph.resets.get() != generation) return Outcome(why = "the record was reset while Claude was asked")
+        if (graph.backups.resets.get() != generation) return Outcome(why = "the record was reset while Claude was asked")
         // At once, armed or not (your call, 11 Oct); laid over what's been asked for, so a change
         // waiting for another setting keeps its wait.
         if (changes.isNotEmpty()) graph.applyReviewChanges(changes)

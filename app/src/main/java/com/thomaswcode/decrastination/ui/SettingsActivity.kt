@@ -669,7 +669,7 @@ private fun ResetPage(graph: AppGraph) {
             confirmButton = {
                 androidx.compose.material3.TextButton(onClick = {
                     asking = null
-                    scope.launch { said = graph.reset(r) }
+                    scope.launch { said = graph.backups.reset(r) }
                 }) { Text("Reset") }
             },
             dismissButton = { androidx.compose.material3.TextButton(onClick = { asking = null }) { Text("Keep it") } },
@@ -685,7 +685,7 @@ private fun ResetPage(graph: AppGraph) {
 @Composable
 private fun NightlyBackup(graph: AppGraph, last: Long?, now: Long) {
     val scope = rememberCoroutineScope()
-    val copies = remember { graph.resetCopies() }
+    val copies = remember { graph.backups.resetCopies() }
     var said by remember { mutableStateOf<String?>(null) }
     Column {
         Section("Nightly backup")
@@ -701,7 +701,7 @@ private fun NightlyBackup(graph: AppGraph, last: Long?, now: Long) {
             copies.forEach { name ->
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(name, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-                    androidx.compose.material3.TextButton(onClick = { scope.launch { said = graph.restoreResetCopy(name) } }) { Text("Restore") }
+                    androidx.compose.material3.TextButton(onClick = { scope.launch { said = graph.backups.restoreResetCopy(name) } }) { Text("Restore") }
                 }
             }
             said?.let { Note(it) }

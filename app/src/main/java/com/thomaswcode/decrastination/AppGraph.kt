@@ -46,7 +46,6 @@ import com.thomaswcode.decrastination.data.Backups
 import com.thomaswcode.decrastination.data.DeviceClock
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.KeystoreCipher
-import com.thomaswcode.decrastination.data.Reset
 import com.thomaswcode.decrastination.data.Secret
 import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.data.Stores
@@ -775,12 +774,6 @@ class AppGraph private constructor(context: Context) {
         )
     }
 
-    fun exportBackup(): String = backups.exportBackup()
-
-    suspend fun backupNow(): Boolean = backups.backupNow()
-
-    suspend fun importBackup(text: String): String = backups.importBackup(text)
-
     /** Where tasks' photos are kept (AI-23): the app's own files, one a task. */
     private val photos: File get() = File(app.filesDir, "photos")
 
@@ -1093,14 +1086,6 @@ class AppGraph private constructor(context: Context) {
         runtime.update { it.copy(checkInDraft = null) }
         if (log.value.felix.lastOrNull()?.reason == com.thomaswcode.decrastination.enrich.FelixPrompts.Reason.CheckIn.name) com.thomaswcode.decrastination.notify.FelixNotifications.cancel(app)
     }
-
-    val resets get() = backups.resets
-
-    suspend fun reset(what: Reset): String = backups.reset(what)
-
-    fun resetCopies(): List<String> = backups.resetCopies()
-
-    suspend fun restoreResetCopy(name: String): String = backups.restoreResetCopy(name)
 
     /** Where a reset's copy goes when Documents can't take it. */
     private val RESET_COPIES = "backups"
