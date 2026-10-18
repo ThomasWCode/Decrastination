@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Badge
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
@@ -113,6 +114,8 @@ fun TaskSheet(
     // Read so a change taken back redraws what's yours.
     val instructions by graph.instructions.state.collectAsStateWithLifecycle()
     val runtime by graph.runtime.state.collectAsStateWithLifecycle()
+    // His messages unread, worn by Ask Felix about it as by his button elsewhere (UI-16).
+    val unread by graph.conversation.unread.collectAsStateWithLifecycle(0)
     val task = state.tasks.firstOrNull { it.id == taskId }
     if (task == null) {
         // Gone (deleted, or aged out of the list): nothing to show.
@@ -349,7 +352,12 @@ fun TaskSheet(
                     OutlinedButton(onClick = { onMove(piece.key) }) { Text("Move…") }
                 }
                 if (changeable && !task.userNotATask) OutlinedButton(onClick = { confirming = "not-a-task" }) { Text("Not a task") }
-                if (task.isOpen) OutlinedButton(onClick = onInstruct) { Text("Ask ${graph.settings.value.felixName} about it") }
+                if (task.isOpen) {
+                    OutlinedButton(onClick = onInstruct) {
+                        Text("Ask ${graph.settings.value.felixName} about it")
+                        if (unread > 0) Badge(Modifier.padding(start = 8.dp)) { Text("$unread") }
+                    }
+                }
                 // Claude's reading made again, as the task is now (AC-06).
                 if (task.isOpen && Enrichments.jobFor(task) != null && graph.gateway.claudeKey() != null) {
                     OutlinedButton(
