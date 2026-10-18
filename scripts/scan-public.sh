@@ -48,8 +48,8 @@ HITS=$(awk -v words="$WORDS" '
       if (tolower(a) !~ /@(example\.(com|org|net)|users\.noreply\.github\.com)$/) print "  an email address: " file ": " a
     }
     rest = text
-    # UK numbers, mobile and landline, with or without the country code and spaces.
-    while (match(rest, /(\+44 ?|0)(7[0-9][0-9][0-9]|1[0-9][0-9][0-9]?[0-9]?|2[0-9])[ -]?[0-9][0-9][0-9][0-9]?[ -]?[0-9][0-9][0-9][0-9]?/)) {
+    # UK numbers, mobile and landline, with or without the country code (and its "(0)"), spaces, or brackets round the area code.
+    while (match(rest, /(\+44 ?(\(0\) ?)?|\(0|0)(7[0-9][0-9][0-9]|1[0-9][0-9][0-9]?[0-9]?|2[0-9])\)?[ -]?[0-9][0-9][0-9][0-9]?[ -]?[0-9][0-9][0-9][0-9]?/)) {
       p = substr(rest, RSTART, RLENGTH); before = RSTART > 1 ? substr(rest, RSTART - 1, 1) : ""; rest = substr(rest, RSTART + RLENGTH)
       # Not the middle of a longer number (a timestamp, an id).
       if (before !~ /[0-9A-Za-z]/ && rest !~ /^[0-9]/) print "  a phone number: " file ": " p
