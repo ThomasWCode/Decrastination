@@ -16,6 +16,8 @@ import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 /**
@@ -98,12 +100,15 @@ object CalendarTime {
         return events
     }
 
+    /** Held while the calendar's read and its questions asked: refreshes at once (a start, a sync, the calendar changing) can't ask an event twice. */
+    private val refreshing = Mutex()
+
     /** Reads the calendar, judges it for the planner, and asks about what it can't judge. */
-    suspend fun refresh(context: Context) {
+    suspend fun refresh(context: Context): Unit = refreshing.withLock {
         val graph = AppGraph.get(context)
         if (!allowed(context)) {
             graph.calendarTime = EventJudge.Time(emptyList(), emptyMap(), emptyList())
-            return
+            return@withLock
         }
         graph.watchCalendar()
         val now = graph.clock.now()
@@ -118,7 +123,7 @@ object CalendarTime {
             // Not read this time: the events last read, judged again with the answers as they are
             // now, so an instruction applied or taken back counts all the same.
             graph.calendarTime = EventJudge.time(graph.calendarTime.events, graph.runtime.value.eventAnswers + yours, graph.clock.zone(), askUntil = now + ASK_AHEAD_MS)
-            return
+            return@withLock
         }
         yours.keys.forEach { cancelQuestion(context, it) }
         // Not counted as asked: taken back, the instruction leaves it to be asked again.
