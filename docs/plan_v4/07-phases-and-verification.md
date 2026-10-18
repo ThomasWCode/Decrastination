@@ -38,7 +38,7 @@ G can go first of everything as 4.0.x if you'd rather hear him sooner: it touche
 
 ### 4.3.0: emails done (H)
 
-Independent of the rest; placed last because it writes outside the phone. One PR: the trigger, the journal, `ImapWriter`, the worker, the grace and undo, the switch and the first-time sheet, Felix's `done`, the sheet's button, the failure's notification on the sources' channel (Q18: C, Q27), the decisions amended (Q19: A). Tests and the phone check in [06](06-emails-done.md). Codex: the full rounds, as it changes behaviour outside the app.
+Independent of the rest; placed last because it writes outside the phone. One PR: the trigger, the journal, `ImapWriter`, the worker, the grace and undo, the switch and the first-time sheet, Felix's `done`, the sheet's button, the failure's notification on the new sources' channel (Q18: C; Q27: A), the decisions amended (Q19: A). Tests and the phone check in [06](06-emails-done.md). Codex: the full rounds, as it changes behaviour outside the app.
 
 ## Meeting the cleanup
 

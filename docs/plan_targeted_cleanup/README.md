@@ -62,7 +62,7 @@ The planner, the slotter, the sources and the learning are in good shape: pure w
 
 1. **Phase 0**, then **Phase 1**: the outbox and the notifier, with every message of Felix's put in the chat.
 2. **plan_v4's 4.0.0** (the chat as Felix's one visible voice, swipe to reply, the collapsed changes and the line that slides out, notifications that don't replace each other) on top of Phase 1, as its own PRs ([its order](../plan_v4/README.md#order), decided by its Q1).
-3. **Phase 2**, then **Phase 3**: the services split, Felix's service first, as it will have just been worked on; **Phase 8** with it (Q9: B; where inside it is Q11).
+3. **Phase 2**, then **Phase 3**: the services split, Felix's service first, as it will have just been worked on; **Phase 8** with it (Q9: B): the `:core` module as its last PR, 3g, the state holders as each screen's service lands (Q11).
 4. **Phases 4 and 5**, the data model and the stores, in one migration release (Q10).
 5. **Phases 6 and 7** in small PRs between the others.
 
@@ -79,7 +79,7 @@ A new ability of Felix's after Phase 3 goes into his service, not `AppGraph`; on
 
 ## Decisions for you
 
-[QUESTIONS.md](QUESTIONS.md), ten of them, answered on 18 Oct (the docs' shape on 17 Oct; the order by plan_v4's Q1, which gives the same one) and applied in these documents: the order; Codex rounds for the cleanup's PRs, with one Claude review each; a finished task's text kept 14 days; one Felix notification for the conversation; his past messages put into the chat once; the calendar's questions and "how did it go?" as his voice; the docs' new shape; the account's address left in the history; Phase 8 with Phase 3; and the data changes in one release. Two new ones (Q11, Q12) wait.
+[QUESTIONS.md](QUESTIONS.md), ten of them, answered on 18 Oct (the docs' shape on 17 Oct; the order by plan_v4's Q1, which gives the same one) and applied in these documents: the order; Codex rounds for the cleanup's PRs, with one Claude review each; a finished task's text kept 14 days; one Felix notification for the conversation; his past messages put into the chat once; the calendar's questions and "how did it go?" as his voice; the docs' new shape; the account's address left in the history; Phase 8 with Phase 3; and the data changes in one release. Two more on 18 Oct: the module as Phase 3's last PR (Q11, left to the plan), and the Claude review as every PR's rule in `docs/development.md` (Q12).
 
 ## Done when
 

@@ -54,7 +54,7 @@ One PR.
 
 ## Phase 3: `AppGraph` split into services
 
-Six PRs, in this order. Each one moves a concern's functions into its service verbatim (references to `graph.` becoming constructor parameters), leaves one-line delegates in `AppGraph` so nothing else changes in that commit, then switches the callers, deletes the delegates, adds the service's tests, and turns its fully qualified names into imports.
+Six PRs for the services, in this order, and a seventh for the `:core` module (Phase 8's, Q11). Each service PR moves a concern's functions into its service verbatim (references to `graph.` becoming constructor parameters), leaves one-line delegates in `AppGraph` so nothing else changes in that commit, then switches the callers, deletes the delegates, adds the service's tests, and turns its fully qualified names into imports.
 
 | PR | Service | Notes |
 |---|---|---|
@@ -64,6 +64,7 @@ Six PRs, in this order. Each one moves a concern's functions into its service ve
 | 3d | `Instructions`, `OwnTasks` | Together, as both lay your values on tasks. |
 | 3e | `Readings`, `Sync`, `Photos` | |
 | 3f | `Conversation` (Felix), `Planning` | After Phase 1 and plan_v4's 4.0.0, so the newest code moves once. |
+| 3g | The `:core` module | Last, when nothing else is moving (Q11: A): `core/` and its tests into a plain Kotlin module, the app depending on it; no code changes but the module files and imports. |
 
 **Tests:** each service gains tests of the flows that had none: the chat's answer and its undo, a card applied and taken back, an instruction applied, refused and deleted, a backup restored into an emptier phone, a reset and its copy restored.
 **Phone check:** after each, the phone check, and that PR's concern used through the debug commands (a sync, a re-read, an instruction applied and taken back, a backup written).
@@ -125,7 +126,7 @@ What's left of it runs through the other phases:
 - **A `:core` module** of plain Kotlin holding `core/`, so the compiler keeps it free of Android and its tests run without the Android plugin.
 - **State holders** for the largest screens (the chat, Settings, the task sheet): plain classes holding a screen's state and actions, tested without Compose; the composables only draw.
 
-Where inside Phase 3 is Q11: recommended, the module as Phase 3's last PR (3g), when nothing else is moving, and each screen's state holder as its service lands (the chat's with plan_v4's 4.0.0-B, Settings' with 3c, the task sheet's with 3d).
+Where inside Phase 3 (Q11, left to the plan on 18 Oct: A): the module as Phase 3's last PR (3g), when nothing else is moving, and each screen's state holder as its service lands (the chat's with plan_v4's 4.0.0-B, Settings' with 3c, the task sheet's with 3d).
 
 ## Size and order
 
@@ -134,11 +135,11 @@ Where inside Phase 3 is Q11: recommended, the module as Phase 3's last PR (3g), 
 | 0 | 1 | ½ | |
 | 1 | 2 (+ the chat work's own) | 1–1½ | 6, 7 |
 | 2 | 1 | ½–1 | 6, 7 |
-| 3 | 6 | 2–3 | 7 |
+| 3 | 7 (3g the module) | 2–3 | 7 |
 | 4 | 2 | 1½ | 7 |
 | 5 | 2 | 1 | 7 |
 | 6 | 4–6, small | 1 | any |
 | 7 | done (17 Oct); kept in step by each phase | 0 | any |
-| 8 | 2 | 1–2 | with 3 |
+| 8 | inside 3: the module as 3g, the state holders in 3c, 3d and plan_v4's 4.0.0-B | 1–2 | with 3 |
 
 About eight to ten days of work in all, spread so that features can still land between phases. Phases 4 and 5 change stored data and are released together (Q10: A), with one rehearsal and one backup.

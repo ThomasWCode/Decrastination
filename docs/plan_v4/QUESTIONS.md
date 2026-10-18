@@ -1,6 +1,6 @@
 # Questions for you
 
-Every call this plan needed, each with a recommendation. You answered Q1–Q22 on 18 Oct 2026 (your words kept below as you wrote them) and Q23–Q26 live the same day; all are applied in the plan. Q27–Q30 are new and open. Where a question repeats one the cleanup plan asked and you answered ([its QUESTIONS.md](../plan_targeted_cleanup/QUESTIONS.md): Q4 one conversation notification, Q5 his past records put in once, Q6 the calendar's questions and "how did it go?" as his), this plan takes your answer as given and asks only what's new.
+Every call this plan needed, each with a recommendation. You answered Q1–Q22 on 18 Oct 2026 (your words kept below as you wrote them), Q23–Q26 live the same day, and Q27–Q30 that evening; all are applied in the plan. Where a question repeats one the cleanup plan asked and you answered ([its QUESTIONS.md](../plan_targeted_cleanup/QUESTIONS.md): Q4 one conversation notification, Q5 his past records put in once, Q6 the calendar's questions and "how did it go?" as his), this plan takes your answer as given and asks only what's new.
 
 ## Q1. The order and the versions
 
@@ -220,7 +220,7 @@ You chose the app's own notification over a message of his. It needs a channel.
 - **A (recommended).** A new channel, "Your sources" (`Channels.SOURCES`), default importance, outside the ceiling: for this, and later for any source that can't be read for a day; the id `NoticeId.GmailWrite`, tagged by thread, tapped, opening the task's sheet.
 - **B.** The "Claude" channel (`Channels.MODEL`), renamed "Claude and your sources".
 - **C.** The protection channel (high importance: it buzzes, which this doesn't deserve).
-- ANSWER:
+- ANSWER: A
 
 ## Q28. Summaries for him ([08](08-summaries.md))
 
@@ -229,13 +229,13 @@ The emails are condensed already (D-93); the one gap is the conversation beyond 
 - **A (recommended).** Later: a conversation digest as a small 4.4.0, after you've lived with 4.0.0's chat a few weeks; nothing else summarised.
 - **B.** Now: the digest as a PR of its own after 4.0.0-C.
 - **C.** Not at all.
-- ANSWER:
+- ANSWER: A
 
 ## Q29. `felixLine`'s new default (Q16 left it blank)
 
 - **A (recommended).** "your mate who's on your case about the work".
 - **B.** Your words:
-- ANSWER:
+- ANSWER: A
 
 ## Q30. The swearing's line (Q16: "could add mild swearing")
 
@@ -243,7 +243,7 @@ Taken as: mild ("bloody", "crap", nothing stronger), sparing (not every message)
 
 - **A (recommended).** As taken.
 - **B.** Say otherwise:
-- ANSWER:
+- ANSWER: A
 
 ---
 

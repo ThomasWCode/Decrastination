@@ -25,7 +25,7 @@ Not on: unstarring in Gmail yourself (that's the source saying so, as now); a ph
    - `LOGOUT`.
    A `NO` (the message gone) on one UID doesn't fail the rest. A failure keeps the entry for the next try; after five tries over a day, it's dropped and said (step 5).
 4. **The read that closes it.** A Gmail-only sync is asked for at once (`SyncWorker.syncNow(sources = gmail)`): it lists no starred message in the conversation, the merge marks the task done (`Merge.apply`, "not listed"), `Focus.onCompleted` records the completion and gives its free time (D-10: an unstarred email earns as any completion does). So the app's state changes only through the source, as every source's does, and nothing is marked done locally ahead of the read, which would reopen it at the next listing while the write was still pending.
-5. **Said.** Only when something went wrong, after the five tries: the app's own notification, not a message of his (Q18: C): `NoticeId.GmailWrite`, tagged by thread, on a channel for the sources (`Channels.SOURCES`, "Your sources", default importance, not ceilinged; which channel is Q27), "Couldn't unstar “Trip consent form” in Gmail (no connection for a day): it's still starred", tapped, opening the task's sheet, which says the same under its status; Setup's attention mark counts it as the source failing (`TaskState.status(Gmail).error`). Success is silent: the task closes, as it does when you unstar by hand.
+5. **Said.** Only when something went wrong, after the five tries: the app's own notification, not a message of his (Q18: C): `NoticeId.GmailWrite`, tagged by thread, on a new channel for the sources (`Channels.SOURCES`, "Your sources", default importance, not ceilinged; Q27: A), "Couldn't unstar “Trip consent form” in Gmail (no connection for a day): it's still starred", tapped, opening the task's sheet, which says the same under its status; Setup's attention mark counts it as the source failing (`TaskState.status(Gmail).error`). Success is silent: the task closes, as it does when you unstar by hand.
 
 ## The reader stays read-only
 
@@ -69,7 +69,7 @@ One PR, the commits in this order:
 5. **Felix.** `ChatAnswers.action`'s `Done` on a Gmail task allowed when `settings.gmailFinishes`; the prompt line and the context's "finish with done" mark; the empty chat's example ("I'm done with the trip email"); `chat.txt` regenerated.
 6. **The sheet.** "Finish: unstar and archive" on an email's About (behind the switch); "Done: unstarring it in Gmail" while an entry's pending; the failure's line.
 7. **The switch and the sheet.** `Settings.gmailFinishes` (default true); Settings → Sources → Gmail and Setup's Gmail text; the first-time sheet, a `Hint` put away into `hintsSeen`.
-8. **The notification.** `NoticeId.GmailWrite` and `Channels.SOURCES` (Q27); the cleanup's registry test.
+8. **The notification.** `NoticeId.GmailWrite` and `Channels.SOURCES` (Q27: A), made in `Channels.create` with the others; the cleanup's registry test.
 9. **The docs**: `sources.md` §Gmail; `felix.md` §What he can do; `decisions.md`: D-7, D-10 and D-54 amended, D-99 added (Q19: A); the phone check below with your mailbox, nothing of it in the PR (D-79).
 
 ## Tests

@@ -2,7 +2,7 @@
 
 A plan, not started, for the changes to how Felix works that you listed on 18 Oct 2026: everything he says in one WhatsApp-like chat, with notifications that are the chat reaching you; notes and reminders he keeps for you; memory that lasts as long as it's needed; a teenager's voice; and a starred email finished in the app finished in Gmail too. Written on 18 Oct 2026 against `main` at e6cd54b (3.2.0); your answers to its questions, given the same day, are applied throughout.
 
-It stands beside [the targeted cleanup](../plan_targeted_cleanup/README.md), which was written with part of this list in view and lays the ground for it (its Phase 1: one conversation store, an outbox, a notifier whose notifications stack). This plan says what's built on that ground, and where each piece sits relative to the cleanup's phases, so the two can be merged into one order later. Nothing here is implemented. [QUESTIONS.md](QUESTIONS.md) holds every call it needed from you with your answers (Q1–Q26), and what's still open (Q27–Q30). Each document ends with how it's built: the steps, the files and the commits, before its tests and its phone check.
+It stands beside [the targeted cleanup](../plan_targeted_cleanup/README.md), which was written with part of this list in view and lays the ground for it (its Phase 1: one conversation store, an outbox, a notifier whose notifications stack). This plan says what's built on that ground, and where each piece sits relative to the cleanup's phases, so the two can be merged into one order later. Nothing here is implemented. [QUESTIONS.md](QUESTIONS.md) holds every call it needed from you with your answers (Q1–Q30, all given on 18 Oct). Each document ends with how it's built: the steps, the files and the commits, before its tests and its phone check.
 
 ## Why
 
@@ -31,7 +31,7 @@ The app plans and blocks well; what's uneven is how Felix reaches you and what y
 | Managing it all from the chat, with nothing else to touch | [02](02-what-felix-can-do.md) §3, and the whole |
 | A ticked starred email unstarred and archived | [06](06-emails-done.md) |
 | A message that's just talk, answered as talk (your note of 18 Oct) | [05](05-his-voice.md) §Just talking |
-| Whether summaries should stand in for the raw data he reads (your note of 18 Oct) | [08](08-summaries.md): an evaluation, with Q28 |
+| Whether summaries should stand in for the raw data he reads (your note of 18 Oct) | [08](08-summaries.md): an evaluation; decided as a later 4.4.0 (Q28: A) |
 
 And what I'd add in the same direction, each marked as a suggestion and asked about in [QUESTIONS.md](QUESTIONS.md): the few things he still can't do that the screens can (keep a piece with no step, check a source, say how much free time there is, open a task where it lives), a quiet-until rule, reminders you can snooze from the notification, the day's reminders in his morning message, an unread badge on his button, and the calendar's questions and "how did it go?" as his (the cleanup's Q6, already agreed).
 
@@ -125,5 +125,5 @@ To be numbered in `docs/decisions.md` by the PRs that apply them (the next free 
 - [05-his-voice.md](05-his-voice.md): the register, the prompts, the fixed lines, the evals.
 - [06-emails-done.md](06-emails-done.md): unstar and archive on the last tick.
 - [07-phases-and-verification.md](07-phases-and-verification.md): the PRs, what each needs, tests, phone checks, risks; meeting the cleanup.
-- [08-summaries.md](08-summaries.md): whether summaries should stand in for the raw data he reads; an evaluation with a recommendation (Q28), not yet a plan.
+- [08-summaries.md](08-summaries.md): whether summaries should stand in for the raw data he reads; an evaluation, decided as a conversation digest in a later 4.4.0 (Q28: A), to be planned then.
 - [QUESTIONS.md](QUESTIONS.md): the calls this plan needed from you, with your answers, and what's still open.
