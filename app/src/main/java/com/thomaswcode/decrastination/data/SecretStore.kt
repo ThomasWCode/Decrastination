@@ -12,9 +12,6 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.builtins.MapSerializer
 import kotlinx.serialization.builtins.serializer
 import java.io.File
-import java.nio.file.AtomicMoveNotSupportedException
-import java.nio.file.Files
-import java.nio.file.StandardCopyOption
 import java.security.KeyStore
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
@@ -118,11 +115,8 @@ class SecretStore(
         dir.mkdirs()
         val tmp = File(dir, "${file.name}.tmp")
         tmp.writeBytes(cipher.encrypt(plain.encodeToByteArray()))
-        try {
-            Files.move(tmp.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
-        } catch (_: AtomicMoveNotSupportedException) {
-            Files.move(tmp.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING)
-        }
+        // As the stores are written: a replace refused for a moment (Windows) tried a few times more.
+        JsonStore.moveOver(tmp, file)
     }
 
     private companion object {
