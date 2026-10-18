@@ -129,6 +129,7 @@ import com.thomaswcode.decrastination.core.Speaker
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.felix.ChatPrompts
 import com.thomaswcode.decrastination.felix.Conversation
+import com.thomaswcode.decrastination.felix.Replies
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -167,8 +168,14 @@ class AskActivity : ComponentActivity() {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         val graph = AppGraph.get(this)
-        // Made again (turned, or brought back): what it's about kept, the words handed in already sent.
-        if (savedInstanceState == null) take(intent) else about.value = aboutFrom(savedInstanceState)
+        // Made again (turned, or brought back): what it's about kept, the words handed in already sent, and
+        // the message being replied to and the archive's pages loaded, as they were.
+        if (savedInstanceState == null) {
+            take(intent)
+        } else {
+            about.value = aboutFrom(savedInstanceState)
+            screen.restored(savedInstanceState.getInt(STATE_EARLIER), savedInstanceState.getString(STATE_REPLYING)?.let { graph.conversation.outbox.find(it) })
+        }
         setContent { AppTheme { Screen(graph) } }
     }
 
@@ -181,6 +188,8 @@ class AskActivity : ComponentActivity() {
         outState.putString(EXTRA_EVENT_TITLE, a.eventTitle)
         outState.putLong(EXTRA_EVENT_START, a.eventStart ?: 0L)
         outState.putString(EXTRA_DAY, a.day)
+        outState.putInt(STATE_EARLIER, screen.earlier)
+        outState.putString(STATE_REPLYING, screen.replyingTo?.id)
     }
 
     /** What a message is about, from an intent's extras or a saved state's. */
@@ -203,12 +212,13 @@ class AskActivity : ComponentActivity() {
         sendHanded = intent.getBooleanExtra(EXTRA_SEND, true)
         handed.value = intent.getStringExtra(EXTRA_TEXT)
         // From his notification: opened at its message, what was unread marked for this visit, and what
-        // it held read now.
+        // it held read now (now as it opens, not as the work runs, which may be after another came).
         intent.getStringExtra(EXTRA_OPEN_AT)?.let { id ->
             val graph = AppGraph.get(this)
             screen.opened(graph.chat.value, graph.clock.now(), at = id)
             openedAt = true
-            graph.scope.launch { graph.conversation.read() }
+            val now = graph.clock.now()
+            graph.scope.launch { graph.conversation.read(now) }
         }
     }
 
@@ -235,8 +245,9 @@ class AskActivity : ComponentActivity() {
         graph.conversation.chatInFront = false
         // Every message closed again for the next visit, its labels done with (5c).
         screen.paused()
-        // What arrived while it was on screen was seen: read, so only what comes after is his notification.
-        graph.scope.launch { graph.conversation.read() }
+        // What arrived while it was on screen was seen: read up to now, so only what comes after is his notification.
+        val now = graph.clock.now()
+        graph.scope.launch { graph.conversation.read(now) }
     }
 
     @OptIn(ExperimentalMaterial3Api::class)
@@ -310,11 +321,13 @@ class AskActivity : ComponentActivity() {
                     Chat(graph, screen, chat.messages, archive.messages, byId, now, zone, claudeOn, onEdit = { m, p -> editing = "$m|$p" })
                     // His replies to offer (UI-06), under his last message: a tap answers it, as a reply to
                     // it from anywhere does (a check-in's answer, an event's, with no call).
-                    val latest = chat.messages.lastOrNull { it.from == Speaker.You || it.text.isNotBlank() }
-                    val last = latest?.takeIf { it.from == Speaker.Felix && it.answeredAt == null }
-                    // His question still waiting for its answer, his last message: the box answers it, shown over it (D-98).
+                    // His question still waiting for its answer since your last turn (with several asked together,
+                    // the one before it once that's answered): the box and the chips answer it (D-98); else his last
+                    // message's replies, where it's his.
                     val checkIn = chat.felix.checkInDraft != null
-                    LaunchedEffect(latest?.id, latest?.answeredAt, checkIn) { screen.offer(latest, checkIn) }
+                    val pending = Replies.pending(chat.messages, checkIn)
+                    val last = pending ?: chat.messages.lastOrNull { it.from == Speaker.You || it.text.isNotBlank() }?.takeIf { it.from == Speaker.Felix && it.answeredAt == null }
+                    LaunchedEffect(pending?.id, checkIn) { screen.offer(pending, checkIn) }
                     if (last != null && last.suggestedReplies.isNotEmpty()) {
                         FlowRow(Modifier.fillMaxWidth().padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             last.suggestedReplies.forEach { reply ->
@@ -426,6 +439,8 @@ class AskActivity : ComponentActivity() {
         private const val EXTRA_EVENT_START = "eventStart"
         private const val EXTRA_DAY = "day"
         private const val EXTRA_OPEN_AT = "openAt"
+        private const val STATE_EARLIER = "earlier"
+        private const val STATE_REPLYING = "replyingTo"
 
         /**
          * The chat, about [about], with [text] to send; with [send] false, only put in the box, to be
@@ -477,8 +492,10 @@ private fun ColumnScope.Chat(
     val name = graph.settings.value.felixName
     val rows = remember(all, archive, screen.earlier, screen.firstUnread, zone) { screen.items(all, archive, zone) }
     val shown = all.filter { it.from == Speaker.You || it.text.isNotBlank() }
-    // Yours waiting for his answer, with nothing to say why (Claude off, resting, a failed call): he's typing.
-    val typing = shown.lastOrNull()?.let { it.from == Speaker.You && it.answeredAt == null && it.note == null } == true
+    // Yours waiting for his answer, with nothing to say why (Claude off, resting, a failed call): he's
+    // typing, whatever he's written unasked since.
+    val waiting = all.lastOrNull { it.from == Speaker.You && it.answeredAt == null }
+    val typing = waiting != null && waiting.note == null
     val today = Instant.ofEpochMilli(now).atZone(zone).toLocalDate()
     // At the foot once it's been put somewhere: what follows slides into view.
     var settled by remember { mutableStateOf(false) }
@@ -494,7 +511,7 @@ private fun ColumnScope.Chat(
     // Else at the foot, kept there as the conversation grows (not as earlier pages load over it). Where it
     // opens at a message, not: read as the list is drawn, as that message's scroll clears it at once.
     val opening = screen.scrollTo
-    LaunchedEffect(shown.lastOrNull()?.id, shown.lastOrNull()?.note, typing) {
+    LaunchedEffect(shown.lastOrNull()?.id, waiting?.note, typing) {
         if (shown.isEmpty() || opening != null) return@LaunchedEffect
         val foot = rows.size + if (typing) 2 else 1
         if (settled) list.animateScrollToItem(foot) else list.scrollToItem(foot)
@@ -548,7 +565,7 @@ private fun ColumnScope.Chat(
                         if (message.from == Speaker.You) {
                             Yours(graph, message, row.quote, name, flash, now, zone, onQuote = { screen.reveal(it, all, archive) }) { screen.replyTo(message) }
                         } else {
-                            Claudes(graph, screen, message, tasks, flash, now, zone, onEdit) { screen.replyTo(message) }
+                            Claudes(graph, screen, message, tasks, flash, now, zone, onEdit, live = !row.archived) { screen.replyTo(message) }
                         }
                     }
                 }
@@ -771,7 +788,7 @@ private const val DOT_STEP_MS = 200
  * outside the fold, a task he shows you and a button in the app's words. Held, [onReply] is Reply.
  */
 @Composable
-private fun Claudes(graph: AppGraph, screen: ChatScreenState, message: ChatMessage, tasks: Map<String, TaskItem>, flash: Boolean, now: Long, zone: ZoneId, onEdit: (String, String) -> Unit, onReply: () -> Unit) {
+private fun Claudes(graph: AppGraph, screen: ChatScreenState, message: ChatMessage, tasks: Map<String, TaskItem>, flash: Boolean, now: Long, zone: ZoneId, onEdit: (String, String) -> Unit, live: Boolean, onReply: () -> Unit) {
     val folds = ChatSummary.folds(message)
     val open = message.id in screen.open
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -787,17 +804,17 @@ private fun Claudes(graph: AppGraph, screen: ChatScreenState, message: ChatMessa
         // A message in the app's words carries its own button: the week's review to open, its summary to send.
         Opens(message)
         // A task he shows you (AI-14), the point of the message: never folded.
-        message.proposals.filter { it.open != null }.forEach { ProposalCard(graph, message.id, it, tasks, now, zone, onEdit) }
+        message.proposals.filter { it.open != null }.forEach { ProposalCard(graph, message.id, it, tasks, now, zone, onEdit, live) }
         AnimatedVisibility(folds && open) {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 // What he searched the web for, and the pages it found, each to open (16 Oct).
                 Searched(message)
-                message.proposals.filter { it.open == null }.forEach { ProposalCard(graph, message.id, it, tasks, now, zone, onEdit) }
+                message.proposals.filter { it.open == null }.forEach { ProposalCard(graph, message.id, it, tasks, now, zone, onEdit, live) }
                 // What it remembered or forgot (AI-21), in small type under its words, each with its Undo.
-                Remembered(graph, message)
+                Remembered(graph, message, live)
                 // What it did beyond its cards (AI-14; 16 Oct, everything he does), likewise, each with its Undo;
                 // and what it says of them with nothing to undo (a change refused, where a time went).
-                Acts(graph, message)
+                Acts(graph, message, live)
                 message.note?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 4.dp)) }
             }
         }
@@ -926,7 +943,7 @@ private fun Searched(message: ChatMessage) {
  * it can be taken back (your call, 16 Oct): a fact gone, and the one it replaced back.
  */
 @Composable
-private fun Remembered(graph: AppGraph, message: ChatMessage) {
+private fun Remembered(graph: AppGraph, message: ChatMessage, live: Boolean) {
     val memory by graph.memory.state.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     var said by remember(message.id) { mutableStateOf<String?>(null) }
@@ -943,7 +960,8 @@ private fun Remembered(graph: AppGraph, message: ChatMessage) {
             )
             when {
                 edit.undone -> Text("Undone", style = MaterialTheme.typography.labelMedium, color = quiet, modifier = Modifier.padding(horizontal = 12.dp))
-                Memories.undo(memory, edit) != null -> TextButton(onClick = { scope.launch { said = graph.conversation.undoMemory(message.id, i) } }) { Text("Undo") }
+                // From the archive, nothing to do: only the window's are acted on.
+                live && Memories.undo(memory, edit) != null -> TextButton(onClick = { scope.launch { said = graph.conversation.undoMemory(message.id, i) } }) { Text("Undo") }
             }
         }
     }
@@ -956,7 +974,7 @@ private fun Remembered(graph: AppGraph, message: ChatMessage) {
  * and the lines with nothing to undo (a change not made, where a time went, a text read in full).
  */
 @Composable
-private fun Acts(graph: AppGraph, message: ChatMessage) {
+private fun Acts(graph: AppGraph, message: ChatMessage, live: Boolean) {
     if (message.acts.isEmpty()) return
     // Read as they change: whether each can still be taken back.
     val tasks by graph.tasks.state.collectAsStateWithLifecycle()
@@ -976,7 +994,7 @@ private fun Acts(graph: AppGraph, message: ChatMessage) {
             )
             when {
                 act.undone -> Text("Undone", style = MaterialTheme.typography.labelMedium, color = quiet, modifier = Modifier.padding(horizontal = 12.dp))
-                com.thomaswcode.decrastination.core.ChatActs.canUndo(act, tasks.tasks, settings, chat.messages) -> TextButton(onClick = { scope.launch { said = graph.conversation.undoAct(message.id, i) } }) { Text("Undo") }
+                live && com.thomaswcode.decrastination.core.ChatActs.canUndo(act, tasks.tasks, settings, chat.messages) -> TextButton(onClick = { scope.launch { said = graph.conversation.undoAct(message.id, i) } }) { Text("Undo") }
             }
         }
     }
@@ -989,7 +1007,7 @@ private fun Acts(graph: AppGraph, message: ChatMessage) {
  * or applied, changed first, or set aside.
  */
 @Composable
-private fun ProposalCard(graph: AppGraph, messageId: String, proposal: Proposal, tasks: Map<String, TaskItem>, now: Long, zone: ZoneId, onEdit: (String, String) -> Unit) {
+private fun ProposalCard(graph: AppGraph, messageId: String, proposal: Proposal, tasks: Map<String, TaskItem>, now: Long, zone: ZoneId, onEdit: (String, String) -> Unit, live: Boolean) {
     val scope = rememberCoroutineScope()
     val applied = proposal.state == ProposalState.Applied
     val discarded = proposal.state == ProposalState.Discarded
@@ -1038,6 +1056,18 @@ private fun ProposalCard(graph: AppGraph, messageId: String, proposal: Proposal,
             proposal.note?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
             FlowRow(Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 when {
+                    // From the archive: what became of it, with nothing to do, as only the window's are acted on.
+                    !live -> Text(
+                        when {
+                            applied -> if (proposal.task != null) "Added" else if (proposal.instant) "Done" else "Applied"
+                            discarded -> "Set aside"
+                            proposal.instant -> if (proposal.note == null) "Undone" else "Not made"
+                            else -> "Not added"
+                        },
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.align(Alignment.CenterVertically),
+                    )
                     applied -> {
                         Text(
                             when {
