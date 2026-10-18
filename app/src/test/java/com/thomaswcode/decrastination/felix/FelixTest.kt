@@ -56,9 +56,9 @@ class FelixTest {
                 window = WindowKind.Evening, outcome = SlotOutcome.Kept, workedMin = 10, at = now - 3_000_000L),
         )
         // His eight in the chat, your reply to the last, and his answer to you, which isn't one of his own.
-        val recent = (1..8).map { ChatMessage("r$it", Speaker.Claude, "message $it", now - (9 - it) * 600_000L, kind = MessageKind.SlotStart) } +
+        val recent = (1..8).map { ChatMessage("r$it", Speaker.Felix, "message $it", now - (9 - it) * 600_000L, kind = MessageKind.SlotStart) } +
             ChatMessage("y8", Speaker.You, "on it", now - 30_000L, replyTo = "r8", answeredAt = now - 20_000L) +
-            ChatMessage("c8", Speaker.Claude, "good", now - 20_000L)
+            ChatMessage("c8", Speaker.Felix, "good", now - 20_000L)
         val text = FelixPrompts.describe(FelixPrompts.Reason.SlotStart, plan, slot, null, today, recent, null, settings, now, LONDON)
         val lines = text.lines()
         assertEquals("Reason: SlotStart", lines[0])

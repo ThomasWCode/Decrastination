@@ -60,7 +60,7 @@ class OutboxTest {
         override suspend fun postHeld() = Unit
     }
 
-    private fun his(id: String, at: Long = clock.now(), kind: MessageKind = MessageKind.SlotStart, text: String = "message $id") = ChatMessage(id, Speaker.Claude, text, at, kind = kind)
+    private fun his(id: String, at: Long = clock.now(), kind: MessageKind = MessageKind.SlotStart, text: String = "message $id") = ChatMessage(id, Speaker.Felix, text, at, kind = kind)
 
     @Test
     fun `a message is in the chat before his notification is made from it, and it sounds for it`() = runBlocking {

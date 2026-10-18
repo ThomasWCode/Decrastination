@@ -132,7 +132,7 @@ class FelixInputsDocTest {
         // The chat: a message about a task, after an earlier exchange.
         val earlier = ChatMessage("m1", Speaker.You, "What's due this week?", Fixtures.at("2026-10-12T19:02"))
         val reply = ChatMessage(
-            "m2", Speaker.Claude, "The worksheet's due Thursday morning and the vectors on Friday. I've put the vectors' first half on Wednesday at 18:00.", Fixtures.at("2026-10-12T19:02"),
+            "m2", Speaker.Felix, "The worksheet's due Thursday morning and the vectors on Friday. I've put the vectors' first half on Wednesday at 18:00.", Fixtures.at("2026-10-12T19:02"),
             proposals = listOf(Proposal("p1", changes = listOf(Change(ChangeType.AtTime, taskId = vectors.id, date = "2026-10-14", startMin = 18 * 60, time = Fixtures.at("2026-10-14T18:00"))), lines = listOf("“Vectors exercise 4B” at 18:00 on Wed 14 Oct"), state = ProposalState.Applied, instant = true)),
         )
         val asked = ChatMessage("m3", Speaker.You, "Can I do these tomorrow instead?", now, about = About(taskId = vectors.id, taskTitle = vectors.title))
@@ -142,9 +142,13 @@ class FelixInputsDocTest {
         )
         ChatPrompts.turns(listOf(earlier, reply, asked), context.known, byId, LONDON, plan = context.plan, events = events).forEachIndexed { i, (from, text) -> out["chat turn $i: $from"] = text }
         // A reply from Felix's notification: his message leads your first turn.
-        val his = ChatMessage("m4", Speaker.Claude, "Starting the worksheet? First: read question 1 and underline what it asks.", Fixtures.at("2026-10-13T17:00"), kind = MessageKind.SlotStart)
+        val his = ChatMessage("m4", Speaker.Felix, "Starting the worksheet? First: read question 1 and underline what it asks.", Fixtures.at("2026-10-13T17:00"), kind = MessageKind.SlotStart)
         val yours = ChatMessage("m5", Speaker.You, "Give me ten minutes", Fixtures.at("2026-10-13T17:02"))
         ChatPrompts.turns(listOf(his, yours), "(the context, as above)", byId, LONDON, plan = "(the plan, as above)").forEachIndexed { i, (from, text) -> out["reply turn $i: $from"] = text }
+        // A reply swiped in the chat to his earlier message, which isn't the one just before: quoted (5b).
+        val answer = ChatMessage("m5a", Speaker.Felix, "Ten minutes, then.", Fixtures.at("2026-10-13T17:02"))
+        val quoted = ChatMessage("m8", Speaker.You, "Can that be at seven instead?", now, replyTo = his.id)
+        out["quoted reply"] = ChatPrompts.turns(listOf(his, yours.copy(answeredAt = answer.at), answer, quoted), "(the context, as above)", byId, LONDON, plan = "(the plan, as above)").last().second
         // With a web search's finding.
         val found = Found("the open day's programme and times", "Saturday 17 October 2026, 10:00 to 15:00: talks every hour from 10:30, subject stands all day.\nBooking isn't needed.", listOf("open day programme"), listOf(WebSource("Open day programme", "https://www.example.ac.uk/open-day")))
         out["chat turn with research"] = ChatPrompts.turns(listOf(ChatMessage("m6", Speaker.You, "What happens at the open day on Saturday?", now)), "(the context)", byId, LONDON, plan = "(the plan)", found = found).last().second
@@ -157,7 +161,7 @@ class FelixInputsDocTest {
         val slot = p.todaySlots.first { it.chunk != null }
         val chunk = slot.chunk!!
         val recent = listOf(
-            ChatMessage("f1", Speaker.Claude, "Starting the vectors? First: copy out question 1's diagram.", Fixtures.at("2026-10-12T17:00"), kind = MessageKind.SlotStart, suggestedReplies = listOf("Starting now", "Give me 10 minutes")),
+            ChatMessage("f1", Speaker.Felix, "Starting the vectors? First: copy out question 1's diagram.", Fixtures.at("2026-10-12T17:00"), kind = MessageKind.SlotStart, suggestedReplies = listOf("Starting now", "Give me 10 minutes")),
             ChatMessage("f1-reply", Speaker.You, "Starting now", Fixtures.at("2026-10-12T17:02"), replyTo = "f1", answeredAt = Fixtures.at("2026-10-12T17:02")),
         )
         fun record(outcome: SlotOutcome, earned: Boolean) = SlotRecord(

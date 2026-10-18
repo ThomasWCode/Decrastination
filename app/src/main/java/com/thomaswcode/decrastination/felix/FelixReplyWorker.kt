@@ -16,11 +16,12 @@ import com.thomaswcode.decrastination.notify.Notify
 /**
  * A reply from Felix's notification answered (AI-24) as work of its own: the receiver that took it
  * is let go at once, and the app may go with it, so the answer, which is paid for, would be lost
- * half made. The reply is in the chat already, waiting for it.
+ * half made. The reply is in the chat already, waiting for it; his answer, or why there's none yet,
+ * is shown in his notification as it's kept ([Conversation.answerChat]).
  */
 class FelixReplyWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
-        AppGraph.get(applicationContext).conversation.answerReply()
+        AppGraph.get(applicationContext).conversation.answerChat()
         return Result.success()
     }
 

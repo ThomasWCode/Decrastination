@@ -290,13 +290,13 @@ class ChatTest {
         fun you(text: String) = ChatMessage(text, Speaker.You, text, now, answeredAt = now)
         val card = Proposal("p", task = OwnTask(title = "Revise mechanics", kind = Kind.Revision, minutes = 180), state = ProposalState.Applied)
         val messages = listOf(
-            ChatMessage("c0", Speaker.Claude, "an old answer cut off from its question", now),
+            ChatMessage("c0", Speaker.Felix, "an old answer cut off from its question", now),
             you("I've got a test soon"),
-            ChatMessage("c1", Speaker.Claude, "When is it?", now, proposals = listOf(card)),
+            ChatMessage("c1", Speaker.Felix, "When is it?", now, proposals = listOf(card)),
             ChatMessage("y2", Speaker.You, "Friday", now, about = About(taskId = "teams:bridge", taskTitle = "Bridge and Balances Beam Q's")),
         )
         val turns = ChatPrompts.turns(messages, "CONTEXT", mapOf(bridge.id to bridge), LONDON)
-        assertEquals(listOf(Speaker.You, Speaker.Claude, Speaker.You), turns.map { it.first })
+        assertEquals(listOf(Speaker.You, Speaker.Felix, Speaker.You), turns.map { it.first })
         assertEquals("I've got a test soon", turns[0].second)
         assertEquals("When is it?\n[Suggested: add the task “Revise mechanics” — the student applied it]", turns[1].second)
         assertTrue(turns[2].second.startsWith("CONTEXT\n\n(About the task teams:bridge, “Bridge and Balances Beam Q's”) Friday"))
@@ -307,14 +307,14 @@ class ChatTest {
         fun you(id: String, text: String) = ChatMessage(id, Speaker.You, text, now, answeredAt = now)
         val messages = listOf(
             you("y1", "a".repeat(300)),
-            ChatMessage("c1", Speaker.Claude, "b".repeat(300), now),
+            ChatMessage("c1", Speaker.Felix, "b".repeat(300), now),
             you("y2", "c".repeat(100)),
-            ChatMessage("c2", Speaker.Claude, "d".repeat(100), now),
+            ChatMessage("c2", Speaker.Felix, "d".repeat(100), now),
             ChatMessage("y3", Speaker.You, "the question", now),
         )
         val turns = ChatPrompts.turns(messages, "x".repeat(2_000), emptyMap(), LONDON, budget = 1_000)
         // The first exchange didn't fit history's share; the context was cut beside the question, which is whole.
-        assertEquals(listOf(Speaker.You, Speaker.Claude, Speaker.You), turns.map { it.first })
+        assertEquals(listOf(Speaker.You, Speaker.Felix, Speaker.You), turns.map { it.first })
         assertEquals(1_000, turns.sumOf { it.second.length })
         assertTrue(turns.last().second.endsWith("\n\nthe question"))
         assertEquals("c".repeat(100), turns.first().second)
@@ -520,9 +520,9 @@ class ChatTest {
     fun `the chat waits on your last message till it's answered`() {
         val asked = ChatMessage("y", Speaker.You, "hello", now)
         assertEquals(asked, ChatState(listOf(asked)).unanswered)
-        assertNull(ChatState(listOf(asked.copy(answeredAt = now), ChatMessage("c", Speaker.Claude, "hi", now))).unanswered)
+        assertNull(ChatState(listOf(asked.copy(answeredAt = now), ChatMessage("c", Speaker.Felix, "hi", now))).unanswered)
         // A reply of yours taken with no call (a check-in's "4") comes answered: what waits before it still waits.
-        val question = ChatMessage("q", Speaker.Claude, "How was the week, 1 to 5?", now, kind = MessageKind.CheckIn, byApp = true, answeredAt = now)
+        val question = ChatMessage("q", Speaker.Felix, "How was the week, 1 to 5?", now, kind = MessageKind.CheckIn, byApp = true, answeredAt = now)
         val four = ChatMessage("4", Speaker.You, "4", now, kind = MessageKind.CheckIn, replyTo = "q", answeredAt = now)
         assertEquals(asked, ChatState(listOf(asked, question, four)).unanswered)
     }
@@ -569,7 +569,7 @@ class ChatTest {
     @Test
     fun `a message of Felix's before any of yours goes with your first turn`() {
         val messages = listOf(
-            ChatMessage("f", Speaker.Claude, "Ten minutes into the physics: starting?", now - 600_000L, kind = MessageKind.SlotStart),
+            ChatMessage("f", Speaker.Felix, "Ten minutes into the physics: starting?", now - 600_000L, kind = MessageKind.SlotStart),
             ChatMessage("r", Speaker.You, "Give me 15", now),
         )
         val turns = ChatPrompts.turns(messages, "", mapOf(bridge.id to bridge), LONDON)
@@ -582,13 +582,63 @@ class ChatTest {
     fun `two messages of Felix's in a row are one turn`() {
         val messages = listOf(
             ChatMessage("1", Speaker.You, "Move the physics", now - 3_000_000L, answeredAt = now - 2_900_000L),
-            ChatMessage("2", Speaker.Claude, "Moved it to 19:30.", now - 2_900_000L),
-            ChatMessage("3", Speaker.Claude, "Ten minutes into the physics: starting?", now - 600_000L, kind = MessageKind.SlotStart),
+            ChatMessage("2", Speaker.Felix, "Moved it to 19:30.", now - 2_900_000L),
+            ChatMessage("3", Speaker.Felix, "Ten minutes into the physics: starting?", now - 600_000L, kind = MessageKind.SlotStart),
             ChatMessage("4", Speaker.You, "Give me 15", now),
         )
         val turns = ChatPrompts.turns(messages, "", mapOf(bridge.id to bridge), LONDON)
-        assertEquals(listOf(Speaker.You, Speaker.Claude, Speaker.You), turns.map { it.first })
+        assertEquals(listOf(Speaker.You, Speaker.Felix, Speaker.You), turns.map { it.first })
         assertEquals("Moved it to 19:30.\n\nTen minutes into the physics: starting?", turns[1].second)
+    }
+
+    @Test
+    fun `a reply to a message that isn't just before it starts with that one, quoted, from the whole chat`() {
+        val messages = listOf(
+            ChatMessage("n", Speaker.Felix, "The essay plan's up at 18:00.", now - 3_000_000L, kind = MessageKind.SlotStart),
+            ChatMessage("1", Speaker.You, "Move the physics", now - 2_000_000L, answeredAt = now - 1_900_000L),
+            ChatMessage("2", Speaker.Felix, "Moved it to 19:30.", now - 1_900_000L),
+            ChatMessage("3", Speaker.You, "can it be half six?", now - 1_000_000L, replyTo = "n", answeredAt = now - 900_000L),
+            ChatMessage("4", Speaker.Felix, "Done: 18:30.", now - 900_000L),
+            ChatMessage("5", Speaker.You, "and that one?", now, replyTo = "1"),
+        )
+        val turns = ChatPrompts.turns(messages, "", emptyMap(), LONDON)
+        assertEquals(listOf(Speaker.You, Speaker.Felix, Speaker.You, Speaker.Felix, Speaker.You), turns.map { it.first })
+        assertEquals("(Replying to your message: “The essay plan's up at 18:00.”)\ncan it be half six?", turns[2].second)
+        assertTrue(turns.last().second.endsWith("(Replying to their own earlier message: “Move the physics”)\nand that one?"), turns.last().second)
+        // One the window has lost is quoted all the same, from the whole chat.
+        val long = (1..20).flatMap { i -> listOf(ChatMessage("q$i", Speaker.You, "question $i", now - 100_000L + i * 2, answeredAt = now), ChatMessage("a$i", Speaker.Felix, "answer $i", now - 100_000L + i * 2 + 1)) }
+        val far = ChatPrompts.turns(messages.take(2) + long + ChatMessage("6", Speaker.You, "back to this", now, replyTo = "1"), "", emptyMap(), LONDON)
+        assertTrue(far.last().second.endsWith("(Replying to their own earlier message: “Move the physics”)\nback to this"), far.last().second)
+        assertTrue("quoted, it's answering that one" in ChatPrompts.system())
+    }
+
+    @Test
+    fun `a reply to a message the window no longer holds is quoted from the archive`() {
+        val old = ChatMessage("old", Speaker.Felix, "The essay's plan is due Friday.", now - 90 * 86_400_000L, kind = MessageKind.SlotStart)
+        val asked = listOf(ChatMessage("q", Speaker.You, "is that still Friday?", now, replyTo = "old"))
+        assertFalse("Replying to" in ChatPrompts.turns(asked, "", emptyMap(), LONDON).single().second)
+        val newest = ChatPrompts.turns(asked, "", emptyMap(), LONDON, quoted = listOf(old)).single().second
+        assertTrue(newest.endsWith("(Replying to your message: “The essay's plan is due Friday.”)\nis that still Friday?"), newest)
+    }
+
+    @Test
+    fun `a reply to the message just before it isn't quoted, and the app's words in his name are said as such`() {
+        val asked = listOf(
+            ChatMessage("ci", Speaker.Felix, "How was the week, 1 to 5?", now - 60_000L, kind = MessageKind.CheckIn, byApp = true),
+            ChatMessage("y", Speaker.You, "what's the review for?", now, replyTo = "ci"),
+        )
+        val newest = ChatPrompts.turns(asked, "", emptyMap(), LONDON).single().second
+        assertFalse("Replying to" in newest, newest)
+        assertTrue("(The app wrote to them for you: “How was the week, 1 to 5?”)" in newest, newest)
+        val later = listOf(
+            ChatMessage("q", Speaker.You, "what's left?", now - 120_000L, answeredAt = now - 100_000L),
+            ChatMessage("a", Speaker.Felix, "Just the worksheet.", now - 100_000L),
+            ChatMessage("m", Speaker.Felix, "Today: 1 thing, 30 min", now - 60_000L, kind = MessageKind.Morning, byApp = true),
+            ChatMessage("y2", Speaker.You, "ok", now, replyTo = "m"),
+        )
+        val turns = ChatPrompts.turns(later, "", emptyMap(), LONDON)
+        assertEquals("Just the worksheet.\n\n(the app wrote this for you) Today: 1 thing, 30 min", turns[1].second)
+        assertFalse("Replying to" in turns.last().second)
     }
 
     @Test
@@ -599,16 +649,16 @@ class ChatTest {
         // Seven exchanges with him, and between them a busy evening of nudges, a silent one among them.
         repeat(7) { i ->
             messages += ChatMessage("q$i", Speaker.You, "question $i", next(), answeredAt = at + 30_000L)
-            messages += ChatMessage("a$i", Speaker.Claude, "answer $i", next())
-            messages += ChatMessage("n$i", Speaker.Claude, "nudge $i", next(), kind = MessageKind.SlotStart)
+            messages += ChatMessage("a$i", Speaker.Felix, "answer $i", next())
+            messages += ChatMessage("n$i", Speaker.Felix, "nudge $i", next(), kind = MessageKind.SlotStart)
         }
-        messages += ChatMessage("silent", Speaker.Claude, "", next(), kind = MessageKind.SlotEnd)
+        messages += ChatMessage("silent", Speaker.Felix, "", next(), kind = MessageKind.SlotEnd)
         // A check-in's question answered with no call: your answer goes with it, not as the conversation's.
-        messages += ChatMessage("ci", Speaker.Claude, "How was the week, 1 to 5?", next(), kind = MessageKind.CheckIn, byApp = true, answeredAt = at + 30_000L)
+        messages += ChatMessage("ci", Speaker.Felix, "How was the week, 1 to 5?", next(), kind = MessageKind.CheckIn, byApp = true, answeredAt = at + 30_000L)
         messages += ChatMessage("ci-r", Speaker.You, "4", next(), replyTo = "ci", answeredAt = at)
         // A reply to a nudge he answered is the conversation's.
         messages += ChatMessage("r6", Speaker.You, "give me 10", next(), replyTo = "n6", answeredAt = at + 30_000L)
-        messages += ChatMessage("ra6", Speaker.Claude, "fine, 10 then", next())
+        messages += ChatMessage("ra6", Speaker.Felix, "fine, 10 then", next())
         messages += ChatMessage("new", Speaker.You, "what's left tonight?", next())
         val sent = ChatPrompts.history(messages).map { it.id }
         // The conversation's last twelve: from the second exchange's answer on, the reply he answered and its answer, and yours now.
@@ -624,10 +674,25 @@ class ChatTest {
     }
 
     @Test
+    fun `yours still waiting, a reply to an older nudge among them, go with the conversation, as they're what's answered`() {
+        var at = now - 3_600_000L
+        fun next() = (at + 60_000L).also { at = it }
+        val messages = listOf(
+            ChatMessage("n0", Speaker.Felix, "nudge 0", next(), kind = MessageKind.SlotStart),
+            ChatMessage("n1", Speaker.Felix, "nudge 1", next(), kind = MessageKind.SlotEnd),
+            ChatMessage("n2", Speaker.Felix, "nudge 2", next(), kind = MessageKind.SlotStart),
+            // Yours to the oldest nudge, then another sent while he answered it: both wait for his answer.
+            ChatMessage("r0", Speaker.You, "can that one move?", next(), replyTo = "n0"),
+            ChatMessage("new", Speaker.You, "to tomorrow, I mean", next()),
+        )
+        assertEquals(listOf("n1", "n2", "r0", "new"), ChatPrompts.history(messages).map { it.id })
+    }
+
+    @Test
     fun `with fewer than twelve said, everything with words is sent`() {
         val messages = listOf(
-            ChatMessage("n", Speaker.Claude, "the essay plan's up at 17:00", now - 120_000L, kind = MessageKind.Morning),
-            ChatMessage("s", Speaker.Claude, "", now - 90_000L, kind = MessageKind.SlotStart),
+            ChatMessage("n", Speaker.Felix, "the essay plan's up at 17:00", now - 120_000L, kind = MessageKind.Morning),
+            ChatMessage("s", Speaker.Felix, "", now - 90_000L, kind = MessageKind.SlotStart),
             ChatMessage("y", Speaker.You, "and after it?", now),
         )
         assertEquals(listOf("n", "y"), ChatPrompts.history(messages).map { it.id })

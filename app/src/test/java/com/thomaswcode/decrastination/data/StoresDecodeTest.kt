@@ -237,7 +237,7 @@ class StoresDecodeTest {
     fun `the chat now holds every message of his, of every kind there was a record of, your replies under them, his state and its earlier messages`() {
         val chat = read(store("chat.json"), now).first as ChatState
         assertEquals(Speaker.You, chat.unanswered?.from)
-        val his = chat.messages.filter { it.from == Speaker.Claude }
+        val his = chat.messages.filter { it.from == Speaker.Felix }
         assertEquals(FelixPrompts.Reason.entries.map { it.name }.filter { it != FelixPrompts.Reason.Reply.name }.toSet() + MessageKind.Chat.name, his.map { it.kind.name }.toSet())
         assertTrue(chat.messages.count { it.from == Speaker.You && it.replyTo != null } >= 4)
         assertTrue(chat.felix.checkInDraft != null && chat.felix.assessLater.isNotEmpty() && chat.readAt > 0)

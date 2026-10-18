@@ -2,6 +2,7 @@ package com.thomaswcode.decrastination.core
 
 import com.thomaswcode.decrastination.data.AssessLater
 import com.thomaswcode.decrastination.data.FelixState
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 /**
@@ -29,8 +30,14 @@ data class ChatState(
     val unanswered: ChatMessage? get() = messages.lastOrNull { it.from == Speaker.You && it.answeredAt == null }
 }
 
+/** Who wrote a message: you, or Felix (the model writing as him), stored as "Claude", his name till 4.0.1. */
 @Serializable
-enum class Speaker { You, Claude }
+enum class Speaker {
+    You,
+
+    @SerialName("Claude")
+    Felix,
+}
 
 /**
  * Why a message was written (docs/plan_v4/05-the-chat.md §1): [Chat] for yours and his answers to you;
@@ -53,7 +60,7 @@ data class ChatMessage(
     val kind: MessageKind = MessageKind.Chat,
     /** His, in the app's own words, with no call made (a check-in's question, the morning's list, a calendar event's question). */
     val byApp: Boolean = false,
-    /** The message this one answers: a reply from his notification, or one of his chips. */
+    /** The message this one answers: a reply from his notification, one of his chips, or a swipe or Reply on a message in the chat. */
     val replyTo: String? = null,
     /** His, about a piece of the plan: its key (PL-13). */
     val pieceKey: String? = null,
@@ -114,7 +121,7 @@ object ChatHistory {
     const val REPLY_WITHIN_MS = 10 * 60_000L
 
     /** His own messages in [messages], written unasked (not his answers to you), as they were kept on record. */
-    fun his(messages: List<ChatMessage>): List<ChatMessage> = messages.filter { it.from == Speaker.Claude && it.kind != MessageKind.Chat }
+    fun his(messages: List<ChatMessage>): List<ChatMessage> = messages.filter { it.from == Speaker.Felix && it.kind != MessageKind.Chat }
 
     /**
      * Your reply to [message], his, in [messages]: the message of yours that says it answers it
@@ -124,7 +131,7 @@ object ChatHistory {
     fun replyOf(message: ChatMessage, messages: List<ChatMessage>): ChatMessage? {
         messages.firstOrNull { it.from == Speaker.You && it.replyTo == message.id }?.let { return it }
         val next = messages.filter { it.from == Speaker.You && it.replyTo == null && it.at > message.at && it.at - message.at <= REPLY_WITHIN_MS }.minByOrNull { it.at } ?: return null
-        val lastOfHis = messages.filter { it.from == Speaker.Claude && it.text.isNotBlank() && it.at <= next.at }.maxByOrNull { it.at }
+        val lastOfHis = messages.filter { it.from == Speaker.Felix && it.text.isNotBlank() && it.at <= next.at }.maxByOrNull { it.at }
         return next.takeIf { lastOfHis?.id == message.id }
     }
 }

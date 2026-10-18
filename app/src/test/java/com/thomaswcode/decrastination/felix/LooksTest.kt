@@ -54,7 +54,7 @@ class LooksTest {
         felix.answers("""{"message":"Ten minutes in: started the worksheet?","replies":["Yes","Not yet"],"nextCheckMin":15,"memories":[]}""")
         felix.looks.check()
         val message = stores.chat.value.messages.single()
-        assertEquals(Speaker.Claude to MessageKind.SlotStart, message.from to message.kind)
+        assertEquals(Speaker.Felix to MessageKind.SlotStart, message.from to message.kind)
         assertEquals("teams:sheet" to key, message.about.taskId to message.pieceKey)
         assertEquals("Forces worksheet", message.about.taskTitle)
         assertEquals("Ten minutes in: started the worksheet?" to listOf("Yes", "Not yet"), message.text to message.suggestedReplies)
