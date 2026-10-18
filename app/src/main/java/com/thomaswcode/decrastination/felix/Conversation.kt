@@ -394,7 +394,10 @@ class Conversation(
      */
     private suspend fun routed(message: ChatMessage, words: String): Boolean {
         val now = clock.now()
-        when (val route = Replies.route(message, words, checkInUnderWay = chat.value.felix.checkInDraft != null)) {
+        // A check-in's question takes its answer only while it's the one the check-in under way asked last:
+        // one from a week long gone, scrolled back to in the archive, is a turn of the chat.
+        val checkIn = chat.value.felix.checkInDraft != null && message.id == chat.value.messages.lastOrNull { it.from == Speaker.Felix && it.kind == MessageKind.CheckIn }?.id
+        when (val route = Replies.route(message, words, checkInUnderWay = checkIn)) {
             // An answer to a check-in question (LR-02): the next asked, or the check-in kept.
             Replies.Route.CheckIn -> return checkInReply(message, words)
             // A reading's question's answer (AI-10), or one of the three to how work went (LR-05): on them, and that's all.
@@ -468,12 +471,15 @@ class Conversation(
             // with it, not looked up or asked for again.
             val before = gathered?.takeIf { it.id == waiting.id }
             var read = tasksOf(before?.read.orEmpty())
-            val called = ask(before?.found, read)
-            // Let go while it ran (AC-08): the message says so already, and the answer goes unused.
-            if (letGo == waiting.id) {
-                letGo = null
-                return@withLock
+            // Let go while it ran (AC-08: the message says so already), or another of yours sent meanwhile, to be
+            // answered with it (D-98): the answer goes unused, and nothing more is looked up or read for it.
+            fun unwanted(): Boolean {
+                val gone = letGo == waiting.id || chat.value.unanswered?.id != waiting.id
+                if (letGo == waiting.id) letGo = null
+                return gone
             }
+            val called = ask(before?.found, read)
+            if (unwanted()) return@withLock
             val result = when (called) {
                 is Called.Held -> return@call gateway.because(called.hold)
                 is Called.Failed -> {
@@ -508,10 +514,7 @@ class Conversation(
                             sentAt.value = null
                         }
                     }
-                    if (letGo == waiting.id) {
-                        letGo = null
-                        return@withLock
-                    }
+                    if (unwanted()) return@withLock
                     val what = (search as? Called.Answered)?.value?.found
                     if (what == null) {
                         if (search is Called.Failed) Log.w(AppGraph.TAG, "Felix's web search failed", search.error)
@@ -537,10 +540,7 @@ class Conversation(
                 if (!looks && !reads) break
                 gathered = Gathered(waiting.id, found, tried, read.map { it.id })
                 val again = ask(found, read)
-                if (letGo == waiting.id) {
-                    letGo = null
-                    return@withLock
-                }
+                if (unwanted()) return@withLock
                 val second = when (again) {
                     is Called.Held -> return@call gateway.because(again.hold)
                     is Called.Failed -> {
@@ -820,9 +820,18 @@ class Conversation(
         Asked.Turn -> true.also { ports.answerLater() }
     }
 
-    /** Your message still waiting for Claude taken back, unanswered. */
+    /**
+     * Your message still waiting for Claude taken back, unanswered. One of yours before it that waited with
+     * it (only the newest says why: [send]) says why it waits now, as that one did, with its Try again.
+     */
     suspend fun withdrawQuestion() {
-        chat.update { s -> s.unanswered?.let { w -> s.copy(messages = s.messages.filterNot { it.id == w.id }) } ?: s }
+        chat.update { s ->
+            s.unanswered?.let { w ->
+                val rest = s.messages.filterNot { it.id == w.id }
+                val before = rest.lastOrNull { it.from == Speaker.You && it.answeredAt == null }?.id
+                s.copy(messages = rest.map { if (it.id == before) it.copy(note = w.note, stuck = w.stuck) else it })
+            } ?: s
+        }
     }
 
     /** The chat cleared, its earlier messages with it. What its cards made (your tasks, changes in use) stays, and so does his state. */
