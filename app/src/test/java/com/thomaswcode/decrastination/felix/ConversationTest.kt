@@ -242,6 +242,19 @@ class ConversationTest {
     }
 
     @Test
+    fun `how work went, handed over again after a stop, is asked once`() = runBlocking {
+        val ask = AssessLater("teams:sheet", "Forces worksheet", now - 3_600_000L)
+        // Kept with Claude on; then, Claude off, the completions handed over again (twice) and the kept ones asked.
+        conversation.askHowItWent(listOf(ask))
+        stores.settings.update { it.copy(aiEnabled = false) }
+        conversation.askHowItWent(listOf(ask))
+        conversation.askHowItWent(listOf(ask))
+        conversation.askKept()
+        assertEquals(listOf(listOf(ask)), his().filter { it.kind == MessageKind.Completions }.map { it.asks })
+        assertTrue(stores.chat.value.felix.assessLater.isEmpty())
+    }
+
+    @Test
     fun `the week's review and its summary are his messages, each with its button`() = runBlocking {
         conversation.reviewed("Nothing to change this week: the estimates held.")
         conversation.summaryReady("2026-10-12")
@@ -339,6 +352,49 @@ class ConversationTest {
         // He's sent the conversation's last twelve: the first two weren't in it, and still wait.
         assertEquals((1..14).map { it > 2 }, mine.map { it.answeredAt != null })
         assertEquals("question 2", stores.chat.value.unanswered?.text)
+    }
+
+    @Test
+    fun `a message sent while he answers lets go what that answer would still look up, with no call for it`() = runBlocking {
+        // His answer to the first comes late and asks to look something up: the second is sent meanwhile.
+        val looks = felix.chatAnswer("Let me check when it opens.").replace("\"research\":\"\"", "\"research\":\"When does the science museum open on Saturdays?\"")
+        felix.answers(looks, delayMs = 1_000)
+        felix.answers(felix.chatAnswer("It opens at 10:00; moved the physics to 8."))
+        assertTrue(conversation.ask("when does the museum open?"))
+        withTimeout(5_000) { while (conversation.answeringSince.value == null) delay(10) }
+        assertTrue(conversation.ask("and move the physics to 8"))
+        felix.settle()
+        // No search for the answer let go: his one answer, to both, the only other call.
+        assertEquals(2, felix.server.requestCount)
+        assertEquals("It opens at 10:00; moved the physics to 8.", his().last().text)
+    }
+
+    @Test
+    fun `a check-in question from a week long gone, scrolled back to in the archive, is a turn of the chat while this week's is asked`() = runBlocking {
+        stores.settings.update { it.copy(aiEnabled = false) }
+        val old = ChatMessage("c0", Speaker.Felix, FelixWords.CHECK_IN[0], now - 70 * 86_400_000L, kind = MessageKind.CheckIn, byApp = true)
+        felix.stores.chatArchive.update { it.copy(messages = listOf(old)) }
+        conversation.remindCheckIn()
+        val draft = stores.chat.value.felix.checkInDraft
+        assertNotNull(draft)
+        assertEquals(Conversation.Asked.Turn, conversation.send("3", replyTo = "c0"))
+        felix.settle()
+        // This week's is where it was, its question still waiting for its answer.
+        assertEquals(draft, stores.chat.value.felix.checkInDraft)
+        assertNull(his().last { it.kind == MessageKind.CheckIn }.answeredAt)
+    }
+
+    @Test
+    fun `taken back, the newest of yours waiting leaves the one before it saying why it waits`() = runBlocking {
+        stores.settings.update { it.copy(aiEnabled = false) }
+        assertTrue(conversation.ask("What's due tomorrow?"))
+        felix.settle()
+        assertTrue(conversation.ask("And on Friday?"))
+        felix.settle()
+        val why = stores.chat.value.unanswered?.note
+        assertNotNull(why)
+        conversation.withdrawQuestion()
+        assertEquals("What's due tomorrow?" to why, stores.chat.value.unanswered?.let { it.text to it.note })
     }
 
     @Test
