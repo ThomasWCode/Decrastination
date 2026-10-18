@@ -138,6 +138,32 @@ class ChatScreenStateTest {
     }
 
     @Test
+    fun `his question still waiting, his last message, is offered to the box, unless you chose another or turned it down`() {
+        val screen = ChatScreenState()
+        val question = ChatMessage("q", Speaker.Felix, "What did you avoid, and why?", 1, kind = MessageKind.CheckIn, byApp = true)
+        // Offered while the check-in's under way; its thanks after it isn't a question.
+        screen.offer(question, checkInUnderWay = true)
+        assertEquals("q", screen.replyingTo?.id)
+        screen.offer(question.copy(id = "thanks", text = "Thanks: the week's review comes next."), checkInUnderWay = false)
+        assertNull(screen.replyingTo)
+        // A message you chose stays chosen.
+        screen.replyTo(his("n", "2026-10-18T17:00"))
+        screen.offer(question, checkInUnderWay = true)
+        assertEquals("n", screen.replyingTo?.id)
+        // Turned down with its ✕: not offered again, but the next question is.
+        screen.sent()
+        screen.offer(question, checkInUnderWay = true)
+        screen.notReplying()
+        screen.offer(question, checkInUnderWay = true)
+        assertNull(screen.replyingTo)
+        screen.offer(question.copy(id = "q2"), checkInUnderWay = true)
+        assertEquals("q2", screen.replyingTo?.id)
+        // Answered: let go.
+        screen.offer(question.copy(id = "q2", answeredAt = 5), checkInUnderWay = true)
+        assertNull(screen.replyingTo)
+    }
+
+    @Test
     fun `a day's line says today, yesterday, or its date, with its year where it isn't this one`() {
         val today = LocalDate.of(2026, 10, 18)
         assertEquals("Today", ChatScreenState.dayLine(today, today))
