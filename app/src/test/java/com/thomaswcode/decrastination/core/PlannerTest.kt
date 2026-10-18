@@ -789,6 +789,30 @@ class PlannerTest {
     }
 
     @Test
+    fun `a piece under way that today would have anyway keeps its own reason, not kept`() {
+        // Today's evening is the roomiest of the days to Thursday, so it's today's whatever: most room, as before.
+        val short = listOf(DayWindow(1005, 1035, WindowKind.Evening))
+        val week = mapOf(tuesday to schoolDay, tuesday.plusDays(1) to short, tuesday.plusDays(2) to short)
+        val tasks = listOf(task("hw", Fixtures.at("2026-10-15T23:59"), effort = 30))
+        val first = Planner.plan(windowed(tasks, "2026-10-13T16:30", windows = week)).todaySlots
+        val starts = first.associate { it.chunk!!.key to it.start }
+        val later = Planner.plan(windowed(tasks, "2026-10-13T16:50", windows = week).copy(previousSlots = starts))
+        assertEquals(Why.MostRoom, later.todaySlots.single().chunk!!.why)
+    }
+
+    @Test
+    fun `two kept pieces of undated work, the first under way, both stay today`() {
+        // Seen today, its soft week ahead: alone its pieces go later; kept at 21:15 (under way at 21:20) and 21:45, both stay.
+        val tasks = listOf(task("u", null, effort = 60, firstSeen = Fixtures.at("2026-10-13T12:00"), steps = listOf(SubStep("a", 30), SubStep("b", 30))))
+        val week = (0L..6L).associate { tuesday.plusDays(it) to schoolDay }
+        val keys = Planner.plan(windowed(tasks, "2026-10-13T21:20", windows = week)).buckets.flatMap { it.chunks }.map { it.key }
+        assertEquals(2, keys.size)
+        val kept = mapOf(keys[0] to Fixtures.at("2026-10-13T21:15"), keys[1] to Fixtures.at("2026-10-13T21:45"))
+        val later = Planner.plan(windowed(tasks, "2026-10-13T21:20", windows = week).copy(previousSlots = kept))
+        assertEquals(keys, later.todayBucket!!.chunks.map { it.key })
+    }
+
+    @Test
     fun `undated work kept today stays today rather than going back to its soft week`() {
         // Undated work goes as late as its soft week allows; one whose slot today has begun stays today.
         // Seen today: its soft week is ahead of it.
