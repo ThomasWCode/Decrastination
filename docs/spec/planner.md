@@ -116,7 +116,7 @@ Work due by today goes on the first day it can (`placeNow`): today, unless a per
 2. In order: never before the piece before it, and never on a day past which the pieces after it can't follow.
 3. Over a window of a week or more, within a week of the piece before, where a day in that week has room (the minimum touch), so a far task moves on every week.
 4. Revision, or work for a test Claude read (`Enrichment.testDate`), a day after the piece before, where a later day has room (spaced practice).
-5. A task in one piece goes to the day with most room, the earlier of two.
+5. A task in one piece goes to the day with most room, the earlier of two. A piece the last plan kept today stays today, dated or undated, where it fits or its slot is already under way (`Planner.keptToday`, PL-13).
 6. A day without room passes its piece to the nearest that has some, earlier first.
 7. A task its window can't hold in order is placed backwards from its last usable day instead (`placeBack`).
 
@@ -163,7 +163,7 @@ Told to Felix or as an instruction, or made by moving a piece on Day or in the c
 
 Each piece carries its reason (`Chunk.why`), set as it's placed, and its sheet says it in a sentence (`Chunk.whyLine`):
 - due today or tomorrow; overdue, naming its deadline's day; spread over the days to its deadline; kept within a week of its last piece; a day apart from the last revision piece; the day with most room;
-- undated, filling spare time this week; packed as late as its days allow; where you put it; moved when its time passed (PL-13); couldn't fit before its deadline.
+- undated, filling spare time this week; packed as late as its days allow; where you put it; moved when its time passed (PL-13); kept where today's slot had it, where keeping it changed its day (PL-13); couldn't fit before its deadline.
 
 Behind with no room before the deadline itself, a piece says it couldn't fit, but overdue and undated work keep their own reason; behind only the safety margin, it keeps the reason that placed it.
 The plan Felix reads has each as a short code (`[why: spread]`).
