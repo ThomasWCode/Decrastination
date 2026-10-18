@@ -158,7 +158,7 @@ class CommandActivity : Activity() {
             "anki-counts" -> logAnkiCounts()
             // The plan's next seven days: each day's minutes, its slots and what has none (phase 3).
             "plan" -> {
-                val plan = graph.plan()
+                val plan = graph.planning.plan()
                 val zone = graph.clock.zone()
                 fun hm(time: Long) = java.time.Instant.ofEpochMilli(time).atZone(zone).toLocalTime().toString()
                 for (bucket in plan.buckets.take(7)) {

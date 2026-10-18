@@ -94,7 +94,7 @@ class BlockedActivity : ComponentActivity() {
                 value = graph.clock.now()
             }
         }
-        val plan = remember(tasks, settings, now / 60_000) { graph.plan(tasks, settings, now) }
+        val plan = remember(tasks, settings, now / 60_000) { graph.planning.plan(tasks, settings, now) }
         val verdict = remember(tasks, settings, runtime, now / 10_000) { graph.focus.verdict(now) }
         val zone = graph.clock.zone()
         var message by remember { mutableStateOf<String?>(null) }

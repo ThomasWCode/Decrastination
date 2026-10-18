@@ -3,15 +3,21 @@ package com.thomaswcode.decrastination.core
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.Fixtures.LONDON
 import com.thomaswcode.decrastination.data.ActivityLog
+import com.thomaswcode.decrastination.data.JsonStore
+import com.thomaswcode.decrastination.data.RuntimeState
 import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.data.SlotOutcome
 import com.thomaswcode.decrastination.data.SlotRecord
 import com.thomaswcode.decrastination.data.TaskState
-import com.thomaswcode.decrastination.learn.Days
+import com.thomaswcode.decrastination.enrich.KeyProblem
+import com.thomaswcode.decrastination.enrich.ModelGateway
+import com.thomaswcode.decrastination.learn.EventJudge
+import com.thomaswcode.decrastination.plan.Planning
 import com.thomaswcode.decrastination.sources.powerplanner.PpClass
 import com.thomaswcode.decrastination.sources.powerplanner.PpSchedule
 import com.thomaswcode.decrastination.sources.powerplanner.Timetable
 import java.io.File
+import java.nio.file.Files
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -19,6 +25,10 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlin.test.Test
 import kotlin.test.fail
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.serialization.KSerializer
 
 /**
  * A fixed state planned, as text, against `fixtures/snapshots/plan.txt` (docs/plan_v4, Stage 0): tasks
@@ -116,29 +126,35 @@ class PlanSnapshotTest {
     )
     private val slots = SlotState("2026-10-19", previous = mapOf("teams:sheet#0" to at("2026-10-19T17:10")), missed = listOf(MissedSlot("teams:late#-1#1", "teams:late", at("2026-10-19T11:30"))))
 
-    /** The plan as the app makes it (`AppGraph.plan()`): each task with its instructions laid, today's windows, the record's minutes. */
+    /** The plan as the app makes it ([Planning.plan]), from temporary stores holding the fixed state, and the calendar as last read. */
     private fun plan(): Plan {
-        val zone = LONDON
-        val state = state()
-        val applied = InstructionState(instructions()).applied
-        val today = Instant.ofEpochMilli(now).atZone(zone).toLocalDate()
-        val reach = today.plusDays(90)
-        val overrides = Instructions.taskOverrides(applied)
-        val tasks = state.tasks.map { task ->
-            val o = overrides[task.id] ?: TaskOverrides.NONE
-            if (o == task.overrides()) task else task.withOverrides(o)
-        }.let(Duplicates::linksPresent).let(Duplicates::credited)
-        val days = generateSequence(today) { it.plusDays(1) }.takeWhile { it <= reach }.toList()
-        val windows = days.associateWith { SchoolDays.windows(it, settings, state.timetable, school) }
-        val dayKinds = days.associateWith { SchoolDays.kindOf(it, school) }
-        return Planner.plan(
-            Planner.Input(
-                tasks = tasks, now = now, zone = zone, settings = settings, calibration = calibration,
-                busy = busy, hardBusy = Instructions.busy(applied, zone, today, reach), dayLoads = dayLoads, dayCaps = Instructions.dayCaps(applied, today, reach),
-                workedTodayMin = Days.workedOn(log, today.toString()).values.sum(), windows = windows, dayKinds = dayKinds,
-                previousSlots = slots.on(today).previous, missedSlots = slots.on(today).missed.map { it.key }.toSet(),
-            ),
+        val dir = Files.createTempDirectory("snapshot").toFile()
+        fun <T> store(name: String, serializer: KSerializer<T>, value: T) = JsonStore(File(dir, name), serializer, { value })
+        val clock = FixedClock(now, LONDON)
+        val settingsStore = store("settings.json", Settings.serializer(), settings)
+        val runtimeStore = store("runtime.json", RuntimeState.serializer(), RuntimeState(calibration = calibration, slots = slots))
+        val tasksStore = store("tasks.json", TaskState.serializer(), state())
+        val scope = CoroutineScope(Dispatchers.Unconfined)
+        val planning = Planning(
+            tasksStore, settingsStore, runtimeStore, store("log.json", ActivityLog.serializer(), log), store("instructions.json", InstructionState.serializer(), InstructionState(instructions())),
+            store("school.json", SchoolCalendar.serializer(), school), clock, scope, ModelGateway(settingsStore, { null }, runtimeStore, tasksStore, clock, NoAlerts, scope) {},
+            calendarTime = { EventJudge.Time(busy, dayLoads, emptyList()) },
+            calendarChanges = emptyFlow<Unit>(),
+            sweep = {},
+            hooks = emptyList(),
+            profile = { error("A plan asks nothing of the profile") },
+            draftAhead = { _, _ -> },
+            onFailure = { throw it },
         )
+        return planning.plan()
+    }
+
+    /** No alerts: there's no key, and nothing's called. */
+    private object NoAlerts : ModelGateway.Alerts {
+        override fun keyProblem(problem: KeyProblem): Boolean = false
+        override fun keyFixed() = Unit
+        override fun dropped(task: TaskItem, why: String): Boolean = false
+        override fun withdrawExcept(standing: Set<String>) = Unit
     }
 
     @Test

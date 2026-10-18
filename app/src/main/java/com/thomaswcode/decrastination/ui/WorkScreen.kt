@@ -78,7 +78,7 @@ fun WorkScreen(graph: AppGraph, activity: Activity, opening: String? = null, onO
     }
     val byId = state.tasks.associateBy { it.id }
     // What the plan leaves out, as the plan has it now.
-    val plan = androidx.compose.runtime.remember(state, settings, now, instructions, calendar) { graph.plan(state, settings, now) }
+    val plan = androidx.compose.runtime.remember(state, settings, now, instructions, calendar) { graph.planning.plan(state, settings, now) }
     val trouble = trouble(state, runtime, now)
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     var said by rememberSaveable { mutableStateOf<String?>(null) }
