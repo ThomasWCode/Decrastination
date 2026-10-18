@@ -97,13 +97,19 @@ object Backups {
      * version reads, or a part from a store newer than this build's. Parts from a store older than
      * [shapes] says (each JSON store's shape by file, [Stores.shapes]) are brought to it first.
      */
-    fun decode(text: String, shapes: Map<String, Shape> = emptyMap()): Backup? {
+    fun decode(text: String, shapes: Map<String, Shape>): Backup? {
         val tree = runCatching { json.parseToJsonElement(text) as? JsonObject }.getOrNull() ?: return null
         val upgraded = upgraded(tree, shapes) ?: return null
         return runCatching { json.decodeFromJsonElement(Backup.serializer(), upgraded) }.getOrNull()?.takeIf { it.app == Backup.APP && it.format <= Backup.FORMAT }
     }
 
-    /** Where each of a backup's parts comes from: its store's file, and its field there (null: the part is the store whole). */
+    /**
+     * Where each of a backup's parts comes from: its store's file, and its field there (null: the part is
+     * the store whole). A store kept in part (tasks.json's own tasks, runtime.json's few fields,
+     * instructions.json's) is migrated as an object holding only those fields, so its migrations must
+     * leave alone what isn't there. `instructions` is the state's applied ones under its `instructions`
+     * field: the same type, so a migration of that field is one of these too.
+     */
     private val PARTS: Map<String, Pair<String, String?>> = mapOf(
         "settings" to ("settings.json" to null), "log" to ("log.json" to null), "school" to ("school.json" to null),
         "memory" to ("memory.json" to null), "chat" to ("chat.json" to null),
