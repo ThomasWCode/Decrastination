@@ -139,7 +139,7 @@ class AskActivity : ComponentActivity() {
     /** What the message being written is about, from the page that opened this one. */
     private val about = mutableStateOf(About())
 
-    /** Words handed in to send (the Calendar's box), or, if one still waits, to go in the box. */
+    /** Words handed in to send (the Calendar's box), or only to go in the box ([sendHanded]). */
     private val handed = mutableStateOf<String?>(null)
 
     /** Whether [handed] is sent, or only put in the box to be changed or sent (*What gives?*, PL-02). */
@@ -249,7 +249,7 @@ class AskActivity : ComponentActivity() {
         val toCheck = instructions.instructions.filter { it.state != InstructionStatus.Applied }.sortedByDescending { it.at }
         val inUse = instructions.applied.reversed()
 
-        // Words handed in: sent, or, while one of yours still waits (or when only to be put there), put in the box.
+        // Words handed in: sent, or, when only to be put there, put in the box.
         val words = handed.value
         LaunchedEffect(words) {
             if (words != null) {
@@ -296,8 +296,12 @@ class AskActivity : ComponentActivity() {
                     Chat(graph, screen, chat.messages, archive.messages, byId, now, zone, claudeOn, onEdit = { m, p -> editing = "$m|$p" })
                     // His replies to offer (UI-06), under his last message: a tap answers it, as a reply to
                     // it from anywhere does (a check-in's answer, an event's, with no call).
-                    val last = chat.messages.lastOrNull { it.from == Speaker.You || it.text.isNotBlank() }?.takeIf { it.from == Speaker.Felix && it.answeredAt == null }
-                    if (last != null && last.suggestedReplies.isNotEmpty() && chat.unanswered == null) {
+                    val latest = chat.messages.lastOrNull { it.from == Speaker.You || it.text.isNotBlank() }
+                    val last = latest?.takeIf { it.from == Speaker.Felix && it.answeredAt == null }
+                    // His question still waiting for its answer, his last message: the box answers it, shown over it (D-98).
+                    val checkIn = chat.felix.checkInDraft != null
+                    LaunchedEffect(latest?.id, latest?.answeredAt, checkIn) { screen.offer(latest, checkIn) }
+                    if (last != null && last.suggestedReplies.isNotEmpty()) {
                         FlowRow(Modifier.fillMaxWidth().padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             last.suggestedReplies.forEach { reply ->
                                 androidx.compose.material3.SuggestionChip(onClick = { graph.scope.launch { graph.conversation.ask(reply, replyTo = last.id) } }, label = { Text(reply) })
@@ -311,20 +315,18 @@ class AskActivity : ComponentActivity() {
                         about = about.value,
                         onForget = { about.value = About() },
                         replyingTo = screen.replyingTo,
-                        onNotReplying = { screen.replyingTo = null },
-                        // Off, it's kept and waits, saying so, till Claude can be asked.
-                        enabled = chat.unanswered == null,
+                        onNotReplying = { screen.notReplying() },
                         now = now,
                         zone = zone,
                     ) {
                         // Kept whatever the screen does meanwhile (Back at once): sent from the app's scope, the
-                        // box cleared at once and filled again only if one of yours still waits.
+                        // box cleared at once and filled again only if it couldn't be.
                         val text = draft
                         val subject = about.value
                         val replying = screen.replyingTo
                         draft = ""
                         about.value = About()
-                        screen.replyingTo = null
+                        screen.sent()
                         graph.scope.launch {
                             if (!graph.conversation.ask(text, subject, replyTo = replying?.id)) {
                                 draft = text
@@ -412,8 +414,8 @@ class AskActivity : ComponentActivity() {
         private const val EXTRA_OPEN_AT = "openAt"
 
         /**
-         * The chat, about [about], with [text] to send (or to put in the box, if one still waits); with
-         * [send] false, only put in the box, to be changed or sent. From his notification, opened at
+         * The chat, about [about], with [text] to send; with [send] false, only put in the box, to be
+         * changed or sent. From his notification, opened at
          * the message [openAt], what the notification held read.
          */
         fun intent(context: Context, about: About = About(), text: String? = null, send: Boolean = true, openAt: String? = null): Intent = Intent(context, AskActivity::class.java)
@@ -475,9 +477,11 @@ private fun ColumnScope.Chat(
         settled = true
         screen.scrolled()
     }
-    // Else at the foot, kept there as the conversation grows (not as earlier pages load over it).
+    // Else at the foot, kept there as the conversation grows (not as earlier pages load over it). Where it
+    // opens at a message, not: read as the list is drawn, as that message's scroll clears it at once.
+    val opening = screen.scrollTo
     LaunchedEffect(shown.lastOrNull()?.id, shown.lastOrNull()?.note, typing) {
-        if (shown.isEmpty() || screen.scrollTo != null) return@LaunchedEffect
+        if (shown.isEmpty() || opening != null) return@LaunchedEffect
         val foot = rows.size + if (typing) 2 else 1
         if (settled) list.animateScrollToItem(foot) else list.scrollToItem(foot)
         settled = true
@@ -526,11 +530,11 @@ private fun ColumnScope.Chat(
                             screen.flashed()
                         }
                     }
-                    SwipeToReply(onReply = { screen.replyingTo = message }) {
+                    SwipeToReply(onReply = { screen.replyTo(message) }) {
                         if (message.from == Speaker.You) {
-                            Yours(graph, message, row.quote, name, flash, now, zone, onQuote = { screen.reveal(it, all, archive) }) { screen.replyingTo = message }
+                            Yours(graph, message, row.quote, name, flash, now, zone, onQuote = { screen.reveal(it, all, archive) }) { screen.replyTo(message) }
                         } else {
-                            Claudes(graph, message, tasks, flash, now, zone, onEdit) { screen.replyingTo = message }
+                            Claudes(graph, message, tasks, flash, now, zone, onEdit) { screen.replyTo(message) }
                         }
                     }
                 }
@@ -983,7 +987,6 @@ private fun InputBar(
     onForget: () -> Unit,
     replyingTo: ChatMessage?,
     onNotReplying: () -> Unit,
-    enabled: Boolean,
     now: Long,
     zone: ZoneId,
     onSend: () -> Unit,
@@ -1036,7 +1039,7 @@ private fun InputBar(
                         Icon(painterResource(R.drawable.ic_mic), contentDescription = "Say it")
                     }
                 }
-                IconButton(enabled = enabled && draft.isNotBlank(), onClick = onSend) {
+                IconButton(enabled = draft.isNotBlank(), onClick = onSend) {
                     Icon(painterResource(R.drawable.ic_send), contentDescription = "Send")
                 }
             }

@@ -338,28 +338,25 @@ class Conversation(
      * entrance for replies (D-98), from the chat, his chips or his notification. A reply to a question of
      * his that's an answer is kept under it with no call ([routed]); anything else is a turn of the
      * chat, kept as message [id] (about what it replies to, where it's about nothing else) and answered
-     * ([answerChat]). Not while one of yours still waits for its answer: false then, and nothing's kept.
-     * Kept, it's shown in his notification under what it answers.
+     * ([answerChat]). One sent while he answers another of yours lets that answer go, paid for and
+     * unused, and he answers both together (D-98). False only with no words. Kept, it's shown in his
+     * notification under what it answers.
      */
     suspend fun ask(text: String, about: About = About(), id: String = UUID.randomUUID().toString(), replyTo: String? = null): Boolean {
         val words = text.trim().take(ChatPrompts.MAX_TEXT)
         if (words.isEmpty()) return false
         val repliedTo = replyTo?.let { r -> chat.value.messages.firstOrNull { it.id == r } }
         if (repliedTo != null && routed(repliedTo, words)) return true
-        var added = false
+        // Yours still waiting go with it, answered together: only the newest says why it waits.
         chat.update { state ->
-            if (state.unanswered != null) {
-                state
-            } else {
-                added = true
-                state.copy(messages = state.messages + ChatMessage(id, Speaker.You, words, clock.now(), about.takeIf { it != About() } ?: repliedTo?.about ?: About(), replyTo = replyTo))
-            }
+            state.copy(
+                messages = state.messages.map { if (it.from == Speaker.You && it.answeredAt == null) it.copy(note = null, stuck = false) else it } +
+                    ChatMessage(id, Speaker.You, words, clock.now(), about.takeIf { it != About() } ?: repliedTo?.about ?: About(), replyTo = replyTo),
+            )
         }
-        if (added) {
-            outbox.delivered()
-            scope.launch { answerChat() }
-        }
-        return added
+        outbox.delivered()
+        scope.launch { answerChat() }
+        return true
     }
 
     /**
@@ -370,7 +367,7 @@ class Conversation(
      */
     private suspend fun routed(message: ChatMessage, words: String): Boolean {
         val now = clock.now()
-        when (val route = Replies.route(message, words)) {
+        when (val route = Replies.route(message, words, checkInUnderWay = chat.value.felix.checkInDraft != null)) {
             // An answer to a check-in question (LR-02): the next asked, or the check-in kept.
             Replies.Route.CheckIn -> return checkInReply(message, words)
             // A reading's question's answer (AI-10), or one of the three to how work went (LR-05): on them, and that's all.
@@ -554,7 +551,8 @@ class Conversation(
                     s
                 } else {
                     kept = true
-                    s.copy(messages = s.messages.map { if (it.id == waiting.id) it.copy(answeredAt = reply.at, note = null) else it } + reply)
+                    // Yours sent before it that waited with it (one sent while he answered: D-98), answered with it.
+                    s.copy(messages = s.messages.map { if (it.id == waiting.id || (it.from == Speaker.You && it.answeredAt == null && it.at <= waiting.at)) it.copy(answeredAt = reply.at, note = null, stuck = false) else it } + reply)
                 }
             }
             // What it remembered (AI-21), with an answer kept only, and said under it with its Undo.
@@ -782,15 +780,10 @@ class Conversation(
     /**
      * Your [text] in reply to his message [id] from his notification (AI-24): asked as any reply is
      * ([ask]). A turn of the chat is answered as work of its own ([FelixPorts.answerLater]), as the
-     * receiver that took the reply is let go once this returns, and the app may go with it. False, and a
-     * line of his says why, when a message of yours is still waiting.
+     * receiver that took the reply is let go once this returns, and the app may go with it.
      */
     suspend fun replyFromNotification(text: String, id: String): Boolean {
-        if (text.isBlank()) return false
-        if (!ask(text, replyTo = id)) {
-            outbox.send(ChatMessage(UUID.randomUUID().toString(), Speaker.Felix, FelixWords.STILL_WAITING, clock.now(), kind = MessageKind.Note, byApp = true), alert = false)
-            return false
-        }
+        if (!ask(text, replyTo = id)) return false
         if (chat.value.unanswered != null) ports.answerLater()
         return true
     }
