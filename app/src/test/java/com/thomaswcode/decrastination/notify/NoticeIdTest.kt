@@ -1,5 +1,6 @@
 package com.thomaswcode.decrastination.notify
 
+import com.thomaswcode.decrastination.felix.FelixNotifications
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -29,6 +30,12 @@ class NoticeIdTest {
         assertFailsWith<IllegalArgumentException> { NoticeId.FelixMessage.code(-1) }
         // Work under way has no tap of its own.
         assertFailsWith<IllegalArgumentException> { NoticeId.Sync.code() }
+    }
+
+    @Test
+    fun `Felix's message has a request code for its tap and each card's button`() {
+        // The tap is code 0, each card's button 1 + its place: more cards than codes would throw as it posts.
+        assertTrue(1 + FelixNotifications.MAX_CARDS <= NoticeId.FelixMessage.codes.count())
     }
 
     @Test
