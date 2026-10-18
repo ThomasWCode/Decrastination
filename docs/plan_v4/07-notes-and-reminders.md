@@ -20,7 +20,7 @@ The store: one file, `felix.json` (`FelixStore(notes, reminders, version = 1)`),
 
 ```text
 reminders: [{ text, date (YYYY-MM-DD or empty), time (HH:MM or empty), taskId (or empty), when: "at" | "slotStart" | "beforeDue", minutesBefore (-1 for none) }]
-notes:     [{ taskId (or empty), text, subject (or empty), source (or empty), titleContains (or empty) }]   // a task, or a scope: one or the other
+notes:     [{ taskId (or empty), text, subject (or empty), className (or empty), source (or empty), titleContains (or empty) }]   // a task, or a scope: one or the other
 actions:   type gains "cancelReminder" (taskId empty, value the reminder's id) and "deleteNote" (value the note's id)
 ```
 
@@ -60,7 +60,7 @@ actions:   type gains "cancelReminder" (taskId empty, value the reminder's id) a
 
 You asked whether he can keep a note that goes beyond one assignment: "tell me to do Ms Peters' assignments on sheets, not in my book". Today that becomes a standing instruction in his memory, and the profile goes to every call (the chat, his slot messages, the readings that write a task's steps, the micro-planner), so he can abide by it in several places at once. Two weak links: no source names a teacher (Teams gives a class code, Power Planner a class id, Gmail a sender), so it works only once you've told him which class she teaches; and the link between the profile's line and the task in front of him is the model's to make each time, so it lands most times, not every time.
 
-A standing note closes both: a note scoped to a class, subject, source or title pattern instead of one task, attached to every matching task by code. `Note.taskId` is optional beside `scope: NoteScope?` (`subject`, `className`, `source`, `titleContains`, each optional; a note has a task or a scope, never both); `Notes.forTask(task, notes)` (pure) gives a task its own notes and every standing one that matches (a subject against the task's class as `classMap` reads it, a class against its code, a source against its source, a word against its title, case ignored); the schema's `notes` gains the three plain strings (no union); the prompt's note item says a note can be for a task or for every task of a class, subject or source; the sheet shows "Note for every chemistry task: …" with its delete; the context, his messages and the micro-planner take them as a per-task note, through `forTask`, so nothing downstream knows the difference. You'd still tell him once which class is hers ("Ms Peters is chemistry" is a fact he keeps). Half a day of Stage 8a.
+A standing note closes both: a note scoped to a class, subject, source or title pattern instead of one task, attached to every matching task by code. `Note.taskId` is optional beside `scope: NoteScope?` (`subject`, `className`, `source`, `titleContains`, each optional; a note has a task or a scope, never both); `Notes.forTask(task, notes, classMap)` (pure; `Settings.classMap` is an input, since a task carries only its source's class code and the subject is what the map makes of it) gives a task its own notes and every standing one that matches (a subject against the task's code through the map, a class against its code, a source against its source, a word against its title, case ignored); the schema's `notes` gains the four plain strings, `subject`, `className`, `source` and `titleContains` (no union); the prompt's note item says a note can be for a task or for every task of a class, subject or source; the sheet shows "Note for every chemistry task: …" with its delete; the context, his messages and the micro-planner take them as a per-task note, through `forTask`, so nothing downstream knows the difference. You'd still tell him once which class is hers ("Ms Peters is chemistry" is a fact he keeps). Half a day of Stage 8a.
 
 ## Pruning
 
@@ -81,7 +81,7 @@ Notes of a task no longer in `tasks.json` go a fortnight after it went (the merg
 - The sheet's model (`TaskSheetModel`): notes listed, added, deleted.
 - The context: reminders and notes listed (`FelixInputsDocTest` regenerated with an example of each).
 - The store in a backup and restored; Reset clears it.
-- Standing notes: `Notes.forTask` by subject, class, source and title; none for a task that matches nothing; a note with both a task and a scope refused by the parse.
+- Standing notes: `Notes.forTask` by subject (through the class map), class code, source and title; none for a task that matches nothing; a subject with no mapping matches nothing; a note with both a task and a scope refused by the parse.
 
 ## Phone check
 
