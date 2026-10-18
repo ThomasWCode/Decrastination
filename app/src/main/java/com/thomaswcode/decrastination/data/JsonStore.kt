@@ -4,6 +4,7 @@ import java.io.File
 import java.nio.file.AccessDeniedException
 import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.Files
+import java.nio.file.Path
 import java.nio.file.StandardCopyOption
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -162,22 +163,7 @@ class JsonStore<T>(
         dir.mkdirs()
         val tmp = File(dir, "${file.name}.tmp")
         tmp.writeText(json.encodeToString(serializer, value))
-        // Windows (the JVM tests on a PC) can refuse the replace for a moment while something else
-        // has the file open (a virus scanner reading what was just written): a few tries more.
-        var tries = 0
-        while (true) {
-            try {
-                try {
-                    Files.move(tmp.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
-                } catch (_: AtomicMoveNotSupportedException) {
-                    Files.move(tmp.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING)
-                }
-                return
-            } catch (refused: AccessDeniedException) {
-                if (++tries >= MOVE_TRIES) throw refused
-                Thread.sleep(MOVE_WAIT_MS * tries)
-            }
-        }
+        moveOver(tmp, file)
     }
 
     /** A file that couldn't be read whole: its name, its copy's (null if even that failed), and whether some of it was kept. */
@@ -212,6 +198,34 @@ class JsonStore<T>(
     companion object {
         private const val MOVE_TRIES = 5
         private const val MOVE_WAIT_MS = 20L
+
+        /**
+         * [tmp] renamed over [file], atomically where the filesystem can, so a crash can't leave half
+         * a file: the stores' writes and the secrets' ([SecretStore]). Windows (the JVM tests on a PC)
+         * can refuse the replace for a moment while something else has the file open (a virus scanner
+         * reading what was just written): a few tries more. [move] is the rename, given in a test.
+         */
+        internal fun moveOver(tmp: File, file: File, move: (Path, Path) -> Unit = ::replace) {
+            var tries = 0
+            while (true) {
+                try {
+                    move(tmp.toPath(), file.toPath())
+                    return
+                } catch (refused: AccessDeniedException) {
+                    if (++tries >= MOVE_TRIES) throw refused
+                    Thread.sleep(MOVE_WAIT_MS * tries)
+                }
+            }
+        }
+
+        /** [from] over [to], atomically where the filesystem can. */
+        private fun replace(from: Path, to: Path) {
+            try {
+                Files.move(from, to, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
+            } catch (_: AtomicMoveNotSupportedException) {
+                Files.move(from, to, StandardCopyOption.REPLACE_EXISTING)
+            }
+        }
 
         /** Copies set aside of each file: the newest so many. */
         const val COPIES_KEPT = 3

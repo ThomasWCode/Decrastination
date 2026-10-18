@@ -5,9 +5,12 @@ import com.thomaswcode.decrastination.sources.powerplanner.PpSchedule
 import com.thomaswcode.decrastination.sources.powerplanner.Timetable
 import kotlinx.coroutines.test.runTest
 import java.io.File
+import java.nio.file.AccessDeniedException
 import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -151,6 +154,28 @@ class StoresTest {
     private object Reverse : SecretCipher {
         override fun encrypt(plain: ByteArray) = plain.reversedArray()
         override fun decrypt(sealed: ByteArray) = sealed.reversedArray()
+    }
+
+    @Test
+    fun `a replace refused for a moment is tried again, and one refused every time says so`() {
+        val file = File(dir, "moved.json").apply { writeText("before") }
+        var refusals = 2
+        JsonStore.moveOver(File(dir, "moved.json.tmp").apply { writeText("after") }, file) { from, to ->
+            if (refusals-- > 0) throw AccessDeniedException(to.toString())
+            Files.move(from, to, StandardCopyOption.REPLACE_EXISTING)
+        }
+        assertEquals("after", file.readText())
+        assertFalse(File(dir, "moved.json.tmp").exists())
+        // Refused every time: the last refusal thrown, after more than one try, the file as it was.
+        var tries = 0
+        assertFailsWith<AccessDeniedException> {
+            JsonStore.moveOver(File(dir, "moved.json.tmp").apply { writeText("later") }, file) { _, to ->
+                tries++
+                throw AccessDeniedException(to.toString())
+            }
+        }
+        assertTrue(tries > 1)
+        assertEquals("after", file.readText())
     }
 
     @Test
