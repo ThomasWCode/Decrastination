@@ -6,7 +6,7 @@ Also how your calendar's events become busy time for the planner (`learn/Calenda
 ## When the plan is made
 
 `PlanWatcher` makes the plan again whenever the tasks, the settings, your instructions, the calendar's busy time, the school calendar, today's slot starts or the calibration change, once they've been quiet 2 seconds (PL-13).
-After each plan: today's slots are saved (`AppGraph.keepSlots`), the slot alarms are set (`SlotAlarms.arm`), the widget is drawn again, and the calendar is written once plans have been quiet 5 seconds.
+After each plan: today's slots are saved (`Planning.keepSlots`), the slot alarms are set (`SlotAlarms.arm`), the widget is drawn again, and the calendar is written once plans have been quiet 5 seconds.
 
 ## The slotter (PL-12)
 
