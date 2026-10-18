@@ -10,7 +10,7 @@ The exact prompts and schemas are the golden copies in [`app/src/test/resources/
 
 | Call | When | Sent | Answer |
 |---|---|---|---|
-| [The chat](#the-chat) | you send a message, or reply to one of his notifications | the chat's prompt, the profile, the conversation, and with your newest message what the app knows, each task's own text and what the message is about, in full | a reply, and what to make: tasks, changes, actions, memories |
+| [The chat](#the-chat) | you send a message, or reply to his notification | the chat's prompt, the profile, the conversation, and with your newest message what the app knows, each task's own text and what the message is about, in full | a reply, and what to make: tasks, changes, actions, memories |
 | [A web search](#a-web-search) | the chat's answer asks to look something up, with searches on | the search's prompt, what to look up, the web search tool | what it found, in words |
 | [His own messages](#his-own-messages) | around today's slots, in the morning, for a question, for the evening's completions | his prompt, the profile, one message saying why and what's on | a message, replies, when to look again, memories |
 
