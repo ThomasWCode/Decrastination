@@ -8,6 +8,7 @@ import com.thomaswcode.decrastination.R
 import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.SchoolDays
 import com.thomaswcode.decrastination.notify.Channels
+import com.thomaswcode.decrastination.notify.NoticeId
 import com.thomaswcode.decrastination.notify.Notify
 import com.thomaswcode.decrastination.ui.Format
 import com.thomaswcode.decrastination.ui.MainActivity
@@ -19,8 +20,6 @@ import com.thomaswcode.decrastination.ui.MainActivity
  * marked done or not.
  */
 object Briefing {
-    private const val ID = 4001
-
     /** How long after the briefing an unlock still brings the morning's Teams sync. */
     private const val MORNING_OFFER_MS = 90 * 60_000L
 
@@ -64,7 +63,7 @@ object Briefing {
     suspend fun run(context: Context) {
         val graph = AppGraph.get(context)
         // What the night held back (LR-07), first thing.
-        runCatching { Notify.postHeld(context) }.onFailure { android.util.Log.w(AppGraph.TAG, "Posting what was held back failed", it) }
+        runCatching { graph.notifier.postHeld() }.onFailure { android.util.Log.w(AppGraph.TAG, "Posting what was held back failed", it) }
         // The calendar read first: woken by its alarm, the app has had no time to read it yet.
         CalendarTime.refresh(context)
         val now = graph.clock.now()
@@ -79,18 +78,17 @@ object Briefing {
         val (title, lines) = summary(plan)
         // Felix's sentence or two on the day in place of the list (LR-04, 16 Oct); the list alone without it.
         if (runCatching { graph.felix.morning(title, now) }.onFailure { android.util.Log.w(AppGraph.TAG, "Felix's morning message failed", it) }.getOrDefault(false)) {
-            Notify.cancel(context, ID)
+            graph.notifier.cancel(NoticeId.Briefing)
             return
         }
-        Notify.post(
-            context,
-            ID,
+        graph.notifier.post(
+            NoticeId.Briefing,
             Notify.builder(context, Channels.BRIEFING)
                 .setSmallIcon(R.drawable.ic_focus)
                 .setContentTitle(title)
                 .setContentText(lines.firstOrNull().orEmpty())
                 .setStyle(NotificationCompat.InboxStyle().also { style -> lines.forEach(style::addLine) })
-                .let { Notify.opening(it, context, ID, Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+                .let { Notify.opening(it, context, NoticeId.Briefing.code(), Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
                 .setAutoCancel(true)
                 .build(),
         )

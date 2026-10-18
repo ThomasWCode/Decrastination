@@ -67,7 +67,6 @@ import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.block.FocusService
 import com.thomaswcode.decrastination.data.Secret
 import com.thomaswcode.decrastination.notify.Channels
-import com.thomaswcode.decrastination.notify.Notify
 import com.thomaswcode.decrastination.ui.AppTheme
 import com.thomaswcode.decrastination.ui.Format
 import com.thomaswcode.decrastination.ui.Group
@@ -222,8 +221,8 @@ fun ProtectionPanel(graph: AppGraph, activity: ComponentActivity) {
                 done = report.onShortcuts.isEmpty() && report.unreadableShortcuts.isEmpty(),
                 detail = ProtectionCheck.shortcutsDetail(report),
             )
-            val notifications = remember(refresh) { Notify.allowed(activity) }
-            val alerts = remember(refresh) { Notify.shown(activity, Channels.PROTECTION) }
+            val notifications = remember(refresh) { AppGraph.get(activity).notifier.allowed() }
+            val alerts = remember(refresh) { AppGraph.get(activity).notifier.shown(Channels.PROTECTION) }
             SetupItem(
                 title = "Notifications",
                 done = alerts,
@@ -304,7 +303,7 @@ fun ProtectionPanel(graph: AppGraph, activity: ComponentActivity) {
                     if (!report.serviceEnabled || !report.accessibilityOn) add("The focus service is off: nothing is blocked till it's on")
                     else if (!report.serviceRunning) add("The focus service is on but has stopped: nothing is blocked till it runs again")
                     if (!report.canRepair) add("Self-repair isn't granted: the service switched off would stay off")
-                    if (!Notify.shown(activity, Channels.PROTECTION)) add("Protection alerts are off: you wouldn't be told if it stopped")
+                    if (!AppGraph.get(activity).notifier.shown(Channels.PROTECTION)) add("Protection alerts are off: you wouldn't be told if it stopped")
                     if (activity.getSystemService(PowerManager::class.java)?.isIgnoringBatteryOptimizations(activity.packageName) != true) add("Battery isn't unrestricted: One UI may stop the app")
                 }
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {

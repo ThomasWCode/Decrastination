@@ -72,7 +72,7 @@ class Felix(private val graph: AppGraph) {
     suspend fun morning(title: String, now: Long = graph.clock.now()): Boolean = writing.withLock {
         val plan = graph.plan(now = now)
         if (plan.todaySlots.none { it.kind == com.thomaswcode.decrastination.core.SlotKind.Work }) return@withLock false
-        if (!com.thomaswcode.decrastination.notify.Notify.shown(graph.app, com.thomaswcode.decrastination.notify.Channels.BRIEFING)) return@withLock false
+        if (!graph.notifier.shown(com.thomaswcode.decrastination.notify.Channels.BRIEFING)) return@withLock false
         val caller = graph.felixCaller() ?: return@withLock false
         val settings = graph.settings.value
         val profile = graph.profile(now)
@@ -101,7 +101,7 @@ class Felix(private val graph: AppGraph) {
     private fun due(now: Long): FelixRules.Trigger? {
         // Claude off, or his messages not to be seen (notifications or his channel off): he has no
         // voice, nothing's asked of the model, and nothing's put on record, so it's all there for later.
-        if (graph.claudeKey() == null || !com.thomaswcode.decrastination.notify.Notify.shown(graph.app, com.thomaswcode.decrastination.notify.Channels.FELIX)) return null
+        if (graph.claudeKey() == null || !graph.notifier.shown(com.thomaswcode.decrastination.notify.Channels.FELIX)) return null
         val settings = graph.settings.value
         val zone = graph.clock.zone()
         val dayStart = graph.focus.today(now).atStartOfDay(zone).toInstant().toEpochMilli()
@@ -263,7 +263,7 @@ class Felix(private val graph: AppGraph) {
         if (at - now > FelixRules.AHEAD_MS) return
         val lastSent = graph.log.value.felix.filter { it.text.isNotBlank() }.maxOfOrNull { it.at }
         if (FelixRules.fits(graph.runtime.value.felix.draft, trigger, now, lastSent)) return
-        if (!com.thomaswcode.decrastination.notify.Notify.shown(graph.app, com.thomaswcode.decrastination.notify.Channels.FELIX) || !graph.modelAvailable()) return
+        if (!graph.notifier.shown(com.thomaswcode.decrastination.notify.Channels.FELIX) || !graph.modelAvailable()) return
         val caller = graph.felixCaller() ?: return
         val answer = (ask(caller, trigger, at, interactive = false) as? AppGraph.Called.Answered)?.value?.answer ?: return
         graph.runtime.update { it.copy(felix = it.felix.copy(draft = com.thomaswcode.decrastination.data.FelixDraft(trigger.reason.name, trigger.key, answer, now))) }

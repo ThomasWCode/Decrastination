@@ -15,6 +15,7 @@ import com.thomaswcode.decrastination.enrich.MemoryTidier
 import com.thomaswcode.decrastination.enrich.MemoryTidy
 import com.thomaswcode.decrastination.enrich.ModelHold
 import com.thomaswcode.decrastination.notify.Channels
+import com.thomaswcode.decrastination.notify.NoticeId
 import com.thomaswcode.decrastination.notify.Notify
 
 /**
@@ -25,8 +26,6 @@ import com.thomaswcode.decrastination.notify.Notify
  * Then what's remembered is tidied, once it's past 70 % of its room (AI-21).
  */
 object Review {
-    private const val ID = 4003
-
     suspend fun run(context: Context, ifDue: Boolean) {
         val graph = AppGraph.get(context)
         val now = graph.clock.now()
@@ -72,15 +71,14 @@ object Review {
         }
         // The week's summary for home (NF-02), after its review: its own call, its failure the review's no matter.
         runCatching { graph.writeSummary(week) }.onFailure { Log.w(AppGraph.TAG, "The week's summary failed", it) }
-        Notify.post(
-            context,
-            ID,
+        graph.notifier.post(
+            NoticeId.Review,
             Notify.builder(context, Channels.WEEKLY)
                 .setSmallIcon(R.drawable.ic_focus)
                 .setContentTitle("This week's review")
                 .setContentText(review.lines.first())
                 .setStyle(NotificationCompat.BigTextStyle().bigText(review.lines.joinToString("\n")))
-                .let { Notify.opening(it, context, ID, Intent(context, CheckInActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+                .let { Notify.opening(it, context, NoticeId.Review.code(), Intent(context, CheckInActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
                 .setAutoCancel(true)
                 .build(),
         )

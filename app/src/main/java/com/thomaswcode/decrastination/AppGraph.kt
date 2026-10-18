@@ -76,6 +76,9 @@ import com.thomaswcode.decrastination.learn.Calibrator
 import com.thomaswcode.decrastination.learn.CalendarTime
 import com.thomaswcode.decrastination.learn.Daily
 import com.thomaswcode.decrastination.net.UrlConnectionHttp
+import com.thomaswcode.decrastination.notify.AndroidTray
+import com.thomaswcode.decrastination.notify.NoticeId
+import com.thomaswcode.decrastination.notify.Notifier
 import com.thomaswcode.decrastination.protect.CodeLock
 import com.thomaswcode.decrastination.protect.SettingsChanges
 import com.thomaswcode.decrastination.protect.Totp
@@ -129,6 +132,9 @@ class AppGraph private constructor(context: Context) {
     val secrets = SecretStore(File(app.filesDir, "secrets.bin"), KeystoreCipher())
     val runtime = JsonStore(File(app.filesDir, "runtime.json"), RuntimeState.serializer(), ::RuntimeState)
     val log = JsonStore(File(app.filesDir, "log.json"), ActivityLog.serializer(), ::ActivityLog)
+
+    /** Every notification the app posts, held and counted by the rules (LR-07): the one place they're posted ([NoticeId] names them). */
+    val notifier = Notifier(AndroidTray(app), runtime, settings, clock, scope)
 
     /** Your instructions about tasks, events and days, and what Claude read them as ([Instructions]). */
     val instructions = JsonStore(File(app.filesDir, "instructions.json"), InstructionState.serializer(), ::InstructionState)
@@ -1314,7 +1320,7 @@ class AppGraph private constructor(context: Context) {
         val now = clock.now()
         val week = com.thomaswcode.decrastination.learn.Daily.checkInWeek(now, clock.zone(), settings.value.checkInMin)
         if (log.value.checkIns.any { it.weekOf == week }) return true
-        if (!com.thomaswcode.decrastination.notify.Notify.shown(app, com.thomaswcode.decrastination.notify.Channels.FELIX)) return false
+        if (!notifier.shown(com.thomaswcode.decrastination.notify.Channels.FELIX)) return false
         // In quiet hours the form's reminder goes instead, held as the routine ones are till the morning.
         if (com.thomaswcode.decrastination.block.BlockPolicy.isQuiet(now, clock.zone(), settings.value)) return false
         val draft = com.thomaswcode.decrastination.learn.CheckInFlow.Draft(week)
@@ -1473,16 +1479,15 @@ class AppGraph private constructor(context: Context) {
         log.update { it.copy(felix = it.felix + record).trimmed(now) }
         // In quiet hours on the week's channel, held with the routine ones till the morning (LR-07).
         val quiet = com.thomaswcode.decrastination.block.BlockPolicy.isQuiet(now, zone, settings.value)
-        com.thomaswcode.decrastination.notify.Notify.post(
-            app,
-            SUMMARY_ID,
+        notifier.post(
+            NoticeId.Summary,
             com.thomaswcode.decrastination.notify.Notify.builder(app, if (quiet) com.thomaswcode.decrastination.notify.Channels.WEEKLY else com.thomaswcode.decrastination.notify.Channels.FELIX)
                 .setSmallIcon(R.drawable.ic_focus)
                 .setContentTitle(settings.value.felixName)
                 .setContentText(SUMMARY_READY)
                 .setStyle(androidx.core.app.NotificationCompat.BigTextStyle().bigText("$SUMMARY_READY\n\n$text"))
                 // Through the Reviews page, which opens the email: a tap held through quiet hours is the app's own.
-                .let { com.thomaswcode.decrastination.notify.Notify.opening(it, app, SUMMARY_ID, android.content.Intent(app, com.thomaswcode.decrastination.ui.ReviewsActivity::class.java).putExtra(com.thomaswcode.decrastination.ui.ReviewsActivity.EXTRA_SEND, week).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) }
+                .let { com.thomaswcode.decrastination.notify.Notify.opening(it, app, NoticeId.Summary.code(), android.content.Intent(app, com.thomaswcode.decrastination.ui.ReviewsActivity::class.java).putExtra(com.thomaswcode.decrastination.ui.ReviewsActivity.EXTRA_SEND, week).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) }
                 .setAutoCancel(true)
                 .build(),
         )
@@ -1491,9 +1496,6 @@ class AppGraph private constructor(context: Context) {
 
     /** Felix's word that the summary's ready (NF-02). */
     private val SUMMARY_READY = "The week's summary is ready; send it?"
-
-    /** The summary's notification. */
-    private val SUMMARY_ID = 4004
 
     /** The most of what a call was about that its record keeps (AC-07). */
     private val MAX_CALL_TITLE = 80

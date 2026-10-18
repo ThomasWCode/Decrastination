@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import androidx.core.app.NotificationCompat
 import androidx.core.app.RemoteInput
+import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.R
 import com.thomaswcode.decrastination.core.Proposal
 import com.thomaswcode.decrastination.ui.AskActivity
@@ -14,7 +15,6 @@ import com.thomaswcode.decrastination.ui.AskActivity
  * One at a time: a newer one takes its place. Tapped, the chat opens, where the thread goes on.
  */
 object FelixNotifications {
-    private const val ID = 4200
     private const val MAX_CARDS = 2
     private const val MAX_CARD_TITLE = 24
 
@@ -53,18 +53,18 @@ object FelixNotifications {
                 if (lines.isEmpty()) NotificationCompat.BigTextStyle().bigText(text)
                 else NotificationCompat.InboxStyle().setBigContentTitle(title ?: name).setSummaryText(text).also { style -> lines.forEach(style::addLine) },
             )
-            .let { Notify.opening(it, context, ID, AskActivity.intent(context).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+            .let { Notify.opening(it, context, NoticeId.FelixMessage.code(), AskActivity.intent(context).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
             .setAutoCancel(true)
             .setOnlyAlertOnce(sent != null)
             // Kept with it, as its buttons are, should the morning's be held back (LR-07).
-            .let { Notify.replying(it, context, "Reply", ID, Intent(context, FelixReplyReceiver::class.java).setAction(ACTION_REPLY).putExtra(EXTRA_ID, id), KEY_REPLY, "Reply to $name", replies) }
+            .let { Notify.replying(it, context, "Reply", NoticeId.FelixMessage.code(), Intent(context, FelixReplyReceiver::class.java).setAction(ACTION_REPLY).putExtra(EXTRA_ID, id), KEY_REPLY, "Reply to $name", replies) }
         sent?.let { builder.setRemoteInputHistory(arrayOf<CharSequence>(it)) }
         cards.take(MAX_CARDS).forEachIndexed { i, (messageId, card) ->
             val label = card.task?.let { "Add “${it.title.take(MAX_CARD_TITLE)}”" } ?: if (card.changes.size == 1) "Apply the change" else "Apply the changes"
-            Notify.button(builder, context, label, ID + 1 + i, Intent(context, FelixReplyReceiver::class.java).setAction(ACTION_CARD).putExtra(EXTRA_MESSAGE, messageId).putExtra(EXTRA_CARD, card.id))
+            Notify.button(builder, context, label, NoticeId.FelixMessage.code(1 + i), Intent(context, FelixReplyReceiver::class.java).setAction(ACTION_CARD).putExtra(EXTRA_MESSAGE, messageId).putExtra(EXTRA_CARD, card.id))
         }
-        Notify.post(context, ID, builder.build())
+        AppGraph.get(context).notifier.post(NoticeId.FelixMessage, builder.build())
     }
 
-    fun cancel(context: Context) = Notify.cancel(context, ID)
+    fun cancel(context: Context) = AppGraph.get(context).notifier.cancel(NoticeId.FelixMessage)
 }
