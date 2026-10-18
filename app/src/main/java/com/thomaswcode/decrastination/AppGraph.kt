@@ -139,7 +139,7 @@ class AppGraph private constructor(context: Context) {
     /** Your chat with Felix: what you said, his answers, and what became of his cards. */
     val chat = stores.chat
 
-    /** The chat before its live window (D-96): read only on scrolling back. */
+    /** The chat before its live window (D-96): kept for you, shown on scrolling back and in the record's export. */
     val chatArchive = stores.chatArchive
 
     /** Days with no school and half-days (PL-16), told to the chat or added in Settings. */

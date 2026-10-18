@@ -355,6 +355,49 @@ class ConversationTest {
     }
 
     @Test
+    fun `a message sent while he answers lets go what that answer would still look up, with no call for it`() = runBlocking {
+        // His answer to the first comes late and asks to look something up: the second is sent meanwhile.
+        val looks = felix.chatAnswer("Let me check when it opens.").replace("\"research\":\"\"", "\"research\":\"When does the science museum open on Saturdays?\"")
+        felix.answers(looks, delayMs = 1_000)
+        felix.answers(felix.chatAnswer("It opens at 10:00; moved the physics to 8."))
+        assertTrue(conversation.ask("when does the museum open?"))
+        withTimeout(5_000) { while (conversation.answeringSince.value == null) delay(10) }
+        assertTrue(conversation.ask("and move the physics to 8"))
+        felix.settle()
+        // No search for the answer let go: his one answer, to both, the only other call.
+        assertEquals(2, felix.server.requestCount)
+        assertEquals("It opens at 10:00; moved the physics to 8.", his().last().text)
+    }
+
+    @Test
+    fun `a check-in question from a week long gone, scrolled back to in the archive, is a turn of the chat while this week's is asked`() = runBlocking {
+        stores.settings.update { it.copy(aiEnabled = false) }
+        val old = ChatMessage("c0", Speaker.Felix, FelixWords.CHECK_IN[0], now - 70 * 86_400_000L, kind = MessageKind.CheckIn, byApp = true)
+        felix.stores.chatArchive.update { it.copy(messages = listOf(old)) }
+        conversation.remindCheckIn()
+        val draft = stores.chat.value.felix.checkInDraft
+        assertNotNull(draft)
+        assertEquals(Conversation.Asked.Turn, conversation.send("3", replyTo = "c0"))
+        felix.settle()
+        // This week's is where it was, its question still waiting for its answer.
+        assertEquals(draft, stores.chat.value.felix.checkInDraft)
+        assertNull(his().last { it.kind == MessageKind.CheckIn }.answeredAt)
+    }
+
+    @Test
+    fun `taken back, the newest of yours waiting leaves the one before it saying why it waits`() = runBlocking {
+        stores.settings.update { it.copy(aiEnabled = false) }
+        assertTrue(conversation.ask("What's due tomorrow?"))
+        felix.settle()
+        assertTrue(conversation.ask("And on Friday?"))
+        felix.settle()
+        val why = stores.chat.value.unanswered?.note
+        assertNotNull(why)
+        conversation.withdrawQuestion()
+        assertEquals("What's due tomorrow?" to why, stores.chat.value.unanswered?.let { it.text to it.note })
+    }
+
+    @Test
     fun `a message sent while he answers lets that answer go, and he answers both together`() = runBlocking {
         // His answer to the first comes late: the second is sent while it's being made.
         felix.answers(felix.chatAnswer("Moved it to 19:00."), delayMs = 1_000)
