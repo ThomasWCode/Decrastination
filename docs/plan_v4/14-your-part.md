@@ -26,7 +26,7 @@ Stage by stage, what each PR needs from your phone and from you, for what and fo
 | 5c | 4.0.2 | **needed**: install; one `chat-ask` that makes a change (paid) | **needed**, 5 min: the chevron, the label sliding out and back, Undo inside the fold, leave and return |
 | 6a | 4.0.3 | **needed**: install; `calendar-written`, `calendar-sync` | no |
 | 6b | 4.0.4 | **needed**: install on a weekend, the phone not in use for an hour; `test-arm`, `test-disarm`, `force-block` | **helpful**: nearby, in case blocking misfires (undone from the PC with `test-disarm`) |
-| 6c | 4.0.5 | **needed**: install; `instruction`, `instructions`, `instruction-discard`, `quick-minutes` (0 takes it back), `own-add`, `own-done`, `own-reopen`, `own-delete` | no |
+| 6c | 4.0.5 | **needed**: install; `instruction`, `instructions`, `instruction-discard`, `instruction-delete` (new in 6c: deletes one applied, as the screen's Delete does), `quick-minutes` (0 takes it back), `own-add`, `own-done`, `own-reopen`, `own-delete` | no |
 | 6d | 4.0.6 | **needed**: install; `sync`, `enrich-task` (paid, cents) | no |
 | 6e | 4.0.7 | **needed**: install; `review` (paid: the review's call and the summary's, cents); the check-in answered from the PC | no |
 | 6f | 4.0.8 | **needed**: install and the script | no |
