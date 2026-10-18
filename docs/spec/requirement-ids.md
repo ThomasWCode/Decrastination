@@ -28,7 +28,7 @@ Grouped by prefix and sorted; where a later decision changed an item, its line g
 - AI-10: When the text can't settle a reading, the model may ask one question; Felix puts it to the student, and the answer is kept with the task, which is read again with it.
 - AI-12: Dates the model sets are soft: only an email's own stated deadline, marked as quoted, can be a real deadline; a date it suggests or guesses is a plan (PL-14).
 - AI-13: The chat is told the time now and whether each of today's slots has gone by, is under way or is to come, so a time later today isn't taken as past.
-- AI-14: The chat's answer carries actions as well as changes (a step ticked or redone, a task shown with Open, renamed, done, reopened or deleted), each made at once and said under the answer with its Undo; a source's task is still done only when its source says so.
+- AI-14: The chat's answer carries actions as well as changes (a step ticked or redone, a task shown with Open, renamed, done, reopened or deleted), each made at once and said under the answer with its Undo, folded behind the answer's chevron till it's opened; a source's task is still done only when its source says so.
 - AI-15: Each of today's and tomorrow's pieces gets a short micro-plan (the first action, the next ones, what done looks like), written ahead and shown on its card, in Felix's messages and on its sheet.
 - AI-16: The photo check is given the task's title, subject, instructions and the steps already done, says what it sees, and judges only the piece in question.
 - AI-17: One photo check takes up to three pages; there is no partial credit.
