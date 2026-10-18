@@ -208,7 +208,7 @@ The design is [05](05-the-chat.md); the stores' change is [04](04-data-and-migra
 
 1. The register paragraph and the three or four exchanges for each prompt (one a vent) written in a scratch file and read by you first; this commit is the text in the two prompt objects and nothing else, so the goldens' diff is the whole change.
 2. `ChatPrompts.system` and `FelixPrompts.system` take the paragraph, the examples and the "just talk" sentence; `Settings.felixLine`'s default (Q29); `GoldenPromptsTest -PupdateGolden=true` for `chat.txt` and `felix.txt`; `FelixInputsDocTest -PupdateDocs=true`.
-3. `FelixWords` reworded in the register (the check-in's five questions and its thanks, the summary's offer, how work went, a calendar event's question, a reminder's verbatim frame; the morning's list-only title, which `Briefing.summary` makes); `Assessment.ANSWERS` and `CheckInFlow.answered` match both forms through `FelixWords.chip`.
+3. `FelixWords` reworded in the register (the check-in's five questions, its asking again and its thanks, the summary's offer, how work went, a calendar event's question, a reminder's verbatim frame; the morning's list-only title, which `Briefing.summary` makes); `Assessment.ANSWERS` and `CheckInFlow.answered` match both forms through `FelixWords.chip`.
 4. `SummaryPrompts.SYSTEM` to the third person (Q25); `summary.txt` regenerated.
 5. `EvalRunTest -PrunEval=true` on both private sets, the rates in the PR beside today's; the register tightened and run again if a change or a date is lost.
 6. `felix.md` §Who he is; `decisions.md`.
