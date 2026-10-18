@@ -764,6 +764,19 @@ class PlannerTest {
     }
 
     @Test
+    fun `work with days to spare stays today while its slot is under way (PL-13)`() {
+        // Tuesday 16:30, one half hour due Thursday night: tonight at 16:45, as nothing else is planned.
+        val tasks = listOf(task("hw", Fixtures.at("2026-10-15T23:59"), effort = 30))
+        val first = Planner.plan(windowed(tasks, "2026-10-13T16:30")).todaySlots
+        fun hm(time: Long) = java.time.Instant.ofEpochMilli(time).atZone(LONDON).toLocalTime().toString()
+        assertEquals(listOf("16:45"), first.map { hm(it.start) })
+        // 16:50, its start kept: under way, it stays where it was, not moved to tomorrow.
+        val starts = first.associate { it.chunk!!.key to it.start }
+        val later = Planner.plan(windowed(tasks, "2026-10-13T16:50").copy(previousSlots = starts)).todaySlots
+        assertEquals(listOf("16:45"), later.map { hm(it.start) })
+    }
+
+    @Test
     fun `a missed slot's piece moves to the next free time, the others staying where they were`() {
         // Tuesday 16:50: three half hours due tomorrow night, at 16:50, 17:25 and 18:00.
         val tasks = listOf("a", "b", "c").map { task(it, Fixtures.at("2026-10-14T23:59"), effort = 30) }
