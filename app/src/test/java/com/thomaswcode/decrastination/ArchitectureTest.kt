@@ -7,7 +7,9 @@ import kotlin.test.assertTrue
 /**
  * The rules of the app's structure that can be checked by reading its code
  * (docs/plan_v4/02-target-architecture.md §The rules), a rule added as each becomes true: only the
- * notifier posts (Stage 1); only the gateway builds a Claude client (Stage 2).
+ * notifier posts (Stage 1); only the gateway builds a Claude client (Stage 2); and the one exception to
+ * "only a store's owner updates it", which holds in full at Stage 12: [com.thomaswcode.decrastination.data.Stores.replace],
+ * for a restore or a reset, called by the backup service alone (Stage 3).
  */
 class ArchitectureTest {
     private val main: File = listOf(File("src/main/java"), File("app/src/main/java")).firstOrNull { it.isDirectory }
@@ -38,5 +40,14 @@ class ArchitectureTest {
         // ModelGateway.build is the one place: the readers take the client they're given.
         val stray = outside(Regex("""\bAnthropicOkHttpClient\b"""), setOf("enrich/ModelGateway.kt"))
         assertTrue(stray.isEmpty(), "A Claude client is built outside enrich/ModelGateway.kt: $stray")
+    }
+
+    @Test
+    fun `only the backup service replaces a store whole`() {
+        // Stores.replace goes round a store's owner: for a backup restored or a reset, and nothing else.
+        val replaces = Regex("""\bstores\.replace\(""")
+        val stray = outside(replaces, setOf("data/BackupService.kt"))
+        assertTrue(stray.isEmpty(), "Stores.replace is called outside data/BackupService.kt: $stray")
+        assertTrue(replaces.containsMatchIn(sources.getValue("data/BackupService.kt")))
     }
 }

@@ -47,7 +47,8 @@
     "outsideBreakMin": 25,
     "outsideTimes": [
         600,
-        900
+        900,
+        1080
     ],
     "photoFromMin": 25,
     "freeAllowanceMin": 45,
