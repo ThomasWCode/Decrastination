@@ -1,6 +1,6 @@
 # Developing Decrastination
 
-How changes are made, checked on the phone and shipped. The owner's product decisions are in [decisions.md](decisions.md); how the app works now is in [spec/](spec/); the restructuring under way is planned in [plan_targeted_cleanup/](plan_targeted_cleanup/README.md).
+How changes are made, checked on the phone and shipped. The owner's product decisions are in [decisions.md](decisions.md); how the app works now is in [spec/](spec/); the next run of work, the restructuring and Felix's changes in one order, is planned in [plan_v4/](plan_v4/README.md).
 
 ## The repository is public
 
@@ -34,6 +34,7 @@ Everything committed is world-readable: code, tests, docs, commit messages, PR d
 - PR title `X.Y.Z: what it does`; the description says what and why, with no attribution lines. Commit messages likewise.
 - Codex reviews: comment `@codex review` on the PR. The bot (`chatgpt-codex-connector[bot]`) reacts 👀 while it reviews, then posts a review whose inline comments carry a P1 or P2 badge, or reacts 👍 when it has nothing. Wait for it in the background (`private/tools/watch_pr.py <repo> <pr> <since> [minutes]`).
 - How many rounds is the owner's call per PR. The standing default: fix the round's findings, then up to two more rounds, stopping as soon as a round returns at most one P2; some PRs get one round only. Never more than three without asking.
+- Claude reviews: on every PR that gets up to three Codex rounds, comment `@claude review` once as well. It answers in one comment, not a comment a finding; handle each point as a Codex finding is handled, then reply to its comment with `Resolved` (the owner's call, 18 Oct; the cleanup plan's Q2 and Q12).
 - Every finding gets fixed (or a reason why not), a reply in its thread naming the fixing commit, and its thread resolved (`private/tools/reply_resolve.py <replies.json>`, which replies and resolves through GraphQL `resolveReviewThread`).
 - Before merging: CI green; any changed schema compiled by the API (`SchemaCompileTest`); the final build installed and checked on the phone; and no `@codex review` comment newer than Codex's last answer (if there is one, wait for that review and handle it first).
 - Merge with a merge commit, subject `Merge #N: <PR title>`, deleting the branch (`gh pr merge N --merge --subject "…" --delete-branch`). Then tag the merge commit `vX.Y.Z` (annotated, its message the PR title) and push the tag.
