@@ -47,10 +47,11 @@ import com.thomaswcode.decrastination.data.Backups
 import com.thomaswcode.decrastination.data.DeviceClock
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.KeystoreCipher
+import com.thomaswcode.decrastination.data.Reset
 import com.thomaswcode.decrastination.data.RuntimeState
 import com.thomaswcode.decrastination.data.Secret
-import com.thomaswcode.decrastination.data.SecretStore
 import com.thomaswcode.decrastination.data.Settings
+import com.thomaswcode.decrastination.data.Stores
 import com.thomaswcode.decrastination.data.TaskState
 import com.thomaswcode.decrastination.enrich.AiUsage
 import com.thomaswcode.decrastination.enrich.AndroidModelAlerts
@@ -123,13 +124,17 @@ class AppGraph private constructor(context: Context) {
     /** Work that outlives the screen or receiver that started it; a failure is logged, not fatal. */
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default + CoroutineExceptionHandler { _, error -> Log.e(TAG, "Background work failed", error) })
 
-    val tasks = JsonStore(File(app.filesDir, "tasks.json"), TaskState.serializer(), ::TaskState)
-    // A file that can't be read at all starts armed while the device admin is on, as only arming
-    // turns it on: a bad file never disarms protection (IMP-P1-003).
-    val settings = JsonStore(File(app.filesDir, "settings.json"), Settings.serializer(), ::Settings, unreadable = { Settings(armed = Watchdog.isAdminActive(app)) })
-    val secrets = SecretStore(File(app.filesDir, "secrets.bin"), KeystoreCipher())
-    val runtime = JsonStore(File(app.filesDir, "runtime.json"), RuntimeState.serializer(), ::RuntimeState)
-    val log = JsonStore(File(app.filesDir, "log.json"), ActivityLog.serializer(), ::ActivityLog)
+    /**
+     * Every store, made first, each with its version and its migrations ([Stores]): a file of an older
+     * shape brought to this one as it's read. A settings file that can't be read at all starts armed
+     * while the device admin is on, as only arming turns it on (IMP-P1-003).
+     */
+    val stores = Stores(app.filesDir, KeystoreCipher(), armedIfUnreadable = { Watchdog.isAdminActive(app) })
+    val tasks = stores.tasks
+    val settings = stores.settings
+    val secrets = stores.secrets
+    val runtime = stores.runtime
+    val log = stores.log
 
     /** Every notification the app posts, held and counted by the rules (LR-07): the one place they're posted ([NoticeId] names them). */
     val notifier = Notifier(AndroidTray(app), runtime, settings, clock, scope)
@@ -138,19 +143,19 @@ class AppGraph private constructor(context: Context) {
     val gateway = ModelGateway(settings, { secrets[Secret.AnthropicApiKey] }, runtime, tasks, clock, AndroidModelAlerts(app), scope) { EnrichWorker.retryAfter(app, it) }
 
     /** Your instructions about tasks, events and days, and what Claude read them as ([Instructions]). */
-    val instructions = JsonStore(File(app.filesDir, "instructions.json"), InstructionState.serializer(), ::InstructionState)
+    val instructions = stores.instructions
 
-    /** Your chat with Claude (2.0.0, Q29): what you said, its answers, and what became of its cards. */
-    val chat = JsonStore(File(app.filesDir, "chat.json"), ChatState.serializer(), ::ChatState)
+    /** Your chat with Felix: what you said, his answers, and what became of his cards. */
+    val chat = stores.chat
 
     /** Days with no school and half-days (PL-16), told to the chat or added in Settings. */
-    val school = JsonStore(File(app.filesDir, "school.json"), SchoolCalendar.serializer(), ::SchoolCalendar)
+    val school = stores.school
 
     /** What Felix remembers (AI-21): facts, and standing instructions. */
-    val memory = JsonStore(File(app.filesDir, "memory.json"), com.thomaswcode.decrastination.core.MemoryState.serializer(), { com.thomaswcode.decrastination.core.MemoryState() })
+    val memory = stores.memory
 
     /** The versions of its events the app has written to calendars, so a copy of one is known ([SlotCalendarDiff.isCopy]). */
-    val calendarVersions = JsonStore(File(app.filesDir, "calendar.json"), com.thomaswcode.decrastination.data.CalendarVersions.serializer(), { com.thomaswcode.decrastination.data.CalendarVersions() })
+    val calendarVersions = stores.calendarVersions
 
     /**
      * Who the student is, as every model call sends it (AI-05): from the settings, the tasks, the
@@ -170,13 +175,13 @@ class AppGraph private constructor(context: Context) {
         // Files that couldn't be read whole at this start: kept for Setup to say, till you've seen them.
         // On record before anything else runs, and only then is a bad file replaced by what was kept
         // of it: a start cut short before then finds it again, and says it (once: its copy is the same).
-        val found = listOfNotNull(tasks.problem, settings.problem, secrets.problem, runtime.problem, log.problem, instructions.problem, chat.problem, school.problem, memory.problem, calendarVersions.problem)
+        val found = stores.problems
         if (found.isNotEmpty()) {
             found.forEach { Log.w(TAG, "${it.file} couldn't be read whole; set aside as ${it.copy}") }
             runBlocking {
                 runCatching {
                     runtime.update { it.withUnreadable(found) }
-                }.onSuccess { listOf(tasks, settings, runtime, log, instructions, chat, school, memory, calendarVersions).forEach { it.keepRecovered() } }
+                }.onSuccess { stores.keepRecovered() }
                     .onFailure { Log.w(TAG, "Couldn't keep what was found unreadable", it) }
             }
         }
@@ -732,6 +737,8 @@ class AppGraph private constructor(context: Context) {
             runCatching { slots.sweep() }.onFailure { Log.w(TAG, "Looking at missed slots failed", it) }
             watcher.start()
         }
+        // The files older shapes came from, a week after their migration, at a start that's got this far.
+        scope.launch(Dispatchers.IO) { runCatching { stores.letGoOfOldShapes() }.onFailure { Log.w(TAG, "Letting go of old shapes failed", it) } }
         // Redraw the widget whenever what it shows may have changed.
         scope.launch {
             combine(tasks.state, settings.state, runtime.state) { _, _, _ -> }.drop(1).debounce(WIDGET_DEBOUNCE_MS).collect {
@@ -1185,16 +1192,6 @@ class AppGraph private constructor(context: Context) {
 
     /** Raised at each reset of the record (LR-08), so a review already out when it came doesn't put back what it took. */
     val resets = java.util.concurrent.atomic.AtomicInteger()
-
-    /** What can be reset (LR-08), and what each takes. */
-    enum class Reset(val title: String, val takes: String) {
-        Stats("Stats", "the record of what got done (slots, completions, days, blocks, the reviews and the check-ins), and what the app learned from it"),
-        Calibration("What the app has learned", "how long your work takes, the margins and how much of each day you use, learned afresh from now"),
-        Memories("What Felix remembers", "his facts about you and how you'd have him behave, and your lines for the profile"),
-        Chat("The chat and Felix's history", "the chat's messages, Felix's messages and what he was waiting to say"),
-        Instructions("Your changes", "every change in use"),
-        Everything("Everything learned", "all of these"),
-    }
 
     /**
      * [what] reset (LR-08), with no parent code, a copy of all the app keeps saved first, as

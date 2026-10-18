@@ -40,6 +40,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.block.Blocklist
 import com.thomaswcode.decrastination.data.JsonStore
+import com.thomaswcode.decrastination.data.Reset
 import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.data.SettingsLimits
 import com.thomaswcode.decrastination.data.Window
@@ -638,11 +639,11 @@ private fun LastCrash(activity: android.app.Activity) {
 @Composable
 private fun ResetPage(graph: AppGraph) {
     val scope = rememberCoroutineScope()
-    var asking by remember { mutableStateOf<AppGraph.Reset?>(null) }
+    var asking by remember { mutableStateOf<Reset?>(null) }
     var said by remember { mutableStateOf<String?>(null) }
     Column {
         Note("A copy of everything the app keeps is saved to Documents/Decrastination before each, to import from Backup.")
-        AppGraph.Reset.entries.forEach { r ->
+        Reset.entries.forEach { r ->
             // The page's margin, as its note has (start only: the button's own padding is its end's).
             Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f).padding(vertical = 6.dp)) {
@@ -655,7 +656,7 @@ private fun ResetPage(graph: AppGraph) {
         said?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.secondary, modifier = Modifier.padding(horizontal = 16.dp)) }
     }
     asking?.let { r ->
-        val changes = if (r == AppGraph.Reset.Instructions || r == AppGraph.Reset.Everything) graph.instructions.value.applied.map { it.text.take(80) } else emptyList()
+        val changes = if (r == Reset.Instructions || r == Reset.Everything) graph.instructions.value.applied.map { it.text.take(80) } else emptyList()
         androidx.compose.material3.AlertDialog(
             onDismissRequest = { asking = null },
             title = { Text("Reset ${r.title.replaceFirstChar(Char::lowercase)}?") },
