@@ -117,7 +117,7 @@ How the app works in detail is in [spec/](spec/); how the work is done is in [de
 
 - **D-79. The repository is public**: real data lives in the git-ignored `private/` and is never committed; the evaluation set stays there, only its harness committed. Nothing personal goes in code, tests, docs or PR text ([development.md](development.md#the-repository-is-public)).
 - **D-80. What's already in the repository may stay** (1.7.0; 17 Oct): the existing fixtures' real teacher and class names, the class group link in an assignment's instructions there (not sensitive), and the real email, appointment and homework text, family references and first name in some code comments, tests, strings and the weekly summary's prompt (`GmailSource`, `Mime`, `PowerPlannerItems`, `WidgetModel`, `AnkiRulesTest`, `Totp` among them), none of it to be cleared. New fixtures are made up, and nothing more personal is added.
-- **D-81. Rewriting the repository's history to remove data is your call**: answered in the cleanup plan's Q8 ([plan_v4/QUESTIONS.md](plan_v4/QUESTIONS.md), C-Q8).
+- **D-81. Rewriting the repository's history to remove data is your call**: answered in the cleanup plan's Q8 on 18 Oct: left as it is.
 
 ## Development
 
