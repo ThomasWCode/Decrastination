@@ -13,6 +13,8 @@ import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.notify.Channels
 import com.thomaswcode.decrastination.notify.Notices
 import com.thomaswcode.decrastination.notify.NotifyRules
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /**
  * Felix's outbox (docs/plan_v4/05-the-chat.md §2): every message in his name is put in the chat first,
@@ -47,13 +49,16 @@ class Outbox(
         notify(now, alertFor)
     }
 
+    /** Held while messages move to the archive, and while the chat's cleared: a move under way can't put back what a clear took. */
+    private val moving = Mutex()
+
     /**
      * What's past the live window and read moved to the archive ([past]): the archive's update first,
      * then the window's trim, so a stop between leaves a copy (dropped by id at the next move), never a hole.
      */
-    suspend fun moveWindow(now: Long) {
+    suspend fun moveWindow(now: Long): Unit = moving.withLock {
         val past = past(chat.value, now)
-        if (past.isEmpty()) return
+        if (past.isEmpty()) return@withLock
         archive.update { a ->
             val there = a.messages.mapTo(HashSet()) { it.id }
             a.copy(messages = a.messages + past.filter { it.id !in there })
@@ -64,9 +69,17 @@ class Outbox(
 
     /** The chat emptied, its archive too ("Clear the chat"): his state stays, and so does what its cards made. */
     suspend fun clear() {
-        chat.update { it.copy(messages = emptyList()) }
-        archive.update { ChatArchive() }
+        moving.withLock {
+            chat.update { it.copy(messages = emptyList()) }
+            archive.update { ChatArchive() }
+        }
         notify(clock.now())
+    }
+
+    /** Message [id] in the archive marked answered at [at] (a question of his answered from there), where it's there and waiting. */
+    suspend fun answeredInArchive(id: String, at: Long) {
+        if (archive.value.messages.none { it.id == id && it.answeredAt == null }) return
+        archive.update { a -> a.copy(messages = a.messages.map { if (it.id == id && it.answeredAt == null) it.copy(answeredAt = at) else it }) }
     }
 
     /** Message [id], from the live window or, past it, the archive (a reply to one scrolled back to). */

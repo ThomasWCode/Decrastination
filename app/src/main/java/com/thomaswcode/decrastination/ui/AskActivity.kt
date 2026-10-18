@@ -111,6 +111,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.R
@@ -164,6 +165,9 @@ class AskActivity : ComponentActivity() {
     /** Opened from his notification just now: what was unread is marked already, as it was before it was read. */
     private var openedAt = false
 
+    /** Whether the Chat tab is the one showing, not Your changes: only then is the chat on screen. */
+    private var chatTab = true
+
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
@@ -174,7 +178,7 @@ class AskActivity : ComponentActivity() {
             take(intent)
         } else {
             about.value = aboutFrom(savedInstanceState)
-            screen.restored(savedInstanceState.getInt(STATE_EARLIER), savedInstanceState.getString(STATE_REPLYING)?.let { graph.conversation.outbox.find(it) })
+            screen.restored(savedInstanceState.getInt(STATE_EARLIER), savedInstanceState.getString(STATE_REPLYING)?.let { graph.conversation.outbox.find(it) }, savedInstanceState.getBoolean(STATE_OFFERED))
         }
         setContent { AppTheme { Screen(graph) } }
     }
@@ -190,6 +194,7 @@ class AskActivity : ComponentActivity() {
         outState.putString(EXTRA_DAY, a.day)
         outState.putInt(STATE_EARLIER, screen.earlier)
         outState.putString(STATE_REPLYING, screen.replyingTo?.id)
+        outState.putBoolean(STATE_OFFERED, screen.offered)
     }
 
     /** What a message is about, from an intent's extras or a saved state's. */
@@ -229,7 +234,7 @@ class AskActivity : ComponentActivity() {
         // What's unread marked for this visit, for its divider: from his notification, as it was when it opened.
         if (!openedAt) screen.opened(graph.chat.value, graph.clock.now())
         openedAt = false
-        graph.conversation.chatInFront = true
+        graph.conversation.chatInFront = chatTab
         // His notification taken away: what it held is on the screen.
         graph.conversation.outbox.notify(graph.clock.now())
         graph.scope.launch {
@@ -246,8 +251,25 @@ class AskActivity : ComponentActivity() {
         // Every message closed again for the next visit, its labels done with (5c).
         screen.paused()
         // What arrived while it was on screen was seen: read up to now, so only what comes after is his notification.
+        if (chatTab) {
+            val now = graph.clock.now()
+            graph.scope.launch { graph.conversation.read(now) }
+        }
+    }
+
+    /**
+     * The Chat tab shown, or Your changes ([chat] false): the chat's on screen only on its tab, so what
+     * arrives while the other's showing is his notification. Left for it, what the chat showed is read;
+     * back on it, his notification's taken away.
+     */
+    private fun showingChat(chat: Boolean) {
+        if (chatTab == chat) return
+        chatTab = chat
+        if (!lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) return
+        val graph = AppGraph.get(this)
+        graph.conversation.chatInFront = chat
         val now = graph.clock.now()
-        graph.scope.launch { graph.conversation.read(now) }
+        if (chat) graph.conversation.outbox.notify(now) else graph.scope.launch { graph.conversation.read(now) }
     }
 
     @OptIn(ExperimentalMaterial3Api::class)
@@ -263,6 +285,7 @@ class AskActivity : ComponentActivity() {
         val zone = graph.clock.zone()
         val scope = rememberCoroutineScope()
         var tab by rememberSaveable { mutableIntStateOf(0) }
+        LaunchedEffect(tab) { showingChat(tab == 0) }
         var draft by rememberSaveable { mutableStateOf("") }
         var menu by remember { mutableStateOf(false) }
         var clearing by remember { mutableStateOf(false) }
@@ -413,6 +436,7 @@ class AskActivity : ComponentActivity() {
                 confirmButton = {
                     TextButton(onClick = {
                         clearing = false
+                        screen.cleared()
                         scope.launch { graph.conversation.clearChat() }
                     }) { Text("Clear") }
                 },
@@ -441,6 +465,7 @@ class AskActivity : ComponentActivity() {
         private const val EXTRA_OPEN_AT = "openAt"
         private const val STATE_EARLIER = "earlier"
         private const val STATE_REPLYING = "replyingTo"
+        private const val STATE_OFFERED = "offered"
 
         /**
          * The chat, about [about], with [text] to send; with [send] false, only put in the box, to be
