@@ -132,7 +132,7 @@ The app asks two more things in his name, in its own words, each answered from h
 ## Notifications and replies
 
 He has one notification (`NoticeId.Felix`), made by his outbox from the chat (`Outbox.notify`, `felix/FelixNotifications.kt`), on the *Felix* channel, in Android's messaging style: his unread messages (after `ChatState.readAt`, with words), oldest first, and under them your replies to them; a reply box answering the newest, its choices his replies. It's made again, not added to, whenever the chat changes: a new message of his sounds, a rebuild doesn't. Tapped, it opens the chat at the first unread.
-- Nothing's posted while the chat is on screen, and opening the chat takes it away. A reply from it doesn't (it isn't auto-cancelled), so its Reply stays for the next.
+- Nothing's posted while the chat is on screen, and opening the chat takes it away. A reply from it doesn't (it isn't auto-cancelled), and its Reply stays for the next: your words show there as a speaker's named "You", as Android hides the Reply while the newest message is the user's own.
 - A question of his answered, here or elsewhere, leaves it.
 - In quiet hours the week's review, its summary and a calendar event's question are in the chat at once and left out of it till the morning's briefing makes it again (`NotifyRules.waitsForMorning`).
 
