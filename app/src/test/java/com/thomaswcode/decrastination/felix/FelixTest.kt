@@ -2,15 +2,17 @@ package com.thomaswcode.decrastination.felix
 
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.Fixtures.LONDON
+import com.thomaswcode.decrastination.core.ChatMessage
 import com.thomaswcode.decrastination.core.DayWindow
 import com.thomaswcode.decrastination.core.Enrichment
 import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.core.Kind
+import com.thomaswcode.decrastination.core.MessageKind
 import com.thomaswcode.decrastination.core.Planner
 import com.thomaswcode.decrastination.core.Source
+import com.thomaswcode.decrastination.core.Speaker
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.WindowKind
-import com.thomaswcode.decrastination.data.FelixRecord
 import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.data.SlotOutcome
 import com.thomaswcode.decrastination.data.SlotRecord
@@ -53,7 +55,10 @@ class FelixTest {
             SlotRecord(date = "2026-10-12", key = "teams:x#-1#1", taskId = "teams:x", kind = Kind.Admin, label = "Form", plannedMin = 10, start = now - 3_600_000L, end = now - 3_000_000L,
                 window = WindowKind.Evening, outcome = SlotOutcome.Kept, workedMin = 10, at = now - 3_000_000L),
         )
-        val recent = (1..8).map { FelixRecord("r$it", now - (9 - it) * 600_000L, "SlotStart", "message $it", replyText = if (it == 8) "on it" else null, repliedAt = now - 30_000L) }
+        // His eight in the chat, your reply to the last, and his answer to you, which isn't one of his own.
+        val recent = (1..8).map { ChatMessage("r$it", Speaker.Claude, "message $it", now - (9 - it) * 600_000L, kind = MessageKind.SlotStart) } +
+            ChatMessage("y8", Speaker.You, "on it", now - 30_000L, replyTo = "r8", answeredAt = now - 20_000L) +
+            ChatMessage("c8", Speaker.Claude, "good", now - 20_000L)
         val text = FelixPrompts.describe(FelixPrompts.Reason.SlotStart, plan, slot, null, today, recent, null, settings, now, LONDON)
         val lines = text.lines()
         assertEquals("Reason: SlotStart", lines[0])

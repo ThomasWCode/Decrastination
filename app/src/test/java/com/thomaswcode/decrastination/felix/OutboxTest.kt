@@ -1,0 +1,192 @@
+package com.thomaswcode.decrastination.felix
+
+import android.app.Notification
+import com.thomaswcode.decrastination.Fixtures
+import com.thomaswcode.decrastination.core.ChatArchive
+import com.thomaswcode.decrastination.core.ChatMessage
+import com.thomaswcode.decrastination.core.ChatState
+import com.thomaswcode.decrastination.core.FixedClock
+import com.thomaswcode.decrastination.core.MessageKind
+import com.thomaswcode.decrastination.core.Speaker
+import com.thomaswcode.decrastination.data.ChatMigration
+import com.thomaswcode.decrastination.data.FelixState
+import com.thomaswcode.decrastination.data.JsonStore
+import com.thomaswcode.decrastination.data.Settings
+import com.thomaswcode.decrastination.notify.NoticeId
+import com.thomaswcode.decrastination.notify.Notices
+import java.io.File
+import java.nio.file.Files
+import kotlin.test.AfterTest
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
+import kotlinx.coroutines.runBlocking
+
+/**
+ * Felix's outbox (docs/plan_v4/05-the-chat.md §2): every message in the chat before his notification
+ * is made from it; his one notification rebuilt from the chat's unread, not added to; nothing while the
+ * chat's on screen or his channel's off; the kinds that wait for the morning left out in quiet hours;
+ * the live window moved to the archive, never an unread message, nothing doubled or lost.
+ */
+class OutboxTest {
+    private val dir: File = Files.createTempDirectory("outbox").toFile()
+    private val clock = FixedClock(Fixtures.at("2026-10-19T18:00"), Fixtures.LONDON)
+    private val chat = JsonStore(File(dir, "chat.json"), ChatState.serializer(), ::ChatState, migrations = listOf(ChatMigration.CHAT))
+    private val archive = JsonStore(File(dir, "chat-archive.json"), ChatArchive.serializer(), ::ChatArchive)
+    private val settings = JsonStore(File(dir, "settings.json"), Settings.serializer(), ::Settings)
+    private var onScreen = false
+    private var shown = true
+    /** What his notification showed as each was made, with the chat as it was then. */
+    private val made = mutableListOf<Pair<Outbox.Notice, ChatState>>()
+    private val ports = object : FelixHarness.Ports() {
+        override fun show(notice: Outbox.Notice) {
+            made += notice to chat.value
+            super.show(notice)
+        }
+    }
+    private val outbox = Outbox(chat, archive, settings, Channel(), ports, { onScreen }, clock)
+
+    @AfterTest
+    fun clean() {
+        dir.deleteRecursively()
+    }
+
+    private inner class Channel : Notices {
+        override fun post(id: NoticeId, notification: Notification, tag: String?) = Unit
+        override fun cancel(id: NoticeId, tag: String?) = Unit
+        override fun shown(channel: String) = shown
+        override suspend fun postHeld() = Unit
+    }
+
+    private fun his(id: String, at: Long = clock.now(), kind: MessageKind = MessageKind.SlotStart, text: String = "message $id") = ChatMessage(id, Speaker.Claude, text, at, kind = kind)
+
+    @Test
+    fun `a message is in the chat before his notification is made from it, and it sounds for it`() = runBlocking {
+        outbox.send(his("a"))
+        val (notice, then) = made.single()
+        assertEquals(listOf("a"), then.messages.map { it.id })
+        assertEquals(listOf("a"), notice.lines.map { it.id })
+        assertTrue(notice.alert)
+        assertEquals("a" to "a", notice.replyTo to notice.openAt)
+    }
+
+    @Test
+    fun `his notification is made again from the chat, holding every unread one, not added to`() = runBlocking {
+        outbox.send(his("a", clock.now() - 60_000L))
+        outbox.send(his("b"))
+        val notice = ports.showing!!
+        assertEquals(listOf("a", "b"), notice.lines.map { it.id })
+        // A reply answers the newest; a tap opens the chat at the first.
+        assertEquals("b" to "a", notice.replyTo to notice.openAt)
+        // Read up to the first: only the second's left.
+        chat.update { it.copy(readAt = clock.now() - 30_000L) }
+        outbox.notify(clock.now())
+        assertEquals(listOf("b"), ports.showing!!.lines.map { it.id })
+        assertFalse(ports.showing!!.alert)
+        // All read: taken away.
+        chat.update { it.copy(readAt = clock.now()) }
+        outbox.notify(clock.now())
+        assertNull(ports.showing)
+    }
+
+    @Test
+    fun `nothing's posted while the chat's on screen, nor with his channel off, and his silences never`() = runBlocking {
+        onScreen = true
+        outbox.send(his("a"))
+        assertNull(ports.showing)
+        assertEquals(listOf("a"), chat.value.messages.map { it.id })
+        onScreen = false
+        shown = false
+        outbox.send(his("b"))
+        assertNull(ports.showing)
+        shown = true
+        outbox.send(his("silent", text = ""))
+        // Made again: the two unread with words, not sounding for a silence.
+        assertEquals(listOf("a", "b"), ports.showing!!.lines.map { it.id })
+        assertFalse(ports.showing!!.alert)
+    }
+
+    @Test
+    fun `the review, the summary and a calendar question wait for the morning in quiet hours, in the chat at once`() = runBlocking {
+        clock.time = Fixtures.at("2026-10-18T23:30")
+        outbox.send(his("review", kind = MessageKind.Review))
+        outbox.send(his("event", kind = MessageKind.EventQuestion))
+        assertEquals(listOf("review", "event"), chat.value.messages.map { it.id })
+        assertNull(ports.showing)
+        // His looks don't come in quiet hours, but a note of the app's does, and shows.
+        outbox.send(his("note", kind = MessageKind.Note))
+        assertEquals(listOf("note"), ports.showing!!.lines.map { it.id })
+        // The morning's briefing makes it again: they're in it.
+        clock.time = Fixtures.at("2026-10-19T07:30")
+        outbox.notify(clock.now())
+        assertEquals(listOf("review", "event", "note"), ports.showing!!.lines.map { it.id })
+    }
+
+    @Test
+    fun `what waited for the morning shows from the morning's message on, quiet hours that outlast it or not`() = runBlocking {
+        clock.time = Fixtures.at("2026-10-18T23:30")
+        outbox.send(his("review", kind = MessageKind.Review))
+        assertNull(ports.showing)
+        // Quiet hours to 08:00 here, the briefing at 07:00: its message is the morning all the same.
+        settings.update { it.copy(quietHours = it.quietHours.copy(endMin = 8 * 60)) }
+        clock.time = Fixtures.at("2026-10-19T07:00")
+        outbox.notify(clock.now())
+        assertNull(ports.showing)
+        outbox.send(his("morning", kind = MessageKind.Morning))
+        assertEquals(listOf("review", "morning"), ports.showing!!.lines.map { it.id })
+        // Made again before quiet hours end: what waited stays in it, and one of a kind that waits,
+        // written after the morning's message, waits for the next.
+        clock.time = Fixtures.at("2026-10-19T07:20")
+        outbox.send(his("event", kind = MessageKind.EventQuestion))
+        assertEquals(listOf("review", "morning"), ports.showing!!.lines.map { it.id })
+    }
+
+    @Test
+    fun `your reply shows under his message, a question answered leaves it, and an answer's gist goes with his words`() = runBlocking {
+        outbox.send(his("q", kind = MessageKind.Question))
+        outbox.send(his("s"))
+        chat.update { s -> s.copy(messages = s.messages + ChatMessage("y", Speaker.You, "on it", clock.now(), replyTo = "s")) }
+        outbox.notify(clock.now())
+        assertEquals(listOf("q" to false, "s" to false, "y" to true), ports.showing!!.lines.map { it.id to it.yours })
+        chat.update { s -> s.copy(messages = s.messages.map { if (it.id == "q") it.copy(answeredAt = clock.now()) else it }) }
+        outbox.notify(clock.now())
+        assertEquals(listOf("s", "y"), ports.showing!!.lines.map { it.id })
+    }
+
+    @Test
+    fun `the window keeps the newest two hundred and all of sixty days, moving the rest to the archive, never an unread one`() = runBlocking {
+        val now = clock.now()
+        val old = now - Outbox.WINDOW_MS - 3_600_000L
+        // His, the oldest of all and still unread; 210 old ones of yours; then 5 recent.
+        val unread = his("u", old - 1)
+        val olds = (0 until 210).map { ChatMessage("o$it", Speaker.You, "old $it", old + it, answeredAt = old + it) }
+        val recent = (0 until 5).map { ChatMessage("r$it", Speaker.You, "recent $it", now - 1_000L + it, answeredAt = now) }
+        chat.update { ChatState(listOf(unread) + olds + recent, readAt = old - 2) }
+        outbox.moveWindow(now)
+        // Past the newest 200 and older than sixty days, and read: the oldest 15 of yours; his unread stays.
+        assertEquals((0 until 15).map { "o$it" }, archive.value.messages.map { it.id })
+        assertEquals(listOf("u") + (15 until 210).map { "o$it" } + recent.map { it.id }, chat.value.messages.map { it.id })
+        // Moved again: nothing doubled, nothing lost.
+        outbox.moveWindow(now)
+        assertEquals(15, archive.value.messages.size)
+        assertEquals(1 + 195 + 5, chat.value.messages.size)
+        // A stop between the archive's update and the window's trim leaves a copy in both: dropped by id at the next move.
+        val stray = olds[20].copy(at = old)
+        archive.update { it.copy(messages = it.messages + stray) }
+        chat.update { it.copy(messages = listOf(stray) + it.messages.filterNot { m -> m.id == stray.id }) }
+        outbox.moveWindow(now)
+        assertEquals(1, archive.value.messages.count { it.id == stray.id })
+    }
+
+    @Test
+    fun `clearing the chat empties its archive too, and keeps his state`() = runBlocking {
+        chat.update { ChatState(listOf(his("a")), felix = FelixState(nextCheckAt = 42)) }
+        archive.update { ChatArchive(listOf(his("z", 1))) }
+        outbox.clear()
+        assertTrue(chat.value.messages.isEmpty() && archive.value.messages.isEmpty())
+        assertEquals(42L, chat.value.felix.nextCheckAt)
+        assertNull(ports.showing)
+    }
+}

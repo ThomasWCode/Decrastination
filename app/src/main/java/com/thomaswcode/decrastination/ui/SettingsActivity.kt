@@ -26,6 +26,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.Saver
@@ -678,15 +679,16 @@ private fun ResetPage(graph: AppGraph) {
 }
 
 /**
- * The nightly backup (AR-07): where it goes, and when it last did. And a reset's copies kept in the
- * app's own files (LR-08), where Documents couldn't be written: the file picker can't reach them, so
- * each is restored from here.
+ * The nightly backup (AR-07): where it goes, and when it last did, and how many of the chat's earliest
+ * messages it leaves out to fit (D-96). And a reset's copies kept in the app's own files (LR-08), where
+ * Documents couldn't be written: the file picker can't reach them, so each is restored from here.
  */
 @Composable
 private fun NightlyBackup(graph: AppGraph, last: Long?, now: Long) {
     val scope = rememberCoroutineScope()
     val copies = remember { graph.backups.resetCopies() }
     var said by remember { mutableStateOf<String?>(null) }
+    val leftOut by produceState(0) { value = withContext(Dispatchers.IO) { runCatching { graph.backups.encoded().second }.getOrDefault(0) } }
     Column {
         Section("Nightly backup")
         if (!com.thomaswcode.decrastination.data.BackupFolder.available) {
@@ -694,6 +696,7 @@ private fun NightlyBackup(graph: AppGraph, last: Long?, now: Long) {
         } else {
             Note("Every night, all the app keeps goes to Documents/Decrastination on the phone, the last two weeks of them kept. Import opens one through the file picker. A copy off the phone is yours to make: a sync app mirroring the folder, or Export.")
             Note("Last backup: " + (last?.let { Format.ago(it, now) } ?: "not yet"))
+            if (leftOut > 0) Note("The chat's $leftOut earliest messages are left out of the backup, as with them it would be more than Import reads (8 MB). They're still in the chat.")
         }
         if (copies.isNotEmpty()) {
             Section("Copies saved before a reset")

@@ -14,14 +14,6 @@ import java.util.Locale
  * its answer; the first's replies 1 to 5, the second's what the week shows was put off. Pure.
  */
 object CheckInFlow {
-    val QUESTIONS = listOf(
-        "How was the week, 1 to 5?",
-        "What did you avoid, and why?",
-        "What got in the way?",
-        "What would you change?",
-        "When did you have most energy?",
-    )
-
     /** The week's answers so far, and the question asked last ([step], from 0). */
     @Serializable
     data class Draft(val week: String, val step: Int = 0, val feel: Int = 0, val avoided: String = "", val inTheWay: String = "", val change: String = "", val energy: String = "")
@@ -30,7 +22,7 @@ object CheckInFlow {
     private const val MAX_CHIPS = 3
 
     /** [draft]'s question to ask now. */
-    fun question(draft: Draft): String = QUESTIONS[draft.step]
+    fun question(draft: Draft): String = FelixWords.CHECK_IN[draft.step]
 
     /**
      * The replies offered to [draft]'s question: 1 to 5 for the first; for the second, what the week
@@ -70,7 +62,7 @@ object CheckInFlow {
     }
 
     /** Whether all five have their answers. */
-    fun done(draft: Draft): Boolean = draft.step >= QUESTIONS.size
+    fun done(draft: Draft): Boolean = draft.step >= FelixWords.CHECK_IN.size
 
     /** [draft], all answered, as the week's check-in made at [at]. */
     fun checkIn(draft: Draft, at: Long): CheckIn = CheckIn(draft.week, at, draft.feel, draft.avoided, draft.inTheWay, draft.change, draft.energy)

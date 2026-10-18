@@ -5,7 +5,6 @@ import android.content.Intent
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.R
 import com.thomaswcode.decrastination.block.SlotAlarms
-import com.thomaswcode.decrastination.core.Proposal
 import com.thomaswcode.decrastination.enrich.EnrichWorker
 import com.thomaswcode.decrastination.learn.Daily
 import com.thomaswcode.decrastination.learn.ReviewWorker
@@ -15,13 +14,13 @@ import com.thomaswcode.decrastination.notify.Notify
 import com.thomaswcode.decrastination.ui.CheckInActivity
 
 /**
- * What Felix's service asks of Android (docs/plan_v4/02 §Ports), so it's tested without it: his
+ * What Felix's service asks of Android (docs/plan_v4/02 §Ports), so it's tested without it: his one
  * notification, and the work and alarms that outlive what asked for them. [AndroidFelixPorts] on the
  * phone.
  */
 interface FelixPorts {
-    /** His message [text], [id], as his notification ([FelixNotifications.post]): its [replies], [cards], and the reply just [sent] to it. */
-    fun post(id: String, name: String, text: String, replies: List<String>, cards: List<Pair<String, Proposal>> = emptyList(), sent: String? = null, title: String? = null, channel: String = Channels.FELIX)
+    /** His one notification, as the outbox makes it from the chat ([FelixNotifications.show]). */
+    fun show(notice: Outbox.Notice)
 
     /** His notification taken away ([FelixNotifications.cancel]). */
     fun cancel()
@@ -39,7 +38,7 @@ interface FelixPorts {
     fun review()
 
     /** The answer to a reply from his notification, as work of its own ([FelixReplyWorker.enqueue]). */
-    fun answerLater(id: String, asked: String, words: String)
+    fun answerLater()
 
     /** The reminder to open the week's check-in form, where he can't ask it himself. */
     fun remindForm()
@@ -47,8 +46,7 @@ interface FelixPorts {
 
 /** [FelixPorts] on the phone. */
 class AndroidFelixPorts(private val context: Context) : FelixPorts {
-    override fun post(id: String, name: String, text: String, replies: List<String>, cards: List<Pair<String, Proposal>>, sent: String?, title: String?, channel: String) =
-        FelixNotifications.post(context, id, name, text, replies, cards, sent, title, channel = channel)
+    override fun show(notice: Outbox.Notice) = FelixNotifications.show(context, notice)
 
     override fun cancel() = FelixNotifications.cancel(context)
 
@@ -60,7 +58,7 @@ class AndroidFelixPorts(private val context: Context) : FelixPorts {
 
     override fun review() = ReviewWorker.enqueue(context, ifDue = true)
 
-    override fun answerLater(id: String, asked: String, words: String) = FelixReplyWorker.enqueue(context, id, asked, words)
+    override fun answerLater() = FelixReplyWorker.enqueue(context)
 
     override fun remindForm() {
         val graph = AppGraph.get(context)

@@ -181,6 +181,7 @@ class JsonStore<T>(
                     "log.json" -> "The activity log"
                     "instructions.json" -> "Your instructions"
                     "chat.json" -> "The chat"
+                    "chat-archive.json" -> "The chat's earlier messages"
                     "school.json" -> "Your school calendar (days off and half-days)"
                     "memory.json" -> "What Felix remembers"
                     "calendar.json" -> "The record of what the app wrote to your calendar"

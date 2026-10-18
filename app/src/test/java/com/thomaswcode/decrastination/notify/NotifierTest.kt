@@ -4,6 +4,7 @@ import android.app.Notification
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.core.FixedClock
 import com.thomaswcode.decrastination.data.HeldNotification
+import com.thomaswcode.decrastination.data.ChatMigration
 import com.thomaswcode.decrastination.data.HeldTap
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.RuntimeState
@@ -24,7 +25,7 @@ import kotlinx.coroutines.runBlocking
 class NotifierTest {
     private val dir: File = Files.createTempDirectory("notifier").toFile()
     private val clock = FixedClock(Fixtures.at("2026-10-14T18:00"), Fixtures.LONDON)
-    private val runtime = JsonStore(File(dir, "runtime.json"), RuntimeState.serializer(), ::RuntimeState)
+    private val runtime = JsonStore(File(dir, "runtime.json"), RuntimeState.serializer(), ::RuntimeState, migrations = listOf(ChatMigration.RUNTIME))
     private val settings = JsonStore(File(dir, "settings.json"), Settings.serializer(), ::Settings)
     private val job = SupervisorJob()
     private val tray = FakeTray()

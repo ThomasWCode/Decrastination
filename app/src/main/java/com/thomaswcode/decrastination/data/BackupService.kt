@@ -1,12 +1,15 @@
 package com.thomaswcode.decrastination.data
 
 import com.thomaswcode.decrastination.core.Calibration
+import com.thomaswcode.decrastination.core.ChatArchive
+import com.thomaswcode.decrastination.core.ChatHistory
 import com.thomaswcode.decrastination.core.ChatState
 import com.thomaswcode.decrastination.core.Instruction
 import com.thomaswcode.decrastination.core.InstructionState
 import com.thomaswcode.decrastination.core.InstructionStatus
 import com.thomaswcode.decrastination.core.MemoryState
 import com.thomaswcode.decrastination.core.Source
+import com.thomaswcode.decrastination.core.Speaker
 import com.thomaswcode.decrastination.core.WallClock
 import com.thomaswcode.decrastination.enrich.AiUsage
 import com.thomaswcode.decrastination.learn.Calibrator
@@ -56,6 +59,8 @@ class BackupService(
     private val reread: suspend () -> Unit,
     /** Felix's notification taken away: nothing's left of the chat to answer it. */
     private val cancelFelix: () -> Unit,
+    /** What a backup holds at most, as Import reads it ([Backups.MAX_BYTES]; smaller in a test). */
+    private val backupCap: Int = Backups.MAX_BYTES,
 ) {
     /** Where backups go: Documents/Decrastination, through MediaStore on the phone ([BackupFolder]); a map in a test. */
     interface Folder {
@@ -71,8 +76,17 @@ class BackupService(
         fun delete(name: String): Boolean
     }
 
-    /** A backup of what the sources can't give back, as text ([Backups]). */
-    fun exportBackup(): String = Backups.encode(
+    /**
+     * A backup of what the sources can't give back, as text ([Backups]): the chat's earlier messages
+     * in it while it fits what Import reads, the oldest left out first ([Backups.fitted]).
+     */
+    fun exportBackup(): String = encoded().first
+
+    /** [exportBackup], and how many of the chat's earliest messages it leaves out for room: said in Settings → Backup. */
+    fun encoded(): Pair<String, Int> = backupOf().let { Backups.fitted(it, backupCap) }
+
+    /** All the app keeps, as a backup holds it, the chat's earlier messages whole. */
+    private fun backupOf(): Backup =
         Backup(
             exportedAt = clock.now(),
             versionName = versionName,
@@ -87,12 +101,11 @@ class BackupService(
             ownTasks = stores.tasks.value.tasks.filter { it.source == Source.Own },
             school = stores.school.value,
             memory = stores.memory.value,
-            felix = stores.runtime.value.felix,
             slots = stores.runtime.value.slots,
             chat = stores.chat.value,
+            archive = stores.chatArchive.value,
             versions = stores.shapes.mapValues { it.value.version },
-        ),
-    )
+        )
 
     /**
      * The nightly backup (AR-07): all the app keeps, as `decrastination-<date>.json` in
@@ -131,25 +144,45 @@ class BackupService(
         // The backup's days off and half-days beside those here (PL-16); and what it remembered (AI-21).
         stores.replace(stores.school) { it.withAll(backup.school) }
         stores.replace(stores.memory) { Backups.mergedMemory(it, backup.memory) }
-        // The chat where this phone's is empty (a reset's copy brings it back, LR-08): not a message
-        // of yours still waiting for its answer, which would be sent, words from then, as it opens.
+        // The chat where this phone's is empty (a reset's copy brings it back, LR-08), with its earlier
+        // messages: not a message of yours still waiting for its answer, which would be sent, words
+        // from then, as it opens. Felix's state with it, or where this phone has none of its own. Into a
+        // chat that isn't empty, his own messages it hasn't, with your replies to them, by id, as the
+        // log's records of them were merged before 4.0.0: none of his is lost. Those read there are read
+        // here, as far as that goes without passing one of his unread here, so his notification doesn't
+        // bring them back as new.
         val backedChat = backup.chat.let { c -> c.unanswered?.let { w -> c.copy(messages = c.messages.filterNot { it.id == w.id }) } ?: c }
         var chatBack = 0
-        stores.replace(stores.chat) { s -> if (s.messages.isEmpty() && backedChat.messages.isNotEmpty()) backedChat.also { chatBack = it.messages.size } else s }
+        var hisBack = 0
+        stores.replace(stores.chat) { s ->
+            // This phone's state of his, where it has one, wins: a chat cleared here keeps it.
+            val felix = if (s.felix == FelixState()) backedChat.felix else s.felix
+            if (s.messages.isEmpty() && backedChat.messages.isNotEmpty()) {
+                backedChat.copy(felix = felix).also { chatBack = it.messages.size }
+            } else {
+                val here = s.messages.mapTo(HashSet()) { it.id }
+                val his = ChatHistory.his(backedChat.messages).filter { it.id !in here }
+                val ids = his.mapTo(HashSet()) { it.id }
+                val replies = backedChat.messages.filter { it.from == Speaker.You && it.replyTo in ids && it.id !in here }
+                hisBack = his.size
+                val unreadHere = s.messages.filter { it.from != Speaker.You && it.at > s.readAt }.minOfOrNull { it.at }
+                val readAt = maxOf(s.readAt, minOf(backedChat.readAt, (unreadHere ?: Long.MAX_VALUE) - 1))
+                s.copy(felix = felix, messages = (s.messages + his + replies).sortedBy { it.at }, readAt = readAt)
+            }
+        }
+        if (chatBack > 0) stores.replace(stores.chatArchive) { a -> if (a.messages.isEmpty()) backup.archive else a }
         val own = ownAdded.size
         val told = buildList {
             if (own > 0) add("$own task${if (own == 1) "" else "s"} of your own")
             if (chatBack > 0) add("the chat ($chatBack message${if (chatBack == 1) "" else "s"})")
+            if (hisBack > 0) add("$hisBack message${if (hisBack == 1) "" else "s"} of Felix's into the chat")
             if (restored > 0) add("$restored instruction${if (restored == 1) "" else "s"} restored")
             if (unclear > 0) add("$unclear left unapplied under Your changes in Felix's chat, as ${if (unclear == 1) "it" else "they"} would have tasks wait for each other in a circle")
         }.takeIf { it.isNotEmpty() }?.joinToString(", ", prefix = " ", postfix = ".") ?: ""
-        // Felix's state where this phone has none of its own; today's slots, restored the same day (AR-07).
+        // Today's slots, restored the same day (AR-07).
         val today = Instant.ofEpochMilli(clock.now()).atZone(clock.zone()).toLocalDate().toString()
         stores.replace(stores.runtime) { s ->
-            s.copy(
-                felix = if (s.felix == FelixState()) backup.felix else s.felix,
-                slots = if (backup.slots.date == today && s.slots.on(LocalDate.parse(today)).let { it.previous.isEmpty() && it.missed.isEmpty() }) backup.slots else s.slots,
-            )
+            s.copy(slots = if (backup.slots.date == today && s.slots.on(LocalDate.parse(today)).let { it.previous.isEmpty() && it.missed.isEmpty() }) backup.slots else s.slots)
         }
         // This month's spend on Claude, armed or not: it can only rise, so the cap isn't given again.
         val month = AiUsage.monthOf(clock.now(), clock.zone())
@@ -189,29 +222,31 @@ class BackupService(
     /**
      * [what] reset (LR-08), with no parent code, a copy of all the app keeps saved first, as
      * `reset-<date>-<time>.json` in Documents/Decrastination (or the app's own files where that
-     * can't be written). What happened, in words.
+     * can't be written). Where the chat goes and the copy has no room for its earliest messages
+     * ([Backups.fitted]), they're kept whole beside it as `chat-archive-<date>-<time>.json`: none is
+     * lost. What happened, in words.
      */
     suspend fun reset(what: Reset): String = withContext(NonCancellable) {
         val now = clock.now()
         // To the second: two resets the same day each keep their copy.
-        val name = "reset-" + Instant.ofEpochMilli(now).atZone(clock.zone()).format(DateTimeFormatter.ofPattern("yyyy-MM-dd-HHmmss", Locale.UK)) + ".json"
-        val text = exportBackup()
-        // Nothing goes till its copy is somewhere it can be restored from.
-        val saved = runCatching {
-            if (folder.available && withContext(Dispatchers.IO) { folder.write(name, text) }) {
-                "Documents/Decrastination/$name"
-            } else {
-                // Where Documents can't be written: the app's own files, which the file picker can't
-                // reach, so Settings → Backup restores from them itself (resetCopies).
-                withContext(Dispatchers.IO) { File(copies.apply { mkdirs() }, name).writeText(text) }
-                "the app's own files ($name), which Settings → Backup can restore"
-            }
-        }.getOrElse { return@withContext "Nothing was reset: a copy of it couldn't be saved first." }
+        val stamp = Instant.ofEpochMilli(now).atZone(clock.zone()).format(DateTimeFormatter.ofPattern("yyyy-MM-dd-HHmmss", Locale.UK))
+        val name = "reset-$stamp.json"
+        val whole = backupOf()
+        val (text, leftOut) = Backups.fitted(whole, backupCap)
         val all = what == Reset.Everything
+        // Nothing goes till its copy is somewhere it can be restored from.
+        val saved = keep(name, text) ?: return@withContext "Nothing was reset: a copy of it couldn't be saved first."
+        val archived = if ((all || what == Reset.Chat) && leftOut > 0) {
+            val archive = "chat-archive-$stamp.json"
+            keep(archive, JsonStore.json.encodeToString(ChatArchive.serializer(), whole.archive))
+                ?.let { " The chat's earliest $leftOut messages, past what a backup holds, are whole in ${it.where}." }
+                ?: return@withContext "Nothing was reset: the chat's earliest messages couldn't be saved first."
+        } else {
+            ""
+        }
         if (all || what == Reset.Stats) {
             resets.incrementAndGet()
-            // Felix's messages are the chat's to reset, not Stats'.
-            stores.replace(stores.log) { ActivityLog(felix = it.felix) }
+            stores.replace(stores.log, ActivityLog())
             stores.replace(stores.runtime) { it.copy(calibration = Calibration()) }
         }
         if (what == Reset.Calibration) stores.replace(stores.runtime) { it.copy(calibration = Calibration(learnFrom = now)) }
@@ -220,9 +255,9 @@ class BackupService(
             changeSettings { it.copy(profileLines = emptyList()) }
         }
         if (all || what == Reset.Chat) {
+            // The chat, its earlier messages, and his state with it: what he's waiting to say, the check-in's answers so far.
             stores.replace(stores.chat, ChatState())
-            stores.replace(stores.runtime) { it.copy(felix = FelixState(), checkInDraft = null) }
-            stores.replace(stores.log) { it.copy(felix = emptyList()) }
+            stores.replace(stores.chatArchive, ChatArchive())
             // His notification too, a check-in's question among them: nothing's left to answer it.
             cancelFelix()
         }
@@ -230,8 +265,25 @@ class BackupService(
             stores.replace(stores.instructions, InstructionState())
             layInstructions()
         }
-        "${what.title}: reset. A copy of everything from before is in $saved."
+        "${what.title}: reset. A copy of everything from before is in ${saved.where}${if (saved.own) ", which Settings → Backup can restore" else ""}.$archived"
     }
+
+    /** Where [keep] put a file, in words: in Documents, or in the app's own files ([own]), which the file picker can't reach. */
+    private data class Kept(val where: String, val own: Boolean)
+
+    /**
+     * [text] saved as [name] in Documents/Decrastination, or, where that can't be written, in the app's own
+     * files, from which Settings → Backup restores a reset's copy itself ([resetCopies]). Null where it
+     * couldn't be saved.
+     */
+    private suspend fun keep(name: String, text: String): Kept? = runCatching {
+        if (folder.available && withContext(Dispatchers.IO) { folder.write(name, text) }) {
+            Kept("Documents/Decrastination/$name", own = false)
+        } else {
+            withContext(Dispatchers.IO) { File(copies.apply { mkdirs() }, name).writeText(text) }
+            Kept("the app's own files ($name)", own = true)
+        }
+    }.getOrNull()
 
     /** A reset's copies kept in the app's own files (LR-08), where Documents couldn't be written then: their names, newest first. */
     fun resetCopies(): List<String> =

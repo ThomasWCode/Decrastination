@@ -71,6 +71,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.R
@@ -81,21 +82,23 @@ import com.thomaswcode.decrastination.core.InstructionStatus
 import com.thomaswcode.decrastination.core.Instructions
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.Memories
-import com.thomaswcode.decrastination.core.MemoryEdit
 import com.thomaswcode.decrastination.core.OwnTask
 import com.thomaswcode.decrastination.core.Proposal
 import com.thomaswcode.decrastination.core.ProposalState
 import com.thomaswcode.decrastination.core.Speaker
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.felix.ChatPrompts
+import com.thomaswcode.decrastination.felix.Conversation
 import java.time.ZoneId
 import kotlinx.coroutines.launch
 
 /**
  * Asking Claude (2.0.0, Q29), in place of the Instructions page: **Chat**, where you tell it about
- * your work and it answers with cards to add a task or apply changes; and **Your changes**, the
- * instructions in use (taken back there) and any still to check. A message about a task, an event
- * or a day comes from its page, with what it's about shown over the box.
+ * your work and it answers with cards to add a task or apply changes, and where every message of
+ * Felix's is, what he writes unasked among them; and **Your changes**, the instructions in use (taken
+ * back there) and any still to check. A message about a task, an event or a day comes from its page,
+ * with what it's about shown over the box. Opened from his notification, it opens at the message it
+ * was for; left, what's in it is read ([Conversation.read]).
  */
 class AskActivity : ComponentActivity() {
 
@@ -108,12 +111,24 @@ class AskActivity : ComponentActivity() {
     /** Whether [handed] is sent, or only put in the box to be changed or sent (*What gives?*, PL-02). */
     private var sendHanded = true
 
+    /** Whether the Chat tab is the one showing, not Your changes: only then is the chat on screen. */
+    private var chatTab = true
+
+    /** The message to open at, from his notification: let go once the list is there. */
+    private val openAt = mutableStateOf<String?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         val graph = AppGraph.get(this)
-        // Made again (turned, or brought back): what it's about kept, the words handed in already sent.
-        if (savedInstanceState == null) take(intent) else about.value = aboutFrom(savedInstanceState)
+        // Made again (turned, or brought back): what it's about kept, the words handed in already sent, and
+        // the tab showing.
+        if (savedInstanceState == null) {
+            take(intent)
+        } else {
+            about.value = aboutFrom(savedInstanceState)
+            chatTab = savedInstanceState.getBoolean(STATE_CHAT_TAB, true)
+        }
         setContent { AppTheme { Screen(graph) } }
     }
 
@@ -126,6 +141,7 @@ class AskActivity : ComponentActivity() {
         outState.putString(EXTRA_EVENT_TITLE, a.eventTitle)
         outState.putLong(EXTRA_EVENT_START, a.eventStart ?: 0L)
         outState.putString(EXTRA_DAY, a.day)
+        outState.putBoolean(STATE_CHAT_TAB, chatTab)
     }
 
     /** What a message is about, from an intent's extras or a saved state's. */
@@ -147,13 +163,23 @@ class AskActivity : ComponentActivity() {
         about.value = aboutFrom(intent.extras)
         sendHanded = intent.getBooleanExtra(EXTRA_SEND, true)
         handed.value = intent.getStringExtra(EXTRA_TEXT)
+        // From his notification: opened at its message, and what it held read now (now as it opens, not
+        // as the work runs, which may be after another came).
+        intent.getStringExtra(EXTRA_OPEN_AT)?.let { id ->
+            openAt.value = id
+            val graph = AppGraph.get(this)
+            val now = graph.clock.now()
+            graph.scope.launch { graph.conversation.read(now) }
+        }
     }
 
     override fun onResume() {
         super.onResume()
         // What waits for Claude (it was off, resting, or capped) is tried again on opening.
         val graph = AppGraph.get(this)
-        graph.conversation.chatInFront = true
+        graph.conversation.chatInFront = chatTab
+        // His notification taken away: what it held is on the screen.
+        graph.conversation.outbox.notify(graph.clock.now())
         graph.scope.launch {
             graph.conversation.answerChat()
             // On the screen they're shown on: you're waiting on them.
@@ -163,7 +189,28 @@ class AskActivity : ComponentActivity() {
 
     override fun onPause() {
         super.onPause()
-        AppGraph.get(this).conversation.chatInFront = false
+        val graph = AppGraph.get(this)
+        graph.conversation.chatInFront = false
+        // What arrived while it was on screen was seen: read up to now, so only what comes after is his notification.
+        if (chatTab) {
+            val now = graph.clock.now()
+            graph.scope.launch { graph.conversation.read(now) }
+        }
+    }
+
+    /**
+     * The Chat tab shown, or Your changes ([chat] false): the chat's on screen only on its tab, so what
+     * arrives while the other's showing is his notification. Left for it, what the chat showed is read;
+     * back on it, his notification's taken away.
+     */
+    private fun showingChat(chat: Boolean) {
+        if (chatTab == chat) return
+        chatTab = chat
+        if (!lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) return
+        val graph = AppGraph.get(this)
+        graph.conversation.chatInFront = chat
+        val now = graph.clock.now()
+        if (chat) graph.conversation.outbox.notify(now) else graph.scope.launch { graph.conversation.read(now) }
     }
 
     @OptIn(ExperimentalMaterial3Api::class)
@@ -178,6 +225,7 @@ class AskActivity : ComponentActivity() {
         val zone = graph.clock.zone()
         val scope = rememberCoroutineScope()
         var tab by rememberSaveable { mutableIntStateOf(0) }
+        LaunchedEffect(tab) { showingChat(tab == 0) }
         var draft by rememberSaveable { mutableStateOf("") }
         var menu by remember { mutableStateOf(false) }
         var clearing by remember { mutableStateOf(false) }
@@ -233,13 +281,14 @@ class AskActivity : ComponentActivity() {
                     })
                 }
                 if (tab == 0) {
-                    Chat(graph, chat.messages, byId, now, zone, claudeOn, onEdit = { m, p -> editing = "$m|$p" })
-                    // His replies to offer (UI-06), under his last message: a tap sends one, about what his message was.
-                    val last = chat.messages.lastOrNull()?.takeIf { it.from == Speaker.Claude }
+                    Chat(graph, chat.messages, byId, now, zone, claudeOn, openAt.value, onOpened = { openAt.value = null }, onEdit = { m, p -> editing = "$m|$p" })
+                    // His replies to offer (UI-06), under his last message: a tap answers it, as his
+                    // notification's reply does (a check-in's answer, an event's, with no call).
+                    val last = chat.messages.lastOrNull { it.from == Speaker.You || it.text.isNotBlank() }?.takeIf { it.from == Speaker.Claude && it.answeredAt == null }
                     if (last != null && last.suggestedReplies.isNotEmpty() && chat.unanswered == null) {
                         FlowRow(Modifier.fillMaxWidth().padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             last.suggestedReplies.forEach { reply ->
-                                androidx.compose.material3.SuggestionChip(onClick = { graph.scope.launch { graph.conversation.ask(reply, last.about) } }, label = { Text(reply) })
+                                androidx.compose.material3.SuggestionChip(onClick = { graph.scope.launch { graph.conversation.replyToFelix(reply, last.id) } }, label = { Text(reply) })
                             }
                         }
                     }
@@ -314,7 +363,7 @@ class AskActivity : ComponentActivity() {
             AlertDialog(
                 onDismissRequest = { clearing = false },
                 title = { Text("Clear the chat?") },
-                text = { Text("Its messages go. What you added or applied from it stays: your tasks, and your changes (taken back under Your changes).") },
+                text = { Text("Its messages go, the earlier ones too. What you added or applied from it stays: your tasks, and your changes (taken back under Your changes).") },
                 confirmButton = {
                     TextButton(onClick = {
                         clearing = false
@@ -343,12 +392,16 @@ class AskActivity : ComponentActivity() {
         private const val EXTRA_EVENT_TITLE = "eventTitle"
         private const val EXTRA_EVENT_START = "eventStart"
         private const val EXTRA_DAY = "day"
+        private const val EXTRA_OPEN_AT = "openAt"
+        private const val STATE_CHAT_TAB = "chatTab"
 
         /**
          * The chat, about [about], with [text] to send (or to put in the box, if one still waits); with
-         * [send] false, only put in the box, to be changed or sent.
+         * [send] false, only put in the box, to be changed or sent. From his notification, opened at
+         * the message [openAt], what the notification held read.
          */
-        fun intent(context: Context, about: About = About(), text: String? = null, send: Boolean = true): Intent = Intent(context, AskActivity::class.java)
+        fun intent(context: Context, about: About = About(), text: String? = null, send: Boolean = true, openAt: String? = null): Intent = Intent(context, AskActivity::class.java)
+            .putExtra(EXTRA_OPEN_AT, openAt)
             .putExtra(EXTRA_TEXT, text)
             .putExtra(EXTRA_SEND, send)
             .putExtra(EXTRA_TASK, about.taskId)
@@ -369,22 +422,34 @@ private val EXAMPLES = listOf(
     "Remind me to buy mum a present before Sunday",
 )
 
-/** The conversation, newest at the foot, kept in view as it grows. */
+/**
+ * The conversation, newest at the foot, kept in view as it grows; opened at [openAt] once, where it's
+ * there (from his notification), else at the foot. His silences (he chose not to write) aren't shown.
+ */
 @Composable
 private fun androidx.compose.foundation.layout.ColumnScope.Chat(
     graph: AppGraph,
-    messages: List<ChatMessage>,
+    all: List<ChatMessage>,
     tasks: Map<String, TaskItem>,
     now: Long,
     zone: ZoneId,
     claudeOn: Boolean,
+    openAt: String?,
+    onOpened: () -> Unit,
     onEdit: (messageId: String, proposalId: String) -> Unit,
 ) {
     val list = rememberLazyListState()
-    // Yours waiting for his answer, with nothing to say why (Claude off, resting, a failed call): he's typing.
-    val typing = messages.lastOrNull()?.let { it.from == Speaker.You && it.answeredAt == null && it.note == null } == true
-    LaunchedEffect(messages.size, messages.lastOrNull()?.note, typing) {
-        if (messages.isNotEmpty()) list.animateScrollToItem(messages.size + if (typing) 2 else 1)
+    val messages = all.filter { it.from == Speaker.You || it.text.isNotBlank() }
+    // Yours waiting for his answer, with nothing to say why (Claude off, resting, a failed call): he's
+    // typing, whatever he's written unasked since.
+    val waiting = all.lastOrNull { it.from == Speaker.You && it.answeredAt == null }
+    val typing = waiting != null && waiting.note == null
+    LaunchedEffect(messages.size, waiting?.note, typing) {
+        if (messages.isEmpty()) return@LaunchedEffect
+        // The message his notification was for, under the intro, once; gone (the chat cleared), the foot.
+        val at = openAt?.let { id -> messages.indexOfFirst { it.id == id } }?.takeIf { it >= 0 }
+        if (openAt != null) onOpened()
+        if (at != null) list.scrollToItem(at + 1) else list.animateScrollToItem(messages.size + if (typing) 2 else 1)
     }
     LazyColumn(Modifier.weight(1f).fillMaxWidth(), state = list, contentPadding = PaddingValues(horizontal = 12.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         item(key = "intro") {
@@ -494,24 +559,36 @@ private fun Dots(modifier: Modifier) {
 private const val DOT_CYCLE_MS = 1_200
 private const val DOT_STEP_MS = 200
 
-/** A message of Claude's, on the left: its words, then a card for each thing it would do. */
+/** A message of Claude's, on the left: its words, then a card for each thing it would do; one in the app's words with its own button. */
 @Composable
 private fun Claudes(graph: AppGraph, message: ChatMessage, tasks: Map<String, TaskItem>, now: Long, zone: ZoneId, onEdit: (String, String) -> Unit) {
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh, shape = RoundedCornerShape(18.dp, 18.dp, 18.dp, 4.dp), modifier = Modifier.widthIn(max = 320.dp)) {
             Text(message.text, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp))
         }
+        // A message in the app's words carries its own button: the week's review to open, its summary to send.
+        Opens(message)
         // What he searched the web for, and the pages it found, each to open (16 Oct).
         Searched(message)
         message.proposals.forEach { ProposalCard(graph, message.id, it, tasks, now, zone, onEdit) }
         // What it remembered or forgot (AI-21), in small type under its words, each with its Undo.
         Remembered(graph, message)
-        // What it did beyond its cards (AI-14; 16 Oct, everything he does), likewise, each with its Undo.
+        // What it did beyond its cards (AI-14; 16 Oct, everything he does), likewise, each with its Undo;
+        // and what it says of them with nothing to undo (a change refused, where a time went).
         Acts(graph, message)
-        // And what it says of them with nothing to undo (a change refused, where a time went).
-        message.done.forEach { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 4.dp)) }
         message.note?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 4.dp)) }
     }
+}
+
+/** [message]'s own button ([ChatMessage.opens]): the week's review, or a week's summary in an email to send. */
+@Composable
+private fun Opens(message: ChatMessage) {
+    val opens = message.opens ?: return
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val week = opens.removePrefix(Conversation.OPENS_SUMMARY).takeIf { opens.startsWith(Conversation.OPENS_SUMMARY) }
+    OutlinedButton(onClick = {
+        context.startActivity(Intent(context, ReviewsActivity::class.java).apply { week?.let { putExtra(ReviewsActivity.EXTRA_SEND, it) } })
+    }) { Text(if (week != null) "Send it" else "Open the review") }
 }
 
 /** What [message]'s searches were for (16 Oct), in small type, and the pages they found, each a link to open. */
@@ -547,8 +624,7 @@ private fun Remembered(graph: AppGraph, message: ChatMessage) {
     val memory by graph.memory.state.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     var said by remember(message.id) { mutableStateOf<String?>(null) }
-    // An answer from before what each line did was kept: its lines read against what's remembered now.
-    val edits = message.memoryEdits.ifEmpty { message.remembered.map { Memories.editOf(it, memory) ?: MemoryEdit(it) } }
+    val edits = message.memoryEdits
     val quiet = MaterialTheme.colorScheme.onSurfaceVariant
     edits.forEachIndexed { i, edit ->
         Row(Modifier.fillMaxWidth().padding(start = 4.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -570,7 +646,8 @@ private fun Remembered(graph: AppGraph, message: ChatMessage) {
 
 /**
  * What [message]'s actions did (16 Oct: a step ticked or to do again, a task done, open again or
- * deleted, a setting set), a line each in small type, each with its Undo while it can be taken back.
+ * deleted, a setting set), a line each in small type, each with its Undo while it can be taken back;
+ * and the lines with nothing to undo (a change not made, where a time went, a text read in full).
  */
 @Composable
 private fun Acts(graph: AppGraph, message: ChatMessage) {

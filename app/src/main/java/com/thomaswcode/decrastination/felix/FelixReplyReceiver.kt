@@ -9,10 +9,9 @@ import com.thomaswcode.decrastination.AppGraph
 import kotlinx.coroutines.launch
 
 /**
- * What's done from Felix's notification (AI-24): a reply, typed or one of his, goes on in the chat
- * ([Conversation.replyToFelix], whose answer comes as his next notification, made as work of its own,
- * [FelixReplyWorker]); a card's button adds the task or applies the changes, as the chat's Add and
- * Apply do.
+ * A reply from Felix's notification (AI-24), typed or one of his: kept in the chat under the message it
+ * answers and routed by its kind ([Conversation.replyToFelix]); a chat turn's answer comes as his next
+ * message, made as work of its own ([FelixReplyWorker]).
  */
 class FelixReplyReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
@@ -20,21 +19,11 @@ class FelixReplyReceiver : BroadcastReceiver() {
         val pending = goAsync()
         graph.scope.launch {
             try {
-                when (intent.action) {
-                    FelixNotifications.ACTION_REPLY -> {
-                        val text = RemoteInput.getResultsFromIntent(intent)?.getCharSequence(FelixNotifications.KEY_REPLY)?.toString()?.trim()
-                        val id = intent.getStringExtra(FelixNotifications.EXTRA_ID)
-                        // Only the reply's own handling waits here; the answer comes after, by itself.
-                        if (!text.isNullOrEmpty() && id != null) graph.conversation.replyToFelix(text, id)
-                    }
-                    FelixNotifications.ACTION_CARD -> {
-                        val message = intent.getStringExtra(FelixNotifications.EXTRA_MESSAGE)
-                        val card = intent.getStringExtra(FelixNotifications.EXTRA_CARD)
-                        if (message != null && card != null) {
-                            graph.conversation.applyProposal(message, card)
-                            FelixNotifications.cancel(context)
-                        }
-                    }
+                if (intent.action == FelixNotifications.ACTION_REPLY) {
+                    val text = RemoteInput.getResultsFromIntent(intent)?.getCharSequence(FelixNotifications.KEY_REPLY)?.toString()?.trim()
+                    val id = intent.getStringExtra(FelixNotifications.EXTRA_ID)
+                    // Only the reply's own handling waits here; the answer comes after, by itself.
+                    if (!text.isNullOrEmpty() && id != null) graph.conversation.replyToFelix(text, id)
                 }
             } catch (e: Exception) {
                 Log.w(AppGraph.TAG, "Felix's notification action failed", e)

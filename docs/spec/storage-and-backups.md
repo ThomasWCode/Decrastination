@@ -11,7 +11,7 @@ The app stores nothing off the phone but the plan's slots in the calendar it wri
 - Unknown keys are ignored and defaults written (`JsonStore.json`).
 - **Every store has a version** (its state's `version`, D-94; a file without one is version 1), and a change to its shape is a migration (`data/Migration.kt`): run on the file's JSON as the store loads, before it's decoded, one version a step, the new shape then written. The file it came from is kept beside it as `<name>.v<from>`, let go a week later at a start that gets that far (`Stores.letGoOfOldShapes`).
 - A file of a newer version than the build, which it can't read, is set aside as one that can't be read (below); what reads of it is kept in this build's shape.
-- Fields that move from one store's file to another's are moved by `Stores` at start, before any store is read (`Move`): the new file written first, then the old trimmed.
+- Fields that move from one store's file to another's are moved by `Stores` at start, before any store is read (`Move`): the new file written first, then the old trimmed. One has: Felix's records from the log and his state from the runtime into the chat (`data/ChatMigration.kt`), merged by id so nothing's doubled; a chat that can't be read is set aside first, as its store would set it aside, and they go into a fresh one, as the log and the runtime are about to lose them.
 - `Stores.all` says, store by store, what a backup keeps of it (or why nothing) and which resets change it, so none can be added and left out of either; `Stores.replace`, called by the backup service alone, is the one way round a store's owner.
 - A failed write is logged; the app carries on.
 
@@ -23,11 +23,12 @@ Under the app's `files/` folder:
 |---|---|
 | `tasks.json` | `TaskState`: every task, open or lately finished, with its text, steps, readings and your values over it; each source's last read; the day's Anki quota deck and the decks' topics; completions not yet rewarded; Power Planner's timetable |
 | `settings.json` | `Settings`: hours and school windows, planning, blocking, Felix, Claude, calendars, notifications, protection |
-| `runtime.json` | `RuntimeState`: free time, today's slots, keeps under way, Felix's state, waiting changes, the code lock, the watchdog's findings, Claude's month and last 100 calls, the calibration, calendar answers, micro-plans, held notifications, Anki readings |
-| `log.json` | `ActivityLog`: slots kept, missed and moved; completions; blocks; protection lapses; each day's plan; check-ins; weekly reviews; Felix's messages; each week's totals ([privacy.md](privacy.md)) |
+| `runtime.json` | `RuntimeState`: free time, today's slots, keeps under way, waiting changes, the code lock, the watchdog's findings, Claude's month and last 100 calls, the calibration, calendar answers, micro-plans, held notifications, Anki readings |
+| `log.json` | `ActivityLog`: slots kept, missed and moved; completions; blocks; protection lapses; each day's plan; check-ins; weekly reviews; each week's totals ([privacy.md](privacy.md)) |
 | `instructions.json` | `InstructionState`: your changes, each with its words, what it's about, its reading and its state |
 | `memory.json` | `MemoryState`: what Felix remembers ([felix.md](felix.md)) |
-| `chat.json` | `ChatState`: the chat, the newest 200 messages |
+| `chat.json` | `ChatState`: the chat's live window (every message of yours and Felix's, the newest 200 or those of the last 60 days, whichever keeps more, and every one of his unread), where you'd read up to, and Felix's state (his next check, what he wrote ahead, what waits to be asked, the check-in's answers so far) |
+| `chat-archive.json` | `ChatArchive`: the chat's messages past its window, oldest first, kept for you and never sent to him ([felix.md](felix.md)) |
 | `school.json` | `SchoolCalendar`: days with no school, and half-days |
 | `calendar.json` | `CalendarVersions`: fingerprints of the event versions the app wrote to the calendar, the last 2 000, so a stray copy is told from an event of yours ([slots-and-calendar.md](slots-and-calendar.md)) |
 | `secrets.bin` | The credentials and keys, encrypted (`data/SecretStore.kt`, [privacy.md](privacy.md)) |
@@ -58,9 +59,10 @@ Secrets that can't be decrypted are told apart from none saved (`SecretStore`): 
 
 ## Backups
 
-`data/Backup.kt` (`Backup`, format 6, `Backups.encode`) holds what the sources can't give back, with the version of each store its parts come from (`Backup.versions`):
+`data/Backup.kt` (`Backup`, format 7, `Backups.encode`) holds what the sources can't give back, with the version of each store its parts come from (`Backup.versions`):
 - the settings as asked for (waiting changes applied), the activity log, the calibration, your calendar answers, and Claude's month;
-- your changes in use, your own tasks, the school calendar, what Felix remembers, Felix's state, today's slots, and the chat.
+- your changes in use, your own tasks, the school calendar, what Felix remembers, today's slots, and the chat with Felix's state;
+- the chat's earlier messages, while the backup fits what Import reads (8 MB): past that, the oldest are left out first, as many as it takes, and Settings → Backup says how many (`Backups.fitted`).
 
 Never the passwords or keys, nor the sources' tasks, which the next sync reads again.
 
@@ -76,8 +78,9 @@ A copy off the phone is yours to make: a sync app mirroring the folder, or Expor
 `BackupService.importBackup` restores nothing from a file that isn't one of this app's, is a newer format, carries a store newer than this build's (a store it doesn't carry, as `calendar.json`, may be newer), has a part its store's migrations can't bring to this build's shape (a step missing, or a migration failing on it), is over 8 MB, or holds what the app never writes (`Backups.problem`: a setting out of the screen's range, negative minutes, a learned figure out of bounds, and so on). A backup's parts from a store of an older version are brought to this build's shape first, by that store's migrations (`Backups.decode`). Otherwise:
 - the settings go through `changeSettings`, keeping this phone's protection, Claude's key in use and its calendars: once armed, one that loosens the blocker waits;
 - your changes come back as applying each here would (one that would make tasks wait for each other in a circle stays unclear, saying so); your own tasks not here are added, with your changes laid over them again;
-- the school calendar is merged; what's remembered is merged by topic and words, this phone's winning; the chat comes back only where this phone's is empty;
-- Felix's state comes back where this phone has none, and today's slots on the same day;
+- the school calendar is merged; what's remembered is merged by topic and words, this phone's winning; the chat comes back whole only where this phone's is empty, its earlier messages and Felix's state with it; into a chat that isn't, his own messages it hasn't come back by id, with your replies to them, as the log's records of them were merged before 4.0.0, those read there read here as far as that goes without passing one of his unread here;
+- Felix's state otherwise comes back where this phone has none, and today's slots on the same day;
+- a backup from before the chat held Felix's messages (format 6) has his records and state moved into its chat as it's read, as the phone's files were;
 - the log is merged with nothing doubled, this phone's winning; the calibration is the backup's; calendar answers merge, this phone's winning; Claude's month takes the higher of each count;
 - the reminders' alarms are set again, the calendar read again, and today's record made again.
 
@@ -85,7 +88,7 @@ It then says what came back, and what waits.
 
 ## Resets
 
-Settings → Reset (LR-08, `BackupService.reset`) clears one part, after saving a copy of everything as `reset-<date>-<time>.json` in `Documents/Decrastination` (in the app's own `backups/` where that can't be written, which Settings → Backup restores from).
+Settings → Reset (LR-08, `BackupService.reset`) clears one part, after saving a copy of everything as `reset-<date>-<time>.json` in `Documents/Decrastination` (in the app's own `backups/` where that can't be written, which Settings → Backup restores from). Where the chat goes and that copy has no room for its earliest messages (past 8 MB), they're kept whole beside it as `chat-archive-<date>-<time>.json`, so none is lost; it isn't a backup to import.
 Nothing goes until its copy is saved. None needs the parent code, and none touches Claude's key, the sources or protection.
 
 | Reset | What goes |
@@ -93,7 +96,7 @@ Nothing goes until its copy is saved. None needs the parent code, and none touch
 | Stats | The record (slots, completions, days, blocks, reviews, check-ins), and what's learned from it; Felix's messages stay |
 | What the app has learned | The calibration, learned afresh from now |
 | What Felix remembers | His facts and standing instructions, and your profile lines |
-| The chat and Felix's history | The chat, Felix's messages and what he's waiting to say |
+| The chat and Felix's history | The chat and its earlier messages, Felix's among them, and what he's waiting to say |
 | Your changes | Every change in use |
 | Everything learned | All of these |
 

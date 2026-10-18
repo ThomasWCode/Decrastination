@@ -4,7 +4,8 @@ package com.thomaswcode.decrastination.notify
  * Every notification the app makes, named in one place (docs/plan_v4/05-the-chat.md §3): its [id],
  * and the request codes its tap and buttons take ([codes]), a range of its own, so no two pending
  * intents can collide. Those named ahead of the stage that uses them are said to be. Ids that stay
- * keep a notification already showing where it is through an update.
+ * keep a notification already showing where it is through an update; those retired ([RETIRED]) are
+ * named still, so one left showing from before is taken away.
  */
 enum class NoticeId(val id: Int, val codes: IntRange = IntRange.EMPTY) {
     /** Work under way, shown by WorkManager (on older Android versions): a sync, readings, the review, a reply answered, Felix's look. */
@@ -21,22 +22,22 @@ enum class NoticeId(val id: Int, val codes: IntRange = IntRange.EMPTY) {
     /** The watchdog's: blocking or protection off. */
     Protection(3001, 3001..3001),
 
-    /** The morning's list, the check-in's form reminder, the week's review and its summary: each one's tap. */
+    /** The check-in's form reminder: its tap. The morning's list, the week's review and its summary, retired: Felix's messages. */
     Briefing(4001, 4001..4001),
     CheckIn(4002, 4002..4002),
     Review(4003, 4003..4003),
     Summary(4004, 4004..4004),
 
-    /** "How was it?" with Claude off, one a completion (tagged): its tap and its three answers. */
+    /** "How was it?" with Claude off, one a completion (tagged), retired: Felix's message. */
     Assessment(4100, 4100..4103),
 
-    /** Felix's message, one at a time: its tap and reply, and up to two cards' buttons. Retired when his conversation is one notification (Stage 5a). */
+    /** Felix's message, one at a time, retired: his conversation is one notification ([Felix]). */
     FelixMessage(4200, 4200..4202),
 
     /** A move of yours in the calendar put back, one a slot (tagged). */
     CalendarMove(4300),
 
-    /** The calendar's questions, one an event (tagged): their three answers. Retired when they're his messages (Stage 5a). */
+    /** The calendar's questions, one an event (tagged), retired: Felix's messages. */
     CalendarQuestion(4400, 4400..4403),
 
     /** A Gmail write that couldn't be made, one a conversation (tagged): its tap. Named ahead of Stage 11. */
@@ -46,7 +47,7 @@ enum class NoticeId(val id: Int, val codes: IntRange = IntRange.EMPTY) {
     ModelDropped(5001, 5001..5001),
     ModelKey(5002, 5002..5002),
 
-    /** His conversation, one notification holding his unread messages: its tap, reply and choices. Named ahead of Stage 5a. */
+    /** His conversation, one notification holding his unread messages: its tap, and its reply with his replies as choices. */
     Felix(6000, 6001..6099),
     ;
 
@@ -55,5 +56,10 @@ enum class NoticeId(val id: Int, val codes: IntRange = IntRange.EMPTY) {
         val code = codes.first + index
         require(index >= 0 && code in codes) { "$name has no request code $index" }
         return code
+    }
+
+    companion object {
+        /** No longer made, as each is Felix's message in the chat now (4.0.0): taken away at start where one's left ([Notifier.retire]). */
+        val RETIRED: Set<NoticeId> = setOf(Briefing, Review, Summary, Assessment, FelixMessage, CalendarQuestion)
     }
 }

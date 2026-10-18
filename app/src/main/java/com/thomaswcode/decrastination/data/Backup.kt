@@ -2,6 +2,7 @@ package com.thomaswcode.decrastination.data
 
 import com.thomaswcode.decrastination.core.Calibration
 import com.thomaswcode.decrastination.core.Change
+import com.thomaswcode.decrastination.core.ChatArchive
 import com.thomaswcode.decrastination.core.ChangeType
 import com.thomaswcode.decrastination.core.Instruction
 import com.thomaswcode.decrastination.core.InstructionState
@@ -19,8 +20,11 @@ import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
 
 /**
@@ -50,12 +54,15 @@ data class Backup(
     val school: SchoolCalendar = SchoolCalendar(),
     /** What Felix remembers (AI-21): none in a backup from before. */
     val memory: com.thomaswcode.decrastination.core.MemoryState = com.thomaswcode.decrastination.core.MemoryState(),
-    /** Felix's own state (AR-07): when he looks next, what he's waiting to say. None in a backup from before. */
-    val felix: FelixState = FelixState(),
     /** Today's slots' starts and misses (AR-07), for a restore the same day. */
     val slots: com.thomaswcode.decrastination.core.SlotState = com.thomaswcode.decrastination.core.SlotState(),
-    /** The chat (AR-07, LR-08), so a reset's copy holds what it clears: restored where this phone's is empty. None in a backup from before. */
+    /**
+     * The chat (AR-07, LR-08), so a reset's copy holds what it clears: restored where this phone's is
+     * empty, Felix's state with it ([com.thomaswcode.decrastination.core.ChatState.felix]). None in a backup from before.
+     */
     val chat: com.thomaswcode.decrastination.core.ChatState = com.thomaswcode.decrastination.core.ChatState(),
+    /** The chat's earlier messages, while the backup has room for them, the oldest left out first ([Backups.fitted]). */
+    val archive: ChatArchive = ChatArchive(),
     /**
      * The version of each store its parts come from, by file (docs/plan_v4/04-data-and-migrations.md): an
      * older one's parts are brought to this build's shapes as it's read ([Backups.decode]). None in a
@@ -72,10 +79,10 @@ data class Backup(
          */
         /**
          * 4 since slots replaced sessions in the log (LR-09, AR-09), 5 with what's remembered
-         * (AI-21), 6 with Felix's state, today's slots and the chat (AR-07): an older app refuses it
-         * rather than losing them.
+         * (AI-21), 6 with Felix's state, today's slots and the chat (AR-07), 7 with the chat's earlier
+         * messages (4.0.0): an older app refuses it rather than losing them.
          */
-        const val FORMAT = 6
+        const val FORMAT = 7
     }
 }
 
@@ -91,6 +98,25 @@ object Backups {
     }
 
     fun encode(backup: Backup): String = json.encodeToString(Backup.serializer(), backup)
+
+    /**
+     * [backup] as text within [cap] bytes, as Import reads it ([read]): the chat's earlier messages
+     * ([Backup.archive]) left out, the oldest first, as far as it takes; and how many were.
+     */
+    fun fitted(backup: Backup, cap: Int = MAX_BYTES): Pair<String, Int> {
+        fun bytes(text: String) = text.toByteArray(Charsets.UTF_8).size
+        val whole = encode(backup)
+        val all = backup.archive.messages
+        if (bytes(whole) <= cap || all.isEmpty()) return whole to 0
+        // The fewest left out that fit: more left out never makes it longer.
+        var fits = all.size
+        var over = 0
+        while (fits - over > 1) {
+            val mid = (over + fits) / 2
+            if (bytes(encode(backup.copy(archive = backup.archive.copy(messages = all.drop(mid))))) <= cap) fits = mid else over = mid
+        }
+        return encode(backup.copy(archive = backup.archive.copy(messages = all.drop(fits)))) to fits
+    }
 
     /**
      * [text] as one of this app's backups, or null: not JSON, not this app's, a newer format than this
@@ -114,11 +140,29 @@ object Backups {
      */
     private val PARTS: Map<String, Pair<String, String?>> = mapOf(
         "settings" to ("settings.json" to null), "log" to ("log.json" to null), "school" to ("school.json" to null),
-        "memory" to ("memory.json" to null), "chat" to ("chat.json" to null),
+        "memory" to ("memory.json" to null), "chat" to ("chat.json" to null), "archive" to ("chat-archive.json" to null),
         "instructions" to ("instructions.json" to "instructions"), "ownTasks" to ("tasks.json" to "tasks"),
         "calibration" to ("runtime.json" to "calibration"), "eventAnswers" to ("runtime.json" to "eventAnswers"),
-        "aiUsage" to ("runtime.json" to "aiUsage"), "felix" to ("runtime.json" to "felix"), "slots" to ("runtime.json" to "slots"),
+        "aiUsage" to ("runtime.json" to "aiUsage"), "slots" to ("runtime.json" to "slots"),
     )
+
+    /**
+     * The chat's move ([ChatMigration.MOVE]) made on a backup from before it, as at a start: Felix's records
+     * (in its log's part) and his state (a part of its own then, the runtime's `felix`) into its chat, put in
+     * [out] in the chat's new shape; the log's part loses them by its own migration after. The version the
+     * chat then has, or null where there's nothing to move ([said] or its chat is of that [shape] already).
+     */
+    private fun moved(backup: JsonObject, out: MutableMap<String, JsonElement>, said: Int?, shape: Shape?): Int? {
+        val chat = backup["chat"] as? JsonObject
+        if ((said ?: chat?.let(Migration::versionOf) ?: 1) >= 2 || (shape?.version ?: 1) < 2) return null
+        val runtime = JsonObject(listOfNotNull((backup["felix"] as? JsonObject)?.let { "felix" to it }).toMap())
+        val titles = (backup["ownTasks"] as? JsonArray).orEmpty().mapNotNull { it as? JsonObject }
+            .mapNotNull { t -> (t["id"] as? JsonPrimitive)?.contentOrNull?.let { id -> id to ((t["title"] as? JsonPrimitive)?.contentOrNull ?: "") } }.toMap()
+        val merged = ChatMigration.merged(chat ?: JsonObject(emptyMap()), (backup["log"] as? JsonObject)?.get("felix") as? JsonArray, runtime, backup["memory"] as? JsonObject, titles)
+        out["chat"] = JsonObject(merged + (Migration.VERSION to JsonPrimitive(2)))
+        out.remove("felix")
+        return 2
+    }
 
     /**
      * [backup]'s parts brought from the versions their stores had (its `versions`; else a whole part's
@@ -127,8 +171,10 @@ object Backups {
      * (wherever its parts are), or a part can't be brought: newer than this build's, or a step on the way missing.
      */
     fun upgraded(backup: JsonObject, shapes: Map<String, Shape>): JsonObject? {
-        val versions = (backup["versions"] as? JsonObject).orEmpty()
         val out = backup.toMutableMap()
+        val given = (backup["versions"] as? JsonObject).orEmpty()
+        // Moves between stores first, as at a start ([Stores.MOVES]): the chat's says its new version.
+        val versions = given + listOfNotNull(moved(backup, out, (given["chat.json"] as? JsonPrimitive)?.intOrNull, shapes["chat.json"])?.let { "chat.json" to JsonPrimitive(it) })
         for ((file, shape) in shapes) {
             val said = (versions[file] as? JsonPrimitive)?.intOrNull
             // A store the backup carries (PARTS) that's newer than this build's isn't read, wherever its parts
@@ -139,7 +185,7 @@ object Backups {
             if (parts.isEmpty()) continue
             val whole = parts.singleOrNull { PARTS.getValue(it).second == null }
             if (whole != null) {
-                val part = backup[whole] as? JsonObject ?: continue
+                val part = out[whole] as? JsonObject ?: continue
                 val at = said ?: Migration.versionOf(part)
                 out[whole] = Migration.upgrade(JsonObject(part + (Migration.VERSION to JsonPrimitive(at))), shape.version, shape.migrations) ?: return null
             } else {
@@ -387,7 +433,6 @@ object Backups {
         days = (current.days + imported.days).distinctBy { it.date }.sortedBy { it.date },
         checkIns = (current.checkIns + imported.checkIns).distinctBy { it.weekOf }.sortedBy { it.at },
         reviews = (current.reviews + imported.reviews).distinctBy { it.at }.sortedBy { it.at },
-        felix = (current.felix + imported.felix).distinctBy { it.id }.sortedBy { it.at },
         weeks = (current.weeks + imported.weeks).distinctBy { it.week }.sortedBy { it.week },
     ).trimmed(now)
 }

@@ -12,7 +12,7 @@ The types are in [04](04-data-and-migrations.md) §The types: `Note(id, text, at
 
 `By` is Stage 7's enum (`You`, `Felix`), in place before this. A note from you comes from the task's sheet (Q14: A); from him, the chat.
 
-The store: one file, `felix.json` (`FelixStore(notes, reminders, version = 1)`), made by `Stores` (Stage 3), owned by the Conversation service (Stage 4), in the backup (format 7) and in Reset's "The chat and Felix's history" (Q12: A). Not on `TaskItem`: a merge rewrites tasks and must not be able to drop them; keyed by task id, which is stable across syncs and reopenings, and outlives a task's trimmed text on its record (Stage 7).
+The store: one file, `felix.json` (`FelixStore(notes, reminders, version = 1)`), made by `Stores` (Stage 3), owned by the Conversation service (Stage 4), in the backup (format 8) and in Reset's "The chat and Felix's history" (Q12: A). Not on `TaskItem`: a merge rewrites tasks and must not be able to drop them; keyed by task id, which is stable across syncs and reopenings, and outlives a task's trimmed text on its record (Stage 7).
 
 ## Setting them from the chat
 

@@ -1,44 +1,32 @@
 package com.thomaswcode.decrastination.learn
 
 import android.Manifest
-import android.content.BroadcastReceiver
 import android.content.ContentUris
 import android.content.Context
-import android.content.Intent
 import android.content.pm.PackageManager
-import android.net.Uri
 import android.provider.CalendarContract
 import android.util.Log
-import androidx.core.app.NotificationCompat
 import com.thomaswcode.decrastination.AppGraph
-import com.thomaswcode.decrastination.R
-import com.thomaswcode.decrastination.block.BlockPolicy
 import com.thomaswcode.decrastination.core.Instructions
 import com.thomaswcode.decrastination.core.Planner
-import com.thomaswcode.decrastination.notify.Channels
-import com.thomaswcode.decrastination.notify.NoticeId
-import com.thomaswcode.decrastination.notify.Notify
 import com.thomaswcode.decrastination.widget.WidgetUpdater
 import java.time.Instant
 import java.time.ZoneId
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.util.Locale
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 /**
  * The phone's calendar as busy time (Q7, docs/spec/slots-and-calendar.md): the next fortnight's events, judged one
  * by one ([EventJudge]), given to the planner; an all-day event the rules can't judge is asked
- * about once, in a notification, within the week before it, and takes all its time till answered.
+ * about once, as Felix's message in the chat, within the week before it, and takes all its time till answered.
  */
 object CalendarTime {
     const val PERMISSION = Manifest.permission.READ_CALENDAR
-    const val ACTION_ANSWER = "com.thomaswcode.decrastination.action.EVENT_ANSWER"
-    const val EXTRA_KEY = "key"
-    const val EXTRA_ANSWER = "answer"
     private const val DAY_MS = 24 * 3_600_000L
     /**
      * The end of the plan's last day (DX-14): its days run to today + [Planner.MAX_HORIZON_DAYS], each
@@ -51,7 +39,7 @@ object CalendarTime {
 
     fun allowed(context: Context): Boolean = context.checkSelfPermission(PERMISSION) == PackageManager.PERMISSION_GRANTED
 
-    /** The answers a question offers, in words and as they're kept: in its notification and on the Calendar page. */
+    /** The answers a question offers, in words and as they're kept: his chips on it, and on the Calendar page. */
     val ANSWERS: List<Pair<String, String>> = listOf(
         "All of it" to EventJudge.Judgement.Busy,
         "A few hours" to EventJudge.Judgement.Load(EventJudge.FEW_HOURS_MIN),
@@ -60,7 +48,7 @@ object CalendarTime {
 
     /**
      * Your [answer] about every event named [key] (null: forgotten, for the rules to judge again):
-     * kept, its question withdrawn, the plan redone, and today's as the briefing recorded it.
+     * kept, his question answered, the plan redone, and today's as the briefing recorded it.
      */
     suspend fun answer(context: Context, key: String, answer: String?) {
         AppGraph.get(context).runtime.update { it.copy(eventAnswers = if (answer == null) it.eventAnswers - key else it.eventAnswers + (key to answer)) }
@@ -112,12 +100,15 @@ object CalendarTime {
         return events
     }
 
+    /** Held while the calendar's read and its questions asked: refreshes at once (a start, a sync, the calendar changing) can't ask an event twice. */
+    private val refreshing = Mutex()
+
     /** Reads the calendar, judges it for the planner, and asks about what it can't judge. */
-    suspend fun refresh(context: Context) {
+    suspend fun refresh(context: Context): Unit = refreshing.withLock {
         val graph = AppGraph.get(context)
         if (!allowed(context)) {
             graph.calendarTime = EventJudge.Time(emptyList(), emptyMap(), emptyList())
-            return
+            return@withLock
         }
         graph.watchCalendar()
         val now = graph.clock.now()
@@ -132,7 +123,7 @@ object CalendarTime {
             // Not read this time: the events last read, judged again with the answers as they are
             // now, so an instruction applied or taken back counts all the same.
             graph.calendarTime = EventJudge.time(graph.calendarTime.events, graph.runtime.value.eventAnswers + yours, graph.clock.zone(), askUntil = now + ASK_AHEAD_MS)
-            return
+            return@withLock
         }
         yours.keys.forEach { cancelQuestion(context, it) }
         // Not counted as asked: taken back, the instruction leaves it to be asked again.
@@ -140,10 +131,9 @@ object CalendarTime {
         val answers = graph.runtime.value.eventAnswers + yours
         val time = EventJudge.time(events, answers, graph.clock.zone(), askUntil = now + ASK_AHEAD_MS)
         graph.calendarTime = time
-        // Not at night: they're asked at the first look after quiet hours. Nor while the question
-        // couldn't be seen (notifications off): it's asked once it can be, not marked asked unseen.
-        val quiet = BlockPolicy.isQuiet(now, graph.clock.zone(), graph.settings.value)
-        val toAsk = if (quiet || !graph.notifier.shown(Channels.CALENDAR)) emptyList() else questions(time.toAsk, graph.runtime.value.eventsAsked, now)
+        // In the chat at once, whatever the hour: his notification leaves them out in quiet hours, till
+        // the morning (NotifyRules.waitsForMorning).
+        val toAsk = questions(time.toAsk, graph.runtime.value.eventsAsked, now)
         if (toAsk.isNotEmpty()) {
             toAsk.forEach { ask(context, it, graph.clock.zone()) }
             graph.runtime.update { it.copy(eventsAsked = it.eventsAsked + toAsk.map(EventJudge::key)) }
@@ -161,51 +151,10 @@ object CalendarTime {
     fun questionDay(event: CalendarEvent, zone: ZoneId): String =
         Instant.ofEpochMilli(event.start).atZone(if (event.allDay) ZoneOffset.UTC else zone).toLocalDate().format(DAY)
 
-    private fun ask(context: Context, event: CalendarEvent, zone: ZoneId) {
-        val key = EventJudge.key(event)
-        // One notification per event name, told apart by its tag, and actions told apart by their
-        // data: no two questions can share either.
-        val tag = TAG_PREFIX + key
-        val day = questionDay(event, zone)
-        val builder = Notify.builder(context, Channels.CALENDAR)
-            .setSmallIcon(R.drawable.ic_focus)
-            .setContentTitle("${event.title}, $day")
-            .setContentText("How much of the day does it take? The plan leaves you that much less time.")
-            .setAutoCancel(true)
-        // Kept with it, so held back (LR-07), it's asked with its answers still.
-        ANSWERS.forEachIndexed { i, (label, answer) ->
-            Notify.button(
-                builder,
-                context,
-                label,
-                NoticeId.CalendarQuestion.code(1 + i),
-                Intent(context, EventAnswerReceiver::class.java)
-                    .setAction(ACTION_ANSWER)
-                    .setData(Uri.fromParts("event", "$key#$i", null))
-                    .putExtra(EXTRA_KEY, key)
-                    .putExtra(EXTRA_ANSWER, answer),
-            )
-        }
-        AppGraph.get(context).notifier.post(NoticeId.CalendarQuestion, builder.build(), tag)
-    }
+    /** [event] asked about as Felix's message, one a name: its three answers his chips, one of them kept for every event of its name. */
+    private suspend fun ask(context: Context, event: CalendarEvent, zone: ZoneId) =
+        AppGraph.get(context).conversation.askAboutEvent(EventJudge.key(event), event.title, questionDay(event, zone), event.start, ANSWERS.map { it.first })
 
-    fun cancelQuestion(context: Context, key: String) = AppGraph.get(context).notifier.cancel(NoticeId.CalendarQuestion, TAG_PREFIX + key)
-
-    private const val TAG_PREFIX = "event:"
-}
-
-/** Your answer about an event: kept for every event of that name, and the plan redone. */
-class EventAnswerReceiver : BroadcastReceiver() {
-    override fun onReceive(context: Context, intent: Intent) {
-        val key = intent.getStringExtra(CalendarTime.EXTRA_KEY) ?: return
-        val answer = intent.getStringExtra(CalendarTime.EXTRA_ANSWER) ?: return
-        val pending = goAsync()
-        CoroutineScope(Dispatchers.Default).launch {
-            try {
-                CalendarTime.answer(context, key, answer)
-            } finally {
-                pending.finish()
-            }
-        }
-    }
+    /** His questions about the events named [key] answered (here, on the Calendar page, or by an instruction): out of his notification. */
+    suspend fun cancelQuestion(context: Context, key: String) = AppGraph.get(context).conversation.settleEvent(key)
 }

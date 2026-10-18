@@ -197,7 +197,7 @@ fun StatsScreen(graph: AppGraph) {
             androidx.compose.material3.TextButton(modifier = Modifier.padding(horizontal = 8.dp), onClick = {
                 scope.launch {
                     val file = java.io.File(context.cacheDir, "exports/decrastination-$today.zip")
-                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { com.thomaswcode.decrastination.learn.Export.zip(com.thomaswcode.decrastination.learn.Export.csv(log, runtime.calibration, zone), file) }
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { com.thomaswcode.decrastination.learn.Export.zip(com.thomaswcode.decrastination.learn.Export.csv(log, runtime.calibration, zone, graph.stores.chatArchive.value.messages + graph.chat.value.messages), file) }
                     val uri = androidx.core.content.FileProvider.getUriForFile(context, "${context.packageName}.photos", file)
                     val send = android.content.Intent(android.content.Intent.ACTION_SEND).setType("application/zip").putExtra(android.content.Intent.EXTRA_STREAM, uri).addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
                     context.startActivity(android.content.Intent.createChooser(send, "Export the record"))

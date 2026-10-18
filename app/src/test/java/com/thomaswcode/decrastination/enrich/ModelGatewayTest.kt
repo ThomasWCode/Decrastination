@@ -11,6 +11,7 @@ import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Status
 import com.thomaswcode.decrastination.core.TaskItem
+import com.thomaswcode.decrastination.data.ChatMigration
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.RuntimeState
 import com.thomaswcode.decrastination.data.Settings
@@ -40,7 +41,7 @@ class ModelGatewayTest {
     private val dir: File = Files.createTempDirectory("gateway").toFile()
     private val clock = FixedClock(Fixtures.at("2026-10-14T18:00"), Fixtures.LONDON)
     private val settings = JsonStore(File(dir, "settings.json"), Settings.serializer(), { Settings(aiEnabled = true, aiKeyActive = true) })
-    private val runtime = JsonStore(File(dir, "runtime.json"), RuntimeState.serializer(), ::RuntimeState)
+    private val runtime = JsonStore(File(dir, "runtime.json"), RuntimeState.serializer(), ::RuntimeState, migrations = listOf(ChatMigration.RUNTIME))
     private val tasks = JsonStore(File(dir, "tasks.json"), TaskState.serializer(), ::TaskState)
     private var key: String? = "test-key"
     private val alerts = Alerts()

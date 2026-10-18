@@ -1,6 +1,8 @@
 package com.thomaswcode.decrastination.learn
 
 import com.thomaswcode.decrastination.core.Calibration
+import com.thomaswcode.decrastination.core.ChatHistory
+import com.thomaswcode.decrastination.core.ChatMessage
 import com.thomaswcode.decrastination.data.ActivityLog
 import java.io.File
 import java.time.Instant
@@ -10,12 +12,12 @@ import java.util.zip.ZipOutputStream
 
 /**
  * The record as CSV files (PL-11), to share: what was finished, each slot, each day, the blocks,
- * Felix's messages and the calibration, a file each; times local, as the app shows them. Pure but
- * for [zip].
+ * Felix's own messages (from the chat's [messages], its archive's with its window's) and the
+ * calibration, a file each; times local, as the app shows them. Pure but for [zip].
  */
 object Export {
     /** File name to its CSV text. */
-    fun csv(log: ActivityLog, calibration: Calibration, zone: ZoneId): Map<String, String> {
+    fun csv(log: ActivityLog, calibration: Calibration, zone: ZoneId, messages: List<ChatMessage> = emptyList()): Map<String, String> {
         fun t(at: Long?) = at?.let { Instant.ofEpochMilli(it).atZone(zone).toLocalDateTime().withNano(0).toString() }
         return linkedMapOf(
             "completions.csv" to table(
@@ -33,7 +35,10 @@ object Export {
             "blocks.csv" to table(listOf("at", "what", "why"), log.blocks.map { listOf(t(it.at), it.target, it.reason) }),
             "felix.csv" to table(
                 listOf("at", "why", "said", "replies", "piece", "task", "reply", "replied"),
-                log.felix.map { listOf(t(it.at), it.reason, it.text, it.replies.joinToString(" | "), it.key, it.taskId, it.replyText, t(it.repliedAt)) },
+                ChatHistory.his(messages).map { m ->
+                    val reply = ChatHistory.replyOf(m, messages)
+                    listOf(t(m.at), m.kind, m.text, m.suggestedReplies.joinToString(" | "), m.pieceKey, m.about.taskId, reply?.text, t(reply?.at))
+                },
             ),
             "calibration.csv" to table(
                 listOf("what", "key", "value", "rests_on"),
