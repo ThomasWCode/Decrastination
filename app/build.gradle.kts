@@ -67,14 +67,22 @@ android {
 // ./gradlew testDebugUnitTest --tests '*SchemaCompileTest*' -PcheckSchemas=true
 // docs/spec/felix-inputs.md written again from what the app sends (FelixInputsDocTest):
 // ./gradlew testDebugUnitTest --tests '*FelixInputsDocTest*' -PupdateDocs=true
+// The plan snapshot written again (PlanSnapshotTest), only on purpose:
+// ./gradlew testDebugUnitTest --tests '*PlanSnapshotTest*' -PupdateSnapshots=true
+// A phone backup's stores read and migrated (RehearsalTest), as scripts/rehearse.sh runs it:
+// ./gradlew testDebugUnitTest --tests '*RehearsalTest*' --rerun -PrehearseFrom=<the unpacked files/ folder>
 tasks.withType<Test>().configureEach {
     systemProperty("updateGolden", providers.gradleProperty("updateGolden").getOrElse("false"))
     systemProperty("runEval", providers.gradleProperty("runEval").getOrElse("false"))
     systemProperty("checkSchemas", providers.gradleProperty("checkSchemas").getOrElse("false"))
     systemProperty("effort", providers.gradleProperty("effort").getOrElse(""))
     systemProperty("updateDocs", providers.gradleProperty("updateDocs").getOrElse("false"))
+    systemProperty("updateSnapshots", providers.gradleProperty("updateSnapshots").getOrElse("false"))
+    systemProperty("rehearseFrom", providers.gradleProperty("rehearseFrom").getOrElse(""))
     // The doc FelixInputsDocTest holds to the code: a change to it alone runs the tests again.
     inputs.file(layout.projectDirectory.file("../docs/spec/felix-inputs.md")).withPropertyName("felixInputsDoc").withPathSensitivity(PathSensitivity.RELATIVE)
+    // The stores' shapes and the plan's snapshot (StoresDecodeTest, PlanSnapshotTest): a change to them alone runs the tests again.
+    inputs.dir(layout.projectDirectory.dir("../fixtures")).withPropertyName("fixtures").withPathSensitivity(PathSensitivity.RELATIVE)
 }
 
 dependencies {

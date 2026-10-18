@@ -1,0 +1,382 @@
+{
+    "credit": {
+        "day": "2026-10-18",
+        "earnedMs": 600000,
+        "spentMs": 120000,
+        "allowanceOn": "2026-10-17"
+    },
+    "slots": {
+        "date": "2026-10-18",
+        "previous": {
+            "teams:as-essay#1": 1792339200000
+        },
+        "missed": [
+            {
+                "key": "teams:as-sheet#1",
+                "taskId": "teams:as-sheet",
+                "at": 1792312800000,
+                "spilled": true
+            }
+        ]
+    },
+    "calendarWritten": {
+        "decrastination://slot/teams:as-essay#1": 1792339200000
+    },
+    "calendarWrittenTo": 12,
+    "calendarsToClear": [
+        4
+    ],
+    "photosDone": [
+        {
+            "id": "photo-2",
+            "taskId": "teams:as-essay",
+            "step": "Plan the essay",
+            "minutes": 25,
+            "at": 1792314000000,
+            "stepIndex": 1,
+            "key": "teams:as-essay#1",
+            "takenAt": 1792313880000
+        }
+    ],
+    "keeping": [
+        {
+            "record": {
+                "date": "2026-10-18",
+                "key": "teams:as-essay#0",
+                "taskId": "teams:as-essay",
+                "kind": "Homework",
+                "className": "12X/Hi1",
+                "label": "History essay: causes of the war: Read the two sources",
+                "plannedMin": 30,
+                "start": 1792310400000,
+                "end": 1792312200000,
+                "window": "Evening",
+                "outcome": "Kept",
+                "workedMin": 30,
+                "photo": true,
+                "earned": true,
+                "at": 1792312200000
+            },
+            "stepIndex": 0,
+            "step": "Read the two sources",
+            "workedBefore": 10,
+            "earningMin": 10.0,
+            "replaces": {
+                "date": "2026-10-18",
+                "key": "teams:as-essay#0",
+                "taskId": "teams:as-essay",
+                "kind": "Homework",
+                "className": "12X/Hi1",
+                "label": "History essay: causes of the war: Read the two sources",
+                "plannedMin": 30,
+                "start": 1792310400000,
+                "end": 1792312200000,
+                "window": "Evening",
+                "outcome": "Missed",
+                "workedMin": 0,
+                "photo": true,
+                "earned": true,
+                "at": 1792312200000
+            },
+            "photo": {
+                "id": "photo-2",
+                "taskId": "teams:as-essay",
+                "step": "Plan the essay",
+                "minutes": 25,
+                "at": 1792314000000,
+                "stepIndex": 1,
+                "key": "teams:as-essay#1",
+                "takenAt": 1792313880000
+            },
+            "earnOnly": true
+        }
+    ],
+    "felix": {
+        "nextCheckAt": 1792340400000,
+        "lastSentAt": 1792311120000,
+        "draft": {
+            "reason": "SlotStart",
+            "key": "teams:as-essay#1",
+            "answer": {
+                "message": "the essay's up at 17:00. start with the plan.",
+                "replies": [
+                    "on it",
+                    "later"
+                ],
+                "nextCheckMin": 20,
+                "memories": [
+                    {
+                        "topic": "essay",
+                        "text": "Two sources are enough",
+                        "kind": "fact"
+                    },
+                    {
+                        "topic": "",
+                        "text": "No messages after 21:30",
+                        "kind": "rule"
+                    }
+                ]
+            },
+            "at": 1792338720000
+        },
+        "activity": {
+            "teams:as-essay": 1792310700000
+        },
+        "questions": [
+            {
+                "taskId": "gmail:thr-trip",
+                "question": "Is the form signed by you or a parent?",
+                "at": 1791963120000
+            }
+        ],
+        "retry": {
+            "reason": "SlotEnd",
+            "key": "teams:as-sheet#1",
+            "notBefore": 1792313400000
+        }
+    },
+    "notifiedToday": {
+        "2026-10-18": 2
+    },
+    "heldNotifications": [
+        {
+            "channel": "weekly",
+            "id": 4003,
+            "tag": null,
+            "at": 1792274400000,
+            "title": "The week's review",
+            "text": "Two changes to your settings.",
+            "taps": [
+                {
+                    "label": null,
+                    "broadcast": false,
+                    "requestCode": 4003,
+                    "intent": "intent:#Intent;component=com.thomaswcode.decrastination/.learn.CheckInActivity;end",
+                    "reply": null
+                },
+                {
+                    "label": "Reply",
+                    "broadcast": true,
+                    "requestCode": 4200,
+                    "intent": "intent:#Intent;action=com.thomaswcode.decrastination.FELIX_REPLY;end",
+                    "reply": {
+                        "key": "reply",
+                        "label": "Reply to Fe",
+                        "choices": [
+                            "ok"
+                        ]
+                    }
+                }
+            ]
+        },
+        {
+            "channel": "model",
+            "id": 5001,
+            "tag": "teams:as-essay",
+            "at": 1792274700000,
+            "title": "Claude's plan was dropped",
+            "text": "History essay: causes of the war",
+            "taps": []
+        }
+    ],
+    "ankiReadings": [
+        {
+            "at": 1792306800000,
+            "counts": {
+                "1700000000001": {
+                    "learn": 2,
+                    "review": 10,
+                    "new": 20,
+                    "top": false
+                }
+            },
+            "entering": true
+        }
+    ],
+    "ankiFrontSince": 1792306800000,
+    "ankiWorked": {
+        "date": "2026-10-18",
+        "minutes": {
+            "anki:deck-2.3": 6
+        }
+    },
+    "enrichFailed": {
+        "gmail:thr-news": "99aa88bb77cc66dd"
+    },
+    "pending": [
+        {
+            "id": "pending-1",
+            "field": "quietHours",
+            "value": "22:00-07:30",
+            "description": "Quiet hours from 22:00",
+            "requestedAt": 1792306800000,
+            "applyAt": 1792393200000,
+            "waitMs": 90000000,
+            "waitedMs": 3600000
+        }
+    ],
+    "overrideUntil": 1792173600000,
+    "dailyRanAt": {
+        "briefing": 1792310400000,
+        "review": 1791743400000
+    },
+    "dailyRetries": {
+        "check-in": {
+            "at": 1792348500000,
+            "tries": 1
+        }
+    },
+    "adminArmed": true,
+    "codeLock": {
+        "lastUsedStep": 59000000,
+        "wrong": 1,
+        "lockedUntil": 1792170000000
+    },
+    "teamsAuto": {
+        "lastOfferedAt": 1792252200000,
+        "delayedUntil": 1792252500000,
+        "firstUnlockDay": "2026-10-17",
+        "morningUntil": 1792306800000,
+        "retries": 1
+    },
+    "protection": {
+        "problems": [
+            "The focus service is off"
+        ],
+        "offSince": 1792148400000,
+        "checkedAt": 1792314000000,
+        "stoppedSince": 1792148400000,
+        "restartedAt": 1792148700000,
+        "restartTries": 1
+    },
+    "forceActiveUntil": 1792188600000,
+    "uptimeMark": {
+        "boot": 3,
+        "elapsedMs": 7200000
+    },
+    "aiUsage": {
+        "month": "2026-10",
+        "spentUsd": 3.25,
+        "calls": 120,
+        "refused": 1,
+        "failed": 2,
+        "lastError": "Read timed out",
+        "lastCallAt": 1792311120000,
+        "keyProblem": "Rejected",
+        "keyProblemSince": 1791795600000,
+        "keyAlerted": true,
+        "restUntil": 1791799200000,
+        "failuresInRow": 1,
+        "lastFailureClass": "Timeout",
+        "failedAt": [
+            1792310400000
+        ],
+        "lastWorkedAt": 1792311120000
+    },
+    "calibration": {
+        "yields": {
+            "Weekday": 0.8,
+            "Weekend": 0.6
+        },
+        "yieldDays": {
+            "Weekday": 9,
+            "Weekend": 8
+        },
+        "multipliers": {
+            "Homework|": 1.2,
+            "Homework|12X/Hi1": 1.4
+        },
+        "marginDays": {
+            "Homework": 2
+        },
+        "timed": {
+            "Homework|": 12,
+            "Homework|12X/Hi1": 4
+        },
+        "counted": true,
+        "ankiSecondsPerCard": {
+            "1700000000001": 9.5
+        },
+        "ankiStretches": {
+            "1700000000001": 3
+        },
+        "forgotten": {
+            "Revision|": 1791630000000
+        },
+        "learnFrom": 1788217200000
+    },
+    "eventAnswers": {
+        "football training": "load:90"
+    },
+    "eventsAsked": [
+        "football training",
+        "dentist"
+    ],
+    "droppedAlerted": {
+        "teams:as-essay": "a1b2c3d4e5f60718"
+    },
+    "assessLater": [
+        {
+            "taskId": "teams:as-done",
+            "title": "Chemistry practical write-up",
+            "doneAt": 1791918000000
+        }
+    ],
+    "lastBackupAt": 1792288800000,
+    "checkInDraft": {
+        "week": "2026-10-12",
+        "step": 4,
+        "feel": 4,
+        "avoided": "the essay",
+        "inTheWay": "football",
+        "change": "start earlier",
+        "energy": ""
+    },
+    "calls": [
+        {
+            "at": 1792311120000,
+            "job": "Felix",
+            "title": "SlotStart",
+            "effort": "medium",
+            "inTokens": 4000,
+            "outTokens": 120,
+            "cacheRead": 3000,
+            "latencyMs": 2500,
+            "stop": "end_turn",
+            "outcome": "used",
+            "costUsd": 0.02
+        }
+    ],
+    "notSame": [
+        "teams:as-essay|gmail:thr-trip"
+    ],
+    "microPlans": {
+        "teams:as-essay#1": {
+            "key": "teams:as-essay#1",
+            "first": "Write the essay's three headings",
+            "next": [
+                "Fill in a point for each"
+            ],
+            "doneWhen": "Each heading has a point",
+            "inputHash": "a1b2c3d4e5f60718",
+            "at": 1792338600000
+        }
+    },
+    "rewarded": [
+        {
+            "taskId": "teams:as-done",
+            "doneAt": 1791918000000
+        }
+    ],
+    "unreadable": [
+        {
+            "file": "log.json",
+            "copy": "log.json.unreadable-20261016-120000",
+            "kept": true,
+            "at": 1792148400000
+        }
+    ],
+    "unreadableSeen": [
+        "runtime.json.unreadable-20261010-080000"
+    ]
+}
