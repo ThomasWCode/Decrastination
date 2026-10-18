@@ -78,3 +78,14 @@ object ModelAlerts {
     private fun tab(context: Context, tab: Int): Intent =
         Intent(context, MainActivity::class.java).putExtra(MainActivity.EXTRA_TAB, tab).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
 }
+
+/** Claude's warnings as the gateway gives them ([ModelGateway.Alerts]): [ModelAlerts]' notifications. */
+class AndroidModelAlerts(private val context: Context) : ModelGateway.Alerts {
+    override fun keyProblem(problem: KeyProblem): Boolean = ModelAlerts.keyProblem(context, problem)
+
+    override fun keyFixed() = ModelAlerts.keyFixed(context)
+
+    override fun dropped(task: TaskItem, why: String): Boolean = ModelAlerts.dropped(context, task, why)
+
+    override fun withdrawExcept(standing: Set<String>) = ModelAlerts.withdrawExcept(context, standing)
+}
