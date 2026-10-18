@@ -17,7 +17,8 @@ import com.thomaswcode.decrastination.ui.AskActivity
  * One at a time: a newer one takes its place. Tapped, the chat opens, where the thread goes on.
  */
 object FelixNotifications {
-    private const val MAX_CARDS = 2
+    /** A button each, after the tap's code in [NoticeId.FelixMessage]'s range: `NoticeIdTest` holds them to it. */
+    internal const val MAX_CARDS = 2
     private const val MAX_CARD_TITLE = 24
 
     const val KEY_REPLY = "reply"

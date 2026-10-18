@@ -84,7 +84,7 @@ class Stores(
     val shapes: Map<String, Shape> get() = json.associate { it.name to Shape(it.version, it.migrations) }
 
     /** Files that couldn't be read whole at this start, and where each was set aside. */
-    val problems: List<JsonStore.Unreadable> get() = listOfNotNull(tasks.problem, settings.problem, secrets.problem, runtime.problem, log.problem, instructions.problem, chat.problem, school.problem, memory.problem, calendarVersions.problem)
+    val problems: List<JsonStore.Unreadable> get() = json.mapNotNull { it.problem } + listOfNotNull(secrets.problem)
 
     /** What was kept of each file that didn't read whole written over it, now its problem is on record ([JsonStore.keepRecovered]). */
     suspend fun keepRecovered() = json.forEach { it.keepRecovered() }

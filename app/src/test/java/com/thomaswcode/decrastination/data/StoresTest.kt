@@ -179,6 +179,14 @@ class StoresTest {
     }
 
     @Test
+    fun `no field moves between stores yet, and the first that does is applied to backups too`() {
+        // A move runs on the stores' files at start; a backup from before it holds the field where it was.
+        // Backups.upgraded migrates each store's parts on their own, so the first move must be taught to it
+        // as well (tested with a backup from before the move), and this test changed with it (D-94).
+        assertTrue(Stores.MOVES.isEmpty(), "A move between stores: apply it to a backup's parts in Backups.upgraded too")
+    }
+
+    @Test
     fun `secrets are kept encrypted, and blank removes one`() = runTest {
         val file = File(dir, "secrets.bin")
         val store = SecretStore(file, Reverse)

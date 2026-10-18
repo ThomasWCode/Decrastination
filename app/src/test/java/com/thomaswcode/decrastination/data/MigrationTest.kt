@@ -68,6 +68,17 @@ class MigrationTest {
     }
 
     @Test
+    fun `a migration that fails on what a file holds sets it aside as one that can't be read, and starts from what reads of it`() {
+        file.writeText("""{"name":"Worksheet","count":3}""")
+        val broken = Migration(1) { json -> JsonObject(json + ("title" to json.getValue("missing"))) }
+        val toy = store(listOf(broken))
+        // Not a crash at every start: the file aside, its problem said, what reads of it kept (its count; no title).
+        assertEquals(Toy(count = 3), toy.value)
+        assertNotNull(toy.problem)
+        assertTrue(dir.listFiles().orEmpty().any { it.name.startsWith("toy.json.unreadable") }, "set aside")
+    }
+
+    @Test
     fun `a file of the shape now isn't migrated, and none is kept`() {
         file.writeText("""{"title":"Essay","count":1,"version":2}""")
         assertEquals(Toy("Essay", 1), store().value)
@@ -142,7 +153,7 @@ class MigrationTest {
         assertEquals("bus", Backups.decode(current, shapes)!!.memory.facts.single().topic)
         assertNull(Backups.decode(Backups.encode(backup.copy(versions = mapOf("memory.json" to 3))), shapes))
         // With no shapes given (every store at version 1), it reads as it always did.
-        assertEquals(backup.memory, Backups.decode(Backups.encode(backup))!!.memory)
+        assertEquals(backup.memory, Backups.decode(Backups.encode(backup), emptyMap())!!.memory)
     }
 
     /** A cipher for the secrets that only reverses the bytes: no keystore on a PC. */
