@@ -240,7 +240,9 @@ class RehearsalTest {
     /** The newest nightly backup beside the stores, if there's one: read as Import reads it, its parts brought to [shapes], counted. */
     private fun nightly(root: File, shapes: Map<String, Shape>): Nightly {
         val file = root.listFiles { f -> f.name.startsWith("decrastination-") && f.name.endsWith(".json") }.orEmpty().maxByOrNull { it.name } ?: return Nightly("Nightly backup: none beside the stores\n")
-        val backup = Backups.decode(file.readText(), shapes) ?: return Nightly("Nightly backup ${file.name}: not one this version reads\n", "not one this version reads")
+        // Through Import's own read, capped as it is: a file it refuses as too big isn't one it restores.
+        val bytes = file.inputStream().use { Backups.read(it) } ?: return Nightly("Nightly backup ${file.name}: bigger than Import reads (${Backups.MAX_BYTES / (1024 * 1024)} MB)\n", "bigger than Import reads")
+        val backup = Backups.decode(bytes.decodeToString(), shapes) ?: return Nightly("Nightly backup ${file.name}: not one this version reads\n", "not one this version reads")
         val problem = Backups.problem(backup)
         return Nightly(buildString {
             appendLine("Nightly backup ${file.name}: format ${backup.format}; problem: ${problem ?: "none"}")
