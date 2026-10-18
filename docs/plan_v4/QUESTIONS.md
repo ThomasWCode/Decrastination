@@ -26,4 +26,5 @@ Everything implementing the plan has needed from you, from 18 Oct 2026: question
 
 - **A (recommended).** Give `SecretStore.write` the same few tries, in a small PR of its own (or in Stage 12's sweep).
 - **B.** Leave it: rerun the tests when it happens.
-- ANSWER:
+- ANSWER: A
+- To come: 3.3.4, a PR of its own on 3.3.3's (a release's number says when it lands).
