@@ -81,6 +81,8 @@ tasks.withType<Test>().configureEach {
     systemProperty("rehearseFrom", providers.gradleProperty("rehearseFrom").getOrElse(""))
     // The doc FelixInputsDocTest holds to the code: a change to it alone runs the tests again.
     inputs.file(layout.projectDirectory.file("../docs/spec/felix-inputs.md")).withPropertyName("felixInputsDoc").withPathSensitivity(PathSensitivity.RELATIVE)
+    // The stores' shapes and the plan's snapshot (StoresDecodeTest, PlanSnapshotTest): a change to them alone runs the tests again.
+    inputs.dir(layout.projectDirectory.dir("../fixtures")).withPropertyName("fixtures").withPathSensitivity(PathSensitivity.RELATIVE)
 }
 
 dependencies {
