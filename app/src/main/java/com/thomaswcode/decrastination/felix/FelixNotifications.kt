@@ -1,4 +1,4 @@
-package com.thomaswcode.decrastination.notify
+package com.thomaswcode.decrastination.felix
 
 import android.content.Context
 import android.content.Intent
@@ -7,6 +7,9 @@ import androidx.core.app.RemoteInput
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.R
 import com.thomaswcode.decrastination.core.Proposal
+import com.thomaswcode.decrastination.notify.Channels
+import com.thomaswcode.decrastination.notify.NoticeId
+import com.thomaswcode.decrastination.notify.Notify
 import com.thomaswcode.decrastination.ui.AskActivity
 
 /**

@@ -19,6 +19,7 @@ import com.thomaswcode.decrastination.enrich.ModelHold
 import com.thomaswcode.decrastination.notify.Channels
 import com.thomaswcode.decrastination.notify.NoticeId
 import com.thomaswcode.decrastination.notify.Notify
+import com.thomaswcode.decrastination.ui.CheckInActivity
 
 /**
  * The weekly review (docs/spec/learning.md, item 7): on Sunday evening, after the check-in (or

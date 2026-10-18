@@ -87,7 +87,7 @@ import com.thomaswcode.decrastination.core.Proposal
 import com.thomaswcode.decrastination.core.ProposalState
 import com.thomaswcode.decrastination.core.Speaker
 import com.thomaswcode.decrastination.core.TaskItem
-import com.thomaswcode.decrastination.enrich.ChatPrompts
+import com.thomaswcode.decrastination.felix.ChatPrompts
 import java.time.ZoneId
 import kotlinx.coroutines.launch
 

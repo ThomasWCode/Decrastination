@@ -1,4 +1,4 @@
-package com.thomaswcode.decrastination.enrich
+package com.thomaswcode.decrastination.felix
 
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.Fixtures.LONDON
@@ -23,6 +23,10 @@ import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.OwnTask
 import com.thomaswcode.decrastination.core.Unplanned
 import com.thomaswcode.decrastination.core.Why
+import com.thomaswcode.decrastination.enrich.Found
+import com.thomaswcode.decrastination.enrich.InstructionPrompts
+import com.thomaswcode.decrastination.enrich.ResearchPrompts
+import com.thomaswcode.decrastination.enrich.searchTool
 import com.thomaswcode.decrastination.learn.CalendarEvent
 import com.thomaswcode.decrastination.sources.gmail.GmailThreads
 import com.thomaswcode.decrastination.sources.gmail.Mime

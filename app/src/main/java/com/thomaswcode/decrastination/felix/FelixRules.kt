@@ -1,4 +1,4 @@
-package com.thomaswcode.decrastination.learn
+package com.thomaswcode.decrastination.felix
 
 import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.Slot
@@ -9,7 +9,7 @@ import com.thomaswcode.decrastination.data.FelixState
 import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.data.SlotOutcome
 import com.thomaswcode.decrastination.data.SlotRecord
-import com.thomaswcode.decrastination.enrich.FelixPrompts.Reason
+import com.thomaswcode.decrastination.felix.FelixPrompts.Reason
 
 /**
  * When Felix writes (LR-03): only around today's work, never in quiet hours or a busy event, and

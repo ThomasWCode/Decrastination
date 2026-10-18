@@ -1,4 +1,4 @@
-package com.thomaswcode.decrastination.learn
+package com.thomaswcode.decrastination.felix
 
 import android.util.Log
 import com.thomaswcode.decrastination.AppGraph
@@ -9,11 +9,8 @@ import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.data.FelixRecord
 import com.thomaswcode.decrastination.data.SlotRecord
 import com.thomaswcode.decrastination.enrich.Called
-import com.thomaswcode.decrastination.enrich.FelixAnswers
-import com.thomaswcode.decrastination.enrich.FelixCaller
-import com.thomaswcode.decrastination.enrich.FelixPrompts
 import com.thomaswcode.decrastination.enrich.ModelEffort
-import com.thomaswcode.decrastination.notify.FelixNotifications
+import com.thomaswcode.decrastination.learn.Assessment
 import kotlinx.coroutines.async
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -25,7 +22,7 @@ import java.util.UUID
  * posts it with its replies (AI-24) and keeps it on record. Cheap when there's none: the rules are
  * pure, and the model is asked only for a message. Silent while Claude is off.
  */
-class Felix(private val graph: AppGraph) {
+class Looks(private val graph: AppGraph) {
     /** One look at a time: a check while one writes is covered by it. */
     private val writing = Mutex()
 

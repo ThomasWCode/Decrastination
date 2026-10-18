@@ -25,11 +25,11 @@ import com.thomaswcode.decrastination.core.Speaker
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.withoutEnrichment
 import com.thomaswcode.decrastination.data.Secret
-import com.thomaswcode.decrastination.enrich.ChatPrompts
-import com.thomaswcode.decrastination.enrich.ChatReader
+import com.thomaswcode.decrastination.felix.ChatPrompts
+import com.thomaswcode.decrastination.felix.ChatReader
 import com.thomaswcode.decrastination.enrich.ClaudeEnricher
 import com.thomaswcode.decrastination.enrich.ClaudeReviewer
-import com.thomaswcode.decrastination.enrich.FelixCaller
+import com.thomaswcode.decrastination.felix.FelixCaller
 import com.thomaswcode.decrastination.enrich.InstructionReader
 import com.thomaswcode.decrastination.enrich.MemoryTidier
 import com.thomaswcode.decrastination.enrich.MicroPlanner
@@ -379,8 +379,8 @@ class CommandActivity : Activity() {
             }
             "felix-check" -> graph.felix.check().also { Log.i(TAG, "felix-check done") }
             "felix-say" -> {
-                val reason = intent.getStringExtra("reason")?.let { name -> com.thomaswcode.decrastination.enrich.FelixPrompts.Reason.entries.firstOrNull { it.name.equals(name, ignoreCase = true) } }
-                if (reason == null) Log.w(TAG, "felix-say needs --es reason, one of ${com.thomaswcode.decrastination.enrich.FelixPrompts.Reason.entries.joinToString()}")
+                val reason = intent.getStringExtra("reason")?.let { name -> com.thomaswcode.decrastination.felix.FelixPrompts.Reason.entries.firstOrNull { it.name.equals(name, ignoreCase = true) } }
+                if (reason == null) Log.w(TAG, "felix-say needs --es reason, one of ${com.thomaswcode.decrastination.felix.FelixPrompts.Reason.entries.joinToString()}")
                 else Log.i(TAG, "felix-say $reason: ${graph.felix.say(reason)?.let { "${it.text.ifBlank { "(silent)" }} ${it.replies}" } ?: "Claude is off"}")
             }
             // What Felix remembers (AI-21): its standing instructions and facts, a line each.
