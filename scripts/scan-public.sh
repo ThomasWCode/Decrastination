@@ -8,7 +8,8 @@
 #   scripts/scan-public.sh --cached   # what's staged
 #   scripts/scan-public.sh <range>    # any range git diff takes
 #
-# Made-up addresses at example.com, example.org and example.net, and GitHub's no-reply ones, pass.
+# Made-up addresses at example.com, example.org and example.net, and GitHub's no-reply ones, pass;
+# so does Kotlin's label on this, super, return, break and continue (this@AppGraph.member).
 ROOT=$(git rev-parse --show-toplevel)
 cd "$ROOT" || exit 2
 RANGE=${1:-origin/main...HEAD}
@@ -28,6 +29,8 @@ HITS=$(awk -v words="$WORDS" '
     rest = text
     while (match(rest, /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z][A-Za-z]+/)) {
       a = substr(rest, RSTART, RLENGTH); rest = substr(rest, RSTART + RLENGTH)
+      local = a; sub(/@.*/, "", local)
+      if (local ~ /^(this|super|return|break|continue)$/) continue
       if (tolower(a) !~ /@(example\.(com|org|net)|users\.noreply\.github\.com)$/) print "  an email address: " file ": " a
     }
     rest = text
