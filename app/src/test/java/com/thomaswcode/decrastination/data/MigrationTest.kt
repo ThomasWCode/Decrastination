@@ -152,6 +152,9 @@ class MigrationTest {
         val current = Backups.encode(backup.copy(versions = mapOf("memory.json" to 2, "runtime.json" to 2)))
         assertEquals("bus", Backups.decode(current, shapes)!!.memory.facts.single().topic)
         assertNull(Backups.decode(Backups.encode(backup.copy(versions = mapOf("memory.json" to 3))), shapes))
+        // Nor is it read with its part under a name this build doesn't know: restored, the part would be lost.
+        val renamed = JsonStore.json.parseToJsonElement(Backups.encode(backup.copy(versions = mapOf("memory.json" to 3)))).jsonObject.let { b -> JsonObject(b - "memory" + ("memories" to b.getValue("memory"))) }
+        assertNull(Backups.decode(renamed.toString(), shapes))
         // With no shapes given (every store at version 1), it reads as it always did.
         assertEquals(backup.memory, Backups.decode(Backups.encode(backup), emptyMap())!!.memory)
     }
