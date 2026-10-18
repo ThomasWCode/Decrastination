@@ -2,7 +2,7 @@
 
 An Android app that gathers everything outstanding (Teams assignments, Power Planner, starred Gmail conversations, AnkiDroid decks and tasks of your own), plans it into the days before each is due as timed slots, writes them to your calendar, shows the next thing to do on a home-screen widget, and, while work is due, replaces distracting apps with that next thing until it's done. Claude reads the work into steps and estimates, and Felix, a persona you chat with, makes changes and messages you about the day.
 
-A personal, sideloaded app for one phone, version 3.1.4.
+A personal, sideloaded app for one phone, version 3.2.0.
 
 ## Documents
 
@@ -11,7 +11,7 @@ A personal, sideloaded app for one phone, version 3.1.4.
 | [`docs/spec/`](docs/spec/) | How the app works now, an area a file: sources, Claude's readings, the planner, slots and the calendar, blocking and protection, Felix (and everything he's sent), learning, storage and backups, privacy; and the requirement ids the code cites |
 | [`docs/decisions.md`](docs/decisions.md) | The owner's decisions that govern how the app is developed, numbered |
 | [`docs/development.md`](docs/development.md) | How changes are made, reviewed, checked on the phone and shipped; the public repository's rules |
-| [`docs/plan_targeted_cleanup/`](docs/plan_targeted_cleanup/README.md) | The planned restructuring of the code, phase by phase, with its open questions |
+| [`docs/plan_v4/`](docs/plan_v4/README.md) | The plan for 4.x: the code's restructuring and the changes to Felix (the chat as his one voice, notes and reminders, memory that expires, his voice, emails finished in Gmail) in one order, stage by stage, with the owner's answers to its questions |
 | [`fixtures/README.md`](fixtures/README.md) | The test fixtures and where they came from |
 
 ## Build and install
