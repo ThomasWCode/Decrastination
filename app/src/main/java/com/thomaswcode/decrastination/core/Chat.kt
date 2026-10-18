@@ -9,7 +9,11 @@ import kotlinx.serialization.Serializable
  * task or days off waited for the card's Add or Apply before). Kept in `chat.json`.
  */
 @Serializable
-data class ChatState(val messages: List<ChatMessage> = emptyList()) {
+data class ChatState(
+    val messages: List<ChatMessage> = emptyList(),
+    /** The shape this is in ([com.thomaswcode.decrastination.data.Migration]): raised with each change of it. */
+    val version: Int = 1,
+) {
     /** Your last message, if Claude hasn't answered it yet. */
     val unanswered: ChatMessage? get() = messages.lastOrNull()?.takeIf { it.from == Speaker.You && it.answeredAt == null }
 }

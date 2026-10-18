@@ -29,6 +29,7 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 
 /**
  * Every store's shapes as they've been, read with the app's own serializers (docs/plan_v4, Stage 0).
@@ -94,7 +95,9 @@ class StoresDecodeTest {
         for (store in stores) {
             val text = File(now, store.file).readText()
             val value = strict.decodeFromString(store.serializer, text)
-            assertEquals(strict.parseToJsonElement(text), strict.encodeToJsonElement(store.serializer, value), "${store.file} isn't the shape now: re-encoded, it differs")
+            val file = strict.parseToJsonElement(text)
+            val again = unsaid(file, strict.encodeToJsonElement(store.serializer, value))
+            assertEquals(file, again, "${store.file} isn't the shape now: re-encoded, it differs")
         }
     }
 
@@ -107,8 +110,22 @@ class StoresDecodeTest {
             val value = strict.decodeFromString(store.serializer, File(now, store.file).readText())
             walk(filledOnly.encodeToJsonElement(store.serializer, value), store.serializer.descriptor, found, fields)
         }
-        val missing = fields.flatMap { (type, names) -> (names - found[type].orEmpty() - LEFT_AT_DEFAULT[type].orEmpty()).map { "$type.$it" } }.sorted()
+        // Each store's version is its shape's, the default till its first migration: defined, not filled.
+        val roots = stores.map { it.serializer.descriptor.serialName }.toSet()
+        val missing = fields.flatMap { (type, names) -> (names - found[type].orEmpty() - LEFT_AT_DEFAULT[type].orEmpty() - (if (type in roots) setOf(Migration.VERSION) else emptySet())).map { "$type.$it" } }.sorted()
         assertTrue(missing.isEmpty(), "Left at their defaults, so no migration would be tested on them:\n" + missing.joinToString("\n"))
+    }
+
+    /**
+     * [again] without the versions [file] doesn't say: a state of version 1 may say none
+     * ([Migration.versionOf]), at the root or nested (a chat card's school calendar), and written
+     * again says 1.
+     */
+    private fun unsaid(file: JsonElement, again: JsonElement): JsonElement = when {
+        file is JsonObject && again is JsonObject ->
+            JsonObject(again.filterNot { (key, value) -> key == Migration.VERSION && key !in file && value == JsonPrimitive(1) }.mapValues { (key, value) -> file[key]?.let { unsaid(it, value) } ?: value })
+        file is JsonArray && again is JsonArray -> JsonArray(again.mapIndexed { i, value -> file.getOrNull(i)?.let { unsaid(it, value) } ?: value })
+        else -> again
     }
 
     /** The fields of each class [element] holds that aren't their defaults, into [found]; every class's fields into [fields]. */

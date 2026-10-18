@@ -9,4 +9,8 @@ import kotlinx.serialization.Serializable
  * which is never deleted. A file of its own, as it changes at each write and the runtime's is big.
  */
 @Serializable
-data class CalendarVersions(val written: List<Long> = emptyList())
+data class CalendarVersions(
+    val written: List<Long> = emptyList(),
+    /** The shape this is in ([Migration]): raised with each change of it. */
+    val version: Int = 1,
+)

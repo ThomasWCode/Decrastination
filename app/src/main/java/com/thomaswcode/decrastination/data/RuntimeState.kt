@@ -96,6 +96,8 @@ data class RuntimeState(
      * for a keystore that may come back) isn't said again.
      */
     val unreadableSeen: List<String> = emptyList(),
+    /** The shape this is in ([Migration]): raised with each change of it, a migration bringing older files to it. */
+    val version: Int = 1,
 ) {
     /** With [found] (this start's) on Setup's list: each once, and none you've seen. */
     fun withUnreadable(found: List<JsonStore.Unreadable>): RuntimeState {
@@ -150,6 +152,8 @@ data class ActivityLog(
     val felix: List<FelixRecord> = emptyList(),
     /** Each reviewed week's totals (PL-10), kept [WEEKS_KEPT] weeks, past the [KEEP_DAYS] the rest is kept: Stats' longer periods read them. */
     val weeks: List<WeekRollup> = emptyList(),
+    /** The shape this is in ([Migration]): raised with each change of it, a migration bringing older files to it. */
+    val version: Int = 1,
 ) {
     fun trimmed(now: Long): ActivityLog {
         val since = now - KEEP_DAYS * 24 * 3_600_000L
@@ -164,6 +168,7 @@ data class ActivityLog(
             reviews = reviews.filter { it.at >= since },
             felix = felix.filter { it.at >= now - FELIX_KEEP_DAYS * 24 * 3_600_000L },
             weeks = weeks.sortedBy { it.week }.takeLast(WEEKS_KEPT),
+            version = version,
         )
     }
 

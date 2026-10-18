@@ -159,7 +159,11 @@ data class Change(
 
 /** Your instructions. Kept in `instructions.json`. */
 @Serializable
-data class InstructionState(val instructions: List<Instruction> = emptyList()) {
+data class InstructionState(
+    val instructions: List<Instruction> = emptyList(),
+    /** The shape this is in ([com.thomaswcode.decrastination.data.Migration]): raised with each change of it. */
+    val version: Int = 1,
+) {
     /** Those in use, in the order they were applied: a later one's change wins over an earlier's. */
     val applied: List<Instruction> get() = instructions.filter { it.state == InstructionStatus.Applied }.sortedBy { it.appliedAt ?: it.at }
 }
