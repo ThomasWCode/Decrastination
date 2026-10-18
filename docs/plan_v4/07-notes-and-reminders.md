@@ -1,10 +1,10 @@
 # Notes and reminders
 
-Felix keeps two new things at your asking: a **note** on a task, for himself and for you, read whenever the task comes up; and a **reminder**, delivered as his message at a time, at the start of a task's next slot, or a while before a task is due. Both are set from the chat, made at once with an Undo, and kept in a store of their own. A reminder is delivered in his words for the moment it's due, written just before (Q9: B; Q24), or as you set it when he can't write; a note costs no call. Built in Stage 8a ([03](03-stages.md)), inside the Conversation service, after Stage 7 has given the app `By`.
+Felix keeps two new things at your asking: a **note** on a task, or standing, for every task of a class, subject or source (Q31: A), for himself and for you, read whenever the task comes up; and a **reminder**, delivered as his message at a time, at the start of a task's next slot, or a while before a task is due. Both are set from the chat, made at once with an Undo, and kept in a store of their own. A reminder is delivered in his words for the moment it's due, written just before (Q9: B; Q24), or as you set it when he can't write; a note costs no call. Built in Stage 8a ([03](03-stages.md)), inside the Conversation service, after Stage 7 has given the app `By`.
 
 ## What they are
 
-The types are in [04](04-data-and-migrations.md) §The types: `Note(id, taskId, text, at, by, deletedAt)`, `Reminder(id, text, at, by, taskId, due, sentAt, snoozedTo, doneAt, draft, draftedAt)`, `Due(kind, at, minutesBefore)` with `DueKind`:
+The types are in [04](04-data-and-migrations.md) §The types: `Note(id, text, at, by, taskId?, scope?, deletedAt)` with `NoteScope(subject, className, source, titleContains)`, `Reminder(id, text, at, by, taskId, due, sentAt, snoozedTo, doneAt, draft, draftedAt)`, `Due(kind, at, minutesBefore)` with `DueKind`:
 
 - `At`: a time of day on a date ("at 7", "Friday morning" read as 09:00 by him, said in his reply).
 - `SlotStart`: the start of the task's next work slot on or after a date (today, with none): "when I next sit down to the physics". If the plan has no slot for it, it waits; if the task closes first, it's let go and said.
@@ -20,14 +20,14 @@ The store: one file, `felix.json` (`FelixStore(notes, reminders, version = 1)`),
 
 ```text
 reminders: [{ text, date (YYYY-MM-DD or empty), time (HH:MM or empty), taskId (or empty), when: "at" | "slotStart" | "beforeDue", minutesBefore (-1 for none) }]
-notes:     [{ taskId, text }]
+notes:     [{ taskId (or empty), text, subject (or empty), source (or empty), titleContains (or empty) }]   // a task, or a scope: one or the other
 actions:   type gains "cancelReminder" (taskId empty, value the reminder's id) and "deleteNote" (value the note's id)
 ```
 
 **The prompt** (one item each, in the chat's numbered list, the wording in [09](09-his-voice.md)'s register once Stage 10b lands; plain until then):
 
 - Remind (reminders): when they ask to be reminded of something, that's a reminder, not a task: its words in theirs, as you'd say them then; at a date and time; or at the start of their next slot on a task (when: slotStart, taskId); or a while before a task's due (beforeDue, minutesBefore). Say when it'll come. Not for work to plan, which is a task.
-- Note (notes): something to keep with a task for when it comes up (what the teacher said, which source to use, what they've decided): taskId and the words. Not a reminder, and not a fact about them.
+- Note (notes): something to keep with a task for when it comes up (what the teacher said, which source to use, what they've decided): taskId and the words; or, for every task of a subject, a class, a source or with a word in its title ("all of her chemistry homework on sheets"), the scope instead of a task. Not a reminder, and not a fact about them.
 - The context lists the reminders set (id, when, words, task) and each open task's notes under its steps, so he answers "what have I asked you to remind me of?" and avoids setting one twice.
 
 **Checks** (`ChatAnswers.parse`): a reminder's time from an hour ago to a year ahead (one gone by is refused and said); `slotStart` and `beforeDue` need a listed open task; the text up to 300 characters; at most 10 reminders and 10 notes a message; a note's task listed. Limits in the store: 50 reminders not yet sent, 10 notes a task (the oldest noted). What's refused is said under his reply, as changes are.
@@ -56,11 +56,11 @@ actions:   type gains "cancelReminder" (taskId empty, value the reminder's id) a
 - **Micro-plans** (AI-15): the task's notes go with its instructions to the micro-planner, so a first action can take them in. Cheap, and worth it (Q14: A).
 - **The widget and Day**: nothing; the sheet is the place.
 
-## Standing notes (Q31, open)
+## Standing notes (Q31: A)
 
 You asked whether he can keep a note that goes beyond one assignment: "tell me to do Ms Peters' assignments on sheets, not in my book". Today that becomes a standing instruction in his memory, and the profile goes to every call (the chat, his slot messages, the readings that write a task's steps, the micro-planner), so he can abide by it in several places at once. Two weak links: no source names a teacher (Teams gives a class code, Power Planner a class id, Gmail a sender), so it works only once you've told him which class she teaches; and the link between the profile's line and the task in front of him is the model's to make each time, so it lands most times, not every time.
 
-A standing note closes both: a note scoped to a class, subject, source or title pattern instead of one task, attached to every matching task by code. `Note.taskId` becomes optional beside `scope: NoteScope?` (`subject`, `className`, `source`, `titleContains`, each optional); `Notes.forTask(task, notes)` (pure) gives a task its own notes and every standing one that matches; the schema's `notes` gains the three plain strings (no union); the prompt's note item says a note can be for a task or for every task of a class, subject or source; the sheet shows "Note for every chemistry task: …"; the context, his messages and the micro-planner take them as a per-task note. You'd still tell him once which class is hers. Half a day more in Stage 8a if A.
+A standing note closes both: a note scoped to a class, subject, source or title pattern instead of one task, attached to every matching task by code. `Note.taskId` is optional beside `scope: NoteScope?` (`subject`, `className`, `source`, `titleContains`, each optional; a note has a task or a scope, never both); `Notes.forTask(task, notes)` (pure) gives a task its own notes and every standing one that matches (a subject against the task's class as `classMap` reads it, a class against its code, a source against its source, a word against its title, case ignored); the schema's `notes` gains the three plain strings (no union); the prompt's note item says a note can be for a task or for every task of a class, subject or source; the sheet shows "Note for every chemistry task: …" with its delete; the context, his messages and the micro-planner take them as a per-task note, through `forTask`, so nothing downstream knows the difference. You'd still tell him once which class is hers ("Ms Peters is chemistry" is a fact he keeps). Half a day of Stage 8a.
 
 ## Pruning
 
@@ -81,12 +81,13 @@ Notes of a task no longer in `tasks.json` go a fortnight after it went (the merg
 - The sheet's model (`TaskSheetModel`): notes listed, added, deleted.
 - The context: reminders and notes listed (`FelixInputsDocTest` regenerated with an example of each).
 - The store in a backup and restored; Reset clears it.
-- Standing notes, if Q31 is A: `Notes.forTask` by subject, class, source and title; none for a task that matches nothing.
+- Standing notes: `Notes.forTask` by subject, class, source and title; none for a task that matches nothing; a note with both a task and a scope refused by the parse.
 
 ## Phone check
 
 - `chat-ask --es text "remind me in 3 minutes to stretch"` (a paid call, and a second for the draft, made at once as it's within the window): the act under his reply; `felix` shows the reminder and its draft; three minutes on, his message in the chat and on the notification with its chips, in his words; *Snooze 15 min* from the notification moves it (no call; the draft goes, a new one is written near the time); *Done* ends it.
 - The same with aeroplane mode on through the window (yours to switch): the reminder comes as your words, marked as the app's.
 - `chat-ask --es text "note on <a task>: check the mark scheme first"`: on the sheet; in `chat-context`; in the next `felix-say --es reason SlotStart` about that task.
+- `chat-ask --es text "for all my chemistry homework: do it on sheets, not in my book"`: the standing note's act under his reply; on every chemistry task's sheet; under each in `chat-context`; in a `felix-say --es reason SlotStart` about one of them.
 - A `SlotStart` reminder on tomorrow's first slot: `plan` shows the slot; the alarm is set (`dumpsys alarm | grep decrastination`); the slot's start brings it.
 - Phone off through a reminder's time: on, it comes, marked late.

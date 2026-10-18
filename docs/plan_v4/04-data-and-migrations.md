@@ -79,7 +79,7 @@ A task finished more than 14 days ago (C-Q3; `Merge.KEEP_FINISHED_MS` is the sam
 
 ### `felix.json` (v1), Stage 8a
 
-Notes and reminders, versioned from the start; in the backup (format 7) and in Reset → "The chat and Felix's history". Not on `TaskItem`: a merge rewrites tasks and must not be able to drop them; keyed by task id, which is stable across syncs and reopenings.
+Notes (on a task, or standing, for every task a scope matches) and reminders, versioned from the start; in the backup (format 7) and in Reset → "The chat and Felix's history". Not on `TaskItem`: a merge rewrites tasks and must not be able to drop them; keyed by task id, which is stable across syncs and reopenings, or by a scope the matcher reads at each use.
 
 ### Memory (v2), Stage 10a
 
@@ -151,8 +151,10 @@ data class Mine(
 @Serializable enum class StepOrigin { Source, Reading, Rules, Yours, Felix, OwnTask }
 
 // core/Notes.kt, core/Reminders.kt (8a)
+/** A note on one task (taskId), or a standing one for every task its scope matches (Q31). */
 @Serializable
-data class Note(val id: String, val taskId: String, val text: String, val at: Long, val by: By, val deletedAt: Long? = null)
+data class Note(val id: String, val text: String, val at: Long, val by: By, val taskId: String? = null, val scope: NoteScope? = null, val deletedAt: Long? = null)
+@Serializable data class NoteScope(val subject: String? = null, val className: String? = null, val source: Source? = null, val titleContains: String? = null)
 
 @Serializable
 data class Reminder(
