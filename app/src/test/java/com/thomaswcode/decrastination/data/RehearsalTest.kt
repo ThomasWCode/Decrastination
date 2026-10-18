@@ -172,6 +172,10 @@ class RehearsalTest {
         assertTrue(migrated.none { it.problem != null } && migrated.all { it.roundTrip }, "A store didn't read whole, or changed read and written again: see rehearsal.txt")
         assertTrue(migrated.all { it.dropped.isEmpty() }, "A store holds what the app doesn't keep: see rehearsal.txt")
         assertTrue(nightly.problem == null, "The nightly backup wouldn't be restored (${nightly.problem}): see rehearsal.txt")
+        // And any difference in the counts, before and after (docs/plan_v4/04-data-and-migrations.md §On the real
+        // data): a migration that moves, renames or merges data teaches this rehearsal where it goes, so the counts
+        // are compared through the move; the check is never loosened to let one through.
+        assertTrue(was == now && lists.isEmpty(), "The counts differ before and after: see rehearsal.txt")
     }
 
     /** No keystore off the phone: the secrets aren't copied, so it's never asked. */
