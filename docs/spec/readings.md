@@ -8,7 +8,7 @@ The rules give every task a reading too, and stand in whenever Claude can't. Cla
 - A reading is an `Enrichment` (`core/Enrichment.kt`), kept on the task and laid over the source's values at every merge (sources.md). It records who made it (`by`: "rules", or the model that answered), from what (`inputHash`), and under which prompts (`promptVersion`).
 - Three jobs run on tasks (`Enrichments.jobFor`): **Email** for a Gmail conversation, **Assignment** for a Teams assignment, **Effort** for a Power Planner task.
 - Not read: a task of your own, Anki's derived tasks, feedback to read (NF-06), a Power Planner event, a task you've said isn't one, a closed task, and an email whose text isn't yet read as far as reads go (`GmailThreads.textRead`).
-- Claude reads only while it's on: the switch in Settings, a key in use (`aiKeyActive`) and the key in the encrypted secrets file (`AppGraph.claudeKey`). These change at once, armed or not. Off, the rules read everything.
+- Claude reads only while it's on: the switch in Settings, a key in use (`aiKeyActive`) and the key in the encrypted secrets file (`ModelGateway.claudeKey`). These change at once, armed or not. Off, the rules read everything.
 - `RuleEnricher` (`enrich/Enricher.kt`) and `ClaudeEnricher` (`enrich/ClaudeEnricher.kt`) both implement `Enricher`. The prompts and the checks are `Prompts` and `Answers` (`enrich/Prompts.kt`).
 
 ## The three jobs
@@ -176,7 +176,7 @@ A piece's first action, under two minutes and concrete, the next two, and what d
 
 ## Cost, the cap and rest after failures
 
-`enrich/AiUsage.kt`, `enrich/Failures.kt`, `enrich/ModelHold.kt`, and `AppGraph.callModel`, which every call goes through.
+`enrich/AiUsage.kt`, `enrich/Failures.kt`, `enrich/ModelHold.kt`, and `enrich/ModelGateway.kt`, which every call goes through (`ModelGateway.call`).
 - **Cost** per call from its tokens at list price (`Pricing`): Opus 5.5 at $4 in, $20 out, $0.20 cache reads and $5 cache writes per million; an older Opus's $5, $25, $0.50 and $6.25; $0.01 a web search. Counted per calendar month, in US dollars.
 - **No cap** unless you set one (`aiMonthlyCapUsd`). With one, a call goes only if the month's spend, plus every call in flight and this one at their dearest ($1.295, `Pricing.WORST_CALL_USD`), stays within it (AC-05).
 - A call is counted once it comes back, whatever stopped waiting for it: once sent, it's paid for.
@@ -185,10 +185,11 @@ A piece's first action, under two minutes and concrete, the next two, and what d
 - A rest holds what runs by itself (readings, micro-plans, messages written ahead); what you're waiting for goes through it (the chat, an instruction, a photo check, a photo of homework), unless the key failed.
 - **Key problems** (`KeyProblem`): rejected (401), not allowed (403), no credit (402, a billing error, a 400 about credit). Alerted once a stretch, Setup saying what puts it right; a call that works, or a new key, ends it.
 - **The record** (AC-07): the last 100 calls (`RuntimeState.calls`), each with its job, what it's about, effort, tokens in, out and from the cache, time taken, why it stopped, how it went and its cost; Settings → Claude → *Recent calls*.
+- **One client** (`ModelGateway.client`): every reader sends through the one client the key and the endpoint have, made once and again only when either changes, with its job's timeout (`ModelEffort.timeout`: the review and the tidy five minutes; Felix, first steps and the summary two; the rest three); `ModelGateway.build` is the one place a client is built.
 
 ## Claude's other calls
 
-Every call goes through `AppGraph.callModel`, so the cap and rests above apply; effort is set by job (`ModelEffort`).
+Every call goes through `ModelGateway.call`, so the cap and rests above apply; effort and timeout are set by job (`ModelEffort`).
 
 | Calls | Effort | Spec |
 |---|---|---|

@@ -10,7 +10,7 @@ Everything each of his calls is sent, circumstance by circumstance and with exam
 - Settings → Felix also has how far into a slot he asks (`felixGraceMin`, 10 minutes), when he checks again if he doesn't say (`felixDefaultCheckMin`, 20), and whether he may search the web (`felixSearches`, on).
 - Stored chat messages call him `Speaker.Claude`; the screens show his name.
 - His button is on every screen: Day, Work, Stats, Settings, a task's sheet (*Ask Felix about it*), and the block screen, about the next piece's task (UI-16).
-- While Claude is off (`AppGraph.claudeKey` null) he says nothing unprompted, and the chat says why it waits.
+- While Claude is off (`ModelGateway.claudeKey` null) he says nothing unprompted, and the chat says why it waits.
 
 ## The chat
 
