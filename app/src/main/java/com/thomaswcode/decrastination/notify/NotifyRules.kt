@@ -2,8 +2,8 @@ package com.thomaswcode.decrastination.notify
 
 /**
  * A ceiling on the routine notifications (LR-07): the briefing's, the calendar's questions, the
- * week's and Claude's go at most [CEILING] a day and never in quiet hours; those held back go at
- * the next morning's briefing. Felix (whose rules keep him quiet) and protection aren't held. Pure.
+ * week's and Claude's go at most [CEILING] a day and, but for the briefing at its own time, never in quiet hours; those held
+ * back go at the next morning's briefing. Felix (whose rules keep him quiet) and protection aren't held. Pure.
  */
 object NotifyRules {
     val CEILINGED = setOf(Channels.BRIEFING, Channels.CALENDAR, Channels.WEEKLY, Channels.MODEL)
