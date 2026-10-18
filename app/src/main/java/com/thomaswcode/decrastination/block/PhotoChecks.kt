@@ -52,7 +52,7 @@ object PhotoChecks {
             withContext(NonCancellable + Dispatchers.IO) { photos.forEach { it.delete() } }
         }
         // Its room taken with every other model call's, then sent (AC-05).
-        val current = graph.gateway.client(com.thomaswcode.decrastination.enrich.ModelEffort.Job.PhotoCheck)?.let { PhotoChecker(it, profile = graph.profile()) } ?: return OFF
+        val current = graph.gateway.client(com.thomaswcode.decrastination.enrich.ModelEffort.Job.PhotoCheck)?.let { PhotoChecker(it, profile = graph.conversation.profile()) } ?: return OFF
         val about = PhotoChecker.context(piece, graph.tasks.value.tasks.firstOrNull { it.id == piece.taskId })
         val result = when (val called = graph.gateway.call(interactive = true, record = com.thomaswcode.decrastination.enrich.ModelCalls.OnRecord(com.thomaswcode.decrastination.enrich.ModelEffort.Job.PhotoCheck, piece.label) { r: PhotoChecker.Result -> r.usage to com.thomaswcode.decrastination.enrich.ModelCalls.outcome(r.refused, r.verdict == null) }, cost = { r: PhotoChecker.Result -> r.costUsd to r.refused }) { current.check(jpegs, about) }) {
             is Called.Held -> return when (called.hold) {

@@ -19,7 +19,7 @@ import com.thomaswcode.decrastination.notify.NoticeId
  */
 class FelixWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
-        runCatching { AppGraph.get(applicationContext).felix.check() }.onFailure { Log.w(AppGraph.TAG, "Felix's look failed", it) }
+        runCatching { AppGraph.get(applicationContext).looks.check() }.onFailure { Log.w(AppGraph.TAG, "Felix's look failed", it) }
         return Result.success()
     }
 

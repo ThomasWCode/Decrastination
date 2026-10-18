@@ -31,7 +31,7 @@ object TaskOpener {
      */
     suspend fun open(context: Context, task: TaskItem): String? {
         val (opened, say) = openIn(context, task)
-        if (opened) com.thomaswcode.decrastination.AppGraph.get(context).felix.noteActivity(listOf(task.id))
+        if (opened) com.thomaswcode.decrastination.AppGraph.get(context).looks.noteActivity(listOf(task.id))
         return say
     }
 

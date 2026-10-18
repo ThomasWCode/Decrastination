@@ -91,7 +91,7 @@ class CheckInActivity : ComponentActivity() {
                                 }
                                 AppGraph.get(this@CheckInActivity).notifier.cancel(NoticeId.CheckIn)
                                 // Felix's questions, should he have begun them: the form has the answers.
-                                if (added) graph.endCheckInFlow()
+                                if (added) graph.conversation.endCheckInFlow()
                                 if (!added) return@launch
                                 // As a job: it can outlast this screen.
                                 // Unless the week has had its review already (the evening's ran first).

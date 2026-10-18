@@ -168,7 +168,7 @@ class DailyReceiver : BroadcastReceiver() {
                 graph.runtime.update { it.copy(dailyRanAt = it.dailyRanAt + (action to graph.clock.now())) }
                 when (action) {
                     Daily.ACTION_BRIEFING -> Briefing.run(context)
-                    Daily.ACTION_CHECK_IN -> CheckIns.remind(context)
+                    Daily.ACTION_CHECK_IN -> AppGraph.get(context).conversation.remindCheckIn()
                     // As a job: a model call can outlast what a receiver is let run.
                     Daily.ACTION_REVIEW -> ReviewWorker.enqueue(context, ifDue = true)
                 }
