@@ -85,7 +85,8 @@ import kotlinx.serialization.json.JsonPrimitive
  *   takes it back), a task's minutes as its sheet sets them. `forget-task --es task own:<id>` leaves no
  *   trace of a test's task of your own: gone, and its completions, slots and question with it.
  * - Test hooks: `test-arm`, `test-disarm` (at once, unlike the app's own disarming), `remove-admin`,
- *   `clear-parent-code`, `offer-teams-sync` (the countdown banner now, whatever the rules), and
+ *   `clear-parent-code`, `offer-teams-sync` (the countdown banner now, whatever the rules),
+ *   `free-time --ei minutes 2` (free time's countdown and heads-up notifications, nothing spent), and
  *   `clean-up` (this app's notifications, a delayed Teams sync, forced blocking hours, the
  *   watchdog's restarts, and reviews run at other times than Sunday evening, cleared).
  * - The debug page (the menu's *Debug*, on a debug build) has a button for each command that takes
@@ -259,6 +260,14 @@ class CommandActivity : Activity() {
                     )
                 }
                 Log.i(TAG, "Cleaned up after testing")
+            }
+            // Free time's countdown and its last minute's heads-up, as spending it shows them, for checking the
+            // notifications from a PC: --ei minutes <n> till it would end; nothing is spent or given, and clean-up takes them away.
+            "free-time" -> {
+                val minutes = intent.getIntExtra("minutes", 2).coerceIn(1, 60)
+                com.thomaswcode.decrastination.block.FreeTimeNotice.show(this, "A test", graph.clock.now() + minutes * 60_000L)
+                com.thomaswcode.decrastination.block.FreeTimeNotice.warn(this, "A test")
+                Log.i(TAG, "free-time: the countdown to $minutes min and the heads-up posted (notifications ${if (graph.notifier.allowed()) "allowed" else "not allowed"})")
             }
             "clear-parent-code" -> graph.secrets.put(Secret.TotpSecret, null).also { Log.i(TAG, "Parent code cleared") }
             "offer-teams-sync" -> sendBroadcast(Intent(FocusService.ACTION_OFFER_TEAMS_SYNC).setPackage(packageName)).also { Log.i(TAG, "Asked the focus service to offer a Teams sync") }
