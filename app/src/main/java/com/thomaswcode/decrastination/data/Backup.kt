@@ -94,13 +94,14 @@ object Backups {
 
     /**
      * [text] as one of this app's backups, or null: not JSON, not this app's, a newer format than this
-     * version reads, or from a store newer than this build's, wherever its parts are. Parts from a
-     * store older than [shapes] says (each JSON store's shape by file, [Stores.shapes]) are brought to
-     * it first.
+     * version reads, from a store it carries that's newer than this build's (wherever its parts are), or
+     * with a part a migration fails on. Parts from a store older than [shapes] says (each JSON store's
+     * shape by file, [Stores.shapes]) are brought to it first.
      */
     fun decode(text: String, shapes: Map<String, Shape>): Backup? {
         val tree = runCatching { json.parseToJsonElement(text) as? JsonObject }.getOrNull() ?: return null
-        val upgraded = upgraded(tree, shapes) ?: return null
+        // A migration that fails on a part makes a backup this build can't read, as one that doesn't parse is.
+        val upgraded = runCatching { upgraded(tree, shapes) }.getOrNull() ?: return null
         return runCatching { json.decodeFromJsonElement(Backup.serializer(), upgraded) }.getOrNull()?.takeIf { it.app == Backup.APP && it.format <= Backup.FORMAT }
     }
 
@@ -122,17 +123,18 @@ object Backups {
     /**
      * [backup]'s parts brought from the versions their stores had (its `versions`; else a whole part's
      * own; else 1) to [shapes]' by each store's migrations, a store's parts together as its file would
-     * hold them; its `versions` then [shapes]'. Null where a store is newer than this build's (wherever
-     * its parts are), or a part can't be brought: newer than this build's, or a step on the way missing.
+     * hold them; its `versions` then [shapes]'. Null where a store it carries is newer than this build's
+     * (wherever its parts are), or a part can't be brought: newer than this build's, or a step on the way missing.
      */
     fun upgraded(backup: JsonObject, shapes: Map<String, Shape>): JsonObject? {
         val versions = (backup["versions"] as? JsonObject).orEmpty()
         val out = backup.toMutableMap()
         for ((file, shape) in shapes) {
             val said = (versions[file] as? JsonPrimitive)?.intOrNull
-            // A store newer than this build's isn't read, wherever its parts are: one of its parts renamed or
-            // moved there would otherwise be passed over, and the backup restored without it.
-            if (said != null && said > shape.version) return null
+            // A store the backup carries (PARTS) that's newer than this build's isn't read, wherever its parts
+            // are: one of its parts renamed or moved there would otherwise be passed over, and the backup
+            // restored without it. One it doesn't carry (the calendar's record) has nothing in it to lose.
+            if (said != null && said > shape.version && PARTS.values.any { it.first == file }) return null
             val parts = PARTS.filterValues { it.first == file }.keys.filter { it in backup }
             if (parts.isEmpty()) continue
             val whole = parts.singleOrNull { PARTS.getValue(it).second == null }
