@@ -155,6 +155,12 @@ class MigrationTest {
         // Nor is it read with its part under a name this build doesn't know: restored, the part would be lost.
         val renamed = JsonStore.json.parseToJsonElement(Backups.encode(backup.copy(versions = mapOf("memory.json" to 3)))).jsonObject.let { b -> JsonObject(b - "memory" + ("memories" to b.getValue("memory"))) }
         assertNull(Backups.decode(renamed.toString(), shapes))
+        // A store it doesn't carry (the calendar's record) can be newer: none of its data is in it, so it's read.
+        val calendarNewer = Backups.encode(backup.copy(versions = mapOf("memory.json" to 2, "runtime.json" to 2, "calendar.json" to 5)))
+        assertNotNull(Backups.decode(calendarNewer, shapes + ("calendar.json" to Shape(1, emptyList()))))
+        // A migration that fails on a part makes the backup one this build can't read, not an exception.
+        val failing = mapOf("memory.json" to Shape(2, listOf(Migration(1) { error("fails on what it's given") })))
+        assertNull(Backups.decode(Backups.encode(backup), failing))
         // With no shapes given (every store at version 1), it reads as it always did.
         assertEquals(backup.memory, Backups.decode(Backups.encode(backup), emptyMap())!!.memory)
     }
