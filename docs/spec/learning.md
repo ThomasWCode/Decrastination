@@ -54,7 +54,7 @@ A completion is timed (`Calibrator.isTimed`) when it has an estimate and kept-sl
 ## How was it?
 
 After homework or revision is confirmed done, the app asks how it went: *harder*, *as expected* or *easier*, with a line if you like (`learn/Assessment.kt`).
-- With Claude on, Felix asks instead, his replies the three answers (LR-05, [felix.md](felix.md)); with Claude off, a notification asks about each. A question waits while notifications can't be seen.
+- With Claude on, Felix asks instead, his replies the three answers (LR-05, [felix.md](felix.md)); with Claude off, a message of his in the app's words asks about each, its chips the three answers.
 - *Harder* raises the completion's figures 5 % where it's timed and 10 % where it isn't; *easier* lowers them as much; *as expected* changes nothing. All within 0.5 and 3.0.
 - The answer and the line go on the completion's record, and the weekly review reads them.
 
@@ -99,7 +99,7 @@ Each is asked first, with no parent code, and a copy of all the app keeps is sav
 
 ## The Sunday check-in
 
-At `Settings.checkInMin` (19:30) on Sundays, Felix asks the week's five questions in his notification, one at a time, in fixed words with no model call (LR-02, `felix/CheckInFlow.kt`; the answers so far in `RuntimeState.checkInDraft`):
+At `Settings.checkInMin` (19:30) on Sundays, Felix asks the week's five questions in the chat, one at a time, in fixed words with no model call (LR-02, `felix/CheckInFlow.kt`, `felix/FelixWords.kt`; the answers so far in `ChatState.felix.checkInDraft`), each answered from his notification or his chips:
 - how the week felt, 1 to 5; what you avoided and why; what got in the way; what you'd change; when you had most energy.
 
 Where his notifications can't be shown, or in quiet hours, a reminder opens the form instead (`Conversation.remindCheckIn`), which takes all five at once. The answers are kept by the week's Monday (`CheckIn`).

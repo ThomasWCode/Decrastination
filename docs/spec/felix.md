@@ -3,7 +3,8 @@
 Felix is the app's voice: the persona Claude writes as, in the chat and in the messages the app sends about your work. A strict friend who knows your week; Claude is the model behind him.
 He can change almost anything about your work, each change made as he gives it with an Undo, and he never touches the blocker, protection or Claude's own settings.
 Everything each of his calls is sent, circumstance by circumstance and with examples, is in [felix-inputs.md](felix-inputs.md).
-His code is in `felix/`: `Conversation` (the chat, a reply to his notification, what he remembers, the week's check-in) and `Looks` (what he writes unprompted), each built like `Focus`: its stores, the clock, and `FelixPorts` for what Android does. `ConversationTest` and `LooksTest` drive them on temporary stores, his calls answered by a stand-in for Claude's API (`FelixHarness`).
+His code is in `felix/`: `Conversation` (the chat, a reply to his notification, what he remembers, the week's check-in, what the app says in his name), `Looks` (what he writes unprompted) and `Outbox` (every message in his name into the chat first, and his one notification made from it), each built like `Focus`: its stores, the clock, and `FelixPorts` for what Android does. `ConversationTest`, `LooksTest` and `OutboxTest` drive them on temporary stores, his calls answered by a stand-in for Claude's API (`FelixHarness`).
+The chat is his one visible voice (D-95): every word in his name is a message there, and a notification of his is made from it, never beside it.
 
 ## Who he is
 
@@ -15,16 +16,20 @@ His code is in `felix/`: `Conversation` (the chat, a reply to his notification, 
 
 ## The chat
 
-`ui/AskActivity.kt` has two tabs, *Chat* and *Your changes*; its menu has *What Felix remembers* and *Clear the chat*. The chat is kept in `chat.json`, the newest 200 messages; clearing it leaves what it made.
+`ui/AskActivity.kt` has two tabs, *Chat* and *Your changes*; its menu has *What Felix remembers* and *Clear the chat*. The chat holds every message of his, what he writes unasked among them, and every one is kept (D-96):
+- the live window in `chat.json`: the newest 200 messages or those of the last 60 days, whichever keeps more, and every one of his still unread; what's past it and read moves to `chat-archive.json`, oldest first, the archive written before the window is trimmed (`Outbox.moveWindow`);
+- clearing the chat empties both, and leaves what it made and his state;
+- opened from his notification, it opens at the message the notification was for; leaving it, what's in it is read (`ChatState.readAt`, `Conversation.read`).
 - You write by keyboard or voice (UI-07). A message from a task's, an event's or a day's page carries what it's about (`About`).
 - One message of yours waits at a time. While Claude can't be asked (off, resting, at its cap) it says why, and it's answered once Claude can be: the chat opened again, *Try again*, Claude back, or after a sync.
 - While he answers, three dots show; after 10 seconds *Cancel* lets the answer go (AC-08). A call once sent is paid for, so it isn't closed.
 - An answer the app can't use (declined, cut off, unreadable) waits for *Try again*, as each try is paid for.
-- His suggested replies, up to three (`suggestedReplies`), are chips under his last message (UI-06).
+- His suggested replies, up to three (`suggestedReplies`), are chips under his last message (UI-06); a tap answers it as a reply from his notification does (below), a check-in's, a calendar question's or how work went with no call.
+- A message in the app's words can carry a button of its own (`ChatMessage.opens`): the week's review to open, its summary to send.
 
 `felix/ChatReader.kt` makes one call a message (`ChatReader.answer`), at medium effort (AC-02), under the cap (AC-05). Someone is waiting, so it goes through a rest after a failure, but not past a key problem or the cap (AC-04).
 - `ChatPrompts.system`: who he is, what he can do (below), and how to answer: one to three short sentences saying what he's done, one short question and no change when he needs to know more, and nothing he isn't asked for.
-- `ChatPrompts.turns`: the last 12 messages (`HISTORY`), starting with one of yours; each earlier answer with its cards and what became of them; a message of his from a notification you answered, in your first turn.
+- `ChatPrompts.turns`: what `ChatPrompts.history` takes of the chat (D-97): the conversation's last 12 messages (`HISTORY`: yours, and his answers to you) and his last two nudges (`NUDGES`: what he wrote unasked), each with your reply, in their order, starting with one of yours; each earlier answer with its cards and what became of them; a nudge before any of yours said in your first turn. A reply that went to no call (a check-in's answer) goes only with its nudge, so nudges can't push the conversation out. The message being answered is the newest of yours: what he wrote unasked after it isn't sent with it.
 - All of it within 40 000 characters (`Pricing.MAX_INPUT_CHARS`): your newest message whole, earlier turns in up to a quarter of the rest, then the context, then the plan, which keeps at least a third of their room.
 - `ChatAnswers.parse` checks his answer against what there is. What can't be used is left out and said under the reply ("Left out, as the app can't use it: …").
 
@@ -90,7 +95,7 @@ When a message needs facts neither you nor the app have given him (a competition
 ## His messages
 
 `felix/Looks.kt` looks for a reason to write (`felix/FelixRules.kt`, `FelixRules.due`, pure) at each slot's start and end alarm, at the check he set (`SlotAlarms.armFelix`, `FelixWorker`), and on the focus service's half-minute tick. The model is asked only when there's a reason.
-- **Never** in quiet hours, during a busy calendar event, or while his channel can't be seen.
+- **Never** in quiet hours or during a busy calendar event. His notifications off silence only them: what he writes is in the chat all the same.
 - **SlotEnd**: a slot gone by undone, or a long piece of written work ticked without the photo it needs to earn; once a slot.
 - **DayDone**: today's last slot kept, once a day, with the free time there is.
 - **Question**: the one question a reading had (AI-10), when he's free, at most once a day a task. Your answer is an instruction on the task, kept with it (`TaskItem.answers`), and the task is read again with it ([readings.md](readings.md)).
@@ -101,29 +106,38 @@ When a message needs facts neither you nor the app have given him (a competition
 Each is written by `FelixCaller.say` (AI-22, medium effort) from `felix/FelixPrompts.kt` (`FelixPrompts.describe`), told:
 - the reason and the time; the piece with its minutes, slot and what earns its free time, and its first action (AI-15);
 - its task's own text, up to 1 500 characters (`FelixPrompts.TEXT`): a longer one as its reading's summary, else its start and end; with what's attached (D-93);
-- today's slots kept, missed and to come; the free time; his last six messages and your replies; and the question.
+- today's slots kept, missed and to come; the free time; his last six messages of his own from the chat and your reply to each (`ChatHistory.replyOf`: the message of yours answering it, or the next of yours within ten minutes); and the question.
 
 What comes back, and what's done with it:
 - He answers with a message of two sentences at most (240 characters), up to three replies (40 each), when he'll check again (5 minutes at least), and anything to remember (`FelixAnswers.parse`).
 - Your standing instructions come first: where one means he shouldn't write now, he gives an empty message, and nothing is sent.
 - His next check is when he said, else `felixDefaultCheckMin`; a call held or failed is tried again after five minutes.
 - His next SlotStart is written up to ten minutes ahead after each plan (AC-10, `Looks.draftAhead`), and sent if it still fits.
-- Every message, silent ones too, is a `FelixRecord` in `log.json`, kept 30 days.
+- Every message is sent through his outbox (`felix/Outbox.kt`): into the chat first, with why he wrote it (`ChatMessage.kind`), its piece and its next check, then his notification made from it. A silent one (his choice not to write) is kept with no words, shown nowhere, so his rules count it as said (`FelixRules.sent`).
 
 Three more come at set times:
-- **The morning** (LR-04, `learn/Briefing.kt`, `Looks.morning`): the briefing is his message whole, up to 480 characters, under the day's title, on the briefing's channel. With no slot today, Claude unavailable, or no answer within 20 seconds, the briefing is the day's list instead.
-- **The check-in** (LR-02, `felix/CheckInFlow.kt`, `Conversation.askCheckIn`): on Sunday he asks its five questions one at a time, the first with 1 to 5, the second with what the week shows you put off; the form takes them all at once instead. Then "Thanks: the week's review comes next."
-- **The summary** (NF-02): after Sunday's review, "The week's summary is ready; send it?"; a tap opens it in your email app, to send.
+- **The morning** (LR-04, `learn/Briefing.kt`, `Looks.morning`): the briefing is his message whole, up to 480 characters. With no slot today, Claude unavailable, or no answer within 20 seconds, it's the day's title and list instead, in his name in the app's words (`Conversation.morningList`), so every morning is in the chat. His notification is then made again, with what waited overnight (below).
+- **The check-in** (LR-02, `felix/CheckInFlow.kt`, `Conversation.askCheckIn`): on Sunday he asks its five questions one at a time in the chat, in the app's words (`FelixWords`), the first with 1 to 5, the second with what the week shows you put off; each reply is kept under its question and the next asked with no call. The form takes them all at once instead, and his questions leave his notification. Then "Thanks: the week's review comes next."
+- **The review** (LR-01): after Sunday's review, its note's first line, with *Open the review*.
+- **The summary** (NF-02): after the review, "The week's summary is ready; send it?", with *Send it*, which opens it in your email app.
+
+The app asks two more things in his name, in its own words, each answered from his chips with no call:
+- **A calendar event the plan can't judge** (Q7, `learn/CalendarTime.kt`): "Open day, Saturday 24 October: how much of the day does it take?", with *All of it*, *A few hours* and *None*; answered for every event of that name. Answered elsewhere (the Calendar page, an instruction), it leaves his notification.
+- **How finished work went, with Claude off** (LR-05, `learn/Assessment.kt`): a message for each completion, with *Harder*, *As expected* and *Easier*. With Claude on, they wait for his evening question.
 
 ## Notifications and replies
 
-`felix/FelixNotifications.kt` posts his messages on the *Felix* channel: his words, a reply box whose choices are his replies, and a button for each of up to two cards still to make. One at a time: a newer one takes the last one's place. Tapping one opens the chat.
-He has no daily ceiling. The routine channels (briefing, calendar questions, weekly, Claude) go at most four a day and, but for the briefing, never in quiet hours, the rest held for the next briefing (LR-07, `notify/NotifyRules.kt`).
-Every notification of the app's is named once, with request codes of its own for its tap and buttons (`notify/NoticeId.kt`), and posted through `notify/Notifier.kt`, which applies those rules and alone posts and cancels them (`notify/Channels.kt` makes the channels; WorkManager shows the work-under-way ones from each worker's `ForegroundInfo`).
+He has one notification (`NoticeId.Felix`), made by his outbox from the chat (`Outbox.notify`, `felix/FelixNotifications.kt`), on the *Felix* channel, in Android's messaging style: his unread messages (after `ChatState.readAt`, with words), oldest first, and under them your replies to them; a reply box answering the newest, its choices his replies. It's made again, not added to, whenever the chat changes: a new message of his sounds, a rebuild doesn't. Tapped, it opens the chat at the first unread.
+- Nothing's posted while the chat is on screen, and opening the chat takes it away.
+- A question of his answered, here or elsewhere, leaves it.
+- In quiet hours the week's review, its summary and a calendar event's question are in the chat at once and left out of it till the morning's briefing makes it again (`NotifyRules.waitsForMorning`).
 
-A reply (`felix/FelixReplyReceiver.kt`, `Conversation.replyToFelix`) goes:
-- to the check-in, as its next answer; to his completions question, as the answer on each completion; to his question about a task, as above;
-- otherwise into the chat: his message put there if it isn't yet, your reply asked there, and the answer posted as his next notification while the chat isn't on screen (`FelixReplyWorker`). An unprompted message of his is in the chat only once you've replied to it.
+He has no daily ceiling. The app's routine channels (a calendar move put back, the check-in's reminder, Claude's) go at most four a day and never in quiet hours, the rest held for the next briefing (LR-07, `notify/NotifyRules.kt`).
+Every notification of the app's is named once, with request codes of its own for its tap and buttons (`notify/NoticeId.kt`), and posted through `notify/Notifier.kt`, which applies those rules and alone posts and cancels them (`notify/Channels.kt` makes the channels; WorkManager shows the work-under-way ones from each worker's `ForegroundInfo`). The notifications his messages took the place of (`NoticeId.RETIRED`) are taken away at start, where one's left.
+
+A reply, from his notification (`felix/FelixReplyReceiver.kt`) or one of his chips, is kept in the chat under the message it answers (`ChatMessage.replyTo`) and routed by what that message is (`Conversation.replyToFelix`):
+- a check-in's question: its next asked; a reading's question: an instruction on its task, as above; how work went: the answer on each completion; a calendar event's question: its answer kept. Each with no call.
+- anything else: a chat turn about what his message was, your words under his in his notification while he answers, and his answer his next message (`FelixReplyWorker`). While a message of yours still waits for its answer, a line of his says so instead.
 
 ## What he remembers
 
