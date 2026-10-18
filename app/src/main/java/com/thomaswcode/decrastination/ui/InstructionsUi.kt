@@ -42,7 +42,7 @@ import kotlinx.coroutines.launch
 
 /** Examples of what an instruction can say, for the box you write one in. */
 const val INSTRUCTION_EXAMPLES = "For example: “I can't do anything on Saturday”, “I can work on my train journeys”, " +
-    "“this email is just an email”, “this can't be done until Statics Prep is done”, “the due date should be Friday”."
+    "“this email is just an email”, “this can't be done until Moments Prep is done”, “the due date should be Friday”."
 
 /**
  * The box you write an instruction in, about [about] ([what] says it in words). [initial]: the

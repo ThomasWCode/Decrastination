@@ -40,9 +40,9 @@ class CheckInFlowTest {
     @Test
     fun `what was put off is offered as replies to the second question`() {
         val log = ActivityLog(
-            slots = listOf(slot("2026-10-06", "Statics Prep: Q1-8", SlotOutcome.Missed), slot("2026-10-07", "Essay: plan", SlotOutcome.Moved), slot("2026-10-08", "Essay: plan", SlotOutcome.Moved)),
+            slots = listOf(slot("2026-10-06", "Moments Prep: Q1-8", SlotOutcome.Missed), slot("2026-10-07", "Essay: plan", SlotOutcome.Moved), slot("2026-10-08", "Essay: plan", SlotOutcome.Moved)),
             days = listOf(DayRecord("2026-10-09", plannedMin = 60, chunks = emptyList(), full = false)),
         )
-        assertEquals(listOf("Statics Prep, missed", "Essay, moved 2 times", "Friday's plan"), CheckInFlow.replies(CheckInFlow.Draft("2026-10-05", step = 1), log, LONDON))
+        assertEquals(listOf("Moments Prep, missed", "Essay, moved 2 times", "Friday's plan"), CheckInFlow.replies(CheckInFlow.Draft("2026-10-05", step = 1), log, LONDON))
     }
 }
