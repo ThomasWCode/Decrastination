@@ -46,7 +46,7 @@ class BackupTest {
             calibration = Calibration(multipliers = mapOf("Homework|" to 1.2)),
             eventAnswers = mapOf("Drum lesson" to "busy"),
         )
-        assertEquals(backup, Backups.decode(Backups.encode(backup)))
+        assertEquals(backup, Backups.decode(Backups.encode(backup), emptyMap()))
     }
 
     @Test
@@ -55,10 +55,10 @@ class BackupTest {
         val backup = Backup(exportedAt = now, settings = Settings(), log = ActivityLog(), school = school)
         assertEquals(Backup.FORMAT, backup.format)
         // A backup from a later app's format is refused, rather than read without what it adds.
-        assertNull(Backups.decode("""{"app":"Decrastination","format":${Backup.FORMAT + 1},"exportedAt":0,"settings":{},"log":{}}"""))
-        assertEquals(school, Backups.decode(Backups.encode(backup))!!.school)
+        assertNull(Backups.decode("""{"app":"Decrastination","format":${Backup.FORMAT + 1},"exportedAt":0,"settings":{},"log":{}}""", emptyMap()))
+        assertEquals(school, Backups.decode(Backups.encode(backup), emptyMap())!!.school)
         // Format 2 (2.0.0) is still read, with no days off.
-        val old = Backups.decode("""{"app":"Decrastination","format":2,"exportedAt":0,"settings":{},"log":{}}""")!!
+        val old = Backups.decode("""{"app":"Decrastination","format":2,"exportedAt":0,"settings":{},"log":{}}""", emptyMap())!!
         assertEquals(SchoolCalendar(), old.school)
         assertNull(Backups.problem(old))
         // One the app couldn't have kept is refused whole.
@@ -68,12 +68,12 @@ class BackupTest {
 
     @Test
     fun `what isn't one of this app's backups, or is from a newer one, isn't read`() {
-        assertNull(Backups.decode("not json"))
-        assertNull(Backups.decode("""{"app":"Something else","format":1,"exportedAt":0,"settings":{},"log":{}}"""))
-        assertNull(Backups.decode("""{"app":"Decrastination","format":${Backup.FORMAT + 1},"exportedAt":0,"settings":{},"log":{}}"""))
-        assertNotNull(Backups.decode("""{"app":"Decrastination","format":${Backup.FORMAT},"exportedAt":0,"settings":{},"log":{}}"""))
+        assertNull(Backups.decode("not json", emptyMap()))
+        assertNull(Backups.decode("""{"app":"Something else","format":1,"exportedAt":0,"settings":{},"log":{}}""", emptyMap()))
+        assertNull(Backups.decode("""{"app":"Decrastination","format":${Backup.FORMAT + 1},"exportedAt":0,"settings":{},"log":{}}""", emptyMap()))
+        assertNotNull(Backups.decode("""{"app":"Decrastination","format":${Backup.FORMAT},"exportedAt":0,"settings":{},"log":{}}""", emptyMap()))
         // One from before 2.0.0 (format 1, no tasks of your own) is still read.
-        assertNotNull(Backups.decode("""{"app":"Decrastination","format":1,"exportedAt":0,"settings":{},"log":{}}"""))
+        assertNotNull(Backups.decode("""{"app":"Decrastination","format":1,"exportedAt":0,"settings":{},"log":{}}""", emptyMap()))
     }
 
     @Test
@@ -213,7 +213,7 @@ class BackupTest {
     @Test
     fun `a backup keeps your own tasks, and a restore adds those not here`() {
         val mine = OwnTasks.create(OwnTask(title = "UCAS statement", dueAt = now + 86_400_000L, minutes = 120), "u1", now)
-        val read = Backups.decode(Backups.encode(backup().copy(ownTasks = listOf(mine))))!!
+        val read = Backups.decode(Backups.encode(backup().copy(ownTasks = listOf(mine))), emptyMap())!!
         assertEquals(listOf(mine), read.ownTasks)
         assertNull(Backups.problem(read))
         // One here already is the newer: it stays as it is.
@@ -240,16 +240,16 @@ class BackupTest {
         assertEquals(mine.dueAt, restored.dueAt)
         assertEquals(false, restored.userNotATask)
         // A backup from before 2.0.0 has none.
-        assertEquals(emptyList(), Backups.decode(Backups.encode(backup()).replace("\"ownTasks\"", "\"ignored\""))!!.ownTasks)
+        assertEquals(emptyList(), Backups.decode(Backups.encode(backup()).replace("\"ownTasks\"", "\"ignored\""), emptyMap())!!.ownTasks)
     }
 
     @Test
     fun `a backup keeps the instructions in use`() {
         val applied = Instruction("i1", "I can't do anything on Saturday", at = now, state = InstructionStatus.Applied, changes = listOf(Change(ChangeType.DayLimit, weekday = 6, freeMin = 0)), appliedAt = now)
-        val read = Backups.decode(Backups.encode(backup().copy(instructions = listOf(applied))))!!
+        val read = Backups.decode(Backups.encode(backup().copy(instructions = listOf(applied))), emptyMap())!!
         assertEquals(listOf(applied), read.instructions)
         // One from before 1.7.0 has none.
-        assertEquals(emptyList(), Backups.decode(Backups.encode(backup()).replace("\"instructions\"", "\"ignored\""))!!.instructions)
+        assertEquals(emptyList(), Backups.decode(Backups.encode(backup()).replace("\"instructions\"", "\"ignored\""), emptyMap())!!.instructions)
     }
 
     @Test
@@ -273,15 +273,15 @@ class BackupTest {
             exportedAt = 1, settings = com.thomaswcode.decrastination.data.Settings(), log = ActivityLog(),
             felix = FelixState(nextCheckAt = 42), slots = com.thomaswcode.decrastination.core.SlotState("2026-10-15", previous = mapOf("teams:a#0" to 7L)),
         )
-        val back = Backups.decode(Backups.encode(backup))!!
+        val back = Backups.decode(Backups.encode(backup), emptyMap())!!
         assertEquals(6, back.format)
         assertEquals(42L, back.felix.nextCheckAt)
         // The chat as well (LR-08's copy before a reset); none in one from before.
         val chat = com.thomaswcode.decrastination.core.ChatState(listOf(com.thomaswcode.decrastination.core.ChatMessage("m1", com.thomaswcode.decrastination.core.Speaker.You, "move the physics to Thursday", 5)))
-        assertEquals(chat, Backups.decode(Backups.encode(backup.copy(chat = chat)))!!.chat)
-        assertEquals(com.thomaswcode.decrastination.core.ChatState(), Backups.decode("""{"app":"Decrastination","format":5,"exportedAt":0,"settings":{},"log":{}}""")!!.chat)
+        assertEquals(chat, Backups.decode(Backups.encode(backup.copy(chat = chat)), emptyMap())!!.chat)
+        assertEquals(com.thomaswcode.decrastination.core.ChatState(), Backups.decode("""{"app":"Decrastination","format":5,"exportedAt":0,"settings":{},"log":{}}""", emptyMap())!!.chat)
         assertEquals(mapOf("teams:a#0" to 7L), back.slots.previous)
-        assertEquals(null, Backups.decode(Backups.encode(backup).replace("\"format\": 6", "\"format\": 7")))
+        assertEquals(null, Backups.decode(Backups.encode(backup).replace("\"format\": 6", "\"format\": 7"), emptyMap()))
     }
 }
 

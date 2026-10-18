@@ -4,7 +4,12 @@ import kotlinx.serialization.Serializable
 
 /** What Felix remembers (AI-21): facts about the student, each under a topic, and standing instructions on how he behaves. */
 @Serializable
-data class MemoryState(val facts: List<Fact> = emptyList(), val rules: List<Rule> = emptyList())
+data class MemoryState(
+    val facts: List<Fact> = emptyList(),
+    val rules: List<Rule> = emptyList(),
+    /** The shape this is in ([com.thomaswcode.decrastination.data.Migration]): raised with each change of it. */
+    val version: Int = 1,
+)
 
 /** A fact worth keeping ("football is on Tuesdays"), under a short [topic] that a newer fact replaces. */
 @Serializable

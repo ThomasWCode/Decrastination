@@ -109,7 +109,7 @@ About twenty-three days in 22 PRs (21 releases), evenings and weekends. After it
 
 ## Decisions it adds
 
-Numbered in `docs/decisions.md` by the PRs that apply them (the next free number is D-94):
+Numbered in `docs/decisions.md` by the PRs that apply them (the next free number is D-95; D-94 is 3.3.2's):
 
 - The chat is Felix's one visible voice; a notification is made from it and never beside it (5a). A reply from a notification and one in the chat are the same turn, routed by the message it answers (5b).
 - The chat keeps every message for you; what he's sent of it is the recent window (5a).
@@ -117,7 +117,7 @@ Numbered in `docs/decisions.md` by the PRs that apply them (the next free number
 - What he remembers can expire: by a date, or with a task; nothing of it is yours to prune (10a).
 - His voice is a sixth-former's, set by his prompts and pinned by examples; his name and line stay the knobs (D-57). A message that's just talk gets a reply and nothing else. The week's summary email is about you in the third person, never in his voice (10b).
 - Finishing a starred email's work in the app unstars and archives it in Gmail (amending D-7, D-10 and D-54), behind a switch; a write that can't be made is the app's own notification, not his (11).
-- A finished task's text is kept a fortnight, its record for good (7). Every store has a version and a migration (3).
+- A finished task's text is kept a fortnight, its record for good (7). Every store has a version and a migration (3: D-94).
 - One `@claude review` on every PR that gets up to three Codex rounds, answered point by point and closed with "Resolved" (already in [development.md](../development.md), C-Q2).
 
 ## Done when

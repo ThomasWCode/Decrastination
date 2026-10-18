@@ -5,10 +5,14 @@ The app stores nothing off the phone but the plan's slots in the calendar it wri
 
 ## The stores
 
-`data/JsonStore.kt` is one piece of the app's state kept in a JSON file and shared as a `StateFlow` by everything in the app's one process: the sync, the focus service, the widget and the screens. `AppGraph` makes one of each.
+`data/JsonStore.kt` is one piece of the app's state kept in a JSON file and shared as a `StateFlow` by everything in the app's one process: the sync, the focus service, the widget and the screens. `data/Stores.kt` makes one of each, and the secrets, and `AppGraph` makes it first.
 - `JsonStore.update` makes changes one at a time and writes only when something changed: to `<name>.tmp`, then renamed over the file, so a crash mid-write can't leave half a file.
 - Each store is written whole at every change.
-- Unknown keys are ignored and defaults written (`JsonStore.json`), so an older or newer file still loads. No store has a schema version: compatibility is by defaults.
+- Unknown keys are ignored and defaults written (`JsonStore.json`).
+- **Every store has a version** (its state's `version`, D-94; a file without one is version 1), and a change to its shape is a migration (`data/Migration.kt`): run on the file's JSON as the store loads, before it's decoded, one version a step, the new shape then written. The file it came from is kept beside it as `<name>.v<from>`, let go a week later at a start that gets that far (`Stores.letGoOfOldShapes`).
+- A file of a newer version than the build, which it can't read, is set aside as one that can't be read (below); what reads of it is kept in this build's shape.
+- Fields that move from one store's file to another's are moved by `Stores` at start, before any store is read (`Move`): the new file written first, then the old trimmed.
+- `Stores.all` says, store by store, what a backup keeps of it (or why nothing) and which resets change it, so none can be added and left out of either; `Stores.replace`, called by the backup service alone, is the one way round a store's owner.
 - A failed write is logged; the app carries on.
 
 ## The files
@@ -33,6 +37,7 @@ Beside them:
 - `crashes/`: the last three crashes (`data/Crashes.kt`, AR-06), the newest in Settings → Claude;
 - `backups/`: a reset's copy, where `Documents` can't be written;
 - `<name>.unreadable-<when>`: copies of files that couldn't be read (below);
+- `<name>.v<n>`: the file a migration came from, kept a week (above);
 - the debug commands' files: `credentials.import` (only until it's imported), `ai-prompts.json` and `chat-context.txt`.
 
 The cache holds a photo check's pages till they're checked, and the record exported from Stats to share (PL-11).
@@ -44,7 +49,7 @@ A store's file that can't be read whole (IMP-P1-003, `JsonStore.load`):
 - is copied aside as `<name>.unreadable-<yyyyMMdd-HHmmss>`, the newest three of each kept, the one just made always among them (`JsonStore.setAside`);
 - sets `JsonStore.problem`.
 
-`AppGraph` puts every problem on record (`RuntimeState.unreadable`) ahead of anything else, and only then has each store write what it kept over the bad file (`JsonStore.keepRecovered`). A start cut short in between finds the file again, and says so again.
+`AppGraph` puts every problem `Stores` reports on record (`RuntimeState.unreadable`) ahead of anything else, and only then has each store write what it kept over the bad file (`Stores.keepRecovered`). A file that's migrated and then doesn't read whole is recovered from its new shape. A start cut short in between finds the file again, and says so again.
 Setup and Settings → Backup say what happened, and where the copy is, until you tap *Got it* (`AppGraph.forgetUnreadable`).
 
 Settings that can't be read at all start armed while the device admin is on, as only arming turns it on: a bad file never disarms protection ([blocking-and-protection.md](blocking-and-protection.md)).
@@ -53,13 +58,13 @@ Secrets that can't be decrypted are told apart from none saved (`SecretStore`): 
 
 ## Backups
 
-`data/Backup.kt` (`Backup`, format 6, `Backups.encode`) holds what the sources can't give back:
+`data/Backup.kt` (`Backup`, format 6, `Backups.encode`) holds what the sources can't give back, with the version of each store its parts come from (`Backup.versions`):
 - the settings as asked for (waiting changes applied), the activity log, the calibration, your calendar answers, and Claude's month;
 - your changes in use, your own tasks, the school calendar, what Felix remembers, Felix's state, today's slots, and the chat.
 
 Never the passwords or keys, nor the sources' tasks, which the next sync reads again.
 
-**Each day** (AR-07): `data/BackupWorker.kt`, a daily job, writes all of it to `Documents/Decrastination/decrastination-<date>.json` (`AppGraph.backupNow`).
+**Each day** (AR-07): `data/BackupWorker.kt`, a daily job, writes all of it to `Documents/Decrastination/decrastination-<date>.json` (`data/BackupService.kt`, `BackupService.backupNow`).
 - It goes through MediaStore (`data/BackupFolder.kt`, Android 10 and later), with no folder to pick and no permission, and outlasts clearing the app's data.
 - It replaces that day's file, keeps the newest 14, and notes the time for Settings → Backup; a failed write is tried again up to three times.
 
@@ -68,7 +73,7 @@ A copy off the phone is yours to make: a sync app mirroring the folder, or Expor
 
 ## Restoring
 
-`AppGraph.importBackup` restores nothing from a file that isn't one of this app's, is a newer format, is over 8 MB, or holds what the app never writes (`Backups.problem`: a setting out of the screen's range, negative minutes, a learned figure out of bounds, and so on). Otherwise:
+`BackupService.importBackup` restores nothing from a file that isn't one of this app's, is a newer format, has a part from a store newer than this build's, is over 8 MB, or holds what the app never writes (`Backups.problem`: a setting out of the screen's range, negative minutes, a learned figure out of bounds, and so on). A backup's parts from a store of an older version are brought to this build's shape first, by that store's migrations (`Backups.decode`). Otherwise:
 - the settings go through `changeSettings`, keeping this phone's protection, Claude's key in use and its calendars: once armed, one that loosens the blocker waits;
 - your changes come back as applying each here would (one that would make tasks wait for each other in a circle stays unclear, saying so); your own tasks not here are added, with your changes laid over them again;
 - the school calendar is merged; what's remembered is merged by topic and words, this phone's winning; the chat comes back only where this phone's is empty;
@@ -80,7 +85,7 @@ It then says what came back, and what waits.
 
 ## Resets
 
-Settings → Reset (LR-08, `AppGraph.reset`) clears one part, after saving a copy of everything as `reset-<date>-<time>.json` in `Documents/Decrastination` (in the app's own `backups/` where that can't be written, which Settings → Backup restores from).
+Settings → Reset (LR-08, `BackupService.reset`) clears one part, after saving a copy of everything as `reset-<date>-<time>.json` in `Documents/Decrastination` (in the app's own `backups/` where that can't be written, which Settings → Backup restores from).
 Nothing goes until its copy is saved. None needs the parent code, and none touches Claude's key, the sources or protection.
 
 | Reset | What goes |
