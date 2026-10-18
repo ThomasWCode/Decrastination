@@ -113,7 +113,7 @@ fun SetupScreen(graph: AppGraph, activity: Activity, parts: Set<SetupPart> = Set
         if (uri == null) return@rememberLauncherForActivityResult
         scope.launch {
             backupNote = runCatching {
-                val text = graph.exportBackup()
+                val text = graph.backups.exportBackup()
                 withContext(Dispatchers.IO) {
                     val out = requireNotNull(activity.contentResolver.openOutputStream(uri, "wt")) { "no file to write" }
                     out.use { it.write(text.toByteArray()) }
@@ -130,7 +130,7 @@ fun SetupScreen(graph: AppGraph, activity: Activity, parts: Set<SetupPart> = Set
                     val input = requireNotNull(activity.contentResolver.openInputStream(uri)) { "no file to read" }
                     input.use { Backups.read(it) }
                 }
-                if (bytes == null) "That file is too big to be a backup." else graph.importBackup(bytes.decodeToString())
+                if (bytes == null) "That file is too big to be a backup." else graph.backups.importBackup(bytes.decodeToString())
             }.getOrElse { "Couldn't read it: ${it.message}" }
         }
     }

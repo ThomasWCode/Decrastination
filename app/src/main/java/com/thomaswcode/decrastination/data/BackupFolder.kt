@@ -82,3 +82,15 @@ object BackupFolder {
     @RequiresApi(Build.VERSION_CODES.Q)
     private fun collection(): Uri = MediaStore.Files.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
 }
+
+/** [BackupFolder] through the phone's MediaStore, as the backup service writes it. */
+class AndroidBackupFolder(private val resolver: ContentResolver) : BackupService.Folder {
+    override val available: Boolean get() = BackupFolder.available
+
+    // Each checks it's Android 10 or later itself, as the folder's calls need.
+    override fun write(name: String, text: String): Boolean = BackupFolder.available && BackupFolder.write(resolver, name, text)
+
+    override fun names(): List<String> = if (BackupFolder.available) BackupFolder.list(resolver).map { it.first } else emptyList()
+
+    override fun delete(name: String): Boolean = BackupFolder.available && BackupFolder.list(resolver).filter { it.first == name }.all { BackupFolder.delete(resolver, it.second) }
+}

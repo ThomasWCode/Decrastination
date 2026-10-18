@@ -40,6 +40,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.block.Blocklist
 import com.thomaswcode.decrastination.data.JsonStore
+import com.thomaswcode.decrastination.data.Reset
 import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.data.SettingsLimits
 import com.thomaswcode.decrastination.data.Window
@@ -638,11 +639,11 @@ private fun LastCrash(activity: android.app.Activity) {
 @Composable
 private fun ResetPage(graph: AppGraph) {
     val scope = rememberCoroutineScope()
-    var asking by remember { mutableStateOf<AppGraph.Reset?>(null) }
+    var asking by remember { mutableStateOf<Reset?>(null) }
     var said by remember { mutableStateOf<String?>(null) }
     Column {
         Note("A copy of everything the app keeps is saved to Documents/Decrastination before each, to import from Backup.")
-        AppGraph.Reset.entries.forEach { r ->
+        Reset.entries.forEach { r ->
             // The page's margin, as its note has (start only: the button's own padding is its end's).
             Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f).padding(vertical = 6.dp)) {
@@ -655,7 +656,7 @@ private fun ResetPage(graph: AppGraph) {
         said?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.secondary, modifier = Modifier.padding(horizontal = 16.dp)) }
     }
     asking?.let { r ->
-        val changes = if (r == AppGraph.Reset.Instructions || r == AppGraph.Reset.Everything) graph.instructions.value.applied.map { it.text.take(80) } else emptyList()
+        val changes = if (r == Reset.Instructions || r == Reset.Everything) graph.instructions.value.applied.map { it.text.take(80) } else emptyList()
         androidx.compose.material3.AlertDialog(
             onDismissRequest = { asking = null },
             title = { Text("Reset ${r.title.replaceFirstChar(Char::lowercase)}?") },
@@ -668,7 +669,7 @@ private fun ResetPage(graph: AppGraph) {
             confirmButton = {
                 androidx.compose.material3.TextButton(onClick = {
                     asking = null
-                    scope.launch { said = graph.reset(r) }
+                    scope.launch { said = graph.backups.reset(r) }
                 }) { Text("Reset") }
             },
             dismissButton = { androidx.compose.material3.TextButton(onClick = { asking = null }) { Text("Keep it") } },
@@ -684,7 +685,7 @@ private fun ResetPage(graph: AppGraph) {
 @Composable
 private fun NightlyBackup(graph: AppGraph, last: Long?, now: Long) {
     val scope = rememberCoroutineScope()
-    val copies = remember { graph.resetCopies() }
+    val copies = remember { graph.backups.resetCopies() }
     var said by remember { mutableStateOf<String?>(null) }
     Column {
         Section("Nightly backup")
@@ -700,7 +701,7 @@ private fun NightlyBackup(graph: AppGraph, last: Long?, now: Long) {
             copies.forEach { name ->
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(name, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-                    androidx.compose.material3.TextButton(onClick = { scope.launch { said = graph.restoreResetCopy(name) } }) { Text("Restore") }
+                    androidx.compose.material3.TextButton(onClick = { scope.launch { said = graph.backups.restoreResetCopy(name) } }) { Text("Restore") }
                 }
             }
             said?.let { Note(it) }

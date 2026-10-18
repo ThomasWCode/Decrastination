@@ -128,6 +128,8 @@ data class Settings(
     val armed: Boolean = false,
     /** How long a change that loosens blocking waits, once armed. */
     val loosenDelayHours: Int = 24,
+    /** The shape this is in ([Migration]): raised with each change of it, a migration bringing older files to it. */
+    val version: Int = 1,
 )
 
 /** A stretch of a day, in minutes after midnight; one that ends before it starts crosses midnight. */

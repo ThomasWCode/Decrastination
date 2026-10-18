@@ -102,6 +102,8 @@ object SettingsChanges {
         "briefingWeekdayMin" to NEVER,
         "briefingWeekendMin" to NEVER,
         "checkInMin" to NEVER,
+        // The settings' shape, raised by a migration, never by a change.
+        "version" to NEVER,
     )
 
     private val LABELS = mapOf(

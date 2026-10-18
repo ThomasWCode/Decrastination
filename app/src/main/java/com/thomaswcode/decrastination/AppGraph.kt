@@ -20,7 +20,6 @@ import com.thomaswcode.decrastination.core.ChatState
 import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.core.HalfDay
 import com.thomaswcode.decrastination.core.Instruction
-import com.thomaswcode.decrastination.core.InstructionState
 import com.thomaswcode.decrastination.core.InstructionStatus
 import com.thomaswcode.decrastination.core.NoSchool
 import com.thomaswcode.decrastination.core.Instructions
@@ -41,18 +40,16 @@ import com.thomaswcode.decrastination.core.WallClock
 import com.thomaswcode.decrastination.core.overrides
 import com.thomaswcode.decrastination.core.withEnrichment
 import com.thomaswcode.decrastination.core.withOverrides
-import com.thomaswcode.decrastination.data.ActivityLog
-import com.thomaswcode.decrastination.data.Backup
+import com.thomaswcode.decrastination.data.AndroidBackupFolder
+import com.thomaswcode.decrastination.data.BackupService
 import com.thomaswcode.decrastination.data.Backups
 import com.thomaswcode.decrastination.data.DeviceClock
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.KeystoreCipher
-import com.thomaswcode.decrastination.data.RuntimeState
 import com.thomaswcode.decrastination.data.Secret
-import com.thomaswcode.decrastination.data.SecretStore
 import com.thomaswcode.decrastination.data.Settings
+import com.thomaswcode.decrastination.data.Stores
 import com.thomaswcode.decrastination.data.TaskState
-import com.thomaswcode.decrastination.enrich.AiUsage
 import com.thomaswcode.decrastination.enrich.AndroidModelAlerts
 import com.thomaswcode.decrastination.enrich.Called
 import com.thomaswcode.decrastination.enrich.Failures
@@ -123,13 +120,17 @@ class AppGraph private constructor(context: Context) {
     /** Work that outlives the screen or receiver that started it; a failure is logged, not fatal. */
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default + CoroutineExceptionHandler { _, error -> Log.e(TAG, "Background work failed", error) })
 
-    val tasks = JsonStore(File(app.filesDir, "tasks.json"), TaskState.serializer(), ::TaskState)
-    // A file that can't be read at all starts armed while the device admin is on, as only arming
-    // turns it on: a bad file never disarms protection (IMP-P1-003).
-    val settings = JsonStore(File(app.filesDir, "settings.json"), Settings.serializer(), ::Settings, unreadable = { Settings(armed = Watchdog.isAdminActive(app)) })
-    val secrets = SecretStore(File(app.filesDir, "secrets.bin"), KeystoreCipher())
-    val runtime = JsonStore(File(app.filesDir, "runtime.json"), RuntimeState.serializer(), ::RuntimeState)
-    val log = JsonStore(File(app.filesDir, "log.json"), ActivityLog.serializer(), ::ActivityLog)
+    /**
+     * Every store, made first, each with its version and its migrations ([Stores]): a file of an older
+     * shape brought to this one as it's read. A settings file that can't be read at all starts armed
+     * while the device admin is on, as only arming turns it on (IMP-P1-003).
+     */
+    val stores = Stores(app.filesDir, KeystoreCipher(), armedIfUnreadable = { Watchdog.isAdminActive(app) })
+    val tasks = stores.tasks
+    val settings = stores.settings
+    val secrets = stores.secrets
+    val runtime = stores.runtime
+    val log = stores.log
 
     /** Every notification the app posts, held and counted by the rules (LR-07): the one place they're posted ([NoticeId] names them). */
     val notifier = Notifier(AndroidTray(app), runtime, settings, clock, scope)
@@ -138,19 +139,19 @@ class AppGraph private constructor(context: Context) {
     val gateway = ModelGateway(settings, { secrets[Secret.AnthropicApiKey] }, runtime, tasks, clock, AndroidModelAlerts(app), scope) { EnrichWorker.retryAfter(app, it) }
 
     /** Your instructions about tasks, events and days, and what Claude read them as ([Instructions]). */
-    val instructions = JsonStore(File(app.filesDir, "instructions.json"), InstructionState.serializer(), ::InstructionState)
+    val instructions = stores.instructions
 
-    /** Your chat with Claude (2.0.0, Q29): what you said, its answers, and what became of its cards. */
-    val chat = JsonStore(File(app.filesDir, "chat.json"), ChatState.serializer(), ::ChatState)
+    /** Your chat with Felix: what you said, his answers, and what became of his cards. */
+    val chat = stores.chat
 
     /** Days with no school and half-days (PL-16), told to the chat or added in Settings. */
-    val school = JsonStore(File(app.filesDir, "school.json"), SchoolCalendar.serializer(), ::SchoolCalendar)
+    val school = stores.school
 
     /** What Felix remembers (AI-21): facts, and standing instructions. */
-    val memory = JsonStore(File(app.filesDir, "memory.json"), com.thomaswcode.decrastination.core.MemoryState.serializer(), { com.thomaswcode.decrastination.core.MemoryState() })
+    val memory = stores.memory
 
     /** The versions of its events the app has written to calendars, so a copy of one is known ([SlotCalendarDiff.isCopy]). */
-    val calendarVersions = JsonStore(File(app.filesDir, "calendar.json"), com.thomaswcode.decrastination.data.CalendarVersions.serializer(), { com.thomaswcode.decrastination.data.CalendarVersions() })
+    val calendarVersions = stores.calendarVersions
 
     /**
      * Who the student is, as every model call sends it (AI-05): from the settings, the tasks, the
@@ -170,13 +171,13 @@ class AppGraph private constructor(context: Context) {
         // Files that couldn't be read whole at this start: kept for Setup to say, till you've seen them.
         // On record before anything else runs, and only then is a bad file replaced by what was kept
         // of it: a start cut short before then finds it again, and says it (once: its copy is the same).
-        val found = listOfNotNull(tasks.problem, settings.problem, secrets.problem, runtime.problem, log.problem, instructions.problem, chat.problem, school.problem, memory.problem, calendarVersions.problem)
+        val found = stores.problems
         if (found.isNotEmpty()) {
             found.forEach { Log.w(TAG, "${it.file} couldn't be read whole; set aside as ${it.copy}") }
             runBlocking {
                 runCatching {
                     runtime.update { it.withUnreadable(found) }
-                }.onSuccess { listOf(tasks, settings, runtime, log, instructions, chat, school, memory, calendarVersions).forEach { it.keepRecovered() } }
+                }.onSuccess { stores.keepRecovered() }
                     .onFailure { Log.w(TAG, "Couldn't keep what was found unreadable", it) }
             }
         }
@@ -732,6 +733,8 @@ class AppGraph private constructor(context: Context) {
             runCatching { slots.sweep() }.onFailure { Log.w(TAG, "Looking at missed slots failed", it) }
             watcher.start()
         }
+        // The files older shapes came from, a week after their migration, at a start that's got this far.
+        scope.launch(Dispatchers.IO) { runCatching { stores.letGoOfOldShapes() }.onFailure { Log.w(TAG, "Letting go of old shapes failed", it) } }
         // Redraw the widget whenever what it shows may have changed.
         scope.launch {
             combine(tasks.state, settings.state, runtime.state) { _, _, _ -> }.drop(1).debounce(WIDGET_DEBOUNCE_MS).collect {
@@ -754,120 +757,21 @@ class AppGraph private constructor(context: Context) {
     /** The rules' enrichment: always there, and the fallback for the model. */
     private val rules = RuleEnricher()
 
-    /** A backup of what the sources can't give back, as text ([Backups]). */
-    fun exportBackup(): String = Backups.encode(
-        Backup(
-            exportedAt = clock.now(),
-            versionName = BuildConfig.VERSION_NAME,
-            // As asked for: a change still waiting its delay is in it, and restored goes through
-            // the same wait (or, restored here, keeps waiting) rather than being lost.
-            settings = SettingsChanges.requested(settings.value, runtime.value.pending),
-            log = log.value,
-            calibration = runtime.value.calibration,
-            eventAnswers = runtime.value.eventAnswers,
-            aiUsage = runtime.value.aiUsage,
-            instructions = instructions.value.applied,
-            ownTasks = tasks.value.tasks.filter { it.source == Source.Own },
-            school = school.value,
-            memory = memory.value,
-            felix = runtime.value.felix,
-            slots = runtime.value.slots,
-            chat = chat.value,
-        ),
-    )
-
-    /**
-     * The nightly backup (AR-07): all the app keeps, as `decrastination-<date>.json` in
-     * Documents/Decrastination, replacing the day's if it's run again; those past the newest
-     * fortnight let go; its time kept for Settings. False below Android 10, or where it can't be written.
-     */
-    suspend fun backupNow(): Boolean = withContext(NonCancellable + Dispatchers.IO) {
-        if (!com.thomaswcode.decrastination.data.BackupFolder.available) return@withContext false
-        val now = clock.now()
-        val folder = com.thomaswcode.decrastination.data.BackupFolder
-        val name = folder.nightlyName(java.time.Instant.ofEpochMilli(now).atZone(clock.zone()).toLocalDate().toString())
-        if (!folder.write(app.contentResolver, name, exportBackup())) return@withContext false
-        val files = folder.list(app.contentResolver)
-        val gone = folder.toPrune(files.map { it.first }).toSet()
-        files.filter { it.first in gone }.forEach { folder.delete(app.contentResolver, it.second) }
-        runtime.update { it.copy(lastBackupAt = now) }
-        true
-    }
-
-    /**
-     * Restores the backup [text] and says what happened. Nothing is restored from one that holds
-     * what the app never writes ([Backups.problem]). The settings go through [changeSettings], so
-     * once armed one that loosens blocking waits; the instructions as applying each here would go
-     * ([restoreInstructions]); the log, the calibration and the calendar answers armed or not. They
-     * were kept back while armed, as an edited file could teach the planner to plan less; but the
-     * plan is yours to change at once now (12 Oct), and free time is earned in a ledger no backup holds.
-     */
-    suspend fun importBackup(text: String): String {
-        val backup = Backups.decode(text) ?: return "That isn't a Decrastination backup (or it's from a newer version)."
-        Backups.problem(backup)?.let { return "Nothing was restored: $it." }
-        changeSettings { Backups.importedSettings(it, backup) }
-        val (restored, unclear) = restoreInstructions(backup.instructions)
-        // Your own tasks not here already: no source can give them back. The instructions' say is laid
-        // over them afresh, from those in use here.
-        val ownAdded = Backups.restoredOwnTasks(backup.ownTasks, tasks.value.tasks).map { it.id }.toSet()
-        tasks.update { state -> state.copy(tasks = state.tasks + Backups.restoredOwnTasks(backup.ownTasks, state.tasks)) }
-        if (ownAdded.isNotEmpty()) layTaskOverrides()
-        // The backup's days off and half-days beside those here (PL-16); and what it remembered (AI-21).
-        school.update { it.withAll(backup.school) }
-        memory.update { Backups.mergedMemory(it, backup.memory) }
-        // The chat where this phone's is empty (a reset's copy brings it back, LR-08): not a message
-        // of yours still waiting for its answer, which would be sent, words from then, as it opens.
-        val backedChat = backup.chat.let { c -> c.unanswered?.let { w -> c.copy(messages = c.messages.filterNot { it.id == w.id }) } ?: c }
-        var chatBack = 0
-        chat.update { s -> if (s.messages.isEmpty() && backedChat.messages.isNotEmpty()) backedChat.also { chatBack = it.messages.size } else s }
-        val own = ownAdded.size
-        val told = buildList {
-            if (own > 0) add("$own task${if (own == 1) "" else "s"} of your own")
-            if (chatBack > 0) add("the chat ($chatBack message${if (chatBack == 1) "" else "s"})")
-            if (restored > 0) add("$restored instruction${if (restored == 1) "" else "s"} restored")
-            if (unclear > 0) add("$unclear left unapplied under Your changes in Felix's chat, as ${if (unclear == 1) "it" else "they"} would have tasks wait for each other in a circle")
-        }.takeIf { it.isNotEmpty() }?.joinToString(", ", prefix = " ", postfix = ".") ?: ""
-        // Felix's state where this phone has none of its own; today's slots, restored the same day (AR-07).
-        val today = java.time.Instant.ofEpochMilli(clock.now()).atZone(clock.zone()).toLocalDate().toString()
-        runtime.update { s ->
-            s.copy(
-                felix = if (s.felix == com.thomaswcode.decrastination.data.FelixState()) backup.felix else s.felix,
-                slots = if (backup.slots.date == today && s.slots.on(java.time.LocalDate.parse(today)).let { it.previous.isEmpty() && it.missed.isEmpty() }) backup.slots else s.slots,
-            )
-        }
-        // This month's spend on Claude, armed or not: it can only rise, so the cap isn't given again.
-        val month = AiUsage.monthOf(clock.now(), clock.zone())
-        runtime.update { it.copy(aiUsage = Backups.mergeUsage(it.aiUsage, backup.aiUsage, month)) }
-        // The reminders' alarms at the restored times, as a save in Settings sets them.
-        Daily.schedule(app)
-        val waiting = runtime.value.pending.size
-        val waits = if (waiting > 0) " $waiting change${if (waiting == 1) " that loosens blocking waits" else "s that loosen blocking wait"} ${settings.value.loosenDelayHours} hours." else ""
-        log.update { Backups.mergeLog(it, backup.log, clock.now()) }
-        // Your answers on this phone win over the backup's.
-        // One from before 1.8.0 under its rule now, as at a start, from the log as merged.
-        val calibration = Calibrator.upgraded(backup.calibration, log.value.completions) ?: backup.calibration
-        runtime.update { it.copy(calibration = calibration, eventAnswers = backup.eventAnswers + it.eventAnswers) }
-        // Read with the restored answers, and today's record made again, as an answer given here does.
-        scope.launch {
-            CalendarTime.refresh(app)
-            Briefing.replanToday(app)
-        }
-        return "Restored the settings, ${backup.log.completions.size} completions and ${backup.log.slots.size} slots, what the app had learned, and your calendar answers.$waits$told"
-    }
-
-    /**
-     * A backup's instructions in use ([backed]) taken in, in the order they were applied, each as
-     * applying it here would go: one already here is left as it is; one that would have tasks wait
-     * for each other in a circle with those here comes back unclear, saying so. The rest are
-     * applied, due dates too (yours to change, 12 Oct). Says how many were applied, and how many
-     * are unclear.
-     */
-    private suspend fun restoreInstructions(backed: List<Instruction>): Pair<Int, Int> = applying.withLock {
-        val added = Backups.restoredInstructions(backed, instructions.value.instructions)
-        instructions.update { state -> state.copy(instructions = state.instructions + added.filter { a -> state.instructions.none { it.id == a.id } }) }
-        val applied = added.count { it.state == InstructionStatus.Applied }
-        if (applied > 0) layInstructions()
-        applied to added.count { it.state == InstructionStatus.Unclear }
+    /** Backups and resets ([BackupService]): made when first asked for, as it takes the instructions' lock. */
+    val backups: BackupService by lazy {
+        BackupService(
+            stores, clock, scope, AndroidBackupFolder(app.contentResolver), File(app.filesDir, RESET_COPIES), BuildConfig.VERSION_NAME,
+            changeSettings = { change -> changeSettings(change) },
+            applying = applying,
+            layInstructions = { layInstructions() },
+            layTaskOverrides = { layTaskOverrides() },
+            schedule = { Daily.schedule(app) },
+            reread = {
+                CalendarTime.refresh(app)
+                Briefing.replanToday(app)
+            },
+            cancelFelix = { com.thomaswcode.decrastination.notify.FelixNotifications.cancel(app) },
+        )
     }
 
     /** Where tasks' photos are kept (AI-23): the app's own files, one a task. */
@@ -1181,77 +1085,6 @@ class AppGraph private constructor(context: Context) {
         if (runtime.value.checkInDraft == null) return
         runtime.update { it.copy(checkInDraft = null) }
         if (log.value.felix.lastOrNull()?.reason == com.thomaswcode.decrastination.enrich.FelixPrompts.Reason.CheckIn.name) com.thomaswcode.decrastination.notify.FelixNotifications.cancel(app)
-    }
-
-    /** Raised at each reset of the record (LR-08), so a review already out when it came doesn't put back what it took. */
-    val resets = java.util.concurrent.atomic.AtomicInteger()
-
-    /** What can be reset (LR-08), and what each takes. */
-    enum class Reset(val title: String, val takes: String) {
-        Stats("Stats", "the record of what got done (slots, completions, days, blocks, the reviews and the check-ins), and what the app learned from it"),
-        Calibration("What the app has learned", "how long your work takes, the margins and how much of each day you use, learned afresh from now"),
-        Memories("What Felix remembers", "his facts about you and how you'd have him behave, and your lines for the profile"),
-        Chat("The chat and Felix's history", "the chat's messages, Felix's messages and what he was waiting to say"),
-        Instructions("Your changes", "every change in use"),
-        Everything("Everything learned", "all of these"),
-    }
-
-    /**
-     * [what] reset (LR-08), with no parent code, a copy of all the app keeps saved first, as
-     * `reset-<date>-<time>.json` in Documents/Decrastination (or the app's own files where that
-     * can't be written). What happened, in words.
-     */
-    suspend fun reset(what: Reset): String = withContext(NonCancellable) {
-        val now = clock.now()
-        // To the second: two resets the same day each keep their copy.
-        val name = "reset-" + java.time.Instant.ofEpochMilli(now).atZone(clock.zone()).format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd-HHmmss", java.util.Locale.UK)) + ".json"
-        val text = exportBackup()
-        // Nothing goes till its copy is somewhere it can be restored from.
-        val saved = runCatching {
-            if (com.thomaswcode.decrastination.data.BackupFolder.available && withContext(Dispatchers.IO) { com.thomaswcode.decrastination.data.BackupFolder.write(app.contentResolver, name, text) }) {
-                "Documents/Decrastination/$name"
-            } else {
-                // Where Documents can't be written: the app's own files, which the file picker can't
-                // reach, so Settings → Backup restores from them itself (resetCopies).
-                withContext(Dispatchers.IO) { File(File(app.filesDir, RESET_COPIES).apply { mkdirs() }, name).writeText(text) }
-                "the app's own files ($name), which Settings → Backup can restore"
-            }
-        }.getOrElse { return@withContext "Nothing was reset: a copy of it couldn't be saved first." }
-        val all = what == Reset.Everything
-        if (all || what == Reset.Stats) {
-            resets.incrementAndGet()
-            // Felix's messages are the chat's to reset, not Stats'.
-            log.update { com.thomaswcode.decrastination.data.ActivityLog(felix = it.felix) }
-            runtime.update { it.copy(calibration = com.thomaswcode.decrastination.core.Calibration()) }
-        }
-        if (what == Reset.Calibration) runtime.update { it.copy(calibration = com.thomaswcode.decrastination.core.Calibration(learnFrom = now)) }
-        if (all || what == Reset.Memories) {
-            memory.update { com.thomaswcode.decrastination.core.MemoryState() }
-            changeSettings { it.copy(profileLines = emptyList()) }
-        }
-        if (all || what == Reset.Chat) {
-            clearChat()
-            runtime.update { it.copy(felix = com.thomaswcode.decrastination.data.FelixState(), checkInDraft = null) }
-            log.update { it.copy(felix = emptyList()) }
-            // His notification too, a check-in's question among them: nothing's left to answer it.
-            com.thomaswcode.decrastination.notify.FelixNotifications.cancel(app)
-        }
-        if (all || what == Reset.Instructions) {
-            instructions.update { com.thomaswcode.decrastination.core.InstructionState() }
-            layInstructions()
-        }
-        "${what.title}: reset. A copy of everything from before is in $saved."
-    }
-
-    /** A reset's copies kept in the app's own files (LR-08), where Documents couldn't be written then: their names, newest first. */
-    fun resetCopies(): List<String> =
-        File(app.filesDir, RESET_COPIES).listFiles { f -> f.isFile && f.name.startsWith("reset-") && f.name.endsWith(".json") }.orEmpty().map { it.name }.sortedDescending()
-
-    /** [name], one of [resetCopies], restored as Import restores a backup. What happened, in words. */
-    suspend fun restoreResetCopy(name: String): String {
-        if (name !in resetCopies()) return "That copy isn't there."
-        val bytes = withContext(Dispatchers.IO) { File(File(app.filesDir, RESET_COPIES), name).inputStream().use { Backups.read(it) } } ?: return "That copy is too big to be a backup."
-        return importBackup(bytes.decodeToString())
     }
 
     /** Where a reset's copy goes when Documents can't take it. */

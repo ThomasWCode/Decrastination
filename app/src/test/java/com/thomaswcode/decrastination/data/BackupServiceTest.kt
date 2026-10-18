@@ -1,0 +1,189 @@
+package com.thomaswcode.decrastination.data
+
+import com.thomaswcode.decrastination.Fixtures
+import com.thomaswcode.decrastination.core.Calibration
+import com.thomaswcode.decrastination.core.FixedClock
+import com.thomaswcode.decrastination.core.Source
+import java.io.File
+import java.nio.file.Files
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNotEquals
+import kotlin.test.assertTrue
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.joinAll
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.test.runTest
+
+/**
+ * Backups and resets through the backup service (AR-07, LR-08), on phones whose stores are in temporary
+ * folders: a full one, every store as Stage 0's fixtures have it, and an empty one; a folder that keeps
+ * a map; and what isn't the backup's own counted.
+ */
+class BackupServiceTest {
+    private val clock = FixedClock(Fixtures.at("2026-10-18T12:00"), Fixtures.LONDON)
+    private val job = SupervisorJob()
+    private val scope = CoroutineScope(job + Dispatchers.Default)
+
+    /** A phone: its stores in a folder of its own, every one of the fixtures' newest shape in it when [full]. */
+    private inner class Phone(full: Boolean) {
+        val dir: File = Files.createTempDirectory("phone").toFile().also { dir ->
+            if (full) Fixtures.file("stores").listFiles { f -> f.isDirectory }.orEmpty().maxBy { it.name }.listFiles().orEmpty().forEach { it.copyTo(File(dir, it.name)) }
+        }
+        val stores = Stores(dir, Reverse, clock = { clock.time })
+        val folder = Folder()
+        var laid = 0
+        var scheduled = 0
+        var reread = 0
+        var cancelled = 0
+        val service = BackupService(
+            stores, clock, scope, folder, File(dir, "backups"), "test",
+            // Unarmed, as a change made here at once.
+            changeSettings = { change -> stores.replace(stores.settings, change) },
+            applying = Mutex(),
+            layInstructions = { laid++ },
+            layTaskOverrides = { laid++ },
+            schedule = { scheduled++ },
+            reread = { reread++ },
+            cancelFelix = { cancelled++ },
+        )
+
+        /** Every JSON store's state, by file. */
+        fun states(): Map<String, Any?> = mapOf(
+            "tasks.json" to stores.tasks.value, "settings.json" to stores.settings.value, "runtime.json" to stores.runtime.value, "log.json" to stores.log.value,
+            "instructions.json" to stores.instructions.value, "chat.json" to stores.chat.value, "school.json" to stores.school.value,
+            "memory.json" to stores.memory.value, "calendar.json" to stores.calendarVersions.value,
+        )
+    }
+
+    /** What's launched on the service's scope (the calendar read again after a restore): waited for. */
+    private fun settle() = runBlocking { job.children.toList().joinAll() }
+
+    @Test
+    fun `a backup written and read back into an emptier phone brings back all it keeps`() = runTest {
+        val full = Phone(full = true)
+        val empty = Phone(full = false)
+        val said = empty.service.importBackup(full.service.exportBackup())
+        settle()
+        assertTrue(said.startsWith("Restored the settings"), said)
+        val was = full.stores
+        val now = empty.stores
+        assertEquals(was.instructions.value.applied, now.instructions.value.applied)
+        assertEquals(was.tasks.value.tasks.filter { it.source == Source.Own }.map { it.id }, now.tasks.value.tasks.map { it.id })
+        assertEquals(was.school.value, now.school.value)
+        assertEquals(was.memory.value, now.memory.value)
+        // The chat but the message of yours still waiting, which would be sent with words from then.
+        assertEquals(was.chat.value.messages.dropLast(1), now.chat.value.messages)
+        assertEquals(was.runtime.value.felix, now.runtime.value.felix)
+        assertEquals(was.runtime.value.calibration, now.runtime.value.calibration)
+        assertEquals(was.runtime.value.eventAnswers, now.runtime.value.eventAnswers)
+        assertEquals(was.runtime.value.slots, now.runtime.value.slots)
+        assertEquals(was.runtime.value.aiUsage.spentUsd, now.runtime.value.aiUsage.spentUsd, 1e-9)
+        // Every record, in the order a merge keeps them: each list by its time.
+        assertEquals(Backups.mergeLog(ActivityLog(), was.log.value, clock.time), now.log.value)
+        // The settings, but this phone's protection, key and calendars.
+        assertEquals(Backups.importedSettings(Settings(), Backups.decode(full.service.exportBackup(), full.stores.shapes)!!), now.settings.value)
+        assertEquals(listOf(false, false), listOf(now.settings.value.armed, now.settings.value.aiKeyActive))
+        assertTrue(empty.laid > 0 && empty.scheduled == 1 && empty.reread == 1)
+        // Every store a backup keeps something of has it back; those it keeps nothing of, nothing.
+        val states = empty.states()
+        for (kept in now.all.filter { it.file in states }) {
+            val default = Phone(full = false).states().getValue(kept.file)
+            if (kept.backup != null) assertNotEquals(default, states.getValue(kept.file), "${kept.file}: the backup says it keeps ${kept.backup}") else assertEquals(default, states.getValue(kept.file), kept.file)
+        }
+    }
+
+    @Test
+    fun `a backup says each store's version, and reads back by them`() {
+        val full = Phone(full = true)
+        val backup = Backups.decode(full.service.exportBackup(), full.stores.shapes)!!
+        assertEquals(full.stores.shapes.mapValues { it.value.version }, backup.versions)
+        assertTrue(backup.versions.values.all { it == 1 })
+    }
+
+    @Test
+    fun `a reset keeps a copy first, takes what it says, and its copy brings it back`() = runTest {
+        val phone = Phone(full = true)
+        val log = phone.stores.log.value
+        val calibration = phone.stores.runtime.value.calibration
+        val said = phone.service.reset(Reset.Stats)
+        val copy = phone.folder.files.keys.single { it.startsWith("reset-2026-10-18-") }
+        assertTrue(said.endsWith("Documents/Decrastination/$copy."), said)
+        assertEquals(ActivityLog(felix = log.felix), phone.stores.log.value)
+        assertEquals(Calibration(), phone.stores.runtime.value.calibration)
+        assertEquals(1, phone.service.resets.get())
+        phone.service.importBackup(phone.folder.files.getValue(copy))
+        settle()
+        assertEquals(Backups.mergeLog(ActivityLog(), log, clock.time), phone.stores.log.value)
+        assertEquals(calibration, phone.stores.runtime.value.calibration)
+    }
+
+    @Test
+    fun `where Documents can't take the copy, it goes in the app's own files, listed and restored from there`() = runTest {
+        val phone = Phone(full = true)
+        phone.folder.available = false
+        val memory = phone.stores.memory.value
+        val said = phone.service.reset(Reset.Memories)
+        val name = phone.service.resetCopies().single()
+        assertTrue(said.contains("the app's own files ($name)"), said)
+        assertTrue(phone.stores.memory.value.facts.isEmpty() && phone.stores.settings.value.profileLines.isEmpty())
+        phone.service.restoreResetCopy(name)
+        assertEquals(memory, phone.stores.memory.value)
+        assertEquals("That copy isn't there.", phone.service.restoreResetCopy("reset-elsewhere.json"))
+    }
+
+    @Test
+    fun `each reset takes from the stores Stores says it does, and from no other`() = runTest {
+        for (area in Reset.entries) {
+            val phone = Phone(full = true)
+            val before = phone.states()
+            phone.service.reset(area)
+            val after = phone.states()
+            val changed = before.keys.filter { before[it] != after[it] }.toSet()
+            val said = phone.stores.all.filter { kept -> kept.resets.any { area == it || area == Reset.Everything } }.map { it.file }.toSet()
+            assertEquals(said, changed, "$area")
+            if (area == Reset.Chat || area == Reset.Everything) assertEquals(1, phone.cancelled)
+            if (area == Reset.Instructions || area == Reset.Everything) assertTrue(phone.laid > 0)
+        }
+    }
+
+    @Test
+    fun `the nightly backup writes the day's file, keeps the newest fortnight and a reset's copies, and notes when`() = runTest {
+        val phone = Phone(full = true)
+        (1..15).forEach { phone.folder.files["decrastination-2026-09-%02d.json".format(it)] = "{}" }
+        phone.folder.files["reset-2026-09-01-120000.json"] = "{}"
+        assertTrue(phone.service.backupNow())
+        val nightly = phone.folder.files.keys.filter { it.startsWith("decrastination-") }
+        assertEquals(BackupFolder.KEEP, nightly.size)
+        assertTrue("decrastination-2026-10-18.json" in nightly && "decrastination-2026-09-01.json" !in nightly && "decrastination-2026-09-02.json" !in nightly)
+        assertTrue("reset-2026-09-01-120000.json" in phone.folder.files)
+        assertEquals(clock.time, phone.stores.runtime.value.lastBackupAt)
+        phone.folder.available = false
+        assertFalse(phone.service.backupNow())
+    }
+
+    /** A folder that keeps a map, by name. */
+    private class Folder : BackupService.Folder {
+        override var available = true
+        val files = LinkedHashMap<String, String>()
+
+        override fun write(name: String, text: String): Boolean {
+            files[name] = text
+            return true
+        }
+
+        override fun names(): List<String> = files.keys.toList()
+
+        override fun delete(name: String): Boolean = files.remove(name) != null
+    }
+
+    /** A cipher for the secrets that only reverses the bytes: no keystore on a PC. */
+    private object Reverse : SecretCipher {
+        override fun encrypt(plain: ByteArray) = plain.reversedArray()
+        override fun decrypt(sealed: ByteArray) = sealed.reversedArray()
+    }
+}

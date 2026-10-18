@@ -10,7 +10,12 @@ import java.time.LocalDate
  * school windows end when it does (PL-15). Kept in `school.json`, each list in date order.
  */
 @Serializable
-data class SchoolCalendar(val noSchool: List<NoSchool> = emptyList(), val halfDays: List<HalfDay> = emptyList()) {
+data class SchoolCalendar(
+    val noSchool: List<NoSchool> = emptyList(),
+    val halfDays: List<HalfDay> = emptyList(),
+    /** The shape this is in ([com.thomaswcode.decrastination.data.Migration]): raised with each change of it. */
+    val version: Int = 1,
+) {
 
     /** Monday to Friday, and not inside a stretch with no school. */
     fun isSchoolDay(date: LocalDate): Boolean = date.dayOfWeek != DayOfWeek.SATURDAY && date.dayOfWeek != DayOfWeek.SUNDAY && noSchoolOn(date) == null

@@ -26,6 +26,8 @@ data class TaskState(
      * come from it, and a failed read leaves it as it was.
      */
     val timetable: Timetable? = null,
+    /** The shape this is in ([Migration]): raised with each change of it, a migration bringing older files to it. */
+    val version: Int = 1,
 ) {
     val open: List<TaskItem> get() = tasks.filter { it.isOpen }
 

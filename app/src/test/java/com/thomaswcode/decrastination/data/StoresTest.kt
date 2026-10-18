@@ -129,9 +129,36 @@ class StoresTest {
     }
 
     /** Stands in for the Keystore: reverses the bytes, so the file is at least not the plain JSON. */
+    @Test
+    fun `every store Stores makes says what a backup keeps of it and which resets change it`() {
+        val stores = Stores(dir, Reverse)
+        // Each JsonStore and the secrets, by their files: none made and left out of the declarations.
+        val made = Stores::class.java.declaredFields.mapNotNull { field ->
+            field.isAccessible = true
+            when (val store = field.get(stores)) {
+                is JsonStore<*> -> store.name
+                is SecretStore -> "secrets.bin"
+                else -> null
+            }
+        }.toSet()
+        assertEquals(made, stores.all.map { it.file }.toSet())
+        assertEquals(stores.all.size, stores.all.map { it.file }.toSet().size)
+        // Every JSON store's shape is known to a backup, at the version its state says.
+        assertEquals(made - "secrets.bin", stores.shapes.keys)
+        assertTrue(stores.shapes.values.all { it.version == 1 && it.migrations.isEmpty() })
+    }
+
     private object Reverse : SecretCipher {
         override fun encrypt(plain: ByteArray) = plain.reversedArray()
         override fun decrypt(sealed: ByteArray) = sealed.reversedArray()
+    }
+
+    @Test
+    fun `no field moves between stores yet, and the first that does is applied to backups too`() {
+        // A move runs on the stores' files at start; a backup from before it holds the field where it was.
+        // Backups.upgraded migrates each store's parts on their own, so the first move must be taught to it
+        // as well (tested with a backup from before the move), and this test changed with it (D-94).
+        assertTrue(Stores.MOVES.isEmpty(), "A move between stores: apply it to a backup's parts in Backups.upgraded too")
     }
 
     @Test
