@@ -29,6 +29,12 @@ import kotlinx.serialization.json.jsonObject
  * fields that reads on its own (a field an app update can no longer read loses only itself), the
  * rest from [unreadable]; the file as it was is set aside as `<name>.unreadable-<when>`, the last
  * few of those kept, and [problem] says so. One bad write never stops the app.
+ *
+ * Its state has a version ([version], its own default's), and a file of an older one is brought to it
+ * by [migrations] as it loads, on its JSON, before it's decoded (docs/plan_v4/04-data-and-migrations.md):
+ * written again in the new shape, the file it came from kept beside it as `<name>.v<from>` for
+ * [Stores.letGoOfOldShapes]. A file of a newer version, which this build can't read, is set aside as one
+ * that can't be.
  */
 class JsonStore<T>(
     private val file: File,
@@ -39,7 +45,19 @@ class JsonStore<T>(
     /** What a file that can't be read starts from, under what can be kept of it: [default], unless it's safer otherwise. */
     private val unreadable: () -> T = default,
     private val clock: () -> Long = System::currentTimeMillis,
+    /** What brings a file of each older version to [version], one version a step. */
+    val migrations: List<Migration> = emptyList(),
 ) {
+    /** Its file's name: `tasks.json`. */
+    val name: String get() = file.name
+
+    /** The state's version now: its default's (1 for a state that keeps none). */
+    val version: Int = (json.encodeToJsonElement(serializer, default()) as? JsonObject)?.let(Migration::versionOf) ?: 1
+
+    init {
+        require(Migration.complete(version, migrations)) { "${file.name}: migrations from 1 to $version, each once, not ${migrations.map { it.from }}" }
+    }
+
     private val mutex = Mutex()
 
     /** Why the file couldn't be read whole at start, and where it was set aside; null if it could. */
@@ -83,12 +101,20 @@ class JsonStore<T>(
     private fun load(): T {
         if (!file.exists()) return default()
         val text = runCatching { file.readText() }.getOrNull()
-        val loaded = text?.let { runCatching { json.decodeFromString(serializer, it) }.getOrNull() }
-        if (loaded != null) return onLoad(loaded)
+        val tree = text?.let { runCatching { json.parseToJsonElement(it) as? JsonObject }.getOrNull() }
+        // An older shape brought to this one first; null where it's newer, or a step is missing.
+        val from = tree?.let(Migration::versionOf)
+        val upgraded = tree?.let { Migration.upgrade(it, version, migrations) }
+        val loaded = upgraded?.let { runCatching { json.decodeFromJsonElement(serializer, it) }.getOrNull() }
+        if (loaded != null) {
+            if (from != null && from < version) keepOldShape(from, loaded)
+            return onLoad(loaded)
+        }
         // Set aside under its own name, so a second time can't overwrite the first; not again where
         // it's there already as it is (a start cut short before it was said).
         val aside = alreadyAside(file) ?: setAside(file, clock())
-        val salvaged = text?.let(::salvage)
+        // What can be kept: of the shape it was brought to, or, newer than this build, of itself.
+        val salvaged = (upgraded ?: tree)?.let(::salvage)
         problem = Unreadable(file.name, aside?.name, kept = salvaged != null, at = clock())
         // What was kept replaces it once it's safe beside it, and said ([keepRecovered]). Only where it
         // was read and couldn't be decoded, which would happen again: not where reading it failed
@@ -99,11 +125,26 @@ class JsonStore<T>(
     }
 
     /**
-     * What can be kept of [text], JSON that doesn't read whole: each top-level field that reads
-     * over [unreadable]'s, in turn. Null when it isn't a JSON object, or keeps nothing.
+     * [loaded], brought from version [from], written over the file in its new shape; the file as it
+     * was kept first as `<name>.v<from>`, dated now, for [Stores.letGoOfOldShapes]. A write that fails
+     * leaves the file as it was: the next update writes the new shape, and it's brought again till then.
      */
-    private fun salvage(text: String): T? {
-        val found = runCatching { json.parseToJsonElement(text).jsonObject }.getOrNull() ?: return null
+    private fun keepOldShape(from: Int, loaded: T) {
+        val old = File(file.absoluteFile.parentFile, "${file.name}.v$from")
+        runCatching {
+            if (!old.exists()) {
+                file.copyTo(old)
+                old.setLastModified(clock())
+            }
+            write(loaded)
+        }
+    }
+
+    /**
+     * What can be kept of [found], JSON that doesn't read whole: each top-level field that reads
+     * over [unreadable]'s, in turn. Null when it keeps nothing.
+     */
+    private fun salvage(found: JsonObject): T? {
         val base = json.encodeToJsonElement(serializer, unreadable()).jsonObject
         var kept = base
         for ((field, value) in found) {
