@@ -58,7 +58,7 @@ Remembered:
 ### When it's called
 
 - You send a message on the chat's tab.
-- You reply to one of his messages from its notification (AI-24): your reply goes into the chat, after his message.
+- You reply to one of his messages, from its notification (AI-24) or his chips: your reply goes into the chat under his message, but for an answer the app takes with no call ([below](#in-his-name-but-not-his-words)).
 - A message waiting is asked again: *Try again*, the chat opened again, or the model back from a rest.
 
 One message is answered at a time. While the model can't be asked (Claude off, resting, the cap), your message says why and waits.
@@ -66,7 +66,7 @@ One message is answered at a time. While the model can't be asked (Claude off, r
 ### What's sent
 
 1. **System**: [the chat's prompt](#the-chats-prompt), then the profile.
-2. **The conversation**: the last 12 messages, starting with one of yours. Each earlier answer of his carries what it made and what became of it ("[Suggested: … — made at once]", "— undone by the student", "— not made: …").
+2. **The conversation**: its last 12 messages (yours, and his answers to you) and his last two nudges (what he wrote unasked) with your replies to them, in their order, starting with one of yours (D-97); a nudge before any of yours goes with your first turn, and a reply that went to no call (a check-in's answer) only with its nudge. Each earlier answer of his carries what it made and what became of it ("[Suggested: … — made at once]", "— undone by the student", "— not made: …").
 3. **Your newest message**, last, holding in this order:
    1. what the app knows now ([the context](#the-context)), each open task's own text last;
    2. the plan, as the Day and Work tabs show it ([the plan](#the-plan));
@@ -232,7 +232,7 @@ The task this message is about, powerplanner:p1 “Vectors exercise 4B” (Power
 (About the task powerplanner:p1, “Vectors exercise 4B”) Can I do these tomorrow instead?
 ```
 
-**A reply from his notification** starts your turn with his message (the context and the plan as above):
+**A reply to his nudge**, with nothing of yours before it, starts your turn with his message (the context and the plan as above):
 
 <!-- generated: reply turn 0: You -->
 ```text
@@ -379,10 +379,10 @@ Every half minute while the blocker runs, at each slot's alarm, and at the check
    - **SlotStart**: a slot under way past his grace (`felixGraceMin`, 10 minutes) with nothing done on its task since it began; up to three times a slot.
    - **SlotKept**: about one kept slot in three, while it's fresh.
 
-He isn't asked in quiet hours, during a timed calendar event that takes its time, with Claude off, or with his notifications (or their channel) off. A standing instruction can quiet him further: he gives an empty message.
+He isn't asked in quiet hours, during a timed calendar event that takes its time, or with Claude off. His notifications off silence only them: what he writes is in the chat. A standing instruction can quiet him further: he gives an empty message.
 
 Also:
-- **Morning**: at the briefing (07:00 on school days, 08:30 at weekends, both in Settings, D-74), when today has work slots. He has 20 seconds; without his answer the briefing goes alone.
+- **Morning**: at the briefing (07:00 on school days, 08:30 at weekends, both in Settings, D-74), when today has work slots. He has 20 seconds; without his answer the day's list is the morning's message, in his name in the app's words.
 - **Written ahead** (AC-10): the next slot's SlotStart, up to 10 minutes before it's due, written as of that moment; sent as it is if it still fits then.
 - A call held or failed puts nothing on record: it's tried again after 5 minutes while it's still to say.
 - `felix-say` writes one now for any reason, from a PC ([storage-and-backups.md](storage-and-backups.md)).
@@ -397,7 +397,7 @@ Also:
    - `Today:` the slots kept, missed and to come, and the next; `Left today:` those to come;
    - `Free time now:` for SlotKept and DayDone;
    - `Done, as their sources say…`: for Completions, the tasks;
-   - `Recent, oldest first:` his last 6 messages that said something, each with your reply to it;
+   - `Recent, oldest first:` his last 6 messages of his own in the chat that said something, each with your reply to it (the message of yours answering it, or the next of yours within ten minutes);
    - `Question:` for a Question, the question to put.
 
 Not sent: the task list, the calendar, your pace, any day but today, or the chat.
@@ -564,7 +564,10 @@ It names Summary and Reply among its reasons, but no message of his is asked for
 ## In his name, but not his words
 
 - **The Sunday check-in** (LR-02): its questions are the app's own text, sent as his messages; your answers go to the check-in, not to the model.
-- **The week's summary**: written in a call of its own, in your voice (D-66); "the summary is ready" is the app's own text.
+- **The morning's list**, where he has no words for the morning; **the week's review's note**, with *Open the review*.
+- **A calendar event's question** (Q7): the app's own text, its answers (*All of it*, *A few hours*, *None*) kept for every event of its name, with no call.
+- **How work went, with Claude off** (LR-05): a message for each completion, its answers kept as below.
+- **The week's summary**: written in a call of its own, in your voice (D-66); "the summary is ready" is the app's own text, with *Send it*.
 - **Your answer to his Question**: read by the instructions reader, as an instruction on that task, and the task read again (AI-10); not by him.
 - **An answer to Completions** (*Harder*, *As expected*, *Easier*): kept on each of those completions (LR-05), with no call.
-- **Any other reply to one of his notifications**: answered in the chat, as above; his answer comes back as his next notification while the chat isn't on screen.
+- **Any other reply**, from his notification or his chips: answered in the chat, as above; his answer is his next message, and in his notification while the chat isn't on screen.

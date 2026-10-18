@@ -2,6 +2,7 @@ package com.thomaswcode.decrastination.felix
 
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.Fixtures.LONDON
+import com.thomaswcode.decrastination.core.ChatState
 import com.thomaswcode.decrastination.core.DayWindow
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.Plan
@@ -12,19 +13,24 @@ import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.WindowKind
 import com.thomaswcode.decrastination.data.AssessLater
+import com.thomaswcode.decrastination.data.ChatMigration
 import com.thomaswcode.decrastination.data.FelixDraft
 import com.thomaswcode.decrastination.data.FelixQuestion
-import com.thomaswcode.decrastination.data.FelixRecord
 import com.thomaswcode.decrastination.data.FelixRetry
+import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.FelixState
 import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.data.SlotOutcome
 import com.thomaswcode.decrastination.data.SlotRecord
+import com.thomaswcode.decrastination.felix.FelixRules.Sent
 import com.thomaswcode.decrastination.felix.FelixPrompts.Reason
 import java.time.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 
 /** When Felix writes (LR-03). */
 class FelixRulesTest {
@@ -43,7 +49,7 @@ class FelixRulesTest {
 
     private fun at(time: String) = Fixtures.at("2026-10-12T$time")
 
-    private fun due(now: Long, state: FelixState = FelixState(), today: List<SlotRecord> = emptyList(), sent: List<FelixRecord> = emptyList(), quiet: Boolean = false, busy: Boolean = false, needsPhoto: Boolean = false, p: Plan = plan) =
+    private fun due(now: Long, state: FelixState = FelixState(), today: List<SlotRecord> = emptyList(), sent: List<Sent> = emptyList(), quiet: Boolean = false, busy: Boolean = false, needsPhoto: Boolean = false, p: Plan = plan) =
         FelixRules.due(p, state, today, sent, settings, now, quiet, busy, needsPhoto = { needsPhoto })
 
     private fun record(key: String, outcome: SlotOutcome, start: Long, at: Long, earned: Boolean = true, plannedMin: Int = 30) = SlotRecord(
@@ -51,7 +57,7 @@ class FelixRulesTest {
         start = start, end = start + plannedMin * 60_000L, window = WindowKind.Evening, outcome = outcome, workedMin = if (outcome.kept) plannedMin else 0, earned = earned, at = at,
     )
 
-    private fun sent(reason: Reason, key: String?, at: Long) = FelixRecord("r$at", at, reason.name, "message", key = key)
+    private fun sent(reason: Reason, key: String?, at: Long) = Sent(reason.name, key, at)
 
     @Test
     fun `a slot under way with nothing done is asked about after its grace, at his pace, three times at most`() {
@@ -114,7 +120,7 @@ class FelixRulesTest {
     @Test
     fun `the day's completions no slot saw are asked about once, in the evening, at his pace`() {
         val ask = listOf(AssessLater("teams:c", "German reading", at("16:00")))
-        fun completions(now: Long, state: FelixState = FelixState(), sent: List<FelixRecord> = emptyList()) =
+        fun completions(now: Long, state: FelixState = FelixState(), sent: List<Sent> = emptyList()) =
             FelixRules.due(plan, state, emptyList(), sent, settings, now, false, false, { false }, ask, LONDON)
         assertEquals(Reason.Completions to ask, completions(at("19:05")).let { it?.reason to it?.asks })
         assertNull(completions(at("18:55")).takeIf { it?.reason == Reason.Completions })
@@ -175,6 +181,34 @@ class FelixRulesTest {
         assertEquals(state, state.withQuestion("teams:a", "The 12th or the 19th?", at("10:00")))
         assertEquals(listOf("teams:b"), state.withQuestion("teams:a", null, at("10:00")).questions.map { it.taskId })
         assertEquals(listOf("teams:a", "teams:b", "teams:c"), state.withQuestion("teams:c", "Which?", at("10:00")).questions.map { it.taskId })
+    }
+
+    @Test
+    fun `what he's sent counts the same from the chat as it did from the log's records`() {
+        val key = first.chunk!!.key
+        // Monday's records as the log kept them: a slot asked about twice (once silent), a kept slot's line,
+        // the evening's completions, and his answer to a reply (Reply), which no rule counts.
+        fun record(id: String, reason: Reason, at: Long, key: String? = null, text: String = "message") =
+            JsonObject(listOfNotNull("id" to JsonPrimitive(id), "at" to JsonPrimitive(at), "reason" to JsonPrimitive(reason.name), "text" to JsonPrimitive(text), key?.let { "key" to JsonPrimitive(it) }).toMap())
+        val records = listOf(
+            record("r1", Reason.SlotStart, first.start + 10 * 60_000L, key),
+            record("r2", Reason.SlotStart, first.start + 20 * 60_000L, key, text = ""),
+            record("r3", Reason.SlotKept, at("17:40"), "teams:k1#-1#1"),
+            record("r4", Reason.Completions, at("19:05")),
+            record("r5", Reason.Reply, at("19:10")),
+        )
+        val logged = records.map { Sent(it.getValue("reason").let { r -> (r as JsonPrimitive).content }, (it["key"] as? JsonPrimitive)?.content, (it.getValue("at") as JsonPrimitive).content.toLong()) }
+        // The same records, as the chat's migration makes them messages, and as his rules read them.
+        val chat = JsonStore.json.decodeFromJsonElement(ChatState.serializer(), JsonObject(ChatMigration.merged(JsonObject(emptyMap()), JsonArray(records), null, null, emptyMap()) + ("version" to JsonPrimitive(2))))
+        val read = FelixRules.sent(chat.messages, at("00:00"))
+        assertEquals(logged.filterNot { it.reason == Reason.Reply.name }, read)
+        val ask = listOf(AssessLater("teams:c", "German reading", at("16:00")))
+        for (now in listOf(first.start + 25 * 60_000L, at("17:45"), at("19:30"))) {
+            assertEquals(
+                FelixRules.due(plan, FelixState(), emptyList(), logged, settings, now, false, false, { false }, ask, LONDON)?.reason,
+                FelixRules.due(plan, FelixState(), emptyList(), read, settings, now, false, false, { false }, ask, LONDON)?.reason,
+            )
+        }
     }
 
     @Test

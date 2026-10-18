@@ -2,8 +2,13 @@ package com.thomaswcode.decrastination.data
 
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.core.Calibration
+import com.thomaswcode.decrastination.core.ChatArchive
+import com.thomaswcode.decrastination.core.ChatMessage
+import com.thomaswcode.decrastination.core.ChatState
 import com.thomaswcode.decrastination.core.FixedClock
+import com.thomaswcode.decrastination.core.MessageKind
 import com.thomaswcode.decrastination.core.Source
+import com.thomaswcode.decrastination.core.Speaker
 import java.io.File
 import java.nio.file.Files
 import kotlin.test.Test
@@ -30,7 +35,7 @@ class BackupServiceTest {
     private val scope = CoroutineScope(job + Dispatchers.Default)
 
     /** A phone: its stores in a folder of its own, every one of the fixtures' newest shape in it when [full]. */
-    private inner class Phone(full: Boolean) {
+    private inner class Phone(full: Boolean, cap: Int = Backups.MAX_BYTES) {
         val dir: File = Files.createTempDirectory("phone").toFile().also { dir ->
             if (full) Fixtures.file("stores").listFiles { f -> f.isDirectory }.orEmpty().maxBy { it.name }.listFiles().orEmpty().forEach { it.copyTo(File(dir, it.name)) }
         }
@@ -50,12 +55,13 @@ class BackupServiceTest {
             schedule = { scheduled++ },
             reread = { reread++ },
             cancelFelix = { cancelled++ },
+            backupCap = cap,
         )
 
         /** Every JSON store's state, by file. */
         fun states(): Map<String, Any?> = mapOf(
             "tasks.json" to stores.tasks.value, "settings.json" to stores.settings.value, "runtime.json" to stores.runtime.value, "log.json" to stores.log.value,
-            "instructions.json" to stores.instructions.value, "chat.json" to stores.chat.value, "school.json" to stores.school.value,
+            "instructions.json" to stores.instructions.value, "chat.json" to stores.chat.value, "chat-archive.json" to stores.chatArchive.value, "school.json" to stores.school.value,
             "memory.json" to stores.memory.value, "calendar.json" to stores.calendarVersions.value,
         )
     }
@@ -78,7 +84,8 @@ class BackupServiceTest {
         assertEquals(was.memory.value, now.memory.value)
         // The chat but the message of yours still waiting, which would be sent with words from then.
         assertEquals(was.chat.value.messages.dropLast(1), now.chat.value.messages)
-        assertEquals(was.runtime.value.felix, now.runtime.value.felix)
+        assertEquals(was.chat.value.felix, now.chat.value.felix)
+        assertEquals(was.chatArchive.value, now.chatArchive.value)
         assertEquals(was.runtime.value.calibration, now.runtime.value.calibration)
         assertEquals(was.runtime.value.eventAnswers, now.runtime.value.eventAnswers)
         assertEquals(was.runtime.value.slots, now.runtime.value.slots)
@@ -102,7 +109,7 @@ class BackupServiceTest {
         val full = Phone(full = true)
         val backup = Backups.decode(full.service.exportBackup(), full.stores.shapes)!!
         assertEquals(full.stores.shapes.mapValues { it.value.version }, backup.versions)
-        assertTrue(backup.versions.values.all { it == 1 })
+        assertEquals(setOf("chat.json", "log.json", "runtime.json"), backup.versions.filterValues { it > 1 }.keys)
     }
 
     @Test
@@ -113,13 +120,60 @@ class BackupServiceTest {
         val said = phone.service.reset(Reset.Stats)
         val copy = phone.folder.files.keys.single { it.startsWith("reset-2026-10-18-") }
         assertTrue(said.endsWith("Documents/Decrastination/$copy."), said)
-        assertEquals(ActivityLog(felix = log.felix), phone.stores.log.value)
+        assertEquals(ActivityLog(), phone.stores.log.value)
         assertEquals(Calibration(), phone.stores.runtime.value.calibration)
         assertEquals(1, phone.service.resets.get())
         phone.service.importBackup(phone.folder.files.getValue(copy))
         settle()
         assertEquals(Backups.mergeLog(ActivityLog(), log, clock.time), phone.stores.log.value)
         assertEquals(calibration, phone.stores.runtime.value.calibration)
+    }
+
+    @Test
+    fun `a reset of the chat whose copy has no room for its earliest messages keeps them whole beside it`() = runTest {
+        val small = Phone(full = true, cap = 60_000)
+        val archive = ChatArchive((1..80).map { ChatMessage("a$it", Speaker.You, "x".repeat(1_000), it.toLong(), answeredAt = it.toLong()) })
+        small.stores.replace(small.stores.chatArchive, archive)
+        val said = small.service.reset(Reset.Chat)
+        val kept = small.folder.files.keys.single { it.startsWith("chat-archive-") }
+        assertTrue("whole in Documents/Decrastination/$kept" in said, said)
+        assertEquals(archive, JsonStore.json.decodeFromString(ChatArchive.serializer(), small.folder.files.getValue(kept)))
+        assertEquals(ChatArchive(), small.stores.chatArchive.value)
+        // Not a reset's copy to restore from.
+        assertTrue(small.service.resetCopies().none { it.startsWith("chat-archive-") })
+    }
+
+    @Test
+    fun `restored into a chat that isn't empty, his messages it hasn't come back with your replies to them`() = runTest {
+        val from = Phone(full = false)
+        val nudge = ChatMessage("n1", Speaker.Claude, "Ten minutes in: starting?", 100, kind = MessageKind.SlotStart)
+        val reply = ChatMessage("r1", Speaker.You, "yes", 110, replyTo = "n1", answeredAt = 120)
+        val talk = ChatMessage("t1", Speaker.You, "what's due?", 130, answeredAt = 140)
+        from.stores.replace(from.stores.chat, ChatState(listOf(nudge, reply, talk)))
+        val to = Phone(full = false)
+        val here = ChatMessage("h1", Speaker.You, "hello", 200, answeredAt = 210)
+        to.stores.replace(to.stores.chat, ChatState(listOf(here)))
+        val said = to.service.importBackup(from.service.exportBackup())
+        settle()
+        assertEquals(listOf("n1", "r1", "h1"), to.stores.chat.value.messages.map { it.id })
+        assertTrue("1 message of Felix's into the chat" in said, said)
+    }
+
+    @Test
+    fun `restored into a chat that isn't empty, his messages read there are read here, and what's unread stays so`() = runTest {
+        val from = Phone(full = false)
+        val read = ChatMessage("n1", Speaker.Claude, "Ten minutes in: starting?", 100, kind = MessageKind.SlotStart)
+        val unread = ChatMessage("n2", Speaker.Claude, "Half an hour left.", 400, kind = MessageKind.SlotEnd)
+        from.stores.replace(from.stores.chat, ChatState(listOf(read, unread), readAt = 300))
+        val to = Phone(full = false)
+        val here = ChatMessage("h1", Speaker.Claude, "Kept the slot: nice.", 220, kind = MessageKind.SlotKept)
+        to.stores.replace(to.stores.chat, ChatState(listOf(here), readAt = 50))
+        to.service.importBackup(from.service.exportBackup())
+        settle()
+        val chat = to.stores.chat.value
+        assertEquals(listOf("n1", "h1", "n2"), chat.messages.map { it.id })
+        // Read up to just before this phone's own unread: n1 read, as it was there; h1 and n2 not.
+        assertEquals(219L, chat.readAt)
     }
 
     @Test

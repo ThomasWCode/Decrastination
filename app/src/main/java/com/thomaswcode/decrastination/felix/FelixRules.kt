@@ -1,6 +1,8 @@
 package com.thomaswcode.decrastination.felix
 
 import com.thomaswcode.decrastination.block.BlockPolicy
+import com.thomaswcode.decrastination.core.ChatHistory
+import com.thomaswcode.decrastination.core.ChatMessage
 import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.Slot
 import com.thomaswcode.decrastination.core.SlotKind
@@ -8,7 +10,6 @@ import com.thomaswcode.decrastination.core.Slotter
 import com.thomaswcode.decrastination.data.AssessLater
 import com.thomaswcode.decrastination.data.FelixDraft
 import com.thomaswcode.decrastination.data.FelixQuestion
-import com.thomaswcode.decrastination.data.FelixRecord
 import com.thomaswcode.decrastination.data.FelixState
 import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.data.SlotOutcome
@@ -34,6 +35,13 @@ object FelixRules {
         val key: String? get() = slot?.chunk?.key ?: record?.key
         val taskId: String? get() = slot?.chunk?.taskId ?: record?.taskId ?: question?.taskId
     }
+
+    /** One of his messages as his rules count it: why he wrote it, the piece it was about, and when. */
+    data class Sent(val reason: String, val key: String?, val at: Long)
+
+    /** What he's sent since [since], as his rules count it: his own messages in [messages], the silent ones (he chose not to write) too. */
+    fun sent(messages: List<ChatMessage>, since: Long): List<Sent> =
+        ChatHistory.his(messages).filter { it.at >= since }.map { Sent(it.kind.name, it.pieceKey, it.at) }
 
     /** At most this many messages about one slot under way with nothing done: the first, then at the checks he sets. */
     const val MAX_PER_SLOT = 3
@@ -62,7 +70,7 @@ object FelixRules {
         plan: Plan,
         state: FelixState,
         today: List<SlotRecord>,
-        sent: List<FelixRecord>,
+        sent: List<Sent>,
         settings: Settings,
         now: Long,
         quiet: Boolean,

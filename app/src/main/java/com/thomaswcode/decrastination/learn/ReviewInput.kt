@@ -1,6 +1,8 @@
 package com.thomaswcode.decrastination.learn
 
 import com.thomaswcode.decrastination.core.Calibration
+import com.thomaswcode.decrastination.core.ChatHistory
+import com.thomaswcode.decrastination.core.ChatMessage
 import com.thomaswcode.decrastination.data.ActivityLog
 import com.thomaswcode.decrastination.data.SlotOutcome
 import com.thomaswcode.decrastination.data.SlotRecord
@@ -96,7 +98,7 @@ object ReviewInput {
      * if it had one: a review run late, on the Monday after, doesn't take that Monday's work in, nor
      * leave the week's own Monday out.
      */
-    fun describe(log: ActivityLog, calibration: Calibration, settings: Settings, now: Long, zone: ZoneId, week: String): String = buildString {
+    fun describe(log: ActivityLog, calibration: Calibration, settings: Settings, now: Long, zone: ZoneId, week: String, messages: List<ChatMessage> = emptyList()): String = buildString {
         val monday = LocalDate.parse(week)
         val start = monday.atStartOfDay(zone).toInstant().toEpochMilli()
         val end = minOf(monday.plusDays(7).atStartOfDay(zone).toInstant().toEpochMilli(), now + 1)
@@ -156,13 +158,13 @@ object ReviewInput {
                 })
             }
         }
-        // Felix's messages, the replies to them, and the slots they were about then kept.
-        val felix = log.felix.filter { inWeek(it.at) && it.text.isNotBlank() }
+        // Felix's own messages in the chat ([messages]), the replies to them, and the slots they were about then kept.
+        val felix = ChatHistory.his(messages).filter { inWeek(it.at) && it.text.isNotBlank() }
         if (felix.isNotEmpty()) {
-            val aboutSlots = felix.filter { it.key != null }
-            val keptAfter = aboutSlots.count { f -> log.slots.any { s -> s.key == f.key && s.outcome.kept && s.at >= f.at && s.at < f.at + 12 * 3_600_000L } }
+            val aboutSlots = felix.filter { it.pieceKey != null }
+            val keptAfter = aboutSlots.count { f -> log.slots.any { s -> s.key == f.pieceKey && s.outcome.kept && s.at >= f.at && s.at < f.at + 12 * 3_600_000L } }
             appendLine()
-            appendLine("Felix: ${felix.size} messages, ${felix.count { it.repliedAt != null }} replied to; of the ${aboutSlots.size} about a slot, ${keptAfter} saw it kept after.")
+            appendLine("Felix: ${felix.size} messages, ${felix.count { ChatHistory.replyOf(it, messages) != null }} replied to; of the ${aboutSlots.size} about a slot, ${keptAfter} saw it kept after.")
         }
         // The week by subject (PL-08).
         val subjects = Stats.bySubject(log, settings.classMap, minOf(end - 1, now), zone, days = 7)

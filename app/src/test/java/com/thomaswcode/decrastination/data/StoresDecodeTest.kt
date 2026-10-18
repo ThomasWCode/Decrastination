@@ -1,12 +1,14 @@
 package com.thomaswcode.decrastination.data
 
 import com.thomaswcode.decrastination.Fixtures
+import com.thomaswcode.decrastination.core.ChatArchive
 import com.thomaswcode.decrastination.core.ChatState
 import com.thomaswcode.decrastination.core.ChangeType
 import com.thomaswcode.decrastination.core.InstructionState
 import com.thomaswcode.decrastination.core.InstructionStatus
 import com.thomaswcode.decrastination.core.Instructions
 import com.thomaswcode.decrastination.core.MemoryState
+import com.thomaswcode.decrastination.core.MessageKind
 import com.thomaswcode.decrastination.core.SchoolCalendar
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Speaker
@@ -32,20 +34,27 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 
 /**
  * Every store's shapes as they've been, read with the app's own serializers (docs/plan_v4, Stage 0).
  * Each folder of `fixtures/stores/` is a shape a phone's files may be in, made up, never taken from
- * the phone: every later migration is tested from every one of them. The newest is the shape now:
+ * the phone: every later migration is tested from every one of them, each read as the app reads it at
+ * a start, through [Stores] (its moves, then each store's migrations). The newest is the shape now:
  * read whole and strictly, back to the same JSON, with every field of every type in it filled
  * somewhere, so a migration from it meets each field.
  */
 class StoresDecodeTest {
-    /** A store's file, read and written by [serializer], with its state's type erased so the stores can be listed together. */
-    private class Store(val file: String, val serializer: KSerializer<Any?>, val default: () -> Any?)
+    /**
+     * A store's file, read and written by [serializer], with its state's type erased so the stores can be
+     * listed together; in every shape from [since] on (a shape's folder is named for its date).
+     */
+    private class Store(val file: String, val serializer: KSerializer<Any?>, val default: () -> Any?, val since: String)
 
     @Suppress("UNCHECKED_CAST")
-    private fun <T> store(file: String, serializer: KSerializer<T>, default: () -> T) = Store(file, serializer as KSerializer<Any?>, default)
+    private fun <T> store(file: String, serializer: KSerializer<T>, default: () -> T, since: String = FIRST) = Store(file, serializer as KSerializer<Any?>, default, since)
 
     private val stores = listOf(
         store("tasks.json", TaskState.serializer(), ::TaskState),
@@ -54,10 +63,14 @@ class StoresDecodeTest {
         store("log.json", ActivityLog.serializer(), ::ActivityLog),
         store("instructions.json", InstructionState.serializer(), ::InstructionState),
         store("chat.json", ChatState.serializer(), ::ChatState),
+        store("chat-archive.json", ChatArchive.serializer(), ::ChatArchive, since = "2026-10-19"),
         store("school.json", SchoolCalendar.serializer(), ::SchoolCalendar),
         store("memory.json", MemoryState.serializer(), ::MemoryState),
         store("calendar.json", CalendarVersions.serializer(), ::CalendarVersions),
     )
+
+    /** The stores there are in the shape of [dir]. */
+    private fun storesIn(dir: File) = stores.filter { it.since <= dir.name }
 
     /** Each shape's folder, oldest first: their names are the dates they were made. */
     private val shapes: List<File> = Fixtures.file("stores").listFiles { f -> f.isDirectory }.orEmpty().sortedBy { it.name }
@@ -69,30 +82,39 @@ class StoresDecodeTest {
     /** Only what differs from its default: what's "filled". */
     private val filledOnly = Json { encodeDefaults = false; explicitNulls = false }
 
-    /** [store] read from [dir] as the app reads it: by a [JsonStore] on a copy, so a file it can't read whole shows. */
+    /**
+     * [store] read from [dir] as the app reads it at a start: by [Stores] on a copy of the whole shape, its
+     * moves made and each store's migrations run, so a file it can't read whole shows.
+     */
     private fun read(store: Store, dir: File): Pair<Any?, JsonStore.Unreadable?> {
         val copy = Files.createTempDirectory("stores").toFile()
         try {
-            File(dir, store.file).copyTo(File(copy, store.file))
-            val read = JsonStore(File(copy, store.file), store.serializer, store.default)
+            dir.listFiles()!!.forEach { it.copyTo(File(copy, it.name)) }
+            val read = Stores(copy, Reverse).let { s -> listOf(s.tasks, s.settings, s.runtime, s.log, s.instructions, s.chat, s.chatArchive, s.school, s.memory, s.calendarVersions) }.single { it.name == store.file }
             return read.value to read.problem
         } finally {
             copy.deleteRecursively()
         }
     }
 
+    /** A cipher for the secrets that only reverses the bytes: none of the shapes has any. */
+    private object Reverse : SecretCipher {
+        override fun encrypt(plain: ByteArray) = plain.reversedArray()
+        override fun decrypt(sealed: ByteArray) = sealed.reversedArray()
+    }
+
     /** The store kept in [file]. */
     private fun store(file: String): Store = stores.single { it.file == file }
 
     @Test
-    fun `there's a shape, and every store is in each`() {
+    fun `there's a shape, and every store is in each from its first`() {
         assertTrue(shapes.isNotEmpty(), "no fixtures/stores/<date>/")
-        for (dir in shapes) for (store in stores) assertTrue(File(dir, store.file).isFile, "${dir.name}/${store.file} is missing")
+        for (dir in shapes) for (store in storesIn(dir)) assertTrue(File(dir, store.file).isFile, "${dir.name}/${store.file} is missing")
     }
 
     @Test
     fun `every shape's every store reads whole`() {
-        for (dir in shapes) for (store in stores) {
+        for (dir in shapes) for (store in storesIn(dir)) {
             val (value, problem) = read(store, dir)
             assertNull(problem, "${dir.name}/${store.file} didn't read whole")
             assertTrue(value != store.default(), "${dir.name}/${store.file} read as nothing")
@@ -196,21 +218,38 @@ class StoresDecodeTest {
     }
 
     @Test
-    fun `the chat holds the fields of before, and the log Felix's records of every reason`() {
-        val chat = read(store("chat.json"), now).first as ChatState
-        assertTrue(chat.messages.any { it.remembered.isNotEmpty() } && chat.messages.any { it.done.isNotEmpty() } && chat.messages.any { it.reason != null })
-        assertEquals(Speaker.You, chat.unanswered?.from)
-        val log = read(store("log.json"), now).first as ActivityLog
-        assertEquals(FelixPrompts.Reason.entries.map { it.name }.toSet(), log.felix.map { it.reason }.toSet())
-        assertTrue(log.felix.count { it.replyText != null } >= 3)
+    fun `the first shape's chat holds the fields of before, and its log Felix's records of every reason`() {
+        // On its JSON: the app's types no longer have them.
+        val first = shapes.first { it.name == FIRST }
+        fun json(name: String) = strict.parseToJsonElement(File(first, name).readText()).jsonObject
+        val messages = json("chat.json").getValue("messages").jsonArray.map { it.jsonObject }
+        assertTrue(listOf("remembered", "done").all { field -> messages.any { it[field]?.jsonArray?.isNotEmpty() == true } } && messages.any { it["reason"] !is JsonNull })
+        val records = json("log.json").getValue("felix").jsonArray.map { it.jsonObject }
+        assertEquals(FelixPrompts.Reason.entries.map { it.name }.toSet(), records.map { it.getValue("reason").jsonPrimitive.content }.toSet())
+        assertTrue(records.count { it["replyText"] !is JsonNull } >= 3)
         // A record in the chat by its id (copied when you replied to it), and an answer's under its chat id.
-        assertTrue(log.felix.map { it.id }.toSet().containsAll(listOf("rec-start", "msg-answer")) && chat.messages.map { it.id }.containsAll(listOf("rec-start", "msg-answer")))
+        val ids = messages.map { it.getValue("id").jsonPrimitive.content }
+        assertTrue(records.map { it.getValue("id").jsonPrimitive.content }.containsAll(listOf("rec-start", "msg-answer")) && ids.containsAll(listOf("rec-start", "msg-answer")))
+        assertTrue(listOf("felix", "assessLater", "checkInDraft").all { it in json("runtime.json") })
+    }
+
+    @Test
+    fun `the chat now holds every message of his, of every kind there was a record of, your replies under them, his state and its earlier messages`() {
+        val chat = read(store("chat.json"), now).first as ChatState
+        assertEquals(Speaker.You, chat.unanswered?.from)
+        val his = chat.messages.filter { it.from == Speaker.Claude }
+        assertEquals(FelixPrompts.Reason.entries.map { it.name }.filter { it != FelixPrompts.Reason.Reply.name }.toSet() + MessageKind.Chat.name, his.map { it.kind.name }.toSet())
+        assertTrue(chat.messages.count { it.from == Speaker.You && it.replyTo != null } >= 4)
+        assertTrue(chat.felix.checkInDraft != null && chat.felix.assessLater.isNotEmpty() && chat.readAt > 0)
         // A card of Felix's that made an instruction in use.
-        val made = chat.messages.flatMap { it.proposals }.mapNotNull { it.made }
-        assertTrue("i-felix-steps" in made)
+        assertTrue("i-felix-steps" in chat.messages.flatMap { it.proposals }.mapNotNull { it.made })
+        assertTrue((read(store("chat-archive.json"), now).first as ChatArchive).messages.isNotEmpty())
     }
 
     private companion object {
+        /** The first shape: Stage 0's. */
+        const val FIRST = "2026-10-18"
+
         /**
          * Fields left at their defaults on purpose, by type: a value there would make the shape
          * incoherent (a Felix answer with no message), or the default is all a field can be.

@@ -14,15 +14,17 @@ object Channels {
     private const val DAILY = "daily"
 
     // Each its own purpose (IMP-P2-019), so a routine one can be silenced and a question kept.
+    /** The morning's list, Felix's message since 4.0.0, on his channel: deleted once nothing's left on it. */
     const val BRIEFING = "briefing"
     /** "How was it?" after each completion, Felix's question since review v2 (LR-05): deleted once nothing's left on it. */
     private const val HOW_IT_WENT = "how-it-went"
+    /** A move of yours in the calendar put back; its questions were here before they were Felix's. */
     const val CALENDAR = "calendar-questions"
     const val WEEKLY = "weekly"
     const val MODEL = "model"
     const val FREE_TIME = "free-time"
     const val FREE_TIME_ENDING = "free-time-ending"
-    /** Felix's messages and his answers to your replies (AI-24, LR-03). */
+    /** Everything Felix says (AI-24, LR-03): his one notification, made from the chat. */
     const val FELIX = "felix"
 
     fun create(context: Context) {
@@ -45,14 +47,11 @@ object Channels {
         }
         manager.createNotificationChannels(
             listOf(
-                NotificationChannel(BRIEFING, "Morning briefing", was).apply {
-                    description = "Today's plan, each morning"
+                NotificationChannel(CALENDAR, "Calendar", was).apply {
+                    description = "A move of yours in the calendar that couldn't be kept"
                 }.asWas(),
-                NotificationChannel(CALENDAR, "Calendar questions", was).apply {
-                    description = "How much of its day an event the plan can't judge takes"
-                }.asWas(),
-                NotificationChannel(WEEKLY, "Weekly check-in and review", was).apply {
-                    description = "The Sunday check-in, and the week's review"
+                NotificationChannel(WEEKLY, "Weekly check-in", was).apply {
+                    description = "The Sunday check-in's reminder, where Felix can't ask it"
                 }.asWas(),
             ),
         )
@@ -66,6 +65,10 @@ object Channels {
         if (manager.getNotificationChannel(HOW_IT_WENT) != null && manager.activeNotifications.none { it.notification.channelId == HOW_IT_WENT }) {
             manager.deleteNotificationChannel(HOW_IT_WENT)
         }
+        // The morning is Felix's message, on his channel (4.0.0): the briefing's goes likewise.
+        if (manager.getNotificationChannel(BRIEFING) != null && manager.activeNotifications.none { it.notification.channelId == BRIEFING }) {
+            manager.deleteNotificationChannel(BRIEFING)
+        }
         // Sessions are gone (AR-09): their channel, and a session's notification left on it, with them.
         if (manager.getNotificationChannel(SESSION) != null) manager.deleteNotificationChannel(SESSION)
         manager.createNotificationChannels(
@@ -77,7 +80,7 @@ object Channels {
                     description = "When blocking is off: the focus service switched off, or protection weakened"
                 },
                 NotificationChannel(FELIX, "Felix", NotificationManager.IMPORTANCE_DEFAULT).apply {
-                    description = "His messages about your work, and his answers to your replies"
+                    description = "Everything he says: the morning, his messages about your work, his questions and answers"
                 },
                 NotificationChannel(MODEL, "Claude", NotificationManager.IMPORTANCE_DEFAULT).apply {
                     description = "When Claude's plan for a task is dropped, or its API key stops working"

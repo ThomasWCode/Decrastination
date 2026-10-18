@@ -2,6 +2,7 @@ package com.thomaswcode.decrastination.felix
 
 import com.thomaswcode.decrastination.core.About
 import com.thomaswcode.decrastination.core.Calibration
+import com.thomaswcode.decrastination.core.ChatHistory
 import com.thomaswcode.decrastination.core.ChatMessage
 import com.thomaswcode.decrastination.core.Chunk
 import com.thomaswcode.decrastination.core.Duplicates
@@ -9,6 +10,7 @@ import com.thomaswcode.decrastination.core.Given
 import com.thomaswcode.decrastination.core.Instruction
 import com.thomaswcode.decrastination.core.Instructions
 import com.thomaswcode.decrastination.core.Kind
+import com.thomaswcode.decrastination.core.MessageKind
 import com.thomaswcode.decrastination.core.OwnTasks
 import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.ProposalState
@@ -46,8 +48,37 @@ object ChatPrompts {
     /** A message longer than this is cut. */
     const val MAX_TEXT = 2_000
 
-    /** The earlier messages sent with a new one: the last few exchanges. */
+    /** The conversation's earlier messages sent with a new one (yours, and his answers to you): the last few exchanges. */
     const val HISTORY = 12
+
+    /** His nudges (what he writes unasked) sent with a new one, each with your reply: the last few, so they can't push the conversation out (D-97). */
+    const val NUDGES = 2
+
+    /**
+     * What of [messages] the conversation sent with a new one is made from (D-97): its last [HISTORY]
+     * messages of the conversation (yours, and his answers to you), and his last [NUDGES] nudges (a
+     * message he wrote unasked), each with your reply to it, in their order; nothing with no words (his
+     * silences). A reply of yours to a nudge that went to no call (a check-in's answer, how work went)
+     * goes only with its nudge; one he answered is the conversation's, as is the newest, yours, which
+     * is what's being answered.
+     */
+    fun history(messages: List<ChatMessage>): List<ChatMessage> {
+        val said = messages.filter { it.from == Speaker.You || it.text.isNotBlank() }
+        val nudges = said.filter { it.from == Speaker.Claude && it.kind != MessageKind.Chat }
+        val nudged = nudges.mapTo(HashSet()) { it.id }
+        // Yours to a nudge, answered by him: his answer comes before another message of yours.
+        fun answered(i: Int): Boolean = said.drop(i + 1).firstOrNull { it.from == Speaker.You || it.kind == MessageKind.Chat }?.from == Speaker.Claude
+        val conversation = said.filterIndexed { i, m ->
+            when {
+                m.from == Speaker.Claude -> m.kind == MessageKind.Chat
+                m.replyTo == null || m.replyTo !in nudged -> true
+                else -> i == said.lastIndex || answered(i)
+            }
+        }
+        val last = nudges.takeLast(NUDGES)
+        val kept = (conversation.takeLast(HISTORY) + last + last.mapNotNull { ChatHistory.replyOf(it, said) }).mapTo(HashSet()) { it.id }
+        return said.filter { it.id in kept }
+    }
 
     private const val MAX_TITLE = 100
 
@@ -154,7 +185,7 @@ object ChatPrompts {
     )
 
     /**
-     * The conversation as it's sent: the last [HISTORY] messages, starting with one of yours, each
+     * The conversation as it's sent: what [history] takes of it, starting with one of yours, each
      * of Claude's with what it suggested and what became of it; your newest carries what the app
      * knows now ([context]). All of it within [budget] characters, as every call's input is held
      * to ([Pricing.MAX_INPUT_CHARS], which the cap's worst case assumes): your newest words whole;
@@ -176,11 +207,11 @@ object ChatPrompts {
         read: List<TaskItem> = emptyList(),
         events: List<CalendarEvent> = emptyList(),
     ): List<Pair<Speaker, String>> {
-        val last = messages.takeLast(HISTORY)
+        val last = history(messages)
         // Before any of yours: an answer cut off from its question by the window goes; a message of
-        // Felix's own (a notification you answered, [ChatMessage.reason]) is said in your first turn,
-        // as the conversation has to start with one of yours.
-        val lead = last.takeWhile { it.from != Speaker.You }.filter { it.reason != null }
+        // Felix's own (one he wrote unasked, [ChatMessage.kind]) is said in your first turn, as the
+        // conversation has to start with one of yours.
+        val lead = last.takeWhile { it.from != Speaker.You }.filter { it.kind != MessageKind.Chat }
         val recent = last.dropWhile { it.from != Speaker.You }
         if (recent.isEmpty()) return emptyList()
         // A turn each way at a time: a message of Felix's from a notification can follow his last answer.

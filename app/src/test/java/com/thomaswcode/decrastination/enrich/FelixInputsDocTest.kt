@@ -16,6 +16,7 @@ import com.thomaswcode.decrastination.core.InstructionStatus
 import com.thomaswcode.decrastination.core.Instructions
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.MemoryState
+import com.thomaswcode.decrastination.core.MessageKind
 import com.thomaswcode.decrastination.core.NoSchool
 import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.Planner
@@ -30,7 +31,6 @@ import com.thomaswcode.decrastination.core.SubStep
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.WebSource
 import com.thomaswcode.decrastination.core.WindowKind
-import com.thomaswcode.decrastination.data.FelixRecord
 import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.data.SlotOutcome
 import com.thomaswcode.decrastination.data.SlotRecord
@@ -142,7 +142,7 @@ class FelixInputsDocTest {
         )
         ChatPrompts.turns(listOf(earlier, reply, asked), context.known, byId, LONDON, plan = context.plan, events = events).forEachIndexed { i, (from, text) -> out["chat turn $i: $from"] = text }
         // A reply from Felix's notification: his message leads your first turn.
-        val his = ChatMessage("m4", Speaker.Claude, "Starting the worksheet? First: read question 1 and underline what it asks.", Fixtures.at("2026-10-13T17:00"), reason = "SlotStart")
+        val his = ChatMessage("m4", Speaker.Claude, "Starting the worksheet? First: read question 1 and underline what it asks.", Fixtures.at("2026-10-13T17:00"), kind = MessageKind.SlotStart)
         val yours = ChatMessage("m5", Speaker.You, "Give me ten minutes", Fixtures.at("2026-10-13T17:02"))
         ChatPrompts.turns(listOf(his, yours), "(the context, as above)", byId, LONDON, plan = "(the plan, as above)").forEachIndexed { i, (from, text) -> out["reply turn $i: $from"] = text }
         // With a web search's finding.
@@ -156,7 +156,10 @@ class FelixInputsDocTest {
         val p = plan("2026-10-13T16:50")
         val slot = p.todaySlots.first { it.chunk != null }
         val chunk = slot.chunk!!
-        val recent = listOf(FelixRecord("f1", Fixtures.at("2026-10-12T17:00"), "SlotStart", "Starting the vectors? First: copy out question 1's diagram.", listOf("Starting now", "Give me 10 minutes"), replyText = "Starting now", repliedAt = Fixtures.at("2026-10-12T17:02")))
+        val recent = listOf(
+            ChatMessage("f1", Speaker.Claude, "Starting the vectors? First: copy out question 1's diagram.", Fixtures.at("2026-10-12T17:00"), kind = MessageKind.SlotStart, suggestedReplies = listOf("Starting now", "Give me 10 minutes")),
+            ChatMessage("f1-reply", Speaker.You, "Starting now", Fixtures.at("2026-10-12T17:02"), replyTo = "f1", answeredAt = Fixtures.at("2026-10-12T17:02")),
+        )
         fun record(outcome: SlotOutcome, earned: Boolean) = SlotRecord(
             date = "2026-10-13", key = chunk.key, taskId = chunk.taskId, kind = Kind.Homework, label = chunk.label, plannedMin = chunk.minutes,
             start = slot.start, end = slot.end, window = WindowKind.Evening, outcome = outcome, workedMin = if (outcome.kept) chunk.minutes else 0, earned = earned, at = slot.end,
