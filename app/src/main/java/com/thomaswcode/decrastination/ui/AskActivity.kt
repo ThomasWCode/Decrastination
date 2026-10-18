@@ -8,9 +8,12 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -20,6 +23,7 @@ import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.FlowRow
@@ -36,6 +40,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
@@ -43,6 +48,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
@@ -89,22 +95,28 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.R
 import com.thomaswcode.decrastination.core.About
 import com.thomaswcode.decrastination.core.ChatMessage
+import com.thomaswcode.decrastination.core.ChatSummary
 import com.thomaswcode.decrastination.core.Instruction
 import com.thomaswcode.decrastination.core.InstructionStatus
 import com.thomaswcode.decrastination.core.Instructions
@@ -194,7 +206,7 @@ class AskActivity : ComponentActivity() {
         // it held read now.
         intent.getStringExtra(EXTRA_OPEN_AT)?.let { id ->
             val graph = AppGraph.get(this)
-            screen.opened(graph.chat.value, at = id)
+            screen.opened(graph.chat.value, graph.clock.now(), at = id)
             openedAt = true
             graph.scope.launch { graph.conversation.read() }
         }
@@ -205,7 +217,7 @@ class AskActivity : ComponentActivity() {
         // What waits for Claude (it was off, resting, or capped) is tried again on opening.
         val graph = AppGraph.get(this)
         // What's unread marked for this visit, for its divider: from his notification, as it was when it opened.
-        if (!openedAt) screen.opened(graph.chat.value)
+        if (!openedAt) screen.opened(graph.chat.value, graph.clock.now())
         openedAt = false
         graph.conversation.chatInFront = true
         // His notification taken away: what it held is on the screen.
@@ -221,6 +233,8 @@ class AskActivity : ComponentActivity() {
         super.onPause()
         val graph = AppGraph.get(this)
         graph.conversation.chatInFront = false
+        // Every message closed again for the next visit, its labels done with (5c).
+        screen.paused()
         // What arrived while it was on screen was seen: read, so only what comes after is his notification.
         graph.scope.launch { graph.conversation.read() }
     }
@@ -530,7 +544,7 @@ private fun ColumnScope.Chat(
                         if (message.from == Speaker.You) {
                             Yours(graph, message, row.quote, name, flash, now, zone, onQuote = { screen.reveal(it, all, archive) }) { screen.replyingTo = message }
                         } else {
-                            Claudes(graph, message, tasks, flash, now, zone, onEdit) { screen.replyingTo = message }
+                            Claudes(graph, screen, message, tasks, flash, now, zone, onEdit) { screen.replyingTo = message }
                         }
                     }
                 }
@@ -747,31 +761,126 @@ private const val DOT_CYCLE_MS = 1_200
 private const val DOT_STEP_MS = 200
 
 /**
- * A message of Felix's, on the left: his words and their time, then a card for each thing he did; one in
- * the app's words with its own button. Held, [onReply] is Reply.
+ * A message of Felix's, on the left: his words and their time; what he did under them folded behind a
+ * chevron at the bubble's corner, red where something went wrong, and unfolded as it always was, with
+ * every Undo (docs/plan_v4/05-the-chat.md §6); the label that says it in a line ([Labelled]); and
+ * outside the fold, a task he shows you and a button in the app's words. Held, [onReply] is Reply.
  */
 @Composable
-private fun Claudes(graph: AppGraph, message: ChatMessage, tasks: Map<String, TaskItem>, flash: Boolean, now: Long, zone: ZoneId, onEdit: (String, String) -> Unit, onReply: () -> Unit) {
+private fun Claudes(graph: AppGraph, screen: ChatScreenState, message: ChatMessage, tasks: Map<String, TaskItem>, flash: Boolean, now: Long, zone: ZoneId, onEdit: (String, String) -> Unit, onReply: () -> Unit) {
+    val folds = ChatSummary.folds(message)
+    val open = message.id in screen.open
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Column {
-            Bubble(message, MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(18.dp, 18.dp, 18.dp, 4.dp), flash, onReply) {
-                Text(message.text, style = MaterialTheme.typography.bodyLarge)
+            Labelled(screen, message) {
+                Bubble(message, MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(18.dp, 18.dp, 18.dp, 4.dp), flash, onReply) {
+                    Text(message.text, style = MaterialTheme.typography.bodyLarge)
+                    if (folds) Chevron(open, ChatSummary.problems(message) > 0, Modifier.align(Alignment.End)) { screen.toggle(message.id) }
+                }
             }
             Time(message, zone)
         }
         // A message in the app's words carries its own button: the week's review to open, its summary to send.
         Opens(message)
-        // What he searched the web for, and the pages it found, each to open (16 Oct).
-        Searched(message)
-        message.proposals.forEach { ProposalCard(graph, message.id, it, tasks, now, zone, onEdit) }
-        // What it remembered or forgot (AI-21), in small type under its words, each with its Undo.
-        Remembered(graph, message)
-        // What it did beyond its cards (AI-14; 16 Oct, everything he does), likewise, each with its Undo;
-        // and what it says of them with nothing to undo (a change refused, where a time went).
-        Acts(graph, message)
-        message.note?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 4.dp)) }
+        // A task he shows you (AI-14), the point of the message: never folded.
+        message.proposals.filter { it.open != null }.forEach { ProposalCard(graph, message.id, it, tasks, now, zone, onEdit) }
+        AnimatedVisibility(folds && open) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                // What he searched the web for, and the pages it found, each to open (16 Oct).
+                Searched(message)
+                message.proposals.filter { it.open == null }.forEach { ProposalCard(graph, message.id, it, tasks, now, zone, onEdit) }
+                // What it remembered or forgot (AI-21), in small type under its words, each with its Undo.
+                Remembered(graph, message)
+                // What it did beyond its cards (AI-14; 16 Oct, everything he does), likewise, each with its Undo;
+                // and what it says of them with nothing to undo (a change refused, where a time went).
+                Acts(graph, message)
+                message.note?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 4.dp)) }
+            }
+        }
     }
 }
+
+/** The corner of a bubble with something folded under it (5c): down while it's closed, up while it's open; red where something under it went wrong. */
+@Composable
+private fun Chevron(open: Boolean, problem: Boolean, modifier: Modifier, onToggle: () -> Unit) {
+    Icon(
+        painterResource(R.drawable.ic_expand_more),
+        contentDescription = if (open) "Hide what he did" else "Show what he did",
+        tint = if (problem) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = modifier.size(24.dp).clip(CircleShape).clickable(onClick = onToggle).graphicsLayer { rotationZ = if (open) 180f else 0f },
+    )
+}
+
+/**
+ * [bubble] with [message]'s label behind it (Q5: A), where it gets one ([ChatScreenState.labels]):
+ * [LABEL_IN_MS] after it's shown the label slides out from under the bubble's edge, to its right where
+ * there's room, else below it; it stays [LABEL_STAYS_MS] and slides back. Drawn under the bubble, so it
+ * comes out from behind it, and over nothing else, so the list doesn't move. Tapped, it opens what's folded.
+ */
+@Composable
+private fun Labelled(screen: ChatScreenState, message: ChatMessage, bubble: @Composable () -> Unit) {
+    val line = remember(message) { ChatSummary.line(message) }
+    val shows = remember(message.id) { screen.labels(message) }
+    if (!shows) {
+        bubble()
+        return
+    }
+    var out by remember { mutableStateOf(false) }
+    LaunchedEffect(message.id) {
+        screen.labelled(message.id)
+        delay(LABEL_IN_MS)
+        out = true
+        delay(LABEL_STAYS_MS)
+        out = false
+    }
+    val slide by animateFloatAsState(if (out) 1f else 0f, tween(LABEL_SLIDE_MS), label = "label")
+    val gap = with(LocalDensity.current) { 6.dp.roundToPx() }
+    BoxWithConstraints {
+        val room = constraints.maxWidth
+        var bubbleSize by remember { mutableStateOf(IntSize.Zero) }
+        var labelSize by remember { mutableStateOf(IntSize.Zero) }
+        val beside = bubbleSize.width + gap + labelSize.width <= room
+        Box {
+            Box(Modifier.matchParentSize()) {
+                Label(
+                    line,
+                    Modifier.align(Alignment.BottomEnd)
+                        .wrapContentSize(Alignment.BottomEnd, unbounded = true)
+                        .onSizeChanged { labelSize = it }
+                        .offset { if (beside) IntOffset(((labelSize.width + gap) * slide).roundToInt(), 0) else IntOffset(0, ((labelSize.height + gap) * slide).roundToInt()) }
+                        .graphicsLayer { alpha = (slide * 3f).coerceAtMost(1f) },
+                ) { screen.unfold(message.id) }
+            }
+            Box(Modifier.onSizeChanged { bubbleSize = it }) { bubble() }
+        }
+    }
+}
+
+/** A message's label (Q5: A): what he did, and in red what went wrong, in a small pill. */
+@Composable
+private fun Label(line: ChatSummary.Line, modifier: Modifier, onOpen: () -> Unit) {
+    val red = MaterialTheme.colorScheme.error
+    val shape = RoundedCornerShape(10.dp)
+    Surface(color = MaterialTheme.colorScheme.secondaryContainer, shape = shape, modifier = modifier.clip(shape).clickable(onClick = onOpen)) {
+        Text(
+            buildAnnotatedString {
+                append(line.did)
+                if (line.wrong.isNotEmpty()) {
+                    if (line.did.isNotEmpty()) append(" · ")
+                    withStyle(SpanStyle(color = red)) { append(line.wrong) }
+                }
+            },
+            style = MaterialTheme.typography.labelMedium,
+            maxLines = 1,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+        )
+    }
+}
+
+/** When a label slides out after its bubble's shown, how long it stays, and how long it takes to slide. */
+private const val LABEL_IN_MS = 300L
+private const val LABEL_STAYS_MS = 5_000L
+private const val LABEL_SLIDE_MS = 250
 
 /** [message]'s own button ([ChatMessage.opens]): the week's review, or a week's summary in an email to send. */
 @Composable
