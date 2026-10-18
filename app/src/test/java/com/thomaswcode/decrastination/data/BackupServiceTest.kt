@@ -86,7 +86,7 @@ class BackupServiceTest {
         // Every record, in the order a merge keeps them: each list by its time.
         assertEquals(Backups.mergeLog(ActivityLog(), was.log.value, clock.time), now.log.value)
         // The settings, but this phone's protection, key and calendars.
-        assertEquals(Backups.importedSettings(Settings(), Backups.decode(full.service.exportBackup())!!), now.settings.value)
+        assertEquals(Backups.importedSettings(Settings(), Backups.decode(full.service.exportBackup(), full.stores.shapes)!!), now.settings.value)
         assertEquals(listOf(false, false), listOf(now.settings.value.armed, now.settings.value.aiKeyActive))
         assertTrue(empty.laid > 0 && empty.scheduled == 1 && empty.reread == 1)
         // Every store a backup keeps something of has it back; those it keeps nothing of, nothing.

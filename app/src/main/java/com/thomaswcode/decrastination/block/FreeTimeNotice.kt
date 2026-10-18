@@ -63,8 +63,9 @@ object FreeTimeNotice {
 
     /** Spending stopped: both go. */
     fun cancel(context: Context) {
-        AppGraph.get(context).notifier.cancel(NoticeId.FreeTime)
-        AppGraph.get(context).notifier.cancel(NoticeId.FreeTimeEnding)
+        val notifier = AppGraph.get(context).notifier
+        notifier.cancel(NoticeId.FreeTime)
+        notifier.cancel(NoticeId.FreeTimeEnding)
     }
 
     /** The plan opened, as [notice]'s tap and its button. */

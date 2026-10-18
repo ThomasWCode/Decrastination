@@ -10,19 +10,29 @@
 #
 # Made-up addresses at example.com, example.org and example.net, and GitHub's no-reply ones, pass;
 # so does Kotlin's label on this, super, return, break and continue (this@AppGraph.member).
+# Only the lines a diff adds are read: a commit's message, a PR's text and a branch's name aren't.
+# A range git can't read exits 2, as a scan that didn't happen, never as a clean one.
 ROOT=$(git rev-parse --show-toplevel)
 cd "$ROOT" || exit 2
 RANGE=${1:-origin/main...HEAD}
 WORDS="$ROOT/private/scan-words.txt"
 ADDED=$(mktemp)
+DIFF=$(mktemp)
+if ! git diff --unified=0 --no-color $RANGE > "$DIFF"; then
+  rm -f "$ADDED" "$DIFF"
+  echo "git diff $RANGE failed: nothing was scanned"
+  exit 2
+fi
 # Each added line as file:text, the file from the diff's own headers.
-git diff --unified=0 --no-color $RANGE | awk '
+awk '
   /^\+\+\+ b\// { file = substr($0, 7); next }
   /^\+\+\+ / { file = ""; next }
-  /^\+/ && file != "" { print file ":" substr($0, 2) }' > "$ADDED"
+  /^\+/ && file != "" { print file ":" substr($0, 2) }' "$DIFF" > "$ADDED"
+rm -f "$DIFF"
 HITS=$(awk -v words="$WORDS" '
   BEGIN {
-    while ((getline w < words) > 0) if (w != "" && w !~ /^#/) listed[tolower(w)] = 1
+    # A line ending \r (the file saved on Windows) is the word without it.
+    while ((getline w < words) > 0) { sub(/\r$/, "", w); if (w != "" && w !~ /^#/) listed[tolower(w)] = 1 }
   }
   {
     file = $0; sub(/:.*/, "", file); text = substr($0, length(file) + 2)
