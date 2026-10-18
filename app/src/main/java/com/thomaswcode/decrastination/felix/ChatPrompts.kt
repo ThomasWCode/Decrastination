@@ -4,16 +4,22 @@ import com.thomaswcode.decrastination.core.About
 import com.thomaswcode.decrastination.core.Calibration
 import com.thomaswcode.decrastination.core.ChatMessage
 import com.thomaswcode.decrastination.core.Chunk
+import com.thomaswcode.decrastination.core.Duplicates
+import com.thomaswcode.decrastination.core.Given
 import com.thomaswcode.decrastination.core.Instruction
 import com.thomaswcode.decrastination.core.Instructions
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.OwnTasks
 import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.ProposalState
+import com.thomaswcode.decrastination.core.SlotKind
+import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Speaker
+import com.thomaswcode.decrastination.core.Status
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.Unplanned
 import com.thomaswcode.decrastination.core.Why
+import com.thomaswcode.decrastination.data.FelixSettings
 import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.enrich.Found
 import com.thomaswcode.decrastination.enrich.InstructionPrompts
@@ -115,7 +121,7 @@ object ChatPrompts {
     val MEMORY: Map<String, Any> = InstructionPrompts.obj(
         "topic" to STRING,
         "text" to STRING,
-        "kind" to mapOf("type" to "string", "enum" to listOf(com.thomaswcode.decrastination.core.Given.FACT, com.thomaswcode.decrastination.core.Given.RULE)),
+        "kind" to mapOf("type" to "string", "enum" to listOf(Given.FACT, Given.RULE)),
     )
 
     /** Something to do for the student (AI-14; 16 Oct, more of it), plain fields so no union is added: stepIndex -1, setting and value empty for none. */
@@ -339,7 +345,7 @@ object ChatPrompts {
             }
         }
         // Work that looks the same from two sources (DX-15): a SameAs change keeps one.
-        val alike = com.thomaswcode.decrastination.core.Duplicates.candidates(tasks, classMap, different)
+        val alike = Duplicates.candidates(tasks, classMap, different)
         if (alike.isNotEmpty()) {
             appendLine()
             appendLine("Tasks that look like the same work (a SameAs change keeps one, if the student says so):")
@@ -361,7 +367,7 @@ object ChatPrompts {
             inUse.take(InstructionPrompts.MAX_TASKS).forEach { appendLine("- " + Instructions.describe(it, byId, zone)) }
         }
         // Their own finished lately (16 Oct), to open again if one wasn't.
-        val finished = tasks.filter { (it.source == com.thomaswcode.decrastination.core.Source.Own || it.tickDone) && it.status == com.thomaswcode.decrastination.core.Status.Done && (it.doneAt ?: 0L) > now - FINISHED_MS }
+        val finished = tasks.filter { (it.source == Source.Own || it.tickDone) && it.status == Status.Done && (it.doneAt ?: 0L) > now - FINISHED_MS }
             .sortedByDescending { it.doneAt }
         if (finished.isNotEmpty()) {
             appendLine()
@@ -371,7 +377,7 @@ object ChatPrompts {
         if (settings != null) {
             appendLine()
             appendLine("Settings you can change (setting | what it is | its value now):")
-            com.thomaswcode.decrastination.data.FelixSettings.describe(settings).forEach { appendLine("- $it") }
+            FelixSettings.describe(settings).forEach { appendLine("- $it") }
         }
         // Each open task's own text, cut short (D-93): what it asks of them, and what comes with it.
         // Last, so it's what a context too long for its room loses first ([turns]).
@@ -447,7 +453,7 @@ object ChatPrompts {
             else -> plan.next?.let { appendLine("Next to do: ${piece(it)}$then") }
         }
         // Today's slots at their times, each gone by, under way or to come (AI-13), so a time today isn't taken for past.
-        val slots = plan.todaySlots.filter { it.kind == com.thomaswcode.decrastination.core.SlotKind.Work && it.chunk != null }
+        val slots = plan.todaySlots.filter { it.kind == SlotKind.Work && it.chunk != null }
         if (slots.isNotEmpty()) {
             appendLine("Today's slots (the times its pieces are laid at):")
             slots.forEach { s ->

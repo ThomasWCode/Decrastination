@@ -3,13 +3,21 @@ package com.thomaswcode.decrastination.felix
 import com.thomaswcode.decrastination.core.About
 import com.thomaswcode.decrastination.core.Change
 import com.thomaswcode.decrastination.core.ChangeType
+import com.thomaswcode.decrastination.core.ChatAction
+import com.thomaswcode.decrastination.core.DayBucket
+import com.thomaswcode.decrastination.core.Given
 import com.thomaswcode.decrastination.core.Instructions
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.OwnStep
 import com.thomaswcode.decrastination.core.OwnTask
 import com.thomaswcode.decrastination.core.OwnTasks
+import com.thomaswcode.decrastination.core.Proposal
+import com.thomaswcode.decrastination.core.SlotKind
+import com.thomaswcode.decrastination.core.Source
+import com.thomaswcode.decrastination.core.Status
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.shareOut
+import com.thomaswcode.decrastination.data.FelixSettings
 import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.enrich.InstructionAnswers
 import com.thomaswcode.decrastination.enrich.ResearchPrompts
@@ -22,6 +30,7 @@ import java.time.LocalTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import java.util.UUID
 import kotlin.math.abs
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -35,16 +44,16 @@ object ChatAnswers {
      * the answer names the time asked for: "06:35 had no free time: it's at 10:45." A minute or
      * less apart is the time kept. Pure.
      */
-    fun movedPins(changes: List<Change>, buckets: List<com.thomaswcode.decrastination.core.DayBucket>, zone: java.time.ZoneId): List<String> {
-        val hm = java.time.format.DateTimeFormatter.ofPattern("HH:mm", java.util.Locale.UK)
-        fun at(time: Long) = java.time.Instant.ofEpochMilli(time).atZone(zone)
+    fun movedPins(changes: List<Change>, buckets: List<DayBucket>, zone: ZoneId): List<String> {
+        val hm = DateTimeFormatter.ofPattern("HH:mm", Locale.UK)
+        fun at(time: Long) = Instant.ofEpochMilli(time).atZone(zone)
         return changes.filter { it.type == ChangeType.AtTime && it.taskId != null && it.time != null }.mapNotNull { c ->
             val asked = c.time!!
             val day = c.date?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: at(asked).toLocalDate()
             // A day past the plan's week: nothing to say of it.
             val bucket = buckets.firstOrNull { it.date == day } ?: return@mapNotNull null
             val slots = bucket.slots
-                .filter { it.kind == com.thomaswcode.decrastination.core.SlotKind.Work && it.chunk?.taskId == c.taskId }
+                .filter { it.kind == SlotKind.Work && it.chunk?.taskId == c.taskId }
             val laid = slots.firstOrNull { it.pinned } ?: slots.minByOrNull { kotlin.math.abs(it.start - asked) }
             when {
                 laid == null -> "${at(asked).format(hm)} had no free time, nor any after it that day."
@@ -59,10 +68,10 @@ object ChatAnswers {
         val tasks: List<OwnTask>,
         val changes: List<Change>,
         val leftOut: List<String>,
-        val memories: List<com.thomaswcode.decrastination.core.Given> = emptyList(),
+        val memories: List<Given> = emptyList(),
         val suggestedReplies: List<String> = emptyList(),
         /** Steps to tick and tasks to show (AI-14), each checked against what there is. */
-        val actions: List<com.thomaswcode.decrastination.core.ChatAction> = emptyList(),
+        val actions: List<ChatAction> = emptyList(),
         /** What it asks to look up on the web first (16 Oct, [WebResearcher]): its answer is then only that it's looking. */
         val research: String? = null,
         /** The tasks whose whole text it asks to read first (D-93): its answer is then only that it's reading. */
@@ -74,12 +83,12 @@ object ChatAnswers {
      * for a button; AI-24 had only changes to what exists made so): its changes on one card, first;
      * then its new tasks, a card each; then a card for each task to show (AI-14), with its Open.
      */
-    fun cards(reading: Reading, tasks: Map<String, TaskItem>, zone: ZoneId, id: () -> String = { java.util.UUID.randomUUID().toString() }): List<com.thomaswcode.decrastination.core.Proposal> {
+    fun cards(reading: Reading, tasks: Map<String, TaskItem>, zone: ZoneId, id: () -> String = { UUID.randomUUID().toString() }): List<Proposal> {
         val changes = reading.changes.takeIf { it.isNotEmpty() }?.let {
-            com.thomaswcode.decrastination.core.Proposal(id(), changes = it, lines = it.map { c -> Instructions.describe(c, tasks, zone) }, instant = true)
+            Proposal(id(), changes = it, lines = it.map { c -> Instructions.describe(c, tasks, zone) }, instant = true)
         }
-        val added = reading.tasks.map { com.thomaswcode.decrastination.core.Proposal(id(), task = it, instant = true) }
-        val opens = reading.actions.filter { it.type == com.thomaswcode.decrastination.core.ChatAction.Type.Open }.map { com.thomaswcode.decrastination.core.Proposal(id(), open = it.taskId) }
+        val added = reading.tasks.map { Proposal(id(), task = it, instant = true) }
+        val opens = reading.actions.filter { it.type == ChatAction.Type.Open }.map { Proposal(id(), open = it.taskId) }
         return listOfNotNull(changes) + added + opens
     }
 
@@ -88,7 +97,7 @@ object ChatAnswers {
         val reply: String = "",
         val newTasks: List<NewTask> = emptyList(),
         val changes: List<InstructionAnswers.Given> = emptyList(),
-        val memories: List<com.thomaswcode.decrastination.core.Given> = emptyList(),
+        val memories: List<Given> = emptyList(),
         val suggestedReplies: List<String> = emptyList(),
         val actions: List<GivenAction> = emptyList(),
         val research: String = "",
@@ -175,30 +184,30 @@ object ChatAnswers {
     }
 
     /** [a] as an action the app can take, checked against the tasks there are ([byId]) and the [settings]; null, and why in [leftOut], if it can't be. */
-    private fun action(a: GivenAction, byId: Map<String, TaskItem>, settings: Settings?, leftOut: MutableList<String>): com.thomaswcode.decrastination.core.ChatAction? {
-        fun act(t: com.thomaswcode.decrastination.core.ChatAction.Type, id: String, step: Int? = null) = com.thomaswcode.decrastination.core.ChatAction(t, id, step)
+    private fun action(a: GivenAction, byId: Map<String, TaskItem>, settings: Settings?, leftOut: MutableList<String>): ChatAction? {
+        fun act(t: ChatAction.Type, id: String, step: Int? = null) = ChatAction(t, id, step)
         fun no(why: String) = null.also { leftOut += why }
         if (a.type == "setting") {
-            val field = com.thomaswcode.decrastination.data.FelixSettings.field(a.setting) ?: return no("a setting the app doesn't let him change (${a.setting.trim().take(40)})")
-            if (settings != null && com.thomaswcode.decrastination.data.FelixSettings.set(settings, field.name, a.value) == null) return no("“${field.label}” set to “${a.value.trim().take(40)}”, which it can't be")
-            return com.thomaswcode.decrastination.core.ChatAction(com.thomaswcode.decrastination.core.ChatAction.Type.Setting, "", setting = field.name, value = a.value.trim())
+            val field = FelixSettings.field(a.setting) ?: return no("a setting the app doesn't let him change (${a.setting.trim().take(40)})")
+            if (settings != null && FelixSettings.set(settings, field.name, a.value) == null) return no("“${field.label}” set to “${a.value.trim().take(40)}”, which it can't be")
+            return ChatAction(ChatAction.Type.Setting, "", setting = field.name, value = a.value.trim())
         }
         val task = byId[a.taskId] ?: return no("an action on a task that isn't listed")
         val name = "“${task.title.take(60)}”"
-        val own = task.source == com.thomaswcode.decrastination.core.Source.Own
+        val own = task.source == Source.Own
         val step = task.subSteps.getOrNull(a.stepIndex)
         return when (a.type) {
-            "open" -> act(com.thomaswcode.decrastination.core.ChatAction.Type.Open, task.id)
-            "tickStep" -> if (task.isOpen && step?.done == false) act(com.thomaswcode.decrastination.core.ChatAction.Type.TickStep, task.id, a.stepIndex) else no("a step to tick that isn't one of $name's still to do")
-            "untickStep" -> if (task.isOpen && step?.done == true) act(com.thomaswcode.decrastination.core.ChatAction.Type.UntickStep, task.id, a.stepIndex) else no("a step to untick that isn't one of $name's done")
+            "open" -> act(ChatAction.Type.Open, task.id)
+            "tickStep" -> if (task.isOpen && step?.done == false) act(ChatAction.Type.TickStep, task.id, a.stepIndex) else no("a step to tick that isn't one of $name's still to do")
+            "untickStep" -> if (task.isOpen && step?.done == true) act(ChatAction.Type.UntickStep, task.id, a.stepIndex) else no("a step to untick that isn't one of $name's done")
             // Done by you: your own, or one done by its tick (NF-06); another is done when its source says.
             "done" -> when {
                 !task.isOpen -> no("$name, finished already")
-                own || task.tickDone -> act(com.thomaswcode.decrastination.core.ChatAction.Type.Done, task.id)
+                own || task.tickDone -> act(ChatAction.Type.Done, task.id)
                 else -> no("$name is done when ${task.source.label} says so")
             }
-            "reopen" -> if ((own || task.tickDone) && task.status == com.thomaswcode.decrastination.core.Status.Done) act(com.thomaswcode.decrastination.core.ChatAction.Type.Reopen, task.id) else no("$name to open again, which isn't one of their own finished")
-            "delete" -> if (own) act(com.thomaswcode.decrastination.core.ChatAction.Type.Delete, task.id) else no("$name to delete, which is from ${task.source.label}: only a task of their own is deleted")
+            "reopen" -> if ((own || task.tickDone) && task.status == Status.Done) act(ChatAction.Type.Reopen, task.id) else no("$name to open again, which isn't one of their own finished")
+            "delete" -> if (own) act(ChatAction.Type.Delete, task.id) else no("$name to delete, which is from ${task.source.label}: only a task of their own is deleted")
             else -> no("an action the app doesn't take")
         }
     }

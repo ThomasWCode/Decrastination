@@ -14,6 +14,7 @@ import com.thomaswcode.decrastination.enrich.ModelCalls
 import com.thomaswcode.decrastination.enrich.ModelEffort
 import com.thomaswcode.decrastination.enrich.ModelGateway
 import com.thomaswcode.decrastination.enrich.Profile
+import com.thomaswcode.decrastination.felix.FelixRules
 import kotlinx.coroutines.sync.Mutex
 
 /**
@@ -42,7 +43,7 @@ class Ahead(
 
     suspend fun run(plan: Plan, now: Long) {
         // The piece of his next message first, so what he writes ahead can say its first action.
-        com.thomaswcode.decrastination.felix.FelixRules.upcoming(plan, settings.value, now)?.first?.slot?.chunk?.key?.let { microPlans(plan, now, only = it) }
+        FelixRules.upcoming(plan, settings.value, now)?.first?.slot?.chunk?.key?.let { microPlans(plan, now, only = it) }
         draftAhead(plan, now)
         microPlans(plan, now)
     }

@@ -2,14 +2,22 @@ package com.thomaswcode.decrastination.felix
 
 import android.util.Log
 import com.thomaswcode.decrastination.AppGraph
+import com.thomaswcode.decrastination.block.BlockPolicy
 import com.thomaswcode.decrastination.block.Focus
 import com.thomaswcode.decrastination.core.About
+import com.thomaswcode.decrastination.core.Act
+import com.thomaswcode.decrastination.core.ChatAction
+import com.thomaswcode.decrastination.core.ChatActs
 import com.thomaswcode.decrastination.core.ChatMessage
 import com.thomaswcode.decrastination.core.ChatState
+import com.thomaswcode.decrastination.core.Duplicates
+import com.thomaswcode.decrastination.core.Given
 import com.thomaswcode.decrastination.core.Instruction
 import com.thomaswcode.decrastination.core.InstructionState
 import com.thomaswcode.decrastination.core.InstructionStatus
 import com.thomaswcode.decrastination.core.Instructions
+import com.thomaswcode.decrastination.core.Memories
+import com.thomaswcode.decrastination.core.MemoryEdit
 import com.thomaswcode.decrastination.core.MemoryState
 import com.thomaswcode.decrastination.core.OwnTask
 import com.thomaswcode.decrastination.core.OwnTasks
@@ -21,17 +29,29 @@ import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.WallClock
 import com.thomaswcode.decrastination.data.ActivityLog
 import com.thomaswcode.decrastination.data.FelixRecord
+import com.thomaswcode.decrastination.data.FelixSettings
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.RuntimeState
 import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.data.TaskState
 import com.thomaswcode.decrastination.enrich.Called
+import com.thomaswcode.decrastination.enrich.Found
+import com.thomaswcode.decrastination.enrich.ModelCalls
+import com.thomaswcode.decrastination.enrich.ModelEffort
 import com.thomaswcode.decrastination.enrich.ModelGateway
 import com.thomaswcode.decrastination.enrich.ModelHold
+import com.thomaswcode.decrastination.enrich.Profile
+import com.thomaswcode.decrastination.enrich.WebResearcher
+import com.thomaswcode.decrastination.learn.Daily
+import com.thomaswcode.decrastination.learn.EventJudge
+import com.thomaswcode.decrastination.notify.Channels
 import com.thomaswcode.decrastination.notify.Notices
 import com.thomaswcode.decrastination.plan.Planning
+import java.util.UUID
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -64,7 +84,7 @@ class Conversation(
     private val ports: FelixPorts,
     private val owners: Owners,
     /** The calendar's events and busy time, as last read and judged. */
-    private val calendarTime: () -> com.thomaswcode.decrastination.learn.EventJudge.Time,
+    private val calendarTime: () -> EventJudge.Time,
     /** Your reply to one of his messages that's an answer and not for the chat ([Looks.answered]). */
     private val answered: suspend (FelixRecord, String) -> Boolean,
 ) {
@@ -87,13 +107,13 @@ class Conversation(
      * Who the student is, as every model call sends it (AI-05): from the settings, the tasks, the
      * timetable, the school calendar and what's [remembered].
      */
-    fun profile(now: Long = clock.now(), remembered: com.thomaswcode.decrastination.core.MemoryState = memory.value): com.thomaswcode.decrastination.enrich.Profile.Block {
+    fun profile(now: Long = clock.now(), remembered: MemoryState = memory.value): Profile.Block {
         val s = settings.value
         val state = tasks.value
         val zone = clock.zone()
-        return com.thomaswcode.decrastination.enrich.Profile.Block(
-            com.thomaswcode.decrastination.enrich.Profile.yearGroup(now, zone, s.yearGroupStart),
-            com.thomaswcode.decrastination.enrich.Profile.block(s, state.tasks, state.timetable, school.value, remembered, now, zone),
+        return Profile.Block(
+            Profile.yearGroup(now, zone, s.yearGroupStart),
+            Profile.block(s, state.tasks, state.timetable, school.value, remembered, now, zone),
         )
     }
 
@@ -117,22 +137,22 @@ class Conversation(
      */
     suspend fun askCheckIn(): Boolean {
         val now = clock.now()
-        val week = com.thomaswcode.decrastination.learn.Daily.checkInWeek(now, clock.zone(), settings.value.checkInMin)
+        val week = Daily.checkInWeek(now, clock.zone(), settings.value.checkInMin)
         if (log.value.checkIns.any { it.weekOf == week }) return true
-        if (!notices.shown(com.thomaswcode.decrastination.notify.Channels.FELIX)) return false
+        if (!notices.shown(Channels.FELIX)) return false
         // In quiet hours the form's reminder goes instead, held as the routine ones are till the morning.
-        if (com.thomaswcode.decrastination.block.BlockPolicy.isQuiet(now, clock.zone(), settings.value)) return false
-        val draft = com.thomaswcode.decrastination.felix.CheckInFlow.Draft(week)
+        if (BlockPolicy.isQuiet(now, clock.zone(), settings.value)) return false
+        val draft = CheckInFlow.Draft(week)
         runtime.update { it.copy(checkInDraft = draft) }
         askNext(draft, now)
         return true
     }
 
     /** [draft]'s question as Felix's message, with its replies: on record, so its reply comes back here. */
-    private suspend fun askNext(draft: com.thomaswcode.decrastination.felix.CheckInFlow.Draft, now: Long, again: Boolean = false) {
-        val flow = com.thomaswcode.decrastination.felix.CheckInFlow
+    private suspend fun askNext(draft: CheckInFlow.Draft, now: Long, again: Boolean = false) {
+        val flow = CheckInFlow
         val text = (if (again) "A number from 1 to 5: " else "") + flow.question(draft)
-        val record = com.thomaswcode.decrastination.data.FelixRecord(java.util.UUID.randomUUID().toString(), now, com.thomaswcode.decrastination.felix.FelixPrompts.Reason.CheckIn.name, text, flow.replies(draft, log.value, clock.zone()))
+        val record = FelixRecord(UUID.randomUUID().toString(), now, FelixPrompts.Reason.CheckIn.name, text, flow.replies(draft, log.value, clock.zone()))
         log.update { it.copy(felix = it.felix + record).trimmed(now) }
         ports.post(record.id, settings.value.felixName, text, record.replies)
     }
@@ -142,12 +162,12 @@ class Conversation(
      * after the last, the week's check-in kept and its review begun. The form filled meanwhile, or the
      * week moved on, ends it.
      */
-    private suspend fun checkInReply(record: com.thomaswcode.decrastination.data.FelixRecord, words: String): Boolean {
+    private suspend fun checkInReply(record: FelixRecord, words: String): Boolean {
         val now = clock.now()
-        val flow = com.thomaswcode.decrastination.felix.CheckInFlow
+        val flow = CheckInFlow
         log.update { l -> l.copy(felix = l.felix.map { if (it.id == record.id) it.copy(replyText = words, repliedAt = now) else it }) }
         val draft = runtime.value.checkInDraft
-        val week = com.thomaswcode.decrastination.learn.Daily.checkInWeek(now, clock.zone(), settings.value.checkInMin)
+        val week = Daily.checkInWeek(now, clock.zone(), settings.value.checkInMin)
         if (draft == null || draft.week != week || log.value.checkIns.any { it.weekOf == draft.week }) {
             runtime.update { it.copy(checkInDraft = null) }
             ports.cancel()
@@ -178,16 +198,16 @@ class Conversation(
     suspend fun endCheckInFlow() {
         if (runtime.value.checkInDraft == null) return
         runtime.update { it.copy(checkInDraft = null) }
-        if (log.value.felix.lastOrNull()?.reason == com.thomaswcode.decrastination.felix.FelixPrompts.Reason.CheckIn.name) ports.cancel()
+        if (log.value.felix.lastOrNull()?.reason == FelixPrompts.Reason.CheckIn.name) ports.cancel()
     }
 
     /** Held while the chat is answered, so each message is answered once. */
     private val answering = Mutex()
 
-    private val sentAt = kotlinx.coroutines.flow.MutableStateFlow<Long?>(null)
+    private val sentAt = MutableStateFlow<Long?>(null)
 
     /** When the chat's call in flight was sent (AC-08), for its "thinking… 12 s"; null with none. */
-    val answeringSince: kotlinx.coroutines.flow.StateFlow<Long?> get() = sentAt
+    val answeringSince: StateFlow<Long?> get() = sentAt
 
     /** The message whose answer you let go while its call ran (AC-08): that answer, when it comes, goes unused. */
     @Volatile
@@ -200,7 +220,7 @@ class Conversation(
      * again with them, never searching or asking for them again, as each is paid for; a search held
      * back (Claude off or resting, the cap) isn't kept, so it can be made later.
      */
-    private data class Gathered(val id: String, val found: com.thomaswcode.decrastination.enrich.Found?, val notLooked: String?, val read: List<String>)
+    private data class Gathered(val id: String, val found: Found?, val notLooked: String?, val read: List<String>)
 
     @Volatile
     private var gathered: Gathered? = null
@@ -221,7 +241,7 @@ class Conversation(
      * Your [text] to Claude about [about] (2.0.0, Q29): kept as message [id], then answered
      * ([answerChat]). Not while one of yours still waits for its answer: false then, and nothing's kept.
      */
-    suspend fun ask(text: String, about: About = About(), id: String = java.util.UUID.randomUUID().toString()): Boolean {
+    suspend fun ask(text: String, about: About = About(), id: String = UUID.randomUUID().toString()): Boolean {
         val words = text.trim().take(ChatPrompts.MAX_TEXT)
         if (words.isEmpty()) return false
         var added = false
@@ -247,7 +267,7 @@ class Conversation(
     fun chatContext(
         now: Long = clock.now(),
         state: TaskState = tasks.value,
-        time: com.thomaswcode.decrastination.learn.EventJudge.Time = calendarTime(),
+        time: EventJudge.Time = calendarTime(),
         applied: List<Instruction> = instructions.value.applied,
     ): ChatPrompts.Context {
         return ChatPrompts.Context(
@@ -269,14 +289,14 @@ class Conversation(
         val note = run call@{
             // Taken back (or the chat cleared) while this waited its turn: nothing to ask.
             if (chat.value.unanswered?.id != waiting.id) return@withLock
-            val chatClient = gateway.client(com.thomaswcode.decrastination.enrich.ModelEffort.Job.Chat) ?: return@call gateway.because(ModelHold.Off)
-            val researchClient = gateway.client(com.thomaswcode.decrastination.enrich.ModelEffort.Job.Research) ?: return@call gateway.because(ModelHold.Off)
+            val chatClient = gateway.client(ModelEffort.Job.Chat) ?: return@call gateway.because(ModelHold.Off)
+            val researchClient = gateway.client(ModelEffort.Job.Research) ?: return@call gateway.because(ModelHold.Off)
             // One snapshot of the tasks, the calendar and your changes: what Claude's shown is what its answer's checked against.
             val state = tasks.value
             val time = calendarTime()
             // His answer, with what a web search he asked for found ([found], 16 Oct), and the tasks whose
             // whole text he asked to [read] (D-93).
-            suspend fun ask(found: com.thomaswcode.decrastination.enrich.Found?, read: List<TaskItem> = emptyList()) = gateway.call(interactive = true, record = com.thomaswcode.decrastination.enrich.ModelCalls.OnRecord(com.thomaswcode.decrastination.enrich.ModelEffort.Job.Chat, waiting.text) { r: ChatReader.Result -> r.usage to com.thomaswcode.decrastination.enrich.ModelCalls.outcome(r.refused, r.reading == null) }, cost = { r: ChatReader.Result -> r.costUsd to r.refused }) { at ->
+            suspend fun ask(found: Found?, read: List<TaskItem> = emptyList()) = gateway.call(interactive = true, record = ModelCalls.OnRecord(ModelEffort.Job.Chat, waiting.text) { r: ChatReader.Result -> r.usage to ModelCalls.outcome(r.refused, r.reading == null) }, cost = { r: ChatReader.Result -> r.costUsd to r.refused }) { at ->
                 // Being asked now: whatever it said before (a failed call) is gone.
                 chat.update { s -> s.copy(messages = s.messages.map { if (it.id == waiting.id) it.copy(note = null, stuck = false) else it }) }
                 sentAt.value = at
@@ -321,13 +341,13 @@ class Conversation(
             // Why a search made found nothing, kept with the rest; one held back isn't, so it can be made later.
             var tried = before?.notLooked
             for (round in 1..com.thomaswcode.decrastination.felix.ChatRounds.MAX_ROUNDS) {
-                val next = com.thomaswcode.decrastination.felix.ChatRounds.next(reading, searched = found != null || notLooked != null, searches = settings.value.felixSearches, read = read.map { it.id }) ?: break
+                val next = ChatRounds.next(reading, searched = found != null || notLooked != null, searches = settings.value.felixSearches, read = read.map { it.id }) ?: break
                 var looks = false
                 next.search?.let { question ->
-                    val search = gateway.call(interactive = true, record = com.thomaswcode.decrastination.enrich.ModelCalls.OnRecord(com.thomaswcode.decrastination.enrich.ModelEffort.Job.Research, question) { r: com.thomaswcode.decrastination.enrich.WebResearcher.Result -> r.usage to com.thomaswcode.decrastination.enrich.ModelCalls.outcome(r.refused, r.found == null) }, cost = { r: com.thomaswcode.decrastination.enrich.WebResearcher.Result -> r.costUsd to r.refused }) { at ->
+                    val search = gateway.call(interactive = true, record = ModelCalls.OnRecord(ModelEffort.Job.Research, question) { r: WebResearcher.Result -> r.usage to ModelCalls.outcome(r.refused, r.found == null) }, cost = { r: WebResearcher.Result -> r.costUsd to r.refused }) { at ->
                         sentAt.value = at
                         try {
-                            com.thomaswcode.decrastination.enrich.WebResearcher(researchClient, year = profile(at).year).look(question, waiting.text, at, clock.zone())
+                            WebResearcher(researchClient, year = profile(at).year).look(question, waiting.text, at, clock.zone())
                         } finally {
                             sentAt.value = null
                         }
@@ -381,12 +401,12 @@ class Conversation(
             reading = reading.copy(research = null, details = emptyList())
             gathered = null
             val reply = ChatMessage(
-                id = java.util.UUID.randomUUID().toString(),
+                id = UUID.randomUUID().toString(),
                 from = Speaker.Claude,
                 text = reading.reply,
                 at = clock.now(),
                 // Everything on a card made as it comes (your call, 16 Oct), each with its Undo.
-                proposals = com.thomaswcode.decrastination.felix.ChatAnswers.cards(reading, tasks.value.tasks.associateBy { it.id }, clock.zone()),
+                proposals = ChatAnswers.cards(reading, tasks.value.tasks.associateBy { it.id }, clock.zone()),
                 suggestedReplies = reading.suggestedReplies,
                 searched = found?.let { it.searched.ifEmpty { listOf(it.question) } }.orEmpty(),
                 sources = found?.sources.orEmpty(),
@@ -418,7 +438,7 @@ class Conversation(
                 instant.forEach { applyProposal(reply.id, it.id) }
                 // A time the plan couldn't keep (PL-04): where the piece went, said under the answer,
                 // which names the time asked for.
-                val moved = com.thomaswcode.decrastination.felix.ChatAnswers.movedPins(instant.flatMap { it.changes }, planning.plan().buckets, clock.zone())
+                val moved = ChatAnswers.movedPins(instant.flatMap { it.changes }, planning.plan().buckets, clock.zone())
                 // One that couldn't be made after all, said under the answer that says it was (16 Oct).
                 val refused = chat.value.messages.firstOrNull { it.id == reply.id }?.proposals.orEmpty()
                     .filter { p -> p.instant && p.state != ProposalState.Applied && p.note != null }.map { "Not made: ${it.note!!.replaceFirstChar(Char::lowercase)}." }
@@ -440,46 +460,46 @@ class Conversation(
      * else ticked as on its sheet) or to do again; a task of yours done, open again or deleted; a
      * setting set. None for one that couldn't be.
      */
-    private suspend fun act(actions: List<com.thomaswcode.decrastination.core.ChatAction>): List<com.thomaswcode.decrastination.core.Act> {
-        fun said(line: String, a: com.thomaswcode.decrastination.core.ChatAction) = com.thomaswcode.decrastination.core.Act(line, a)
+    private suspend fun act(actions: List<ChatAction>): List<Act> {
+        fun said(line: String, a: ChatAction) = Act(line, a)
         return actions.mapNotNull { a ->
             val task = tasks.value.tasks.firstOrNull { it.id == a.taskId }
             when (a.type) {
-                com.thomaswcode.decrastination.core.ChatAction.Type.Open -> null
-                com.thomaswcode.decrastination.core.ChatAction.Type.TickStep -> {
+                ChatAction.Type.Open -> null
+                ChatAction.Type.TickStep -> {
                     val index = a.stepIndex ?: return@mapNotNull null
                     val step = task?.subSteps?.getOrNull(index)?.takeIf { !it.done } ?: return@mapNotNull null
                     said("Ticked: ${step.title}, of ${task.title}", a).takeIf { tick(task, index, step.title) }
                 }
-                com.thomaswcode.decrastination.core.ChatAction.Type.UntickStep -> {
+                ChatAction.Type.UntickStep -> {
                     val index = a.stepIndex ?: return@mapNotNull null
                     val step = task?.subSteps?.getOrNull(index)?.takeIf { it.done } ?: return@mapNotNull null
                     said("To do again: ${step.title}, of ${task.title}", a).takeIf { focus.untickBlock(task.id, index, step.title) }
                 }
-                com.thomaswcode.decrastination.core.ChatAction.Type.Done -> {
+                ChatAction.Type.Done -> {
                     if (task?.isOpen != true) return@mapNotNull null
                     owners.finishOwnTask(task.id)
                     said("Done: ${task.title}", a).takeIf { tasks.value.tasks.firstOrNull { it.id == task.id }?.isOpen == false }
                 }
-                com.thomaswcode.decrastination.core.ChatAction.Type.Reopen -> {
+                ChatAction.Type.Reopen -> {
                     if (task == null || task.isOpen) return@mapNotNull null
                     owners.reopenOwnTask(task.id)
                     // As it was, finished, for its Undo: not finished anew, a second time on record.
-                    com.thomaswcode.decrastination.core.Act("Open again: ${task.title}", a, was = task).takeIf { tasks.value.tasks.firstOrNull { it.id == task.id }?.isOpen == true }
+                    Act("Open again: ${task.title}", a, was = task).takeIf { tasks.value.tasks.firstOrNull { it.id == task.id }?.isOpen == true }
                 }
-                com.thomaswcode.decrastination.core.ChatAction.Type.Delete -> {
+                ChatAction.Type.Delete -> {
                     if (task?.source != Source.Own) return@mapNotNull null
                     // The cards that added it, which its going sets back: linked again by its Undo.
                     val cards = chat.value.messages.flatMap { m -> m.proposals.filter { it.made == task.id }.map { "${m.id}|${it.id}" } }
                     owners.deleteOwnTask(task.id)
-                    com.thomaswcode.decrastination.core.Act("Deleted: ${task.title}", a, was = task, cards = cards).takeIf { tasks.value.tasks.none { it.id == task.id } }
+                    Act("Deleted: ${task.title}", a, was = task, cards = cards).takeIf { tasks.value.tasks.none { it.id == task.id } }
                 }
-                com.thomaswcode.decrastination.core.ChatAction.Type.Setting -> {
-                    val field = com.thomaswcode.decrastination.data.FelixSettings.field(a.setting.orEmpty()) ?: return@mapNotNull null
-                    var made: com.thomaswcode.decrastination.core.Act? = null
+                ChatAction.Type.Setting -> {
+                    val field = FelixSettings.field(a.setting.orEmpty()) ?: return@mapNotNull null
+                    var made: Act? = null
                     owners.changeSettings { s ->
-                        val (next, line) = com.thomaswcode.decrastination.data.FelixSettings.set(s, field.name, a.value.orEmpty()) ?: return@changeSettings s
-                        made = com.thomaswcode.decrastination.core.Act(line, a, before = field.get(s), after = field.get(next))
+                        val (next, line) = FelixSettings.set(s, field.name, a.value.orEmpty()) ?: return@changeSettings s
+                        made = Act(line, a, before = field.get(s), after = field.get(next))
                         next
                     }
                     // The reminders' alarms at their new times, as the Settings screen sets them.
@@ -515,20 +535,20 @@ class Conversation(
         val step = a.stepIndex?.let { i -> task?.subSteps?.getOrNull(i) }
         fun open(id: String) = tasks.value.tasks.firstOrNull { it.id == id }?.isOpen
         val undone = when (a.type) {
-            com.thomaswcode.decrastination.core.ChatAction.Type.Open -> false
+            ChatAction.Type.Open -> false
             // The step that finished one of yours: open again with it to do.
-            com.thomaswcode.decrastination.core.ChatAction.Type.TickStep -> step?.done == true && focus.untickBlock(task!!.id, a.stepIndex!!, step.title, reopen = true)
-            com.thomaswcode.decrastination.core.ChatAction.Type.UntickStep -> step?.done == false && task!!.isOpen && tick(task, a.stepIndex!!, step.title)
-            com.thomaswcode.decrastination.core.ChatAction.Type.Done -> task?.isOpen == false && (task.source == Source.Own || task.tickDone) && run { owners.reopenOwnTask(task.id); open(task.id) == true }
-            com.thomaswcode.decrastination.core.ChatAction.Type.Reopen -> task?.isOpen == true && act.was != null && refinish(act.was)
+            ChatAction.Type.TickStep -> step?.done == true && focus.untickBlock(task!!.id, a.stepIndex!!, step.title, reopen = true)
+            ChatAction.Type.UntickStep -> step?.done == false && task!!.isOpen && tick(task, a.stepIndex!!, step.title)
+            ChatAction.Type.Done -> task?.isOpen == false && (task.source == Source.Own || task.tickDone) && run { owners.reopenOwnTask(task.id); open(task.id) == true }
+            ChatAction.Type.Reopen -> task?.isOpen == true && act.was != null && refinish(act.was)
             // Not once a card that had added it is made again: that's the task anew.
-            com.thomaswcode.decrastination.core.ChatAction.Type.Delete -> act.was != null && task == null && !com.thomaswcode.decrastination.core.ChatActs.redone(act.cards, chat.value.messages) && run {
+            ChatAction.Type.Delete -> act.was != null && task == null && !ChatActs.redone(act.cards, chat.value.messages) && run {
                 restoreTask(act.was)
                 relink(act.cards, act.was.id)
                 open(act.was.id) != null
             }
-            com.thomaswcode.decrastination.core.ChatAction.Type.Setting -> {
-                val field = com.thomaswcode.decrastination.data.FelixSettings.field(a.setting.orEmpty())
+            ChatAction.Type.Setting -> {
+                val field = FelixSettings.field(a.setting.orEmpty())
                 var back = false
                 if (field != null && act.before != null) {
                     owners.changeSettings { s ->
@@ -556,7 +576,7 @@ class Conversation(
         tasks.update { state ->
             state.copy(
                 tasks = state.tasks.map { t ->
-                    if (t.id != was.id || !com.thomaswcode.decrastination.core.ChatActs.asReopened(t, was)) return@map t
+                    if (t.id != was.id || !ChatActs.asReopened(t, was)) return@map t
                     back = true
                     t.copy(status = was.status, doneAt = was.doneAt, subSteps = was.subSteps)
                 },
@@ -575,15 +595,15 @@ class Conversation(
 
     /** [task], one of your own deleted, back as it was (a chat action's Undo), its instructions laid over it again. */
     private suspend fun restoreTask(task: TaskItem) {
-        tasks.update { state -> if (state.tasks.any { it.id == task.id }) state else state.copy(tasks = com.thomaswcode.decrastination.core.Duplicates.linksPresent(state.tasks + task)) }
+        tasks.update { state -> if (state.tasks.any { it.id == task.id }) state else state.copy(tasks = Duplicates.linksPresent(state.tasks + task)) }
         owners.layTaskOverrides()
     }
 
     /** [given] kept in what's remembered (AI-21), and what each thing did ([com.thomaswcode.decrastination.core.MemoryEdit.line] says it). */
-    suspend fun remember(given: List<com.thomaswcode.decrastination.core.Given>): List<com.thomaswcode.decrastination.core.MemoryEdit> {
+    suspend fun remember(given: List<Given>): List<MemoryEdit> {
         if (given.isEmpty()) return emptyList()
-        var edits = emptyList<com.thomaswcode.decrastination.core.MemoryEdit>()
-        memory.update { state -> com.thomaswcode.decrastination.core.Memories.edit(state, given, clock.now()).also { edits = it.second }.first }
+        var edits = emptyList<MemoryEdit>()
+        memory.update { state -> Memories.edit(state, given, clock.now()).also { edits = it.second }.first }
         return edits
     }
 
@@ -596,11 +616,11 @@ class Conversation(
     suspend fun undoMemory(messageId: String, index: Int): String? {
         val message = chat.value.messages.firstOrNull { it.id == messageId } ?: return null
         val edits = message.memoryEdits.ifEmpty {
-            message.remembered.map { com.thomaswcode.decrastination.core.Memories.editOf(it, memory.value) ?: com.thomaswcode.decrastination.core.MemoryEdit(it) }
+            message.remembered.map { Memories.editOf(it, memory.value) ?: MemoryEdit(it) }
         }
         val edit = edits.getOrNull(index)?.takeIf { !it.undone } ?: return null
         var undone = false
-        memory.update { state -> com.thomaswcode.decrastination.core.Memories.undo(state, edit)?.also { undone = true } ?: state }
+        memory.update { state -> Memories.undo(state, edit)?.also { undone = true } ?: state }
         if (!undone) return "It's changed since: forget it in the list of what ${settings.value.felixName} remembers"
         chat.update { s -> s.copy(messages = s.messages.map { m -> if (m.id != messageId) m else m.copy(memoryEdits = edits.mapIndexed { i, e -> if (i == index) e.copy(undone = true) else e }) }) }
         return null
@@ -623,7 +643,7 @@ class Conversation(
         val name = settings.value.felixName
         val record = log.value.felix.firstOrNull { it.id == id }
         // An answer to a check-in question (LR-02): the next asked, or the check-in kept.
-        if (record?.reason == com.thomaswcode.decrastination.felix.FelixPrompts.Reason.CheckIn.name) return checkInReply(record, words)
+        if (record?.reason == FelixPrompts.Reason.CheckIn.name) return checkInReply(record, words)
         // One of the three answers to how the day's completions went (LR-05): on them, and that's all.
         if (record != null && answered(record, words)) {
             log.update { l -> l.copy(felix = l.felix.map { if (it.id == id) it.copy(replyText = words, repliedAt = now) else it }) }
@@ -641,7 +661,7 @@ class Conversation(
         val his = chat.value.messages.firstOrNull { it.id == id }
         val said = record?.text ?: his?.text.orEmpty()
         // The reply's own message in the chat, so its answer is told from any to what's said after it.
-        val asked = java.util.UUID.randomUUID().toString()
+        val asked = UUID.randomUUID().toString()
         if (!ask(words, his?.about ?: About(), asked)) {
             ports.post(id, name, "$said\n\nYour last message to me is still waiting for its answer: send this again once it's come.", emptyList())
             return false
@@ -681,7 +701,7 @@ class Conversation(
 
     /** [answer], Felix's in the chat to a reply from a notification, as his next notification (AI-24), with its replies and cards; and on record. */
     private suspend fun tellAnswer(answer: ChatMessage) {
-        val record = com.thomaswcode.decrastination.data.FelixRecord(answer.id, answer.at, com.thomaswcode.decrastination.felix.FelixPrompts.Reason.Reply.name, answer.text, answer.suggestedReplies)
+        val record = FelixRecord(answer.id, answer.at, FelixPrompts.Reason.Reply.name, answer.text, answer.suggestedReplies)
         log.update { it.copy(felix = it.felix.filterNot { r -> r.id == record.id } + record).trimmed(clock.now()) }
         // Only a card with something to make: one that shows a task (AI-14) opens it in the chat.
         val cards = answer.proposals.filter { it.state == ProposalState.Proposed && (it.task != null || it.changes.isNotEmpty()) }.map { answer.id to it }
@@ -719,14 +739,14 @@ class Conversation(
         var note: String? = null
         var before = emptyMap<String, OwnTask>()
         // The days off and half-days it puts in the school calendar (PL-16), for its Undo.
-        var schoolBefore: com.thomaswcode.decrastination.core.SchoolCalendar? = null
-        var schoolAfter: com.thomaswcode.decrastination.core.SchoolCalendar? = null
+        var schoolBefore: SchoolCalendar? = null
+        var schoolAfter: SchoolCalendar? = null
         val task = edited ?: proposal.task
         if (task != null) {
-            val id = java.util.UUID.randomUUID().toString()
+            val id = UUID.randomUUID().toString()
             if (owners.saveOwnTask(id, task)) made = TaskItem.id(Source.Own, id) else note = OwnTasks.problem(task) ?: "It couldn't be added"
         } else if (proposal.changes.isNotEmpty()) {
-            val id = java.util.UUID.randomUUID().toString()
+            val id = UUID.randomUUID().toString()
             // Your own tasks it changes, as they are: made on them, the changes are undone by putting them back.
             val own = tasks.value.tasks.filter { it.source == Source.Own }.associateBy { it.id }
             before = proposal.changes.filter { it.type in OwnTasks.MADE_ON_IT }.mapNotNull { it.taskId }.distinct()
