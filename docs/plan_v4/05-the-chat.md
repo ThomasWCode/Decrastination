@@ -4,25 +4,25 @@ Everything Felix says is a message in the chat. A notification is the chat reach
 
 Your answers are settled here: his channel for everything he says (Q3), the folds and the label as recommended (Q4, Q5), swipe right on any bubble with the quote told to the model and replies routed by kind (Q6), the divider, the position and the badge (Q7), every message kept, the older ones in an archive (Q8, Q23), one notification for the conversation (C-Q4), his past records put in once (C-Q5), the calendar's questions and "how did it go?" as his (C-Q6).
 
-## Today
+## Before Stage 5 (3.3.x)
 
-- **Two homes.** His unprompted messages are `FelixRecord`s in `log.json` (kept 30 days) and notifications; the chat (`chat.json`) has your messages and his answers. A record reaches the chat only when you reply to its notification (`Conversation.replyToFelix` copies it in). On your phone on 18 Oct: 35 records in 30 days, 27 replied to, 1 in the chat. Tap one of the others and the chat opens without it.
+- **Two homes.** His unprompted messages were `FelixRecord`s in `log.json` (kept 30 days) and notifications; the chat (`chat.json`) had your messages and his answers. A record reached the chat only when you replied to its notification (`Conversation.replyToFelix` copied it in). On your phone on 18 Oct: 35 records in 30 days, 27 replied to, 1 in the chat. Tapping one of the others opened the chat without it.
 - **Seven producers**, each posting its own notification: his looks and the morning (`felix/Looks.kt`), the morning's title and list (`learn/Briefing.kt`), the check-in (`Conversation`'s check-in flow, `felix/CheckInFlow.kt`; the form `ui/CheckInActivity.kt`), the weekly review (`learn/Review.kt`), the summary's offer (`AppGraph.writeSummary`, id 4004), "How did it go?" (`learn/Assessment.kt`, 4100 tagged, on his channel), and answers to a notification's reply (`Conversation.tellAnswer`).
-- **One notification at a time**: `FelixNotifications` posts his looks, the morning, the check-in and the answers under id 4200, so each new one takes the last one's place; the calendar's questions have had an id of their own, 4400 (`NoticeId.CalendarQuestion`), since 3.3.0.
+- **One notification at a time**: `FelixNotifications` posted his looks, the morning, the check-in and the answers under id 4200, so each new one took the last one's place; the calendar's questions have had an id of their own, 4400 (`NoticeId.CalendarQuestion`), since 3.3.0.
 - **His state in three places**: the log's records, `RuntimeState.felix` (next check, a draft, a retry, the questions waiting) with `assessLater` and `checkInDraft`, and the chat.
-- **The chat buries what he did**: every change, memory and search sits under his bubble as cards and small lines; a message that does three things is a screen long.
+- **The chat buried what he did**: every change, memory and search sat under his bubble as cards and small lines; a message that did three things was a screen long.
 
 ## 1. The conversation
 
 One store, `chat.json`, holds everything said between you and Felix, and his state ([04](04-data-and-migrations.md) §The chat has the types and the migration).
 
-**Kinds.** `ChatMessage.kind: MessageKind`, `Chat` by default (yours, and his answers to you), else why he wrote: `Morning`, `SlotStart`, `SlotEnd`, `SlotKept`, `DayDone`, `Question`, `Completions`, `CheckIn`, `Review`, `Summary`, `EventQuestion`, `Reminder` ([07](07-notes-and-reminders.md)), `Note` (a line the app wrote in his name about something it did or let go: a reminder let go because its task closed; "teams says the worksheet's handed in" after a `sync` he asked for, [06](06-what-felix-can-do.md) G2). A Gmail write that couldn't be made is the app's own notification, not a message of his (Q18: C). Today's `ChatMessage.reason` becomes the kind, read from the stored `reason` once.
+**Kinds.** `ChatMessage.kind: MessageKind`, `Chat` by default (yours, and his answers to you), else why he wrote: `Morning`, `SlotStart`, `SlotEnd`, `SlotKept`, `DayDone`, `Question`, `Completions`, `CheckIn`, `Review`, `Summary`, `EventQuestion`, `Reminder` ([07](07-notes-and-reminders.md)), `Note` (a line the app wrote in his name about something it did or let go: a reminder let go because its task closed; "teams says the worksheet's handed in" after a `sync` he asked for, [06](06-what-felix-can-do.md) G2). A Gmail write that couldn't be made is the app's own notification, not a message of his (Q18: C). 3.3.x's `ChatMessage.reason` became the kind, read from the stored `reason` once.
 
 **Who wrote the words.** `byApp: Boolean`: the words are the app's, in his name, with no model call (the check-in's questions, "Thanks: the week's review comes next.", the list-only briefing, a reminder sent as you set it when he couldn't write, a `Note`). The screen shows them as his; the model's history is told "(the app wrote this for you)" so he doesn't take fixed words for his own style ([09](09-his-voice.md)). The fixed lines live in one place, `FelixWords`, made in 5a with today's words and reworded in 10b.
 
 **The producers, each through the outbox** (§2):
 
-| Message | Today | After |
+| Message | Before (3.3.x) | After |
 |---|---|---|
 | His looks: SlotStart, SlotEnd, SlotKept, DayDone (`learn/Felix.kt`, `Looks` after Stage 4) | a `FelixRecord` and a notification under 4200 | a message of that kind, with `about` the piece's task, `pieceKey`, `nextCheckAt`, `suggestedReplies` |
 | A reading's question (Reason.Question) | the same | kind `Question`; your reply is the task's answer (as now, `Looks.answered`) |
@@ -43,10 +43,10 @@ Not his, and not in the chat: syncs under way, protection, free time and its end
 
 **The speaker is Felix** (`Speaker.Felix`, read from the stored "Claude"), from 5b.
 
-**Every message kept; the model sees less** (Q8, Q23). Today the chat keeps its last 200 messages (`MAX_CHAT`). You want them all kept for you to read, with what's sent to him cut much earlier, so the chat is in two parts:
+**Every message kept; the model sees less** (Q8, Q23). Before 4.0.0 the chat kept its last 200 messages (`MAX_CHAT`). You want them all kept for you to read, with what's sent to him cut much earlier, so the chat is in two parts:
 
 - **The live window**, `chat.json`: the newest messages, the last 200 or 60 days, whichever keeps more, and every unread message whatever its age (a message is only moved once it's been read, so the notification, the badge and the opening position, which read the window, never lose one). It's what the screen opens on, what his rules read (`FelixRules.due`'s `sent` is today's messages), what his own messages' context reads (his last six, `FelixPrompts.RECENT`), and what the model's history is taken from: the conversation's last 12 messages (`ChatPrompts.HISTORY`, yours and his answers) and his last two nudges with your replies (`ChatPrompts.NUDGES`), within a quarter of the room, so his nudges can't push the conversation out (your call while 5a was built, 18 Oct: D-97).
-- **The archive**, `chat-archive.json` (`ChatArchive`), oldest first, append-only. After a message is written, what's past the window moves there: the archive's `update` first, then the live store's trim, so a crash between the two leaves a duplicate (dropped by id at the next move), never a hole. The screen reads it only when you scroll up past the oldest live message ("Earlier messages", a page of 100 at a time from the file's end); it's never sent to the model and never read by his rules. A reply swiped on an archived message still carries its `replyTo`, and the quote is read from the archive.
+- **The archive**, `chat-archive.json` (`ChatArchive`), oldest first, append-only. After a message is written, what's past the window moves there: the archive's `update` first, then the live store's trim, so a crash between the two leaves a duplicate (dropped by id at the next move), never a hole. It's loaded with the other stores at start, and the screen shows it only when you scroll up past the oldest live message ("Earlier messages", a page of 100 at a time from its end); it's never sent to the model and never read by his rules. A reply swiped on an archived message still carries its `replyTo`, and the quote is read from the archive.
 - **Clear the chat** empties both, and its dialog says so; Reset → "The chat and Felix's history" too. The backup carries the archive while the backup fits its cap (`Backups.MAX_BYTES`, 8 MB); past that, the archive's oldest messages are what's left out first, and Settings → Backup says so. An older build ignores the file. What his rules count today ("said once a slot") starts afresh after a clear, which is fine.
 
 ## 2. The outbox
@@ -68,7 +68,7 @@ class Outbox(
 
 - **The chat first.** The message is written to the conversation before anything is posted, so a notification can't point at a message that isn't there.
 - **Every producer goes through it**: his looks, the morning (the briefing's title and his words become one morning message of his), the check-in's questions, the review's note, the summary's offer, the completions' question, the calendar's questions, his answers. None posts a notification of its own.
-- **Rebuilt from the chat, not accumulated.** `notify(now)` posts his notification from the chat's unread messages (`from == Felix`, `at > readAt`, with text), or cancels it when there are none; `send` calls it after writing, the screen on pause after setting `readAt`, and the briefing in the morning. So "held back" needs no copy: a kind that today goes on a ceilinged channel in quiet hours (the calendar's questions, the morning's fallback, the review, the summary) is in the chat at once and simply left out of the notification until the morning's rebuild (`NotifyRules` keeps its say, by kind instead of channel). The `heldNotifications` list stays for the app's own notifications only.
+- **Rebuilt from the chat, not accumulated.** `notify(now)` posts his notification from the chat's unread messages (`from == Felix`, `at > readAt`, with text), or cancels it when there are none; `send` calls it after writing, the screen on pause after setting `readAt`, and the briefing in the morning. So "held back" needs no copy: a kind that went on a ceilinged channel in quiet hours before (the calendar's questions, the review, the summary; the morning's own message is the briefing, at its time) is in the chat at once and simply left out of the notification until the morning's rebuild (`NotifyRules` keeps its say, by kind instead of channel). The `heldNotifications` list stays for the app's own notifications only.
 - **When the chat's on screen** nothing's posted (`chatInFront`), as now; when another screen of the app is in front, a notification still is: "not on the chat screen" is the test.
 
 ## 3. The notifier
@@ -77,7 +77,7 @@ class Outbox(
 
 `NoticeId` names every notification the app makes, with a range of request codes for its buttons, so no two can collide:
 
-| Kind | Id now | Id after | Several at once |
+| Kind | Id at 3.2.0 | Id after | Several at once |
 |---|---|---|---|
 | Work under way: sync, readings, review, Felix's look, a reply | 1001–1005 | the same | one each |
 | Free time, its end | 2003, 2004 | the same | one each |
@@ -98,7 +98,7 @@ At `NoticeId.Felix`, in `NotificationCompat.MessagingStyle` (C-Q4: A; one a mess
 
 - the person is him, his name from Settings, the app's icon; the conversation title is nothing (a one-to-one chat);
 - its messages are his unread ones (`at > ChatState.readAt`), oldest first, each at its time, text only (a card's gist in words: "Added “Trip form”" after the text, as the history tells him);
-- a reply from it is shown in it as yours, under his, while he answers; his answer is added as it comes;
+- a reply from it is shown in it as yours, under his, while he answers (as a speaker of its own, "You": One UI hides the Reply while the newest message is the user's own); his answer is added as it comes;
 - the reply box offers the newest message's `suggestedReplies` as choices, as now; the buttons for cards (Add / Apply) go: since 3.1.0 nothing waits for a button, and `tellAnswer` only ever found pre-16-Oct cards;
 - tapped, it opens the chat at the first unread (§4); opening the chat clears it;
 - `setOnlyAlertOnce` where it's rebuilt for a reply sent, as now, so it doesn't sound again; a new message of his sounds.
@@ -107,7 +107,7 @@ Samsung groups an app's notifications under its name; his messaging-style one sh
 
 ### One policy
 
-`NotifyRules`' ceiling of four routine notifications a day, quiet hours, and those held for the next briefing apply in one place, `Notifier.post`, as now; from 5a the rule is by the kind of his message where the channel used to decide (Morning's fallback, Review, Summary and EventQuestion wait for the morning's rebuild; his looks and the check-in don't). Felix's and protection's stay outside the ceiling. His channel being off no longer silences him: the chat is his voice, so his looks still write and the message goes in the chat; the channel's state is checked where the notification is built (`Outbox.notify`), not before the message is written. Today `Looks.due` and the morning return before writing when the channel's off; that check moves to the outbox in 5a. (Claude being off still means no look: that's a cost rule, not a notification one.)
+`NotifyRules`' ceiling of four routine notifications a day, quiet hours, and those held for the next briefing apply in one place, `Notifier.post`, as now; from 5a the rule is by the kind of his message where the channel used to decide (Review, Summary and EventQuestion wait for the morning's rebuild, the morning's own message being that rebuild; his looks and the check-in don't). Felix's and protection's stay outside the ceiling. His channel being off no longer silences him: the chat is his voice, so his looks still write and the message goes in the chat; the channel's state is checked where the notification is built (`Outbox.notify`), not before the message is written. Before 5a, `Looks.due` and the morning returned before writing when the channel was off; that check moved to the outbox in 5a. (Claude being off still means no look: that's a cost rule, not a notification one.)
 
 ### Channels (Q3: A)
 
@@ -127,7 +127,7 @@ His channel (`Channels.FELIX`) for all of it, the morning included: one notifica
 
 **Long-press** on any bubble: *Reply*, *Copy*. (Later, maybe: *Undo all of it* on his.)
 
-**Swipe to reply.** A horizontal drag on any bubble, his or yours, to the right (Q6: A), past a third of the width: a haptic tick, a reply arrow shown while dragged, and the bubble springs back (`AnchoredDraggable` with one anchor, or `SwipeToDismissBox` whose `confirmValueChange` refuses, so nothing's dismissed); vertical scrolling wins where the drag is more down than across, as Compose's gesture system decides. Then:
+**Swipe to reply.** A horizontal drag on any bubble, his or yours, to the right (Q6: A), past a third of the width: a haptic tick, a reply arrow shown while dragged, and the bubble springs back (built as a horizontal `draggable`, so nothing's dismissed); vertical scrolling wins where the drag is more down than across, as Compose's gesture system decides. Then:
 
 - a strip over the box: "Replying to Felix" (or "to you") with the quoted text's first line and an ✕;
 - the message sent carries `replyTo = id`, and its bubble shows the quote in a tinted block above your words; tapping the quote scrolls to it;
@@ -144,15 +144,15 @@ His channel (`Channels.FELIX`) for all of it, the morning included: one notifica
 | `Reminder` | Done, Snooze ([07](07-notes-and-reminders.md)) | a chat turn |
 | anything else | | a chat turn, the quoted message told to the model |
 
-`FelixReplyReceiver` then calls `ask(words, replyTo = id)` and the outbox rebuilds the notification with your words under his; `FelixReplyWorker` stays, for the answer to be paid for and shown after the receiver's gone.
+`FelixReplyReceiver` then calls `replyFromNotification(words, id)`, which sends it as any reply (`send` with `replyTo`), and the outbox rebuilds the notification with your words under his; `FelixReplyWorker` stays, for the answer to be paid for and shown after the receiver's gone.
 
 **What the model is told.** `ChatPrompts.turns` prefixes your turn with the quoted message where it isn't the one just before yours: "(Replying to your message: “…”)" for his, "(Replying to their own earlier message: “…”)" for yours; the last 12 messages may not hold it. One sentence in the chat's prompt says a message may quote what it replies to and that's what to answer. The chat golden and `FelixInputsDocTest`'s page change; the readings' prompt version doesn't (it's not a reading's prompt).
 
 ## 6. The extras folded
 
-Under his bubble today, in order: what he searched and the pages found (`Searched`), a card for each change set, new task and task to open (`ProposalCard`), what he remembered (`Remembered`), what his actions did (`Acts`), the lines with nothing to undo (`done`: not made, where a time went, read in full), and `note` (left out).
+Under his bubble before 4.0.2, in order: what he searched and the pages found (`Searched`), a card for each change set, new task and task to open (`ProposalCard`), what he remembered (`Remembered`), what his actions did (`Acts`), the lines with nothing to undo (`done`: not made, where a time went, read in full), and `note` (left out).
 
-**After.** A chevron at the bubble's bottom-right corner, shown only when the message has anything folded. Closed, the bubble shows his words alone. Open, the tail unfolds below the bubble as it's drawn today, with every Undo. The state is the screen's (the state holder's open set); it's cleared when the screen pauses, so coming back finds every message closed, as you asked. A message with nothing to fold (an answer that's just talk, [09](09-his-voice.md) §Just talking) has no chevron and no label. What folds and what doesn't (Q4: A):
+**After.** A chevron at the bubble's bottom-right corner, shown only when the message has anything folded. Closed, the bubble shows his words alone. Open, the tail unfolds below the bubble as it was drawn before 4.0.2, with every Undo. The state is the screen's (the state holder's open set); it's cleared when the screen pauses, so coming back finds every message closed, as you asked. A message with nothing to fold (an answer that's just talk, [09](09-his-voice.md) §Just talking) has no chevron and no label. What folds and what doesn't (Q4: A):
 
 | Folds | Stays visible |
 |---|---|
@@ -160,13 +160,13 @@ Under his bubble today, in order: what he searched and the pages found (`Searche
 
 A message that has a problem in its tail (not made, left out, not looked up) colours the chevron red, so it isn't hidden (Q5: A).
 
-**The label that slides out.** For a message of his that arrives while the chat's on screen (its `at` after the screen resumed), and once for each unread one when the chat opens (Q5: A), a small label drawn behind his bubble slides out to its right 300 ms after the bubble appears, stays five seconds, and slides back behind it (`AnimatedVisibility` with a horizontal slide, the bubble above it in z-order so it emerges from under the bubble's edge). Its text is `ChatSummary.line(message)`, pure and tested: "Changes: 2 · Remembered · Searched", each part only where it applies, and "1 not made" in red where something was refused. "Changes" counts changes made + tasks added + actions done (a tick, a setting), since each is one thing he did (Q5: A). Tapping the label opens the tail. With nothing to say, no label.
+**The label that slides out.** For a message of his that arrives while the chat's on screen (its `at` after the screen resumed), and once for each unread one when the chat opens (Q5: A), a small label drawn behind his bubble slides out to its right (below it, where the row has no room to its right) 300 ms after the bubble appears, stays five seconds, and slides back behind it (`AnimatedVisibility` with a horizontal slide, the bubble above it in z-order so it emerges from under the bubble's edge). Its text is `ChatSummary.line(message)`, pure and tested: "Changes: 2 · Remembered · Searched", each part only where it applies, and "1 not made" in red where something was refused. "Changes" counts changes made + tasks added + actions done (a tick, a setting), since each is one thing he did (Q5: A). Tapping the label opens the tail. With nothing to say, no label.
 
 ## What to watch
 
 - **What his rules count.** Moving "what he's sent today" from the log to the chat must count the same messages; `FelixRules`' tests run on both before the switch (the test's records turned into messages by the migration's own function).
 - **The briefing's timing.** The morning moves to his channel but keeps its time; a sound you'd set on the briefing's channel is set on his instead.
-- **Notifications you've turned off.** His channel off silences the notification only; his looks still run and the message still goes in the chat, which is the change from today's `Notices.shown` gate in his rules.
+- **Notifications you've turned off.** His channel off silences the notification only; his looks still run and the message still goes in the chat, which is the change from the `Notices.shown` gate in his rules before 4.0.0.
 - **The chat's size.** A message of his a slot, on a busy day, is a dozen messages; the window keeps the live file in bounds, the archive takes the rest.
 
 ## Tests

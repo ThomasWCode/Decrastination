@@ -106,7 +106,7 @@ data class WebSource(val title: String, val url: String)
 
 /**
  * The conversation before the live window ([ChatState]), oldest first: every message kept for you to
- * read, never sent to the model, read only on scrolling back. Kept in `chat-archive.json`.
+ * read, never sent to the model, shown only on scrolling back. Kept in `chat-archive.json`.
  */
 @Serializable
 data class ChatArchive(
