@@ -12,6 +12,7 @@ import com.thomaswcode.decrastination.enrich.Called
 import com.thomaswcode.decrastination.enrich.FelixAnswers
 import com.thomaswcode.decrastination.enrich.FelixCaller
 import com.thomaswcode.decrastination.enrich.FelixPrompts
+import com.thomaswcode.decrastination.enrich.ModelEffort
 import com.thomaswcode.decrastination.notify.FelixNotifications
 import kotlinx.coroutines.async
 import kotlinx.coroutines.sync.Mutex
@@ -74,14 +75,14 @@ class Felix(private val graph: AppGraph) {
         val plan = graph.plan(now = now)
         if (plan.todaySlots.none { it.kind == com.thomaswcode.decrastination.core.SlotKind.Work }) return@withLock false
         if (!graph.notifier.shown(com.thomaswcode.decrastination.notify.Channels.BRIEFING)) return@withLock false
-        val caller = graph.felixCaller() ?: return@withLock false
+        val caller = graph.gateway.client(ModelEffort.Job.Felix)?.let { FelixCaller(it) } ?: return@withLock false
         val settings = graph.settings.value
         val profile = graph.profile(now)
         val user = FelixPrompts.describe(FelixPrompts.Reason.Morning, plan, null, null, today(now), graph.log.value.felix, null, settings, now, graph.clock.zone())
         // Asked in the app's scope, not the briefing's: past [MORNING_MS] the briefing goes without
         // it, and the call, paid for, comes back and is counted all the same.
         val call = graph.scope.async {
-            graph.callModel(interactive = false, record = com.thomaswcode.decrastination.enrich.ModelCalls.OnRecord(com.thomaswcode.decrastination.enrich.ModelEffort.Job.Felix, "Morning") { r: FelixCaller.Result -> r.usage to com.thomaswcode.decrastination.enrich.ModelCalls.outcome(r.refused, r.answer == null) }, cost = { r: FelixCaller.Result -> r.costUsd to r.refused }) { caller.say(FelixPrompts.system(settings, profile.year), profile.text, user, maxMessage = FelixAnswers.MAX_MORNING) }
+            graph.gateway.call(interactive = false, record = com.thomaswcode.decrastination.enrich.ModelCalls.OnRecord(com.thomaswcode.decrastination.enrich.ModelEffort.Job.Felix, "Morning") { r: FelixCaller.Result -> r.usage to com.thomaswcode.decrastination.enrich.ModelCalls.outcome(r.refused, r.answer == null) }, cost = { r: FelixCaller.Result -> r.costUsd to r.refused }) { caller.say(FelixPrompts.system(settings, profile.year), profile.text, user, maxMessage = FelixAnswers.MAX_MORNING) }
         }
         val called = kotlinx.coroutines.withTimeoutOrNull(MORNING_MS) { call.await() }
         val answer = (called as? Called.Answered)?.value?.answer?.takeIf { it.message.isNotBlank() } ?: return@withLock false
@@ -102,7 +103,7 @@ class Felix(private val graph: AppGraph) {
     private fun due(now: Long): FelixRules.Trigger? {
         // Claude off, or his messages not to be seen (notifications or his channel off): he has no
         // voice, nothing's asked of the model, and nothing's put on record, so it's all there for later.
-        if (graph.claudeKey() == null || !graph.notifier.shown(com.thomaswcode.decrastination.notify.Channels.FELIX)) return null
+        if (graph.gateway.claudeKey() == null || !graph.notifier.shown(com.thomaswcode.decrastination.notify.Channels.FELIX)) return null
         val settings = graph.settings.value
         val zone = graph.clock.zone()
         val dayStart = graph.focus.today(now).atStartOfDay(zone).toInstant().toEpochMilli()
@@ -135,7 +136,7 @@ class Felix(private val graph: AppGraph) {
      * nothing on record: it's tried again past [FelixRules.RETRY_MS] while it's still to say.
      */
     private suspend fun write(trigger: FelixRules.Trigger, now: Long): FelixRecord? {
-        val caller = graph.felixCaller() ?: return null
+        val caller = graph.gateway.client(ModelEffort.Job.Felix)?.let { FelixCaller(it) } ?: return null
         val settings = graph.settings.value
         val zone = graph.clock.zone()
         // Written ahead and still fitting (AC-10): sent as it is, at once.
@@ -238,7 +239,7 @@ class Felix(private val graph: AppGraph) {
         val recent = graph.log.value.felix.filter { it.text.isNotBlank() }
         val free = (graph.focus.creditLeftMs(at) / 60_000L).toInt().takeIf { trigger.reason == FelixPrompts.Reason.DayDone || trigger.reason == FelixPrompts.Reason.SlotKept }
         val user = FelixPrompts.describe(trigger.reason, graph.plan(), trigger.slot, task, today(at), recent, trigger.question?.question, settings, at, graph.clock.zone(), free, trigger.record, trigger.asks.map { it.title }, firstAction = trigger.slot?.chunk?.key?.let { graph.runtime.value.microPlans[it] }?.first?.takeIf { it.isNotEmpty() })
-        val called = graph.callModel(interactive = interactive, record = com.thomaswcode.decrastination.enrich.ModelCalls.OnRecord(com.thomaswcode.decrastination.enrich.ModelEffort.Job.Felix, trigger.reason.name) { r: FelixCaller.Result -> r.usage to com.thomaswcode.decrastination.enrich.ModelCalls.outcome(r.refused, r.answer == null) }, cost = { r: FelixCaller.Result -> r.costUsd to r.refused }) { caller.say(FelixPrompts.system(settings, profile.year), profile.text, user) }
+        val called = graph.gateway.call(interactive = interactive, record = com.thomaswcode.decrastination.enrich.ModelCalls.OnRecord(com.thomaswcode.decrastination.enrich.ModelEffort.Job.Felix, trigger.reason.name) { r: FelixCaller.Result -> r.usage to com.thomaswcode.decrastination.enrich.ModelCalls.outcome(r.refused, r.answer == null) }, cost = { r: FelixCaller.Result -> r.costUsd to r.refused }) { caller.say(FelixPrompts.system(settings, profile.year), profile.text, user) }
         if (called is Called.Failed) Log.w(AppGraph.TAG, "Felix's message failed", called.error)
         return called
     }
@@ -264,8 +265,8 @@ class Felix(private val graph: AppGraph) {
         if (at - now > FelixRules.AHEAD_MS) return
         val lastSent = graph.log.value.felix.filter { it.text.isNotBlank() }.maxOfOrNull { it.at }
         if (FelixRules.fits(graph.runtime.value.felix.draft, trigger, now, lastSent)) return
-        if (!graph.notifier.shown(com.thomaswcode.decrastination.notify.Channels.FELIX) || !graph.modelAvailable()) return
-        val caller = graph.felixCaller() ?: return
+        if (!graph.notifier.shown(com.thomaswcode.decrastination.notify.Channels.FELIX) || !graph.gateway.available()) return
+        val caller = graph.gateway.client(ModelEffort.Job.Felix)?.let { FelixCaller(it) } ?: return
         val answer = (ask(caller, trigger, at, interactive = false) as? Called.Answered)?.value?.answer ?: return
         graph.runtime.update { it.copy(felix = it.felix.copy(draft = com.thomaswcode.decrastination.data.FelixDraft(trigger.reason.name, trigger.key, answer, now))) }
         Log.i(AppGraph.TAG, "Felix wrote ahead for ${trigger.key}, due at ${java.time.Instant.ofEpochMilli(at).atZone(graph.clock.zone()).toLocalTime()}")

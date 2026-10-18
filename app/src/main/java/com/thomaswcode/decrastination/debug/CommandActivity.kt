@@ -423,8 +423,8 @@ class CommandActivity : Activity() {
             }
             "ai-endpoint" -> {
                 // --es base <url> sends the model's calls to a stand-in till the app restarts; none, to Anthropic again.
-                graph.modelEndpoint = intent.getStringExtra("base")
-                Log.w(TAG, graph.modelEndpoint?.let { "Claude's calls now go to $it, not Anthropic, till this is cleared or the app restarts" } ?: "Claude's calls go to Anthropic again")
+                graph.gateway.endpoint = intent.getStringExtra("base")
+                Log.w(TAG, graph.gateway.endpoint?.let { "Claude's calls now go to $it, not Anthropic, till this is cleared or the app restarts" } ?: "Claude's calls go to Anthropic again")
             }
             "enrich-task" -> {
                 val id = intent.getStringExtra("task")

@@ -60,7 +60,6 @@ import com.thomaswcode.decrastination.enrich.Failure
 import com.thomaswcode.decrastination.enrich.ChatPrompts
 import com.thomaswcode.decrastination.enrich.ChatReader
 import com.thomaswcode.decrastination.enrich.ClaudeEnricher
-import com.thomaswcode.decrastination.enrich.ClaudeReviewer
 import com.thomaswcode.decrastination.enrich.EnrichWorker
 import com.thomaswcode.decrastination.enrich.Enricher
 import com.thomaswcode.decrastination.enrich.InstructionAnswers
@@ -68,7 +67,6 @@ import com.thomaswcode.decrastination.enrich.InstructionPrompts
 import com.thomaswcode.decrastination.enrich.InstructionReader
 import com.thomaswcode.decrastination.enrich.ModelGateway
 import com.thomaswcode.decrastination.enrich.ModelHold
-import com.thomaswcode.decrastination.enrich.PhotoChecker
 import com.thomaswcode.decrastination.enrich.RuleEnricher
 import com.thomaswcode.decrastination.learn.Assessment
 import com.thomaswcode.decrastination.learn.Briefing
@@ -637,8 +635,8 @@ class AppGraph private constructor(context: Context) {
         syncer.addAfterEverySync { if (instructions.value.instructions.any { it.state == InstructionStatus.Reading }) readInstructions() }
         // What's new or changed, even in place, is enriched.
         syncer.addAfterEverySync {
-            val modelOn = modelAvailable()
-            val modelOff = claudeKey() == null
+            val modelOn = gateway.available()
+            val modelOff = gateway.claudeKey() == null
             if (tasks.value.tasks.any { Enrichments.jobFor(it) != null && Enrichments.stale(it, modelOn, RuleEnricher.BY, modelOff) }) EnrichWorker.enqueue(app)
         }
         scope.launch { CalendarTime.refresh(app) }
@@ -682,7 +680,7 @@ class AppGraph private constructor(context: Context) {
         // Able to be asked again (switched on, its key put to use, a higher cap or another exchange
         // rate saved, its rest after a failure over), the model goes over what only the rules have seen.
         scope.launch {
-            combine(settings.state, runtime.state) { _, _ -> modelAvailable() }.distinctUntilChanged().drop(1).collect { on ->
+            combine(settings.state, runtime.state) { _, _ -> gateway.available() }.distinctUntilChanged().drop(1).collect { on ->
                 if (on) {
                     EnrichWorker.enqueue(app)
                     readInstructions()
@@ -721,11 +719,11 @@ class AppGraph private constructor(context: Context) {
             toWrite.debounce(CALENDAR_WRITE_QUIET_MS).collect { made -> runCatching { writeSlots(made) }.onFailure { Log.w(TAG, "Writing the calendar failed", it) } }
         }
         // A key problem standing from before, whose alert couldn't be shown then.
-        reconcileAlerts()
+        gateway.reconcileAlerts()
         // Dropped plans' warnings kept in step with the tasks, from the start.
         scope.launch {
             tasks.state.debounce(WIDGET_DEBOUNCE_MS).collect { state ->
-                runCatching { droppedAlerts(state.tasks) }.onFailure { Log.w(TAG, "Dropped-plan warnings failed", it) }
+                runCatching { gateway.droppedAlerts(state.tasks) }.onFailure { Log.w(TAG, "Dropped-plan warnings failed", it) }
             }
         }
         // Slots whose end went by with the phone off, as if their alarms had rung; then the plan, made
@@ -872,23 +870,6 @@ class AppGraph private constructor(context: Context) {
         applied to added.count { it.state == InstructionStatus.Unclear }
     }
 
-    /** Where the model's calls go instead of Anthropic, debug only ([ModelGateway.endpoint]). */
-    var modelEndpoint: String?
-        get() = gateway.endpoint
-        set(value) {
-            gateway.endpoint = value
-        }
-
-
-    /** The photo check, while Claude is switched on and has its key; else null. */
-    fun photoChecker(): PhotoChecker? = gateway.client(com.thomaswcode.decrastination.enrich.ModelEffort.Job.PhotoCheck)?.let { PhotoChecker(it, profile = profile()) }
-
-    /** The model's weekly review, while Claude is switched on and has its key; else null. */
-    fun modelReviewer(): ClaudeReviewer? = gateway.client(com.thomaswcode.decrastination.enrich.ModelEffort.Job.Review)?.let { ClaudeReviewer(it, profile = profile()) }
-
-    /** The photo-to-task reader (NF-01), while Claude is switched on and has its key; else null. */
-    fun photoTaskReader(): com.thomaswcode.decrastination.enrich.PhotoTaskReader? = gateway.client(com.thomaswcode.decrastination.enrich.ModelEffort.Job.PhotoToTask)?.let { com.thomaswcode.decrastination.enrich.PhotoTaskReader(it, profile = profile()) }
-
     /** Where tasks' photos are kept (AI-23): the app's own files, one a task. */
     private val photos: File get() = File(app.filesDir, "photos")
 
@@ -909,9 +890,9 @@ class AppGraph private constructor(context: Context) {
 
     /** [jpeg] read into tasks of your own to check (NF-01): the reading, or why there's none. */
     suspend fun readPhotoTasks(jpeg: ByteArray): Pair<com.thomaswcode.decrastination.enrich.PhotoTasks.Reading?, String?> {
-        val reader = photoTaskReader() ?: return null to "Claude is off: add it with New task."
+        val reader = gateway.client(com.thomaswcode.decrastination.enrich.ModelEffort.Job.PhotoToTask)?.let { com.thomaswcode.decrastination.enrich.PhotoTaskReader(it, profile = profile()) } ?: return null to "Claude is off: add it with New task."
         val now = clock.now()
-        return when (val called = callModel(interactive = true, record = com.thomaswcode.decrastination.enrich.ModelCalls.OnRecord(com.thomaswcode.decrastination.enrich.ModelEffort.Job.PhotoToTask, "a photo of homework") { r: com.thomaswcode.decrastination.enrich.PhotoTaskReader.Result -> r.usage to com.thomaswcode.decrastination.enrich.ModelCalls.outcome(r.refused, r.reading == null) }, cost = { r: com.thomaswcode.decrastination.enrich.PhotoTaskReader.Result -> r.costUsd to r.refused }) { reader.read(jpeg, now, clock.zone()) }) {
+        return when (val called = gateway.call(interactive = true, record = com.thomaswcode.decrastination.enrich.ModelCalls.OnRecord(com.thomaswcode.decrastination.enrich.ModelEffort.Job.PhotoToTask, "a photo of homework") { r: com.thomaswcode.decrastination.enrich.PhotoTaskReader.Result -> r.usage to com.thomaswcode.decrastination.enrich.ModelCalls.outcome(r.refused, r.reading == null) }, cost = { r: com.thomaswcode.decrastination.enrich.PhotoTaskReader.Result -> r.costUsd to r.refused }) { reader.read(jpeg, now, clock.zone()) }) {
             is Called.Held -> null to "Claude can't be asked now: add it with New task."
             is Called.Failed -> null to "The photo couldn't be read (${called.error.message ?: "no connection"})."
             is Called.Answered -> called.value.reading?.let { it to null } ?: (null to if (called.value.refused) "Claude declined to read it." else "Claude couldn't read the photo: try a clearer one.")
@@ -959,36 +940,6 @@ class AppGraph private constructor(context: Context) {
         photos.listFiles()?.filter { it.path !in held }?.forEach { it.delete() }
     }
 
-    /** The micro-plans' caller (AI-15), while Claude is switched on and has its key; else null. */
-    fun microPlanner(): com.thomaswcode.decrastination.enrich.MicroPlanner? = gateway.client(com.thomaswcode.decrastination.enrich.ModelEffort.Job.MicroPlan)?.let { com.thomaswcode.decrastination.enrich.MicroPlanner(it) }
-
-    /** Felix's caller (AI-22), while Claude is switched on and has its key; else null. */
-    fun felixCaller(): com.thomaswcode.decrastination.enrich.FelixCaller? = gateway.client(com.thomaswcode.decrastination.enrich.ModelEffort.Job.Felix)?.let { com.thomaswcode.decrastination.enrich.FelixCaller(it) }
-
-    /** The weekly tidy's (AI-21): the profile without the facts, which it's given to tidy. */
-    fun memoryTidier(): com.thomaswcode.decrastination.enrich.MemoryTidier? =
-        gateway.client(com.thomaswcode.decrastination.enrich.ModelEffort.Job.Tidy)?.let { com.thomaswcode.decrastination.enrich.MemoryTidier(it, profile = profile(remembered = memory.value.copy(facts = emptyList()))) }
-
-    /** [ModelGateway.claudeKey]. */
-    fun claudeKey(): String? = gateway.claudeKey()
-
-    fun modelEnricher(): Enricher? = gateway.client(com.thomaswcode.decrastination.enrich.ModelEffort.Job.Email)?.let { ClaudeEnricher(it, clock.zone(), profile = { profile() }, decks = { tasks.value.deckTopics }) }
-
-    suspend fun modelFailed(error: Throwable, month: String, at: Long, task: TaskItem? = null) = gateway.failed(error, month, at, task)
-
-    fun reconcileAlerts() = gateway.reconcileAlerts()
-
-    private suspend fun droppedAlerts(all: List<TaskItem>) = gateway.droppedAlerts(all)
-
-    suspend fun modelWorked(costUsd: Double, refused: Boolean, month: String, at: Long) = gateway.worked(costUsd, refused, month, at)
-
-    fun modelHold(interactive: Boolean = false): ModelHold? = gateway.hold(interactive)
-
-    suspend fun <T> callModel(interactive: Boolean, task: TaskItem? = null, record: com.thomaswcode.decrastination.enrich.ModelCalls.OnRecord<T>? = null, cost: (T) -> Pair<Double, Boolean>, send: suspend (at: Long) -> T): Called<T> =
-        gateway.call(interactive, task, record, cost, send)
-
-    fun modelAvailable(): Boolean = gateway.available()
-
     /**
      * Enriches every task that's new or changed since it was last enriched, and, while the model is
      * on, those only the rules have seen; soonest due first. The model does it while it's on and
@@ -996,17 +947,18 @@ class AppGraph private constructor(context: Context) {
      * the rest, and stand in for a call that fails (the model is then left alone for the run) or
      * that the model declines (recorded as the model's, so it isn't asked again). With [force], [only]
      * is read again by the model whatever it was read by (AC-06), its reading kept unless the model
-     * gives one; whether it did.
+     * gives one; whether it did. [byModel] false, the rules alone, whatever's on.
      */
-    suspend fun enrichNow(model: Enricher? = modelEnricher(), only: String? = null, force: Boolean = false): Boolean {
+    suspend fun enrichNow(byModel: Boolean = true, only: String? = null, force: Boolean = false): Boolean {
         // Not while it rests after a failed call (no network, a bad key), nor with no room under the
         // cap: then what only the rules have seen isn't due for it.
-        var enricher = model.takeIf { modelAvailable() }
+        var enricher: Enricher? = gateway.client(com.thomaswcode.decrastination.enrich.ModelEffort.Job.Email).takeIf { byModel }
+            ?.let { ClaudeEnricher(it, clock.zone(), profile = { profile() }, decks = { tasks.value.deckTopics }) }?.takeIf { gateway.available() }
         var calls = 0
         var decksChanged = false
         // A task whose call the API wouldn't take as asked (AC-04): the rules' till it changes.
         fun refused(task: TaskItem) = runtime.value.enrichFailed[task.id] == Enrichments.inputHash(task)
-        fun due(task: TaskItem) = (force && task.id == only) || Enrichments.stale(task, enricher != null && !refused(task), RuleEnricher.BY, modelOff = claudeKey() == null)
+        fun due(task: TaskItem) = (force && task.id == only) || Enrichments.stale(task, enricher != null && !refused(task), RuleEnricher.BY, modelOff = gateway.claudeKey() == null)
         // Whether [only]'s reading laid was the model's (for [force]).
         var readByModel = false
         val candidates = tasks.value.tasks
@@ -1027,12 +979,12 @@ class AppGraph private constructor(context: Context) {
             val onlyVersion = Enrichments.staleOnlyByVersion(task, RuleEnricher.BY)
             val now = clock.now()
             // Switched off (or its key removed) while this runs: nothing more is sent.
-            if (claudeKey() == null) enricher = null
+            if (gateway.claudeKey() == null) enricher = null
             val model = enricher?.takeIf { calls < MAX_MODEL_CALLS && !refused(task) }
             var enrichment = if (model != null) {
                 // Held now (switched off, resting after a failed call, no room under the cap): the
                 // rules do the rest of the run.
-                when (val called = callModel(interactive = false, task = task, record = com.thomaswcode.decrastination.enrich.ModelCalls.OnRecord(com.thomaswcode.decrastination.enrich.ModelEffort.jobOf(job), task.title) { r: Enricher.Result -> r.usage to com.thomaswcode.decrastination.enrich.ModelCalls.outcome(r) }, cost = { r: Enricher.Result -> r.costUsd to r.refused }) { model.enrich(task, job, now) }) {
+                when (val called = gateway.call(interactive = false, task = task, record = com.thomaswcode.decrastination.enrich.ModelCalls.OnRecord(com.thomaswcode.decrastination.enrich.ModelEffort.jobOf(job), task.title) { r: Enricher.Result -> r.usage to com.thomaswcode.decrastination.enrich.ModelCalls.outcome(r) }, cost = { r: Enricher.Result -> r.costUsd to r.refused }) { model.enrich(task, job, now) }) {
                     is Called.Held -> {
                         enricher = null
                         null
@@ -1051,7 +1003,7 @@ class AppGraph private constructor(context: Context) {
                         // A check its answer failed (AI-01): put back once, as a call of its own (counted
                         // under the cap, held by a rest); the first's reading stands if that doesn't come back.
                         val again = first.repair?.takeIf { calls < MAX_MODEL_CALLS }?.let { repair ->
-                            when (val second = callModel(interactive = false, task = task, record = com.thomaswcode.decrastination.enrich.ModelCalls.OnRecord(com.thomaswcode.decrastination.enrich.ModelEffort.jobOf(job), task.title) { r: Enricher.Result -> r.usage to com.thomaswcode.decrastination.enrich.ModelCalls.outcome(r) }, cost = { r: Enricher.Result -> r.costUsd to r.refused }) { model.repair(task, job, now, repair) }) {
+                            when (val second = gateway.call(interactive = false, task = task, record = com.thomaswcode.decrastination.enrich.ModelCalls.OnRecord(com.thomaswcode.decrastination.enrich.ModelEffort.jobOf(job), task.title) { r: Enricher.Result -> r.usage to com.thomaswcode.decrastination.enrich.ModelCalls.outcome(r) }, cost = { r: Enricher.Result -> r.costUsd to r.refused }) { model.repair(task, job, now, repair) }) {
                                 is Called.Answered -> second.value.also { calls++ }
                                 is Called.Failed -> {
                                     calls++
@@ -1120,7 +1072,7 @@ class AppGraph private constructor(context: Context) {
      * while Claude can't be asked (off, resting, at the cap).
      */
     suspend fun readAgain(taskId: String): ReadAgain = withContext(NonCancellable) {
-        if (claudeKey() == null || !modelAvailable()) return@withContext ReadAgain.NotNow
+        if (gateway.claudeKey() == null || !gateway.available()) return@withContext ReadAgain.NotNow
         if (enrichNow(only = taskId, force = true)) ReadAgain.Read else ReadAgain.NoReading
     }
 
@@ -1316,7 +1268,7 @@ class AppGraph private constructor(context: Context) {
         val zone = clock.zone()
         val input = com.thomaswcode.decrastination.learn.Summary.input(log.value, instructions.value.applied, week, zone)
         val writer = com.thomaswcode.decrastination.enrich.SummaryWriter(client)
-        val called = callModel(
+        val called = gateway.call(
             interactive = false,
             record = com.thomaswcode.decrastination.enrich.ModelCalls.OnRecord(com.thomaswcode.decrastination.enrich.ModelEffort.Job.Summary, "the week's summary") { r: com.thomaswcode.decrastination.enrich.SummaryWriter.Result -> r.usage to com.thomaswcode.decrastination.enrich.ModelCalls.outcome(r.refused, r.text == null) },
             cost = { r: com.thomaswcode.decrastination.enrich.SummaryWriter.Result -> r.costUsd to r.refused },
@@ -1521,9 +1473,9 @@ class AppGraph private constructor(context: Context) {
         while (true) {
             val next = instructions.value.instructions.firstOrNull { it.state == InstructionStatus.Reading } ?: return@withLock
             val waiting = run call@{
-                val reader = instructionReader() ?: return@call because(ModelHold.Off)
+                val reader = gateway.client(com.thomaswcode.decrastination.enrich.ModelEffort.Job.Instruction)?.let { InstructionReader(it, clock.zone(), profile = profile()) } ?: return@call because(ModelHold.Off)
                 // Through a rest only for you waiting on it (AC-04): after a sync or an enrichment it waits.
-                val result = when (val called = callModel(interactive = interactive, record = com.thomaswcode.decrastination.enrich.ModelCalls.OnRecord(com.thomaswcode.decrastination.enrich.ModelEffort.Job.Instruction, next.text) { r: InstructionReader.Result -> r.usage to com.thomaswcode.decrastination.enrich.ModelCalls.outcome(r.refused, r.reading == null) }, cost = { r: InstructionReader.Result -> r.costUsd to r.refused }) { at -> reader.read(next, tasks.value.tasks, calendarTime.events, at) }) {
+                val result = when (val called = gateway.call(interactive = interactive, record = com.thomaswcode.decrastination.enrich.ModelCalls.OnRecord(com.thomaswcode.decrastination.enrich.ModelEffort.Job.Instruction, next.text) { r: InstructionReader.Result -> r.usage to com.thomaswcode.decrastination.enrich.ModelCalls.outcome(r.refused, r.reading == null) }, cost = { r: InstructionReader.Result -> r.costUsd to r.refused }) { at -> reader.read(next, tasks.value.tasks, calendarTime.events, at) }) {
                     is Called.Held -> return@call because(called.hold)
                     is Called.Failed -> {
                         Log.w(TAG, "Reading an instruction failed", called.error)
@@ -1569,8 +1521,6 @@ class AppGraph private constructor(context: Context) {
 
     /** When a failed call is tried again (AC-04): after its rest, or at the next chance where it has none. */
     private fun retryWords(): String = ModelHold.restLeftMin(runtime.value.aiUsage, clock.now()).let { if (it > 0) "it's tried again in $it min" else "it's tried again at the next chance" }
-
-    private fun instructionReader(): InstructionReader? = gateway.client(com.thomaswcode.decrastination.enrich.ModelEffort.Job.Instruction)?.let { InstructionReader(it, clock.zone(), profile = profile()) }
 
     /** Held while the chat is answered, so each message is answered once. */
     private val answering = Mutex()
@@ -1667,7 +1617,7 @@ class AppGraph private constructor(context: Context) {
             val time = calendarTime
             // His answer, with what a web search he asked for found ([found], 16 Oct), and the tasks whose
             // whole text he asked to [read] (D-93).
-            suspend fun ask(found: com.thomaswcode.decrastination.enrich.Found?, read: List<TaskItem> = emptyList()) = callModel(interactive = true, record = com.thomaswcode.decrastination.enrich.ModelCalls.OnRecord(com.thomaswcode.decrastination.enrich.ModelEffort.Job.Chat, waiting.text) { r: ChatReader.Result -> r.usage to com.thomaswcode.decrastination.enrich.ModelCalls.outcome(r.refused, r.reading == null) }, cost = { r: ChatReader.Result -> r.costUsd to r.refused }) { at ->
+            suspend fun ask(found: com.thomaswcode.decrastination.enrich.Found?, read: List<TaskItem> = emptyList()) = gateway.call(interactive = true, record = com.thomaswcode.decrastination.enrich.ModelCalls.OnRecord(com.thomaswcode.decrastination.enrich.ModelEffort.Job.Chat, waiting.text) { r: ChatReader.Result -> r.usage to com.thomaswcode.decrastination.enrich.ModelCalls.outcome(r.refused, r.reading == null) }, cost = { r: ChatReader.Result -> r.costUsd to r.refused }) { at ->
                 // Being asked now: whatever it said before (a failed call) is gone.
                 chat.update { s -> s.copy(messages = s.messages.map { if (it.id == waiting.id) it.copy(note = null, stuck = false) else it }) }
                 sentAt.value = at
@@ -1715,7 +1665,7 @@ class AppGraph private constructor(context: Context) {
                 val next = com.thomaswcode.decrastination.enrich.ChatRounds.next(reading, searched = found != null || notLooked != null, searches = settings.value.felixSearches, read = read.map { it.id }) ?: break
                 var looks = false
                 next.search?.let { question ->
-                    val search = callModel(interactive = true, record = com.thomaswcode.decrastination.enrich.ModelCalls.OnRecord(com.thomaswcode.decrastination.enrich.ModelEffort.Job.Research, question) { r: com.thomaswcode.decrastination.enrich.WebResearcher.Result -> r.usage to com.thomaswcode.decrastination.enrich.ModelCalls.outcome(r.refused, r.found == null) }, cost = { r: com.thomaswcode.decrastination.enrich.WebResearcher.Result -> r.costUsd to r.refused }) { at ->
+                    val search = gateway.call(interactive = true, record = com.thomaswcode.decrastination.enrich.ModelCalls.OnRecord(com.thomaswcode.decrastination.enrich.ModelEffort.Job.Research, question) { r: com.thomaswcode.decrastination.enrich.WebResearcher.Result -> r.usage to com.thomaswcode.decrastination.enrich.ModelCalls.outcome(r.refused, r.found == null) }, cost = { r: com.thomaswcode.decrastination.enrich.WebResearcher.Result -> r.costUsd to r.refused }) { at ->
                         sentAt.value = at
                         try {
                             com.thomaswcode.decrastination.enrich.WebResearcher(researchClient, year = profile(at).year).look(question, waiting.text, at, clock.zone())
