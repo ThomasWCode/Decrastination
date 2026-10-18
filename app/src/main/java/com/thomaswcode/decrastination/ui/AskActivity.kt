@@ -254,13 +254,11 @@ class AskActivity : ComponentActivity() {
         super.onPause()
         val graph = AppGraph.get(this)
         graph.conversation.chatInFront = false
-        // Every message closed again for the next visit, its labels done with (5c).
-        screen.paused()
+        val now = graph.clock.now()
+        // Every message closed again for the next visit, its labels done with (5c), and what it showed read.
+        screen.paused(read = now.takeIf { chatTab })
         // What arrived while it was on screen was seen: read up to now, so only what comes after is his notification.
-        if (chatTab) {
-            val now = graph.clock.now()
-            graph.scope.launch { graph.conversation.read(now) }
-        }
+        if (chatTab) graph.scope.launch { graph.conversation.read(now) }
     }
 
     /**
@@ -281,7 +279,7 @@ class AskActivity : ComponentActivity() {
             screen.opened(graph.chat.value, now)
             graph.conversation.outbox.notify(now)
         } else {
-            screen.paused()
+            screen.paused(read = now)
             graph.scope.launch { graph.conversation.read(now) }
         }
     }
