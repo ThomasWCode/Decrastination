@@ -77,7 +77,7 @@ class WidgetModelTest {
                 task("Statics", "2026-10-05T14:30"),
                 task("Chapter 17", "2026-10-09T23:59", effort = 30),
                 task("Essay", "2026-10-09T21:00", effort = 20),
-                task("PREP 2", "2026-10-11T08:00"),
+                task("PREP 3", "2026-10-11T08:00"),
             ),
         )
         // Work due later today before the overdue Statics: those deadlines can still be met.

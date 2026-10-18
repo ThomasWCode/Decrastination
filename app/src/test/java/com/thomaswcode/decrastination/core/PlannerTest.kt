@@ -93,8 +93,8 @@ class PlannerTest {
     fun `tonight, everything overdue and due today is today's, and nothing fits`() {
         val today = tonight.titlesOn("2026-10-07")
         listOf(
-            "Pg 60&61", "Gefahren in den sozialen Netzwerken. Vor- und Nachteile", "Familie und Ehe", "Statics Prep",
-            "Vocabulary and translation", "Binomial Expansion", "Anki: 100 new", "Prep 30/09/2026 Chapter 17 review",
+            "Pg 60&61", "Reisen in Europa. Vor- und Nachteile", "Stadt und Land", "Moments Prep",
+            "Grammar and listening", "Partial Fractions", "Anki: 100 new", "Prep 01/10/2026 Chapter 9 review",
         ).forEach { assertTrue(it in today, "$it should be today's") }
         assertEquals(0, tonight.todayBucket!!.capacityMin)
         assertTrue(tonight.pressure)
@@ -104,10 +104,10 @@ class PlannerTest {
     fun `tonight, work due today or tomorrow comes before overdue work, the oldest of that first`() {
         val order = tonight.todayBucket!!.chunks.map { it.title }.distinct()
         // Due tonight at 23:59, then tomorrow morning's two.
-        assertEquals("Prep 30/09/2026 Chapter 17 review", tonight.next!!.title)
+        assertEquals("Prep 01/10/2026 Chapter 9 review", tonight.next!!.title)
         assertTrue(tonight.next!!.dueToday)
         val soon = tonight.todayBucket!!.chunks.takeWhile { it.dueSoon }.map { it.title }.distinct()
-        assertEquals(listOf("Prep 30/09/2026 Chapter 17 review", "Dr. Frost - Using F=ma - Week 4", "Prep and Assessment preparation"), soon)
+        assertEquals(listOf("Prep 01/10/2026 Chapter 9 review", "Online quiz - Using v=u+at - Week 2", "Prep and test preparation"), soon)
         // Then what's overdue, the oldest deadline first.
         assertEquals("Pg 60&61", order[soon.size])
         assertTrue(tonight.todayBucket!!.chunks.first { it.title == "Pg 60&61" }.overdue)
@@ -178,11 +178,11 @@ class PlannerTest {
 
     @Test
     fun `tomorrow morning's deadlines are today's, behind, since tonight is gone`() {
-        val frost = tonight.todayBucket!!.chunks.single { it.title.startsWith("Dr. Frost") }
+        val frost = tonight.todayBucket!!.chunks.single { it.title.startsWith("Online quiz") }
         assertTrue(frost.behind)
         assertEquals(Why.NoRoom, frost.why)
         assertEquals("Couldn't fit before its deadline", frost.whyLine(LocalDate.parse("2026-10-07"), LONDON))
-        assertTrue(tonight.todayBucket!!.chunks.single { it.title == "Prep and Assessment preparation" }.behind)
+        assertTrue(tonight.todayBucket!!.chunks.single { it.title == "Prep and test preparation" }.behind)
     }
 
     @Test
@@ -191,9 +191,9 @@ class PlannerTest {
         // usable day is Thursday, the only one with time; the test Monday 11:00 gets Saturday, the
         // first of the weekend; PREP 2 (Tuesday 08:00) Sunday, Saturday having less now; the call
         // (Wednesday 16:00) Saturday, roomier than any weekday still.
-        assertTrue("Gefahren im Internet. Wie kann man sich schuetzen? Verbot?" in tonight.titlesOn("2026-10-08"))
+        assertTrue("Medien im Alltag. Wie viel ist zu viel? Regeln?" in tonight.titlesOn("2026-10-08"))
         assertEquals(listOf("Test", "Call with a friend after school."), tonight.titlesOn("2026-10-10"))
-        assertEquals(listOf("PREP 2"), tonight.titlesOn("2026-10-11"))
+        assertEquals(listOf("PREP 3"), tonight.titlesOn("2026-10-11"))
     }
 
     // --- The rules, one at a time. ---

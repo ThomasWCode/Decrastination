@@ -12,11 +12,11 @@ class DuplicatesTest {
         dueAt = due?.let(Fixtures::at), kind = Kind.Homework, firstSeenAt = 0, lastSeenAt = 0,
     )
 
-    private val map = mapOf("12.2-PH3" to "Physics")
+    private val map = mapOf("12.9-PH1" to "Physics")
 
     @Test
     fun `work of one subject due within a day, its title's words shared, from two sources, looks the same`() {
-        val teams = task("t", Source.Teams, "Chapter 17 questions", "12.2-PH3", "2026-10-14T08:30")
+        val teams = task("t", Source.Teams, "Chapter 17 questions", "12.9-PH1", "2026-10-14T08:30")
         val planner = task("p", Source.PowerPlanner, "Physics chapter 17 questions homework", "Physics", "2026-10-13T23:59")
         assertEquals(listOf(teams.id to planner.id), Duplicates.candidates(listOf(teams, planner), map).map { it.first.id to it.second.id })
         // Not the same: one source, another subject, days apart, other words, or said to be different.
@@ -31,7 +31,7 @@ class DuplicatesTest {
 
     @Test
     fun `the same as another is hidden, the other kept, and two said the same as each other are both kept`() {
-        val teams = task("t", Source.Teams, "Chapter 17 questions", "12.2-PH3", "2026-10-14T08:30")
+        val teams = task("t", Source.Teams, "Chapter 17 questions", "12.9-PH1", "2026-10-14T08:30")
         val planner = task("p", Source.PowerPlanner, "Physics chapter 17 questions", "Physics", "2026-10-13T23:59")
         fun applied(vararg changes: Change) = changes.mapIndexed { i, c -> Instruction("i$i", "same", at = i.toLong(), state = InstructionStatus.Applied, changes = listOf(c), appliedAt = i.toLong()) }
         val one = Instructions.taskOverrides(applied(Change(ChangeType.SameAs, taskId = planner.id, afterTaskId = teams.id)))
@@ -44,7 +44,7 @@ class DuplicatesTest {
 
     @Test
     fun `the one kept is planned with the same work's minutes worked as its own, the stored ones as they were`() {
-        val teams = task("t", Source.Teams, "Chapter 17 questions", "12.2-PH3", "2026-10-14T08:30").copy(workedMin = 20)
+        val teams = task("t", Source.Teams, "Chapter 17 questions", "12.9-PH1", "2026-10-14T08:30").copy(workedMin = 20)
         val planner = task("p", Source.PowerPlanner, "Physics chapter 17 questions", "Physics", "2026-10-13T23:59").copy(workedMin = 25, photoMin = 5)
         val linked = listOf(teams, planner.copy(userSameAs = teams.id))
         assertEquals(listOf(50, 25), Duplicates.credited(linked).map { it.workedMin })
@@ -55,7 +55,7 @@ class DuplicatesTest {
 
     @Test
     fun `a link to a task that's gone is let go, and the task's back`() {
-        val teams = task("t", Source.Teams, "Chapter 17 questions", "12.2-PH3", "2026-10-14T08:30")
+        val teams = task("t", Source.Teams, "Chapter 17 questions", "12.9-PH1", "2026-10-14T08:30")
         val planner = task("p", Source.PowerPlanner, "Physics chapter 17 questions", "Physics", "2026-10-13T23:59").copy(userSameAs = teams.id)
         assertEquals(teams.id, Duplicates.linksPresent(listOf(teams, planner))[1].userSameAs)
         val alone = Duplicates.linksPresent(listOf(planner)).single()
