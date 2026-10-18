@@ -121,7 +121,7 @@ Grouped by prefix and sorted; where a later decision changed an item, its line g
 
 - LR-01: A Reviews page shows each week's note, its changes each with Undo, the check-in, the week's summary, and the memory tidy's before and after with Undo.
 - LR-02: Felix asks the Sunday check-in in the chat, a question a message, each reply its answer (1 to 5 first, then what was put off, offered from the week's record); the form stays for answering all at once.
-- LR-03: Felix speaks only around today's scheduled work (a slot's start with nothing done after a grace, its end, the photo ask, the day's last slot kept, the morning, a question, the Sunday check-in), never in quiet hours or a busy event, at the pace he sets himself, with no daily ceiling.
+- LR-03: Felix speaks only around today's scheduled work (a slot's start with nothing done after a grace, its end, the photo ask, the day's last slot kept, the morning, a question), never in quiet hours or a busy event, at the pace he sets himself, with no daily ceiling; and the Sunday check-in at the time it's set for, out of quiet hours.
 - LR-04: The morning briefing is Felix's message whole (up to 480 characters), with no list of the day under it; without his words, the day's list as his message in the app's words.
 - LR-05: "How did it go?" is Felix's question: at a slot's end for its piece, and once in the evening for the day's work done outside the app's knowledge; with Claude off, a message of his in the app's words for each completion.
 - LR-06: Stats says what the calibration has learned and what each figure rests on, and a kind's or class's figure can be forgotten, starting afresh from its kind's.
