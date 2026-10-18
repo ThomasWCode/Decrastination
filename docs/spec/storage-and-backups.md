@@ -120,7 +120,7 @@ On a debug build the menu's *Debug* page (AR-03) has a button for each command t
 
 **Claude and readings**
 - `enrich`; `enrich-task --es task <id>`; `ai-prompts --ei count <n>` (writes `files/ai-prompts.json`).
-- `ai-check --es base <url>` (a stand-in server, a dummy key); `ai-endpoint --es base <url>` and `ai-effort --es job <job> --es level <low|medium|high|none>`, both till the app restarts.
+- `ai-check --es base <url>` (every job's reader once, through the real client, to a stand-in server with a dummy key: `scripts/claude_stub.py` on the PC, `adb reverse tcp:8089 tcp:8089`); `ai-endpoint --es base <url>` and `ai-effort --es job <job> --es level <low|medium|high|none>`, both till the app restarts.
 
 **The chat, Felix and instructions**
 - `chat-ask --es text "<words>"` (a paid call); `chat-context` (writes `files/chat-context.txt`); `chat-card --es do <apply|undo>`; `chat-clear`.

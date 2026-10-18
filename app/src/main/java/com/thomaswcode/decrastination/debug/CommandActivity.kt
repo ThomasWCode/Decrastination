@@ -11,19 +11,36 @@ import com.thomaswcode.decrastination.block.FocusService
 import com.thomaswcode.decrastination.block.TeamsAutoSync
 import com.thomaswcode.decrastination.core.About
 import com.thomaswcode.decrastination.core.ChangeType
+import com.thomaswcode.decrastination.core.ChatMessage
 import com.thomaswcode.decrastination.core.Enrichments
+import com.thomaswcode.decrastination.core.Fact
+import com.thomaswcode.decrastination.core.Instruction
 import com.thomaswcode.decrastination.core.InstructionStatus
 import com.thomaswcode.decrastination.core.Instructions
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.OwnTask
 import com.thomaswcode.decrastination.core.OwnTasks
 import com.thomaswcode.decrastination.core.Source
+import com.thomaswcode.decrastination.core.Speaker
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.withoutEnrichment
 import com.thomaswcode.decrastination.data.Secret
+import com.thomaswcode.decrastination.enrich.ChatPrompts
+import com.thomaswcode.decrastination.enrich.ChatReader
 import com.thomaswcode.decrastination.enrich.ClaudeEnricher
+import com.thomaswcode.decrastination.enrich.ClaudeReviewer
+import com.thomaswcode.decrastination.enrich.FelixCaller
+import com.thomaswcode.decrastination.enrich.InstructionReader
+import com.thomaswcode.decrastination.enrich.MemoryTidier
+import com.thomaswcode.decrastination.enrich.MicroPlanner
 import com.thomaswcode.decrastination.enrich.ModelAlerts
+import com.thomaswcode.decrastination.enrich.ModelEffort
+import com.thomaswcode.decrastination.enrich.ModelGateway
+import com.thomaswcode.decrastination.enrich.PhotoChecker
+import com.thomaswcode.decrastination.enrich.PhotoTaskReader
 import com.thomaswcode.decrastination.enrich.Prompts
+import com.thomaswcode.decrastination.enrich.SummaryWriter
+import com.thomaswcode.decrastination.enrich.WebResearcher
 import com.thomaswcode.decrastination.learn.Assessment
 import com.thomaswcode.decrastination.learn.Briefing
 import com.thomaswcode.decrastination.learn.CalendarTime
@@ -73,7 +90,7 @@ import kotlinx.serialization.json.JsonPrimitive
  * - `chat-ask --es text "<words>"`: a message to *Ask Claude*, as sent on the phone (a paid call),
  *   logging Claude's reply; `chat-clear` empties the chat, as its menu's *Clear the chat* does.
  * - `ai-check --es base http://127.0.0.1:8089`: one model call per job through the real client
- *   to a stand-in server (`adb reverse` to the PC), with a dummy key, logging what it reads back.
+ *   to a stand-in server (`scripts/claude_stub.py`, `adb reverse` to the PC), with a dummy key, logging what it reads back.
  *   Nothing reaches Anthropic and nothing is stored: it checks the client works on the phone.
  * - `instruction --es text "<words>"` (about `--es task <id>`, `--es event <name>` or `--es day
  *   YYYY-MM-DD`, or none): an instruction written as on the phone, read by Claude (a paid call)
@@ -506,13 +523,33 @@ class CommandActivity : Activity() {
                 if (base == null) {
                     Log.w(TAG, "ai-check needs --es base <url>")
                 } else {
-                    val model = ClaudeEnricher("dummy-key-for-a-stand-in", graph.clock.zone(), endpoint = base)
+                    // Every job's reader once, through a client made as the gateway makes one, each at its job's
+                    // timeout, to the stand-in with a dummy key: the readings with a task of each job, the rest
+                    // with made-up words.
+                    val stand = ModelGateway.build("dummy-key-for-a-stand-in", base)
+                    fun client(job: ModelEffort.Job) = stand.withOptions { it.timeout(ModelEffort.timeout(job)) }
+                    val now = graph.clock.now()
+                    val zone = graph.clock.zone()
+                    suspend fun check(job: ModelEffort.Job, call: suspend () -> String) =
+                        Log.i(TAG, "ai-check $job: ${runCatching { call() }.getOrElse { "failed: $it" }}")
+                    val model = ClaudeEnricher(client(ModelEffort.Job.Email), zone)
                     for (job in Enrichments.Job.entries) {
                         val task = graph.tasks.value.tasks.firstOrNull { Enrichments.jobFor(it) == job } ?: continue
-                        val result = runCatching { model.enrich(task, job, graph.clock.now()) }
+                        val result = runCatching { model.enrich(task, job, now) }
                         val said = result.fold({ "${it.enrichment} (cost ${"%.4f".format(it.costUsd)} USD, refused ${it.refused})" }, { "failed: $it" })
                         Log.i(TAG, "ai-check $job on '${task.title}': $said")
                     }
+                    val words = "A check of the plumbing."
+                    check(ModelEffort.Job.Chat) { ChatReader(client(ModelEffort.Job.Chat), zone).answer(listOf(ChatMessage("ai-check", Speaker.You, words, now)), emptyList(), emptyList(), ChatPrompts.Context(words, ""), now).let { "answered, reading ${it.reading != null}" } }
+                    check(ModelEffort.Job.Felix) { FelixCaller(client(ModelEffort.Job.Felix)).say(words, "", words).let { "answered, message ${it.answer != null}" } }
+                    check(ModelEffort.Job.Instruction) { InstructionReader(client(ModelEffort.Job.Instruction), zone).read(Instruction("ai-check", words, at = now), emptyList(), emptyList(), now).let { "answered, reading ${it.reading != null}" } }
+                    check(ModelEffort.Job.Review) { ClaudeReviewer(client(ModelEffort.Job.Review)).review(words).let { "answered, note ${it.answer != null}" } }
+                    check(ModelEffort.Job.Tidy) { MemoryTidier(client(ModelEffort.Job.Tidy)).tidy(listOf(Fact("check", words, now)), now, zone).let { "answered, tidied ${it.answer != null}" } }
+                    check(ModelEffort.Job.MicroPlan) { MicroPlanner(client(ModelEffort.Job.MicroPlan)).plan("", words).let { "answered, text ${it.text != null}" } }
+                    check(ModelEffort.Job.PhotoCheck) { PhotoChecker(client(ModelEffort.Job.PhotoCheck)).check(listOf(byteArrayOf(1, 2, 3)), words).let { "answered, verdict ${it.verdict != null}" } }
+                    check(ModelEffort.Job.PhotoToTask) { PhotoTaskReader(client(ModelEffort.Job.PhotoToTask)).read(byteArrayOf(1, 2, 3), now, zone).let { "answered, reading ${it.reading != null}" } }
+                    check(ModelEffort.Job.Summary) { SummaryWriter(client(ModelEffort.Job.Summary)).write("", words).let { "answered, text ${it.text != null}" } }
+                    check(ModelEffort.Job.Research) { WebResearcher(client(ModelEffort.Job.Research)).look("a check", words, now, zone).let { "answered, found ${it.found != null}" } }
                 }
             }
             else -> Log.w(TAG, "Unknown command $command")
