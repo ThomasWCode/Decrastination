@@ -1,7 +1,6 @@
 package com.thomaswcode.decrastination.enrich
 
 import com.anthropic.client.AnthropicClient
-import com.anthropic.client.okhttp.AnthropicOkHttpClient
 import com.anthropic.core.JsonValue
 import com.anthropic.models.messages.JsonOutputFormat
 import com.anthropic.models.messages.MessageCreateParams
@@ -9,20 +8,13 @@ import com.anthropic.models.messages.OutputConfig
 import com.anthropic.models.messages.StopReason
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import java.time.Duration
 
 /** A piece's micro-plan asked of the model (AI-15), as Felix's call is, at the effort of the answers someone waits for (AC-02). */
-class MicroPlanner(apiKey: String, endpoint: String? = null, val model: String = ClaudeEnricher.MODEL) {
+class MicroPlanner(private val client: AnthropicClient, val model: String = ClaudeEnricher.MODEL) {
 
     /** [text]: the answer as it came, for [MicroPlans.parse]; null when declined or cut off. */
     data class Result(val text: String?, val costUsd: Double, val refused: Boolean = false, val usage: ModelCalls.Usage = ModelCalls.Usage.NONE)
 
-    private val client: AnthropicClient = AnthropicOkHttpClient.builder()
-        .apiKey(apiKey)
-        .apply { if (endpoint != null) baseUrl(endpoint) }
-        .timeout(Duration.ofMinutes(2))
-        .maxRetries(2)
-        .build()
 
     /** The micro-plan for [user] (from [MicroPlans.describe]), with the student's [profile]. */
     suspend fun plan(profile: String, user: String): Result {

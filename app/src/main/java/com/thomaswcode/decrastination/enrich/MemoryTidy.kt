@@ -1,7 +1,6 @@
 package com.thomaswcode.decrastination.enrich
 
 import com.anthropic.client.AnthropicClient
-import com.anthropic.client.okhttp.AnthropicOkHttpClient
 import com.anthropic.core.JsonValue
 import com.anthropic.models.messages.JsonOutputFormat
 import com.anthropic.models.messages.MessageCreateParams
@@ -15,7 +14,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
-import java.time.Duration
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -87,17 +85,11 @@ object MemoryTidy {
 }
 
 /** The weekly tidy's call to the model (AI-21), made as the review's is. Off until Claude is switched on. */
-class MemoryTidier(apiKey: String, endpoint: String? = null, val model: String = ClaudeEnricher.MODEL, private val profile: Profile.Block = Profile.Block.NONE) {
+class MemoryTidier(private val client: AnthropicClient, val model: String = ClaudeEnricher.MODEL, private val profile: Profile.Block = Profile.Block.NONE) {
 
     /** [model]: the model that answered, a fallback's if one did. */
     data class Result(val answer: MemoryTidy.Answer?, val costUsd: Double, val refused: Boolean = false, val model: String? = null, val usage: ModelCalls.Usage = ModelCalls.Usage.NONE)
 
-    private val client: AnthropicClient = AnthropicOkHttpClient.builder()
-        .apiKey(apiKey)
-        .apply { if (endpoint != null) baseUrl(endpoint) }
-        .timeout(Duration.ofMinutes(5))
-        .maxRetries(2)
-        .build()
 
     private val json = Json { ignoreUnknownKeys = true }
 

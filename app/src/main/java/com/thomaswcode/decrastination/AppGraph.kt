@@ -879,16 +879,15 @@ class AppGraph private constructor(context: Context) {
             gateway.endpoint = value
         }
 
-    private fun endpoint(): String? = gateway.endpoint()
 
     /** The photo check, while Claude is switched on and has its key; else null. */
-    fun photoChecker(): PhotoChecker? = claudeKey()?.let { PhotoChecker(it, endpoint(), profile = profile()) }
+    fun photoChecker(): PhotoChecker? = gateway.client(com.thomaswcode.decrastination.enrich.ModelEffort.Job.PhotoCheck)?.let { PhotoChecker(it, profile = profile()) }
 
     /** The model's weekly review, while Claude is switched on and has its key; else null. */
-    fun modelReviewer(): ClaudeReviewer? = claudeKey()?.let { ClaudeReviewer(it, endpoint(), profile = profile()) }
+    fun modelReviewer(): ClaudeReviewer? = gateway.client(com.thomaswcode.decrastination.enrich.ModelEffort.Job.Review)?.let { ClaudeReviewer(it, profile = profile()) }
 
     /** The photo-to-task reader (NF-01), while Claude is switched on and has its key; else null. */
-    fun photoTaskReader(): com.thomaswcode.decrastination.enrich.PhotoTaskReader? = claudeKey()?.let { com.thomaswcode.decrastination.enrich.PhotoTaskReader(it, endpoint(), profile = profile()) }
+    fun photoTaskReader(): com.thomaswcode.decrastination.enrich.PhotoTaskReader? = gateway.client(com.thomaswcode.decrastination.enrich.ModelEffort.Job.PhotoToTask)?.let { com.thomaswcode.decrastination.enrich.PhotoTaskReader(it, profile = profile()) }
 
     /** Where tasks' photos are kept (AI-23): the app's own files, one a task. */
     private val photos: File get() = File(app.filesDir, "photos")
@@ -961,19 +960,19 @@ class AppGraph private constructor(context: Context) {
     }
 
     /** The micro-plans' caller (AI-15), while Claude is switched on and has its key; else null. */
-    fun microPlanner(): com.thomaswcode.decrastination.enrich.MicroPlanner? = claudeKey()?.let { com.thomaswcode.decrastination.enrich.MicroPlanner(it, endpoint()) }
+    fun microPlanner(): com.thomaswcode.decrastination.enrich.MicroPlanner? = gateway.client(com.thomaswcode.decrastination.enrich.ModelEffort.Job.MicroPlan)?.let { com.thomaswcode.decrastination.enrich.MicroPlanner(it) }
 
     /** Felix's caller (AI-22), while Claude is switched on and has its key; else null. */
-    fun felixCaller(): com.thomaswcode.decrastination.enrich.FelixCaller? = claudeKey()?.let { com.thomaswcode.decrastination.enrich.FelixCaller(it, endpoint()) }
+    fun felixCaller(): com.thomaswcode.decrastination.enrich.FelixCaller? = gateway.client(com.thomaswcode.decrastination.enrich.ModelEffort.Job.Felix)?.let { com.thomaswcode.decrastination.enrich.FelixCaller(it) }
 
     /** The weekly tidy's (AI-21): the profile without the facts, which it's given to tidy. */
     fun memoryTidier(): com.thomaswcode.decrastination.enrich.MemoryTidier? =
-        claudeKey()?.let { com.thomaswcode.decrastination.enrich.MemoryTidier(it, endpoint(), profile = profile(remembered = memory.value.copy(facts = emptyList()))) }
+        gateway.client(com.thomaswcode.decrastination.enrich.ModelEffort.Job.Tidy)?.let { com.thomaswcode.decrastination.enrich.MemoryTidier(it, profile = profile(remembered = memory.value.copy(facts = emptyList()))) }
 
     /** [ModelGateway.claudeKey]. */
     fun claudeKey(): String? = gateway.claudeKey()
 
-    fun modelEnricher(): Enricher? = claudeKey()?.let { ClaudeEnricher(it, clock.zone(), endpoint(), profile = { profile() }, decks = { tasks.value.deckTopics }) }
+    fun modelEnricher(): Enricher? = gateway.client(com.thomaswcode.decrastination.enrich.ModelEffort.Job.Email)?.let { ClaudeEnricher(it, clock.zone(), profile = { profile() }, decks = { tasks.value.deckTopics }) }
 
     suspend fun modelFailed(error: Throwable, month: String, at: Long, task: TaskItem? = null) = gateway.failed(error, month, at, task)
 
@@ -1312,11 +1311,11 @@ class AppGraph private constructor(context: Context) {
      * can't be asked, or the week has no review. The summary, or null.
      */
     suspend fun writeSummary(week: String): String? {
-        val key = claudeKey() ?: return null
+        val client = gateway.client(com.thomaswcode.decrastination.enrich.ModelEffort.Job.Summary) ?: return null
         if (log.value.reviews.none { it.week == week }) return null
         val zone = clock.zone()
         val input = com.thomaswcode.decrastination.learn.Summary.input(log.value, instructions.value.applied, week, zone)
-        val writer = com.thomaswcode.decrastination.enrich.SummaryWriter(key, endpoint())
+        val writer = com.thomaswcode.decrastination.enrich.SummaryWriter(client)
         val called = callModel(
             interactive = false,
             record = com.thomaswcode.decrastination.enrich.ModelCalls.OnRecord(com.thomaswcode.decrastination.enrich.ModelEffort.Job.Summary, "the week's summary") { r: com.thomaswcode.decrastination.enrich.SummaryWriter.Result -> r.usage to com.thomaswcode.decrastination.enrich.ModelCalls.outcome(r.refused, r.text == null) },
@@ -1571,7 +1570,7 @@ class AppGraph private constructor(context: Context) {
     /** When a failed call is tried again (AC-04): after its rest, or at the next chance where it has none. */
     private fun retryWords(): String = ModelHold.restLeftMin(runtime.value.aiUsage, clock.now()).let { if (it > 0) "it's tried again in $it min" else "it's tried again at the next chance" }
 
-    private fun instructionReader(): InstructionReader? = claudeKey()?.let { InstructionReader(it, clock.zone(), endpoint(), profile = profile()) }
+    private fun instructionReader(): InstructionReader? = gateway.client(com.thomaswcode.decrastination.enrich.ModelEffort.Job.Instruction)?.let { InstructionReader(it, clock.zone(), profile = profile()) }
 
     /** Held while the chat is answered, so each message is answered once. */
     private val answering = Mutex()
@@ -1661,7 +1660,8 @@ class AppGraph private constructor(context: Context) {
         val note = run call@{
             // Taken back (or the chat cleared) while this waited its turn: nothing to ask.
             if (chat.value.unanswered?.id != waiting.id) return@withLock
-            val key = claudeKey() ?: return@call because(ModelHold.Off)
+            val chatClient = gateway.client(com.thomaswcode.decrastination.enrich.ModelEffort.Job.Chat) ?: return@call because(ModelHold.Off)
+            val researchClient = gateway.client(com.thomaswcode.decrastination.enrich.ModelEffort.Job.Research) ?: return@call because(ModelHold.Off)
             // One snapshot of the tasks, the calendar and your changes: what Claude's shown is what its answer's checked against.
             val state = tasks.value
             val time = calendarTime
@@ -1672,7 +1672,7 @@ class AppGraph private constructor(context: Context) {
                 chat.update { s -> s.copy(messages = s.messages.map { if (it.id == waiting.id) it.copy(note = null, stuck = false) else it }) }
                 sentAt.value = at
                 try {
-                    ChatReader(key, clock.zone(), endpoint(), profile = profile(at), settings = settings.value).answer(chat.value.messages, state.tasks, time.events, chatContext(at, state, time, instructions.value.applied), at, found, read)
+                    ChatReader(chatClient, clock.zone(), profile = profile(at), settings = settings.value).answer(chat.value.messages, state.tasks, time.events, chatContext(at, state, time, instructions.value.applied), at, found, read)
                 } finally {
                     sentAt.value = null
                 }
@@ -1718,7 +1718,7 @@ class AppGraph private constructor(context: Context) {
                     val search = callModel(interactive = true, record = com.thomaswcode.decrastination.enrich.ModelCalls.OnRecord(com.thomaswcode.decrastination.enrich.ModelEffort.Job.Research, question) { r: com.thomaswcode.decrastination.enrich.WebResearcher.Result -> r.usage to com.thomaswcode.decrastination.enrich.ModelCalls.outcome(r.refused, r.found == null) }, cost = { r: com.thomaswcode.decrastination.enrich.WebResearcher.Result -> r.costUsd to r.refused }) { at ->
                         sentAt.value = at
                         try {
-                            com.thomaswcode.decrastination.enrich.WebResearcher(key, endpoint(), year = profile(at).year).look(question, waiting.text, at, clock.zone())
+                            com.thomaswcode.decrastination.enrich.WebResearcher(researchClient, year = profile(at).year).look(question, waiting.text, at, clock.zone())
                         } finally {
                             sentAt.value = null
                         }

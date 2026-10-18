@@ -1,7 +1,6 @@
 package com.thomaswcode.decrastination.enrich
 
 import com.anthropic.client.AnthropicClient
-import com.anthropic.client.okhttp.AnthropicOkHttpClient
 import com.anthropic.core.JsonValue
 import com.anthropic.models.messages.JsonOutputFormat
 import com.anthropic.models.messages.MessageCreateParams
@@ -9,20 +8,13 @@ import com.anthropic.models.messages.OutputConfig
 import com.anthropic.models.messages.StopReason
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import java.time.Duration
 
 /** Felix's call to the model (AI-22), made as the chat's is, at the effort of the answers someone waits for (AC-02). */
-class FelixCaller(apiKey: String, endpoint: String? = null, val model: String = ClaudeEnricher.MODEL) {
+class FelixCaller(private val client: AnthropicClient, val model: String = ClaudeEnricher.MODEL) {
 
     /** [model]: the model that answered, a fallback's if one did. */
     data class Result(val answer: FelixAnswer?, val costUsd: Double, val refused: Boolean = false, val model: String? = null, val usage: ModelCalls.Usage = ModelCalls.Usage.NONE)
 
-    private val client: AnthropicClient = AnthropicOkHttpClient.builder()
-        .apiKey(apiKey)
-        .apply { if (endpoint != null) baseUrl(endpoint) }
-        .timeout(Duration.ofMinutes(2))
-        .maxRetries(2)
-        .build()
 
     /** His message for [user] (from [FelixPrompts.describe]), with his [system] and the student's [profile]. */
     suspend fun say(system: String, profile: String, user: String, maxMessage: Int = FelixAnswers.MAX_MESSAGE): Result {
