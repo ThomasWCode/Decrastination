@@ -6,6 +6,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.thomaswcode.decrastination.core.ChatMessage
 import com.thomaswcode.decrastination.core.ChatState
+import com.thomaswcode.decrastination.core.ChatSummary
 import com.thomaswcode.decrastination.core.Speaker
 import com.thomaswcode.decrastination.felix.Outbox
 import java.time.Instant
@@ -15,10 +16,11 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 /**
- * What the chat's screen holds beside the chat (docs/plan_v4/05-the-chat.md §4, §5): the first of his
+ * What the chat's screen holds beside the chat (docs/plan_v4/05-the-chat.md §4 to §6): the first of his
  * messages unread when it was opened, for the divider, and where it opens; how many of the archive's
- * messages are shown, scrolled back to; and the message your next one replies to. A plain class,
- * tested without Compose: the screen keeps one while it's there and draws from [items].
+ * messages are shown, scrolled back to; the message your next one replies to; and which of his messages
+ * have what's under them open, and which get the label that slides out. A plain class, tested without
+ * Compose: the screen keeps one while it's there and draws from [items].
  */
 class ChatScreenState {
     /** One row of the list: a day's date, the divider over the first unread, a message, or the row that loads the archive's next page. */
@@ -62,15 +64,62 @@ class ChatScreenState {
     /** The message your next one replies to (a swipe, or Reply on a long press), shown over the box. */
     var replyingTo: ChatMessage? by mutableStateOf(null)
 
+    /** His messages with what's under them open (5c): none once the screen's paused ([paused]), so coming back finds every one closed. */
+    var open: Set<String> by mutableStateOf(emptySet())
+        private set
+
+    /** When the chat was opened ([opened]): a message of his after it arrived while it was on screen. */
+    private var since = Long.MAX_VALUE
+
+    /** His messages unread when the chat was opened: each gets its label, once. */
+    private var unreadOnOpen: Set<String> = emptySet()
+
+    /** The labels shown this visit, so each slides out once. */
+    private val shownLabels = mutableSetOf<String>()
+
     /**
-     * The chat opened, at [state] as it was before anything in it was read: what's unread then is
+     * The chat opened at [now], at [state] as it was before anything in it was read: what's unread then is
      * marked for this visit, and the list opens at [at] (his notification's message), else at the first
      * unread, else at its foot.
      */
-    fun opened(state: ChatState, at: String? = null) {
-        firstUnread = state.messages.firstOrNull { Outbox.unread(it, state.readAt) }?.id
+    fun opened(state: ChatState, now: Long, at: String? = null) {
+        val unread = state.messages.filter { Outbox.unread(it, state.readAt) }
+        firstUnread = unread.firstOrNull()?.id
+        unreadOnOpen = unread.mapTo(HashSet()) { it.id }
+        since = now
         scrollTo = at ?: firstUnread
         flash = at
+    }
+
+    /** What's under message [id] opened, or closed again (its chevron). */
+    fun toggle(id: String) {
+        open = if (id in open) open - id else open + id
+    }
+
+    /** What's under message [id] opened (its label tapped). */
+    fun unfold(id: String) {
+        open = open + id
+    }
+
+    /**
+     * Whether [message]'s label slides out now (Q5: A): one of his with something to say
+     * ([ChatSummary.line]) that arrived while the chat was on screen, or was unread when it opened,
+     * and hasn't had its label this visit.
+     */
+    fun labels(message: ChatMessage): Boolean =
+        message.from == Speaker.Felix && message.id !in shownLabels && (message.at > since || message.id in unreadOnOpen) && !ChatSummary.line(message).isEmpty
+
+    /** Message [id]'s label shown: not again this visit. */
+    fun labelled(id: String) {
+        shownLabels += id
+    }
+
+    /** The screen paused: every message closed again, and the visit's labels done with. */
+    fun paused() {
+        open = emptySet()
+        shownLabels.clear()
+        unreadOnOpen = emptySet()
+        since = Long.MAX_VALUE
     }
 
     /** The list scrolled where it was to be: not again. */
