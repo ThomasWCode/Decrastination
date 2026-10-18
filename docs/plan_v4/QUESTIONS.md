@@ -27,7 +27,7 @@ Everything implementing the plan has needed from you, from 18 Oct 2026: question
 - **A (recommended).** Give `SecretStore.write` the same few tries, in a small PR of its own (or in Stage 12's sweep).
 - **B.** Leave it: rerun the tests when it happens.
 - ANSWER: A
-- To come: 3.3.4, a PR of its own on 3.3.3's (a release's number says when it lands).
+- Done in 3.3.4, a PR of its own on 3.3.3's: the secrets' write goes through the stores' replace (`JsonStore.moveOver`), with its few tries.
 
 ### I3. A piece under way leaves today a minute after its start
 
@@ -35,4 +35,4 @@ Found while writing Stage 4's test of his looks; not changed there, as it's a mo
 
 - **A (recommended).** Find why the day chosen changes once the evening's window has begun, and keep a piece under way on today while its slot and grace last: a test for it first, in a small PR of its own after 3.3.4.
 - **B.** Leave it: work not begun moves to the next day.
-- ANSWER:
+- ANSWER: A
