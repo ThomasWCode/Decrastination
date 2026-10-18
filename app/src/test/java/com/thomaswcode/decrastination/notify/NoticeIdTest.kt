@@ -1,6 +1,5 @@
 package com.thomaswcode.decrastination.notify
 
-import com.thomaswcode.decrastination.felix.FelixNotifications
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -33,9 +32,14 @@ class NoticeIdTest {
     }
 
     @Test
-    fun `Felix's message has a request code for its tap and each card's button`() {
-        // The tap is code 0, each card's button 1 + its place: more cards than codes would throw as it posts.
-        assertTrue(1 + FelixNotifications.MAX_CARDS <= NoticeId.FelixMessage.codes.count())
+    fun `his one notification has a request code for its tap and its reply`() {
+        assertEquals(6001 to 6002, NoticeId.Felix.code() to NoticeId.Felix.code(1))
+    }
+
+    @Test
+    fun `those retired are his messages now, and the check-in's reminder and the app's own stay`() {
+        assertEquals(setOf(NoticeId.Briefing, NoticeId.Review, NoticeId.Summary, NoticeId.Assessment, NoticeId.FelixMessage, NoticeId.CalendarQuestion), NoticeId.RETIRED)
+        assertTrue(NoticeId.Felix !in NoticeId.RETIRED && NoticeId.CheckIn !in NoticeId.RETIRED && NoticeId.CalendarMove !in NoticeId.RETIRED)
     }
 
     @Test

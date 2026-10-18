@@ -3,6 +3,7 @@ package com.thomaswcode.decrastination.core
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.Fixtures.LONDON
 import com.thomaswcode.decrastination.data.ActivityLog
+import com.thomaswcode.decrastination.data.ChatMigration
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.RuntimeState
 import com.thomaswcode.decrastination.data.Settings
@@ -126,10 +127,13 @@ class PlanSnapshotTest {
     )
     private val slots = SlotState("2026-10-19", previous = mapOf("teams:sheet#0" to at("2026-10-19T17:10")), missed = listOf(MissedSlot("teams:late#-1#1", "teams:late", at("2026-10-19T11:30"))))
 
+    /** The stores' migrations, as [com.thomaswcode.decrastination.data.Stores] gives them: those of a shape past the first. */
+    private val MIGRATIONS = mapOf("runtime.json" to listOf(ChatMigration.RUNTIME), "log.json" to listOf(ChatMigration.LOG))
+
     /** The plan as the app makes it ([Planning.plan]), from temporary stores holding the fixed state, and the calendar as last read. */
     private fun plan(): Plan {
         val dir = Files.createTempDirectory("snapshot").toFile()
-        fun <T> store(name: String, serializer: KSerializer<T>, value: T) = JsonStore(File(dir, name), serializer, { value })
+        fun <T> store(name: String, serializer: KSerializer<T>, value: T) = JsonStore(File(dir, name), serializer, { value }, migrations = MIGRATIONS[name].orEmpty())
         val clock = FixedClock(now, LONDON)
         val settingsStore = store("settings.json", Settings.serializer(), settings)
         val runtimeStore = store("runtime.json", RuntimeState.serializer(), RuntimeState(calibration = calibration, slots = slots))

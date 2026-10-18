@@ -91,6 +91,16 @@ class Notifier(
     /** Every notification of the app's gone (the debug `clean-up`). */
     fun cancelAll() = tray.cancelAll()
 
+    /**
+     * The notifications of [ids], no longer made: one still showing from before taken away, whatever
+     * its tag, and one held back for the morning (LR-07) let go, so neither's tap names what's gone.
+     */
+    suspend fun retire(ids: Set<NoticeId>) {
+        val numbers = ids.mapTo(HashSet()) { it.id }
+        tray.active().filter { it.first in numbers }.forEach { (id, tag) -> tray.cancel(id, tag) }
+        if (runtime.value.heldNotifications.any { it.id in numbers }) runtime.update { s -> s.copy(heldNotifications = s.heldNotifications.filterNot { it.id in numbers }) }
+    }
+
     /** The tags of [id]'s notifications showing now. */
     fun showing(id: NoticeId): List<String?> = tray.active().filter { it.first == id.id }.map { it.second }
 

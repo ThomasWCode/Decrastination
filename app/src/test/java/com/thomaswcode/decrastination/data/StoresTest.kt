@@ -84,7 +84,7 @@ class StoresTest {
         val file = File(dir, "log.json")
         for (i in 0 until 5) {
             file.writeText("bad $i")
-            JsonStore(file, ActivityLog.serializer(), ::ActivityLog, clock = { AT + i * 1000L })
+            JsonStore(file, ActivityLog.serializer(), ::ActivityLog, clock = { AT + i * 1000L }, migrations = listOf(ChatMigration.LOG))
         }
         val copies = dir.listFiles { f -> f.name.startsWith("log.json.unreadable-") }.orEmpty().map { it.name }.sorted()
         assertEquals(JsonStore.COPIES_KEPT, copies.size)
@@ -96,7 +96,7 @@ class StoresTest {
         val file = File(dir, "log.json").apply { writeText("bad now") }
         // Three from a clock that was ahead: by name, each newer than this one.
         listOf("20270101-000000", "20270102-000000", "20270103-000000").forEach { File(dir, "log.json.unreadable-$it").writeText("bad then") }
-        val store = JsonStore(file, ActivityLog.serializer(), ::ActivityLog, clock = { AT })
+        val store = JsonStore(file, ActivityLog.serializer(), ::ActivityLog, clock = { AT }, migrations = listOf(ChatMigration.LOG))
         assertEquals("bad now", File(dir, store.problem!!.copy!!).readText())
         assertEquals(JsonStore.COPIES_KEPT, dir.listFiles { f -> f.name.startsWith("log.json.unreadable-") }!!.size)
     }
@@ -117,7 +117,7 @@ class StoresTest {
                    "finishing": [{"session": {"taskId": "teams:t", "label": "t", "step": null, "minutes": 30, "startedAt": 1}, "workedMin": 30, "completed": true, "endedAt": 2}]}""",
             )
         }
-        val state = JsonStore(runtime, RuntimeState.serializer(), ::RuntimeState)
+        val state = JsonStore(runtime, RuntimeState.serializer(), ::RuntimeState, migrations = listOf(ChatMigration.RUNTIME))
         assertNull(state.problem)
         assertEquals(600_000L to 5L, state.value.credit.earnedMs to state.value.overrideUntil)
         val log = File(dir, "log.json").apply {
@@ -126,7 +126,7 @@ class StoresTest {
                    "blocks": [{"at": 3, "target": "com.google.android.youtube", "reason": "Session"}]}""",
             )
         }
-        val history = JsonStore(log, ActivityLog.serializer(), ::ActivityLog)
+        val history = JsonStore(log, ActivityLog.serializer(), ::ActivityLog, migrations = listOf(ChatMigration.LOG))
         assertNull(history.problem)
         assertEquals(listOf("Session"), history.value.blocks.map { it.reason })
     }
@@ -146,9 +146,10 @@ class StoresTest {
         }.toSet()
         assertEquals(made, stores.all.map { it.file }.toSet())
         assertEquals(stores.all.size, stores.all.map { it.file }.toSet().size)
-        // Every JSON store's shape is known to a backup, at the version its state says.
+        // Every JSON store's shape is known to a backup, at the version its state says, each with a migration from every one before.
         assertEquals(made - "secrets.bin", stores.shapes.keys)
-        assertTrue(stores.shapes.values.all { it.version == 1 && it.migrations.isEmpty() })
+        assertEquals(mapOf("chat.json" to 2, "log.json" to 2, "runtime.json" to 2), stores.shapes.filterValues { it.version > 1 }.mapValues { it.value.version })
+        assertTrue(stores.shapes.values.all { Migration.complete(it.version, it.migrations) })
     }
 
     private object Reverse : SecretCipher {
@@ -179,11 +180,11 @@ class StoresTest {
     }
 
     @Test
-    fun `no field moves between stores yet, and the first that does is applied to backups too`() {
-        // A move runs on the stores' files at start; a backup from before it holds the field where it was.
-        // Backups.upgraded migrates each store's parts on their own, so the first move must be taught to it
-        // as well (tested with a backup from before the move), and this test changed with it (D-94).
-        assertTrue(Stores.MOVES.isEmpty(), "A move between stores: apply it to a backup's parts in Backups.upgraded too")
+    fun `the one move between stores is the chat's, and a backup's parts are moved too`() {
+        // A move runs on the stores' files at start; a backup from before it holds the fields where they were.
+        // Backups.upgraded makes the chat's move on a backup's parts (ChatMigrationTest restores one from
+        // before it); a second move must be taught to it as well, and this test changed with it (D-94).
+        assertEquals(listOf(ChatMigration.MOVE), Stores.MOVES, "A new move between stores: apply it to a backup's parts in Backups.upgraded too")
     }
 
     @Test

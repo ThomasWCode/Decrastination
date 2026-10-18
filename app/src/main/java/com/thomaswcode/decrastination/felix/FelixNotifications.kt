@@ -3,71 +3,46 @@ package com.thomaswcode.decrastination.felix
 import android.content.Context
 import android.content.Intent
 import androidx.core.app.NotificationCompat
+import androidx.core.app.Person
+import androidx.core.graphics.drawable.IconCompat
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.R
-import com.thomaswcode.decrastination.core.Proposal
 import com.thomaswcode.decrastination.notify.Channels
 import com.thomaswcode.decrastination.notify.NoticeId
 import com.thomaswcode.decrastination.notify.Notify
 import com.thomaswcode.decrastination.ui.AskActivity
 
 /**
- * Felix's messages as notifications (AI-24): his words; a reply box, his quick replies its choices
- * (shown as chips); and a button for each of up to two cards (a task to add, changes to apply).
- * One at a time: a newer one takes its place. Tapped, the chat opens, where the thread goes on.
+ * Felix's one notification (docs/plan_v4/05-the-chat.md §3), as the outbox makes it from the chat
+ * ([Outbox.Notice]): his unread messages and your replies to them, in Android's messaging style, from
+ * him by his name; a reply box answering the newest, his replies its choices (shown as chips). Tapped,
+ * the chat opens at the first unread.
  */
 object FelixNotifications {
-    /** A button each, after the tap's code in [NoticeId.FelixMessage]'s range: `NoticeIdTest` holds them to it. */
-    internal const val MAX_CARDS = 2
-    private const val MAX_CARD_TITLE = 24
-
     const val KEY_REPLY = "reply"
     const val ACTION_REPLY = "com.thomaswcode.decrastination.FELIX_REPLY"
-    const val ACTION_CARD = "com.thomaswcode.decrastination.FELIX_CARD"
 
-    /** The message replied to: a record of his ([com.thomaswcode.decrastination.data.FelixRecord]), or an answer of his in the chat. */
+    /** The message of his a reply answers. */
     const val EXTRA_ID = "id"
-    const val EXTRA_MESSAGE = "message"
-    const val EXTRA_CARD = "card"
 
-    /**
-     * [text], his message [id], from [name], with [replies] to choose from and [cards] (each with the
-     * chat message it's on) to act on. [sent]: the reply just sent to it, shown under it while he
-     * answers, without sounding again. [title] in his name's place, and [lines] under it (the
-     * morning's list, LR-04), on [channel] (the morning's: the briefing's, LR-07).
-     */
-    fun post(
-        context: Context,
-        id: String,
-        name: String,
-        text: String,
-        replies: List<String>,
-        cards: List<Pair<String, Proposal>> = emptyList(),
-        sent: String? = null,
-        title: String? = null,
-        lines: List<String> = emptyList(),
-        channel: String = Channels.FELIX,
-    ) {
-        val builder = Notify.builder(context, channel)
-            .setSmallIcon(R.drawable.ic_focus)
-            .setContentTitle(title ?: name)
-            .setContentText(text)
-            .setStyle(
-                if (lines.isEmpty()) NotificationCompat.BigTextStyle().bigText(text)
-                else NotificationCompat.InboxStyle().setBigContentTitle(title ?: name).setSummaryText(text).also { style -> lines.forEach(style::addLine) },
-            )
-            .let { Notify.opening(it, context, NoticeId.FelixMessage.code(), AskActivity.intent(context).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+    /** [notice] posted, in place of the one showing; silent unless it's for a new message of his. */
+    fun show(context: Context, notice: Outbox.Notice) {
+        val him = Person.Builder().setName(notice.name).setKey("felix").setIcon(IconCompat.createWithResource(context, R.mipmap.ic_launcher)).build()
+        val you = Person.Builder().setName("You").build()
+        val style = NotificationCompat.MessagingStyle(you)
+        // Yours as the user's own (no person), so they show as sent.
+        notice.lines.forEach { style.addMessage(it.text, it.at, if (it.yours) null else him) }
+        val builder = Notify.builder(context, Channels.FELIX)
+            .setStyle(style)
+            .setWhen(notice.lines.last().at)
+            .setShowWhen(true)
+            .let { Notify.opening(it, context, NoticeId.Felix.code(), AskActivity.intent(context, openAt = notice.openAt).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
             .setAutoCancel(true)
-            .setOnlyAlertOnce(sent != null)
-            // Kept with it, as its buttons are, should the morning's be held back (LR-07).
-            .let { Notify.replying(it, context, "Reply", NoticeId.FelixMessage.code(), Intent(context, FelixReplyReceiver::class.java).setAction(ACTION_REPLY).putExtra(EXTRA_ID, id), KEY_REPLY, "Reply to $name", replies) }
-        sent?.let { builder.setRemoteInputHistory(arrayOf<CharSequence>(it)) }
-        cards.take(MAX_CARDS).forEachIndexed { i, (messageId, card) ->
-            val label = card.task?.let { "Add “${it.title.take(MAX_CARD_TITLE)}”" } ?: if (card.changes.size == 1) "Apply the change" else "Apply the changes"
-            Notify.button(builder, context, label, NoticeId.FelixMessage.code(1 + i), Intent(context, FelixReplyReceiver::class.java).setAction(ACTION_CARD).putExtra(EXTRA_MESSAGE, messageId).putExtra(EXTRA_CARD, card.id))
-        }
-        AppGraph.get(context).notifier.post(NoticeId.FelixMessage, builder.build())
+            .setOnlyAlertOnce(!notice.alert)
+            .setSilent(!notice.alert)
+            .let { Notify.replying(it, context, "Reply", NoticeId.Felix.code(1), Intent(context, FelixReplyReceiver::class.java).setAction(ACTION_REPLY).putExtra(EXTRA_ID, notice.replyTo), KEY_REPLY, "Reply to ${notice.name}", notice.replies) }
+        AppGraph.get(context).notifier.post(NoticeId.Felix, builder.build())
     }
 
-    fun cancel(context: Context) = AppGraph.get(context).notifier.cancel(NoticeId.FelixMessage)
+    fun cancel(context: Context) = AppGraph.get(context).notifier.cancel(NoticeId.Felix)
 }

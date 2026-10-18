@@ -10,7 +10,6 @@ import com.thomaswcode.decrastination.core.Instruction
 import com.thomaswcode.decrastination.core.InstructionStatus
 import com.thomaswcode.decrastination.core.OwnTask
 import com.thomaswcode.decrastination.core.OwnTasks
-import com.thomaswcode.decrastination.core.Proposal
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.data.SecretCipher
@@ -40,9 +39,10 @@ import okhttp3.mockwebserver.MockWebServer
 
 /**
  * Felix's service on temporary stores (docs/plan_v4, Stage 4), for the flows' tests: the real stores,
- * gateway, focus and plan, and his calls through the real readers, answered by a stand-in for
+ * gateway, focus, plan and outbox, and his calls through the real readers, answered by a stand-in for
  * Claude's API ([server]). Android is a list of what it was asked ([ports]); the other owners
- * ([owners]: your own tasks and your instructions) do, simply, what AppGraph's functions do.
+ * ([owners]: your own tasks, your instructions and the calendar's answers) do, simply, what AppGraph's
+ * functions do.
  */
 class FelixHarness(start: String = "2026-10-19T16:30") : AutoCloseable {
     private val dir = Files.createTempDirectory("felix").toFile()
@@ -55,6 +55,12 @@ class FelixHarness(start: String = "2026-10-19T16:30") : AutoCloseable {
         .also { it.endpoint = server.url("").toString().trimEnd('/') }
     val ports = Ports()
     val owners = Owners()
+
+    /** Whether the chat is on screen, as its screen says so. */
+    @Volatile var chatOnScreen = false
+
+    /** His channel shown, as Android says. */
+    @Volatile var shown = true
     private val focus: Focus = Focus(stores.tasks, stores.settings, stores.runtime, stores.log, clock) { state, s, now -> planning.plan(state, s, now) }
     val planning: Planning = Planning(
         stores.tasks, stores.settings, stores.runtime, stores.log, stores.instructions, stores.school, clock, scope, gateway,
@@ -66,20 +72,25 @@ class FelixHarness(start: String = "2026-10-19T16:30") : AutoCloseable {
         draftAhead = { _, _ -> },
         onFailure = { throw it },
     )
+    private val notices = Shown()
+    val outbox = Outbox(stores.chat, stores.chatArchive, stores.settings, notices, ports, { chatOnScreen }, clock)
     val conversation: Conversation = Conversation(
         stores.tasks, stores.settings, stores.runtime, stores.log, stores.instructions, stores.chat, stores.school, stores.memory,
-        clock, scope, gateway, Shown, focus, planning, ports, owners,
+        clock, scope, gateway, notices, focus, planning, ports, outbox, owners,
         calendarTime = { NO_CALENDAR },
-        answered = { record, words -> looks.answered(record, words) },
+        answered = { message, words -> looks.answered(message, words) },
     )
     val looks: Looks = Looks(
-        stores.tasks, stores.settings, stores.runtime, stores.log, clock, scope, gateway, Shown, focus, planning, ports,
+        stores.tasks, stores.settings, stores.runtime, stores.log, stores.chat, clock, scope, gateway, focus, planning, ports, outbox,
         calendarTime = { NO_CALENDAR },
         profile = { conversation.profile(it) },
         remember = { conversation.remember(it) },
         addInstruction = { text, about, answer -> owners.instruction(text, about, answer) },
-        assess = { _, _, _ -> },
+        assess = { taskId, doneAt, answer -> assessed += Triple(taskId, doneAt, answer) },
     )
+
+    /** How work went, as it was put on record ([Looks.answered]): the task, when it was done, the answer. */
+    val assessed: MutableList<Triple<String, Long, String>> = Collections.synchronizedList(mutableListOf())
 
     init {
         // Claude on, with its key in use: his calls go to the stand-in.
@@ -118,25 +129,27 @@ class FelixHarness(start: String = "2026-10-19T16:30") : AutoCloseable {
         dir.deleteRecursively()
     }
 
-    /** What Android was asked to do: his notifications posted and taken away, his looks set, the work asked for. */
-    class Ports : FelixPorts {
-        data class Posted(val id: String, val text: String, val replies: List<String>, val cards: Int, val sent: String?, val title: String?, val channel: String)
-
-        val posted: MutableList<Posted> = Collections.synchronizedList(mutableListOf())
+    /** What Android was asked to do: his notification made and taken away, his looks set, the work asked for. */
+    open class Ports : FelixPorts {
+        /** His notification as each was made: the last is what's showing, unless taken away since ([showing]). */
+        val shown: MutableList<Outbox.Notice> = Collections.synchronizedList(mutableListOf())
         val looks: MutableList<Long?> = Collections.synchronizedList(mutableListOf())
-        val later: MutableList<Triple<String, String, String>> = Collections.synchronizedList(mutableListOf())
         @Volatile var cancelled = 0
+        @Volatile var showing: Outbox.Notice? = null
         @Volatile var readAgain = 0
         @Volatile var schedules = 0
         @Volatile var reviews = 0
         @Volatile var forms = 0
+        @Volatile var later = 0
 
-        override fun post(id: String, name: String, text: String, replies: List<String>, cards: List<Pair<String, Proposal>>, sent: String?, title: String?, channel: String) {
-            posted += Posted(id, text, replies, cards.size, sent, title, channel)
+        override fun show(notice: Outbox.Notice) {
+            shown += notice
+            showing = notice
         }
 
         override fun cancel() {
             cancelled++
+            showing = null
         }
 
         override fun armLook(at: Long?) {
@@ -155,8 +168,8 @@ class FelixHarness(start: String = "2026-10-19T16:30") : AutoCloseable {
             reviews++
         }
 
-        override fun answerLater(id: String, asked: String, words: String) {
-            later += Triple(id, asked, words)
+        override fun answerLater() {
+            later++
         }
 
         override fun remindForm() {
@@ -197,6 +210,16 @@ class FelixHarness(start: String = "2026-10-19T16:30") : AutoCloseable {
             stores.settings.update(change)
         }
 
+        /** The calendar's answers kept (the event, the answer's words), as `CalendarTime.answer` would keep them. */
+        val events: MutableList<Pair<String, String>> = Collections.synchronizedList(mutableListOf())
+
+        override suspend fun answerEvent(key: String, words: String): Boolean {
+            if (words.trim().lowercase() !in setOf("all of it", "a few hours", "none")) return false
+            events += key to words.trim()
+            conversation.settleEvent(key)
+            return true
+        }
+
         /** Your answer to his question, kept to be read, as `AppGraph.addInstruction` keeps one. */
         suspend fun instruction(text: String, about: About, answer: Boolean): String {
             val id = UUID.randomUUID().toString()
@@ -205,11 +228,11 @@ class FelixHarness(start: String = "2026-10-19T16:30") : AutoCloseable {
         }
     }
 
-    /** His channel shown, and nothing posted through it here: his notifications are the ports'. */
-    private object Shown : Notices {
+    /** His channel shown while [shown] says, and nothing posted through it here: his notification is the ports'. */
+    private inner class Shown : Notices {
         override fun post(id: NoticeId, notification: Notification, tag: String?) = Unit
         override fun cancel(id: NoticeId, tag: String?) = Unit
-        override fun shown(channel: String): Boolean = true
+        override fun shown(channel: String): Boolean = shown
         override suspend fun postHeld() = Unit
     }
 

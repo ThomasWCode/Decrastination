@@ -1,29 +1,22 @@
 package com.thomaswcode.decrastination.learn
 
 import android.content.Context
-import android.content.Intent
-import androidx.core.app.NotificationCompat
 import com.thomaswcode.decrastination.AppGraph
-import com.thomaswcode.decrastination.R
 import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.SchoolDays
-import com.thomaswcode.decrastination.notify.Channels
-import com.thomaswcode.decrastination.notify.NoticeId
-import com.thomaswcode.decrastination.notify.Notify
 import com.thomaswcode.decrastination.ui.Format
-import com.thomaswcode.decrastination.ui.MainActivity
 
 /**
- * The morning briefing (Q13): today's plan in a notification, at 07:00 on school days and 08:30 at
- * weekends, Felix's sentence on the day's shape over it on a day with slots (LR-04); a Teams sync
- * offered at the next unlock; and the day's plan recorded for the capacity check, with yesterday's
- * marked done or not.
+ * The morning briefing (Q13), at 07:00 on school days and 08:30 at weekends: Felix's message on the
+ * day's shape on a day with slots (LR-04), or the day's plan in his name in the app's words, in the
+ * chat and his notification, made again with what waited overnight; a Teams sync offered at the next
+ * unlock; and the day's plan recorded for the capacity check, with yesterday's marked done or not.
  */
 object Briefing {
     /** How long after the briefing an unlock still brings the morning's Teams sync. */
     private const val MORNING_OFFER_MS = 90 * 60_000L
 
-    /** The notification's title and lines for [plan]: pure, for the tests. */
+    /** The morning's list for [plan], its title and lines, where he has no words for it: pure, for the tests. */
     fun summary(plan: Plan): Pair<String, List<String>> {
         val today = plan.todayBucket?.chunks.orEmpty()
         if (today.isEmpty()) {
@@ -76,21 +69,11 @@ object Briefing {
         }
         graph.runtime.update { it.copy(teamsAuto = it.teamsAuto.copy(morningUntil = now + MORNING_OFFER_MS)) }
         val (title, lines) = summary(plan)
-        // Felix's sentence or two on the day in place of the list (LR-04, 16 Oct); the list alone without it.
-        if (runCatching { graph.looks.morning(title, now) }.onFailure { android.util.Log.w(AppGraph.TAG, "Felix's morning message failed", it) }.getOrDefault(false)) {
-            graph.notifier.cancel(NoticeId.Briefing)
-            return
-        }
-        graph.notifier.post(
-            NoticeId.Briefing,
-            Notify.builder(context, Channels.BRIEFING)
-                .setSmallIcon(R.drawable.ic_focus)
-                .setContentTitle(title)
-                .setContentText(lines.firstOrNull().orEmpty())
-                .setStyle(NotificationCompat.InboxStyle().also { style -> lines.forEach(style::addLine) })
-                .let { Notify.opening(it, context, NoticeId.Briefing.code(), Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
-                .setAutoCancel(true)
-                .build(),
-        )
+        // Felix's sentence or two on the day in place of the list (LR-04, 16 Oct); without it, the list
+        // in his name, in the app's words: every morning is in the chat.
+        val his = runCatching { graph.looks.morning(now) }.onFailure { android.util.Log.w(AppGraph.TAG, "Felix's morning message failed", it) }.getOrDefault(false)
+        if (!his) graph.conversation.morningList(title, lines)
+        // His notification made again, with what waited overnight for the morning (LR-07).
+        graph.conversation.outbox.notify(graph.clock.now())
     }
 }

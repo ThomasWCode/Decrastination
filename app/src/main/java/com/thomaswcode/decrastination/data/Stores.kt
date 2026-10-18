@@ -1,5 +1,6 @@
 package com.thomaswcode.decrastination.data
 
+import com.thomaswcode.decrastination.core.ChatArchive
 import com.thomaswcode.decrastination.core.ChatState
 import com.thomaswcode.decrastination.core.InstructionState
 import com.thomaswcode.decrastination.core.MemoryState
@@ -35,14 +36,17 @@ class Stores(
     // turns it on: a bad file never disarms protection (IMP-P1-003).
     val settings = store("settings.json", Settings.serializer(), ::Settings, unreadable = { Settings(armed = armedIfUnreadable()) })
     val secrets = SecretStore(File(dir, "secrets.bin"), cipher, clock)
-    val runtime = store("runtime.json", RuntimeState.serializer(), ::RuntimeState)
-    val log = store("log.json", ActivityLog.serializer(), ::ActivityLog)
+    val runtime = store("runtime.json", RuntimeState.serializer(), ::RuntimeState, migrations = listOf(ChatMigration.RUNTIME))
+    val log = store("log.json", ActivityLog.serializer(), ::ActivityLog, migrations = listOf(ChatMigration.LOG))
 
     /** Your instructions about tasks, events and days, and what Claude read them as. */
     val instructions = store("instructions.json", InstructionState.serializer(), ::InstructionState)
 
-    /** Your chat with Felix: what you said, his answers, and what became of his cards. */
-    val chat = store("chat.json", ChatState.serializer(), ::ChatState)
+    /** Your chat with Felix, the live window of it: every message of his and yours, what became of his cards, and his state. */
+    val chat = store("chat.json", ChatState.serializer(), ::ChatState, migrations = listOf(ChatMigration.CHAT))
+
+    /** The chat's messages past its window, oldest first, read on scrolling back. */
+    val chatArchive = store("chat-archive.json", ChatArchive.serializer(), ::ChatArchive)
 
     /** Days with no school and half-days (PL-16), told to the chat or added in Settings. */
     val school = store("school.json", SchoolCalendar.serializer(), ::SchoolCalendar)
@@ -53,7 +57,7 @@ class Stores(
     /** The versions of its events the app has written to calendars, so a copy of one is known. */
     val calendarVersions = store("calendar.json", CalendarVersions.serializer(), ::CalendarVersions)
 
-    private val json = listOf(tasks, settings, runtime, log, instructions, chat, school, memory, calendarVersions)
+    private val json = listOf(tasks, settings, runtime, log, instructions, chat, chatArchive, school, memory, calendarVersions)
 
     /**
      * A store, what a backup keeps of it ([backup]; none, and [why] says why), and the resets that
@@ -71,10 +75,11 @@ class Stores(
         Kept("tasks.json", backup = "your own tasks, which no source gives back"),
         Kept("settings.json", backup = "the settings as asked for, a change still waiting among them", resets = setOf(Reset.Memories)),
         Kept("secrets.bin", backup = null, why = "passwords and keys stay on this phone (D-78)"),
-        Kept("runtime.json", backup = "the calibration, your calendar answers, Claude's month, Felix's state and today's slots", resets = setOf(Reset.Stats, Reset.Calibration, Reset.Chat)),
-        Kept("log.json", backup = "all of it", resets = setOf(Reset.Stats, Reset.Chat)),
+        Kept("runtime.json", backup = "the calibration, your calendar answers, Claude's month and today's slots", resets = setOf(Reset.Stats, Reset.Calibration)),
+        Kept("log.json", backup = "all of it", resets = setOf(Reset.Stats)),
         Kept("instructions.json", backup = "the instructions in use", resets = setOf(Reset.Instructions)),
-        Kept("chat.json", backup = "all of it", resets = setOf(Reset.Chat)),
+        Kept("chat.json", backup = "all of it, Felix's state with it", resets = setOf(Reset.Chat)),
+        Kept("chat-archive.json", backup = "the chat's earlier messages, while the backup has room for them, the oldest left out first", resets = setOf(Reset.Chat)),
         Kept("school.json", backup = "all of it"),
         Kept("memory.json", backup = "all of it", resets = setOf(Reset.Memories)),
         Kept("calendar.json", backup = null, why = "the versions this phone wrote to its calendars mean nothing to another's"),
@@ -110,8 +115,8 @@ class Stores(
     }
 
     companion object {
-        /** The moves between stores this build makes at start: none yet. */
-        val MOVES: List<Move> = emptyList()
+        /** The moves between stores this build makes at start: Felix's records and state into the chat (4.0.0). */
+        val MOVES: List<Move> = listOf(ChatMigration.MOVE)
 
         /** How long the file an older shape came from is kept after its migration. */
         const val OLD_SHAPE_KEPT_MS = 7 * 24 * 3_600_000L
