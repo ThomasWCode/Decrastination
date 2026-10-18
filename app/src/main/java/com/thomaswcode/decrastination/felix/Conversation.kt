@@ -142,18 +142,19 @@ class Conversation(
 
     /**
      * The week's check-in asked by Felix (LR-02): its first question, unless the week has its check-in
-     * already, or his notifications can't be shown or it's quiet hours (false then, and the form's
-     * reminder goes instead).
+     * already, or it's quiet hours (false then, and the form's reminder goes instead). With his
+     * notifications off it's asked in the chat all the same (D-95), and false, so the form's reminder
+     * says so. A week before's questions never finished are settled first: an answer to one isn't this week's.
      */
     suspend fun askCheckIn(): Boolean {
         val now = clock.now()
         val week = Daily.checkInWeek(now, clock.zone(), settings.value.checkInMin)
         if (log.value.checkIns.any { it.weekOf == week }) return true
-        if (!notices.shown(Channels.FELIX)) return false
         // In quiet hours the form's reminder goes instead, held as the routine ones are till the morning.
         if (BlockPolicy.isQuiet(now, clock.zone(), settings.value)) return false
+        chat.update { s -> s.copy(messages = s.messages.map { if (it.from == Speaker.Claude && it.kind == MessageKind.CheckIn && it.answeredAt == null) it.copy(answeredAt = now) else it }) }
         askNext(CheckInFlow.Draft(week), now)
-        return true
+        return notices.shown(Channels.FELIX)
     }
 
     /** [draft]'s question as his message, in the app's words, with its replies, the draft kept with it: so its reply comes back here. */
@@ -217,7 +218,7 @@ class Conversation(
      * question, answered, out of his notification. Shown there by the outbox after.
      */
     private suspend fun keepReply(message: ChatMessage, words: String, now: Long) {
-        val reply = ChatMessage(UUID.randomUUID().toString(), Speaker.You, words, now, message.about, replyTo = message.id, answeredAt = now)
+        val reply = ChatMessage(UUID.randomUUID().toString(), Speaker.You, words, now, message.about, kind = message.kind, replyTo = message.id, answeredAt = now)
         chat.update { s -> s.copy(messages = s.messages.map { if (it.id == message.id && it.answeredAt == null) it.copy(answeredAt = now) else it } + reply) }
     }
 

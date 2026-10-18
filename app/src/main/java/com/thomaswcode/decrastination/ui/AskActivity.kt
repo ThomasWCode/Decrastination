@@ -152,11 +152,13 @@ class AskActivity : ComponentActivity() {
         about.value = aboutFrom(intent.extras)
         sendHanded = intent.getBooleanExtra(EXTRA_SEND, true)
         handed.value = intent.getStringExtra(EXTRA_TEXT)
-        // From his notification: opened at its message, and what it held read now.
+        // From his notification: opened at its message, and what it held read now (now as it opens, not
+        // as the work runs, which may be after another came).
         intent.getStringExtra(EXTRA_OPEN_AT)?.let { id ->
             openAt.value = id
             val graph = AppGraph.get(this)
-            graph.scope.launch { graph.conversation.read() }
+            val now = graph.clock.now()
+            graph.scope.launch { graph.conversation.read(now) }
         }
     }
 
@@ -178,8 +180,9 @@ class AskActivity : ComponentActivity() {
         super.onPause()
         val graph = AppGraph.get(this)
         graph.conversation.chatInFront = false
-        // What arrived while it was on screen was seen: read, so only what comes after is his notification.
-        graph.scope.launch { graph.conversation.read() }
+        // What arrived while it was on screen was seen: read up to now, so only what comes after is his notification.
+        val now = graph.clock.now()
+        graph.scope.launch { graph.conversation.read(now) }
     }
 
     @OptIn(ExperimentalMaterial3Api::class)
@@ -407,9 +410,11 @@ private fun androidx.compose.foundation.layout.ColumnScope.Chat(
 ) {
     val list = rememberLazyListState()
     val messages = all.filter { it.from == Speaker.You || it.text.isNotBlank() }
-    // Yours waiting for his answer, with nothing to say why (Claude off, resting, a failed call): he's typing.
-    val typing = messages.lastOrNull()?.let { it.from == Speaker.You && it.answeredAt == null && it.note == null } == true
-    LaunchedEffect(messages.size, messages.lastOrNull()?.note, typing) {
+    // Yours waiting for his answer, with nothing to say why (Claude off, resting, a failed call): he's
+    // typing, whatever he's written unasked since.
+    val waiting = all.lastOrNull { it.from == Speaker.You && it.answeredAt == null }
+    val typing = waiting != null && waiting.note == null
+    LaunchedEffect(messages.size, waiting?.note, typing) {
         if (messages.isEmpty()) return@LaunchedEffect
         // The message his notification was for, under the intro, once; gone (the chat cleared), the foot.
         val at = openAt?.let { id -> messages.indexOfFirst { it.id == id } }?.takeIf { it >= 0 }

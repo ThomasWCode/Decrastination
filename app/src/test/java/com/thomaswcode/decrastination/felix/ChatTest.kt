@@ -521,6 +521,10 @@ class ChatTest {
         val asked = ChatMessage("y", Speaker.You, "hello", now)
         assertEquals(asked, ChatState(listOf(asked)).unanswered)
         assertNull(ChatState(listOf(asked.copy(answeredAt = now), ChatMessage("c", Speaker.Claude, "hi", now))).unanswered)
+        // A reply of yours taken with no call (a check-in's "4") comes answered: what waits before it still waits.
+        val question = ChatMessage("q", Speaker.Claude, "How was the week, 1 to 5?", now, kind = MessageKind.CheckIn, byApp = true, answeredAt = now)
+        val four = ChatMessage("4", Speaker.You, "4", now, kind = MessageKind.CheckIn, replyTo = "q", answeredAt = now)
+        assertEquals(asked, ChatState(listOf(asked, question, four)).unanswered)
     }
 
     @Test
