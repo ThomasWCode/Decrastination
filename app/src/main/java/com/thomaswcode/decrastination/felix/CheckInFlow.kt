@@ -1,7 +1,8 @@
-package com.thomaswcode.decrastination.learn
+package com.thomaswcode.decrastination.felix
 
 import com.thomaswcode.decrastination.data.ActivityLog
 import com.thomaswcode.decrastination.data.SlotOutcome
+import com.thomaswcode.decrastination.learn.CheckIn
 import kotlinx.serialization.Serializable
 import java.time.LocalDate
 import java.time.ZoneId

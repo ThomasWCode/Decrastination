@@ -1,4 +1,4 @@
-package com.thomaswcode.decrastination.learn
+package com.thomaswcode.decrastination.felix
 
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.Fixtures.LONDON
@@ -7,6 +7,8 @@ import com.thomaswcode.decrastination.core.WindowKind
 import com.thomaswcode.decrastination.data.ActivityLog
 import com.thomaswcode.decrastination.data.SlotOutcome
 import com.thomaswcode.decrastination.data.SlotRecord
+import com.thomaswcode.decrastination.learn.CheckIn
+import com.thomaswcode.decrastination.learn.DayRecord
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull

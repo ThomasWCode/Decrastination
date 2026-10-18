@@ -148,7 +148,7 @@
         </receiver>
 
         <activity
-            android:name=".learn.CheckInActivity"
+            android:name=".ui.CheckInActivity"
             android:exported="false"
             android:label="This week" />
         <activity
@@ -182,7 +182,7 @@
             android:name=".learn.EventAnswerReceiver"
             android:exported="false" />
         <receiver
-            android:name=".notify.FelixReplyReceiver"
+            android:name=".felix.FelixReplyReceiver"
             android:exported="false" />
         <receiver
             android:name=".protect.WatchdogReceiver"

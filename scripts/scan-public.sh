@@ -8,7 +8,9 @@
 #   scripts/scan-public.sh --cached   # what's staged
 #   scripts/scan-public.sh <range>    # any range git diff takes
 #
-# Made-up addresses at example.com, example.org and example.net, and GitHub's no-reply ones, pass.
+# Made-up addresses at example.com, example.org and example.net, and GitHub's no-reply ones, pass;
+# so do the two Kotlin labels the code holds, in a .kt file (this@AppGraph and this@AnkiSource, then
+# a member), which read as addresses there. Any other is a hit, a new label too, till it's listed below.
 # Only the lines a diff adds are read: a commit's message, a PR's text and a branch's name aren't.
 # A range git can't read exits 2, as a scan that didn't happen, never as a clean one.
 ROOT=$(git rev-parse --show-toplevel)
@@ -41,6 +43,8 @@ HITS=$(awk -v words="$WORDS" '
     rest = text
     while (match(rest, /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z][A-Za-z]+/)) {
       a = substr(rest, RSTART, RLENGTH); rest = substr(rest, RSTART + RLENGTH)
+      # The two Kotlin labels the code holds, in Kotlin files alone: any other reads as an address, a new label too until it is listed here.
+      if (file ~ /\.kts?$/ && a ~ /^this@(AppGraph|AnkiSource)\./) continue
       if (tolower(a) !~ /@(example\.(com|org|net)|users\.noreply\.github\.com)$/) print "  an email address: " file ": " a
     }
     rest = text

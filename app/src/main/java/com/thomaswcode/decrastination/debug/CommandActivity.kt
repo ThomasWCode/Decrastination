@@ -25,11 +25,12 @@ import com.thomaswcode.decrastination.core.Speaker
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.withoutEnrichment
 import com.thomaswcode.decrastination.data.Secret
-import com.thomaswcode.decrastination.enrich.ChatPrompts
-import com.thomaswcode.decrastination.enrich.ChatReader
+import com.thomaswcode.decrastination.felix.ChatPrompts
+import com.thomaswcode.decrastination.felix.ChatReader
 import com.thomaswcode.decrastination.enrich.ClaudeEnricher
 import com.thomaswcode.decrastination.enrich.ClaudeReviewer
-import com.thomaswcode.decrastination.enrich.FelixCaller
+import com.thomaswcode.decrastination.felix.FelixCaller
+import com.thomaswcode.decrastination.felix.FelixPrompts
 import com.thomaswcode.decrastination.enrich.InstructionReader
 import com.thomaswcode.decrastination.enrich.MemoryTidier
 import com.thomaswcode.decrastination.enrich.MicroPlanner
@@ -44,7 +45,6 @@ import com.thomaswcode.decrastination.enrich.WebResearcher
 import com.thomaswcode.decrastination.learn.Assessment
 import com.thomaswcode.decrastination.learn.Briefing
 import com.thomaswcode.decrastination.learn.CalendarTime
-import com.thomaswcode.decrastination.learn.CheckIns
 import com.thomaswcode.decrastination.learn.EventJudge
 import com.thomaswcode.decrastination.learn.Review
 import com.thomaswcode.decrastination.protect.Watchdog
@@ -158,7 +158,7 @@ class CommandActivity : Activity() {
             "anki-counts" -> logAnkiCounts()
             // The plan's next seven days: each day's minutes, its slots and what has none (phase 3).
             "plan" -> {
-                val plan = graph.plan()
+                val plan = graph.planning.plan()
                 val zone = graph.clock.zone()
                 fun hm(time: Long) = java.time.Instant.ofEpochMilli(time).atZone(zone).toLocalTime().toString()
                 for (bucket in plan.buckets.take(7)) {
@@ -308,7 +308,7 @@ class CommandActivity : Activity() {
                 Log.i(TAG, "setting: " + (said ?: "$name not set to $value"))
             }
             "briefing" -> Briefing.run(this).also { Log.i(TAG, "Briefing posted") }
-            "check-in" -> CheckIns.remind(this).also { Log.i(TAG, "Check-in reminder posted") }
+            "check-in" -> graph.conversation.remindCheckIn().also { Log.i(TAG, "Check-in reminder posted") }
             // The nightly backup's work, once (AR-07).
             "backup-now" -> Log.i(TAG, "Backup: ${if (graph.backups.backupNow()) "written" else "not written"}; last ${graph.runtime.value.lastBackupAt}")
             "review" -> {
@@ -355,33 +355,33 @@ class CommandActivity : Activity() {
             }
             "chat-context" -> {
                 // What the chat sends Claude with your newest message now, the plan included.
-                File(filesDir, "chat-context.txt").writeText(graph.chatContext().whole)
+                File(filesDir, "chat-context.txt").writeText(graph.conversation.chatContext().whole)
                 Log.i(TAG, "Wrote the chat's context to files/chat-context.txt")
             }
             "chat-ask" -> {
                 // --es text "<words>": sent to the chat as on the phone (a paid call); Claude's reply logged.
                 val text = intent.getStringExtra("text")
-                if (text.isNullOrBlank() || !graph.ask(text)) {
+                if (text.isNullOrBlank() || !graph.conversation.ask(text)) {
                     Log.w(TAG, "chat-ask needs --es text <words>, and no message of yours still waiting")
                 } else {
                     // Waits its turn behind the answer ask started, or answers it itself.
-                    graph.answerChat()
+                    graph.conversation.answerChat()
                     val last = graph.chat.value.messages.last()
                     Log.i(TAG, "chat-ask: ${last.from}: ${last.text}${last.note?.let { " [$it]" }.orEmpty()}; ${last.proposals.size} cards")
                 }
             }
-            "chat-clear" -> graph.clearChat().also { Log.i(TAG, "Chat cleared") }
+            "chat-clear" -> graph.conversation.clearChat().also { Log.i(TAG, "Chat cleared") }
             // Felix (LR-03): his state and today's messages; a look now; or a message for a reason, whatever the rules say (a paid call).
             "felix" -> {
                 val state = graph.runtime.value.felix
                 Log.i(TAG, "felix: next check ${state.nextCheckAt?.let { java.time.Instant.ofEpochMilli(it).atZone(graph.clock.zone()).toLocalTime() }}, last sent ${state.lastSentAt}, activity ${state.activity.keys}")
                 graph.log.value.felix.takeLast(10).forEach { Log.i(TAG, "felix ${it.reason} ${it.key}: ${it.text.ifBlank { "(silent)" }} ${it.replies}${it.replyText?.let { r -> " / reply: $r" }.orEmpty()}") }
             }
-            "felix-check" -> graph.felix.check().also { Log.i(TAG, "felix-check done") }
+            "felix-check" -> graph.looks.check().also { Log.i(TAG, "felix-check done") }
             "felix-say" -> {
-                val reason = intent.getStringExtra("reason")?.let { name -> com.thomaswcode.decrastination.enrich.FelixPrompts.Reason.entries.firstOrNull { it.name.equals(name, ignoreCase = true) } }
-                if (reason == null) Log.w(TAG, "felix-say needs --es reason, one of ${com.thomaswcode.decrastination.enrich.FelixPrompts.Reason.entries.joinToString()}")
-                else Log.i(TAG, "felix-say $reason: ${graph.felix.say(reason)?.let { "${it.text.ifBlank { "(silent)" }} ${it.replies}" } ?: "Claude is off"}")
+                val reason = intent.getStringExtra("reason")?.let { name -> FelixPrompts.Reason.entries.firstOrNull { it.name.equals(name, ignoreCase = true) } }
+                if (reason == null) Log.w(TAG, "felix-say needs --es reason, one of ${FelixPrompts.Reason.entries.joinToString()}")
+                else Log.i(TAG, "felix-say $reason: ${graph.looks.say(reason)?.let { "${it.text.ifBlank { "(silent)" }} ${it.replies}" } ?: "Claude is off"}")
             }
             // What Felix remembers (AI-21): its standing instructions and facts, a line each.
             "memory" -> graph.memory.value.let { m ->
@@ -402,8 +402,8 @@ class CommandActivity : Activity() {
                     Log.w(TAG, "chat-card: no card to act on")
                 } else {
                     when (intent.getStringExtra("do")) {
-                        "apply" -> graph.applyProposal(message.id, card.id)
-                        "undo" -> graph.undoProposal(message.id, card.id)
+                        "apply" -> graph.conversation.applyProposal(message.id, card.id)
+                        "undo" -> graph.conversation.undoProposal(message.id, card.id)
                     }
                     val now = graph.chat.value.messages.firstOrNull { it.id == message.id }?.proposals?.firstOrNull { it.id == card.id }
                     Log.i(TAG, "chat-card ${intent.getStringExtra("do")}: ${card.lines} -> ${now?.state}")

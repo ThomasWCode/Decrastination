@@ -1,11 +1,12 @@
-package com.thomaswcode.decrastination.enrich
+package com.thomaswcode.decrastination.felix
 
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.Fixtures.LONDON
 import com.thomaswcode.decrastination.core.DayWindow
+import com.thomaswcode.decrastination.core.Enrichment
+import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.Planner
-import com.thomaswcode.decrastination.core.SlotKind
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.WindowKind
@@ -14,6 +15,7 @@ import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.data.SlotOutcome
 import com.thomaswcode.decrastination.data.SlotRecord
 import com.thomaswcode.decrastination.sources.teams.TeamsRows
+import java.time.Instant
 import java.time.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -46,7 +48,7 @@ class FelixTest {
     @Test
     fun `for a slot begun, he's told the piece, what earns it, today's and his last messages`() {
         val slot = plan.todaySlots.first { it.chunk?.title == "Statics" }
-        fun hm(at: Long) = java.time.Instant.ofEpochMilli(at).atZone(LONDON).toLocalTime().toString()
+        fun hm(at: Long) = Instant.ofEpochMilli(at).atZone(LONDON).toLocalTime().toString()
         val today = listOf(
             SlotRecord(date = "2026-10-12", key = "teams:x#-1#1", taskId = "teams:x", kind = Kind.Admin, label = "Form", plannedMin = 10, start = now - 3_600_000L, end = now - 3_000_000L,
                 window = WindowKind.Evening, outcome = SlotOutcome.Kept, workedMin = 10, at = now - 3_000_000L),
@@ -87,7 +89,7 @@ class FelixTest {
         assertTrue("  [… ${sheet.detail.length - FelixPrompts.TEXT} characters left out …]" in text, text)
         assertTrue("\n  Hand it in on Friday." in text, text)
         // Where its reading summarised all of it, that in place of the start and end.
-        val summarised = sheet.copy(enrichment = com.thomaswcode.decrastination.core.Enrichment(inputHash = com.thomaswcode.decrastination.core.Enrichments.inputHash(sheet), by = "test", at = now, summary = "Questions 1 to 6, handed in on Friday."))
+        val summarised = sheet.copy(enrichment = Enrichment(inputHash = Enrichments.inputHash(sheet), by = "test", at = now, summary = "Questions 1 to 6, handed in on Friday."))
         val told = FelixPrompts.describe(FelixPrompts.Reason.Question, plan, null, summarised, emptyList(), emptyList(), "Which questions?", settings, now, LONDON)
         assertTrue("  Its reading's summary of all ${sheet.detail.length} characters: Questions 1 to 6, handed in on Friday." in told, told)
         // With none of its own, nothing's said of it.

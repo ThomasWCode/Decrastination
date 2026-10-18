@@ -1,21 +1,26 @@
-package com.thomaswcode.decrastination.learn
+package com.thomaswcode.decrastination.felix
 
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.Fixtures.LONDON
 import com.thomaswcode.decrastination.core.DayWindow
 import com.thomaswcode.decrastination.core.Kind
+import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.Planner
 import com.thomaswcode.decrastination.core.SlotKind
 import com.thomaswcode.decrastination.core.Slotter
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.WindowKind
+import com.thomaswcode.decrastination.data.AssessLater
+import com.thomaswcode.decrastination.data.FelixDraft
+import com.thomaswcode.decrastination.data.FelixQuestion
 import com.thomaswcode.decrastination.data.FelixRecord
+import com.thomaswcode.decrastination.data.FelixRetry
 import com.thomaswcode.decrastination.data.FelixState
 import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.data.SlotOutcome
 import com.thomaswcode.decrastination.data.SlotRecord
-import com.thomaswcode.decrastination.enrich.FelixPrompts.Reason
+import com.thomaswcode.decrastination.felix.FelixPrompts.Reason
 import java.time.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -38,7 +43,7 @@ class FelixRulesTest {
 
     private fun at(time: String) = Fixtures.at("2026-10-12T$time")
 
-    private fun due(now: Long, state: FelixState = FelixState(), today: List<SlotRecord> = emptyList(), sent: List<FelixRecord> = emptyList(), quiet: Boolean = false, busy: Boolean = false, needsPhoto: Boolean = false, p: com.thomaswcode.decrastination.core.Plan = plan) =
+    private fun due(now: Long, state: FelixState = FelixState(), today: List<SlotRecord> = emptyList(), sent: List<FelixRecord> = emptyList(), quiet: Boolean = false, busy: Boolean = false, needsPhoto: Boolean = false, p: Plan = plan) =
         FelixRules.due(p, state, today, sent, settings, now, quiet, busy, needsPhoto = { needsPhoto })
 
     private fun record(key: String, outcome: SlotOutcome, start: Long, at: Long, earned: Boolean = true, plannedMin: Int = 30) = SlotRecord(
@@ -108,7 +113,7 @@ class FelixRulesTest {
 
     @Test
     fun `the day's completions no slot saw are asked about once, in the evening, at his pace`() {
-        val ask = listOf(com.thomaswcode.decrastination.data.AssessLater("teams:c", "German reading", at("16:00")))
+        val ask = listOf(AssessLater("teams:c", "German reading", at("16:00")))
         fun completions(now: Long, state: FelixState = FelixState(), sent: List<FelixRecord> = emptyList()) =
             FelixRules.due(plan, state, emptyList(), sent, settings, now, false, false, { false }, ask, LONDON)
         assertEquals(Reason.Completions to ask, completions(at("19:05")).let { it?.reason to it?.asks })
@@ -123,7 +128,7 @@ class FelixRulesTest {
         val (trigger, due) = FelixRules.upcoming(plan, settings, at("16:30"))!!
         assertEquals(Reason.SlotStart to first.chunk!!.key, trigger.reason to trigger.key)
         assertEquals(first.start + grace, due)
-        val draft = com.thomaswcode.decrastination.data.FelixDraft(Reason.SlotStart.name, first.chunk!!.key, com.thomaswcode.decrastination.enrich.FelixAnswer("Ten minutes in: starting?"), at("17:02"))
+        val draft = FelixDraft(Reason.SlotStart.name, first.chunk!!.key, FelixAnswer("Ten minutes in: starting?"), at("17:02"))
         val now = first.start + grace
         assertEquals(true, FelixRules.fits(draft, trigger, now, lastSentAt = at("16:00")))
         // Another piece's, too old, or with a message of his since: written again.
@@ -134,7 +139,7 @@ class FelixRulesTest {
 
     @Test
     fun `a question of the model's is put when he's free, the oldest first`() {
-        val q = com.thomaswcode.decrastination.data.FelixQuestion("teams:a", "The 12th or the 19th?", at("09:00"))
+        val q = FelixQuestion("teams:a", "The 12th or the 19th?", at("09:00"))
         val state = FelixState(questions = listOf(q, q.copy(taskId = "teams:b")))
         assertEquals(Reason.Question to q, due(at("16:30"), state).let { it?.reason to it?.question })
         assertNull(due(at("16:30"), state.copy(nextCheckAt = at("16:40"))))
@@ -153,9 +158,9 @@ class FelixRulesTest {
 
     @Test
     fun `completions kept from a day he couldn't be seen are asked about, unless a slot kept that day saw them`() {
-        val yesterday = com.thomaswcode.decrastination.data.AssessLater("teams:c", "German reading", Fixtures.at("2026-10-11T16:00"))
-        val today = com.thomaswcode.decrastination.data.AssessLater("teams:d", "Maths sheet", at("16:00"))
-        val seen = com.thomaswcode.decrastination.data.AssessLater("teams:a", "a", Fixtures.at("2026-10-11T18:00"))
+        val yesterday = AssessLater("teams:c", "German reading", Fixtures.at("2026-10-11T16:00"))
+        val today = AssessLater("teams:d", "Maths sheet", at("16:00"))
+        val seen = AssessLater("teams:a", "a", Fixtures.at("2026-10-11T18:00"))
         val kept = record("teams:a#-1#1", SlotOutcome.Kept, Fixtures.at("2026-10-11T17:00"), Fixtures.at("2026-10-11T17:30")).copy(date = "2026-10-11")
         assertEquals(listOf(yesterday, today), FelixRules.toAsk(listOf(yesterday, today, seen), listOf(kept), at("19:05"), LONDON))
         // The same task's slot kept on another day saw other work.
@@ -164,8 +169,8 @@ class FelixRulesTest {
 
     @Test
     fun `a newer reading's question takes the place of the one waiting, and none takes it away`() {
-        val q = com.thomaswcode.decrastination.data.FelixQuestion("teams:a", "The 12th or the 19th?", at("09:00"))
-        val state = FelixState(questions = listOf(q, com.thomaswcode.decrastination.data.FelixQuestion("teams:b", "Which exercise?", at("09:05"))))
+        val q = FelixQuestion("teams:a", "The 12th or the 19th?", at("09:00"))
+        val state = FelixState(questions = listOf(q, FelixQuestion("teams:b", "Which exercise?", at("09:05"))))
         assertEquals(listOf("Part 1 or part 2?", "Which exercise?"), state.withQuestion("teams:a", "Part 1 or part 2?", at("10:00")).questions.map { it.question })
         assertEquals(state, state.withQuestion("teams:a", "The 12th or the 19th?", at("10:00")))
         assertEquals(listOf("teams:b"), state.withQuestion("teams:a", null, at("10:00")).questions.map { it.taskId })
@@ -176,7 +181,7 @@ class FelixRulesTest {
     fun `a message whose call didn't come back is tried again past its wait, the rest going on meanwhile`() {
         val missed = record(first.chunk!!.key, SlotOutcome.Missed, first.start, first.end + Slotter.GRACE_MS)
         val now = first.end + Slotter.GRACE_MS + 60_000L
-        val retry = com.thomaswcode.decrastination.data.FelixRetry(Reason.SlotEnd.name, missed.key, now + FelixRules.RETRY_MS)
+        val retry = FelixRetry(Reason.SlotEnd.name, missed.key, now + FelixRules.RETRY_MS)
         assertNull(due(now, FelixState(retry = retry), today = listOf(missed))?.takeIf { it.reason == Reason.SlotEnd })
         assertEquals(Reason.SlotEnd, due(now + FelixRules.RETRY_MS, FelixState(retry = retry), today = listOf(missed))?.reason)
         // His next look comes for it, with nothing else ahead.

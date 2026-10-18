@@ -1,7 +1,5 @@
-package com.thomaswcode.decrastination.learn
+package com.thomaswcode.decrastination.ui
 
-import android.content.Context
-import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -32,39 +30,13 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import androidx.core.app.NotificationCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.thomaswcode.decrastination.AppGraph
-import com.thomaswcode.decrastination.R
-import com.thomaswcode.decrastination.notify.Channels
+import com.thomaswcode.decrastination.learn.CheckIn
+import com.thomaswcode.decrastination.learn.Daily
+import com.thomaswcode.decrastination.learn.ReviewWorker
 import com.thomaswcode.decrastination.notify.NoticeId
-import com.thomaswcode.decrastination.notify.Notify
-import com.thomaswcode.decrastination.ui.AppTheme
-import com.thomaswcode.decrastination.ui.Format
 import kotlinx.coroutines.launch
-
-/** The Sunday check-in's reminder (docs/spec/learning.md, item 6). */
-object CheckIns {
-    /**
-     * The week's check-in begun (LR-02): Felix asks its first question in his notification, the rest
-     * as each is answered ([AppGraph.checkInReply]); the form, This week, takes them all at once.
-     * The reminder to open the form, where his notifications can't be shown.
-     */
-    suspend fun remind(context: Context) {
-        val graph = AppGraph.get(context)
-        if (graph.askCheckIn()) return
-        graph.notifier.post(
-            NoticeId.CheckIn,
-            Notify.builder(context, Channels.WEEKLY)
-                .setSmallIcon(R.drawable.ic_focus)
-                .setContentTitle("Sunday check-in")
-                .setContentText("Five quick questions about the week, before its review.")
-                .let { Notify.opening(it, context, NoticeId.CheckIn.code(), Intent(context, CheckInActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
-                .setAutoCancel(true)
-                .build(),
-        )
-    }
-}
 
 /** The five questions, and below them the latest weekly review. */
 class CheckInActivity : ComponentActivity() {
@@ -119,7 +91,7 @@ class CheckInActivity : ComponentActivity() {
                                 }
                                 AppGraph.get(this@CheckInActivity).notifier.cancel(NoticeId.CheckIn)
                                 // Felix's questions, should he have begun them: the form has the answers.
-                                if (added) graph.endCheckInFlow()
+                                if (added) graph.conversation.endCheckInFlow()
                                 if (!added) return@launch
                                 // As a job: it can outlast this screen.
                                 // Unless the week has had its review already (the evening's ran first).

@@ -51,7 +51,7 @@ object Briefing {
         val graph = AppGraph.get(context)
         val now = graph.clock.now()
         val zone = graph.clock.zone()
-        val plan = graph.plan()
+        val plan = graph.planning.plan()
         val record = Days.record(plan, zone, SchoolDays.kindOf(plan.today, graph.school.value))
         val ahead = record.chunks
         graph.log.update { log ->
@@ -68,7 +68,7 @@ object Briefing {
         CalendarTime.refresh(context)
         val now = graph.clock.now()
         val zone = graph.clock.zone()
-        val plan = graph.plan()
+        val plan = graph.planning.plan()
         val today = Days.record(plan, zone, SchoolDays.kindOf(plan.today, graph.school.value))
         graph.log.update { log ->
             val finished = log.days.map { day -> if (day.full == null && day.date < today.date) Days.finish(day, log, zone) else day }
@@ -77,7 +77,7 @@ object Briefing {
         graph.runtime.update { it.copy(teamsAuto = it.teamsAuto.copy(morningUntil = now + MORNING_OFFER_MS)) }
         val (title, lines) = summary(plan)
         // Felix's sentence or two on the day in place of the list (LR-04, 16 Oct); the list alone without it.
-        if (runCatching { graph.felix.morning(title, now) }.onFailure { android.util.Log.w(AppGraph.TAG, "Felix's morning message failed", it) }.getOrDefault(false)) {
+        if (runCatching { graph.looks.morning(title, now) }.onFailure { android.util.Log.w(AppGraph.TAG, "Felix's morning message failed", it) }.getOrDefault(false)) {
             graph.notifier.cancel(NoticeId.Briefing)
             return
         }

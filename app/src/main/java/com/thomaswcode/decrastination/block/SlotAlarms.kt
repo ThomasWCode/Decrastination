@@ -13,6 +13,7 @@ import com.thomaswcode.decrastination.core.SchoolDays
 import com.thomaswcode.decrastination.core.Slot
 import com.thomaswcode.decrastination.core.SlotKind
 import com.thomaswcode.decrastination.core.WindowKind
+import com.thomaswcode.decrastination.felix.FelixWorker
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -100,12 +101,12 @@ class Slots(private val graph: AppGraph) {
     /** [key]'s slot has begun (phase 5 has more to do here). */
     fun onStart(key: String) {
         Log.i(AppGraph.TAG, "Slot begun: $key")
-        graph.watcher.poke()
+        graph.planning.watcher.poke()
     }
 
     /** [key]'s slot is over, and its grace: its piece still planned is missed, and moves; recorded as it was [laid] (LR-09). */
     suspend fun onEnd(key: String, laid: Focus.Laid? = null, now: Long = graph.clock.now()) {
-        val plan = graph.plan(now = now)
+        val plan = graph.planning.plan(now = now)
         // Done (ticked, or by its source): nothing missed.
         val chunk = plan.ordered.firstOrNull { it.key == key }
         if (chunk == null) {
@@ -115,7 +116,7 @@ class Slots(private val graph: AppGraph) {
         Log.i(AppGraph.TAG, "Slot missed: $key")
         graph.focus.missSlot(key, laid ?: graph.runtime.value.slots.on(plan.today).previous[key]?.let { Focus.Laid(it, it + chunk.minutes * 60_000L, WindowKind.Evening) }, now)
         graph.runtime.update { it.copy(slots = it.slots.on(plan.today).missed(key, chunk.taskId, now)) }
-        graph.watcher.poke()
+        graph.planning.watcher.poke()
     }
 
     /** The kind of today's window [time] falls in, as the plan lays them (the evening's, where none does). */
@@ -137,7 +138,7 @@ class Slots(private val graph: AppGraph) {
         val missed = state.missed.map { it.key }.toSet()
         val started = state.previous.filter { (key, start) -> key !in missed && start + SlotAlarms.GRACE_MS < now }
         if (started.isEmpty()) return
-        val plan = graph.plan(now = now)
+        val plan = graph.planning.plan(now = now)
         for ((key, start) in started) {
             val chunk = plan.ordered.firstOrNull { it.key == key } ?: continue
             if (start + chunk.minutes * 60_000L + SlotAlarms.GRACE_MS < now) onEnd(key, Focus.Laid(start, start + chunk.minutes * 60_000L, windowAt(start)), now)
@@ -167,7 +168,7 @@ class SlotReceiver : BroadcastReceiver() {
                 // Each is a moment Felix may have something to say (LR-03): his look is work of its own,
                 // as the model's answer may take longer than a receiver is given, and the app may go
                 // once it's let go.
-                com.thomaswcode.decrastination.learn.FelixWorker.enqueue(context)
+                FelixWorker.enqueue(context)
             } finally {
                 pending.finish()
             }

@@ -11,6 +11,8 @@ import com.thomaswcode.decrastination.core.SchoolCalendar
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.data.Settings
+import com.thomaswcode.decrastination.felix.ChatPrompts
+import com.thomaswcode.decrastination.felix.FelixPrompts
 import com.thomaswcode.decrastination.learn.ReviewInput
 import java.io.File
 import java.util.concurrent.TimeUnit

@@ -1,15 +1,21 @@
-package com.thomaswcode.decrastination.learn
+package com.thomaswcode.decrastination.felix
 
+import com.thomaswcode.decrastination.block.BlockPolicy
 import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.Slot
 import com.thomaswcode.decrastination.core.SlotKind
 import com.thomaswcode.decrastination.core.Slotter
+import com.thomaswcode.decrastination.data.AssessLater
+import com.thomaswcode.decrastination.data.FelixDraft
+import com.thomaswcode.decrastination.data.FelixQuestion
 import com.thomaswcode.decrastination.data.FelixRecord
 import com.thomaswcode.decrastination.data.FelixState
 import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.data.SlotOutcome
 import com.thomaswcode.decrastination.data.SlotRecord
-import com.thomaswcode.decrastination.enrich.FelixPrompts.Reason
+import com.thomaswcode.decrastination.felix.FelixPrompts.Reason
+import java.time.Instant
+import java.time.ZoneId
 
 /**
  * When Felix writes (LR-03): only around today's work, never in quiet hours or a busy event, and
@@ -22,8 +28,8 @@ object FelixRules {
         val reason: Reason,
         val slot: Slot? = null,
         val record: SlotRecord? = null,
-        val asks: List<com.thomaswcode.decrastination.data.AssessLater> = emptyList(),
-        val question: com.thomaswcode.decrastination.data.FelixQuestion? = null,
+        val asks: List<AssessLater> = emptyList(),
+        val question: FelixQuestion? = null,
     ) {
         val key: String? get() = slot?.chunk?.key ?: record?.key
         val taskId: String? get() = slot?.chunk?.taskId ?: record?.taskId ?: question?.taskId
@@ -62,8 +68,8 @@ object FelixRules {
         quiet: Boolean,
         busyNow: Boolean,
         needsPhoto: (SlotRecord) -> Boolean,
-        toAsk: List<com.thomaswcode.decrastination.data.AssessLater> = emptyList(),
-        zone: java.time.ZoneId = java.time.ZoneId.systemDefault(),
+        toAsk: List<AssessLater> = emptyList(),
+        zone: ZoneId = ZoneId.systemDefault(),
     ): Trigger? {
         if (quiet || busyNow) return null
         fun said(reason: Reason, key: String?, since: Long) = sent.filter { it.reason == reason.name && it.key == key && it.at >= since }
@@ -85,7 +91,7 @@ object FelixRules {
         // A question of the model's about a reading (AI-10): put when he's free to, the oldest first.
         if (!paced) state.questions.firstOrNull()?.let { return Trigger(Reason.Question, question = it) }
         // Work its source says is done that the app saw none of: how it went, asked together in the evening.
-        if (!paced && toAsk.isNotEmpty() && com.thomaswcode.decrastination.block.BlockPolicy.minuteOfDay(now, zone) >= COMPLETIONS_FROM_MIN && sent.none { it.reason == Reason.Completions.name }) {
+        if (!paced && toAsk.isNotEmpty() && BlockPolicy.minuteOfDay(now, zone) >= COMPLETIONS_FROM_MIN && sent.none { it.reason == Reason.Completions.name }) {
             return Trigger(Reason.Completions, asks = toAsk)
         }
         // Quiet when nothing's scheduled (Q-31): no slot of today's under way or to come.
@@ -133,7 +139,7 @@ object FelixRules {
      * longer ago than [DRAFT_FRESH_MS], and with no message of his since ([lastSentAt]), which it
      * would repeat or contradict.
      */
-    fun fits(draft: com.thomaswcode.decrastination.data.FelixDraft?, trigger: Trigger, now: Long, lastSentAt: Long?): Boolean =
+    fun fits(draft: FelixDraft?, trigger: Trigger, now: Long, lastSentAt: Long?): Boolean =
         draft != null && draft.reason == trigger.reason.name && draft.key == trigger.key && now - draft.at <= DRAFT_FRESH_MS && (lastSentAt == null || lastSentAt < draft.at)
 
     /**
@@ -158,12 +164,12 @@ object FelixRules {
      * can be. One with no time is today's.
      */
     fun toAsk(
-        waiting: List<com.thomaswcode.decrastination.data.AssessLater>,
+        waiting: List<AssessLater>,
         slots: List<SlotRecord>,
         now: Long,
-        zone: java.time.ZoneId,
-    ): List<com.thomaswcode.decrastination.data.AssessLater> {
+        zone: ZoneId,
+    ): List<AssessLater> {
         val keptOn = slots.filter { it.outcome.kept }.mapTo(HashSet()) { it.taskId to it.date }
-        return waiting.filter { a -> (a.taskId to java.time.Instant.ofEpochMilli(a.doneAt ?: now).atZone(zone).toLocalDate().toString()) !in keptOn }
+        return waiting.filter { a -> (a.taskId to Instant.ofEpochMilli(a.doneAt ?: now).atZone(zone).toLocalDate().toString()) !in keptOn }
     }
 }

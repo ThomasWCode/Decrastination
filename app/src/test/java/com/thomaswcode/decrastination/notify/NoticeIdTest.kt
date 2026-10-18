@@ -1,5 +1,6 @@
 package com.thomaswcode.decrastination.notify
 
+import com.thomaswcode.decrastination.felix.FelixNotifications
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
