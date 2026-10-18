@@ -19,3 +19,11 @@ Everything implementing the plan has needed from you, from 18 Oct 2026: question
 - **B.** Leave it.
 - ANSWER: A
 - Done (18 Oct): pulled into `private/phone-files/`, then deleted from the phone.
+
+### I2. A test that can fail on this PC now and then
+
+`PowerPlannerSourceTest` failed once in Stage 3's runs (and passed three times out of three again): Windows refused to rename `secrets.bin.tmp` over `secrets.bin` for a moment, as a virus scanner reading a file just written does. `JsonStore`'s write tries a few times more when that happens; `SecretStore`'s doesn't. CI runs on Linux, where it can't happen, and the app on Android neither: only the tests on this PC are touched. Not fixed here: the plan keeps finds out of the moves.
+
+- **A (recommended).** Give `SecretStore.write` the same few tries, in a small PR of its own (or in Stage 12's sweep).
+- **B.** Leave it: rerun the tests when it happens.
+- ANSWER:
