@@ -128,7 +128,7 @@ A task's steps can be the source's (Anki's), a reading's (Claude's or the rules'
 Nothing that changes a phase; the numbers moved, the structure didn't. What the plan should know of:
 
 - **`ChatRounds`** (3.2.0): the chat's answer can take a second round for a web search or a task's whole text, and `AppGraph` holds the retry's state in memory (`Gathered`: what a failed answer had looked up or read). It's the Conversation service's ([02](02-target-architecture.md)).
-- **The readings write a summary** of a long text (D-93, `Enrichment.summary`), which `enrich/TaskText.kt` gives the chat and his messages in place of the text: no new store, no new call. (plan_v4's [08](../plan_v4/08-summaries.md) builds on it.)
+- **The readings write a summary** of a long text (D-93, `Enrichment.summary`), which `enrich/TaskText.kt` gives the chat and his messages in place of the text: no new store, no new call. ([13](13-summaries.md) builds on it.)
 - **The schemas are guarded twice**: `SchemaLimitsTest` (at most 16 unions, two inside a list) as a tripwire, and `SchemaCompileTest -PcheckSchemas=true`, which has the API compile every schema, as the guard before a merge.
-- **A doc kept by a test**: `FelixInputsDocTest -PupdateDocs=true` writes `docs/spec/felix-inputs.md` from the code's own examples, the first case of Phase 7's "kept in step" rule being enforced.
+- **A doc kept by a test**: `FelixInputsDocTest -PupdateDocs=true` writes `docs/spec/felix-inputs.md` from the code's own examples, the first case of the docs' "kept in step" rule ([11](11-conventions-and-docs.md) §The docs) being enforced by a test.
 - `Prompts.VERSION` is 7; the warm, capped Gradle daemons are in `gradle.properties`; the tests are 874.
