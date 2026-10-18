@@ -1,0 +1,233 @@
+package com.thomaswcode.decrastination.felix
+
+import android.app.Notification
+import com.thomaswcode.decrastination.Fixtures
+import com.thomaswcode.decrastination.Fixtures.LONDON
+import com.thomaswcode.decrastination.block.Focus
+import com.thomaswcode.decrastination.core.About
+import com.thomaswcode.decrastination.core.FixedClock
+import com.thomaswcode.decrastination.core.Instruction
+import com.thomaswcode.decrastination.core.InstructionStatus
+import com.thomaswcode.decrastination.core.OwnTask
+import com.thomaswcode.decrastination.core.OwnTasks
+import com.thomaswcode.decrastination.core.Proposal
+import com.thomaswcode.decrastination.core.Source
+import com.thomaswcode.decrastination.core.TaskItem
+import com.thomaswcode.decrastination.data.SecretCipher
+import com.thomaswcode.decrastination.data.Settings
+import com.thomaswcode.decrastination.data.Stores
+import com.thomaswcode.decrastination.enrich.KeyProblem
+import com.thomaswcode.decrastination.enrich.ModelGateway
+import com.thomaswcode.decrastination.learn.EventJudge
+import com.thomaswcode.decrastination.notify.NoticeId
+import com.thomaswcode.decrastination.notify.Notices
+import com.thomaswcode.decrastination.plan.Planning
+import java.nio.file.Files
+import java.util.Collections
+import java.util.UUID
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.joinAll
+import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import okhttp3.mockwebserver.MockResponse
+import okhttp3.mockwebserver.MockWebServer
+
+/**
+ * Felix's service on temporary stores (docs/plan_v4, Stage 4), for the flows' tests: the real stores,
+ * gateway, focus and plan, and his calls through the real readers, answered by a stand-in for
+ * Claude's API ([server]). Android is a list of what it was asked ([ports]); the other owners
+ * ([owners]: your own tasks and your instructions) do, simply, what AppGraph's functions do.
+ */
+class FelixHarness(start: String = "2026-10-19T16:30") : AutoCloseable {
+    private val dir = Files.createTempDirectory("felix").toFile()
+    val clock = FixedClock(Fixtures.at(start), LONDON)
+    val stores = Stores(dir, Reverse, { clock.now() })
+    private val job = SupervisorJob()
+    private val scope = CoroutineScope(job + Dispatchers.Default)
+    val server = MockWebServer().apply { start() }
+    private val gateway = ModelGateway(stores.settings, { "test-key" }, stores.runtime, stores.tasks, clock, NoAlerts, scope) {}
+        .also { it.endpoint = server.url("").toString().trimEnd('/') }
+    val ports = Ports()
+    val owners = Owners()
+    private val focus: Focus = Focus(stores.tasks, stores.settings, stores.runtime, stores.log, clock) { state, s, now -> planning.plan(state, s, now) }
+    val planning: Planning = Planning(
+        stores.tasks, stores.settings, stores.runtime, stores.log, stores.instructions, stores.school, clock, scope, gateway,
+        calendarTime = { NO_CALENDAR },
+        calendarChanges = emptyFlow<Unit>(),
+        sweep = {},
+        hooks = emptyList(),
+        profile = { conversation.profile(it) },
+        draftAhead = { _, _ -> },
+        onFailure = { throw it },
+    )
+    val conversation: Conversation = Conversation(
+        stores.tasks, stores.settings, stores.runtime, stores.log, stores.instructions, stores.chat, stores.school, stores.memory,
+        clock, scope, gateway, Shown, focus, planning, ports, owners,
+        calendarTime = { NO_CALENDAR },
+        answered = { record, words -> looks.answered(record, words) },
+    )
+    val looks: Looks = Looks(
+        stores.tasks, stores.settings, stores.runtime, stores.log, clock, scope, gateway, Shown, focus, planning, ports,
+        calendarTime = { NO_CALENDAR },
+        profile = { conversation.profile(it) },
+        remember = { conversation.remember(it) },
+        addInstruction = { text, about, answer -> owners.instruction(text, about, answer) },
+        assess = { _, _, _ -> },
+    )
+
+    init {
+        // Claude on, with its key in use: his calls go to the stand-in.
+        runBlocking { stores.settings.update { it.copy(aiEnabled = true, aiKeyActive = true) } }
+    }
+
+    /** Claude's next answer from the stand-in: a message whose text is [text], the JSON a reader parses. */
+    fun answers(text: String) {
+        val body = JsonObject(
+            mapOf(
+                "id" to JsonPrimitive("msg_test"),
+                "type" to JsonPrimitive("message"),
+                "role" to JsonPrimitive("assistant"),
+                "model" to JsonPrimitive("claude-opus-5-5"),
+                "content" to JsonArray(listOf(JsonObject(mapOf("type" to JsonPrimitive("text"), "text" to JsonPrimitive(text))))),
+                "stop_reason" to JsonPrimitive("end_turn"),
+                "stop_sequence" to JsonNull,
+                "usage" to JsonObject(mapOf("input_tokens" to JsonPrimitive(1_200), "output_tokens" to JsonPrimitive(80))),
+            ),
+        )
+        server.enqueue(MockResponse().setHeader("Content-Type", "application/json").setBody(body.toString()))
+    }
+
+    /** The chat's answer [reply], with the tasks and changes it offers (the schema's JSON for them), and nothing else. */
+    fun chatAnswer(reply: String, newTasks: String = "[]", changes: String = "[]"): String =
+        """{"reply":"$reply","newTasks":$newTasks,"changes":$changes,"memories":[],"suggestedReplies":[],"actions":[],"research":"","details":[]}"""
+
+    /** What the service started in the background (an answer asked for as a message is kept), finished. */
+    fun settle() = runBlocking {
+        while (job.children.any { it.isActive }) job.children.toList().joinAll()
+    }
+
+    override fun close() {
+        settle()
+        server.shutdown()
+        dir.deleteRecursively()
+    }
+
+    /** What Android was asked to do: his notifications posted and taken away, his looks set, the work asked for. */
+    class Ports : FelixPorts {
+        data class Posted(val id: String, val text: String, val replies: List<String>, val cards: Int, val sent: String?, val title: String?, val channel: String)
+
+        val posted: MutableList<Posted> = Collections.synchronizedList(mutableListOf())
+        val looks: MutableList<Long?> = Collections.synchronizedList(mutableListOf())
+        val later: MutableList<Triple<String, String, String>> = Collections.synchronizedList(mutableListOf())
+        @Volatile var cancelled = 0
+        @Volatile var readAgain = 0
+        @Volatile var schedules = 0
+        @Volatile var reviews = 0
+        @Volatile var forms = 0
+
+        override fun post(id: String, name: String, text: String, replies: List<String>, cards: List<Pair<String, Proposal>>, sent: String?, title: String?, channel: String) {
+            posted += Posted(id, text, replies, cards.size, sent, title, channel)
+        }
+
+        override fun cancel() {
+            cancelled++
+        }
+
+        override fun armLook(at: Long?) {
+            looks += at
+        }
+
+        override fun readAgain() {
+            readAgain++
+        }
+
+        override fun scheduleReminders() {
+            schedules++
+        }
+
+        override fun review() {
+            reviews++
+        }
+
+        override fun answerLater(id: String, asked: String, words: String) {
+            later += Triple(id, asked, words)
+        }
+
+        override fun remindForm() {
+            forms++
+        }
+    }
+
+    /** Your own tasks and your instructions, as AppGraph keeps them: made, applied and taken back on the stores, the checks left out. */
+    inner class Owners : Conversation.Owners {
+        override suspend fun saveOwnTask(sourceId: String, task: OwnTask): Boolean {
+            if (OwnTasks.problem(task) != null) return false
+            val made = OwnTasks.create(task, sourceId, clock.now())
+            stores.tasks.update { s -> s.copy(tasks = s.tasks.filterNot { it.id == made.id } + made) }
+            return true
+        }
+
+        override suspend fun finishOwnTask(taskId: String) = Unit
+
+        override suspend fun reopenOwnTask(taskId: String) = Unit
+
+        override suspend fun deleteOwnTask(taskId: String) {
+            stores.tasks.update { s -> s.copy(tasks = s.tasks.filterNot { it.id == taskId && it.source == Source.Own }) }
+        }
+
+        override suspend fun applyInstruction(id: String) {
+            stores.instructions.update { s ->
+                s.copy(instructions = s.instructions.map { if (it.id == id && it.state == InstructionStatus.Understood) it.copy(state = InstructionStatus.Applied, appliedAt = clock.now()) else it })
+            }
+        }
+
+        override suspend fun deleteInstruction(id: String) {
+            stores.instructions.update { s -> s.copy(instructions = s.instructions.filterNot { it.id == id }) }
+        }
+
+        override suspend fun layTaskOverrides() = Unit
+
+        override suspend fun changeSettings(change: (Settings) -> Settings) {
+            stores.settings.update(change)
+        }
+
+        /** Your answer to his question, kept to be read, as `AppGraph.addInstruction` keeps one. */
+        suspend fun instruction(text: String, about: About, answer: Boolean): String {
+            val id = UUID.randomUUID().toString()
+            stores.instructions.update { it.copy(instructions = it.instructions + Instruction(id, text, about, clock.now(), answer = answer)) }
+            return id
+        }
+    }
+
+    /** His channel shown, and nothing posted through it here: his notifications are the ports'. */
+    private object Shown : Notices {
+        override fun post(id: NoticeId, notification: Notification, tag: String?) = Unit
+        override fun cancel(id: NoticeId, tag: String?) = Unit
+        override fun shown(channel: String): Boolean = true
+        override suspend fun postHeld() = Unit
+    }
+
+    private object NoAlerts : ModelGateway.Alerts {
+        override fun keyProblem(problem: KeyProblem): Boolean = false
+        override fun keyFixed() = Unit
+        override fun dropped(task: TaskItem, why: String): Boolean = false
+        override fun withdrawExcept(standing: Set<String>) = Unit
+    }
+
+    /** A cipher for the secrets that only reverses the bytes: no keystore on a PC. */
+    private object Reverse : SecretCipher {
+        override fun encrypt(plain: ByteArray) = plain.reversedArray()
+        override fun decrypt(sealed: ByteArray) = sealed.reversedArray()
+    }
+
+    private companion object {
+        /** No calendar: nothing busy, no day's load, no event. */
+        val NO_CALENDAR = EventJudge.Time(emptyList(), emptyMap(), emptyList())
+    }
+}
