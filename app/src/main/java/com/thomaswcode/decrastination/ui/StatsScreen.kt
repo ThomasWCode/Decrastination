@@ -80,7 +80,7 @@ fun StatsScreen(graph: AppGraph) {
     val credit = runtime.credit.on(graph.focus.today(now))
     val leftMin = (graph.focus.creditLeftMs(now) / 60_000).toInt()
     val usage = runtime.aiUsage.forMonth(AiUsage.monthOf(now, zone))
-    val claudeOff = graph.claudeKey() == null && usage.calls == 0
+    val claudeOff = graph.gateway.claudeKey() == null && usage.calls == 0
     val top = stats.topBlocked.joinToString { (target, times) -> "${Blocklist.NAMES[target] ?: target} $times" }
     var allDays by rememberSaveable { mutableStateOf(false) }
     var inFull by rememberSaveable { mutableStateOf(false) }

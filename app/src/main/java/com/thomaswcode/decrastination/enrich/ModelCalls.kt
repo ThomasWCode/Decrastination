@@ -30,7 +30,7 @@ object ModelCalls {
     }
 
     /**
-     * How a call goes on record (AC-07, `AppGraph.callModel`): its job and what it was about, and,
+     * How a call goes on record (AC-07, [ModelGateway.call]): its job and what it was about, and,
      * from its answer, what it used and how it went.
      */
     class OnRecord<T>(val job: ModelEffort.Job, val title: String? = null, val read: (T) -> Pair<Usage, String>)

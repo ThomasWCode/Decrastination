@@ -63,7 +63,7 @@ private val PIECE = Saver<PhotoPiece?, ArrayList<String?>>(
 @Composable
 fun rememberPhotoCheck(graph: AppGraph, activity: Activity, plan: Plan, say: (taskId: String, text: String) -> Unit): PhotoCheck {
     val settings by graph.settings.state.collectAsStateWithLifecycle()
-    val checker = remember(settings.aiEnabled, settings.aiKeyActive) { graph.photoChecker() }
+    val checkable = remember(settings.aiEnabled, settings.aiKeyActive) { graph.gateway.claudeKey() != null }
     val dir = remember { File(activity.cacheDir, "photos").also { it.mkdirs() } }
     fun page(n: Int) = File(dir, "check-$n.jpg")
     fun uriOf(file: File) = FileProvider.getUriForFile(activity, "${activity.packageName}.photos", file)
@@ -84,7 +84,7 @@ fun rememberPhotoCheck(graph: AppGraph, activity: Activity, plan: Plan, say: (ta
         photoFor = null
         val pages = (1..wanted.pages).map(::page)
         val piece = plan.chunksOf(wanted.taskId).firstOrNull { it.stepIndex == wanted.stepIndex && it.step == wanted.step && it.sitting?.after == wanted.after }
-        if (piece == null || checker == null) {
+        if (piece == null || !checkable) {
             pages.forEach { it.delete() }
             if (piece == null) say(wanted.taskId, "That piece has changed since the photo was taken (done, or planned again), so it wasn't checked.")
             return
@@ -103,7 +103,7 @@ fun rememberPhotoCheck(graph: AppGraph, activity: Activity, plan: Plan, say: (ta
         val wanted = photoFor ?: return@rememberLauncherForActivityResult
         when {
             // Not to be checked: with no page yet, nothing to keep.
-            checker == null || (!taken && wanted.pages == 0) -> {
+            !checkable || (!taken && wanted.pages == 0) -> {
                 photoFor = null
                 (1..PhotoChecker.MAX_PAGES).forEach { page(it).delete() }
             }
@@ -138,7 +138,7 @@ fun rememberPhotoCheck(graph: AppGraph, activity: Activity, plan: Plan, say: (ta
             },
         )
     }
-    return PhotoCheck(checker != null, running != null) { piece ->
+    return PhotoCheck(checkable, running != null) { piece ->
         (1..PhotoChecker.MAX_PAGES).forEach { page(it).delete() }
         photoFor = PhotoPiece(piece.taskId, piece.stepIndex, piece.step, after = piece.sitting?.after)
         launcher.launch(uriOf(page(1)))

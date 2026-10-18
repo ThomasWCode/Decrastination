@@ -4,7 +4,7 @@ import java.time.ZoneId
 
 /**
  * What stops the model being asked now, when something does. Every call checks it under
- * `AppGraph.modelCalls`, just before sending, so the call before it (its failure, its cost) counts.
+ * [ModelGateway]'s lock, just before sending, so the call before it (its failure, its cost) counts.
  */
 enum class ModelHold {
     /** Switched off, or its key not (yet) in use. */

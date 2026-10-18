@@ -5,7 +5,7 @@ The app has no server of its own: it runs on the phone, talks only to Claude and
 
 ## What leaves the phone
 
-**Claude.** The Anthropic API, through its Java SDK, is called only while Claude is on and its key in use (`AppGraph.claudeKey`), every call through `AppGraph.callModel` ([readings.md](readings.md)).
+**Claude.** The Anthropic API, through its Java SDK, is called only while Claude is on and its key in use (`ModelGateway.claudeKey`), every call through `ModelGateway.call` ([readings.md](readings.md)).
 Every call sends its job's instructions and, but for the web search, your profile (AI-05, AI-06, `enrich/Profile.kt`):
 - your year group, and your subjects (Settings' map of your class codes to subjects, or the codes as they are);
 - the school day's times (lessons, study periods, break, lunch), your working hours, the next days off with their names, and the Anki textbook;

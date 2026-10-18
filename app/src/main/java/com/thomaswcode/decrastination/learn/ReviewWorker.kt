@@ -46,7 +46,7 @@ class ReviewWorker(context: Context, params: WorkerParameters) : CoroutineWorker
         fun enqueue(context: Context, ifDue: Boolean) {
             // With Claude on, the model's review is expected: it waits for a connection, rather
             // than its call failing offline and the rules' review standing for the week.
-            val online = AppGraph.get(context).claudeKey() != null
+            val online = AppGraph.get(context).gateway.claudeKey() != null
             val request = OneTimeWorkRequestBuilder<ReviewWorker>()
                 .setInputData(workDataOf(KEY_IF_DUE to ifDue))
                 .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)

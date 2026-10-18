@@ -238,7 +238,7 @@ fun SetupScreen(graph: AppGraph, activity: Activity, parts: Set<SetupPart> = Set
                 // Put to use at once, armed or not: Claude works on the plan, not the blocker (12 Oct).
                 graph.changeSettings { it.copy(aiKeyActive = true) }
                 // A new key for one already in use: straight to work.
-                if (graph.claudeKey() != null) EnrichWorker.enqueue(activity)
+                if (graph.gateway.claudeKey() != null) EnrichWorker.enqueue(activity)
             }
         }
     }

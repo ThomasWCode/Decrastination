@@ -77,7 +77,7 @@ object Assessment {
         if (asks.isEmpty()) return
         // Felix asks in the evening (LR-05); without Claude, or while notifications can't be seen, kept till they can.
         val graph = AppGraph.get(context)
-        if (graph.claudeKey() != null || !graph.notifier.shown(Channels.FELIX)) {
+        if (graph.gateway.claudeKey() != null || !graph.notifier.shown(Channels.FELIX)) {
             graph.runtime.update { it.copy(assessLater = (it.assessLater + asks).distinctBy { a -> a.taskId to a.doneAt }.takeLast(MAX_LATER)) }
             return
         }
@@ -88,7 +88,7 @@ object Assessment {
     suspend fun askLater(context: Context) {
         val graph = AppGraph.get(context)
         val waiting = graph.runtime.value.assessLater
-        if (waiting.isEmpty() || graph.claudeKey() != null || !graph.notifier.shown(Channels.FELIX)) return
+        if (waiting.isEmpty() || graph.gateway.claudeKey() != null || !graph.notifier.shown(Channels.FELIX)) return
         waiting.forEach { post(context, it) }
         graph.runtime.update { it.copy(assessLater = it.assessLater - waiting.toSet()) }
     }

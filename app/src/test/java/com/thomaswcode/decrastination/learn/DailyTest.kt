@@ -283,7 +283,7 @@ class ClaudeReviewerTest {
                 ),
             )
             server.enqueue(MockResponse().setHeader("Content-Type", "application/json").setBody(body.toString()))
-            val result = ClaudeReviewer("test-key", endpoint = server.url("").toString().trimEnd('/')).review("Finished this week: ...")
+            val result = ClaudeReviewer(com.thomaswcode.decrastination.enrich.ModelGateway.build("test-key", server.url("").toString().trimEnd('/'))).review("Finished this week: ...")
             val request = Json.parseToJsonElement(server.takeRequest().body.readUtf8()).jsonObject
             assertEquals("high", request["output_config"]!!.jsonObject["effort"]!!.jsonPrimitive.content)
             assertEquals("default", request["fallbacks"]!!.jsonPrimitive.content)

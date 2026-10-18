@@ -124,7 +124,7 @@ fun ProtectionPanel(graph: AppGraph, activity: ComponentActivity) {
     val notificationLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
         refresh++
         // Allowed now: alerts that couldn't be shown before are.
-        graph.reconcileAlerts()
+        graph.gateway.reconcileAlerts()
     }
     val hasParentCode = Secret.TotpSecret in secrets
     val now = graph.clock.now()

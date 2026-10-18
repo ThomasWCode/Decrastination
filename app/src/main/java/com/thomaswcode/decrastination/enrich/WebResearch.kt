@@ -1,7 +1,6 @@
 package com.thomaswcode.decrastination.enrich
 
 import com.anthropic.client.AnthropicClient
-import com.anthropic.client.okhttp.AnthropicOkHttpClient
 import com.anthropic.core.JsonValue
 import com.anthropic.models.messages.MessageCreateParams
 import com.anthropic.models.messages.OutputConfig
@@ -9,7 +8,6 @@ import com.anthropic.models.messages.StopReason
 import com.anthropic.models.messages.UserLocation
 import com.anthropic.models.messages.WebSearchTool20250305
 import com.thomaswcode.decrastination.core.WebSource
-import java.time.Duration
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -72,17 +70,11 @@ internal fun searchTool(zone: ZoneId): WebSearchTool20250305 =
     WebSearchTool20250305.builder().maxUses(ResearchPrompts.MAX_SEARCHES.toLong()).userLocation(UserLocation.builder().country("GB").timezone(zone.id).build()).build()
 
 /** Claude looking something up on the web for the chat ([ResearchPrompts]), as the enrichment's calls are made. */
-class WebResearcher(apiKey: String, endpoint: String? = null, val model: String = ClaudeEnricher.MODEL, private val year: Int = 12) {
+class WebResearcher(private val client: AnthropicClient, val model: String = ClaudeEnricher.MODEL, private val year: Int = 12) {
 
     /** [paused]: its searching ran past the turn's limit (pause_turn), and it isn't sent on: one request a look, as the cap reserves. */
     data class Result(val found: Found?, val costUsd: Double, val refused: Boolean = false, val usage: ModelCalls.Usage = ModelCalls.Usage.NONE, val paused: Boolean = false)
 
-    private val client: AnthropicClient = AnthropicOkHttpClient.builder()
-        .apiKey(apiKey)
-        .apply { if (endpoint != null) baseUrl(endpoint) }
-        .timeout(Duration.ofMinutes(3))
-        .maxRetries(2)
-        .build()
 
     /** What the web says for [question], asked about the student's [asked], at [now]; none found, a null [Result.found]. */
     suspend fun look(question: String, asked: String, now: Long, zone: ZoneId): Result {
