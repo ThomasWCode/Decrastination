@@ -23,7 +23,7 @@ class FelixReplyWorker(context: Context, params: WorkerParameters) : CoroutineWo
     override suspend fun doWork(): Result {
         val id = inputData.getString(KEY_ID) ?: return Result.success()
         val asked = inputData.getString(KEY_ASKED) ?: return Result.success()
-        AppGraph.get(applicationContext).answerReply(id, asked, inputData.getString(KEY_WORDS).orEmpty())
+        AppGraph.get(applicationContext).conversation.answerReply(id, asked, inputData.getString(KEY_WORDS).orEmpty())
         return Result.success()
     }
 

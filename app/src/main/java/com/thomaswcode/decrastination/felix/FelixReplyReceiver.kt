@@ -10,7 +10,7 @@ import kotlinx.coroutines.launch
 
 /**
  * What's done from Felix's notification (AI-24): a reply, typed or one of his, goes on in the chat
- * ([AppGraph.replyToFelix], whose answer comes as his next notification, made as work of its own,
+ * ([Conversation.replyToFelix], whose answer comes as his next notification, made as work of its own,
  * [FelixReplyWorker]); a card's button adds the task or applies the changes, as the chat's Add and
  * Apply do.
  */
@@ -25,13 +25,13 @@ class FelixReplyReceiver : BroadcastReceiver() {
                         val text = RemoteInput.getResultsFromIntent(intent)?.getCharSequence(FelixNotifications.KEY_REPLY)?.toString()?.trim()
                         val id = intent.getStringExtra(FelixNotifications.EXTRA_ID)
                         // Only the reply's own handling waits here; the answer comes after, by itself.
-                        if (!text.isNullOrEmpty() && id != null) graph.replyToFelix(text, id)
+                        if (!text.isNullOrEmpty() && id != null) graph.conversation.replyToFelix(text, id)
                     }
                     FelixNotifications.ACTION_CARD -> {
                         val message = intent.getStringExtra(FelixNotifications.EXTRA_MESSAGE)
                         val card = intent.getStringExtra(FelixNotifications.EXTRA_CARD)
                         if (message != null && card != null) {
-                            graph.applyProposal(message, card)
+                            graph.conversation.applyProposal(message, card)
                             FelixNotifications.cancel(context)
                         }
                     }

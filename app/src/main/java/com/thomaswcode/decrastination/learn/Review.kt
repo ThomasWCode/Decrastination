@@ -102,12 +102,12 @@ object Review {
      * changes applied through [AppGraph.applyReviewChanges]. Otherwise why it couldn't be had.
      */
     private suspend fun modelReview(graph: AppGraph, now: Long, week: String, generation: Int): Outcome {
-        val reviewer = graph.gateway.client(ModelEffort.Job.Review)?.let { ClaudeReviewer(it, profile = graph.profile()) } ?: return Outcome(why = because(ModelHold.Off))
+        val reviewer = graph.gateway.client(ModelEffort.Job.Review)?.let { ClaudeReviewer(it, profile = graph.conversation.profile()) } ?: return Outcome(why = because(ModelHold.Off))
         val zone = graph.clock.zone()
         val input = ReviewInput.describe(graph.log.value, graph.runtime.value.calibration, graph.settings.value, now, zone, week)
         // Its room taken with every other model call's, then sent (AC-05). A failure is recorded
         // (Setup shows it; the model rests), then the rules' review stands.
-        val current = graph.gateway.client(ModelEffort.Job.Review)?.let { ClaudeReviewer(it, profile = graph.profile()) } ?: return Outcome(why = because(ModelHold.Off))
+        val current = graph.gateway.client(ModelEffort.Job.Review)?.let { ClaudeReviewer(it, profile = graph.conversation.profile()) } ?: return Outcome(why = because(ModelHold.Off))
         val result = when (val called = graph.gateway.call(interactive = false, record = com.thomaswcode.decrastination.enrich.ModelCalls.OnRecord(com.thomaswcode.decrastination.enrich.ModelEffort.Job.Review, "the week") { r: ClaudeReviewer.Result -> r.usage to com.thomaswcode.decrastination.enrich.ModelCalls.outcome(r.refused, r.answer == null) }, cost = { r: ClaudeReviewer.Result -> r.costUsd to r.refused }) { current.review(input) }) {
             is Called.Held -> return Outcome(why = because(called.hold))
             is Called.Failed -> throw called.error
@@ -137,7 +137,7 @@ object Review {
         val before = graph.memory.value.facts
         if (before.isEmpty() || !(force || MemoryTidy.due(before))) return null
         // The profile without the facts, which it's given to tidy.
-        val tidier = graph.gateway.client(ModelEffort.Job.Tidy)?.let { MemoryTidier(it, profile = graph.profile(remembered = graph.memory.value.copy(facts = emptyList()))) } ?: return null
+        val tidier = graph.gateway.client(ModelEffort.Job.Tidy)?.let { MemoryTidier(it, profile = graph.conversation.profile(remembered = graph.memory.value.copy(facts = emptyList()))) } ?: return null
         val called = graph.gateway.call(interactive = false, record = com.thomaswcode.decrastination.enrich.ModelCalls.OnRecord(com.thomaswcode.decrastination.enrich.ModelEffort.Job.Tidy, "what's remembered") { r: MemoryTidier.Result -> r.usage to com.thomaswcode.decrastination.enrich.ModelCalls.outcome(r.refused, r.answer == null) }, cost = { r: MemoryTidier.Result -> r.costUsd to r.refused }) { at -> tidier.tidy(before, at, graph.clock.zone()) }
         val answer = (called as? Called.Answered)?.value?.answer ?: return null
         val after = MemoryTidy.after(answer, before, now) ?: return null

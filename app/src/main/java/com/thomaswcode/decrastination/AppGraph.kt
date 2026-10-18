@@ -225,8 +225,8 @@ class AppGraph private constructor(context: Context) {
             { made -> toWrite.tryEmit(made); Unit },
             { _ -> WidgetUpdater.update(app) },
         ),
-        profile = { profile(it) },
-        draftAhead = { made, now -> felix.draftAhead(made, now) },
+        profile = { conversation.profile(it) },
+        draftAhead = { made, now -> looks.draftAhead(made, now) },
         onFailure = { Log.w(TAG, "Replanning failed", it) },
     )
 
@@ -255,7 +255,7 @@ class AppGraph private constructor(context: Context) {
     private val felixPorts = AndroidFelixPorts(app)
 
     /** The voice of the app's messages (LR-03). */
-    val felix: Looks = Looks(
+    val looks: Looks = Looks(
         tasks, settings, runtime, log, clock, scope, gateway, notifier, focus, planning, felixPorts,
         calendarTime = { calendarTime },
         profile = { conversation.profile(it) },
@@ -281,29 +281,8 @@ class AppGraph private constructor(context: Context) {
             override suspend fun changeSettings(change: (Settings) -> Settings) { this@AppGraph.changeSettings(change) }
         },
         calendarTime = { calendarTime },
-        answered = { record, words -> felix.answered(record, words) },
+        answered = { record, words -> looks.answered(record, words) },
     )
-
-    // [Conversation]'s functions, till their callers call them there.
-    fun profile(now: Long = clock.now(), remembered: com.thomaswcode.decrastination.core.MemoryState = memory.value): com.thomaswcode.decrastination.enrich.Profile.Block = conversation.profile(now, remembered)
-    suspend fun askCheckIn(): Boolean = conversation.askCheckIn()
-    suspend fun endCheckInFlow(): Unit = conversation.endCheckInFlow()
-    val answeringSince: kotlinx.coroutines.flow.StateFlow<Long?> get() = conversation.answeringSince
-    fun cancelAnswer(): Unit = conversation.cancelAnswer()
-    suspend fun ask(text: String, about: About = About(), id: String = java.util.UUID.randomUUID().toString()): Boolean = conversation.ask(text, about, id)
-    fun chatContext(now: Long = clock.now(), state: TaskState = tasks.value, time: com.thomaswcode.decrastination.learn.EventJudge.Time = calendarTime, applied: List<Instruction> = instructions.value.applied): com.thomaswcode.decrastination.felix.ChatPrompts.Context = conversation.chatContext(now, state, time, applied)
-    suspend fun answerChat(retry: Boolean = false): Unit = conversation.answerChat(retry)
-    suspend fun undoAct(messageId: String, index: Int): String? = conversation.undoAct(messageId, index)
-    suspend fun remember(given: List<com.thomaswcode.decrastination.core.Given>): List<com.thomaswcode.decrastination.core.MemoryEdit> = conversation.remember(given)
-    suspend fun undoMemory(messageId: String, index: Int): String? = conversation.undoMemory(messageId, index)
-    var chatInFront: Boolean get() = conversation.chatInFront; set(value) { conversation.chatInFront = value }
-    suspend fun replyToFelix(text: String, id: String): Boolean = conversation.replyToFelix(text, id)
-    suspend fun answerReply(id: String, asked: String, words: String): Unit = conversation.answerReply(id, asked, words)
-    suspend fun withdrawQuestion(): Unit = conversation.withdrawQuestion()
-    suspend fun clearChat(): Unit = conversation.clearChat()
-    suspend fun applyProposal(messageId: String, proposalId: String, edited: OwnTask? = null): Unit = conversation.applyProposal(messageId, proposalId, edited)
-    suspend fun undoProposal(messageId: String, proposalId: String): Unit = conversation.undoProposal(messageId, proposalId)
-    suspend fun discardProposal(messageId: String, proposalId: String, discarded: Boolean = true): Unit = conversation.discardProposal(messageId, proposalId, discarded)
 
     /**
      * [made]'s next seven days written to the calendar you picked (NF-07). A slot you've moved there
@@ -592,7 +571,7 @@ class AppGraph private constructor(context: Context) {
         // Your own tasks long done go, as a source's do.
         syncer.addAfterEverySync { pruneOwn() }
         // A question of yours still waiting (Claude was off, resting, or the app stopped): tried again.
-        syncer.addAfterEverySync { if (chat.value.unanswered != null) answerChat() }
+        syncer.addAfterEverySync { if (chat.value.unanswered != null) conversation.answerChat() }
         // One of your own whose steps are all done (ticked, or kept in their slots) is finished; and one
         // done by its tick (NF-06) given steps of yours by the chat (16 Oct).
         scope.launch {
@@ -653,7 +632,7 @@ class AppGraph private constructor(context: Context) {
                 if (on) {
                     EnrichWorker.enqueue(app)
                     readInstructions()
-                    answerChat()
+                    conversation.answerChat()
                 }
             }
         }
@@ -666,7 +645,7 @@ class AppGraph private constructor(context: Context) {
             // told the fortnight's events.
             if (chat.value.unanswered != null) {
                 runCatching { CalendarTime.refresh(app) }.onFailure { Log.w(TAG, "Reading the calendar failed", it) }
-                answerChat()
+                conversation.answerChat()
             }
         }
         runCatching {
@@ -762,7 +741,7 @@ class AppGraph private constructor(context: Context) {
 
     /** [jpeg] read into tasks of your own to check (NF-01): the reading, or why there's none. */
     suspend fun readPhotoTasks(jpeg: ByteArray): Pair<com.thomaswcode.decrastination.enrich.PhotoTasks.Reading?, String?> {
-        val reader = gateway.client(com.thomaswcode.decrastination.enrich.ModelEffort.Job.PhotoToTask)?.let { com.thomaswcode.decrastination.enrich.PhotoTaskReader(it, profile = profile()) } ?: return null to "Claude is off: add it with New task."
+        val reader = gateway.client(com.thomaswcode.decrastination.enrich.ModelEffort.Job.PhotoToTask)?.let { com.thomaswcode.decrastination.enrich.PhotoTaskReader(it, profile = conversation.profile()) } ?: return null to "Claude is off: add it with New task."
         val now = clock.now()
         return when (val called = gateway.call(interactive = true, record = com.thomaswcode.decrastination.enrich.ModelCalls.OnRecord(com.thomaswcode.decrastination.enrich.ModelEffort.Job.PhotoToTask, "a photo of homework") { r: com.thomaswcode.decrastination.enrich.PhotoTaskReader.Result -> r.usage to com.thomaswcode.decrastination.enrich.ModelCalls.outcome(r.refused, r.reading == null) }, cost = { r: com.thomaswcode.decrastination.enrich.PhotoTaskReader.Result -> r.costUsd to r.refused }) { reader.read(jpeg, now, clock.zone()) }) {
             is Called.Held -> null to "Claude can't be asked now: add it with New task."
@@ -825,7 +804,7 @@ class AppGraph private constructor(context: Context) {
         // Not while it rests after a failed call (no network, a bad key), nor with no room under the
         // cap: then what only the rules have seen isn't due for it.
         var enricher: Enricher? = gateway.client(com.thomaswcode.decrastination.enrich.ModelEffort.Job.Email).takeIf { byModel }
-            ?.let { ClaudeEnricher(it, clock.zone(), profile = { profile() }, decks = { tasks.value.deckTopics }) }?.takeIf { gateway.available() }
+            ?.let { ClaudeEnricher(it, clock.zone(), profile = { conversation.profile() }, decks = { tasks.value.deckTopics }) }?.takeIf { gateway.available() }
         var calls = 0
         var decksChanged = false
         // A task whose call the API wouldn't take as asked (AC-04): the rules' till it changes.
@@ -919,7 +898,7 @@ class AppGraph private constructor(context: Context) {
             if (fromModel && task.id == only) readByModel = true
             // A question it couldn't settle from the text (AI-10): Felix puts it. One waiting from an
             // older reading goes, asked again as this one has it, or settled by it.
-            felix.queueQuestion(task.id, made.question, now)
+            looks.queueQuestion(task.id, made.question, now)
             // A plan of the model's dropped (out of range, not adding up) is said once it's laid,
             // by droppedAlerts, as the tasks change.
             // Its deck tasks take their sections and due date from it.
@@ -999,7 +978,7 @@ class AppGraph private constructor(context: Context) {
             interactive = false,
             record = com.thomaswcode.decrastination.enrich.ModelCalls.OnRecord(com.thomaswcode.decrastination.enrich.ModelEffort.Job.Summary, "the week's summary") { r: com.thomaswcode.decrastination.enrich.SummaryWriter.Result -> r.usage to com.thomaswcode.decrastination.enrich.ModelCalls.outcome(r.refused, r.text == null) },
             cost = { r: com.thomaswcode.decrastination.enrich.SummaryWriter.Result -> r.costUsd to r.refused },
-        ) { at -> writer.write(profile(at).text, input) }
+        ) { at -> writer.write(conversation.profile(at).text, input) }
         val text = (called as? Called.Answered)?.value?.text ?: return null
         log.update { l -> l.copy(reviews = l.reviews.map { if (it.week == week) it.copy(summary = text) else it }) }
         val now = clock.now()
@@ -1200,7 +1179,7 @@ class AppGraph private constructor(context: Context) {
         while (true) {
             val next = instructions.value.instructions.firstOrNull { it.state == InstructionStatus.Reading } ?: return@withLock
             val waiting = run call@{
-                val reader = gateway.client(com.thomaswcode.decrastination.enrich.ModelEffort.Job.Instruction)?.let { InstructionReader(it, clock.zone(), profile = profile()) } ?: return@call gateway.because(ModelHold.Off)
+                val reader = gateway.client(com.thomaswcode.decrastination.enrich.ModelEffort.Job.Instruction)?.let { InstructionReader(it, clock.zone(), profile = conversation.profile()) } ?: return@call gateway.because(ModelHold.Off)
                 // Through a rest only for you waiting on it (AC-04): after a sync or an enrichment it waits.
                 val result = when (val called = gateway.call(interactive = interactive, record = com.thomaswcode.decrastination.enrich.ModelCalls.OnRecord(com.thomaswcode.decrastination.enrich.ModelEffort.Job.Instruction, next.text) { r: InstructionReader.Result -> r.usage to com.thomaswcode.decrastination.enrich.ModelCalls.outcome(r.refused, r.reading == null) }, cost = { r: InstructionReader.Result -> r.costUsd to r.refused }) { at -> reader.read(next, tasks.value.tasks, calendarTime.events, at) }) {
                     is Called.Held -> return@call gateway.because(called.hold)

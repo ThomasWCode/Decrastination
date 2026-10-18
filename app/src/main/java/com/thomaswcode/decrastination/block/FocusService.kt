@@ -702,7 +702,7 @@ class FocusService : AccessibilityService() {
             // A slot whose end went by while its alarm couldn't ring (PL-13).
             runCatching { graph.slots.sweep() }.onFailure { Log.w(TAG, "Looking at missed slots failed", it) }
             // Felix's look (LR-03): cheap with nothing to say, his rules being pure.
-            graph.scope.launch { runCatching { graph.felix.check() }.onFailure { Log.w(TAG, "Felix's look failed", it) } }
+            graph.scope.launch { runCatching { graph.looks.check() }.onFailure { Log.w(TAG, "Felix's look failed", it) } }
             val now = SystemClock.elapsedRealtime()
             if (now - lastWatchdogAt >= WATCHDOG_MS) {
                 lastWatchdogAt = now

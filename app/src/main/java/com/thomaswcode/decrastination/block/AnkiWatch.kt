@@ -73,7 +73,7 @@ class AnkiWatch(private val graph: AppGraph) {
         graph.runtime.update { it.copy(ankiFrontSince = now, ankiReadings = (it.ankiReadings + reading).takeLast(AnkiProgress.KEEP)) }
         // In AnkiDroid in a deck task's slot: work on it, as Felix sees it (LR-03). Not on every deck
         // task: it may be the deck list, or another deck; going out, the decks that moved say which.
-        graph.focus.plan(now).slotAt(now)?.chunk?.takeIf { it.source == Source.Anki }?.let { graph.felix.noteActivity(listOf(it.taskId), now) }
+        graph.focus.plan(now).slotAt(now)?.chunk?.takeIf { it.source == Source.Anki }?.let { graph.looks.noteActivity(listOf(it.taskId), now) }
     }
 
     private suspend fun went(now: Long) {
@@ -92,7 +92,7 @@ class AnkiWatch(private val graph: AppGraph) {
             var worked = graph.runtime.value.ankiWorked.on(java.time.Instant.ofEpochMilli(now).atZone(zone).toLocalDate().toString())
             val studied = AnkiProgress.done(stretch, tasks.tasks, reviewsOnly = tasks.ankiDay?.reviewsOnly == true)
             // The decks studied: work on their tasks, as Felix sees it (LR-03).
-            graph.felix.noteActivity(studied.filter { it.cards > 0 }.map { it.taskId }, now)
+            graph.looks.noteActivity(studied.filter { it.cards > 0 }.map { it.taskId }, now)
             for (done in studied) {
                 Log.i(AppGraph.TAG, "AnkiDroid: ${done.cards} cards for ${done.taskId} in ${done.minutes} min${if (done.finished) ", today's done" else ""}")
                 if (!done.finished) {
