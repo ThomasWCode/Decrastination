@@ -5,7 +5,7 @@ It's pure Kotlin: everything comes in through `Planner.Input`, so the same input
 
 ## Inputs
 
-`AppGraph.plan` builds `Planner.Input` and calls `Planner.plan`; `PlanWatcher` makes the plan again whenever an input changes ([slots-and-calendar.md](slots-and-calendar.md)).
+`Planning.plan` (`plan/Planning.kt`) builds `Planner.Input` and calls `Planner.plan`; its `PlanWatcher` makes the plan again whenever an input changes ([slots-and-calendar.md](slots-and-calendar.md)).
 
 - **Tasks**, each with your instructions laid on it (`Instructions.taskOverrides`), and the minutes of work it's the same as credited to it (`Duplicates.credited`, DX-15).
 - **Windows** (PL-15): each day's planning time, from `core/SchoolDays.kt` and the school calendar (PL-16).
