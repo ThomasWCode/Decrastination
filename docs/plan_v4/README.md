@@ -52,7 +52,7 @@ The planner, the slotter, the sources and the learning are in good shape: pure w
 - **Move first, then improve.** A move is its own commit, unchanged but for imports and visibility, so its review is "nothing changed"; improvements follow in their own commits.
 - **One concern a PR**, small enough for its review rounds, with the phone check before merging.
 - **The pattern that already works.** `block/Focus.kt` takes its stores, its clock and small callbacks in its constructor, and `FocusTest` drives it on temporary files. Every service is built that way, so each becomes testable as it moves out of `AppGraph`; every feature is written inside its service, so it's tested the same way from its first commit.
-- **Data never lost.** Every migration is rehearsed on a copy of your phone's data in `private/` (never committed) before it's installed; the installed app keeps the file it migrated from.
+- **Data never lost.** Every migration is rehearsed on a copy of your phone's data in `private/` (never committed) before it's installed; the installed app keeps the file it migrated from until a week after its next successful start, and the backup taken before every install keeps it for good.
 - **Your values are yours.** Nothing in the restructuring reworks a value you or Felix set; a reminder's time and words are yours as he set them (D-4).
 - **The chat is the record.** Every word in his name is a message in `chat.json` first; a notification is made from the chat, never beside it; nothing he says exists only as a notification or only in the log.
 - **One entrance for replies.** A reply from a notification and one in the chat are the same turn, routed the same way.
