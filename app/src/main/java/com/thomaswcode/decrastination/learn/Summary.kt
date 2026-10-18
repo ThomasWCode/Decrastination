@@ -64,6 +64,7 @@ object Summary {
      */
     fun email(to: String, week: String, text: String): Intent =
         Intent(Intent.ACTION_SEND)
+            .setType("text/plain")
             .putExtra(Intent.EXTRA_EMAIL, listOfNotNull(to.trim().takeIf { it.isNotEmpty() }).toTypedArray())
             .putExtra(Intent.EXTRA_SUBJECT, "Week of " + LocalDate.parse(week).format(DAY))
             .putExtra(Intent.EXTRA_TEXT, text)

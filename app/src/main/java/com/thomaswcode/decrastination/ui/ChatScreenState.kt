@@ -116,6 +116,10 @@ class ChatScreenState {
     var open: Set<String> by mutableStateOf(emptySet())
         private set
 
+    /** Each opening of the chat, counted ([opened]): a row looks again at whether it gets its label, as what's unread then has changed. */
+    var visit by mutableIntStateOf(0)
+        private set
+
     /** When the chat was opened ([opened]): a message of his after it arrived while it was on screen. */
     private var since = Long.MAX_VALUE
 
@@ -136,6 +140,7 @@ class ChatScreenState {
         firstUnread = unread.firstOrNull()?.id
         unreadOnOpen = unread.mapTo(HashSet()) { it.id }
         since = now
+        visit++
         scrollTo = at ?: firstUnread
         flash = at
     }

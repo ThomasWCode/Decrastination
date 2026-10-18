@@ -69,6 +69,19 @@ class ChatSummaryTest {
     }
 
     @Test
+    fun `a card from before everything was made as it came, whose making failed, is a problem too`() {
+        val failed = his(proposals = listOf(Proposal("p", changes = listOf(Change(ChangeType.Minutes, taskId = "a", minutes = 30)), note = "the task's gone")))
+        assertEquals(1, ChatSummary.problems(failed))
+        assertEquals(ChatSummary.Line("", "1 not made"), ChatSummary.line(failed))
+        // Made as it came and not made: said by its line, counted once.
+        val instant = his(
+            proposals = listOf(Proposal("p", changes = listOf(Change(ChangeType.Minutes, taskId = "a", minutes = 30)), instant = true, note = "the task's gone")),
+            acts = listOf(Act(Act.NOT_MADE + "the task's gone.", problem = true)),
+        )
+        assertEquals(1, ChatSummary.problems(instant))
+    }
+
+    @Test
     fun `only a task to show, or only a memory undone, folds what there is but says nothing`() {
         assertFalse(ChatSummary.folds(his(proposals = listOf(Proposal("p", open = "teams:sheet", state = ProposalState.Applied, instant = true)))))
         val forgotten = his(memoryEdits = listOf(MemoryEdit("Remembered: bus at 7:40", undone = true)))

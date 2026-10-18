@@ -222,8 +222,16 @@ object ChatSummary {
         message.proposals.any { it.open == null } || message.acts.isNotEmpty() || message.memoryEdits.isNotEmpty() ||
             message.searched.isNotEmpty() || message.sources.isNotEmpty() || message.note != null
 
-    /** How many things under [message] went wrong (Q5: A): a card not made, a search not looked up, what was left out. Any, and its chevron is red. */
-    fun problems(message: ChatMessage): Int = message.acts.count { it.problem } + if (message.note != null) 1 else 0
+    /**
+     * How many things under [message] went wrong (Q5: A): a card not made, a search not looked up, what was
+     * left out; and a card from before everything was made as it came whose making failed, said only on it.
+     * Any, and its chevron is red.
+     */
+    fun problems(message: ChatMessage): Int = message.acts.count { it.problem } + failedBefore(message) + if (message.note != null) 1 else 0
+
+    /** Cards from before everything was made as it came (16 Oct) whose making failed: their note says why, with no line of their own. */
+    private fun failedBefore(message: ChatMessage): Int =
+        message.proposals.count { !it.instant && it.open == null && it.note != null && it.state != ProposalState.Applied }
 
     /** A label's words: what he did ([did], "Changes: 2 · Remembered · Searched") and what went wrong ([wrong], in red, "1 not made"), each part only where it applies. */
     data class Line(val did: String, val wrong: String) {
@@ -239,7 +247,7 @@ object ChatSummary {
     fun line(message: ChatMessage): Line {
         val made = message.proposals.filter { it.open == null && it.state == ProposalState.Applied }.sumOf { if (it.task != null) 1 else it.changes.size }
         val changes = made + message.acts.count { it.action != null && !it.undone }
-        val notMade = message.acts.count { it.problem && it.line.startsWith(Act.NOT_MADE) }
+        val notMade = message.acts.count { it.problem && it.line.startsWith(Act.NOT_MADE) } + failedBefore(message)
         return Line(
             listOfNotNull(
                 "Changes: $changes".takeIf { changes > 0 },
