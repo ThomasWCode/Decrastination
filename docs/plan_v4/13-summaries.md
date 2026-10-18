@@ -1,6 +1,6 @@
 # Summaries for him: an evaluation
 
-You asked (18 Oct) whether constant summarisation calls would be a good idea: models summarise the emails, the chat log and so on, the summaries are stored, and he's sent those instead of the raw data. This is an evaluation, not a plan: what he reads raw today, what's summarised already, where a summary would help, what it would cost, and a recommendation. Decided (Q28: A): nothing in 4.0.0 to 4.3.0; the conversation digest below as a small 4.4.0 once you've lived with the new chat a few weeks, when it gets a document of its own with steps, tests and a phone check like the others.
+You asked (18 Oct) whether constant summarisation calls would be a good idea: models summarise the emails, the chat log and so on, the summaries are stored, and he's sent those instead of the raw data. This is an evaluation, not a plan: what he reads raw today, what's summarised already, where a summary would help, what it would cost, and a recommendation. Decided (Q28: A): nothing in this plan's stages; the conversation digest below as a small 4.4.0 once you've lived with the new chat a few weeks, when it gets a document of its own with steps, tests and a phone check like the others.
 
 ## What he reads today, and how much of it
 
@@ -15,7 +15,7 @@ You asked (18 Oct) whether constant summarisation calls would be a good idea: mo
 | His own messages' context | `FelixPrompts.describe` | the piece's task text to `TEXT` (1,500, the reading's summary where there is one); his last six messages and your replies | short |
 | The week, for the review and the summary email | `ReviewInput`, `Summary.input` | numbers and lists from the log | short, weekly |
 
-So the biggest raw input, the emails and the assignments, is condensed already: each reading writes a summary of a long text in the call that reads it, and the chat's list gives the summary in place of the text. The chat history is the one raw stream that's cut rather than condensed, and with every message of his in the chat (4.0.0) it gets longer: a busy day is a dozen of his.
+So the biggest raw input, the emails and the assignments, is condensed already: each reading writes a summary of a long text in the call that reads it, and the chat's list gives the summary in place of the text. The chat history is the one raw stream that's cut rather than condensed, and with every message of his in the chat (Stage 5) it gets longer: a busy day is a dozen of his.
 
 ## Where a summary would help, and where not
 
@@ -26,16 +26,16 @@ So the biggest raw input, the emails and the assignments, is condensed already: 
 | The plan and the calendar | No | Structured and short, and his actions need the exactness (times, ids, keys) a summary loses. |
 | The week's record | No | The review's note is that summary, weekly, with its own call; his morning gets the day's shape from the plan. |
 | His own messages | No | Six short messages; a summary would cost more than they do. |
-| Memory | No: done | The tidy is a summariser, and expiry ([04](04-memory-that-expires.md)) prunes the rest. |
+| Memory | No: done | The tidy is a summariser, and expiry ([08](08-memory-that-expires.md)) prunes the rest. |
 
 ## What a conversation digest would be
 
-- **Kept**: `ChatState.digest: String` (at most 600 characters) and `digestedTo: String` (the id of the last message it covers), in `chat.json`; shown on the debug page only; in the backup.
-- **Written**: by a small call (`ModelEffort.Job.Digest`, the cheapest model, under the cap and the rests like every call; none while Claude's off): the digest so far and the messages since, "rewrite the digest in 600 characters: what they've agreed, asked for, put off and said about their week; drop what's done". Once a day at the nightly run when ten or more messages are new, or sooner when the window is about to drop a message the digest doesn't cover. About a cent a day.
+- **Kept**: `ChatState.digest: String` (at most 600 characters) and `digestedTo: String` (the id of the last message it covers), in `chat.json` (the window; the archive stays as it is); shown on the debug page only; in the backup.
+- **Written**: by a small call through the gateway (`ModelEffort.Job.Digest`, the cheapest model, under the cap and the rests like every call; none while Claude's off): the digest so far and the messages since, "rewrite the digest in 600 characters: what they've agreed, asked for, put off and said about their week; drop what's done". Once a day at the nightly run when ten or more messages are new, or sooner when the window is about to move a message the digest doesn't cover to the archive. About a cent a day.
 - **Sent**: in `ChatPrompts.turns` before the history ("Earlier in the chat: …") and in `FelixPrompts.describe` ("Lately in the chat: …"), with a line saying it's a summary and the messages after it are what was said.
 - **Risks**: a wrong digest is wrong for a day (the prompts say the messages win); the private evals get a few "from last week" questions; nothing of yours goes anywhere it doesn't already (the same messages go in the history today).
-- **Size**: about a day: the pure parts (`ChatDigest.due`, `describe`, `after`), the call through the gateway, a golden, the two prompts' lines, the doc page, the tests.
+- **Size**: about a day: the pure parts (`ChatDigest.due`, `describe`, `after`), the call through the gateway, a golden, the two prompts' lines, the doc page, the tests. It lives in the Conversation service, so everything it needs (the gateway, the window, the store's version) is there by the end of this plan.
 
-## Recommendation
+## Recommendation, and your call
 
-Not in 4.0.0 to 4.3.0. Build the digest as a small 4.4.0 once the chat holds everything and you've lived with the 12-message window a few weeks: by then it's clear whether what he forgets is the thread of the talk (the digest fixes that) or facts about you (memory's job, [04](04-memory-that-expires.md)). Everything else on the list is done already or isn't worth a call. Your call (Q28: A): as recommended, a later 4.4.0.
+Not in this plan. Build the digest as a small 4.4.0 once the chat holds everything and you've lived with the 12-message window a few weeks: by then it's clear whether what he forgets is the thread of the talk (the digest fixes that) or facts about you (memory's job, [08](08-memory-that-expires.md)). Everything else on the list is done already or isn't worth a call. Your call (Q28: A): as recommended.

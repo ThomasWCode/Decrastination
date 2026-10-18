@@ -1,6 +1,6 @@
 # Developing Decrastination
 
-How changes are made, checked on the phone and shipped. The owner's product decisions are in [decisions.md](decisions.md); how the app works now is in [spec/](spec/); the restructuring under way is planned in [plan_targeted_cleanup/](plan_targeted_cleanup/README.md).
+How changes are made, checked on the phone and shipped. The owner's product decisions are in [decisions.md](decisions.md); how the app works now is in [spec/](spec/); the next run of work, the restructuring and Felix's changes in one order, is planned in [plan_v4/](plan_v4/README.md).
 
 ## The repository is public
 
