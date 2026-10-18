@@ -680,6 +680,16 @@ object Planner {
         // room passes its piece to the nearest that has some, earlier first, but never to one past
         // which the pieces after it can't follow. Where the window can't hold the task in order at
         // all, it's placed backwards as before, behind where it must be.
+        // Piece [i] of [item] at a start the last plan kept today, under way or still to come, its slot
+        // and grace not over and not missed (PL-13): today stays its day, so a replan doesn't move it
+        // to a day with more room once today's time has begun to run.
+        fun keptToday(item: Item, i: Int): Boolean {
+            val piece = item.chunks[i]
+            val key = Chunk.keyOf(item.task.id, piece.index, item.offset + i + 1, piece.sitting?.after)
+            val start = input.previousSlots[key] ?: return false
+            return key !in input.missedSlots && date(start, zone) == today && start + piece.minutes * 60_000L + Slotter.GRACE_MS > input.now
+        }
+
         fun placeSpread(item: Item) {
             // For a test: as Claude read it of the task as it is now, not of what it said before.
             val spaced = item.task.kind == Kind.Revision || Enrichments.current(byId[item.task.id] ?: item.task)?.testDate != null
@@ -699,6 +709,7 @@ object Planner {
                 room(item, window[day], i) >= item.chunks[i].minutes && (perDay == null || countOn(item, window[day]) < perDay)
             // Where piece [i]'s share falls: the first day whose running total of free time reaches it.
             fun target(i: Int): Int {
+                if (window.first() == today && keptToday(item, i)) return 0
                 if (n == 1) return weight.indices.maxByOrNull { weight[it] } ?: 0
                 if (total == 0) return i * window.size / n
                 val goal = (i + 0.5) / n * total
