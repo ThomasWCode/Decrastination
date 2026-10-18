@@ -10,8 +10,8 @@ import kotlinx.coroutines.launch
 
 /**
  * A reply from Felix's notification (AI-24), typed or one of his: kept in the chat under the message it
- * answers and routed by its kind ([Conversation.replyToFelix]); a chat turn's answer comes as his next
- * message, made as work of its own ([FelixReplyWorker]).
+ * answers and routed by its kind, as any reply is ([Conversation.replyFromNotification]); a chat turn's
+ * answer comes as his next message, made as work of its own ([FelixReplyWorker]).
  */
 class FelixReplyReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
@@ -23,7 +23,7 @@ class FelixReplyReceiver : BroadcastReceiver() {
                     val text = RemoteInput.getResultsFromIntent(intent)?.getCharSequence(FelixNotifications.KEY_REPLY)?.toString()?.trim()
                     val id = intent.getStringExtra(FelixNotifications.EXTRA_ID)
                     // Only the reply's own handling waits here; the answer comes after, by itself.
-                    if (!text.isNullOrEmpty() && id != null) graph.conversation.replyToFelix(text, id)
+                    if (!text.isNullOrEmpty() && id != null) graph.conversation.replyFromNotification(text, id)
                 }
             } catch (e: Exception) {
                 Log.w(AppGraph.TAG, "Felix's notification action failed", e)

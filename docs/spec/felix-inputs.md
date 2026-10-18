@@ -58,7 +58,7 @@ Remembered:
 ### When it's called
 
 - You send a message on the chat's tab.
-- You reply to one of his messages, from its notification (AI-24) or his chips: your reply goes into the chat under his message, but for an answer the app takes with no call ([below](#in-his-name-but-not-his-words)).
+- You reply to a message, from his notification (AI-24), his chips, or a swipe or *Reply* in the chat, all one way in (D-98): your reply goes into the chat under the message it answers, but for an answer the app takes with no call ([below](#in-his-name-but-not-his-words)).
 - A message waiting is asked again: *Try again*, the chat opened again, or the model back from a rest.
 
 One message is answered at a time. While the model can't be asked (Claude off, resting, the cap), your message says why and waits.
@@ -66,7 +66,7 @@ One message is answered at a time. While the model can't be asked (Claude off, r
 ### What's sent
 
 1. **System**: [the chat's prompt](#the-chats-prompt), then the profile.
-2. **The conversation**: its last 12 messages (yours, and his answers to you) and his last two nudges (what he wrote unasked) with your replies to them, in their order, starting with one of yours (D-97); a nudge before any of yours goes with your first turn, and a reply that went to no call (a check-in's answer) only with its nudge. Each earlier answer of his carries what it made and what became of it ("[Suggested: … — made at once]", "— undone by the student", "— not made: …").
+2. **The conversation**: its last 12 messages (yours, and his answers to you) and his last two nudges (what he wrote unasked) with your replies to them, in their order, starting with one of yours (D-97); a nudge before any of yours goes with your first turn, and a reply that went to no call (a check-in's answer) only with its nudge. Each earlier answer of his carries what it made and what became of it ("[Suggested: … — made at once]", "— undone by the student", "— not made: …"). A message of yours that replies to one that isn't just before it starts with that one, quoted from the whole chat, as the window may not hold it ("(Replying to your message: “…”)", or "(Replying to their own earlier message: “…”)"); a message the app wrote in his name says so ("(the app wrote this for you)").
 3. **Your newest message**, last, holding in this order:
    1. what the app knows now ([the context](#the-context)), each open task's own text last;
    2. the plan, as the Day and Work tabs show it ([the plan](#the-plan));
@@ -132,7 +132,7 @@ What's due this week?
 
 **His:**
 
-<!-- generated: chat turn 1: Claude -->
+<!-- generated: chat turn 1: Felix -->
 ```text
 The worksheet's due Thursday morning and the vectors on Friday. I've put the vectors' first half on Wednesday at 18:00.
 [Suggested: “Vectors exercise 4B” at 18:00 on Wed 14 Oct — made at once]
@@ -245,6 +245,18 @@ The task this message is about, powerplanner:p1 “Vectors exercise 4B” (Power
 Give me ten minutes
 ```
 
+**A reply swiped in the chat to an earlier message of his** starts with that message, quoted, as it isn't the one just before (the context and the plan as above):
+
+<!-- generated: quoted reply -->
+```text
+(the context, as above)
+
+(the plan, as above)
+
+(Replying to your message: “Starting the worksheet? First: read question 1 and underline what it asks.”)
+Can that be at seven instead?
+```
+
 ### Reading a task in full
 
 Where he needs more of a task's text than the context gives, his answer names it in `details` (three at most, listed and open, never the one the message is about, which came whole) and says only that he's reading it. He's then asked again, as before, with their whole texts after your words (each an even share of 16,000 characters, 8,000 at most), and that answer is his, with "Read in full: …" under it. Asked for a web search as well, he's asked once with both. Where the texts show a need for a search, or a search for a text, he's asked once more, never more (`ChatRounds`), and never for the same search or text twice. What he read is kept till he's answered with it, so a failed answer is asked again with it, not for it. Asked again with the trip's form:
@@ -323,7 +335,7 @@ Minutes you set (a new task's, a Minutes change, each step's) are planned exactl
 6. Look things up (research): when their message needs facts that neither they nor the app have given you (a competition's rules and dates, an exam board's specification, what an event involves), give what to search the web for in a few words, reply only that you're looking it up, and change nothing: you'll be asked again with what's found, to answer and act on (its steps, dates and minutes). Never for what the lists here tell you, nor for anything about the student themselves; most messages need none, and research is then an empty string.
 7. Read a task in full (details): where you need more of a task's own text than the list shows (it says how much was left out), give its id, up to three, reply only that you're reading it, and change nothing: you'll be asked again with the whole text, to answer and act on. Not for the task a message is about, whose text comes whole; most messages need none, and details is then an empty list.
 
-Reply in one to three short sentences of plain UK English (asked what's on, a short list instead, a line a task). Everything you give is made as soon as you give it (a new task or event, a change, days off, a step ticked, a setting), so say what you've done ("Moved it to 19:30", "Added it, due Tuesday"), never what you'd do: the student has an Undo for each. To undo something yourself, give what puts it back. When a reply from them is likely, offer up to three short ones in their words (suggestedReplies). If what you need is missing or unclear (which task they mean, or when), ask one short question and change nothing. Don't add a task that's already listed: change it instead. When their message is about a given task, event or day, it's about that unless they clearly name another. Do only what they asked for, and leave every field you don't use empty: an empty string, -1 for a number.
+Reply in one to three short sentences of plain UK English (asked what's on, a short list instead, a line a task). Everything you give is made as soon as you give it (a new task or event, a change, days off, a step ticked, a setting), so say what you've done ("Moved it to 19:30", "Added it, due Tuesday"), never what you'd do: the student has an Undo for each. To undo something yourself, give what puts it back. When a reply from them is likely, offer up to three short ones in their words (suggestedReplies). If what you need is missing or unclear (which task they mean, or when), ask one short question and change nothing. Don't add a task that's already listed: change it instead. When their message is about a given task, event or day, it's about that unless they clearly name another. When it starts with a message it replies to, quoted, it's answering that one. Do only what they asked for, and leave every field you don't use empty: an empty string, -1 for a number.
 ```
 
 ## A web search
@@ -570,4 +582,4 @@ It names Summary and Reply among its reasons, but no message of his is asked for
 - **The week's summary**: written in a call of its own, in your voice (D-66); "the summary is ready" is the app's own text, with *Send it*.
 - **Your answer to his Question**: read by the instructions reader, as an instruction on that task, and the task read again (AI-10); not by him.
 - **An answer to Completions** (*Harder*, *As expected*, *Easier*): kept on each of those completions (LR-05), with no call.
-- **Any other reply**, from his notification or his chips: answered in the chat, as above; his answer is his next message, and in his notification while the chat isn't on screen.
+- **Any other reply**, from his notification, his chips or the chat: answered in the chat, as above; his answer is his next message, and in his notification while the chat isn't on screen.
