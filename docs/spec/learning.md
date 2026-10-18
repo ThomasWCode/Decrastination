@@ -9,7 +9,7 @@ Every figure is bounded, shown in Stats, and worked out afresh from the record, 
 - `SlotRecord`: each slot's outcome (kept, kept late, missed, moved), its window and the minutes worked (LR-09);
 - `CompletionRecord`: each task confirmed done;
 - `DayRecord`: each day's plan as it stood in the morning, and how much of it got done;
-- the blocks, the check-ins, the weekly reviews, Felix's messages (30 days), and each reviewed week's totals (`WeekRollup`, two years).
+- the blocks, the check-ins, the weekly reviews, and each reviewed week's totals (`WeekRollup`, two years). Felix's messages are the chat's ([felix.md](felix.md)).
 
 A completion's record is made as it's confirmed (`Focus.onCompleted`):
 - `estimateMin`: the estimate it's measured against (yours, the app's, or for a paced total the app's it came from), before any pace, for what's left of it when first seen, less the vocabulary its decks hold;
@@ -53,10 +53,10 @@ A completion is timed (`Calibrator.isTimed`) when it has an estimate and kept-sl
 
 ## How was it?
 
-After homework or revision is confirmed done, the app asks how it went: *harder*, *as expected* or *easier*, with a line if you like (`learn/Assessment.kt`).
+After homework or revision is confirmed done, the app asks how it went: *harder*, *as expected* or *easier* (`learn/Assessment.kt`).
 - With Claude on, Felix asks instead, his replies the three answers (LR-05, [felix.md](felix.md)); with Claude off, a message of his in the app's words asks about each, its chips the three answers.
 - *Harder* raises the completion's figures 5 % where it's timed and 10 % where it isn't; *easier* lowers them as much; *as expected* changes nothing. All within 0.5 and 3.0.
-- The answer and the line go on the completion's record, and the weekly review reads them.
+- The answer goes on the completion's record, and the weekly review reads it.
 
 ## Safety margins
 
@@ -124,7 +124,7 @@ It writes a note of at most five lines, opening on how last week's change went, 
 It never changes `boxMin` (a piece's length is yours: your decision), what's blocked, quiet hours, protection, or any hours but a school day's; the free-time rate is the only blocking setting in its reach.
 Its changes apply at once, armed or not (`AppGraph.applyReviewChanges`, IMP-P2-015), in place of any waiting change of yours to the same setting; each is kept with its value before it (`WeeklyReview.changes`, `settingsBefore`).
 
-After it, what Felix remembers is tidied once it's past 70 % of its room (AI-21, [felix.md](felix.md)); the week's totals are kept (`Stats.rollup`, PL-10); the week's summary for home is written (NF-02); and a notification shows the review.
+After it, what Felix remembers is tidied once it's past 70 % of its room (AI-21, [felix.md](felix.md)); the week's totals are kept (`Stats.rollup`, PL-10); the week's summary for home is written (NF-02); and Felix's message in the chat says it, with *Open the review* (`Conversation.reviewed`), on his notification.
 The Reviews page (LR-01) lists each review with its note, each change with *Undo* while it's still what the review left (a change of yours, so once armed one that loosens blocking waits).
 
 ## Stats
