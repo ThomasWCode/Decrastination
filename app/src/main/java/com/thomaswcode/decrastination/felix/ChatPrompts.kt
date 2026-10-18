@@ -59,8 +59,8 @@ object ChatPrompts {
      * messages of the conversation (yours, and his answers to you), and his last [NUDGES] nudges (a
      * message he wrote unasked), each with your reply to it, in their order; nothing with no words (his
      * silences). A reply of yours to a nudge that went to no call (a check-in's answer, how work went)
-     * goes only with its nudge; one he answered is the conversation's, as is the newest, yours, which
-     * is what's being answered.
+     * goes only with its nudge; one he answered is the conversation's, as are the newest and yours still
+     * waiting for his answer, which are what's being answered.
      */
     fun history(messages: List<ChatMessage>): List<ChatMessage> {
         val said = messages.filter { it.from == Speaker.You || it.text.isNotBlank() }
@@ -72,7 +72,7 @@ object ChatPrompts {
             when {
                 m.from == Speaker.Felix -> m.kind == MessageKind.Chat
                 m.replyTo == null || m.replyTo !in nudged -> true
-                else -> i == said.lastIndex || answered(i)
+                else -> i == said.lastIndex || m.answeredAt == null || answered(i)
             }
         }
         val last = nudges.takeLast(NUDGES)
