@@ -94,8 +94,9 @@ object Backups {
 
     /**
      * [text] as one of this app's backups, or null: not JSON, not this app's, a newer format than this
-     * version reads, or a part from a store newer than this build's. Parts from a store older than
-     * [shapes] says (each JSON store's shape by file, [Stores.shapes]) are brought to it first.
+     * version reads, or from a store newer than this build's, wherever its parts are. Parts from a
+     * store older than [shapes] says (each JSON store's shape by file, [Stores.shapes]) are brought to
+     * it first.
      */
     fun decode(text: String, shapes: Map<String, Shape>): Backup? {
         val tree = runCatching { json.parseToJsonElement(text) as? JsonObject }.getOrNull() ?: return null
@@ -121,16 +122,19 @@ object Backups {
     /**
      * [backup]'s parts brought from the versions their stores had (its `versions`; else a whole part's
      * own; else 1) to [shapes]' by each store's migrations, a store's parts together as its file would
-     * hold them; its `versions` then [shapes]'. Null where a part can't be: newer than this build's, or
-     * a step on the way missing.
+     * hold them; its `versions` then [shapes]'. Null where a store is newer than this build's (wherever
+     * its parts are), or a part can't be brought: newer than this build's, or a step on the way missing.
      */
     fun upgraded(backup: JsonObject, shapes: Map<String, Shape>): JsonObject? {
         val versions = (backup["versions"] as? JsonObject).orEmpty()
         val out = backup.toMutableMap()
         for ((file, shape) in shapes) {
+            val said = (versions[file] as? JsonPrimitive)?.intOrNull
+            // A store newer than this build's isn't read, wherever its parts are: one of its parts renamed or
+            // moved there would otherwise be passed over, and the backup restored without it.
+            if (said != null && said > shape.version) return null
             val parts = PARTS.filterValues { it.first == file }.keys.filter { it in backup }
             if (parts.isEmpty()) continue
-            val said = (versions[file] as? JsonPrimitive)?.intOrNull
             val whole = parts.singleOrNull { PARTS.getValue(it).second == null }
             if (whole != null) {
                 val part = backup[whole] as? JsonObject ?: continue
