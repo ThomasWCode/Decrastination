@@ -137,13 +137,13 @@ class StatsTest {
     fun `each subject's minutes, pieces, deadlines met and time against the estimates, busiest first`() {
         fun slotIn(start: String, className: String?, worked: Int) = slot(start, SlotOutcome.Kept, worked).copy(className = className)
         val log = ActivityLog(
-            slots = listOf(slotIn("2026-10-08T17:00", "12.2-PH3", 45), slotIn("2026-10-07T17:00", "12.2-PH3", 30), slotIn("2026-10-07T18:00", "German", 20), slotIn("2026-10-06T18:00", null, 10)),
+            slots = listOf(slotIn("2026-10-08T17:00", "12.9-PH1", 45), slotIn("2026-10-07T17:00", "12.9-PH1", 30), slotIn("2026-10-07T18:00", "German", 20), slotIn("2026-10-06T18:00", null, 10)),
             completions = listOf(
-                completion("p1", "2026-10-08T18:00", "2026-10-09T08:30").copy(className = "12.2-PH3", estimateMin = 40, workedMin = 60),
+                completion("p1", "2026-10-08T18:00", "2026-10-09T08:30").copy(className = "12.9-PH1", estimateMin = 40, workedMin = 60),
                 completion("g1", "2026-10-07T19:00", "2026-10-06T08:30").copy(className = "German"),
             ),
         )
-        val rows = Stats.bySubject(log, mapOf("12.2-PH3" to "Physics"), now, LONDON)
+        val rows = Stats.bySubject(log, mapOf("12.9-PH1" to "Physics"), now, LONDON)
         assertEquals(listOf("Physics", "German", Stats.OTHER), rows.map { it.subject })
         assertEquals(Stats.SubjectRow("Physics", 75, 2, 1, 1, 1, 1.5), rows[0])
         assertEquals(Stats.SubjectRow("German", 20, 1, 1, 0, 0, null), rows[1])

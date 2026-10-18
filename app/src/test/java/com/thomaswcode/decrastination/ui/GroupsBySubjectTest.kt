@@ -19,13 +19,13 @@ class GroupsBySubjectTest {
     @Test
     fun `tasks by the subject their class is named as, else its code, those with none last, each soonest due first`() {
         val tasks = listOf(
-            task("b", "12.2-PH3", "2026-10-15T09:00"),
-            task("a", "12.2-PH3", "2026-10-13T09:00"),
+            task("b", "12.9-PH1", "2026-10-15T09:00"),
+            task("a", "12.9-PH1", "2026-10-13T09:00"),
             task("c", "12.1-MA2", null),
             task("d", null, "2026-10-14T09:00"),
             task("e", " ", null),
         )
-        val groups = Groups.bySubject(tasks, mapOf("12.2-PH3" to "Physics"), now)
+        val groups = Groups.bySubject(tasks, mapOf("12.9-PH1" to "Physics"), now)
         assertEquals(listOf("12.1-MA2", "Physics", Groups.NO_SUBJECT), groups.map { it.first })
         assertEquals(listOf("teams:a", "teams:b"), groups[1].second.map { it.id })
         assertEquals(listOf("teams:d", "teams:e"), groups[2].second.map { it.id })

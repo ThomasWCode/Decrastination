@@ -22,7 +22,7 @@ import kotlin.test.assertTrue
 /** Who the student is, as every model call says it (AI-05, AI-06). */
 class ProfileTest {
     private val now = Fixtures.at("2026-10-14T17:00")
-    private val settings = Settings(classMap = mapOf("12.2-PH3" to "Physics"), profileLines = listOf("I play football on Tuesdays"))
+    private val settings = Settings(classMap = mapOf("12.9-PH1" to "Physics"), profileLines = listOf("I play football on Tuesdays"))
     private val maths = TaskItem(
         id = "teams:m", source = Source.Teams, sourceId = "m", title = "Mechanics", className = "12.1-MA2", kind = Kind.Homework,
         firstSeenAt = now, lastSeenAt = now,
@@ -43,7 +43,7 @@ class ProfileTest {
         assertEquals(
             listOf(
                 "About the student",
-                "Year 12 at a UK sixth form. Subjects: Physics (12.2-PH3), 12.1-MA2.",
+                "Year 12 at a UK sixth form. Subjects: Physics (12.9-PH1), 12.1-MA2.",
                 "School days: break 10:45–11:15; lunch 13:15–14:35 (eating 13:40–13:55).",
                 // Only the days off still to come.
                 "Works school days 16:45–22:00, weekends and days off 08:30–22:30. No school: 26 Oct–30 Oct (half term).",
@@ -83,7 +83,7 @@ class ProfileTest {
         val text = Profile.block(lines, listOf(maths), null, SchoolCalendar(), many, now, LONDON)
         val own = text.substringBefore("How Felix should behave:")
         assertTrue(own.length <= Profile.MAX_CHARS, "${own.length}")
-        assertTrue("Subjects: Physics (12.2-PH3)" in own)
+        assertTrue("Subjects: Physics (12.9-PH1)" in own)
         assertFalse(" 20" in own.lines().last())
         // Every instruction; the facts newest first, within their room.
         assertTrue("- don't message before 8" in text)

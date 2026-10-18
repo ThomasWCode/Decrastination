@@ -20,7 +20,7 @@ import java.time.ZoneId
  * opens the task).
  */
 data class WidgetModel(
-    /** "17:00–17:30 · Statics Prep", its slot's time first (UI-05); "Do: Statics Prep" with no slot; "Nothing due". */
+    /** "17:00–17:30 · Moments Prep", its slot's time first (UI-05); "Do: Moments Prep" with no slot; "Nothing due". */
     val headline: String,
     /** The piece's first step under it (AI-15's micro-plan, phase 7), where there's room; null without one. */
     val label: String?,

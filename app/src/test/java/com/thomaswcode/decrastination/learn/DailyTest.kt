@@ -82,10 +82,10 @@ class DailyTest {
     @Test
     fun `the briefing says what today holds, first things first`() {
         val now = Fixtures.at("2026-10-09T07:00")
-        val task = TaskItem(id = "teams:a", source = Source.Teams, sourceId = "a", title = "Statics Prep", dueAt = Fixtures.at("2026-10-09T21:00"), kind = Kind.Homework, sourceEffortMin = 40, firstSeenAt = now, lastSeenAt = now)
+        val task = TaskItem(id = "teams:a", source = Source.Teams, sourceId = "a", title = "Moments Prep", dueAt = Fixtures.at("2026-10-09T21:00"), kind = Kind.Homework, sourceEffortMin = 40, firstSeenAt = now, lastSeenAt = now)
         val (title, lines) = Briefing.summary(Planner.plan(Planner.Input(listOf(task), now, LONDON, settings)))
         assertEquals("Today: 1 thing, 40 min", title)
-        assertEquals(listOf("Statics Prep (due today) · 40 min"), lines)
+        assertEquals(listOf("Moments Prep (due today) · 40 min"), lines)
         assertEquals("Nothing planned today", Briefing.summary(Planner.plan(Planner.Input(emptyList(), now, LONDON, settings))).first)
     }
 
@@ -203,16 +203,16 @@ class ReviewInputTest {
     @Test
     fun `the week is described with its work, sessions, answers and settings`() {
         val log = ActivityLog(
-            completions = listOf(CompletionRecord("teams:a", "Statics Prep", Source.Teams, Kind.Homework, "12.1 Physics", 40, 55, Fixtures.at("2026-10-09T21:00"), 0, Fixtures.at("2026-10-09T20:00"), "harder", "the diagrams")),
+            completions = listOf(CompletionRecord("teams:a", "Moments Prep", Source.Teams, Kind.Homework, "12.1 Physics", 40, 55, Fixtures.at("2026-10-09T21:00"), 0, Fixtures.at("2026-10-09T20:00"), "harder", "the diagrams")),
             checkIns = listOf(CheckIn("2026-10-05", now - 60_000L, 3, "German", "Football", "Less on Fridays", "Before tea")),
         )
         val text = ReviewInput.describe(log, Calibration(), Settings(), now, LONDON, week = "2026-10-05")
-        assertTrue("- Statics Prep [Homework, 12.1 Physics]: due Fri 9 Oct 21:00, done Fri 9 Oct 20:00, estimate 40 min, timed 55 min. felt harder (\"the diagrams\")" in text, text)
+        assertTrue("- Moments Prep [Homework, 12.1 Physics]: due Fri 9 Oct 21:00, done Fri 9 Oct 20:00, estimate 40 min, timed 55 min. felt harder (\"the diagrams\")" in text, text)
         assertTrue("the week felt 3/5" in text, text)
         assertTrue("Settings: boxMin 30, marginDays 1, softMinPerDay 60, workMinPerFreeMin 3, weekdayHoursStart 1005, weekdayHoursEnd 1320." in text, text)
         // Done by a date the app or Claude set: a plan, said to be one.
         val planned = log.copy(completions = log.completions.map { it.copy(hardDeadline = false) })
-        assertTrue("Statics Prep [Homework, 12.1 Physics]: due Fri 9 Oct 21:00 (a plan, not a deadline), done Fri 9 Oct 20:00" in ReviewInput.describe(planned, Calibration(), Settings(), now, LONDON, week = "2026-10-05"))
+        assertTrue("Moments Prep [Homework, 12.1 Physics]: due Fri 9 Oct 21:00 (a plan, not a deadline), done Fri 9 Oct 20:00" in ReviewInput.describe(planned, Calibration(), Settings(), now, LONDON, week = "2026-10-05"))
     }
 
     @Test

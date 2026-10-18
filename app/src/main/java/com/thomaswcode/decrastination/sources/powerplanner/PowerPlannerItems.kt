@@ -17,7 +17,7 @@ import java.time.temporal.ChronoUnit
  * `:02` during class, `:03` end of class, `:04` a set time, anything else all day. A task with no
  * class, whose `ClassIdentifier` is the semester's id: `:04` a set time, else all day. Class times
  * come from the class's slot that day in the two-week timetable, counted from `WeekOneStartsOn`.
- * An event (an exam, or "Call with Jags") is all day when its `EndTime` ends in `:59`.
+ * An event (an exam, or "Call with a friend") is all day when its `EndTime` ends in `:59`.
  */
 /** One lesson in the timetable: its class's name ("Study Period" for a free one), and when it is. */
 data class Lesson(val className: String, val start: LocalTime, val end: LocalTime)
