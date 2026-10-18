@@ -9,9 +9,11 @@
 # service among them; the calendar written to (the app's slots ahead, the longest of them, and
 # stray copies in its words); crashes since the install; what's in front; the stores' sizes beside
 # the last run's (kept in the git-ignored private/phone-check-last.txt). adb's one device, or
-# ANDROID_SERIAL's. Exits 1 if the focus service isn't enabled and bound, the app crashed since its
-# install, or the crash log, the calendar or the stores couldn't be read: a check that didn't happen
-# isn't a clean one.
+# ANDROID_SERIAL's. Exits 1 if the focus service isn't enabled, a service enabled isn't bound or one
+# has gone from the list since the last run (kept in private/phone-check-services.txt), the app crashed
+# since its install (in the crash log or its own records), the calendar holds stray copies, a store has
+# gone since the last run, or the crash log, the calendar or the stores couldn't be read: a check that
+# didn't happen isn't a clean one.
 export MSYS_NO_PATHCONV=1
 PKG=com.thomaswcode.decrastination
 ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
@@ -38,9 +40,20 @@ if [ -z "$BOUND" ] && echo "$BOUNDLIST" | grep -q "Service\["; then
   FAILED=1
 else
   for s in $ENABLED; do
-    if echo "$BOUND" | grep -qx "$s"; then echo "  bound    $s"; else echo "  UNBOUND  $s"; fi
+    if echo "$BOUND" | grep -qx "$s"; then echo "  bound    $s"; else echo "  UNBOUND  $s"; FAILED=1; fi
   done
   echo "$BOUND" | grep -qx "$PKG/$PKG.block.FocusService" && echo "  the focus service is bound" || { echo "  THE FOCUS SERVICE ISN'T BOUND"; FAILED=1; }
+fi
+# A service on the last run's list that isn't enabled now was dropped (Android drops one that crashes as
+# it connects, without a word): said, and that list kept as evidence until it's settled.
+SERVICES="$ROOT/private/phone-check-services.txt"
+GONE_S=$( [ -f "$SERVICES" ] && while read -r s; do echo "$ENABLED" | grep -qx "$s" || echo "$s"; done < "$SERVICES" )
+if [ -n "$GONE_S" ]; then
+  echo "$GONE_S" | sed 's/^/  GONE FROM THE ENABLED LIST SINCE THE LAST RUN: /'
+  echo "  (if that's meant, delete private/phone-check-services.txt)"
+  FAILED=1
+elif [ -d "$ROOT/private" ] && [ -n "$ENABLED" ]; then
+  echo "$ENABLED" > "$SERVICES"
 fi
 
 echo "== Calendar"
@@ -76,7 +89,8 @@ else
     END {
       printf "  the app'"'"'s slots ahead %d, the longest %d min (%d over an hour: fine only for steps you or Felix gave, D-34)\n", ours, longest, over
       printf "  copies in its words without its package %d; other events %d\n", copies, others
-    }'
+      if (copies > 0) { print "  STRAY COPIES IN THE CALENDAR: events in its words without its package"; exit 1 }
+    }' || FAILED=1
 fi
 rm -f "$QERR"
 
@@ -91,7 +105,12 @@ fi
 CRASHES=$(echo "$CRASHLOG" | grep -A1 "FATAL EXCEPTION" | grep -c "Process: $PKG")
 echo "  in the crash log: $CRASHES"
 adb exec-out run-as $PKG sh -c 'ls -l files/crashes 2>/dev/null' | tr -d '\r' | awk 'NR > 1 { print "  kept by the app: " $6 " " $7 " " $8 }'
-[ "$CRASHES" = "0" ] || FAILED=1
+# The app's own records (data/Crashes.kt) outlast the crash buffer turning over: one from after the
+# install is this build's. Without the install's time, every record counts.
+SINCE=$(date -d "$INSTALLED" +%s 2>/dev/null || echo 0)
+KEPT=$(adb exec-out run-as $PKG sh -c 'stat -c %Y files/crashes/* 2>/dev/null' | tr -d '\r' | awk -v since="$SINCE" '$1 ~ /^[0-9]+$/ && $1 >= since' | grep -c .)
+echo "  the app's own records since the install: $KEPT"
+[ "$CRASHES" = "0" ] && [ "$KEPT" = "0" ] || FAILED=1
 
 echo "== In front"
 adb shell dumpsys window | grep -m1 mCurrentFocus | tr -d '\r' | sed 's/.* u0 /  /; s/}$//'
@@ -105,11 +124,18 @@ if [ -z "$SIZES" ]; then
   echo "  CAN'T LIST THE STORES: their sizes weren't checked"
   FAILED=1
 else
+  # A store on the last run's list that isn't here now has gone: said, and that list kept as evidence
+  # until it's settled.
+  GONE=$( [ -f "$LAST" ] && cut -d' ' -f1 "$LAST" | while read -r n; do echo "$SIZES" | grep -q "^$n " || echo "$n"; done )
+  if [ -n "$GONE" ]; then
+    echo "  GONE SINCE THE LAST RUN: $(echo $GONE) (if that's meant, take its line out of private/phone-check-last.txt)"
+    FAILED=1
+  fi
   echo "$SIZES" | while read -r name size; do
     was=$( [ -f "$LAST" ] && grep "^$name " "$LAST" | cut -d' ' -f2 )
     if [ -n "$was" ]; then echo "  $name $size bytes (was $was)"; else echo "  $name $size bytes"; fi
   done
-  [ -d "$ROOT/private" ] && echo "$SIZES" > "$LAST"
+  [ -d "$ROOT/private" ] && [ -z "$GONE" ] && echo "$SIZES" > "$LAST"
 fi
 
 [ "$FAILED" = "0" ] && echo "== All well" || echo "== SOMETHING'S WRONG: see above"
