@@ -21,7 +21,9 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.test.fail
 import kotlinx.serialization.KSerializer
+import kotlinx.serialization.descriptors.PolymorphicKind
 import kotlinx.serialization.descriptors.SerialDescriptor
 import kotlinx.serialization.descriptors.StructureKind
 import kotlinx.serialization.json.Json
@@ -69,10 +71,17 @@ class StoresDecodeTest {
     /** [store] read from [dir] as the app reads it: by a [JsonStore] on a copy, so a file it can't read whole shows. */
     private fun read(store: Store, dir: File): Pair<Any?, JsonStore.Unreadable?> {
         val copy = Files.createTempDirectory("stores").toFile()
-        File(dir, store.file).copyTo(File(copy, store.file))
-        val read = JsonStore(File(copy, store.file), store.serializer, store.default)
-        return read.value to read.problem
+        try {
+            File(dir, store.file).copyTo(File(copy, store.file))
+            val read = JsonStore(File(copy, store.file), store.serializer, store.default)
+            return read.value to read.problem
+        } finally {
+            copy.deleteRecursively()
+        }
     }
+
+    /** The store kept in [file]. */
+    private fun store(file: String): Store = stores.single { it.file == file }
 
     @Test
     fun `there's a shape, and every store is in each`() {
@@ -127,13 +136,16 @@ class StoresDecodeTest {
             }
             StructureKind.LIST -> (element as? JsonArray)?.forEach { walk(it, descriptor.getElementDescriptor(0), found, fields) }
             StructureKind.MAP -> (element as? JsonObject)?.values?.forEach { walk(it, descriptor.getElementDescriptor(1), found, fields) }
+            // Raw JSON (a waiting change's value, SettingsChanges) is a value with no fields of its own; any
+            // other polymorphic type is said, not passed over unchecked.
+            is PolymorphicKind -> if (descriptor.serialName != "kotlinx.serialization.json.JsonElement") fail("${descriptor.serialName} is polymorphic, which this check doesn't walk: teach it, or leave it out on purpose")
             else -> Unit
         }
     }
 
     @Test
     fun `the tasks are from every source, with steps of each kind, each of your values, and finished ones`() {
-        val state = read(stores[0], now).first as TaskState
+        val state = read(store("tasks.json"), now).first as TaskState
         assertEquals(Source.entries.toSet(), state.tasks.map { it.source }.toSet())
         val byId = state.tasks.associateBy { it.id }
         // Steps of each kind: the reading's, the rules', yours, Felix's (by an instruction), your own task's, the source's.
@@ -157,21 +169,21 @@ class StoresDecodeTest {
 
     @Test
     fun `the instructions change every way there is, each the tasks' values carry`() {
-        val state = read(stores[4], now).first as InstructionState
+        val state = read(store("instructions.json"), now).first as InstructionState
         assertEquals(ChangeType.entries.toSet(), state.instructions.flatMap { i -> i.changes.map { it.type } }.toSet())
         assertEquals(InstructionStatus.entries.toSet(), state.instructions.map { it.state }.toSet())
         // What's in use is what the tasks carry: laid again, nothing on them would change.
-        val tasks = (read(stores[0], now).first as TaskState).tasks
+        val tasks = (read(store("tasks.json"), now).first as TaskState).tasks
         val laid = Instructions.taskOverrides(state.applied)
         for (task in tasks) assertEquals(laid[task.id] ?: TaskOverrides.NONE, task.overrides(), "${task.id}'s values aren't its instructions'")
     }
 
     @Test
     fun `the chat holds the fields of before, and the log Felix's records of every reason`() {
-        val chat = read(stores[5], now).first as ChatState
+        val chat = read(store("chat.json"), now).first as ChatState
         assertTrue(chat.messages.any { it.remembered.isNotEmpty() } && chat.messages.any { it.done.isNotEmpty() } && chat.messages.any { it.reason != null })
         assertEquals(Speaker.You, chat.unanswered?.from)
-        val log = read(stores[3], now).first as ActivityLog
+        val log = read(store("log.json"), now).first as ActivityLog
         assertEquals(FelixPrompts.Reason.entries.map { it.name }.toSet(), log.felix.map { it.reason }.toSet())
         assertTrue(log.felix.count { it.replyText != null } >= 3)
         // A record in the chat by its id (copied when you replied to it), and an answer's under its chat id.
