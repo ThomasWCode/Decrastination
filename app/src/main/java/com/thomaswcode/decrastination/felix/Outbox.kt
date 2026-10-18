@@ -98,7 +98,7 @@ class Outbox(
         const val WINDOW_MS = 60 * 24 * 3_600_000L
 
         /** Whether [message] is his, with words, and unread at [readAt]: shown nowhere yet, so never moved. */
-        fun unread(message: ChatMessage, readAt: Long): Boolean = message.from == Speaker.Claude && message.at > readAt && message.text.isNotBlank()
+        fun unread(message: ChatMessage, readAt: Long): Boolean = message.from == Speaker.Felix && message.at > readAt && message.text.isNotBlank()
 
         /**
          * The messages of [state] past its live window at [now]: older than the newest [WINDOW] and than
@@ -132,7 +132,7 @@ class Outbox(
          */
         private fun line(message: ChatMessage): String = when (message.from) {
             Speaker.You -> message.text + (message.note?.takeIf { message.answeredAt == null }?.let { "\n($it)" } ?: "")
-            Speaker.Claude -> (
+            Speaker.Felix -> (
                 listOf(message.text) +
                     message.proposals.filter { it.state == ProposalState.Applied }.map { p -> p.task?.let { "Added “${it.title}”" } ?: p.lines.joinToString("; ") } +
                     message.acts.filter { it.action != null && !it.undone }.map { it.line }

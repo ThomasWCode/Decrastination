@@ -64,13 +64,13 @@ object ChatPrompts {
      */
     fun history(messages: List<ChatMessage>): List<ChatMessage> {
         val said = messages.filter { it.from == Speaker.You || it.text.isNotBlank() }
-        val nudges = said.filter { it.from == Speaker.Claude && it.kind != MessageKind.Chat }
+        val nudges = said.filter { it.from == Speaker.Felix && it.kind != MessageKind.Chat }
         val nudged = nudges.mapTo(HashSet()) { it.id }
         // Yours to a nudge, answered by him: his answer comes before another message of yours.
-        fun answered(i: Int): Boolean = said.drop(i + 1).firstOrNull { it.from == Speaker.You || it.kind == MessageKind.Chat }?.from == Speaker.Claude
+        fun answered(i: Int): Boolean = said.drop(i + 1).firstOrNull { it.from == Speaker.You || it.kind == MessageKind.Chat }?.from == Speaker.Felix
         val conversation = said.filterIndexed { i, m ->
             when {
-                m.from == Speaker.Claude -> m.kind == MessageKind.Chat
+                m.from == Speaker.Felix -> m.kind == MessageKind.Chat
                 m.replyTo == null || m.replyTo !in nudged -> true
                 else -> i == said.lastIndex || answered(i)
             }
@@ -81,6 +81,9 @@ object ChatPrompts {
     }
 
     private const val MAX_TITLE = 100
+
+    /** A message a reply quotes, cut to this ([turns]): its point, not all of it. */
+    private const val MAX_QUOTE = 300
 
     private val WHEN = DateTimeFormatter.ofPattern("EEE d MMM yyyy HH:mm", Locale.UK)
     private val TODAY = DateTimeFormatter.ofPattern("EEEE d MMMM yyyy, HH:mm", Locale.UK)
@@ -118,7 +121,7 @@ object ChatPrompts {
         4. Remember (memories): a fact about the student worth keeping for later (a preference, a pattern, something about their week: "football is on Tuesdays"), with a short topic, so a newer fact on the same topic replaces it; or, kind "rule", a standing instruction about how you should behave ("don't message before 8", "be blunter"). To forget one, give its topic (a rule's own words) and an empty text. Busy times, limits and days off are changes, not memories; most messages need none.
         5. Act (actions): tickStep when the student says a step is done, untickStep when one ticked isn't (taskId, and stepIndex from the list's steps); done when they've finished a task of their own (from Yours), or one whose tick finishes it; reopen for one of theirs finished by mistake (from the finished list); delete for a task of their own they no longer want (another source's they can only say isn't a task: NotATask); open to show them a task; setting to change one of the settings listed with their values (taskId empty, setting its name, value as the list writes it: a number, a time as HH:MM, hours as HH:MM-HH:MM). stepIndex is -1 but for steps, setting and value empty but for settings. A task from Teams, Power Planner, Gmail or Anki is done when its source says so (handed in, completed in Power Planner, unstarred, studied), so it can't be marked done. Most messages need none.
 """ + (if (settings.felixSearches) RESEARCH else NO_RESEARCH).prependIndent("        ") + "\n" + READ.prependIndent("        ") + "\n" + """
-        Reply in one to three short sentences of plain UK English (asked what's on, a short list instead, a line a task). Everything you give is made as soon as you give it (a new task or event, a change, days off, a step ticked, a setting), so say what you've done ("Moved it to 19:30", "Added it, due Tuesday"), never what you'd do: the student has an Undo for each. To undo something yourself, give what puts it back. When a reply from them is likely, offer up to three short ones in their words (suggestedReplies). If what you need is missing or unclear (which task they mean, or when), ask one short question and change nothing. Don't add a task that's already listed: change it instead. When their message is about a given task, event or day, it's about that unless they clearly name another. Do only what they asked for, and leave every field you don't use empty: an empty string, -1 for a number.
+        Reply in one to three short sentences of plain UK English (asked what's on, a short list instead, a line a task). Everything you give is made as soon as you give it (a new task or event, a change, days off, a step ticked, a setting), so say what you've done ("Moved it to 19:30", "Added it, due Tuesday"), never what you'd do: the student has an Undo for each. To undo something yourself, give what puts it back. When a reply from them is likely, offer up to three short ones in their words (suggestedReplies). If what you need is missing or unclear (which task they mean, or when), ask one short question and change nothing. Don't add a task that's already listed: change it instead. When their message is about a given task, event or day, it's about that unless they clearly name another. When it starts with a message it replies to, quoted, it's answering that one. Do only what they asked for, and leave every field you don't use empty: an empty string, -1 for a number.
     """
         ).trimIndent()
 
@@ -194,7 +197,9 @@ object ChatPrompts {
      * Where both can't be whole, the plan keeps at least a third of their room (its near days first),
      * so a long list of tasks can't push it out: the list loses its end, and the plan its far days.
      * Your newest words come after what they're about, in full ([aboutText], D-93), and before what
-     * a web search [found] and the tasks he asked to [read] whole ([readText]).
+     * a web search [found] and the tasks he asked to [read] whole ([readText]). A message of yours that
+     * replies to one that isn't just before it starts with that one, quoted (5b), as the window may not
+     * hold it.
      */
     fun turns(
         messages: List<ChatMessage>,
@@ -214,12 +219,21 @@ object ChatPrompts {
         val lead = last.takeWhile { it.from != Speaker.You }.filter { it.kind != MessageKind.Chat }
         val recent = last.dropWhile { it.from != Speaker.You }
         if (recent.isEmpty()) return emptyList()
+        // What a message of yours replies to, where it isn't the message before it: quoted, from the
+        // whole chat, as the window may not hold it.
+        val byId = messages.associateBy { it.id }
+        fun quote(m: ChatMessage): String {
+            val before = last.getOrNull(last.indexOfFirst { it.id == m.id } - 1)
+            val to = m.replyTo?.takeIf { m.from == Speaker.You && it != before?.id }?.let(byId::get)?.takeIf { it.text.isNotBlank() } ?: return ""
+            val said = to.text.trim().take(MAX_QUOTE)
+            return if (to.from == Speaker.Felix) "(Replying to your message: “$said”)\n" else "(Replying to their own earlier message: “$said”)\n"
+        }
         // A turn each way at a time: a message of Felix's from a notification can follow his last answer.
-        val folded = recent.map { m -> m.from to text(m, tasks, zone) }.fold(emptyList<Pair<Speaker, String>>()) { turns, (from, text) ->
+        val folded = recent.map { m -> m.from to quote(m) + text(m, tasks, zone) }.fold(emptyList<Pair<Speaker, String>>()) { turns, (from, text) ->
             if (turns.lastOrNull()?.first == from) turns.dropLast(1) + (from to turns.last().second + "\n\n" + text) else turns + (from to text)
         }
         val texts = if (lead.isEmpty()) folded else {
-            val before = lead.joinToString("\n") { "(You'd written to them: “${it.text.trim().take(MAX_TEXT)}”)" }
+            val before = lead.joinToString("\n") { (if (it.byApp) "(The app wrote to them for you: “" else "(You'd written to them: “") + it.text.trim().take(MAX_TEXT) + "”)" }
             listOf(folded.first().first to before + "\n\n" + folded.first().second) + folded.drop(1)
         }
         // After what it's about, in full; with what a web search found for it (16 Oct) and the tasks
@@ -253,10 +267,13 @@ object ChatPrompts {
         val whole: String get() = if (plan.isEmpty()) known else known + PLAN_GAP + plan
     }
 
-    /** One message as it's sent: yours with what it was about; Claude's with its cards and what became of them. */
+    /**
+     * One message as it's sent: yours with what it was about; Felix's with its cards and what became of
+     * them, and one the app wrote in his name (a check-in's question, the morning's list) said as such.
+     */
     private fun text(m: ChatMessage, tasks: Map<String, TaskItem>, zone: ZoneId): String = when (m.from) {
         Speaker.You -> aboutLine(m.about) + m.text.trim().take(MAX_TEXT)
-        Speaker.Claude -> m.text + m.proposals.joinToString("") { p ->
+        Speaker.Felix -> (if (m.byApp) "(the app wrote this for you) " else "") + m.text + m.proposals.joinToString("") { p ->
             // In the words it was proposed in, where they're kept: made, a task's estimate is the new one.
             val what = p.task?.let { "add the task “${it.title}”" }
                 ?: p.lines.takeIf { it.size == p.changes.size }?.joinToString("; ")

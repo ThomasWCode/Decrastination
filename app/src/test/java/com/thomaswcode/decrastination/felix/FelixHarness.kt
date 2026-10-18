@@ -210,14 +210,12 @@ class FelixHarness(start: String = "2026-10-19T16:30") : AutoCloseable {
             stores.settings.update(change)
         }
 
-        /** The calendar's answers kept (the event, the answer's words), as `CalendarTime.answer` would keep them. */
+        /** The calendar's answers kept (the event, the answer as it's kept), as `CalendarTime.answer` would keep them. */
         val events: MutableList<Pair<String, String>> = Collections.synchronizedList(mutableListOf())
 
-        override suspend fun answerEvent(key: String, words: String): Boolean {
-            if (words.trim().lowercase() !in setOf("all of it", "a few hours", "none")) return false
-            events += key to words.trim()
+        override suspend fun answerEvent(key: String, answer: String) {
+            events += key to answer
             conversation.settleEvent(key)
-            return true
         }
 
         /** Your answer to his question, kept to be read, as `AppGraph.addInstruction` keeps one. */

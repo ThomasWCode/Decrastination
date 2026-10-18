@@ -28,6 +28,12 @@ class FormatTest {
     }
 
     @Test
+    fun `a moment's time of day, as under a chat message`() {
+        assertEquals("16:45", Format.time(Fixtures.at("2026-10-18T16:45"), LONDON))
+        assertEquals("09:05", Format.time(Fixtures.at("2026-12-01T09:05"), LONDON))
+    }
+
+    @Test
     fun `durations`() {
         assertEquals("45 min", Format.minutes(45))
         assertEquals("2 h", Format.minutes(120))
