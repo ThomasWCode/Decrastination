@@ -102,9 +102,10 @@ class JsonStore<T>(
         if (!file.exists()) return default()
         val text = runCatching { file.readText() }.getOrNull()
         val tree = text?.let { runCatching { json.parseToJsonElement(it) as? JsonObject }.getOrNull() }
-        // An older shape brought to this one first; null where it's newer, or a step is missing.
+        // An older shape brought to this one first; null where it's newer, a step is missing, or one fails
+        // on what the file holds (it's then set aside, as any file that can't be read, not a crash at every start).
         val from = tree?.let(Migration::versionOf)
-        val upgraded = tree?.let { Migration.upgrade(it, version, migrations) }
+        val upgraded = tree?.let { runCatching { Migration.upgrade(it, version, migrations) }.getOrNull() }
         val loaded = upgraded?.let { runCatching { json.decodeFromJsonElement(serializer, it) }.getOrNull() }
         if (loaded != null) {
             if (from != null && from < version) keepOldShape(from, loaded)
@@ -193,6 +194,10 @@ class JsonStore<T>(
                     "runtime.json" -> "The app's running state (free time, today's slots, calendar answers)"
                     "log.json" -> "The activity log"
                     "instructions.json" -> "Your instructions"
+                    "chat.json" -> "The chat"
+                    "school.json" -> "Your school calendar (days off and half-days)"
+                    "memory.json" -> "What Felix remembers"
+                    "calendar.json" -> "The record of what the app wrote to your calendar"
                     else -> file
                 }
                 val how = if (kept) "couldn't be read whole: what could be was kept, the rest is back to its defaults" else "couldn't be read: it started afresh"
