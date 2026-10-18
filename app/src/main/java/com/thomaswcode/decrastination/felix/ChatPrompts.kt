@@ -423,7 +423,7 @@ object ChatPrompts {
     const val PLAN_DAYS = 14
 
     /**
-     * [plan] as the Plan tab shows it, for questions about a day ("what's on tomorrow?"): the next
+     * [plan] as the Day and Work tabs show it, for questions about a day ("what's on tomorrow?"): the next
      * thing to do, as its *Do now* card has it, with the slot under way ("Now: 17:00–17:30 …");
      * the open work it leaves out, with why; the other events coming up; what's planned after
      * the fortnight, in a line naming its tasks; then each of the next [PLAN_DAYS] days, its minutes
@@ -436,7 +436,7 @@ object ChatPrompts {
         fun piece(chunk: Chunk) = "${chunk.label.take(MAX_TITLE)} (${chunk.minutes} min)"
         fun event(task: TaskItem) = "${task.id} | ${task.title.take(MAX_TITLE)} | ${task.source.label}"
         appendLine(
-            "The plan: the work the app has them do each day so every deadline is met, as its Plan tab shows it. Its minutes are the app's, " +
+            "The plan: the work the app has them do each day so every deadline is met, as its Day and Work tabs show it. Its minutes are the app's, " +
                 "from what it's learned of how long things take them, so they can differ from the task list's. While anything's planned for " +
                 "today, blocked apps stay blocked in blocking hours; otherwise they cost free time earned by working. Each piece's [why: …] " +
                 "says why it's on its day: duesoon (due today or tomorrow), overdue, spread (its share of the free time to its deadline), " +
