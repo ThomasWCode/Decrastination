@@ -1,0 +1,80 @@
+now 2026-10-19 16:30, today 2026-10-19
+next anki:quota#0, then teams:sheet#0
+day 2026-10-19 MON: 104 of 252 min
+  piece anki:quota#0 "Anki: today's cards: Reviews" 9 min, due 2026-10-19 21:30 hard, deadline 2026-10-19 21:30, why DueSoon, part 1/2 of 18 min, Anywhere [dueToday, dueSoon], ranked by 2026-10-19 21:30, step 0
+  piece anki:quota#1 "Anki: today's cards: New cards" 9 min, due 2026-10-19 21:30 hard, deadline 2026-10-19 21:30, why DueSoon, part 2/2 of 18 min, Anywhere [dueToday, dueSoon], ranked by 2026-10-19 21:30, step 1
+  piece teams:sheet#0 "Forces worksheet: Questions 1 to 6" 10 min, due 2026-10-20 09:00 hard, deadline 2026-10-20 09:00, why DueSoon, part 1/2 of 35 min, Home [dueSoon], ranked by 2026-10-20 09:00, step 0
+  piece teams:sheet#1 "Forces worksheet: Questions 7 to 12" 25 min, due 2026-10-20 09:00 hard, deadline 2026-10-20 09:00, why DueSoon, part 2/2 of 35 min, Home [dueSoon], ranked by 2026-10-20 09:00, step 1
+  piece teams:late#-1#1 "Chemistry questions: part 1 of 2" 18 min, due 2026-10-16 09:00 hard, deadline 2026-10-16 09:00, why Overdue, part 1/2 of 36 min, Home [overdue], ranked by 2026-10-16 09:00, box 30
+  piece teams:late#-1#2 "Chemistry questions: part 2 of 2" 18 min, due 2026-10-16 09:00 hard, deadline 2026-10-16 09:00, why Overdue, part 2/2 of 36 min, Home [overdue], ranked by 2026-10-16 09:00, box 30
+  piece own:folder#-1#1 "Sort the folder" 15 min, due -, deadline 2026-10-19 17:00 soft, why Soft, part 1/1 of 15 min, Anywhere, ranked by 2026-10-19 17:00
+  slot Work 16:45-16:54 Evening anki:quota#0
+  slot Work 17:10-17:20 Evening teams:sheet#0
+  slot Work 17:25-17:34 Evening anki:quota#1
+  slot Work 17:39-18:04 Evening teams:sheet#1
+  slot Work 18:09-18:27 Evening teams:late#-1#1
+  slot Work 18:32-18:50 Evening teams:late#-1#2
+  slot Work 18:55-19:10 Evening own:folder#-1#1
+day 2026-10-20 TUE: 108 of 311 min
+  piece powerplanner:poster#0 "Biology poster: Read the brief" 15 min, due 2026-10-21 17:00, deadline 2026-10-20 23:59, why Pinned, part 1/2 of 45 min, Anywhere [dueSoon], ranked by 2026-10-20 23:59, from 2026-10-20 00:00, step 0
+  piece powerplanner:poster#1 "Biology poster: Plan the poster" 30 min, due 2026-10-21 17:00, deadline 2026-10-20 23:59, why Pinned, part 2/2 of 45 min, Home [dueSoon], ranked by 2026-10-20 23:59, from 2026-10-20 00:00, step 1
+  piece teams:essay#0 "History essay: Read the two sources" 33 min, due 2026-10-23 09:00, deadline 2026-10-20 23:59, why Pinned, part 1/4 of 150 min, Home [dueSoon], ranked by 2026-10-20 23:59, from 2026-10-20 17:00, step 0
+  piece own:revise#0 "Revise for the maths test: Chapter 3" 30 min, due 2026-10-22 09:00 hard, deadline 2026-10-22 09:00, why Spread, part 1/2 of 60 min, Home, ranked by 2026-10-22 09:00, from 2026-10-20 00:00, step 0
+  slot Work 10:45-11:00 Break powerplanner:poster#0
+  slot Work 17:00-17:33 Evening teams:essay#0 pinned
+  slot Work 19:00-19:30 Evening powerplanner:poster#1
+  slot Work 21:00-21:30 Evening own:revise#0
+day 2026-10-21 WED: 30 of 60 min
+  piece own:revise#1 "Revise for the maths test: Chapter 4" 30 min, due 2026-10-22 09:00 hard, deadline 2026-10-22 09:00, why Spread, part 2/2 of 60 min, Home, ranked by 2026-10-22 09:00, from 2026-10-20 00:00, step 1
+  slot Work 16:45-17:15 Evening own:revise#1
+day 2026-10-22 THU: 117 of 486 min
+  piece teams:essay#1 "History essay: Plan the essay" 28 min, due 2026-10-23 09:00 hard, deadline 2026-10-23 09:00, why Spread, part 2/4 of 150 min, Home, ranked by 2026-10-23 09:00, from 2026-10-20 17:00, step 1
+  piece teams:essay#2#1 "History essay: Write the essay" 45 min, due 2026-10-23 09:00 hard, deadline 2026-10-23 09:00, why Spread, part 3/4 of 150 min, Home, ranked by 2026-10-23 09:00, from 2026-10-20 17:00, step 2, sitting 1 "Write the essay"
+  piece teams:essay#2 "History essay: Continue and finish: Write the essay" 44 min, due 2026-10-23 09:00 hard, deadline 2026-10-23 09:00, why Spread, part 4/4 of 150 min, Home, ranked by 2026-10-23 09:00, from 2026-10-20 17:00, step 2, sitting 0 "Continue and finish: Write the essay"
+  slot Work 12:30-12:58 Evening teams:essay#1
+  slot Work 13:03-13:48 Evening teams:essay#2#1
+  slot Work 13:53-14:37 Evening teams:essay#2
+day 2026-10-23 FRI: 0 of 588 min
+  slot Outside 09:30-09:50 Evening outside:1792744200000
+  slot Outside 13:00-13:20 Evening outside:1792756800000
+  slot Outside 16:00-16:20 Evening outside:1792767600000
+day 2026-10-24 SAT: 0 of 525 min
+  slot Outside 09:30-09:50 Evening outside:1792830600000
+  slot Outside 13:00-13:20 Evening outside:1792843200000
+  slot Outside 16:00-16:20 Evening outside:1792854000000
+day 2026-10-25 SUN: 0 of 588 min
+  slot Outside 09:30-09:50 Evening outside:1792920600000
+  slot Outside 13:00-13:20 Evening outside:1792933200000
+  slot Outside 16:00-16:20 Evening outside:1792944000000
+day 2026-10-26 MON: 0 of 588 min
+  slot Outside 09:30-09:50 Evening outside:1793007000000
+  slot Outside 13:00-13:20 Evening outside:1793019600000
+  slot Outside 16:00-16:20 Evening outside:1793030400000
+day 2026-10-27 TUE: 0 of 546 min
+  slot Outside 09:30-09:50 Evening outside:1793093400000
+  slot Outside 13:00-13:20 Evening outside:1793106000000
+  slot Outside 16:00-16:20 Evening outside:1793116800000
+day 2026-10-28 WED: 0 of 588 min
+  slot Outside 09:30-09:50 Evening outside:1793179800000
+  slot Outside 13:00-13:20 Evening outside:1793192400000
+  slot Outside 16:00-16:20 Evening outside:1793203200000
+day 2026-10-29 THU: 0 of 588 min
+  slot Outside 09:30-09:50 Evening outside:1793266200000
+  slot Outside 13:00-13:20 Evening outside:1793278800000
+  slot Outside 16:00-16:20 Evening outside:1793289600000
+day 2026-10-30 FRI: 0 of 588 min
+  slot Outside 09:30-09:50 Evening outside:1793352600000
+  slot Outside 13:00-13:20 Evening outside:1793365200000
+  slot Outside 16:00-16:20 Evening outside:1793376000000
+day 2026-10-31 SAT: 0 of 588 min
+  slot Outside 09:30-09:50 Evening outside:1793439000000
+  slot Outside 13:00-13:20 Evening outside:1793451600000
+  slot Outside 16:00-16:20 Evening outside:1793462400000
+day 2026-11-01 SUN: 0 of 588 min
+  slot Outside 09:30-09:50 Evening outside:1793525400000
+  slot Outside 13:00-13:20 Evening outside:1793538000000
+  slot Outside 16:00-16:20 Evening outside:1793548800000
+day 2026-11-02 MON: 0 of 347 min
+unplanned teams:later "Spring project" 72 min in 3: NotOpen at 2027-02-01 08:00
+unplanned gmail:form "Trip consent form" 10 min in 1: Waits after "History essay"
+event own:open-evening "Open evening" at 2026-10-21 18:00
