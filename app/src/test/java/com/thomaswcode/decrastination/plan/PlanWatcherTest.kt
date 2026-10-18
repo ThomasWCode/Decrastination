@@ -1,5 +1,6 @@
-package com.thomaswcode.decrastination
+package com.thomaswcode.decrastination.plan
 
+import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.core.Plan
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
