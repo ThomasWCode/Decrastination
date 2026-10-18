@@ -521,6 +521,10 @@ class ChatTest {
         val asked = ChatMessage("y", Speaker.You, "hello", now)
         assertEquals(asked, ChatState(listOf(asked)).unanswered)
         assertNull(ChatState(listOf(asked.copy(answeredAt = now), ChatMessage("c", Speaker.Felix, "hi", now))).unanswered)
+        // A reply of yours taken with no call (a check-in's "4") comes answered: what waits before it still waits.
+        val question = ChatMessage("q", Speaker.Felix, "How was the week, 1 to 5?", now, kind = MessageKind.CheckIn, byApp = true, answeredAt = now)
+        val four = ChatMessage("4", Speaker.You, "4", now, kind = MessageKind.CheckIn, replyTo = "q", answeredAt = now)
+        assertEquals(asked, ChatState(listOf(asked, question, four)).unanswered)
     }
 
     @Test
@@ -606,6 +610,15 @@ class ChatTest {
         val far = ChatPrompts.turns(messages.take(2) + long + ChatMessage("6", Speaker.You, "back to this", now, replyTo = "1"), "", emptyMap(), LONDON)
         assertTrue(far.last().second.endsWith("(Replying to their own earlier message: “Move the physics”)\nback to this"), far.last().second)
         assertTrue("quoted, it's answering that one" in ChatPrompts.system())
+    }
+
+    @Test
+    fun `a reply to a message the window no longer holds is quoted from the archive`() {
+        val old = ChatMessage("old", Speaker.Felix, "The essay's plan is due Friday.", now - 90 * 86_400_000L, kind = MessageKind.SlotStart)
+        val asked = listOf(ChatMessage("q", Speaker.You, "is that still Friday?", now, replyTo = "old"))
+        assertFalse("Replying to" in ChatPrompts.turns(asked, "", emptyMap(), LONDON).single().second)
+        val newest = ChatPrompts.turns(asked, "", emptyMap(), LONDON, quoted = listOf(old)).single().second
+        assertTrue(newest.endsWith("(Replying to your message: “The essay's plan is due Friday.”)\nis that still Friday?"), newest)
     }
 
     @Test

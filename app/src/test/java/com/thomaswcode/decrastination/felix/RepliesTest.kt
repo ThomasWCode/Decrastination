@@ -31,6 +31,22 @@ class RepliesTest {
     }
 
     @Test
+    fun `the box answers the newest question still waiting since your last turn, and with several asked together the one before it next`() {
+        fun asked(id: String, at: Long) = ChatMessage(id, Speaker.Felix, "How did it go?", at, kind = MessageKind.Completions, byApp = true, asks = listOf(AssessLater("t$id", "A task", at)))
+        val turn = ChatMessage("y", Speaker.You, "what's left?", 1, answeredAt = 2)
+        val answer = ChatMessage("a", Speaker.Felix, "The worksheet.", 2)
+        val (one, two) = asked("1", 3) to asked("2", 4)
+        assertEquals("2", Replies.pending(listOf(turn, answer, one, two), checkInUnderWay = false)?.id)
+        // The second answered with no call (its kind its question's): the first is next.
+        val done = two.copy(answeredAt = 5)
+        val harder = ChatMessage("h", Speaker.You, "Harder", 5, kind = MessageKind.Completions, replyTo = "2", answeredAt = 5)
+        assertEquals("1", Replies.pending(listOf(turn, answer, one, done, harder), checkInUnderWay = false)?.id)
+        // A turn of the chat since: none, the conversation's moved on.
+        val talk = ChatMessage("t", Speaker.You, "anyway, what's tomorrow?", 6)
+        assertEquals(null, Replies.pending(listOf(turn, answer, one, done, harder, talk), checkInUnderWay = false))
+    }
+
+    @Test
     fun `a check-in's question takes any words, with no call`() {
         assertEquals(Replies.Route.CheckIn, Replies.route(his(MessageKind.CheckIn), "4", checkInUnderWay = true))
         assertEquals(Replies.Route.CheckIn, Replies.route(his(MessageKind.CheckIn), "Physics questions", checkInUnderWay = true))

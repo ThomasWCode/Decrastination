@@ -141,6 +141,46 @@ class ConversationTest {
     }
 
     @Test
+    fun `a check-in's answer given while a message of yours waits leaves it waiting, and it's answered after`() = runBlocking {
+        // Claude off: your message waits, saying why.
+        stores.settings.update { it.copy(aiEnabled = false) }
+        assertTrue(conversation.ask("What's due tomorrow?"))
+        felix.settle()
+        conversation.remindCheckIn()
+        val question = his().last()
+        assertTrue(conversation.ask("4", replyTo = question.id))
+        // The "4", answered as it came with its question's kind, doesn't hide what waits.
+        assertEquals(MessageKind.CheckIn, stores.chat.value.messages.last().kind)
+        assertEquals("What's due tomorrow?", stores.chat.value.unanswered?.text)
+        stores.settings.update { it.copy(aiEnabled = true) }
+        felix.answers(felix.chatAnswer("The forces worksheet, due Wednesday."))
+        conversation.answerChat()
+        assertNull(stores.chat.value.unanswered)
+        assertEquals("The forces worksheet, due Wednesday.", stores.chat.value.messages.last { it.from == Speaker.Felix && it.kind == MessageKind.Chat }.text)
+    }
+
+    @Test
+    fun `with his notifications off the check-in is asked in the chat all the same, and the form's reminder says so`() = runBlocking {
+        felix.shown = false
+        conversation.remindCheckIn()
+        assertEquals(MessageKind.CheckIn, his().single().kind)
+        assertEquals(1, felix.ports.forms)
+        assertNull(felix.ports.showing)
+    }
+
+    @Test
+    fun `a week before's check-in questions never finished are settled as a new one starts`() = runBlocking {
+        conversation.remindCheckIn()
+        val old = his().single()
+        // A week on, nothing answered: this week's asked, and last week's question no longer takes an answer.
+        felix.clock.time += 7 * 86_400_000L
+        conversation.remindCheckIn()
+        assertNotNull(stores.chat.value.messages.single { it.id == old.id }.answeredAt)
+        assertEquals(2, his().size)
+        assertNull(his().last().answeredAt)
+    }
+
+    @Test
     fun `a reply from his notification is kept under his message and answered in the chat, the answer his next message`() = runBlocking {
         val his = ChatMessage("r1", Speaker.Felix, "The worksheet's slot went by. Still on for tonight?", now - 5 * 60_000L, kind = MessageKind.SlotEnd, pieceKey = "teams:sheet#-1#1", suggestedReplies = listOf("Yes", "Later"))
         felix.outbox.send(his)
@@ -260,6 +300,29 @@ class ConversationTest {
         val sent = felix.server.takeRequest().body.readUtf8()
         assertTrue("What's due tomorrow?" in sent && "on it" in sent)
         assertEquals(1, felix.server.requestCount)
+    }
+
+    @Test
+    fun `a reply to a question scrolled back to in the archive is answered as it, with no call`() = runBlocking {
+        val question = ChatMessage("e1", Speaker.Felix, "Is the open day all day?", now - 70 * 86_400_000L, About(eventKey = "open day", eventTitle = "Open day"), kind = MessageKind.EventQuestion, byApp = true, suggestedReplies = CalendarTime.ANSWERS.map { it.first })
+        felix.stores.chatArchive.update { it.copy(messages = listOf(question)) }
+        assertEquals(Conversation.Asked.Answer, conversation.send(CalendarTime.ANSWERS[0].first, replyTo = "e1"))
+        assertEquals(listOf("open day" to CalendarTime.ANSWERS[0].second), felix.owners.events)
+        assertEquals(0, felix.server.requestCount)
+    }
+
+    @Test
+    fun `an answer with no call from his notification, while a message of yours waits, asks for no work`() = runBlocking {
+        stores.settings.update { it.copy(aiEnabled = false) }
+        assertTrue(conversation.ask("What's due tomorrow?"))
+        felix.settle()
+        conversation.remindCheckIn()
+        assertTrue(conversation.replyFromNotification("4", his().last().id))
+        assertEquals(0, felix.ports.later)
+        // A turn of the chat from it does.
+        felix.outbox.send(ChatMessage("n1", Speaker.Felix, "the worksheet's up at 17:00", now, kind = MessageKind.SlotStart))
+        assertTrue(conversation.replyFromNotification("on it", "n1"))
+        assertEquals(1, felix.ports.later)
     }
 
     @Test

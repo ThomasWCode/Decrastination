@@ -146,18 +146,19 @@ class Conversation(
 
     /**
      * The week's check-in asked by Felix (LR-02): its first question, unless the week has its check-in
-     * already, or his notifications can't be shown or it's quiet hours (false then, and the form's
-     * reminder goes instead).
+     * already, or it's quiet hours (false then, and the form's reminder goes instead). With his
+     * notifications off it's asked in the chat all the same (D-95), and false, so the form's reminder
+     * says so. A week before's questions never finished are settled first: an answer to one isn't this week's.
      */
     suspend fun askCheckIn(): Boolean {
         val now = clock.now()
         val week = Daily.checkInWeek(now, clock.zone(), settings.value.checkInMin)
         if (log.value.checkIns.any { it.weekOf == week }) return true
-        if (!notices.shown(Channels.FELIX)) return false
         // In quiet hours the form's reminder goes instead, held as the routine ones are till the morning.
         if (BlockPolicy.isQuiet(now, clock.zone(), settings.value)) return false
+        chat.update { s -> s.copy(messages = s.messages.map { if (it.from == Speaker.Felix && it.kind == MessageKind.CheckIn && it.answeredAt == null) it.copy(answeredAt = now) else it }) }
         askNext(CheckInFlow.Draft(week), now)
-        return true
+        return notices.shown(Channels.FELIX)
     }
 
     /** [draft]'s question as his message, in the app's words, with its replies, the draft kept with it: so its reply comes back here. */
@@ -221,7 +222,7 @@ class Conversation(
      * question, answered, out of his notification. Shown there by the outbox after.
      */
     private suspend fun keepReply(message: ChatMessage, words: String, now: Long) {
-        val reply = ChatMessage(UUID.randomUUID().toString(), Speaker.You, words, now, message.about, replyTo = message.id, answeredAt = now)
+        val reply = ChatMessage(UUID.randomUUID().toString(), Speaker.You, words, now, message.about, kind = message.kind, replyTo = message.id, answeredAt = now)
         chat.update { s -> s.copy(messages = s.messages.map { if (it.id == message.id && it.answeredAt == null) it.copy(answeredAt = now) else it } + reply) }
     }
 
@@ -342,11 +343,22 @@ class Conversation(
      * unused, and he answers both together (D-98). False only with no words. Kept, it's shown in his
      * notification under what it answers.
      */
-    suspend fun ask(text: String, about: About = About(), id: String = UUID.randomUUID().toString(), replyTo: String? = null): Boolean {
+    suspend fun ask(text: String, about: About = About(), id: String = UUID.randomUUID().toString(), replyTo: String? = null): Boolean =
+        send(text, about, id, replyTo) != Asked.Nothing
+
+    /** What became of words sent ([send]): nothing (there were none), an answer taken with no call, or a turn of the chat waiting for his answer. */
+    enum class Asked { Nothing, Answer, Turn }
+
+    /**
+     * [ask], saying which way it went: a reply from his notification is answered as work of its own only
+     * where it's a turn of the chat ([replyFromNotification]), and the `chat-ask` command waits for an
+     * answer only then. The message replied to may be in the archive, scrolled back to.
+     */
+    suspend fun send(text: String, about: About = About(), id: String = UUID.randomUUID().toString(), replyTo: String? = null): Asked {
         val words = text.trim().take(ChatPrompts.MAX_TEXT)
-        if (words.isEmpty()) return false
-        val repliedTo = replyTo?.let { r -> chat.value.messages.firstOrNull { it.id == r } }
-        if (repliedTo != null && routed(repliedTo, words)) return true
+        if (words.isEmpty()) return Asked.Nothing
+        val repliedTo = replyTo?.let { outbox.find(it) }
+        if (repliedTo != null && routed(repliedTo, words)) return Asked.Answer
         // Yours still waiting go with it, answered together: only the newest says why it waits.
         chat.update { state ->
             state.copy(
@@ -356,7 +368,7 @@ class Conversation(
         }
         outbox.delivered()
         scope.launch { answerChat() }
-        return true
+        return Asked.Turn
     }
 
     /**
@@ -427,7 +439,10 @@ class Conversation(
                 chat.update { s -> s.copy(messages = s.messages.map { if (it.id == waiting.id) it.copy(note = null, stuck = false) else it }) }
                 sentAt.value = at
                 try {
-                    ChatReader(chatClient, clock.zone(), profile = profile(at), settings = settings.value).answer(upTo(chat.value.messages), state.tasks, time.events, chatContext(at, state, time, instructions.value.applied), at, found, read)
+                    val sent = upTo(chat.value.messages)
+                    // What a message of yours quotes from the archive, past the window: told to him all the same.
+                    val quoted = sent.mapNotNull { m -> m.replyTo?.takeIf { r -> sent.none { it.id == r } }?.let { outbox.find(it) } }
+                    ChatReader(chatClient, clock.zone(), profile = profile(at), settings = settings.value).answer(sent, state.tasks, time.events, chatContext(at, state, time, instructions.value.applied), at, found, read, quoted)
                 } finally {
                     sentAt.value = null
                 }
@@ -782,10 +797,10 @@ class Conversation(
      * ([ask]). A turn of the chat is answered as work of its own ([FelixPorts.answerLater]), as the
      * receiver that took the reply is let go once this returns, and the app may go with it.
      */
-    suspend fun replyFromNotification(text: String, id: String): Boolean {
-        if (!ask(text, replyTo = id)) return false
-        if (chat.value.unanswered != null) ports.answerLater()
-        return true
+    suspend fun replyFromNotification(text: String, id: String): Boolean = when (send(text, replyTo = id)) {
+        Asked.Nothing -> false
+        Asked.Answer -> true
+        Asked.Turn -> true.also { ports.answerLater() }
     }
 
     /** Your message still waiting for Claude taken back, unanswered. */

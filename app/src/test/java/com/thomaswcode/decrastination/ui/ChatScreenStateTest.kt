@@ -56,7 +56,35 @@ class ChatScreenStateTest {
         )
         val screen = ChatScreenState()
         screen.opened(ChatState(window, readAt = Fixtures.at("2026-10-18T08:00")), opening)
-        assertEquals(listOf("day-2026-10-17", "y1", "day-2026-10-18", "h1", "unread", "h2"), screen.items(window, emptyList(), LONDON).map { it.key })
+        val rows = screen.items(window, emptyList(), LONDON)
+        assertEquals(listOf("day-y1", "y1", "day-h1", "h1", "unread", "h2"), rows.map { it.key })
+        assertEquals(listOf(LocalDate.of(2026, 10, 17), LocalDate.of(2026, 10, 18)), rows.filterIsInstance<ChatScreenState.Item.Day>().map { it.date })
+        // A message out of time order brings a date back: its row keyed by the message, so no key repeats.
+        val back = window + yours("late", "2026-10-17T23:59")
+        val keys = screen.items(back, emptyList(), LONDON).map { it.key }
+        assertEquals(keys.size, keys.toSet().size)
+    }
+
+    @Test
+    fun `a question you've answered from his notification isn't where the chat opens, and the archive's rows are marked`() {
+        val answered = his("q", "2026-10-18T17:10").copy(kind = MessageKind.CheckIn, answeredAt = Fixtures.at("2026-10-18T17:11"))
+        val state = ChatState(listOf(answered, his("h2", "2026-10-18T17:20")), readAt = Fixtures.at("2026-10-18T17:00"))
+        val screen = ChatScreenState()
+        screen.opened(state, opening)
+        assertEquals("h2", screen.firstUnread)
+        val rows = ChatScreenState().apply { loadEarlier(1) }.items(state.messages, listOf(his("old", "2026-08-01T10:00")), LONDON)
+        assertEquals(mapOf("old" to true, "q" to false, "h2" to false), rows.filterIsInstance<ChatScreenState.Item.Message>().associate { it.message.id to it.archived })
+    }
+
+    @Test
+    fun `made again, the screen has the archive's pages and the message it was replying to back`() {
+        val screen = ChatScreenState()
+        val target = his("h", "2026-10-18T17:00")
+        screen.restored(earlier = 200, replyingTo = target)
+        assertEquals(200 to "h", screen.earlier to screen.replyingTo?.id)
+        // Restored as chosen: his question offered after it doesn't take its place.
+        screen.offer(ChatMessage("q", Speaker.Felix, "What did you avoid?", 2, kind = MessageKind.CheckIn), checkInUnderWay = true)
+        assertEquals("h", screen.replyingTo?.id)
     }
 
     @Test

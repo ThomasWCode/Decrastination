@@ -131,6 +131,18 @@ class ChatMigrationTest {
     }
 
     @Test
+    fun `with a chat that can't be read, his records and state go into a fresh chat all the same, the bad file kept aside`() {
+        before.listFiles()!!.forEach { it.copyTo(File(dir, it.name)) }
+        File(dir, "chat.json").writeText("{ not json")
+        val stores = Stores(dir, Reverse)
+        val records = (json(File(before, "log.json"))["felix"] as JsonArray).map { (it.jsonObject["id"] as JsonPrimitive).content }
+        assertTrue(stores.chat.value.messages.map { it.id }.containsAll(records))
+        assertTrue(stores.chat.value.felix.checkInDraft != null || json(File(before, "runtime.json"))["checkInDraft"] == null)
+        assertEquals(1, dir.listFiles { f -> f.name.startsWith("chat.json.unreadable-") }!!.size)
+        assertEquals("{ not json", dir.listFiles { f -> f.name.startsWith("chat.json.unreadable-") }!!.single().readText())
+    }
+
+    @Test
     fun `a phone starting afresh has nothing moved, and a chat on its own is brought to the new shape without the log`() {
         assertEquals(ChatState(), Stores(dir, Reverse).chat.value)
         assertFalse(File(dir, "chat.json").exists())

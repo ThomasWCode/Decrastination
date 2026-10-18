@@ -55,9 +55,11 @@ object ChatMigration {
     private fun move(dir: File) {
         val file = File(dir, "chat.json")
         val chat = read(file)
-        // One that can't be read is set aside as its store loads; one in the new shape is moved already.
-        if (file.exists() && chat == null) return
+        // One in the new shape is moved already. One that can't be read is set aside as its store would
+        // set it aside, and his records and state are moved into a fresh chat all the same, as the log and
+        // the runtime are about to lose them; where it can't be set aside, it isn't written over.
         if (chat != null && Migration.versionOf(chat) >= 2) return
+        if (file.exists() && chat == null && JsonStore.alreadyAside(file) == null && JsonStore.setAside(file, System.currentTimeMillis()) == null) return
         val log = read(File(dir, "log.json"))?.takeIf { Migration.versionOf(it) < 2 }
         val runtime = read(File(dir, "runtime.json"))?.takeIf { Migration.versionOf(it) < 2 }
         // A phone starting afresh: nothing to move.
