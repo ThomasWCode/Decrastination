@@ -1,7 +1,6 @@
 package com.thomaswcode.decrastination.enrich
 
 import com.anthropic.client.AnthropicClient
-import com.anthropic.client.okhttp.AnthropicOkHttpClient
 import com.anthropic.core.JsonValue
 import com.anthropic.models.messages.JsonOutputFormat
 import com.anthropic.models.messages.MessageCreateParams
@@ -29,7 +28,6 @@ import com.thomaswcode.decrastination.core.shareOut
 import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.learn.CalendarEvent
 import com.thomaswcode.decrastination.learn.EventJudge
-import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
@@ -791,9 +789,8 @@ object ChatAnswers {
 
 /** Claude in the chat ([ChatPrompts]), as the enrichment's calls are made. */
 class ChatReader(
-    apiKey: String,
+    private val client: AnthropicClient,
     private val zone: ZoneId,
-    endpoint: String? = null,
     val model: String = ClaudeEnricher.MODEL,
     private val profile: Profile.Block = Profile.Block.NONE,
     /** Felix's name and line, as the chat's him (AI-24). */
@@ -802,12 +799,6 @@ class ChatReader(
 
     data class Result(val reading: ChatAnswers.Reading?, val costUsd: Double, val refused: Boolean = false, val usage: ModelCalls.Usage = ModelCalls.Usage.NONE)
 
-    private val client: AnthropicClient = AnthropicOkHttpClient.builder()
-        .apiKey(apiKey)
-        .apply { if (endpoint != null) baseUrl(endpoint) }
-        .timeout(Duration.ofMinutes(3))
-        .maxRetries(2)
-        .build()
 
     /**
      * Claude's answer to the last of [messages] (yours), with what the app knows now ([context]:

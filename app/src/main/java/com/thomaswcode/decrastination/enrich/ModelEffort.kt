@@ -2,6 +2,7 @@ package com.thomaswcode.decrastination.enrich
 
 import com.anthropic.models.messages.OutputConfig
 import com.thomaswcode.decrastination.core.Enrichments
+import java.time.Duration
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -12,6 +13,18 @@ import java.util.concurrent.ConcurrentHashMap
  */
 object ModelEffort {
     enum class Job { Email, Assignment, Effort, Instruction, Review, PhotoToTask, PhotoContext, Chat, Reply, Felix, MicroPlan, PhotoCheck, Summary, Tidy, Research }
+
+    /**
+     * How long a call waits for its answer, by job: the week's review and the tidy, which think longest,
+     * five minutes; Felix's messages, a piece's first steps and the summary two; the rest three. The three
+     * readings are one reader's ([ClaudeEnricher]), so theirs are alike.
+     */
+    private val TIMEOUT_MIN = mapOf(
+        Job.Email to 3L, Job.Assignment to 3L, Job.Effort to 3L, Job.Instruction to 3L, Job.Review to 5L, Job.PhotoToTask to 3L, Job.PhotoContext to 3L,
+        Job.Chat to 3L, Job.Reply to 3L, Job.Felix to 2L, Job.MicroPlan to 2L, Job.PhotoCheck to 3L, Job.Summary to 2L, Job.Tidy to 5L, Job.Research to 3L,
+    )
+
+    fun timeout(job: Job): Duration = Duration.ofMinutes(TIMEOUT_MIN.getValue(job))
 
     /** Set from a PC for testing (`ai-effort`), till the app restarts: never kept. */
     val overrides: MutableMap<Job, OutputConfig.Effort> = ConcurrentHashMap()

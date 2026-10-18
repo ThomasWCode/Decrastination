@@ -1,7 +1,6 @@
 package com.thomaswcode.decrastination.enrich
 
 import com.anthropic.client.AnthropicClient
-import com.anthropic.client.okhttp.AnthropicOkHttpClient
 import com.anthropic.core.JsonValue
 import com.anthropic.models.messages.Base64ImageSource
 import com.anthropic.models.messages.ContentBlockParam
@@ -15,7 +14,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
-import java.time.Duration
 import java.util.Base64
 
 /**
@@ -24,7 +22,7 @@ import java.util.Base64
  * in, `{done, confidence, reason, seen}` out. A piece can't be confirmed done at its source, so
  * this stands in for the timer. Built, and offered only while Claude is on.
  */
-class PhotoChecker(apiKey: String, endpoint: String? = null, val model: String = ClaudeEnricher.MODEL, private val profile: Profile.Block = Profile.Block.NONE) {
+class PhotoChecker(private val client: AnthropicClient, val model: String = ClaudeEnricher.MODEL, private val profile: Profile.Block = Profile.Block.NONE) {
 
     /** [seen]: what the photos show, as the model names it (AI-16). */
     @Serializable
@@ -32,12 +30,6 @@ class PhotoChecker(apiKey: String, endpoint: String? = null, val model: String =
 
     data class Result(val verdict: Verdict?, val costUsd: Double, val refused: Boolean = false, val usage: ModelCalls.Usage = ModelCalls.Usage.NONE)
 
-    private val client: AnthropicClient = AnthropicOkHttpClient.builder()
-        .apiKey(apiKey)
-        .apply { if (endpoint != null) baseUrl(endpoint) }
-        .timeout(Duration.ofMinutes(3))
-        .maxRetries(2)
-        .build()
 
     private val json = Json { ignoreUnknownKeys = true }
 

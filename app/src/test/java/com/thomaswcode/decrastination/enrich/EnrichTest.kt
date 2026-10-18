@@ -806,7 +806,7 @@ class ClaudeEnricherTest {
         return MockResponse().setHeader("Content-Type", "application/json").setBody(body.toString())
     }
 
-    private fun enricher() = ClaudeEnricher("test-key", LONDON, endpoint = server.url("").toString().trimEnd('/'))
+    private fun enricher() = ClaudeEnricher(ModelGateway.build("test-key", server.url("").toString().trimEnd('/')), LONDON)
 
     @Test
     fun `it asks Opus 5 point 5 at high effort for the schema's answer, with fallbacks on`() = runBlocking {
@@ -922,7 +922,7 @@ class PhotoCheckerTest {
                 ),
             )
             server.enqueue(MockResponse().setHeader("Content-Type", "application/json").setBody(body.toString()))
-            val result = PhotoChecker("test-key", endpoint = server.url("").toString().trimEnd('/')).check(listOf(byteArrayOf(1, 2, 3), byteArrayOf(4, 5, 6)), "The piece of work: Chapter 17 review, part 2 of 3, 30 min")
+            val result = PhotoChecker(ModelGateway.build("test-key", server.url("").toString().trimEnd('/'))).check(listOf(byteArrayOf(1, 2, 3), byteArrayOf(4, 5, 6)), "The piece of work: Chapter 17 review, part 2 of 3, 30 min")
             val request = Json.parseToJsonElement(server.takeRequest().body.readUtf8()).jsonObject
             val content = request["messages"]!!.jsonArray.single().jsonObject["content"]!!.jsonArray
             // A page each, then what they're of (AI-17).

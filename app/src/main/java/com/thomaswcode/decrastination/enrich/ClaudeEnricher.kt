@@ -1,7 +1,6 @@
 package com.thomaswcode.decrastination.enrich
 
 import com.anthropic.client.AnthropicClient
-import com.anthropic.client.okhttp.AnthropicOkHttpClient
 import com.anthropic.core.JsonValue
 import com.anthropic.models.messages.JsonOutputFormat
 import com.anthropic.models.messages.Message
@@ -13,20 +12,18 @@ import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.core.TaskItem
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import java.time.Duration
 import java.time.ZoneId
 
 /**
  * The model's enrichment (docs/spec/readings.md): Claude Opus 5.5 at high effort, its answer held
  * to a JSON schema ([Prompts]), with the API's server-side fallback on for a request the model's
  * safety classifiers decline. Off until switched on in Settings; [AiUsage] keeps it under the
- * monthly cap, from each call's token counts ([Pricing]). [baseUrl] points it elsewhere: the tests'
- * fake server, and the phone's plumbing check.
+ * monthly cap, from each call's token counts ([Pricing]). It sends through the [client] it's given
+ * ([ModelGateway.client]): the tests' points at their fake server, the phone's plumbing check's at a stand-in.
  */
 class ClaudeEnricher(
-    apiKey: String,
+    private val client: AnthropicClient,
     private val zone: ZoneId,
-    endpoint: String? = null,
     private val model: String = MODEL,
     /** Who the student is (AI-05): read for each call, as it changes with what's remembered. */
     private val profile: () -> Profile.Block = { Profile.Block.NONE },
@@ -34,13 +31,6 @@ class ClaudeEnricher(
     private val decks: () -> Map<String, String> = { emptyMap() },
 ) : Enricher {
     override val by = model
-
-    private val client: AnthropicClient = AnthropicOkHttpClient.builder()
-        .apiKey(apiKey)
-        .apply { if (endpoint != null) baseUrl(endpoint) }
-        .timeout(Duration.ofMinutes(3))
-        .maxRetries(2)
-        .build()
 
     override suspend fun enrich(task: TaskItem, job: Enrichments.Job, now: Long): Enricher.Result {
         val photo = photoOf(task)

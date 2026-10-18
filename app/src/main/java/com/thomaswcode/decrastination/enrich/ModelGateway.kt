@@ -1,6 +1,8 @@
 package com.thomaswcode.decrastination.enrich
 
 import android.util.Log
+import com.anthropic.client.AnthropicClient
+import com.anthropic.client.okhttp.AnthropicOkHttpClient
 import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.WallClock
@@ -67,6 +69,22 @@ class ModelGateway(
 
     /** [endpoint], said loudly each time a client is made with it. */
     fun endpoint(): String? = endpoint?.also { Log.w(TAG, "Claude's calls go to $it, not Anthropic (debug ai-endpoint)") }
+
+    /** The one client, and the key and endpoint it was made for: made again only when either changes. */
+    private var made: Triple<String, String?, AnthropicClient>? = null
+
+    /**
+     * What [job]'s reader sends through, while Claude is on with its key: the one client for the key
+     * and the endpoint, kept between calls (its connections with it), with [job]'s timeout
+     * ([ModelEffort.timeout]). Null while Claude is off.
+     */
+    @Synchronized
+    fun client(job: ModelEffort.Job): AnthropicClient? {
+        val key = claudeKey() ?: return null
+        val at = endpoint
+        val client = made?.takeIf { it.first == key && it.second == at }?.third ?: build(key, endpoint()).also { made = Triple(key, at, it) }
+        return client.withOptions { it.timeout(ModelEffort.timeout(job)) }
+    }
 
     /** Claude's API key, while Claude is switched on and the key is in use; else null. */
     fun claudeKey(): String? {
@@ -230,16 +248,23 @@ class ModelGateway(
      */
     fun available(): Boolean = hold() == null
 
-    private companion object {
-        const val TAG = "Decrastination"
+    companion object {
+        /**
+         * A client for [key], at [endpoint] (Anthropic's, with none): the one place one's built, the
+         * gateway's own and a stand-in's for the plumbing check (`ai-check`) alike.
+         */
+        fun build(key: String, endpoint: String? = null): AnthropicClient =
+            AnthropicOkHttpClient.builder().apiKey(key).apply { if (endpoint != null) baseUrl(endpoint) }.maxRetries(2).build()
+
+        private const val TAG = "Decrastination"
 
         /** Past the model's hour of rest, so the retry finds it over. */
-        const val RETRY_SLACK_MS = 60_000L
+        private const val RETRY_SLACK_MS = 60_000L
 
         /** The most of what a call was about that its record keeps (AC-07). */
-        const val MAX_CALL_TITLE = 80
+        private const val MAX_CALL_TITLE = 80
 
         /** The most tasks remembered as refused as asked (AC-04): far more than there are. */
-        const val MAX_ENRICH_FAILED = 200
+        private const val MAX_ENRICH_FAILED = 200
     }
 }
