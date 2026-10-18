@@ -121,8 +121,14 @@ class AskActivity : ComponentActivity() {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         val graph = AppGraph.get(this)
-        // Made again (turned, or brought back): what it's about kept, the words handed in already sent.
-        if (savedInstanceState == null) take(intent) else about.value = aboutFrom(savedInstanceState)
+        // Made again (turned, or brought back): what it's about kept, the words handed in already sent, and
+        // the tab showing.
+        if (savedInstanceState == null) {
+            take(intent)
+        } else {
+            about.value = aboutFrom(savedInstanceState)
+            chatTab = savedInstanceState.getBoolean(STATE_CHAT_TAB, true)
+        }
         setContent { AppTheme { Screen(graph) } }
     }
 
@@ -135,6 +141,7 @@ class AskActivity : ComponentActivity() {
         outState.putString(EXTRA_EVENT_TITLE, a.eventTitle)
         outState.putLong(EXTRA_EVENT_START, a.eventStart ?: 0L)
         outState.putString(EXTRA_DAY, a.day)
+        outState.putBoolean(STATE_CHAT_TAB, chatTab)
     }
 
     /** What a message is about, from an intent's extras or a saved state's. */
@@ -386,6 +393,7 @@ class AskActivity : ComponentActivity() {
         private const val EXTRA_EVENT_START = "eventStart"
         private const val EXTRA_DAY = "day"
         private const val EXTRA_OPEN_AT = "openAt"
+        private const val STATE_CHAT_TAB = "chatTab"
 
         /**
          * The chat, about [about], with [text] to send (or to put in the box, if one still waits); with
