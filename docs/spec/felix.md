@@ -118,8 +118,8 @@ Three more come at set times:
 ## Notifications and replies
 
 `felix/FelixNotifications.kt` posts his messages on the *Felix* channel: his words, a reply box whose choices are his replies, and a button for each of up to two cards still to make. One at a time: a newer one takes the last one's place. Tapping one opens the chat.
-He has no daily ceiling. The routine channels (briefing, calendar questions, weekly, Claude) go at most four a day and never in quiet hours, the rest held for the next briefing (LR-07, `notify/NotifyRules.kt`).
-Every notification of the app's is named once, with request codes of its own for its tap and buttons (`notify/NoticeId.kt`), and posted through `notify/Notifier.kt`, which applies those rules and is the one place Android's notification manager is called.
+He has no daily ceiling. The routine channels (briefing, calendar questions, weekly, Claude) go at most four a day and, but for the briefing, never in quiet hours, the rest held for the next briefing (LR-07, `notify/NotifyRules.kt`).
+Every notification of the app's is named once, with request codes of its own for its tap and buttons (`notify/NoticeId.kt`), and posted through `notify/Notifier.kt`, which applies those rules and alone posts and cancels them (`notify/Channels.kt` makes the channels; WorkManager shows the work-under-way ones from each worker's `ForegroundInfo`).
 
 A reply (`felix/FelixReplyReceiver.kt`, `Conversation.replyToFelix`) goes:
 - to the check-in, as its next answer; to his completions question, as the answer on each completion; to his question about a task, as above;

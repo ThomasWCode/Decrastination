@@ -38,7 +38,7 @@ Otherwise it goes at the next free start at or after its time, so a pin moved ne
 
 ## Kept starts (PL-13)
 
-After each plan, today's work slots' starts are saved by key (`SlotState.previous`, in `RuntimeState.slots`). The next plan lays each piece there again where that's still free, one under way or in its grace included, so a replan doesn't shuffle the day.
+After each plan, today's work slots' starts are saved by key (`SlotState.previous`, in `RuntimeState.slots`). The next plan lays each piece there again where that's still free, one under way or in its grace included (not yet for work with days to spare, which a replan can move to a later day once its slot has begun: [QUESTIONS.md](../plan_v4/QUESTIONS.md) I3), so a replan doesn't shuffle the day.
 A piece's key is its task and its step's place (`Chunk.key`: sittings counted from the end, a box by its part), so ticking one piece doesn't renumber the next and move it. A new day starts empty (`SlotState.on`).
 
 ## Grace, and missed slots (PL-13)

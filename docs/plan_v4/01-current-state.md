@@ -1,4 +1,6 @@
-# Where the code is now
+# Where the code was at 3.2.0
+
+The baseline, kept as measured. Since then 3.3.0 named every notification in `notify/NoticeId.kt` and posts them through `notify/Notifier.kt` (§3), 3.3.1 sends every call through `enrich/ModelGateway.kt` (§4), 3.3.2 gave every store a version (§8), and 3.3.3 moved Felix into `felix/` and the plan into `plan/` (§1, §2, §9, §13); [03](03-stages.md) says what went where.
 
 Measured on `main` at e6cd54b (3.2.0), re-measured on 18 Oct 2026 after 3.1.5 to 3.2.0 landed (first measured at b8469fc, 3.1.4, on 17 Oct), and on the phone's data on 18 Oct (sizes and counts only, read with `run-as`; nothing on the phone was changed).
 
@@ -40,7 +42,7 @@ Measured on 18 Oct 2026 at 4b0aff7 (3.2.0's code, the plan merged), for Stage 12
 
 | | |
 |---|---|
-| Tests | 874 on `main` (3 skipped: the paid eval, the schema compile and, from Stage 0, the rehearsal, each run only when asked); 883 with Stage 0's nine |
+| Tests | 874 on `main` (3 skipped: the paid eval, the schema compile and, from Stage 0, the rehearsal, each run only when asked); 884 with Stage 0's ten |
 | Test time | 13 s for every unit test (`testDebugUnitTest --rerun`), on the warm daemon |
 | Build time | 90 s for a full debug build (`assembleDebug --rerun-tasks`), on the warm daemon |
 | `AppGraph.kt` | 2,628 lines, 117 functions |

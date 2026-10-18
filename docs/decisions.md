@@ -25,7 +25,7 @@ How the app works in detail is in [spec/](spec/); how the work is done is in [de
 
 ## Claude's readings
 
-- **D-14. Claude is opt-in; the rules stand in when it's off.** Applies: `enrich/RuleEnricher`.
+- **D-14. Claude is opt-in; the rules stand in when it's off.** Applies: `RuleEnricher` (`enrich/Enricher.kt`).
 - **D-15. One model for every job**, thinking hard on the readings the plan is made from and less where someone waits (AC-02).
 - **D-16. A task is read once, and again only when its content changes** (`Enrichments.inputHash`). A change to the prompts (`Prompts.VERSION`) reads open tasks again once, except those with a step of their reading done (AC-06).
 - **D-17. A reading that fails a check is put back once, then salvaged, then dropped** (AI-01).
