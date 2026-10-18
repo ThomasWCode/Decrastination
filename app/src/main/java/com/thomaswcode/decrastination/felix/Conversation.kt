@@ -340,7 +340,7 @@ class Conversation(
             var notLooked = before?.notLooked
             // Why a search made found nothing, kept with the rest; one held back isn't, so it can be made later.
             var tried = before?.notLooked
-            for (round in 1..com.thomaswcode.decrastination.felix.ChatRounds.MAX_ROUNDS) {
+            for (round in 1..ChatRounds.MAX_ROUNDS) {
                 val next = ChatRounds.next(reading, searched = found != null || notLooked != null, searches = settings.value.felixSearches, read = read.map { it.id }) ?: break
                 var looks = false
                 next.search?.let { question ->
@@ -675,7 +675,7 @@ class Conversation(
 
     /**
      * The chat's answer to a reply from Felix's notification ([replyToFelix]), as
-     * [com.thomaswcode.decrastination.felix.FelixReplyWorker] runs it: the answer to that reply's
+     * [FelixReplyWorker] runs it: the answer to that reply's
      * message, [asked], not one to anything said after it, shown as his next notification, or why
      * there's none, where the reply was made; nothing with the chat in front, which shows it.
      */
