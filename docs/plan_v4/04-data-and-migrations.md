@@ -51,7 +51,7 @@ Today a store is read by its serializer, with defaults for what's missing and fi
 ### Testing a migration
 
 - **From every shape it may meet.** Stage 0's fixtures are the first shape; each migration adds its output's, and its test runs every older fixture through every migration since.
-- **On the real data, never committed.** The rehearsal ([03](03-stages.md) §Stage 0) migrates the latest phone backup in the scratch folder and prints counts before and after: tasks, open ones, steps ticked, your values, instructions in use, chat messages, pins, the month's spend. Any difference stops the release.
+- **On the real data, never committed.** The rehearsal ([03](03-stages.md) §Stage 0) migrates the latest phone backup in the scratch folder and prints counts before and after: tasks, open ones, steps ticked, your values, instructions in use, chat messages, pins, the month's spend. Any difference stops the release. Its "before" is each file read with the new build's types, so a migration that moves, renames or merges data (5a's Felix records into the chat and its archive, 7's split of `runtime.json`) shows as a difference even when nothing is lost: that migration's PR teaches the rehearsal where its data goes, so the counts are compared through the move, and never loosens the check to let a migration through.
 - **Idempotent.** Each migration run twice gives what it gives once.
 
 ## The data changes, one by one, in order

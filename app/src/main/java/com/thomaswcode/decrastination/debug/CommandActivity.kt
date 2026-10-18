@@ -30,6 +30,7 @@ import com.thomaswcode.decrastination.felix.ChatReader
 import com.thomaswcode.decrastination.enrich.ClaudeEnricher
 import com.thomaswcode.decrastination.enrich.ClaudeReviewer
 import com.thomaswcode.decrastination.felix.FelixCaller
+import com.thomaswcode.decrastination.felix.FelixPrompts
 import com.thomaswcode.decrastination.enrich.InstructionReader
 import com.thomaswcode.decrastination.enrich.MemoryTidier
 import com.thomaswcode.decrastination.enrich.MicroPlanner
@@ -378,8 +379,8 @@ class CommandActivity : Activity() {
             }
             "felix-check" -> graph.looks.check().also { Log.i(TAG, "felix-check done") }
             "felix-say" -> {
-                val reason = intent.getStringExtra("reason")?.let { name -> com.thomaswcode.decrastination.felix.FelixPrompts.Reason.entries.firstOrNull { it.name.equals(name, ignoreCase = true) } }
-                if (reason == null) Log.w(TAG, "felix-say needs --es reason, one of ${com.thomaswcode.decrastination.felix.FelixPrompts.Reason.entries.joinToString()}")
+                val reason = intent.getStringExtra("reason")?.let { name -> FelixPrompts.Reason.entries.firstOrNull { it.name.equals(name, ignoreCase = true) } }
+                if (reason == null) Log.w(TAG, "felix-say needs --es reason, one of ${FelixPrompts.Reason.entries.joinToString()}")
                 else Log.i(TAG, "felix-say $reason: ${graph.looks.say(reason)?.let { "${it.text.ifBlank { "(silent)" }} ${it.replies}" } ?: "Claude is off"}")
             }
             // What Felix remembers (AI-21): its standing instructions and facts, a line each.
