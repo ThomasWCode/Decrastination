@@ -76,6 +76,12 @@ class Outbox(
         notify(clock.now())
     }
 
+    /** Message [id] in the archive marked answered at [at] (a question of his answered from there), where it's there and waiting. */
+    suspend fun answeredInArchive(id: String, at: Long) {
+        if (archive.value.messages.none { it.id == id && it.answeredAt == null }) return
+        archive.update { a -> a.copy(messages = a.messages.map { if (it.id == id && it.answeredAt == null) it.copy(answeredAt = at) else it }) }
+    }
+
     /** Message [id], from the live window or, past it, the archive (a reply to one scrolled back to). */
     fun find(id: String): ChatMessage? = chat.value.messages.firstOrNull { it.id == id } ?: archive.value.messages.firstOrNull { it.id == id }
 

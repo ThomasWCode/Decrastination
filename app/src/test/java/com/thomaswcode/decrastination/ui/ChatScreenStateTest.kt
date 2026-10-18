@@ -75,11 +75,20 @@ class ChatScreenStateTest {
     fun `made again, the screen has the archive's pages and the message it was replying to back`() {
         val screen = ChatScreenState()
         val target = his("h", "2026-10-18T17:00")
-        screen.restored(earlier = 200, replyingTo = target)
+        screen.restored(earlier = 200, replyingTo = target, offered = false)
         assertEquals(200 to "h", screen.earlier to screen.replyingTo?.id)
         // Restored as chosen: his question offered after it doesn't take its place.
         screen.offer(ChatMessage("q", Speaker.Felix, "What did you avoid?", 2, kind = MessageKind.CheckIn), checkInUnderWay = true)
         assertEquals("h", screen.replyingTo?.id)
+        // Restored as the chat's offer: the next question takes its place once it's answered.
+        val offered = ChatScreenState()
+        val first = ChatMessage("q1", Speaker.Felix, "How was the week, 1 to 5?", 1, kind = MessageKind.CheckIn)
+        offered.restored(earlier = 0, replyingTo = first, offered = true)
+        offered.offer(ChatMessage("q2", Speaker.Felix, "What did you avoid?", 2, kind = MessageKind.CheckIn), checkInUnderWay = true)
+        assertEquals("q2", offered.replyingTo?.id)
+        // Cleared with the chat: nothing to reply to, no pages.
+        offered.cleared()
+        assertEquals(null to 0, offered.replyingTo to offered.earlier)
     }
 
     @Test

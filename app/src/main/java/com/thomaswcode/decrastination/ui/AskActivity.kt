@@ -166,7 +166,7 @@ class AskActivity : ComponentActivity() {
             take(intent)
         } else {
             about.value = aboutFrom(savedInstanceState)
-            screen.restored(savedInstanceState.getInt(STATE_EARLIER), savedInstanceState.getString(STATE_REPLYING)?.let { graph.conversation.outbox.find(it) })
+            screen.restored(savedInstanceState.getInt(STATE_EARLIER), savedInstanceState.getString(STATE_REPLYING)?.let { graph.conversation.outbox.find(it) }, savedInstanceState.getBoolean(STATE_OFFERED))
         }
         setContent { AppTheme { Screen(graph) } }
     }
@@ -182,6 +182,7 @@ class AskActivity : ComponentActivity() {
         outState.putString(EXTRA_DAY, a.day)
         outState.putInt(STATE_EARLIER, screen.earlier)
         outState.putString(STATE_REPLYING, screen.replyingTo?.id)
+        outState.putBoolean(STATE_OFFERED, screen.offered)
     }
 
     /** What a message is about, from an intent's extras or a saved state's. */
@@ -421,6 +422,7 @@ class AskActivity : ComponentActivity() {
                 confirmButton = {
                     TextButton(onClick = {
                         clearing = false
+                        screen.cleared()
                         scope.launch { graph.conversation.clearChat() }
                     }) { Text("Clear") }
                 },
@@ -449,6 +451,7 @@ class AskActivity : ComponentActivity() {
         private const val EXTRA_OPEN_AT = "openAt"
         private const val STATE_EARLIER = "earlier"
         private const val STATE_REPLYING = "replyingTo"
+        private const val STATE_OFFERED = "offered"
 
         /**
          * The chat, about [about], with [text] to send; with [send] false, only put in the box, to be
