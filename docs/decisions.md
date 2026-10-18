@@ -50,7 +50,7 @@ How the app works in detail is in [spec/](spec/); how the work is done is in [de
 - **D-33. A piece's length (`boxMin`) is yours** (17 Oct): 60 minutes on your phone; the weekly review never changes it.
 - **D-34. Steps you or Felix gave are planned exactly as given** (17 Oct): never cut into sittings, never stretched by the learned pace (`TaskItem.yourSteps`).
 - **D-35. The learned pace stretches only the app's own estimates** (2.0.0; 17 Oct): your minutes, your own tasks and steps you or Felix gave are planned as given (`Calibration.multiplierFor`).
-- **D-36. What isn't planned is listed with why** (*Not planned*, at the foot of Work); there's no forecasting of work not yet open.
+- **D-36. What isn't planned is listed with why** (*Not planned*, on Work, below the tasks); there's no forecasting of work not yet open.
 - **D-37. Days off and half-days are told to Felix** (or set in Settings): a day off takes the weekend's rules, a half-day's evening starts at the early finish.
 - **D-38. No exams page, recurring work or streaks.**
 
