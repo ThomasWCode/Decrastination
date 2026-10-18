@@ -93,6 +93,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -868,14 +869,18 @@ private fun Chevron(open: Boolean, problem: Boolean, modifier: Modifier, onToggl
 @Composable
 private fun Labelled(screen: ChatScreenState, message: ChatMessage, bubble: @Composable () -> Unit) {
     val line = remember(message) { ChatSummary.line(message) }
-    // Looked at again once its line has something in it: an answer's changes and acts are kept after its words.
-    val shows = remember(message.id, line.isEmpty) { screen.labels(message) }
+    // Looked at again once its line has something in it (an answer's changes and acts are kept after its
+    // words), and at each opening of the chat, as what's unread then has changed.
+    val shows = remember(message.id, line.isEmpty, screen.visit) { screen.labels(message) }
     if (!shows) {
         bubble()
         return
     }
     var out by remember { mutableStateOf(false) }
-    LaunchedEffect(message.id) {
+    // Its time counted from when its row is on screen, not when the list made it ready, a little ahead.
+    var placed by remember { mutableStateOf(false) }
+    LaunchedEffect(message.id, placed) {
+        if (!placed) return@LaunchedEffect
         screen.labelled(message.id)
         delay(LABEL_IN_MS)
         out = true
@@ -884,7 +889,7 @@ private fun Labelled(screen: ChatScreenState, message: ChatMessage, bubble: @Com
     }
     val slide by animateFloatAsState(if (out) 1f else 0f, tween(LABEL_SLIDE_MS), label = "label")
     val gap = with(LocalDensity.current) { 6.dp.roundToPx() }
-    BoxWithConstraints {
+    BoxWithConstraints(Modifier.onPlaced { placed = true }) {
         val room = constraints.maxWidth
         val widest = maxWidth
         var bubbleSize by remember { mutableStateOf(IntSize.Zero) }

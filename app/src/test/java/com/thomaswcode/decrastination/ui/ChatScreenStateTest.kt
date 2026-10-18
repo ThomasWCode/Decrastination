@@ -173,7 +173,9 @@ class ChatScreenStateTest {
         // Paused: nothing arrives on a screen that isn't there; opened again, what's unread then gets it.
         screen.paused()
         assertFalse(screen.labels(said("later", "2026-10-18T18:10")))
+        val before = screen.visit
         screen.opened(ChatState(listOf(read, unread, arrived), readAt = Fixtures.at("2026-10-18T18:01")), Fixtures.at("2026-10-18T18:20"))
+        assertEquals(before + 1, screen.visit)
         assertFalse(screen.labels(unread))
         assertTrue(screen.labels(arrived))
     }
