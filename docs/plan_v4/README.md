@@ -1,6 +1,6 @@
 # Decrastination 4.x: the cleanup and Felix as the app's one voice, in one order
 
-One plan for the next run of work, merged on 18 Oct 2026 from two: the targeted cleanup (written 17 Oct: the code and its stores restructured without changing what the app does) and the Felix plan (written 18 Oct: everything he says in one WhatsApp-like chat, notes and reminders, memory that expires, a teenager's voice, a starred email finished in Gmail). Written against `main` at e6cd54b (3.2.0) and measured on 18 Oct ([01](01-current-state.md)); every question either plan asked is answered and applied (the "Q3: A" marks through the documents; the questions file went once nothing in it was open, and git's history keeps it); nothing is implemented. [14](14-your-part.md) says which stages need your phone and which need you.
+One plan for the next run of work, merged on 18 Oct 2026 from two: the targeted cleanup (written 17 Oct: the code and its stores restructured without changing what the app does) and the Felix plan (written 18 Oct: everything he says in one WhatsApp-like chat, notes and reminders, memory that expires, a teenager's voice, a starred email finished in Gmail). Written against `main` at e6cd54b (3.2.0) and measured on 18 Oct ([01](01-current-state.md)); every question either plan asked is answered and applied ([ANSWERS.md](ANSWERS.md) is the record; the "Q3: A" marks through the documents point into it); nothing is implemented. [14](14-your-part.md) says which stages need your phone and which need you.
 
 The order is the merge's one real decision: the cleanup comes first where a feature would otherwise be built on the mess, and between features where it only has to be done at all. [03](03-stages.md) lays out every stage and PR in order, with what each needs from the ones before it and what it leaves for the ones after; nothing in it relies on anything later.
 
@@ -150,3 +150,4 @@ Numbered in `docs/decisions.md` by the PRs that apply them (the next free number
 - [12-verification-and-risks.md](12-verification-and-risks.md): how each PR is shown to work; tests, phone checks, reviews, risks, rolling back.
 - [13-summaries.md](13-summaries.md): the summaries evaluation; the conversation digest as 4.4.0.
 - [14-your-part.md](14-your-part.md): which stages need your phone and which need you, for what and for how long; how to batch them.
+- [ANSWERS.md](ANSWERS.md): every call either plan needed, with your answers, and the merge's own calls; closed. Questions raised during implementation go in a separate `QUESTIONS.md`.
