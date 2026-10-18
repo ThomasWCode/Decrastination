@@ -613,6 +613,15 @@ class ChatTest {
     }
 
     @Test
+    fun `a reply to a message the window no longer holds is quoted from the archive`() {
+        val old = ChatMessage("old", Speaker.Felix, "The essay's plan is due Friday.", now - 90 * 86_400_000L, kind = MessageKind.SlotStart)
+        val asked = listOf(ChatMessage("q", Speaker.You, "is that still Friday?", now, replyTo = "old"))
+        assertFalse("Replying to" in ChatPrompts.turns(asked, "", emptyMap(), LONDON).single().second)
+        val newest = ChatPrompts.turns(asked, "", emptyMap(), LONDON, quoted = listOf(old)).single().second
+        assertTrue(newest.endsWith("(Replying to your message: “The essay's plan is due Friday.”)\nis that still Friday?"), newest)
+    }
+
+    @Test
     fun `a reply to the message just before it isn't quoted, and the app's words in his name are said as such`() {
         val asked = listOf(
             ChatMessage("ci", Speaker.Felix, "How was the week, 1 to 5?", now - 60_000L, kind = MessageKind.CheckIn, byApp = true),

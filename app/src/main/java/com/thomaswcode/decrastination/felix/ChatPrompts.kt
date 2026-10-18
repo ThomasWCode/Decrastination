@@ -211,6 +211,7 @@ object ChatPrompts {
         found: Found? = null,
         read: List<TaskItem> = emptyList(),
         events: List<CalendarEvent> = emptyList(),
+        quoted: List<ChatMessage> = emptyList(),
     ): List<Pair<Speaker, String>> {
         val last = history(messages)
         // Before any of yours: an answer cut off from its question by the window goes; a message of
@@ -220,8 +221,8 @@ object ChatPrompts {
         val recent = last.dropWhile { it.from != Speaker.You }
         if (recent.isEmpty()) return emptyList()
         // What a message of yours replies to, where it isn't the message before it: quoted, from the
-        // whole chat, as the window may not hold it.
-        val byId = messages.associateBy { it.id }
+        // whole chat, as the window may not hold it, nor the window the archive's [quoted].
+        val byId = quoted.associateBy { it.id } + messages.associateBy { it.id }
         fun quote(m: ChatMessage): String {
             val before = last.getOrNull(last.indexOfFirst { it.id == m.id } - 1)
             val to = m.replyTo?.takeIf { m.from == Speaker.You && it != before?.id }?.let(byId::get)?.takeIf { it.text.isNotBlank() } ?: return ""

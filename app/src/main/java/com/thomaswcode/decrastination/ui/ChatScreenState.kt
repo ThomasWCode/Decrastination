@@ -26,16 +26,20 @@ class ChatScreenState {
     sealed interface Item {
         val key: String
 
-        data class Day(val date: LocalDate) : Item {
-            override val key: String get() = "day-$date"
+        /** A day's date over its [first] message: keyed by that, as a message out of time order can bring a date back. */
+        data class Day(val date: LocalDate, val first: String) : Item {
+            override val key: String get() = "day-$first"
         }
 
         data object Divider : Item {
             override val key: String get() = "unread"
         }
 
-        /** A [message], with the message it replies to where that isn't the one above it ([quote]), shown over its words. */
-        data class Message(val message: ChatMessage, val quote: ChatMessage? = null) : Item {
+        /**
+         * A [message], with the message it replies to where that isn't the one above it ([quote]), shown over
+         * its words; one from the archive ([archived]) shown with nothing to do, as only the window is acted on.
+         */
+        data class Message(val message: ChatMessage, val quote: ChatMessage? = null, val archived: Boolean = false) : Item {
             override val key: String get() = message.id
         }
 
@@ -111,7 +115,8 @@ class ChatScreenState {
      * unread, else at its foot.
      */
     fun opened(state: ChatState, at: String? = null) {
-        firstUnread = state.messages.firstOrNull { Outbox.unread(it, state.readAt) }?.id
+        // A question you've answered from his notification has been seen, as his button's count says.
+        firstUnread = state.messages.firstOrNull { Outbox.unread(it, state.readAt) && it.answeredAt == null }?.id
         scrollTo = at ?: firstUnread
         flash = at
     }
@@ -124,6 +129,13 @@ class ChatScreenState {
     /** The moment's tint over. */
     fun flashed() {
         flash = null
+    }
+
+    /** The screen made again (turned): the archive's pages it had, and the message it was replying to, back. */
+    fun restored(earlier: Int, replyingTo: ChatMessage?) {
+        this.earlier = earlier
+        this.replyingTo = replyingTo
+        offered = false
     }
 
     /** The archive's next [PAGE] shown over what's there, of the [archived] it holds: false when it has no more. */
@@ -156,17 +168,18 @@ class ChatScreenState {
     fun items(window: List<ChatMessage>, archive: List<ChatMessage>, zone: ZoneId): List<Item> = buildList {
         if (earlier < archive.size) add(Item.Earlier)
         val byId = (archive + window).associateBy { it.id }
+        val live = window.mapTo(HashSet()) { it.id }
         var day: LocalDate? = null
         var above: ChatMessage? = null
         for (m in (archive.takeLast(earlier) + window).distinctBy { it.id }) {
             if (m.from == Speaker.Felix && m.text.isBlank()) continue
             val on = Instant.ofEpochMilli(m.at).atZone(zone).toLocalDate()
             if (on != day) {
-                add(Item.Day(on))
+                add(Item.Day(on, m.id))
                 day = on
             }
             if (m.id == firstUnread) add(Item.Divider)
-            add(Item.Message(m, m.replyTo?.takeIf { it != above?.id }?.let(byId::get)?.takeIf { it.text.isNotBlank() }))
+            add(Item.Message(m, m.replyTo?.takeIf { it != above?.id }?.let(byId::get)?.takeIf { it.text.isNotBlank() }, archived = m.id !in live))
             above = m
         }
     }
