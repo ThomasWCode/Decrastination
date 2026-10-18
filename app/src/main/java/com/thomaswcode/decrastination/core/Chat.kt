@@ -23,8 +23,11 @@ data class ChatState(
     /** The shape this is in ([com.thomaswcode.decrastination.data.Migration]): raised with each change of it. */
     val version: Int = 2,
 ) {
-    /** Your last message, if Claude hasn't answered it yet: a message of his written since, unasked, doesn't answer it. */
-    val unanswered: ChatMessage? get() = messages.lastOrNull { it.from == Speaker.You }?.takeIf { it.answeredAt == null }
+    /**
+     * Your newest message still waiting for his answer: a message of his written since, unasked, doesn't
+     * answer it, nor does a reply of yours taken with no call (a check-in's answer), which comes answered.
+     */
+    val unanswered: ChatMessage? get() = messages.lastOrNull { it.from == Speaker.You && it.answeredAt == null }
 }
 
 /** Who wrote a message: you, or Felix (the model writing as him), stored as "Claude", his name till 4.0.1. */
@@ -53,7 +56,7 @@ data class ChatMessage(
     val at: Long,
     /** What your message was written about: a task, an event or a day (from its page), or nothing in particular. His: what he wrote about. */
     val about: About = About(),
-    /** Why it was written: a message of his written unasked has a kind of its own. */
+    /** Why it was written: a message of his written unasked has a kind of its own; yours answering his question with no call, its question's. */
     val kind: MessageKind = MessageKind.Chat,
     /** His, in the app's own words, with no call made (a check-in's question, the morning's list, a calendar event's question). */
     val byApp: Boolean = false,

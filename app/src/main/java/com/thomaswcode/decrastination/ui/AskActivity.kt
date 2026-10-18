@@ -191,12 +191,13 @@ class AskActivity : ComponentActivity() {
         sendHanded = intent.getBooleanExtra(EXTRA_SEND, true)
         handed.value = intent.getStringExtra(EXTRA_TEXT)
         // From his notification: opened at its message, what was unread marked for this visit, and what
-        // it held read now.
+        // it held read now (now as it opens, not as the work runs, which may be after another came).
         intent.getStringExtra(EXTRA_OPEN_AT)?.let { id ->
             val graph = AppGraph.get(this)
             screen.opened(graph.chat.value, at = id)
             openedAt = true
-            graph.scope.launch { graph.conversation.read() }
+            val now = graph.clock.now()
+            graph.scope.launch { graph.conversation.read(now) }
         }
     }
 
@@ -221,8 +222,9 @@ class AskActivity : ComponentActivity() {
         super.onPause()
         val graph = AppGraph.get(this)
         graph.conversation.chatInFront = false
-        // What arrived while it was on screen was seen: read, so only what comes after is his notification.
-        graph.scope.launch { graph.conversation.read() }
+        // What arrived while it was on screen was seen: read up to now, so only what comes after is his notification.
+        val now = graph.clock.now()
+        graph.scope.launch { graph.conversation.read(now) }
     }
 
     @OptIn(ExperimentalMaterial3Api::class)
@@ -463,8 +465,10 @@ private fun ColumnScope.Chat(
     val name = graph.settings.value.felixName
     val rows = remember(all, archive, screen.earlier, screen.firstUnread, zone) { screen.items(all, archive, zone) }
     val shown = all.filter { it.from == Speaker.You || it.text.isNotBlank() }
-    // Yours waiting for his answer, with nothing to say why (Claude off, resting, a failed call): he's typing.
-    val typing = shown.lastOrNull()?.let { it.from == Speaker.You && it.answeredAt == null && it.note == null } == true
+    // Yours waiting for his answer, with nothing to say why (Claude off, resting, a failed call): he's
+    // typing, whatever he's written unasked since.
+    val waiting = all.lastOrNull { it.from == Speaker.You && it.answeredAt == null }
+    val typing = waiting != null && waiting.note == null
     val today = Instant.ofEpochMilli(now).atZone(zone).toLocalDate()
     // At the foot once it's been put somewhere: what follows slides into view.
     var settled by remember { mutableStateOf(false) }
@@ -480,7 +484,7 @@ private fun ColumnScope.Chat(
     // Else at the foot, kept there as the conversation grows (not as earlier pages load over it). Where it
     // opens at a message, not: read as the list is drawn, as that message's scroll clears it at once.
     val opening = screen.scrollTo
-    LaunchedEffect(shown.lastOrNull()?.id, shown.lastOrNull()?.note, typing) {
+    LaunchedEffect(shown.lastOrNull()?.id, waiting?.note, typing) {
         if (shown.isEmpty() || opening != null) return@LaunchedEffect
         val foot = rows.size + if (typing) 2 else 1
         if (settled) list.animateScrollToItem(foot) else list.scrollToItem(foot)

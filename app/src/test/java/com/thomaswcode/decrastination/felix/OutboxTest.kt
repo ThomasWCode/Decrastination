@@ -125,6 +125,20 @@ class OutboxTest {
     }
 
     @Test
+    fun `the morning's briefing makes his notification with what waited, quiet hours that outlast it or not`() = runBlocking {
+        clock.time = Fixtures.at("2026-10-18T23:30")
+        outbox.send(his("review", kind = MessageKind.Review))
+        assertNull(ports.showing)
+        // Quiet hours to 08:00 here, the briefing at 07:00: its rebuild is the morning all the same.
+        settings.update { it.copy(quietHours = it.quietHours.copy(endMin = 8 * 60)) }
+        clock.time = Fixtures.at("2026-10-19T07:00")
+        outbox.notify(clock.now())
+        assertNull(ports.showing)
+        outbox.notify(clock.now(), morning = true)
+        assertEquals(listOf("review"), ports.showing!!.lines.map { it.id })
+    }
+
+    @Test
     fun `your reply shows under his message, a question answered leaves it, and an answer's gist goes with his words`() = runBlocking {
         outbox.send(his("q", kind = MessageKind.Question))
         outbox.send(his("s"))
