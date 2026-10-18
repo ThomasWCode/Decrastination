@@ -14,6 +14,9 @@ import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertTrue
 import kotlinx.serialization.KSerializer
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
 import org.junit.Assume.assumeTrue
 
 /**
@@ -24,20 +27,36 @@ import org.junit.Assume.assumeTrue
  * and to the test's output, never anything the stores hold. Skipped without `-PrehearseFrom`.
  */
 class RehearsalTest {
-    private class Read(val file: String, val value: Any?, val problem: JsonStore.Unreadable?, val roundTrip: Boolean)
+    /** [file] as read: its [value] (null: not there), whether it read whole, and the keys it holds that the app doesn't keep ([dropped]). */
+    private class Read(val file: String, val value: Any?, val problem: JsonStore.Unreadable?, val roundTrip: Boolean, val dropped: List<String> = emptyList())
 
-    @Suppress("UNCHECKED_CAST")
     private fun <T> read(dir: File, file: String, serializer: KSerializer<T>, default: () -> T): Read {
         val source = File(dir, file)
         if (!source.isFile) return Read(file, null, null, roundTrip = true)
-        // Read from a copy: the backup itself is never written, whatever the store does with a bad file.
-        val copy = File(Files.createTempDirectory("rehearsal").toFile(), file)
-        source.copyTo(copy)
-        val store = JsonStore(copy, serializer, default)
-        val value = store.value
-        val again = JsonStore.json.decodeFromString(serializer, JsonStore.json.encodeToString(serializer, value))
-        return Read(file, value, store.problem, roundTrip = again == value)
+        // Read from a copy: the backup itself is never written, whatever the store does with a bad file;
+        // and the copy, the phone's own data, goes once it's read.
+        val temp = Files.createTempDirectory("rehearsal").toFile()
+        try {
+            val copy = File(temp, file)
+            source.copyTo(copy)
+            val store = JsonStore(copy, serializer, default)
+            val value = store.value
+            val written = JsonStore.json.encodeToString(serializer, value)
+            val again = JsonStore.json.decodeFromString(serializer, written)
+            // The file against what the store writes of it: a key in the one and not the other is data the app doesn't keep.
+            val dropped = runCatching { dropped(JsonStore.json.parseToJsonElement(source.readText()), JsonStore.json.parseToJsonElement(written)) }.getOrDefault(emptyList())
+            return Read(file, value, store.problem, roundTrip = again == value, dropped = dropped)
+        } finally {
+            temp.deleteRecursively()
+        }
     }
+
+    /** The keys in [file] that [written] lacks, each by its path (a list's items as `[]`), never its value. */
+    private fun dropped(file: JsonElement, written: JsonElement, path: String = ""): List<String> = when {
+        file is JsonObject && written is JsonObject -> file.flatMap { (key, value) -> written[key]?.let { dropped(value, it, "$path.$key") } ?: listOf("$path.$key") }
+        file is JsonArray && written is JsonArray -> file.zip(written).flatMap { (a, b) -> dropped(a, b, "$path[]") }
+        else -> emptyList()
+    }.distinct()
 
     @Test
     fun `the phone's stores read, and what they hold is counted`() {
@@ -60,8 +79,12 @@ class RehearsalTest {
         val report = describe(reads) + nightly(root)
         File(root, "rehearsal.txt").writeText(report)
         println(report)
-        // What stops a release: a store that doesn't read whole, or loses something read and written again.
+        // What stops a release: a backup without a store every phone has (it isn't the phone's data), a store
+        // that doesn't read whole, that changes read and written again, or that holds what the app doesn't keep.
+        val missing = REQUIRED.filter { file -> reads.single { it.file == file }.value == null }
+        assertTrue(missing.isEmpty(), "The backup has no $missing, which every phone has: not a rehearsal of its data")
         assertTrue(reads.none { it.problem != null } && reads.all { it.roundTrip }, "A store didn't read whole, or changed read and written again: see rehearsal.txt")
+        assertTrue(reads.all { it.dropped.isEmpty() }, "A store holds what the app doesn't keep: see rehearsal.txt")
     }
 
     /** The counts and invariants of [reads]: numbers and file names only. */
@@ -73,6 +96,8 @@ class RehearsalTest {
         appendLine("Stores: ${reads.count { it.value != null }} of ${reads.size} there; read whole: ${reads.count { it.value != null && it.problem == null }}; the same written again: ${reads.count { it.value != null && it.roundTrip }}")
         reads.filter { it.problem != null }.forEach { appendLine("  ${it.file} didn't read whole${if (it.problem!!.kept) ", some of it kept" else ""}") }
         reads.filter { !it.roundTrip }.forEach { appendLine("  ${it.file} changed read and written again") }
+        reads.filter { it.value == null }.forEach { appendLine("  ${it.file} isn't there${if (it.file in REQUIRED) ": every phone has it" else ""}") }
+        reads.filter { it.dropped.isNotEmpty() }.forEach { appendLine("  ${it.file} holds what the app doesn't keep: ${it.dropped.joinToString()}") }
         val tasks = of<TaskState>("tasks.json")
         val instructions = of<InstructionState>("instructions.json")
         if (tasks != null) {
@@ -120,5 +145,10 @@ class RehearsalTest {
             appendLine("Nightly backup ${file.name}: format ${backup.format}; problem: ${Backups.problem(backup) ?: "none"}")
             appendLine("  instructions ${backup.instructions.size}, own tasks ${backup.ownTasks.size}, chat ${backup.chat.messages.size}, log slots ${backup.log.slots.size} completions ${backup.log.completions.size} Felix ${backup.log.felix.size}, memory ${backup.memory.facts.size}+${backup.memory.rules.size}")
         }
+    }
+
+    private companion object {
+        /** The stores the app writes at its first start: a backup without one isn't a phone's. */
+        val REQUIRED = listOf("tasks.json", "settings.json", "runtime.json", "log.json")
     }
 }
