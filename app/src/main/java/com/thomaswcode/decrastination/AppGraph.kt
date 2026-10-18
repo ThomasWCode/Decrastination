@@ -57,6 +57,8 @@ import com.thomaswcode.decrastination.enrich.ModelHold
 import com.thomaswcode.decrastination.enrich.RuleEnricher
 import com.thomaswcode.decrastination.felix.AndroidFelixPorts
 import com.thomaswcode.decrastination.felix.Conversation
+import com.thomaswcode.decrastination.felix.FelixNotifications
+import com.thomaswcode.decrastination.felix.FelixPrompts
 import com.thomaswcode.decrastination.felix.Looks
 import com.thomaswcode.decrastination.learn.Assessment
 import com.thomaswcode.decrastination.learn.Briefing
@@ -706,7 +708,7 @@ class AppGraph private constructor(context: Context) {
                 CalendarTime.refresh(app)
                 Briefing.replanToday(app)
             },
-            cancelFelix = { com.thomaswcode.decrastination.felix.FelixNotifications.cancel(app) },
+            cancelFelix = { FelixNotifications.cancel(app) },
         )
     }
 
@@ -971,7 +973,7 @@ class AppGraph private constructor(context: Context) {
         val text = (called as? Called.Answered)?.value?.text ?: return null
         log.update { l -> l.copy(reviews = l.reviews.map { if (it.week == week) it.copy(summary = text) else it }) }
         val now = clock.now()
-        val record = com.thomaswcode.decrastination.data.FelixRecord(java.util.UUID.randomUUID().toString(), now, com.thomaswcode.decrastination.felix.FelixPrompts.Reason.Summary.name, SUMMARY_READY)
+        val record = com.thomaswcode.decrastination.data.FelixRecord(java.util.UUID.randomUUID().toString(), now, FelixPrompts.Reason.Summary.name, SUMMARY_READY)
         log.update { it.copy(felix = it.felix + record).trimmed(now) }
         // In quiet hours on the week's channel, held with the routine ones till the morning (LR-07).
         val quiet = com.thomaswcode.decrastination.block.BlockPolicy.isQuiet(now, zone, settings.value)
