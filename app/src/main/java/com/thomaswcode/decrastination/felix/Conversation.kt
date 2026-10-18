@@ -224,6 +224,8 @@ class Conversation(
     private suspend fun keepReply(message: ChatMessage, words: String, now: Long) {
         val reply = ChatMessage(UUID.randomUUID().toString(), Speaker.You, words, now, message.about, kind = message.kind, replyTo = message.id, answeredAt = now)
         chat.update { s -> s.copy(messages = s.messages.map { if (it.id == message.id && it.answeredAt == null) it.copy(answeredAt = now) else it } + reply) }
+        // One scrolled back to in the archive is answered there, so it takes no second answer.
+        outbox.answeredInArchive(message.id, now)
     }
 
     /** The morning's list (LR-04) as his message, in the app's words, where he has none of his own ([Looks.morning]): the day's [title], then its [lines]. */
@@ -268,8 +270,8 @@ class Conversation(
         if (gateway.claudeKey() != null) return
         val kept = chat.value.felix.assessLater
         if (kept.isEmpty()) return
-        chat.update { s -> s.copy(felix = s.felix.copy(assessLater = s.felix.assessLater - kept.toSet())) }
-        kept.forEach { outbox.send(howItWent(it)) }
+        // Each let go of in the same write that asks it: a stop between leaves the rest kept, to be asked.
+        kept.forEach { ask -> outbox.send(howItWent(ask)) { it.copy(assessLater = it.assessLater - ask) } }
     }
 
     /** How [ask]'s work went, as his message in the app's words: the three answers its replies, each kept on it ([Looks.answered]). */
@@ -560,14 +562,16 @@ class Conversation(
                 ),
             )
             var kept = false
+            // What he was sent of the chat ([ChatPrompts.history]): yours before it that waited with it and went
+            // with it (one sent while he answered: D-98) are answered with it; one left out still waits, for an answer of its own.
+            val sent = ChatPrompts.history(upTo(chat.value.messages)).mapTo(HashSet()) { it.id }
             chat.update { s ->
                 // Only while it's still the one waiting: taken back meanwhile, the answer goes with it.
                 if (s.unanswered?.id != waiting.id) {
                     s
                 } else {
                     kept = true
-                    // Yours sent before it that waited with it (one sent while he answered: D-98), answered with it.
-                    s.copy(messages = s.messages.map { if (it.id == waiting.id || (it.from == Speaker.You && it.answeredAt == null && it.at <= waiting.at)) it.copy(answeredAt = reply.at, note = null, stuck = false) else it } + reply)
+                    s.copy(messages = s.messages.map { if (it.id == waiting.id || (it.from == Speaker.You && it.answeredAt == null && it.at <= waiting.at && it.id in sent)) it.copy(answeredAt = reply.at, note = null, stuck = false) else it } + reply)
                 }
             }
             // What it remembered (AI-21), with an answer kept only, and said under it with its Undo.

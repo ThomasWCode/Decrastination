@@ -70,7 +70,8 @@ class ChatScreenState {
     var replyingTo: ChatMessage? by mutableStateOf(null)
 
     /** Whether [replyingTo] is the chat's own offer ([offer]), not a message you chose: a newer question takes its place. */
-    private var offered = false
+    var offered = false
+        private set
 
     /** The question last offered to the box and turned down with ✕ ([notReplying]): not offered again. */
     private var declined: String? = null
@@ -180,11 +181,20 @@ class ChatScreenState {
         flash = null
     }
 
-    /** The screen made again (turned): the archive's pages it had, and the message it was replying to, back. */
-    fun restored(earlier: Int, replyingTo: ChatMessage?) {
+    /** The screen made again (turned): the archive's pages it had, and the message it was replying to, back, as offered or chosen. */
+    fun restored(earlier: Int, replyingTo: ChatMessage?, offered: Boolean) {
         this.earlier = earlier
         this.replyingTo = replyingTo
+        this.offered = offered && replyingTo != null
+    }
+
+    /** The chat cleared: nothing's left to reply to, nor of the archive to show. */
+    fun cleared() {
+        replyingTo = null
         offered = false
+        declined = null
+        earlier = 0
+        firstUnread = null
     }
 
     /** The archive's next [PAGE] shown over what's there, of the [archived] it holds: false when it has no more. */
