@@ -9,7 +9,8 @@
 #   scripts/scan-public.sh <range>    # any range git diff takes
 #
 # Made-up addresses at example.com, example.org and example.net, and GitHub's no-reply ones, pass;
-# so does Kotlin's label on this, super, return, break and continue (this@AppGraph.member).
+# so does Kotlin's label in a .kt file: this or super, then a class's name (this@AppGraph, then a
+# member), which reads as an address there. Any other word before an @ is looked at as one.
 # Only the lines a diff adds are read: a commit's message, a PR's text and a branch's name aren't.
 # A range git can't read exits 2, as a scan that didn't happen, never as a clean one.
 ROOT=$(git rev-parse --show-toplevel)
@@ -43,7 +44,8 @@ HITS=$(awk -v words="$WORDS" '
     while (match(rest, /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z][A-Za-z]+/)) {
       a = substr(rest, RSTART, RLENGTH); rest = substr(rest, RSTART + RLENGTH)
       local = a; sub(/@.*/, "", local)
-      if (local ~ /^(this|super|return|break|continue)$/) continue
+      # A Kotlin label, in Kotlin files alone, on this or super naming a class: capitalised, as addresses are not.
+      if (file ~ /\.kts?$/ && local ~ /^(this|super)$/ && a ~ /@[A-Z]/) continue
       if (tolower(a) !~ /@(example\.(com|org|net)|users\.noreply\.github\.com)$/) print "  an email address: " file ": " a
     }
     rest = text
