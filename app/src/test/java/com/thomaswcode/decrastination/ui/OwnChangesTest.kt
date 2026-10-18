@@ -15,7 +15,7 @@ class OwnChangesTest {
         id = "teams:t",
         source = Source.Teams,
         sourceId = "t",
-        title = "Statics Prep",
+        title = "Moments Prep",
         dueAt = dueAt,
         kind = Kind.Homework,
         firstSeenAt = Fixtures.at("2026-10-07T12:00"),

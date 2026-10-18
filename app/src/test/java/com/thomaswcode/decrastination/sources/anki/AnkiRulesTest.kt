@@ -32,13 +32,13 @@ class AnkiRulesTest {
 
     @Test
     fun `the sections German homework names are found, and only in vocabulary work`() {
-        // The texts of 7 Oct (docs/spec/sources.md).
-        assertEquals(listOf(1 to 2), AnkiRules.linkedSections("Learn vocabulary column 1.2 Familie und Ehe - both ways.\nPage 15 - exercises 4 and 5."))
-        assertEquals(listOf(2 to 2, 2 to 3), AnkiRules.linkedSections("Hausaufgaben\n1. Learn vocabulary p46-47/ 2.2/2.3 ( vocabulary test ! )"))
-        assertEquals(emptyList(), AnkiRules.linkedSections("Learn vocabulary - verschiedene Familienformen"))
+        // Made-up texts in the shape of 7 Oct's (docs/spec/sources.md).
+        assertEquals(listOf(2 to 1), AnkiRules.linkedSections("Learn vocabulary column 2.1 Stadt und Land - both ways.\nPage 9 - exercises 2 and 3."))
+        assertEquals(listOf(3 to 1, 3 to 2), AnkiRules.linkedSections("Hausaufgaben\n1. Learn vocabulary p20-21/ 3.1/3.2 ( vocabulary test ! )"))
+        assertEquals(emptyList(), AnkiRules.linkedSections("Learn vocabulary - Wohnen in der Stadt"))
         assertEquals(emptyList(), AnkiRules.linkedSections("Chapter 2.3 questions"))
         // A class code or a year isn't a section.
-        assertEquals(emptyList(), AnkiRules.linkedSections("12.1 German 2026-27 vocab, 2026.27"))
+        assertEquals(emptyList(), AnkiRules.linkedSections("12.8 German 2026-27 vocab, 2026.27"))
     }
 
     @Test
@@ -78,7 +78,7 @@ class AnkiRulesTest {
 
     @Test
     fun `a deck's own new cards a day make its steps`() {
-        val homework = listOf(assignment("Familie und Ehe", "Learn vocabulary column 1.2", Fixtures.at("2026-10-20T09:00")))
+        val homework = listOf(assignment("Stadt und Land", "Learn vocabulary column 1.2", Fixtures.at("2026-10-20T09:00")))
         // 40 a day in AnkiDroid's options: 100 cards are 40, 40 and 20.
         val forty = decks.map { if (it.id == 12L) it.copy(new = 40, newPerDay = 40) else it }
         assertEquals(listOf("40 new cards", "40 new cards", "20 new cards"), AnkiRules.homeworkDecks(forty, 1, homework, unseen = { 100 }, now = NOW, zone = LONDON).single().subSteps!!.map { it.title })
@@ -86,7 +86,7 @@ class AnkiRulesTest {
 
     @Test
     fun `a deck whose options allow no new cards a day is one step, not waiting, and never the quota's`() {
-        val homework = listOf(assignment("Familie und Ehe", "Learn vocabulary column 1.2", Fixtures.at("2026-10-20T09:00")))
+        val homework = listOf(assignment("Stadt und Land", "Learn vocabulary column 1.2", Fixtures.at("2026-10-20T09:00")))
         val none = decks.map { if (it.id == 12L) it.copy(new = 0, newPerDay = 0) else it }
         val deck = AnkiRules.homeworkDecks(none, 1, homework, unseen = { 100 }, now = NOW, zone = LONDON).single()
         assertEquals(listOf("100 new cards"), deck.subSteps!!.map { it.title })
@@ -186,7 +186,7 @@ class AnkiRulesTest {
         sourceId = title,
         title = title,
         detail = detail,
-        className = "12.1 German 2026-27",
+        className = "12.8 German 2026-27",
         dueAt = dueAt,
         kind = Kind.Homework,
         firstSeenAt = 0,
@@ -197,7 +197,7 @@ class AnkiRulesTest {
     @Test
     fun `each deck homework names becomes a task due with it, in daily steps`() {
         val homework = listOf(
-            assignment("Familie und Ehe", "Learn vocabulary column 1.2 Familie und Ehe", Fixtures.at("2026-10-02T09:00")),
+            assignment("Stadt und Land", "Learn vocabulary column 1.2 Stadt und Land", Fixtures.at("2026-10-02T09:00")),
             assignment("Gefahren", "1. Learn vocabulary p46-47/ 1.2/2.2", Fixtures.at("2026-10-01T08:30")),
             assignment("Done already", "Learn vocabulary 1.3", Fixtures.at("2026-10-01T08:30"), open = false),
         )
@@ -208,7 +208,7 @@ class AnkiRulesTest {
         assertEquals(1, deck12.stepsPerDay)
         assertEquals(Fixtures.at("2026-10-01T08:30"), deck12.dueAt)
         assertEquals(listOf("20 new cards", "20 new cards", "5 new cards"), deck12.subSteps!!.map { it.title })
-        assertEquals("45 cards never studied. For: Familie und Ehe; Gefahren", deck12.detail)
+        assertEquals("45 cards never studied. For: Stadt und Land; Gefahren", deck12.detail)
         assertTrue(deck12.derived)
     }
 
@@ -217,7 +217,7 @@ class AnkiRulesTest {
         // Teams says Friday 23 Oct; Claude read a test on Tuesday 6 Oct, gone by on Thursday 8 Oct.
         val real = Fixtures.at("2026-10-23T23:59")
         val test = Fixtures.at("2026-10-06T08:30")
-        val prep = assignment("Familie und Ehe", "Learn vocabulary column 1.2 Familie und Ehe", test).copy(sourceValues = SourceValues(Kind.Homework, real, null))
+        val prep = assignment("Stadt und Land", "Learn vocabulary column 1.2 Stadt und Land", test).copy(sourceValues = SourceValues(Kind.Homework, real, null))
         val deck = AnkiRules.homeworkDecks(decks, 1, listOf(prep), unseen = { 45 }, now = NOW, zone = LONDON).single()
         assertEquals(real, deck.dueAt)
         assertEquals(real.toString(), deck.extra[AnkiRules.EXTRA_REAL])
@@ -232,7 +232,7 @@ class AnkiRulesTest {
 
     @Test
     fun `a homework deck is done when every card has been seen, reviews or not`() {
-        val homework = listOf(assignment("Familie und Ehe", "Learn vocabulary column 1.3", null))
+        val homework = listOf(assignment("Stadt und Land", "Learn vocabulary column 1.3", null))
         val studied = decks.map { if (it.id == 13L) it.copy(new = 0, review = 4) else it }
         assertTrue(AnkiRules.homeworkDecks(studied, 1, homework, unseen = { 0 }, now = NOW, zone = LONDON).single().done)
     }
@@ -252,7 +252,7 @@ class AnkiRulesTest {
                 extra = mapOf(AnkiRules.EXTRA_DECK_ID to deckId.toString()),
             )
         }
-        val handedIn = assignment("Familie und Ehe", "Learn vocabulary column 1.2 and 1.3", null, open = false)
+        val handedIn = assignment("Stadt und Land", "Learn vocabulary column 1.2 and 1.3", null, open = false)
         val finished = decks.map { if (it.id == 12L) it.copy(new = 0, review = 0) else it }
         val tasks = AnkiRules.homeworkDecks(finished, 1, listOf(handedIn, tracked(12), tracked(13)), unseen = { if (it.id == 12L) 0 else 30 }, now = NOW, zone = LONDON)
         assertEquals(listOf("deck:12"), tasks.map { it.sourceId })
@@ -276,7 +276,7 @@ class AnkiRulesTest {
 
     @Test
     fun `a homework deck whose new cards for today are studied waits for Anki's next day`() {
-        val homework = listOf(assignment("Familie und Ehe", "Learn vocabulary column 1.2", Fixtures.at("2026-10-02T09:00")))
+        val homework = listOf(assignment("Stadt und Land", "Learn vocabulary column 1.2", Fixtures.at("2026-10-02T09:00")))
         // Reviews still due in it (deck 1.2 has 5) don't release more new cards today.
         val studied = decks.map { if (it.id == 12L) it.copy(new = 0) else it }
         val deck = AnkiRules.homeworkDecks(studied, 1, homework, unseen = { 25 }, now = NOW, zone = LONDON).single()
@@ -287,7 +287,7 @@ class AnkiRulesTest {
 
     @Test
     fun `a homework deck part-way through today's new cards steps from what's left today`() {
-        val homework = listOf(assignment("Familie und Ehe", "Learn vocabulary column 1.2", Fixtures.at("2026-10-02T09:00")))
+        val homework = listOf(assignment("Stadt und Land", "Learn vocabulary column 1.2", Fixtures.at("2026-10-02T09:00")))
         val partway = decks.map { if (it.id == 12L) it.copy(new = 5) else it }
         val deck = AnkiRules.homeworkDecks(partway, 1, homework, unseen = { 45 }, now = NOW, zone = LONDON).single()
         assertEquals(listOf("5 new cards", "20 new cards", "20 new cards"), deck.subSteps!!.map { it.title })

@@ -42,8 +42,8 @@ private fun email(body: String = "Please sign and return the trip form by Monday
 )
 
 private fun assignment(detail: String) = TaskItem(
-    id = "teams:a1", source = Source.Teams, sourceId = "a1", title = "Gefahren in den sozialen Netzwerken", detail = detail,
-    className = "12.1 German 2026-27", dueAt = Fixtures.at("2026-10-14T08:30"), kind = Kind.Homework, firstSeenAt = NOW, lastSeenAt = NOW,
+    id = "teams:a1", source = Source.Teams, sourceId = "a1", title = "Reisen in Europa", detail = detail,
+    className = "12.8 German 2026-27", dueAt = Fixtures.at("2026-10-14T08:30"), kind = Kind.Homework, firstSeenAt = NOW, lastSeenAt = NOW,
 )
 
 class RuleEnricherTest {
@@ -90,16 +90,16 @@ class RuleEnricherTest {
 
     @Test
     fun `a part that's learning numbered vocabulary is a step tagged with its sections`() {
-        val steps = RuleEnricher.steps("1. Learn vocabulary p46-47/ 2.2/2.3 ( vocabulary test ! )\n2. Complete the reading task", 40)!!
-        assertEquals(listOf(listOf("2.2", "2.3"), emptyList()), steps.map { it.ankiSections })
+        val steps = RuleEnricher.steps("1. Learn vocabulary p20-21/ 3.1/3.2 ( vocabulary test ! )\n2. Complete the reading task", 40)!!
+        assertEquals(listOf(listOf("3.1", "3.2"), emptyList()), steps.map { it.ankiSections })
     }
 
     @Test
     fun `dashes and a number without its space count, a section number doesn't`() {
-        assertEquals(2, RuleEnricher.steps("- Learn vocabulary - verschiedene Familienformen\n- Translation - from the booklet", 40)!!.size)
+        assertEquals(2, RuleEnricher.steps("- Learn vocabulary - Wohnen in der Stadt\n- Translation - from the booklet", 40)!!.size)
         assertEquals(2, RuleEnricher.steps("1.Past paper: print it out\n2.Mark it", 40)!!.size)
-        // "1.2 Familie" is a section, and one item is no list.
-        assertNull(RuleEnricher.steps("1.2 Familie und Ehe - both ways.\nPage 15 - exercises 4 and 5.", 40))
+        // "1.2 Stadt" is a section, and one item is no list.
+        assertNull(RuleEnricher.steps("1.2 Stadt und Land - both ways.\nPage 9 - exercises 2 and 3.", 40))
         assertNull(RuleEnricher.steps("1. Do page 7", 40))
     }
 
@@ -123,7 +123,7 @@ class PromptsTest {
 
     @Test
     fun `the model is told what the source says is due, not an older enrichment's date`() {
-        val task = assignment("Page 7-11 of booklet.").copy(
+        val task = assignment("Pages 3-5 of the booklet.").copy(
             dueAt = Fixtures.at("2026-10-12T08:30"),
             sourceValues = SourceValues(Kind.Homework, Fixtures.at("2026-10-14T08:30"), null),
         )
@@ -189,7 +189,7 @@ class PromptsTest {
     @Test
     fun `an assignment gives its class and due time, no multiplier, and a long text says it's cut`() {
         val text = Prompts.describe(assignment("x".repeat(Prompts.MAX_TEXT + 10)), Enrichments.Job.Assignment, NOW, LONDON)
-        assertTrue("Class: 12.1 German 2026-27" in text, text)
+        assertTrue("Class: 12.8 German 2026-27" in text, text)
         assertTrue("Due: Wednesday 14 October 2026 08:30" in text, text)
         // The planner applies the learned multiplier itself; the model gives typical times.
         assertTrue("multiplier" !in text, text)

@@ -33,10 +33,10 @@ class TeamsRowsTest {
     fun `every row becomes homework with its deadline and instructions`() {
         val tasks = rows.mapNotNull(TeamsRows::fetched)
         assertEquals(11, tasks.size)
-        val statics = tasks.single { it.title == "Statics Prep" }
+        val statics = tasks.single { it.title == "Moments Prep" }
         assertEquals(Kind.Homework, statics.kind)
-        assertEquals("12.2-PH3", statics.className)
-        assertEquals("Page 7-11 of booklet.", statics.detail)
+        assertEquals("12.9-PH1", statics.className)
+        assertEquals("Pages 3-5 of the booklet.", statics.detail)
         assertEquals(Fixtures.at("2026-10-05T14:30"), statics.dueAt)
         assertEquals("PastDue", statics.extra[TeamsRows.EXTRA_TAB])
     }
@@ -70,12 +70,12 @@ class TeamsRowsTest {
 
     @Test
     fun `returned work with feedback is ten minutes' reading, due in three days, done by a tick`() {
-        val row = mapOf("key" to "k1", "title" to "Statics Prep", "class_name" to "12.2-PH3", "returned_at" to Fixtures.at("2026-10-14T16:00"), "feedback" to "Good work; check your units in Q3.")
+        val row = mapOf("key" to "k1", "title" to "Moments Prep", "class_name" to "12.9-PH1", "returned_at" to Fixtures.at("2026-10-14T16:00"), "feedback" to "Good work; check your units in Q3.")
         val f = TeamsRows.returned(row)!!
         assertEquals("k1:feedback:${Fixtures.at("2026-10-14T16:00")}", f.sourceId)
         // Returned again later: feedback of its own.
         assertEquals("k1:feedback:${Fixtures.at("2026-10-21T16:00")}", TeamsRows.returned(row + ("returned_at" to Fixtures.at("2026-10-21T16:00")))!!.sourceId)
-        assertEquals("Read the feedback on Statics Prep", f.title)
+        assertEquals("Read the feedback on Moments Prep", f.title)
         assertEquals(Kind.Admin, f.kind)
         assertEquals("Good work; check your units in Q3.", f.detail)
         assertEquals(Fixtures.at("2026-10-17T16:00"), f.dueAt)

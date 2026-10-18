@@ -19,7 +19,7 @@ class EnrichmentTest {
     )
 
     private fun assignment(dueAt: Long? = Fixtures.at("2026-10-16T08:30")) = TaskItem(
-        id = "teams:a1", source = Source.Teams, sourceId = "a1", title = "Prep", detail = "Page 7-11 of booklet.",
+        id = "teams:a1", source = Source.Teams, sourceId = "a1", title = "Prep", detail = "Pages 3-5 of the booklet.",
         dueAt = dueAt, kind = Kind.Homework, firstSeenAt = t0, lastSeenAt = t0,
     )
 

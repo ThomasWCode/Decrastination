@@ -239,7 +239,7 @@ class MergeTest {
 
     @Test
     fun `feedback read, done by its tick, stays done while Teams still lists it, and goes once it doesn't`() {
-        val feedback = Fetched(sourceId = "k:feedback", title = "Read the feedback on Statics Prep", kind = Kind.Admin, extra = mapOf(TaskItem.EXTRA_TICK_DONE to "true"))
+        val feedback = Fetched(sourceId = "k:feedback", title = "Read the feedback on Moments Prep", kind = Kind.Admin, extra = mapOf(TaskItem.EXTRA_TICK_DONE to "true"))
         val ticked = first(feedback).map { it.copy(status = Status.Done, doneAt = t0) }
         val again = Merge.apply(ticked, Source.Teams, listOf(feedback), t0 + 1)
         assertEquals(Status.Done, again.tasks.single().status)
