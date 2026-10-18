@@ -34,6 +34,20 @@ On the phone (18 Oct):
 
 The app's process: about 127 MB resident, which is fine.
 
+## Baselines for the done-when list (Stage 0)
+
+Measured on 18 Oct 2026 at 4b0aff7 (3.2.0's code, the plan merged), for Stage 12 to compare with and better:
+
+| | |
+|---|---|
+| Tests | 874 on `main` (3 skipped: the paid eval, the schema compile and, from Stage 0, the rehearsal, each run only when asked); 883 with Stage 0's nine |
+| Test time | 13 s for every unit test (`testDebugUnitTest --rerun`), on the warm daemon |
+| Build time | 90 s for a full debug build (`assembleDebug --rerun-tasks`), on the warm daemon |
+| `AppGraph.kt` | 2,628 lines, 117 functions |
+| The stores on the phone | `tasks.json` 589,798 bytes; `runtime.json` 94,904; `chat.json` 29,541; `log.json` 25,791; `instructions.json` 13,324; `calendar.json` 3,499; `settings.json` 1,779; `memory.json` 1,170; `school.json` 79 |
+
+The rehearsal of the phone's data that day (`scripts/rehearse.sh`, counts only): 178 tasks (24 open), 151 steps, 12 tasks with values of yours, 4 pins, 12 instructions in use, 25 chat messages, 31 of Felix's records in the log; every store read whole and wrote back the same.
+
 ## Findings
 
 ### 1. `AppGraph` is most of the app
