@@ -42,6 +42,8 @@ enum class Why {
 
     /** Moved when its time passed (phase 3). */
     Refitted,
+    /** Kept on today, where the last plan had its slot, under way or still to come (PL-13). */
+    Kept,
 
     /** No room before its deadline: flagged behind. */
     NoRoom,
@@ -130,6 +132,7 @@ data class Chunk(
             Why.Packed -> "Its days before the deadline are tight: as late as they allow"
             Why.Pinned -> "Where you put it"
             Why.Refitted -> "Moved when its time passed"
+            Why.Kept -> "Kept where today's slot had it"
             Why.NoRoom -> "Couldn't fit before its deadline"
         }
     }

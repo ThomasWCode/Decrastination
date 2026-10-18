@@ -442,7 +442,8 @@ object ChatPrompts {
                 "says why it's on its day: duesoon (due today or tomorrow), overdue, spread (its share of the free time to its deadline), " +
                 "minimumtouch (kept within a week of its piece before), revisiongap (a day after its revision piece before), mostroom (a " +
                 "task in one piece, on the roomiest day before its deadline), soft (no due date: spare time this week), packed (its days " +
-                "are too tight to spread it, so as late as they allow), noroom (no room before its deadline).",
+                "are too tight to spread it, so as late as they allow), kept (where its slot today already was, under way or still to come), " +
+                "noroom (no room before its deadline).",
         )
         // As the Do now card: the slot under way, with its time, else the next thing; then the one after.
         val then = plan.then?.let { "; then ${piece(it)}" }.orEmpty()
