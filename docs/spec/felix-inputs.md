@@ -61,7 +61,7 @@ Remembered:
 - You reply to a message, from his notification (AI-24), his chips, or a swipe or *Reply* in the chat, all one way in (D-98): your reply goes into the chat under the message it answers, but for an answer the app takes with no call ([below](#in-his-name-but-not-his-words)).
 - A message waiting is asked again: *Try again*, the chat opened again, or the model back from a rest.
 
-One message is answered at a time. While the model can't be asked (Claude off, resting, the cap), your message says why and waits.
+One answer at a time: a message sent while he answers another of yours lets that answer go, and he answers both together (D-98). While the model can't be asked (Claude off, resting, the cap), your message says why and waits.
 
 ### What's sent
 
