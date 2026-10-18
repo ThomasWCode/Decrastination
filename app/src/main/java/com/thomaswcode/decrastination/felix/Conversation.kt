@@ -264,8 +264,8 @@ class Conversation(
         if (gateway.claudeKey() != null) return
         val kept = chat.value.felix.assessLater
         if (kept.isEmpty()) return
-        chat.update { s -> s.copy(felix = s.felix.copy(assessLater = s.felix.assessLater - kept.toSet())) }
-        kept.forEach { outbox.send(howItWent(it)) }
+        // Each let go of in the same write that asks it: a stop between leaves the rest kept, to be asked.
+        kept.forEach { ask -> outbox.send(howItWent(ask)) { it.copy(assessLater = it.assessLater - ask) } }
     }
 
     /** How [ask]'s work went, as his message in the app's words: the three answers its replies, each kept on it ([Looks.answered]). */

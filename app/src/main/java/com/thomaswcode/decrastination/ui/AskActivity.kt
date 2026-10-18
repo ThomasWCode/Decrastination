@@ -71,6 +71,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.R
@@ -109,6 +110,9 @@ class AskActivity : ComponentActivity() {
 
     /** Whether [handed] is sent, or only put in the box to be changed or sent (*What gives?*, PL-02). */
     private var sendHanded = true
+
+    /** Whether the Chat tab is the one showing, not Your changes: only then is the chat on screen. */
+    private var chatTab = true
 
     /** The message to open at, from his notification: let go once the list is there. */
     private val openAt = mutableStateOf<String?>(null)
@@ -166,7 +170,7 @@ class AskActivity : ComponentActivity() {
         super.onResume()
         // What waits for Claude (it was off, resting, or capped) is tried again on opening.
         val graph = AppGraph.get(this)
-        graph.conversation.chatInFront = true
+        graph.conversation.chatInFront = chatTab
         // His notification taken away: what it held is on the screen.
         graph.conversation.outbox.notify(graph.clock.now())
         graph.scope.launch {
@@ -181,8 +185,25 @@ class AskActivity : ComponentActivity() {
         val graph = AppGraph.get(this)
         graph.conversation.chatInFront = false
         // What arrived while it was on screen was seen: read up to now, so only what comes after is his notification.
+        if (chatTab) {
+            val now = graph.clock.now()
+            graph.scope.launch { graph.conversation.read(now) }
+        }
+    }
+
+    /**
+     * The Chat tab shown, or Your changes ([chat] false): the chat's on screen only on its tab, so what
+     * arrives while the other's showing is his notification. Left for it, what the chat showed is read;
+     * back on it, his notification's taken away.
+     */
+    private fun showingChat(chat: Boolean) {
+        if (chatTab == chat) return
+        chatTab = chat
+        if (!lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) return
+        val graph = AppGraph.get(this)
+        graph.conversation.chatInFront = chat
         val now = graph.clock.now()
-        graph.scope.launch { graph.conversation.read(now) }
+        if (chat) graph.conversation.outbox.notify(now) else graph.scope.launch { graph.conversation.read(now) }
     }
 
     @OptIn(ExperimentalMaterial3Api::class)
@@ -197,6 +218,7 @@ class AskActivity : ComponentActivity() {
         val zone = graph.clock.zone()
         val scope = rememberCoroutineScope()
         var tab by rememberSaveable { mutableIntStateOf(0) }
+        LaunchedEffect(tab) { showingChat(tab == 0) }
         var draft by rememberSaveable { mutableStateOf("") }
         var menu by remember { mutableStateOf(false) }
         var clearing by remember { mutableStateOf(false) }
