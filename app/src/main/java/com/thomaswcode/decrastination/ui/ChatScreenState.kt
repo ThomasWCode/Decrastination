@@ -129,14 +129,19 @@ class ChatScreenState {
     /** The labels shown this visit, so each slides out once. */
     private val shownLabels = mutableSetOf<String>()
 
+    /** When the chat was last left with what it showed read ([paused]): read, though the write may not have reached the chat yet. */
+    private var leftAt = 0L
+
     /**
      * The chat opened at [now], at [state] as it was before anything in it was read: what's unread then is
      * marked for this visit, and the list opens at [at] (his notification's message), else at the first
      * unread, else at its foot.
      */
     fun opened(state: ChatState, now: Long, at: String? = null) {
-        // A question you've answered from his notification has been seen, as his button's count says.
-        val unread = state.messages.filter { Outbox.unread(it, state.readAt) && it.answeredAt == null }
+        // A question you've answered from his notification has been seen, as his button's count says; and
+        // what it showed when it was left just now, whether or not that's reached the chat's read position.
+        val readAt = maxOf(state.readAt, leftAt)
+        val unread = state.messages.filter { Outbox.unread(it, readAt) && it.answeredAt == null }
         firstUnread = unread.firstOrNull()?.id
         unreadOnOpen = unread.mapTo(HashSet()) { it.id }
         since = now
@@ -168,12 +173,13 @@ class ChatScreenState {
         shownLabels += id
     }
 
-    /** The screen paused: every message closed again, and the visit's labels done with. */
-    fun paused() {
+    /** The screen paused: every message closed again, and the visit's labels done with; what it showed read at [read], where it was. */
+    fun paused(read: Long? = null) {
         open = emptySet()
         shownLabels.clear()
         unreadOnOpen = emptySet()
         since = Long.MAX_VALUE
+        if (read != null) leftAt = maxOf(leftAt, read)
     }
 
     /** The list scrolled where it was to be: not again. */

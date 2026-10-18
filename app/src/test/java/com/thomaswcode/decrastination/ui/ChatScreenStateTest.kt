@@ -181,6 +181,22 @@ class ChatScreenStateTest {
     }
 
     @Test
+    fun `opened again before what it showed is written as read, what it showed isn't unread`() {
+        val seen = his("seen", "2026-10-18T18:00")
+        val screen = ChatScreenState()
+        screen.paused(read = Fixtures.at("2026-10-18T18:05"))
+        // The chat's read position not moved yet: its write still under way.
+        screen.opened(ChatState(listOf(seen), readAt = Fixtures.at("2026-10-18T17:00")), Fixtures.at("2026-10-18T18:06"))
+        assertNull(screen.firstUnread)
+        assertFalse(screen.labels(seen.copy(acts = listOf(Act("Ticked “Plan” on “Essay”.", ChatAction(ChatAction.Type.TickStep, "own:essay", stepIndex = 0))))))
+        // Paused with nothing read (on Your changes), what came after is still unread.
+        val later = his("later", "2026-10-18T18:10")
+        screen.paused()
+        screen.opened(ChatState(listOf(seen, later), readAt = Fixtures.at("2026-10-18T17:00")), Fixtures.at("2026-10-18T18:20"))
+        assertEquals("later", screen.firstUnread)
+    }
+
+    @Test
     fun `his question still waiting, his last message, is offered to the box, unless you chose another or turned it down`() {
         val screen = ChatScreenState()
         val question = ChatMessage("q", Speaker.Felix, "What did you avoid, and why?", 1, kind = MessageKind.CheckIn, byApp = true)
