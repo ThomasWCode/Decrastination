@@ -67,6 +67,7 @@ import com.thomaswcode.decrastination.enrich.ModelHold
 import com.thomaswcode.decrastination.enrich.RuleEnricher
 import com.thomaswcode.decrastination.felix.AndroidFelixPorts
 import com.thomaswcode.decrastination.felix.Conversation
+import com.thomaswcode.decrastination.felix.Looks
 import com.thomaswcode.decrastination.learn.Assessment
 import com.thomaswcode.decrastination.learn.Briefing
 import com.thomaswcode.decrastination.learn.Calibrator
@@ -250,15 +251,25 @@ class AppGraph private constructor(context: Context) {
     /** Time in AnkiDroid as work (NF-03, DX-11). */
     val anki = com.thomaswcode.decrastination.block.AnkiWatch(this)
 
+    /** What Felix's service asks of Android: his notification, and the work and alarms that outlive what asked. */
+    private val felixPorts = AndroidFelixPorts(app)
+
     /** The voice of the app's messages (LR-03). */
-    val felix = com.thomaswcode.decrastination.felix.Looks(this)
+    val felix: Looks = Looks(
+        tasks, settings, runtime, log, clock, scope, gateway, notifier, focus, planning, felixPorts,
+        calendarTime = { calendarTime },
+        profile = { conversation.profile(it) },
+        remember = { conversation.remember(it) },
+        addInstruction = { text, about, answer -> addInstruction(text, about, answer) },
+        assess = { taskId, doneAt, answer -> Assessment.record(app, taskId, doneAt, answer) },
+    )
 
     /**
      * Felix's conversation ([Conversation]): the chat, his answers and what they make, what he
      * remembers, the replies from his notification and the week's check-in.
      */
     val conversation: Conversation = Conversation(
-        tasks, settings, runtime, log, instructions, chat, school, memory, clock, scope, gateway, notifier, focus, planning, AndroidFelixPorts(app),
+        tasks, settings, runtime, log, instructions, chat, school, memory, clock, scope, gateway, notifier, focus, planning, felixPorts,
         owners = object : Conversation.Owners {
             override suspend fun saveOwnTask(sourceId: String, task: OwnTask): Boolean = this@AppGraph.saveOwnTask(sourceId, task)
             override suspend fun finishOwnTask(taskId: String) { this@AppGraph.finishOwnTask(taskId) }

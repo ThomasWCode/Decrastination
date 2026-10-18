@@ -26,8 +26,8 @@ interface FelixPorts {
     /** His notification taken away ([FelixNotifications.cancel]). */
     fun cancel()
 
-    /** His next look at [at], by alarm ([SlotAlarms.armFelix]): the phone may be asleep through the service's ticks. */
-    fun armLook(at: Long)
+    /** His next look at [at], or none, by alarm ([SlotAlarms.armFelix]): the phone may be asleep through the service's ticks. */
+    fun armLook(at: Long?)
 
     /** The tasks read again now, as a job ([EnrichWorker.enqueue]). */
     fun readAgain()
@@ -52,7 +52,7 @@ class AndroidFelixPorts(private val context: Context) : FelixPorts {
 
     override fun cancel() = FelixNotifications.cancel(context)
 
-    override fun armLook(at: Long) = SlotAlarms.armFelix(context, at)
+    override fun armLook(at: Long?) = SlotAlarms.armFelix(context, at)
 
     override fun readAgain() = EnrichWorker.enqueue(context)
 
