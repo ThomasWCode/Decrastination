@@ -1,4 +1,4 @@
-package com.thomaswcode.decrastination.notify
+package com.thomaswcode.decrastination.felix
 
 import android.content.Context
 import androidx.work.CoroutineWorker
@@ -10,7 +10,9 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import com.thomaswcode.decrastination.AppGraph
+import com.thomaswcode.decrastination.notify.Channels
 import com.thomaswcode.decrastination.notify.NoticeId
+import com.thomaswcode.decrastination.notify.Notify
 
 /**
  * A reply from Felix's notification answered (AI-24) as work of its own: the receiver that took it

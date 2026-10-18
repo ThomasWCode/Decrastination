@@ -1,6 +1,8 @@
 package com.thomaswcode.decrastination.enrich
 
 import com.thomaswcode.decrastination.core.Enrichments
+import com.thomaswcode.decrastination.felix.ChatPrompts
+import com.thomaswcode.decrastination.felix.FelixPrompts
 import com.thomaswcode.decrastination.learn.ReviewInput
 import kotlin.test.Test
 import kotlin.test.assertTrue

@@ -13,7 +13,7 @@ import com.thomaswcode.decrastination.core.Speaker
 import com.thomaswcode.decrastination.core.Status
 import com.thomaswcode.decrastination.core.TaskOverrides
 import com.thomaswcode.decrastination.core.overrides
-import com.thomaswcode.decrastination.enrich.FelixPrompts
+import com.thomaswcode.decrastination.felix.FelixPrompts
 import java.io.File
 import java.nio.file.Files
 import kotlin.test.Test
@@ -205,7 +205,7 @@ class StoresDecodeTest {
          */
         val LEFT_AT_DEFAULT: Map<String, Set<String>> = mapOf(
             // A check-in's last answer is never in its draft: given, the check-in is kept and the draft goes.
-            "com.thomaswcode.decrastination.learn.CheckInFlow.Draft" to setOf("energy"),
+            "com.thomaswcode.decrastination.felix.CheckInFlow.Draft" to setOf("energy"),
         )
     }
 }

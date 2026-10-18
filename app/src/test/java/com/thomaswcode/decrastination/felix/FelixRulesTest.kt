@@ -1,4 +1,4 @@
-package com.thomaswcode.decrastination.learn
+package com.thomaswcode.decrastination.felix
 
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.Fixtures.LONDON
@@ -15,7 +15,7 @@ import com.thomaswcode.decrastination.data.FelixState
 import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.data.SlotOutcome
 import com.thomaswcode.decrastination.data.SlotRecord
-import com.thomaswcode.decrastination.enrich.FelixPrompts.Reason
+import com.thomaswcode.decrastination.felix.FelixPrompts.Reason
 import java.time.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -123,7 +123,7 @@ class FelixRulesTest {
         val (trigger, due) = FelixRules.upcoming(plan, settings, at("16:30"))!!
         assertEquals(Reason.SlotStart to first.chunk!!.key, trigger.reason to trigger.key)
         assertEquals(first.start + grace, due)
-        val draft = com.thomaswcode.decrastination.data.FelixDraft(Reason.SlotStart.name, first.chunk!!.key, com.thomaswcode.decrastination.enrich.FelixAnswer("Ten minutes in: starting?"), at("17:02"))
+        val draft = com.thomaswcode.decrastination.data.FelixDraft(Reason.SlotStart.name, first.chunk!!.key, com.thomaswcode.decrastination.felix.FelixAnswer("Ten minutes in: starting?"), at("17:02"))
         val now = first.start + grace
         assertEquals(true, FelixRules.fits(draft, trigger, now, lastSentAt = at("16:00")))
         // Another piece's, too old, or with a message of his since: written again.

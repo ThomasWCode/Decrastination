@@ -1,4 +1,4 @@
-package com.thomaswcode.decrastination.notify
+package com.thomaswcode.decrastination.felix
 
 import android.content.BroadcastReceiver
 import android.content.Context

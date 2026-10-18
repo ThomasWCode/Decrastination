@@ -167,7 +167,7 @@ class SlotReceiver : BroadcastReceiver() {
                 // Each is a moment Felix may have something to say (LR-03): his look is work of its own,
                 // as the model's answer may take longer than a receiver is given, and the app may go
                 // once it's let go.
-                com.thomaswcode.decrastination.learn.FelixWorker.enqueue(context)
+                com.thomaswcode.decrastination.felix.FelixWorker.enqueue(context)
             } finally {
                 pending.finish()
             }

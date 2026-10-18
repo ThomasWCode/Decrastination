@@ -54,8 +54,8 @@ import com.thomaswcode.decrastination.enrich.AndroidModelAlerts
 import com.thomaswcode.decrastination.enrich.Called
 import com.thomaswcode.decrastination.enrich.Failures
 import com.thomaswcode.decrastination.enrich.Failure
-import com.thomaswcode.decrastination.enrich.ChatPrompts
-import com.thomaswcode.decrastination.enrich.ChatReader
+import com.thomaswcode.decrastination.felix.ChatPrompts
+import com.thomaswcode.decrastination.felix.ChatReader
 import com.thomaswcode.decrastination.enrich.ClaudeEnricher
 import com.thomaswcode.decrastination.enrich.EnrichWorker
 import com.thomaswcode.decrastination.enrich.Enricher
@@ -319,7 +319,7 @@ class AppGraph private constructor(context: Context) {
     val anki = com.thomaswcode.decrastination.block.AnkiWatch(this)
 
     /** The voice of the app's messages (LR-03). */
-    val felix = com.thomaswcode.decrastination.learn.Felix(this)
+    val felix = com.thomaswcode.decrastination.felix.Looks(this)
 
     /**
      * [made]'s next seven days written to the calendar you picked (NF-07). A slot you've moved there
@@ -770,7 +770,7 @@ class AppGraph private constructor(context: Context) {
                 CalendarTime.refresh(app)
                 Briefing.replanToday(app)
             },
-            cancelFelix = { com.thomaswcode.decrastination.notify.FelixNotifications.cancel(app) },
+            cancelFelix = { com.thomaswcode.decrastination.felix.FelixNotifications.cancel(app) },
         )
     }
 
@@ -1028,19 +1028,19 @@ class AppGraph private constructor(context: Context) {
         if (!notifier.shown(com.thomaswcode.decrastination.notify.Channels.FELIX)) return false
         // In quiet hours the form's reminder goes instead, held as the routine ones are till the morning.
         if (com.thomaswcode.decrastination.block.BlockPolicy.isQuiet(now, clock.zone(), settings.value)) return false
-        val draft = com.thomaswcode.decrastination.learn.CheckInFlow.Draft(week)
+        val draft = com.thomaswcode.decrastination.felix.CheckInFlow.Draft(week)
         runtime.update { it.copy(checkInDraft = draft) }
         askNext(draft, now)
         return true
     }
 
     /** [draft]'s question as Felix's message, with its replies: on record, so its reply comes back here. */
-    private suspend fun askNext(draft: com.thomaswcode.decrastination.learn.CheckInFlow.Draft, now: Long, again: Boolean = false) {
-        val flow = com.thomaswcode.decrastination.learn.CheckInFlow
+    private suspend fun askNext(draft: com.thomaswcode.decrastination.felix.CheckInFlow.Draft, now: Long, again: Boolean = false) {
+        val flow = com.thomaswcode.decrastination.felix.CheckInFlow
         val text = (if (again) "A number from 1 to 5: " else "") + flow.question(draft)
-        val record = com.thomaswcode.decrastination.data.FelixRecord(java.util.UUID.randomUUID().toString(), now, com.thomaswcode.decrastination.enrich.FelixPrompts.Reason.CheckIn.name, text, flow.replies(draft, log.value, clock.zone()))
+        val record = com.thomaswcode.decrastination.data.FelixRecord(java.util.UUID.randomUUID().toString(), now, com.thomaswcode.decrastination.felix.FelixPrompts.Reason.CheckIn.name, text, flow.replies(draft, log.value, clock.zone()))
         log.update { it.copy(felix = it.felix + record).trimmed(now) }
-        com.thomaswcode.decrastination.notify.FelixNotifications.post(app, record.id, settings.value.felixName, text, record.replies)
+        com.thomaswcode.decrastination.felix.FelixNotifications.post(app, record.id, settings.value.felixName, text, record.replies)
     }
 
     /**
@@ -1050,13 +1050,13 @@ class AppGraph private constructor(context: Context) {
      */
     private suspend fun checkInReply(record: com.thomaswcode.decrastination.data.FelixRecord, words: String): Boolean {
         val now = clock.now()
-        val flow = com.thomaswcode.decrastination.learn.CheckInFlow
+        val flow = com.thomaswcode.decrastination.felix.CheckInFlow
         log.update { l -> l.copy(felix = l.felix.map { if (it.id == record.id) it.copy(replyText = words, repliedAt = now) else it }) }
         val draft = runtime.value.checkInDraft
         val week = com.thomaswcode.decrastination.learn.Daily.checkInWeek(now, clock.zone(), settings.value.checkInMin)
         if (draft == null || draft.week != week || log.value.checkIns.any { it.weekOf == draft.week }) {
             runtime.update { it.copy(checkInDraft = null) }
-            com.thomaswcode.decrastination.notify.FelixNotifications.cancel(app)
+            com.thomaswcode.decrastination.felix.FelixNotifications.cancel(app)
             return true
         }
         val next = flow.answered(draft, words) ?: run {
@@ -1071,7 +1071,7 @@ class AppGraph private constructor(context: Context) {
         var added = false
         log.update { l -> if (l.checkIns.any { it.weekOf == next.week }) l else l.copy(checkIns = l.checkIns + flow.checkIn(next, now)).trimmed(now).also { added = true } }
         runtime.update { it.copy(checkInDraft = null) }
-        com.thomaswcode.decrastination.notify.FelixNotifications.post(app, record.id, settings.value.felixName, "Thanks: the week's review comes next.", emptyList())
+        com.thomaswcode.decrastination.felix.FelixNotifications.post(app, record.id, settings.value.felixName, "Thanks: the week's review comes next.", emptyList())
         // Its review, unless the week has had it (the evening's ran first).
         if (added) com.thomaswcode.decrastination.learn.ReviewWorker.enqueue(app, ifDue = true)
         return true
@@ -1084,7 +1084,7 @@ class AppGraph private constructor(context: Context) {
     suspend fun endCheckInFlow() {
         if (runtime.value.checkInDraft == null) return
         runtime.update { it.copy(checkInDraft = null) }
-        if (log.value.felix.lastOrNull()?.reason == com.thomaswcode.decrastination.enrich.FelixPrompts.Reason.CheckIn.name) com.thomaswcode.decrastination.notify.FelixNotifications.cancel(app)
+        if (log.value.felix.lastOrNull()?.reason == com.thomaswcode.decrastination.felix.FelixPrompts.Reason.CheckIn.name) com.thomaswcode.decrastination.felix.FelixNotifications.cancel(app)
     }
 
     /** Where a reset's copy goes when Documents can't take it. */
@@ -1109,7 +1109,7 @@ class AppGraph private constructor(context: Context) {
         val text = (called as? Called.Answered)?.value?.text ?: return null
         log.update { l -> l.copy(reviews = l.reviews.map { if (it.week == week) it.copy(summary = text) else it }) }
         val now = clock.now()
-        val record = com.thomaswcode.decrastination.data.FelixRecord(java.util.UUID.randomUUID().toString(), now, com.thomaswcode.decrastination.enrich.FelixPrompts.Reason.Summary.name, SUMMARY_READY)
+        val record = com.thomaswcode.decrastination.data.FelixRecord(java.util.UUID.randomUUID().toString(), now, com.thomaswcode.decrastination.felix.FelixPrompts.Reason.Summary.name, SUMMARY_READY)
         log.update { it.copy(felix = it.felix + record).trimmed(now) }
         // In quiet hours on the week's channel, held with the routine ones till the morning (LR-07).
         val quiet = com.thomaswcode.decrastination.block.BlockPolicy.isQuiet(now, zone, settings.value)
@@ -1494,8 +1494,8 @@ class AppGraph private constructor(context: Context) {
             var notLooked = before?.notLooked
             // Why a search made found nothing, kept with the rest; one held back isn't, so it can be made later.
             var tried = before?.notLooked
-            for (round in 1..com.thomaswcode.decrastination.enrich.ChatRounds.MAX_ROUNDS) {
-                val next = com.thomaswcode.decrastination.enrich.ChatRounds.next(reading, searched = found != null || notLooked != null, searches = settings.value.felixSearches, read = read.map { it.id }) ?: break
+            for (round in 1..com.thomaswcode.decrastination.felix.ChatRounds.MAX_ROUNDS) {
+                val next = com.thomaswcode.decrastination.felix.ChatRounds.next(reading, searched = found != null || notLooked != null, searches = settings.value.felixSearches, read = read.map { it.id }) ?: break
                 var looks = false
                 next.search?.let { question ->
                     val search = gateway.call(interactive = true, record = com.thomaswcode.decrastination.enrich.ModelCalls.OnRecord(com.thomaswcode.decrastination.enrich.ModelEffort.Job.Research, question) { r: com.thomaswcode.decrastination.enrich.WebResearcher.Result -> r.usage to com.thomaswcode.decrastination.enrich.ModelCalls.outcome(r.refused, r.found == null) }, cost = { r: com.thomaswcode.decrastination.enrich.WebResearcher.Result -> r.costUsd to r.refused }) { at ->
@@ -1560,7 +1560,7 @@ class AppGraph private constructor(context: Context) {
                 text = reading.reply,
                 at = clock.now(),
                 // Everything on a card made as it comes (your call, 16 Oct), each with its Undo.
-                proposals = com.thomaswcode.decrastination.enrich.ChatAnswers.cards(reading, tasks.value.tasks.associateBy { it.id }, clock.zone()),
+                proposals = com.thomaswcode.decrastination.felix.ChatAnswers.cards(reading, tasks.value.tasks.associateBy { it.id }, clock.zone()),
                 suggestedReplies = reading.suggestedReplies,
                 searched = found?.let { it.searched.ifEmpty { listOf(it.question) } }.orEmpty(),
                 sources = found?.sources.orEmpty(),
@@ -1592,7 +1592,7 @@ class AppGraph private constructor(context: Context) {
                 instant.forEach { applyProposal(reply.id, it.id) }
                 // A time the plan couldn't keep (PL-04): where the piece went, said under the answer,
                 // which names the time asked for.
-                val moved = com.thomaswcode.decrastination.enrich.ChatAnswers.movedPins(instant.flatMap { it.changes }, plan().buckets, clock.zone())
+                val moved = com.thomaswcode.decrastination.felix.ChatAnswers.movedPins(instant.flatMap { it.changes }, plan().buckets, clock.zone())
                 // One that couldn't be made after all, said under the answer that says it was (16 Oct).
                 val refused = chat.value.messages.firstOrNull { it.id == reply.id }?.proposals.orEmpty()
                     .filter { p -> p.instant && p.state != ProposalState.Applied && p.note != null }.map { "Not made: ${it.note!!.replaceFirstChar(Char::lowercase)}." }
@@ -1797,11 +1797,11 @@ class AppGraph private constructor(context: Context) {
         val name = settings.value.felixName
         val record = log.value.felix.firstOrNull { it.id == id }
         // An answer to a check-in question (LR-02): the next asked, or the check-in kept.
-        if (record?.reason == com.thomaswcode.decrastination.enrich.FelixPrompts.Reason.CheckIn.name) return checkInReply(record, words)
+        if (record?.reason == com.thomaswcode.decrastination.felix.FelixPrompts.Reason.CheckIn.name) return checkInReply(record, words)
         // One of the three answers to how the day's completions went (LR-05): on them, and that's all.
         if (record != null && felix.answered(record, words)) {
             log.update { l -> l.copy(felix = l.felix.map { if (it.id == id) it.copy(replyText = words, repliedAt = now) else it }) }
-            com.thomaswcode.decrastination.notify.FelixNotifications.cancel(app)
+            com.thomaswcode.decrastination.felix.FelixNotifications.cancel(app)
             return true
         }
         if (record != null) {
@@ -1817,19 +1817,19 @@ class AppGraph private constructor(context: Context) {
         // The reply's own message in the chat, so its answer is told from any to what's said after it.
         val asked = java.util.UUID.randomUUID().toString()
         if (!ask(words, his?.about ?: About(), asked)) {
-            com.thomaswcode.decrastination.notify.FelixNotifications.post(app, id, name, "$said\n\nYour last message to me is still waiting for its answer: send this again once it's come.", emptyList())
+            com.thomaswcode.decrastination.felix.FelixNotifications.post(app, id, name, "$said\n\nYour last message to me is still waiting for its answer: send this again once it's come.", emptyList())
             return false
         }
         // Shown as sent, under his message, while he answers: as work of its own, as the receiver
         // that took the reply is let go once this returns, and the app may go with it.
-        com.thomaswcode.decrastination.notify.FelixNotifications.post(app, id, name, said, emptyList(), sent = words)
-        com.thomaswcode.decrastination.notify.FelixReplyWorker.enqueue(app, id, asked, words)
+        com.thomaswcode.decrastination.felix.FelixNotifications.post(app, id, name, said, emptyList(), sent = words)
+        com.thomaswcode.decrastination.felix.FelixReplyWorker.enqueue(app, id, asked, words)
         return true
     }
 
     /**
      * The chat's answer to a reply from Felix's notification ([replyToFelix]), as
-     * [com.thomaswcode.decrastination.notify.FelixReplyWorker] runs it: the answer to that reply's
+     * [com.thomaswcode.decrastination.felix.FelixReplyWorker] runs it: the answer to that reply's
      * message, [asked], not one to anything said after it, shown as his next notification, or why
      * there's none, where the reply was made; nothing with the chat in front, which shows it.
      */
@@ -1845,21 +1845,21 @@ class AppGraph private constructor(context: Context) {
         val later = messages.drop(mine + 1)
         val answer = later.takeWhile { it.from != Speaker.You }.firstOrNull { it.from == Speaker.Claude }
         when {
-            chatInFront -> com.thomaswcode.decrastination.notify.FelixNotifications.cancel(app)
+            chatInFront -> com.thomaswcode.decrastination.felix.FelixNotifications.cancel(app)
             answer != null -> tellAnswer(answer)
             // Not answered (Claude off, resting, a failed call): why, where the reply was made.
             later.none { it.from == Speaker.You } && messages[mine].note != null ->
-                com.thomaswcode.decrastination.notify.FelixNotifications.post(app, id, name, "$said\n\n${messages[mine].note}", emptyList(), sent = words)
+                com.thomaswcode.decrastination.felix.FelixNotifications.post(app, id, name, "$said\n\n${messages[mine].note}", emptyList(), sent = words)
         }
     }
 
     /** [answer], Felix's in the chat to a reply from a notification, as his next notification (AI-24), with its replies and cards; and on record. */
     private suspend fun tellAnswer(answer: ChatMessage) {
-        val record = com.thomaswcode.decrastination.data.FelixRecord(answer.id, answer.at, com.thomaswcode.decrastination.enrich.FelixPrompts.Reason.Reply.name, answer.text, answer.suggestedReplies)
+        val record = com.thomaswcode.decrastination.data.FelixRecord(answer.id, answer.at, com.thomaswcode.decrastination.felix.FelixPrompts.Reason.Reply.name, answer.text, answer.suggestedReplies)
         log.update { it.copy(felix = it.felix.filterNot { r -> r.id == record.id } + record).trimmed(clock.now()) }
         // Only a card with something to make: one that shows a task (AI-14) opens it in the chat.
         val cards = answer.proposals.filter { it.state == ProposalState.Proposed && (it.task != null || it.changes.isNotEmpty()) }.map { answer.id to it }
-        com.thomaswcode.decrastination.notify.FelixNotifications.post(app, answer.id, settings.value.felixName, answer.text, answer.suggestedReplies, cards)
+        com.thomaswcode.decrastination.felix.FelixNotifications.post(app, answer.id, settings.value.felixName, answer.text, answer.suggestedReplies, cards)
     }
 
     /** Your message still waiting for Claude taken back, unanswered. */

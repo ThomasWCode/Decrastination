@@ -1,4 +1,4 @@
-package com.thomaswcode.decrastination.enrich
+package com.thomaswcode.decrastination.felix
 
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.Fixtures.LONDON

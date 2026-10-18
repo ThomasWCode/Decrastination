@@ -39,7 +39,6 @@ import androidx.work.WorkManager
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.R
 import com.thomaswcode.decrastination.core.Source
-import com.thomaswcode.decrastination.learn.CheckInActivity
 import com.thomaswcode.decrastination.sync.SyncWorker
 
 /**

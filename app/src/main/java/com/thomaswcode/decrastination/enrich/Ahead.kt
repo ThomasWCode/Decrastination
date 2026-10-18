@@ -20,7 +20,7 @@ object Ahead {
 
     suspend fun run(graph: AppGraph, plan: Plan, now: Long) {
         // The piece of his next message first, so what he writes ahead can say its first action.
-        com.thomaswcode.decrastination.learn.FelixRules.upcoming(plan, graph.settings.value, now)?.first?.slot?.chunk?.key?.let { microPlans(graph, plan, now, only = it) }
+        com.thomaswcode.decrastination.felix.FelixRules.upcoming(plan, graph.settings.value, now)?.first?.slot?.chunk?.key?.let { microPlans(graph, plan, now, only = it) }
         graph.felix.draftAhead(plan, now)
         microPlans(graph, plan, now)
     }

@@ -1,4 +1,4 @@
-package com.thomaswcode.decrastination.enrich
+package com.thomaswcode.decrastination.felix
 
 import com.thomaswcode.decrastination.core.EarnsBy
 import com.thomaswcode.decrastination.core.Given
@@ -10,6 +10,8 @@ import com.thomaswcode.decrastination.data.FelixRecord
 import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.data.SlotOutcome
 import com.thomaswcode.decrastination.data.SlotRecord
+import com.thomaswcode.decrastination.enrich.InstructionPrompts
+import com.thomaswcode.decrastination.enrich.TaskText
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import java.time.Instant
