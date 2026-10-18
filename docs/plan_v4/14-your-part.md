@@ -56,3 +56,5 @@ Stage by stage, what each PR needs from your phone and from you, for what and fo
 7. **Stage 12**: the phone, and the done-when list read together.
 
 On any evening the phone is connected and you're not using it, I can run a stage's install and its scripted checks, wait for your taps where they're needed, and carry on with the next PR's code meanwhile.
+
+Each session that needs you is prepared first: its list reaches you before it, in the stage's PR, with every step in order, what to look for, and what the scripts have already checked, so your time at the phone goes only on what needs you.
