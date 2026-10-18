@@ -1,4 +1,4 @@
-package com.thomaswcode.decrastination.enrich
+package com.thomaswcode.decrastination.felix
 
 import com.anthropic.client.AnthropicClient
 import com.anthropic.core.JsonValue
@@ -6,6 +6,10 @@ import com.anthropic.models.messages.JsonOutputFormat
 import com.anthropic.models.messages.MessageCreateParams
 import com.anthropic.models.messages.OutputConfig
 import com.anthropic.models.messages.StopReason
+import com.thomaswcode.decrastination.enrich.ClaudeEnricher
+import com.thomaswcode.decrastination.enrich.ModelCalls
+import com.thomaswcode.decrastination.enrich.ModelEffort
+import com.thomaswcode.decrastination.enrich.Pricing
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 

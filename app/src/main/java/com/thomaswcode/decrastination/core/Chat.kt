@@ -49,7 +49,7 @@ data class ChatMessage(
     val done: List<String> = emptyList(),
     /** Claude's: what its actions did (a step ticked or unticked, a task done, open again or deleted, a setting set), each with its Undo. */
     val acts: List<Act> = emptyList(),
-    /** Felix's, put here from a notification he wrote (AI-24): why he wrote it ([com.thomaswcode.decrastination.enrich.FelixPrompts.Reason]). */
+    /** Felix's, put here from a notification he wrote (AI-24): why he wrote it ([com.thomaswcode.decrastination.felix.FelixPrompts.Reason]). */
     val reason: String? = null,
     /** Claude's: up to three short replies you might send next, in your words (AI-24, UI-06). */
     val suggestedReplies: List<String> = emptyList(),

@@ -34,6 +34,8 @@ import com.thomaswcode.decrastination.data.FelixRecord
 import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.data.SlotOutcome
 import com.thomaswcode.decrastination.data.SlotRecord
+import com.thomaswcode.decrastination.felix.ChatPrompts
+import com.thomaswcode.decrastination.felix.FelixPrompts
 import com.thomaswcode.decrastination.learn.CalendarEvent
 import com.thomaswcode.decrastination.learn.EventJudge
 import com.thomaswcode.decrastination.sources.gmail.GmailThreads

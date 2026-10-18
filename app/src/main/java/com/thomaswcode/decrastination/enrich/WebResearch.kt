@@ -8,6 +8,7 @@ import com.anthropic.models.messages.StopReason
 import com.anthropic.models.messages.UserLocation
 import com.anthropic.models.messages.WebSearchTool20250305
 import com.thomaswcode.decrastination.core.WebSource
+import com.thomaswcode.decrastination.felix.ChatPrompts
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter

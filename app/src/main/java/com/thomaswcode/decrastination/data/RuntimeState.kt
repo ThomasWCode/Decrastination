@@ -8,6 +8,8 @@ import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Uptime
 import com.thomaswcode.decrastination.core.WindowKind
 import com.thomaswcode.decrastination.enrich.AiUsage
+import com.thomaswcode.decrastination.felix.CheckInFlow
+import com.thomaswcode.decrastination.felix.FelixAnswer
 import com.thomaswcode.decrastination.learn.CheckIn
 import com.thomaswcode.decrastination.learn.DayRecord
 import com.thomaswcode.decrastination.protect.CodeLock
@@ -80,7 +82,7 @@ data class RuntimeState(
     /** When the nightly backup was last written (AR-07): null before the first. */
     val lastBackupAt: Long? = null,
     /** The week's check-in as Felix asks it (LR-02), its answers so far: null when none is being asked. */
-    val checkInDraft: com.thomaswcode.decrastination.learn.CheckInFlow.Draft? = null,
+    val checkInDraft: CheckInFlow.Draft? = null,
     /** The model's last calls (AC-07), oldest first: [CallRecord.MAX] of them. */
     val calls: List<CallRecord> = emptyList(),
     /** Pairs of tasks you've said aren't the same work (DX-15), by [com.thomaswcode.decrastination.core.Duplicates.key]: not asked about again. */
@@ -184,7 +186,7 @@ data class ActivityLog(
 }
 
 /**
- * A message of Felix's (AI-22, LR-03): when, why ([reason], a [com.thomaswcode.decrastination.enrich.FelixPrompts.Reason]),
+ * A message of Felix's (AI-22, LR-03): when, why ([reason], a [com.thomaswcode.decrastination.felix.FelixPrompts.Reason]),
  * what he said and the replies he offered, the piece ([key]) or task it was about, when he'd check
  * again, and the student's reply, when one came.
  */
@@ -409,7 +411,7 @@ data class FelixQuestion(val taskId: String, val question: String, val at: Long)
 
 /** A message of Felix's written ahead (AC-10): sent if it still fits its reason and piece when the time comes. */
 @Serializable
-data class FelixDraft(val reason: String, val key: String?, val answer: com.thomaswcode.decrastination.enrich.FelixAnswer, val at: Long)
+data class FelixDraft(val reason: String, val key: String?, val answer: FelixAnswer, val at: Long)
 
 /** A notification held back (LR-07): where it was to go, what it said, and its tap and buttons ([taps]), to be made again with. */
 @Serializable

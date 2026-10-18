@@ -63,7 +63,7 @@ fun MemorySection(graph: AppGraph) {
             TextButton(enabled = rule.isNotBlank(), onClick = {
                 val text = rule.trim()
                 rule = ""
-                scope.launch { said = graph.remember(listOf(Given(text = text, kind = Given.RULE))).joinToString("\n") { it.line }.ifEmpty { null } }
+                scope.launch { said = graph.conversation.remember(listOf(Given(text = text, kind = Given.RULE))).joinToString("\n") { it.line }.ifEmpty { null } }
             }) { Text("Add") }
         }
         said?.let { Text(it, style = small, color = quiet) }

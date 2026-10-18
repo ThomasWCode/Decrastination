@@ -72,7 +72,7 @@ private fun DebugPage(graph: AppGraph, activity: Activity) {
     var round by remember { mutableIntStateOf(0) }
     var taskId by rememberSaveable { mutableStateOf<String?>(null) }
     fun at(time: Long?) = time?.let { Format.ago(it, now) } ?: "never"
-    val context = remember(round, state, runtime.notSame) { graph.chatContext().let { it.known + "\n\n" + it.plan } }
+    val context = remember(round, state, runtime.notSame) { graph.conversation.chatContext().let { it.known + "\n\n" + it.plan } }
     Scaffold(topBar = { TopAppBar(title = { Text("Debug") }) }) { padding ->
         LazyColumn(Modifier.padding(padding).fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             item(key = "commands") {
@@ -94,7 +94,7 @@ private fun DebugPage(graph: AppGraph, activity: Activity) {
                     }
                     open.firstOrNull { it.id == taskId }?.let { task ->
                         val job = Enrichments.jobFor(task)!!
-                        val profile = graph.profile(now)
+                        val profile = graph.conversation.profile(now)
                         val previous = task.subSteps.ifEmpty { task.enrichment?.subSteps.orEmpty() }
                         val item = (if (task.photo != null) Prompts.photo(job) + "\n\n" else "") + Prompts.describe(task, job, now, zone, previous, state.deckTopics)
                         Block(activity, "${job.name}, version ${Prompts.VERSION}", Prompts.system(job, profile.year) + "\n\n=== PROFILE ===\n" + profile.text + "\n\n=== ITEM ===\n" + item)

@@ -251,6 +251,16 @@ class ModelGateway(
      */
     fun available(): Boolean = hold() == null
 
+    /** Why a call waits, in words, by what [hold]s it: an instruction's or a chat message's note. */
+    fun because(hold: ModelHold): String = when (hold) {
+        ModelHold.Off -> "Waiting for Claude, which is off (Settings)"
+        ModelHold.Resting -> "Waiting for Claude, resting ${ModelHold.restLeftMin(runtime.value.aiUsage, clock.now())} min more after a failed call"
+        ModelHold.Capped -> "Waiting for Claude: this month's cap is reached"
+    }
+
+    /** When a failed call is tried again (AC-04): after its rest, or at the next chance where it has none. */
+    fun retryWords(): String = ModelHold.restLeftMin(runtime.value.aiUsage, clock.now()).let { if (it > 0) "it's tried again in $it min" else "it's tried again at the next chance" }
+
     companion object {
         /**
          * A client for [key], at [endpoint] (Anthropic's, with none): the one place one's built, the

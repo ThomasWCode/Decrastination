@@ -132,7 +132,7 @@ It runs again once Claude can be asked again (its rest over, `EnrichWorker.retry
 ## Questions (AI-10)
 
 - An Email or Assignment reading may carry the one question that would settle what its text can't (which Friday; whether the test is on the 12th or the 19th), rarely.
-- Felix puts it to you when he can (felix.md), and not again within a day for that task (`Felix.queueQuestion`). A newer reading's question takes the place of one waiting; a reading with none takes it away.
+- Felix puts it to you when he can (felix.md), and not again within a day for that task (`Looks.queueQuestion`). A newer reading's question takes the place of one waiting; a reading with none takes it away.
 - Your answer is an instruction on the task, and kept with it (`TaskItem.answers`, the latest five). It's in the input hash, so the task is read again at once, Claude told "The student says: …".
 
 ## Quoted deadlines (AI-12)
@@ -169,7 +169,7 @@ Felix's look-ups are a call of their own (`enrich/WebResearch.kt`), never part o
 ## Micro-plans (AI-15)
 
 A piece's first action, under two minutes and concrete, the next two, and what done looks like (`enrich/MicroPlans.kt`).
-- Written ahead after each plan (`enrich/Ahead.kt`) for today's and tomorrow's work slots' pieces: the piece of Felix's next message first, then the rest; at most 8 a run, one run at a time, each a call under the cap at medium effort (`MicroPlanner`).
+- Written ahead after each plan (`plan/Ahead.kt`) for today's and tomorrow's work slots' pieces: the piece of Felix's next message first, then the rest; at most 8 a run, one run at a time, each a call under the cap at medium effort (`MicroPlanner`).
 - Sent, with the profile: the task's title and subject, the piece and its minutes, attachments by name, and its instructions (1 500 characters).
 - Written once for a piece and its task as they stand (`MicroPlans.hashOf`: the input hash and the piece). One declined or unreadable is kept empty, so it isn't paid for again; those for days gone go.
 - Shown on Day's slot and *Do now* card, the piece's and task's sheets, the widget, the calendar's event, and in Felix's messages.

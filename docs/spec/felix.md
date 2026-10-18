@@ -3,6 +3,7 @@
 Felix is the app's voice: the persona Claude writes as, in the chat and in the messages the app sends about your work. A strict friend who knows your week; Claude is the model behind him.
 He can change almost anything about your work, each change made as he gives it with an Undo, and he never touches the blocker, protection or Claude's own settings.
 Everything each of his calls is sent, circumstance by circumstance and with examples, is in [felix-inputs.md](felix-inputs.md).
+His code is in `felix/`: `Conversation` (the chat, a reply to his notification, what he remembers, the week's check-in) and `Looks` (what he writes unprompted), each built like `Focus`: its stores, the clock, and `FelixPorts` for what Android does. `ConversationTest` and `LooksTest` drive them on temporary stores, his calls answered by a stand-in for Claude's API (`FelixHarness`).
 
 ## Who he is
 
@@ -21,7 +22,7 @@ Everything each of his calls is sent, circumstance by circumstance and with exam
 - An answer the app can't use (declined, cut off, unreadable) waits for *Try again*, as each try is paid for.
 - His suggested replies, up to three (`suggestedReplies`), are chips under his last message (UI-06).
 
-`enrich/ChatReader.kt` makes one call a message (`ChatReader.answer`), at medium effort (AC-02), under the cap (AC-05). Someone is waiting, so it goes through a rest after a failure, but not past a key problem or the cap (AC-04).
+`felix/ChatReader.kt` makes one call a message (`ChatReader.answer`), at medium effort (AC-02), under the cap (AC-05). Someone is waiting, so it goes through a rest after a failure, but not past a key problem or the cap (AC-04).
 - `ChatPrompts.system`: who he is, what he can do (below), and how to answer: one to three short sentences saying what he's done, one short question and no change when he needs to know more, and nothing he isn't asked for.
 - `ChatPrompts.turns`: the last 12 messages (`HISTORY`), starting with one of yours; each earlier answer with its cards and what became of them; a message of his from a notification you answered, in your first turn.
 - All of it within 40 000 characters (`Pricing.MAX_INPUT_CHARS`): your newest message whole, earlier turns in up to a quarter of the rest, then the context, then the plan, which keeps at least a third of their room.
@@ -29,7 +30,7 @@ Everything each of his calls is sent, circumstance by circumstance and with exam
 
 ## What he's told
 
-With your newest message, from one snapshot of the tasks, the calendar and your changes, which his answer is then checked against (`AppGraph.chatContext`):
+With your newest message, from one snapshot of the tasks, the calendar and your changes, which his answer is then checked against (`Conversation.chatContext`):
 - `ChatPrompts.context`: today and the time; the open tasks (id, title, source, kind, due date and whether it's a real deadline or a plan, minutes, minutes worked, can't start until), each with its steps by place;
 - tasks that look like the same work (DX-15), the fortnight's calendar events, the changes in use, your own tasks finished in the last week, and the settings he may change, with their values;
 - **your pace**: the multipliers the calibration has learned, by kind and class, with how many timed tasks each rests on, or that nothing's learned yet;
@@ -59,11 +60,11 @@ A task from Teams, Power Planner, Gmail or AnkiDroid is done when its source say
 
 ## Made at once, with an Undo
 
-`ChatAnswers.cards` turns his answer into cards, each made as if applied (`Proposal.instant`, `AppGraph.applyProposal`): his changes on one card, each new task on its own, and an *Open* card for each task he shows you.
+`ChatAnswers.cards` turns his answer into cards, each made as if applied (`Proposal.instant`, `Conversation.applyProposal`): his changes on one card, each new task on its own, and an *Open* card for each task he shows you.
 - A changes card becomes an instruction in the words that asked for it, listed under *Your changes*. Changes to your own tasks are made on the task itself; days off go into the school calendar.
-- Each card says *Done* or *Added*, with *Undo* (`AppGraph.undoProposal`); a task he added has *Change* (the form); one undone has *Redo*.
+- Each card says *Done* or *Added*, with *Undo* (`Conversation.undoProposal`); a task he added has *Change* (the form); one undone has *Redo*.
 - One that couldn't be made says "Not made: …" under his answer; a time the plan couldn't keep says where it went: "06:35 had no free time: it's at 10:45." (`ChatAnswers.movedPins`, PL-04).
-- His actions are listed under his answer (`ChatMessage.acts`, `Act` in `core/Chat.kt`), each with its *Undo* while `ChatActs.canUndo` finds it as he left it (`AppGraph.undoAct`).
+- His actions are listed under his answer (`ChatMessage.acts`, `Act` in `core/Chat.kt`), each with its *Undo* while `ChatActs.canUndo` finds it as he left it (`Conversation.undoAct`).
 - Undo takes back a tick (one of yours it finished opens again), ticks an untick again, opens a finished task again or finishes a reopened one as it stood, restores a deleted task with the cards that added it, and puts a setting back.
 - Once something else has changed it, its Undo says it can't be undone any more.
 
@@ -88,7 +89,7 @@ When a message needs facts neither you nor the app have given him (a competition
 
 ## His messages
 
-`learn/Felix.kt` looks for a reason to write (`learn/FelixRules.kt`, `FelixRules.due`, pure) at each slot's start and end alarm, at the check he set (`SlotAlarms.armFelix`, `FelixWorker`), and on the focus service's half-minute tick. The model is asked only when there's a reason.
+`felix/Looks.kt` looks for a reason to write (`felix/FelixRules.kt`, `FelixRules.due`, pure) at each slot's start and end alarm, at the check he set (`SlotAlarms.armFelix`, `FelixWorker`), and on the focus service's half-minute tick. The model is asked only when there's a reason.
 - **Never** in quiet hours, during a busy calendar event, or while his channel can't be seen.
 - **SlotEnd**: a slot gone by undone, or a long piece of written work ticked without the photo it needs to earn; once a slot.
 - **DayDone**: today's last slot kept, once a day, with the free time there is.
@@ -97,7 +98,7 @@ When a message needs facts neither you nor the app have given him (a competition
 - With no slot of today's under way or to come, nothing more. Otherwise, after his check: **SlotStart**, a slot past his grace with nothing done on its task in it (opened, studied in AnkiDroid, or a slot of it kept), at most three times a slot; **SlotKept**, about one kept slot in three.
 - A slot ended, a slot kept and the day done are said only while fresh (30 minutes), so a restart hours on says nothing stale.
 
-Each is written by `FelixCaller.say` (AI-22, medium effort) from `enrich/FelixPrompts.kt` (`FelixPrompts.describe`), told:
+Each is written by `FelixCaller.say` (AI-22, medium effort) from `felix/FelixPrompts.kt` (`FelixPrompts.describe`), told:
 - the reason and the time; the piece with its minutes, slot and what earns its free time, and its first action (AI-15);
 - its task's own text, up to 1 500 characters (`FelixPrompts.TEXT`): a longer one as its reading's summary, else its start and end; with what's attached (D-93);
 - today's slots kept, missed and to come; the free time; his last six messages and your replies; and the question.
@@ -106,21 +107,21 @@ What comes back, and what's done with it:
 - He answers with a message of two sentences at most (240 characters), up to three replies (40 each), when he'll check again (5 minutes at least), and anything to remember (`FelixAnswers.parse`).
 - Your standing instructions come first: where one means he shouldn't write now, he gives an empty message, and nothing is sent.
 - His next check is when he said, else `felixDefaultCheckMin`; a call held or failed is tried again after five minutes.
-- His next SlotStart is written up to ten minutes ahead after each plan (AC-10, `Felix.draftAhead`), and sent if it still fits.
+- His next SlotStart is written up to ten minutes ahead after each plan (AC-10, `Looks.draftAhead`), and sent if it still fits.
 - Every message, silent ones too, is a `FelixRecord` in `log.json`, kept 30 days.
 
 Three more come at set times:
-- **The morning** (LR-04, `learn/Briefing.kt`, `Felix.morning`): the briefing is his message whole, up to 480 characters, under the day's title, on the briefing's channel. With no slot today, Claude unavailable, or no answer within 20 seconds, the briefing is the day's list instead.
-- **The check-in** (LR-02, `learn/CheckInFlow.kt`, `AppGraph.askCheckIn`): on Sunday he asks its five questions one at a time, the first with 1 to 5, the second with what the week shows you put off; the form takes them all at once instead. Then "Thanks: the week's review comes next."
+- **The morning** (LR-04, `learn/Briefing.kt`, `Looks.morning`): the briefing is his message whole, up to 480 characters, under the day's title, on the briefing's channel. With no slot today, Claude unavailable, or no answer within 20 seconds, the briefing is the day's list instead.
+- **The check-in** (LR-02, `felix/CheckInFlow.kt`, `Conversation.askCheckIn`): on Sunday he asks its five questions one at a time, the first with 1 to 5, the second with what the week shows you put off; the form takes them all at once instead. Then "Thanks: the week's review comes next."
 - **The summary** (NF-02): after Sunday's review, "The week's summary is ready; send it?"; a tap opens it in your email app, to send.
 
 ## Notifications and replies
 
-`notify/FelixNotifications.kt` posts his messages on the *Felix* channel: his words, a reply box whose choices are his replies, and a button for each of up to two cards still to make. One at a time: a newer one takes the last one's place. Tapping one opens the chat.
+`felix/FelixNotifications.kt` posts his messages on the *Felix* channel: his words, a reply box whose choices are his replies, and a button for each of up to two cards still to make. One at a time: a newer one takes the last one's place. Tapping one opens the chat.
 He has no daily ceiling. The routine channels (briefing, calendar questions, weekly, Claude) go at most four a day and never in quiet hours, the rest held for the next briefing (LR-07, `notify/NotifyRules.kt`).
 Every notification of the app's is named once, with request codes of its own for its tap and buttons (`notify/NoticeId.kt`), and posted through `notify/Notifier.kt`, which applies those rules and is the one place Android's notification manager is called.
 
-A reply (`notify/FelixReplyReceiver.kt`, `AppGraph.replyToFelix`) goes:
+A reply (`felix/FelixReplyReceiver.kt`, `Conversation.replyToFelix`) goes:
 - to the check-in, as its next answer; to his completions question, as the answer on each completion; to his question about a task, as above;
 - otherwise into the chat: his message put there if it isn't yet, your reply asked there, and the answer posted as his next notification while the chat isn't on screen (`FelixReplyWorker`). An unprompted message of his is in the chat only once you've replied to it.
 

@@ -87,7 +87,7 @@ import com.thomaswcode.decrastination.core.Proposal
 import com.thomaswcode.decrastination.core.ProposalState
 import com.thomaswcode.decrastination.core.Speaker
 import com.thomaswcode.decrastination.core.TaskItem
-import com.thomaswcode.decrastination.enrich.ChatPrompts
+import com.thomaswcode.decrastination.felix.ChatPrompts
 import java.time.ZoneId
 import kotlinx.coroutines.launch
 
@@ -153,9 +153,9 @@ class AskActivity : ComponentActivity() {
         super.onResume()
         // What waits for Claude (it was off, resting, or capped) is tried again on opening.
         val graph = AppGraph.get(this)
-        graph.chatInFront = true
+        graph.conversation.chatInFront = true
         graph.scope.launch {
-            graph.answerChat()
+            graph.conversation.answerChat()
             // On the screen they're shown on: you're waiting on them.
             graph.readInstructions(interactive = true)
         }
@@ -163,7 +163,7 @@ class AskActivity : ComponentActivity() {
 
     override fun onPause() {
         super.onPause()
-        AppGraph.get(this).chatInFront = false
+        AppGraph.get(this).conversation.chatInFront = false
     }
 
     @OptIn(ExperimentalMaterial3Api::class)
@@ -195,7 +195,7 @@ class AskActivity : ComponentActivity() {
             if (words != null) {
                 // Let go of once sent: cleared first, they recomposed this effect away, which cancelled
                 // the send halfway, its message saved to the file but neither shown nor answered.
-                val sent = sendHanded && graph.ask(words, about.value)
+                val sent = sendHanded && graph.conversation.ask(words, about.value)
                 handed.value = null
                 if (!sent) draft = words else about.value = About()
             }
@@ -239,7 +239,7 @@ class AskActivity : ComponentActivity() {
                     if (last != null && last.suggestedReplies.isNotEmpty() && chat.unanswered == null) {
                         FlowRow(Modifier.fillMaxWidth().padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             last.suggestedReplies.forEach { reply ->
-                                androidx.compose.material3.SuggestionChip(onClick = { graph.scope.launch { graph.ask(reply, last.about) } }, label = { Text(reply) })
+                                androidx.compose.material3.SuggestionChip(onClick = { graph.scope.launch { graph.conversation.ask(reply, last.about) } }, label = { Text(reply) })
                             }
                         }
                     }
@@ -261,7 +261,7 @@ class AskActivity : ComponentActivity() {
                         draft = ""
                         about.value = About()
                         graph.scope.launch {
-                            if (!graph.ask(text, subject)) {
+                            if (!graph.conversation.ask(text, subject)) {
                                 draft = text
                                 about.value = subject
                             }
@@ -297,7 +297,7 @@ class AskActivity : ComponentActivity() {
                 LaunchedEffect(editing) { editing = null }
             } else {
                 OwnTaskForm(graph, editing = null, initial = task, onSave = { changed ->
-                    graph.applyProposal(messageId, proposalId, changed)
+                    graph.conversation.applyProposal(messageId, proposalId, changed)
                     graph.chat.value.messages.firstOrNull { it.id == messageId }?.proposals?.firstOrNull { it.id == proposalId }?.state == ProposalState.Applied
                 }) { editing = null }
             }
@@ -318,7 +318,7 @@ class AskActivity : ComponentActivity() {
                 confirmButton = {
                     TextButton(onClick = {
                         clearing = false
-                        scope.launch { graph.clearChat() }
+                        scope.launch { graph.conversation.clearChat() }
                     }) { Text("Clear") }
                 },
                 dismissButton = { TextButton(onClick = { clearing = false }) { Text("Cancel") } },
@@ -429,8 +429,8 @@ private fun Yours(graph: AppGraph, message: ChatMessage, now: Long, zone: ZoneId
         if (message.answeredAt == null && message.note != null) {
             Text(message.note, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 6.dp))
             Row {
-                TextButton(onClick = { graph.scope.launch { graph.answerChat(retry = true) } }) { Text("Try again") }
-                TextButton(onClick = { scope.launch { graph.withdrawQuestion() } }) { Text("Take back") }
+                TextButton(onClick = { graph.scope.launch { graph.conversation.answerChat(retry = true) } }) { Text("Try again") }
+                TextButton(onClick = { scope.launch { graph.conversation.withdrawQuestion() } }) { Text("Take back") }
             }
         }
     }
@@ -443,7 +443,7 @@ private fun Yours(graph: AppGraph, message: ChatMessage, now: Long, zone: ZoneId
  */
 @Composable
 private fun Typing(graph: AppGraph) {
-    val since by graph.answeringSince.collectAsStateWithLifecycle()
+    val since by graph.conversation.answeringSince.collectAsStateWithLifecycle()
     var clock by remember { mutableStateOf(graph.clock.now()) }
     LaunchedEffect(since) {
         while (since != null) {
@@ -457,7 +457,7 @@ private fun Typing(graph: AppGraph) {
         Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh, shape = RoundedCornerShape(18.dp, 18.dp, 18.dp, 4.dp)) {
             Dots(Modifier.padding(horizontal = 16.dp, vertical = 15.dp).semantics { contentDescription = "$name is typing" })
         }
-        if (long) TextButton(onClick = { graph.cancelAnswer() }) { Text("Cancel") }
+        if (long) TextButton(onClick = { graph.conversation.cancelAnswer() }) { Text("Cancel") }
     }
 }
 
@@ -561,7 +561,7 @@ private fun Remembered(graph: AppGraph, message: ChatMessage) {
             )
             when {
                 edit.undone -> Text("Undone", style = MaterialTheme.typography.labelMedium, color = quiet, modifier = Modifier.padding(horizontal = 12.dp))
-                Memories.undo(memory, edit) != null -> TextButton(onClick = { scope.launch { said = graph.undoMemory(message.id, i) } }) { Text("Undo") }
+                Memories.undo(memory, edit) != null -> TextButton(onClick = { scope.launch { said = graph.conversation.undoMemory(message.id, i) } }) { Text("Undo") }
             }
         }
     }
@@ -593,7 +593,7 @@ private fun Acts(graph: AppGraph, message: ChatMessage) {
             )
             when {
                 act.undone -> Text("Undone", style = MaterialTheme.typography.labelMedium, color = quiet, modifier = Modifier.padding(horizontal = 12.dp))
-                com.thomaswcode.decrastination.core.ChatActs.canUndo(act, tasks.tasks, settings, chat.messages) -> TextButton(onClick = { scope.launch { said = graph.undoAct(message.id, i) } }) { Text("Undo") }
+                com.thomaswcode.decrastination.core.ChatActs.canUndo(act, tasks.tasks, settings, chat.messages) -> TextButton(onClick = { scope.launch { said = graph.conversation.undoAct(message.id, i) } }) { Text("Undo") }
             }
         }
     }
@@ -666,25 +666,25 @@ private fun ProposalCard(graph: AppGraph, messageId: String, proposal: Proposal,
                             color = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.align(Alignment.CenterVertically),
                         )
-                        if (proposal.made != null || proposal.before.isNotEmpty() || proposal.schoolBefore != null) TextButton(onClick = { scope.launch { graph.undoProposal(messageId, proposal.id) } }) { Text("Undo") }
+                        if (proposal.made != null || proposal.before.isNotEmpty() || proposal.schoolBefore != null) TextButton(onClick = { scope.launch { graph.conversation.undoProposal(messageId, proposal.id) } }) { Text("Undo") }
                         // A task it added is yours to change, in the form, from here too.
                         if (proposal.task != null && proposal.made in tasks) TextButton(onClick = { onEdit(messageId, proposal.id) }) { Text("Change") }
                     }
                     discarded -> {
                         Text("Set aside", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.align(Alignment.CenterVertically))
-                        TextButton(onClick = { scope.launch { graph.discardProposal(messageId, proposal.id, discarded = false) } }) { Text("Bring back") }
+                        TextButton(onClick = { scope.launch { graph.conversation.discardProposal(messageId, proposal.id, discarded = false) } }) { Text("Bring back") }
                     }
                     // Made as it came, and since undone, or not made (its note says why): made again here.
                     proposal.instant -> {
                         if (proposal.note == null) Text("Undone", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.align(Alignment.CenterVertically))
-                        TextButton(onClick = { scope.launch { graph.applyProposal(messageId, proposal.id) } }) { Text(if (proposal.note == null) "Redo" else "Try again") }
+                        TextButton(onClick = { scope.launch { graph.conversation.applyProposal(messageId, proposal.id) } }) { Text(if (proposal.note == null) "Redo" else "Try again") }
                         if (proposal.task != null) TextButton(onClick = { onEdit(messageId, proposal.id) }) { Text("Change first") }
                     }
                     // From before everything was made as it came (16 Oct): still to add or apply.
                     else -> {
-                        Button(onClick = { scope.launch { graph.applyProposal(messageId, proposal.id) } }) { Text(if (task != null) "Add" else "Apply") }
+                        Button(onClick = { scope.launch { graph.conversation.applyProposal(messageId, proposal.id) } }) { Text(if (task != null) "Add" else "Apply") }
                         if (task != null) OutlinedButton(onClick = { onEdit(messageId, proposal.id) }) { Text("Change first") }
-                        TextButton(onClick = { scope.launch { graph.discardProposal(messageId, proposal.id) } }) { Text("Set aside") }
+                        TextButton(onClick = { scope.launch { graph.conversation.discardProposal(messageId, proposal.id) } }) { Text("Set aside") }
                     }
                 }
             }

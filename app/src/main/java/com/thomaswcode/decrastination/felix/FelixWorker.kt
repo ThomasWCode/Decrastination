@@ -1,4 +1,4 @@
-package com.thomaswcode.decrastination.learn
+package com.thomaswcode.decrastination.felix
 
 import android.content.Context
 import android.util.Log
@@ -12,6 +12,7 @@ import androidx.work.WorkerParameters
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.notify.Channels
 import com.thomaswcode.decrastination.notify.NoticeId
+import com.thomaswcode.decrastination.notify.Notify
 
 /**
  * Felix's look (LR-03) from an alarm, as work of its own: the receiver the alarm woke is let go at
@@ -19,13 +20,13 @@ import com.thomaswcode.decrastination.notify.NoticeId
  */
 class FelixWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
-        runCatching { AppGraph.get(applicationContext).felix.check() }.onFailure { Log.w(AppGraph.TAG, "Felix's look failed", it) }
+        runCatching { AppGraph.get(applicationContext).looks.check() }.onFailure { Log.w(AppGraph.TAG, "Felix's look failed", it) }
         return Result.success()
     }
 
     override suspend fun getForegroundInfo(): ForegroundInfo = ForegroundInfo(
         NoticeId.FelixWork.id,
-        com.thomaswcode.decrastination.notify.Notify.builder(applicationContext, Channels.SYNC)
+        Notify.builder(applicationContext, Channels.SYNC)
             .setContentTitle("Looking at the plan")
             .setOngoing(true)
             .build(),

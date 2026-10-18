@@ -28,3 +28,11 @@ Everything implementing the plan has needed from you, from 18 Oct 2026: question
 - **B.** Leave it: rerun the tests when it happens.
 - ANSWER: A
 - To come: 3.3.4, a PR of its own on 3.3.3's (a release's number says when it lands).
+
+### I3. A piece under way leaves today a minute after its start
+
+Found while writing Stage 4's test of his looks; not changed there, as it's a move. On a Monday evening with nothing else planned, a 30-minute homework due Wednesday (or Friday) is planned at 16:45 today when the plan is made at 16:30, but every plan made from 16:46 on puts it on Tuesday, even with its start kept as the plan's watcher keeps it; one due the next morning stays. The spec says a kept start holds "one under way or in its grace included" (`docs/spec/slots-and-calendar.md`, PL-13). The planner chooses each piece's day first and lays today's slots after, and the kept starts reach only the laying (`previousSlots` goes to `Slotter.slot` alone). So, with nothing done on it, a slot of work with days to spare isn't under way at its tenth minute, and his "ten minutes in: starting?" (SlotStart) can't be written for it.
+
+- **A (recommended).** Find why the day chosen changes once the evening's window has begun, and keep a piece under way on today while its slot and grace last: a test for it first, in a small PR of its own after 3.3.4.
+- **B.** Leave it: work not begun moves to the next day.
+- ANSWER:
