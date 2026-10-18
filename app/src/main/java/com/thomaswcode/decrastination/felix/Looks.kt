@@ -4,27 +4,40 @@ import android.util.Log
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.block.BlockPolicy
 import com.thomaswcode.decrastination.block.Focus
+import com.thomaswcode.decrastination.core.About
+import com.thomaswcode.decrastination.core.Given
 import com.thomaswcode.decrastination.core.Kind
+import com.thomaswcode.decrastination.core.MemoryEdit
+import com.thomaswcode.decrastination.core.Plan
+import com.thomaswcode.decrastination.core.SlotKind
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.WallClock
 import com.thomaswcode.decrastination.data.ActivityLog
+import com.thomaswcode.decrastination.data.FelixDraft
 import com.thomaswcode.decrastination.data.FelixRecord
+import com.thomaswcode.decrastination.data.FelixRetry
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.RuntimeState
 import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.data.SlotRecord
 import com.thomaswcode.decrastination.data.TaskState
 import com.thomaswcode.decrastination.enrich.Called
+import com.thomaswcode.decrastination.enrich.ModelCalls
 import com.thomaswcode.decrastination.enrich.ModelEffort
 import com.thomaswcode.decrastination.enrich.ModelGateway
+import com.thomaswcode.decrastination.enrich.Profile
 import com.thomaswcode.decrastination.learn.Assessment
+import com.thomaswcode.decrastination.learn.EventJudge
+import com.thomaswcode.decrastination.notify.Channels
 import com.thomaswcode.decrastination.notify.Notices
 import com.thomaswcode.decrastination.plan.Planning
+import java.time.Instant
 import kotlinx.coroutines.async
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.util.UUID
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * Felix (LR-03): looks for a reason to write ([FelixRules]) at each slot alarm, at the check he set
@@ -47,13 +60,13 @@ class Looks(
     private val planning: Planning,
     private val ports: FelixPorts,
     /** The calendar's busy time, as last read and judged: he doesn't write while you're in something on it. */
-    private val calendarTime: () -> com.thomaswcode.decrastination.learn.EventJudge.Time,
+    private val calendarTime: () -> EventJudge.Time,
     /** Who the student is, as every call sends it ([Conversation.profile]). */
-    private val profile: (Long) -> com.thomaswcode.decrastination.enrich.Profile.Block,
+    private val profile: (Long) -> Profile.Block,
     /** What he remembered, kept ([Conversation.remember]). */
-    private val remember: suspend (List<com.thomaswcode.decrastination.core.Given>) -> List<com.thomaswcode.decrastination.core.MemoryEdit>,
+    private val remember: suspend (List<Given>) -> List<MemoryEdit>,
     /** Your answer to his question about a task, as an instruction on it, read by Claude (`AppGraph.addInstruction`). */
-    private val addInstruction: suspend (text: String, about: com.thomaswcode.decrastination.core.About, answer: Boolean) -> String,
+    private val addInstruction: suspend (text: String, about: About, answer: Boolean) -> String,
     /** How a completion went, on record ([com.thomaswcode.decrastination.learn.Assessment.record]). */
     private val assess: suspend (taskId: String, doneAt: Long, answer: String) -> Unit,
 ) {
@@ -104,8 +117,8 @@ class Looks(
      */
     suspend fun morning(title: String, now: Long = clock.now()): Boolean = writing.withLock {
         val plan = planning.plan(now = now)
-        if (plan.todaySlots.none { it.kind == com.thomaswcode.decrastination.core.SlotKind.Work }) return@withLock false
-        if (!notices.shown(com.thomaswcode.decrastination.notify.Channels.BRIEFING)) return@withLock false
+        if (plan.todaySlots.none { it.kind == SlotKind.Work }) return@withLock false
+        if (!notices.shown(Channels.BRIEFING)) return@withLock false
         val caller = gateway.client(ModelEffort.Job.Felix)?.let { FelixCaller(it) } ?: return@withLock false
         val settings = this.settings.value
         val profile = this.profile(now)
@@ -113,16 +126,16 @@ class Looks(
         // Asked in the app's scope, not the briefing's: past [MORNING_MS] the briefing goes without
         // it, and the call, paid for, comes back and is counted all the same.
         val call = scope.async {
-            gateway.call(interactive = false, record = com.thomaswcode.decrastination.enrich.ModelCalls.OnRecord(com.thomaswcode.decrastination.enrich.ModelEffort.Job.Felix, "Morning") { r: FelixCaller.Result -> r.usage to com.thomaswcode.decrastination.enrich.ModelCalls.outcome(r.refused, r.answer == null) }, cost = { r: FelixCaller.Result -> r.costUsd to r.refused }) { caller.say(FelixPrompts.system(settings, profile.year), profile.text, user, maxMessage = FelixAnswers.MAX_MORNING) }
+            gateway.call(interactive = false, record = ModelCalls.OnRecord(ModelEffort.Job.Felix, "Morning") { r: FelixCaller.Result -> r.usage to ModelCalls.outcome(r.refused, r.answer == null) }, cost = { r: FelixCaller.Result -> r.costUsd to r.refused }) { caller.say(FelixPrompts.system(settings, profile.year), profile.text, user, maxMessage = FelixAnswers.MAX_MORNING) }
         }
-        val called = kotlinx.coroutines.withTimeoutOrNull(MORNING_MS) { call.await() }
+        val called = withTimeoutOrNull(MORNING_MS) { call.await() }
         val answer = (called as? Called.Answered)?.value?.answer?.takeIf { it.message.isNotBlank() } ?: return@withLock false
         val record = FelixRecord(UUID.randomUUID().toString(), now, FelixPrompts.Reason.Morning.name, answer.message, answer.replies)
         log.update { it.copy(felix = it.felix + record).trimmed(now) }
         answer.memories.takeIf { it.isNotEmpty() }?.let { remember(it) }
         // His message whole, under the day's title, with no list of the day beside it (your call,
         // 16 Oct): the room is his.
-        ports.post(record.id, settings.felixName, answer.message, answer.replies, title = title, channel = com.thomaswcode.decrastination.notify.Channels.BRIEFING)
+        ports.post(record.id, settings.felixName, answer.message, answer.replies, title = title, channel = Channels.BRIEFING)
         true
     }
 
@@ -134,7 +147,7 @@ class Looks(
     private fun due(now: Long): FelixRules.Trigger? {
         // Claude off, or his messages not to be seen (notifications or his channel off): he has no
         // voice, nothing's asked of the model, and nothing's put on record, so it's all there for later.
-        if (gateway.claudeKey() == null || !notices.shown(com.thomaswcode.decrastination.notify.Channels.FELIX)) return null
+        if (gateway.claudeKey() == null || !notices.shown(Channels.FELIX)) return null
         val settings = this.settings.value
         val zone = clock.zone()
         val dayStart = focus.today(now).atStartOfDay(zone).toInstant().toEpochMilli()
@@ -189,7 +202,7 @@ class Looks(
         // Held or failed, or a question or completions with no answer it could read: nothing on
         // record, tried again from his next look past the wait.
         if ((drafted == null && called !is Called.Answered) || (answer == null && (trigger.question != null || trigger.asks.isNotEmpty()))) {
-            val retry = com.thomaswcode.decrastination.data.FelixRetry(trigger.reason.name, trigger.key, now + FelixRules.RETRY_MS)
+            val retry = FelixRetry(trigger.reason.name, trigger.key, now + FelixRules.RETRY_MS)
             runtime.update { it.copy(felix = it.felix.copy(nextCheckAt = next, retry = retry)) }
             return null
         }
@@ -246,7 +259,7 @@ class Looks(
     suspend fun answered(record: FelixRecord, text: String): Boolean {
         if (record.reason == FelixPrompts.Reason.Question.name && record.taskId != null) {
             val task = this.tasks.value.tasks.firstOrNull { it.id == record.taskId } ?: return false
-            addInstruction(text, com.thomaswcode.decrastination.core.About(taskId = task.id, taskTitle = task.title), true)
+            addInstruction(text, About(taskId = task.id, taskTitle = task.title), true)
             tasks.update { s -> s.copy(tasks = s.tasks.map { if (it.id == task.id) it.copy(answers = (it.answers + text.trim()).takeLast(MAX_ANSWERS)) else it }) }
             // Read again with it now, not at the next sync: it's what settles the reading.
             ports.readAgain()
@@ -270,7 +283,7 @@ class Looks(
         val recent = log.value.felix.filter { it.text.isNotBlank() }
         val free = (focus.creditLeftMs(at) / 60_000L).toInt().takeIf { trigger.reason == FelixPrompts.Reason.DayDone || trigger.reason == FelixPrompts.Reason.SlotKept }
         val user = FelixPrompts.describe(trigger.reason, planning.plan(), trigger.slot, task, today(at), recent, trigger.question?.question, settings, at, clock.zone(), free, trigger.record, trigger.asks.map { it.title }, firstAction = trigger.slot?.chunk?.key?.let { runtime.value.microPlans[it] }?.first?.takeIf { it.isNotEmpty() })
-        val called = gateway.call(interactive = interactive, record = com.thomaswcode.decrastination.enrich.ModelCalls.OnRecord(com.thomaswcode.decrastination.enrich.ModelEffort.Job.Felix, trigger.reason.name) { r: FelixCaller.Result -> r.usage to com.thomaswcode.decrastination.enrich.ModelCalls.outcome(r.refused, r.answer == null) }, cost = { r: FelixCaller.Result -> r.costUsd to r.refused }) { caller.say(FelixPrompts.system(settings, profile.year), profile.text, user) }
+        val called = gateway.call(interactive = interactive, record = ModelCalls.OnRecord(ModelEffort.Job.Felix, trigger.reason.name) { r: FelixCaller.Result -> r.usage to ModelCalls.outcome(r.refused, r.answer == null) }, cost = { r: FelixCaller.Result -> r.costUsd to r.refused }) { caller.say(FelixPrompts.system(settings, profile.year), profile.text, user) }
         if (called is Called.Failed) Log.w(AppGraph.TAG, "Felix's message failed", called.error)
         return called
     }
@@ -281,7 +294,7 @@ class Looks(
      * while one fits; not with Claude off; not while he's writing. His looks do it too ([check]), one
      * of them when it's time to with a grace longer than that ([FelixRules.next]).
      */
-    suspend fun draftAhead(plan: com.thomaswcode.decrastination.core.Plan, now: Long = clock.now()) {
+    suspend fun draftAhead(plan: Plan, now: Long = clock.now()) {
         if (!writing.tryLock()) return
         try {
             draft(plan, now)
@@ -291,16 +304,16 @@ class Looks(
     }
 
     /** [draftAhead]'s writing, under [writing]: the cheap checks first, as his looks come every half minute. */
-    private suspend fun draft(plan: com.thomaswcode.decrastination.core.Plan, now: Long) {
+    private suspend fun draft(plan: Plan, now: Long) {
         val (trigger, at) = FelixRules.upcoming(plan, this.settings.value, now) ?: return
         if (at - now > FelixRules.AHEAD_MS) return
         val lastSent = log.value.felix.filter { it.text.isNotBlank() }.maxOfOrNull { it.at }
         if (FelixRules.fits(runtime.value.felix.draft, trigger, now, lastSent)) return
-        if (!notices.shown(com.thomaswcode.decrastination.notify.Channels.FELIX) || !gateway.available()) return
+        if (!notices.shown(Channels.FELIX) || !gateway.available()) return
         val caller = gateway.client(ModelEffort.Job.Felix)?.let { FelixCaller(it) } ?: return
         val answer = (ask(caller, trigger, at, interactive = false) as? Called.Answered)?.value?.answer ?: return
-        runtime.update { it.copy(felix = it.felix.copy(draft = com.thomaswcode.decrastination.data.FelixDraft(trigger.reason.name, trigger.key, answer, now))) }
-        Log.i(AppGraph.TAG, "Felix wrote ahead for ${trigger.key}, due at ${java.time.Instant.ofEpochMilli(at).atZone(clock.zone()).toLocalTime()}")
+        runtime.update { it.copy(felix = it.felix.copy(draft = FelixDraft(trigger.reason.name, trigger.key, answer, now))) }
+        Log.i(AppGraph.TAG, "Felix wrote ahead for ${trigger.key}, due at ${Instant.ofEpochMilli(at).atZone(clock.zone()).toLocalTime()}")
     }
 
     /** His next look, by alarm: the phone may be asleep through the service's ticks. */

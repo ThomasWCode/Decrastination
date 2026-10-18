@@ -2,12 +2,14 @@ package com.thomaswcode.decrastination.plan
 
 import android.util.Log
 import com.thomaswcode.decrastination.AppGraph
+import com.thomaswcode.decrastination.core.Duplicates
 import com.thomaswcode.decrastination.core.Instruction
 import com.thomaswcode.decrastination.core.InstructionState
 import com.thomaswcode.decrastination.core.Instructions
 import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.Planner
 import com.thomaswcode.decrastination.core.SchoolCalendar
+import com.thomaswcode.decrastination.core.SchoolDays
 import com.thomaswcode.decrastination.core.SlotKind
 import com.thomaswcode.decrastination.core.TaskOverrides
 import com.thomaswcode.decrastination.core.WallClock
@@ -20,6 +22,10 @@ import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.data.TaskState
 import com.thomaswcode.decrastination.enrich.ModelGateway
 import com.thomaswcode.decrastination.enrich.Profile
+import com.thomaswcode.decrastination.learn.Days
+import com.thomaswcode.decrastination.learn.EventJudge
+import java.time.Instant
+import java.time.ZoneId
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -45,7 +51,7 @@ class Planning(
     scope: CoroutineScope,
     gateway: ModelGateway,
     /** The calendar's busy time and per-day loads, as last read and judged. */
-    private val calendarTime: () -> com.thomaswcode.decrastination.learn.EventJudge.Time,
+    private val calendarTime: () -> EventJudge.Time,
     /** [calendarTime] as it changes. */
     calendarChanges: Flow<*>,
     /** Today's slots whose grace has gone by, missed ([com.thomaswcode.decrastination.block.Slots.sweep]). */
@@ -64,11 +70,11 @@ class Planning(
         settings: Settings = this.settings.value,
         now: Long = clock.now(),
         applied: List<Instruction> = instructions.value.applied,
-        time: com.thomaswcode.decrastination.learn.EventJudge.Time = calendarTime(),
+        time: EventJudge.Time = calendarTime(),
     ): Plan {
         val zone = clock.zone()
         // Your instructions' days and times, over as far as the plan can reach.
-        val today = java.time.Instant.ofEpochMilli(now).atZone(zone).toLocalDate()
+        val today = Instant.ofEpochMilli(now).atZone(zone).toLocalDate()
         val reach = today.plusDays(PLAN_REACH_DAYS)
         // Each task as its instructions say, whatever the task file (a stop between writing the two,
         // not yet put right): the instructions are what's kept.
@@ -76,12 +82,12 @@ class Planning(
         val tasks = state.tasks.map { task ->
             val o = overrides[task.id] ?: TaskOverrides.NONE
             if (o == task.overrides()) task else task.withOverrides(o)
-        }.let(com.thomaswcode.decrastination.core.Duplicates::linksPresent).let(com.thomaswcode.decrastination.core.Duplicates::credited)
+        }.let(Duplicates::linksPresent).let(Duplicates::credited)
         // Each day's windows, from the timetable's study periods and the school calendar (PL-15).
         val days = generateSequence(today) { it.plusDays(1) }.takeWhile { it <= reach }.toList()
         val calendar = school.value
-        val windows = days.associateWith { com.thomaswcode.decrastination.core.SchoolDays.windows(it, settings, state.timetable, calendar) }
-        val dayKinds = days.associateWith { com.thomaswcode.decrastination.core.SchoolDays.kindOf(it, calendar) }
+        val windows = days.associateWith { SchoolDays.windows(it, settings, state.timetable, calendar) }
+        val dayKinds = days.associateWith { SchoolDays.kindOf(it, calendar) }
         return Planner.plan(
             Planner.Input(
                 tasks = tasks,
@@ -105,8 +111,8 @@ class Planning(
     }
 
     /** Minutes worked in today's kept slots, as the day's record counts them (LR-09). */
-    private fun workedToday(now: Long, zone: java.time.ZoneId): Int =
-        com.thomaswcode.decrastination.learn.Days.workedOn(log.value, java.time.Instant.ofEpochMilli(now).atZone(zone).toLocalDate().toString()).values.sum()
+    private fun workedToday(now: Long, zone: ZoneId): Int =
+        Days.workedOn(log.value, Instant.ofEpochMilli(now).atZone(zone).toLocalDate().toString()).values.sum()
 
     /** The pieces' first steps and Felix's next message, written after each plan (AC-10, AI-15). */
     private val ahead: Ahead = Ahead(tasks, settings, runtime, gateway, profile, draftAhead) { watcher.poke() }

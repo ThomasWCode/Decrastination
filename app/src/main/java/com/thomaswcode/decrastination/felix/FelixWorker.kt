@@ -12,6 +12,7 @@ import androidx.work.WorkerParameters
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.notify.Channels
 import com.thomaswcode.decrastination.notify.NoticeId
+import com.thomaswcode.decrastination.notify.Notify
 
 /**
  * Felix's look (LR-03) from an alarm, as work of its own: the receiver the alarm woke is let go at
@@ -25,7 +26,7 @@ class FelixWorker(context: Context, params: WorkerParameters) : CoroutineWorker(
 
     override suspend fun getForegroundInfo(): ForegroundInfo = ForegroundInfo(
         NoticeId.FelixWork.id,
-        com.thomaswcode.decrastination.notify.Notify.builder(applicationContext, Channels.SYNC)
+        Notify.builder(applicationContext, Channels.SYNC)
             .setContentTitle("Looking at the plan")
             .setOngoing(true)
             .build(),

@@ -2,6 +2,7 @@ package com.thomaswcode.decrastination.felix
 
 import com.thomaswcode.decrastination.core.EarnsBy
 import com.thomaswcode.decrastination.core.Given
+import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.Slot
 import com.thomaswcode.decrastination.core.SlotKind
@@ -88,7 +89,7 @@ object FelixPrompts {
             val how = when {
                 record.outcome == SlotOutcome.Missed -> "it went by undone, and has been moved to later"
                 record.earned -> "kept"
-                record.kind == com.thomaswcode.decrastination.core.Kind.Homework && record.plannedMin >= settings.photoFromMin -> "ticked done, but it earns its free time only with a photo of it"
+                record.kind == Kind.Homework && record.plannedMin >= settings.photoFromMin -> "ticked done, but it earns its free time only with a photo of it"
                 else -> "ticked done, without earning its free time yet"
             }
             appendLine("Piece: ${record.label}, ${record.plannedMin} min, slot ${clock(record.start)}–${clock(record.end)}; $how")
