@@ -69,7 +69,7 @@ One message is answered at a time. While the model can't be asked (Claude off, r
 2. **The conversation**: the last 12 messages, starting with one of yours. Each earlier answer of his carries what it made and what became of it ("[Suggested: … — made at once]", "— undone by the student", "— not made: …").
 3. **Your newest message**, last, holding in this order:
    1. what the app knows now ([the context](#the-context)), each open task's own text last;
-   2. the plan, as the Plan tab shows it ([the plan](#the-plan));
+   2. the plan, as the Day and Work tabs show it ([the plan](#the-plan));
    3. what your message is about, in full ([below](#where-you-asked-from)): a task's whole text, or an event's place and description;
    4. your words, after a line saying what they're about;
    5. after a web search, [what it found](#a-web-search); after he asked to read a task in full, [its whole text](#reading-a-task-in-full).
