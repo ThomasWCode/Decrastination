@@ -18,3 +18,4 @@ Everything implementing the plan has needed from you, from 18 Oct 2026: question
 - **A (recommended).** Delete it (`run-as … rm files/chat-context.txt`); I'd pull it into `private/` first.
 - **B.** Leave it.
 - ANSWER: A
+- Done (18 Oct): pulled into `private/phone-files/`, then deleted from the phone.
