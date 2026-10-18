@@ -37,3 +37,4 @@ Found while writing Stage 4's test of his looks; not changed there, as it's a mo
 - **A (recommended).** Find why the day chosen changes once the evening's window has begun, and keep a piece under way on today while its slot and grace last: a test for it first, in a small PR of its own after 3.3.4.
 - **B.** Leave it: work not begun moves to the next day.
 - ANSWER: A
+  - Done (18 Oct): 3.3.5, the planner keeps a piece kept today on today (`Planner.keptToday`), with a test.
