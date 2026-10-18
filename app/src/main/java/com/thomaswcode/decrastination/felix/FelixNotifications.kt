@@ -37,7 +37,8 @@ object FelixNotifications {
             .setWhen(notice.lines.last().at)
             .setShowWhen(true)
             .let { Notify.opening(it, context, NoticeId.Felix.code(), AskActivity.intent(context, openAt = notice.openAt).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
-            .setAutoCancel(true)
+            // Not cancelled by Android when it's used: opening the chat takes it away (the outbox), and a
+            // reply from it would cancel it, leaving a copy with no Reply till his answer replaced it.
             .setOnlyAlertOnce(!notice.alert)
             .setSilent(!notice.alert)
             .let { Notify.replying(it, context, "Reply", NoticeId.Felix.code(1), Intent(context, FelixReplyReceiver::class.java).setAction(ACTION_REPLY).putExtra(EXTRA_ID, notice.replyTo), KEY_REPLY, "Reply to ${notice.name}", notice.replies) }
