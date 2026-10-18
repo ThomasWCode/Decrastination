@@ -32,6 +32,12 @@ class NoticeIdTest {
     }
 
     @Test
+    fun `Felix's message has a request code for its tap and each card's button`() {
+        // The tap is code 0, each card's button 1 + its place: more cards than codes would throw as it posts.
+        assertTrue(1 + FelixNotifications.MAX_CARDS <= NoticeId.FelixMessage.codes.count())
+    }
+
+    @Test
     fun `those that stay keep the ids a notification may be showing under, and the calendar's questions leave Felix's`() {
         assertEquals(
             mapOf(
