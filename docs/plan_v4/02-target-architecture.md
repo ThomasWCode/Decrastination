@@ -103,7 +103,7 @@ class ModelGateway(
 
 ### `Notifier` (Stage 1)
 
-One object posts every notification: `NoticeId`, the registry of ids with their request-code ranges; the channels (`Channels`, which Stage 11 gives `SOURCES`); `NotifyRules`, the policy that holds or sends, by channel today and by the kind of his message from 5a; and his one stacked notification, built by the outbox ([05](05-the-chat.md) §3). Every other file stops calling `NotificationManagerCompat` and `Notify.post` directly.
+One object posts every notification: `NoticeId`, the registry of ids with their request-code ranges; the channels (`Channels`, which Stage 11 gives `SOURCES`); `NotifyRules`, the policy that holds or sends, by channel for the app's own and, since 5a, by the kind of his message; and his one stacked notification, built by the outbox ([05](05-the-chat.md) §3). Every other file stops calling `NotificationManagerCompat` and `Notify.post` directly.
 
 ### Ports
 
