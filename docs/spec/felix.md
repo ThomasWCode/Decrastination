@@ -23,8 +23,9 @@ The chat is his one visible voice (D-95): every word in his name is a message th
 - it opens at that message, or, from his notification, at the message the notification was for, tinted for a moment, else at its foot; leaving it, what's in it is read (`ChatState.readAt`, `Conversation.read`);
 - scrolled back to its top, the archive's messages show, a page of 100 at a time (*Earlier messages*), never put back in the window;
 - a message, his or yours, swiped right past a third of the width (with a haptic tick) or held for *Reply* is the one your next replies to: a strip over the box says whose and its first line, with ✕ to reply to none. Sent, yours carries it (`replyTo`) and shows it over your words, tinted, where it isn't the message just above; tapped, the chat goes to it, from the archive too. Held, *Copy* copies a message's words.
+- when his last message is a question of his still waiting for its answer (a check-in's while it's under way, a reading's, how work went, a calendar event's: `Replies.waiting`), the box answers it, as its chips do: its strip shows over the box by itself, and its ✕ sends your words to him instead (D-98).
 - You write by keyboard or voice (UI-07). A message from a task's, an event's or a day's page carries what it's about (`About`).
-- One message of yours waits at a time. While Claude can't be asked (off, resting, at its cap) it says why, and it's answered once Claude can be: the chat opened again, *Try again*, Claude back, or after a sync.
+- A message sent while he answers another of yours lets that answer go, paid for and unused, and he answers both together (D-98); what waits, waits together, the newest saying why. While Claude can't be asked (off, resting, at its cap) yours says why, and it's answered once Claude can be: the chat opened again, *Try again*, Claude back, or after a sync.
 - While he answers, three dots show; after 10 seconds *Cancel* lets the answer go (AC-08). A call once sent is paid for, so it isn't closed.
 - An answer the app can't use (declined, cut off, unreadable) waits for *Try again*, as each try is paid for.
 - His suggested replies, up to three (`suggestedReplies`), are chips under his last message (UI-06); a tap is a reply to it, as one from anywhere is (below): a check-in's, a calendar question's or how work went with no call.
@@ -140,7 +141,7 @@ Every notification of the app's is named once, with request codes of its own for
 
 A reply, from his notification (`felix/FelixReplyReceiver.kt`), one of his chips, or a swipe or *Reply* in the chat, comes in one way (D-98: `Conversation.ask` with `replyTo`): it's kept in the chat under the message it answers (`ChatMessage.replyTo`) and routed by what that message is (`felix/Replies.kt`):
 - a check-in's question: its next asked; a reading's question: an instruction on its task, as above; how work went: the answer on each completion; a calendar event's question: its answer kept. Each with no call.
-- anything else: a chat turn, about what the message it answers was; from his notification, your words under his there while he answers, and his answer his next message, made as work of its own (`Conversation.replyFromNotification`, `FelixReplyWorker`). While a message of yours still waits for its answer, a reply from his notification gets a line of his saying so, and one in the chat stays in the box.
+- anything else: a chat turn, about what the message it answers was; from his notification, your words under his there while he answers, and his answer his next message, made as work of its own (`Conversation.replyFromNotification`, `FelixReplyWorker`). One sent while he answers another of yours goes with it, as one in the chat does (above).
 
 ## What he remembers
 
