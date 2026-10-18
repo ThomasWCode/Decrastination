@@ -134,6 +134,9 @@ class Conversation(
     /** Said on a message whose answer you let go (AC-08). */
     private val CANCELLED = "Cancelled"
 
+    /** What a message of yours left out of his answer says (more waited than go in one turn): it waits for Try again, so it's never asked unasked. */
+    private val LEFT_OUT = "Left out of his answer, as more waited than go in one: Try again"
+
     /**
      * The week's check-in begun (LR-02): Felix asks its first question in the chat, the rest as each
      * is answered ([checkInReply]); the form, This week, takes them all at once.
@@ -374,10 +377,11 @@ class Conversation(
         if (words.isEmpty()) return Asked.Nothing
         val repliedTo = replyTo?.let { outbox.find(it) }
         if (repliedTo != null && routed(repliedTo, words)) return Asked.Answer
-        // Yours still waiting go with it, answered together: only the newest says why it waits.
+        // Yours still waiting go with it, answered together: only the newest says why it waits. Each keeps
+        // whether it waits for Try again, for if the newest is taken back ([withdrawQuestion]).
         chat.update { state ->
             state.copy(
-                messages = state.messages.map { if (it.from == Speaker.You && it.answeredAt == null) it.copy(note = null, stuck = false) else it } +
+                messages = state.messages.map { if (it.from == Speaker.You && it.answeredAt == null) it.copy(note = null) else it } +
                     ChatMessage(id, Speaker.You, words, clock.now(), about.takeIf { it != About() } ?: repliedTo?.about ?: About(), replyTo = replyTo),
             )
         }
@@ -576,7 +580,8 @@ class Conversation(
             )
             var kept = false
             // What he was sent of the chat ([ChatPrompts.history]): yours before it that waited with it and went
-            // with it (one sent while he answered: D-98) are answered with it; one left out still waits, for an answer of its own.
+            // with it (one sent while he answered: D-98) are answered with it; one left out (more waited than go
+            // in one) says so, and waits for its Try again.
             val sent = ChatPrompts.history(upTo(chat.value.messages)).mapTo(HashSet()) { it.id }
             chat.update { s ->
                 // Only while it's still the one waiting: taken back meanwhile, the answer goes with it.
@@ -584,7 +589,15 @@ class Conversation(
                     s
                 } else {
                     kept = true
-                    s.copy(messages = s.messages.map { if (it.id == waiting.id || (it.from == Speaker.You && it.answeredAt == null && it.at <= waiting.at && it.id in sent)) it.copy(answeredAt = reply.at, note = null, stuck = false) else it } + reply)
+                    s.copy(
+                        messages = s.messages.map {
+                            when {
+                                it.id == waiting.id || (it.from == Speaker.You && it.answeredAt == null && it.at <= waiting.at && it.id in sent) -> it.copy(answeredAt = reply.at, note = null, stuck = false)
+                                it.from == Speaker.You && it.answeredAt == null && it.at <= waiting.at -> it.copy(note = LEFT_OUT, stuck = true)
+                                else -> it
+                            }
+                        } + reply,
+                    )
                 }
             }
             // What it remembered (AI-21), with an answer kept only, and said under it with its Undo.
@@ -822,14 +835,15 @@ class Conversation(
 
     /**
      * Your message still waiting for Claude taken back, unanswered. One of yours before it that waited with
-     * it (only the newest says why: [send]) says why it waits now, as that one did, with its Try again.
+     * it (only the newest says why: [send]) says why it waits now, as that one did, with its Try again; one
+     * that waited for its Try again still does.
      */
     suspend fun withdrawQuestion() {
         chat.update { s ->
             s.unanswered?.let { w ->
                 val rest = s.messages.filterNot { it.id == w.id }
                 val before = rest.lastOrNull { it.from == Speaker.You && it.answeredAt == null }?.id
-                s.copy(messages = rest.map { if (it.id == before) it.copy(note = w.note, stuck = w.stuck) else it })
+                s.copy(messages = rest.map { if (it.id == before) it.copy(note = w.note, stuck = w.stuck || it.stuck) else it })
             } ?: s
         }
     }
