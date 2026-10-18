@@ -4,6 +4,7 @@ import com.thomaswcode.decrastination.block.BlockPolicy
 import com.thomaswcode.decrastination.core.ChatArchive
 import com.thomaswcode.decrastination.core.ChatMessage
 import com.thomaswcode.decrastination.core.ChatState
+import com.thomaswcode.decrastination.core.MessageKind
 import com.thomaswcode.decrastination.core.ProposalState
 import com.thomaswcode.decrastination.core.Speaker
 import com.thomaswcode.decrastination.core.WallClock
@@ -82,11 +83,9 @@ class Outbox(
     /**
      * His notification made again from the chat ([notice]), sounding for [alertFor] where it's in it; or
      * taken away with nothing to show, his channel off, or the chat on screen, where you're reading them.
-     * The morning's briefing makes it as the [morning]: what waited overnight is in it, quiet hours that
-     * outlast the briefing or not.
      */
-    fun notify(now: Long, alertFor: String? = null, morning: Boolean = false) = synchronized(posting) {
-        val quiet = !morning && BlockPolicy.isQuiet(now, clock.zone(), settings.value)
+    fun notify(now: Long, alertFor: String? = null) = synchronized(posting) {
+        val quiet = BlockPolicy.isQuiet(now, clock.zone(), settings.value)
         val notice = if (chatOnScreen() || !notices.shown(Channels.FELIX)) null else notice(chat.value, settings.value.felixName, quiet, alertFor)
         if (notice == null) ports.cancel() else ports.show(notice)
     }
@@ -123,10 +122,13 @@ class Outbox(
          * His notification from [state] (pure): his unread messages with words, but those answered already
          * (a question settled here or elsewhere) and those of a kind that waits for the morning in quiet
          * hours ([NotifyRules.waitsForMorning]); your replies to those under them. None, and it's null.
+         * What waits for the morning waits for its briefing: one written before the morning's message is
+         * shown from then on, every time it's made again, quiet hours that outlast the briefing or not.
          */
         fun notice(state: ChatState, name: String, quiet: Boolean, alertFor: String? = null): Notice? {
             val after = state.messages.filter { it.at > state.readAt }
-            val his = after.filter { unread(it, state.readAt) && it.answeredAt == null && !NotifyRules.waitsForMorning(it.kind, quiet) }
+            val morning = state.messages.lastOrNull { it.kind == MessageKind.Morning }?.at ?: Long.MIN_VALUE
+            val his = after.filter { unread(it, state.readAt) && it.answeredAt == null && !(it.at > morning && NotifyRules.waitsForMorning(it.kind, quiet)) }
             if (his.isEmpty()) return null
             val shown = his.mapTo(HashSet()) { it.id }
             // In the chat's order, which is the order they were said in.
