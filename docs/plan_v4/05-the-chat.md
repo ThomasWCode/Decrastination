@@ -107,7 +107,7 @@ Samsung groups an app's notifications under its name; his messaging-style one sh
 
 ### One policy
 
-`NotifyRules`' ceiling of four routine notifications a day, quiet hours, and those held for the next briefing apply in one place, `Notifier.post`, as now; from 5a the rule is by the kind of his message where the channel used to decide (Morning's fallback, Review, Summary and EventQuestion wait for the morning's rebuild; his looks and the check-in don't). Felix's and protection's stay outside the ceiling. A channel's being off still means Felix has no voice for it (`Notices.shown`), as his rules check today.
+`NotifyRules`' ceiling of four routine notifications a day, quiet hours, and those held for the next briefing apply in one place, `Notifier.post`, as now; from 5a the rule is by the kind of his message where the channel used to decide (Morning's fallback, Review, Summary and EventQuestion wait for the morning's rebuild; his looks and the check-in don't). Felix's and protection's stay outside the ceiling. His channel being off no longer silences him: the chat is his voice, so his looks still write and the message goes in the chat; the channel's state is checked where the notification is built (`Outbox.notify`), not before the message is written. Today `Looks.due` and the morning return before writing when the channel's off; that check moves to the outbox in 5a. (Claude being off still means no look: that's a cost rule, not a notification one.)
 
 ### Channels (Q3: A)
 
@@ -166,7 +166,7 @@ A message that has a problem in its tail (not made, left out, not looked up) col
 
 - **What his rules count.** Moving "what he's sent today" from the log to the chat must count the same messages; `FelixRules`' tests run on both before the switch (the test's records turned into messages by the migration's own function).
 - **The briefing's timing.** The morning moves to his channel but keeps its time; a sound you'd set on the briefing's channel is set on his instead.
-- **Notifications you've turned off.** His channel off still silences him; a message still goes in the chat.
+- **Notifications you've turned off.** His channel off silences the notification only; his looks still run and the message still goes in the chat, which is the change from today's `Notices.shown` gate in his rules.
 - **The chat's size.** A message of his a slot, on a busy day, is a dozen messages; the window keeps the live file in bounds, the archive takes the rest.
 
 ## Tests

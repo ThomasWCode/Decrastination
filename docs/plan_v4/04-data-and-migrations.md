@@ -17,7 +17,7 @@ What's kept where after the plan, the types the features add, and how each chang
 | `chat-archive.json` | | the messages past the window, oldest first, never sent to the model, read on scrolling back | Conversation | as the window moves | 5a |
 | `felix.json` | | notes on tasks; reminders with their drafts | Conversation | as they're set, drafted, sent | 8a |
 | `memory.json` | facts and rules (1 KB) | the same, each able to carry an until, a fact a task | Conversation | at each memory edit | 10a |
-| `gmail-writes.json` | | the Gmail writes journaled and not yet made | Sync | at a finish, a try, an undo | 11 |
+| `gmail-writes.json` | | the Gmail writes journaled and not yet made, and the receipts of those made, kept while their Undo stands | Sync | at a finish, a try, an undo | 11 |
 | `log.json` | slots, completions, blocks, days, check-ins, reviews, Felix's records (23 KB) | the same, without Felix's records | Learning | at each slot and completion | 5a |
 | `learning.json` | | the calibration (from `runtime.json`) | Learning | at the review | 7 |
 | `instructions.json`, `settings.json`, `school.json`, `secrets.bin` | | as now (`Instruction.by` added in 7; `Settings.gmailFinishes` in 11) | Instructions, (all), Planning, Stores | | |
@@ -87,7 +87,7 @@ Notes (on a task, or standing, for every task a scope matches) and reminders, ve
 
 ### `gmail-writes.json` (v1), Stage 11
 
-The journal of writes to Gmail not yet made; in no backup (a pending write is this phone's and this hour's); cleared by nothing in Reset.
+The journal of writes to Gmail: the pending ones, in no backup (a pending write is this phone's and this hour's), and the receipts of completed ones, which the backup does carry (format 7), since a restored chat still holds the act whose Undo needs them; cleared by nothing in Reset.
 
 ## The types, after
 
@@ -184,7 +184,7 @@ data class GmailWrite(
     val id: String, val threadId: String, val uids: List<Long>, val uidValidity: Long?, val unstar: Boolean, val archive: Boolean, val at: Long,
     /** When it may go; null while the very first finish waits for your OK. */
     val notBefore: Long? = null,
-    /** Which of the uids were starred and which in the inbox before the write, read first, so a reverse write restores only those. */
+    /** Which messages were starred and which in the inbox before the write, read first, as Gmail's stable message ids (X-GM-MSGID, not UIDs, which a UIDVALIDITY change renumbers), so a reverse write restores only those, mapped back to UIDs when it runs. */
     val flagged: List<Long>? = null, val inbox: List<Long>? = null,
     /** Each command's own success, so a retry skips what's done and a failure says what state the mailbox is in. */
     val unstarred: Boolean = false, val archived: Boolean = false,

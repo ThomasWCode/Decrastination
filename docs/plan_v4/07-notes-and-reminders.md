@@ -19,18 +19,18 @@ The store: one file, `felix.json` (`FelixStore(notes, reminders, version = 1)`),
 **The schema** (`ChatPrompts.SCHEMA`) gains two arrays of plain fields and two actions, so no union is added (`SchemaLimitsTest`); the API compiles it before the release (`SchemaCompileTest -PcheckSchemas=true`, D-87). The chat's schema was refused once as too large (3.1.4): if it is again, the fallback is to carry them as change types (`Remind`, `Note`) on the existing `CHANGE` object, whose fields already hold a task, a date, a time, a title and minutes, at no growth at all (Q13: A, with B in the same PR if the API refuses). A standing note's scope has no field of its own there: the fallback carries it in the object's `eventKey` string as `kind:value` ("subject:chemistry", "class:12A", "source:Teams", "title:essay"), which the parse reads and the prompt's note item spells out; a cost of the fallback, said in the PR if it's taken.
 
 ```text
-reminders: [{ text, date (YYYY-MM-DD or empty), time (HH:MM or empty), taskId (or empty), when: "at" | "slotStart" | "beforeDue", minutesBefore (-1 for none) }]
+reminders: [{ id (empty for a new one; a listed reminder's id to move or reword it), text, date (YYYY-MM-DD or empty), time (HH:MM or empty), taskId (or empty), when: "at" | "slotStart" | "beforeDue", minutesBefore (-1 for none) }]
 notes:     [{ taskId (or empty), text, subject (or empty), className (or empty), source (or empty), titleContains (or empty) }]   // a task, or a scope: one or the other
 actions:   type gains "cancelReminder" (taskId empty, value the reminder's id) and "deleteNote" (value the note's id)
 ```
 
 **The prompt** (one item each, in the chat's numbered list, the wording in [09](09-his-voice.md)'s register once Stage 10b lands; plain until then):
 
-- Remind (reminders): when they ask to be reminded of something, that's a reminder, not a task: its words in theirs, as you'd say them then; at a date and time; or at the start of their next slot on a task (when: slotStart, taskId); or a while before a task's due (beforeDue, minutesBefore). Say when it'll come. Not for work to plan, which is a task.
+- Remind (reminders): when they ask to be reminded of something, that's a reminder, not a task: its words in theirs, as you'd say them then; at a date and time; or at the start of their next slot on a task (when: slotStart, taskId); or a while before a task's due (beforeDue, minutesBefore). To move or reword one already set ("push it to 8"), give its id from the list with the new time or words. Say when it'll come. Not for work to plan, which is a task.
 - Note (notes): something to keep with a task for when it comes up (what the teacher said, which source to use, what they've decided): taskId and the words; or, for every task of a subject, a class, a source or with a word in its title ("all of her chemistry homework on sheets"), the scope instead of a task. Not a reminder, and not a fact about them.
 - The context lists the reminders set (id, when, words, task) and each open task's notes under its steps, so he answers "what have I asked you to remind me of?" and avoids setting one twice.
 
-**Checks** (`ChatAnswers.parse`): a reminder's time from an hour ago to a year ahead (one gone by is refused and said); `slotStart` and `beforeDue` need a listed open task; the text up to 300 characters; at most 10 reminders and 10 notes a message; a note's task listed. Limits in the store: 50 reminders not yet sent, 10 notes a task (the oldest noted). What's refused is said under his reply, as changes are.
+**Checks** (`ChatAnswers.parse`): a reminder's time from an hour ago to a year ahead (one gone by is refused and said); `slotStart` and `beforeDue` need a listed open task; the text up to 300 characters; at most 10 reminders and 10 notes a message; a note's task listed; an `id` must be a listed reminder not yet sent (else refused and said), and the entry then changes that reminder's due and words in place (its draft dropped, drafted again), an act of its own ("Moved: “call gran” to 20:00") whose Undo puts the old due and words back. Limits in the store: 50 reminders not yet sent, 10 notes a task (the oldest noted). What's refused is said under his reply, as changes are.
 
 **Made at once.** Each reminder and note set is an `Act` with its Undo line ("Reminder set: Fri 24 Oct 19:00, “call gran”"; "Noted on “Vectors”: use the second source"), undone while it's as he left it (not sent, not deleted). `cancelReminder` and `deleteNote` are acts too, with Undo bringing the thing back: neither removes anything. A cancelled reminder gets `cancelledAt` and is never delivered (`Reminders.next` and `due` skip it, its draft dropped), a deleted note `deletedAt`; each stays, whole, until its act can no longer be undone (the message's life), and Undo clears the mark.
 
@@ -64,7 +64,7 @@ A standing note closes both: a note scoped to a class, subject, source or title 
 
 ## Pruning
 
-A note on a task whose record is gone from `tasks.json` goes at the next prune (Stage 7 keeps every finished task's record, so only an own task you deleted can be gone, and that's deliberate; the same rule as a task-bound fact's, [08](08-memory-that-expires.md)); a note on a finished task stays with its record and still shows on its sheet. Reminders sent or done go after 30 days; cancelled ones, and deleted notes, with their act's Undo window (their message's life). The store stays small.
+A note on a task whose record is gone from `tasks.json` goes at the next prune once the delete can no longer be undone (a deleted own task's `Act` keeps the task for its Undo, and the notes and task-bound facts wait with it, so Undo brings the task back whole; Stage 7 keeps every finished task's record, so only an own task you deleted can be gone; the same rule as a task-bound fact's, [08](08-memory-that-expires.md)); a note on a finished task stays with its record and still shows on its sheet. Reminders sent or done go after 30 days; cancelled ones, and deleted notes, with their act's Undo window (their message's life). The store stays small.
 
 ## Built in
 
@@ -73,7 +73,8 @@ A note on a task whose record is gone from `tasks.json` goes at the next prune (
 ## Tests
 
 - `Reminders.next` and `Reminders.due`: an At before and after its time and snooze; a SlotStart with a slot today, tomorrow, none; a BeforeDue whose deadline moves; quiet hours per Q10.
-- `ChatAnswers.parse`: each field, a time gone by refused, a slotStart without a task refused, the limits.
+- `ChatAnswers.parse`: each field, a time gone by refused, a slotStart without a task refused, the limits; an entry with an id moving a listed reminder, one with an unknown or sent id refused.
+- A move's act and its Undo (the old due and words back); a deleted own task's notes kept until its delete can't be undone, back with the task on Undo.
 - `SchemaLimitsTest` passes; `SchemaCompileTest` compiled by the API before the PR merges (one call a schema, a cent each).
 - The acts: set, cancel, delete, each undone and not undone once changed (`ChatActs.canUndo`); a cancelled reminder never delivered and whole for its Undo; a deleted note the same.
 - Drafting on creation: a reminder set three minutes ahead drafted at once, with no plan or look between.

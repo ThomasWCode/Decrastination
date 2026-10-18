@@ -30,7 +30,7 @@ Each row: what you'd text; what happens today; what this plan makes of it, and w
 | "Make a note on the essay: use the second source" | nothing; `notes` exist only on a task of your own, through the form | a note on any task, shown on its sheet and told to him whenever the task comes up |
 | "Tell me to do Ms Peters' assignments on sheets, not in my book" | a standing instruction in his memory, which every prompt sees; no source names a teacher, so only once you've said which class is hers, and the link to the task in front of him is the model's to make | a standing note the app attaches to every matching task by code: on each sheet, under each in his context, in his slot message for each ([07](07-notes-and-reminders.md) §Standing notes; Q31: A) |
 | "What have I asked you to remind me of?" | nothing | listed in his context; he answers |
-| "Cancel that" / "push it to 8" | nothing | an action on the reminder; a new time is a change to it |
+| "Cancel that" / "push it to 8" | nothing | an action on the reminder; a new time or new words given with the reminder's id move it in place, with their own Undo |
 | "Remind me again in 20 minutes" (from a reminder) | nothing | Snooze, a chip on the reminder, no call; the message at the new time written again |
 
 ### Memory
@@ -82,7 +82,7 @@ Each row: what you'd text; what happens today; what this plan makes of it, and w
 
 Each is small, and most are one new action in the chat's schema plus a line of context. Taken (Q17): G1, G2 as the stop, G3 and G5; G6 and G7 wait for a later release. Built in Stage 8b, after 8a settles the schema's shape, so one compile by the API covers both.
 
-- **G1. Keep and unkeep a piece.** `keepPiece` (taskId, and the piece's key as the plan lists it) → `Focus.keepSlot`; `unkeepPiece` → `Focus.unkeepSlot`. The context's plan already names each piece; the task list gains each open task's next piece key where it has no steps. Undo as a tick's.
+- **G1. Keep and unkeep a piece.** `keepPiece` (taskId, and the piece's key as the plan lists it) → `Focus.keepSlot`; `unkeepPiece` → `Focus.unkeepSlot`. The context's plan already names each piece; the task list gains each open task's next piece key where it has no steps, and a line "Kept today: …" with the keys of today's kept pieces, which the plan no longer shows once kept, so an unkeep is checked against today's kept records, not the plan. Undo as a tick's.
 - **G2. Check a source.** `sync` (source) → a `requestSync(sources)` callback the Conversation takes in its constructor, wired in `AppGraph` to the Sync service's `syncNow` (Stage 6d), as `Focus` takes its callbacks: Sync already calls the Conversation (the calendar's questions), so the Conversation mustn't call Sync back; his reply says it's reading, and a `Syncer` listener in the Conversation posts a `Note` message when the read changes the task he was asked about ("teams says the worksheet's handed in"). The stop, not the round: a second call would be dearer and the note says what the round would.
 - **G3. Open where it lives.** `open` gains `where`: "app" (the sheet, as now) or "source" (`TaskOpener.open`, which already tells him it was opened).
 - **G5. Free time and blocking in his context.** A line after the plan's "Now:": "Blocking: on until today's work's done (2 pieces, 1 h); free time 12 min" from `Focus`'s state, which `ChatPrompts.plan` is given.
