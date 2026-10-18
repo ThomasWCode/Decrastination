@@ -9,8 +9,9 @@
 # service among them; the calendar written to (the app's slots ahead, the longest of them, and
 # stray copies in its words); crashes since the install; what's in front; the stores' sizes beside
 # the last run's (kept in the git-ignored private/phone-check-last.txt). adb's one device, or
-# ANDROID_SERIAL's. Exits 1 if the focus service isn't enabled and bound, or the app crashed since
-# its install.
+# ANDROID_SERIAL's. Exits 1 if the focus service isn't enabled and bound, the app crashed since its
+# install, or the crash log, the calendar or the stores couldn't be read: a check that didn't happen
+# isn't a clean one.
 export MSYS_NO_PATHCONV=1
 PKG=com.thomaswcode.decrastination
 ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
@@ -43,12 +44,25 @@ else
 fi
 
 echo "== Calendar"
-CAL=$(adb exec-out run-as $PKG cat files/settings.json 2>/dev/null | grep -o '"calendarWriteId":[0-9]*' | cut -d: -f2)
-if [ -z "$CAL" ]; then
+# exec-out passes run-as's error on as if it were the file: settings that aren't JSON weren't read.
+SETTINGS=$(adb exec-out run-as $PKG cat files/settings.json 2>/dev/null)
+CAL=$(echo "$SETTINGS" | grep -o '"calendarWriteId":[0-9]*' | cut -d: -f2)
+case "$SETTINGS" in "{"*) READ=1 ;; *) READ=0 ;; esac
+# The query's rows, read only once it's known to have run: the content command prints a provider's
+# error to stderr alone and still exits 0, and it prints "No result found." when there are no rows, so
+# anything on stderr, or nothing at all, is a query that failed.
+QERR=$(mktemp)
+NOW=$(($(date +%s) * 1000))
+if [ "$READ" = 0 ]; then
+  echo "  CAN'T READ THE SETTINGS: the calendar wasn't checked"
+  FAILED=1
+elif [ -z "$CAL" ]; then
   echo "  no calendar written to"
+elif ! ROWS=$(adb shell content query --uri content://com.android.calendar/events --projection dtstart:dtend:customAppPackage:description --where "\"calendar_id=$CAL AND deleted=0 AND dtend>$NOW\"" 2>"$QERR") || [ -s "$QERR" ] || [ -z "$ROWS" ]; then
+  echo "  CAN'T READ THE CALENDAR (its query failed): the slots weren't checked"
+  FAILED=1
 else
-  NOW=$(($(date +%s) * 1000))
-  adb shell content query --uri content://com.android.calendar/events --projection dtstart:dtend:customAppPackage:description --where "\"calendar_id=$CAL AND deleted=0 AND dtend>$NOW\"" 2>/dev/null | tr -d '\r' | awk -v pkg="$PKG" '
+  echo "$ROWS" | tr -d '\r' | awk -v pkg="$PKG" '
     /^Row:/ {
       start = $0; sub(/.*dtstart=/, "", start); sub(/,.*/, "", start)
       end = $0; sub(/.*dtend=/, "", end); sub(/,.*/, "", end)
@@ -64,6 +78,7 @@ else
       printf "  copies in its words without its package %d; other events %d\n", copies, others
     }'
 fi
+rm -f "$QERR"
 
 echo "== Crashes since the install ($INSTALLED)"
 # The crash buffer from the install on: one an earlier build left there isn't this build's. A crash
@@ -83,12 +98,19 @@ adb shell dumpsys window | grep -m1 mCurrentFocus | tr -d '\r' | sed 's/.* u0 / 
 
 echo "== Stores"
 LAST="$ROOT/private/phone-check-last.txt"
-SIZES=$(adb exec-out run-as $PKG sh -c 'ls -l files/*.json' | tr -d '\r' | awk '{ n = $NF; sub(/.*\//, "", n); print n, $5 }')
-echo "$SIZES" | while read -r name size; do
-  was=$( [ -f "$LAST" ] && grep "^$name " "$LAST" | cut -d' ' -f2 )
-  if [ -n "$was" ]; then echo "  $name $size bytes (was $was)"; else echo "  $name $size bytes"; fi
-done
-[ -d "$ROOT/private" ] && echo "$SIZES" > "$LAST"
+# ls's lines for the stores alone: run-as's or ls's error, passed on by exec-out as output, isn't one.
+SIZES=$(adb exec-out run-as $PKG sh -c 'ls -l files/*.json' | tr -d '\r' | awk '$NF ~ /\.json$/ && $5 ~ /^[0-9]+$/ { n = $NF; sub(/.*\//, "", n); print n, $5 }')
+if [ -z "$SIZES" ]; then
+  # The last run's sizes are kept, for the next run to compare with.
+  echo "  CAN'T LIST THE STORES: their sizes weren't checked"
+  FAILED=1
+else
+  echo "$SIZES" | while read -r name size; do
+    was=$( [ -f "$LAST" ] && grep "^$name " "$LAST" | cut -d' ' -f2 )
+    if [ -n "$was" ]; then echo "  $name $size bytes (was $was)"; else echo "  $name $size bytes"; fi
+  done
+  [ -d "$ROOT/private" ] && echo "$SIZES" > "$LAST"
+fi
 
 [ "$FAILED" = "0" ] && echo "== All well" || echo "== SOMETHING'S WRONG: see above"
 exit $FAILED
