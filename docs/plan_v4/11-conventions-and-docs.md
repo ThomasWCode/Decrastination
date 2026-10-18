@@ -14,6 +14,7 @@ How code is named, laid out and commented once the plan is done, and how the doc
 - **One top-level type a file**, named for it, but for a small sealed family or a type's private helpers. `ChatReader.kt` becomes `ChatPrompts.kt`, `ChatAnswers.kt`, `ChatRounds.kt` and `ChatReader.kt` (Stage 4); `InstructionReader.kt` likewise (Stage 9).
 - **One test class a file**: `EnrichTest.kt`'s seven classes become seven files (Stage 9).
 - **Imports, not inline fully qualified names**, but where a name would be ambiguous (`java.time.Duration` beside `kotlin.time.Duration`). Each move imports what it moves; Stage 12 sweeps the rest.
+- **Classes Android holds by their name.** An activity or receiver a notification's tap names (posted, or held in `runtime.json` to be posted again) and a worker in WorkManager's queue (periodic work's, for good) are named by their class: a move leaves them pointing at nothing, unless the phone holds none under the old name when the build is installed (looked at first), the old name stays (an `activity-alias`, a forwarding class), or a migration rewrites what names it.
 - **A package a concern**: Felix's code in `felix/`; Planning's in `plan/`; the platform's in `data/` (stores), `enrich/` (the gateway) and `notify/`; services in their concern's package; pure rules in `core/`, a module from Stage 6f.
 
 ## Code
