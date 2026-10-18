@@ -25,14 +25,22 @@ echo "== Accessibility"
 # Each as package/package.Class: either list may name one as package/.Class.
 full() { sed -E 's#^([^/]+)/\.#\1/\1.#'; }
 ENABLED=$(adb shell settings get secure enabled_accessibility_services | tr -d '\r' | tr ':' '\n' | grep . | full)
-# The bound list runs over several lines, from "Bound services:" to "Enabled services:".
-BOUND=$(adb shell dumpsys accessibility | tr -d '\r' | awk '/Bound services:/ { p = 1 } p && /Enabled services:/ { exit } p' | grep -o "id=[^,]*" | sed 's/^id=//' | full)
+# The bound list runs over several lines, from "Bound services:" to "Enabled services:", each entry
+# Service[label=..., id=package/.Class, ...] (Android 16's dump).
+BOUNDLIST=$(adb shell dumpsys accessibility | tr -d '\r' | awk '/Bound services:/ { p = 1 } p && /Enabled services:/ { exit } p')
+BOUND=$(echo "$BOUNDLIST" | grep -o "id=[^,]*" | sed 's/^id=//' | full)
 echo "  enabled $(echo "$ENABLED" | grep -c .), bound $(echo "$BOUND" | grep -c .)"
-for s in $ENABLED; do
-  if echo "$BOUND" | grep -qx "$s"; then echo "  bound    $s"; else echo "  UNBOUND  $s"; fi
-done
 echo "$ENABLED" | grep -qx "$PKG/$PKG.block.FocusService" && echo "  the focus service is enabled" || { echo "  THE FOCUS SERVICE ISN'T ENABLED"; FAILED=1; }
-echo "$BOUND" | grep -qx "$PKG/$PKG.block.FocusService" && echo "  the focus service is bound" || { echo "  THE FOCUS SERVICE ISN'T BOUND"; FAILED=1; }
+if [ -z "$BOUND" ] && echo "$BOUNDLIST" | grep -q "Service\["; then
+  # Services bound, but a dump that doesn't name them: said as such, not as each unbound.
+  echo "  CAN'T READ WHICH SERVICES ARE BOUND: this build's dump doesn't name them"
+  FAILED=1
+else
+  for s in $ENABLED; do
+    if echo "$BOUND" | grep -qx "$s"; then echo "  bound    $s"; else echo "  UNBOUND  $s"; fi
+  done
+  echo "$BOUND" | grep -qx "$PKG/$PKG.block.FocusService" && echo "  the focus service is bound" || { echo "  THE FOCUS SERVICE ISN'T BOUND"; FAILED=1; }
+fi
 
 echo "== Calendar"
 CAL=$(adb exec-out run-as $PKG cat files/settings.json 2>/dev/null | grep -o '"calendarWriteId":[0-9]*' | cut -d: -f2)
@@ -58,7 +66,14 @@ else
 fi
 
 echo "== Crashes since the install ($INSTALLED)"
-CRASHES=$(adb logcat -d -b crash | grep -A1 "FATAL EXCEPTION" | grep -c "Process: $PKG")
+# The crash buffer from the install on: one an earlier build left there isn't this build's. A crash
+# log that can't be read is a check that didn't happen, not a clean one.
+if [ -n "$INSTALLED" ]; then
+  CRASHLOG=$(adb logcat -d -b crash -t "$INSTALLED.000" 2>&1) || { echo "  CAN'T READ THE CRASH LOG (logcat failed)"; FAILED=1; }
+else
+  CRASHLOG=$(adb logcat -d -b crash 2>&1) || { echo "  CAN'T READ THE CRASH LOG (logcat failed)"; FAILED=1; }
+fi
+CRASHES=$(echo "$CRASHLOG" | grep -A1 "FATAL EXCEPTION" | grep -c "Process: $PKG")
 echo "  in the crash log: $CRASHES"
 adb exec-out run-as $PKG sh -c 'ls -l files/crashes 2>/dev/null' | tr -d '\r' | awk 'NR > 1 { print "  kept by the app: " $6 " " $7 " " $8 }'
 [ "$CRASHES" = "0" ] || FAILED=1
