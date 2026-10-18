@@ -341,7 +341,7 @@ class ConversationTest {
     }
 
     @Test
-    fun `of messages that waited together, those he wasn't sent still wait, for an answer of their own`() = runBlocking {
+    fun `of messages that waited together, those he wasn't sent say so, and wait for their Try again`() = runBlocking {
         stores.settings.update { it.copy(aiEnabled = false) }
         (1..14).forEach { assertTrue(conversation.ask("question $it")) }
         felix.settle()
@@ -349,9 +349,13 @@ class ConversationTest {
         felix.answers(felix.chatAnswer("All of them, in order."))
         conversation.answerChat()
         val mine = stores.chat.value.messages.filter { it.from == Speaker.You }
-        // He's sent the conversation's last twelve: the first two weren't in it, and still wait.
+        // He's sent the conversation's last twelve: the first two weren't in it, and say so, with Try again.
         assertEquals((1..14).map { it > 2 }, mine.map { it.answeredAt != null })
         assertEquals("question 2", stores.chat.value.unanswered?.text)
+        assertTrue(mine.take(2).all { it.note != null && it.stuck })
+        // Not asked unasked: only Try again asks for it.
+        conversation.answerChat()
+        assertEquals(1, felix.server.requestCount)
     }
 
     @Test
@@ -395,6 +399,23 @@ class ConversationTest {
         assertNotNull(why)
         conversation.withdrawQuestion()
         assertEquals("What's due tomorrow?" to why, stores.chat.value.unanswered?.let { it.text to it.note })
+    }
+
+    @Test
+    fun `one that waited for its Try again still does when the newest of yours is taken back`() = runBlocking {
+        stores.settings.update { it.copy(aiEnabled = false) }
+        assertTrue(conversation.ask("What's due tomorrow?"))
+        felix.settle()
+        // Its answer couldn't be read: it waits for Try again.
+        stores.chat.update { s -> s.copy(messages = s.messages.map { if (it.text == "What's due tomorrow?") it.copy(note = "Claude's answer couldn't be read: Try again", stuck = true) else it }) }
+        assertTrue(conversation.ask("And on Friday?"))
+        felix.settle()
+        conversation.withdrawQuestion()
+        assertEquals(true, stores.chat.value.unanswered?.stuck)
+        // Claude back: nothing's asked by itself.
+        stores.settings.update { it.copy(aiEnabled = true) }
+        conversation.answerChat()
+        assertEquals(0, felix.server.requestCount)
     }
 
     @Test

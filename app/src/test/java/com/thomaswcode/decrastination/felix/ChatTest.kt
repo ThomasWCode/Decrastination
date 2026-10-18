@@ -674,6 +674,21 @@ class ChatTest {
     }
 
     @Test
+    fun `yours still waiting, a reply to an older nudge among them, go with the conversation, as they're what's answered`() {
+        var at = now - 3_600_000L
+        fun next() = (at + 60_000L).also { at = it }
+        val messages = listOf(
+            ChatMessage("n0", Speaker.Felix, "nudge 0", next(), kind = MessageKind.SlotStart),
+            ChatMessage("n1", Speaker.Felix, "nudge 1", next(), kind = MessageKind.SlotEnd),
+            ChatMessage("n2", Speaker.Felix, "nudge 2", next(), kind = MessageKind.SlotStart),
+            // Yours to the oldest nudge, then another sent while he answered it: both wait for his answer.
+            ChatMessage("r0", Speaker.You, "can that one move?", next(), replyTo = "n0"),
+            ChatMessage("new", Speaker.You, "to tomorrow, I mean", next()),
+        )
+        assertEquals(listOf("n1", "n2", "r0", "new"), ChatPrompts.history(messages).map { it.id })
+    }
+
+    @Test
     fun `with fewer than twelve said, everything with words is sent`() {
         val messages = listOf(
             ChatMessage("n", Speaker.Felix, "the essay plan's up at 17:00", now - 120_000L, kind = MessageKind.Morning),
