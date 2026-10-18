@@ -167,18 +167,19 @@ class AskActivity : ComponentActivity() {
     private var openedAt = false
 
     /** Whether the Chat tab is the one showing, not Your changes: only then is the chat on screen. */
-    private var chatTab = true
+    private var chatTab by mutableStateOf(true)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         val graph = AppGraph.get(this)
         // Made again (turned, or brought back): what it's about kept, the words handed in already sent, and
-        // the message being replied to and the archive's pages loaded, as they were.
+        // the tab showing, the message being replied to and the archive's pages loaded, as they were.
         if (savedInstanceState == null) {
             take(intent)
         } else {
             about.value = aboutFrom(savedInstanceState)
+            chatTab = savedInstanceState.getBoolean(STATE_CHAT_TAB, true)
             screen.restored(savedInstanceState.getInt(STATE_EARLIER), savedInstanceState.getString(STATE_REPLYING)?.let { graph.conversation.outbox.find(it) }, savedInstanceState.getBoolean(STATE_OFFERED))
         }
         setContent { AppTheme { Screen(graph) } }
@@ -196,6 +197,7 @@ class AskActivity : ComponentActivity() {
         outState.putInt(STATE_EARLIER, screen.earlier)
         outState.putString(STATE_REPLYING, screen.replyingTo?.id)
         outState.putBoolean(STATE_OFFERED, screen.offered)
+        outState.putBoolean(STATE_CHAT_TAB, chatTab)
     }
 
     /** What a message is about, from an intent's extras or a saved state's. */
@@ -214,6 +216,8 @@ class AskActivity : ComponentActivity() {
     }
 
     private fun take(intent: Intent) {
+        // Every way in is to the chat: left on Your changes, the Chat tab's shown.
+        showingChat(true)
         about.value = aboutFrom(intent.extras)
         sendHanded = intent.getBooleanExtra(EXTRA_SEND, true)
         handed.value = intent.getStringExtra(EXTRA_TEXT)
@@ -232,8 +236,9 @@ class AskActivity : ComponentActivity() {
         super.onResume()
         // What waits for Claude (it was off, resting, or capped) is tried again on opening.
         val graph = AppGraph.get(this)
-        // What's unread marked for this visit, for its divider: from his notification, as it was when it opened.
-        if (!openedAt) screen.opened(graph.chat.value, graph.clock.now())
+        // What's unread marked for this visit, for its divider: from his notification, as it was when it
+        // opened; on Your changes, once the Chat tab's shown.
+        if (!openedAt && chatTab) screen.opened(graph.chat.value, graph.clock.now())
         openedAt = false
         graph.conversation.chatInFront = chatTab
         // His notification taken away: what it held is on the screen.
@@ -260,8 +265,10 @@ class AskActivity : ComponentActivity() {
 
     /**
      * The Chat tab shown, or Your changes ([chat] false): the chat's on screen only on its tab, so what
-     * arrives while the other's showing is his notification. Left for it, what the chat showed is read;
-     * back on it, his notification's taken away.
+     * arrives while the other's showing is his notification. Left for it, the chat is left as the screen
+     * is (what it showed read, every message closed again); back on it, it's opened as the screen is, at
+     * what came meanwhile, and his notification's taken away. Called before the tab changes, so the chat
+     * is drawn knowing where it opens.
      */
     private fun showingChat(chat: Boolean) {
         if (chatTab == chat) return
@@ -270,7 +277,13 @@ class AskActivity : ComponentActivity() {
         val graph = AppGraph.get(this)
         graph.conversation.chatInFront = chat
         val now = graph.clock.now()
-        if (chat) graph.conversation.outbox.notify(now) else graph.scope.launch { graph.conversation.read(now) }
+        if (chat) {
+            screen.opened(graph.chat.value, now)
+            graph.conversation.outbox.notify(now)
+        } else {
+            screen.paused()
+            graph.scope.launch { graph.conversation.read(now) }
+        }
     }
 
     @OptIn(ExperimentalMaterial3Api::class)
@@ -285,8 +298,7 @@ class AskActivity : ComponentActivity() {
         val now = graph.clock.now()
         val zone = graph.clock.zone()
         val scope = rememberCoroutineScope()
-        var tab by rememberSaveable { mutableIntStateOf(0) }
-        LaunchedEffect(tab) { showingChat(tab == 0) }
+        val tab = if (chatTab) 0 else 1
         var draft by rememberSaveable { mutableStateOf("") }
         var menu by remember { mutableStateOf(false) }
         var clearing by remember { mutableStateOf(false) }
@@ -335,8 +347,8 @@ class AskActivity : ComponentActivity() {
         ) { padding ->
             Column(Modifier.padding(padding).fillMaxSize().imePadding()) {
                 PrimaryTabRow(selectedTabIndex = tab) {
-                    Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text("Chat") })
-                    Tab(selected = tab == 1, onClick = { tab = 1 }, text = {
+                    Tab(selected = tab == 0, onClick = { showingChat(true) }, text = { Text("Chat") })
+                    Tab(selected = tab == 1, onClick = { showingChat(false) }, text = {
                         // How many wait to be checked, as a badge: the label stays one line.
                         BadgedBox(badge = { if (toCheck.isNotEmpty()) Badge { Text("${toCheck.size}") } }) { Text("Your changes") }
                     })
@@ -467,6 +479,7 @@ class AskActivity : ComponentActivity() {
         private const val STATE_EARLIER = "earlier"
         private const val STATE_REPLYING = "replyingTo"
         private const val STATE_OFFERED = "offered"
+        private const val STATE_CHAT_TAB = "chatTab"
 
         /**
          * The chat, about [about], with [text] to send; with [send] false, only put in the box, to be
