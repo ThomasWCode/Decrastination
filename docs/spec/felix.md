@@ -12,7 +12,7 @@ The chat is his one visible voice (D-95): every word in his name is a message th
 - Settings → Felix also has how far into a slot he asks (`felixGraceMin`, 10 minutes), when he checks again if he doesn't say (`felixDefaultCheckMin`, 20), and whether he may search the web (`felixSearches`, on).
 - Stored chat messages call him `Speaker.Claude`; the screens show his name.
 - His button is on every screen: Day, Work, Stats, Settings, a task's sheet (*Ask Felix about it*), and the block screen, about the next piece's task (UI-16).
-- While Claude is off (`ModelGateway.claudeKey` null) he says nothing unprompted, and the chat says why it waits.
+- While Claude is off (`ModelGateway.claudeKey` null) he writes nothing unprompted of his own, and the chat says why your message waits; the app's own words still go in his name: the morning's list, how work went, the check-in's and a calendar event's questions.
 
 ## The chat
 
@@ -122,7 +122,7 @@ Three more come at set times:
 - **The summary** (NF-02): after the review, "The week's summary is ready; send it?", with *Send it*, which opens it in your email app.
 
 The app asks two more things in his name, in its own words, each answered from his chips with no call:
-- **A calendar event the plan can't judge** (Q7, `learn/CalendarTime.kt`): "Open day, Saturday 24 October: how much of the day does it take?", with *All of it*, *A few hours* and *None*; answered for every event of that name. Answered elsewhere (the Calendar page, an instruction), it leaves his notification.
+- **A calendar event the plan can't judge** (Q7, `learn/CalendarTime.kt`): "Open day, Saturday 24 October: how much of the day does it take?", with *All of it*, *A few hours* and *None*; answered for every event of that name. Answered elsewhere (an event's sheet on Day, an instruction), it leaves his notification.
 - **How finished work went, with Claude off** (LR-05, `learn/Assessment.kt`): a message for each completion, with *Harder*, *As expected* and *Easier*. With Claude on, they wait for his evening question.
 
 ## Notifications and replies

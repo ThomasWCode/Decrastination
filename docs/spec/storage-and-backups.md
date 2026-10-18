@@ -28,7 +28,7 @@ Under the app's `files/` folder:
 | `instructions.json` | `InstructionState`: your changes, each with its words, what it's about, its reading and its state |
 | `memory.json` | `MemoryState`: what Felix remembers ([felix.md](felix.md)) |
 | `chat.json` | `ChatState`: the chat's live window (every message of yours and Felix's, the newest 200 or those of the last 60 days, whichever keeps more, and every one of his unread), where you'd read up to, and Felix's state (his next check, what he wrote ahead, what waits to be asked, the check-in's answers so far) |
-| `chat-archive.json` | `ChatArchive`: the chat's messages past its window, oldest first, read only on scrolling back ([felix.md](felix.md)) |
+| `chat-archive.json` | `ChatArchive`: the chat's messages past its window, oldest first, kept for you and never sent to him ([felix.md](felix.md)) |
 | `school.json` | `SchoolCalendar`: days with no school, and half-days |
 | `calendar.json` | `CalendarVersions`: fingerprints of the event versions the app wrote to the calendar, the last 2 000, so a stray copy is told from an event of yours ([slots-and-calendar.md](slots-and-calendar.md)) |
 | `secrets.bin` | The credentials and keys, encrypted (`data/SecretStore.kt`, [privacy.md](privacy.md)) |
