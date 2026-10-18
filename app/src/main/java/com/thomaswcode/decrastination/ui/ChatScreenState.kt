@@ -8,6 +8,7 @@ import com.thomaswcode.decrastination.core.ChatMessage
 import com.thomaswcode.decrastination.core.ChatState
 import com.thomaswcode.decrastination.core.Speaker
 import com.thomaswcode.decrastination.felix.Outbox
+import com.thomaswcode.decrastination.felix.Replies
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -59,8 +60,50 @@ class ChatScreenState {
     var earlier: Int by mutableIntStateOf(0)
         private set
 
-    /** The message your next one replies to (a swipe, or Reply on a long press), shown over the box. */
+    /** The message your next one replies to (a swipe, Reply on a long press, or his question offered: [offer]), shown over the box. */
     var replyingTo: ChatMessage? by mutableStateOf(null)
+
+    /** Whether [replyingTo] is the chat's own offer ([offer]), not a message you chose: a newer question takes its place. */
+    private var offered = false
+
+    /** The question last offered to the box and turned down with ✕ ([notReplying]): not offered again. */
+    private var declined: String? = null
+
+    /** [message] chosen to reply to: a swipe, or Reply on a long press. */
+    fun replyTo(message: ChatMessage) {
+        replyingTo = message
+        offered = false
+    }
+
+    /**
+     * His [last] message offered to the box (D-98): where it's a question of his still waiting for its
+     * answer ([Replies.waiting], a check-in's while [checkInUnderWay]), what you type answers it, as its
+     * chips do, unless you've chosen another message or turned it down. The offer's let go once the
+     * question's answered or isn't the last.
+     */
+    fun offer(last: ChatMessage?, checkInUnderWay: Boolean) {
+        val question = last?.takeIf { Replies.waiting(it, checkInUnderWay) && it.id != declined }
+        if (question != null && (replyingTo == null || offered)) {
+            replyingTo = question
+            offered = true
+        } else if (question == null && offered) {
+            replyingTo = null
+            offered = false
+        }
+    }
+
+    /** The strip's ✕: your words go to him as they are, and a question the chat offered isn't offered again. */
+    fun notReplying() {
+        if (offered) declined = replyingTo?.id
+        replyingTo = null
+        offered = false
+    }
+
+    /** Your message sent: the box replies to nothing till another's chosen or offered. */
+    fun sent() {
+        replyingTo = null
+        offered = false
+    }
 
     /**
      * The chat opened, at [state] as it was before anything in it was read: what's unread then is
