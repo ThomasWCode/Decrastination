@@ -640,7 +640,8 @@ object Planner {
                 val day = (if (i in kept && today <= cursor) today else null)?.also { if (it != natural) keptMoved += i } ?: natural ?: break
                 assigned[i] = day
                 take(item, day, i)
-                cursor = day.minusDays(1)
+                // A piece kept today leaves today to the pieces before it, kept there too.
+                cursor = if (i in kept && day == today) today else day.minusDays(1)
             }
             // Then sharing days, still in order. What fits nowhere before the deadline is today's,
             // and behind; except for undated work and a task limited per day, below.
@@ -716,8 +717,8 @@ object Planner {
             fun fits(day: Int, i: Int) =
                 room(item, window[day], i) >= item.chunks[i].minutes && (perDay == null || countOn(item, window[day]) < perDay)
             // Where piece [i]'s share falls: the first day whose running total of free time reaches it.
-            fun target(i: Int): Int {
-                if (window.first() == today && keptToday(item, i)) return 0
+            fun target(i: Int, keep: Boolean = true): Int {
+                if (keep && window.first() == today && keptToday(item, i)) return 0
                 if (n == 1) return weight.indices.maxByOrNull { weight[it] } ?: 0
                 if (total == 0) return i * window.size / n
                 val goal = (i + 0.5) / n * total
@@ -782,7 +783,8 @@ object Planner {
                 val apart = if (spaced && previous >= 0) previous + 1 else from
                 val within = if (weekly && previous >= 0) minOf(window.lastIndex, previous + 7) else window.lastIndex
                 if (from == 0 && window.first() == today && underWayToday(item, i)) {
-                    whys[i] = Why.Kept
+                    // Said kept only where the day it would have had without its slot isn't today.
+                    whys[i] = if (nearest(target(i, keep = false), from, window.lastIndex, i) != 0) Why.Kept else if (n == 1) Why.MostRoom else Why.Spread
                     assigned[i] = today
                     take(item, today, i)
                     previous = 0
@@ -805,7 +807,7 @@ object Planner {
                     return
                 }
                 whys[i] = when {
-                    day == 0 && window.first() == today && keptToday(item, i) -> Why.Kept
+                    day == 0 && window.first() == today && keptToday(item, i) && nearest(target(i, keep = false), from, window.lastIndex, i) != 0 -> Why.Kept
                     n == 1 -> Why.MostRoom
                     day == loose -> Why.Spread
                     // Moved by the gap where revision's would have gone without it (before the day after its last piece).
