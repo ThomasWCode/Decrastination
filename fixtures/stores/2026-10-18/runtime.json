@@ -207,7 +207,10 @@
         {
             "id": "pending-1",
             "field": "quietHours",
-            "value": "22:00-07:30",
+            "value": {
+                "startMin": 1320,
+                "endMin": 450
+            },
             "description": "Quiet hours from 22:00",
             "requestedAt": 1792306800000,
             "applyAt": 1792393200000,

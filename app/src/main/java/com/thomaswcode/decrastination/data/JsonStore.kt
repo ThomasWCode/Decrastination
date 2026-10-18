@@ -142,12 +142,14 @@ class JsonStore<T>(
 
     /**
      * What can be kept of [found], JSON that doesn't read whole: each top-level field that reads
-     * over [unreadable]'s, in turn. Null when it keeps nothing.
+     * over [unreadable]'s, in turn, but its version: what's kept is in this build's shape, so it says
+     * this build's, or a newer file's would be found newer again at every start. Null when it keeps nothing.
      */
     private fun salvage(found: JsonObject): T? {
         val base = json.encodeToJsonElement(serializer, unreadable()).jsonObject
         var kept = base
         for ((field, value) in found) {
+            if (field == Migration.VERSION) continue
             val tried = JsonObject(kept + (field to value))
             if (runCatching { json.decodeFromJsonElement(serializer, tried) }.isSuccess) kept = tried
         }
