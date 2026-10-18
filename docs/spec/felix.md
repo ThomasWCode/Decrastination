@@ -124,7 +124,7 @@ Three more come at set times:
 - **The morning** (LR-04, `learn/Briefing.kt`, `Looks.morning`): the briefing is his message whole, up to 480 characters. With no slot today, Claude unavailable, or no answer within 20 seconds, it's the day's title and list instead, in his name in the app's words (`Conversation.morningList`), so every morning is in the chat. His notification is then made again, with what waited overnight (below).
 - **The check-in** (LR-02, `felix/CheckInFlow.kt`, `Conversation.askCheckIn`): on Sunday he asks its five questions one at a time in the chat, in the app's words (`FelixWords`), the first with 1 to 5, the second with what the week shows you put off; each reply is kept under its question and the next asked with no call. The form takes them all at once instead, and his questions leave his notification. Then "Thanks: the week's review comes next."
 - **The review** (LR-01): after Sunday's review, its note's first line, with *Open the review*.
-- **The summary** (NF-02): after the review, "The week's summary is ready; send it?", with *Send it*, which opens it in your email app.
+- **The summary** (NF-02): after the review, "The week's summary is ready; send it?", with *Send it*, which opens it in your email app, addressed, with its subject and words (`Summary.email`).
 
 The app asks two more things in his name, in its own words, each answered from his chips with no call:
 - **A calendar event the plan can't judge** (Q7, `learn/CalendarTime.kt`): "Open day, Saturday 24 October: how much of the day does it take?", with *All of it*, *A few hours* and *None*; answered for every event of that name. Answered elsewhere (the Calendar page, an instruction), it leaves his notification.
