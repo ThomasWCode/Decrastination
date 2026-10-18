@@ -1,0 +1,246 @@
+package com.thomaswcode.decrastination.data
+
+import com.thomaswcode.decrastination.core.Calibration
+import com.thomaswcode.decrastination.core.ChatState
+import com.thomaswcode.decrastination.core.Instruction
+import com.thomaswcode.decrastination.core.InstructionState
+import com.thomaswcode.decrastination.core.InstructionStatus
+import com.thomaswcode.decrastination.core.MemoryState
+import com.thomaswcode.decrastination.core.Source
+import com.thomaswcode.decrastination.core.WallClock
+import com.thomaswcode.decrastination.enrich.AiUsage
+import com.thomaswcode.decrastination.learn.Calibrator
+import com.thomaswcode.decrastination.protect.SettingsChanges
+import java.io.File
+import java.time.Instant
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.util.Locale
+import java.util.concurrent.atomic.AtomicInteger
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
+
+/**
+ * Backups and resets (docs/spec/storage-and-backups.md, AR-07, LR-08): what the app keeps that the
+ * sources can't give back, written as a backup ([exportBackup], the nightly [backupNow]) and read
+ * back ([importBackup]), and a part of it reset, a copy kept first ([reset]). It writes the stores
+ * through [Stores.replace], the one way round their owners; what isn't its own (the settings' wait,
+ * your changes laid on the tasks, the alarms, the calendar) it asks for.
+ */
+class BackupService(
+    private val stores: Stores,
+    private val clock: WallClock,
+    private val scope: CoroutineScope,
+    /** Where backups go ([AndroidBackupFolder] on the phone). */
+    private val folder: Folder,
+    /** Where a reset's copy goes when [folder] can't take it: the app's own files. */
+    private val copies: File,
+    /** The app's version, which a backup names. */
+    private val versionName: String,
+    /** A settings change, as Settings makes one: once armed, one that loosens blocking waits. */
+    private val changeSettings: suspend ((Settings) -> Settings) -> Unit,
+    /** Held from checking an instruction to applying it ([Instructions]'s lock). */
+    private val applying: Mutex,
+    /** The instructions in use laid over everything they change, the plan made again. */
+    private val layInstructions: suspend () -> Unit,
+    /** Each task's values made what the instructions in use say. */
+    private val layTaskOverrides: suspend () -> Unit,
+    /** The reminders' alarms set again at their times, as a save in Settings sets them. */
+    private val schedule: () -> Unit,
+    /** After a restore: the calendar read again with its answers, and today's record made again. */
+    private val reread: suspend () -> Unit,
+    /** Felix's notification taken away: nothing's left of the chat to answer it. */
+    private val cancelFelix: () -> Unit,
+) {
+    /** Where backups go: Documents/Decrastination, through MediaStore on the phone ([BackupFolder]); a map in a test. */
+    interface Folder {
+        /** Whether it can be written here (Android 10 and later). */
+        val available: Boolean
+
+        /** [text] as the file [name], in place of one of that name. */
+        fun write(name: String, text: String): Boolean
+
+        /** The backups there, by name. */
+        fun names(): List<String>
+
+        fun delete(name: String): Boolean
+    }
+
+    /** A backup of what the sources can't give back, as text ([Backups]). */
+    fun exportBackup(): String = Backups.encode(
+        Backup(
+            exportedAt = clock.now(),
+            versionName = versionName,
+            // As asked for: a change still waiting its delay is in it, and restored goes through
+            // the same wait (or, restored here, keeps waiting) rather than being lost.
+            settings = SettingsChanges.requested(stores.settings.value, stores.runtime.value.pending),
+            log = stores.log.value,
+            calibration = stores.runtime.value.calibration,
+            eventAnswers = stores.runtime.value.eventAnswers,
+            aiUsage = stores.runtime.value.aiUsage,
+            instructions = stores.instructions.value.applied,
+            ownTasks = stores.tasks.value.tasks.filter { it.source == Source.Own },
+            school = stores.school.value,
+            memory = stores.memory.value,
+            felix = stores.runtime.value.felix,
+            slots = stores.runtime.value.slots,
+            chat = stores.chat.value,
+            versions = stores.shapes.mapValues { it.value.version },
+        ),
+    )
+
+    /**
+     * The nightly backup (AR-07): all the app keeps, as `decrastination-<date>.json` in
+     * Documents/Decrastination, replacing the day's if it's run again; those past the newest
+     * fortnight let go; its time kept for Settings. False below Android 10, or where it can't be written.
+     */
+    suspend fun backupNow(): Boolean = withContext(NonCancellable + Dispatchers.IO) {
+        if (!folder.available) return@withContext false
+        val now = clock.now()
+        val name = BackupFolder.nightlyName(Instant.ofEpochMilli(now).atZone(clock.zone()).toLocalDate().toString())
+        if (!folder.write(name, exportBackup())) return@withContext false
+        BackupFolder.toPrune(folder.names()).forEach { folder.delete(it) }
+        stores.replace(stores.runtime) { it.copy(lastBackupAt = now) }
+        true
+    }
+
+    /**
+     * Restores the backup [text] and says what happened. Nothing is restored from one that holds
+     * what the app never writes ([Backups.problem]). The settings go through [changeSettings], so
+     * once armed one that loosens blocking waits; the instructions as applying each here would go
+     * ([restoreInstructions]); the log, the calibration and the calendar answers armed or not. They
+     * were kept back while armed, as an edited file could teach the planner to plan less; but the
+     * plan is yours to change at once now (12 Oct), and free time is earned in a ledger no backup holds.
+     * A backup of an older shape is brought to this build's first ([Backups.decode]).
+     */
+    suspend fun importBackup(text: String): String {
+        val backup = Backups.decode(text, stores.shapes) ?: return "That isn't a Decrastination backup (or it's from a newer version)."
+        Backups.problem(backup)?.let { return "Nothing was restored: $it." }
+        changeSettings { Backups.importedSettings(it, backup) }
+        val (restored, unclear) = restoreInstructions(backup.instructions)
+        // Your own tasks not here already: no source can give them back. The instructions' say is laid
+        // over them afresh, from those in use here.
+        val ownAdded = Backups.restoredOwnTasks(backup.ownTasks, stores.tasks.value.tasks).map { it.id }.toSet()
+        stores.replace(stores.tasks) { state -> state.copy(tasks = state.tasks + Backups.restoredOwnTasks(backup.ownTasks, state.tasks)) }
+        if (ownAdded.isNotEmpty()) layTaskOverrides()
+        // The backup's days off and half-days beside those here (PL-16); and what it remembered (AI-21).
+        stores.replace(stores.school) { it.withAll(backup.school) }
+        stores.replace(stores.memory) { Backups.mergedMemory(it, backup.memory) }
+        // The chat where this phone's is empty (a reset's copy brings it back, LR-08): not a message
+        // of yours still waiting for its answer, which would be sent, words from then, as it opens.
+        val backedChat = backup.chat.let { c -> c.unanswered?.let { w -> c.copy(messages = c.messages.filterNot { it.id == w.id }) } ?: c }
+        var chatBack = 0
+        stores.replace(stores.chat) { s -> if (s.messages.isEmpty() && backedChat.messages.isNotEmpty()) backedChat.also { chatBack = it.messages.size } else s }
+        val own = ownAdded.size
+        val told = buildList {
+            if (own > 0) add("$own task${if (own == 1) "" else "s"} of your own")
+            if (chatBack > 0) add("the chat ($chatBack message${if (chatBack == 1) "" else "s"})")
+            if (restored > 0) add("$restored instruction${if (restored == 1) "" else "s"} restored")
+            if (unclear > 0) add("$unclear left unapplied under Your changes in Felix's chat, as ${if (unclear == 1) "it" else "they"} would have tasks wait for each other in a circle")
+        }.takeIf { it.isNotEmpty() }?.joinToString(", ", prefix = " ", postfix = ".") ?: ""
+        // Felix's state where this phone has none of its own; today's slots, restored the same day (AR-07).
+        val today = Instant.ofEpochMilli(clock.now()).atZone(clock.zone()).toLocalDate().toString()
+        stores.replace(stores.runtime) { s ->
+            s.copy(
+                felix = if (s.felix == FelixState()) backup.felix else s.felix,
+                slots = if (backup.slots.date == today && s.slots.on(LocalDate.parse(today)).let { it.previous.isEmpty() && it.missed.isEmpty() }) backup.slots else s.slots,
+            )
+        }
+        // This month's spend on Claude, armed or not: it can only rise, so the cap isn't given again.
+        val month = AiUsage.monthOf(clock.now(), clock.zone())
+        stores.replace(stores.runtime) { it.copy(aiUsage = Backups.mergeUsage(it.aiUsage, backup.aiUsage, month)) }
+        // The reminders' alarms at the restored times, as a save in Settings sets them.
+        schedule()
+        val waiting = stores.runtime.value.pending.size
+        val waits = if (waiting > 0) " $waiting change${if (waiting == 1) " that loosens blocking waits" else "s that loosen blocking wait"} ${stores.settings.value.loosenDelayHours} hours." else ""
+        stores.replace(stores.log) { Backups.mergeLog(it, backup.log, clock.now()) }
+        // Your answers on this phone win over the backup's.
+        // One from before 1.8.0 under its rule now, as at a start, from the log as merged.
+        val calibration = Calibrator.upgraded(backup.calibration, stores.log.value.completions) ?: backup.calibration
+        stores.replace(stores.runtime) { it.copy(calibration = calibration, eventAnswers = backup.eventAnswers + it.eventAnswers) }
+        // Read with the restored answers, and today's record made again, as an answer given here does.
+        scope.launch { reread() }
+        return "Restored the settings, ${backup.log.completions.size} completions and ${backup.log.slots.size} slots, what the app had learned, and your calendar answers.$waits$told"
+    }
+
+    /**
+     * A backup's instructions in use ([backed]) taken in, in the order they were applied, each as
+     * applying it here would go: one already here is left as it is; one that would have tasks wait
+     * for each other in a circle with those here comes back unclear, saying so. The rest are
+     * applied, due dates too (yours to change, 12 Oct). Says how many were applied, and how many
+     * are unclear.
+     */
+    private suspend fun restoreInstructions(backed: List<Instruction>): Pair<Int, Int> = applying.withLock {
+        val added = Backups.restoredInstructions(backed, stores.instructions.value.instructions)
+        stores.replace(stores.instructions) { state -> state.copy(instructions = state.instructions + added.filter { a -> state.instructions.none { it.id == a.id } }) }
+        val applied = added.count { it.state == InstructionStatus.Applied }
+        if (applied > 0) layInstructions()
+        applied to added.count { it.state == InstructionStatus.Unclear }
+    }
+
+    /** Raised at each reset of the record (LR-08), so a review already out when it came doesn't put back what it took. */
+    val resets = AtomicInteger()
+
+    /**
+     * [what] reset (LR-08), with no parent code, a copy of all the app keeps saved first, as
+     * `reset-<date>-<time>.json` in Documents/Decrastination (or the app's own files where that
+     * can't be written). What happened, in words.
+     */
+    suspend fun reset(what: Reset): String = withContext(NonCancellable) {
+        val now = clock.now()
+        // To the second: two resets the same day each keep their copy.
+        val name = "reset-" + Instant.ofEpochMilli(now).atZone(clock.zone()).format(DateTimeFormatter.ofPattern("yyyy-MM-dd-HHmmss", Locale.UK)) + ".json"
+        val text = exportBackup()
+        // Nothing goes till its copy is somewhere it can be restored from.
+        val saved = runCatching {
+            if (folder.available && withContext(Dispatchers.IO) { folder.write(name, text) }) {
+                "Documents/Decrastination/$name"
+            } else {
+                // Where Documents can't be written: the app's own files, which the file picker can't
+                // reach, so Settings → Backup restores from them itself (resetCopies).
+                withContext(Dispatchers.IO) { File(copies.apply { mkdirs() }, name).writeText(text) }
+                "the app's own files ($name), which Settings → Backup can restore"
+            }
+        }.getOrElse { return@withContext "Nothing was reset: a copy of it couldn't be saved first." }
+        val all = what == Reset.Everything
+        if (all || what == Reset.Stats) {
+            resets.incrementAndGet()
+            // Felix's messages are the chat's to reset, not Stats'.
+            stores.replace(stores.log) { ActivityLog(felix = it.felix) }
+            stores.replace(stores.runtime) { it.copy(calibration = Calibration()) }
+        }
+        if (what == Reset.Calibration) stores.replace(stores.runtime) { it.copy(calibration = Calibration(learnFrom = now)) }
+        if (all || what == Reset.Memories) {
+            stores.replace(stores.memory, MemoryState())
+            changeSettings { it.copy(profileLines = emptyList()) }
+        }
+        if (all || what == Reset.Chat) {
+            stores.replace(stores.chat, ChatState())
+            stores.replace(stores.runtime) { it.copy(felix = FelixState(), checkInDraft = null) }
+            stores.replace(stores.log) { it.copy(felix = emptyList()) }
+            // His notification too, a check-in's question among them: nothing's left to answer it.
+            cancelFelix()
+        }
+        if (all || what == Reset.Instructions) {
+            stores.replace(stores.instructions, InstructionState())
+            layInstructions()
+        }
+        "${what.title}: reset. A copy of everything from before is in $saved."
+    }
+
+    /** A reset's copies kept in the app's own files (LR-08), where Documents couldn't be written then: their names, newest first. */
+    fun resetCopies(): List<String> =
+        copies.listFiles { f -> f.isFile && f.name.startsWith("reset-") && f.name.endsWith(".json") }.orEmpty().map { it.name }.sortedDescending()
+
+    /** [name], one of [resetCopies], restored as Import restores a backup. What happened, in words. */
+    suspend fun restoreResetCopy(name: String): String {
+        if (name !in resetCopies()) return "That copy isn't there."
+        val bytes = withContext(Dispatchers.IO) { File(copies, name).inputStream().use { Backups.read(it) } } ?: return "That copy is too big to be a backup."
+        return importBackup(bytes.decodeToString())
+    }
+}

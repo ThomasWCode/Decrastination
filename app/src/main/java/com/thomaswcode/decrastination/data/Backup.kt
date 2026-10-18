@@ -19,6 +19,9 @@ import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.intOrNull
 
 /**
  * What a backup keeps (docs/spec/storage-and-backups.md): the settings, the activity log, what the app has learned,
@@ -53,6 +56,12 @@ data class Backup(
     val slots: com.thomaswcode.decrastination.core.SlotState = com.thomaswcode.decrastination.core.SlotState(),
     /** The chat (AR-07, LR-08), so a reset's copy holds what it clears: restored where this phone's is empty. None in a backup from before. */
     val chat: com.thomaswcode.decrastination.core.ChatState = com.thomaswcode.decrastination.core.ChatState(),
+    /**
+     * The version of each store its parts come from, by file (docs/plan_v4/04-data-and-migrations.md): an
+     * older one's parts are brought to this build's shapes as it's read ([Backups.decode]). None in a
+     * backup from before: version 1.
+     */
+    val versions: Map<String, Int> = emptyMap(),
 ) {
     companion object {
         const val APP = "Decrastination"
@@ -83,9 +92,54 @@ object Backups {
 
     fun encode(backup: Backup): String = json.encodeToString(Backup.serializer(), backup)
 
-    /** [text] as one of this app's backups, or null: not JSON, not this app's, or a newer format than this version reads. */
-    fun decode(text: String): Backup? = runCatching { json.decodeFromString(Backup.serializer(), text) }.getOrNull()
-        ?.takeIf { it.app == Backup.APP && it.format <= Backup.FORMAT }
+    /**
+     * [text] as one of this app's backups, or null: not JSON, not this app's, a newer format than this
+     * version reads, or a part from a store newer than this build's. Parts from a store older than
+     * [shapes] says (each JSON store's shape by file, [Stores.shapes]) are brought to it first.
+     */
+    fun decode(text: String, shapes: Map<String, Shape> = emptyMap()): Backup? {
+        val tree = runCatching { json.parseToJsonElement(text) as? JsonObject }.getOrNull() ?: return null
+        val upgraded = upgraded(tree, shapes) ?: return null
+        return runCatching { json.decodeFromJsonElement(Backup.serializer(), upgraded) }.getOrNull()?.takeIf { it.app == Backup.APP && it.format <= Backup.FORMAT }
+    }
+
+    /** Where each of a backup's parts comes from: its store's file, and its field there (null: the part is the store whole). */
+    private val PARTS: Map<String, Pair<String, String?>> = mapOf(
+        "settings" to ("settings.json" to null), "log" to ("log.json" to null), "school" to ("school.json" to null),
+        "memory" to ("memory.json" to null), "chat" to ("chat.json" to null),
+        "instructions" to ("instructions.json" to "instructions"), "ownTasks" to ("tasks.json" to "tasks"),
+        "calibration" to ("runtime.json" to "calibration"), "eventAnswers" to ("runtime.json" to "eventAnswers"),
+        "aiUsage" to ("runtime.json" to "aiUsage"), "felix" to ("runtime.json" to "felix"), "slots" to ("runtime.json" to "slots"),
+    )
+
+    /**
+     * [backup]'s parts brought from the versions their stores had (its `versions`; else a whole part's
+     * own; else 1) to [shapes]' by each store's migrations, a store's parts together as its file would
+     * hold them; its `versions` then [shapes]'. Null where a part can't be: newer than this build's, or
+     * a step on the way missing.
+     */
+    fun upgraded(backup: JsonObject, shapes: Map<String, Shape>): JsonObject? {
+        val versions = (backup["versions"] as? JsonObject).orEmpty()
+        val out = backup.toMutableMap()
+        for ((file, shape) in shapes) {
+            val parts = PARTS.filterValues { it.first == file }.keys.filter { it in backup }
+            if (parts.isEmpty()) continue
+            val said = (versions[file] as? JsonPrimitive)?.intOrNull
+            val whole = parts.singleOrNull { PARTS.getValue(it).second == null }
+            if (whole != null) {
+                val part = backup[whole] as? JsonObject ?: continue
+                val at = said ?: Migration.versionOf(part)
+                out[whole] = Migration.upgrade(JsonObject(part + (Migration.VERSION to JsonPrimitive(at))), shape.version, shape.migrations) ?: return null
+            } else {
+                // The fields a store's parts are, put together as its file would hold them, and taken out again.
+                val held = JsonObject(parts.associate { PARTS.getValue(it).second!! to backup.getValue(it) } + (Migration.VERSION to JsonPrimitive(said ?: 1)))
+                val brought = Migration.upgrade(held, shape.version, shape.migrations) ?: return null
+                parts.forEach { part -> brought[PARTS.getValue(part).second!!]?.let { out[part] = it } }
+            }
+        }
+        out["versions"] = JsonObject(versions + shapes.mapValues { JsonPrimitive(it.value.version) })
+        return JsonObject(out)
+    }
 
     /**
      * What's wrong with [backup] as this app's state, in words, or null if nothing is: JSON of the
