@@ -5,7 +5,9 @@ Everything implementing the plan has needed from you, from 18 Oct 2026: question
 ## Actions for you
 
 - **A1. The PRs are stacked.** Stage 0's PR is on `main`; 3.3.0's (Stage 1) on Stage 0's branch, 3.3.1's on 3.3.0's, and so on to 3.3.3's, each showing only its own stage. Merge them in order; before merging one with `--delete-branch`, retarget the next to `main` (`gh pr edit <next> --base main`), or deleting the branch closes it. Reviews and merges are yours: none was requested.
+  - UNDERSTOOD
 - **A2. Words the privacy scan should refuse.** `scripts/scan-public.sh` refuses, beside email addresses and phone numbers, every word in the git-ignored `private/scan-words.txt`. It holds only the phone's serial number so far: add, a line each, any names you want kept out of the public repository (family, teachers, the school, the Gmail account's name before the @).
+  - DONE
 
 ## Questions
 
@@ -15,4 +17,5 @@ Everything implementing the plan has needed from you, from 18 Oct 2026: question
 
 - **A (recommended).** Delete it (`run-as … rm files/chat-context.txt`); I'd pull it into `private/` first.
 - **B.** Leave it.
-- ANSWER:
+- ANSWER: A
+- Done (18 Oct): pulled into `private/phone-files/`, then deleted from the phone.

@@ -7,7 +7,7 @@ import kotlin.test.assertTrue
 /**
  * The rules of the app's structure that can be checked by reading its code
  * (docs/plan_v4/02-target-architecture.md §The rules), a rule added as each becomes true: only the
- * notifier posts (Stage 1).
+ * notifier posts (Stage 1); only the gateway builds a Claude client (Stage 2).
  */
 class ArchitectureTest {
     private val main: File = listOf(File("src/main/java"), File("app/src/main/java")).firstOrNull { it.isDirectory }
@@ -31,5 +31,12 @@ class ArchitectureTest {
         // Android's notification manager, called by Notifier's tray alone; Channels makes the channels.
         val stray = outside(Regex("""\bNotificationManager(Compat)?\b"""), setOf("notify/Notifier.kt", "notify/Channels.kt"))
         assertTrue(stray.isEmpty(), "Android's notification manager is called outside notify/Notifier.kt: $stray")
+    }
+
+    @Test
+    fun `only the gateway builds a Claude client`() {
+        // ModelGateway.build is the one place: the readers take the client they're given.
+        val stray = outside(Regex("""\bAnthropicOkHttpClient\b"""), setOf("enrich/ModelGateway.kt"))
+        assertTrue(stray.isEmpty(), "A Claude client is built outside enrich/ModelGateway.kt: $stray")
     }
 }

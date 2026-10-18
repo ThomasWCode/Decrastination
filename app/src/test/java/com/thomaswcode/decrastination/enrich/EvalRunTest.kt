@@ -53,7 +53,7 @@ class EvalRunTest {
                     Profile.yearGroup(now, zone, Settings().yearGroupStart),
                     Profile.block(Settings(), listOf(case.task), null, SchoolCalendar(), MemoryState(), now, zone),
                 )
-                val result = ClaudeEnricher(key!!, zone, profile = { profile }).enrich(case.task, case.job, now)
+                val result = ClaudeEnricher(ModelGateway.build(key!!), zone, profile = { profile }).enrich(case.task, case.job, now)
                 spent += result.costUsd
                 result.answer?.let { File(answers, "${case.id}-$run.json").writeText(it) }
                 val how = when {

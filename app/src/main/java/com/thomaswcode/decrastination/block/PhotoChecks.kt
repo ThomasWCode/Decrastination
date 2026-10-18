@@ -9,6 +9,7 @@ import androidx.core.graphics.scale
 import androidx.exifinterface.media.ExifInterface
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.core.Chunk
+import com.thomaswcode.decrastination.enrich.Called
 import com.thomaswcode.decrastination.enrich.ModelHold
 import com.thomaswcode.decrastination.enrich.PhotoChecker
 import java.io.ByteArrayOutputStream
@@ -51,19 +52,19 @@ object PhotoChecks {
             withContext(NonCancellable + Dispatchers.IO) { photos.forEach { it.delete() } }
         }
         // Its room taken with every other model call's, then sent (AC-05).
-        val current = graph.photoChecker() ?: return OFF
+        val current = graph.gateway.client(com.thomaswcode.decrastination.enrich.ModelEffort.Job.PhotoCheck)?.let { PhotoChecker(it, profile = graph.profile()) } ?: return OFF
         val about = PhotoChecker.context(piece, graph.tasks.value.tasks.firstOrNull { it.id == piece.taskId })
-        val result = when (val called = graph.callModel(interactive = true, record = com.thomaswcode.decrastination.enrich.ModelCalls.OnRecord(com.thomaswcode.decrastination.enrich.ModelEffort.Job.PhotoCheck, piece.label) { r: PhotoChecker.Result -> r.usage to com.thomaswcode.decrastination.enrich.ModelCalls.outcome(r.refused, r.verdict == null) }, cost = { r: PhotoChecker.Result -> r.costUsd to r.refused }) { current.check(jpegs, about) }) {
-            is AppGraph.Called.Held -> return when (called.hold) {
+        val result = when (val called = graph.gateway.call(interactive = true, record = com.thomaswcode.decrastination.enrich.ModelCalls.OnRecord(com.thomaswcode.decrastination.enrich.ModelEffort.Job.PhotoCheck, piece.label) { r: PhotoChecker.Result -> r.usage to com.thomaswcode.decrastination.enrich.ModelCalls.outcome(r.refused, r.verdict == null) }, cost = { r: PhotoChecker.Result -> r.costUsd to r.refused }) { current.check(jpegs, about) }) {
+            is Called.Held -> return when (called.hold) {
                 ModelHold.Off -> OFF
                 ModelHold.Resting -> "Claude's key isn't working (Setup says why): tick it Done, or the source will have to do."
                 ModelHold.Capped -> "Claude's monthly cap is reached: tick it Done, or the source will have to do."
             }
-            is AppGraph.Called.Failed -> {
+            is Called.Failed -> {
                 Log.w(AppGraph.TAG, "The photo check failed", called.error)
                 return "The check didn't go through (${called.error.message ?: "no connection"})."
             }
-            is AppGraph.Called.Answered -> called.value
+            is Called.Answered -> called.value
         }
         val verdict = result.verdict ?: return "Claude couldn't say. Try a clearer photo."
         if (!verdict.done || verdict.confidence < PhotoChecker.ACCEPT) return "Not yet: ${verdict.reason}"

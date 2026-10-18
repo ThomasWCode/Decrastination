@@ -29,7 +29,7 @@ class EnrichWorker(context: Context, params: WorkerParameters) : CoroutineWorker
         val graph = AppGraph.get(applicationContext)
         // Queued for the rules alone (no connection asked for): the model isn't asked, even if
         // it's been switched on since; switching it on queues a job of its own that waits online.
-        graph.enrichNow(if (inputData.getBoolean(KEY_MODEL, false)) graph.modelEnricher() else null)
+        graph.enrichNow(byModel = inputData.getBoolean(KEY_MODEL, false))
         // Instructions and the chat waiting for Claude, as its rest after a failed call ends.
         if (inputData.getBoolean(KEY_MODEL, false)) {
             graph.readInstructions()
@@ -56,7 +56,7 @@ class EnrichWorker(context: Context, params: WorkerParameters) : CoroutineWorker
         fun enqueue(context: Context) {
             // With the model to ask, it waits for a connection: offline, a call would fail and rest
             // the model for an hour. Without it, the rules need none.
-            val online = AppGraph.get(context).modelAvailable()
+            val online = AppGraph.get(context).gateway.available()
             val request = OneTimeWorkRequestBuilder<EnrichWorker>()
                 .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
                 .setInputData(workDataOf(KEY_MODEL to online))

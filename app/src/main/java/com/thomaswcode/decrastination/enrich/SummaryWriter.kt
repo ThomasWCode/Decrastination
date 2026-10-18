@@ -1,7 +1,6 @@
 package com.thomaswcode.decrastination.enrich
 
 import com.anthropic.client.AnthropicClient
-import com.anthropic.client.okhttp.AnthropicOkHttpClient
 import com.anthropic.core.JsonValue
 import com.anthropic.models.messages.JsonOutputFormat
 import com.anthropic.models.messages.MessageCreateParams
@@ -9,19 +8,12 @@ import com.anthropic.models.messages.OutputConfig
 import com.anthropic.models.messages.StopReason
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import java.time.Duration
 
 /** The weekly summary's call to the model (NF-02), at its own effort. */
-class SummaryWriter(apiKey: String, endpoint: String? = null, val model: String = ClaudeEnricher.MODEL) {
+class SummaryWriter(private val client: AnthropicClient, val model: String = ClaudeEnricher.MODEL) {
 
     data class Result(val text: String?, val costUsd: Double, val refused: Boolean = false, val usage: ModelCalls.Usage = ModelCalls.Usage.NONE)
 
-    private val client: AnthropicClient = AnthropicOkHttpClient.builder()
-        .apiKey(apiKey)
-        .apply { if (endpoint != null) baseUrl(endpoint) }
-        .timeout(Duration.ofMinutes(2))
-        .maxRetries(2)
-        .build()
 
     /** The summary of [user] (from [com.thomaswcode.decrastination.learn.Summary.input]), with the student's [profile]. */
     suspend fun write(profile: String, user: String): Result {
