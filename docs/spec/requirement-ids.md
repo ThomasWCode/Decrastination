@@ -125,7 +125,7 @@ Grouped by prefix and sorted; where a later decision changed an item, its line g
 - LR-04: The morning briefing is Felix's message whole (up to 480 characters), with no list of the day under it; without Claude, the list alone.
 - LR-05: "How did it go?" is Felix's question: at a slot's end for its piece, and once in the evening for the day's work done outside the app's knowledge; with Claude off, a notification of its own for each completion.
 - LR-06: Stats says what the calibration has learned and what each figure rests on, and a kind's or class's figure can be forgotten, starting afresh from its kind's.
-- LR-07: Routine notifications (the briefing, calendar questions, the week's, Claude's) go at most four a day and never in quiet hours, those held back going in the morning; Felix's and protection's sit outside that ceiling.
+- LR-07: Routine notifications (the briefing, calendar questions, the week's, Claude's) go at most four a day and, but for the briefing at its own time (D-74), never in quiet hours, those held back going in the morning; Felix's and protection's sit outside that ceiling.
 - LR-08: Settings → Reset clears, one at a time or all together (*Everything learned*): the record and what was learned from it, what was learned only, what Felix remembers with the profile lines, the chat and Felix's history, and the changes in use; it needs no override code, saves a full copy to Documents/Decrastination first, and never touches the key, the sources or protection.
 - LR-09: Slot outcomes are the learning signal: kept (with the minutes worked, more if it took longer), kept late, or missed; the multipliers learn from worked over estimated, the day record's done minutes are the kept slots', and each kind of day's yield is done over planned.
 
