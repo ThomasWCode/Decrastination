@@ -24,6 +24,7 @@ import com.thomaswcode.decrastination.plan.Planning
 import java.nio.file.Files
 import java.util.Collections
 import java.util.UUID
+import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -97,8 +98,8 @@ class FelixHarness(start: String = "2026-10-19T16:30") : AutoCloseable {
         runBlocking { stores.settings.update { it.copy(aiEnabled = true, aiKeyActive = true) } }
     }
 
-    /** Claude's next answer from the stand-in: a message whose text is [text], the JSON a reader parses. */
-    fun answers(text: String) {
+    /** Claude's next answer from the stand-in: a message whose text is [text], the JSON a reader parses, sent [delayMs] late. */
+    fun answers(text: String, delayMs: Long = 0) {
         val body = JsonObject(
             mapOf(
                 "id" to JsonPrimitive("msg_test"),
@@ -111,7 +112,7 @@ class FelixHarness(start: String = "2026-10-19T16:30") : AutoCloseable {
                 "usage" to JsonObject(mapOf("input_tokens" to JsonPrimitive(1_200), "output_tokens" to JsonPrimitive(80))),
             ),
         )
-        server.enqueue(MockResponse().setHeader("Content-Type", "application/json").setBody(body.toString()))
+        server.enqueue(MockResponse().setHeader("Content-Type", "application/json").setBody(body.toString()).setHeadersDelay(delayMs, TimeUnit.MILLISECONDS))
     }
 
     /** The chat's answer [reply], with the tasks and changes it offers (the schema's JSON for them), and nothing else. */
@@ -210,14 +211,12 @@ class FelixHarness(start: String = "2026-10-19T16:30") : AutoCloseable {
             stores.settings.update(change)
         }
 
-        /** The calendar's answers kept (the event, the answer's words), as `CalendarTime.answer` would keep them. */
+        /** The calendar's answers kept (the event, the answer as it's kept), as `CalendarTime.answer` would keep them. */
         val events: MutableList<Pair<String, String>> = Collections.synchronizedList(mutableListOf())
 
-        override suspend fun answerEvent(key: String, words: String): Boolean {
-            if (words.trim().lowercase() !in setOf("all of it", "a few hours", "none")) return false
-            events += key to words.trim()
+        override suspend fun answerEvent(key: String, answer: String) {
+            events += key to answer
             conversation.settleEvent(key)
-            return true
         }
 
         /** Your answer to his question, kept to be read, as `AppGraph.addInstruction` keeps one. */

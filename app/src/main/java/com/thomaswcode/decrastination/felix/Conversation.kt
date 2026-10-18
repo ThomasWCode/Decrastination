@@ -52,8 +52,11 @@ import com.thomaswcode.decrastination.plan.Planning
 import java.util.UUID
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -63,7 +66,8 @@ import kotlinx.coroutines.withContext
  * Felix's conversation (docs/plan_v4, Stage 4), moved out of `AppGraph`: who the student is, as every
  * call sends it ([profile]); the chat, your messages and his answers, their cards and acts made at
  * once with their Undo ([ask], [answerChat], [applyProposal], [undoAct]); what he remembers
- * ([remember]); a reply from his notification or one of his chips ([replyToFelix]); the week's
+ * ([remember]); a reply to one of his messages, from the chat, his chips or his notification, routed
+ * by what it answers ([ask], [Replies]); the week's
  * check-in as he asks it ([remindCheckIn]); and what the app says in his name, each through his
  * [outbox] (docs/plan_v4/05-the-chat.md): the morning's list, a calendar event's question, how work
  * went, the week's review and summary. Built like [com.thomaswcode.decrastination.block.Focus]: its
@@ -109,8 +113,8 @@ class Conversation(
         suspend fun layTaskOverrides()
         suspend fun changeSettings(change: (Settings) -> Settings)
 
-        /** [words], one of a calendar question's answers, kept for every event named [key] (Q7): false where they're none of them. */
-        suspend fun answerEvent(key: String, words: String): Boolean
+        /** [answer], one of a calendar question's answers as it's kept (`CalendarTime.ANSWERS`), for every event named [key] (Q7). */
+        suspend fun answerEvent(key: String, answer: String)
     }
 
     /**
@@ -129,6 +133,9 @@ class Conversation(
 
     /** Said on a message whose answer you let go (AC-08). */
     private val CANCELLED = "Cancelled"
+
+    /** What a message of yours left out of his answer says (more waited than go in one turn): it waits for Try again, so it's never asked unasked. */
+    private val LEFT_OUT = "Left out of his answer, as more waited than go in one: Try again"
 
     /**
      * The week's check-in begun (LR-02): Felix asks its first question in the chat, the rest as each
@@ -152,7 +159,7 @@ class Conversation(
         if (log.value.checkIns.any { it.weekOf == week }) return true
         // In quiet hours the form's reminder goes instead, held as the routine ones are till the morning.
         if (BlockPolicy.isQuiet(now, clock.zone(), settings.value)) return false
-        chat.update { s -> s.copy(messages = s.messages.map { if (it.from == Speaker.Claude && it.kind == MessageKind.CheckIn && it.answeredAt == null) it.copy(answeredAt = now) else it }) }
+        chat.update { s -> s.copy(messages = s.messages.map { if (it.from == Speaker.Felix && it.kind == MessageKind.CheckIn && it.answeredAt == null) it.copy(answeredAt = now) else it }) }
         askNext(CheckInFlow.Draft(week), now)
         return notices.shown(Channels.FELIX)
     }
@@ -160,7 +167,7 @@ class Conversation(
     /** [draft]'s question as his message, in the app's words, with its replies, the draft kept with it: so its reply comes back here. */
     private suspend fun askNext(draft: CheckInFlow.Draft, now: Long, again: Boolean = false) {
         val text = (if (again) FelixWords.CHECK_IN_AGAIN else "") + CheckInFlow.question(draft)
-        val question = ChatMessage(UUID.randomUUID().toString(), Speaker.Claude, text, now, kind = MessageKind.CheckIn, byApp = true, suggestedReplies = CheckInFlow.replies(draft, log.value, clock.zone()))
+        val question = ChatMessage(UUID.randomUUID().toString(), Speaker.Felix, text, now, kind = MessageKind.CheckIn, byApp = true, suggestedReplies = CheckInFlow.replies(draft, log.value, clock.zone()))
         outbox.send(question) { it.copy(checkInDraft = draft) }
     }
 
@@ -190,7 +197,7 @@ class Conversation(
         }
         var added = false
         log.update { l -> if (l.checkIns.any { it.weekOf == next.week }) l else l.copy(checkIns = l.checkIns + flow.checkIn(next, now)).trimmed(now).also { added = true } }
-        outbox.send(ChatMessage(UUID.randomUUID().toString(), Speaker.Claude, FelixWords.CHECK_IN_THANKS, now, kind = MessageKind.CheckIn, byApp = true)) { it.copy(checkInDraft = null) }
+        outbox.send(ChatMessage(UUID.randomUUID().toString(), Speaker.Felix, FelixWords.CHECK_IN_THANKS, now, kind = MessageKind.CheckIn, byApp = true)) { it.copy(checkInDraft = null) }
         // Its review, unless the week has had it (the evening's ran first).
         if (added) ports.review()
         return true
@@ -206,7 +213,7 @@ class Conversation(
         chat.update { s ->
             s.copy(
                 felix = s.felix.copy(checkInDraft = null),
-                messages = s.messages.map { if (it.from == Speaker.Claude && it.kind == MessageKind.CheckIn && it.answeredAt == null) it.copy(answeredAt = now) else it },
+                messages = s.messages.map { if (it.from == Speaker.Felix && it.kind == MessageKind.CheckIn && it.answeredAt == null) it.copy(answeredAt = now) else it },
             )
         }
         outbox.notify(now)
@@ -220,20 +227,22 @@ class Conversation(
     private suspend fun keepReply(message: ChatMessage, words: String, now: Long) {
         val reply = ChatMessage(UUID.randomUUID().toString(), Speaker.You, words, now, message.about, kind = message.kind, replyTo = message.id, answeredAt = now)
         chat.update { s -> s.copy(messages = s.messages.map { if (it.id == message.id && it.answeredAt == null) it.copy(answeredAt = now) else it } + reply) }
+        // One scrolled back to in the archive is answered there, so it takes no second answer.
+        outbox.answeredInArchive(message.id, now)
     }
 
     /** The morning's list (LR-04) as his message, in the app's words, where he has none of his own ([Looks.morning]): the day's [title], then its [lines]. */
     suspend fun morningList(title: String, lines: List<String>) =
-        outbox.send(ChatMessage(UUID.randomUUID().toString(), Speaker.Claude, FelixWords.morningList(title, lines), clock.now(), kind = MessageKind.Morning, byApp = true))
+        outbox.send(ChatMessage(UUID.randomUUID().toString(), Speaker.Felix, FelixWords.morningList(title, lines), clock.now(), kind = MessageKind.Morning, byApp = true))
 
     /**
      * An event the plan can't judge (Q7), [title] on [day], asked about as his message in the app's
      * words, its [answers] his chips: one of them, from here or his notification, is kept for every
-     * event named [key] with no call ([replyToFelix]).
+     * event named [key] with no call ([ask]).
      */
     suspend fun askAboutEvent(key: String, title: String, day: String, start: Long, answers: List<String>) = outbox.send(
         ChatMessage(
-            UUID.randomUUID().toString(), Speaker.Claude, FelixWords.eventQuestion(title, day), clock.now(),
+            UUID.randomUUID().toString(), Speaker.Felix, FelixWords.eventQuestion(title, day), clock.now(),
             About(eventKey = key, eventTitle = title, eventStart = start), kind = MessageKind.EventQuestion, byApp = true, suggestedReplies = answers,
         ),
     )
@@ -283,7 +292,7 @@ class Conversation(
 
     /** How [ask]'s work went, as his message in the app's words: the three answers its replies, each kept on it ([Looks.answered]). */
     private fun howItWent(ask: AssessLater) = ChatMessage(
-        UUID.randomUUID().toString(), Speaker.Claude, FelixWords.howItWent(ask.title), clock.now(), About(taskId = ask.taskId, taskTitle = ask.title),
+        UUID.randomUUID().toString(), Speaker.Felix, FelixWords.howItWent(ask.title), clock.now(), About(taskId = ask.taskId, taskTitle = ask.title),
         kind = MessageKind.Completions, byApp = true, asks = listOf(ask), suggestedReplies = Assessment.ANSWERS.map { it.first },
     )
 
@@ -301,11 +310,11 @@ class Conversation(
 
     /** The week's review written (LR-01): its note's [firstLine] as his message in the app's words, with the button that opens the review. */
     suspend fun reviewed(firstLine: String) =
-        outbox.send(ChatMessage(UUID.randomUUID().toString(), Speaker.Claude, firstLine, clock.now(), kind = MessageKind.Review, byApp = true, opens = OPENS_REVIEW))
+        outbox.send(ChatMessage(UUID.randomUUID().toString(), Speaker.Felix, firstLine, clock.now(), kind = MessageKind.Review, byApp = true, opens = OPENS_REVIEW))
 
     /** The [week]'s summary written (NF-02): his offer to send it, with the button that opens it in an email. */
     suspend fun summaryReady(week: String) =
-        outbox.send(ChatMessage(UUID.randomUUID().toString(), Speaker.Claude, FelixWords.SUMMARY_READY, clock.now(), kind = MessageKind.Summary, byApp = true, opens = OPENS_SUMMARY + week))
+        outbox.send(ChatMessage(UUID.randomUUID().toString(), Speaker.Felix, FelixWords.SUMMARY_READY, clock.now(), kind = MessageKind.Summary, byApp = true, opens = OPENS_SUMMARY + week))
 
     /** Held while the chat is answered, so each message is answered once. */
     private val answering = Mutex()
@@ -344,27 +353,66 @@ class Conversation(
     }
 
     /**
-     * Your [text] to Claude about [about] (2.0.0, Q29), answering his message [replyTo] if it does: kept
-     * as message [id], then answered ([answerChat]). Not while one of yours still waits for its answer:
-     * false then, and nothing's kept. Kept, it's shown in his notification under what it answers.
+     * Your [text] to Felix about [about] (2.0.0, Q29), answering the message [replyTo] if it does: one
+     * entrance for replies (D-98), from the chat, his chips or his notification. A reply to a question of
+     * his that's an answer is kept under it with no call ([routed]); anything else is a turn of the
+     * chat, kept as message [id] (about what it replies to, where it's about nothing else) and answered
+     * ([answerChat]). One sent while he answers another of yours lets that answer go, paid for and
+     * unused, and he answers both together (D-98). False only with no words. Kept, it's shown in his
+     * notification under what it answers.
      */
-    suspend fun ask(text: String, about: About = About(), id: String = UUID.randomUUID().toString(), replyTo: String? = null): Boolean {
+    suspend fun ask(text: String, about: About = About(), id: String = UUID.randomUUID().toString(), replyTo: String? = null): Boolean =
+        send(text, about, id, replyTo) != Asked.Nothing
+
+    /** What became of words sent ([send]): nothing (there were none), an answer taken with no call, or a turn of the chat waiting for his answer. */
+    enum class Asked { Nothing, Answer, Turn }
+
+    /**
+     * [ask], saying which way it went: a reply from his notification is answered as work of its own only
+     * where it's a turn of the chat ([replyFromNotification]), and the `chat-ask` command waits for an
+     * answer only then. The message replied to may be in the archive, scrolled back to.
+     */
+    suspend fun send(text: String, about: About = About(), id: String = UUID.randomUUID().toString(), replyTo: String? = null): Asked {
         val words = text.trim().take(ChatPrompts.MAX_TEXT)
-        if (words.isEmpty()) return false
-        var added = false
+        if (words.isEmpty()) return Asked.Nothing
+        val repliedTo = replyTo?.let { outbox.find(it) }
+        if (repliedTo != null && routed(repliedTo, words)) return Asked.Answer
+        // Yours still waiting go with it, answered together: only the newest says why it waits. Each keeps
+        // whether it waits for Try again, for if the newest is taken back ([withdrawQuestion]).
         chat.update { state ->
-            if (state.unanswered != null) {
-                state
-            } else {
-                added = true
-                state.copy(messages = state.messages + ChatMessage(id, Speaker.You, words, clock.now(), about, replyTo = replyTo))
-            }
+            state.copy(
+                messages = state.messages.map { if (it.from == Speaker.You && it.answeredAt == null) it.copy(note = null) else it } +
+                    ChatMessage(id, Speaker.You, words, clock.now(), about.takeIf { it != About() } ?: repliedTo?.about ?: About(), replyTo = replyTo),
+            )
         }
-        if (added) {
-            outbox.delivered()
-            scope.launch { answerChat() }
+        outbox.delivered()
+        scope.launch { answerChat() }
+        return Asked.Turn
+    }
+
+    /**
+     * [words], your reply to [message], answered with no call where it's the answer to a question of his
+     * ([Replies.route]): a check-in's question, its next asked ([checkInReply]); a reading's question, or
+     * how work went with one of its three ([answered]); a calendar event's question, one of its three
+     * kept ([Owners.answerEvent]); each kept under it. False for a turn of the chat.
+     */
+    private suspend fun routed(message: ChatMessage, words: String): Boolean {
+        val now = clock.now()
+        // A check-in's question takes its answer only while it's the one the check-in under way asked last:
+        // one from a week long gone, scrolled back to in the archive, is a turn of the chat.
+        val checkIn = chat.value.felix.checkInDraft != null && message.id == chat.value.messages.lastOrNull { it.from == Speaker.Felix && it.kind == MessageKind.CheckIn }?.id
+        when (val route = Replies.route(message, words, checkInUnderWay = checkIn)) {
+            // An answer to a check-in question (LR-02): the next asked, or the check-in kept.
+            Replies.Route.CheckIn -> return checkInReply(message, words)
+            // A reading's question's answer (AI-10), or one of the three to how work went (LR-05): on them, and that's all.
+            Replies.Route.Question, is Replies.Route.Completions -> if (!answered(message, words)) return false
+            // One of a calendar question's three answers (Q7), for every event of its name.
+            is Replies.Route.Event -> owners.answerEvent(route.key, route.answer)
+            Replies.Route.Chat -> return false
         }
-        return added
+        keepReply(message, words, now)
+        outbox.delivered()
+        return true
     }
 
     /**
@@ -413,7 +461,10 @@ class Conversation(
                 chat.update { s -> s.copy(messages = s.messages.map { if (it.id == waiting.id) it.copy(note = null, stuck = false) else it }) }
                 sentAt.value = at
                 try {
-                    ChatReader(chatClient, clock.zone(), profile = profile(at), settings = settings.value).answer(upTo(chat.value.messages), state.tasks, time.events, chatContext(at, state, time, instructions.value.applied), at, found, read)
+                    val sent = upTo(chat.value.messages)
+                    // What a message of yours quotes from the archive, past the window: told to him all the same.
+                    val quoted = sent.mapNotNull { m -> m.replyTo?.takeIf { r -> sent.none { it.id == r } }?.let { outbox.find(it) } }
+                    ChatReader(chatClient, clock.zone(), profile = profile(at), settings = settings.value).answer(sent, state.tasks, time.events, chatContext(at, state, time, instructions.value.applied), at, found, read, quoted)
                 } finally {
                     sentAt.value = null
                 }
@@ -424,12 +475,15 @@ class Conversation(
             // with it, not looked up or asked for again.
             val before = gathered?.takeIf { it.id == waiting.id }
             var read = tasksOf(before?.read.orEmpty())
-            val called = ask(before?.found, read)
-            // Let go while it ran (AC-08): the message says so already, and the answer goes unused.
-            if (letGo == waiting.id) {
-                letGo = null
-                return@withLock
+            // Let go while it ran (AC-08: the message says so already), or another of yours sent meanwhile, to be
+            // answered with it (D-98): the answer goes unused, and nothing more is looked up or read for it.
+            fun unwanted(): Boolean {
+                val gone = letGo == waiting.id || chat.value.unanswered?.id != waiting.id
+                if (letGo == waiting.id) letGo = null
+                return gone
             }
+            val called = ask(before?.found, read)
+            if (unwanted()) return@withLock
             val result = when (called) {
                 is Called.Held -> return@call gateway.because(called.hold)
                 is Called.Failed -> {
@@ -464,10 +518,7 @@ class Conversation(
                             sentAt.value = null
                         }
                     }
-                    if (letGo == waiting.id) {
-                        letGo = null
-                        return@withLock
-                    }
+                    if (unwanted()) return@withLock
                     val what = (search as? Called.Answered)?.value?.found
                     if (what == null) {
                         if (search is Called.Failed) Log.w(AppGraph.TAG, "Felix's web search failed", search.error)
@@ -493,10 +544,7 @@ class Conversation(
                 if (!looks && !reads) break
                 gathered = Gathered(waiting.id, found, tried, read.map { it.id })
                 val again = ask(found, read)
-                if (letGo == waiting.id) {
-                    letGo = null
-                    return@withLock
-                }
+                if (unwanted()) return@withLock
                 val second = when (again) {
                     is Called.Held -> return@call gateway.because(again.hold)
                     is Called.Failed -> {
@@ -514,7 +562,7 @@ class Conversation(
             gathered = null
             val reply = ChatMessage(
                 id = UUID.randomUUID().toString(),
-                from = Speaker.Claude,
+                from = Speaker.Felix,
                 text = reading.reply,
                 at = clock.now(),
                 // Everything on a card made as it comes (your call, 16 Oct), each with its Undo.
@@ -531,13 +579,25 @@ class Conversation(
                 ),
             )
             var kept = false
+            // What he was sent of the chat ([ChatPrompts.history]): yours before it that waited with it and went
+            // with it (one sent while he answered: D-98) are answered with it; one left out (more waited than go
+            // in one) says so, and waits for its Try again.
+            val sent = ChatPrompts.history(upTo(chat.value.messages)).mapTo(HashSet()) { it.id }
             chat.update { s ->
                 // Only while it's still the one waiting: taken back meanwhile, the answer goes with it.
                 if (s.unanswered?.id != waiting.id) {
                     s
                 } else {
                     kept = true
-                    s.copy(messages = s.messages.map { if (it.id == waiting.id) it.copy(answeredAt = reply.at, note = null) else it } + reply)
+                    s.copy(
+                        messages = s.messages.map {
+                            when {
+                                it.id == waiting.id || (it.from == Speaker.You && it.answeredAt == null && it.at <= waiting.at && it.id in sent) -> it.copy(answeredAt = reply.at, note = null, stuck = false)
+                                it.from == Speaker.You && it.answeredAt == null && it.at <= waiting.at -> it.copy(note = LEFT_OUT, stuck = true)
+                                else -> it
+                            }
+                        } + reply,
+                    )
                 }
             }
             // What it remembered (AI-21), with an answer kept only, and said under it with its Undo.
@@ -564,9 +624,11 @@ class Conversation(
             }
             null
         }
-        // Why it waits, said once: written only when it changes, as this runs after every sync.
+        // Why it waits, said once: written only when it changes, as this runs after every sync; and under
+        // your words in his notification, where they're shown.
         if (note != null && chat.value.unanswered?.let { it.id == waiting.id && (it.note != note || it.stuck != stuck) } == true) {
             chat.update { s -> s.copy(messages = s.messages.map { if (it.id == waiting.id && it.answeredAt == null) it.copy(note = note, stuck = stuck) else it }) }
+            outbox.notify(clock.now())
         }
     }
 
@@ -755,64 +817,35 @@ class Conversation(
     }
 
     /**
-     * Your [text] in reply to Felix's message [id], from his notification or one of his chips (AI-24),
-     * routed by what it answers: a check-in's question, its next asked ([checkInReply]); a reading's
-     * question, or how work went, answered with one of its three ([answered]); a calendar event's
-     * question, one of its three answers kept ([Owners.answerEvent]): each kept under it with no call.
-     * Anything else is a chat turn about what his message was, your words under his while he answers,
-     * the answer his next message. Returns once it's asked, not answered. False, and a line of his says
-     * why, when a message of yours is still waiting.
+     * How many of his messages wait unread (docs/plan_v4/05-the-chat.md §4), the badge on his button:
+     * those he's written since you last left the chat, but a question you've answered from his notification.
      */
-    suspend fun replyToFelix(text: String, id: String): Boolean {
-        val words = text.trim()
-        if (words.isEmpty()) return false
-        val now = clock.now()
-        val his = chat.value.messages.firstOrNull { it.id == id && it.from == Speaker.Claude }
-        if (his != null && his.answeredAt == null) {
-            when (his.kind) {
-                // An answer to a check-in question (LR-02): the next asked, or the check-in kept.
-                MessageKind.CheckIn -> return checkInReply(his, words)
-                // A reading's question's answer (AI-10), or one of the three to how work went (LR-05): on them, and that's all.
-                MessageKind.Question, MessageKind.Completions -> if (answered(his, words)) {
-                    keepReply(his, words, now)
-                    outbox.delivered()
-                    return true
-                }
-                // One of a calendar question's three answers (Q7), for every event of its name.
-                MessageKind.EventQuestion -> his.about.eventKey?.let { key ->
-                    if (owners.answerEvent(key, words)) {
-                        keepReply(his, words, now)
-                        outbox.delivered()
-                        return true
-                    }
-                }
-                else -> Unit
-            }
-        }
-        // The reply's own message in the chat, answering his: its answer is his next message.
-        if (!ask(words, his?.about ?: About(), replyTo = id)) {
-            outbox.send(ChatMessage(UUID.randomUUID().toString(), Speaker.Claude, FelixWords.STILL_WAITING, now, kind = MessageKind.Note, byApp = true), alert = false)
-            return false
-        }
-        // Answered as work of its own, as the receiver that took the reply is let go once this
-        // returns, and the app may go with it.
-        ports.answerLater()
-        return true
+    val unread: Flow<Int> = chat.state.map { s -> s.messages.count { Outbox.unread(it, s.readAt) && it.answeredAt == null } }.distinctUntilChanged()
+
+    /**
+     * Your [text] in reply to his message [id] from his notification (AI-24): asked as any reply is
+     * ([ask]). A turn of the chat is answered as work of its own ([FelixPorts.answerLater]), as the
+     * receiver that took the reply is let go once this returns, and the app may go with it.
+     */
+    suspend fun replyFromNotification(text: String, id: String): Boolean = when (send(text, replyTo = id)) {
+        Asked.Nothing -> false
+        Asked.Answer -> true
+        Asked.Turn -> true.also { ports.answerLater() }
     }
 
     /**
-     * The chat's answer to a reply from Felix's notification ([replyToFelix]), as [FelixReplyWorker]
-     * runs it: his next message, notified as it comes; or, not answered (Claude off, resting, a failed
-     * call), why, shown under your words in his notification.
+     * Your message still waiting for Claude taken back, unanswered. One of yours before it that waited with
+     * it (only the newest says why: [send]) says why it waits now, as that one did, with its Try again; one
+     * that waited for its Try again still does.
      */
-    suspend fun answerReply() {
-        answerChat()
-        outbox.notify(clock.now())
-    }
-
-    /** Your message still waiting for Claude taken back, unanswered. */
     suspend fun withdrawQuestion() {
-        chat.update { s -> s.unanswered?.let { w -> s.copy(messages = s.messages.filterNot { it.id == w.id }) } ?: s }
+        chat.update { s ->
+            s.unanswered?.let { w ->
+                val rest = s.messages.filterNot { it.id == w.id }
+                val before = rest.lastOrNull { it.from == Speaker.You && it.answeredAt == null }?.id
+                s.copy(messages = rest.map { if (it.id == before) it.copy(note = w.note, stuck = w.stuck || it.stuck) else it })
+            } ?: s
+        }
     }
 
     /** The chat cleared, its earlier messages with it. What its cards made (your tasks, changes in use) stays, and so does his state. */

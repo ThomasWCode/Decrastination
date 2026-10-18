@@ -259,7 +259,7 @@ class ReviewInputTest {
         )
         // His message in the chat about the slot, and your reply to it.
         val felix = listOf(
-            ChatMessage("f1", Speaker.Claude, "Ten minutes in: are you starting?", Fixtures.at("2026-10-06T17:10"), kind = MessageKind.SlotStart, pieceKey = "teams:a#0"),
+            ChatMessage("f1", Speaker.Felix, "Ten minutes in: are you starting?", Fixtures.at("2026-10-06T17:10"), kind = MessageKind.SlotStart, pieceKey = "teams:a#0"),
             ChatMessage("y1", Speaker.You, "yes", Fixtures.at("2026-10-06T17:12"), replyTo = "f1", answeredAt = Fixtures.at("2026-10-06T17:12")),
         )
         val day = com.thomaswcode.decrastination.learn.DayRecord("2026-10-06", plannedMin = 60, chunks = emptyList(), doneMin = 30, full = false, kind = com.thomaswcode.decrastination.core.DayKind.Weekday)

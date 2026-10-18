@@ -133,7 +133,7 @@ class Looks(
         val called = withTimeoutOrNull(MORNING_MS) { call.await() }
         val answer = (called as? Called.Answered)?.value?.answer?.takeIf { it.message.isNotBlank() } ?: return@withLock false
         // His message whole, with no list of the day beside it (your call, 16 Oct): the room is his.
-        outbox.send(ChatMessage(UUID.randomUUID().toString(), Speaker.Claude, answer.message, now, kind = MessageKind.Morning, suggestedReplies = answer.replies))
+        outbox.send(ChatMessage(UUID.randomUUID().toString(), Speaker.Felix, answer.message, now, kind = MessageKind.Morning, suggestedReplies = answer.replies))
         answer.memories.takeIf { it.isNotEmpty() }?.let { remember(it) }
         true
     }
@@ -200,7 +200,7 @@ class Looks(
         }
         val task = trigger.taskId?.let { id -> tasks.value.tasks.firstOrNull { it.id == id } }
         val message = ChatMessage(
-            UUID.randomUUID().toString(), Speaker.Claude, text, now, About(taskId = trigger.taskId, taskTitle = task?.title),
+            UUID.randomUUID().toString(), Speaker.Felix, text, now, About(taskId = trigger.taskId, taskTitle = task?.title),
             // Why he wrote it, its kind (his answer, the chat's).
             kind = MessageKind.entries.firstOrNull { it.name == trigger.reason.name } ?: MessageKind.Chat, pieceKey = trigger.key, nextCheckAt = next, asks = trigger.asks, suggestedReplies = replies,
         )
@@ -229,7 +229,7 @@ class Looks(
     }
 
     /** When he last wrote something with words: a message written ahead since is out of date. */
-    private fun lastSent(): Long? = chat.value.messages.filter { it.from == Speaker.Claude && it.text.isNotBlank() }.maxOfOrNull { it.at }
+    private fun lastSent(): Long? = chat.value.messages.filter { it.from == Speaker.Felix && it.text.isNotBlank() }.maxOfOrNull { it.at }
 
     private companion object {
         /** How long the morning's briefing waits for his sentence. */

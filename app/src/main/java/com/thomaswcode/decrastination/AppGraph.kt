@@ -139,6 +139,9 @@ class AppGraph private constructor(context: Context) {
     /** Your chat with Felix: what you said, his answers, and what became of his cards. */
     val chat = stores.chat
 
+    /** The chat before its live window (D-96): kept for you, shown on scrolling back and in the record's export. */
+    val chatArchive = stores.chatArchive
+
     /** Days with no school and half-days (PL-16), told to the chat or added in Settings. */
     val school = stores.school
 
@@ -273,10 +276,8 @@ class AppGraph private constructor(context: Context) {
             override suspend fun deleteInstruction(id: String) { this@AppGraph.deleteInstruction(id) }
             override suspend fun layTaskOverrides() { this@AppGraph.layTaskOverrides() }
             override suspend fun changeSettings(change: (Settings) -> Settings) { this@AppGraph.changeSettings(change) }
-            override suspend fun answerEvent(key: String, words: String): Boolean {
-                val answer = CalendarTime.ANSWERS.firstOrNull { it.first.equals(words.trim(), ignoreCase = true) }?.second ?: return false
+            override suspend fun answerEvent(key: String, answer: String) {
                 CalendarTime.answer(app, key, answer)
-                return true
             }
         },
         calendarTime = { calendarTime },

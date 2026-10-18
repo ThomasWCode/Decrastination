@@ -38,7 +38,7 @@ Grouped by prefix and sorted; where a later decision changed an item, its line g
 - AI-21: Felix remembers, on his own, facts (one per topic, the newer replacing the older) and up to 20 standing instructions on how he should behave, from the chat and from replies; each is shown as a "Remembered:" line with its Undo; the facts are kept within a budget of about 1,500 tokens, the oldest going first, and tidied weekly (Q-51).
 - AI-22: Every message the app sends about the work is Felix's, written by Claude: a strict friend whose name and one-line description can be changed in Settings; each answer is a short message, up to three quick replies, when he'll check again, and what to remember.
 - AI-23: A photo of the work can be added to a task Claude reads (`Enrichments.jobFor`): the task is read again with it, the photo kept with the task (one each) and let go when the task goes, and the reading says it came from the photo.
-- AI-24: A reply to one of Felix's notifications is a turn in the one chat thread; his answer comes back as his next notification (not while the chat is on screen), and what he does is made at once, with its Undo.
+- AI-24: A reply to Felix's notification is a reply in the one chat, as one in the chat is (D-98): to a question of his, answered with no call; else a turn of the chat, his answer his next message, in his notification while the chat isn't on screen; what he does is made at once, with its Undo.
 
 ## AR: architecture and testing
 
@@ -200,6 +200,6 @@ These come from the questions answered for v1 and 2.0.0; Q31 here is not Q-31 be
 - UI-12: The app is dark blue (navy on paper by day, near-black with navy by night), the widget and notifications alike; the launcher icon keeps the logo's pink, and overdue keeps the standard red.
 - UI-13: Each setting shows one sentence, worked out from its value, on what it does to the plan.
 - UI-15: The form for a task of the student's own edits its steps one by one (add, remove, rename, minutes, order, where each can be done), a renamed step keeping its tick.
-- UI-16: Felix's chat button, Material's standard 56 dp, is on every screen, the block screen included, opening the chat about what that screen shows.
+- UI-16: Felix's chat button, Material's standard 56 dp, is on every screen, the block screen included, opening the chat about what that screen shows, and wearing the count of his messages unread.
 - UI-17: Two screens for the work and one for the record: Day (when: a timeline of the chosen day's windows, events, slots and free time, under the week ahead) and Work (what: every open task), and Stats; a first-run hint says *Day is when, Work is what*.
 - UI-18: The menu holds only the week's check-in, the Reviews and Settings, which gathers Setup, protection, the calendar and Reset; a mark opens Setup when something there needs the student.

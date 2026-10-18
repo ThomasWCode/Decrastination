@@ -31,7 +31,7 @@ class ChatActsTest {
         val task = essay()
         val act = Act("Deleted: Essay", ChatAction(ChatAction.Type.Delete, task.id), was = task, cards = listOf("m|c"))
         val card = Proposal("c", task = OwnTasks.draftOf(task), instant = true)
-        val messages = listOf(ChatMessage("m", Speaker.Claude, "Added it.", now, proposals = listOf(card)))
+        val messages = listOf(ChatMessage("m", Speaker.Felix, "Added it.", now, proposals = listOf(card)))
         assertTrue(ChatActs.canUndo(act, emptyList(), settings, messages))
         // Redo made it anew: bringing the old one back would make two.
         val redone = listOf(messages[0].copy(proposals = listOf(card.copy(state = ProposalState.Applied, made = "own:new"))))

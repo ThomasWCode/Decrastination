@@ -28,6 +28,7 @@ import com.thomaswcode.decrastination.core.withoutEnrichment
 import com.thomaswcode.decrastination.data.Secret
 import com.thomaswcode.decrastination.felix.ChatPrompts
 import com.thomaswcode.decrastination.felix.ChatReader
+import com.thomaswcode.decrastination.felix.Conversation
 import com.thomaswcode.decrastination.enrich.ClaudeEnricher
 import com.thomaswcode.decrastination.enrich.ClaudeReviewer
 import com.thomaswcode.decrastination.felix.FelixCaller
@@ -355,15 +356,27 @@ class CommandActivity : Activity() {
                 Log.i(TAG, "Wrote ${items.size} prompts to files/ai-prompts.json")
             }
             "chat-context" -> {
-                // What the chat sends Claude with your newest message now, the plan included.
+                // What the chat sends Claude with your newest message now, the plan included; and the
+                // conversation's turns as your newest message was sent, a reply's quote among them (5b).
                 File(filesDir, "chat-context.txt").writeText(graph.conversation.chatContext().whole)
-                Log.i(TAG, "Wrote the chat's context to files/chat-context.txt")
+                val messages = graph.chat.value.messages
+                val sent = messages.take(messages.indexOfLast { it.from == Speaker.You } + 1)
+                val turns = ChatPrompts.turns(sent, "(the context)", graph.tasks.value.tasks.associateBy { it.id }, graph.clock.zone(), plan = "(the plan)")
+                File(filesDir, "chat-turns.txt").writeText(turns.joinToString("\n\n") { (from, text) -> "== $from\n$text" })
+                Log.i(TAG, "Wrote the chat's context to files/chat-context.txt, and the turns your newest message was sent with to files/chat-turns.txt")
             }
             "chat-ask" -> {
                 // --es text "<words>": sent to the chat as on the phone (a paid call); Claude's reply logged.
+                // --es replyTo <message id>: a reply to that message, routed as a swipe's or his notification's
+                // is (5b): a question of his answered with no call, logged as what follows it.
                 val text = intent.getStringExtra("text")
-                if (text.isNullOrBlank() || !graph.conversation.ask(text)) {
-                    Log.w(TAG, "chat-ask needs --es text <words>, and no message of yours still waiting")
+                val asked = if (text.isNullOrBlank()) Conversation.Asked.Nothing else graph.conversation.send(text, replyTo = intent.getStringExtra("replyTo"))
+                if (asked == Conversation.Asked.Nothing) {
+                    Log.w(TAG, "chat-ask needs --es text <words>")
+                } else if (asked == Conversation.Asked.Answer) {
+                    // Answered with no call: what followed it, no answer of his waited for.
+                    val last = graph.chat.value.messages.last()
+                    Log.i(TAG, "chat-ask: answered with no call; then ${last.from}: ${last.text}")
                 } else {
                     // Waits its turn behind the answer ask started, or answers it itself.
                     graph.conversation.answerChat()

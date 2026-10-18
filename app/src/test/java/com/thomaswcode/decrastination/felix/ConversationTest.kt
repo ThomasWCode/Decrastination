@@ -21,14 +21,19 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import com.thomaswcode.decrastination.learn.CalendarTime
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 
 /**
  * The Conversation's flows (docs/plan_v4, Stages 4 and 5a), on temporary stores, his answers read by
  * the real chat reader from a stand-in for Claude's API ([FelixHarness]): an answer's cards made as it
  * comes and undone; a card applied and taken back; the check-in's five questions in the chat; a reply
- * from his notification under the message it answers; and what the app says in his name, each in the
- * chat first and his one notification after.
+ * from his notification, his chips or the chat under the message it answers, routed by what it is
+ * (Stage 5b); his button's count; and what the app says in his name, each in the chat first and his
+ * one notification after.
  */
 class ConversationTest {
     private val felix = FelixHarness()
@@ -46,7 +51,7 @@ class ConversationTest {
     )
 
     /** His messages in the chat, oldest first. */
-    private fun his() = stores.chat.value.messages.filter { it.from == Speaker.Claude }
+    private fun his() = stores.chat.value.messages.filter { it.from == Speaker.Felix }
 
     @Test
     fun `an answer's cards are made as it comes, and its Undo takes what it made back`() = runBlocking {
@@ -84,7 +89,7 @@ class ConversationTest {
             ChatState(
                 listOf(
                     ChatMessage("m1", Speaker.You, "Make the worksheet 90 minutes", now - 60_000L, answeredAt = now - 30_000L),
-                    ChatMessage("m2", Speaker.Claude, "I'd make it 90 minutes.", now - 30_000L, proposals = listOf(Proposal("p1", changes = listOf(change)))),
+                    ChatMessage("m2", Speaker.Felix, "I'd make it 90 minutes.", now - 30_000L, proposals = listOf(Proposal("p1", changes = listOf(change)))),
                 ),
             )
         }
@@ -114,9 +119,9 @@ class ConversationTest {
         assertEquals(asked().id, felix.ports.showing?.replyTo)
         assertEquals(0, felix.ports.forms)
         // Not a number: asked again, saying what it wants.
-        assertTrue(conversation.replyToFelix("Good", asked().id))
+        assertTrue(conversation.ask("Good", replyTo = asked().id))
         assertEquals(FelixWords.CHECK_IN_AGAIN + FelixWords.CHECK_IN[0], asked().text)
-        for (answer in listOf("4", "Physics questions", "Football", "Less on Fridays", "Mornings")) assertTrue(conversation.replyToFelix(answer, asked().id))
+        for (answer in listOf("4", "Physics questions", "Football", "Less on Fridays", "Mornings")) assertTrue(conversation.ask(answer, replyTo = asked().id))
         val checkIn = stores.log.value.checkIns.single()
         assertEquals(listOf<Any>(4, "Physics questions", "Football", "Less on Fridays", "Mornings"), listOf(checkIn.feel, checkIn.avoided, checkIn.inTheWay, checkIn.change, checkIn.energy))
         assertNull(stores.chat.value.felix.checkInDraft)
@@ -124,7 +129,7 @@ class ConversationTest {
         assertEquals(1, felix.ports.reviews)
         // Every question in the chat, answered, each with your reply under it; none of it a call.
         val messages = stores.chat.value.messages
-        val questions = messages.filter { it.from == Speaker.Claude && it.text != FelixWords.CHECK_IN_THANKS }
+        val questions = messages.filter { it.from == Speaker.Felix && it.text != FelixWords.CHECK_IN_THANKS }
         assertEquals(6, questions.size)
         for (q in questions) {
             assertNotNull(q.answeredAt, q.text)
@@ -143,7 +148,7 @@ class ConversationTest {
         felix.settle()
         conversation.remindCheckIn()
         val question = his().last()
-        assertTrue(conversation.replyToFelix("4", question.id))
+        assertTrue(conversation.ask("4", replyTo = question.id))
         // The "4", answered as it came with its question's kind, doesn't hide what waits.
         assertEquals(MessageKind.CheckIn, stores.chat.value.messages.last().kind)
         assertEquals("What's due tomorrow?", stores.chat.value.unanswered?.text)
@@ -151,7 +156,7 @@ class ConversationTest {
         felix.answers(felix.chatAnswer("The forces worksheet, due Wednesday."))
         conversation.answerChat()
         assertNull(stores.chat.value.unanswered)
-        assertEquals("The forces worksheet, due Wednesday.", stores.chat.value.messages.last { it.from == Speaker.Claude && it.kind == MessageKind.Chat }.text)
+        assertEquals("The forces worksheet, due Wednesday.", stores.chat.value.messages.last { it.from == Speaker.Felix && it.kind == MessageKind.Chat }.text)
     }
 
     @Test
@@ -177,18 +182,18 @@ class ConversationTest {
 
     @Test
     fun `a reply from his notification is kept under his message and answered in the chat, the answer his next message`() = runBlocking {
-        val his = ChatMessage("r1", Speaker.Claude, "The worksheet's slot went by. Still on for tonight?", now - 5 * 60_000L, kind = MessageKind.SlotEnd, pieceKey = "teams:sheet#-1#1", suggestedReplies = listOf("Yes", "Later"))
+        val his = ChatMessage("r1", Speaker.Felix, "The worksheet's slot went by. Still on for tonight?", now - 5 * 60_000L, kind = MessageKind.SlotEnd, pieceKey = "teams:sheet#-1#1", suggestedReplies = listOf("Yes", "Later"))
         felix.outbox.send(his)
         assertEquals(listOf("Yes", "Later"), felix.ports.showing?.replies)
         felix.answers(felix.chatAnswer("Good: after dinner, then."))
-        assertTrue(conversation.replyToFelix("Yes, after dinner", "r1"))
+        assertTrue(conversation.replyFromNotification("Yes, after dinner", "r1"))
         // Your words in his notification under his message, while he answers as work of its own.
         assertEquals(listOf("r1" to false, null to true), felix.ports.showing!!.lines.map { (if (it.yours) null else it.id) to it.yours })
         assertEquals(1, felix.ports.later)
         // As the reply's worker runs it.
-        conversation.answerReply()
+        conversation.answerChat()
         val messages = stores.chat.value.messages
-        assertEquals(listOf(Speaker.Claude to his.text, Speaker.You to "Yes, after dinner", Speaker.Claude to "Good: after dinner, then."), messages.map { it.from to it.text })
+        assertEquals(listOf(Speaker.Felix to his.text, Speaker.You to "Yes, after dinner", Speaker.Felix to "Good: after dinner, then."), messages.map { it.from to it.text })
         assertEquals("r1", messages[1].replyTo)
         assertNotNull(messages[1].answeredAt)
         // His answer is in his notification too, after your words.
@@ -212,8 +217,8 @@ class ConversationTest {
         val question = his().single()
         assertEquals(MessageKind.EventQuestion to "open day", question.kind to question.about.eventKey)
         assertEquals(listOf("All of it", "A few hours", "None"), question.suggestedReplies)
-        assertTrue(conversation.replyToFelix("a few hours", question.id))
-        assertEquals(listOf("open day" to "a few hours"), felix.owners.events)
+        assertTrue(conversation.ask("a few hours", replyTo = question.id))
+        assertEquals(listOf("open day" to CalendarTime.ANSWERS[1].second), felix.owners.events)
         assertNotNull(stores.chat.value.messages.single { it.id == question.id }.answeredAt)
         assertNull(felix.ports.showing)
         assertEquals(0, felix.server.requestCount)
@@ -232,7 +237,7 @@ class ConversationTest {
         assertEquals(MessageKind.Completions to listOf(ask), question.kind to question.asks)
         assertEquals(listOf("Harder", "As expected", "Easier"), question.suggestedReplies)
         assertTrue(stores.chat.value.felix.assessLater.isEmpty())
-        assertTrue(conversation.replyToFelix("Harder", question.id))
+        assertTrue(conversation.ask("Harder", replyTo = question.id))
         assertEquals(listOf(Triple("teams:sheet", ask.doneAt!!, "harder")), felix.assessed)
     }
 
@@ -261,16 +266,177 @@ class ConversationTest {
     }
 
     @Test
-    fun `a reply while a message of yours still waits says so in his name, and nothing's lost`() = runBlocking {
+    fun `a reply in the chat to an older message of his is a turn of the chat, sent quoting it`() = runBlocking {
+        felix.outbox.send(ChatMessage("n1", Speaker.Felix, "The essay plan's up at 18:00.", now - 20 * 60_000L, kind = MessageKind.SlotStart))
+        felix.outbox.send(ChatMessage("n2", Speaker.Felix, "Ten minutes left on the worksheet.", now - 5 * 60_000L, kind = MessageKind.SlotEnd))
+        felix.answers(felix.chatAnswer("Fine: 18:30 then."))
+        assertTrue(conversation.ask("can it be half six?", replyTo = "n1"))
+        felix.settle()
+        val mine = stores.chat.value.messages.single { it.from == Speaker.You }
+        assertEquals("n1" to "Fine: 18:30 then.", mine.replyTo to his().last().text)
+        assertTrue("(Replying to your message: " in felix.server.takeRequest().body.readUtf8())
+        // Not from his notification: nothing waits for work of its own.
+        assertEquals(0, felix.ports.later)
+    }
+
+    @Test
+    fun `his button counts his messages since you last left the chat, but a question you've answered`() = runBlocking {
+        felix.outbox.send(ChatMessage("n1", Speaker.Felix, "Up at 17:00.", now - 60_000L, kind = MessageKind.SlotStart))
+        conversation.askAboutEvent("open day", "Open day", "Saturday 24 October", now + 86_400_000L, CalendarTime.ANSWERS.map { it.first })
+        assertEquals(2, conversation.unread.first())
+        assertTrue(conversation.ask(CalendarTime.ANSWERS[2].first, replyTo = his().last().id))
+        assertEquals(1, conversation.unread.first())
+        conversation.read()
+        assertEquals(0, conversation.unread.first())
+    }
+
+    @Test
+    fun `a reply while a message of yours still waits goes with it, and he answers both together`() = runBlocking {
         // Claude off: your message waits, saying why.
         stores.settings.update { it.copy(aiEnabled = false) }
         assertTrue(conversation.ask("What's due tomorrow?"))
         felix.settle()
-        felix.outbox.send(ChatMessage("n1", Speaker.Claude, "the worksheet's up at 17:00", now, kind = MessageKind.SlotStart))
-        assertTrue(!conversation.replyToFelix("on it", "n1"))
-        val note = his().last()
-        assertEquals(FelixWords.STILL_WAITING to MessageKind.Note, note.text to note.kind)
-        // Yours still waits, and his look didn't answer it.
-        assertEquals("What's due tomorrow?", stores.chat.value.unanswered?.text)
+        felix.outbox.send(ChatMessage("n1", Speaker.Felix, "the worksheet's up at 17:00", now, kind = MessageKind.SlotStart))
+        assertTrue(conversation.replyFromNotification("on it", "n1"))
+        felix.settle()
+        // Both kept, only the newest saying why it waits.
+        val waiting = stores.chat.value.messages.filter { it.from == Speaker.You }
+        assertEquals(listOf("What's due tomorrow?", "on it"), waiting.map { it.text })
+        assertNull(waiting.first().note)
+        assertNotNull(waiting.last().note)
+        // Claude back: one answer for both.
+        stores.settings.update { it.copy(aiEnabled = true) }
+        felix.answers(felix.chatAnswer("The worksheet, due Wednesday: go for it."))
+        conversation.answerChat()
+        assertTrue(stores.chat.value.messages.filter { it.from == Speaker.You }.all { it.answeredAt != null })
+        assertEquals("The worksheet, due Wednesday: go for it.", his().last().text)
+        val sent = felix.server.takeRequest().body.readUtf8()
+        assertTrue("What's due tomorrow?" in sent && "on it" in sent)
+        assertEquals(1, felix.server.requestCount)
+    }
+
+    @Test
+    fun `a reply to a question scrolled back to in the archive is answered as it, with no call`() = runBlocking {
+        val question = ChatMessage("e1", Speaker.Felix, "Is the open day all day?", now - 70 * 86_400_000L, About(eventKey = "open day", eventTitle = "Open day"), kind = MessageKind.EventQuestion, byApp = true, suggestedReplies = CalendarTime.ANSWERS.map { it.first })
+        felix.stores.chatArchive.update { it.copy(messages = listOf(question)) }
+        assertEquals(Conversation.Asked.Answer, conversation.send(CalendarTime.ANSWERS[0].first, replyTo = "e1"))
+        assertEquals(listOf("open day" to CalendarTime.ANSWERS[0].second), felix.owners.events)
+        // Answered there, so it takes no second answer.
+        assertNotNull(felix.stores.chatArchive.value.messages.single().answeredAt)
+        assertEquals(0, felix.server.requestCount)
+    }
+
+    @Test
+    fun `an answer with no call from his notification, while a message of yours waits, asks for no work`() = runBlocking {
+        stores.settings.update { it.copy(aiEnabled = false) }
+        assertTrue(conversation.ask("What's due tomorrow?"))
+        felix.settle()
+        conversation.remindCheckIn()
+        assertTrue(conversation.replyFromNotification("4", his().last().id))
+        assertEquals(0, felix.ports.later)
+        // A turn of the chat from it does.
+        felix.outbox.send(ChatMessage("n1", Speaker.Felix, "the worksheet's up at 17:00", now, kind = MessageKind.SlotStart))
+        assertTrue(conversation.replyFromNotification("on it", "n1"))
+        assertEquals(1, felix.ports.later)
+    }
+
+    @Test
+    fun `of messages that waited together, those he wasn't sent say so, and wait for their Try again`() = runBlocking {
+        stores.settings.update { it.copy(aiEnabled = false) }
+        (1..14).forEach { assertTrue(conversation.ask("question $it")) }
+        felix.settle()
+        stores.settings.update { it.copy(aiEnabled = true) }
+        felix.answers(felix.chatAnswer("All of them, in order."))
+        conversation.answerChat()
+        val mine = stores.chat.value.messages.filter { it.from == Speaker.You }
+        // He's sent the conversation's last twelve: the first two weren't in it, and say so, with Try again.
+        assertEquals((1..14).map { it > 2 }, mine.map { it.answeredAt != null })
+        assertEquals("question 2", stores.chat.value.unanswered?.text)
+        assertTrue(mine.take(2).all { it.note != null && it.stuck })
+        // Not asked unasked: only Try again asks for it.
+        conversation.answerChat()
+        assertEquals(1, felix.server.requestCount)
+    }
+
+    @Test
+    fun `a message sent while he answers lets go what that answer would still look up, with no call for it`() = runBlocking {
+        // His answer to the first comes late and asks to look something up: the second is sent meanwhile.
+        val looks = felix.chatAnswer("Let me check when it opens.").replace("\"research\":\"\"", "\"research\":\"When does the science museum open on Saturdays?\"")
+        felix.answers(looks, delayMs = 1_000)
+        felix.answers(felix.chatAnswer("It opens at 10:00; moved the physics to 8."))
+        assertTrue(conversation.ask("when does the museum open?"))
+        withTimeout(5_000) { while (conversation.answeringSince.value == null) delay(10) }
+        assertTrue(conversation.ask("and move the physics to 8"))
+        felix.settle()
+        // No search for the answer let go: his one answer, to both, the only other call.
+        assertEquals(2, felix.server.requestCount)
+        assertEquals("It opens at 10:00; moved the physics to 8.", his().last().text)
+    }
+
+    @Test
+    fun `a check-in question from a week long gone, scrolled back to in the archive, is a turn of the chat while this week's is asked`() = runBlocking {
+        stores.settings.update { it.copy(aiEnabled = false) }
+        val old = ChatMessage("c0", Speaker.Felix, FelixWords.CHECK_IN[0], now - 70 * 86_400_000L, kind = MessageKind.CheckIn, byApp = true)
+        felix.stores.chatArchive.update { it.copy(messages = listOf(old)) }
+        conversation.remindCheckIn()
+        val draft = stores.chat.value.felix.checkInDraft
+        assertNotNull(draft)
+        assertEquals(Conversation.Asked.Turn, conversation.send("3", replyTo = "c0"))
+        felix.settle()
+        // This week's is where it was, its question still waiting for its answer.
+        assertEquals(draft, stores.chat.value.felix.checkInDraft)
+        assertNull(his().last { it.kind == MessageKind.CheckIn }.answeredAt)
+    }
+
+    @Test
+    fun `taken back, the newest of yours waiting leaves the one before it saying why it waits`() = runBlocking {
+        stores.settings.update { it.copy(aiEnabled = false) }
+        assertTrue(conversation.ask("What's due tomorrow?"))
+        felix.settle()
+        assertTrue(conversation.ask("And on Friday?"))
+        felix.settle()
+        val why = stores.chat.value.unanswered?.note
+        assertNotNull(why)
+        conversation.withdrawQuestion()
+        assertEquals("What's due tomorrow?" to why, stores.chat.value.unanswered?.let { it.text to it.note })
+    }
+
+    @Test
+    fun `one that waited for its Try again still does when the newest of yours is taken back`() = runBlocking {
+        stores.settings.update { it.copy(aiEnabled = false) }
+        assertTrue(conversation.ask("What's due tomorrow?"))
+        felix.settle()
+        // Its answer couldn't be read: it waits for Try again.
+        stores.chat.update { s -> s.copy(messages = s.messages.map { if (it.text == "What's due tomorrow?") it.copy(note = "Claude's answer couldn't be read: Try again", stuck = true) else it }) }
+        assertTrue(conversation.ask("And on Friday?"))
+        felix.settle()
+        conversation.withdrawQuestion()
+        assertEquals(true, stores.chat.value.unanswered?.stuck)
+        // Claude back: nothing's asked by itself.
+        stores.settings.update { it.copy(aiEnabled = true) }
+        conversation.answerChat()
+        assertEquals(0, felix.server.requestCount)
+    }
+
+    @Test
+    fun `a message sent while he answers lets that answer go, and he answers both together`() = runBlocking {
+        // His answer to the first comes late: the second is sent while it's being made.
+        felix.answers(felix.chatAnswer("Moved it to 19:00."), delayMs = 1_000)
+        felix.answers(felix.chatAnswer("Moved it to 20:00, as you said."))
+        assertTrue(conversation.ask("move the physics to 7"))
+        withTimeout(5_000) { while (conversation.answeringSince.value == null) delay(10) }
+        assertTrue(conversation.ask("no, make it 8"))
+        felix.settle()
+        val messages = stores.chat.value.messages
+        // One answer, to both: the one made meanwhile let go, paid for and unused.
+        assertEquals(
+            listOf(Speaker.You to "move the physics to 7", Speaker.You to "no, make it 8", Speaker.Felix to "Moved it to 20:00, as you said."),
+            messages.map { it.from to it.text },
+        )
+        assertTrue(messages.filter { it.from == Speaker.You }.all { it.answeredAt != null })
+        assertEquals(2, felix.server.requestCount)
+        felix.server.takeRequest()
+        val second = felix.server.takeRequest().body.readUtf8()
+        assertTrue("move the physics to 7" in second && "no, make it 8" in second)
     }
 }

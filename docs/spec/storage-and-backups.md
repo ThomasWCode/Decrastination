@@ -28,7 +28,7 @@ Under the app's `files/` folder:
 | `instructions.json` | `InstructionState`: your changes, each with its words, what it's about, its reading and its state |
 | `memory.json` | `MemoryState`: what Felix remembers ([felix.md](felix.md)) |
 | `chat.json` | `ChatState`: the chat's live window (every message of yours and Felix's, the newest 200 or those of the last 60 days, whichever keeps more, and every one of his unread), where you'd read up to, and Felix's state (his next check, what he wrote ahead, what waits to be asked, the check-in's answers so far) |
-| `chat-archive.json` | `ChatArchive`: the chat's messages past its window, oldest first, kept for you and never sent to him ([felix.md](felix.md)) |
+| `chat-archive.json` | `ChatArchive`: the chat's messages past its window, oldest first, kept for you and never sent to him: loaded with the rest at start, and shown a page at a time on scrolling back ([felix.md](felix.md)) |
 | `school.json` | `SchoolCalendar`: days with no school, and half-days |
 | `calendar.json` | `CalendarVersions`: fingerprints of the event versions the app wrote to the calendar, the last 2 000, so a stray copy is told from an event of yours ([slots-and-calendar.md](slots-and-calendar.md)) |
 | `secrets.bin` | The credentials and keys, encrypted (`data/SecretStore.kt`, [privacy.md](privacy.md)) |
@@ -39,7 +39,7 @@ Beside them:
 - `backups/`: a reset's copy, where `Documents` can't be written;
 - `<name>.unreadable-<when>`: copies of files that couldn't be read (below);
 - `<name>.v<n>`: the file a migration came from, kept a week (above);
-- the debug commands' files: `credentials.import` (only until it's imported), `ai-prompts.json` and `chat-context.txt`.
+- the debug commands' files: `credentials.import` (only until it's imported), `ai-prompts.json`, `chat-context.txt` and `chat-turns.txt`.
 
 The cache holds a photo check's pages till they're checked, and the record exported from Stats to share (PL-11).
 
@@ -131,7 +131,7 @@ On a debug build the menu's *Debug* page (AR-03) has a button for each command t
 - `ai-check --es base <url>` (every job's reader once, through the real client, to a stand-in server with a dummy key: `scripts/claude_stub.py` on the PC, `adb reverse tcp:8089 tcp:8089`); `ai-endpoint --es base <url>` and `ai-effort --es job <job> --es level <low|medium|high|none>`, both till the app restarts.
 
 **The chat, Felix and instructions**
-- `chat-ask --es text "<words>"` (a paid call); `chat-context` (writes `files/chat-context.txt`); `chat-card --es do <apply|undo>`; `chat-clear`.
+- `chat-ask --es text "<words>"` (a paid call; with `--es replyTo <message id>`, a reply to that message, routed as any reply is: a question of his answered with no call); `chat-context` (writes `files/chat-context.txt`, and the turns your newest message was sent with, a reply's quote among them, to `files/chat-turns.txt`); `chat-card --es do <apply|undo>`; `chat-clear`.
 - `felix` (his state and last messages); `felix-check`; `felix-say --es reason <reason>` (a paid call); `memory`; `memory-tidy` (a paid call).
 - `instruction --es text "<words>"` [`--es task <id>`, `--es event <key>` or `--es day <YYYY-MM-DD>`]; `instructions`; `instruction-discard --es id <id|all>`.
 
