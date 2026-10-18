@@ -574,7 +574,7 @@ class Conversation(
                 // Asked to look something up, and it couldn't be: his first answer stands, saying why.
                 // What he read in full to answer (D-93), said under it.
                 acts = listOfNotNull(
-                    notLooked?.let { Act("Not looked up: $it.", problem = true) },
+                    notLooked?.let { Act(Act.NOT_LOOKED_UP + "$it.", problem = true) },
                     read.takeIf { it.isNotEmpty() }?.let { r -> Act("Read in full: " + r.joinToString("; ") { "“${it.title}”" } + ".") },
                 ),
             )
@@ -616,7 +616,7 @@ class Conversation(
                 val moved = ChatAnswers.movedPins(instant.flatMap { it.changes }, planning.plan().buckets, clock.zone())
                 // One that couldn't be made after all, said under the answer that says it was (16 Oct).
                 val refused = chat.value.messages.firstOrNull { it.id == reply.id }?.proposals.orEmpty()
-                    .filter { p -> p.instant && p.state != ProposalState.Applied && p.note != null }.map { Act("Not made: ${it.note!!.replaceFirstChar(Char::lowercase)}.", problem = true) }
+                    .filter { p -> p.instant && p.state != ProposalState.Applied && p.note != null }.map { Act(Act.NOT_MADE + "${it.note!!.replaceFirstChar(Char::lowercase)}.", problem = true) }
                 val lines = refused + moved.map { Act(it) }
                 if (lines.isNotEmpty()) chat.update { s -> s.copy(messages = s.messages.map { if (it.id == reply.id) it.copy(acts = it.acts + lines) else it }) }
                 // His answer, in the chat whole: the window moved, and it's his notification while the chat isn't on screen.

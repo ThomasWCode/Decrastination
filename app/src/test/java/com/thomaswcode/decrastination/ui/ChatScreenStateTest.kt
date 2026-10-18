@@ -2,6 +2,8 @@ package com.thomaswcode.decrastination.ui
 
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.Fixtures.LONDON
+import com.thomaswcode.decrastination.core.Act
+import com.thomaswcode.decrastination.core.ChatAction
 import com.thomaswcode.decrastination.core.ChatMessage
 import com.thomaswcode.decrastination.core.ChatState
 import com.thomaswcode.decrastination.core.MessageKind
@@ -13,7 +15,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/** The chat screen's state beside the chat (docs/plan_v4/05-the-chat.md §4, §5), without Compose. */
+/** The chat screen's state beside the chat (docs/plan_v4/05-the-chat.md §4 to §6), without Compose. */
 class ChatScreenStateTest {
     private fun his(id: String, at: String, text: String = "Up at 17:00.") = ChatMessage(id, Speaker.Felix, text, Fixtures.at(at), kind = MessageKind.SlotStart)
 
@@ -21,14 +23,17 @@ class ChatScreenStateTest {
 
     private fun yours(id: String, at: String, replyTo: String? = null) = yours(id, Fixtures.at(at), replyTo)
 
+    /** When the chat's opened in these tests. */
+    private val opening = Fixtures.at("2026-10-18T18:00")
+
     @Test
     fun `opened, the first of his unread is marked for the divider and opened at, and from his notification, its message`() {
         val state = ChatState(listOf(yours("y", "2026-10-18T17:00"), his("h1", "2026-10-18T17:10"), his("h2", "2026-10-18T17:20")), readAt = Fixtures.at("2026-10-18T17:05"))
         val screen = ChatScreenState()
-        screen.opened(state)
+        screen.opened(state, opening)
         assertEquals("h1" to "h1", screen.firstUnread to screen.scrollTo)
         assertNull(screen.flash)
-        screen.opened(state, at = "h2")
+        screen.opened(state, opening, at = "h2")
         assertEquals("h1" to "h2", screen.firstUnread to screen.scrollTo)
         assertEquals("h2", screen.flash)
         screen.scrolled()
@@ -36,7 +41,7 @@ class ChatScreenStateTest {
         assertNull(screen.scrollTo)
         assertNull(screen.flash)
         // Everything read: no divider, and the foot.
-        screen.opened(state.copy(readAt = Fixtures.at("2026-10-18T18:00")))
+        screen.opened(state.copy(readAt = Fixtures.at("2026-10-18T18:00")), opening)
         assertNull(screen.firstUnread)
         assertNull(screen.scrollTo)
     }
@@ -50,7 +55,7 @@ class ChatScreenStateTest {
             his("h2", "2026-10-18T17:00"),
         )
         val screen = ChatScreenState()
-        screen.opened(ChatState(window, readAt = Fixtures.at("2026-10-18T08:00")))
+        screen.opened(ChatState(window, readAt = Fixtures.at("2026-10-18T08:00")), opening)
         val rows = screen.items(window, emptyList(), LONDON)
         assertEquals(listOf("day-y1", "y1", "day-h1", "h1", "unread", "h2"), rows.map { it.key })
         assertEquals(listOf(LocalDate.of(2026, 10, 17), LocalDate.of(2026, 10, 18)), rows.filterIsInstance<ChatScreenState.Item.Day>().map { it.date })
@@ -65,7 +70,7 @@ class ChatScreenStateTest {
         val answered = his("q", "2026-10-18T17:10").copy(kind = MessageKind.CheckIn, answeredAt = Fixtures.at("2026-10-18T17:11"))
         val state = ChatState(listOf(answered, his("h2", "2026-10-18T17:20")), readAt = Fixtures.at("2026-10-18T17:00"))
         val screen = ChatScreenState()
-        screen.opened(state)
+        screen.opened(state, opening)
         assertEquals("h2", screen.firstUnread)
         val rows = ChatScreenState().apply { loadEarlier(1) }.items(state.messages, listOf(his("old", "2026-08-01T10:00")), LONDON)
         assertEquals(mapOf("old" to true, "q" to false, "h2" to false), rows.filterIsInstance<ChatScreenState.Item.Message>().associate { it.message.id to it.archived })
@@ -127,6 +132,68 @@ class ChatScreenStateTest {
         )
         val rows = ChatScreenState().items(window, archived, LONDON).filterIsInstance<ChatScreenState.Item.Message>()
         assertEquals(listOf(null, null, null, "h1", "old"), rows.map { it.quote?.id })
+    }
+
+    @Test
+    fun `what's under a message is opened and closed, and every one closed again as the screen pauses`() {
+        val screen = ChatScreenState()
+        screen.toggle("h1")
+        screen.unfold("h2")
+        screen.unfold("h2")
+        assertEquals(setOf("h1", "h2"), screen.open)
+        screen.toggle("h1")
+        assertEquals(setOf("h2"), screen.open)
+        screen.paused()
+        assertTrue(screen.open.isEmpty())
+    }
+
+    @Test
+    fun `a label slides out once for his message with something to say that arrived on screen or was unread when the chat opened`() {
+        fun said(id: String, at: String) = his(id, at).copy(acts = listOf(Act("Ticked “Plan” on “Essay”.", ChatAction(ChatAction.Type.TickStep, "own:essay", stepIndex = 0))))
+        val read = said("read", "2026-10-18T16:00")
+        val unread = said("unread", "2026-10-18T17:30")
+        val talk = his("talk", "2026-10-18T17:40")
+        val screen = ChatScreenState()
+        screen.opened(ChatState(listOf(read, unread, talk), readAt = Fixtures.at("2026-10-18T17:00")), opening)
+        // Read before it opened, or just talk: none.
+        assertFalse(screen.labels(read))
+        assertFalse(screen.labels(talk))
+        assertTrue(screen.labels(unread))
+        // Arriving while it's on screen.
+        val arrived = said("arrived", "2026-10-18T18:05")
+        assertTrue(screen.labels(arrived))
+        assertFalse(screen.labels(arrived.copy(from = Speaker.You)))
+        // An answer whose changes are kept after its words: none while it has nothing to say, one once it has.
+        val words = his("words", "2026-10-18T18:06")
+        assertFalse(screen.labels(words))
+        assertTrue(screen.labels(said("words", "2026-10-18T18:06")))
+        // Once a visit.
+        screen.labelled("unread")
+        assertFalse(screen.labels(unread))
+        // Paused: nothing arrives on a screen that isn't there; opened again, what's unread then gets it.
+        screen.paused()
+        assertFalse(screen.labels(said("later", "2026-10-18T18:10")))
+        val before = screen.visit
+        screen.opened(ChatState(listOf(read, unread, arrived), readAt = Fixtures.at("2026-10-18T18:01")), Fixtures.at("2026-10-18T18:20"))
+        assertEquals(before + 1, screen.visit)
+        assertFalse(screen.labels(unread))
+        assertTrue(screen.labels(arrived))
+    }
+
+    @Test
+    fun `opened again before what it showed is written as read, what it showed isn't unread`() {
+        val seen = his("seen", "2026-10-18T18:00")
+        val screen = ChatScreenState()
+        screen.paused(read = Fixtures.at("2026-10-18T18:05"))
+        // The chat's read position not moved yet: its write still under way.
+        screen.opened(ChatState(listOf(seen), readAt = Fixtures.at("2026-10-18T17:00")), Fixtures.at("2026-10-18T18:06"))
+        assertNull(screen.firstUnread)
+        assertFalse(screen.labels(seen.copy(acts = listOf(Act("Ticked “Plan” on “Essay”.", ChatAction(ChatAction.Type.TickStep, "own:essay", stepIndex = 0))))))
+        // Paused with nothing read (on Your changes), what came after is still unread.
+        val later = his("later", "2026-10-18T18:10")
+        screen.paused()
+        screen.opened(ChatState(listOf(seen, later), readAt = Fixtures.at("2026-10-18T17:00")), Fixtures.at("2026-10-18T18:20"))
+        assertEquals("later", screen.firstUnread)
     }
 
     @Test

@@ -200,7 +200,68 @@ data class Act(
     val after: String? = null,
     val undone: Boolean = false,
     val problem: Boolean = false,
-)
+) {
+    companion object {
+        /** How a [problem]'s line starts where a card of the answer couldn't be made, and where a search he asked for wasn't looked up: each said apart in the message's label ([ChatSummary.line]). */
+        const val NOT_MADE = "Not made: "
+        const val NOT_LOOKED_UP = "Not looked up: "
+    }
+}
+
+/**
+ * What's said under a message of his, folded behind a chevron at its bubble's corner, and the label that
+ * says it in a line (docs/plan_v4/05-the-chat.md §6). Pure.
+ */
+object ChatSummary {
+    /**
+     * Whether [message] has anything under its words to fold (Q4: A): its cards but a task to open (the
+     * point of a message that shows you one), what it did and said of it, what it remembered, what was
+     * searched and found, what was left out. A message that's just talk has none: no chevron, no label.
+     */
+    fun folds(message: ChatMessage): Boolean =
+        message.proposals.any { it.open == null } || message.acts.isNotEmpty() || message.memoryEdits.isNotEmpty() ||
+            message.searched.isNotEmpty() || message.sources.isNotEmpty() || message.note != null
+
+    /**
+     * How many things under [message] went wrong (Q5: A): a card not made, a search not looked up, what was
+     * left out; and a card from before everything was made as it came whose making failed, said only on it.
+     * Any, and its chevron is red.
+     */
+    fun problems(message: ChatMessage): Int = message.acts.count { it.problem } + failedBefore(message) + if (message.note != null) 1 else 0
+
+    /** Cards from before everything was made as it came (16 Oct) whose making failed: their note says why, with no line of their own. */
+    private fun failedBefore(message: ChatMessage): Int =
+        message.proposals.count { !it.instant && it.open == null && it.note != null && it.state != ProposalState.Applied }
+
+    /** A label's words: what he did ([did], "Changes: 2 · Remembered · Searched") and what went wrong ([wrong], in red, "1 not made"), each part only where it applies. */
+    data class Line(val did: String, val wrong: String) {
+        val isEmpty: Boolean get() = did.isEmpty() && wrong.isEmpty()
+    }
+
+    /**
+     * [message]'s label (Q5: A): "Changes" counting what he made that still stands, each one thing he
+     * did (a change, a task added, an action: a step ticked, a setting); "Remembered" where he
+     * remembered or forgot something; "Searched" where he looked something up; and what wasn't made,
+     * looked up or used.
+     */
+    fun line(message: ChatMessage): Line {
+        val made = message.proposals.filter { it.open == null && it.state == ProposalState.Applied }.sumOf { if (it.task != null) 1 else it.changes.size }
+        val changes = made + message.acts.count { it.action != null && !it.undone }
+        val notMade = message.acts.count { it.problem && it.line.startsWith(Act.NOT_MADE) } + failedBefore(message)
+        return Line(
+            listOfNotNull(
+                "Changes: $changes".takeIf { changes > 0 },
+                "Remembered".takeIf { message.memoryEdits.any { !it.undone } },
+                "Searched".takeIf { message.searched.isNotEmpty() },
+            ).joinToString(" · "),
+            listOfNotNull(
+                "$notMade not made".takeIf { notMade > 0 },
+                "not looked up".takeIf { message.acts.any { it.problem && it.line.startsWith(Act.NOT_LOOKED_UP) } },
+                "left out".takeIf { message.note != null },
+            ).joinToString(" · "),
+        )
+    }
+}
 
 @Serializable
 enum class ProposalState { Proposed, Applied, Discarded }
