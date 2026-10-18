@@ -1,4 +1,4 @@
-package com.thomaswcode.decrastination
+package com.thomaswcode.decrastination.plan
 
 import com.thomaswcode.decrastination.core.Plan
 import kotlinx.coroutines.CoroutineScope

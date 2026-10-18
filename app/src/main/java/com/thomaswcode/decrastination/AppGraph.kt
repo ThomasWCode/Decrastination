@@ -74,6 +74,8 @@ import com.thomaswcode.decrastination.net.UrlConnectionHttp
 import com.thomaswcode.decrastination.notify.AndroidTray
 import com.thomaswcode.decrastination.notify.NoticeId
 import com.thomaswcode.decrastination.notify.Notifier
+import com.thomaswcode.decrastination.plan.PlanWatcher
+import com.thomaswcode.decrastination.plan.Planning
 import com.thomaswcode.decrastination.protect.CodeLock
 import com.thomaswcode.decrastination.protect.SettingsChanges
 import com.thomaswcode.decrastination.protect.Totp
@@ -206,7 +208,6 @@ class AppGraph private constructor(context: Context) {
         ankiRates = { runtime.value.calibration.ankiSecondsPerCard },
     )
 
-    /** The plan now, from the stored tasks and settings. Cheap: dozens of tasks. */
     /** The calendar's busy time and per-day loads (Phase 5), as last read and judged. */
     @Volatile
     /** The calendar as the planner counts it, from its last read: a plan made before that read is dropped with it. */
@@ -220,55 +221,35 @@ class AppGraph private constructor(context: Context) {
     /** [calendarTime] as it changes, for a screen open while the calendar is read again. */
     val calendarState = kotlinx.coroutines.flow.MutableStateFlow(calendarTime)
 
-    /** The plan at [now], of [state] with [applied] instructions and the calendar's [time]: as they are, or a snapshot of them taken once ([chatContext]). */
+    /**
+     * The plan ([Planning]): made from the stores as they are, made again as they change, today's slot
+     * starts kept, and the work done ahead after each. A new plan's hooks are the app's: the slot
+     * alarms, the calendar, the widget.
+     */
+    val planning = Planning(
+        tasks, settings, runtime, log, instructions, school, clock, scope, gateway,
+        calendarTime = { calendarTime },
+        calendarChanges = calendarState,
+        sweep = { slots.sweep() },
+        hooks = listOf(
+            { made -> SlotAlarms.arm(app, made, clock.now()) },
+            // The calendar once plans have been quiet a while ([toWrite]).
+            { made -> toWrite.tryEmit(made); Unit },
+            { _ -> WidgetUpdater.update(app) },
+        ),
+        profile = { profile(it) },
+        draftAhead = { made, now -> felix.draftAhead(made, now) },
+        onFailure = { Log.w(TAG, "Replanning failed", it) },
+    )
+
+    /** [Planning.plan], till its callers call it there. */
     fun plan(
         state: TaskState = tasks.value,
         settings: Settings = this.settings.value,
         now: Long = clock.now(),
         applied: List<Instruction> = instructions.value.applied,
         time: com.thomaswcode.decrastination.learn.EventJudge.Time = calendarTime,
-    ): Plan {
-        val zone = clock.zone()
-        // Your instructions' days and times, over as far as the plan can reach.
-        val today = java.time.Instant.ofEpochMilli(now).atZone(zone).toLocalDate()
-        val reach = today.plusDays(PLAN_REACH_DAYS)
-        // Each task as its instructions say, whatever the task file (a stop between writing the two,
-        // not yet put right): the instructions are what's kept.
-        val overrides = Instructions.taskOverrides(applied)
-        val tasks = state.tasks.map { task ->
-            val o = overrides[task.id] ?: TaskOverrides.NONE
-            if (o == task.overrides()) task else task.withOverrides(o)
-        }.let(com.thomaswcode.decrastination.core.Duplicates::linksPresent).let(com.thomaswcode.decrastination.core.Duplicates::credited)
-        // Each day's windows, from the timetable's study periods and the school calendar (PL-15).
-        val days = generateSequence(today) { it.plusDays(1) }.takeWhile { it <= reach }.toList()
-        val calendar = school.value
-        val windows = days.associateWith { com.thomaswcode.decrastination.core.SchoolDays.windows(it, settings, state.timetable, calendar) }
-        val dayKinds = days.associateWith { com.thomaswcode.decrastination.core.SchoolDays.kindOf(it, calendar) }
-        return Planner.plan(
-            Planner.Input(
-                tasks = tasks,
-                now = now,
-                zone = zone,
-                settings = settings,
-                calibration = runtime.value.calibration,
-                busy = time.busy,
-                hardBusy = Instructions.busy(applied, zone, today, reach),
-                dayLoads = time.dayLoads,
-                dayCaps = Instructions.dayCaps(applied, today, reach),
-                workedTodayMin = workedToday(now, zone),
-                windows = windows,
-                dayKinds = dayKinds,
-                // Today's pieces where the last plan laid them, where that's still free, and those whose
-                // slots went by undone (PL-13).
-                previousSlots = runtime.value.slots.on(today).previous,
-                missedSlots = runtime.value.slots.on(today).missed.map { it.key }.toSet(),
-            ),
-        )
-    }
-
-    /** Minutes worked in today's kept slots, as the day's record counts them (LR-09). */
-    private fun workedToday(now: Long, zone: java.time.ZoneId): Int =
-        com.thomaswcode.decrastination.learn.Days.workedOn(log.value, java.time.Instant.ofEpochMilli(now).atZone(zone).toLocalDate().toString()).values.sum()
+    ): Plan = planning.plan(state, settings, now, applied, time)
 
     /** The blocker's state and decisions (block/Focus.kt). */
     val focus = Focus(
@@ -278,32 +259,8 @@ class AppGraph private constructor(context: Context) {
         schoolDay = { com.thomaswcode.decrastination.core.SchoolDays.kindOf(it, school.value) == com.thomaswcode.decrastination.core.DayKind.Weekday },
     ) { state, s, now -> plan(state, s, now) }
 
-    /**
-     * The plan made again as what it depends on changes (PL-13): today's slot starts kept, then the
-     * slot alarms set to it and the widget redrawn.
-     */
-    val watcher = PlanWatcher(
-        scope = scope,
-        changes = merge(
-            tasks.state,
-            settings.state,
-            instructions.state,
-            calendarState,
-            school.state,
-            runtime.state.map { it.slots.previous to it.calibration }.distinctUntilChanged(),
-        ),
-        plan = { plan() },
-        keep = ::keepSlots,
-        hooks = listOf(
-            { made -> SlotAlarms.arm(app, made, clock.now()) },
-            // The calendar once plans have been quiet a while ([toWrite]).
-            { made -> toWrite.tryEmit(made); Unit },
-            { _ -> WidgetUpdater.update(app) },
-            // Felix's next message written ahead (AC-10): by itself, as a model call takes a while.
-            { made -> scope.launch { runCatching { com.thomaswcode.decrastination.enrich.Ahead.run(this@AppGraph, made, clock.now()) }.onFailure { Log.w(TAG, "Writing ahead failed", it) } }; Unit },
-        ),
-        onFailure = { Log.w(TAG, "Replanning failed", it) },
-    )
+    /** [Planning.watcher], till its callers call it there. */
+    val watcher: PlanWatcher get() = planning.watcher
 
     /**
      * The plan to write to the calendar, once plans have been quiet [CALENDAR_WRITE_QUIET_MS] (17 Oct):
@@ -385,22 +342,6 @@ class AppGraph private constructor(context: Context) {
         val versions = calendarVersions.value.written.toSet()
         val cleared = withContext(Dispatchers.IO) { waiting.filter { SlotCalendar.clear(app, it, versions) } }
         if (cleared.isNotEmpty()) runtime.update { it.copy(calendarsToClear = it.calendarsToClear - cleared.toSet()) }
-    }
-
-    /**
-     * [made]'s today kept for the next plan (PL-13): its work slots' starts, and which missed pieces
-     * went to another day. Written only where that changes something, so keeping them doesn't make
-     * the plan again for nothing.
-     */
-    private suspend fun keepSlots(made: Plan) {
-        // A slot whose grace went by before its alarm or a sweep could see it is missed first: once its
-        // start is replaced by where this plan moved it, nothing would know it was.
-        runCatching { slots.sweep() }.onFailure { Log.w(TAG, "Looking at missed slots failed", it) }
-        val starts = made.todaySlots.filter { it.kind == SlotKind.Work }.associate { it.chunk!!.key to it.start }
-        runtime.update { state ->
-            val kept = state.slots.on(made.today).copy(previous = starts).reconciled(made)
-            if (kept == state.slots) state else state.copy(slots = kept)
-        }
     }
 
     /** Applies a settings change: at once, or, once armed, pending if it loosens blocking. */
@@ -2216,9 +2157,6 @@ class AppGraph private constructor(context: Context) {
 
     companion object {
         const val TAG = "Decrastination"
-
-        /** How far ahead your instructions' days and times are laid out for the plan: as far as it reaches. */
-        private const val PLAN_REACH_DAYS = 90L
 
         /** [requestTeamsSync]'s answer when the widget is syncing already: as good as one started. */
         const val TEAMS_BUSY = "The Teams widget is already syncing"
