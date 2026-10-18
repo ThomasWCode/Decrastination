@@ -29,9 +29,11 @@ object FelixNotifications {
     fun show(context: Context, notice: Outbox.Notice) {
         val him = Person.Builder().setName(notice.name).setKey("felix").setIcon(IconCompat.createWithResource(context, R.mipmap.ic_launcher)).build()
         val you = Person.Builder().setName("You").build()
+        // Your replies as a speaker's of their own, not the user's: after a reply from it, Android hides its
+        // Reply while the newest message is the user's own, till he answers, and this keeps it there.
+        val yours = Person.Builder().setName("You").setKey("you").build()
         val style = NotificationCompat.MessagingStyle(you)
-        // Yours as the user's own (no person), so they show as sent.
-        notice.lines.forEach { style.addMessage(it.text, it.at, if (it.yours) null else him) }
+        notice.lines.forEach { style.addMessage(it.text, it.at, if (it.yours) yours else him) }
         val builder = Notify.builder(context, Channels.FELIX)
             .setStyle(style)
             .setWhen(notice.lines.last().at)
