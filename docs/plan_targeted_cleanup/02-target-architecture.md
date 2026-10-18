@@ -27,7 +27,7 @@ The same app, organised so that each concern has one home, owns its data, and ca
 
 ## The rules
 
-1. **`core` stays pure**: no Android, no stores, no services. It's that way now; Phase 8 can make it a module of its own so the compiler holds it.
+1. **`core` stays pure**: no Android, no stores, no services. It's that way now; Phase 8, with Phase 3 (Q9), makes it a module of its own so the compiler holds it.
 2. **One writer a store.** Each store belongs to one service, which alone calls `update` on it. Others read its `StateFlow`, or call the service.
 3. **Services are built like `Focus`**: stores, the clock and small interfaces for Android's effects (notifications, the calendar provider, work, alarms, content resolvers) in the constructor. `AppGraph` passes the real ones; tests pass fakes and stores on temporary files.
 4. **Screens call services.** A composable may read flows and call a service's function; it never calls `update` on a store.
@@ -48,7 +48,7 @@ What stays: making the stores (through `Stores`), the gateway, the notifier and 
 | **Readings** | the readings on tasks | `enrichNow`, `readAgain`, the rules' and Claude's readers, the dropped-plan alerts | Sync, screens |
 | **Instructions** | `instructions.json`; your values laid on tasks | `addInstruction`, `readInstructions`, `applyInstruction`, `deleteInstruction`, the quick changes, `layTaskOverrides` and the refusals | screens, Felix |
 | **OwnTasks** | your own tasks | `saveOwnTask`, `finishOwnTask`, `reopenOwnTask`, `deleteOwnTask`, `pruneOwn`, `forgetCards` | screens, Felix, the focus |
-| **Conversation** (Felix) | the chat with all his messages, his state | the chat functions in `AppGraph`, `learn/Felix.kt`, the check-in flow, the briefing's message, `notify/Felix*` | screens, workers, the notification's receiver |
+| **Conversation** (Felix) | the chat with all his messages (and its archive, plan_v4 Q8), his state, the chat's retry state (`Gathered`) | the chat functions in `AppGraph`, `learn/Felix.kt`, the check-in flow, the briefing's message, `writeSummary`'s offer, `Assessment`'s question and `CalendarTime`'s (Q6), `notify/Felix*` | screens, workers, the notification's receiver |
 | **CalendarWriter** | `calendar.json`, what was written where | `writeSlots`, `clearOldCalendars`, `watchCalendar`, `calendar/SlotCalendar*` | Planning's hooks |
 | **Protection** | changes that loosen blocking, the armed state, the parent code's lock | `changeSettings`, `applyDue`, `useParentCode`, `cancelChange`, `applyNow`, `applyReviewChanges`, `protect/*` | screens, the review, the watchdog |
 | **Learning** | the activity log, the calibration | the review, the stats, `forgetCalibration`, `undoReviewChange`, `undoTidy`, `writeSummary` | workers, screens |

@@ -5,20 +5,20 @@ The structural ground for the coming chat work: every message of Felix's in the 
 ## Today
 
 - **Two homes.** His unprompted messages are `FelixRecord`s in `log.json` (kept 30 days) and notifications; the chat (`chat.json`) has your messages and his answers. A record reaches the chat only when you reply to its notification.
-- **Five producers**, each posting its own notification: his looks and the morning (`learn/Felix.kt`), the morning's title and list (`learn/Briefing.kt`), the check-in (`AppGraph`'s check-in flow, `learn/CheckIns.kt`), the weekly review (`learn/Review.kt`), and answers to a notification's reply (`AppGraph.tellAnswer`).
-- **One notification at a time**: `FelixNotifications` posts every message under id 4200, so each new one takes the last one's place.
+- **Seven producers**, each posting its own notification: his looks and the morning (`learn/Felix.kt`), the morning's title and list (`learn/Briefing.kt`), the check-in (`AppGraph`'s check-in flow, `learn/CheckIns.kt`), the weekly review (`learn/Review.kt`), the summary's offer (`AppGraph.writeSummary`, id 4004, on his channel or the week's in quiet hours), "How did it go?" (`learn/Assessment.kt`, on his channel, 4100 tagged), and answers to a notification's reply (`AppGraph.tellAnswer`).
+- **One notification at a time**: `FelixNotifications` posts his looks, the morning, the check-in and the answers under id 4200, so each new one takes the last one's place; the summary's and the assessment's have ids of their own.
 - **His state in three places**: the log's records, `RuntimeState.felix` (next check, draft, retry, questions) and `assessLater`, and the chat.
 
 ## The conversation
 
 One store, `chat.json`, holds everything said between you and Felix, and his state.
 
-- **Every message of his is a chat message**, with a `kind`: an answer to you, or one he started (Morning, SlotStart, SlotEnd, Question, Completions, CheckIn, Review). What his records held moves onto the message: what it's about (the piece, the task), his next check, the completions it asks about, the replies offered.
+- **Every message of his is a chat message**, with a `kind`: an answer to you, or one he started (Morning, SlotStart, SlotEnd, SlotKept, DayDone, Question, Completions, CheckIn, Review, Summary, EventQuestion; plan_v4's [01](../plan_v4/01-the-chat.md) §1 has the set and the app's own words in his name). What his records held moves onto the message: what it's about (the piece, the task), his next check, the completions it asks about, the replies offered.
 - **`replyTo`** on any message: the message it answers. A reply from a notification sets it; swipe to reply will too. The history sent with your next message says what each reply was to, so he answers the message you meant.
 - **Read state**: when you last saw the chat. It decides which of his messages are unread, which the notification shows and where the chat opens.
 - **His state** (next check, draft, retry, questions waiting, completions to ask about, the check-in's draft) is the conversation's, not `RuntimeState`'s.
 - **The speaker is Felix** (`Speaker.Felix`, read from the stored "Claude").
-- **The cap.** The chat keeps its last 200 messages today. With his own messages in it, that's a month or two; the cap becomes count and age (the last 200, or 60 days, whichever keeps more), so what his rules count today is always there.
+- **The window, not a cap** (plan_v4 Q8, 18 Oct). The chat keeps its last 200 messages today; with his own messages in it, that's a month or two. Every message is kept for you: `chat.json` holds the window (the last 200, or 60 days, whichever keeps more: what the screen opens on, what his rules count, what the model's history is cut from), and what's past it moves to `chat-archive.json`, read only when you scroll back and never sent to him.
 
 `FelixRules` reads today's messages from the conversation instead of the log; its tests stay, run against the conversation.
 
@@ -36,10 +36,10 @@ class Outbox(
 ```
 
 - **The chat first.** The message is written to the conversation before anything is posted, so a notification can't point at a message that isn't there.
-- **A notification only when the chat isn't on screen**, made from the message (text, its quick replies, its cards' buttons), on its channel: Felix's, or the briefing's for the morning, so the briefing's time and its ceiling stay as they are.
+- **A notification only when the chat isn't on screen**, made from the message (text, its quick replies), on his channel, the morning's too (plan_v4 Q3: one notification can't be on two channels, so the briefing's channel goes once it's empty); the briefing's time stays, and what `NotifyRules` would hold overnight is left out of his notification until the morning's rebuild.
 - **Tapping it opens the chat at that message**; replying from it is your message in the chat, replying to his.
 - **Every producer goes through it**: his looks, the morning (the briefing's title and Felix's words become one morning message of his, with the day's list attached), the check-in's questions, the review's note, answers to replies. None posts a notification of its own.
-- **What isn't Felix stays a notification**: syncs under way, protection, free time, the model's alerts, the calendar's moves and questions, "How did it go?". Which of these count as his voice is your call (Q6).
+- **What isn't Felix stays a notification** (Q6): syncs under way, protection, free time, the model's alerts, a calendar move put back. The calendar's questions and "How did it go?" are his: asked in the chat with quick replies, answered with no call.
 
 ## The notifier
 
@@ -63,9 +63,9 @@ Each kind's buttons get request codes in a range of their own (Felix's 6001–60
 
 ### Felix's notifications stack
 
-Two ways, both ending "a new one removes the last" (Q4 is which):
+Two ways, both ending "a new one removes the last"; Q4 chose the first, and the second is the fallback should One UI mishandle the messaging style:
 
-- **One conversation notification (recommended)**, as messaging apps do it: Android's messaging style, holding his unread messages, newest last, each added as it comes; a reply box replying to the newest; tapping opens the chat at the first unread. Opening the chat marks them read and clears it.
+- **One conversation notification (Q4: A)**, as messaging apps do it: Android's messaging style, holding his unread messages, newest last, each added as it comes; a reply box replying to the newest; tapping opens the chat at the first unread. Opening the chat marks them read and clears it.
 - **One notification a message**, tagged with its id and grouped under a summary: each dismissed on its own, each with its own reply box replying to it.
 
 ### One policy
@@ -74,7 +74,7 @@ Two ways, both ending "a new one removes the last" (Q4 is which):
 
 ## The coming chat work, on this ground
 
-| Feature (from your next request) | What it uses |
+| Feature (plan_v4's 4.0.0) | What it uses |
 |---|---|
 | Every message of his in the chat, the morning's too | the outbox; the morning as a message of his |
 | A tapped notification opens his message | the message id on the notification; the chat opening at it |
@@ -92,6 +92,6 @@ Two ways, both ending "a new one removes the last" (Q4 is which):
 ## What to watch
 
 - **What his rules count.** Moving "what he's sent today" from the log to the chat must count the same messages; its tests run on both before the switch.
-- **The briefing's timing and ceiling.** The morning stays on its channel and time; only where it's kept changes.
+- **The briefing's timing.** The morning moves to his channel (plan_v4 Q3) but keeps its time; the briefing's channel is deleted once empty, as `daily` was, and a sound you'd set on it is set on his instead.
 - **Notifications you've turned off.** A channel off still silences that kind; a message still goes in the chat.
 - **The chat's size.** A message of his a slot, on a busy day, is a dozen messages; the cap by count and age keeps that in bounds.

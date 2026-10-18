@@ -1,8 +1,8 @@
 # Felix as the app's one voice: the plan for 4.x
 
-A plan, not started, for the changes to how Felix works that you listed on 18 Oct 2026: everything he says in one WhatsApp-like chat, with notifications that are the chat reaching you; notes and reminders he keeps for you; memory that lasts as long as it's needed; a teenager's voice; and a starred email finished in the app finished in Gmail too. Written on 18 Oct 2026 against `main` at e6cd54b (3.2.0).
+A plan, not started, for the changes to how Felix works that you listed on 18 Oct 2026: everything he says in one WhatsApp-like chat, with notifications that are the chat reaching you; notes and reminders he keeps for you; memory that lasts as long as it's needed; a teenager's voice; and a starred email finished in the app finished in Gmail too. Written on 18 Oct 2026 against `main` at e6cd54b (3.2.0); your answers to its questions, given the same day, are applied throughout.
 
-It stands beside [the targeted cleanup](../plan_targeted_cleanup/README.md), which was written with part of this list in view and lays the ground for it (its Phase 1: one conversation store, an outbox, a notifier whose notifications stack). This plan says what's built on that ground, and where each piece sits relative to the cleanup's phases, so the two can be merged into one order later. Nothing here is implemented, and nothing in it is settled: [QUESTIONS.md](QUESTIONS.md) holds every call it needs from you, each with a recommendation.
+It stands beside [the targeted cleanup](../plan_targeted_cleanup/README.md), which was written with part of this list in view and lays the ground for it (its Phase 1: one conversation store, an outbox, a notifier whose notifications stack). This plan says what's built on that ground, and where each piece sits relative to the cleanup's phases, so the two can be merged into one order later. Nothing here is implemented. [QUESTIONS.md](QUESTIONS.md) holds every call it needed from you with your answers (Q1–Q26), and what's still open (Q27–Q30). Each document ends with how it's built: the steps, the files and the commits, before its tests and its phone check.
 
 ## Why
 
@@ -30,6 +30,8 @@ The app plans and blocks well; what's uneven is how Felix reaches you and what y
 | A teenager's voice | [05](05-his-voice.md) |
 | Managing it all from the chat, with nothing else to touch | [02](02-what-felix-can-do.md) §3, and the whole |
 | A ticked starred email unstarred and archived | [06](06-emails-done.md) |
+| A message that's just talk, answered as talk (your note of 18 Oct) | [05](05-his-voice.md) §Just talking |
+| Whether summaries should stand in for the raw data he reads (your note of 18 Oct) | [08](08-summaries.md): an evaluation, with Q28 |
 
 And what I'd add in the same direction, each marked as a suggestion and asked about in [QUESTIONS.md](QUESTIONS.md): the few things he still can't do that the screens can (keep a piece with no step, check a source, say how much free time there is, open a task where it lives), a quiet-until rule, reminders you can snooze from the notification, the day's reminders in his morning message, an unread badge on his button, and the calendar's questions and "how did it go?" as his (the cleanup's Q6, already agreed).
 
@@ -40,13 +42,14 @@ And what I'd add in the same direction, each marked as a suggestion and asked ab
 - Photos in the chat, voice notes, a second chat, group messages, read receipts: ideas noted in [02](02-what-felix-can-do.md) §3, not planned.
 - A tone setting (D-57: his name and line are the knobs); the voice is a prompt change.
 - Writing to Teams, Power Planner or AnkiDroid: none has a write API the app uses; only Gmail gets a write, and only the two acts in [06](06-emails-done.md).
+- The chat as the app's home screen: asked on 18 Oct, then dropped the same day (Q26); the app opens on Day as now.
 
 ## Principles
 
 - **The chat is the record.** Every word in his name is a message in `chat.json` first; a notification is made from the chat, never beside it; nothing he says exists only as a notification or only in the log.
 - **One entrance for replies.** A reply from a notification and a reply in the chat are the same turn, routed the same way: to the check-in, to a completion's "how was it?", to a reading's question, to a reminder, or to the model.
 - **He acts at once, with an Undo** (D-60), for the new things too: a reminder set, a note kept, an email finished.
-- **Free where it can be.** Reminders, notes and the email's finish make no model call; the voice and the folded extras change prompts and screens only. New paid calls come only where the owner's list asks for judgement (none here).
+- **Free where it can be.** Notes, the email's finish and a reminder's chips make no model call; the voice and the folded extras change prompts and screens only. A reminder's message is written by him for its moment (Q9), one small call each, drafted ahead so it's sent on time and sent as you set it when he can't write; no other new paid call.
 - **The app's rules over the app's values, yours over yours** (D-4): a reminder's time and words are yours as he set them; the app doesn't move them.
 - **The public repository stays clean** (D-79): examples are made up; the private evaluation sets stay in `private/`.
 
@@ -55,19 +58,19 @@ And what I'd add in the same direction, each marked as a suggestion and asked ab
 | # | Change | Version | Needs from the cleanup | Model calls | Size |
 |---|---|---|---|---|---|
 | A | Every message of his in the chat; the notification from the chat, opening at the message; one stacked notification | 4.0.0 | Phase 0, 1a, 1b | none new | 1½ days |
-| B | WhatsApp-like chat: read state, dates, times, swipe to reply, replies routed by kind | 4.0.0 | A | a prompt line (chat golden) | 1½ days |
+| B | WhatsApp-like chat: read state, dates, times, swipe to reply, replies routed by kind; every message kept, the older ones in an archive | 4.0.0 | A | a prompt line (chat golden) | 2 days |
 | C | The extras folded under an arrow; the line that slides out | 4.0.0 | A | none | ½ day |
-| D | Notes on tasks, and reminders at a time or at a task's slot | 4.1.0 | A; better after 3f (his service) and 4a (`By`) | the chat's schema grows (compiled by the API first) | 2 days |
+| D | Notes on tasks, and reminders at a time or at a task's slot, written by him for the moment | 4.1.0 | A; better after 3f (his service) and 4a (`By`) | the chat's schema grows (compiled by the API first); a call a reminder, drafted ahead | 2½ days |
 | E | The gaps closed: keep a piece, check a source, free time and blocking in his context, open where it lives | 4.1.0 | none (3f tidier) | the chat's schema and prompt | 1 day |
-| F | Memory that expires: facts and rules with an until, or tied to a task | 4.2.0 | none | the chat's and his own schema; the profile's shape (not a reading's: no `Prompts.VERSION`) | 1 day |
-| G | His voice | 4.2.0 (or first, as 4.0.x) | none | both his goldens; the private evals re-run | ½ day |
+| F | Memory that expires: facts and rules with an until, or tied to a task | 4.2.0 | none | the chat's and his own schema; the profile's shape (`Prompts.VERSION` raised: Q15) | 1 day |
+| G | His voice; just talk answered as talk; the summary email in the third person | 4.2.0 | none | both his goldens and the summary's; the private evals re-run | ½ day |
 | H | A starred email finished in the app unstarred and archived in Gmail | 4.3.0 | none (3e tidier) | none | 1½ days |
 
-About nine days, in five releases, each a PR with its own Codex rounds and phone check as every release has ([development.md](../development.md)). [07](07-phases-and-verification.md) has each PR's steps, tests and checks.
+About ten days, in four releases, each a PR with its own Codex rounds and phone check as every release has ([development.md](../development.md)). [07](07-phases-and-verification.md) has each PR's steps, tests and checks.
 
 ## Order
 
-Recommended, and open (Q1):
+Decided (Q1: A):
 
 1. **Cleanup Phases 0 and 1** (the safety net, the notifier, the outbox and the conversation), as its own plan orders them.
 2. **4.0.0: A, B, C** on top, the chat as his one voice. This is the piece you'll see every day, and the rest hangs off its message kinds and routing.
@@ -93,17 +96,21 @@ To be numbered in `docs/decisions.md` by the PRs that apply them (the next free 
 
 - The chat is Felix's one visible voice; a notification is made from it and never beside it.
 - A reply from a notification and one in the chat are the same turn, routed by the message it answers.
-- He keeps notes and reminders at your asking, made at once with an Undo, delivered in his own words as he set them, with no model call.
+- He keeps notes and reminders at your asking, made at once with an Undo; a reminder is delivered in his words for the moment, written ahead, or as you set it when he can't write.
+- The chat keeps every message for you; what he's sent of it is the recent window, and the rest is an archive read only on scrolling back.
 - What he remembers can expire: by a date, or with a task; nothing of it is yours to prune.
-- His voice is a sixth-former's, set by his prompts and pinned by examples; his name and line stay the knobs (D-57).
-- Finishing a starred email's work in the app unstars and archives it in Gmail (amending D-7, D-10 and D-54), behind a switch.
+- His voice is a sixth-former's, set by his prompts and pinned by examples; his name and line stay the knobs (D-57). A message that's just talk gets a reply and nothing else.
+- The week's summary email is about you in the third person, never in his voice.
+- Finishing a starred email's work in the app unstars and archives it in Gmail (amending D-7, D-10 and D-54), behind a switch; a write that can't be made is the app's own notification, not his.
 
 ## Done when
 
 - Every message in his name since the update is in the chat, and `felix-say` twice gives one notification with both.
 - A tapped notification opens the chat at that message; a reply from it and a reply swiped in the chat answer the same message the same way.
 - His bubble shows a chevron and nothing under it until opened; a new message's label slides out and back.
-- "Remind me at 7 to…" sets a reminder (not a task) that arrives at 7 as his message; "remind me when I next sit down to…" arrives at that slot's start.
+- "Remind me at 7 to…" sets a reminder (not a task) that arrives at 7 as his message written for that moment (your words, when he couldn't write); "remind me when I next sit down to…" arrives at that slot's start.
+- Scrolling up past the chat's oldest message loads the earlier ones; `chat-context` shows only the window.
+- A message that's just talk gets his reply and nothing else: no card, no chevron, no label.
 - "Don't message me tonight" is gone by morning without your deleting it.
 - The private chat and Felix evals pass at the rate they pass today after the voice change.
 - Ticking the last piece of a starred email unstars and archives it within a minute online, and after reconnecting offline; Undo within the grace leaves Gmail untouched.
@@ -118,4 +125,5 @@ To be numbered in `docs/decisions.md` by the PRs that apply them (the next free 
 - [05-his-voice.md](05-his-voice.md): the register, the prompts, the fixed lines, the evals.
 - [06-emails-done.md](06-emails-done.md): unstar and archive on the last tick.
 - [07-phases-and-verification.md](07-phases-and-verification.md): the PRs, what each needs, tests, phone checks, risks; meeting the cleanup.
-- [QUESTIONS.md](QUESTIONS.md): the calls this plan needs from you.
+- [08-summaries.md](08-summaries.md): whether summaries should stand in for the raw data he reads; an evaluation with a recommendation (Q28), not yet a plan.
+- [QUESTIONS.md](QUESTIONS.md): the calls this plan needed from you, with your answers, and what's still open.

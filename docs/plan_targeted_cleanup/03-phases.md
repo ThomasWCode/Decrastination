@@ -1,6 +1,6 @@
 # The phases
 
-Each phase is one or more PRs, made as every release is: a branch, the tests, CI, the agreed Codex rounds, the build on the phone behind a backup, the checks, then the merge. A phase that moves code moves it first, in a commit that changes nothing else, and improves it in the next.
+Each phase is one or more PRs, made as every release is: a branch, the tests, CI, the Codex rounds and the Claude review Q2 sets ([07](07-verification-and-risks.md#reviews)), the build on the phone behind a backup, the checks, then the merge. A phase that moves code moves it first, in a commit that changes nothing else, and improves it in the next.
 
 The common checks after every install are in [07](07-verification-and-risks.md#the-phone-check); each phase adds its own.
 
@@ -8,7 +8,7 @@ The common checks after every install are in [07](07-verification-and-risks.md#t
 
 One PR, tests and scripts only; the app doesn't change.
 
-1. **Store fixtures.** Made-up files for every store in its shape today, every field filled (the old ones too: `ChatMessage.remembered` and `done`, tasks with each `user…` field, a paced total, steps of each kind, finished tasks, an email's extras), under `fixtures/stores/2026-10-17/`. `StoresDecodeTest` reads each with the app's own serializers and checks what came out. Every later shape gets its own folder, so each migration is tested from every shape it may meet.
+1. **Store fixtures.** Made-up files for every store in its shape today, every field filled (the old ones too: `ChatMessage.remembered` and `done`, tasks with each `user…` field, a paced total, steps of each kind, finished tasks, an email's extras), under `fixtures/stores/<the day they're made>/`. `StoresDecodeTest` reads each with the app's own serializers and checks what came out. Every later shape gets its own folder, so each migration is tested from every shape it may meet.
 2. **A plan snapshot.** A fixed state (tasks from every source, steps of each kind, your instructions, a pin, a school calendar, busy time, a learned pace) planned by `Planner.plan`, its pieces, keys, days and slots written as text and compared with `fixtures/snapshots/plan.txt`. Rewritten only on purpose (`-PupdateSnapshots=true`), as the goldens are. Any move that changes a plan shows here.
 3. **A migration rehearsal.** `scripts/rehearse.sh <backup>` unpacks a phone backup from `private/backup/` into the scratch folder and runs a test (`-PrehearseFrom=<dir>`, skipped otherwise) that reads every store with the code as it is, migrates it once migrations exist, and prints only counts and invariants (tasks, open ones, steps ticked, instructions in use, chat messages, pins). Nothing it reads is printed or committed.
 4. **A phone check script.** `scripts/phone-check.sh`: the read-only checks run by hand this week (version, the six accessibility services bound, the focus service, the calendar's slots and stray copies, crashes since the install, what's in front, the stores' sizes) as one command.
@@ -22,7 +22,7 @@ The foundation of the coming chat work; [05](05-felix-and-notifications.md) has 
 
 ### 1a. The notifier (no change in behaviour)
 
-1. `notify/NoticeId.kt`: every notification id, with its request codes, in one enum: the thirteen ids as they are now, each with a range of request codes that can't meet another's. A test checks that no two ids or ranges overlap.
+1. `notify/NoticeId.kt`: every notification id, with its request codes, in one enum: the eighteen ids as they are now (the summary's 4004 among them), each with a range of request codes that can't meet another's. A test checks that no two ids or ranges overlap.
 2. `notify/Notifier.kt`: `Notify`'s posting, holding and channel checks behind one class; the twelve files that post switch to it, keeping their ids. Nothing else calls `NotificationManagerCompat`.
 3. The architecture test's first rule: only the notifier posts.
 
@@ -30,15 +30,15 @@ The foundation of the coming chat work; [05](05-felix-and-notifications.md) has 
 
 ### 1b. The outbox (Felix's messages in the chat; agreed with you first)
 
-1. `felix/Outbox.kt`: `send(message)`, which every producer calls instead of writing a `FelixRecord` and posting: his looks and the morning (`learn/Felix.kt`), the check-in, the review's thanks, and an answer to a notification's reply.
-2. Felix's messages go into the chat store as messages of his (`kind`: Morning, SlotStart, SlotEnd, Question, Completions, CheckIn, Review, Answer), with what his record held (the reason, the piece or task, his next check, the replies, the completions it asks about). `FelixRules` reads today's messages from the chat instead of the log.
+1. `felix/Outbox.kt`: `send(message)`, which every producer calls instead of writing a `FelixRecord` and posting: his looks and the morning (`learn/Felix.kt`), the morning's list (`Briefing`), the check-in, the review's note, the summary's offer (`writeSummary`), "How did it go?" (`Assessment`) and the calendar's questions (`CalendarTime`), both his by Q6, and an answer to a notification's reply.
+2. Felix's messages go into the chat store as messages of his (`kind`, from `FelixPrompts.Reason` and the app's own: SlotStart, SlotEnd, SlotKept, DayDone, Morning, Question, Completions, CheckIn, Review, Summary, EventQuestion, and a plain answer; plan_v4's [01](../plan_v4/01-the-chat.md) §1 has the full set), with what his record held (the reason, the piece or task, his next check, the replies, the completions it asks about). `FelixRules` reads today's messages from the chat instead of the log.
 3. A notification is made from the message when the chat isn't on screen, carrying its id; tapped, the chat opens at it. A reply from the notification is your message in the chat, replying to his.
-4. His past records: put into the chat once, or left in the log (your call, Q5).
+4. His past records: put into the chat once, the last 30 days (Q5: A).
 
 **Tests:** the outbox posts once and puts the message in the chat; nothing's posted with the chat on screen; his rules find today's messages in the chat; a reply from a notification lands under the message it answers.
 **Phone check:** a message of his via `felix-say --es reason SlotStart` (a paid call); it's in the chat, and its notification, tapped by you (the agent doesn't touch the screen), opens the chat at it.
 
-The coming chat work then lands on this in its own PRs: the chat as his one visible voice, swipe to reply, the collapsed changes with the line that slides out, and notifications that stack.
+plan_v4's 4.0.0 then lands on this in its own PRs: the chat as his one visible voice, swipe to reply, the collapsed changes with the line that slides out, and notifications that stack ([its 07](../plan_v4/07-phases-and-verification.md) says where each touches these phases).
 
 ## Phase 2: the model gateway
 
@@ -63,7 +63,7 @@ Six PRs, in this order. Each one moves a concern's functions into its service ve
 | 3c | `Protection` | The settings that loosen blocking. Moved as they are; `ProtectTest` stays as it is, and the service's own tests cover armed and unarmed paths. |
 | 3d | `Instructions`, `OwnTasks` | Together, as both lay your values on tasks. |
 | 3e | `Readings`, `Sync`, `Photos` | |
-| 3f | `Conversation` (Felix), `Planning` | After Phase 1 and the chat work, so the newest code moves once. |
+| 3f | `Conversation` (Felix), `Planning` | After Phase 1 and plan_v4's 4.0.0, so the newest code moves once. |
 
 **Tests:** each service gains tests of the flows that had none: the chat's answer and its undo, a card applied and taken back, an instruction applied, refused and deleted, a backup restored into an emptier phone, a reset and its copy restored.
 **Phone check:** after each, the phone check, and that PR's concern used through the debug commands (a sync, a re-read, an instruction applied and taken back, a backup written).
@@ -94,7 +94,7 @@ Two PRs and one data migration ([04](04-data-and-migrations.md#tasks-v2-your-val
 Two PRs and their migrations ([04](04-data-and-migrations.md)).
 
 1. **5a.** `runtime.json` split by owner and by how often it changes: the half-minute state (`session.json`), Claude's record (`model.json`), Anki's readings (`anki.json`), the protection's state (`protection.json`), what the calendar was written with (into `calendar.json`), Felix's state (into the conversation). Every store gets a schema version, and `Stores` runs the migrations.
-2. **5b.** A finished task's text dropped once it's been finished a while (your call on how long, Q3), its record kept: what stats, the reopen list and a source listing it again need.
+2. **5b.** A finished task's text dropped a fortnight after it's finished (14 days, Q3: B; `Merge.KEEP_FINISHED_MS` is the same fortnight), its record kept: what stats, the reopen list and a source listing it again need.
 
 **Tests:** each migration from every fixture shape; the rehearsal's invariants; a backup made before the split restored after it.
 **Phone check:** the stores' sizes before and after; the phone check; a slot kept, a sync, a backup written.
@@ -120,10 +120,12 @@ What's left of it runs through the other phases:
 1. Each phase that changes behaviour edits its spec file in the same PR.
 2. As Phase 6 touches a comment that retells a decision ("your call, 17 Oct"), it becomes the decision's number ("(D-14)").
 
-## Phase 8 (optional): a pure module, and state holders
+## Phase 8 (with Phase 3, Q9: B): a pure module, and state holders
 
 - **A `:core` module** of plain Kotlin holding `core/`, so the compiler keeps it free of Android and its tests run without the Android plugin.
 - **State holders** for the largest screens (the chat, Settings, the task sheet): plain classes holding a screen's state and actions, tested without Compose; the composables only draw.
+
+Where inside Phase 3 is Q11: recommended, the module as Phase 3's last PR (3g), when nothing else is moving, and each screen's state holder as its service lands (the chat's with plan_v4's 4.0.0-B, Settings' with 3c, the task sheet's with 3d).
 
 ## Size and order
 
@@ -137,6 +139,6 @@ What's left of it runs through the other phases:
 | 5 | 2 | 1 | 7 |
 | 6 | 4–6, small | 1 | any |
 | 7 | done (17 Oct); kept in step by each phase | 0 | any |
-| 8 | 2 | 1–2 | |
+| 8 | 2 | 1–2 | with 3 |
 
-About eight to ten days of work in all, spread so that features can still land between phases. Phases 4 and 5 change stored data and are best released together, with one rehearsal and one backup.
+About eight to ten days of work in all, spread so that features can still land between phases. Phases 4 and 5 change stored data and are released together (Q10: A), with one rehearsal and one backup.
