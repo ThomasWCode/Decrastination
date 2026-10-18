@@ -77,11 +77,11 @@ Every PR is a release ([development.md](../development.md)): cleanup-only releas
 | 5b | WhatsApp-like: read state, dates, earlier messages, swipe to reply, one entrance for replies | 4.0.1 | feature | 5a | 1½ |
 | 5c | The extras folded; the label that slides out | 4.0.2 | feature | 5b | ½ |
 | 6a | `CalendarWriter` | 4.0.3 | cleanup | 3 | ½ |
-| 6b | `Protection` | 4.0.4 | cleanup | 3 | ½ |
-| 6c | `Instructions` and `OwnTasks` | 4.0.5 | cleanup | 3 | ½ |
+| 6b | `Protection`, and the Settings screen's state holder | 4.0.4 | cleanup | 3 | 1 |
+| 6c | `Instructions` and `OwnTasks`, and the task sheet's state holder | 4.0.5 | cleanup | 3 | 1 |
 | 6d | `Readings`, `Sync` and `Photos` | 4.0.6 | cleanup | 2, 3 | ½ |
 | 6e | `Learning` | 4.0.7 | cleanup | 3, 5a | ½ |
-| 6f | The `:core` module | 4.0.8 | cleanup | 6a–6e | ½ |
+| 6f | The `:core` module, its dependencies on the app turned round first | 4.0.8 | cleanup | 6a–6e | 1 |
 | 7 | Who set what (`Mine`, `By`, steps with ids) and the stores split, trimmed: one data release | 4.0.9 | cleanup, data | 0, 3, 6 | 2½ |
 | 8a | Notes, standing notes and reminders | 4.1.0 | feature, data | 2, 3, 4, 5, 7 | 3 |
 | 8b | The gaps: keep a piece, check a source, open where it lives, free time in his context | 4.1.1 | feature | 5, 6d, 8a | 1 |
@@ -91,7 +91,7 @@ Every PR is a release ([development.md](../development.md)): cleanup-only releas
 | 11 | Emails done | 4.3.0 | feature, data | 1, 3, 6d, 7 | 1½ |
 | 12 | The sweep: imports, comments, the architecture test complete, baselines compared | 4.3.1 | cleanup | all | ½ |
 
-About twenty-one days in 22 PRs (21 releases), evenings and weekends. After it, the conversation digest as 4.4.0 ([13](13-summaries.md)). You've said you won't use the app until the whole of it is in (Q21): each release is still built and checked on the phone, but nothing between releases has to serve a day's use.
+About twenty-three days in 22 PRs (21 releases), evenings and weekends. After it, the conversation digest as 4.4.0 ([13](13-summaries.md)). You've said you won't use the app until the whole of it is in (Q21): each release is still built and checked on the phone, but nothing between releases has to serve a day's use.
 
 ## What changes substantially
 

@@ -10,7 +10,7 @@ You asked for the selective remembering a person does: he keeps what you tell hi
 ```
 
 - **`until`**: the fact or rule holds till then, and is forgotten after: "I've got a cold this week" (until Sunday), "don't message me tonight" (until 07:00 tomorrow), "I'm away Thursday to Sunday" is a change (NoSchool or BusyTime), not a memory, as the prompt already says.
-- **`taskId`**: the fact is about a task and goes with it, a fortnight after the task is finished or gone: "for the trip, I'm sharing a room with a friend" (the trip's email), "the teacher said the essay can be over length". A finished task keeps its record past the fortnight its text is trimmed at (Stage 7), so the fact goes by its own rule, not the trim's.
+- **`taskId`**: the fact is about a task and goes with it: a fortnight after the task is finished (its `doneAt`; a finished task keeps its record past the fortnight its text is trimmed at, Stage 7, so the record is there to read), or at once when its record is gone from `tasks.json` (only a task of your own can go without finishing: you deleted it, which is deliberate). "For the trip, I'm sharing a room with a friend" (the trip's email), "the teacher said the essay can be over length".
 - **Neither**: as now, a fact that stays till replaced or tidied; a rule that stays.
 
 **Forgetting** is silent, as a person's is: no line in the chat. `Memories.expired(state, tasks, now)` (pure) drops what's past, run where the memory is read for the profile (`Conversation.profile`) and at the morning's sweep, so the profile never carries a stale line. Settings → Felix and the chat's menu list each fact with "until Sun 25 Oct" or "with “Trip consent form”", so you can see what's temporary (Q15: A).
@@ -47,7 +47,7 @@ You asked for the selective remembering a person does: he keeps what you tell hi
 
 ## Tests
 
-- `Memories.expired`: by until, by task gone or finished (with the fortnight), neither; idempotent.
+- `Memories.expired`: by until; by task finished (not before the fortnight, after it); by task gone (at once); neither; idempotent.
 - `Memories.edit` with until and taskId: past refused, far cut, unknown task kept without; the lines; undo whole.
 - `MemoryTidy`: expiring facts not sent, counted.
 - `Profile.block`: the until shown; an expired fact absent; the golden's `profile.txt` regenerated with one, and `ReadingPrompts.VERSION` 8 (Q15: A).

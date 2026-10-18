@@ -60,13 +60,13 @@ Today a store is read by its serializer, with defaults for what's missing and fi
 
 - **On each message**: `kind` (from the stored `reason`, else `Chat`), `byApp`, `replyTo`, `pieceKey`, `nextCheckAt`, `asks`, `opens`; `remembered` becomes `memoryEdits` (as the screen already reads it, `Memories.editOf`), `done` becomes `acts` with nothing to undo; the three old fields go.
 - **On the state**: `readAt` (set to the newest message's time, so nothing's unread on the day of the update) and `felix` (from `RuntimeState.felix`, `assessLater` and `checkInDraft`, which go).
-- **From the log**: each `FelixRecord` of the last 30 days becomes a message of his: `id` and `at` as they were, `text`, `replies` as its suggested replies, `reason` as its kind, `key` as `pieceKey`, `taskId` as what it's about, `nextCheckAt` and `asks` as themselves; a record's `replyText` becomes a message of yours at `repliedAt` with `replyTo` the record's id. `ActivityLog.felix` and `FELIX_KEEP_DAYS` go.
+- **From the log**: each `FelixRecord` of the last 30 days becomes a message of his: `id` and `at` as they were, `text`, `replies` as its suggested replies, `reason` as its kind, `key` as `pieceKey`, `taskId` as what it's about, `nextCheckAt` and `asks` as themselves; a record's `replyText` becomes a message of yours at `repliedAt` with `replyTo` the record's id. Merged by id, never doubled: a record whose id the chat already has (today's `replyToFelix` copies a record into the chat under its own id when you reply, and `tellAnswer` keeps a record under an answer's chat id) keeps the chat's message and only fills in what the message lacks (`kind`, `pieceKey`, `nextCheckAt`, `asks`); and a reply that's already in the chat as a message of yours after it (the reply `replyToFelix` sent) gets `replyTo` set rather than a second copy. `ActivityLog.felix` and `FELIX_KEEP_DAYS` go.
 - **The window and the archive**: `chat.json` keeps the last 200 messages or 60 days, whichever keeps more; what's past it moves to `chat-archive.json` (`ChatArchive`, oldest first, append-only) by the outbox after each message: the archive's `update` first, then the live store's trim, so a crash between leaves a duplicate (dropped by id at the next move), never a hole. The first move after the update makes them; no migration of their own.
 - **`Speaker.Felix`** (5b) with `@SerialName("Claude")`, so the stored value doesn't change.
 
 ### Tasks v2, Stage 7
 
-- **Your values.** The twelve `user…` fields go, and `TaskItem.mine` takes their place. No values need converting: they're laid from `instructions.json` (the plan does so at every run already), so the migration drops the old fields and `Instructions` lays `mine` from the instructions in use before anything reads the tasks. A task whose instructions are gone has nothing of yours, as now.
+- **Your values.** The twelve `user…` fields go, and `TaskItem.mine` takes their place. No values need converting: they're laid from `instructions.json` (the plan does so at every run already), so the migration drops the old fields and `Instructions` lays `mine` from the instructions in use before anything reads the tasks. A task whose instructions are gone has nothing of yours, as now. **Who set an existing instruction** can't always be told: the chat is capped and can be cleared while its changes stay in force. So every instruction from before gets `by = You`, the value that changes nothing (the app treats yours and Felix's alike, D-4; `by` only labels), and the migration marks `Felix` only where the chat still holds the card that made it (the card's text is the instruction's). From then on each new instruction records its author.
 - **Steps.** Each step gets an id (eight random hex characters, kept from then on) and an origin, inferred this once as the app tells them apart today: the reading's steps (`stepsFromEnrichment`) are `Reading`, or `Rules` where the rules made the reading; steps laid from your instruction are `Yours` (or `Felix`, where the instruction was the chat's); a task of your own's are `OwnTask`; the rest (Anki's) `Source`.
 
 ### `runtime.json` split, Stage 7
@@ -155,6 +155,7 @@ data class Mine(
 @Serializable
 data class Note(val id: String, val text: String, val at: Long, val by: By, val taskId: String? = null, val scope: NoteScope? = null, val deletedAt: Long? = null)
 @Serializable data class NoteScope(val subject: String? = null, val className: String? = null, val source: Source? = null, val titleContains: String? = null)
+// Notes.forTask(task, notes, classMap): a subject matches through Settings.classMap (a class code → its subject), a class its code, a source its source, a word its title.
 
 @Serializable
 data class Reminder(
@@ -175,7 +176,14 @@ data class Reminder(
 
 // data/GmailWriteStore.kt (11)
 @Serializable
-data class GmailWrite(val id: String, val threadId: String, val uids: List<Long>, val uidValidity: Long?, val unstar: Boolean, val archive: Boolean, val at: Long, val notBefore: Long, val tries: Int = 0, val lastError: String? = null)
+data class GmailWrite(
+    val id: String, val threadId: String, val uids: List<Long>, val uidValidity: Long?, val unstar: Boolean, val archive: Boolean, val at: Long,
+    /** When it may go; null while the very first finish waits for your OK. */
+    val notBefore: Long? = null,
+    /** Which of the uids were starred and which in the inbox before the write, read first, so a reverse write restores only those. */
+    val flagged: List<Long>? = null, val inbox: List<Long>? = null,
+    val tries: Int = 0, val lastError: String? = null,
+)
 @Serializable data class GmailWriteStore(val writes: List<GmailWrite> = emptyList(), val version: Int = 1)
 ```
 
