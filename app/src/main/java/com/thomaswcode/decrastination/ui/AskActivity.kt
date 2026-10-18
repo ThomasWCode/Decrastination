@@ -161,11 +161,12 @@ class AskActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         val graph = AppGraph.get(this)
         // Made again (turned, or brought back): what it's about kept, the words handed in already sent, and
-        // the message being replied to and the archive's pages loaded, as they were.
+        // the tab showing, the message being replied to and the archive's pages loaded, as they were.
         if (savedInstanceState == null) {
             take(intent)
         } else {
             about.value = aboutFrom(savedInstanceState)
+            chatTab = savedInstanceState.getBoolean(STATE_CHAT_TAB, true)
             screen.restored(savedInstanceState.getInt(STATE_EARLIER), savedInstanceState.getString(STATE_REPLYING)?.let { graph.conversation.outbox.find(it) }, savedInstanceState.getBoolean(STATE_OFFERED))
         }
         setContent { AppTheme { Screen(graph) } }
@@ -183,6 +184,7 @@ class AskActivity : ComponentActivity() {
         outState.putInt(STATE_EARLIER, screen.earlier)
         outState.putString(STATE_REPLYING, screen.replyingTo?.id)
         outState.putBoolean(STATE_OFFERED, screen.offered)
+        outState.putBoolean(STATE_CHAT_TAB, chatTab)
     }
 
     /** What a message is about, from an intent's extras or a saved state's. */
@@ -452,6 +454,7 @@ class AskActivity : ComponentActivity() {
         private const val STATE_EARLIER = "earlier"
         private const val STATE_REPLYING = "replyingTo"
         private const val STATE_OFFERED = "offered"
+        private const val STATE_CHAT_TAB = "chatTab"
 
         /**
          * The chat, about [about], with [text] to send; with [send] false, only put in the box, to be
