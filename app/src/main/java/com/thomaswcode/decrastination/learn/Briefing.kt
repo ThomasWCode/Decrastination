@@ -73,7 +73,8 @@ object Briefing {
         // in his name, in the app's words: every morning is in the chat.
         val his = runCatching { graph.looks.morning(now) }.onFailure { android.util.Log.w(AppGraph.TAG, "Felix's morning message failed", it) }.getOrDefault(false)
         if (!his) graph.conversation.morningList(title, lines)
-        // His notification made again, with what waited overnight for the morning (LR-07).
-        graph.conversation.outbox.notify(graph.clock.now())
+        // His notification made again, with what waited overnight for the morning (LR-07), quiet hours
+        // that outlast the briefing or not.
+        graph.conversation.outbox.notify(graph.clock.now(), morning = true)
     }
 }

@@ -75,9 +75,11 @@ class Outbox(
     /**
      * His notification made again from the chat ([notice]), sounding for [alertFor] where it's in it; or
      * taken away with nothing to show, his channel off, or the chat on screen, where you're reading them.
+     * The morning's briefing makes it as the [morning]: what waited overnight is in it, quiet hours that
+     * outlast the briefing or not.
      */
-    fun notify(now: Long, alertFor: String? = null) = synchronized(posting) {
-        val quiet = BlockPolicy.isQuiet(now, clock.zone(), settings.value)
+    fun notify(now: Long, alertFor: String? = null, morning: Boolean = false) = synchronized(posting) {
+        val quiet = !morning && BlockPolicy.isQuiet(now, clock.zone(), settings.value)
         val notice = if (chatOnScreen() || !notices.shown(Channels.FELIX)) null else notice(chat.value, settings.value.felixName, quiet, alertFor)
         if (notice == null) ports.cancel() else ports.show(notice)
     }
