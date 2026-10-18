@@ -303,6 +303,29 @@ class ConversationTest {
     }
 
     @Test
+    fun `a reply to a question scrolled back to in the archive is answered as it, with no call`() = runBlocking {
+        val question = ChatMessage("e1", Speaker.Felix, "Is the open day all day?", now - 70 * 86_400_000L, About(eventKey = "open day", eventTitle = "Open day"), kind = MessageKind.EventQuestion, byApp = true, suggestedReplies = CalendarTime.ANSWERS.map { it.first })
+        felix.stores.chatArchive.update { it.copy(messages = listOf(question)) }
+        assertEquals(Conversation.Asked.Answer, conversation.send(CalendarTime.ANSWERS[0].first, replyTo = "e1"))
+        assertEquals(listOf("open day" to CalendarTime.ANSWERS[0].second), felix.owners.events)
+        assertEquals(0, felix.server.requestCount)
+    }
+
+    @Test
+    fun `an answer with no call from his notification, while a message of yours waits, asks for no work`() = runBlocking {
+        stores.settings.update { it.copy(aiEnabled = false) }
+        assertTrue(conversation.ask("What's due tomorrow?"))
+        felix.settle()
+        conversation.remindCheckIn()
+        assertTrue(conversation.replyFromNotification("4", his().last().id))
+        assertEquals(0, felix.ports.later)
+        // A turn of the chat from it does.
+        felix.outbox.send(ChatMessage("n1", Speaker.Felix, "the worksheet's up at 17:00", now, kind = MessageKind.SlotStart))
+        assertTrue(conversation.replyFromNotification("on it", "n1"))
+        assertEquals(1, felix.ports.later)
+    }
+
+    @Test
     fun `a message sent while he answers lets that answer go, and he answers both together`() = runBlocking {
         // His answer to the first comes late: the second is sent while it's being made.
         felix.answers(felix.chatAnswer("Moved it to 19:00."), delayMs = 1_000)

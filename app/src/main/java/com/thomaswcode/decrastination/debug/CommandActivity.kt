@@ -28,6 +28,7 @@ import com.thomaswcode.decrastination.core.withoutEnrichment
 import com.thomaswcode.decrastination.data.Secret
 import com.thomaswcode.decrastination.felix.ChatPrompts
 import com.thomaswcode.decrastination.felix.ChatReader
+import com.thomaswcode.decrastination.felix.Conversation
 import com.thomaswcode.decrastination.enrich.ClaudeEnricher
 import com.thomaswcode.decrastination.enrich.ClaudeReviewer
 import com.thomaswcode.decrastination.felix.FelixCaller
@@ -369,8 +370,13 @@ class CommandActivity : Activity() {
                 // --es replyTo <message id>: a reply to that message, routed as a swipe's or his notification's
                 // is (5b): a question of his answered with no call, logged as what follows it.
                 val text = intent.getStringExtra("text")
-                if (text.isNullOrBlank() || !graph.conversation.ask(text, replyTo = intent.getStringExtra("replyTo"))) {
+                val asked = if (text.isNullOrBlank()) Conversation.Asked.Nothing else graph.conversation.send(text, replyTo = intent.getStringExtra("replyTo"))
+                if (asked == Conversation.Asked.Nothing) {
                     Log.w(TAG, "chat-ask needs --es text <words>")
+                } else if (asked == Conversation.Asked.Answer) {
+                    // Answered with no call: what followed it, no answer of his waited for.
+                    val last = graph.chat.value.messages.last()
+                    Log.i(TAG, "chat-ask: answered with no call; then ${last.from}: ${last.text}")
                 } else {
                     // Waits its turn behind the answer ask started, or answers it itself.
                     graph.conversation.answerChat()

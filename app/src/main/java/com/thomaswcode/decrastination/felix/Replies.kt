@@ -45,6 +45,17 @@ object Replies {
         }
 
     /**
+     * The newest question of his in [messages] still waiting for its answer ([waiting]) since your last turn
+     * of the chat: what the box and his chips answer (D-98). An answer to one taken with no call isn't a
+     * turn, so with several asked together (how work went, a calendar's questions), the one before it is
+     * next: they're answered one by one.
+     */
+    fun pending(messages: List<ChatMessage>, checkInUnderWay: Boolean): ChatMessage? {
+        val turn = messages.indexOfLast { it.from == Speaker.You && it.kind == MessageKind.Chat }
+        return messages.drop(turn + 1).lastOrNull { waiting(it, checkInUnderWay) }
+    }
+
+    /**
      * Where [words], your reply to [message], go: a question of his still waiting ([waiting]) takes its
      * answer with no call (a check-in's, any words; a reading's, any words; how work went or a calendar
      * event's, one of its three, whatever their case); anything else, and any other words, is a turn of

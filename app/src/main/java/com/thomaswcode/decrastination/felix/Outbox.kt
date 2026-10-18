@@ -69,6 +69,9 @@ class Outbox(
         notify(clock.now())
     }
 
+    /** Message [id], from the live window or, past it, the archive (a reply to one scrolled back to). */
+    fun find(id: String): ChatMessage? = chat.value.messages.firstOrNull { it.id == id } ?: archive.value.messages.firstOrNull { it.id == id }
+
     /** Held while his notification is made from the chat and posted, so the last posted is made from the newest. */
     private val posting = Any()
 
