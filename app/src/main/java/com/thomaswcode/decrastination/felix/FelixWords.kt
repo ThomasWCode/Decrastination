@@ -24,8 +24,6 @@ object FelixWords {
     /** The week's summary written (NF-02), with its button to send it. */
     const val SUMMARY_READY = "The week's summary is ready; send it?"
 
-    /** A reply from his notification while a message of yours still waits for its answer. */
-    const val STILL_WAITING = "Your last message to me is still waiting for its answer: send this again once it's come."
 
     /** How [title], finished, went (LR-05), asked with Claude off: the three answers its replies. */
     fun howItWent(title: String): String = "Done: $title. How was it?"

@@ -370,7 +370,7 @@ class CommandActivity : Activity() {
                 // is (5b): a question of his answered with no call, logged as what follows it.
                 val text = intent.getStringExtra("text")
                 if (text.isNullOrBlank() || !graph.conversation.ask(text, replyTo = intent.getStringExtra("replyTo"))) {
-                    Log.w(TAG, "chat-ask needs --es text <words>, and no message of yours still waiting")
+                    Log.w(TAG, "chat-ask needs --es text <words>")
                 } else {
                     // Waits its turn behind the answer ask started, or answers it itself.
                     graph.conversation.answerChat()

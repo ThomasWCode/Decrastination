@@ -22,8 +22,10 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import com.thomaswcode.decrastination.learn.CalendarTime
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 
 /**
  * The Conversation's flows (docs/plan_v4, Stages 4 and 5a), on temporary stores, his answers read by
@@ -236,16 +238,49 @@ class ConversationTest {
     }
 
     @Test
-    fun `a reply while a message of yours still waits says so in his name, and nothing's lost`() = runBlocking {
+    fun `a reply while a message of yours still waits goes with it, and he answers both together`() = runBlocking {
         // Claude off: your message waits, saying why.
         stores.settings.update { it.copy(aiEnabled = false) }
         assertTrue(conversation.ask("What's due tomorrow?"))
         felix.settle()
         felix.outbox.send(ChatMessage("n1", Speaker.Felix, "the worksheet's up at 17:00", now, kind = MessageKind.SlotStart))
-        assertTrue(!conversation.replyFromNotification("on it", "n1"))
-        val note = his().last()
-        assertEquals(FelixWords.STILL_WAITING to MessageKind.Note, note.text to note.kind)
-        // Yours still waits, and his look didn't answer it.
-        assertEquals("What's due tomorrow?", stores.chat.value.unanswered?.text)
+        assertTrue(conversation.replyFromNotification("on it", "n1"))
+        felix.settle()
+        // Both kept, only the newest saying why it waits.
+        val waiting = stores.chat.value.messages.filter { it.from == Speaker.You }
+        assertEquals(listOf("What's due tomorrow?", "on it"), waiting.map { it.text })
+        assertNull(waiting.first().note)
+        assertNotNull(waiting.last().note)
+        // Claude back: one answer for both.
+        stores.settings.update { it.copy(aiEnabled = true) }
+        felix.answers(felix.chatAnswer("The worksheet, due Wednesday: go for it."))
+        conversation.answerChat()
+        assertTrue(stores.chat.value.messages.filter { it.from == Speaker.You }.all { it.answeredAt != null })
+        assertEquals("The worksheet, due Wednesday: go for it.", his().last().text)
+        val sent = felix.server.takeRequest().body.readUtf8()
+        assertTrue("What's due tomorrow?" in sent && "on it" in sent)
+        assertEquals(1, felix.server.requestCount)
+    }
+
+    @Test
+    fun `a message sent while he answers lets that answer go, and he answers both together`() = runBlocking {
+        // His answer to the first comes late: the second is sent while it's being made.
+        felix.answers(felix.chatAnswer("Moved it to 19:00."), delayMs = 1_000)
+        felix.answers(felix.chatAnswer("Moved it to 20:00, as you said."))
+        assertTrue(conversation.ask("move the physics to 7"))
+        withTimeout(5_000) { while (conversation.answeringSince.value == null) delay(10) }
+        assertTrue(conversation.ask("no, make it 8"))
+        felix.settle()
+        val messages = stores.chat.value.messages
+        // One answer, to both: the one made meanwhile let go, paid for and unused.
+        assertEquals(
+            listOf(Speaker.You to "move the physics to 7", Speaker.You to "no, make it 8", Speaker.Felix to "Moved it to 20:00, as you said."),
+            messages.map { it.from to it.text },
+        )
+        assertTrue(messages.filter { it.from == Speaker.You }.all { it.answeredAt != null })
+        assertEquals(2, felix.server.requestCount)
+        felix.server.takeRequest()
+        val second = felix.server.takeRequest().body.readUtf8()
+        assertTrue("move the physics to 7" in second && "no, make it 8" in second)
     }
 }
