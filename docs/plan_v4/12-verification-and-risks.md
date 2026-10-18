@@ -6,7 +6,7 @@ How each PR is shown to keep the app working, or to change it only as it says; w
 
 A cleanup PR claims to keep behaviour, and shows it four ways:
 
-1. **Every test passes**, the 874 of today and the new ones, with none removed but by a stated reason.
+1. **Every test passes**, the 874 the plan began with (933 at 3.3.4) and the new ones, with none removed but by a stated reason.
 2. **The plan snapshot is unchanged** (Stage 0): a fixed state planned the same, to the piece and the minute.
 3. **The goldens are unchanged**: no prompt or schema differs, unless the PR says why.
 4. **The phone check passes** after the install, and the stage's own checks with it.
@@ -48,7 +48,7 @@ After every install, read-only, by `scripts/phone-check.sh` (Stage 0):
 - what's in front (the home screen, not a screen left open);
 - the stores' sizes, against the last run.
 
-Then the stage's own checks ([03](03-stages.md)), through the debug commands where they can be. The notification shade, a gesture, another app, aeroplane mode and the power button are yours: where a check needs one, you make it and say what you saw; a tap inside the app can go through the guarded `tap.sh` with screenshots when you're not using the phone ([14](14-your-part.md) says which is which, stage by stage). A backup of the APK and the data comes before every install (`keep_before.sh`), and the app is never uninstalled. The phone's away on school days (07:40–18:00): installs and checks are evenings and weekends.
+Then the stage's own checks ([03](03-stages.md)), through the debug commands where they can be. The notification shade, a gesture, another app, aeroplane mode and the power button are yours: where a check needs one, you make it and say what you saw; a tap inside the app can go through the guarded `tap.sh` with screenshots when you're not using the phone ([14](14-your-part.md) says which is which, stage by stage). A backup of the APK and the data comes before every install (`keep_before.sh`), and the app is never uninstalled. The phone's away on school days: installs and checks are evenings and weekends.
 
 ## Reviews
 
@@ -77,7 +77,7 @@ Then the stage's own checks ([03](03-stages.md)), through the debug commands whe
 | Clashes between a cleanup PR and a feature PR | all | low | low | one order, each PR from `main`, nothing in flight at once; features written inside the services they live in |
 | Paid calls in checks | all | low | low | `ai-check` against a local stub; a paid call only where the stage needs one, said in the PR |
 | The PC's memory during builds | all | low | low | one warm Gradle daemon and Kotlin's beside it, each capped (`gradle.properties`); `./gradlew --stop` after each session's builds |
-| The phone's away (school days, 07:40–18:00) | all | certain | time | installs and checks in the evening or at the weekend |
+| The phone's away (school days) | all | certain | time | installs and checks in the evening or at the weekend |
 
 ## Rolling back
 

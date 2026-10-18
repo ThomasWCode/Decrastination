@@ -6,9 +6,9 @@ Your answers are settled here: his channel for everything he says (Q3), the fold
 
 ## Today
 
-- **Two homes.** His unprompted messages are `FelixRecord`s in `log.json` (kept 30 days) and notifications; the chat (`chat.json`) has your messages and his answers. A record reaches the chat only when you reply to its notification (`AppGraph.replyToFelix` copies it in). On your phone on 18 Oct: 35 records in 30 days, 27 replied to, 1 in the chat. Tap one of the others and the chat opens without it.
-- **Seven producers**, each posting its own notification: his looks and the morning (`learn/Felix.kt`), the morning's title and list (`learn/Briefing.kt`), the check-in (`AppGraph`'s check-in flow, `learn/CheckIns.kt`), the weekly review (`learn/Review.kt`), the summary's offer (`AppGraph.writeSummary`, id 4004), "How did it go?" (`learn/Assessment.kt`, 4100 tagged, on his channel), and answers to a notification's reply (`AppGraph.tellAnswer`).
-- **One notification at a time**: `FelixNotifications` posts his looks, the morning, the check-in and the answers under id 4200, so each new one takes the last one's place; the calendar's questions share 4200, told apart only by a tag.
+- **Two homes.** His unprompted messages are `FelixRecord`s in `log.json` (kept 30 days) and notifications; the chat (`chat.json`) has your messages and his answers. A record reaches the chat only when you reply to its notification (`Conversation.replyToFelix` copies it in). On your phone on 18 Oct: 35 records in 30 days, 27 replied to, 1 in the chat. Tap one of the others and the chat opens without it.
+- **Seven producers**, each posting its own notification: his looks and the morning (`felix/Looks.kt`), the morning's title and list (`learn/Briefing.kt`), the check-in (`Conversation`'s check-in flow, `felix/CheckInFlow.kt`; the form `ui/CheckInActivity.kt`), the weekly review (`learn/Review.kt`), the summary's offer (`AppGraph.writeSummary`, id 4004), "How did it go?" (`learn/Assessment.kt`, 4100 tagged, on his channel), and answers to a notification's reply (`Conversation.tellAnswer`).
+- **One notification at a time**: `FelixNotifications` posts his looks, the morning, the check-in and the answers under id 4200, so each new one takes the last one's place; the calendar's questions have had an id of their own, 4400 (`NoticeId.CalendarQuestion`), since 3.3.0.
 - **His state in three places**: the log's records, `RuntimeState.felix` (next check, a draft, a retry, the questions waiting) with `assessLater` and `checkInDraft`, and the chat.
 - **The chat buries what he did**: every change, memory and search sits under his bubble as cards and small lines; a message that does three things is a screen long.
 
@@ -32,7 +32,7 @@ One store, `chat.json`, holds everything said between you and Felix, and his sta
 | The check-in's five questions (`askNext`) and its thanks | records, under 4200 | kind `CheckIn`, `byApp`, replies 1–5 and the week's put-off work as now; answers routed as `checkInReply` does |
 | The review's note (`Review.run`, id 4003 → the check-in screen) | the app's notification on the weekly channel | kind `Review`, `byApp`: the note's first line and a button opening the review (`opens`, Q2) |
 | "The week's summary is ready; send it?" (NF-02, `writeSummary`) | a record, and a notification of its own (id 4004) on his channel, or the week's in quiet hours, opening Reviews | kind `Summary`, `byApp`, in his register ("the week's summary's ready, want me to send it?"), with a button that opens the email; the email itself is about you in the third person, not in his voice (Q2, Q25; [09](09-his-voice.md) §The summary email) |
-| The calendar's questions (`CalendarTime.ask`, 4200 tagged) | the app's, on the calendar channel, three buttons | kind `EventQuestion`, `byApp`, replies All of it / A few hours / None → `CalendarTime.answer`, no call (C-Q6) |
+| The calendar's questions (`CalendarTime.ask`, 4400 tagged, `NoticeId.CalendarQuestion` since 3.3.0) | the app's, on the calendar channel, three buttons | kind `EventQuestion`, `byApp`, replies All of it / A few hours / None → `CalendarTime.answer`, no call (C-Q6) |
 | Answers to a reply from a notification (`tellAnswer`) | a record and a notification | nothing special: his answer is a `Chat` message as any; the notification shows it because it's unread |
 
 Not his, and not in the chat: syncs under way, protection, free time and its end, the model's alerts (a dropped plan, a key problem), a calendar move put back, a Gmail write that failed.
@@ -90,7 +90,7 @@ class Outbox(
 | Model alerts | 5001, 5002 | the same | one each |
 | Felix's conversation | 4200 | 6000 | one, holding every unread message |
 
-Each kind's buttons get request codes in a range of their own (Felix's 6001–6099, and so on), where today they're made by adding to the id. The ids that stay keep a notification already showing on your phone where it is through the update.
+Each kind's buttons get request codes in a range of their own (Felix's 6001–6099, and so on), as each kind's have been since 3.3.0 (`NoticeId.codes`). The ids that stay keep a notification already showing on your phone where it is through the update.
 
 ### One notification, his (5a)
 
@@ -111,7 +111,7 @@ Samsung groups an app's notifications under its name; his messaging-style one sh
 
 ### Channels (Q3: A)
 
-His channel (`Channels.FELIX`) for all of it, the morning included: one notification can't be on two channels. The briefing's channel then carries nothing: `Channels.create` deletes it once nothing's left on it, as it does the old `daily` and `how-it-went` channels today. The calendar channel keeps a move put back; the weekly channel keeps the check-in's form reminder (`CheckIns.remind`) and nothing else; Stage 11 adds `SOURCES` for a write that failed. The briefing's time (`Daily.nextBriefing`) stays: the morning's message is written then, and his notification is rebuilt then with whatever was held overnight.
+His channel (`Channels.FELIX`) for all of it, the morning included: one notification can't be on two channels. The briefing's channel then carries nothing: `Channels.create` deletes it once nothing's left on it, as it does the old `daily` and `how-it-went` channels today. The calendar channel keeps a move put back; the weekly channel keeps the check-in's form reminder (`Conversation.remindCheckIn`, posted by `FelixPorts.remindForm`) and nothing else; Stage 11 adds `SOURCES` for a write that failed. The briefing's time (`Daily.nextBriefing`) stays: the morning's message is written then, and his notification is rebuilt then with whatever was held overnight.
 
 ## 4. Opening at the message
 

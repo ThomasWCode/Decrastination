@@ -1,20 +1,20 @@
 # Decrastination 4.x: the cleanup and Felix as the app's one voice, in one order
 
-One plan for the next run of work, merged on 18 Oct 2026 from two: the targeted cleanup (written 17 Oct: the code and its stores restructured without changing what the app does) and the Felix plan (written 18 Oct: everything he says in one WhatsApp-like chat, notes and reminders, memory that expires, a teenager's voice, a starred email finished in Gmail). Written against `main` at e6cd54b (3.2.0) and measured on 18 Oct ([01](01-current-state.md)); every question either plan asked is answered and applied ([ANSWERS.md](ANSWERS.md) is the record; the "Q3: A" marks through the documents point into it); nothing is implemented. [14](14-your-part.md) says which stages need your phone and which need you.
+One plan for the next run of work, merged on 18 Oct 2026 from two: the targeted cleanup (written 17 Oct: the code and its stores restructured without changing what the app does) and the Felix plan (written 18 Oct: everything he says in one WhatsApp-like chat, notes and reminders, memory that expires, a teenager's voice, a starred email finished in Gmail). Written against `main` at e6cd54b (3.2.0) and measured on 18 Oct ([01](01-current-state.md)); every question either plan asked is answered and applied ([ANSWERS.md](ANSWERS.md) is the record; the "Q3: A" marks through the documents point into it); Stages 0 to 4 are in (#57 to #61: Stage 0, then 3.3.0 to 3.3.3), with 3.3.4 beside them (#62, the secrets' write tried again as the stores' is, [QUESTIONS.md](QUESTIONS.md) I2), and 5a is next. [14](14-your-part.md) says which stages need your phone and which need you.
 
 The order is the merge's one real decision: the cleanup comes first where a feature would otherwise be built on the mess, and between features where it only has to be done at all. [03](03-stages.md) lays out every stage and PR in order, with what each needs from the ones before it and what it leaves for the ones after; nothing in it relies on anything later.
 
 ## Why
 
-The planner, the slotter, the sources and the learning are in good shape: pure where they can be, behind clear interfaces, covered by 874 tests. Two things aren't.
+At 3.2.0, when this was written ([01](01-current-state.md)): the planner, the slotter, the sources and the learning were in good shape: pure where they could be, behind clear interfaces, covered by 874 tests. Two things weren't.
 
 **The structure, where this fortnight's changes met** ([01](01-current-state.md) has the evidence):
 
-- `AppGraph.kt` does everything else: 2,628 lines, 117 functions, ten stores, thirteen concerns, no tests of its own; 51 other files reach into it, most straight into its stores.
-- Felix has two homes: what he says unprompted is a record in the log and a notification; the chat has only his answers. Seven places produce messages in his name, each building its own notification, and most share one id, so each new one replaces the last.
-- "Who set this?" is spread over twelve `user…` fields, mirrored by position; a step's origin is told from its title.
-- Eleven classes build their own Claude client; 18 notification ids live in 17 files.
-- `tasks.json` is 590 KB, most of it finished tasks, rewritten whole at every tick; `runtime.json` mixes the half-minute state with logs; no store has a version.
+- `AppGraph.kt` did everything else: 2,628 lines, 117 functions, ten stores, thirteen concerns, no tests of its own; 51 other files reached into it, most straight into its stores. (Since 3.3.3: 1,446 lines, 64 functions.)
+- Felix had two homes: what he said unprompted was a record in the log and a notification; the chat had only his answers. Seven places produced messages in his name, each building its own notification, and most shared one id, so each new one replaced the last.
+- "Who set this?" was spread over twelve `user…` fields, mirrored by position; a step's origin was told from its title.
+- Eleven classes built their own Claude client; 18 notification ids lived in 17 files. (One gateway, `enrich/ModelGateway.kt`, since 3.3.1; one id registry, `notify/NoticeId.kt`, since 3.3.0.)
+- `tasks.json` was 590 KB, most of it finished tasks, rewritten whole at every tick; `runtime.json` mixed the half-minute state with logs; no store had a version. (A version on every store since 3.3.2, D-94.)
 
 **What Felix can be asked, and how he reaches you**:
 
@@ -68,11 +68,12 @@ Every PR is a release ([development.md](../development.md)): cleanup-only releas
 
 | # | Stage | Version | Kind | Needs | Days |
 |---|---|---|---|---|---|
-| 0 | Safety net: store fixtures, the plan snapshot, the rehearsal, the phone-check script, baselines | none (tests and scripts) | cleanup | — | ½ |
-| 1 | One notifier: `NoticeId`, `Notifier`, every caller switched | 3.3.0 | cleanup | 0 | ½ |
-| 2 | One model gateway | 3.3.1 | cleanup | 0 | ½–1 |
-| 3 | Stores and backups, with versions and migrations | 3.3.2 | cleanup | 0 | 1 |
-| 4 | Felix's code in one place: the Conversation and Planning services, moved; his files split | 3.3.3 | cleanup | 1, 2, 3 | 1 |
+| 0 | Safety net: store fixtures, the plan snapshot, the rehearsal, the phone-check script, baselines | none (tests and scripts), done (#57) | cleanup | — | ½ |
+| 1 | One notifier: `NoticeId`, `Notifier`, every caller switched | 3.3.0, done (#58) | cleanup | 0 | ½ |
+| 2 | One model gateway | 3.3.1, done (#59) | cleanup | 0 | ½–1 |
+| 3 | Stores and backups, with versions and migrations | 3.3.2, done (#60) | cleanup | 0 | 1 |
+| 4 | Felix's code in one place: the Conversation and Planning services, moved; his files split | 3.3.3, done (#61) | cleanup | 1, 2, 3 | 1 |
+| — | The secrets' write tried again as the stores' is ([QUESTIONS.md](QUESTIONS.md) I2) | 3.3.4, done (#62) | fix | — | — |
 | 5a | The chat as his one voice: every message in it, the outbox, one notification, the archive | 4.0.0 | feature, data | 0, 1, 3, 4 | 2 |
 | 5b | WhatsApp-like: read state, dates, earlier messages, swipe to reply, one entrance for replies | 4.0.1 | feature | 5a | 1½ |
 | 5c | The extras folded; the label that slides out | 4.0.2 | feature | 5b | ½ |
@@ -91,7 +92,7 @@ Every PR is a release ([development.md](../development.md)): cleanup-only releas
 | 11 | Emails done | 4.3.0 | feature, data | 1, 3, 6d, 7 | 1½ |
 | 12 | The sweep: imports, comments, the architecture test complete, baselines compared | 4.3.1 | cleanup | all | ½ |
 
-About twenty-three days in 22 PRs (21 releases), evenings and weekends. After it, the conversation digest as 4.4.0 ([13](13-summaries.md)). You've said you won't use the app until the whole of it is in (Q21): each release is still built and checked on the phone, but nothing between releases has to serve a day's use.
+About twenty-three days in 23 PRs (22 releases), 3.3.4 among them, evenings and weekends. After it, the conversation digest as 4.4.0 ([13](13-summaries.md)). You've said you won't use the app until the whole of it is in (Q21): each release is still built and checked on the phone, but nothing between releases has to serve a day's use.
 
 ## What changes substantially
 
@@ -132,7 +133,7 @@ Numbered in `docs/decisions.md` by the PRs that apply them (the next free number
 - The private chat and Felix evals pass at the rate they pass today after the voice change.
 - Ticking the last piece of a starred email unstars and archives it within a minute online, and after reconnecting offline; Undo within the grace leaves Gmail untouched.
 - A new override of yours is a field in one place, not six; no store is rewritten for a change that isn't its own: the half-minute state has a file of its own, under 10 KB.
-- All tests pass, more of them than today's 874; every release checked on the phone; the baselines of Stage 0 compared and bettered.
+- All tests pass, more of them than the 874 the plan began with; every release checked on the phone; the baselines of Stage 0 compared and bettered.
 
 ## The documents
 

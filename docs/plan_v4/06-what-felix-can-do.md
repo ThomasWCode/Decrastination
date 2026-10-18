@@ -4,7 +4,7 @@ Your question: to what extent can he act as someone you're texting would, with t
 
 ## 1. What he can do today
 
-From the chat (`ChatPrompts.system`, `ChatAnswers.parse`, `AppGraph.answerChat`), everything made at once with an Undo (D-60):
+From the chat (`ChatPrompts.system`, `ChatAnswers.parse`, `Conversation.answerChat`), everything made at once with an Undo (D-60):
 
 - **Add tasks of your own** (`newTasks`): title, kind, subject, due date and time, start, minutes, notes, steps.
 - **Change tasks and days** (`changes`, the instructions' 15 types): not a task; can't start before; waits for another; due by; minutes (paced or yours); how much of your time an event takes; a day's limit; a busy stretch; days off; a half-day; all of it on a day; its next piece at a time; the same as another; its steps; its name.
@@ -28,7 +28,7 @@ Each row: what you'd text; what happens today; what this plan makes of it, and w
 | "Remind me about the form when I next sit down to the physics" | nothing of the kind | a reminder at that task's next slot's start |
 | "Before the essay's due, remind me to print it" | nothing | a reminder a set time before the task's deadline |
 | "Make a note on the essay: use the second source" | nothing; `notes` exist only on a task of your own, through the form | a note on any task, shown on its sheet and told to him whenever the task comes up |
-| "Tell me to do Ms Peters' assignments on sheets, not in my book" | a standing instruction in his memory, which every prompt sees; no source names a teacher, so only once you've said which class is hers, and the link to the task in front of him is the model's to make | a standing note the app attaches to every matching task by code: on each sheet, under each in his context, in his slot message for each ([07](07-notes-and-reminders.md) §Standing notes; Q31: A) |
+| "Tell me to do Ms Example's assignments on sheets, not in my book" | a standing instruction in his memory, which every prompt sees; no source names a teacher, so only once you've said which class is hers, and the link to the task in front of him is the model's to make | a standing note the app attaches to every matching task by code: on each sheet, under each in his context, in his slot message for each ([07](07-notes-and-reminders.md) §Standing notes; Q31: A) |
 | "What have I asked you to remind me of?" | nothing | listed in his context; he answers |
 | "Cancel that" / "push it to 8" | nothing | an action on the reminder; a new time or new words given with the reminder's id move it in place, with their own Undo |
 | "Remind me again in 20 minutes" (from a reminder) | nothing | Snooze, a chip on the reminder, no call; the message at the new time written again |

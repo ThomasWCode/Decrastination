@@ -57,6 +57,7 @@ Nothing else: no analytics, no crash reports (crashes are written down on the ph
 | Crashes | `files/crashes/` | The last three |
 | Daily backups | `Documents/Decrastination` | The newest 14; a reset's copy till you delete it |
 | Copies of unreadable files | `files/` | The newest three of each |
+| The file a migration came from | `files/` (`<name>.v<n>`) | A week from the migration, then let go at the next start |
 
 A backup is plain JSON in the phone's shared `Documents` folder, holding the chat, what Felix remembers, your changes, your own tasks, the log and the settings (the summary's address among them).
 Apps with access to all files (a file manager, a sync app) can read it, and so can a PC over USB.
@@ -78,7 +79,7 @@ Two keys are in the code, neither of them yours: Power Planner's web API is call
 - each block (when, what, why); each protection lapse; each day's plan and how much got done;
 - the check-ins, in your words; the weekly reviews, with their summary; Felix's messages and your replies; each week's totals.
 
-It's trimmed at each change: 120 days, Felix's messages 30. It goes in every backup; Stats' export shares it as CSV; Settings → Reset → Stats clears it ([storage-and-backups.md](storage-and-backups.md)).
+It's trimmed at each change: 120 days, Felix's messages 30. It goes in every backup; Stats' export shares it as CSV; Settings → Reset → Stats clears it but for Felix's messages, which Reset → "The chat and Felix's history" clears ([storage-and-backups.md](storage-and-backups.md)).
 Android's own log (`adb logcat -s Decrastination`) gets the app's notes too: the debug commands log task titles, never a secret's value.
 
 ## The public repository

@@ -24,7 +24,7 @@ Each stage says what it **needs** (always from earlier stages: nothing here reli
 
 1. **Store fixtures.** Made-up files for every store in its shape today, every field filled, the old ones too (`ChatMessage.remembered`, `done` and `reason`; tasks with each `user…` field, a paced total, steps of each kind, finished tasks, an email's extras; `log.json` with `FelixRecord`s of every reason, replies among them), under `fixtures/stores/<date>/`. `StoresDecodeTest` reads each with the app's own serializers and checks what came out. Every later shape gets its own folder, so each migration is tested from every shape it may meet.
 2. **A plan snapshot.** A fixed state (tasks from every source, steps of each kind, your instructions, a pin, a school calendar, busy time, a learned pace) planned by `Planner.plan`, its pieces, keys, days and slots written as text and compared with `fixtures/snapshots/plan.txt`; rewritten only on purpose (`-PupdateSnapshots=true`), as the goldens are. Any move that changes a plan shows here.
-3. **A migration rehearsal.** `scripts/rehearse.sh <backup>` unpacks a phone backup from `private/backup/` into the scratch folder and runs a test (`-PrehearseFrom=<dir>`, skipped otherwise) that reads every store with the code as it is, runs the migrations there are, and prints only counts and invariants (tasks, open ones, steps ticked, instructions in use, chat messages, pins, the month's spend). Nothing it reads is printed or committed.
+3. **A migration rehearsal.** `scripts/rehearse.sh <backup>` unpacks a phone backup from `private/backup/` into the git-ignored `private/rehearsal/<name>/` and runs a test (`-PrehearseFrom=<dir>`, skipped otherwise) that reads every store with the code as it is, runs the migrations there are, and prints only counts and invariants (tasks, open ones, steps ticked, instructions in use, chat messages, pins, the month's spend). Nothing it reads is printed or committed.
 4. **Two scripts.** `scripts/phone-check.sh`: the read-only checks of [12](12-verification-and-risks.md) §The phone check as one command. `scripts/scan-public.sh`: the privacy scan done by hand before each push, as a script, run on the diff before committing ([11](11-conventions-and-docs.md) §Privacy in the docs).
 5. **Baselines** for the done-when list: test count, build and test time, `AppGraph`'s size, the stores' sizes ([01](01-current-state.md) has today's).
 
@@ -48,8 +48,8 @@ Each stage says what it **needs** (always from earlier stages: nothing here reli
 
 **Steps**
 
-1. `enrich/ModelGateway.kt`: `callModel`, `modelHold`, `modelWorked`, `modelFailed`, `keepCall`, `modelAvailable`, `claudeKey`, `reconcileAlerts` and the alerts, moved from `AppGraph` unchanged, with `Called`, `ModelHold` and the record of calls; its state is `runtime.json`'s model fields until Stage 7 gives them `model.json`.
-2. One `AnthropicClient` a key and endpoint, kept, remade only when the key changes; the eleven readers (`ChatReader`, `ClaudeEnricher`, `ClaudeReviewer`, `FelixCaller`, `InstructionReader`, `MemoryTidier`, `MicroPlanner`, `PhotoChecker`, `PhotoTaskReader`, `SummaryWriter`, `WebResearcher`) take the client instead of building one; the timeouts by `ModelEffort.Job` in one table.
+1. `enrich/ModelGateway.kt`: `call`, `hold`, `worked`, `failed`, `keepCall`, `available`, `claudeKey`, `reconcileAlerts` and the alerts, moved from `AppGraph` (where they were `callModel`, `modelHold`, `modelWorked`, `modelFailed` and `modelAvailable`), with `Called`, `ModelHold` and the record of calls; its state is `runtime.json`'s model fields until Stage 7 gives them `model.json`.
+2. One `AnthropicClient` a key and endpoint, kept, remade only when the key or the endpoint changes; the eleven readers (`ChatReader`, `ClaudeEnricher`, `ClaudeReviewer`, `FelixCaller`, `InstructionReader`, `MemoryTidier`, `MicroPlanner`, `PhotoChecker`, `PhotoTaskReader`, `SummaryWriter`, `WebResearcher`) take the client instead of building one; the timeouts by `ModelEffort.Job` in one table.
 3. `AppGraph`'s factories go (`felixCaller()`, `microPlanner()`, `modelEnricher()`, `memoryTidier()`, `photoChecker()`, `photoTaskReader()`, `modelReviewer()`, `instructionReader()`, and the inline `ChatReader`, `SummaryWriter` and `WebResearcher`): a caller makes its reader from the gateway.
 4. The architecture test's second rule: only the gateway builds a client.
 
@@ -62,7 +62,7 @@ Each stage says what it **needs** (always from earlier stages: nothing here reli
 **Steps**
 
 1. `data/Stores.kt`: makes each store with its file name, its state class, its version and its migrations; reports what couldn't be read (as `AppGraph.found` does); hands each service its stores; `AppGraph` builds it first.
-2. `data/Migration.kt`: `version: Int = 1` in each state class (a file without one is version 1); `Migration(from, to) { JsonObject -> JsonObject }` run in order by `JsonStore` as it loads, before decoding; the file it came from kept as `<name>.v<from>` until a week after the next successful start; `JsonStore`'s recovery after migration, as now. A migration that moves fields between stores runs in `Stores` at start, before any service reads.
+2. `data/Migration.kt`: `version: Int = 1` in each state class (a file without one is version 1); `Migration(from) { JsonObject -> JsonObject }` (to `from + 1`) run in order by `JsonStore` as it loads, before decoding; the file it came from kept as `<name>.v<from>` until a week after the next successful start; `JsonStore`'s recovery after migration, as now. A migration that moves fields between stores runs in `Stores` at start, before any service reads.
 3. `data/BackupService.kt`: `exportBackup`, `backupNow`, `importBackup`, `restoreInstructions`, `reset`, `restoreResetCopy` moved from `AppGraph`, enumerating stores through `Stores`, so a new store can't be left out of a backup or a reset; a backup carries its parts' versions, and restoring an older one migrates them first. The pure `Backups` object (encode, decode, the checks) stays as it is. A restore or a reset replaces whole stores, which the one-writer rule ([02](02-target-architecture.md) §The rules) doesn't allow a service to do: so `Stores` alone has `replace(store, value)`, the backup service calls it and nothing else does, and the architecture test names `Stores` as the one exception to "only the owner updates", tested as such.
 4. The rehearsal (Stage 0) runs the migrations there are (none yet) and prints its counts before and after.
 
@@ -80,7 +80,7 @@ Each stage says what it **needs** (always from earlier stages: nothing here reli
 4. **Imports.** Every fully qualified name in the moved files becomes an import (the 198 in `AppGraph` go with the code that held them).
 5. **The first tests of flows that had none**, on temporary stores through a fake gateway: the chat's answer with cards made at once and its undo; a card applied and taken back; the check-in's five questions through `checkInReply`; a reply from a notification landing under the message it answers (as `replyToFelix` does today); his look writing a record and posting (as today).
 
-**Tests**: the five above; every existing test unchanged (the `FelixRules`, `ChatPrompts`, `ChatAnswers` and `CheckInFlow` tests move with their files). **Phone check**: the plan snapshot unchanged; `chat-ask` (paid), `felix-say` (paid), `check-in`, `briefing`, `undo`, `chat-card`, each as before. **Leaves**: the service the chat work is written in, with its harness; `AppGraph` about 900 lines lighter.
+**Tests**: the five above; every existing test unchanged (the `FelixRules`, `ChatPrompts`, `ChatAnswers` and `CheckInFlow` tests move with their files). **Phone check**: the plan snapshot unchanged; `chat-ask` (paid), `felix-say` (paid), `check-in`, `briefing`, `chat-card --es do apply`, then `--es do undo`, each as before. **Leaves**: the service the chat work is written in, with its harness; `AppGraph` about 900 lines lighter.
 
 ## Stage 5: the chat as his one voice (4.0.0, 4.0.1, 4.0.2)
 
@@ -94,7 +94,7 @@ The design is [05](05-the-chat.md); the stores' change is [04](04-data-and-migra
 2. **The outbox** (`felix/Outbox.kt`): `send(message)` writes to `chat.json`, moves what's past the window and read to `chat-archive.json` (never an unread message; the archive's update first, then the trim), then `notify(now)`; `notify` builds his one `MessagingStyle` notification from the live messages of his after `readAt` with text, or cancels it when there are none; `chatInFront` suppresses the post. `FelixNotifications.post` becomes the builder `notify` calls: `NoticeId.Felix`, no card buttons, `setOnlyAlertOnce` when rebuilt after a reply, your reply shown as yours.
 3. **Each producer through it**, a commit each with its test: `Looks.write` and `Looks.morning` (the `FelixRecord` becomes the message); `Briefing.run` (the fallback list as a `byApp` Morning message, the title its first line); `askNext` and `checkInReply` (`CheckIn`, `byApp`, the thanks from `FelixWords`); `Review.run` (`Review`, `byApp`, the note's first line, `opens = "review"`); `writeSummary` (`Summary`, `byApp`, `opens = "summary:<week>"`; its own id and `SUMMARY_READY` gone); `Assessment.post` (`Completions`, `byApp`, one message a completion, `asks = listOf(it)`); `CalendarTime.ask` (`EventQuestion`, `byApp`, `about.eventKey`, `suggestedReplies` its three answers; `NoticeId.CalendarQuestion` retired); `tellAnswer` deleted. Each stops posting a notification of its own.
 4. **The readers**: `FelixRules.due`'s `sent` from the chat (a `Sent(reason, key, at)` view, so its tests stay); `FelixPrompts.describe`'s recent from the chat (his last six with text, each with the next message of yours that has `replyTo` it, or the next of yours within ten minutes); `ReviewInput` and `Summary.input` counting from the chat; `Looks.queueQuestion`'s "asked lately" and `Looks.answered` by message.
-5. **Held, by kind**: `NotifyRules` says which kinds of his wait for the morning (Morning's fallback, Review, Summary, EventQuestion: the ones whose channels were ceilinged); `Outbox.notify` leaves those out of the notification until the briefing's rebuild, never a held copy; `Notifier.postHeld` stays for the app's own. The `Notices.shown` check that today stops `Looks.due` and the morning before they write moves to `Outbox.notify`: his channel off silences the notification, not the chat (Claude off still means no look). His channel for all of it (Q3); `Channels.create` deletes the briefing's once empty, as it does `daily`; the weekly channel keeps only the check-in's form reminder (`CheckIns.remind`).
+5. **Held, by kind**: `NotifyRules` says which kinds of his wait for the morning (Morning's fallback, Review, Summary, EventQuestion: the ones whose channels were ceilinged); `Outbox.notify` leaves those out of the notification until the briefing's rebuild, never a held copy; `Notifier.postHeld` stays for the app's own. The `Notices.shown` check that today stops `Looks.due` and the morning before they write moves to `Outbox.notify`: his channel off silences the notification, not the chat (Claude off still means no look). His channel for all of it (Q3); `Channels.create` deletes the briefing's once empty, as it does `daily`; the weekly channel keeps only the check-in's form reminder (`Conversation.remindCheckIn`, posted by `FelixPorts.remindForm`).
 6. **Clear and Reset**: `clearChat` and Reset → "The chat and Felix's history" empty the archive too; the backup carries the archive while it fits (`Backups.MAX_BYTES`), the oldest left out first and said in Settings → Backup.
 7. **The docs**: `felix.md` §His messages and §Notifications and replies; `storage-and-backups.md` (the archive); `decisions.md` (the chat is his one voice; every message kept).
 
@@ -233,7 +233,7 @@ The design is [05](05-the-chat.md); the stores' change is [04](04-data-and-migra
 
 ## Stage 12: the sweep (4.3.1)
 
-**Needs** everything. **Does**: what [11](11-conventions-and-docs.md) asks of the code as a whole, now that nothing is moving: every inline fully qualified name left becomes an import (437 today, most gone with the moves); comments that only date a change lose the date, and a decision they retell becomes its number; the architecture test's fourth and last rule added, one writer a store, which only holds once every service owns its store (the first three came in Stages 1, 2 and 6f: only the notifier posts, only the gateway builds a client, `core` pure by the module); the baselines of Stage 0 compared with now (test count, `AppGraph`'s size, the stores' sizes, build time) and the README's done-when list ticked; `docs/spec/` read through once against the code. One Codex round.
+**Needs** everything. **Does**: what [11](11-conventions-and-docs.md) asks of the code as a whole, now that nothing is moving: every inline fully qualified name left becomes an import (437 at 3.2.0, 258 after Stage 4, most of the rest gone with the moves); comments that only date a change lose the date, and a decision they retell becomes its number; the architecture test's fourth and last rule added, one writer a store, which only holds once every service owns its store (the first three came in Stages 1, 2 and 6f: only the notifier posts, only the gateway builds a client, `core` pure by the module); the baselines of Stage 0 compared with now (test count, `AppGraph`'s size, the stores' sizes, build time) and the README's done-when list ticked; `docs/spec/` read through once against the code. One Codex round.
 
 ## After
 
@@ -246,6 +246,7 @@ The conversation digest, 4.4.0 ([13](13-summaries.md), Q28): planned on its own 
 | 0 | 1 (no release) | ½ |
 | 1, 2, 3 | 3 | 2 |
 | 4 | 1 | 1 |
+| 3.3.4 (QUESTIONS.md I2) | 1 | — |
 | 5 | 3 | 4 |
 | 6 | 6 | 4½ |
 | 7 | 1 | 2½ |
@@ -254,6 +255,6 @@ The conversation digest, 4.4.0 ([13](13-summaries.md), Q28): planned on its own 
 | 10 | 2 | 1½ |
 | 11 | 1 | 1½ |
 | 12 | 1 | ½ |
-| | 22 (21 releases) | about 23 |
+| | 23 (22 releases) | about 23 |
 
 Evenings and weekends, as every release ([12](12-verification-and-risks.md) §Risks: the phone's away on school days).

@@ -373,7 +373,7 @@ The merge put the two plans in one order. These are the calls it made beyond you
 
 ### Q31. Standing notes: a note for every task of a class, subject or source
 
-You asked (18 Oct) whether he can keep a note that goes beyond one assignment: "tell me to do Ms Peters' assignments on sheets, not in my book". Today that's a standing instruction in his memory, which every prompt sees, but no source names a teacher (Teams gives a class code), so it works only once you've told him which class she teaches, and the link to the task in front of him is the model's to make each time. [07](07-notes-and-reminders.md) §Standing notes has the design.
+You asked (18 Oct) whether he can keep a note that goes beyond one assignment: "tell me to do Ms Example's assignments on sheets, not in my book". Today that's a standing instruction in his memory, which every prompt sees, but no source names a teacher (Teams gives a class code), so it works only once you've told him which class she teaches, and the link to the task in front of him is the model's to make each time. [07](07-notes-and-reminders.md) §Standing notes has the design.
 
 - **A (recommended).** In 8a, half a day more: `Note.taskId` optional beside a `scope` (subject or class, source, title contains); `Notes.forTask(task)` attaches a standing note to every matching task by code; it shows on each matching task's sheet, sits under each in his context, goes into his slot message and to the micro-planner, as a per-task note does. You'd still tell him once which class is hers.
 - **B.** Not now: a memory rule does most of it; revisit after 4.x.
