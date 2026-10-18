@@ -17,6 +17,7 @@ import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.R
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.notify.Channels
+import com.thomaswcode.decrastination.notify.NoticeId
 import java.util.concurrent.TimeUnit
 import com.thomaswcode.decrastination.notify.Notify
 
@@ -51,14 +52,13 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
             .setContentTitle("Reading your tasks")
             .setOngoing(true)
             .build()
-        return ForegroundInfo(NOTIFICATION_ID, notification)
+        return ForegroundInfo(NoticeId.Sync.id, notification)
     }
 
     companion object {
         private const val PERIODIC = "sync-periodic"
         const val NOW = "sync-now"
         private const val KEY_SOURCES = "sources"
-        private const val NOTIFICATION_ID = 1001
 
         /** Keeps the existing schedule if there is one, so starting the app doesn't reset its clock. */
         fun schedule(context: Context) {

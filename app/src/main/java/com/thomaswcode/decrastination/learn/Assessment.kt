@@ -37,6 +37,7 @@ import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.data.ActivityLog
 import com.thomaswcode.decrastination.data.AssessLater
 import com.thomaswcode.decrastination.notify.Channels
+import com.thomaswcode.decrastination.notify.NoticeId
 import com.thomaswcode.decrastination.notify.Notify
 import com.thomaswcode.decrastination.ui.AppTheme
 import kotlinx.coroutines.CoroutineScope
@@ -50,7 +51,6 @@ import kotlinx.coroutines.launch
  * outside the app's knowledge; with Claude off, a notification of its own per completion, as before.
  */
 object Assessment {
-    private const val BASE_ID = 4100
     const val ACTION = "com.thomaswcode.decrastination.action.ASSESS"
     const val EXTRA_TASK = "task"
     const val EXTRA_TITLE = "title"
@@ -77,7 +77,7 @@ object Assessment {
         if (asks.isEmpty()) return
         // Felix asks in the evening (LR-05); without Claude, or while notifications can't be seen, kept till they can.
         val graph = AppGraph.get(context)
-        if (graph.claudeKey() != null || !Notify.shown(context, Channels.FELIX)) {
+        if (graph.claudeKey() != null || !graph.notifier.shown(Channels.FELIX)) {
             graph.runtime.update { it.copy(assessLater = (it.assessLater + asks).distinctBy { a -> a.taskId to a.doneAt }.takeLast(MAX_LATER)) }
             return
         }
@@ -88,7 +88,7 @@ object Assessment {
     suspend fun askLater(context: Context) {
         val graph = AppGraph.get(context)
         val waiting = graph.runtime.value.assessLater
-        if (waiting.isEmpty() || graph.claudeKey() != null || !Notify.shown(context, Channels.FELIX)) return
+        if (waiting.isEmpty() || graph.claudeKey() != null || !graph.notifier.shown(Channels.FELIX)) return
         waiting.forEach { post(context, it) }
         graph.runtime.update { it.copy(assessLater = it.assessLater - waiting.toSet()) }
     }
@@ -103,7 +103,7 @@ object Assessment {
             .setContentIntent(
                 PendingIntent.getActivity(
                     context,
-                    0,
+                    NoticeId.Assessment.code(),
                     Intent(context, AssessActivity::class.java)
                         .setData(Uri.fromParts("task", "${ask.taskId}@${ask.doneAt ?: 0}", null))
                         .putExtra(EXTRA_TASK, ask.taskId)
@@ -117,7 +117,7 @@ object Assessment {
         ANSWERS.forEachIndexed { i, (label, answer) ->
             val tap = PendingIntent.getBroadcast(
                 context,
-                i,
+                NoticeId.Assessment.code(1 + i),
                 Intent(context, AssessmentReceiver::class.java)
                     .setAction(ACTION)
                     .setData(Uri.fromParts("task", "${ask.taskId}@${ask.doneAt ?: 0}#$i", null))
@@ -128,16 +128,16 @@ object Assessment {
             )
             builder.addAction(0, label, tap)
         }
-        Notify.post(context, tag(ask.taskId, ask.doneAt), BASE_ID, builder.build())
+        AppGraph.get(context).notifier.post(NoticeId.Assessment, builder.build(), tag(ask.taskId, ask.doneAt))
     }
 
     /** Records [answer] (and [note]) on the completion of [taskId] done at [doneAt] (0: its latest, for older questions). */
     /** The question about [taskId]'s completion at [doneAt] taken back unasked: the completion is gone (debug `forget-task`). */
-    fun withdraw(context: Context, taskId: String, doneAt: Long) = Notify.cancel(context, tag(taskId, doneAt.takeIf { it != 0L }), BASE_ID)
+    fun withdraw(context: Context, taskId: String, doneAt: Long) = AppGraph.get(context).notifier.cancel(NoticeId.Assessment, tag(taskId, doneAt.takeIf { it != 0L }))
 
     suspend fun record(context: Context, taskId: String, doneAt: Long, answer: String, note: String? = null) {
         AppGraph.get(context).log.update { answered(it, taskId, doneAt, answer, note) }
-        Notify.cancel(context, tag(taskId, doneAt.takeIf { it != 0L }), BASE_ID)
+        AppGraph.get(context).notifier.cancel(NoticeId.Assessment, tag(taskId, doneAt.takeIf { it != 0L }))
     }
 
     /** [log] with [answer] on the completion it's about: the one done at [doneAt], or (0) the latest of [taskId]'s. */

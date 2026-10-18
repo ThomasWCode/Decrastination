@@ -16,6 +16,7 @@ import com.thomaswcode.decrastination.block.BlockPolicy
 import com.thomaswcode.decrastination.core.Instructions
 import com.thomaswcode.decrastination.core.Planner
 import com.thomaswcode.decrastination.notify.Channels
+import com.thomaswcode.decrastination.notify.NoticeId
 import com.thomaswcode.decrastination.notify.Notify
 import com.thomaswcode.decrastination.widget.WidgetUpdater
 import java.time.Instant
@@ -38,7 +39,6 @@ object CalendarTime {
     const val ACTION_ANSWER = "com.thomaswcode.decrastination.action.EVENT_ANSWER"
     const val EXTRA_KEY = "key"
     const val EXTRA_ANSWER = "answer"
-    private const val BASE_ID = 4200
     private const val DAY_MS = 24 * 3_600_000L
     /**
      * The end of the plan's last day (DX-14): its days run to today + [Planner.MAX_HORIZON_DAYS], each
@@ -143,7 +143,7 @@ object CalendarTime {
         // Not at night: they're asked at the first look after quiet hours. Nor while the question
         // couldn't be seen (notifications off): it's asked once it can be, not marked asked unseen.
         val quiet = BlockPolicy.isQuiet(now, graph.clock.zone(), graph.settings.value)
-        val toAsk = if (quiet || !Notify.shown(context, Channels.CALENDAR)) emptyList() else questions(time.toAsk, graph.runtime.value.eventsAsked, now)
+        val toAsk = if (quiet || !graph.notifier.shown(Channels.CALENDAR)) emptyList() else questions(time.toAsk, graph.runtime.value.eventsAsked, now)
         if (toAsk.isNotEmpty()) {
             toAsk.forEach { ask(context, it, graph.clock.zone()) }
             graph.runtime.update { it.copy(eventsAsked = it.eventsAsked + toAsk.map(EventJudge::key)) }
@@ -178,7 +178,7 @@ object CalendarTime {
                 builder,
                 context,
                 label,
-                i,
+                NoticeId.CalendarQuestion.code(1 + i),
                 Intent(context, EventAnswerReceiver::class.java)
                     .setAction(ACTION_ANSWER)
                     .setData(Uri.fromParts("event", "$key#$i", null))
@@ -186,10 +186,10 @@ object CalendarTime {
                     .putExtra(EXTRA_ANSWER, answer),
             )
         }
-        Notify.post(context, tag, BASE_ID, builder.build())
+        AppGraph.get(context).notifier.post(NoticeId.CalendarQuestion, builder.build(), tag)
     }
 
-    fun cancelQuestion(context: Context, key: String) = Notify.cancel(context, TAG_PREFIX + key, BASE_ID)
+    fun cancelQuestion(context: Context, key: String) = AppGraph.get(context).notifier.cancel(NoticeId.CalendarQuestion, TAG_PREFIX + key)
 
     private const val TAG_PREFIX = "event:"
 }

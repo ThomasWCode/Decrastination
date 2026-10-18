@@ -15,6 +15,7 @@ import androidx.work.workDataOf
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.R
 import com.thomaswcode.decrastination.notify.Channels
+import com.thomaswcode.decrastination.notify.NoticeId
 import com.thomaswcode.decrastination.notify.Notify
 
 /**
@@ -34,13 +35,12 @@ class ReviewWorker(context: Context, params: WorkerParameters) : CoroutineWorker
             .setContentTitle("Reviewing the week")
             .setOngoing(true)
             .build()
-        return ForegroundInfo(NOTIFICATION_ID, notification)
+        return ForegroundInfo(NoticeId.ReviewWork.id, notification)
     }
 
     companion object {
         private const val NAME = "review"
         private const val KEY_IF_DUE = "ifDue"
-        private const val NOTIFICATION_ID = 1003
 
         /** The review now; [ifDue], only if none has run since Sunday's check-in. One after another. */
         fun enqueue(context: Context, ifDue: Boolean) {

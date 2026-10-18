@@ -27,6 +27,7 @@ import com.thomaswcode.decrastination.data.ProtectionRecord
 import com.thomaswcode.decrastination.data.ProtectionState
 import com.thomaswcode.decrastination.learn.Daily
 import com.thomaswcode.decrastination.notify.Channels
+import com.thomaswcode.decrastination.notify.NoticeId
 import com.thomaswcode.decrastination.notify.Notify
 import com.thomaswcode.decrastination.sync.SyncWorker
 import com.thomaswcode.decrastination.ui.MainActivity
@@ -62,7 +63,6 @@ object Watchdog {
      */
     private const val RESTART_VERIFY_MS = 25_000L
 
-    private const val NOTIFICATION_ID = 3001
     private const val TAG = AppGraph.TAG
     private const val RESTART_PAUSE_MS = 1_500L
 
@@ -101,7 +101,7 @@ object Watchdog {
             adminActive = isAdminActive(context),
             canRepair = canRepair(context),
             serviceRunning = FocusService.isRunning(context),
-            alertsShown = Notify.shown(context, Channels.PROTECTION),
+            alertsShown = AppGraph.get(context).notifier.shown(Channels.PROTECTION),
             // Only those it leaves uncovered: one since blocked outright (the fix it suggests) is covered.
             unreadableBrowsers = AppGraph.get(context).focus.uncovered(FocusService.unreadableBrowsers.value).map { Blocklist.NAMES[it] ?: it }.sorted(),
         )
@@ -219,19 +219,18 @@ object Watchdog {
             graph.log.update { it.copy(protection = it.protection + ProtectionRecord(now, recorded, repaired)).trimmed(now) }
             Log.i(TAG, "Protection: ${recorded.ifEmpty { listOf("all well") }}${if (repaired) " (repaired)" else ""}")
         }
-        if (problems.isEmpty()) Notify.cancel(context, NOTIFICATION_ID) else alert(context, problems, armed)
+        if (problems.isEmpty()) AppGraph.get(context).notifier.cancel(NoticeId.Protection) else alert(context, problems, armed)
     }
 
     private fun alert(context: Context, problems: List<String>, armed: Boolean) {
         val open = PendingIntent.getActivity(
             context,
-            3,
+            NoticeId.Protection.code(),
             Intent(context, MainActivity::class.java).putExtra(MainActivity.EXTRA_TAB, MainActivity.OPEN_SETUP).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
-        Notify.post(
-            context,
-            NOTIFICATION_ID,
+        AppGraph.get(context).notifier.post(
+            NoticeId.Protection,
             Notify.builder(context, Channels.PROTECTION)
                 .setSmallIcon(R.drawable.ic_focus)
                 .setContentTitle(if (armed) "PROTECTION OFF" else "Blocking is off")
