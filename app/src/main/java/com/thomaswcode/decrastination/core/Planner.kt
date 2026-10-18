@@ -601,6 +601,20 @@ object Planner {
         }
 
         // Due after today: backwards from its last usable day.
+        // Piece [i] of [item] at a start the last plan kept today, under way or still to come, its slot
+        // and grace not over and not missed (PL-13): today stays its day, so a replan doesn't move it
+        // to a day with more room once today's time has begun to run.
+        fun keptStart(item: Item, i: Int): Long? {
+            val piece = item.chunks[i]
+            val key = Chunk.keyOf(item.task.id, piece.index, item.offset + i + 1, piece.sitting?.after)
+            val start = input.previousSlots[key] ?: return null
+            return start.takeIf { key !in input.missedSlots && date(it, zone) == today && it + piece.minutes * 60_000L + Slotter.GRACE_MS > input.now }
+        }
+        fun keptToday(item: Item, i: Int): Boolean = keptStart(item, i) != null
+        // One under way stays today even where less than its whole length is left: the slotter holds
+        // it through its grace.
+        fun underWayToday(item: Item, i: Int): Boolean = keptStart(item, i)?.let { it <= input.now } ?: false
+
         fun placeBack(item: Item, why: Why) {
             val earliest = maxOf(firstDay(item), floorOf(item) ?: today)
             // The day it's due by, as calibrated: work after it is behind, even when that day has
@@ -618,8 +632,12 @@ object Planner {
 
             // Backwards, one chunk per day while there are days with room.
             var cursor = lastUsable
+            val kept = item.chunks.indices.filter { i -> today in earliest..cursor && keptToday(item, i) && (fits(today, i) || underWayToday(item, i)) }.toSet()
+            // Said kept only where keeping it changed its day: work due soon is today's anyway.
+            val keptMoved = HashSet<Int>()
             for (i in item.chunks.indices.reversed()) {
-                val day = latest(cursor, i) ?: break
+                val natural = latest(cursor, i)
+                val day = (if (i in kept && today <= cursor) today else null)?.also { if (it != natural) keptMoved += i } ?: natural ?: break
                 assigned[i] = day
                 take(item, day, i)
                 cursor = day.minusDays(1)
@@ -665,7 +683,7 @@ object Planner {
             val short = reachable(item) && (item.minutes > freeBefore || forced || assigned.any { it == null || it > lastDayBefore(item, input) })
             item.chunks.indices.forEach { i ->
                 val day = assigned[i] ?: return@forEach
-                placed.getValue(day) += chunk(item, i, behind = behind[i] || day > dueBy, why = why, noRoom = noRoom(item, day, short))
+                placed.getValue(day) += chunk(item, i, behind = behind[i] || day > dueBy, why = if (i in keptMoved && day == today) Why.Kept else why, noRoom = noRoom(item, day, short))
             }
             sayIfShort(item, freeBefore, short)
             note(item, assigned)
@@ -680,16 +698,6 @@ object Planner {
         // room passes its piece to the nearest that has some, earlier first, but never to one past
         // which the pieces after it can't follow. Where the window can't hold the task in order at
         // all, it's placed backwards as before, behind where it must be.
-        // Piece [i] of [item] at a start the last plan kept today, under way or still to come, its slot
-        // and grace not over and not missed (PL-13): today stays its day, so a replan doesn't move it
-        // to a day with more room once today's time has begun to run.
-        fun keptToday(item: Item, i: Int): Boolean {
-            val piece = item.chunks[i]
-            val key = Chunk.keyOf(item.task.id, piece.index, item.offset + i + 1, piece.sitting?.after)
-            val start = input.previousSlots[key] ?: return false
-            return key !in input.missedSlots && date(start, zone) == today && start + piece.minutes * 60_000L + Slotter.GRACE_MS > input.now
-        }
-
         fun placeSpread(item: Item) {
             // For a test: as Claude read it of the task as it is now, not of what it said before.
             val spaced = item.task.kind == Kind.Revision || Enrichments.current(byId[item.task.id] ?: item.task)?.testDate != null
@@ -773,6 +781,13 @@ object Planner {
                 val from = maxOf(previous, 0)
                 val apart = if (spaced && previous >= 0) previous + 1 else from
                 val within = if (weekly && previous >= 0) minOf(window.lastIndex, previous + 7) else window.lastIndex
+                if (from == 0 && window.first() == today && underWayToday(item, i)) {
+                    whys[i] = Why.Kept
+                    assigned[i] = today
+                    take(item, today, i)
+                    previous = 0
+                    continue
+                }
                 val at = target(i)
                 // The gap and the week kept where there's room; then the week given up; then the gap.
                 // Revision's look-ahead keeps its gap where a day allows (else as without it).
@@ -790,6 +805,7 @@ object Planner {
                     return
                 }
                 whys[i] = when {
+                    day == 0 && window.first() == today && keptToday(item, i) -> Why.Kept
                     n == 1 -> Why.MostRoom
                     day == loose -> Why.Spread
                     // Moved by the gap where revision's would have gone without it (before the day after its last piece).
