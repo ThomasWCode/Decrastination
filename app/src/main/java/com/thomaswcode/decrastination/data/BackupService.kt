@@ -235,7 +235,7 @@ class BackupService(
         val archived = if ((all || what == Reset.Chat) && leftOut > 0) {
             val archive = "chat-archive-$stamp.json"
             keep(archive, JsonStore.json.encodeToString(ChatArchive.serializer(), whole.archive))
-                ?.let { " The chat's earliest $leftOut messages, past what a backup holds, are whole in ${it.substringBefore(archive)}$archive." }
+                ?.let { " The chat's earliest $leftOut messages, past what a backup holds, are whole in ${it.where}." }
                 ?: return@withContext "Nothing was reset: the chat's earliest messages couldn't be saved first."
         } else {
             ""
@@ -261,20 +261,23 @@ class BackupService(
             stores.replace(stores.instructions, InstructionState())
             layInstructions()
         }
-        "${what.title}: reset. A copy of everything from before is in $saved.$archived"
+        "${what.title}: reset. A copy of everything from before is in ${saved.where}${if (saved.own) ", which Settings → Backup can restore" else ""}.$archived"
     }
+
+    /** Where [keep] put a file, in words: in Documents, or in the app's own files ([own]), which the file picker can't reach. */
+    private data class Kept(val where: String, val own: Boolean)
 
     /**
      * [text] saved as [name] in Documents/Decrastination, or, where that can't be written, in the app's own
-     * files, which the file picker can't reach, so Settings → Backup restores a reset's copy from them
-     * itself ([resetCopies]). Where it went, in words; null where it couldn't be saved.
+     * files, from which Settings → Backup restores a reset's copy itself ([resetCopies]). Null where it
+     * couldn't be saved.
      */
-    private suspend fun keep(name: String, text: String): String? = runCatching {
+    private suspend fun keep(name: String, text: String): Kept? = runCatching {
         if (folder.available && withContext(Dispatchers.IO) { folder.write(name, text) }) {
-            "Documents/Decrastination/$name"
+            Kept("Documents/Decrastination/$name", own = false)
         } else {
             withContext(Dispatchers.IO) { File(copies.apply { mkdirs() }, name).writeText(text) }
-            "the app's own files ($name), which Settings → Backup can restore"
+            Kept("the app's own files ($name)", own = true)
         }
     }.getOrNull()
 
