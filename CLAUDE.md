@@ -2,7 +2,7 @@
 
 Decrastination is a personal Android app, sideloaded onto one phone. It gathers the owner's school work (Teams assignments, Power Planner, starred Gmail, AnkiDroid decks, tasks of their own), plans it into timed slots, writes them to the calendar, blocks distracting apps while work is due (an accessibility service), and talks through Felix, a persona Claude writes as, in a chat and in notifications. Kotlin, Jetpack Compose (Material 3), Glance for the widget; the app's state is JSON files; Claude's API through the Anthropic Java SDK. `README.md` has more.
 
-Every Claude session in this repository reads this file: the reviewer GitHub Actions runs on a pull request, and Claude Code working here. The last section, *Reviewing a pull request in GitHub Actions*, is for the reviewer alone; the rest holds for every session.
+Every Claude session in this repository reads this file: the reviewer GitHub Actions runs on a pull request, and Claude Code working here. The last two sections are each for one of them, *Working in a local session* for Claude Code and *Reviewing a pull request in GitHub Actions* for the reviewer; the rest holds for every session.
 
 ## Where things are said
 
@@ -28,6 +28,17 @@ Every Claude session in this repository reads this file: the reviewer GitHub Act
 - Comments say what the code does and why, in the present tense, in plain British English. Requirement ids (PL-12, AI-19) stay; the owner's decisions are referred to ("D-14"), not retold; no review history in comments.
 - Imports, not inline fully qualified names, in the code a change moves or writes.
 - A change matches the code around it. What's already there isn't renamed or reworded without a reason.
+
+## Working in a local session
+
+This section is for Claude Code working here; the reviewer can leave it aside. It keeps the work quick: most of a stage's time went on many small steps, so the steps are made bigger.
+
+- **Fewer, bigger steps.** Chain the commands that depend on each other (`&&`), make an edit across several files with one script, send independent reads and checks together, and don't read a file back after editing it. A check before anything hard to undo (a push, an install, a reply, a merge) stays a step of its own, so a surprise still stops the work.
+- **The helpers first.** The git-ignored `private/tools/` holds what each PR needs, listed in its `README.md`: `pr_status.py` (each PR's state; `--ready` the merge checklist), `watch_pr.py` and `watch_ci.py` (Codex and CI waited for in the background), `merge_up.sh` (a fix merged up a stack), `reply_resolve.py` (review threads answered and resolved), `held_by_name.py` (before a build that moves a class Android holds by name). A new script is written only for what they don't do, and kept there if it'll be wanted again.
+- **Short stacks.** A PR's reviews are done, or it's merged, before more than one or two are stacked on it: a fix low in a long stack has to be merged up through every branch above it, with its conflicts in each.
+- **One full CI run a push.** While changing code, compile, then run the tests the change touches. Before a push, one run of CI's command (`./gradlew testDebugUnitTest lintDebug assembleDebug`), on a stack's top branch alone: CI runs it on every branch in parallel.
+- **Phone sessions prepared.** A stage that needs the owner at the phone sends them its list first: every step in order, what to look for, and what the scripts have checked already, so their time goes only on what needs them (`docs/plan_v4/14-your-part.md`).
+- **Broad reading in a subagent.** A sweep across many files goes to an Explore subagent, keeping this session's context small and its compactions few.
 
 ## Reviewing a pull request in GitHub Actions
 
