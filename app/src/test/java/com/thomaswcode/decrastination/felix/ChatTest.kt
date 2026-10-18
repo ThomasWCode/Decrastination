@@ -437,7 +437,7 @@ class ChatTest {
     )
 
     @Test
-    fun `the plan is sent as the Plan tab has it, a day at a time and a task a line, with what it leaves out and why`() {
+    fun `the plan is sent as the Day and Work tabs have it, a day at a time and a task a line, with what it leaves out and why`() {
         val text = ChatPrompts.plan(plan, LONDON)
         assertTrue(text.startsWith("The plan: the work the app has them do each day"), text)
         assertTrue("\nNext to do: Bridge and Balances Beam Q's: part 1 of 3 (34 min); then Bridge and Balances Beam Q's: part 2 of 3 (33 min)\n" in text, text)

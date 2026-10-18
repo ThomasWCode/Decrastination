@@ -259,7 +259,7 @@ class Conversation(
 
     /**
      * What the chat tells Claude the app knows at [now] ([ChatPrompts.context]): the open tasks, the
-     * calendar and the changes in use; and beside them the plan as the Plan tab shows it then, the
+     * calendar and the changes in use; and beside them the plan as the Day and Work tabs show it then, the
      * slot under way included ([ChatPrompts.plan]). All of one [state], calendar [time] and
      * [applied] instructions, so the list and the plan agree, and with the answer's checks where the
      * caller passes it the same ones.
