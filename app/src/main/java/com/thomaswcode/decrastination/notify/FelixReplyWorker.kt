@@ -10,6 +10,7 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import com.thomaswcode.decrastination.AppGraph
+import com.thomaswcode.decrastination.notify.NoticeId
 
 /**
  * A reply from Felix's notification answered (AI-24) as work of its own: the receiver that took it
@@ -25,7 +26,7 @@ class FelixReplyWorker(context: Context, params: WorkerParameters) : CoroutineWo
     }
 
     override suspend fun getForegroundInfo(): ForegroundInfo = ForegroundInfo(
-        NOTIFICATION_ID,
+        NoticeId.ReplyWork.id,
         Notify.builder(applicationContext, Channels.SYNC)
             .setContentTitle("Answering your reply")
             .setOngoing(true)
@@ -37,7 +38,6 @@ class FelixReplyWorker(context: Context, params: WorkerParameters) : CoroutineWo
         private const val KEY_ID = "id"
         private const val KEY_WORDS = "words"
         private const val KEY_ASKED = "asked"
-        private const val NOTIFICATION_ID = 1004
 
         /** The most of the reply kept to show under his message while he answers: the chat has it whole. */
         private const val MAX_WORDS = 1_000

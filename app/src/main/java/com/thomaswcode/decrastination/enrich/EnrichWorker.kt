@@ -15,6 +15,7 @@ import androidx.work.workDataOf
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.R
 import com.thomaswcode.decrastination.notify.Channels
+import com.thomaswcode.decrastination.notify.NoticeId
 import java.util.concurrent.TimeUnit
 import com.thomaswcode.decrastination.notify.Notify
 
@@ -43,14 +44,13 @@ class EnrichWorker(context: Context, params: WorkerParameters) : CoroutineWorker
             .setContentTitle("Reading your tasks")
             .setOngoing(true)
             .build()
-        return ForegroundInfo(NOTIFICATION_ID, notification)
+        return ForegroundInfo(NoticeId.Readings.id, notification)
     }
 
     companion object {
         private const val NAME = "enrich"
         private const val RETRY = "enrich-retry"
         private const val KEY_MODEL = "model"
-        private const val NOTIFICATION_ID = 1002
 
         /** After each sync, and when the model is switched on or given its key; one run after another. */
         fun enqueue(context: Context) {

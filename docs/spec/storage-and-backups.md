@@ -114,7 +114,7 @@ On a debug build the menu's *Debug* page (AR-03) has a button for each command t
 - `calendar-move --es key <slot> --ei by <minutes>` and `calendar-delete --es key <slot>`, as a hand in the calendar would.
 
 **Blocking and protection**
-- `force-block --ei minutes <n>` (0 ends it; it only tightens); `protection` [`--ez repair true`]; `offer-teams-sync`.
+- `force-block --ei minutes <n>` (0 ends it; it only tightens); `protection` [`--ez repair true`]; `offer-teams-sync`; `free-time` [`--ei minutes <n>`] (free time's countdown and its heads-up as notifications, nothing spent or given).
 - `test-arm` and `test-disarm` (at once); `remove-admin`; `clear-parent-code`.
 - `clean-up`: this app's notifications, a delayed Teams sync, forced blocking, the watchdog's restarts, and reviews run at any time but Sunday evening.
 

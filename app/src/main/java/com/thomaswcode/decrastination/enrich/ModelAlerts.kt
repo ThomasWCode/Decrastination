@@ -1,37 +1,34 @@
 package com.thomaswcode.decrastination.enrich
 
-import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
 import androidx.core.app.NotificationCompat
+import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.R
 import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.notify.Channels
+import com.thomaswcode.decrastination.notify.NoticeId
 import com.thomaswcode.decrastination.notify.Notify
 import com.thomaswcode.decrastination.ui.MainActivity
 
 /** Claude's warnings (docs/spec/readings.md): a plan of its dropped, and its key no longer working. */
 object ModelAlerts {
-    /** One a task, told apart by its id as the tag. */
-    private const val DROPPED_ID = 5001
-    private const val KEY_ID = 5002
-
     /**
      * Claude's key or account can't be used ([problem]): said once a stretch of it, till it's put
      * right in Setup. False if it couldn't be shown (notifications off), so it's tried again.
      */
     fun keyProblem(context: Context, problem: KeyProblem): Boolean {
-        if (!Notify.shown(context, Channels.MODEL)) return false
-        Notify.post(
-            context,
-            KEY_ID,
+        val notifier = AppGraph.get(context).notifier
+        if (!notifier.shown(Channels.MODEL)) return false
+        notifier.post(
+            NoticeId.ModelKey,
             Notify.builder(context, Channels.MODEL)
                 .setSmallIcon(R.drawable.ic_focus)
                 .setContentTitle("Claude has stopped working")
                 .setContentText(problem.says)
                 .setStyle(NotificationCompat.BigTextStyle().bigText("${problem.says}. ${problem.fix}. The rules stand in meanwhile."))
-                .let { Notify.opening(it, context, KEY_ID, tab(context, MainActivity.OPEN_SETUP)) }
+                .let { Notify.opening(it, context, NoticeId.ModelKey.code(), tab(context, MainActivity.OPEN_SETUP)) }
                 .setAutoCancel(true)
                 .build(),
         )
@@ -39,23 +36,24 @@ object ModelAlerts {
     }
 
     /** The key works again, or a new one is in: the alert is out of date. */
-    fun keyFixed(context: Context) = Notify.cancel(context, KEY_ID)
+    fun keyFixed(context: Context) = AppGraph.get(context).notifier.cancel(NoticeId.ModelKey)
 
     /** [task]'s plan from the model dropped, [why]: its estimate is planned whole, so it's worth a look. */
     fun dropped(context: Context, task: TaskItem, why: String): Boolean {
-        if (!Notify.shown(context, Channels.MODEL)) return false
-        Notify.post(
-            context,
-            task.id,
-            DROPPED_ID,
+        val notifier = AppGraph.get(context).notifier
+        if (!notifier.shown(Channels.MODEL)) return false
+        notifier.post(
+            NoticeId.ModelDropped,
             Notify.builder(context, Channels.MODEL)
                 .setSmallIcon(R.drawable.ic_focus)
                 .setContentTitle("Claude's plan was dropped")
                 .setContentText("${task.title}: $why")
                 .setStyle(NotificationCompat.BigTextStyle().bigText("${task.title}: $why. It's planned as one piece meanwhile; Tasks shows it."))
-                .let { Notify.opening(it, context, DROPPED_ID, tab(context, MainActivity.TAB_TASKS)) }
+                .let { Notify.opening(it, context, NoticeId.ModelDropped.code(), tab(context, MainActivity.TAB_TASKS)) }
                 .setAutoCancel(true)
                 .build(),
+            // One a task, told apart by its id as the tag.
+            task.id,
         )
         return true
     }
@@ -73,8 +71,8 @@ object ModelAlerts {
      * enrichment loop never sees again), or changed or planned since. Those still standing stay.
      */
     fun withdrawExcept(context: Context, standing: Set<String>) {
-        val posted = context.getSystemService(NotificationManager::class.java)?.activeNotifications ?: return
-        posted.filter { it.id == DROPPED_ID && it.tag != null && it.tag !in standing }.forEach { Notify.cancel(context, it.tag, DROPPED_ID) }
+        val notifier = AppGraph.get(context).notifier
+        notifier.showing(NoticeId.ModelDropped).filter { it != null && it !in standing }.forEach { notifier.cancel(NoticeId.ModelDropped, it) }
     }
 
     private fun tab(context: Context, tab: Int): Intent =
