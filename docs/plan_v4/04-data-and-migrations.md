@@ -61,13 +61,13 @@ Today a store is read by its serializer, with defaults for what's missing and fi
 - **On each message**: `kind` (from the stored `reason`, else `Chat`), `byApp`, `replyTo`, `pieceKey`, `nextCheckAt`, `asks`, `opens`; `remembered` becomes `memoryEdits` (as the screen already reads it, `Memories.editOf`), `done` becomes `acts` with nothing to undo; the three old fields go.
 - **On the state**: `readAt` (set to the newest message's time, so nothing's unread on the day of the update) and `felix` (from `RuntimeState.felix`, `assessLater` and `checkInDraft`, which go).
 - **From the log**: each `FelixRecord` of the last 30 days becomes a message of his: `id` and `at` as they were, `text`, `replies` as its suggested replies, `reason` as its kind, `key` as `pieceKey`, `taskId` as what it's about, `nextCheckAt` and `asks` as themselves; a record's `replyText` becomes a message of yours at `repliedAt` with `replyTo` the record's id. Merged by id, never doubled: a record whose id the chat already has (today's `replyToFelix` copies a record into the chat under its own id when you reply, and `tellAnswer` keeps a record under an answer's chat id) keeps the chat's message and only fills in what the message lacks (`kind`, `pieceKey`, `nextCheckAt`, `asks`); and a reply that's already in the chat as a message of yours after it (the reply `replyToFelix` sent) gets `replyTo` set rather than a second copy. `ActivityLog.felix` and `FELIX_KEEP_DAYS` go.
-- **The window and the archive**: `chat.json` keeps the last 200 messages or 60 days, whichever keeps more; what's past it moves to `chat-archive.json` (`ChatArchive`, oldest first, append-only) by the outbox after each message: the archive's `update` first, then the live store's trim, so a crash between leaves a duplicate (dropped by id at the next move), never a hole. The first move after the update makes them; no migration of their own.
+- **The window and the archive**: `chat.json` keeps the last 200 messages or 60 days, whichever keeps more, and every unread message whatever its age (so the notification, the badge and the opening position, all read from the window, never lose one); what's past it and read moves to `chat-archive.json` (`ChatArchive`, oldest first, append-only) by the outbox after each message: the archive's `update` first, then the live store's trim, so a crash between leaves a duplicate (dropped by id at the next move), never a hole. The first move after the update makes them; no migration of their own.
 - **`Speaker.Felix`** (5b) with `@SerialName("Claude")`, so the stored value doesn't change.
 
 ### Tasks v2, Stage 7
 
 - **Your values.** The twelve `user…` fields go, and `TaskItem.mine` takes their place. No values need converting: they're laid from `instructions.json` (the plan does so at every run already), so the migration drops the old fields and `Instructions` lays `mine` from the instructions in use before anything reads the tasks. A task whose instructions are gone has nothing of yours, as now. **Who set an existing instruction** can't always be told: the chat is capped and can be cleared while its changes stay in force. So every instruction from before gets `by = You`, the value that changes nothing (the app treats yours and Felix's alike, D-4; `by` only labels), and the migration marks `Felix` only where the chat still holds the card that made it (the card's text is the instruction's). From then on each new instruction records its author.
-- **Steps.** Each step gets an id (eight random hex characters, kept from then on) and an origin, inferred this once as the app tells them apart today: the reading's steps (`stepsFromEnrichment`) are `Reading`, or `Rules` where the rules made the reading; steps laid from your instruction are `Yours` (or `Felix`, where the instruction was the chat's); a task of your own's are `OwnTask`; the rest (Anki's) `Source`.
+- **Steps.** Each step gets an id (eight random hex characters, kept from then on) and an origin, inferred this once as the app tells them apart today: the reading's steps (`stepsFromEnrichment`) are `Reading`, or `Rules` where the rules made the reading; steps laid from your instruction are `Yours` (or `Felix`, where the instruction was the chat's); a task of your own's are `OwnTask`; the rest (Anki's) `Source`. The steps an instruction holds (`OwnStep`, in its `Steps` change and in `SetSteps`) get ids too, the same migration giving an instruction's step the id of the task step it laid, so laying the instruction again carries the same ids and `carryMarks` keeps the ticks by id; a new instruction's steps get their ids when it's read.
 
 ### `runtime.json` split, Stage 7
 
@@ -75,7 +75,7 @@ The fields in the table above, each to its file, in one migration at start; `run
 
 ### Finished tasks trimmed, Stage 7
 
-A task finished more than 14 days ago (C-Q3; `Merge.KEEP_FINISHED_MS` is the same fortnight) keeps what the rest of the app reads of it: its identity, title, class, kind, dates and status, its estimates and minutes worked, its steps' titles, minutes and ticks, your values and its source's values. It drops its text (`detail`), its reading, its answers, its photo and its source's bulky extras (an email's text, messages and ids). On 17 Oct's numbers that was about 450 of the 585 KB. If a source lists it again (a hand-in undone, an email starred again), the sync brings its text back and it's read again, a paid call, as for a task seen for the first time. That's the one behaviour this changes, and only for work finished a fortnight before. A note (8a) or a task-bound fact (10a) on a trimmed task still shows on its record.
+A task finished more than 14 days ago (C-Q3; `Merge.KEEP_FINISHED_MS` is the same fortnight) keeps what the rest of the app reads of it, a task of your own too (`pruneOwn`, which deletes a finished own task after that fortnight today, stops doing so and trims it like any other; only an explicit delete removes an own task's record): its identity, title, class, kind, dates and status, its estimates and minutes worked, its steps' titles, minutes and ticks, your values and its source's values. It drops its text (`detail`), its reading, its answers, its photo and its source's bulky extras (an email's text, messages and ids). On 17 Oct's numbers that was about 450 of the 585 KB. If a source lists it again (a hand-in undone, an email starred again), the sync brings its text back and it's read again, a paid call, as for a task seen for the first time. That's the one behaviour this changes, and only for work finished a fortnight before. A note (8a) or a task-bound fact (10a) on a trimmed task still shows on its record.
 
 ### `felix.json` (v1), Stage 8a
 
@@ -134,20 +134,22 @@ data class ChatMessage(
 @Serializable
 data class ChatArchive(val messages: List<ChatMessage> = emptyList(), val version: Int = 1)
 
-// core/Mine.kt (7)
+// core/Mine.kt (7): every value of yours carries who set it.
 @Serializable
 data class Mine(
-    val notATask: Boolean = false, val from: Long? = null, val after: String? = null, val dueAt: Long? = null,
-    val minutes: SetMinutes? = null, val onDay: String? = null, val atTime: Long? = null, val sameAs: String? = null,
-    val steps: SetSteps? = null, val title: String? = null,
+    val notATask: Set<Boolean>? = null, val from: Set<Long>? = null, val after: Set<String>? = null, val dueAt: Set<Long>? = null,
+    val minutes: SetMinutes? = null, val onDay: Set<String>? = null, val atTime: Set<Long>? = null, val sameAs: Set<String>? = null,
+    val steps: SetSteps? = null, val title: Set<String>? = null,
 )
+@Serializable data class Set<T>(val value: T, val by: By)
 @Serializable data class SetMinutes(val minutes: Int, val by: By, val paced: Paced? = null)
 @Serializable data class Paced(val from: Int, val contentHash: String)
-@Serializable data class SetSteps(val steps: List<OwnStep>, val by: By)
+@Serializable data class SetSteps(val steps: List<OwnStep>, val by: By)   // each OwnStep carries its id (below), so a re-lay keeps the ticks
 @Serializable enum class By { You, Felix }
 
-// core/Task.kt (7)
+// core/Task.kt, core/OwnTasks.kt (7)
 @Serializable data class SubStep(val id: String, val origin: StepOrigin, /* as now */ …)
+@Serializable data class OwnStep(val id: String, /* as now */ …)   // the id made once, when the instruction is read, and kept through every re-lay
 @Serializable enum class StepOrigin { Source, Reading, Rules, Yours, Felix, OwnTask }
 
 // core/Notes.kt, core/Reminders.kt (8a)
@@ -161,6 +163,8 @@ data class Note(val id: String, val text: String, val at: Long, val by: By, val 
 data class Reminder(
     val id: String, val text: String, val at: Long, val by: By, val taskId: String? = null, val due: Due,
     val sentAt: Long? = null, val snoozedTo: Long? = null, val doneAt: Long? = null,
+    /** Cancelled from the chat: kept, never delivered, until its act's Undo window closes; Undo clears it. */
+    val cancelledAt: Long? = null,
     /** His words for it, written ahead. */
     val draft: FelixAnswer? = null, val draftedAt: Long? = null,
 )
@@ -182,7 +186,11 @@ data class GmailWrite(
     val notBefore: Long? = null,
     /** Which of the uids were starred and which in the inbox before the write, read first, so a reverse write restores only those. */
     val flagged: List<Long>? = null, val inbox: List<Long>? = null,
+    /** Each command's own success, so a retry skips what's done and a failure says what state the mailbox is in. */
+    val unstarred: Boolean = false, val archived: Boolean = false,
     val tries: Int = 0, val lastError: String? = null,
+    /** Set when the write is complete, or given up: the entry stays as a receipt (its subsets are what an Undo restores) until its act can no longer be undone, then goes. */
+    val doneAt: Long? = null, val gaveUp: Boolean = false,
 )
 @Serializable data class GmailWriteStore(val writes: List<GmailWrite> = emptyList(), val version: Int = 1)
 ```

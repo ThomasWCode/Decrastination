@@ -45,7 +45,7 @@ Not his, and not in the chat: syncs under way, protection, free time and its end
 
 **Every message kept; the model sees less** (Q8, Q23). Today the chat keeps its last 200 messages (`MAX_CHAT`). You want them all kept for you to read, with what's sent to him cut much earlier, so the chat is in two parts:
 
-- **The live window**, `chat.json`: the newest messages, the last 200 or 60 days, whichever keeps more. It's what the screen opens on, what his rules read (`FelixRules.due`'s `sent` is today's messages), what his own messages' context reads (his last six, `FelixPrompts.RECENT`), and what the model's history is cut from (`ChatPrompts.HISTORY`, the last 12 messages, within a quarter of the room). Nothing the model sees changes.
+- **The live window**, `chat.json`: the newest messages, the last 200 or 60 days, whichever keeps more, and every unread message whatever its age (a message is only moved once it's been read, so the notification, the badge and the opening position, which read the window, never lose one). It's what the screen opens on, what his rules read (`FelixRules.due`'s `sent` is today's messages), what his own messages' context reads (his last six, `FelixPrompts.RECENT`), and what the model's history is cut from (`ChatPrompts.HISTORY`, the last 12 messages, within a quarter of the room). Nothing the model sees changes.
 - **The archive**, `chat-archive.json` (`ChatArchive`), oldest first, append-only. After a message is written, what's past the window moves there: the archive's `update` first, then the live store's trim, so a crash between the two leaves a duplicate (dropped by id at the next move), never a hole. The screen reads it only when you scroll up past the oldest live message ("Earlier messages", a page of 100 at a time from the file's end); it's never sent to the model and never read by his rules. A reply swiped on an archived message still carries its `replyTo`, and the quote is read from the archive.
 - **Clear the chat** empties both, and its dialog says so; Reset → "The chat and Felix's history" too. The backup carries the archive while the backup fits its cap (`Backups.MAX_BYTES`, 8 MB); past that, the archive's oldest messages are what's left out first, and Settings → Backup says so. An older build ignores the file. What his rules count today ("said once a slot") starts afresh after a clear, which is fine.
 
@@ -179,7 +179,7 @@ A message that has a problem in its tail (not made, left out, not looked up) col
 - `FelixRules.due` against messages instead of records: the same triggers for the same day.
 - The notification builder (pure part): the unread messages, oldest first; none → cancel; `readAt` moved → fewer; held kinds left out before the morning.
 - The migration from the Stage 0 fixtures, twice.
-- The archive: the move past the window (by count and by age), run twice, nothing doubled or lost; a page of earlier messages; Clear the chat empties both; a backup with room carries it, one without leaves the oldest out.
+- The archive: the move past the window (by count and by age; never an unread message), run twice, nothing doubled or lost; a page of earlier messages; Clear the chat empties both; a backup with room carries it, one without leaves the oldest out.
 - A just-talk answer (no cards, no acts, no memory): `ChatSummary.line` empty, no chevron.
 
 ## Phone check
