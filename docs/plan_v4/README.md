@@ -151,3 +151,4 @@ Numbered in `docs/decisions.md` by the PRs that apply them (the next free number
 - [13-summaries.md](13-summaries.md): the summaries evaluation; the conversation digest as 4.4.0.
 - [14-your-part.md](14-your-part.md): which stages need your phone and which need you, for what and for how long; how to batch them.
 - [ANSWERS.md](ANSWERS.md): every call either plan needed, with your answers, and the merge's own calls; closed. Questions raised during implementation go in a separate `QUESTIONS.md`.
+- [QUESTIONS.md](QUESTIONS.md): what implementing the stages has needed from you, questions with a recommendation each and actions only you can take.
