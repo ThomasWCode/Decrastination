@@ -51,7 +51,7 @@ object Briefing {
         val graph = AppGraph.get(context)
         val now = graph.clock.now()
         val zone = graph.clock.zone()
-        val plan = graph.plan()
+        val plan = graph.planning.plan()
         val record = Days.record(plan, zone, SchoolDays.kindOf(plan.today, graph.school.value))
         val ahead = record.chunks
         graph.log.update { log ->
@@ -68,7 +68,7 @@ object Briefing {
         CalendarTime.refresh(context)
         val now = graph.clock.now()
         val zone = graph.clock.zone()
-        val plan = graph.plan()
+        val plan = graph.planning.plan()
         val today = Days.record(plan, zone, SchoolDays.kindOf(plan.today, graph.school.value))
         graph.log.update { log ->
             val finished = log.days.map { day -> if (day.full == null && day.date < today.date) Days.finish(day, log, zone) else day }

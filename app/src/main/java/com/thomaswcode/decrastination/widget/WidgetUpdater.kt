@@ -46,7 +46,7 @@ object WidgetUpdater {
             return
         }
         val teamsAsOf = graph.tasks.value.status(Source.Teams).dataAsOf
-        alarms.setWindow(AlarmManager.RTC, nextRedrawAt(graph.plan(), graph.clock.zone(), graph.settings.value, teamsAsOf), REDRAW_WINDOW_MS, redrawIntent(context))
+        alarms.setWindow(AlarmManager.RTC, nextRedrawAt(graph.planning.plan(), graph.clock.zone(), graph.settings.value, teamsAsOf), REDRAW_WINDOW_MS, redrawIntent(context))
     }
 
     /** While the evening's hours run out, the plan shifts as they do: a chunk stops fitting today. */

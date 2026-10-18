@@ -55,7 +55,7 @@ class Looks(private val graph: AppGraph) {
      * about the slot under way or next, or the last on record. Null while Claude is off.
      */
     suspend fun say(reason: FelixPrompts.Reason, now: Long = graph.clock.now()): FelixRecord? = writing.withLock {
-        val plan = graph.plan(now = now)
+        val plan = graph.planning.plan(now = now)
         val record = today(now).maxByOrNull { it.at }
         val slot = (plan.slotAt(now) ?: plan.nextSlot(now)).takeIf { reason == FelixPrompts.Reason.SlotStart || record == null }
         write(FelixRules.Trigger(reason, slot = slot, record = record.takeIf { slot == null }), now)
@@ -69,7 +69,7 @@ class Looks(private val graph: AppGraph) {
      * resting, no answer within [MORNING_MS], or an empty one. It sets no check: the day's slots do that.
      */
     suspend fun morning(title: String, now: Long = graph.clock.now()): Boolean = writing.withLock {
-        val plan = graph.plan(now = now)
+        val plan = graph.planning.plan(now = now)
         if (plan.todaySlots.none { it.kind == com.thomaswcode.decrastination.core.SlotKind.Work }) return@withLock false
         if (!graph.notifier.shown(com.thomaswcode.decrastination.notify.Channels.BRIEFING)) return@withLock false
         val caller = graph.gateway.client(ModelEffort.Job.Felix)?.let { FelixCaller(it) } ?: return@withLock false
@@ -235,7 +235,7 @@ class Looks(private val graph: AppGraph) {
         val task = trigger.taskId?.let { id -> graph.tasks.value.tasks.firstOrNull { it.id == id } }
         val recent = graph.log.value.felix.filter { it.text.isNotBlank() }
         val free = (graph.focus.creditLeftMs(at) / 60_000L).toInt().takeIf { trigger.reason == FelixPrompts.Reason.DayDone || trigger.reason == FelixPrompts.Reason.SlotKept }
-        val user = FelixPrompts.describe(trigger.reason, graph.plan(), trigger.slot, task, today(at), recent, trigger.question?.question, settings, at, graph.clock.zone(), free, trigger.record, trigger.asks.map { it.title }, firstAction = trigger.slot?.chunk?.key?.let { graph.runtime.value.microPlans[it] }?.first?.takeIf { it.isNotEmpty() })
+        val user = FelixPrompts.describe(trigger.reason, graph.planning.plan(), trigger.slot, task, today(at), recent, trigger.question?.question, settings, at, graph.clock.zone(), free, trigger.record, trigger.asks.map { it.title }, firstAction = trigger.slot?.chunk?.key?.let { graph.runtime.value.microPlans[it] }?.first?.takeIf { it.isNotEmpty() })
         val called = graph.gateway.call(interactive = interactive, record = com.thomaswcode.decrastination.enrich.ModelCalls.OnRecord(com.thomaswcode.decrastination.enrich.ModelEffort.Job.Felix, trigger.reason.name) { r: FelixCaller.Result -> r.usage to com.thomaswcode.decrastination.enrich.ModelCalls.outcome(r.refused, r.answer == null) }, cost = { r: FelixCaller.Result -> r.costUsd to r.refused }) { caller.say(FelixPrompts.system(settings, profile.year), profile.text, user) }
         if (called is Called.Failed) Log.w(AppGraph.TAG, "Felix's message failed", called.error)
         return called

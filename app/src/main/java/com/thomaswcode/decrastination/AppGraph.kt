@@ -74,7 +74,6 @@ import com.thomaswcode.decrastination.net.UrlConnectionHttp
 import com.thomaswcode.decrastination.notify.AndroidTray
 import com.thomaswcode.decrastination.notify.NoticeId
 import com.thomaswcode.decrastination.notify.Notifier
-import com.thomaswcode.decrastination.plan.PlanWatcher
 import com.thomaswcode.decrastination.plan.Planning
 import com.thomaswcode.decrastination.protect.CodeLock
 import com.thomaswcode.decrastination.protect.SettingsChanges
@@ -242,25 +241,13 @@ class AppGraph private constructor(context: Context) {
         onFailure = { Log.w(TAG, "Replanning failed", it) },
     )
 
-    /** [Planning.plan], till its callers call it there. */
-    fun plan(
-        state: TaskState = tasks.value,
-        settings: Settings = this.settings.value,
-        now: Long = clock.now(),
-        applied: List<Instruction> = instructions.value.applied,
-        time: com.thomaswcode.decrastination.learn.EventJudge.Time = calendarTime,
-    ): Plan = planning.plan(state, settings, now, applied, time)
-
     /** The blocker's state and decisions (block/Focus.kt). */
     val focus = Focus(
         tasks, settings, runtime, log, clock,
         onOwnTaskDone = { finishOwnTask(it) },
         // A school day by the school calendar (BL-02): a day off blocks from the weekend's time.
         schoolDay = { com.thomaswcode.decrastination.core.SchoolDays.kindOf(it, school.value) == com.thomaswcode.decrastination.core.DayKind.Weekday },
-    ) { state, s, now -> plan(state, s, now) }
-
-    /** [Planning.watcher], till its callers call it there. */
-    val watcher: PlanWatcher get() = planning.watcher
+    ) { state, s, now -> planning.plan(state, s, now) }
 
     /**
      * The plan to write to the calendar, once plans have been quiet [CALENDAR_WRITE_QUIET_MS] (17 Oct):
@@ -589,7 +576,7 @@ class AppGraph private constructor(context: Context) {
         scope.launch {
             calendarChanged.debounce(CALENDAR_QUIET_MS).collect {
                 CalendarTime.refresh(app)
-                watcher.poke()
+                planning.watcher.poke()
             }
         }
         // The calendar written to, or those not read, changed (NF-07, DX-13): what was written to
@@ -604,7 +591,7 @@ class AppGraph private constructor(context: Context) {
                     state.copy(calendarWrittenTo = id, calendarWritten = emptyMap(), calendarsToClear = (state.calendarsToClear + listOfNotNull(was)).distinct() - listOfNotNull(id).toSet())
                 }
                 clearOldCalendars()
-                watcher.poke()
+                planning.watcher.poke()
             }
         }
         scope.launch {
@@ -672,7 +659,7 @@ class AppGraph private constructor(context: Context) {
         // again as it changes, from now on (PL-13).
         scope.launch {
             runCatching { slots.sweep() }.onFailure { Log.w(TAG, "Looking at missed slots failed", it) }
-            watcher.start()
+            planning.watcher.start()
         }
         // The files older shapes came from, a week after their migration, at a start that's got this far.
         scope.launch(Dispatchers.IO) { runCatching { stores.letGoOfOldShapes() }.onFailure { Log.w(TAG, "Letting go of old shapes failed", it) } }
@@ -1112,7 +1099,7 @@ class AppGraph private constructor(context: Context) {
     suspend fun laterToday(key: String): Long? {
         val now = clock.now()
         val zone = clock.zone()
-        val plan = plan(now = now)
+        val plan = planning.plan(now = now)
         val chunk = plan.ordered.firstOrNull { it.key == key } ?: return null
         if (plan.chunksOf(chunk.taskId).firstOrNull()?.key != key) return null
         val task = tasks.value.tasks.firstOrNull { it.id == chunk.taskId } ?: return null
@@ -1367,7 +1354,7 @@ class AppGraph private constructor(context: Context) {
     ): ChatPrompts.Context {
         return ChatPrompts.Context(
             known = ChatPrompts.context(state.tasks, time.events, applied, now, clock.zone(), settings.value.classMap, runtime.value.notSame, settings.value, runtime.value.calibration),
-            plan = ChatPrompts.plan(plan(state, now = now, applied = applied, time = time), clock.zone()),
+            plan = ChatPrompts.plan(planning.plan(state, now = now, applied = applied, time = time), clock.zone()),
         )
     }
 
@@ -1533,7 +1520,7 @@ class AppGraph private constructor(context: Context) {
                 instant.forEach { applyProposal(reply.id, it.id) }
                 // A time the plan couldn't keep (PL-04): where the piece went, said under the answer,
                 // which names the time asked for.
-                val moved = com.thomaswcode.decrastination.felix.ChatAnswers.movedPins(instant.flatMap { it.changes }, plan().buckets, clock.zone())
+                val moved = com.thomaswcode.decrastination.felix.ChatAnswers.movedPins(instant.flatMap { it.changes }, planning.plan().buckets, clock.zone())
                 // One that couldn't be made after all, said under the answer that says it was (16 Oct).
                 val refused = chat.value.messages.firstOrNull { it.id == reply.id }?.proposals.orEmpty()
                     .filter { p -> p.instant && p.state != ProposalState.Applied && p.note != null }.map { "Not made: ${it.note!!.replaceFirstChar(Char::lowercase)}." }
@@ -1611,7 +1598,7 @@ class AppGraph private constructor(context: Context) {
      * ticked as on its sheet, where that can be.
      */
     private suspend fun tick(task: TaskItem, index: Int, title: String): Boolean {
-        val plan = plan()
+        val plan = planning.plan()
         val piece = (plan.todaySlots.mapNotNull { it.chunk } + plan.ordered).firstOrNull { it.taskId == task.id && it.ticks == index }
         return if (piece != null) focus.keepSlot(piece.key) else runCatching { focus.tickBlock(task.id, index, title) }.getOrDefault(false)
     }
