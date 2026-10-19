@@ -313,21 +313,6 @@ class AppGraph private constructor(context: Context) {
     /** Your own tasks ([OwnTasks]): kept, finished, opened again, deleted, and let go once long done. */
     val ownTasks: OwnTasks = OwnTasks(tasks, stores.instructions, chat, clock, scope) { settleCompletions() }
 
-    // [Instructions]'s and [OwnTasks]'s functions, till their callers call them there.
-    suspend fun addInstruction(text: String, about: About, answer: Boolean = false): String = instructions.addInstruction(text, about, answer)
-    suspend fun addOwnChange(id: String, text: String, about: About, change: Change): Unit = instructions.addOwnChange(id, text, about, change)
-    suspend fun laterToday(key: String): Long? = instructions.laterToday(key)
-    suspend fun takeBackQuick(taskId: String, type: ChangeType): Unit = instructions.takeBackQuick(taskId, type)
-    fun quickInForce(taskId: String, type: ChangeType): Boolean = instructions.quickInForce(taskId, type)
-    suspend fun rereadInstruction(id: String, text: String) = instructions.rereadInstruction(id, text)
-    suspend fun readInstructions(interactive: Boolean = false) = instructions.readInstructions(interactive)
-    suspend fun applyInstruction(id: String): Unit = instructions.applyInstruction(id)
-    suspend fun deleteInstruction(id: String): Unit = instructions.deleteInstruction(id)
-    suspend fun saveOwnTask(sourceId: String, task: OwnTask): Boolean = ownTasks.saveOwnTask(sourceId, task)
-    suspend fun finishOwnTask(taskId: String): Unit = ownTasks.finishOwnTask(taskId)
-    suspend fun reopenOwnTask(taskId: String) = ownTasks.reopenOwnTask(taskId)
-    suspend fun deleteOwnTask(taskId: String) = ownTasks.deleteOwnTask(taskId)
-
     /** Protection ([Protection]): settings changes, waiting once armed if they loosen blocking; the parent code; the device admin. */
     val protection = Protection(settings, runtime, secrets, clock, scope, adminActive = { Watchdog.isAdminActive(app) }) {
         app.getSystemService(DevicePolicyManager::class.java)?.removeActiveAdmin(Watchdog.admin(app))

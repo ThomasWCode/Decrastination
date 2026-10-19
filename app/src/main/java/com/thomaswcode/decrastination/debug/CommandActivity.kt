@@ -474,7 +474,7 @@ class CommandActivity : Activity() {
                         eventStart = event?.start,
                         day = intent.getStringExtra("day"),
                     )
-                    val id = graph.addInstruction(text, about)
+                    val id = graph.instructions.addInstruction(text, about)
                     Log.i(TAG, "instruction $id written; `instructions` shows Claude's reading")
                 }
             }
@@ -482,7 +482,7 @@ class CommandActivity : Activity() {
                 // --es id <id>, or all: discards those not applied (a test's), as Discard does.
                 val which = intent.getStringExtra("id")
                 val ids = graph.instructions.value.instructions.filter { it.state != InstructionStatus.Applied && (which == "all" || it.id == which) }.map { it.id }
-                ids.forEach { graph.deleteInstruction(it) }
+                ids.forEach { graph.instructions.deleteInstruction(it) }
                 Log.i(TAG, "instruction-discard: ${ids.size} discarded")
             }
             "own-add" -> {
@@ -496,13 +496,13 @@ class CommandActivity : Activity() {
                     Log.w(TAG, "own-add: $problem")
                 } else {
                     val id = java.util.UUID.randomUUID().toString()
-                    graph.saveOwnTask(id, task)
+                    graph.ownTasks.saveOwnTask(id, task)
                     Log.i(TAG, "own-add: ${TaskItem.id(Source.Own, id)}")
                 }
             }
-            "own-done" -> intent.getStringExtra("task")?.let { graph.finishOwnTask(it) }.also { Log.i(TAG, "own-done") }
-            "own-reopen" -> intent.getStringExtra("task")?.let { graph.reopenOwnTask(it) }.also { Log.i(TAG, "own-reopen") }
-            "own-delete" -> intent.getStringExtra("task")?.let { id -> graph.deleteOwnTask(id).also { Log.i(TAG, "own-delete: $id") } }
+            "own-done" -> intent.getStringExtra("task")?.let { graph.ownTasks.finishOwnTask(it) }.also { Log.i(TAG, "own-done") }
+            "own-reopen" -> intent.getStringExtra("task")?.let { graph.ownTasks.reopenOwnTask(it) }.also { Log.i(TAG, "own-reopen") }
+            "own-delete" -> intent.getStringExtra("task")?.let { id -> graph.ownTasks.deleteOwnTask(id).also { Log.i(TAG, "own-delete: $id") } }
             "forget-task" -> {
                 val id = intent.getStringExtra("task")?.takeIf { it.startsWith("own:") }
                 if (id == null) {
@@ -510,7 +510,7 @@ class CommandActivity : Activity() {
                 } else {
                     graph.conversation.forgetAsks(id)
                     graph.log.update { log -> log.copy(completions = log.completions.filterNot { it.taskId == id }, slots = log.slots.filterNot { it.taskId == id }) }
-                    graph.deleteOwnTask(id)
+                    graph.ownTasks.deleteOwnTask(id)
                     Log.i(TAG, "forget-task: $id gone, with its log")
                 }
             }
@@ -519,10 +519,10 @@ class CommandActivity : Activity() {
                 val minutes = intent.getIntExtra("minutes", -1)
                 when {
                     task == null -> Log.w(TAG, "quick-minutes needs --es task <id>")
-                    minutes == 0 -> graph.takeBackQuick(task.id, ChangeType.Minutes).also { Log.i(TAG, "quick-minutes: taken back") }
+                    minutes == 0 -> graph.instructions.takeBackQuick(task.id, ChangeType.Minutes).also { Log.i(TAG, "quick-minutes: taken back") }
                     minutes in OwnTasks.MINUTES -> {
                         val (change, text) = com.thomaswcode.decrastination.ui.minutesChange(task, minutes)
-                        graph.addOwnChange(java.util.UUID.randomUUID().toString(), text, About(taskId = task.id, taskTitle = task.title), change)
+                        graph.instructions.addOwnChange(java.util.UUID.randomUUID().toString(), text, About(taskId = task.id, taskTitle = task.title), change)
                         Log.i(TAG, "quick-minutes: ${task.title} takes $minutes min")
                     }
                     else -> Log.w(TAG, "quick-minutes needs --ei minutes 1..${OwnTasks.MINUTES.last} (0 takes it back)")

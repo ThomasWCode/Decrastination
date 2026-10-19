@@ -206,7 +206,7 @@ fun PieceActions(graph: AppGraph, activity: Activity, piece: Chunk, now: Long, p
             // Yours: nothing to ask, so all of it done is your say (2.0.0), earning no free time.
             OutlinedButton(onClick = {
                 scope.launch {
-                    graph.finishOwnTask(piece.taskId)
+                    graph.ownTasks.finishOwnTask(piece.taskId)
                     say("All of it done. It earns no free time; its pieces earned theirs.")
                 }
             }) { Text("All of it done") }

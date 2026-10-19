@@ -224,7 +224,7 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
                                 // A time pins its task's next piece: this one goes by its day.
                                 snackbar.showSnackbar("Only its next piece takes a time: hold it to move all of it to a day")
                             } else {
-                                val at = graph.laterToday(chunk.key)
+                                val at = graph.instructions.laterToday(chunk.key)
                                 snackbar.showSnackbar(at?.let { "Later today, at ${clock(it, zone)}: undone in the chat's Your changes" } ?: "No time left today it can be done in")
                             }
                         }
