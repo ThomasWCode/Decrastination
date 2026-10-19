@@ -318,12 +318,6 @@ class AppGraph private constructor(context: Context) {
         summaryReady = { week -> conversation.summaryReady(week) },
     )
 
-    // [Learning]'s functions, till their callers call them there.
-    suspend fun forgetCalibration(key: String) = learning.forgetCalibration(key)
-    suspend fun undoReviewChange(review: com.thomaswcode.decrastination.data.WeeklyReview, change: com.thomaswcode.decrastination.learn.ReviewInput.Change): String = learning.undoReviewChange(review, change)
-    suspend fun undoTidy(review: com.thomaswcode.decrastination.data.WeeklyReview): String = learning.undoTidy(review)
-    suspend fun writeSummary(week: String): String? = learning.writeSummary(week)
-
     init {
         // The device admin kept in step with arming ([Protection.start]).
         protection.start()
