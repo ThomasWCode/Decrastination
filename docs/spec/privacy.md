@@ -48,7 +48,7 @@ Nothing else: no analytics, no crash reports (crashes are written down on the ph
 |---|---|---|
 | Tasks, their text and readings | `tasks.json` | A finished task while its source still lists it, then a fortnight; one its source stops listing is finished then; your own, a fortnight once done |
 | The activity log | `log.json` | 120 days; each week's totals two years |
-| The chat | `chat.json`, `chat-archive-<yyyy-MM>.json` | Every message, Felix's among them, till you clear it: the newest 200 or 60 days' in `chat.json`, the rest in the archive, a file a month |
+| The chat | `chat.json`, `chat-archive-<yyyy-MM>.json` | Every message, Felix's among them, till you clear it: the newest 200 or 14 days' in `chat.json`, the rest in the archive, a file a month |
 | What Felix remembers | `memory.json` | Facts within 6 000 characters, the oldest out first; up to 20 standing instructions; till you delete them |
 | Your changes | `instructions.json` | Till you take them back |
 | Claude's calls | `runtime.json` | The last 100: job, what it's about, tokens, time, outcome, cost |

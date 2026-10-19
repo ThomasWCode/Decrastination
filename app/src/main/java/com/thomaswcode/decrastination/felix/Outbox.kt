@@ -111,9 +111,12 @@ class Outbox(
     }
 
     companion object {
-        /** The live window keeps the newest so many messages, and all of those within [WINDOW_MS], whichever keeps more. */
+        /**
+         * The live window keeps the newest so many messages, and all of those within [WINDOW_MS], whichever
+         * keeps more (D-96): a fortnight covers the week his review reads, and the chat's Undo reaches as far.
+         */
         const val WINDOW = 200
-        const val WINDOW_MS = 60 * 24 * 3_600_000L
+        const val WINDOW_MS = 14 * 24 * 3_600_000L
 
         /** Whether [message] is his, with words, and unread at [readAt]: shown nowhere yet, so never moved. */
         fun unread(message: ChatMessage, readAt: Long): Boolean = message.from == Speaker.Felix && message.at > readAt && message.text.isNotBlank()

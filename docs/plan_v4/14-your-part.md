@@ -52,7 +52,7 @@ Everything else in Stage 5 was checked on the phone with you on 18 Oct, or by th
 1. With more of his messages unread than a screen holds, open the chat (his button, not his notification): it opens at the *New messages* line, not at its foot.
 2. Leave the chat on *Your changes*, then tap his notification: the *Chat* tab shows, at the message.
 3. Open a message's fold, go to *Your changes* and back: every fold is closed, and what came meanwhile is under the *New messages* line.
-4. Once the chat has messages past its window (60 days old, weeks away), scroll back past them: the older rows show under *Earlier messages* with no Undo or buttons of their own, read a month at a time (4.0.4).
+4. Once the chat has messages past its window (a fortnight old and past the newest 200, days away), scroll back past them: the older rows show under *Earlier messages* with no Undo or buttons of their own, read a month at a time (4.0.4).
 
 ## How to batch it
 
