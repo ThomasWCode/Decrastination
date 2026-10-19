@@ -8,8 +8,10 @@ import com.thomaswcode.decrastination.core.InstructionState
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.Source
+import com.thomaswcode.decrastination.data.CalendarState
 import com.thomaswcode.decrastination.data.ChatMigration
 import com.thomaswcode.decrastination.data.JsonStore
+import com.thomaswcode.decrastination.data.RuntimeSplit
 import com.thomaswcode.decrastination.data.RuntimeState
 import com.thomaswcode.decrastination.data.TaskState
 import com.thomaswcode.decrastination.data.TasksMigration
@@ -48,7 +50,8 @@ class SyncTest {
     private val clock = FixedClock(Fixtures.at("2026-10-19T16:00"), LONDON)
     private val tasks = JsonStore(File(dir, "tasks.json"), TaskState.serializer(), ::TaskState, migrations = listOf(TasksMigration.TASKS))
     private val settings = JsonStore(File(dir, "settings.json"), Settings.serializer(), ::Settings)
-    private val runtime = JsonStore(File(dir, "runtime.json"), RuntimeState.serializer(), ::RuntimeState, migrations = listOf(ChatMigration.RUNTIME))
+    private val runtime = JsonStore(File(dir, "runtime.json"), RuntimeState.serializer(), ::RuntimeState, migrations = listOf(ChatMigration.RUNTIME, RuntimeSplit.RUNTIME))
+    private val calendar = JsonStore(File(dir, "calendar.json"), CalendarState.serializer(), ::CalendarState, migrations = listOf(RuntimeSplit.CALENDAR))
     private val instructions = JsonStore(File(dir, "instructions.json"), InstructionState.serializer(), ::InstructionState, migrations = listOf(TasksMigration.INSTRUCTIONS))
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val ports = Ports()
@@ -66,7 +69,7 @@ class SyncTest {
     private val gmail = FakeSource(Source.Gmail) { throw IOException("No network") }
 
     private val sync = Sync(
-        tasks, settings, runtime, instructions, clock, scope, Syncer(tasks, settings, listOf(teams, gmail), clock), ports,
+        tasks, settings, calendar, instructions, clock, scope, Syncer(tasks, settings, listOf(teams, gmail), clock), ports,
         forgetPlan = { forgot.incrementAndGet() },
         watchCalendar = { watched.incrementAndGet() },
         askAboutEvent = { key, _, _, _, _ -> asked += key },
@@ -120,7 +123,7 @@ class SyncTest {
         assertEquals(1, watched.get())
         assertTrue(sync.calendarTime.busy.any { it.start == dentist.start && it.end == dentist.end }, "the dentist is busy time")
         assertEquals(listOf(EventJudge.key(openDay)), asked)
-        assertEquals(setOf(EventJudge.key(openDay)), runtime.value.eventsAsked)
+        assertEquals(setOf(EventJudge.key(openDay)), calendar.value.eventsAsked)
         assertTrue(forgot.get() > 0, "the plan made before the read let go")
         assertEquals(sync.calendarTime, sync.calendarState.value)
         assertEquals(1, ports.redraws.get())

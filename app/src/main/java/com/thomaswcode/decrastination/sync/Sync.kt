@@ -11,8 +11,8 @@ import com.thomaswcode.decrastination.core.InstructionState
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.WallClock
+import com.thomaswcode.decrastination.data.CalendarState
 import com.thomaswcode.decrastination.data.JsonStore
-import com.thomaswcode.decrastination.data.RuntimeState
 import com.thomaswcode.decrastination.data.TaskState
 import com.thomaswcode.decrastination.learn.CalendarEvent
 import com.thomaswcode.decrastination.learn.CalendarTime
@@ -99,7 +99,7 @@ class AndroidSyncPorts(private val context: Context) : SyncPorts {
 class Sync(
     private val tasks: JsonStore<TaskState>,
     private val settings: JsonStore<Settings>,
-    private val runtime: JsonStore<RuntimeState>,
+    private val calendar: JsonStore<CalendarState>,
     /** Your instructions, read for what they say about events. */
     private val instructions: JsonStore<InstructionState>,
     private val clock: WallClock,
@@ -196,21 +196,21 @@ class Sync(
             .getOrNull() ?: run {
             // Not read this time: the events last read, judged again with the answers as they are
             // now, so an instruction applied or taken back counts all the same.
-            calendarTime = EventJudge.time(calendarTime.events, runtime.value.eventAnswers + yours, clock.zone(), askUntil = now + CalendarTime.ASK_AHEAD_MS)
+            calendarTime = EventJudge.time(calendarTime.events, calendar.value.eventAnswers + yours, clock.zone(), askUntil = now + CalendarTime.ASK_AHEAD_MS)
             return@withLock
         }
         yours.keys.forEach { settleEvent(it) }
         // Not counted as asked: taken back, the instruction leaves it to be asked again.
-        if (runtime.value.eventsAsked.any { it in yours }) runtime.update { it.copy(eventsAsked = it.eventsAsked - yours.keys) }
-        val answers = runtime.value.eventAnswers + yours
+        if (calendar.value.eventsAsked.any { it in yours }) calendar.update { it.copy(eventsAsked = it.eventsAsked - yours.keys) }
+        val answers = calendar.value.eventAnswers + yours
         val time = EventJudge.time(events, answers, clock.zone(), askUntil = now + CalendarTime.ASK_AHEAD_MS)
         calendarTime = time
         // In the chat at once, whatever the hour: his notification leaves them out in quiet hours, till
         // the morning (NotifyRules.waitsForMorning).
-        val toAsk = CalendarTime.questions(time.toAsk, runtime.value.eventsAsked, now)
+        val toAsk = CalendarTime.questions(time.toAsk, calendar.value.eventsAsked, now)
         if (toAsk.isNotEmpty()) {
             toAsk.forEach { ask(it, clock.zone()) }
-            runtime.update { it.copy(eventsAsked = it.eventsAsked + toAsk.map(EventJudge::key)) }
+            calendar.update { it.copy(eventsAsked = it.eventsAsked + toAsk.map(EventJudge::key)) }
         }
         runCatching { ports.redraw() }
     }

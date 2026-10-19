@@ -4,8 +4,8 @@ import com.thomaswcode.decrastination.core.Chunk
 import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.SlotKind
 import com.thomaswcode.decrastination.core.Source
-import com.thomaswcode.decrastination.core.Uptime
-import com.thomaswcode.decrastination.data.RuntimeState
+import com.thomaswcode.decrastination.data.ProtectionState
+import com.thomaswcode.decrastination.data.SessionState
 import com.thomaswcode.decrastination.data.SlotOutcome
 import com.thomaswcode.decrastination.data.SlotRecord
 import com.thomaswcode.decrastination.data.TaskState
@@ -55,14 +55,15 @@ data class WidgetModel(
         private const val LIST_MAX = 30
 
         /**
-         * [runtime] and [armed] add the blocker's side: protection trouble comes first among the
+         * [session], [protection] and [armed] add the blocker's side: protection trouble comes first among the
          * warnings, and free time is shown. [slots]: today's on record, for the day's count.
          */
         fun from(
             plan: Plan,
             state: TaskState,
             zone: ZoneId,
-            runtime: RuntimeState = RuntimeState(),
+            session: SessionState = SessionState(),
+            protection: ProtectionState = ProtectionState(),
             armed: Boolean = false,
             reward: String? = null,
             slots: List<SlotRecord> = emptyList(),
@@ -92,7 +93,7 @@ data class WidgetModel(
                 minutes = next?.let { Format.minutes(it.minutes) },
                 then = plan.then?.let { "Then: ${it.label}" },
                 summary = day(plan, slots) ?: when {
-                    today.isEmpty() && tomorrow.isEmpty() -> runtime.credit.on(plan.today).leftMs.takeIf { it > 0 }
+                    today.isEmpty() && tomorrow.isEmpty() -> session.credit.on(plan.today).leftMs.takeIf { it > 0 }
                         ?.let { "Nothing due soon · ${Format.minutes((it / 60_000L).toInt())} of free time" }
                         ?: "Nothing due today or tomorrow"
                     else -> listOfNotNull(
@@ -105,7 +106,7 @@ data class WidgetModel(
                     Line(text, Format.minutes(row.minutes), row.urgent, row.taskId)
                 },
                 more = (rest.size - LIST_MAX).coerceAtLeast(0),
-                warning = protection(runtime, armed) ?: warning(state, now),
+                warning = warning(protection, armed) ?: warning(state, now),
                 taskId = next?.taskId,
                 key = next?.key,
                 seenAt = now,
@@ -139,8 +140,8 @@ data class WidgetModel(
         }
 
         /** The watchdog's finding, worst first: blocking off matters before anything else on the widget. */
-        private fun protection(runtime: RuntimeState, armed: Boolean): String? =
-            runtime.protection.problems.firstOrNull()?.let { if (armed) "PROTECTION OFF: $it" else it }
+        private fun warning(protection: ProtectionState, armed: Boolean): String? =
+            protection.protection.problems.firstOrNull()?.let { if (armed) "PROTECTION OFF: $it" else it }
 
         private fun warning(state: TaskState, now: Long): String? {
             val failing = Source.SYNCED.firstOrNull { state.status(it).error != null }

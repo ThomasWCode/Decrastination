@@ -1,35 +1,30 @@
 package com.thomaswcode.decrastination.ui
 
 import android.app.Activity
-import android.content.Intent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -42,24 +37,20 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.thomaswcode.decrastination.AppGraph
-import com.thomaswcode.decrastination.R
-import com.thomaswcode.decrastination.core.About
 import com.thomaswcode.decrastination.core.Chunk
-import com.thomaswcode.decrastination.core.DayBucket
 import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Unplanned
 import com.thomaswcode.decrastination.core.WontFit
+import com.thomaswcode.decrastination.data.ProtectionState
 import com.thomaswcode.decrastination.data.RuntimeState
 import com.thomaswcode.decrastination.data.TaskState
 import com.thomaswcode.decrastination.enrich.KeyProblem
-import com.thomaswcode.decrastination.protect.ProtectionActivity
 import com.thomaswcode.decrastination.widget.WidgetModel
 import java.time.Instant
 import java.time.LocalDate
@@ -83,8 +74,8 @@ internal data class Trouble(val text: String, val fix: Fix) {
 }
 
 /** As the widget's warning has them, all of them, protection first. */
-internal fun trouble(tasks: TaskState, runtime: RuntimeState, now: Long): List<Trouble> = buildList {
-    runtime.protection.problems.forEach { add(Trouble(it, Trouble.Fix.Protection)) }
+internal fun trouble(tasks: TaskState, runtime: RuntimeState, protection: ProtectionState, now: Long): List<Trouble> = buildList {
+    protection.protection.problems.forEach { add(Trouble(it, Trouble.Fix.Protection)) }
     if (runtime.unreadable.isNotEmpty()) add(Trouble("A saved file couldn't be read: Setup says what was kept", Trouble.Fix.Setup))
     Source.SYNCED.forEach { source -> tasks.status(source).error?.let { add(Trouble("Can't read ${source.label}: $it", Trouble.Fix.Setup)) } }
     WidgetModel.teamsWarning(tasks, now)?.let { add(Trouble(it, Trouble.Fix.Teams)) }
@@ -157,7 +148,7 @@ internal fun NextCard(
             Text("DO NOW", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
             Text(next.label, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
             // Its first step (AI-15), as it's written ahead.
-            graph.runtime.value.microPlans[next.key]?.first?.takeIf { it.isNotEmpty() }?.let { Text("First: $it", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onPrimaryContainer) }
+            graph.stores.model.value.microPlans[next.key]?.first?.takeIf { it.isNotEmpty() }?.let { Text("First: $it", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onPrimaryContainer) }
             Badges(next, plan.now, zone)
             graph.focus.rewardLine(plan)?.let { Text(it, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onPrimaryContainer) }
             plan.then?.let { Text("Then: ${it.label}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onPrimaryContainer) }
@@ -204,7 +195,7 @@ internal fun PieceSheet(
             // Why it's on this day (PL-07).
             Text(chunk.whyLine(Instant.ofEpochMilli(now).atZone(zone).toLocalDate(), zone), style = MaterialTheme.typography.bodyMedium)
             // Its first steps in full (AI-15).
-            graph.runtime.value.microPlans[chunk.key]?.let(com.thomaswcode.decrastination.enrich.MicroPlans::lines)?.forEach { Text(it, style = MaterialTheme.typography.bodyMedium) }
+            graph.stores.model.value.microPlans[chunk.key]?.let(com.thomaswcode.decrastination.enrich.MicroPlans::lines)?.forEach { Text(it, style = MaterialTheme.typography.bodyMedium) }
             PieceActions(graph, activity, chunk, now, photo, say)
             // Its due date, minutes or start: on the task's own sheet (2.0.0).
             TextButton(onClick = onChange) { Text("Change its due date, minutes…") }

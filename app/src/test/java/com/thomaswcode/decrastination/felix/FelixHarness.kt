@@ -54,7 +54,7 @@ class FelixHarness(start: String = "2026-10-19T16:30") : AutoCloseable {
     private val job = SupervisorJob()
     private val scope = CoroutineScope(job + Dispatchers.Default)
     val server = MockWebServer().apply { start() }
-    private val gateway = ModelGateway(stores.settings, { "test-key" }, stores.runtime, stores.tasks, clock, NoAlerts, scope) {}
+    private val gateway = ModelGateway(stores.settings, { "test-key" }, stores.model, stores.tasks, clock, NoAlerts, scope) {}
         .also { it.endpoint = server.url("").toString().trimEnd('/') }
     val ports = Ports()
     val owners = Owners()
@@ -64,9 +64,9 @@ class FelixHarness(start: String = "2026-10-19T16:30") : AutoCloseable {
 
     /** His channel shown, as Android says. */
     @Volatile var shown = true
-    private val focus: Focus = Focus(stores.tasks, stores.settings, stores.runtime, stores.log, clock) { state, s, now -> planning.plan(state, s, now) }
+    private val focus: Focus = Focus(stores.tasks, stores.settings, stores.session, stores.learning, stores.protection, stores.log, clock) { state, s, now -> planning.plan(state, s, now) }
     val planning: Planning = Planning(
-        stores.tasks, stores.settings, stores.runtime, stores.log, stores.instructions, stores.school, clock, scope, gateway,
+        stores.tasks, stores.settings, stores.session, stores.learning, stores.model, stores.log, stores.instructions, stores.school, clock, scope, gateway,
         calendarTime = { NO_CALENDAR },
         calendarChanges = emptyFlow<Unit>(),
         sweep = {},
@@ -78,13 +78,13 @@ class FelixHarness(start: String = "2026-10-19T16:30") : AutoCloseable {
     private val notices = Shown()
     val outbox = Outbox(stores.chat, stores.chatArchive, stores.settings, notices, ports, { chatOnScreen }, clock)
     val conversation: Conversation = Conversation(
-        stores.tasks, stores.settings, stores.runtime, stores.log, stores.instructions, stores.chat, stores.school, stores.memory,
+        stores.tasks, stores.settings, stores.runtime, stores.learning, stores.log, stores.instructions, stores.chat, stores.school, stores.memory,
         clock, scope, gateway, notices, focus, planning, ports, outbox, owners,
         calendarTime = { NO_CALENDAR },
         answered = { message, words -> looks.answered(message, words) },
     )
     val looks: Looks = Looks(
-        stores.tasks, stores.settings, stores.runtime, stores.log, stores.chat, clock, scope, gateway, focus, planning, ports, outbox,
+        stores.tasks, stores.settings, stores.model, stores.log, stores.chat, clock, scope, gateway, focus, planning, ports, outbox,
         calendarTime = { NO_CALENDAR },
         profile = { conversation.profile(it) },
         remember = { conversation.remember(it) },

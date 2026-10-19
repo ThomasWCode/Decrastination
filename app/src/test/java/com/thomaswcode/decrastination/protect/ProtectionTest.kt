@@ -7,6 +7,8 @@ import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.Uptime
 import com.thomaswcode.decrastination.data.ChatMigration
 import com.thomaswcode.decrastination.data.JsonStore
+import com.thomaswcode.decrastination.data.ProtectionState
+import com.thomaswcode.decrastination.data.RuntimeSplit
 import com.thomaswcode.decrastination.data.RuntimeState
 import com.thomaswcode.decrastination.data.Secret
 import com.thomaswcode.decrastination.data.SecretCipher
@@ -36,7 +38,8 @@ class ProtectionTest {
     private val dir: File = Files.createTempDirectory("protection").toFile()
     private val clock = FixedClock(Fixtures.at("2026-10-19T16:00"), LONDON, up = Uptime(boot = 1, elapsedMs = 1_000_000))
     private val settings = JsonStore(File(dir, "settings.json"), Settings.serializer(), ::Settings)
-    private val runtime = JsonStore(File(dir, "runtime.json"), RuntimeState.serializer(), ::RuntimeState, migrations = listOf(ChatMigration.RUNTIME))
+    private val runtime = JsonStore(File(dir, "runtime.json"), RuntimeState.serializer(), ::RuntimeState, migrations = listOf(ChatMigration.RUNTIME, RuntimeSplit.RUNTIME))
+    private val protectionState = JsonStore(File(dir, "protection.json"), ProtectionState.serializer(), ::ProtectionState)
     private val secrets = SecretStore(File(dir, "secrets.bin"), Reverse, clock = { clock.now() })
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
@@ -44,7 +47,7 @@ class ProtectionTest {
     @Volatile private var admin = false
     private val removed = AtomicInteger()
 
-    private val protection = Protection(settings, runtime, secrets, clock, scope, adminActive = { admin }) {
+    private val protection = Protection(settings, protectionState, secrets, clock, scope, adminActive = { admin }) {
         removed.incrementAndGet()
         admin = false
     }
@@ -71,7 +74,7 @@ class ProtectionTest {
         protection.changeSettings { it.copy(freeAllowanceMin = 90) }
         assertEquals(90, settings.value.freeAllowanceMin)
         assertEquals(emptyList(), protection.pending)
-        assertNull(runtime.value.uptimeMark)
+        assertNull(protectionState.value.uptimeMark)
     }
 
     @Test
@@ -82,7 +85,7 @@ class ProtectionTest {
         assertEquals(60, settings.value.freeAllowanceMin)
         assertEquals(listOf("freeAllowanceMin"), protection.pending.map { it.field })
         assertEquals(90, protection.asked.freeAllowanceMin)
-        assertEquals(clock.up, runtime.value.uptimeMark)
+        assertEquals(clock.up, protectionState.value.uptimeMark)
         // A tightening at once, the waiting change left as it was.
         protection.changeSettings { it.copy(photoFromMin = 10) }
         assertEquals(10, settings.value.photoFromMin)
@@ -98,7 +101,7 @@ class ProtectionTest {
         protection.applyDueChanges()
         assertEquals(90, settings.value.freeAllowanceMin)
         assertEquals(emptyList(), protection.pending)
-        assertNull(runtime.value.uptimeMark)
+        assertNull(protectionState.value.uptimeMark)
     }
 
     @Test
@@ -107,7 +110,7 @@ class ProtectionTest {
         protection.changeSettings { it.copy(workMinPerFreeMin = 2) }
         protection.cancelChange(protection.pending.single().id)
         assertEquals(emptyList(), protection.pending)
-        assertNull(runtime.value.uptimeMark)
+        assertNull(protectionState.value.uptimeMark)
         assertEquals(3, settings.value.workMinPerFreeMin)
     }
 
@@ -131,7 +134,7 @@ class ProtectionTest {
         clock.time += Totp.STEP_MS
         val until = clock.now() + 3_600_000L
         assertNull(protection.useParentCode(code(), unblockUntil = until))
-        assertEquals(until, runtime.value.overrideUntil)
+        assertEquals(until, protectionState.value.overrideUntil)
     }
 
     @Test
@@ -139,7 +142,7 @@ class ProtectionTest {
         val step = Totp.step(clock.now())
         protection.newParentCode(secret, step)
         assertEquals(Totp.base32(secret), secrets[Secret.TotpSecret])
-        assertEquals(step, runtime.value.codeLock.lastUsedStep)
+        assertEquals(step, protectionState.value.codeLock.lastUsedStep)
         // The code checked can't be used again; the next one his app shows works.
         assertEquals("That code has been used: wait for the next one", protection.useParentCode(code()))
         clock.time += Totp.STEP_MS
@@ -160,7 +163,7 @@ class ProtectionTest {
         // The app keeps its wait, and its count.
         assertEquals(listOf("blockedApps"), protection.pending.map { it.field })
         assertEquals(Settings().blockedApps, settings.value.blockedApps)
-        assertEquals(clock.up, runtime.value.uptimeMark)
+        assertEquals(clock.up, protectionState.value.uptimeMark)
     }
 
     @Test
@@ -169,13 +172,13 @@ class ProtectionTest {
         admin = true
         protection.start()
         until("the part-way arming is undone") { removed.get() == 1 }
-        assertTrue(!runtime.value.adminArmed)
+        assertTrue(!protectionState.value.adminArmed)
         // Armed: on record; disarmed (its wait over), given up.
         admin = true
         settings.update { it.copy(armed = true) }
-        until("armed is on record") { runtime.value.adminArmed }
+        until("armed is on record") { protectionState.value.adminArmed }
         settings.update { it.copy(armed = false) }
-        until("the admin is given up") { removed.get() == 2 && !runtime.value.adminArmed }
+        until("the admin is given up") { removed.get() == 2 && !protectionState.value.adminArmed }
     }
 
     private fun until(what: String, done: () -> Boolean) {

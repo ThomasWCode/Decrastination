@@ -43,7 +43,7 @@ class LooksTest {
         }
         val slot = felix.planning.plan().todaySlots.first { it.kind == SlotKind.Work }
         val today = Instant.ofEpochMilli(now).atZone(Fixtures.LONDON).toLocalDate().toString()
-        stores.runtime.update { it.copy(slots = SlotState(today, previous = mapOf(slot.chunk!!.key to slot.start))) }
+        stores.session.update { it.copy(slots = SlotState(today, previous = mapOf(slot.chunk!!.key to slot.start))) }
         felix.clock.time = slot.start + (stores.settings.value.felixGraceMin + 1) * 60_000L
         return slot.chunk!!.key
     }

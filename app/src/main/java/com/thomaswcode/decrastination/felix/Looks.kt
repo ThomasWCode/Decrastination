@@ -21,7 +21,7 @@ import com.thomaswcode.decrastination.core.Speaker
 import com.thomaswcode.decrastination.core.WallClock
 import com.thomaswcode.decrastination.data.ActivityLog
 import com.thomaswcode.decrastination.data.JsonStore
-import com.thomaswcode.decrastination.data.RuntimeState
+import com.thomaswcode.decrastination.data.ModelState
 import com.thomaswcode.decrastination.data.SlotRecord
 import com.thomaswcode.decrastination.data.TaskState
 import com.thomaswcode.decrastination.enrich.Called
@@ -51,7 +51,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 class Looks(
     private val tasks: JsonStore<TaskState>,
     private val settings: JsonStore<Settings>,
-    private val runtime: JsonStore<RuntimeState>,
+    private val model: JsonStore<ModelState>,
     private val log: JsonStore<ActivityLog>,
     /** The chat: his messages, and his state between looks ([ChatState.felix]). */
     private val chat: JsonStore<ChatState>,
@@ -284,7 +284,7 @@ class Looks(
         val profile = this.profile(at)
         val task = trigger.taskId?.let { id -> this.tasks.value.tasks.firstOrNull { it.id == id } }
         val free = (focus.creditLeftMs(at) / 60_000L).toInt().takeIf { trigger.reason == FelixPrompts.Reason.DayDone || trigger.reason == FelixPrompts.Reason.SlotKept }
-        val user = FelixPrompts.describe(trigger.reason, planning.plan(), trigger.slot, task, today(at), chat.value.messages, trigger.question?.question, settings, at, clock.zone(), free, trigger.record, trigger.asks.map { it.title }, firstAction = trigger.slot?.chunk?.key?.let { runtime.value.microPlans[it] }?.first?.takeIf { it.isNotEmpty() })
+        val user = FelixPrompts.describe(trigger.reason, planning.plan(), trigger.slot, task, today(at), chat.value.messages, trigger.question?.question, settings, at, clock.zone(), free, trigger.record, trigger.asks.map { it.title }, firstAction = trigger.slot?.chunk?.key?.let { model.value.microPlans[it] }?.first?.takeIf { it.isNotEmpty() })
         val called = gateway.call(interactive = interactive, record = ModelCalls.OnRecord(ModelEffort.Job.Felix, trigger.reason.name) { r: FelixCaller.Result -> r.usage to ModelCalls.outcome(r.refused, r.answer == null) }, cost = { r: FelixCaller.Result -> r.costUsd to r.refused }) { caller.say(FelixPrompts.system(settings, profile.year), profile.text, user) }
         if (called is Called.Failed) Log.w(AppGraph.TAG, "Felix's message failed", called.error)
         return called

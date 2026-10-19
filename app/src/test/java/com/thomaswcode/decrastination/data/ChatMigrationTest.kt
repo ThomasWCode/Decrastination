@@ -118,7 +118,8 @@ class ChatMigrationTest {
         assertTrue(listOf("felix", "assessLater", "checkInDraft").none { it in written })
         // The rest of them as they were.
         assertEquals(json(File(before, "log.json")).getValue("slots"), log.getValue("slots"))
-        assertEquals(runtime.getValue("calibration"), written.getValue("calibration"))
+        // The calibration in its own file since the runtime's split (4.0.13), as it was.
+        assertEquals(runtime.getValue("calibration"), json(File(dir, "learning.json")).getValue("calibration"))
     }
 
     @Test

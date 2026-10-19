@@ -61,16 +61,16 @@ class LearningTest {
 
     /** Claude's key, while there is one. */
     @Volatile private var key: String? = null
-    private val gateway = ModelGateway(stores.settings, { key }, stores.runtime, stores.tasks, clock, NoAlerts, scope) {}.also { it.endpoint = server.url("").toString().trimEnd('/') }
-    private val focus = Focus(stores.tasks, stores.settings, stores.runtime, stores.log, clock) { state, s, now -> Planner.plan(Planner.Input(state.tasks, now, LONDON, s)) }
-    private val protection = Protection(stores.settings, stores.runtime, stores.secrets, clock, scope, adminActive = { false }) {}
+    private val gateway = ModelGateway(stores.settings, { key }, stores.model, stores.tasks, clock, NoAlerts, scope) {}.also { it.endpoint = server.url("").toString().trimEnd('/') }
+    private val focus = Focus(stores.tasks, stores.settings, stores.session, stores.learning, stores.protection, stores.log, clock) { state, s, now -> Planner.plan(Planner.Input(state.tasks, now, LONDON, s)) }
+    private val protection = Protection(stores.settings, stores.protection, stores.secrets, clock, scope, adminActive = { false }) {}
 
     /** The review's lines put in the chat, and the weeks whose summary was offered. */
     private val told: MutableList<String> = Collections.synchronizedList(mutableListOf())
     private val offered: MutableList<String> = Collections.synchronizedList(mutableListOf())
 
     private val learning = Learning(
-        stores.log, stores.runtime, stores.settings, stores.memory, stores.chat, stores.instructions, clock, gateway, focus, protection,
+        stores.log, stores.learning, stores.settings, stores.memory, stores.chat, stores.instructions, clock, gateway, focus, protection,
         resets = { 0 },
         profile = { _, _ -> Profile.Block.NONE },
         reviewed = { told += it },
@@ -95,9 +95,9 @@ class LearningTest {
     @Test
     fun `the week's review from a fixed log with Claude off learns the calibration afresh, keeps the rules' note and the week's totals, and tells Felix`() = runBlocking {
         stores.log.update { it.copy(completions = listOf(done("a", 30, 45, "2026-10-14T18:00"), done("b", 40, 60, "2026-10-15T18:00"), done("c", 20, 30, "2026-10-16T18:00"))) }
-        val learned = Calibrator.learn(stores.log.value, stores.runtime.value.calibration, today = LocalDate.parse("2026-10-18"), zone = LONDON, defaultMargin = stores.settings.value.marginDays)
+        val learned = Calibrator.learn(stores.log.value, stores.learning.value.calibration, today = LocalDate.parse("2026-10-18"), zone = LONDON, defaultMargin = stores.settings.value.marginDays)
         learning.review(ifDue = false)
-        assertEquals(learned.calibration, stores.runtime.value.calibration)
+        assertEquals(learned.calibration, stores.learning.value.calibration)
         val review = stores.log.value.reviews.single()
         assertEquals(week, review.week)
         assertEquals("rules", review.by)

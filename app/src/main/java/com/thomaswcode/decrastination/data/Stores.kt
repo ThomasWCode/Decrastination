@@ -38,7 +38,22 @@ class Stores(
     // turns it on: a bad file never disarms protection (IMP-P1-003).
     val settings = store("settings.json", Settings.serializer(), ::Settings, unreadable = { Settings(armed = armedIfUnreadable()) })
     val secrets = SecretStore(File(dir, "secrets.bin"), cipher, clock)
-    val runtime = store("runtime.json", RuntimeState.serializer(), ::RuntimeState, migrations = listOf(ChatMigration.RUNTIME))
+    val runtime = store("runtime.json", RuntimeState.serializer(), ::RuntimeState, migrations = listOf(ChatMigration.RUNTIME, RuntimeSplit.RUNTIME))
+
+    /** What the blocker keeps from moment to moment, changing every half minute (Focus's). */
+    val session = store("session.json", SessionState.serializer(), ::SessionState)
+
+    /** Protection's own state: changes waiting, the override, what's armed, the watchdog's finding. */
+    val protection = store("protection.json", ProtectionState.serializer(), ::ProtectionState)
+
+    /** What calling Claude keeps: the month's cost, the last calls, what was refused, the micro-plans. */
+    val model = store("model.json", ModelState.serializer(), ::ModelState)
+
+    /** What the Anki watch keeps as AnkiDroid is used. */
+    val anki = store("anki.json", AnkiState.serializer(), ::AnkiState)
+
+    /** What the app has learned about how long things take you: the calibration. */
+    val learning = store("learning.json", LearningState.serializer(), ::LearningState)
     val log = store("log.json", ActivityLog.serializer(), ::ActivityLog, migrations = listOf(ChatMigration.LOG))
 
     /** Your instructions about tasks, events and days, and what Claude read them as. */
@@ -75,10 +90,10 @@ class Stores(
     /** What Felix remembers (AI-21): facts, and standing instructions. */
     val memory = store("memory.json", MemoryState.serializer(), ::MemoryState)
 
-    /** The versions of its events the app has written to calendars, so a copy of one is known. */
-    val calendarVersions = store("calendar.json", CalendarVersions.serializer(), ::CalendarVersions)
+    /** The versions of its events the app has written to calendars, so a copy of one is known; what it wrote where; your answers about events. */
+    val calendar = store("calendar.json", CalendarState.serializer(), ::CalendarState, migrations = listOf(RuntimeSplit.CALENDAR))
 
-    private val json = listOf(tasks, settings, runtime, log, instructions, chat, school, memory, calendarVersions)
+    private val json = listOf(tasks, settings, runtime, session, protection, model, anki, learning, log, instructions, chat, school, memory, calendar)
 
     /**
      * A store, what a backup keeps of it ([backup]; none, and [why] says why), and the resets that
@@ -96,14 +111,19 @@ class Stores(
         Kept("tasks.json", backup = "your own tasks, which no source gives back"),
         Kept("settings.json", backup = "the settings as asked for, a change still waiting among them", resets = setOf(Reset.Memories)),
         Kept("secrets.bin", backup = null, why = "passwords and keys stay on this phone (D-78)"),
-        Kept("runtime.json", backup = "the calibration, your calendar answers, Claude's month and today's slots", resets = setOf(Reset.Stats, Reset.Calibration)),
+        Kept("runtime.json", backup = null, why = "the notifications held, the daily runs and the files found unreadable are this phone's"),
+        Kept("session.json", backup = "today's slots"),
+        Kept("protection.json", backup = null, why = "protection is this phone's; a change still waiting goes with the settings"),
+        Kept("model.json", backup = "Claude's month"),
+        Kept("anki.json", backup = null, why = "what AnkiDroid showed this phone"),
+        Kept("learning.json", backup = "the calibration", resets = setOf(Reset.Stats, Reset.Calibration)),
         Kept("log.json", backup = "all of it", resets = setOf(Reset.Stats)),
         Kept("instructions.json", backup = "the instructions in use", resets = setOf(Reset.Instructions)),
         Kept("chat.json", backup = "all of it, Felix's state with it", resets = setOf(Reset.Chat)),
         Kept("chat-archive.json", backup = "the chat's earlier messages, while the backup has room for them, the oldest left out first", resets = setOf(Reset.Chat)),
         Kept("school.json", backup = "all of it"),
         Kept("memory.json", backup = "all of it", resets = setOf(Reset.Memories)),
-        Kept("calendar.json", backup = null, why = "the versions this phone wrote to its calendars mean nothing to another's"),
+        Kept("calendar.json", backup = "your answers about events (what this phone wrote to its calendars means nothing to another's)"),
     )
 
     /** Each JSON store's shape now, by file: what a backup's parts from it are brought to ([Backups.decode]). */
@@ -149,9 +169,9 @@ class Stores(
         /**
          * The moves between stores this build makes at start: Felix's records and state into the chat (4.0.0); the
          * chat's archive into its months (4.0.4); your instructions' step ids onto the tasks they're laid on, and
-         * Felix's instructions marked from the chat (4.0.13).
+         * Felix's instructions marked from the chat, and runtime.json split by owner (4.0.13).
          */
-        val MOVES: List<Move> = listOf(ChatMigration.MOVE, ChatArchiveStore.SPLIT, TasksMigration.MOVE)
+        val MOVES: List<Move> = listOf(ChatMigration.MOVE, ChatArchiveStore.SPLIT, TasksMigration.MOVE, RuntimeSplit.MOVE)
 
         /** How long the file an older shape came from is kept after its migration. */
         const val OLD_SHAPE_KEPT_MS = 7 * 24 * 3_600_000L

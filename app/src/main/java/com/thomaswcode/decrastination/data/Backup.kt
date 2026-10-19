@@ -2,12 +2,12 @@ package com.thomaswcode.decrastination.data
 
 import com.thomaswcode.decrastination.core.Calibration
 import com.thomaswcode.decrastination.core.Change
-import com.thomaswcode.decrastination.core.ChatArchive
 import com.thomaswcode.decrastination.core.ChangeType
+import com.thomaswcode.decrastination.core.ChatArchive
 import com.thomaswcode.decrastination.core.Instruction
+import com.thomaswcode.decrastination.core.InstructionRules
 import com.thomaswcode.decrastination.core.InstructionState
 import com.thomaswcode.decrastination.core.InstructionStatus
-import com.thomaswcode.decrastination.core.InstructionRules
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.Mine
 import com.thomaswcode.decrastination.core.OwnTaskRules
@@ -17,8 +17,8 @@ import com.thomaswcode.decrastination.core.SettingsLimits
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.enriched
-import com.thomaswcode.decrastination.learn.Calibrator
 import com.thomaswcode.decrastination.enrich.AiUsage
+import com.thomaswcode.decrastination.learn.Calibrator
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import kotlinx.serialization.Serializable
@@ -145,8 +145,8 @@ object Backups {
         "settings" to ("settings.json" to null), "log" to ("log.json" to null), "school" to ("school.json" to null),
         "memory" to ("memory.json" to null), "chat" to ("chat.json" to null), "archive" to ("chat-archive.json" to null),
         "instructions" to ("instructions.json" to "instructions"), "ownTasks" to ("tasks.json" to "tasks"),
-        "calibration" to ("runtime.json" to "calibration"), "eventAnswers" to ("runtime.json" to "eventAnswers"),
-        "aiUsage" to ("runtime.json" to "aiUsage"), "slots" to ("runtime.json" to "slots"),
+        "calibration" to ("learning.json" to "calibration"), "eventAnswers" to ("calendar.json" to "eventAnswers"),
+        "aiUsage" to ("model.json" to "aiUsage"), "slots" to ("session.json" to "slots"),
     )
 
     /**

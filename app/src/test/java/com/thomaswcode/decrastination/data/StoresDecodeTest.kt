@@ -1,20 +1,20 @@
 package com.thomaswcode.decrastination.data
 
 import com.thomaswcode.decrastination.Fixtures
+import com.thomaswcode.decrastination.core.ChangeType
 import com.thomaswcode.decrastination.core.ChatArchive
 import com.thomaswcode.decrastination.core.ChatState
-import com.thomaswcode.decrastination.core.ChangeType
+import com.thomaswcode.decrastination.core.InstructionRules
 import com.thomaswcode.decrastination.core.InstructionState
 import com.thomaswcode.decrastination.core.InstructionStatus
-import com.thomaswcode.decrastination.core.InstructionRules
 import com.thomaswcode.decrastination.core.MemoryState
 import com.thomaswcode.decrastination.core.MessageKind
+import com.thomaswcode.decrastination.core.Mine
 import com.thomaswcode.decrastination.core.SchoolCalendar
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Speaker
 import com.thomaswcode.decrastination.core.Status
-import com.thomaswcode.decrastination.core.Mine
 import com.thomaswcode.decrastination.felix.FelixPrompts
 import java.io.File
 import java.nio.file.Files
@@ -60,13 +60,18 @@ class StoresDecodeTest {
         store("tasks.json", TaskState.serializer(), ::TaskState),
         store("settings.json", Settings.serializer(), ::Settings),
         store("runtime.json", RuntimeState.serializer(), ::RuntimeState),
+        store("session.json", SessionState.serializer(), ::SessionState, since = "2026-10-20"),
+        store("protection.json", ProtectionState.serializer(), ::ProtectionState, since = "2026-10-20"),
+        store("model.json", ModelState.serializer(), ::ModelState, since = "2026-10-20"),
+        store("anki.json", AnkiState.serializer(), ::AnkiState, since = "2026-10-20"),
+        store("learning.json", LearningState.serializer(), ::LearningState, since = "2026-10-20"),
         store("log.json", ActivityLog.serializer(), ::ActivityLog),
         store("instructions.json", InstructionState.serializer(), ::InstructionState),
         store("chat.json", ChatState.serializer(), ::ChatState),
         store("chat-archive.json", ChatArchive.serializer(), ::ChatArchive, since = "2026-10-19"),
         store("school.json", SchoolCalendar.serializer(), ::SchoolCalendar),
         store("memory.json", MemoryState.serializer(), ::MemoryState),
-        store("calendar.json", CalendarVersions.serializer(), ::CalendarVersions),
+        store("calendar.json", CalendarState.serializer(), ::CalendarState),
     )
 
     /** The stores there are in the shape of [dir]. */
@@ -93,7 +98,7 @@ class StoresDecodeTest {
             val stores = Stores(copy, Reverse)
             // The chat's archive, a month a file: all of it read, then what couldn't be.
             if (store.file == stores.chatArchive.name) return stores.chatArchive.value.let { it to stores.chatArchive.problems.firstOrNull() }
-            val read = stores.let { s -> listOf(s.tasks, s.settings, s.runtime, s.log, s.instructions, s.chat, s.school, s.memory, s.calendarVersions) }.single { it.name == store.file }
+            val read = stores.let { s -> listOf(s.tasks, s.settings, s.runtime, s.session, s.protection, s.model, s.anki, s.learning, s.log, s.instructions, s.chat, s.school, s.memory, s.calendar) }.single { it.name == store.file }
             return read.value to read.problem
         } finally {
             copy.deleteRecursively()
