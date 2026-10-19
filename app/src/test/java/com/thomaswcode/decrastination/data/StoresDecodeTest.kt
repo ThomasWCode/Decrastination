@@ -90,7 +90,10 @@ class StoresDecodeTest {
         val copy = Files.createTempDirectory("stores").toFile()
         try {
             dir.listFiles()!!.forEach { it.copyTo(File(copy, it.name)) }
-            val read = Stores(copy, Reverse).let { s -> listOf(s.tasks, s.settings, s.runtime, s.log, s.instructions, s.chat, s.chatArchive, s.school, s.memory, s.calendarVersions) }.single { it.name == store.file }
+            val stores = Stores(copy, Reverse)
+            // The chat's archive, a month a file: all of it read, then what couldn't be.
+            if (store.file == stores.chatArchive.name) return stores.chatArchive.value.let { it to stores.chatArchive.problems.firstOrNull() }
+            val read = stores.let { s -> listOf(s.tasks, s.settings, s.runtime, s.log, s.instructions, s.chat, s.school, s.memory, s.calendarVersions) }.single { it.name == store.file }
             return read.value to read.problem
         } finally {
             copy.deleteRecursively()
