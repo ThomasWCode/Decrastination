@@ -80,6 +80,22 @@ class TaskSheetStateTest {
     }
 
     @Test
+    fun `later today puts its next piece at the first free time after its slot, a time of yours the plan keeps`() = runBlocking {
+        // Due tomorrow morning: its piece is laid this evening, in a school day's hours (16:45 to 22:00).
+        h.stores.tasks.update { it.copy(tasks = listOf(h.teams("essay", due = Fixtures.at("2026-10-20T09:00"), minutes = 30))) }
+        val slot = h.planning.plan().todaySlots.firstOrNull { it.chunk?.taskId == "teams:essay" }
+        assertNotNull(slot, "the essay's piece is laid today")
+        sheet.later(slot.chunk!!, h.clock.now(), LONDON)
+        val change = h.instructions.value.applied.single().changes.single()
+        assertEquals(ChangeType.AtTime, change.type)
+        val at = change.time!!
+        assertTrue(at >= slot.end, "after its slot")
+        assertEquals("Later today, at ${Format.at(at, h.clock.now(), LONDON)}: undone in the chat's Your changes", sheet.said)
+        // Laid there by the next plan, as a time you gave it (PL-04).
+        assertEquals(at, h.planning.plan().todaySlots.single { it.chunk?.taskId == "teams:essay" }.start)
+    }
+
+    @Test
     fun `yours done, not done, kept for home and deleted`() = runBlocking {
         h.ownTasks.saveOwnTask("mine", OwnTask(title = "Revise"))
         sheet.homeOnly(task("own:mine"), true)
