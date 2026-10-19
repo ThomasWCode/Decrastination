@@ -140,6 +140,7 @@ import java.time.LocalDate
 import java.time.ZoneId
 import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -561,6 +562,7 @@ private fun ColumnScope.Chat(
     val list = rememberLazyListState()
     val name = graph.settings.value.felixName
     val scope = rememberCoroutineScope()
+    var lookup by remember { mutableStateOf<Job?>(null) }
     val rows = remember(all, archive, quotes, unread, screen.earlier, screen.firstUnread, zone) { screen.items(all, archive, zone, unread, quotes) }
     val shown = all.filter { it.from == Speaker.You || it.text.isNotBlank() }
     // Yours waiting for his answer, with nothing to say why (Claude off, resting, a failed call): he's
@@ -645,8 +647,10 @@ private fun ColumnScope.Chat(
                     SwipeToReply(onReply = { screen.replyTo(message) }) {
                         if (message.from == Speaker.You) {
                             Yours(graph, message, row.quote, name, flash, now, zone, onQuote = { id ->
-                                // One further back than the pages read: the archive read back as far as it.
-                                if (!screen.reveal(id, all, archive)) scope.launch { withContext(Dispatchers.IO) { graph.chatArchive.back(id) }?.let { screen.revealBack(id, it) } }
+                                // One further back than the pages read: the archive read back as far as it. Only the
+                                // last quote tapped is followed: one still being looked for gives way.
+                                lookup?.cancel()
+                                if (!screen.reveal(id, all, archive)) lookup = scope.launch { withContext(Dispatchers.IO) { graph.chatArchive.back(id) }?.let { screen.revealBack(id, it) } }
                             }) { screen.replyTo(message) }
                         } else {
                             Claudes(graph, screen, message, tasks, flash, now, zone, onEdit, live = !row.archived) { screen.replyTo(message) }

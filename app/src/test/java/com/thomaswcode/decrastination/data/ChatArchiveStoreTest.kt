@@ -28,7 +28,7 @@ class ChatArchiveStoreTest {
     private val august = listOf(his("a1", "2026-08-03T10:00"), his("a2", "2026-08-30T10:00"))
     private val september = listOf(his("s1", "2026-09-01T09:00"), his("s2", "2026-09-20T10:00"))
 
-    private fun files() = dir.list()!!.filter { it.startsWith("chat-archive") }.sorted()
+    private fun files() = dir.list()!!.filter { it.startsWith("chat-archive") && it.endsWith(".json") }.sorted()
 
     @Test
     fun `messages moved go to their months' files, each once, and read back as one`() = runBlocking {
@@ -101,6 +101,23 @@ class ChatArchiveStoreTest {
         assertTrue(files().isEmpty())
         assertFalse(store.holdsAny)
         assertTrue(store.problems.isEmpty())
+    }
+
+    @Test
+    fun `a month that can't be read and keeps nothing is let go once it's said, and a far year's month is still listed`() = runBlocking {
+        File(dir, "chat-archive-2026-08.json").writeText("{")
+        val store = ChatArchiveStore(dir)
+        assertTrue(store.value.messages.isEmpty())
+        assertEquals("chat-archive-2026-08.json", store.problems.single().file)
+        store.keepRecovered()
+        assertFalse(File(dir, "chat-archive-2026-08.json").exists())
+        assertFalse(store.holdsAny)
+        // A message dated past 9999 (a restore's), in a file named with the year's sign: read back, and cleared.
+        val far = ChatMessage("far", Speaker.Felix, "far", 300_000_000_000_000L)
+        store.add(listOf(far))
+        assertEquals(listOf(far), ChatArchiveStore(dir).value.messages)
+        store.clear()
+        assertTrue(files().isEmpty())
     }
 
     @Test
