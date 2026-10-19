@@ -17,7 +17,7 @@ You asked for the selective remembering a person does: he keeps what you tell hi
 
 **The tidy** (`MemoryTidy`) leaves expiring facts as they are: they go by themselves, and a merge of them would lose their until. Only facts with neither field are sent to it; the count it's due by counts all.
 
-**The profile** (`Profile.block`) shows an expiring fact with its until ("- cold: feeling rough (until Sun 25 Oct)") so he knows it's passing. The profile's shape changes, which the readings see too; it's not a reading's prompt, but `GoldenPromptsTest` ties `profile.txt` to the readings' prompt version (`ReadingPrompts.VERSION`, today `Prompts.VERSION`), and raising the version re-reads every open task (about 40 calls, 60 cents). The version goes to 8 with this (Q15: A), batched with any other reading-prompt change due then, and the one re-read is accepted.
+**The profile** (`Profile.block`) shows an expiring fact with its until ("- cold: feeling rough (until Sun 25 Oct)") so he knows it's passing. The profile's shape changes, which the readings see too; it's not a reading's prompt, but `GoldenPromptsTest` ties `profile.txt` to the readings' prompt version (`ReadingPrompts.VERSION`), and raising the version re-reads every open task (about 40 calls, 60 cents). The version goes to 8 with this (Q15: A), batched with any other reading-prompt change due then, and the one re-read is accepted.
 
 ## How he sets an until
 

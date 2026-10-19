@@ -13,10 +13,10 @@ The rules give every task a reading too, and stand in whenever Claude can't. Cla
 
 ## The three jobs
 
-What a job is sent is `Prompts.describe`; what it answers is `Prompts.schema`, every field required, optional ones nullable, every object closed.
+What a job is sent is `ReadingPrompts.describe`; what it answers is `ReadingPrompts.schema`, every field required, optional ones nullable, every object closed.
 
 **Email**: a starred conversation, always something to do (AI-02).
-- Sent: today, when its newest message came, who from ("the student (a note to self)" for one of yours), the subject, how many messages, attachments by name (AI-04), your answers, its blocks as last planned, and the text up to 16 000 characters (`Prompts.MAX_TEXT`), the rest said to be left out.
+- Sent: today, when its newest message came, who from ("the student (a note to self)" for one of yours), the subject, how many messages, attachments by name (AI-04), your answers, its blocks as last planned, and the text up to 16 000 characters (`ReadingPrompts.MAX_TEXT`), the rest said to be left out.
 - Returns: `kind` (only "Admin"), `actionableFrom`, `deadline`, `deadlineQuoted` (AI-12), `effortMin` (reading included; at least 5 for one only to read and decide), `nextStep` (one concrete action), `question` (AI-10), `reason`, `blocks` and `summary`.
 - Blocks only for separate pieces of work with dates of their own, a calendar of deadlines (Q12): each with its minutes, `from` and `due`. One job, however long, has none. A rough window runs from its first day to its last.
 - Where what it asks turns on an attachment or an earlier message Claude can't see, its next step says to read that first, naming it, at 10 minutes.
@@ -31,7 +31,7 @@ What a job is sent is `Prompts.describe`; what it answers is `Prompts.schema`, e
 - An appointment isn't work: only the time to prepare for it, at least a minute.
 
 Every job:
-- Its prompt (`Prompts.system`) is its brief, the limits its answer is checked against, from the checks' own values (`Prompts.limits`, AI-03), and made-up worked examples (`enrich/Examples.kt`, AI-07), each an answer the checks pass whole.
+- Its prompt (`ReadingPrompts.system`) is its brief, the limits its answer is checked against, from the checks' own values (`ReadingPrompts.limits`, AI-03), and made-up worked examples (`enrich/Examples.kt`, AI-07), each an answer the checks pass whole.
 - Each schema field says what it's for and its limit (AI-20). The year group comes from the profile (AI-06).
 - `reason` quotes the phrase that gave the date, kind or test date, at most 160 characters (AI-09), shown under the due date on the task's sheet.
 - `summary`, last (D-93): for a text over about 600 characters, what it asks of the student from all of it, in at most 400 characters (500 kept): an email's what to do and by when, what to bring, send or pay, and what a later message changed; an assignment's work, parts, needs, dates and hand-in. Empty for a shorter text. Felix is told it in place of a text too long for his room ([felix.md](felix.md)); the readings made before it have none, and his room keeps the text's start and end instead.
@@ -50,21 +50,21 @@ Emails' and planner items' blocks follow the same rule: only separately dated pi
 
 ## The checks on an answer
 
-`Answers.read` checks every answer; what's out of range is dropped, not trusted.
+`ReadingAnswers.read` checks every answer; what's out of range is dropped, not trusted.
 - **A task's dates** (deadline, start, test date): `YYYY-MM-DD` or `YYYY-MM-DDTHH:MM`, a date alone being 23:59 (a start, midnight). One that can't be read, or is over 400 days ahead, is a complaint; one more than a month gone is left out quietly.
 - **A step's or block's dates** out of that range, or unreadable, fail all the steps.
 - **Lengths**: a title 80 characters, a next step 120, a question 200, a reason 160. Only sections like "1.2" are kept.
 - **An email's kind** must be Admin; any other is no answer, and the rules' reading stands.
-- **An estimate** is 1 to 600 minutes (`Answers.MAX_EFFORT`, ten hours), and so is each step or block.
-- **Steps**: at most 12 (`Answers.MAX_STEPS`). With more, the first eleven stay and the rest are folded, each run of plain steps into one "The rest: …" step, while vocabulary and dated steps keep their own (`Answers.fold`).
+- **An estimate** is 1 to 600 minutes (`ReadingAnswers.MAX_EFFORT`, ten hours), and so is each step or block.
+- **Steps**: at most 12 (`ReadingAnswers.MAX_STEPS`). With more, the first eleven stay and the rest are folded, each run of plain steps into one "The rest: …" step, while vocabulary and dated steps keep their own (`ReadingAnswers.fold`).
 - They must add up to `effortMin` within a tenth or 10 minutes, whichever is more, both within 600 minutes. Otherwise the steps are dropped (below), and the task is planned as one piece at Claude's total, or at its own estimate where that total is out of range.
-- **Blocks**: at most 30 (`Prompts.MAX_BLOCKS`), 20 hours in all (`Answers.MAX_BLOCKS_EFFORT`), adding up to `effortMin` as steps must. With blocks, the estimate is their total.
+- **Blocks**: at most 30 (`ReadingPrompts.MAX_BLOCKS`), 20 hours in all (`ReadingAnswers.MAX_BLOCKS_EFFORT`), adding up to `effortMin` as steps must. With blocks, the estimate is their total.
 - **Dates in order**: a step or block can't start after its own due, nor start or be due after the task's due (or the test), nor start after a later one's due; an email's block can't be due ahead of the email's start.
 - Felix's steps have their own rule, AI-19 (below).
 
 **Put back once, then salvaged** (AI-01):
 - The first answer is read strictly (`salvage = false`). A failed check becomes a complaint naming the step and what's wrong ("The steps add up to 135 minutes, not the 200 effortMin gives").
-- The answer is sent back once, as a call of its own under the cap: the item, Claude's answer as its turn, and "Your answer had a problem: …. Return the whole answer again with only that put right." (`ClaudeEnricher.repair`, `Prompts.repair`).
+- The answer is sent back once, as a call of its own under the cap: the item, Claude's answer as its turn, and "Your answer had a problem: …. Return the whole answer again with only that put right." (`ClaudeEnricher.repair`, `ReadingPrompts.repair`).
 - It isn't sent back where that would leave the item under 4 000 characters of room.
 - Read with salvage, a step whose own dates can't be (a start after its due, or a start or due after the task's) keeps its place and minutes with no dates, planned by its task's; the sheet says so (`Enrichment.adjusted`). Whatever still fails is dropped.
 - Meanwhile, and if the second answer gives nothing, the first answer read with salvage stands.
@@ -77,7 +77,7 @@ Emails' and planner items' blocks follow the same rule: only separately dated pi
 A step over an hour is cut into even sittings by time, never by content (`core/Sittings.kt`, `ReadingAnswers.fitParts`).
 - `Sittings.count`: a sitting an hour, or part of one (`Sittings.MAX_MIN`, 60). `Sittings.even`: even minutes, the odd ones first (100 is 50 and 50; 125 is 42, 42 and 41).
 - Titles: the first is the step's own, then "Continue: …", and the last "Continue and finish: …". Each sitting keeps its step's dates.
-- `Answers.sittings` cuts after folding, so a folded step is cut too; the rules' steps are cut the same way.
+- `ReadingAnswers.sittings` cuts after folding, so a folded step is cut too; the rules' steps are cut the same way.
 - **A step done isn't cut.** Each new step first takes the mark of the old step of its exact title at the same place among those of that name (`carryMarks`: the second "Review" the second's). One that takes a done mark stays whole, so all of it keeps its tick.
 - The planner cuts a step still over an hour as it plans it, by the minutes it plans (the pace learned, your minutes shared out), in the same way (`Planner.sittings`, PL-12, planner.md).
 - Never your steps, or Felix's (below).
@@ -122,7 +122,7 @@ It runs again once Claude can be asked again (its rest over, `EnrichWorker.retry
 `ReadingPrompts.VERSION` is 7 (7: a long text's summary, D-93). Each reading keeps the version of the prompts that made it (`Enrichment.promptVersion`; 1 where none is stored).
 - With Claude on, an open task Claude read under an older version is read again once, within the run's 20 calls, the oldest first.
 - **Not a task with a step of its reading done** (`partDone`, `core/Enrichment.kt`): newer prompts could give its work as other steps, and a tick goes only to a step of its name, so work done would be planned again. It's read again only when its content changes or you ask.
-- Read for such a reason, Claude is told which steps are done: each listed "(N min, done)", to be kept exactly as it is (title and minutes, still in `effortMin`), with only the work left given in the others (AI-08, `Prompts.describe`).
+- Read for such a reason, Claude is told which steps are done: each listed "(N min, done)", to be kept exactly as it is (title and minutes, still in `effortMin`), with only the work left given in the others (AI-08, `ReadingPrompts.describe`).
 - A re-read for the version alone that gets no answer keeps its reading, marked as these prompts'; one past the run's calls waits for the next run.
 - **The version is raised** with any change to a reading's prompt, schema or examples, or to the profile's shape.
 - `GoldenPromptsTest` (AR-01) keeps a golden copy of every prompt and schema in `app/src/test/resources/prompts/` and fails on any difference, with its diff; `-PupdateGolden=true` writes them again.
@@ -145,7 +145,7 @@ It runs again once Claude can be asked again (its rest over, `EnrichWorker.retry
 ## Photos (AI-23)
 
 - *Add a photo of the work*, on a task Claude reads, keeps one photo with it (`Photos.attachPhoto`: the app's own files, one a task, a new one replacing the last). Its hash is in the input hash, so the task is read again at once.
-- The photo goes first in the item, Claude told it's the work itself, to estimate and split from, saying in `reason` what it saw (`Prompts.photo`). Such a reading is `fromPhoto`, and the sheet says "From your photo".
+- The photo goes first in the item, Claude told it's the work itself, to estimate and split from, saying in `reason` what it saw (`ReadingPrompts.photo`). Such a reading is `fromPhoto`, and the sheet says "From your photo".
 - Photos no task holds are let go when the app starts (`Photos.sweepPhotos`), but for one a chat delete can still undo.
 - `Readings` and `Photos` are built like `Focus` (their stores, the clock, the gateway and small callbacks); `ReadingsTest` and `PhotosTest` drive them on temporary stores, Claude's API a stand-in.
 - A photo of homework, taken in Work, is read into tasks of your own instead (NF-01, `PhotoTasks`, `PhotoTaskReader`), each checked in the form (sources.md).

@@ -1,6 +1,7 @@
 package com.thomaswcode.decrastination.core
 
 import com.thomaswcode.decrastination.Fixtures
+import com.thomaswcode.decrastination.enrich.ReadingAnswers
 import com.thomaswcode.decrastination.enrich.ReadingPrompts
 import com.thomaswcode.decrastination.sources.gmail.GmailThreads
 import kotlin.test.Test
@@ -25,7 +26,7 @@ class EnrichmentTest {
     )
 
     /** A reading of [task] as it is, by the prompts as they are. */
-    private fun enrichment(task: TaskItem, by: String = "claude-opus-5-5") = Enrichment(Enrichments.inputHash(task), by, t0, promptVersion = com.thomaswcode.decrastination.enrich.ReadingPrompts.VERSION)
+    private fun enrichment(task: TaskItem, by: String = "claude-opus-5-5") = Enrichment(Enrichments.inputHash(task), by, t0, promptVersion = ReadingPrompts.VERSION)
 
     @Test
     fun `an email is a task whatever its reading's kind, and takes its deadline where the source has none`() {
@@ -205,9 +206,9 @@ class EnrichmentTest {
         // Resting, or the task done: it stands. The rules' readings have no prompts to be out of date by.
         assertFalse(Enrichments.stale(old, modelOn = false, rules = "rules", version = ReadingPrompts.VERSION))
         assertFalse(Enrichments.stale(old.copy(status = Status.Done), modelOn = true, rules = "rules", version = ReadingPrompts.VERSION))
-        val now = task.copy(enrichment = enrichment(task).copy(promptVersion = com.thomaswcode.decrastination.enrich.ReadingPrompts.VERSION))
+        val now = task.copy(enrichment = enrichment(task).copy(promptVersion = ReadingPrompts.VERSION))
         assertFalse(Enrichments.stale(now, modelOn = true, rules = "rules", version = ReadingPrompts.VERSION))
-        assertEquals(com.thomaswcode.decrastination.enrich.ReadingPrompts.VERSION, com.thomaswcode.decrastination.enrich.ReadingAnswers.parse(Enrichments.Job.Email, """{"kind":"Admin","actionableFrom":null,"deadline":null,"deadlineQuoted":false,"effortMin":10,"nextStep":"Reply","question":null,"reason":"","blocks":[]}""", task, "claude", t0, Fixtures.LONDON)?.promptVersion)
+        assertEquals(ReadingPrompts.VERSION, ReadingAnswers.parse(Enrichments.Job.Email, """{"kind":"Admin","actionableFrom":null,"deadline":null,"deadlineQuoted":false,"effortMin":10,"nextStep":"Reply","question":null,"reason":"","blocks":[]}""", task, "claude", t0, Fixtures.LONDON)?.promptVersion)
         val never = task.copy(id = "gmail:never", enrichment = null, dueAt = t0 + 5)
         val dueFirst = now.copy(id = "gmail:due", dueAt = t0)
         val oldLater = old.copy(id = "gmail:old", dueAt = t0 + 10)
@@ -304,7 +305,7 @@ class EnrichmentTest {
         val read = com.thomaswcode.decrastination.core.Enrichment(Enrichments.inputHash(task), "claude-opus-5-5", 0, effortMin = 40, promptVersion = 1)
         assertTrue(Enrichments.staleOnlyByVersion(task.copy(enrichment = read), "rules", ReadingPrompts.VERSION))
         // By these prompts, by the rules, or of text since changed: not so.
-        assertFalse(Enrichments.staleOnlyByVersion(task.copy(enrichment = read.copy(promptVersion = com.thomaswcode.decrastination.enrich.ReadingPrompts.VERSION)), "rules", ReadingPrompts.VERSION))
+        assertFalse(Enrichments.staleOnlyByVersion(task.copy(enrichment = read.copy(promptVersion = ReadingPrompts.VERSION)), "rules", ReadingPrompts.VERSION))
         assertFalse(Enrichments.staleOnlyByVersion(task.copy(enrichment = read.copy(by = "rules")), "rules", ReadingPrompts.VERSION))
         assertFalse(Enrichments.staleOnlyByVersion(task.copy(enrichment = read.copy(inputHash = "older")), "rules", ReadingPrompts.VERSION))
     }
