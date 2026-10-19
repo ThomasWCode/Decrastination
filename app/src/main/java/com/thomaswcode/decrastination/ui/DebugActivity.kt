@@ -44,6 +44,7 @@ import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.debug.CommandActivity
 import com.thomaswcode.decrastination.enrich.Prompts
 import com.thomaswcode.decrastination.protect.Watchdog
+import com.thomaswcode.decrastination.sources.gmail.GmailThreads
 import java.time.Instant
 
 /**
@@ -88,14 +89,14 @@ private fun DebugPage(graph: AppGraph, activity: Activity) {
             }
             item(key = "calls") { Block(activity, "Recent calls (${runtime.calls.size})", runtime.calls.asReversed().joinToString("\n\n") { it.details(zone) }.ifEmpty { "None yet." }) }
             item(key = "prompt") {
-                val open = state.tasks.filter { Enrichments.jobFor(it) != null }
+                val open = state.tasks.filter { Enrichments.jobFor(it, GmailThreads::textRead) != null }
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text("A task's prompt", style = MaterialTheme.typography.titleSmall)
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         open.forEach { t -> FilterChip(selected = taskId == t.id, onClick = { taskId = t.id }, label = { Text(t.title.take(28)) }) }
                     }
                     open.firstOrNull { it.id == taskId }?.let { task ->
-                        val job = Enrichments.jobFor(task)!!
+                        val job = Enrichments.jobFor(task, GmailThreads::textRead)!!
                         val profile = graph.conversation.profile(now)
                         val previous = task.subSteps.ifEmpty { task.enrichment?.subSteps.orEmpty() }
                         val item = (if (task.photo != null) Prompts.photo(job) + "\n\n" else "") + Prompts.describe(task, job, now, zone, previous, state.deckTopics)

@@ -10,6 +10,7 @@ import com.thomaswcode.decrastination.core.withEnrichment
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.RuntimeState
 import com.thomaswcode.decrastination.data.TaskState
+import com.thomaswcode.decrastination.sources.gmail.GmailThreads
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.NonCancellable
@@ -59,25 +60,25 @@ class Readings(
         var decksChanged = false
         // A task whose call the API wouldn't take as asked (AC-04): the rules' till it changes.
         fun refused(task: TaskItem) = runtime.value.enrichFailed[task.id] == Enrichments.inputHash(task)
-        fun due(task: TaskItem) = (force && task.id == only) || Enrichments.stale(task, enricher != null && !refused(task), RuleEnricher.BY, modelOff = gateway.claudeKey() == null)
+        fun due(task: TaskItem) = (force && task.id == only) || Enrichments.stale(task, enricher != null && !refused(task), RuleEnricher.BY, Prompts.VERSION, modelOff = gateway.claudeKey() == null)
         // Whether [only]'s reading laid was the model's (for [force]).
         var readByModel = false
         val candidates = tasks.value.tasks
             // [only]: that task alone (the debug `enrich-task`), so nothing else is sent anywhere.
             .filter { only == null || it.id == only }
-            .mapNotNull { task -> Enrichments.jobFor(task)?.let { task to it } }
+            .mapNotNull { task -> Enrichments.jobFor(task, GmailThreads::textRead)?.let { task to it } }
             .filter { (task, _) -> due(task) }
             // Never read first, then the oldest prompts' readings (AC-06), soonest due first.
             .sortedWith(compareBy(Enrichments.NEED) { it.first })
         for ((snapshot, _) in candidates) {
             // Read afresh: a sync since the run began may have closed or changed it.
             val task = tasks.value.tasks.firstOrNull { it.id == snapshot.id } ?: continue
-            val job = Enrichments.jobFor(task) ?: continue
+            val job = Enrichments.jobFor(task, GmailThreads::textRead) ?: continue
             if (!due(task)) continue
             // Whether the model gave this one's reading, not the rules standing in.
             var fromModel = false
             // Stale only by the prompts' version (AC-06): its reading stays unless the model reads it now.
-            val onlyVersion = Enrichments.staleOnlyByVersion(task, RuleEnricher.BY)
+            val onlyVersion = Enrichments.staleOnlyByVersion(task, RuleEnricher.BY, Prompts.VERSION)
             val now = clock.now()
             // Switched off (or its key removed) while this runs: nothing more is sent.
             if (gateway.claudeKey() == null) enricher = null

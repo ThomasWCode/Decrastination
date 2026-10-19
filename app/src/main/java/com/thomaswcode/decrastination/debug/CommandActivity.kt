@@ -53,6 +53,7 @@ import com.thomaswcode.decrastination.learn.Review
 import com.thomaswcode.decrastination.protect.Watchdog
 import com.thomaswcode.decrastination.sources.anki.AnkiProvider
 import com.thomaswcode.decrastination.core.AnkiRules
+import com.thomaswcode.decrastination.sources.gmail.GmailThreads
 import com.thomaswcode.decrastination.sync.SyncWorker
 import com.thomaswcode.decrastination.ui.OpenTaskActivity
 import java.io.File
@@ -298,7 +299,7 @@ class CommandActivity : Activity() {
             }
             "enrich" -> {
                 graph.readings.enrichNow()
-                val open = graph.tasks.value.tasks.filter { Enrichments.jobFor(it) != null }
+                val open = graph.tasks.value.tasks.filter { Enrichments.jobFor(it, GmailThreads::textRead) != null }
                 Log.i(TAG, "Enriched: " + open.groupingBy { it.enrichment?.by ?: "nothing" }.eachCount())
                 open.filter { it.subSteps.isNotEmpty() && it.enrichment?.subSteps != null }
                     .forEach { Log.i(TAG, "  ${it.title}: ${it.subSteps.joinToString(" | ") { s -> "${s.title} (${s.minutes})" }}") }
@@ -342,7 +343,7 @@ class CommandActivity : Activity() {
                 val count = intent.getIntExtra("count", 6)
                 val now = graph.clock.now()
                 val items = Enrichments.Job.entries.flatMap { job ->
-                    graph.tasks.value.tasks.filter { Enrichments.jobFor(it) == job }.take(count).map { task ->
+                    graph.tasks.value.tasks.filter { Enrichments.jobFor(it, GmailThreads::textRead) == job }.take(count).map { task ->
                         JsonObject(
                             mapOf(
                                 "id" to JsonPrimitive(task.id),
@@ -565,7 +566,7 @@ class CommandActivity : Activity() {
                         Log.i(TAG, "ai-check $job: ${runCatching { call() }.getOrElse { "failed: $it" }}")
                     val model = ClaudeEnricher(client(ModelEffort.Job.Email), zone)
                     for (job in Enrichments.Job.entries) {
-                        val task = graph.tasks.value.tasks.firstOrNull { Enrichments.jobFor(it) == job } ?: continue
+                        val task = graph.tasks.value.tasks.firstOrNull { Enrichments.jobFor(it, GmailThreads::textRead) == job } ?: continue
                         val result = runCatching { model.enrich(task, job, now) }
                         val said = result.fold({ "${it.enrichment} (cost ${"%.4f".format(it.costUsd)} USD, refused ${it.refused})" }, { "failed: $it" })
                         Log.i(TAG, "ai-check $job on '${task.title}': $said")

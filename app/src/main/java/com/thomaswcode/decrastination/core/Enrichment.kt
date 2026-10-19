@@ -1,6 +1,5 @@
 package com.thomaswcode.decrastination.core
 
-import com.thomaswcode.decrastination.sources.gmail.GmailThreads
 import java.security.MessageDigest
 import kotlinx.serialization.Serializable
 
@@ -85,7 +84,7 @@ fun TaskItem.enriched(): TaskItem = enrichedOnly().let { t ->
  * among its name's (the second "Apply" the second's): two steps of one name aren't both ticked by
  * one, and a mark stays on the step it was made on.
  */
-internal fun carryMarks(steps: List<SubStep>, before: List<SubStep>): List<SubStep> {
+fun carryMarks(steps: List<SubStep>, before: List<SubStep>): List<SubStep> {
     val was = before.groupBy { it.title }
     val seen = HashMap<String, Int>()
     return steps.map { step ->
@@ -175,14 +174,24 @@ object Enrichments {
     /** The three jobs of docs/spec/readings.md that run on tasks. */
     enum class Job { Email, Assignment, Effort }
 
-    /** What [task] needs, or null: done, derived (the Anki quota and decks), or an event. */
-    fun jobFor(task: TaskItem): Job? = when {
+    /**
+     * The extras' keys the hash reads beside the task's own fields, as the sources write them: an
+     * email's attachments (GmailThreads), an assignment's links (TeamsRows).
+     */
+    const val EXTRA_ATTACHMENTS = "attachments"
+    const val EXTRA_LINKS = "links"
+
+    /**
+     * What [task] needs, or null: done, derived (the Anki quota and decks), or an event. [textRead]
+     * says whether an email's text has been read as far as reads now go (GmailThreads.textRead).
+     */
+    fun jobFor(task: TaskItem, textRead: (TaskItem) -> Boolean): Job? = when {
         !task.isOpen || task.derived -> null
         // You've said it isn't a task: nothing to read it for. Nor feedback to read (NF-06): ten minutes, as it is.
         task.userNotATask || task.tickDone -> null
         // Its text not read yet (more new emails than one read takes), or not as far as reads now
-        // go (cut by an older, lower limit): asked about once it is (GmailThreads.textRead).
-        task.source == Source.Gmail && !GmailThreads.textRead(task) -> null
+        // go (cut by an older, lower limit): asked about once it is.
+        task.source == Source.Gmail && !textRead(task) -> null
         task.source == Source.Gmail -> Job.Email
         task.source == Source.Teams -> Job.Assignment
         task.source == Source.PowerPlanner && task.kind != Kind.Event -> Job.Effort
@@ -207,7 +216,7 @@ object Enrichments {
             task.extra["from"].orEmpty(),
             task.extra["received"].orEmpty(),
             // Your answers to its questions (AI-10): only where there are some, so no other task's changes.
-        ) + listOfNotNull(task.extra[GmailThreads.EXTRA_ATTACHMENTS], task.extra[com.thomaswcode.decrastination.sources.teams.TeamsRows.EXTRA_LINKS], task.answers.takeIf { it.isNotEmpty() }?.joinToString("\n"), task.photo?.hash)).joinToString("\n")
+        ) + listOfNotNull(task.extra[EXTRA_ATTACHMENTS], task.extra[EXTRA_LINKS], task.answers.takeIf { it.isNotEmpty() }?.joinToString("\n"), task.photo?.hash)).joinToString("\n")
         val digest = MessageDigest.getInstance("SHA-256").digest(text.toByteArray(Charsets.UTF_8))
         return digest.take(8).joinToString("") { "%02x".format(it) }
     }
@@ -220,23 +229,24 @@ object Enrichments {
      * model is now on, or done by the model when it's now switched off ([modelOff]: what it read goes
      * with it, and the rules' reading stands instead); or an email read, before starred-only reading,
      * as only to read (AI-02), which a starred one never is; or, the model on, an open task the model
-     * read by older prompts (AC-06), unless some of the steps it gave are done ([partDone]). Resting
-     * or refused, the model's older reading stands.
+     * read by prompts older than [version] (AC-06: the prompts' now, Prompts.VERSION), unless some of
+     * the steps it gave are done ([partDone]). Resting or refused, the model's older reading stands.
      */
-    fun stale(task: TaskItem, modelOn: Boolean, rules: String, modelOff: Boolean = false): Boolean {
+    fun stale(task: TaskItem, modelOn: Boolean, rules: String, version: Int, modelOff: Boolean = false): Boolean {
         val e = task.enrichment ?: return true
         return e.inputHash != inputHash(task) || (modelOn && e.by == rules) || (modelOff && e.by != rules) ||
             (task.source == Source.Gmail && e.kind == Kind.Info) ||
-            (modelOn && e.by != rules && task.isOpen && e.promptVersion < com.thomaswcode.decrastination.enrich.Prompts.VERSION && !task.partDone())
+            (modelOn && e.by != rules && task.isOpen && e.promptVersion < version && !task.partDone())
     }
 
     /**
-     * Whether [task]'s reading is the model's, of its text as it is now, stale only as older prompts
-     * made it (AC-06): kept as it is unless the model reads it again, never the rules' in its place.
+     * Whether [task]'s reading is the model's, of its text as it is now, stale only as prompts older
+     * than [version] made it (AC-06): kept as it is unless the model reads it again, never the rules'
+     * in its place.
      */
-    fun staleOnlyByVersion(task: TaskItem, rules: String): Boolean {
+    fun staleOnlyByVersion(task: TaskItem, rules: String, version: Int): Boolean {
         val e = task.enrichment ?: return false
-        return e.by != rules && e.inputHash == inputHash(task) && e.promptVersion < com.thomaswcode.decrastination.enrich.Prompts.VERSION &&
+        return e.by != rules && e.inputHash == inputHash(task) && e.promptVersion < version &&
             !(task.source == Source.Gmail && e.kind == Kind.Info) && !task.partDone()
     }
 

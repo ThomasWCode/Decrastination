@@ -27,6 +27,7 @@ import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.enrich.PhotoTasks
+import com.thomaswcode.decrastination.sources.gmail.GmailThreads
 import java.util.UUID
 import kotlinx.coroutines.launch
 
@@ -64,7 +65,7 @@ fun PhotoTasksSheet(graph: AppGraph, reading: PhotoTasks.Reading, jpeg: ByteArra
             Text("From your photo", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
             if (attaching) {
                 Text("The photo goes with a task listed, and Claude reads the task again with it.", style = MaterialTheme.typography.bodyMedium)
-                val open = graph.tasks.value.tasks.filter { it.isOpen && !it.hidden && com.thomaswcode.decrastination.core.Enrichments.jobFor(it) != null }
+                val open = graph.tasks.value.tasks.filter { it.isOpen && !it.hidden && com.thomaswcode.decrastination.core.Enrichments.jobFor(it, GmailThreads::textRead) != null }
                 if (open.isEmpty()) Text("None of the listed tasks is one Claude reads.", style = MaterialTheme.typography.bodyMedium)
                 open.sortedBy { it.dueAt ?: Long.MAX_VALUE }.forEach { t ->
                     TextButton(onClick = {

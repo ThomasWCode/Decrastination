@@ -2,6 +2,7 @@ package com.thomaswcode.decrastination.sources.teams
 
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.core.Kind
+import com.thomaswcode.decrastination.sources.gmail.GmailThreads
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -84,7 +85,7 @@ class TeamsRowsTest {
         val task = com.thomaswcode.decrastination.core.Merge.apply(emptyList(), com.thomaswcode.decrastination.core.Source.Teams, listOf(f), 0).tasks.single()
         assertEquals(true, task.tickDone)
         // Not read by Claude: it's ten minutes as it is.
-        assertNull(com.thomaswcode.decrastination.core.Enrichments.jobFor(task))
+        assertNull(com.thomaswcode.decrastination.core.Enrichments.jobFor(task, GmailThreads::textRead))
         assertNull(TeamsRows.returned(mapOf("title" to "x")))
         kotlin.test.assertFailsWith<java.io.IOException> { TeamsRows.allReturned(listOf(mapOf("title" to "x"))) }
     }

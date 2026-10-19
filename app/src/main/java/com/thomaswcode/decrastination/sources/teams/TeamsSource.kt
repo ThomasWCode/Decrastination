@@ -4,6 +4,7 @@ import android.content.ContentResolver
 import android.database.Cursor
 import android.net.Uri
 import android.os.Bundle
+import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.core.Fetched
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.Source
@@ -84,7 +85,7 @@ object TeamsRows {
     const val EXTRA_DUE_TEXT = "dueText"
 
     /** The web addresses its instructions link to (DX-08), one a line, as the widget gives them (0.4.0 on). */
-    const val EXTRA_LINKS = "links"
+    const val EXTRA_LINKS = Enrichments.EXTRA_LINKS
 
     /** On a returned assignment's feedback to read (NF-06): the assignment's key, for Open. */
     const val EXTRA_FEEDBACK_ON = "feedbackOn"

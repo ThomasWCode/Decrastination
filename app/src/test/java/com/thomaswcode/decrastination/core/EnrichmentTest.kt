@@ -1,6 +1,7 @@
 package com.thomaswcode.decrastination.core
 
 import com.thomaswcode.decrastination.Fixtures
+import com.thomaswcode.decrastination.enrich.Prompts
 import com.thomaswcode.decrastination.sources.gmail.GmailThreads
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -87,9 +88,9 @@ class EnrichmentTest {
         val old = task.copy(enrichment = enrichment(task).copy(kind = Kind.Info, effortMin = 2)).enriched()
         assertEquals(Kind.Admin, old.kind)
         assertFalse(old.hidden)
-        assertTrue(Enrichments.stale(old, modelOn = true, rules = "rules"))
+        assertTrue(Enrichments.stale(old, modelOn = true, rules = "rules", version = Prompts.VERSION))
         // A reading that says Admin isn't read again for that.
-        assertFalse(Enrichments.stale(task.copy(enrichment = enrichment(task).copy(kind = Kind.Admin)), modelOn = true, rules = "rules"))
+        assertFalse(Enrichments.stale(task.copy(enrichment = enrichment(task).copy(kind = Kind.Admin)), modelOn = true, rules = "rules", version = Prompts.VERSION))
     }
 
     @Test
@@ -154,7 +155,7 @@ class EnrichmentTest {
         val made = enrichment(task).copy(deadline = Fixtures.at("2026-10-12T09:00"))
         val enriched = task.withEnrichment(made)
         assertEquals(Fixtures.at("2026-10-12T09:00"), enriched.dueAt)
-        assertEquals(false, Enrichments.stale(enriched, modelOn = false, rules = "rules"))
+        assertEquals(false, Enrichments.stale(enriched, modelOn = false, rules = "rules", version = Prompts.VERSION))
     }
 
     @Test
@@ -187,11 +188,11 @@ class EnrichmentTest {
     fun `a task changed since it was enriched is stale, and so is one only the rules saw once the model is on`() {
         val task = email()
         val done = task.copy(enrichment = enrichment(task, by = "rules"))
-        assertFalse(Enrichments.stale(done, modelOn = false, rules = "rules"))
-        assertTrue(Enrichments.stale(done, modelOn = true, rules = "rules"))
+        assertFalse(Enrichments.stale(done, modelOn = false, rules = "rules", version = Prompts.VERSION))
+        assertTrue(Enrichments.stale(done, modelOn = true, rules = "rules", version = Prompts.VERSION))
         val changed = done.copy(detail = "Please sign the trip form by Monday.")
         assertNotEquals(Enrichments.inputHash(done), Enrichments.inputHash(changed))
-        assertTrue(Enrichments.stale(changed, modelOn = false, rules = "rules"))
+        assertTrue(Enrichments.stale(changed, modelOn = false, rules = "rules", version = Prompts.VERSION))
     }
 
     @Test
@@ -200,12 +201,12 @@ class EnrichmentTest {
         // Stored before there was a version: the first.
         val old = task.copy(enrichment = Enrichment(Enrichments.inputHash(task), "claude-opus-5-5", t0))
         assertEquals(1, old.enrichment!!.promptVersion)
-        assertTrue(Enrichments.stale(old, modelOn = true, rules = "rules"))
+        assertTrue(Enrichments.stale(old, modelOn = true, rules = "rules", version = Prompts.VERSION))
         // Resting, or the task done: it stands. The rules' readings have no prompts to be out of date by.
-        assertFalse(Enrichments.stale(old, modelOn = false, rules = "rules"))
-        assertFalse(Enrichments.stale(old.copy(status = Status.Done), modelOn = true, rules = "rules"))
+        assertFalse(Enrichments.stale(old, modelOn = false, rules = "rules", version = Prompts.VERSION))
+        assertFalse(Enrichments.stale(old.copy(status = Status.Done), modelOn = true, rules = "rules", version = Prompts.VERSION))
         val now = task.copy(enrichment = enrichment(task).copy(promptVersion = com.thomaswcode.decrastination.enrich.Prompts.VERSION))
-        assertFalse(Enrichments.stale(now, modelOn = true, rules = "rules"))
+        assertFalse(Enrichments.stale(now, modelOn = true, rules = "rules", version = Prompts.VERSION))
         assertEquals(com.thomaswcode.decrastination.enrich.Prompts.VERSION, com.thomaswcode.decrastination.enrich.Answers.parse(Enrichments.Job.Email, """{"kind":"Admin","actionableFrom":null,"deadline":null,"deadlineQuoted":false,"effortMin":10,"nextStep":"Reply","question":null,"reason":"","blocks":[]}""", task, "claude", t0, Fixtures.LONDON)?.promptVersion)
         val never = task.copy(id = "gmail:never", enrichment = null, dueAt = t0 + 5)
         val dueFirst = now.copy(id = "gmail:due", dueAt = t0)
@@ -216,10 +217,10 @@ class EnrichmentTest {
     @Test
     fun `what the model read is stale once Claude is switched off, the rules' isn't`() {
         val task = email()
-        assertTrue(Enrichments.stale(task.copy(enrichment = enrichment(task)), modelOn = false, rules = "rules", modelOff = true))
-        assertFalse(Enrichments.stale(task.copy(enrichment = enrichment(task, by = "rules")), modelOn = false, rules = "rules", modelOff = true))
+        assertTrue(Enrichments.stale(task.copy(enrichment = enrichment(task)), modelOn = false, rules = "rules", modelOff = true, version = Prompts.VERSION))
+        assertFalse(Enrichments.stale(task.copy(enrichment = enrichment(task, by = "rules")), modelOn = false, rules = "rules", modelOff = true, version = Prompts.VERSION))
         // Only resting (a failed call, the cap): what it read stands.
-        assertFalse(Enrichments.stale(task.copy(enrichment = enrichment(task)), modelOn = false, rules = "rules", modelOff = false))
+        assertFalse(Enrichments.stale(task.copy(enrichment = enrichment(task)), modelOn = false, rules = "rules", modelOff = false, version = Prompts.VERSION))
     }
 
     @Test
@@ -270,16 +271,16 @@ class EnrichmentTest {
 
     @Test
     fun `what's enriched is emails, assignments and planner items, not done, derived or events`() {
-        assertEquals(Enrichments.Job.Email, Enrichments.jobFor(email()))
+        assertEquals(Enrichments.Job.Email, Enrichments.jobFor(email(), GmailThreads::textRead))
         // Its text still to be read, or read only as far as an older, lower limit went: it waits.
-        assertEquals(null, Enrichments.jobFor(email().copy(extra = mapOf("textPending" to "true"))))
-        assertEquals(null, Enrichments.jobFor(email("x".repeat(4_000)).copy(extra = emptyMap())))
-        assertEquals(Enrichments.Job.Assignment, Enrichments.jobFor(assignment()))
+        assertEquals(null, Enrichments.jobFor(email().copy(extra = mapOf("textPending" to "true")), GmailThreads::textRead))
+        assertEquals(null, Enrichments.jobFor(email("x".repeat(4_000)).copy(extra = emptyMap()), GmailThreads::textRead))
+        assertEquals(Enrichments.Job.Assignment, Enrichments.jobFor(assignment(), GmailThreads::textRead))
         val item = assignment().copy(source = Source.PowerPlanner, id = "powerplanner:p")
-        assertEquals(Enrichments.Job.Effort, Enrichments.jobFor(item))
-        assertEquals(null, Enrichments.jobFor(item.copy(kind = Kind.Event)))
-        assertEquals(null, Enrichments.jobFor(assignment().copy(status = Status.Done)))
-        assertEquals(null, Enrichments.jobFor(assignment().copy(source = Source.Anki, derived = true)))
+        assertEquals(Enrichments.Job.Effort, Enrichments.jobFor(item, GmailThreads::textRead))
+        assertEquals(null, Enrichments.jobFor(item.copy(kind = Kind.Event), GmailThreads::textRead))
+        assertEquals(null, Enrichments.jobFor(assignment().copy(status = Status.Done), GmailThreads::textRead))
+        assertEquals(null, Enrichments.jobFor(assignment().copy(source = Source.Anki, derived = true), GmailThreads::textRead))
     }
 
     @Test
@@ -288,23 +289,23 @@ class EnrichmentTest {
         val read = Enrichment(Enrichments.inputHash(task), "claude-opus-5-5", t0, effortMin = 50, subSteps = listOf(SubStep("Page 7-9", 30), SubStep("Page 10-11", 20)), promptVersion = 1)
         val given = task.withEnrichment(read)
         assertEquals(listOf("Page 7-9", "Page 10-11"), given.subSteps.map { it.title })
-        assertTrue(Enrichments.stale(given, modelOn = true, rules = "rules"))
+        assertTrue(Enrichments.stale(given, modelOn = true, rules = "rules", version = Prompts.VERSION))
         // One done: newer prompts could give its work as other steps, and its mark would go with it.
         val partDone = given.copy(subSteps = given.subSteps.mapIndexed { i, s -> if (i == 0) s.copy(done = true) else s })
-        assertFalse(Enrichments.stale(partDone, modelOn = true, rules = "rules"))
-        assertFalse(Enrichments.staleOnlyByVersion(partDone, "rules"))
+        assertFalse(Enrichments.stale(partDone, modelOn = true, rules = "rules", version = Prompts.VERSION))
+        assertFalse(Enrichments.staleOnlyByVersion(partDone, "rules", Prompts.VERSION))
         // Its text changed, it's read again, as any task is.
-        assertTrue(Enrichments.stale(partDone.copy(detail = "Page 7-12 of booklet."), modelOn = true, rules = "rules"))
+        assertTrue(Enrichments.stale(partDone.copy(detail = "Page 7-12 of booklet."), modelOn = true, rules = "rules", version = Prompts.VERSION))
     }
 
     @Test
     fun `a model's reading of the text as it is, by older prompts, is stale only by its version`() {
         val task = assignment()
         val read = com.thomaswcode.decrastination.core.Enrichment(Enrichments.inputHash(task), "claude-opus-5-5", 0, effortMin = 40, promptVersion = 1)
-        assertTrue(Enrichments.staleOnlyByVersion(task.copy(enrichment = read), "rules"))
+        assertTrue(Enrichments.staleOnlyByVersion(task.copy(enrichment = read), "rules", Prompts.VERSION))
         // By these prompts, by the rules, or of text since changed: not so.
-        assertFalse(Enrichments.staleOnlyByVersion(task.copy(enrichment = read.copy(promptVersion = com.thomaswcode.decrastination.enrich.Prompts.VERSION)), "rules"))
-        assertFalse(Enrichments.staleOnlyByVersion(task.copy(enrichment = read.copy(by = "rules")), "rules"))
-        assertFalse(Enrichments.staleOnlyByVersion(task.copy(enrichment = read.copy(inputHash = "older")), "rules"))
+        assertFalse(Enrichments.staleOnlyByVersion(task.copy(enrichment = read.copy(promptVersion = com.thomaswcode.decrastination.enrich.Prompts.VERSION)), "rules", Prompts.VERSION))
+        assertFalse(Enrichments.staleOnlyByVersion(task.copy(enrichment = read.copy(by = "rules")), "rules", Prompts.VERSION))
+        assertFalse(Enrichments.staleOnlyByVersion(task.copy(enrichment = read.copy(inputHash = "older")), "rules", Prompts.VERSION))
     }
 }
