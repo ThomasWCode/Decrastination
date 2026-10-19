@@ -20,7 +20,7 @@ import java.util.concurrent.TimeUnit
 import com.thomaswcode.decrastination.notify.Notify
 
 /**
- * Enriches what's new or changed ([AppGraph.enrichNow]) as a job: the model's calls need the
+ * Enriches what's new or changed ([Readings.enrichNow]) as a job: the model's calls need the
  * network, which Android 15+ takes from an app seconds after it leaves the screen.
  */
 class EnrichWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
@@ -29,7 +29,7 @@ class EnrichWorker(context: Context, params: WorkerParameters) : CoroutineWorker
         val graph = AppGraph.get(applicationContext)
         // Queued for the rules alone (no connection asked for): the model isn't asked, even if
         // it's been switched on since; switching it on queues a job of its own that waits online.
-        graph.enrichNow(byModel = inputData.getBoolean(KEY_MODEL, false))
+        graph.readings.enrichNow(byModel = inputData.getBoolean(KEY_MODEL, false))
         // Instructions and the chat waiting for Claude, as its rest after a failed call ends.
         if (inputData.getBoolean(KEY_MODEL, false)) {
             graph.instructions.readInstructions()
