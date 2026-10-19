@@ -5,11 +5,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.setValue
-import com.thomaswcode.decrastination.block.Blocklist
+import com.thomaswcode.decrastination.core.Blocklist
+import com.thomaswcode.decrastination.core.Settings
+import com.thomaswcode.decrastination.core.SettingsLimits
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.data.JsonStore
-import com.thomaswcode.decrastination.data.Settings
-import com.thomaswcode.decrastination.data.SettingsLimits
 import com.thomaswcode.decrastination.protect.Protection
 import com.thomaswcode.decrastination.protect.SettingsChanges
 

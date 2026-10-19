@@ -4,6 +4,7 @@ import com.thomaswcode.decrastination.block.BlockPolicy
 import com.thomaswcode.decrastination.core.ChatHistory
 import com.thomaswcode.decrastination.core.ChatMessage
 import com.thomaswcode.decrastination.core.Plan
+import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.Slot
 import com.thomaswcode.decrastination.core.SlotKind
 import com.thomaswcode.decrastination.core.Slotter
@@ -11,7 +12,6 @@ import com.thomaswcode.decrastination.data.AssessLater
 import com.thomaswcode.decrastination.data.FelixDraft
 import com.thomaswcode.decrastination.data.FelixQuestion
 import com.thomaswcode.decrastination.data.FelixState
-import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.data.SlotOutcome
 import com.thomaswcode.decrastination.data.SlotRecord
 import com.thomaswcode.decrastination.felix.FelixPrompts.Reason

@@ -6,13 +6,13 @@ import com.thomaswcode.decrastination.block.Focus
 import com.thomaswcode.decrastination.core.ChatState
 import com.thomaswcode.decrastination.core.InstructionState
 import com.thomaswcode.decrastination.core.MemoryState
+import com.thomaswcode.decrastination.core.Settings
+import com.thomaswcode.decrastination.core.SettingsLimits
 import com.thomaswcode.decrastination.core.WallClock
 import com.thomaswcode.decrastination.data.ActivityLog
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.MemoryTidyRecord
 import com.thomaswcode.decrastination.data.RuntimeState
-import com.thomaswcode.decrastination.data.Settings
-import com.thomaswcode.decrastination.data.SettingsLimits
 import com.thomaswcode.decrastination.data.WeeklyReview
 import com.thomaswcode.decrastination.enrich.Called
 import com.thomaswcode.decrastination.enrich.ClaudeReviewer

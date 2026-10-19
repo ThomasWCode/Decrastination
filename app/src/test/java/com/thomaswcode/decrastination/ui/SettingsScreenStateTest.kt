@@ -3,9 +3,10 @@ package com.thomaswcode.decrastination.ui
 import androidx.compose.runtime.saveable.SaverScope
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.Fixtures.LONDON
-import com.thomaswcode.decrastination.block.Blocklist
+import com.thomaswcode.decrastination.core.Blocklist
 import com.thomaswcode.decrastination.core.FixedClock
 import com.thomaswcode.decrastination.core.Kind
+import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.Uptime
@@ -14,7 +15,6 @@ import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.RuntimeState
 import com.thomaswcode.decrastination.data.SecretCipher
 import com.thomaswcode.decrastination.data.SecretStore
-import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.protect.Protection
 import java.io.File
 import java.nio.file.Files

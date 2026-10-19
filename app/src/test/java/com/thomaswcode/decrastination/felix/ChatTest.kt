@@ -33,7 +33,7 @@ import com.thomaswcode.decrastination.core.SubStep
 import com.thomaswcode.decrastination.core.Unplanned
 import com.thomaswcode.decrastination.core.Why
 import com.thomaswcode.decrastination.core.WindowKind
-import com.thomaswcode.decrastination.data.Settings
+import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.enrich.Found
 import com.thomaswcode.decrastination.enrich.InstructionPrompts
 import com.thomaswcode.decrastination.enrich.ResearchPrompts

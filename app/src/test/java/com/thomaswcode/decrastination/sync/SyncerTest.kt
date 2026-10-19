@@ -3,10 +3,10 @@ package com.thomaswcode.decrastination.sync
 import com.thomaswcode.decrastination.core.Fetched
 import com.thomaswcode.decrastination.core.FixedClock
 import com.thomaswcode.decrastination.core.Kind
+import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Status
 import com.thomaswcode.decrastination.data.JsonStore
-import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.data.TaskState
 import com.thomaswcode.decrastination.sources.ReadContext
 import com.thomaswcode.decrastination.sources.SourceRead

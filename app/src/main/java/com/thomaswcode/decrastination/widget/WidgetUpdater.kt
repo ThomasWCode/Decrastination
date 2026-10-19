@@ -11,8 +11,8 @@ import androidx.glance.appwidget.GlanceAppWidgetReceiver
 import androidx.glance.appwidget.updateAll
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.core.Plan
+import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.Source
-import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.learn.CalendarTime
 import com.thomaswcode.decrastination.learn.Daily
 import java.time.DayOfWeek

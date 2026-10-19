@@ -2,8 +2,6 @@ package com.thomaswcode.decrastination.core
 
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.Fixtures.LONDON
-import com.thomaswcode.decrastination.data.Settings
-import com.thomaswcode.decrastination.data.Window
 import java.time.LocalDate
 import java.time.LocalTime
 import kotlin.random.Random

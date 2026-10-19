@@ -38,10 +38,10 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.thomaswcode.decrastination.AppGraph
+import com.thomaswcode.decrastination.core.Settings
+import com.thomaswcode.decrastination.core.SettingsLimits
+import com.thomaswcode.decrastination.core.Window
 import com.thomaswcode.decrastination.data.Reset
-import com.thomaswcode.decrastination.data.Settings
-import com.thomaswcode.decrastination.data.SettingsLimits
-import com.thomaswcode.decrastination.data.Window
 import com.thomaswcode.decrastination.enrich.AiUsage
 import com.thomaswcode.decrastination.enrich.ModelEffort
 import com.thomaswcode.decrastination.learn.Daily

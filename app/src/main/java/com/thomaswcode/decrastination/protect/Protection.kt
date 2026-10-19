@@ -1,11 +1,11 @@
 package com.thomaswcode.decrastination.protect
 
+import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.WallClock
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.RuntimeState
 import com.thomaswcode.decrastination.data.Secret
 import com.thomaswcode.decrastination.data.SecretStore
-import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.learn.ReviewInput
 import com.thomaswcode.decrastination.ui.Format
 import java.util.UUID

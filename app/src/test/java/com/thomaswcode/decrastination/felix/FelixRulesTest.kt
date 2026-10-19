@@ -19,7 +19,7 @@ import com.thomaswcode.decrastination.data.FelixQuestion
 import com.thomaswcode.decrastination.data.FelixRetry
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.FelixState
-import com.thomaswcode.decrastination.data.Settings
+import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.data.SlotOutcome
 import com.thomaswcode.decrastination.data.SlotRecord
 import com.thomaswcode.decrastination.felix.FelixRules.Sent

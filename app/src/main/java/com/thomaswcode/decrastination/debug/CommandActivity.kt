@@ -26,7 +26,7 @@ import com.thomaswcode.decrastination.core.Speaker
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.withoutEnrichment
 import com.thomaswcode.decrastination.data.Secret
-import com.thomaswcode.decrastination.data.FelixSettings
+import com.thomaswcode.decrastination.core.FelixSettings
 import com.thomaswcode.decrastination.felix.ChatPrompts
 import com.thomaswcode.decrastination.felix.ChatReader
 import com.thomaswcode.decrastination.felix.Conversation

@@ -3,6 +3,7 @@ package com.thomaswcode.decrastination.protect
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.Fixtures.LONDON
 import com.thomaswcode.decrastination.core.FixedClock
+import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.Uptime
 import com.thomaswcode.decrastination.data.ChatMigration
 import com.thomaswcode.decrastination.data.JsonStore
@@ -10,7 +11,6 @@ import com.thomaswcode.decrastination.data.RuntimeState
 import com.thomaswcode.decrastination.data.Secret
 import com.thomaswcode.decrastination.data.SecretCipher
 import com.thomaswcode.decrastination.data.SecretStore
-import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.learn.ReviewInput
 import java.io.File
 import java.nio.file.Files

@@ -1,4 +1,4 @@
-package com.thomaswcode.decrastination.block
+package com.thomaswcode.decrastination.core
 
 /**
  * What is blocked, as decided on 8 Oct (Q8): video and social apps; in Chrome and Brave, the

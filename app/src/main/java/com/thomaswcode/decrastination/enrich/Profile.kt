@@ -2,9 +2,9 @@ package com.thomaswcode.decrastination.enrich
 
 import com.thomaswcode.decrastination.core.MemoryState
 import com.thomaswcode.decrastination.core.SchoolCalendar
+import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.TaskItem
-import com.thomaswcode.decrastination.data.Settings
-import com.thomaswcode.decrastination.data.Window
+import com.thomaswcode.decrastination.core.Window
 import com.thomaswcode.decrastination.sources.powerplanner.PowerPlannerItems
 import com.thomaswcode.decrastination.sources.powerplanner.Timetable
 import java.time.DayOfWeek

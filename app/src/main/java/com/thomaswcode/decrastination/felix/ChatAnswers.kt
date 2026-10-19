@@ -5,6 +5,7 @@ import com.thomaswcode.decrastination.core.Change
 import com.thomaswcode.decrastination.core.ChangeType
 import com.thomaswcode.decrastination.core.ChatAction
 import com.thomaswcode.decrastination.core.DayBucket
+import com.thomaswcode.decrastination.core.FelixSettings
 import com.thomaswcode.decrastination.core.Given
 import com.thomaswcode.decrastination.core.Instructions
 import com.thomaswcode.decrastination.core.Kind
@@ -12,13 +13,12 @@ import com.thomaswcode.decrastination.core.OwnStep
 import com.thomaswcode.decrastination.core.OwnTask
 import com.thomaswcode.decrastination.core.OwnTasks
 import com.thomaswcode.decrastination.core.Proposal
+import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.SlotKind
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Status
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.shareOut
-import com.thomaswcode.decrastination.data.FelixSettings
-import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.enrich.InstructionAnswers
 import com.thomaswcode.decrastination.enrich.ResearchPrompts
 import com.thomaswcode.decrastination.enrich.filled

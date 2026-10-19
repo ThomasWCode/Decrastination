@@ -35,7 +35,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.thomaswcode.decrastination.AppGraph
-import com.thomaswcode.decrastination.block.Blocklist
+import com.thomaswcode.decrastination.core.Blocklist
 import com.thomaswcode.decrastination.enrich.AiUsage
 import com.thomaswcode.decrastination.learn.Stats
 import kotlinx.coroutines.delay

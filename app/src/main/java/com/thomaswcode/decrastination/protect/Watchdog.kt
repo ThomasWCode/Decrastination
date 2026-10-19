@@ -21,8 +21,8 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.R
-import com.thomaswcode.decrastination.block.Blocklist
 import com.thomaswcode.decrastination.block.FocusService
+import com.thomaswcode.decrastination.core.Blocklist
 import com.thomaswcode.decrastination.data.ProtectionRecord
 import com.thomaswcode.decrastination.data.ProtectionState
 import com.thomaswcode.decrastination.learn.Daily
