@@ -12,15 +12,18 @@ import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.MemoryTidyRecord
 import com.thomaswcode.decrastination.data.RuntimeState
 import com.thomaswcode.decrastination.data.Settings
+import com.thomaswcode.decrastination.data.SettingsLimits
 import com.thomaswcode.decrastination.data.WeeklyReview
 import com.thomaswcode.decrastination.enrich.Called
 import com.thomaswcode.decrastination.enrich.ClaudeReviewer
 import com.thomaswcode.decrastination.enrich.MemoryTidier
 import com.thomaswcode.decrastination.enrich.MemoryTidy
+import com.thomaswcode.decrastination.enrich.ModelCalls
 import com.thomaswcode.decrastination.enrich.ModelEffort
 import com.thomaswcode.decrastination.enrich.ModelGateway
 import com.thomaswcode.decrastination.enrich.ModelHold
 import com.thomaswcode.decrastination.enrich.Profile
+import com.thomaswcode.decrastination.enrich.SummaryWriter
 import com.thomaswcode.decrastination.protect.Protection
 import java.time.LocalDate
 
@@ -125,7 +128,7 @@ class Learning(
         // Its room taken with every other model call's, then sent (AC-05). A failure is recorded
         // (Setup shows it; the model rests), then the rules' review stands.
         val current = gateway.client(ModelEffort.Job.Review)?.let { ClaudeReviewer(it, profile = profile(clock.now(), memory.value)) } ?: return Outcome(why = because(ModelHold.Off))
-        val result = when (val called = gateway.call(interactive = false, record = com.thomaswcode.decrastination.enrich.ModelCalls.OnRecord(com.thomaswcode.decrastination.enrich.ModelEffort.Job.Review, "the week") { r: ClaudeReviewer.Result -> r.usage to com.thomaswcode.decrastination.enrich.ModelCalls.outcome(r.refused, r.answer == null) }, cost = { r: ClaudeReviewer.Result -> r.costUsd to r.refused }) { current.review(input) }) {
+        val result = when (val called = gateway.call(interactive = false, record = ModelCalls.OnRecord(ModelEffort.Job.Review, "the week") { r: ClaudeReviewer.Result -> r.usage to ModelCalls.outcome(r.refused, r.answer == null) }, cost = { r: ClaudeReviewer.Result -> r.costUsd to r.refused }) { current.review(input) }) {
             is Called.Held -> return Outcome(why = because(called.hold))
             is Called.Failed -> throw called.error
             is Called.Answered -> called.value
@@ -155,7 +158,7 @@ class Learning(
         if (before.isEmpty() || !(force || MemoryTidy.due(before))) return null
         // The profile without the facts, which it's given to tidy.
         val tidier = gateway.client(ModelEffort.Job.Tidy)?.let { MemoryTidier(it, profile = profile(clock.now(), memory.value.copy(facts = emptyList()))) } ?: return null
-        val called = gateway.call(interactive = false, record = com.thomaswcode.decrastination.enrich.ModelCalls.OnRecord(com.thomaswcode.decrastination.enrich.ModelEffort.Job.Tidy, "what's remembered") { r: MemoryTidier.Result -> r.usage to com.thomaswcode.decrastination.enrich.ModelCalls.outcome(r.refused, r.answer == null) }, cost = { r: MemoryTidier.Result -> r.costUsd to r.refused }) { at -> tidier.tidy(before, at, clock.zone()) }
+        val called = gateway.call(interactive = false, record = ModelCalls.OnRecord(ModelEffort.Job.Tidy, "what's remembered") { r: MemoryTidier.Result -> r.usage to ModelCalls.outcome(r.refused, r.answer == null) }, cost = { r: MemoryTidier.Result -> r.costUsd to r.refused }) { at -> tidier.tidy(before, at, clock.zone()) }
         val answer = (called as? Called.Answered)?.value?.answer ?: return null
         val after = MemoryTidy.after(answer, before, now) ?: return null
         var applied = false
@@ -184,19 +187,19 @@ class Learning(
      * yours (once armed, one that loosens waits as yours do), while it's still what the review left.
      * What happened, in words.
      */
-    suspend fun undoReviewChange(review: com.thomaswcode.decrastination.data.WeeklyReview, change: com.thomaswcode.decrastination.learn.ReviewInput.Change): String {
+    suspend fun undoReviewChange(review: WeeklyReview, change: ReviewInput.Change): String {
         val before = review.settingsBefore[change.setting] ?: return "What it was before isn't known."
-        if (com.thomaswcode.decrastination.learn.ReviewInput.valueOf(settings.value, change.setting) != change.value) return "It's been changed since: left as it is."
+        if (ReviewInput.valueOf(settings.value, change.setting) != change.value) return "It's been changed since: left as it is."
         // One end of a school day's hours back alone can meet the other: then it can't be.
-        if (!com.thomaswcode.decrastination.data.SettingsLimits.window(com.thomaswcode.decrastination.learn.ReviewInput.set(settings.value, change.setting, before).weekdayHours, overnight = false)) return "It can't go back on its own: the day's hours would end before they start. Change them in Settings."
-        protection.changeSettings { com.thomaswcode.decrastination.learn.ReviewInput.set(it, change.setting, before) }
-        val now = com.thomaswcode.decrastination.learn.ReviewInput.valueOf(settings.value, change.setting)
-        val label = com.thomaswcode.decrastination.learn.ReviewInput.label(change.setting)
-        return if (now == before) "$label is back to ${com.thomaswcode.decrastination.learn.ReviewInput.valueText(change.setting, before)}." else "$label back to ${com.thomaswcode.decrastination.learn.ReviewInput.valueText(change.setting, before)} waits, as a change that loosens does once armed."
+        if (!SettingsLimits.window(ReviewInput.set(settings.value, change.setting, before).weekdayHours, overnight = false)) return "It can't go back on its own: the day's hours would end before they start. Change them in Settings."
+        protection.changeSettings { ReviewInput.set(it, change.setting, before) }
+        val now = ReviewInput.valueOf(settings.value, change.setting)
+        val label = ReviewInput.label(change.setting)
+        return if (now == before) "$label is back to ${ReviewInput.valueText(change.setting, before)}." else "$label back to ${ReviewInput.valueText(change.setting, before)} waits, as a change that loosens does once armed."
     }
 
     /** [review]'s tidy of what's remembered undone (LR-01): its facts as they were, while they're still as it left them. What happened, in words. */
-    suspend fun undoTidy(review: com.thomaswcode.decrastination.data.WeeklyReview): String {
+    suspend fun undoTidy(review: WeeklyReview): String {
         val tidy = review.memoryTidy ?: return "That review tidied nothing."
         var done = false
         memory.update { state -> if (state.facts == tidy.after) state.copy(facts = tidy.before).also { done = true } else state }
@@ -209,15 +212,15 @@ class Learning(
      * while Claude can't be asked, or the week has no review. The summary, or null.
      */
     suspend fun writeSummary(week: String): String? {
-        val client = gateway.client(com.thomaswcode.decrastination.enrich.ModelEffort.Job.Summary) ?: return null
+        val client = gateway.client(ModelEffort.Job.Summary) ?: return null
         if (log.value.reviews.none { it.week == week }) return null
         val zone = clock.zone()
-        val input = com.thomaswcode.decrastination.learn.Summary.input(log.value, instructions.value.applied, week, zone, chat.value.messages)
-        val writer = com.thomaswcode.decrastination.enrich.SummaryWriter(client)
+        val input = Summary.input(log.value, instructions.value.applied, week, zone, chat.value.messages)
+        val writer = SummaryWriter(client)
         val called = gateway.call(
             interactive = false,
-            record = com.thomaswcode.decrastination.enrich.ModelCalls.OnRecord(com.thomaswcode.decrastination.enrich.ModelEffort.Job.Summary, "the week's summary") { r: com.thomaswcode.decrastination.enrich.SummaryWriter.Result -> r.usage to com.thomaswcode.decrastination.enrich.ModelCalls.outcome(r.refused, r.text == null) },
-            cost = { r: com.thomaswcode.decrastination.enrich.SummaryWriter.Result -> r.costUsd to r.refused },
+            record = ModelCalls.OnRecord(ModelEffort.Job.Summary, "the week's summary") { r: SummaryWriter.Result -> r.usage to ModelCalls.outcome(r.refused, r.text == null) },
+            cost = { r: SummaryWriter.Result -> r.costUsd to r.refused },
         ) { at -> writer.write(profile(at, memory.value).text, input) }
         val text = (called as? Called.Answered)?.value?.text ?: return null
         log.update { l -> l.copy(reviews = l.reviews.map { if (it.week == week) it.copy(summary = text) else it }) }
