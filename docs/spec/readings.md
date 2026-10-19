@@ -84,7 +84,8 @@ A step over an hour is cut into even sittings by time, never by content (`core/S
 
 ## Your steps, and Felix's
 
-- Steps you give a task, or Felix gives it with a `Steps` change (`TaskItem.userSteps`), are laid over the reading's at every merge (`TaskItem.enriched`), their ticks carried by name. Taken back, the reading's steps return, ticks kept by name.
+- Steps you give a task, or Felix gives it with a `Steps` change (`TaskItem.mine.steps`, with who gave them), are laid over the reading's at every merge (`TaskItem.enriched`), their ticks carried by id (`carryMarks`). Taken back, the reading's steps return, ticks kept by name.
+- Every step has an id, given as it's stored, and where it came from (`SubStep.origin`: the source, a reading, the rules, you, Felix, your own task's form): a reading's steps are told from yours by it, not by their names.
 - They never pass through a reading: no reading's check, fold or sitting touches them, and a reading never replaces them. The planner neither cuts them nor scales them by your pace (`TaskItem.yourSteps`, `Calibration.multiplierFor`).
 - Felix's steps must add up to the task's minutes, or come with a `Minutes` change for their new total (AI-19, `InstructionAnswers.stepsProblem`); otherwise they're left out, and said. An Anki task's steps are its cards, and can't be given.
 - A task with your steps is still read, its reading kept in its `Enrichment`, and your steps stay the plan. Claude is sent them as the task's steps as last planned (`ClaudeEnricher.previous`).
@@ -104,7 +105,7 @@ It runs again once Claude can be asked again (its rest over, `EnrichWorker.retry
 - **Out of date** (`Enrichments.stale`): no reading; its content changed (`inputHash`); Claude on and the reading the rules'; Claude off and the reading Claude's (the rules' replaces it); an email read as only to read; or, Claude on, an open task Claude read under older prompts (AC-06).
 - **Order** (`Enrichments.NEED`): never read first, then the oldest prompts' readings, each soonest due first. At most 20 calls to Claude a run (`Readings.MAX_MODEL_CALLS`), second asks counted.
 - Each task is looked up afresh just ahead of its call, and the reading laid only over the task as read: one that changes during the call is read in the next run.
-- **A call that fails** gives the task the rules' reading (one stale by the version alone keeps its own), and leaves Claude alone for the rest of the run; but a request the API won't take leaves only that task to the rules, till its content changes (`RuntimeState.enrichFailed`).
+- **A call that fails** gives the task the rules' reading (one stale by the version alone keeps its own), and leaves Claude alone for the rest of the run; but a request the API won't take leaves only that task to the rules, till its content changes (`ModelState.enrichFailed`).
 - **Declined or unreadable** (a refusal, an answer cut off at the token limit, one that still can't be read once put back): the rules' reading is kept under Claude's name and these prompts, so it isn't asked for again till something changes.
 - **Read again with Claude** (the sheet, `Readings.readAgain`) reads that task at once, whatever read it. Its reading stands till the new one comes, and you're told if none did. Not while Claude is off, resting or at its cap.
 - A reading that finds new vocabulary sections, or moves a deck task's date, has Anki read again at once.
@@ -185,7 +186,7 @@ A piece's first action, under two minutes and concrete, the next two, and what d
 - A longer `Retry-After` stands, and more than three failures in an hour rest an hour. A failed call sent earlier than one that's gone through brings no rest.
 - A rest holds what runs by itself (readings, micro-plans, messages written ahead); what you're waiting for goes through it (the chat, an instruction, a photo check, a photo of homework), unless the key failed.
 - **Key problems** (`KeyProblem`): rejected (401), not allowed (403), no credit (402, a billing error, a 400 about credit). Alerted once a stretch, Setup saying what puts it right; a call that works, or a new key, ends it.
-- **The record** (AC-07): the last 100 calls (`RuntimeState.calls`), each with its job, what it's about, effort, tokens in, out and from the cache, time taken, why it stopped, how it went and its cost; Settings → Claude → *Recent calls*.
+- **The record** (AC-07): the last 100 calls (`ModelState.calls`), each with its job, what it's about, effort, tokens in, out and from the cache, time taken, why it stopped, how it went and its cost; Settings → Claude → *Recent calls*.
 - **One client** (`ModelGateway.client`): every reader sends through the one client the key and the endpoint have, made once and again only when either changes, with its job's timeout (`ModelEffort.timeout`: the review and the tidy five minutes; Felix, first steps and the summary two; the rest three); `ModelGateway.build` is the one place a client is built.
 
 ## Claude's other calls

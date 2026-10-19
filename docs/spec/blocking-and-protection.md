@@ -31,7 +31,7 @@ It stays reported until an address is read again, or the browser is blocked outr
 ## When blocking applies
 
 `block/BlockPolicy.kt` (`BlockPolicy.decide`) is pure, and decides in this order:
-1. A parent code's unblock lets everything through for its hour (`RuntimeState.overrideUntil`).
+1. A parent code's unblock lets everything through for its hour (`ProtectionState.overrideUntil`).
 2. Quiet hours (`quietHours`, 22:30 to 07:00) never block. Nor does the time until blocking starts: 16:45 on a school day (`weekdayBlockFromMin`), 10:00 on a weekend or a day off by the school calendar (`weekendBlockFromMin`, BL-02). So the phone at school is left alone (BL-09).
 3. In the gap after a slot kept today, earned free time can be spent till the next work slot starts (BL-10, `Focus.gapUntil`, `Plan.gapUntil`); a slot missed after the keep closes the gap.
 4. While today's work isn't done, blocking is strict (`Reason.TodayUndone`).
@@ -40,7 +40,7 @@ It stays reported until an address is read again, or the browser is blocked outr
 **Today's work isn't done** (BL-01) while today's bucket holds pieces (`Plan.pressure`), or while a slot missed today has gone to tomorrow, until today's working hours end (BL-11, `Focus.missedKeepsPressure`). Tomorrow's work alone never blocks.
 A piece you move yourself (a time, a day or a start you give its task) is recorded moved and its miss forgotten, so moving work doesn't keep the evening blocked the way letting it lapse does.
 
-From a PC, `force-block` makes blocking hours apply for up to two hours whatever the time, for testing (`RuntimeState.forceActiveUntil`); it can only tighten.
+From a PC, `force-block` makes blocking hours apply for up to two hours whatever the time, for testing (`ProtectionState.forceActiveUntil`); it can only tighten.
 
 ## The block screen
 
@@ -54,7 +54,7 @@ There's no way through it. Back goes to the home screen. It closes itself once n
 
 ## Earned free time
 
-`block/Credit.kt` keeps one day's ledger in `runtime.json`: minutes earned and spent, and whether the day's allowance is given. Every three minutes of work earn about one of free time (`workMinPerFreeMin`, 3). What's left at midnight is gone.
+`block/Credit.kt` keeps one day's ledger in `session.json`: minutes earned and spent, and whether the day's allowance is given. Every three minutes of work earn about one of free time (`workMinPerFreeMin`, 3). What's left at midnight is gone.
 
 It's spent only while a blocked app or site is on screen (in front, floating, or beside another app), timed on the phone's elapsed-time clock and saved every half minute; locking the phone stops it.
 While it's spent, a silent notification counts it down, and a heads-up comes in its last minute (IMP-P2-011, `block/FreeTimeNotice.kt`). Neither grants time; **Back to work** opens the app.
@@ -71,7 +71,7 @@ What today's slots earn is at most today's plan's share at the ratio: the pieces
 - It's capped by the lower of your minutes and the app's own estimate (without your minutes or your steps) at the pace learned, each in its own scale: raising a task's minutes plans more time for it, but can't make finishing it earn more.
 - Vocabulary its deck tasks hold, and blocks you ticked off by hand, come off it.
 - An event (`Kind.Event`), one of your own you say is done, and feedback done by its tick (NF-06) earn nothing; an email you unstar is its source confirming it, and earns as any completion does.
-- Each completion earns once (`RuntimeState.rewarded`), and only on the day it's confirmed.
+- Each completion earns once (`SessionState.rewarded`), and only on the day it's confirmed.
 
 **A day with nothing to do** starts with an hour (`freeAllowanceMin`, BL-07), given once: nothing planned today or overdue, no slot of today's kept, missed or moved, the morning's record planning nothing, and every source read that day (`Focus.grantAllowanceIfDue`).
 
@@ -80,7 +80,7 @@ What today's slots earn is at most today's plan's share at the ratio: the pieces
 **The reward in sight** (BL-04): `Focus.rewardLine` says what finishing today earns, on the block screen, Day's *Do now* card and the widget: "Finish today's 3 slots (1 h) → 10 min free, 10 min more with a photo of …".
 Once today's done, it's "Today's plan is done. 25 min free."; on an empty day, "Nothing planned today: 1 h free."
 
-A keep, a photo's earning and a completion are each saved first (`RuntimeState.keeping`, `RuntimeState.photosDone`, `TaskState.unrewarded`), so a stop part-way is carried through at the next start, once (`Focus.finishKeeps`, `finishPhotos`, `rewardCompletions`).
+A keep, a photo's earning and a completion are each saved first (`SessionState.keeping`, `SessionState.photosDone`, `TaskState.unrewarded`), so a stop part-way is carried through at the next start, once (`Focus.finishKeeps`, `finishPhotos`, `rewardCompletions`).
 
 ## Photo checks
 
@@ -130,7 +130,7 @@ Everything else applies at once, armed or not:
 The weekly review's bounded changes apply at once too, armed or not (IMP-P2-015, `Protection.applyReviewChanges`): margins, undated work a day, a school day's hours within an hour, and the minutes of work for a minute of free time between 2 and 5 (`ReviewInput.BOUNDS`).
 Undone on the Reviews page, one that loosens the blocker waits as yours do.
 
-A waiting change is a `PendingChange` in `runtime.json`, listed under *Waiting* with when it applies.
+A waiting change is a `PendingChange` in `protection.json`, listed under *Waiting* with when it applies.
 - Its wait is counted on the uptime clock (`DeviceClock.uptime`, `SettingsChanges.applyDue`), which setting the date can't move; hours the phone is off don't count.
 - *Cancel*, or setting it back, drops it at once; a parent code applies it at once (`Protection.applyNow`).
 - One that no longer loosens (a setting that no longer waits, a removal added back) applies at the next count.

@@ -33,7 +33,7 @@ A weekend or a day off school is `weekendHours` as one window; a half-day's scho
 
 ## Effort and remaining time
 
-A task's estimate (`TaskItem.effortMin`) is the first there is of: your minutes (`userEffortMin`, a Minutes change), Claude's (`aiEffortMin`), the source's or the rules' (`sourceEffortMin`), the kind's default (Homework 40, Revision 30, Admin 15, Event 0).
+A task's estimate (`TaskItem.effortMin`) is the first there is of: your minutes (`mine.minutes`, a Minutes change), Claude's (`aiEffortMin`), the source's or the rules' (`sourceEffortMin`), the kind's default (Homework 40, Revision 30, Admin 15, Event 0).
 `appEffortMin` is the same without yours.
 
 **The pace multiplier** (`Calibration.multiplierFor`) is 1.0 for your minutes and a task of your own (`TaskItem.yourMinutes`), and for steps you or Felix gave (`TaskItem.yourSteps`).
@@ -77,11 +77,11 @@ Claude's reading cuts a long step when it's read (`ReadingAnswers.fitParts`), bu
 - How many the whole step takes is counted from its planned minutes, and how many are left from what's left of it, so the ones left keep their names as earlier ones are kept.
 - Keys (`Chunk.keyOf`): a step's piece is `id#i`; a sitting before its step's last is `id#i#n`, n being how many of the step's sittings come after it. Counted from the end, keeping one renumbers none, so kept starts and pins hold.
 - The last sitting has the step's own key, and only it ticks the step (`Chunk.ticks`). Keeping one before it adds its minutes to the task's worked minutes (`Focus.finish`), which come off the sittings left.
-- Steps you or Felix gave (`TaskItem.yourSteps`: a task of your own's, or `userSteps` on any task) are never cut, however long (D-34). Boxes need no sittings: none is longer than `boxMin`.
+- Steps you or Felix gave (`TaskItem.yourSteps`: a task of your own's, or `mine.steps` on any task) are never cut, however long (D-34). Boxes need no sittings: none is longer than `boxMin`.
 
 ## Real deadlines and plans (PL-14)
 
-`TaskItem.realDeadline` is yours (`userDueAt`); an email's own words as Claude quoted them (`deadlineQuoted`, AI-12), or an invite's start (DX-02); a homework deck's assignments' earliest real one; else the source's own.
+`TaskItem.realDeadline` is yours (`mine.dueAt`); an email's own words as Claude quoted them (`deadlineQuoted`, AI-12), or an invite's start (DX-02); a homework deck's assignments' earliest real one; else the source's own.
 `TaskItem.hardDeadline` says the date in force is that one.
 
 - Any other date is a plan: one Claude read without quoting it, the rules' guess, a test date before the source's deadline, a step's own dates. It orders the work and can leave a piece behind, but it's never overdue or due today.
@@ -152,7 +152,7 @@ Runs stay in order: none starts before the one before it, each is planned to be 
 
 ## Days and times you gave (PL-04)
 
-Told to Felix or as an instruction, or made by moving a piece on Day or in the calendar, they're changes on the task (`userOnDay`, `userAtTime`):
+Told to Felix or as an instruction, or made by moving a piece on Day or in the calendar, they're changes on the task (`mine.onDay`, `mine.atTime`):
 - **A day** (`OnDay`): all of the task on that day, placed before everything else; that day is its last usable day whatever the margin, and a deadline only where the task's own is that day.
 - **A time** (`AtTime`): its next piece a run of its own from that time, which the slotter keeps to the minute; the rest follow it.
 - Not kept: one whose day has gone, one before the task can start, and, while the task's real deadline is still to come, a day after its day or a time at or after it. Those last two are refused as they're given ("It's due before then", `InstructionRules.latePin`; on Day, `Planner.pinProblem`).
