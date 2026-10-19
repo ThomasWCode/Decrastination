@@ -29,7 +29,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -39,8 +38,6 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.thomaswcode.decrastination.AppGraph
-import com.thomaswcode.decrastination.block.Blocklist
-import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.Reset
 import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.data.SettingsLimits
@@ -58,7 +55,7 @@ import kotlinx.coroutines.withContext
 
 /**
  * Everything you can change: hours, Teams, planning, Anki, what's blocked, and
- * Claude. Saved through [AppGraph.changeSettings], so once protection is armed a change that
+ * Claude. Saved through [com.thomaswcode.decrastination.protect.Protection.changeSettings], so once protection is armed a change that
  * loosens blocking waits its 24 hours and shows here until it applies.
  */
 class SettingsActivity : ComponentActivity() {
@@ -70,40 +67,29 @@ class SettingsActivity : ComponentActivity() {
         setContent { AppTheme { Editor(graph) } }
     }
 
-    private data class App(val label: String, val packageName: String)
-
     @Composable
     private fun Editor(graph: AppGraph) {
         val saved by graph.settings.state.collectAsStateWithLifecycle()
         val runtime by graph.runtime.state.collectAsStateWithLifecycle()
         // What's been asked for, waiting changes included: setting one back cancels it.
         val asked = SettingsChanges.requested(saved, runtime.pending)
-        // Your edits ([draft]) over what the screen showed as you began ([base]), each field as typed
-        // ([raw], so one that doesn't parse keeps its words and its error however far it scrolls),
-        // and which don't parse: all kept through the screen being made again, a turn of the phone
-        // (BUG-P2-013, BUG-P2-027).
-        var base by rememberSaveable(stateSaver = SETTINGS) { mutableStateOf(asked) }
-        var draft by rememberSaveable(stateSaver = SETTINGS) { mutableStateOf(asked) }
-        var raw by rememberSaveable(stateSaver = TEXTS) { mutableStateOf(emptyMap<String, String>()) }
-        var invalid by rememberSaveable(stateSaver = KEYS) { mutableStateOf(emptySet<String>()) }
-        var message by remember { mutableStateOf<String?>(null) }
-        var apps by remember { mutableStateOf(emptyList<App>()) }
-        // The apps list's search (IMP-P2-009), kept through a turn of the phone.
-        var find by rememberSaveable { mutableStateOf("") }
+        // Your edits over what the screen showed as you began, each field as typed, which don't parse,
+        // the page open and the apps' search ([SettingsScreenState]): kept through the screen being
+        // made again, a turn of the phone (BUG-P2-013, BUG-P2-027).
+        val screen = rememberSaveable(saver = SettingsScreenState.SAVER) { SettingsScreenState(asked) }
+        var draft by screen::draft
+        val raw by screen::raw
+        val message by screen::message
+        var apps by remember { mutableStateOf(emptyList<SettingsScreenState.App>()) }
+        var find by screen::find
         val scope = rememberCoroutineScope()
-        // The page open (UI-18), kept through a turn of the phone; Back comes to the list, your edits kept till they're saved.
-        var section by rememberSaveable { mutableStateOf<String?>(null) }
+        // Back comes to the list, your edits kept till they're saved.
+        var section by screen::section
         androidx.activity.compose.BackHandler(enabled = section != null) { section = null }
         LaunchedEffect(Unit) { apps = withContext(Dispatchers.IO) { launchableApps() } }
-        // A change made elsewhere meanwhile (Setup putting a key to use) shows at once, your edits
-        // laid over it; saved, only what you changed goes, over what's asked for then (BUG-P2-014).
-        LaunchedEffect(asked) {
-            if (asked != base) {
-                draft = SettingsChanges.edited(base, draft, asked)
-                base = asked
-            }
-        }
-        val form = Form(raw, typed = { key, text -> raw = raw + (key to text) }, valid = { key, ok -> invalid = if (ok) invalid - key else invalid + key })
+        // A change made elsewhere meanwhile shows at once, your edits laid over it ([SettingsScreenState.shown]).
+        LaunchedEffect(asked) { screen.shown(asked) }
+        val form = Form(raw, typed = screen::typed, valid = screen::valid)
         // What a field does, under it, as the draft has it (UI-13).
         val schoolCalendar by graph.school.state.collectAsStateWithLifecycle()
         val tasksState by graph.tasks.state.collectAsStateWithLifecycle()
@@ -117,25 +103,10 @@ class SettingsActivity : ComponentActivity() {
                 Column(Modifier.fillMaxWidth().padding(16.dp)) {
                     message?.let { Text(it, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(bottom = 8.dp)) }
                     Button(
-                        enabled = invalid.isEmpty() && draft != base,
+                        enabled = screen.canSave,
                         onClick = {
-                            scope.launch {
-                                val began = base
-                                val wanted = draft
-                                graph.changeSettings { latest -> SettingsChanges.edited(began, wanted, latest) }
-                                // The reminders' alarms, at their new times.
-                                Daily.schedule(this@SettingsActivity)
-                                val waiting = graph.runtime.value.pending
-                                message = if (waiting.isEmpty()) {
-                                    "Saved."
-                                } else {
-                                    "Saved. ${waiting.size} change${if (waiting.size == 1) " loosening blocking waits" else "s loosening blocking wait"} ${graph.settings.value.loosenDelayHours} hours, shown below."
-                                }
-                                val now = SettingsChanges.requested(graph.settings.value, waiting)
-                                base = now
-                                draft = now
-                                raw = emptyMap()
-                            }
+                            // The reminders' alarms, at their new times.
+                            scope.launch { screen.save(graph.protection) { Daily.schedule(this@SettingsActivity) } }
                         },
                         modifier = Modifier.fillMaxWidth(),
                     ) { Text("Save") }
@@ -169,20 +140,17 @@ class SettingsActivity : ComponentActivity() {
                         NumberField("The September you went into Year 12", draft.yearGroupStart, SettingsLimits.YEAR_GROUP_START, "yearGroupStart", form) { draft = draft.copy(yearGroupStart = it) }
                         NumberField("Current German textbook", draft.ankiTextbook, SettingsLimits.TEXTBOOK, "ankiTextbook", form) { draft = draft.copy(ankiTextbook = it) }
                         OutlinedTextField(
-                            value = raw[PROFILE] ?: draft.profileLines.joinToString("\n"),
-                            onValueChange = { value ->
-                                raw = raw + (PROFILE to value)
-                                draft = draft.copy(profileLines = value.lines().map { it.trim().take(SettingsLimits.MAX_PROFILE_LINE) }.filter { it.isNotEmpty() }.take(SettingsLimits.MAX_PROFILE_LINES))
-                            },
+                            value = raw[SettingsScreenState.PROFILE] ?: draft.profileLines.joinToString("\n"),
+                            onValueChange = screen::profileTyped,
                             label = { Text("What you'd have Claude know, a line each") },
                             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
                             minLines = 3,
                         )
                         // Each class code the sources give, and the subject it is: blank leaves it the code.
-                        for (code in (draft.classMap.keys + graph.tasks.value.tasks.mapNotNull { it.className?.trim()?.takeIf(String::isNotEmpty) }).distinct().sorted().take(SettingsLimits.MAX_CLASSES)) {
+                        for (code in screen.classCodes(graph.tasks.value.tasks)) {
                             OutlinedTextField(
                                 value = draft.classMap[code].orEmpty(),
-                                onValueChange = { subject -> draft = draft.copy(classMap = if (subject.isBlank()) draft.classMap - code else draft.classMap + (code to subject.take(SettingsLimits.MAX_NAME))) },
+                                onValueChange = { subject -> screen.subject(code, subject) },
                                 label = { Text("$code is") },
                                 singleLine = true,
                                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
@@ -229,49 +197,27 @@ class SettingsActivity : ComponentActivity() {
                         item { Section("Blocked sites") }
                         item {
                             OutlinedTextField(
-                                value = raw[SITES] ?: draft.blockedSites.joinToString("\n"),
-                                onValueChange = { value ->
-                                    raw = raw + (SITES to value)
-                                    draft = draft.copy(blockedSites = value.lines().map { it.trim().lowercase() }.filter { it.isNotEmpty() }.distinct())
-                                },
+                                value = raw[SettingsScreenState.SITES] ?: draft.blockedSites.joinToString("\n"),
+                                onValueChange = screen::sitesTyped,
                                 label = { Text("One per line: a site, or a site and path") },
                                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
                                 minLines = 4,
                             )
-                            Note("Covered in ${draft.checkedBrowsers.joinToString { browserName(it) }}, whose address bar is read.")
+                            Note("Covered in ${draft.checkedBrowsers.joinToString { SettingsScreenState.browserName(it) }}, whose address bar is read.")
                         }
 
                         item { Section("Browsers") }
                         item {
-                            for (browser in browsers(draft)) {
+                            for (browser in SettingsScreenState.browsers(draft)) {
                                 val blocked = browser in draft.blockedBrowsers
-                                SwitchRow("${browserName(browser)}: blocked outright", blocked) { on ->
-                                    draft = draft.copy(
-                                        blockedBrowsers = if (on) (draft.blockedBrowsers + browser).distinct() else draft.blockedBrowsers - browser,
-                                        // Not blocked outright, one whose address bar can be read is watched for the sites again.
-                                        checkedBrowsers = when {
-                                            on -> draft.checkedBrowsers - browser
-                                            browser in Blocklist.CHECKED_BROWSERS -> (draft.checkedBrowsers + browser).distinct()
-                                            else -> draft.checkedBrowsers
-                                        },
-                                    )
-                                }
+                                SwitchRow("${SettingsScreenState.browserName(browser)}: blocked outright", blocked) { on -> screen.browserBlocked(browser, on) }
                             }
                             Note("A browser not blocked outright has its address bar read for the blocked sites, if it's one that can be (Chrome, Brave).")
                         }
 
                         item { Section("Blocked apps") }
-                        // Browsers have their own switches above.
-                        val shownBrowsers = browsers(draft).toSet()
-                        // Known ones not installed keep a row once switched off, so they can be switched back.
-                        val listed = (Blocklist.APPS + asked.blockedApps + draft.blockedApps).distinct()
-                            .filter { pkg -> apps.none { it.packageName == pkg } && pkg !in shownBrowsers }
-                            .map { App("${Blocklist.NAMES[it] ?: it} (not installed)", it) }
-                        // Blocked ones first (as the screen opened or was last saved, so a row doesn't jump as
-                        // it's switched), then the rest; the search finds one by name (IMP-P2-009).
-                        val all = (listed + apps.filter { it.packageName != packageName && it.packageName !in shownBrowsers })
-                            .sortedWith(compareBy({ it.packageName !in base.blockedApps }, { it.label.lowercase() }))
-                        val query = find.trim().lowercase()
+                        // Browsers have their own switches above; blocked ones first, the search finding one by name (IMP-P2-009).
+                        val rows = screen.appRows(apps, asked, packageName)
                         item {
                             OutlinedTextField(
                                 value = find,
@@ -281,10 +227,8 @@ class SettingsActivity : ComponentActivity() {
                                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
                             )
                         }
-                        items(all.filter { query.isEmpty() || query in it.label.lowercase() || query in it.packageName }, key = { it.packageName }) { app ->
-                            SwitchRow(app.label, app.packageName in draft.blockedApps) { on ->
-                                draft = draft.copy(blockedApps = if (on) (draft.blockedApps + app.packageName).distinct() else draft.blockedApps - app.packageName)
-                            }
+                        items(rows, key = { it.packageName }) { app ->
+                            SwitchRow(app.label, app.packageName in draft.blockedApps) { on -> screen.appBlocked(app.packageName, on) }
                         }
                     }
 
@@ -371,38 +315,14 @@ class SettingsActivity : ComponentActivity() {
         }
     }
 
-    private fun launchableApps(): List<App> {
+    private fun launchableApps(): List<SettingsScreenState.App> {
         val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
         return packageManager.queryIntentActivities(intent, 0)
-            .map { App(it.loadLabel(packageManager).toString(), it.activityInfo.packageName) }
+            .map { SettingsScreenState.App(it.loadLabel(packageManager).toString(), it.activityInfo.packageName) }
             .distinctBy { it.packageName }
             .sortedBy { it.label.lowercase() }
     }
 
-    private companion object {
-        const val SITES = "blockedSites"
-        const val PROFILE = "profileLines"
-
-        /** The settings as their JSON, to keep a draft through the screen being made again. */
-        val SETTINGS = Saver<Settings, String>(
-            save = { JsonStore.json.encodeToString(Settings.serializer(), it) },
-            restore = { JsonStore.json.decodeFromString(Settings.serializer(), it) },
-        )
-
-        /** Each field's words as typed, by key, as one list: key, words, key, words… */
-        val TEXTS = Saver<Map<String, String>, ArrayList<String>>(
-            save = { texts -> ArrayList(texts.flatMap { (key, text) -> listOf(key, text) }) },
-            restore = { list -> list.chunked(2).associate { (key, text) -> key to text } },
-        )
-
-        val KEYS = Saver<Set<String>, ArrayList<String>>(save = { ArrayList(it) }, restore = { it.toSet() })
-
-        /** Every browser the blocker knows, and any the settings name. */
-        fun browsers(settings: Settings): List<String> =
-            (Blocklist.CHECKED_BROWSERS + Blocklist.BLOCKED_BROWSERS + settings.checkedBrowsers + settings.blockedBrowsers).distinct()
-
-        fun browserName(pkg: String): String = Blocklist.NAMES[pkg] ?: pkg
-    }
 }
 
 @Composable
