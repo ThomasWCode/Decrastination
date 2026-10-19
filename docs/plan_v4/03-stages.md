@@ -14,7 +14,7 @@ Each stage says what it **needs** (always from earlier stages: nothing here reli
 4. **Names are settled as soon as the services are in.** The renames (9) follow the last of the moves (6f), so the data release (7) and the features (8) are written on the new names rather than renamed after them; and the readings' prompts are renamed before memory and the voice (10) change them, so those diffs are only the change.
 5. **The write outside the phone comes last** (11), and the sweep (12) leaves the code as [11](11-conventions-and-docs.md) wants it.
 
-[README](README.md) §The order has the table; the days add up to about twenty-three. [14](14-your-part.md) says, stage by stage, when the phone and you are needed.
+[README](README.md) §The order has the table; the days add up to about twenty-five. [14](14-your-part.md) says, stage by stage, when the phone and you are needed.
 
 ## Stage 0: the safety net (no release)
 
@@ -153,7 +153,7 @@ The design is [05](05-the-chat.md); the stores' change is [04](04-data-and-migra
 
 **Tests**: every flag of 4a against the cases that made it (the 3.1.2 to 3.1.4 tests, kept); ticks following a step through a re-read that reorders; origins across a sync, a reading and an instruction; each migration from every fixture shape, twice; a backup from before restored after; the rehearsal's invariants. **Phone check**: the rehearsal first; after the install the open tasks, their ticks and your values as they were (counts compared with the rehearsal's); the stores' sizes; a slot kept, a sync, a backup written. **Leaves**: `By` for 8a's notes and reminders; `model.json` and the split stores; the records 8a's notes and 10a's task-bound facts outlive a trimmed task on.
 
-## Stage 8: notes, reminders and the gaps (4.1.0, 4.1.1)
+## Stage 8: notes, reminders, the gaps, and what he's sent (4.1.0, 4.1.1, 4.1.2)
 
 ### 8a. Notes and reminders (4.1.0)
 
@@ -175,15 +175,30 @@ The design is [05](05-the-chat.md); the stores' change is [04](04-data-and-migra
 
 ### 8b. The gaps (4.1.1)
 
-**Needs** 5 (the outbox for `Note` messages; `Conversation.act`), 6d (the Sync service's `syncNow` and the `Syncer` listener), 8a (the schema's shape settled; one API compile covers both). **Does**: [06](06-what-felix-can-do.md) §3: G1, G2 as the stop, G3 and G5 (Q17), a commit each with its test, prompt line and golden:
+**Needs** 5 (the outbox for `Note` messages; `Conversation.act`), 6d (the Sync service's `syncNow` and the `Syncer` listener), 6f (the timetable's types where `core` reads them, for G8's rule), 8a (the schema's shape settled; one API compile covers both). **Does**: [06](06-what-felix-can-do.md) §3: G1, G2 as the stop, G3 and G5 (Q17), and G8 (your call, 19 Oct), a commit each with its test, prompt line and golden:
 
 1. **G1**: `ChatAction.Type.KeepPiece` and `UnkeepPiece`; the schema's `type` enum gains `keepPiece` and `unkeepPiece`; `ChatAnswers.action` reads `value` as the piece's key: a keep is refused unless the plan shown lists it, an unkeep unless today's kept records do (a kept piece leaves the plan, so the context carries a "Kept today: …" line with their keys); `Conversation.act` → `focus.keepSlot(key)` and `focus.unkeepSlot(key, since)`, the `Act` lines "Kept: …" and "Not kept after all: …", Undo the reverse (not once the slot's record has changed since); `ChatPrompts.plan` adds the key to today's slots, to the next piece of each task without steps, and the kept line; prompt item 5.
 2. **G2**: `ChatAction.Type.Sync`, `setting` the source's name; `Conversation.act` → a `requestSync(sources)` callback the Conversation takes in its constructor, wired in `AppGraph` to `Sync.syncNow` (Sync already calls the Conversation for the calendar's questions, so the Conversation can't call Sync back: the no-cycle rule), the line "Asked Teams to read", no Undo; a `Syncer` listener in the Conversation posts a `Note` message through the outbox when that read changes the task he was asked about ("teams says the worksheet's handed in"); prompt line.
 3. **G3**: `open` gains `value` "app" or "source"; "source" → `TaskOpener.open`, which already tells him it was opened; prompt line.
 4. **G5**: `ChatPrompts.plan` takes a line from `Focus` ("Blocking: on until today's work's done (2 pieces, 1 h); free time 12 min", from `verdict`, `rewardLine` and `creditLeftMs`), passed by `Conversation.chatContext`; the doc page shows it.
-5. The goldens (`chat.txt`, `chat.schema.json`); `SchemaLimitsTest`; `SchemaCompileTest -PcheckSchemas=true`; `felix.md` §What he can do.
+5. **G8** ([15](15-sent-or-asked-for.md) §G8): the next lessons' rule, pure, beside `SchoolDays` (a class's next three lessons, looked for as far as the plan's reach so a holiday doesn't hide them, by `lessonsOn`'s rule for an unknown week, none on a day of no school or from a half day's end; a Power Planner class and a Teams code tied by the subject the class map gives both), tested first; Settings → About you's classes list gains the timetable's classes with no task yet; `ChatPrompts.context` gives each task's line its class (code and subject) and lists the lessons after the calendar's events; prompt line ("next lesson" is a `DueBy` naming the class, which the app sets to that lesson's start); `lesson`, a plain string, on a change in the schema and `ChatAnswers`; the lessons' line dated where the timetable's over a week old, a lesson's `DueBy` refused then, and the line left out with none.
+6. The goldens (`chat.txt`, `chat.schema.json`); `SchemaLimitsTest`; `SchemaCompileTest -PcheckSchemas=true`; `felix.md` §What he can do; `felix-inputs.md` with the lessons' line.
 
-**Tests**: each action's parse, act and Undo; the context line in the doc page. **Phone check**: `chat-ask` for each (paid): "I've done today's bit of…", "check Teams", "how much free time have I got", "open it in Teams".
+**Tests**: each action's parse, act and Undo; the context lines in the doc page; G8's rule ([15](15-sent-or-asked-for.md) §Tests). **Phone check**: your classes' subjects entered first ([14](14-your-part.md)); `chat-ask` for each (paid): "I've done today's bit of…", "check Teams", "how much free time have I got", "open it in Teams", "when's my next chemistry?", "the worksheet's due next lesson".
+
+### 8c. Less sent, more asked for (4.1.2)
+
+**Needs** 6e (`Learning`'s `Stats` for G6), 8b (the context's last new lines in, so what moves is measured once). **Does**: [15](15-sent-or-asked-for.md): the week's numbers (G6) and the calendar further out (G7) become things he asks for; each task's line says what its text holds, and the text sent is cut from 600 to 250 characters if the chat's eval before and after holds; the settings stay always, as a change needs their names (your call, 19 Oct). The text asked for instead of sent waits for real use (§After). Before 10b, so its eval runs on the shape that stays. One PR, staged:
+
+1. **The eval's baseline.** `EvalRunTest` asks the chat's private set (`private/eval-chat`, made here if it isn't yet; never committed) through `ChatReader` as the Conversation does, rounds included, and reports each case's scores, rounds, tokens, cost and seconds; the set gains cases for each thing that changes or is new. Run on the code as it is, twice for the cases the cut rests on: the baseline's figures in the PR.
+2. **The requests**: `ChatAnswers.read` keeps `details`' kinds, `stats` and `calendar` (with its month), apart from the tasks' ids (today it keeps only listed, open tasks' ids and takes three, so the kinds would be dropped): `Reading` carries them, each once, the tasks still three at most; `ChatRounds.next` reads both; tested first, with three ids and both kinds in one answer. `MAX_ROUNDS` stays two; each kind's block after your words, under its own heading. The schema doesn't change.
+3. **The prompt**: item 7 lists what he can ask for and when; `chat.txt` rewritten, its diff in the PR.
+4. **G6 and G7**: `stats` brings `Learning`'s period summary in 20 lines; `calendar` the four weeks after the fortnight, or a month it names (`calendar:yyyy-MM`), up to 60 events with their keys, saying what it left out.
+5. **What each task's text holds, and the text cut**: each task's line gains `TaskText.about`'s sender, attachments and links and its text's length, in a room of its own (160 characters a line, 6,000 in all, by the deadline in force; past it, the length alone), so no task is crowded out of the list; the text block's 600 characters a task cut to 250 (5,000 in all); the task the message is about still whole; `details` reads as now.
+6. **The eval again**, twice for the cut's cases: the cut stands only where they score at least the baseline's in both runs, at no more rounds; otherwise the text goes back to 600 characters in this PR, said with the figures.
+7. **The docs**: `felix-inputs.md` (the context, the rounds, the examples regenerated); `felix.md` §What he can do; `decisions.md`: D-93 amended (the text's 250 characters, if the cut stands), the rule of what's sent always and what's asked for, G6 and G7 taken.
+
+**Tests** and **phone check**: [15](15-sent-or-asked-for.md). **Leaves**: the chat's eval runner 10b uses.
 
 ## Stage 10: memory and the voice (4.2.0, 4.2.1)
 
@@ -238,7 +253,7 @@ The design is [05](05-the-chat.md); the stores' change is [04](04-data-and-migra
 
 ## After
 
-The conversation digest, 4.4.0 ([13](13-summaries.md), Q28): planned on its own once you've lived with the chat a few weeks.
+The conversation digest, 4.4.0 ([13](13-summaries.md), Q28): planned on its own once you've lived with the chat a few weeks. The cache mark on the chat's context, and the tasks' text asked for instead of sent ([15](15-sent-or-asked-for.md) §After the plan), each decided by real use: the mark made only if the record of calls, after a few weeks of use, shows more than about one message in four taking a round, and with it the newest turn built so a round only adds, and a round let run past `MAX_INPUT_CHARS` by its own blocks, the cap holding back its worst case uncached (`AiUsage.allows` given each call's own), so no first call is cut for it (your calls, 19 Oct); the text's block dropped only if a sample of your real messages, run through the chat's eval with it and without, shows fewer than about one in four would need a round, at answers as good.
 
 ## Size
 
@@ -252,12 +267,13 @@ The conversation digest, 4.4.0 ([13](13-summaries.md), Q28): planned on its own 
 | 4.0.3 (the Day screen's crash), 4.0.4 (the archive by month) | 2 | — |
 | 5 | 3 | 4 |
 | 6 | 6 | 4½ |
-| 7 | 1 | 2½ |
-| 8 | 2 | 4 |
+| 4.0.10 (the chat's box, what waits for your answer) | 1 | — |
 | 9 | 1 | ½ |
+| 7 | 1 | 2½ |
+| 8 | 3 | 6 |
 | 10 | 2 | 1½ |
 | 11 | 1 | 1½ |
 | 12 | 1 | ½ |
-| | 25 (24 releases) | about 23 |
+| | 29 (28 releases) | about 25 |
 
 Evenings and weekends, as every release ([12](12-verification-and-risks.md) §Risks: the phone's away on school days).
