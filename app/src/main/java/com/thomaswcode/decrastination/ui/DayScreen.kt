@@ -212,7 +212,7 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
                             val since = graph.clock.now()
                             if (!graph.focus.keepSlot(chunk.key, seenAt = now)) {
                                 snackbar.showSnackbar("That piece has changed since (done, or planned again).")
-                            } else if (snackbar.showSnackbar("Done: ${chunk.label}", actionLabel = "Undo", duration = androidx.compose.material3.SnackbarDuration.Short) == androidx.compose.material3.SnackbarResult.ActionPerformed) {
+                            } else if (snackbar.showSnackbar(listOfNotNull("Done: ${chunk.label}", stillPlanned(graph, chunk.taskId)).joinToString(". "), actionLabel = "Undo", duration = androidx.compose.material3.SnackbarDuration.Short) == androidx.compose.material3.SnackbarResult.ActionPerformed) {
                                 if (!graph.focus.unkeepSlot(chunk.key, since)) snackbar.showSnackbar("It can't be taken back now: its task is finished.")
                             }
                         }

@@ -61,7 +61,8 @@ A slot just over stays where it is for `Slotter.GRACE_MS` (10 minutes), its piec
 - A step's last sitting ticks the step, its worked minutes including the step's other sittings still in the plan (kept out of order).
 - The slot's `SlotRecord` says how it went: `Kept`, or `KeptLate` once its grace is over or after a miss. A slot missed today and kept later is recorded as that slot, at its own time, and the miss gives way.
 - A piece ticked ahead of its slot, or with none, is kept all the same; one of a later day's earns nothing today.
-- A second tap keeps nothing (`seenAt`), and two ticks at once keep one, under a lock.
+- A second tap keeps nothing: a tick on a piece kept since its screen's plan was made (`seenAt`: the Day screen's, the block screen's and a sheet's, the plan's minute, not a time read as the screen's drawn again), or kept in the last 30 seconds whenever that was (`Focus.AGAIN_MS`), is that Done again. Two ticks at once keep one, under a lock.
+- A Done that leaves all of a task's work done but its source's word says its last minutes stay planned until the source says it's done (`stillPlanned`), so the piece shown again isn't taken for a Done that didn't take.
 - One of your own, or feedback done by its tick (NF-06), whose minutes a keep finishes is finished, as *Done* does.
 
 What a kept slot earns, and when, is BL-08 ([blocking-and-protection.md](blocking-and-protection.md)); its record says whether it did (`SlotRecord.earned`).
