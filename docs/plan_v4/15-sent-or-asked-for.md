@@ -42,22 +42,21 @@ He can already ask before he answers: his answer names `details` (up to three ta
 | **The conversation**: the last 12 messages and his last two nudges with your replies, each answer with what it made | a quarter of the room, at most | always | always | what "that" and "it" refer to |
 | A message replied to from the archive, past the window | 300 characters, quoted | when you reply to it | as now | it's what you're answering (`Outbox.find`, `ChatPrompts.turns`) |
 | **The context**: today's date, time and time zone | a line | always | always | every date is worked out from it |
-| Context: the open tasks, a line each, with their steps | 80 | always | always, each line gaining its source's sender, attachments' names, links and its text's length (8c) | what most messages are about; the line says what each task's text holds, so he knows which to ask for |
+| Context: the open tasks, a line each, with their steps | 80 | always | always, each line gaining its class (8b) and its sender, attachments' names, links and text's length, within their own room (8c) | what most messages are about; the class ties a task to its lessons, and the rest says what each task's text holds, so he knows which to ask for |
 | Context: notes under each task, and the reminders (8a) | | not yet | always | small; "cancel that" needs the reminder's id |
 | Context: the pace learned | a line a kind or class | always | always | small; needed when he sets minutes (D-69) |
 | Context: tasks that look like the same work (DX-15) | where there are any | always | always | small; stops a duplicate being made |
 | Context: the calendar's events in the next fortnight, with their keys | 60 | always | always | the plan's fortnight; an event is answered by its key |
-| Context: each class's next lessons in the fortnight (G8, 8b) | three a class, about 1,000 characters | not sent | always | small, and "next lesson" and "when's my next chemistry?" are common |
+| Context: each class's next lessons (G8, 8b) | three a class, to the plan's reach, about 1,000 characters | not sent | always | small, and "next lesson" and "when's my next chemistry?" are common |
 | Context: the changes in use, in words | | always | always | he mustn't contradict or repeat one |
 | Context: your own tasks finished in the last week | 15 | always | always | small; "I didn't finish that" needs its id, and he wouldn't know to ask |
-| Context: the settings he may change, with their values | 22, about 1,200 characters | always | asked for (8c) | needed only to say or change one by an amount; an absolute value ("set it to 2") needs no round |
+| Context: the settings he may change, with their values | 22, about 1,200 characters | always | always | a change names a setting exactly as this block writes it (`FelixSettings.field`), so the names must stay, and the values without them are about 600 characters: not worth a round (your call, 19 Oct) |
 | Context: each open task's own text, cut to 600 characters | 12,000 characters | always (D-93) | asked for (8c), if the eval holds | the largest block, and most messages don't need it; the task line says what's there |
 | **The plan**: the slot under way and the next, today's slots, what isn't planned, events off the days, what's after the fortnight, 14 days of pieces | 20 lines each summary | always | always | what most questions are about |
 | Plan: today's kept pieces (G1) and free time and blocking (G5), 8b | a line each | not sent | always | a line each; "actually I haven't done it" and "how much free time?" need them |
 | **What your message is about**: a task's whole text, sender, attachments, links and your answers to its questions; or an event's place and description | 8,000; 500 | always, where asked from a task or an event | always | it's what you're asking about |
 | **Tasks read in full** (`details`) | three, 16,000 characters | asked for | asked for | large, and needed by few |
 | **What a web search found** (`research`, searches on) | 3,000 characters | asked for | asked for | a call of its own, paid for |
-| The settings (`details` "settings") | 22 | always | asked for (8c) | as above |
 | The week's numbers (G6, `details` "stats") | 20 lines | not sent | asked for (8c) | needed only for a message about the week |
 | The calendar further out (G7, `details` "calendar") | to the plan's 90 days, 60 events | not sent | asked for (8c) | needed only for a message about weeks ahead |
 | The rest of the archive | | not sent | not sent | no need seen; the conversation digest is 4.4.0's ([13](13-summaries.md)) |
@@ -89,25 +88,25 @@ These run by themselves (a slot, the morning, a question, the evening's completi
 
 ## G8: the next lessons (8b)
 
-- **The rule** (pure, beside `SchoolDays`, from the lessons `PowerPlannerItems.lessonsOn` gives wherever 6f leaves it): every lesson in the next 14 days, with `lessonsOn`'s rule for the week: where the timetable's week one isn't known, only the lessons of both weeks, as those alone are sure; a day of no school (`SchoolCalendar.noSchool`) has none; a half day has none from its end (`HalfDay`'s end) on. By class, each class's next three.
+- **The rule** (pure, beside `SchoolDays`, from the lessons `PowerPlannerItems.lessonsOn` gives wherever 6f leaves it): each class's next three lessons, looked for day by day as far as the plan's reach (90 days), so a holiday doesn't hide them; with `lessonsOn`'s rule for the week: where the timetable's week one isn't known, only the lessons of both weeks, as those alone are sure; a day of no school (`SchoolCalendar.noSchool`) has none; a half day has none from its end (`HalfDay`'s end) on.
 - **A Power Planner class and its Teams code are tied by the subject you give each.** Settings → About you's classes list each class name the sources give, Teams' codes and Power Planner's names alike, and the subject it is (`Settings.classMap`); its list gains the timetable's classes that have no task yet, so each can be given one. A Power Planner class and a Teams code with the same subject are one class: its lessons are listed under the subject with both names. None of Power Planner's names matches Teams' codes, so the subjects are yours to give, once (the list you offered on 19 Oct, entered on the phone and never in the repository, D-79). A class with no subject is listed by its own name and said to be tied to no code.
-- **The line**, after the calendar's events: "Lessons in the next fortnight (class, its names | the next three):", then a line a class ("- Physics (12X/Ph1, Phys) | Tue 21 Oct 08:50–09:45; Thu 23 Oct 12:20–13:15; Tue 28 Oct 08:50–09:45"). Made-up names here as everywhere in the repository.
+- **Each task's line gains its class**: its code, and the subject the class map gives it ("12X/Ph1, Physics"). Today the line has neither, so without it "the worksheet's due next lesson" couldn't tie the worksheet to its class's lessons.
+- **The line**, after the calendar's events: "Next lessons (class, its names | the next three):", then a line a class ("- Physics (12X/Ph1, Phys) | Tue 20 Oct 08:50–09:45; Thu 22 Oct 12:20–13:15; Tue 27 Oct 08:50–09:45"). Made-up names here as everywhere in the repository.
 - **The prompt**: "next lesson" or "next <subject>" is that class's next lesson from the list; a `DueBy` at its start, date and time, as a Power Planner item due at a class is. A class not in the list, or tied to no code he can match, is asked about, not guessed.
 - No change to the schema: `DueBy` takes a date and a time already.
 
 ## The requests and the moves (8c)
 
-- **What he can ask for.** `details` takes, beside the tasks' ids, `settings`, `stats` and `calendar`. The schema doesn't change (it's a list of strings), so no compile by the API is needed. `ChatRounds.next` reads the kinds: tasks up to `MAX_READ` (three) as now, each other kind once; `MAX_ROUNDS` stays two, so a message is at most three of his calls (a web search a call of its own, as now), never a loop, and each goes through the gateway under the cap. What a round brings comes after your words, as the tasks' texts do now, each under its own heading.
-- **The list in the prompt.** Item 7 becomes what he can ask for before answering, and when: a task's whole text by its id (to quote or answer from it); `settings` (to say a setting's value or change it by an amount); `stats` (a message about how a week went); `calendar` (anything after the fortnight). With each, "say only that you're looking, and leave the rest empty", as `details` is today.
-- **The settings asked for.** The context's settings block goes; asked for, the same lines come in the round. A setting's change is checked as now (`FelixSettings`, D-61), with or without the round.
+- **What he can ask for.** `details` takes, beside the tasks' ids, `stats` and `calendar`. The schema doesn't change (it's a list of strings), so no compile by the API is needed. `ChatAnswers.read` keeps the kinds: today it keeps only listed, open tasks' ids and takes three (`ChatAnswers.kt:182`), so the kinds would be dropped before a round saw them. `Reading` carries the kinds apart from the ids, each once, the tasks still three at most, and `ChatRounds.next` reads both; `MAX_ROUNDS` stays two, so a message is at most three of his calls (a web search a call of its own, as now), never a loop, and each goes through the gateway under the cap. What a round brings comes after your words, as the tasks' texts do now, each under its own heading.
+- **The list in the prompt.** Item 7 becomes what he can ask for before answering, and when: a task's whole text by its id (to quote or answer from it); `stats` (a message about how a week went); `calendar` (anything after the fortnight). With each, "say only that you're looking, and leave the rest empty", as `details` is today.
+- **The settings stay.** A change names a setting exactly as the context's block writes it (`FelixSettings.field` matches the name and nothing else), so its names stay, and without them its values are about 600 characters: not worth a round. Kept always (your call, 19 Oct).
 - **G6, the week's numbers.** `stats` brings `Learning`'s period summary (from `Stats`, 6e): kept minutes, completions, deadlines met, slots kept and missed, by subject, for this week so far and last week, in 20 lines.
 - **G7, the calendar further out.** `calendar` brings the events from the fortnight's end to the plan's reach (90 days), up to 60, with their keys, as the fortnight's are listed.
-- **The tasks' text asked for** (D-93 amended, if the eval holds). The context's text block goes. Each task's line gains what `TaskText.about` gives (its source, an email's sender, the attachments' names, the links) and its text's length ("text 1,850 characters"; "no text"), so "which email has the consent form attached?" is answered from the list and he knows which texts to ask for. Asked for, a text comes as `details` brings it today (whole up to 8,000 characters, three at most). The task your message is about still comes whole, unasked. His own messages are unchanged.
-- **The newest turn built so a round only adds.** The context and the plan go as a text block of their own, before your words and what a round brought. A round keeps the first call's moment (`at`), its snapshot, its context, its plan and its rooms (the earlier turns' and the context's), so everything before your words is the same, byte for byte, and a round only adds blocks after. Nothing is marked for the cache yet; this is the shape that makes the mark work when it comes.
+- **The tasks' text asked for** (D-93 amended, if the eval holds). The context's text block goes. Each task's line gains what `TaskText.about` gives (its source, an email's sender, the attachments' names, the links) and its text's length ("text 1,850 characters"; "no text"), so "which email has the consent form attached?" is answered from the list and he knows which texts to ask for. That part of a line has a room of its own, so it can't crowd later tasks out of the list (`TaskText.about` allows 800 characters, and 80 tasks of it would pass the whole input's 40,000): at most 160 characters a line, and 6,000 in all, by the deadline in force as the texts are now; a task past that keeps only its text's length. Asked for, a text comes as `details` brings it today (whole up to 8,000 characters, three at most). The task your message is about still comes whole, unasked. His own messages are unchanged.
 
 ## The eval
 
-The chat's private eval (`private/eval-chat`, never committed; the set 10b runs, made here if it isn't by then): each case a state and a message, labelled with the changes it should make, the dates it should read, and what it should ask for. `EvalRunTest` asks it through `ChatReader` as the Conversation does, rounds included (it runs the readings' set today), and reports the scores with each case's rounds, tokens and cost. The set gains cases for everything that moves or is new: a setting's value and a change by an amount; the week; a month ahead; an email's sender or attachment; what a task's text asks; a next lesson.
+The chat's private eval (`private/eval-chat`, never committed; the set 10b runs, made here if it isn't by then): each case a state and a message, labelled with the changes it should make, the dates it should read, and what it should ask for. `EvalRunTest` asks it through `ChatReader` as the Conversation does, rounds included (it runs the readings' set today), and reports the scores with each case's rounds, tokens and cost. The set gains cases for everything that moves or is new: the week; a month ahead; an email's sender or attachment; what a task's text asks; a next lesson.
 
 1. **The baseline**: run on the code as it is before any move, its figures in the PR.
 2. **After**: run again with everything in.
@@ -118,7 +117,13 @@ The set leans on the cases that need a round, so its rate of rounds says nothing
 
 ## The cache mark, after the plan
 
-You won't use the app until the whole plan is in (Q21), so how often a message takes a round can't be measured before then. After a few weeks of use, the record of calls gives it (the chat's calls a message: one, or two or three with rounds). If more than about one message in four takes a round, a small release marks the context's block for the five-minute cache: rounds come seconds apart. If fewer do, the mark costs more than it saves and isn't made. The shape 8c leaves means the mark is a line and a test.
+You won't use the app until the whole plan is in (Q21), so how often a message takes a round can't be measured before then. After a few weeks of use, the record of calls gives it (the chat's calls a message: one, or two or three with rounds). If more than about one message in four takes a round, a small release marks the context's block for the five-minute cache: rounds come seconds apart. If fewer do, the mark costs more than it saves and isn't made. Till then rounds are built as today: the earlier turns' and the context's rooms shrink as your newest turn grows, which keeps every call within `Pricing.MAX_INPUT_CHARS`.
+
+That release also builds the newest turn so a round only adds (your call, 19 Oct: with the mark, as it serves nothing else):
+
+- **The prefix kept.** The context and the plan go as a text block of their own, before your words and what a round brought. A round keeps the first call's moment (`at`), its snapshot, its context, its plan and its rooms, so everything before your words is the same, byte for byte; a hit needs every byte before the mark the same.
+- **Room kept back for a round.** With the rooms fixed, nothing would bound what a round adds: three tasks' texts (16,000 characters), the week's numbers and the calendar further out could take a round to about 60,000 characters, past the 40,000 the cap's worst call assumes (`Pricing.WORST_CALL_USD`, which `AiUsage.allows` checks each call against). So the first call keeps back room for the largest round, and a round's blocks are held to it.
+- **Tests**: a round's text before your words equal, byte for byte, to the first call's, though the clock has moved on a minute; the largest round, every kind asked for at once, within `MAX_INPUT_CHARS`.
 
 ## Not planned
 
@@ -126,19 +131,19 @@ The API's own tool use in place of `details`: it handles several requests more n
 
 ## Built in
 
-[03](03-stages.md) §Stage 8b, G8's commit; §Stage 8c: the eval's baseline first, then the requests, the moves, the newest turn's shape, the eval again, the docs.
+[03](03-stages.md) §Stage 8b, G8's commit, with each task's class on its line; §Stage 8c: the eval's baseline first, then the requests, the moves, the eval again, the docs; §After, the cache mark with the newest turn's shape.
 
 ## Tests
 
-- G8's rule: lessons from a two-week timetable over a fortnight; the week unknown (both weeks' lessons only); a day of no school; a half day, a lesson before its end kept and one after left out; a class tied to a code by subject, one tied to none; three a class.
+- G8's rule: lessons from a two-week timetable; the week unknown (both weeks' lessons only); a day of no school; a half day, a lesson before its end kept and one after left out; a class whose next lesson is past a fortnight's holiday, found; a class tied to a code by subject, one tied to none; three a class.
+- Each task's line with its class code and subject; "the worksheet's due next lesson" in `FelixInputsDocTest`'s example, the task's class and its lessons both in the context.
 - The class map's list in Settings gaining the timetable's classes with no task.
-- `ChatRounds.next` with each kind: tasks to three, each other kind once, nothing new ends it; two rounds at most.
-- The context: no settings block and no text block; each task's line with its sender, attachments, links and length; the lessons line (`FelixInputsDocTest` regenerated).
-- Each round's block: the settings' lines, `stats`' summary from a fixed log, `calendar`'s events past the fortnight.
-- The newest turn: a round's text before your words is equal, byte for byte, to the first call's, though the clock has moved on a minute.
+- `ChatAnswers.read` with three tasks' ids and both kinds in one answer: the ids to three, each kind kept once, an unknown word dropped; `ChatRounds.next` with each kind, nothing new ending it; two rounds at most.
+- The context: no text block; the settings block as now; each task's line with its sender, attachments, links and length, within 160 characters a line and 6,000 in all; 80 tasks with long attachments' names keep every id in the list; the lessons line (`FelixInputsDocTest` regenerated).
+- Each round's block: `stats`' summary from a fixed log, `calendar`'s events past the fortnight.
 - The goldens: `chat.txt` rewritten on purpose, its diff in the PR; `chat.schema.json` unchanged.
 
 ## Phone check
 
 - 8b: your classes' subjects entered first; `chat-ask` (paid): "when's my next chemistry?" (the lesson from the list); "the worksheet's due next lesson" (a `DueBy` at that lesson's start, its Undo).
-- 8c: `chat-ask` (paid): "what's my margin days?" (a round for the settings, "Read: the settings" under his answer); "how did last week go?" (`stats`); "what's on in December?" (`calendar`); "what does the trip email say?" (its text read); "which email has the form attached?" (answered without a round). `chat-context` shows no settings and no texts, each task's line with what its text holds.
+- 8c: `chat-ask` (paid): "how did last week go?" (`stats`, "Read: the week's numbers" under his answer); "what's on in December?" (`calendar`); "what does the trip email say?" (its text read); "which email has the form attached?" (answered without a round). `chat-context` shows no texts, each task's line with what its text holds.

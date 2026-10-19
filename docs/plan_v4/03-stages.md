@@ -175,26 +175,24 @@ The design is [05](05-the-chat.md); the stores' change is [04](04-data-and-migra
 2. **G2**: `ChatAction.Type.Sync`, `setting` the source's name; `Conversation.act` → a `requestSync(sources)` callback the Conversation takes in its constructor, wired in `AppGraph` to `Sync.syncNow` (Sync already calls the Conversation for the calendar's questions, so the Conversation can't call Sync back: the no-cycle rule), the line "Asked Teams to read", no Undo; a `Syncer` listener in the Conversation posts a `Note` message through the outbox when that read changes the task he was asked about ("teams says the worksheet's handed in"); prompt line.
 3. **G3**: `open` gains `value` "app" or "source"; "source" → `TaskOpener.open`, which already tells him it was opened; prompt line.
 4. **G5**: `ChatPrompts.plan` takes a line from `Focus` ("Blocking: on until today's work's done (2 pieces, 1 h); free time 12 min", from `verdict`, `rewardLine` and `creditLeftMs`), passed by `Conversation.chatContext`; the doc page shows it.
-5. **G8** ([15](15-sent-or-asked-for.md) §G8): the next lessons' rule, pure, beside `SchoolDays` (a fortnight's lessons by `lessonsOn`'s rule for an unknown week, none on a day of no school or from a half day's end, a class's next three, a Power Planner class and a Teams code tied by the subject the class map gives both), tested first; Settings → About you's classes list gains the timetable's classes with no task yet; `ChatPrompts.context` lists the lessons after the calendar's events; prompt line ("next lesson" is that class's next, a `DueBy` at its start). No schema change.
+5. **G8** ([15](15-sent-or-asked-for.md) §G8): the next lessons' rule, pure, beside `SchoolDays` (a class's next three lessons, looked for as far as the plan's reach so a holiday doesn't hide them, by `lessonsOn`'s rule for an unknown week, none on a day of no school or from a half day's end; a Power Planner class and a Teams code tied by the subject the class map gives both), tested first; Settings → About you's classes list gains the timetable's classes with no task yet; `ChatPrompts.context` gives each task's line its class (code and subject) and lists the lessons after the calendar's events; prompt line ("next lesson" is that class's next, a `DueBy` at its start). No schema change.
 6. The goldens (`chat.txt`, `chat.schema.json`); `SchemaLimitsTest`; `SchemaCompileTest -PcheckSchemas=true`; `felix.md` §What he can do; `felix-inputs.md` with the lessons' line.
 
 **Tests**: each action's parse, act and Undo; the context lines in the doc page; G8's rule ([15](15-sent-or-asked-for.md) §Tests). **Phone check**: your classes' subjects entered first ([14](14-your-part.md)); `chat-ask` for each (paid): "I've done today's bit of…", "check Teams", "how much free time have I got", "open it in Teams", "when's my next chemistry?", "the worksheet's due next lesson".
 
 ### 8c. Less sent, more asked for (4.1.2)
 
-**Needs** 6e (`Learning`'s `Stats` for G6), 8b (the context's last new lines in, so what moves is measured once). **Does**: [15](15-sent-or-asked-for.md): the settings, the week's numbers (G6), the calendar further out (G7) and the tasks' own text become things he asks for, measured by the chat's eval before and after. Before 10b, so its eval runs on the shape that stays. One PR, staged:
+**Needs** 6e (`Learning`'s `Stats` for G6), 8b (the context's last new lines in, so what moves is measured once). **Does**: [15](15-sent-or-asked-for.md): the week's numbers (G6), the calendar further out (G7) and the tasks' own text become things he asks for, measured by the chat's eval before and after; the settings stay always, as a change needs their names (your call, 19 Oct). Before 10b, so its eval runs on the shape that stays. One PR, staged:
 
 1. **The eval's baseline.** `EvalRunTest` asks the chat's private set (`private/eval-chat`, made here if it isn't yet; never committed) through `ChatReader` as the Conversation does, rounds included, and reports each case's scores, rounds, tokens and cost; the set gains cases for each thing that moves or is new. Run on the code as it is: the baseline's figures in the PR.
-2. **The requests**: `ChatRounds.next` reads `details`' kinds (the tasks' ids to `MAX_READ`, and `settings`, `stats`, `calendar` once each), tested first; `MAX_ROUNDS` stays two; each kind's block after your words, under its own heading. The schema doesn't change.
+2. **The requests**: `ChatAnswers.read` keeps `details`' kinds, `stats` and `calendar`, apart from the tasks' ids (today it keeps only listed, open tasks' ids and takes three, so the kinds would be dropped): `Reading` carries them, each once, the tasks still three at most; `ChatRounds.next` reads both; tested first, with three ids and both kinds in one answer. `MAX_ROUNDS` stays two; each kind's block after your words, under its own heading. The schema doesn't change.
 3. **The prompt**: item 7 lists what he can ask for and when; `chat.txt` rewritten, its diff in the PR.
-4. **The settings asked for**: the context's settings block goes; `settings` brings it in the round.
-5. **G6 and G7**: `stats` brings `Learning`'s period summary in 20 lines; `calendar` the events from the fortnight's end to the plan's reach, up to 60, with their keys.
-6. **The tasks' text asked for**: the context's text block goes; each task's line gains `TaskText.about`'s sender, attachments and links and its text's length; the task the message is about still whole; `details` reads as now.
-7. **The newest turn built so a round only adds**: the context and plan a text block of their own before your words; a round keeps the first call's `at`, snapshot, context, plan and rooms; a test that the text before your words is the same, byte for byte, in a round a minute later. No cache mark ([15](15-sent-or-asked-for.md) §The cache mark).
-8. **The eval again**: what moved stays asked for only where its cases score at least the baseline's; anything else goes back to always in this PR, said with the figures.
-9. **The docs**: `felix-inputs.md` (the context, the rounds, the examples regenerated); `felix.md` §What he can do; `decisions.md`: D-93 amended (if its text moved), the rule of what's sent always and what's asked for, G6 and G7 taken.
+4. **G6 and G7**: `stats` brings `Learning`'s period summary in 20 lines; `calendar` the events from the fortnight's end to the plan's reach, up to 60, with their keys.
+5. **The tasks' text asked for**: the context's text block goes; each task's line gains `TaskText.about`'s sender, attachments and links and its text's length, in a room of its own (160 characters a line, 6,000 in all, by the deadline in force; past it, the length alone), so no task is crowded out of the list; the task the message is about still whole; `details` reads as now.
+6. **The eval again**: what moved stays asked for only where its cases score at least the baseline's; anything else goes back to always in this PR, said with the figures.
+7. **The docs**: `felix-inputs.md` (the context, the rounds, the examples regenerated); `felix.md` §What he can do; `decisions.md`: D-93 amended (if its text moved), the rule of what's sent always and what's asked for, G6 and G7 taken.
 
-**Tests** and **phone check**: [15](15-sent-or-asked-for.md). **Leaves**: the newest turn in the shape a cache mark needs; the chat's eval runner 10b uses.
+**Tests** and **phone check**: [15](15-sent-or-asked-for.md). **Leaves**: the chat's eval runner 10b uses.
 
 ## Stage 9: names (4.1.3)
 
@@ -254,7 +252,7 @@ The design is [05](05-the-chat.md); the stores' change is [04](04-data-and-migra
 
 ## After
 
-The conversation digest, 4.4.0 ([13](13-summaries.md), Q28): planned on its own once you've lived with the chat a few weeks. The cache mark on the chat's context ([15](15-sent-or-asked-for.md) §The cache mark): made only if the record of calls, after a few weeks of use, shows more than about one message in four taking a round.
+The conversation digest, 4.4.0 ([13](13-summaries.md), Q28): planned on its own once you've lived with the chat a few weeks. The cache mark on the chat's context ([15](15-sent-or-asked-for.md) §The cache mark): made only if the record of calls, after a few weeks of use, shows more than about one message in four taking a round; with it, the newest turn built so a round only adds, and room kept back in the first call so the largest round stays within `MAX_INPUT_CHARS` (your call, 19 Oct).
 
 ## Size
 

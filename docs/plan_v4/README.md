@@ -90,7 +90,7 @@ Every PR is a release ([development.md](../development.md)): cleanup-only releas
 | 7 | Who set what (`Mine`, `By`, steps with ids) and the stores split, trimmed: one data release | 4.0.11 | cleanup, data | 0, 3, 6 | 2½ |
 | 8a | Notes, standing notes and reminders | 4.1.0 | feature, data | 2, 3, 4, 5, 7 | 3 |
 | 8b | The gaps: keep a piece, check a source, open where it lives, free time and the next lessons in his context | 4.1.1 | feature | 5, 6d, 6f, 8a | 1½ |
-| 8c | Less sent, more asked for: the settings, the week's numbers, the calendar further out and the tasks' text asked for, measured by the chat's eval before and after | 4.1.2 | feature | 6e, 8b | 1½ |
+| 8c | Less sent, more asked for: the week's numbers, the calendar further out and the tasks' text asked for, measured by the chat's eval before and after | 4.1.2 | feature | 6e, 8b | 1½ |
 | 9 | Names: the readings' prompts renamed, files and tests split | 4.1.3 | cleanup | 6 | ½ |
 | 10a | Memory that expires | 4.2.0 | feature, data | 3, 4, 7, 9 | 1 |
 | 10b | His voice; just talk; the summary email in the third person | 4.2.1 | feature | 5, 6e, 9 | ½ |
@@ -108,7 +108,7 @@ About twenty-five days in 28 PRs (27 releases), 3.3.4 to 3.3.6, 4.0.3 and 4.0.4 
 - **Two new things he keeps**: notes on tasks (or on every task of a class, subject or source) and reminders, in a store of their own, each set from the chat with an Undo, shown on the task's sheet and in his context; a reminder delivered in his words for the moment, written ahead. [07](07-notes-and-reminders.md).
 - **Memory with a shelf life**: a fact or a rule can carry an until, or belong to a task, and goes when that passes. [08](08-memory-that-expires.md).
 - **His prompts say how he talks**, with the register pinned by examples; the fixed lines in his name follow; a message that's just talk gets a reply and nothing else; the week's summary email is about you in the third person. [09](09-his-voice.md).
-- **He's sent less, and asks for the rest**: the settings, the week's numbers, the calendar past the fortnight and the tasks' own text come when he asks for them, in a round, as a task read in full does today; what he needs for most messages stays in, the next lessons by class added. The chat's eval decides, before and after. [15](15-sent-or-asked-for.md).
+- **He's sent less, and asks for the rest**: the week's numbers, the calendar past the fortnight and the tasks' own text come when he asks for them, in a round, as a task read in full does today; what he needs for most messages stays in, the next lessons by class added. The chat's eval decides, before and after. [15](15-sent-or-asked-for.md).
 - **Gmail gets one write**: finishing a starred email's work unstars and archives its conversation, journaled and retried, undone within a grace. D-7's "only ever read" is amended. [10](10-emails-done.md).
 - **Tasks keep your values in one place** (`TaskItem.mine`), each with who set it; steps carry an id and an origin, and ticks follow the id.
 - **The stores split**: `runtime.json` into files by how often they change; a finished task's text dropped a fortnight after it's finished, its record kept; every store versioned, its migrations tested. [04](04-data-and-migrations.md).
@@ -138,7 +138,7 @@ Numbered in `docs/decisions.md` by the PRs that apply them (the next free number
 - "Tell me to do her assignments on sheets" lands on every task of that class: on each sheet, under each in his context, in his slot message for each.
 - "Don't message me tonight" is gone by morning without your deleting it.
 - The private chat and Felix evals pass at the rate they pass today after the voice change.
-- "It's due next lesson" dates a task to that class's next lesson; "what's my margin days?", "how did last week go?" and "what's on in December?" are answered after a round; the chat's eval scores at least what it did before 8c.
+- "It's due next lesson" dates a task to that class's next lesson; "how did last week go?" and "what's on in December?" are answered after a round; the chat's eval scores at least what it did before 8c.
 - Ticking the last piece of a starred email unstars and archives it within a minute online, and after reconnecting offline; Undo within the grace leaves Gmail untouched.
 - A new override of yours is a field in one place, not six; no store is rewritten for a change that isn't its own: the half-minute state has a file of its own, under 10 KB.
 - All tests pass, more of them than the 874 the plan began with; every release checked on the phone; the baselines of Stage 0 compared and bettered.
