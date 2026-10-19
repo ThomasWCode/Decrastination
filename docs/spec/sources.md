@@ -135,8 +135,9 @@ Made in the app, not read from anywhere (Q28): `Source.Own` ("Yours"), keyed `ow
 - And where it can be done: home or anywhere (PL-15). An event needs its date and time and has no minutes.
 - Kept as a source's values are (`sourceValues`), so instructions lay over it as over any task. A due date, start, minutes, steps or name an instruction gives is made on the task itself (`OwnTasks.changed`, `OwnTasks.MADE_ON_IT`), as the form would make it.
 - Steps edited in the form are matched to their old steps by place, so a renamed step keeps its tick (UI-15).
-- **Done** when you tap *All of it done*, or once every step is done. It earns no free time of itself; its kept slots earn theirs. *Not done* opens it again; *Delete* removes it. A fortnight after it's done, it goes (`AppGraph.pruneOwn`).
+- **Done** when you tap *All of it done*, or once every step is done. It earns no free time of itself; its kept slots earn theirs. *Not done* opens it again; *Delete* removes it. A fortnight after it's done, it goes (`OwnTasks.pruneOwn`).
 - Claude doesn't read it: its minutes and steps are yours, planned as given (readings.md).
+- `tasks/OwnTasks.kt` keeps, finishes, opens again, deletes and lets go of them, its rules `core/OwnTasks.kt`'s; `tasks/OwnTasksTest` drives it on temporary stores.
 
 ## The sync
 
@@ -147,7 +148,7 @@ Made in the app, not read from anywhere (Q28): `Source.Own` ("Yours"), keyed `ow
 - **A failed source fails only itself.** Its error is kept in its `SourceStatus` with the time of the attempt; its tasks stay as they are, and the other sources carry on.
 - A read that overruns is cancelled and left to wind down, and no other read of that source starts beside it (BUG-P2-020).
 - A good read records its time, the source's own "as of" time and note, and Anki's day, the decks' topics and Power Planner's timetable (`TaskState`).
-- **After each sync**: completions are settled (free time and the log, learning.md); your instructions' overrides are laid on new and returning tasks (`AppGraph.layTaskOverrides`); your own tasks long done go; and readings are queued where any task's is out of date (`EnrichWorker`, readings.md).
+- **After each sync**: completions are settled (free time and the log, learning.md); your instructions' overrides are laid on new and returning tasks (`Instructions.layTaskOverrides`); your own tasks long done go; and readings are queued where any task's is out of date (`EnrichWorker`, readings.md).
 
 ## The merge
 
