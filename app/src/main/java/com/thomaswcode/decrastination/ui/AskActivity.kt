@@ -149,6 +149,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * Asking Claude (2.0.0, Q29), in place of the Instructions page: **Chat**, where you tell it about
@@ -352,7 +353,8 @@ class AskActivity : ComponentActivity() {
                 val marked = graph.conversation.markAnswered(ids)
                 if (marked.ids.isEmpty()) return@launch
                 val said = if (marked.ids.size == 1) "Marked answered" else "${marked.ids.size} marked answered"
-                if (snackbar.showSnackbar(said, actionLabel = "Undo", duration = SnackbarDuration.Short) == SnackbarResult.ActionPerformed) graph.conversation.unmarkAnswered(marked)
+                val undo = withTimeoutOrNull(UNDO_BAR_MS) { snackbar.showSnackbar(said, actionLabel = "Undo", duration = SnackbarDuration.Indefinite) }
+                if (undo == SnackbarResult.ActionPerformed) graph.conversation.unmarkAnswered(marked)
             }
         }
 
@@ -450,7 +452,8 @@ class AskActivity : ComponentActivity() {
                         about.value = About()
                         screen.sent()
                         graph.scope.launch {
-                            if (!graph.conversation.ask(text, subject, replyTo = (replying ?: quiet)?.id)) {
+                            // The box's own reply to his nudge takes none of its subject: your words go to him as they are.
+                            if (!graph.conversation.ask(text, subject, replyTo = (replying ?: quiet)?.id, takeItsSubject = replying != null)) {
                                 draft = text
                                 about.value = subject
                                 screen.replyingTo = replying
@@ -702,6 +705,9 @@ private fun ColumnScope.Chat(
 
 /** How long the message his notification opened the chat at stays tinted. */
 private const val FLASH_MS = 1_000L
+
+/** How long Mark answered's Undo stays at the foot (D-99): six seconds, your call. */
+private const val UNDO_BAR_MS = 6_000L
 
 /** How near the top of the list (in rows) scrolling back loads the archive's next page. */
 private const val EARLIER_WITHIN = 5

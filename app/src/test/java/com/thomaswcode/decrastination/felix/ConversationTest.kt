@@ -18,6 +18,7 @@ import com.thomaswcode.decrastination.data.AssessLater
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -277,6 +278,26 @@ class ConversationTest {
         assertTrue("(Replying to your message: " in felix.server.takeRequest().body.readUtf8())
         // Not from his notification: nothing waits for work of its own.
         assertEquals(0, felix.ports.later)
+    }
+
+    @Test
+    fun `the box's words to his nudge take none of its subject, told him as they are, and still answer it`() = runBlocking {
+        stores.tasks.update { it.copy(tasks = it.tasks + sheet) }
+        felix.outbox.send(ChatMessage("n1", Speaker.Felix, "Starting the worksheet now?", now - 60_000L, About(taskId = sheet.id, taskTitle = sheet.title), kind = MessageKind.SlotStart, suggestedReplies = listOf("Starting", "Later")))
+        felix.answers(felix.chatAnswer("Tomorrow's the worksheet."))
+        assertTrue(conversation.ask("what's due tomorrow?", replyTo = "n1", takeItsSubject = false))
+        felix.settle()
+        val mine = stores.chat.value.messages.single { it.from == Speaker.You }
+        assertEquals("n1" to About(), mine.replyTo to mine.about)
+        val sent = felix.server.takeRequest().body.readUtf8()
+        assertFalse("(About the task" in sent)
+        assertFalse("The task this message is about" in sent)
+        // Answered by it, all the same; a reply you chose (a swipe) takes its subject, as ever.
+        assertFalse("n1" in Replies.awaitingIds(stores.chat.value.messages, checkInUnderWay = false, now = now, zone = felix.clock.zone()))
+        felix.answers(felix.chatAnswer("Fine."))
+        assertTrue(conversation.ask("can it wait till seven?", replyTo = "n1"))
+        felix.settle()
+        assertEquals(sheet.id, stores.chat.value.messages.last { it.from == Speaker.You }.about.taskId)
     }
 
     @Test
