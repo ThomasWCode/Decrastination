@@ -8,6 +8,7 @@ import com.thomaswcode.decrastination.core.ChatState
 import com.thomaswcode.decrastination.core.FixedClock
 import com.thomaswcode.decrastination.core.MessageKind
 import com.thomaswcode.decrastination.core.Speaker
+import com.thomaswcode.decrastination.data.ChatArchiveStore
 import com.thomaswcode.decrastination.data.ChatMigration
 import com.thomaswcode.decrastination.data.FelixState
 import com.thomaswcode.decrastination.data.JsonStore
@@ -34,7 +35,7 @@ class OutboxTest {
     private val dir: File = Files.createTempDirectory("outbox").toFile()
     private val clock = FixedClock(Fixtures.at("2026-10-19T18:00"), Fixtures.LONDON)
     private val chat = JsonStore(File(dir, "chat.json"), ChatState.serializer(), ::ChatState, migrations = listOf(ChatMigration.CHAT))
-    private val archive = JsonStore(File(dir, "chat-archive.json"), ChatArchive.serializer(), ::ChatArchive)
+    private val archive = ChatArchiveStore(dir)
     private val settings = JsonStore(File(dir, "settings.json"), Settings.serializer(), ::Settings)
     private var onScreen = false
     private var shown = true

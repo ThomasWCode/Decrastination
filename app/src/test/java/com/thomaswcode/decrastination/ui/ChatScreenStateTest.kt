@@ -97,6 +97,23 @@ class ChatScreenStateTest {
     }
 
     @Test
+    fun `an archive not read yet has its row, asks for one page till it's read, and a quote further back is shown from what's read of it`() {
+        val old = his("old", "2026-08-01T10:00")
+        val window = listOf(yours("w1", Fixtures.at("2026-10-18T17:00")).copy(replyTo = "old"))
+        val screen = ChatScreenState()
+        assertEquals(ChatScreenState.Item.Earlier, screen.items(window, emptyList(), LONDON, unread = true).first())
+        assertTrue(screen.loadEarlier(null))
+        assertEquals(ChatScreenState.PAGE, screen.earlier)
+        assertFalse(screen.loadEarlier(null))
+        // The quote, read on its own from the archive.
+        val reply = screen.items(window, emptyList(), LONDON, quotes = listOf(old)).filterIsInstance<ChatScreenState.Item.Message>().single()
+        assertEquals(old, reply.quote)
+        // Tapped, further back than the pages read: as far back as it is, and scrolled to.
+        screen.revealBack("old", 340)
+        assertEquals(340 to "old", screen.earlier to screen.scrollTo)
+    }
+
+    @Test
     fun `the archive is read back a page at a time, newest first, and a quote's message loads as far back as it is`() {
         val start = Fixtures.at("2026-08-01T10:00")
         val archive = (1..250).map { yours("a$it", start + it * 60_000L) }

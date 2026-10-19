@@ -45,8 +45,11 @@ class Stores(
     /** Your chat with Felix, the live window of it: every message of his and yours, what became of his cards, and his state. */
     val chat = store("chat.json", ChatState.serializer(), ::ChatState, migrations = listOf(ChatMigration.CHAT))
 
-    /** The chat's messages past its window, oldest first, read on scrolling back. */
-    val chatArchive = store("chat-archive.json", ChatArchive.serializer(), ::ChatArchive)
+    /**
+     * The chat's messages past its window, oldest first, a month a file: each read only when it's wanted
+     * (scrolling back, a reply to one of them, the window's next move, a backup, the export), not at a start.
+     */
+    val chatArchive = ChatArchiveStore(dir, clock)
 
     /** Days with no school and half-days (PL-16), told to the chat or added in Settings. */
     val school = store("school.json", SchoolCalendar.serializer(), ::SchoolCalendar)
@@ -57,7 +60,7 @@ class Stores(
     /** The versions of its events the app has written to calendars, so a copy of one is known. */
     val calendarVersions = store("calendar.json", CalendarVersions.serializer(), ::CalendarVersions)
 
-    private val json = listOf(tasks, settings, runtime, log, instructions, chat, chatArchive, school, memory, calendarVersions)
+    private val json = listOf(tasks, settings, runtime, log, instructions, chat, school, memory, calendarVersions)
 
     /**
      * A store, what a backup keeps of it ([backup]; none, and [why] says why), and the resets that
@@ -86,13 +89,16 @@ class Stores(
     )
 
     /** Each JSON store's shape now, by file: what a backup's parts from it are brought to ([Backups.decode]). */
-    val shapes: Map<String, Shape> get() = json.associate { it.name to Shape(it.version, it.migrations) }
+    val shapes: Map<String, Shape> get() = json.associate { it.name to Shape(it.version, it.migrations) } + (chatArchive.name to Shape(chatArchive.version, emptyList()))
 
-    /** Files that couldn't be read whole at this start, and where each was set aside. */
-    val problems: List<JsonStore.Unreadable> get() = json.mapNotNull { it.problem } + listOfNotNull(secrets.problem)
+    /** Files that couldn't be read whole at this start, and where each was set aside (the archive's months, read later: [ChatArchiveStore.onProblem]). */
+    val problems: List<JsonStore.Unreadable> get() = json.mapNotNull { it.problem } + chatArchive.problems + listOfNotNull(secrets.problem)
 
     /** What was kept of each file that didn't read whole written over it, now its problem is on record ([JsonStore.keepRecovered]). */
-    suspend fun keepRecovered() = json.forEach { it.keepRecovered() }
+    suspend fun keepRecovered() {
+        json.forEach { it.keepRecovered() }
+        chatArchive.keepRecovered()
+    }
 
     /**
      * [store] made [value] whole: the one way round its owner, for a backup restored or a reset
@@ -102,6 +108,12 @@ class Stores(
 
     /** [store] made what [transform] makes of it, as [replace]: a restore's merge, a reset of part of it. */
     suspend fun <T> replace(store: JsonStore<T>, transform: (T) -> T): T = store.update(transform)
+
+    /** The chat's archive made [value] whole, as [replace]. */
+    suspend fun replace(store: ChatArchiveStore, value: ChatArchive): ChatArchive = store.update { value }
+
+    /** The chat's archive made what [transform] makes of it, as [replace]. */
+    suspend fun replace(store: ChatArchiveStore, transform: (ChatArchive) -> ChatArchive): ChatArchive = store.update(transform)
 
     /**
      * The files older shapes came from (`<name>.v<n>`, [JsonStore]) let go once a week old: called at a
@@ -115,8 +127,8 @@ class Stores(
     }
 
     companion object {
-        /** The moves between stores this build makes at start: Felix's records and state into the chat (4.0.0). */
-        val MOVES: List<Move> = listOf(ChatMigration.MOVE)
+        /** The moves between stores this build makes at start: Felix's records and state into the chat (4.0.0); the chat's archive into its months (4.0.4). */
+        val MOVES: List<Move> = listOf(ChatMigration.MOVE, ChatArchiveStore.SPLIT)
 
         /** How long the file an older shape came from is kept after its migration. */
         const val OLD_SHAPE_KEPT_MS = 7 * 24 * 3_600_000L

@@ -36,6 +36,8 @@ import kotlinx.serialization.json.jsonObject
  * written again in the new shape, the file it came from kept beside it as `<name>.v<from>` for
  * [Stores.letGoOfOldShapes]. A file of a newer version, which this build can't read, is set aside as one
  * that can't be.
+ *
+ * Read as it's made, unless [lazily]: then when it's first wanted.
  */
 class JsonStore<T>(
     private val file: File,
@@ -48,6 +50,11 @@ class JsonStore<T>(
     private val clock: () -> Long = System::currentTimeMillis,
     /** What brings a file of each older version to [version], one version a step. */
     val migrations: List<Migration> = emptyList(),
+    /**
+     * Read when it's first wanted ([state], [value], [update]), not as it's made: for a file that can grow
+     * large and is seldom looked at (a month of the chat's archive, D-96). A problem found then goes to [onProblem].
+     */
+    private val lazily: Boolean = false,
 ) {
     /** Its file's name: `tasks.json`. */
     val name: String get() = file.name
@@ -71,10 +78,29 @@ class JsonStore<T>(
      */
     private var unsaved = false
 
-    private val _state = MutableStateFlow(load())
-    val state: StateFlow<T> = _state.asStateFlow()
+    /**
+     * Where it's read [lazily], what to do with a problem found reading it, past the start's that
+     * [Stores.problems] puts on record: the same.
+     */
+    @Volatile
+    var onProblem: ((Unreadable) -> Unit)? = null
+
+    private val loaded = lazy { MutableStateFlow(load()) }
+    private val _state: MutableStateFlow<T> get() = loaded.value
+
+    init {
+        if (!lazily) loaded.value
+    }
+
+    val state: StateFlow<T> by lazy { _state.asStateFlow() }
 
     val value: T get() = _state.value
+
+    /** Whether its file has been read: as it was made, unless [lazily]. */
+    val isLoaded: Boolean get() = loaded.isInitialized()
+
+    /** Whether it holds anything but its default, without reading a file not read yet: by the file's size till then. */
+    val holdsAny: Boolean get() = if (isLoaded) value != default() else file.length() > json.encodeToString(serializer, default()).length
 
     /** Applies [transform] and saves the result, if it changed anything. Returns the new state. */
     suspend fun update(transform: (T) -> T): T = mutex.withLock {
@@ -123,6 +149,7 @@ class JsonStore<T>(
         // (that can pass, and the file is then still good), nor where the copy failed (then the bad
         // file is all there is of it).
         unsaved = text != null && aside != null
+        if (lazily) problem?.let { found -> onProblem?.invoke(found) }
         return onLoad(salvaged ?: unreadable())
     }
 
@@ -181,11 +208,10 @@ class JsonStore<T>(
                     "log.json" -> "The activity log"
                     "instructions.json" -> "Your instructions"
                     "chat.json" -> "The chat"
-                    "chat-archive.json" -> "The chat's earlier messages"
                     "school.json" -> "Your school calendar (days off and half-days)"
                     "memory.json" -> "What Felix remembers"
                     "calendar.json" -> "The record of what the app wrote to your calendar"
-                    else -> file
+                    else -> if (file.startsWith("chat-archive-")) "The chat's earlier messages from ${file.removePrefix("chat-archive-").removeSuffix(".json")}" else file
                 }
                 val how = if (kept) "couldn't be read whole: what could be was kept, the rest is back to its defaults" else "couldn't be read: it started afresh"
                 // Settings unreadable stay armed while the device admin is on (only arming turns it on).
