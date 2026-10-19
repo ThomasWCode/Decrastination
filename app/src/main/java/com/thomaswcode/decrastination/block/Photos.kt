@@ -2,21 +2,30 @@ package com.thomaswcode.decrastination.block
 
 import android.util.Log
 import com.thomaswcode.decrastination.AppGraph
+import com.thomaswcode.decrastination.core.ChatAction
+import com.thomaswcode.decrastination.core.ChatActs
 import com.thomaswcode.decrastination.core.ChatState
 import com.thomaswcode.decrastination.core.Chunk
+import com.thomaswcode.decrastination.core.TaskPhoto
 import com.thomaswcode.decrastination.core.WallClock
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.data.TaskState
 import com.thomaswcode.decrastination.enrich.Called
+import com.thomaswcode.decrastination.enrich.ModelCalls
+import com.thomaswcode.decrastination.enrich.ModelEffort
 import com.thomaswcode.decrastination.enrich.ModelGateway
 import com.thomaswcode.decrastination.enrich.ModelHold
 import com.thomaswcode.decrastination.enrich.PhotoChecker
+import com.thomaswcode.decrastination.enrich.PhotoTaskReader
+import com.thomaswcode.decrastination.enrich.PhotoTasks
 import com.thomaswcode.decrastination.enrich.Profile
 import java.io.File
+import java.security.MessageDigest
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -53,16 +62,16 @@ class Photos(
             photos.mkdirs()
             file.writeBytes(jpeg)
         }
-        val hash = java.security.MessageDigest.getInstance("SHA-256").digest(jpeg).take(8).joinToString("") { "%02x".format(it) }
-        tasks.update { s -> s.copy(tasks = s.tasks.map { if (it.id == taskId) it.copy(photo = com.thomaswcode.decrastination.core.TaskPhoto(file.path, hash, clock.now())) else it }) }
+        val hash = MessageDigest.getInstance("SHA-256").digest(jpeg).take(8).joinToString("") { "%02x".format(it) }
+        tasks.update { s -> s.copy(tasks = s.tasks.map { if (it.id == taskId) it.copy(photo = TaskPhoto(file.path, hash, clock.now())) else it }) }
         scope.launch { runCatching { read(taskId) }.onFailure { Log.w(AppGraph.TAG, "Reading a task with its photo failed", it) } }
     }
 
     /** [jpeg] read into tasks of your own to check (NF-01): the reading, or why there's none. */
-    suspend fun readPhotoTasks(jpeg: ByteArray): Pair<com.thomaswcode.decrastination.enrich.PhotoTasks.Reading?, String?> {
-        val reader = gateway.client(com.thomaswcode.decrastination.enrich.ModelEffort.Job.PhotoToTask)?.let { com.thomaswcode.decrastination.enrich.PhotoTaskReader(it, profile = profile()) } ?: return null to "Claude is off: add it with New task."
+    suspend fun readPhotoTasks(jpeg: ByteArray): Pair<PhotoTasks.Reading?, String?> {
+        val reader = gateway.client(ModelEffort.Job.PhotoToTask)?.let { PhotoTaskReader(it, profile = profile()) } ?: return null to "Claude is off: add it with New task."
         val now = clock.now()
-        return when (val called = gateway.call(interactive = true, record = com.thomaswcode.decrastination.enrich.ModelCalls.OnRecord(com.thomaswcode.decrastination.enrich.ModelEffort.Job.PhotoToTask, "a photo of homework") { r: com.thomaswcode.decrastination.enrich.PhotoTaskReader.Result -> r.usage to com.thomaswcode.decrastination.enrich.ModelCalls.outcome(r.refused, r.reading == null) }, cost = { r: com.thomaswcode.decrastination.enrich.PhotoTaskReader.Result -> r.costUsd to r.refused }) { reader.read(jpeg, now, clock.zone()) }) {
+        return when (val called = gateway.call(interactive = true, record = ModelCalls.OnRecord(ModelEffort.Job.PhotoToTask, "a photo of homework") { r: PhotoTaskReader.Result -> r.usage to ModelCalls.outcome(r.refused, r.reading == null) }, cost = { r: PhotoTaskReader.Result -> r.costUsd to r.refused }) { reader.read(jpeg, now, clock.zone()) }) {
             is Called.Held -> null to "Claude can't be asked now: add it with New task."
             is Called.Failed -> null to "The photo couldn't be read (${called.error.message ?: "no connection"})."
             is Called.Answered -> called.value.reading?.let { it to null } ?: (null to if (called.value.refused) "Claude declined to read it." else "Claude couldn't read the photo: try a clearer one.")
@@ -74,18 +83,18 @@ class Photos(
      * leaving Work while the paid call runs loses nothing. [busy] while it's read; then what it read,
      * with the photo for the tasks made from it, or why not.
      */
-    class PhotoReading(val busy: Boolean, val reading: com.thomaswcode.decrastination.enrich.PhotoTasks.Reading? = null, val jpeg: ByteArray? = null, val why: String? = null)
+    class PhotoReading(val busy: Boolean, val reading: PhotoTasks.Reading? = null, val jpeg: ByteArray? = null, val why: String? = null)
 
     /** The photo of homework being read, or read and not yet seen through (NF-01). */
-    val photoReading = kotlinx.coroutines.flow.MutableStateFlow<PhotoReading?>(null)
+    val photoReading = MutableStateFlow<PhotoReading?>(null)
 
     /** [file], a photo of homework just taken, read into tasks in the app's scope (NF-01), [photoReading] saying how it goes; the file let go. */
-    fun readPhotoOf(file: java.io.File) {
+    fun readPhotoOf(file: File) {
         if (photoReading.value?.busy == true) return
         photoReading.value = PhotoReading(busy = true)
         scope.launch {
             val done = runCatching {
-                val jpeg = withContext(Dispatchers.IO) { com.thomaswcode.decrastination.block.PhotoChecks.shrink(file) }
+                val jpeg = withContext(Dispatchers.IO) { PhotoChecks.shrink(file) }
                 if (jpeg == null) {
                     PhotoReading(busy = false, why = "Couldn't read the photo.")
                 } else {
@@ -103,7 +112,7 @@ class Photos(
         // A task the chat deleted keeps its photo while its Undo can bring it back: no other act's, nor one made again since.
         val messages = chat.value.messages
         val undoable = messages.flatMap { m ->
-            m.acts.filter { it.action?.type == com.thomaswcode.decrastination.core.ChatAction.Type.Delete && com.thomaswcode.decrastination.core.ChatActs.canUndo(it, tasks.value.tasks, settings.value, messages) }
+            m.acts.filter { it.action?.type == ChatAction.Type.Delete && ChatActs.canUndo(it, tasks.value.tasks, settings.value, messages) }
                 .mapNotNull { it.was?.photo?.path }
         }
         val held = tasks.value.tasks.mapNotNull { it.photo?.path }.toSet() + undoable
@@ -129,9 +138,9 @@ class Photos(
             withContext(NonCancellable + Dispatchers.IO) { pages.forEach { it.delete() } }
         }
         // Its room taken with every other model call's, then sent (AC-05).
-        val current = gateway.client(com.thomaswcode.decrastination.enrich.ModelEffort.Job.PhotoCheck)?.let { PhotoChecker(it, profile = profile()) } ?: return OFF
+        val current = gateway.client(ModelEffort.Job.PhotoCheck)?.let { PhotoChecker(it, profile = profile()) } ?: return OFF
         val about = PhotoChecker.context(piece, tasks.value.tasks.firstOrNull { it.id == piece.taskId })
-        val result = when (val called = gateway.call(interactive = true, record = com.thomaswcode.decrastination.enrich.ModelCalls.OnRecord(com.thomaswcode.decrastination.enrich.ModelEffort.Job.PhotoCheck, piece.label) { r: PhotoChecker.Result -> r.usage to com.thomaswcode.decrastination.enrich.ModelCalls.outcome(r.refused, r.verdict == null) }, cost = { r: PhotoChecker.Result -> r.costUsd to r.refused }) { current.check(jpegs, about) }) {
+        val result = when (val called = gateway.call(interactive = true, record = ModelCalls.OnRecord(ModelEffort.Job.PhotoCheck, piece.label) { r: PhotoChecker.Result -> r.usage to ModelCalls.outcome(r.refused, r.verdict == null) }, cost = { r: PhotoChecker.Result -> r.costUsd to r.refused }) { current.check(jpegs, about) }) {
             is Called.Held -> return when (called.hold) {
                 ModelHold.Off -> OFF
                 ModelHold.Resting -> "Claude's key isn't working (Setup says why): tick it Done, or the source will have to do."

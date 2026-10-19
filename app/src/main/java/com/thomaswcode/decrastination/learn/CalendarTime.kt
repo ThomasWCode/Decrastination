@@ -5,20 +5,12 @@ import android.content.ContentUris
 import android.content.Context
 import android.content.pm.PackageManager
 import android.provider.CalendarContract
-import android.util.Log
-import com.thomaswcode.decrastination.AppGraph
-import com.thomaswcode.decrastination.core.Instructions
 import com.thomaswcode.decrastination.core.Planner
-import com.thomaswcode.decrastination.widget.WidgetUpdater
 import java.time.Instant
 import java.time.ZoneId
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.util.Locale
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.withContext
 
 /**
  * The phone's calendar as busy time (Q7, docs/spec/slots-and-calendar.md): the next fortnight's events, judged one

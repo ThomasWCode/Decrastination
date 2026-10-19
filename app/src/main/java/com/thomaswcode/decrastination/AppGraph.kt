@@ -3,9 +3,6 @@ package com.thomaswcode.decrastination
 import android.annotation.SuppressLint
 import android.app.admin.DevicePolicyManager
 import android.content.Context
-import android.database.ContentObserver
-import android.os.Handler
-import android.os.Looper
 import android.util.Log
 import com.thomaswcode.decrastination.block.Focus
 import com.thomaswcode.decrastination.block.Photos
@@ -18,9 +15,7 @@ import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.core.InstructionStatus
 import com.thomaswcode.decrastination.core.OwnTask
 import com.thomaswcode.decrastination.core.Source
-import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.WallClock
-import com.thomaswcode.decrastination.core.withEnrichment
 import com.thomaswcode.decrastination.data.AndroidBackupFolder
 import com.thomaswcode.decrastination.data.BackupService
 import com.thomaswcode.decrastination.data.DeviceClock
@@ -31,11 +26,7 @@ import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.data.Stores
 import com.thomaswcode.decrastination.enrich.AndroidModelAlerts
 import com.thomaswcode.decrastination.enrich.Called
-import com.thomaswcode.decrastination.enrich.Failures
-import com.thomaswcode.decrastination.enrich.Failure
-import com.thomaswcode.decrastination.enrich.ClaudeEnricher
 import com.thomaswcode.decrastination.enrich.EnrichWorker
-import com.thomaswcode.decrastination.enrich.Enricher
 import com.thomaswcode.decrastination.enrich.ModelGateway
 import com.thomaswcode.decrastination.enrich.Readings
 import com.thomaswcode.decrastination.enrich.RuleEnricher
@@ -47,7 +38,6 @@ import com.thomaswcode.decrastination.felix.Outbox
 import com.thomaswcode.decrastination.learn.Assessment
 import com.thomaswcode.decrastination.learn.Briefing
 import com.thomaswcode.decrastination.learn.Calibrator
-import com.thomaswcode.decrastination.learn.CalendarTime
 import com.thomaswcode.decrastination.learn.Daily
 import com.thomaswcode.decrastination.net.UrlConnectionHttp
 import com.thomaswcode.decrastination.notify.AndroidTray
@@ -56,12 +46,10 @@ import com.thomaswcode.decrastination.notify.Notifier
 import com.thomaswcode.decrastination.plan.Planning
 import com.thomaswcode.decrastination.protect.Protection
 import com.thomaswcode.decrastination.protect.Watchdog
-import com.thomaswcode.decrastination.sources.anki.AnkiRules
 import com.thomaswcode.decrastination.sources.anki.AnkiSource
 import com.thomaswcode.decrastination.sources.gmail.GmailSource
 import com.thomaswcode.decrastination.sources.powerplanner.PowerPlannerApi
 import com.thomaswcode.decrastination.sources.powerplanner.PowerPlannerSource
-import com.thomaswcode.decrastination.sources.teams.TeamsProvider
 import com.thomaswcode.decrastination.sources.teams.TeamsSource
 import com.thomaswcode.decrastination.sync.SyncWorker
 import com.thomaswcode.decrastination.sync.AndroidSyncPorts
@@ -75,9 +63,7 @@ import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
-import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -85,7 +71,6 @@ import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withContext
 
 /**
  * The app's singletons. The sync, the focus service, the widget and the screens all run in the

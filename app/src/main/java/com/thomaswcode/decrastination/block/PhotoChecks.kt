@@ -1,23 +1,14 @@
 package com.thomaswcode.decrastination.block
 
-import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Matrix
-import android.util.Log
 import androidx.core.graphics.scale
 import androidx.exifinterface.media.ExifInterface
-import com.thomaswcode.decrastination.AppGraph
-import com.thomaswcode.decrastination.core.Chunk
-import com.thomaswcode.decrastination.enrich.Called
-import com.thomaswcode.decrastination.enrich.ModelHold
 import com.thomaswcode.decrastination.enrich.PhotoChecker
 import java.io.ByteArrayOutputStream
 import java.io.File
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.NonCancellable
-import kotlinx.coroutines.withContext
 
 /** A photo of written work, checked by the model and, if it's done, the piece ticked off. */
 object PhotoChecks {
