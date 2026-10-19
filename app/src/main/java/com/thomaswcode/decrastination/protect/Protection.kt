@@ -6,6 +6,9 @@ import com.thomaswcode.decrastination.data.RuntimeState
 import com.thomaswcode.decrastination.data.Secret
 import com.thomaswcode.decrastination.data.SecretStore
 import com.thomaswcode.decrastination.data.Settings
+import com.thomaswcode.decrastination.learn.ReviewInput
+import com.thomaswcode.decrastination.ui.Format
+import java.util.UUID
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
@@ -49,7 +52,7 @@ class Protection(
         applyDue(force = true)
         val state = runtime.value
         val proposed = change(SettingsChanges.requested(settings.value, state.pending))
-        val outcome = SettingsChanges.propose(settings.value, proposed, state.pending, clock.now()) { java.util.UUID.randomUUID().toString() }
+        val outcome = SettingsChanges.propose(settings.value, proposed, state.pending, clock.now()) { UUID.randomUUID().toString() }
         // Nothing was waiting: the count starts now, whatever an old mark says.
         val mark = if (state.pending.isEmpty()) clock.uptime() else state.uptimeMark ?: clock.uptime()
         // The pending list first: stopped between the two, what applies now is lost (and seen to
@@ -63,13 +66,13 @@ class Protection(
      * armed or not: you said they needn't wait (11 Oct, IMP-P2-015). Only the fields
      * [ReviewInput.apply] sets can change this way; everything else waits as ever.
      */
-    suspend fun applyReviewChanges(changes: List<com.thomaswcode.decrastination.learn.ReviewInput.Change>) = changing.withLock {
+    suspend fun applyReviewChanges(changes: List<ReviewInput.Change>) = changing.withLock {
         applyDue(force = true)
         val state = runtime.value
         // The settings it names: one it sets to the value already asked for applies now all the same.
-        val bounds = com.thomaswcode.decrastination.learn.ReviewInput.bounds(settings.value)
-        val fields = changes.map { it.setting }.filter { it in bounds }.map(com.thomaswcode.decrastination.learn.ReviewInput::fieldOf).toSet()
-        val outcome = SettingsChanges.atOnce(settings.value, state.pending, fields) { com.thomaswcode.decrastination.learn.ReviewInput.apply(it, changes) }
+        val bounds = ReviewInput.bounds(settings.value)
+        val fields = changes.map { it.setting }.filter { it in bounds }.map(ReviewInput::fieldOf).toSet()
+        val outcome = SettingsChanges.atOnce(settings.value, state.pending, fields) { ReviewInput.apply(it, changes) }
         runtime.update { it.copy(pending = outcome.pending, uptimeMark = if (outcome.pending.isEmpty()) null else it.uptimeMark) }
         settings.update { outcome.settings }
     }
@@ -115,7 +118,7 @@ class Protection(
         return when (val result = outcome) {
             is CodeLock.Result.Accepted -> null
             is CodeLock.Result.Wrong -> "Wrong code: ${result.triesLeft} ${if (result.triesLeft == 1) "try" else "tries"} left"
-            is CodeLock.Result.Locked -> "Too many wrong codes: try again ${com.thomaswcode.decrastination.ui.Format.at(result.until, now, clock.zone())}"
+            is CodeLock.Result.Locked -> "Too many wrong codes: try again ${Format.at(result.until, now, clock.zone())}"
             CodeLock.Result.Reused -> "That code has been used: wait for the next one"
         }
     }
