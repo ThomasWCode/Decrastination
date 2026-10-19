@@ -26,6 +26,7 @@ import com.thomaswcode.decrastination.core.Speaker
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.withoutEnrichment
 import com.thomaswcode.decrastination.data.Secret
+import com.thomaswcode.decrastination.data.FelixSettings
 import com.thomaswcode.decrastination.felix.ChatPrompts
 import com.thomaswcode.decrastination.felix.ChatReader
 import com.thomaswcode.decrastination.felix.Conversation
@@ -306,7 +307,7 @@ class CommandActivity : Activity() {
                 val name = intent.getStringExtra("name").orEmpty()
                 val value = intent.getStringExtra("value").orEmpty()
                 var said: String? = null
-                graph.protection.changeSettings { s -> com.thomaswcode.decrastination.data.FelixSettings.set(s, name, value)?.also { said = it.second }?.first ?: s }
+                graph.protection.changeSettings { s -> FelixSettings.set(s, name, value)?.also { said = it.second }?.first ?: s }
                 Log.i(TAG, "setting: " + (said ?: "$name not set to $value"))
             }
             "briefing" -> Briefing.run(this).also { Log.i(TAG, "Briefing posted") }
