@@ -112,6 +112,13 @@ object GmailThreads {
     const val TEXT_RULES = 2
     const val EXTRA_TEXT_RULES = "textRules"
 
+    /**
+     * The extras that hold its text, or say which messages and how far it was read: let go with the
+     * text once it's long finished ([com.thomaswcode.decrastination.core.trimmed], C-Q3), so a read of
+     * it listed again fetches it afresh.
+     */
+    val TEXT_EXTRAS = setOf(EXTRA_MESSAGES, EXTRA_UIDS, EXTRA_UID_VALIDITY, EXTRA_TEXT_PENDING, EXTRA_TEXT_READ_TO, EXTRA_TEXT_RULES, EXTRA_ATTACHMENTS)
+
     /** A conversation's text, how far it was read ([EXTRA_TEXT_READ_TO]), what's attached to it, by which [rules], and its [invite] (DX-02). */
     data class Body(val text: String, val readTo: Int = MAX_BODY_CHARS, val attachments: List<Mime.Attachment> = emptyList(), val rules: Int = TEXT_RULES, val invite: Invite? = null) {
         /** All there is, or as much as a read takes now, made as reads make it now: reading it again would add nothing. */

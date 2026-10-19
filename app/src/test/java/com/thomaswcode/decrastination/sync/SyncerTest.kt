@@ -7,12 +7,14 @@ import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Status
+import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.TaskState
 import com.thomaswcode.decrastination.data.TasksMigration
 import com.thomaswcode.decrastination.sources.ReadContext
 import com.thomaswcode.decrastination.sources.SourceRead
 import com.thomaswcode.decrastination.sources.TaskSource
+import com.thomaswcode.decrastination.sources.gmail.GmailThreads
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
@@ -61,6 +63,32 @@ class SyncerTest {
         assertEquals("No network", tasks.value.status(Source.Gmail).error)
         assertEquals(clock.time, tasks.value.status(Source.Gmail).lastSuccessAt)
         assertNull(tasks.value.status(Source.Teams).error)
+    }
+
+    @Test
+    fun `a sync keeps what was finished a fortnight ago as its record, whichever source it's from`() = runTest {
+        val day = 24 * 3_600_000L
+        fun done(id: String, source: Source, daysAgo: Int) = TaskItem(
+            id = id,
+            source = source,
+            sourceId = id.substringAfter(':'),
+            title = id,
+            detail = "Its text",
+            kind = Kind.Admin,
+            status = Status.Done,
+            doneAt = clock.time - daysAgo * day,
+            firstSeenAt = 0,
+            lastSeenAt = clock.time - daysAgo * day,
+            extra = mapOf(GmailThreads.EXTRA_UIDS to "1,2", GmailThreads.EXTRA_MESSAGE_ID to "m1"),
+        )
+        tasks.update { it.copy(tasks = listOf(done("gmail:m", Source.Gmail, 15), done("own:x", Source.Own, 13))) }
+        syncer(listOf(FakeSource(Source.Teams) { items("a") })).sync()
+        val after = tasks.value.tasks.associateBy { it.id }
+        assertEquals("", after.getValue("gmail:m").detail)
+        assertEquals(mapOf(GmailThreads.EXTRA_MESSAGE_ID to "m1"), after.getValue("gmail:m").extra)
+        // Short of the fortnight: as it was.
+        assertEquals("Its text", after.getValue("own:x").detail)
+        assertEquals(setOf("gmail:m", "own:x", "teams:a"), after.keys)
     }
 
     @Test

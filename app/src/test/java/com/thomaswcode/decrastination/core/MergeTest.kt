@@ -209,6 +209,72 @@ class MergeTest {
         assertTrue(Merge.apply(done, Source.Teams, emptyList(), later + Merge.KEEP_FINISHED_MS).tasks.isEmpty())
     }
 
+    /** An assignment read (90 minutes in two steps, the first ticked), with your 75 minutes, an answer and a photo, handed in at [t0]. */
+    private fun handedIn(): TaskItem {
+        val task = first(fetched("a").copy(detail = "Write up the practical")).single()
+            .copy(answers = listOf("Half a page"), photo = TaskPhoto("photos/a.jpg", "ab12", t0)).yours(minutes = 75)
+        val read = task.withEnrichment(Enrichment(inputHash = Enrichments.inputHash(task), by = "model", at = t0, effortMin = 90, subSteps = listOf(SubStep("Plan", 30), SubStep("Write", 60))))
+        return read.copy(
+            status = Status.Done,
+            doneAt = t0,
+            workedMin = 80,
+            subSteps = read.subSteps.mapIndexed { i, s -> if (i == 0) s.copy(done = true, byHand = true) else s },
+            extra = read.extra + (GmailThreads.EXTRA_UIDS to "1,2") + (GmailThreads.EXTRA_MESSAGE_ID to "m1"),
+        )
+    }
+
+    @Test
+    fun `a task finished a fortnight ago keeps its record, its text, reading, answers, photo and email's text let go`() {
+        val done = handedIn()
+        val bulky = GmailThreads.TEXT_EXTRAS
+        val kept = Merge.trimmed(listOf(done), t0 + Merge.KEEP_FINISHED_MS, bulky).single()
+        assertEquals("", kept.detail)
+        assertEquals(null, kept.enrichment)
+        assertTrue(kept.answers.isEmpty())
+        assertEquals(null, kept.photo)
+        assertEquals(mapOf(GmailThreads.EXTRA_MESSAGE_ID to "m1"), kept.extra)
+        // The rest as it was: its estimates, minutes, steps and their ticks, your values.
+        assertEquals(done.copy(detail = "", enrichment = null, answers = emptyList(), photo = null, extra = kept.extra), kept)
+        assertEquals(90, kept.aiEffortMin)
+        assertEquals(listOf(true, false), kept.subSteps.map { it.done })
+        // Once: kept so, it's left as it is.
+        assertEquals(listOf(kept), Merge.trimmed(listOf(kept), t0 + 2 * Merge.KEEP_FINISHED_MS, bulky))
+        // Short of the fortnight, or open however old, it's as it was.
+        assertEquals(listOf(done), Merge.trimmed(listOf(done), t0 + Merge.KEEP_FINISHED_MS - 1, bulky))
+        val open = done.copy(status = Status.Open, doneAt = null)
+        assertEquals(listOf(open), Merge.trimmed(listOf(open), t0 + 10 * Merge.KEEP_FINISHED_MS, bulky))
+    }
+
+    @Test
+    fun `kept as its record, a task its source still lists as finished keeps what its reading laid`() {
+        val now = t0 + Merge.KEEP_FINISHED_MS
+        val kept = Merge.trimmed(listOf(handedIn()), now, GmailThreads.TEXT_EXTRAS)
+        val merged = Merge.apply(kept, Source.Teams, listOf(fetched("a", done = true).copy(detail = "Write up the practical")), now + 1).tasks.single()
+        assertEquals(Status.Done, merged.status)
+        assertEquals(90, merged.aiEffortMin)
+        assertEquals(kept.single().subSteps, merged.subSteps)
+        // The text it gave again goes again.
+        assertEquals("", Merge.trimmed(listOf(merged), now + 1, GmailThreads.TEXT_EXTRAS).single().detail)
+        // Your values changed on it: what the reading laid stays too.
+        val relaid = kept.single().withMine(Mine.NONE)
+        assertEquals(90, relaid.aiEffortMin)
+        assertEquals(kept.single().subSteps, relaid.subSteps)
+    }
+
+    @Test
+    fun `kept as its record, a task listed again as open is as one seen for the first time, and read again`() {
+        val now = t0 + Merge.KEEP_FINISHED_MS
+        val kept = Merge.trimmed(listOf(handedIn()), now, GmailThreads.TEXT_EXTRAS)
+        val again = Merge.apply(kept, Source.Teams, listOf(fetched("a").copy(detail = "Write up the practical")), now + 1).reopened.single()
+        assertEquals("Write up the practical", again.detail)
+        assertEquals(null, again.aiEffortMin)
+        assertTrue(again.subSteps.isEmpty())
+        // Yours stay yours.
+        assertEquals(75, again.effortMin)
+        assertEquals(Enrichments.Job.Assignment, Enrichments.jobFor(again, GmailThreads::textRead))
+        assertTrue(Enrichments.stale(again, modelOn = true, rules = "rules", version = 1))
+    }
+
     @Test
     fun `a repeated id counts once`() {
         val result = Merge.apply(emptyList(), Source.Teams, listOf(fetched("a", title = "one"), fetched("a", title = "two")), t0)

@@ -12,6 +12,7 @@ import com.thomaswcode.decrastination.data.TaskState
 import com.thomaswcode.decrastination.sources.ReadContext
 import com.thomaswcode.decrastination.sources.SourceRead
 import com.thomaswcode.decrastination.sources.TaskSource
+import com.thomaswcode.decrastination.sources.gmail.GmailThreads
 import kotlin.coroutines.CoroutineContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -123,7 +124,8 @@ class Syncer(
         var report = SyncReport()
         tasks.update { current ->
             val now = clock.now()
-            val merged = Merge.apply(current.tasks, source.source, read.items, now)
+            // Merged, and what was finished a fortnight ago kept as its record (C-Q3), whichever source it's from.
+            val merged = Merge.apply(current.tasks, source.source, read.items, now).let { it.copy(tasks = Merge.trimmed(it.tasks, now, GmailThreads.TEXT_EXTRAS)) }
             report = SyncReport(
                 completed = merged.completed,
                 reopened = merged.reopened,

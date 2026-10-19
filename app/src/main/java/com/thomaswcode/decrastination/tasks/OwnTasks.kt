@@ -4,7 +4,6 @@ import com.thomaswcode.decrastination.core.ChatState
 import com.thomaswcode.decrastination.core.Duplicates
 import com.thomaswcode.decrastination.core.InstructionRules
 import com.thomaswcode.decrastination.core.InstructionState
-import com.thomaswcode.decrastination.core.Merge
 import com.thomaswcode.decrastination.core.Mine
 import com.thomaswcode.decrastination.core.OwnTask
 import com.thomaswcode.decrastination.core.OwnTaskRules
@@ -13,6 +12,8 @@ import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Status
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.WallClock
+import com.thomaswcode.decrastination.core.longFinished
+import com.thomaswcode.decrastination.core.trimmed
 import com.thomaswcode.decrastination.core.withMine
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.TaskState
@@ -106,16 +107,14 @@ class OwnTasks(
     }
 
     /**
-     * Your own tasks done more than a fortnight ago go, as a source's do once it no longer lists them
-     * ([com.thomaswcode.decrastination.core.Merge.KEEP_FINISHED_MS]); nothing reads them to do it.
+     * Your own tasks done more than a fortnight ago are kept as their record, as a source's are
+     * ([trimmed], C-Q3): only a delete removes one. A sync trims them too; this does after one that
+     * merged nothing.
      */
     suspend fun pruneOwn() {
         val now = clock.now()
-        fun old(t: TaskItem) = t.source == Source.Own && !t.isOpen && now - (t.doneAt ?: t.lastSeenAt) >= Merge.KEEP_FINISHED_MS
-        val gone = tasks.value.tasks.filter(::old).map { it.id }.toSet()
-        if (gone.isEmpty()) return
-        tasks.update { state -> state.copy(tasks = state.tasks.filterNot(::old)) }
-        forgetCards(gone)
+        if (tasks.value.tasks.none { it.source == Source.Own && it.longFinished(now) && it != it.trimmed(emptySet()) }) return
+        tasks.update { state -> state.copy(tasks = state.tasks.map { if (it.source == Source.Own && it.longFinished(now)) it.trimmed(emptySet()) else it }) }
     }
 
     /** One of your own whose steps are all done finished, from the app's start. */

@@ -11,6 +11,7 @@ package com.thomaswcode.decrastination.core
  *   don't keep it). A [TaskItem.derived] one (the Anki quota) was missed instead: only its counts
  *   can say it's done.
  * - A done task the source lists again is open again: a hand-in undone, an email starred again.
+ *   One whose reading was let go ([trimmed]) is laid as one seen for the first time, and read again.
  *   A derived task once done stays done, even if the counts waver (Anki's learning cards come
  *   back within minutes); so does one done by its tick ([TaskItem.tickDone]: feedback you've read,
  *   which Teams goes on listing).
@@ -30,8 +31,12 @@ object Merge {
         val missed: List<TaskItem>,
     )
 
-    /** How long a finished task stays in the list after it was last seen or finished. */
+    /** How long a finished task stays in the list after it was last seen or finished; and keeps its text and reading ([trimmed], C-Q3). */
     const val KEEP_FINISHED_MS = 14 * 24 * 3_600_000L
+
+    /** [tasks], each finished more than [KEEP_FINISHED_MS] ago as it's kept ([TaskItem.trimmed]), the rest as they are. */
+    fun trimmed(tasks: List<TaskItem>, now: Long, bulky: Set<String>): List<TaskItem> =
+        tasks.map { if (it.longFinished(now)) it.trimmed(bulky) else it }
 
     fun apply(tasks: List<TaskItem>, source: Source, fetched: List<Fetched>, now: Long): Result {
         val byId = tasks.associateBy { it.id }
@@ -114,6 +119,7 @@ object Merge {
                 // A new round of it: the last round's minutes count towards neither this one's
                 // completion record nor what's left of it.
                 // Its steps too: none of the new round is done yet, by a session, a photo or by hand.
+                // Laid again as open: one whose reading was let go ([trimmed]) as one seen for the first time.
                 else -> updated.copy(
                     status = Status.Open,
                     doneAt = null,
@@ -122,7 +128,7 @@ object Merge {
                     stepsWorkedMin = 0,
                     firstProgress = f.sourceProgress,
                     subSteps = updated.subSteps.map { it.copy(done = false, byHand = false, timedMin = 0) },
-                ).also { reopened += it }
+                ).enriched().also { reopened += it }
             }
             fresh[id] = next
         }
