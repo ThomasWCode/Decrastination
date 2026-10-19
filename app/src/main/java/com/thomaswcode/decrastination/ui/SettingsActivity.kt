@@ -58,7 +58,7 @@ import kotlinx.coroutines.withContext
 
 /**
  * Everything you can change: hours, Teams, planning, Anki, what's blocked, and
- * Claude. Saved through [AppGraph.changeSettings], so once protection is armed a change that
+ * Claude. Saved through [com.thomaswcode.decrastination.protect.Protection.changeSettings], so once protection is armed a change that
  * loosens blocking waits its 24 hours and shows here until it applies.
  */
 class SettingsActivity : ComponentActivity() {
@@ -122,7 +122,7 @@ class SettingsActivity : ComponentActivity() {
                             scope.launch {
                                 val began = base
                                 val wanted = draft
-                                graph.changeSettings { latest -> SettingsChanges.edited(began, wanted, latest) }
+                                graph.protection.changeSettings { latest -> SettingsChanges.edited(began, wanted, latest) }
                                 // The reminders' alarms, at their new times.
                                 Daily.schedule(this@SettingsActivity)
                                 val waiting = graph.runtime.value.pending

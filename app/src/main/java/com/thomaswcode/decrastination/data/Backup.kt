@@ -384,7 +384,7 @@ object Backups {
     /**
      * The settings an import proposes: the backup's, but this phone's own protection and Claude's
      * key stay as they are. Arming needs the device admin and the parent code set up here, and a
-     * key is this phone's. They go through [com.thomaswcode.decrastination.AppGraph.changeSettings],
+     * key is this phone's. They go through [com.thomaswcode.decrastination.protect.Protection.changeSettings],
      * so once armed a loosening one waits like any other.
      */
     fun importedSettings(asked: Settings, backup: Backup): Settings =

@@ -295,7 +295,7 @@ class AppGraph private constructor(context: Context) {
             override suspend fun applyInstruction(id: String) { this@AppGraph.applyInstruction(id) }
             override suspend fun deleteInstruction(id: String) { this@AppGraph.deleteInstruction(id) }
             override suspend fun layTaskOverrides() { this@AppGraph.layTaskOverrides() }
-            override suspend fun changeSettings(change: (Settings) -> Settings) { this@AppGraph.changeSettings(change) }
+            override suspend fun changeSettings(change: (Settings) -> Settings) { protection.changeSettings(change) }
             override suspend fun answerEvent(key: String, answer: String) {
                 calendarWriter.answer(key, answer)
             }
@@ -308,14 +308,6 @@ class AppGraph private constructor(context: Context) {
     val protection = Protection(settings, runtime, secrets, clock, scope, adminActive = { Watchdog.isAdminActive(app) }) {
         app.getSystemService(DevicePolicyManager::class.java)?.removeActiveAdmin(Watchdog.admin(app))
     }
-
-    // [Protection]'s functions, till their callers call them there.
-    suspend fun changeSettings(change: (Settings) -> Settings) = protection.changeSettings(change)
-    suspend fun applyReviewChanges(changes: List<com.thomaswcode.decrastination.learn.ReviewInput.Change>) = protection.applyReviewChanges(changes)
-    suspend fun applyDueChanges(force: Boolean = false) = protection.applyDueChanges(force)
-    suspend fun useParentCode(code: String, unblockUntil: Long? = null): String? = protection.useParentCode(code, unblockUntil)
-    suspend fun cancelChange(id: String) = protection.cancelChange(id)
-    suspend fun applyNow(id: String) = protection.applyNow(id)
 
     /**
      * Reads every source now, as a job (it keeps its network after the screen that asked has
@@ -507,7 +499,7 @@ class AppGraph private constructor(context: Context) {
     val backups: BackupService by lazy {
         BackupService(
             stores, clock, scope, AndroidBackupFolder(app.contentResolver), File(app.filesDir, RESET_COPIES), BuildConfig.VERSION_NAME,
-            changeSettings = { change -> changeSettings(change) },
+            changeSettings = { change -> protection.changeSettings(change) },
             applying = applying,
             layInstructions = { layInstructions() },
             layTaskOverrides = { layTaskOverrides() },
@@ -745,7 +737,7 @@ class AppGraph private constructor(context: Context) {
         if (com.thomaswcode.decrastination.learn.ReviewInput.valueOf(settings.value, change.setting) != change.value) return "It's been changed since: left as it is."
         // One end of a school day's hours back alone can meet the other: then it can't be.
         if (!com.thomaswcode.decrastination.data.SettingsLimits.window(com.thomaswcode.decrastination.learn.ReviewInput.set(settings.value, change.setting, before).weekdayHours, overnight = false)) return "It can't go back on its own: the day's hours would end before they start. Change them in Settings."
-        changeSettings { com.thomaswcode.decrastination.learn.ReviewInput.set(it, change.setting, before) }
+        protection.changeSettings { com.thomaswcode.decrastination.learn.ReviewInput.set(it, change.setting, before) }
         val now = com.thomaswcode.decrastination.learn.ReviewInput.valueOf(settings.value, change.setting)
         val label = com.thomaswcode.decrastination.learn.ReviewInput.label(change.setting)
         return if (now == before) "$label is back to ${com.thomaswcode.decrastination.learn.ReviewInput.valueText(change.setting, before)}." else "$label back to ${com.thomaswcode.decrastination.learn.ReviewInput.valueText(change.setting, before)} waits, as a change that loosens does once armed."

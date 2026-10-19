@@ -696,7 +696,7 @@ class FocusService : AccessibilityService() {
         // being spent, its own check does this.)
         if (spending == null) lookAtScreen()
         scope.launch {
-            graph.applyDueChanges()
+            graph.protection.applyDueChanges()
             // A day with nothing to do starts with free time (BL-07), given once.
             runCatching { graph.focus.grantAllowanceIfDue() }.onFailure { Log.w(TAG, "Giving the day's free time failed", it) }
             // A slot whose end went by while its alarm couldn't ring (PL-13).

@@ -252,7 +252,7 @@ class AdminReceiver : DeviceAdminReceiver() {
 /** The watchdog every 15 minutes, and pending setting changes applied when due. */
 class WatchdogWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
-        AppGraph.get(applicationContext).applyDueChanges()
+        AppGraph.get(applicationContext).protection.applyDueChanges()
         Watchdog.check(applicationContext, repair = true)
         return Result.success()
     }
