@@ -99,14 +99,14 @@ A step over an hour is cut into even sittings by time, never by content (`core/S
 
 ## When a task is read
 
-`AppGraph.enrichNow`, run by `enrich/EnrichWorker.kt` after a sync leaves any task's reading out of date (online, where Claude's to be asked), when Claude is switched on or off, and when a question gets your answer.
+`Readings.enrichNow` (`enrich/Readings.kt`), run by `enrich/EnrichWorker.kt` after a sync leaves any task's reading out of date (online, where Claude's to be asked), when Claude is switched on or off, and when a question gets your answer.
 It runs again once Claude can be asked again (its rest over, `EnrichWorker.retryAfter`; a higher cap). A new photo reads its task at once.
 - **Out of date** (`Enrichments.stale`): no reading; its content changed (`inputHash`); Claude on and the reading the rules'; Claude off and the reading Claude's (the rules' replaces it); an email read as only to read; or, Claude on, an open task Claude read under older prompts (AC-06).
-- **Order** (`Enrichments.NEED`): never read first, then the oldest prompts' readings, each soonest due first. At most 20 calls to Claude a run (`AppGraph.MAX_MODEL_CALLS`), second asks counted.
+- **Order** (`Enrichments.NEED`): never read first, then the oldest prompts' readings, each soonest due first. At most 20 calls to Claude a run (`Readings.MAX_MODEL_CALLS`), second asks counted.
 - Each task is looked up afresh just ahead of its call, and the reading laid only over the task as read: one that changes during the call is read in the next run.
 - **A call that fails** gives the task the rules' reading (one stale by the version alone keeps its own), and leaves Claude alone for the rest of the run; but a request the API won't take leaves only that task to the rules, till its content changes (`RuntimeState.enrichFailed`).
 - **Declined or unreadable** (a refusal, an answer cut off at the token limit, one that still can't be read once put back): the rules' reading is kept under Claude's name and these prompts, so it isn't asked for again till something changes.
-- **Read again with Claude** (the sheet, `AppGraph.readAgain`) reads that task at once, whatever read it. Its reading stands till the new one comes, and you're told if none did. Not while Claude is off, resting or at its cap.
+- **Read again with Claude** (the sheet, `Readings.readAgain`) reads that task at once, whatever read it. Its reading stands till the new one comes, and you're told if none did. Not while Claude is off, resting or at its cap.
 - A reading that finds new vocabulary sections, or moves a deck task's date, has Anki read again at once.
 
 ## The input hash
@@ -144,9 +144,10 @@ It runs again once Claude can be asked again (its rest over, `EnrichWorker.retry
 
 ## Photos (AI-23)
 
-- *Add a photo of the work*, on a task Claude reads, keeps one photo with it (`AppGraph.attachPhoto`: the app's own files, one a task, a new one replacing the last). Its hash is in the input hash, so the task is read again at once.
+- *Add a photo of the work*, on a task Claude reads, keeps one photo with it (`Photos.attachPhoto`: the app's own files, one a task, a new one replacing the last). Its hash is in the input hash, so the task is read again at once.
 - The photo goes first in the item, Claude told it's the work itself, to estimate and split from, saying in `reason` what it saw (`Prompts.photo`). Such a reading is `fromPhoto`, and the sheet says "From your photo".
-- Photos no task holds are let go when the app starts (`AppGraph.sweepPhotos`), but for one a chat delete can still undo.
+- Photos no task holds are let go when the app starts (`Photos.sweepPhotos`), but for one a chat delete can still undo.
+- `Readings` and `Photos` are built like `Focus` (their stores, the clock, the gateway and small callbacks); `ReadingsTest` and `PhotosTest` drive them on temporary stores, Claude's API a stand-in.
 - A photo of homework, taken in Work, is read into tasks of your own instead (NF-01, `PhotoTasks`, `PhotoTaskReader`), each checked in the form (sources.md).
 
 ## The request
