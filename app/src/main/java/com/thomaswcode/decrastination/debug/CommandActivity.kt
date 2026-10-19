@@ -97,8 +97,9 @@ import kotlinx.serialization.json.JsonPrimitive
  *   Nothing reaches Anthropic and nothing is stored: it checks the client works on the phone.
  * - `instruction --es text "<words>"` (about `--es task <id>`, `--es event <name>` or `--es day
  *   YYYY-MM-DD`, or none): an instruction written as on the phone, read by Claude (a paid call)
- *   and left for you to apply; `instructions` logs them all with Claude's reading, and
- *   `instruction-discard --es id <id|all>` discards those not applied.
+ *   and applied once it's read; `instructions` logs them all with Claude's reading,
+ *   `instruction-discard --es id <id|all>` discards those not applied, and
+ *   `instruction-delete --es id <id>` takes one applied back, as *Take back* does.
  * - Your own tasks (2.0.0): `own-add --es title "<name>"` (with `--es due 2026-10-16T17:00`,
  *   `--ei minutes 45`, `--es kind Revision`), logging its id; `own-done`, `own-reopen` and
  *   `own-delete --es task <id>`; and `quick-minutes --es task <id> --ei minutes N` (`--ei minutes 0`
@@ -460,7 +461,7 @@ class CommandActivity : Activity() {
             }
             "instruction" -> {
                 // --es text "<words>", about --es task <id>, --es event <name>, or --es day YYYY-MM-DD (or none):
-                // written as on the phone, then read by Claude; it waits for you to apply it.
+                // written as on the phone, then read by Claude, and applied once it's read.
                 val text = intent.getStringExtra("text")
                 if (text.isNullOrBlank()) {
                     Log.w(TAG, "instruction needs --es text <words>")
