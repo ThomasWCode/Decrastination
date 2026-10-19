@@ -52,7 +52,8 @@ import kotlinx.coroutines.withContext
  * ([addInstruction], [readInstructions]), or made yourself as quick changes ([addOwnChange],
  * [laterToday], [takeBackQuick]); applied at once once read, or refused saying why ([applyInstruction]);
  * deleted or taken back ([deleteInstruction]); and laid over everything they change ([layInstructions],
- * [layTaskOverrides]). The one writer of `instructions.json`: others read it here ([value], [state]).
+ * [layTaskOverrides]). The rest of the app reads `instructions.json` here ([value], [state]); a card of
+ * Felix's adds the instruction it makes itself, then has it applied here.
  * Built like [com.thomaswcode.decrastination.block.Focus]: its stores, the clock, the gateway, the focus
  * and the plan, and small callbacks. Their pure rules are [com.thomaswcode.decrastination.core.Instructions]'s,
  * named in full here, as this class has their name.

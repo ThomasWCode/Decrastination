@@ -159,7 +159,8 @@ They're kept only if they make room and the facts are unchanged meanwhile (`Memo
 ## The instructions screen
 
 *Your changes*, the chat's second tab, lists the changes in use, each with *Take back*, and those to check: still being read, or unclear with why (*Write again*, *Discard*).
-It holds Felix's changes, the quick changes made on a task's sheet without Claude, and instructions read by `enrich/InstructionReader.kt`.
+It holds Felix's changes, the quick changes made on a task's sheet without Claude (`ui/TaskSheetState.kt`), and instructions read by `enrich/InstructionReader.kt`.
+`tasks/Instructions.kt` keeps them in `instructions.json`: it has each read, applies or refuses it, takes it back, and lays what's in use over the tasks (`layTaskOverrides`), the calendar's answers and the plan (`layInstructions`). It's built like `Focus` (its stores, the clock, the gateway, the focus and the plan); `tasks/InstructionsTest` drives it on temporary stores, and `TaskSheetStateTest` the sheet's changes without Compose.
 - `InstructionPrompts` reads your own words about a task, an event, a day or nothing in particular into changes of the chat's types, given the open tasks and the fortnight's events (`InstructionPrompts.describe`).
 - It reads an instruction you write again, and your answer to Felix's question about a task.
 - `InstructionAnswers.parse` checks the reading: if one change can't be made, none are, and it says why.
