@@ -94,7 +94,10 @@ class BlockedActivity : ComponentActivity() {
                 value = graph.clock.now()
             }
         }
-        val plan = remember(tasks, settings, now / 60_000) { graph.planning.plan(tasks, settings, now) }
+        // The plan as at the minute it's in: made again as the tasks change, it keeps that time, so a
+        // Done's second tap isn't taken for one on the piece shown after it (its seen-at, LR-09).
+        val minute = remember(now / 60_000) { now }
+        val plan = remember(tasks, settings, minute) { graph.planning.plan(tasks, settings, minute) }
         val verdict = remember(tasks, settings, runtime, now / 10_000) { graph.focus.verdict(now) }
         val zone = graph.clock.zone()
         var message by remember { mutableStateOf<String?>(null) }

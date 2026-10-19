@@ -82,6 +82,21 @@ class DayModelTest {
     }
 
     @Test
+    fun `a slot kept twice at one start is two rows, each with its own key`() {
+        val p = plan()
+        val slot = p.todaySlots.first { it.kind == SlotKind.Work }
+        val kept = SlotRecord(
+            date = "2026-10-12", key = "anki:quota#-1#1", taskId = "anki:quota", kind = Kind.Revision, label = "Anki", plannedMin = 5,
+            start = slot.start + 7_200_000L, end = slot.start + 7_500_000L, window = WindowKind.Evening, outcome = SlotOutcome.Kept, workedMin = 5, at = slot.start - 60_000L,
+        )
+        val again = kept.copy(at = kept.at + 4_500L)
+        val model = DayModel.from(p, monday, emptyList(), listOf(kept, again), evening, Fixtures.at("2026-10-12T16:30"), LONDON)
+        val keys = model.rows.map(::rowKey)
+        assertEquals(2, model.rows.count { it is DayModel.Row.Recorded })
+        assertEquals(keys.size, keys.toSet().size)
+    }
+
+    @Test
     fun `today's real deadlines its days can't hold are said`() {
         val short = plan().copy(wontFit = listOf(WontFit("teams:a", "a", 120, 60, Fixtures.at("2026-10-13T09:00"))))
         assertEquals("1 won't fit before its deadline", DayModel.from(short, monday, emptyList(), emptyList(), evening, Fixtures.at("2026-10-12T16:30"), LONDON).wontFit)
