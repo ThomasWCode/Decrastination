@@ -139,6 +139,20 @@ class Protection(
         }
     }
 
+    /**
+     * [secret], a new one for your dad's authenticator, kept once a code from it checked out at [step]
+     * (arming's wizard). Only the code checked is used up: the next one his app shows works.
+     */
+    suspend fun newParentCode(secret: ByteArray, step: Long) {
+        secrets.put(Secret.TotpSecret, Totp.base32(secret))
+        runtime.update { it.copy(codeLock = CodeLock(lastUsedStep = step)) }
+    }
+
+    /** No parent code: one kept from an earlier arming would still unblock. */
+    suspend fun noParentCode() {
+        secrets.put(Secret.TotpSecret, null)
+    }
+
     /** The device admin kept in step with arming, from the app's start. */
     fun start() {
         // Disarmed (once the wait is over, or at once by a parent's code): the device admin goes

@@ -353,7 +353,7 @@ private fun ParentCodeDialog(graph: AppGraph, onDone: () -> Unit, onCancel: () -
             onKept = onDone,
             onNew = { fresh = true },
             // No parent code means none: the one kept would still unblock.
-            onNone = { scope.launch { graph.secrets.put(Secret.TotpSecret, null); onDone() } },
+            onNone = { scope.launch { graph.protection.noParentCode(); onDone() } },
             onCancel = onCancel,
         )
     }
@@ -428,9 +428,7 @@ private fun NewParentCodeDialog(graph: AppGraph, onDone: () -> Unit, onCancel: (
                     error = "That isn't the code. Check his app has the new entry."
                 } else {
                     scope.launch {
-                        graph.secrets.put(Secret.TotpSecret, Totp.base32(secret))
-                        // Only the code checked is used up: the next one his app shows works.
-                        graph.runtime.update { it.copy(codeLock = CodeLock(lastUsedStep = step)) }
+                        graph.protection.newParentCode(secret, step)
                         onDone()
                     }
                 }
@@ -438,7 +436,7 @@ private fun NewParentCodeDialog(graph: AppGraph, onDone: () -> Unit, onCancel: (
         },
         dismissButton = {
             // No parent code means none: one kept from an earlier arming would still unblock.
-            TextButton(onClick = { scope.launch { graph.secrets.put(Secret.TotpSecret, null); onDone() } }) { Text("Skip: no parent code") }
+            TextButton(onClick = { scope.launch { graph.protection.noParentCode(); onDone() } }) { Text("Skip: no parent code") }
         },
     )
 }
