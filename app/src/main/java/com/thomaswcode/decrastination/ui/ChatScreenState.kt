@@ -107,7 +107,8 @@ class ChatScreenState {
      * His [last] message offered to the box (D-98): where it's a question of his still waiting for its
      * answer ([Replies.waiting], a check-in's while [checkInUnderWay]), what you type answers it, as its
      * chips do, unless you've chosen another message or turned it down. The offer's let go once the
-     * question's answered or isn't the last.
+     * question's answered or isn't the last, or a newer nudge of his takes the box ([Replies.pending]):
+     * that one with no strip over it, as your words answer the message just before them.
      */
     fun offer(last: ChatMessage?, checkInUnderWay: Boolean) {
         val question = last?.takeIf { Replies.waiting(it, checkInUnderWay) && it.id != declined }

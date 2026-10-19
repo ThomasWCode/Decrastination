@@ -36,14 +36,67 @@ class RepliesTest {
         val turn = ChatMessage("y", Speaker.You, "what's left?", 1, answeredAt = 2)
         val answer = ChatMessage("a", Speaker.Felix, "The worksheet.", 2)
         val (one, two) = asked("1", 3) to asked("2", 4)
-        assertEquals("2", Replies.pending(listOf(turn, answer, one, two), checkInUnderWay = false)?.id)
+        assertEquals("2", Replies.pending(listOf(turn, answer, one, two), checkInUnderWay = false, now = 7)?.id)
         // The second answered with no call (its kind its question's): the first is next.
         val done = two.copy(answeredAt = 5)
         val harder = ChatMessage("h", Speaker.You, "Harder", 5, kind = MessageKind.Completions, replyTo = "2", answeredAt = 5)
-        assertEquals("1", Replies.pending(listOf(turn, answer, one, done, harder), checkInUnderWay = false)?.id)
+        assertEquals("1", Replies.pending(listOf(turn, answer, one, done, harder), checkInUnderWay = false, now = 7)?.id)
         // A turn of the chat since: none, the conversation's moved on.
         val talk = ChatMessage("t", Speaker.You, "anyway, what's tomorrow?", 6)
-        assertEquals(null, Replies.pending(listOf(turn, answer, one, done, harder, talk), checkInUnderWay = false))
+        assertEquals(null, Replies.pending(listOf(turn, answer, one, done, harder, talk), checkInUnderWay = false, now = 7))
+    }
+
+    @Test
+    fun `his newest message with replies of its own takes the box over an older question, which waits, shown so`() {
+        val turn = ChatMessage("y", Speaker.You, "what's left?", 1, answeredAt = 2)
+        val trip = ChatMessage("e", Speaker.Felix, "A trip on Monday: how much of the day does it take?", 3, About(eventKey = "trip", eventStart = 100), kind = MessageKind.EventQuestion, byApp = true, suggestedReplies = listOf("All of it", "A few hours", "None"))
+        val start = ChatMessage("s", Speaker.Felix, "Starting now?", 4, About(taskId = "t1"), kind = MessageKind.SlotStart, suggestedReplies = listOf("Starting", "Later"))
+        val slipped = ChatMessage("n", Speaker.Felix, "It slipped again: finding the email, or something else?", 5, About(taskId = "t1"), kind = MessageKind.SlotEnd, suggestedReplies = listOf("The email", "Something else"))
+        val chat = listOf(turn, trip, start, slipped)
+        assertEquals("n", Replies.pending(chat, checkInUnderWay = false, now = 6)?.id)
+        // Waiting, shown so: the question, and the newest nudge; the nudge before it has had its moment.
+        assertEquals(setOf("e", "n"), Replies.awaitingIds(chat, checkInUnderWay = false, now = 6))
+        // The nudge marked answered: the question's the box's again.
+        val marked = listOf(turn, trip, start, slipped.copy(answeredAt = 7))
+        assertEquals("e", Replies.pending(marked, checkInUnderWay = false, now = 8)?.id)
+        // Answered by a turn of the chat: the box moves on with the conversation, and the question still waits, shown.
+        val talked = marked + ChatMessage("r", Speaker.You, "the email", 9)
+        assertEquals(null, Replies.pending(talked, checkInUnderWay = false, now = 10))
+        assertEquals(setOf("e"), Replies.awaitingIds(talked, checkInUnderWay = false, now = 10))
+        // Once its event has begun, it waits no more.
+        assertEquals(emptySet(), Replies.awaitingIds(talked, checkInUnderWay = false, now = 100))
+        assertEquals(null, Replies.pending(marked, checkInUnderWay = false, now = 100))
+    }
+
+    @Test
+    fun `your words after his nudge answer it, swiped to it or not, and a reply of yours to his question answers that`() {
+        val trip = ChatMessage("e", Speaker.Felix, "A trip on Monday: how much of the day does it take?", 2, About(eventKey = "trip", eventStart = 100), kind = MessageKind.EventQuestion, byApp = true)
+        val nudge = ChatMessage("n", Speaker.Felix, "Starting now?", 3, kind = MessageKind.SlotStart, suggestedReplies = listOf("Starting"))
+        assertEquals(setOf("e", "n"), Replies.awaitingIds(listOf(trip, nudge), checkInUnderWay = false, now = 4))
+        val words = ChatMessage("y", Speaker.You, "in five", 5)
+        assertEquals(setOf("e"), Replies.awaitingIds(listOf(trip, nudge, words), checkInUnderWay = false, now = 6))
+        // Words that aren't one of its answers, a turn of the chat replying to it: it waits no more, unanswered in the store.
+        val reply = ChatMessage("r", Speaker.You, "it depends on the ferry", 7, replyTo = "e")
+        assertEquals(emptySet(), Replies.awaitingIds(listOf(trip, nudge, words, reply), checkInUnderWay = false, now = 8))
+        // His reply to something isn't yours.
+        assertEquals(setOf("e", "n"), Replies.awaitingIds(listOf(trip, nudge.copy(replyTo = "e")), checkInUnderWay = false, now = 4))
+    }
+
+    @Test
+    fun `his answers in the chat, his messages with no replies, yours and one answered aren't waiting`() {
+        val nudge = ChatMessage("n", Speaker.Felix, "Starting now?", 2, kind = MessageKind.SlotStart, suggestedReplies = listOf("Starting"))
+        assertEquals(setOf("n"), Replies.awaitingIds(listOf(nudge), checkInUnderWay = false, now = 3))
+        assertEquals(emptySet(), Replies.awaitingIds(listOf(nudge.copy(answeredAt = 3)), checkInUnderWay = false, now = 4))
+        assertEquals(emptySet(), Replies.awaitingIds(listOf(nudge.copy(suggestedReplies = emptyList())), checkInUnderWay = false, now = 3))
+        // His answer in the chat isn't an ask of his, whatever it offers.
+        assertEquals(emptySet(), Replies.awaitingIds(listOf(ChatMessage("a", Speaker.Felix, "Moved it to seven.", 2, suggestedReplies = listOf("Thanks"))), checkInUnderWay = false, now = 3))
+        assertEquals(emptySet(), Replies.awaitingIds(listOf(ChatMessage("y", Speaker.You, "hi", 2, kind = MessageKind.SlotStart, suggestedReplies = listOf("x"))), checkInUnderWay = false, now = 3))
+        // One of his with no words after it isn't a message after it.
+        assertEquals(setOf("n"), Replies.awaitingIds(listOf(nudge, ChatMessage("x", Speaker.Felix, "", 3)), checkInUnderWay = false, now = 4))
+        // A check-in's question only while the check-in's under way.
+        val asked = ChatMessage("c", Speaker.Felix, "How did the week feel?", 2, kind = MessageKind.CheckIn, byApp = true)
+        assertEquals(setOf("c"), Replies.awaitingIds(listOf(asked), checkInUnderWay = true, now = 3))
+        assertEquals(emptySet(), Replies.awaitingIds(listOf(asked), checkInUnderWay = false, now = 3))
     }
 
     @Test

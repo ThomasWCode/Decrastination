@@ -78,6 +78,20 @@ class ChatScreenStateTest {
     }
 
     @Test
+    fun `a newer nudge of his taking the box lets go the question offered before, with no strip of its own`() {
+        val screen = ChatScreenState()
+        screen.offer(ChatMessage("q", Speaker.Felix, "What did you avoid?", 2, kind = MessageKind.CheckIn), checkInUnderWay = true)
+        assertEquals("q" to true, screen.replyingTo?.id to screen.offered)
+        screen.offer(ChatMessage("n", Speaker.Felix, "Starting now?", 3, kind = MessageKind.SlotStart, suggestedReplies = listOf("Starting")), checkInUnderWay = true)
+        assertEquals(null to false, screen.replyingTo to screen.offered)
+        // One you chose stays chosen.
+        val chosen = his("h", "2026-10-18T17:00")
+        screen.replyTo(chosen)
+        screen.offer(ChatMessage("n2", Speaker.Felix, "Ten minutes left.", 4, kind = MessageKind.SlotEnd, suggestedReplies = listOf("Done")), checkInUnderWay = true)
+        assertEquals("h", screen.replyingTo?.id)
+    }
+
+    @Test
     fun `made again, the screen has the archive's pages and the message it was replying to back`() {
         val screen = ChatScreenState()
         val target = his("h", "2026-10-18T17:00")
