@@ -299,8 +299,9 @@ class Focus(
         val plan = plan(now)
         val slot = (plan.todaySlots + plan.buckets.flatMap { it.slots }).firstOrNull { it.kind == SlotKind.Work && it.chunk?.key == key }
         val chunk = slot?.chunk ?: plan.ordered.firstOrNull { it.key == key } ?: return null
-        // Kept since you saw it (a second tap, a sheet left open): a box's next piece has its key now.
-        if (seenAt != null && log.value.slots.any { it.key == key && it.outcome.kept && it.at >= seenAt }) return null
+        // Kept since you saw it (a second tap, a sheet left open), or moments ago (taps in a row, the
+        // screen drawn again between them): a box's next piece has its key now.
+        if (seenAt != null && log.value.slots.any { it.key == key && it.outcome.kept && it.at >= minOf(seenAt, now - AGAIN_MS) }) return null
         val task = tasks.value.tasks.firstOrNull { it.id == chunk.taskId && it.isOpen } ?: return null
         // Its step, where it's still that one and still to do (none for a box of time, or the whole task).
         val index = chunk.stepIndex?.let { i -> stepAt(task, i, chunk.step.orEmpty()).takeIf { it >= 0 } ?: return null }
@@ -787,6 +788,8 @@ class Focus(
     }
 
     companion object {
+        /** How soon after a piece's Done a tick on it is that Done's tap again, whenever its screen saw it: no piece is worked in less. */
+        private const val AGAIN_MS = 30_000L
         private const val PLAN_TTL_MS = 60_000L
 
         /** Whether [task]'s blocks can be ticked off by hand: an email's, or one of your own's, which are yours to say. */

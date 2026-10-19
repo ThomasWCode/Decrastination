@@ -56,7 +56,7 @@ A task without steps is planned at no less than 5 minutes, or its whole estimate
 - the source's own progress counts too, the smaller of the two again;
 - a vocabulary step whose sections the textbook's Anki deck tasks hold is left out: the cards are that work.
 
-With every step done, an email or a task of your own has nothing left; any other keeps a 5-minute "finish and hand in" piece until its source says it's done.
+With every step done, an email or a task of your own has nothing left; any other keeps a 5-minute "finish and hand in" piece until its source says it's done. A task without steps whose minutes are all worked keeps a last box of 5 minutes in the same way.
 
 ## Pieces
 

@@ -11,6 +11,7 @@ import com.thomaswcode.decrastination.core.InstructionStatus
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.Planner
 import com.thomaswcode.decrastination.core.Source
+import com.thomaswcode.decrastination.core.SubStep
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.WindowKind
 import com.thomaswcode.decrastination.data.Settings
@@ -32,6 +33,20 @@ class TaskSheetModelTest {
 
     /** Monday's plan as made at 16:00: two 30-minute pieces in the evening, both due tonight. */
     private val plan = Planner.plan(Planner.Input(listOf(task("a", 30), task("b", 30)), Fixtures.at("2026-10-12T16:00"), LONDON, Settings(), windows = evening))
+
+    @Test
+    fun `a task with all its work done but its source's word still has its last minutes planned, and is said to`() {
+        val done = task("a", 30).copy(workedMin = 30)
+        assertTrue(worked(done, 1.0))
+        assertFalse(worked(task("a", 30).copy(workedMin = 25), 1.0))
+        // Planned all the same, a last few minutes, till its source says it's done (planner.md).
+        val p = Planner.plan(Planner.Input(listOf(done), Fixtures.at("2026-10-12T16:00"), LONDON, Settings(), windows = evening))
+        assertEquals(5, p.ordered.single().minutes)
+        // With steps: when every one is ticked.
+        val steps = task("b", 30).copy(subSteps = listOf(SubStep("Plan", 10, done = true), SubStep("Write", 20)))
+        assertFalse(worked(steps, 1.0))
+        assertTrue(worked(steps.copy(subSteps = steps.subSteps.map { it.copy(done = true) }), 1.0))
+    }
 
     @Test
     fun `a task's pieces say when they're planned and why`() {

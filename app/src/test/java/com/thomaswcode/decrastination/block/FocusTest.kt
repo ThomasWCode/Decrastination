@@ -545,8 +545,13 @@ class FocusTest {
         assertEquals(1, both.count { it })
         assertEquals(30, tasks.value.tasks.single().workedMin)
         assertEquals(1, log.value.slots.size)
-        // The next box, its key the same now, is kept by a tick seen after the first.
-        assertTrue(slotted.keepSlot(key, seenAt = clock.time + 1))
+        // A tap moments after, its screen drawn again since (the blocking screen's plan made again): the same Done.
+        clock.time += 4_500L
+        assertFalse(slotted.keepSlot(key, seenAt = clock.time))
+        assertEquals(1, log.value.slots.size)
+        // The next box, its key the same now, is kept by a tick seen after the first, once it's been worked.
+        clock.time += 30 * 60_000L
+        assertTrue(slotted.keepSlot(key, seenAt = clock.time))
         assertEquals(60, tasks.value.tasks.single().workedMin)
     }
 
