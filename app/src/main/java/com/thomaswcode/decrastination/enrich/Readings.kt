@@ -53,7 +53,7 @@ class Readings(
     suspend fun enrichNow(byModel: Boolean = true, only: String? = null, force: Boolean = false): Boolean {
         // Not while it rests after a failed call (no network, a bad key), nor with no room under the
         // cap: then what only the rules have seen isn't due for it.
-        var enricher: Enricher? = gateway.client(com.thomaswcode.decrastination.enrich.ModelEffort.Job.Email).takeIf { byModel }
+        var enricher: Enricher? = gateway.client(ModelEffort.Job.Email).takeIf { byModel }
             ?.let { ClaudeEnricher(it, clock.zone(), profile = { profile() }, decks = { tasks.value.deckTopics }) }?.takeIf { gateway.available() }
         var calls = 0
         var decksChanged = false
@@ -85,7 +85,7 @@ class Readings(
             var enrichment = if (model != null) {
                 // Held now (switched off, resting after a failed call, no room under the cap): the
                 // rules do the rest of the run.
-                when (val called = gateway.call(interactive = false, task = task, record = com.thomaswcode.decrastination.enrich.ModelCalls.OnRecord(com.thomaswcode.decrastination.enrich.ModelEffort.jobOf(job), task.title) { r: Enricher.Result -> r.usage to com.thomaswcode.decrastination.enrich.ModelCalls.outcome(r) }, cost = { r: Enricher.Result -> r.costUsd to r.refused }) { model.enrich(task, job, now) }) {
+                when (val called = gateway.call(interactive = false, task = task, record = ModelCalls.OnRecord(ModelEffort.jobOf(job), task.title) { r: Enricher.Result -> r.usage to ModelCalls.outcome(r) }, cost = { r: Enricher.Result -> r.costUsd to r.refused }) { model.enrich(task, job, now) }) {
                     is Called.Held -> {
                         enricher = null
                         null
@@ -104,7 +104,7 @@ class Readings(
                         // A check its answer failed (AI-01): put back once, as a call of its own (counted
                         // under the cap, held by a rest); the first's reading stands if that doesn't come back.
                         val again = first.repair?.takeIf { calls < MAX_MODEL_CALLS }?.let { repair ->
-                            when (val second = gateway.call(interactive = false, task = task, record = com.thomaswcode.decrastination.enrich.ModelCalls.OnRecord(com.thomaswcode.decrastination.enrich.ModelEffort.jobOf(job), task.title) { r: Enricher.Result -> r.usage to com.thomaswcode.decrastination.enrich.ModelCalls.outcome(r) }, cost = { r: Enricher.Result -> r.costUsd to r.refused }) { model.repair(task, job, now, repair) }) {
+                            when (val second = gateway.call(interactive = false, task = task, record = ModelCalls.OnRecord(ModelEffort.jobOf(job), task.title) { r: Enricher.Result -> r.usage to ModelCalls.outcome(r) }, cost = { r: Enricher.Result -> r.costUsd to r.refused }) { model.repair(task, job, now, repair) }) {
                                 is Called.Answered -> second.value.also { calls++ }
                                 is Called.Failed -> {
                                     calls++
@@ -122,8 +122,8 @@ class Readings(
                             ?: when {
                                 force -> null
                                 // Declined by these prompts: the reading there kept, as theirs now, so it isn't asked for again till they change.
-                                onlyVersion -> task.enrichment?.copy(promptVersion = com.thomaswcode.decrastination.enrich.Prompts.VERSION)
-                                else -> rules.enrich(task, job, now).enrichment?.copy(by = model.by, promptVersion = com.thomaswcode.decrastination.enrich.Prompts.VERSION)
+                                onlyVersion -> task.enrichment?.copy(promptVersion = Prompts.VERSION)
+                                else -> rules.enrich(task, job, now).enrichment?.copy(by = model.by, promptVersion = Prompts.VERSION)
                             }
                     }
                 }

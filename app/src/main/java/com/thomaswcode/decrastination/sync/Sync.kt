@@ -25,6 +25,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
@@ -122,7 +123,7 @@ class Sync(
     /** The calendar's busy time and per-day loads (Phase 5), as last read and judged. */
     @Volatile
     /** The calendar as the planner counts it, from its last read: a plan made before that read is dropped with it. */
-    var calendarTime: com.thomaswcode.decrastination.learn.EventJudge.Time = com.thomaswcode.decrastination.learn.EventJudge.Time(emptyList(), emptyMap(), emptyList())
+    var calendarTime: EventJudge.Time = EventJudge.Time(emptyList(), emptyMap(), emptyList())
         private set(value) {
             field = value
             forgetPlan()
@@ -130,7 +131,7 @@ class Sync(
         }
 
     /** [calendarTime] as it changes, for a screen open while the calendar is read again. */
-    val calendarState = kotlinx.coroutines.flow.MutableStateFlow(calendarTime)
+    val calendarState = MutableStateFlow(calendarTime)
 
     /**
      * Reads every source now, as a job (it keeps its network after the screen that asked has
