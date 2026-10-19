@@ -28,7 +28,7 @@ What's laid, in turn:
 
 ## Outside breaks
 
-On a weekend or a day off, `outsideBreaks` (3) breaks of `outsideBreakMin` (20) are laid first, one at or after each of `outsideTimes` (09:30, 13:00, 16:00), each over by the next one's time. On a day under way, one whose time has gone isn't laid later.
+On a weekend or a day off, `outsideBreaks` (3) breaks of `outsideBreakMin` (20) are laid first, one at or after each of `outsideTimes` (09:30, 13:00, 16:00), each over by the next one's time and none starting after 18:00 (`Slotter.OUTSIDE_LATEST_MIN`, D-41): one with no room by then isn't laid. On a day under way, one whose time has gone isn't laid later.
 When the day's work needs their time (with its breaks, as they'd be laid), the midday one is given up first, then the afternoon's, then the morning's; and fewer still while more of the work would go unslotted around them than with none.
 
 ## Pins (PL-04)
