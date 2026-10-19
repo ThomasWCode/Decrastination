@@ -26,6 +26,7 @@ Decrastination has no Teams reader of its own. A separate app, the Teams Assignm
 - **Paths and calls** (`TeamsProvider`): `/assignments`, one row per assignment not handed in; `/state`, the widget's last sync and status; `/returned`, work handed back with feedback (NF-06); and the calls `requestSync` and `open`.
 - Queries and calls run off the main thread, as they block while the widget's process starts.
 - **A row as a task** (`TeamsRows.fetched`): Homework, keyed `teams:<key>`, with its title, class, instructions, due time, tab and due text.
+- **Its key is its identity**, so it never changes: an assignment gone from the list is done. The widget keeps it so from its 0.5.1: work it saved from its own screen before a list showed the card (keyed `h-…`, from its class and title) keeps that key here after it takes its Teams id. Before then, the switch looked like work handed in and new work set: a completion that never happened, with its free time, and the work read again as new (found 19 Oct; that day's records were put right by hand).
 - Its reference materials (by name) and links, one a line, where the widget gives them (DX-08): the files are kept as an email's attachments are, and named to Claude; the links are listed on the sheet, each opening in the browser.
 - **Returned work** (NF-06, `TeamsRows.returned`): each row is a task to read the feedback, "Read the feedback on …", Admin, 10 minutes, due three days after the work came back, its text the feedback.
 - It's done by its tick (`TaskItem.tickDone`), as no source can say it's read, or once the widget stops listing it. Claude doesn't read it. A widget without `/returned` refuses the path, and there are none.
@@ -33,13 +34,13 @@ Decrastination has no Teams reader of its own. A separate app, the Teams Assignm
 - **Done.** An assignment gone from `/assignments` is handed in. Listed again, the same task opens again.
 
 Freshness:
-- A Teams sync takes over the screen, so the widget syncs only when asked. Decrastination asks (`AppGraph.requestTeamsSync`) when you tap **Refresh Teams**.
+- A Teams sync takes over the screen, so the widget syncs only when asked. Decrastination asks (`Sync.requestTeamsSync`) when you tap **Refresh Teams**.
 - It also asks on its own (Q21, `block/TeamsAutoSync.kt`): at the first unlock after 16:45 (`teamsFirstUnlockMin`), every three hours (`teamsSyncEveryMin`), and at an unlock soon after the morning briefing.
 - Automatic syncs come only while the phone is unlocked and in use, never in quiet hours, and not within 30 minutes of a Teams sync.
 - On weekdays the first-unlock and three-hourly ones wait for the school-day blocking time (`weekdayBlockFromMin`); the morning's comes at an unlock within an hour and a half of the briefing.
 - Each is announced by a banner counting down 10 s, with **Cancel** and **Delay 5 min** (`block/CountdownBanner.kt`).
 - One the widget didn't start is offered again 15 minutes later, twice at most; then the next comes at its usual time.
-- The widget announces each change to its list. Once the changes have stopped for 5 s, Teams and Anki are read (`AppGraph.teamsChanged`). An announcement to an app in the background can come late, so it's a prompt to read, not a clock.
+- The widget announces each change to its list. Once the changes have stopped for 5 s, Teams and Anki are read (`Sync.teamsChanged`). An announcement to an app in the background can come late, so it's a prompt to read, not a clock.
 
 **Open** asks the widget to open the assignment in Teams (`call("open", key)`); feedback opens its assignment. When the widget can't, Teams opens on its own and you're told why (`ui/TaskOpener.kt`).
 
@@ -135,19 +136,21 @@ Made in the app, not read from anywhere (Q28): `Source.Own` ("Yours"), keyed `ow
 - And where it can be done: home or anywhere (PL-15). An event needs its date and time and has no minutes.
 - Kept as a source's values are (`sourceValues`), so instructions lay over it as over any task. A due date, start, minutes, steps or name an instruction gives is made on the task itself (`OwnTasks.changed`, `OwnTasks.MADE_ON_IT`), as the form would make it.
 - Steps edited in the form are matched to their old steps by place, so a renamed step keeps its tick (UI-15).
-- **Done** when you tap *All of it done*, or once every step is done. It earns no free time of itself; its kept slots earn theirs. *Not done* opens it again; *Delete* removes it. A fortnight after it's done, it goes (`AppGraph.pruneOwn`).
+- **Done** when you tap *All of it done*, or once every step is done. It earns no free time of itself; its kept slots earn theirs. *Not done* opens it again; *Delete* removes it. A fortnight after it's done, it goes (`OwnTasks.pruneOwn`).
 - Claude doesn't read it: its minutes and steps are yours, planned as given (readings.md).
+- `tasks/OwnTasks.kt` keeps, finishes, opens again, deletes and lets go of them, its rules `core/OwnTasks.kt`'s; `tasks/OwnTasksTest` drives it on temporary stores.
 
 ## The sync
 
 - **When.** `sync/SyncWorker.kt` reads every source every 15 minutes (WorkManager's shortest period), with no network constraint, and at once when asked (`SyncWorker.syncNow`, all sources or some).
 - A sync of all or some sources also runs on a refresh (Work, the widget, Settings), when the Teams widget's list changes, when AnkiDroid leaves the screen, when Anki's settings change, when a reading finds new deck sections, and from Setup.
 - *Check it's done* on a piece reads just its task's source and says whether it agrees (`ui/PieceActions.kt`).
-- **How** (`sync/Syncer.kt`): one sync at a time; the sources in turn, Anki last, as its deck tasks come from the others' homework; each read on its own, waited for at most 90 s.
+- **How** (`sync/Syncer.kt`, which the app reaches through `sync/Sync.kt`): one sync at a time; the sources in turn, Anki last, as its deck tasks come from the others' homework; each read on its own, waited for at most 90 s.
 - **A failed source fails only itself.** Its error is kept in its `SourceStatus` with the time of the attempt; its tasks stay as they are, and the other sources carry on.
 - A read that overruns is cancelled and left to wind down, and no other read of that source starts beside it (BUG-P2-020).
 - A good read records its time, the source's own "as of" time and note, and Anki's day, the decks' topics and Power Planner's timetable (`TaskState`).
-- **After each sync**: completions are settled (free time and the log, learning.md); your instructions' overrides are laid on new and returning tasks (`AppGraph.layTaskOverrides`); your own tasks long done go; and readings are queued where any task's is out of date (`EnrichWorker`, readings.md).
+- `Sync` is built like `Focus`: its stores, the clock, the syncer, and `SyncPorts` for what Android does (a sync as a job, the Teams widget asked and watched, the calendar read, the widget drawn); `SyncTest` drives it on temporary stores with made-up sources, `SyncerTest` the syncer itself.
+- **After each sync**: completions are settled (free time and the log, learning.md); your instructions' overrides are laid on new and returning tasks (`Instructions.layTaskOverrides`); your own tasks long done go; and readings are queued where any task's is out of date (`EnrichWorker`, readings.md).
 
 ## The merge
 

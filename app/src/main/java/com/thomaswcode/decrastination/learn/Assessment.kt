@@ -32,11 +32,6 @@ object Assessment {
         graph.conversation.askHowItWent(asks)
     }
 
-    /** Records [answer] (and [note]) on the completion of [taskId] done at [doneAt] (0: its latest, for older questions). */
-    suspend fun record(context: Context, taskId: String, doneAt: Long, answer: String, note: String? = null) {
-        AppGraph.get(context).log.update { answered(it, taskId, doneAt, answer, note) }
-    }
-
     /** [log] with [answer] on the completion it's about: the one done at [doneAt], or (0) the latest of [taskId]'s. */
     fun answered(log: ActivityLog, taskId: String, doneAt: Long, answer: String, note: String?): ActivityLog {
         val i = if (doneAt != 0L) log.completions.indexOfFirst { it.taskId == taskId && it.doneAt == doneAt } else log.completions.indexOfLast { it.taskId == taskId }

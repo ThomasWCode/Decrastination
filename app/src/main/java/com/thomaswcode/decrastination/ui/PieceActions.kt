@@ -95,7 +95,7 @@ fun rememberPhotoCheck(graph: AppGraph, activity: Activity, plan: Plan, say: (ta
         PhotoChecks.running.value = piece.taskId
         graph.scope.launch {
             try {
-                PhotoChecks.unseen.value = piece.taskId to PhotoChecks.check(activity.applicationContext, graph, pages, piece, takenAt = wanted.takenAt ?: graph.clock.now())
+                PhotoChecks.unseen.value = piece.taskId to graph.photos.check(pages, piece, takenAt = wanted.takenAt ?: graph.clock.now())
             } finally {
                 PhotoChecks.running.value = null
             }
@@ -206,7 +206,7 @@ fun PieceActions(graph: AppGraph, activity: Activity, piece: Chunk, now: Long, p
             // Yours: nothing to ask, so all of it done is your say (2.0.0), earning no free time.
             OutlinedButton(onClick = {
                 scope.launch {
-                    graph.finishOwnTask(piece.taskId)
+                    graph.ownTasks.finishOwnTask(piece.taskId)
                     say("All of it done. It earns no free time; its pieces earned theirs.")
                 }
             }) { Text("All of it done") }
@@ -214,7 +214,7 @@ fun PieceActions(graph: AppGraph, activity: Activity, piece: Chunk, now: Long, p
             val task = tasks.tasks.firstOrNull { it.id == piece.taskId } ?: return@OutlinedButton
             say("Asking ${task.source.label}…")
             scope.launch {
-                graph.syncer.sync(setOf(task.source))
+                graph.sync.sync(setOf(task.source))
                 val still = graph.tasks.value.tasks.firstOrNull { it.id == task.id }?.isOpen == true
                 say(
                     when {
@@ -227,7 +227,7 @@ fun PieceActions(graph: AppGraph, activity: Activity, piece: Chunk, now: Long, p
         }) { Text("Check it's done") }
         if (piece.source == Source.Teams) {
             OutlinedButton(onClick = {
-                scope.launch { say(graph.requestTeamsSync() ?: "The Teams widget is syncing Teams") }
+                scope.launch { say(graph.sync.requestTeamsSync() ?: "The Teams widget is syncing Teams") }
             }) { Text("Refresh Teams") }
         }
         // Written work: a photo shows it done, once Claude is on (Q16; BL-08: a longer piece earns by it).

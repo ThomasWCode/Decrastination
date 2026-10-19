@@ -86,7 +86,7 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
     val log by graph.log.state.collectAsStateWithLifecycle()
     val school by graph.school.state.collectAsStateWithLifecycle()
     val instructions by graph.instructions.state.collectAsStateWithLifecycle()
-    val calendar by graph.calendarState.collectAsStateWithLifecycle()
+    val calendar by graph.sync.calendarState.collectAsStateWithLifecycle()
     // The day moves with the clock as well as the data: slots begin and end, the evening runs out.
     val now by produceState(graph.clock.now()) {
         while (true) {
@@ -224,7 +224,7 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
                                 // A time pins its task's next piece: this one goes by its day.
                                 snackbar.showSnackbar("Only its next piece takes a time: hold it to move all of it to a day")
                             } else {
-                                val at = graph.laterToday(chunk.key)
+                                val at = graph.instructions.laterToday(chunk.key)
                                 snackbar.showSnackbar(at?.let { "Later today, at ${clock(it, zone)}: undone in the chat's Your changes" } ?: "No time left today it can be done in")
                             }
                         }

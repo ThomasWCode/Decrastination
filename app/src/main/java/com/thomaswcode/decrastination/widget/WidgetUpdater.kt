@@ -109,7 +109,7 @@ class NextWidgetReceiver : GlanceAppWidgetReceiver() {
         CoroutineScope(Dispatchers.Default).launch {
             try {
                 // Long events' hours are put on days where you are: read again in the new zone.
-                if (intent.action != WidgetUpdater.ACTION_REDRAW) CalendarTime.refresh(context)
+                if (intent.action != WidgetUpdater.ACTION_REDRAW) AppGraph.get(context).sync.refreshCalendar()
                 WidgetUpdater.update(context)
             } finally {
                 pending.finish()

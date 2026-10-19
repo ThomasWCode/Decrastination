@@ -49,10 +49,10 @@ import com.thomaswcode.decrastination.core.Status
 import com.thomaswcode.decrastination.core.Invite
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.invite
+import com.thomaswcode.decrastination.enrich.Readings
 import com.thomaswcode.decrastination.enrich.RuleEnricher
 import com.thomaswcode.decrastination.sources.gmail.GmailThreads
 import java.time.Instant
-import java.util.UUID
 import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 
@@ -126,12 +126,14 @@ fun TaskSheet(
     val zone = graph.clock.zone()
     val today = Instant.ofEpochMilli(now).atZone(zone).toLocalDate()
     val scope = rememberCoroutineScope()
-    var picking by rememberSaveable { mutableStateOf<OwnChange?>(null) }
-    var confirming by rememberSaveable { mutableStateOf<String?>(null) }
-    var message by rememberSaveable { mutableStateOf<String?>(null) }
+    // The sheet's state and its changes ([TaskSheetState]), kept through a turn of the phone.
+    val sheet = rememberSaveable(saver = TaskSheetState.saver(graph.instructions, graph.ownTasks)) { TaskSheetState(graph.instructions, graph.ownTasks) }
+    var picking by sheet::picking
+    var confirming by sheet::confirming
+    var message by sheet::message
     // What an action here said (a piece done, moved later), over the screen's last word.
-    var said by rememberSaveable { mutableStateOf<String?>(null) }
-    var showInstructions by rememberSaveable { mutableStateOf(false) }
+    var said by sheet::said
+    var showInstructions by sheet::showInstructions
     val own = task.source == Source.Own
     val changeable = task.isOpen && !task.derived
     val byId = state.tasks.associateBy { it.id }
@@ -151,7 +153,7 @@ fun TaskSheet(
             if (jpeg == null) {
                 message = "Couldn't read the photo."
             } else {
-                graph.attachPhoto(task.id, jpeg)
+                graph.photos.attachPhoto(task.id, jpeg)
                 said = if (graph.gateway.claudeKey() != null) "Photo kept: Claude reads the task again with it." else "Photo kept: it's read with the task once Claude is on."
             }
         }
@@ -159,17 +161,9 @@ fun TaskSheet(
     // Undo only where a quick change of yours is what's in force: one of Claude's since wins.
     fun quick(type: ChangeType) = Instructions.quickInForce(instructions.applied, task.id, type)
 
-    /** Your own task changed as [change] says, or a source's given it as a quick change. */
+    /** Your own task changed as [change] says, or a source's given it as a quick change ([TaskSheetState.make]). */
     fun make(change: Change, text: String) {
-        scope.launch {
-            if (own) {
-                val draft = OwnTasks.draftWith(task, change) ?: return@launch
-                message = OwnTasks.problem(draft)
-                if (message == null) graph.saveOwnTask(task.sourceId, draft)
-            } else {
-                graph.addOwnChange(UUID.randomUUID().toString(), text, About(taskId = task.id, taskTitle = task.title), change)
-            }
-        }
+        scope.launch { sheet.make(task, change, text) }
     }
 
     ModalBottomSheet(onDismissRequest = onClose) {
@@ -222,8 +216,8 @@ fun TaskSheet(
                     }
                 }
                 when {
-                    own && task.isOpen -> Button(onClick = { scope.launch { graph.finishOwnTask(task.id) } }) { Text("All of it done") }
-                    own -> Button(onClick = { scope.launch { graph.reopenOwnTask(task.id) } }) { Text("Not done") }
+                    own && task.isOpen -> Button(onClick = { scope.launch { sheet.finish(task) } }) { Text("All of it done") }
+                    own -> Button(onClick = { scope.launch { sheet.reopen(task) } }) { Text("Not done") }
                 }
             }
             when {
@@ -265,7 +259,7 @@ fun TaskSheet(
                     onChange = if (changeable) ({ picking = OwnChange.DueOn }) else null,
                     undo = when {
                         own && changeable && task.dueAt != null -> "Clear" to { make(Change(ChangeType.DueBy, taskId = task.id, time = null), "") }
-                        !own && changeable && quick(ChangeType.DueBy) -> "Undo" to { scope.launch { graph.takeBackQuick(task.id, ChangeType.DueBy) } }
+                        !own && changeable && quick(ChangeType.DueBy) -> "Undo" to { scope.launch { sheet.undo(task, ChangeType.DueBy) } }
                         else -> null
                     },
                 )
@@ -293,7 +287,7 @@ fun TaskSheet(
                         },
                     ).joinToString(". ").takeIf { it.isNotEmpty() },
                     onChange = if (changeable) ({ picking = OwnChange.Minutes }) else null,
-                    undo = if (!own && changeable && quick(ChangeType.Minutes)) "Undo" to { scope.launch { graph.takeBackQuick(task.id, ChangeType.Minutes) } } else null,
+                    undo = if (!own && changeable && quick(ChangeType.Minutes)) "Undo" to { scope.launch { sheet.undo(task, ChangeType.Minutes) } } else null,
                 )
                 val start = if (own) task.notBefore else task.userFrom
                 val hiddenUntil = task.availableFrom?.takeIf { it > now && !own }
@@ -304,7 +298,7 @@ fun TaskSheet(
                     onChange = if (changeable) ({ picking = OwnChange.StartFrom }) else null,
                     undo = when {
                         own && changeable && task.notBefore != null -> "Clear" to { make(Change(ChangeType.StartFrom, taskId = task.id, time = null), "") }
-                        !own && changeable && quick(ChangeType.StartFrom) -> "Undo" to { scope.launch { graph.takeBackQuick(task.id, ChangeType.StartFrom) } }
+                        !own && changeable && quick(ChangeType.StartFrom) -> "Undo" to { scope.launch { sheet.undo(task, ChangeType.StartFrom) } }
                         else -> null
                     },
                 )
@@ -335,19 +329,10 @@ fun TaskSheet(
             SectionHeading("Change", sheet = true)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 next?.let { piece ->
-                    OutlinedButton(onClick = {
-                        scope.launch {
-                            said = graph.laterToday(piece.key)?.let { "Later today, at ${Format.at(it, now, zone)}: undone in the chat's Your changes" } ?: "No time left today for it"
-                        }
-                    }) { Text("Later today") }
+                    OutlinedButton(onClick = { scope.launch { sheet.later(piece, now, zone) } }) { Text("Later today") }
                     val tomorrow = today.plusDays(1)
                     if (TaskSheetModel.canGo(task, tomorrow, now, zone)) {
-                        OutlinedButton(onClick = {
-                            scope.launch {
-                                graph.addOwnChange(UUID.randomUUID().toString(), "Tomorrow", About(taskId = task.id, taskTitle = task.title), Change(ChangeType.OnDay, taskId = task.id, date = tomorrow.toString()))
-                                said = "Tomorrow: undone in the chat's Your changes"
-                            }
-                        }) { Text("Tomorrow") }
+                        OutlinedButton(onClick = { scope.launch { sheet.tomorrow(task, tomorrow) } }) { Text("Tomorrow") }
                     }
                     OutlinedButton(onClick = { onMove(piece.key) }) { Text("Move…") }
                 }
@@ -363,10 +348,10 @@ fun TaskSheet(
                     OutlinedButton(
                         onClick = {
                             scope.launch {
-                                said = when (graph.readAgain(task.id)) {
-                                    AppGraph.ReadAgain.Read -> "Read again by Claude"
-                                    AppGraph.ReadAgain.NotNow -> "Claude can't be asked now: try again later"
-                                    AppGraph.ReadAgain.NoReading -> "No new reading came back: the one there stands"
+                                said = when (graph.readings.readAgain(task.id)) {
+                                    Readings.ReadAgain.Read -> "Read again by Claude"
+                                    Readings.ReadAgain.NotNow -> "Claude can't be asked now: try again later"
+                                    Readings.ReadAgain.NoReading -> "No new reading came back: the one there stands"
                                 }
                             }
                         },
@@ -387,7 +372,7 @@ fun TaskSheet(
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     FilterChip(
                         selected = home,
-                        onClick = { scope.launch { graph.saveOwnTask(task.sourceId, OwnTasks.draftOf(task).copy(where = if (home) "anywhere" else "home")) } },
+                        onClick = { scope.launch { sheet.homeOnly(task, !home) } },
                         label = { Text("Home only") },
                     )
                     Text(
@@ -445,7 +430,7 @@ fun TaskSheet(
             confirmButton = {
                 TextButton(onClick = {
                     confirming = null
-                    scope.launch { graph.deleteOwnTask(task.id) }
+                    scope.launch { sheet.delete(task) }
                 }) { Text("Delete") }
             },
             dismissButton = { TextButton(onClick = { confirming = null }) { Text("Cancel") } },
@@ -457,8 +442,7 @@ fun TaskSheet(
             confirmButton = {
                 TextButton(onClick = {
                     confirming = null
-                    val (change, text) = ownChange(task, OwnChange.NotATask, today, zone)
-                    scope.launch { graph.addOwnChange(UUID.randomUUID().toString(), text, About(taskId = task.id, taskTitle = task.title), change) }
+                    scope.launch { sheet.notATask(task, today, zone) }
                 }) { Text("Not a task") }
             },
             dismissButton = { TextButton(onClick = { confirming = null }) { Text("Cancel") } },

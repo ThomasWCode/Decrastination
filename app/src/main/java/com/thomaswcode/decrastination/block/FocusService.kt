@@ -22,6 +22,7 @@ import com.thomaswcode.decrastination.R
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.protect.GuardRules
 import com.thomaswcode.decrastination.protect.Watchdog
+import com.thomaswcode.decrastination.sync.Sync
 import kotlin.math.abs
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
@@ -696,7 +697,7 @@ class FocusService : AccessibilityService() {
         // being spent, its own check does this.)
         if (spending == null) lookAtScreen()
         scope.launch {
-            graph.applyDueChanges()
+            graph.protection.applyDueChanges()
             // A day with nothing to do starts with free time (BL-07), given once.
             runCatching { graph.focus.grantAllowanceIfDue() }.onFailure { Log.w(TAG, "Giving the day's free time failed", it) }
             // A slot whose end went by while its alarm couldn't ring (PL-13).
@@ -747,9 +748,9 @@ class FocusService : AccessibilityService() {
                     // Counted as offered first, so the next look doesn't offer it again meanwhile.
                     val before = graph.runtime.value.teamsAuto
                     recordOffer()
-                    val why = graph.requestTeamsSync() ?: return@launch
+                    val why = graph.sync.requestTeamsSync() ?: return@launch
                     // One already running is as good as one started.
-                    if (why == AppGraph.TEAMS_BUSY) return@launch
+                    if (why == Sync.TEAMS_BUSY) return@launch
                     Log.w(TAG, "Automatic Teams sync didn't start: $why")
                     // Not started (its sync service off, no answer): offered again shortly, not in three hours.
                     graph.runtime.update { it.copy(teamsAuto = TeamsAutoSync.retry(before, it.teamsAuto, graph.clock.now())) }

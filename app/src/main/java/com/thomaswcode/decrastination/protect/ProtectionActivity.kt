@@ -161,7 +161,7 @@ fun ProtectionPanel(graph: AppGraph, activity: ComponentActivity) {
                 runtime.protection.problems.forEach { Text("• $it", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error) }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (settings.armed) {
-                        OutlinedButton(onClick = { scope.launch { graph.changeSettings { it.copy(armed = false) } } }) { Text("Disarm") }
+                        OutlinedButton(onClick = { scope.launch { graph.protection.changeSettings { it.copy(armed = false) } } }) { Text("Disarm") }
                         if (hasParentCode) {
                             OutlinedButton(onClick = { codeFor = CodeTarget.Unblock }) { Text("Unblock for an hour") }
                         }
@@ -185,7 +185,7 @@ fun ProtectionPanel(graph: AppGraph, activity: ComponentActivity) {
                         Text("Applies ${Format.at(change.applyAt, now, graph.clock.zone())}", style = MaterialTheme.typography.bodySmall)
                     }
                     // Changed your mind: cancelling a loosening tightens, so it's at once.
-                    TextButton(onClick = { scope.launch { graph.cancelChange(change.id) } }) { Text("Cancel") }
+                    TextButton(onClick = { scope.launch { graph.protection.cancelChange(change.id) } }) { Text("Cancel") }
                     if (hasParentCode) TextButton(onClick = { codeFor = CodeTarget.Change(change.id, change.description) }) { Text("Parent code") }
                 }
             }
@@ -318,7 +318,7 @@ fun ProtectionPanel(graph: AppGraph, activity: ComponentActivity) {
                 TextButton(onClick = {
                     step = Step.None
                     scope.launch {
-                        graph.changeSettings { it.copy(armed = true) }
+                        graph.protection.changeSettings { it.copy(armed = true) }
                         Watchdog.check(activity, repair = true)
                     }
                 }) { Text("Arm") }
@@ -353,7 +353,7 @@ private fun ParentCodeDialog(graph: AppGraph, onDone: () -> Unit, onCancel: () -
             onKept = onDone,
             onNew = { fresh = true },
             // No parent code means none: the one kept would still unblock.
-            onNone = { scope.launch { graph.secrets.put(Secret.TotpSecret, null); onDone() } },
+            onNone = { scope.launch { graph.protection.noParentCode(); onDone() } },
             onCancel = onCancel,
         )
     }
@@ -386,7 +386,7 @@ private fun KeepParentCodeDialog(graph: AppGraph, onKept: () -> Unit, onNew: () 
         confirmButton = {
             TextButton(enabled = code.length == Totp.DIGITS, onClick = {
                 // Checked, and used up, as any parent code is.
-                scope.launch { graph.useParentCode(code)?.let { error = it } ?: onKept() }
+                scope.launch { graph.protection.useParentCode(code)?.let { error = it } ?: onKept() }
             }) { Text("Keep it") }
         },
         dismissButton = { TextButton(onClick = onCancel) { Text("Cancel") } },
@@ -428,9 +428,7 @@ private fun NewParentCodeDialog(graph: AppGraph, onDone: () -> Unit, onCancel: (
                     error = "That isn't the code. Check his app has the new entry."
                 } else {
                     scope.launch {
-                        graph.secrets.put(Secret.TotpSecret, Totp.base32(secret))
-                        // Only the code checked is used up: the next one his app shows works.
-                        graph.runtime.update { it.copy(codeLock = CodeLock(lastUsedStep = step)) }
+                        graph.protection.newParentCode(secret, step)
                         onDone()
                     }
                 }
@@ -438,7 +436,7 @@ private fun NewParentCodeDialog(graph: AppGraph, onDone: () -> Unit, onCancel: (
         },
         dismissButton = {
             // No parent code means none: one kept from an earlier arming would still unblock.
-            TextButton(onClick = { scope.launch { graph.secrets.put(Secret.TotpSecret, null); onDone() } }) { Text("Skip: no parent code") }
+            TextButton(onClick = { scope.launch { graph.protection.noParentCode(); onDone() } }) { Text("Skip: no parent code") }
         },
     )
 }
@@ -492,8 +490,8 @@ private suspend fun applyWithCode(graph: AppGraph, target: CodeTarget, code: Str
     // The code is used up first (with the unblock, if that's what it was for), then the change
     // it allows is applied.
     val unblock = if (target == CodeTarget.Unblock) graph.clock.now() + UNBLOCK_MS else null
-    graph.useParentCode(code, unblock)?.let { return it }
-    if (target is CodeTarget.Change) graph.applyNow(target.id)
+    graph.protection.useParentCode(code, unblock)?.let { return it }
+    if (target is CodeTarget.Change) graph.protection.applyNow(target.id)
     return null
 }
 

@@ -5,20 +5,12 @@ import android.content.ContentUris
 import android.content.Context
 import android.content.pm.PackageManager
 import android.provider.CalendarContract
-import android.util.Log
-import com.thomaswcode.decrastination.AppGraph
-import com.thomaswcode.decrastination.core.Instructions
 import com.thomaswcode.decrastination.core.Planner
-import com.thomaswcode.decrastination.widget.WidgetUpdater
 import java.time.Instant
 import java.time.ZoneId
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.util.Locale
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.withContext
 
 /**
  * The phone's calendar as busy time (Q7, docs/spec/slots-and-calendar.md): the next fortnight's events, judged one
@@ -27,7 +19,7 @@ import kotlinx.coroutines.withContext
  */
 object CalendarTime {
     const val PERMISSION = Manifest.permission.READ_CALENDAR
-    private const val DAY_MS = 24 * 3_600_000L
+    const val DAY_MS = 24 * 3_600_000L
     /**
      * The end of the plan's last day (DX-14): its days run to today + [Planner.MAX_HORIZON_DAYS], each
      * whole, so the calendar is read to that day's midnight, where you are; a trip in the plan's third
@@ -35,7 +27,7 @@ object CalendarTime {
      */
     fun readUntil(now: Long, zone: ZoneId): Long =
         Instant.ofEpochMilli(now).atZone(zone).toLocalDate().plusDays(Planner.MAX_HORIZON_DAYS + 1).atStartOfDay(zone).toInstant().toEpochMilli()
-    private const val ASK_AHEAD_MS = 7 * DAY_MS
+    const val ASK_AHEAD_MS = 7 * DAY_MS
 
     fun allowed(context: Context): Boolean = context.checkSelfPermission(PERMISSION) == PackageManager.PERMISSION_GRANTED
 
@@ -89,47 +81,6 @@ object CalendarTime {
         return events
     }
 
-    /** Held while the calendar's read and its questions asked: refreshes at once (a start, a sync, the calendar changing) can't ask an event twice. */
-    private val refreshing = Mutex()
-
-    /** Reads the calendar, judges it for the planner, and asks about what it can't judge. */
-    suspend fun refresh(context: Context): Unit = refreshing.withLock {
-        val graph = AppGraph.get(context)
-        if (!allowed(context)) {
-            graph.calendarTime = EventJudge.Time(emptyList(), emptyMap(), emptyList())
-            return@withLock
-        }
-        graph.calendarWriter.watchCalendar()
-        val now = graph.clock.now()
-        // Your instructions about events over your answers to its questions; a question one of them
-        // has answered since it was asked is withdrawn.
-        val yours = Instructions.eventAnswers(graph.instructions.value.applied)
-        val settings = graph.settings.value
-        val excluded = (settings.calendarsExcluded + listOfNotNull(settings.calendarWriteId)).toSet()
-        val events = runCatching { withContext(Dispatchers.IO) { read(context, now - DAY_MS, readUntil(now, graph.clock.zone()), excluded) } }
-            .onFailure { Log.w(AppGraph.TAG, "Can't read the calendar", it) }
-            .getOrNull() ?: run {
-            // Not read this time: the events last read, judged again with the answers as they are
-            // now, so an instruction applied or taken back counts all the same.
-            graph.calendarTime = EventJudge.time(graph.calendarTime.events, graph.runtime.value.eventAnswers + yours, graph.clock.zone(), askUntil = now + ASK_AHEAD_MS)
-            return@withLock
-        }
-        yours.keys.forEach { cancelQuestion(context, it) }
-        // Not counted as asked: taken back, the instruction leaves it to be asked again.
-        if (graph.runtime.value.eventsAsked.any { it in yours }) graph.runtime.update { it.copy(eventsAsked = it.eventsAsked - yours.keys) }
-        val answers = graph.runtime.value.eventAnswers + yours
-        val time = EventJudge.time(events, answers, graph.clock.zone(), askUntil = now + ASK_AHEAD_MS)
-        graph.calendarTime = time
-        // In the chat at once, whatever the hour: his notification leaves them out in quiet hours, till
-        // the morning (NotifyRules.waitsForMorning).
-        val toAsk = questions(time.toAsk, graph.runtime.value.eventsAsked, now)
-        if (toAsk.isNotEmpty()) {
-            toAsk.forEach { ask(context, it, graph.clock.zone()) }
-            graph.runtime.update { it.copy(eventsAsked = it.eventsAsked + toAsk.map(EventJudge::key)) }
-        }
-        runCatching { WidgetUpdater.update(context) }
-    }
-
     private val DAY = DateTimeFormatter.ofPattern("EEEE d MMMM", Locale.UK)
 
     /** Of the events the rules can't judge, those to ask about now: not over, within the week, not asked before. */
@@ -140,10 +91,4 @@ object CalendarTime {
     fun questionDay(event: CalendarEvent, zone: ZoneId): String =
         Instant.ofEpochMilli(event.start).atZone(if (event.allDay) ZoneOffset.UTC else zone).toLocalDate().format(DAY)
 
-    /** [event] asked about as Felix's message, one a name: its three answers his chips, one of them kept for every event of its name. */
-    private suspend fun ask(context: Context, event: CalendarEvent, zone: ZoneId) =
-        AppGraph.get(context).conversation.askAboutEvent(EventJudge.key(event), event.title, questionDay(event, zone), event.start, ANSWERS.map { it.first })
-
-    /** His questions about the events named [key] answered (here, on the Calendar page, or by an instruction): out of his notification. */
-    suspend fun cancelQuestion(context: Context, key: String) = AppGraph.get(context).conversation.settleEvent(key)
 }

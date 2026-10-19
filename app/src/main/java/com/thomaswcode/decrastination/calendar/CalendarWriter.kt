@@ -52,13 +52,13 @@ class CalendarWriter(
     private val provider: CalendarProvider,
     /** A move of yours written back, and why, said ([SlotCalendar.sayRefused]). */
     private val sayRefused: (move: SlotCalendarDiff.HandMove, zone: ZoneId, why: String) -> Unit,
-    /** A move of yours taken as your time: a change of yours, kept and applied at once (`AppGraph.addOwnChange`). */
+    /** A move of yours taken as your time: a change of yours, kept and applied at once ([com.thomaswcode.decrastination.tasks.Instructions.addOwnChange]). */
     private val addOwnChange: suspend (id: String, text: String, about: About, change: Change) -> Unit,
     /** The plan made again ([com.thomaswcode.decrastination.plan.PlanWatcher.poke]). */
     private val replan: () -> Unit,
     /** His questions about the events named a key settled ([com.thomaswcode.decrastination.felix.Conversation.settleEvent]). */
     private val settleEvent: suspend (String) -> Unit,
-    /** The calendar read again, and today's record made again with it ([com.thomaswcode.decrastination.learn.CalendarTime.refresh], [com.thomaswcode.decrastination.learn.Briefing.replanToday]). */
+    /** The calendar read again, and today's record made again with it ([com.thomaswcode.decrastination.sync.Sync.refreshCalendar], [com.thomaswcode.decrastination.learn.Briefing.replanToday]). */
     private val reread: suspend () -> Unit,
     /** How long plans are quiet before the calendar's written: [CALENDAR_WRITE_QUIET_MS], but in a test. */
     private val quietMs: Long = CALENDAR_WRITE_QUIET_MS,

@@ -49,9 +49,9 @@ fun PhotoTasksSheet(graph: AppGraph, reading: PhotoTasks.Reading, jpeg: ByteArra
         if (task != null) {
             val id = rememberSaveable(i) { UUID.randomUUID().toString() }
             OwnTaskForm(graph, editing = null, initial = task, onSave = { made ->
-                graph.saveOwnTask(id, made).also { saved ->
+                graph.ownTasks.saveOwnTask(id, made).also { saved ->
                     if (saved) {
-                        graph.attachPhoto(TaskItem.id(Source.Own, id), jpeg)
+                        graph.photos.attachPhoto(TaskItem.id(Source.Own, id), jpeg)
                         added = added + i
                     }
                 }
@@ -68,7 +68,7 @@ fun PhotoTasksSheet(graph: AppGraph, reading: PhotoTasks.Reading, jpeg: ByteArra
                 if (open.isEmpty()) Text("None of the listed tasks is one Claude reads.", style = MaterialTheme.typography.bodyMedium)
                 open.sortedBy { it.dueAt ?: Long.MAX_VALUE }.forEach { t ->
                     TextButton(onClick = {
-                        graph.scope.launch { graph.attachPhoto(t.id, jpeg) }
+                        graph.scope.launch { graph.photos.attachPhoto(t.id, jpeg) }
                         onClose()
                     }) { Text("${t.title} · ${t.source.label}") }
                 }

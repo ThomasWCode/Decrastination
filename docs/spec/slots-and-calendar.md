@@ -1,7 +1,7 @@
 # Slots and the calendar
 
 How each day's pieces get their times (`core/Slotter.kt`), how a slot is kept, missed or moved (`block/Focus.kt`, `block/SlotAlarms.kt`), and how the plan is written to your calendar (`calendar/CalendarWriter.kt`, through `CalendarProvider`: `calendar/SlotCalendar.kt` on the phone).
-Also how your calendar's events become busy time for the planner (`learn/CalendarTime.kt`, `learn/EventJudge.kt`).
+Also how your calendar's events become busy time for the planner (`sync/Sync.kt`'s `refreshCalendar`, `learn/CalendarTime.kt`, `learn/EventJudge.kt`).
 
 ## When the plan is made
 
@@ -82,7 +82,7 @@ A stop part-way is finished at the next start (`Focus.finishKeeps`), before an e
 
 ## Moving a slot by hand
 
-On Day, a slot swiped right to left is done. Left to right, it's later today (`AppGraph.laterToday`, its task's next piece only): at the first free time after it with its minutes, around today's other slots, as an `AtTime` change.
+On Day, a slot swiped right to left is done. Left to right, it's later today (`Instructions.laterToday`, its task's next piece only): at the first free time after it with its minutes, around today's other slots, as an `AtTime` change.
 Held, it goes to a day of the next fortnight, at a time or any time that day (`ui/MoveSheet.kt`): not a day after a real deadline still to come, while overdue work can go to any (D-30). Each move is a change of yours, taken back in *Your changes*; one the plan wouldn't keep is refused first (`Planner.pinProblem`).
 
 ## Writing the calendar (NF-07)
@@ -132,7 +132,7 @@ It's tried again at each write till it works (the permission back, the provider 
 
 ## Your calendar as busy time
 
-`CalendarTime.refresh` reads the phone's calendar (`READ_CALENDAR`) from a day back to the end of the plan's last day, 90 days on (`CalendarTime.readUntil`, DX-14).
+`Sync.refreshCalendar` reads the phone's calendar (`READ_CALENDAR`) from a day back to the end of the plan's last day, 90 days on (`CalendarTime.readUntil`, DX-14).
 - Only the calendars ticked in Settings → Calendar (`Settings.calendarsExcluded`, DX-13), never the one written to; events you've declined are left out.
 - Each event's location and description (its first 500 characters) are read too (DX-12).
 - It's read again when the calendar changes (once quiet 5 seconds), after each sync, and at the morning briefing; a failed read judges the last events read again.
