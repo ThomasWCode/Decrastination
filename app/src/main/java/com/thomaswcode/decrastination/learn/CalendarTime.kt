@@ -46,9 +46,6 @@ object CalendarTime {
         "None" to EventJudge.Judgement.Free,
     ).map { (label, judgement) -> label to EventJudge.store(judgement)!! }
 
-    // [com.thomaswcode.decrastination.calendar.CalendarWriter]'s, till its callers call it there.
-    suspend fun answer(context: Context, key: String, answer: String?): Unit = AppGraph.get(context).calendarWriter.answer(key, answer)
-
     /** How much of an event's description is kept (DX-12). */
     private const val DESCRIPTION_CHARS = 500
 
@@ -102,7 +99,7 @@ object CalendarTime {
             graph.calendarTime = EventJudge.Time(emptyList(), emptyMap(), emptyList())
             return@withLock
         }
-        graph.watchCalendar()
+        graph.calendarWriter.watchCalendar()
         val now = graph.clock.now()
         // Your instructions about events over your answers to its questions; a question one of them
         // has answered since it was asked is withdrawn.
