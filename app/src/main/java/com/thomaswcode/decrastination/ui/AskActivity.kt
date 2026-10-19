@@ -344,7 +344,7 @@ class AskActivity : ComponentActivity() {
         // His messages waiting for your answer (D-99), shown so: all but a check-in's under way can be
         // marked answered, each or all at once, with an Undo for a moment.
         val checkIn = chat.felix.checkInDraft != null
-        val awaiting = Replies.awaitingIds(chat.messages, checkIn, now)
+        val awaiting = Replies.awaitingIds(chat.messages, checkIn, now, zone)
         val markable = chat.messages.filter { it.id in awaiting && !(checkIn && it.kind == MessageKind.CheckIn) }.mapTo(HashSet()) { it.id }
         val snackbar = remember { SnackbarHostState() }
         fun mark(ids: Collection<String>) {
@@ -408,14 +408,17 @@ class AskActivity : ComponentActivity() {
                     Chat(graph, screen, chat.messages, archive, quotes, unread, reading, byId, now, zone, claudeOn, awaiting, markable, onMark = ::mark, onQuoted = { quoted = quoted + it }, onEdit = { m, p -> editing = "$m|$p" })
                     // His replies to offer (UI-06), under his last message: a tap answers it, as a reply to
                     // it from anywhere does (a check-in's answer, an event's, with no call).
-                    // His newest message where it waits for your answer, else his question still waiting since your
-                    // last turn (with several asked together, the one before it once that's answered): the box and the
-                    // chips answer it (D-98); else his last message's replies, where it's his. One of his you chose to
-                    // reply to (a swipe, its waiting line tapped) shows its own.
-                    val pending = Replies.pending(chat.messages, checkIn, now)
+                    // His newest message still waiting for your answer since your last turn, a question or a nudge (with
+                    // several asked together, the one before it once that's answered): the box and the chips answer it
+                    // (D-98); else his last message's replies, where it's his. One of his you chose to reply to (a swipe,
+                    // its waiting line tapped) shows its own. A nudge just above the box takes it with no strip, your
+                    // words its reply ([quiet]); one further up has its strip, as a question has.
+                    val pending = Replies.pending(chat.messages, checkIn, now, zone)
+                    val nudge = pending != null && !Replies.waiting(pending, checkIn)
+                    val quiet = pending?.takeIf { nudge && it.id == Replies.newest(chat.messages)?.id }
                     val chosen = screen.replyingTo?.takeIf { it.from == Speaker.Felix && it.answeredAt == null && it.suggestedReplies.isNotEmpty() }
                     val last = chosen ?: pending ?: Replies.newest(chat.messages)?.takeIf { it.from == Speaker.Felix && it.answeredAt == null }
-                    LaunchedEffect(pending?.id, checkIn) { screen.offer(pending, checkIn) }
+                    LaunchedEffect(pending?.id, checkIn, quiet?.id) { screen.offer(pending?.takeIf { quiet == null }, checkIn, nudge) }
                     if (last != null && last.suggestedReplies.isNotEmpty()) {
                         FlowRow(Modifier.fillMaxWidth().padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             last.suggestedReplies.forEach { reply ->
@@ -447,7 +450,7 @@ class AskActivity : ComponentActivity() {
                         about.value = About()
                         screen.sent()
                         graph.scope.launch {
-                            if (!graph.conversation.ask(text, subject, replyTo = replying?.id)) {
+                            if (!graph.conversation.ask(text, subject, replyTo = (replying ?: quiet)?.id)) {
                                 draft = text
                                 about.value = subject
                                 screen.replyingTo = replying
