@@ -1,6 +1,6 @@
 # Slots and the calendar
 
-How each day's pieces get their times (`core/Slotter.kt`), how a slot is kept, missed or moved (`block/Focus.kt`, `block/SlotAlarms.kt`), and how the plan is written to your calendar (`calendar/`).
+How each day's pieces get their times (`core/Slotter.kt`), how a slot is kept, missed or moved (`block/Focus.kt`, `block/SlotAlarms.kt`), and how the plan is written to your calendar (`calendar/CalendarWriter.kt`, through `CalendarProvider`: `calendar/SlotCalendar.kt` on the phone).
 Also how your calendar's events become busy time for the planner (`learn/CalendarTime.kt`, `learn/EventJudge.kt`).
 
 ## When the plan is made
@@ -89,11 +89,12 @@ Held, it goes to a day of the next fortnight, at a time or any time that day (`u
 
 With `WRITE_CALENDAR`, the plan's slots are written to the calendar you pick in Setup or Settings → Calendar (`Settings.calendarWriteId`); none is written to till you pick one.
 Pick one you made at calendar.google.com: a calendar an app makes stays on the phone.
+`CalendarWriter` writes it, built like `Focus`: its stores, the clock, and `CalendarProvider` for the calendar's events (`SlotCalendar` on the phone). It owns what the app knows of its writes (`RuntimeState.calendarWritten`, `calendarWrittenTo` and `calendarsToClear`, and `calendar.json`) and your answers about events; `CalendarWriterTest` drives it on temporary stores, against a calendar in memory.
 - **What**: the next seven days' slots (today and the six after, `SlotCalendarDiff.DAYS`), pieces of work and outside breaks.
 - **Each event**: the piece's label as its title ("Outside" for a break); its source and why as its description ("Teams. Due tomorrow."), with its first action where one's written (AI-15), or "A break outside.".
 - **Marked**: free, with no reminders, and with the app's package and its URI (`CUSTOM_APP_PACKAGE`, `CUSTOM_APP_URI`: `decrastination://slot/<date>/<key>`).
-- **Cheap**: one query and one batch a write (`SlotCalendar.write`), nothing written when nothing changed; slots as last written aren't even read back unless the calendar has changed after its last read (AR-08).
-- **Once quiet**: written after plans have been quiet 5 seconds (`AppGraph.CALENDAR_WRITE_QUIET_MS`), so a burst of changes is one write, not an event changed again while the calendar's sync still has it.
+- **Cheap**: one query and one batch a write (`CalendarWriter.writeSlots`), nothing written when nothing changed; slots as last written aren't even read back unless the calendar has changed after its last read (AR-08).
+- **Once quiet**: written after plans have been quiet 5 seconds (`CalendarWriter.CALENDAR_WRITE_QUIET_MS`), so a burst of changes is one write, not an event changed again while the calendar's sync still has it.
 
 `SlotCalendarDiff.diff` compares the slots with the app's events, those starting in the week and any with a slot's URI wherever it is now:
 - a slot with no event is inserted, so one you deleted is written again;
@@ -126,7 +127,7 @@ An event of yours is deleted only if it has both the app's words and the very ti
 
 ## A calendar no longer written to
 
-Picking another calendar, or none, puts the old one on `RuntimeState.calendarsToClear`. `SlotCalendar.clear` deletes the app's events there (by its package) and copies of them (by their fingerprints).
+Picking another calendar, or none, puts the old one on `RuntimeState.calendarsToClear`. `CalendarWriter.clearOldCalendars` deletes the app's events there (by its package) and copies of them (by their fingerprints).
 It's tried again at each write till it works (the permission back, the provider well). A backup restored keeps this phone's calendar choices, as their ids are this phone's.
 
 ## Your calendar as busy time
@@ -149,4 +150,4 @@ It's tried again at each write till it works (the permission back, the provider 
 - to ask, starting within the week: asked once, as Felix's message in the chat, its chips *All of it*, *A few hours* and *None* (in quiet hours it waits for the morning to be in his notification); it takes all its time till you answer (all day, all of each of its days), so the plan counts on no time it may not have (D-44);
 - to ask, further off: a few hours of its day (of each, all day) meanwhile, so the spread before it leaves it room.
 
-Your answer holds for every event of that name (`RuntimeState.eventAnswers`); the plan, and today's record of it, are made again with it.
+Your answer holds for every event of that name (`RuntimeState.eventAnswers`, kept by `CalendarWriter.answer`); the plan, and today's record of it, are made again with it.
