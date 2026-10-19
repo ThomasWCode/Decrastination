@@ -21,8 +21,6 @@ import kotlinx.coroutines.withContext
 
 /** A photo of written work, checked by the model and, if it's done, the piece ticked off. */
 object PhotoChecks {
-    private const val OFF = "Claude is off: the timer or the source will have to do."
-
     /**
      * The task a photo check is under way for, if one is: app-wide, so a screen made again, or
      * another one, knows (no session is started meanwhile). The check runs in the app's scope, so
@@ -32,45 +30,6 @@ object PhotoChecks {
 
     /** The last check's outcome, by task, until a screen has shown it: one left while it ran shows it on coming back. */
     val unseen = MutableStateFlow<Pair<String, String>?>(null)
-
-    /**
-     * Checks [photos], the pages of [piece]'s work (AI-17), against it and its task (AI-16), records
-     * the cost, and says how it went. The photos are deleted, whatever happens.
-     */
-    suspend fun check(context: Context, graph: AppGraph, photos: List<File>, piece: Chunk, takenAt: Long = graph.clock.now()): String {
-        // [takenAt], when its first page was taken: a slot of its key kept before then isn't the one it shows.
-        if (!piece.photoCheckable) {
-            withContext(NonCancellable + Dispatchers.IO) { photos.forEach { it.delete() } }
-            return "Only written homework can be checked from a photo."
-        }
-        val jpegs = try {
-            // Every page, or the check isn't made: one left out could be the one that shows it isn't done.
-            val read = withContext(Dispatchers.IO) { photos.map { shrink(it) } }
-            if (read.isEmpty() || read.any { it == null }) return if (photos.size > 1) "A page couldn't be read: take the photos again." else "Couldn't read the photo."
-            read.filterNotNull()
-        } finally {
-            withContext(NonCancellable + Dispatchers.IO) { photos.forEach { it.delete() } }
-        }
-        // Its room taken with every other model call's, then sent (AC-05).
-        val current = graph.gateway.client(com.thomaswcode.decrastination.enrich.ModelEffort.Job.PhotoCheck)?.let { PhotoChecker(it, profile = graph.conversation.profile()) } ?: return OFF
-        val about = PhotoChecker.context(piece, graph.tasks.value.tasks.firstOrNull { it.id == piece.taskId })
-        val result = when (val called = graph.gateway.call(interactive = true, record = com.thomaswcode.decrastination.enrich.ModelCalls.OnRecord(com.thomaswcode.decrastination.enrich.ModelEffort.Job.PhotoCheck, piece.label) { r: PhotoChecker.Result -> r.usage to com.thomaswcode.decrastination.enrich.ModelCalls.outcome(r.refused, r.verdict == null) }, cost = { r: PhotoChecker.Result -> r.costUsd to r.refused }) { current.check(jpegs, about) }) {
-            is Called.Held -> return when (called.hold) {
-                ModelHold.Off -> OFF
-                ModelHold.Resting -> "Claude's key isn't working (Setup says why): tick it Done, or the source will have to do."
-                ModelHold.Capped -> "Claude's monthly cap is reached: tick it Done, or the source will have to do."
-            }
-            is Called.Failed -> {
-                Log.w(AppGraph.TAG, "The photo check failed", called.error)
-                return "The check didn't go through (${called.error.message ?: "no connection"})."
-            }
-            is Called.Answered -> called.value
-        }
-        val verdict = result.verdict ?: return "Claude couldn't say. Try a clearer photo."
-        if (!verdict.done || verdict.confidence < PhotoChecker.ACCEPT) return "Not yet: ${verdict.reason}"
-        if (!graph.focus.photoChecked(piece.taskId, piece.step, piece.minutes, piece.stepIndex, piece.key, takenAt)) return "Done, but it was already ticked off: ${verdict.reason}"
-        return "Done: ${verdict.reason}"
-    }
 
     /**
      * The photo as a JPEG no bigger than [PhotoChecker.MAX_SIDE] on its long side, the right way up:
