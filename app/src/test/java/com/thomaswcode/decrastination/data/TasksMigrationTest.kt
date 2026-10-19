@@ -6,6 +6,7 @@ import com.thomaswcode.decrastination.core.ChangeType
 import com.thomaswcode.decrastination.core.InstructionRules
 import com.thomaswcode.decrastination.core.StepOrigin
 import com.thomaswcode.decrastination.core.TaskItem
+import kotlin.test.assertFalse
 import java.io.File
 import java.nio.file.Files
 import kotlin.test.AfterTest
@@ -163,6 +164,28 @@ class TasksMigrationTest {
         assertNull(task["userDueAt"])
         assertEquals(5L, (task["mine"]!!.jsonObject["dueAt"]!!.jsonObject["value"] as JsonPrimitive).content.toLong())
         assertEquals(setOf("tasks", "version"), moved.keys)
+    }
+
+    @Test
+    fun `the archive's one file of before its months is brought to the new shape as it's split, the tasks its acts keep moved`() {
+        val dir = phone(before.last())
+        val chat = JsonStore.json.parseToJsonElement(File(dir, "chat.json").readText()).jsonObject
+        val withUndo = chat.getValue("messages").jsonArray.map { it.jsonObject }.first { m -> (m["acts"] as? JsonArray).orEmpty().any { (it as JsonObject)["was"] is JsonObject } }
+        // That message as an archive of then held it: its task kept for an Undo in the first shape, with a due date and minutes of yours.
+        val acts = (withUndo.getValue("acts") as JsonArray).map { a ->
+            val act = a.jsonObject
+            val was = act["was"] as? JsonObject ?: return@map act
+            JsonObject(act + ("was" to JsonObject(was + ("userDueAt" to JsonPrimitive(1_000L)) + ("userEffortMin" to JsonPrimitive(40)))))
+        }
+        val archived = JsonObject(withUndo + ("id" to JsonPrimitive("msg-archived")) + ("acts" to JsonArray(acts)))
+        File(dir, "chat-archive.json").writeText(JsonObject(mapOf("version" to JsonPrimitive(1), "messages" to JsonArray(listOf(archived)))).toString())
+        val stores = Stores(dir, Reverse)
+        val was = assertNotNull(stores.chatArchive.find("msg-archived")).acts.firstNotNullOf { it.was }
+        assertEquals(1_000L, was.mine.dueAt?.value)
+        assertEquals(By.You, was.mine.dueAt?.by)
+        assertEquals(40, was.mine.minutes?.minutes)
+        assertTrue(was.subSteps.all { it.id.isNotEmpty() })
+        assertFalse(File(dir, "chat-archive.json").exists())
     }
 
     @Test

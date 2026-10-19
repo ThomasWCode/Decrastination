@@ -2,6 +2,7 @@ package com.thomaswcode.decrastination.data
 
 import com.thomaswcode.decrastination.core.ChatArchive
 import com.thomaswcode.decrastination.core.ChatMessage
+import kotlinx.serialization.json.JsonObject
 import java.io.File
 import java.time.Instant
 import java.time.ZoneOffset
@@ -211,15 +212,19 @@ class ChatArchiveStore(private val dir: File, private val clock: () -> Long = Sy
         fun fileOf(message: ChatMessage): String = "chat-archive-${Instant.ofEpochMilli(message.at).atOffset(ZoneOffset.UTC).format(MONTH)}.json"
 
         /**
-         * The one file 4.0.0 to 4.0.3 kept the archive in split into its months (4.0.4): each month
-         * written, and only then the file let go, so a stop between splits it again, each message once.
+         * The one file 4.0.0 to 4.0.3 kept the archive in split into its months (4.0.4), brought to this
+         * build's shape first as its months are ([MIGRATIONS]): each month written, and only then the file
+         * let go, so a stop between splits it again, each message once.
          * One that can't be read is left for [Stores] to read as any store's file: set aside and said, what
          * can be kept of it split.
          */
         val SPLIT = Move { dir ->
             val whole = File(dir, NAME)
             if (!whole.isFile) return@Move emptyList()
-            val archive = runCatching { JsonStore.json.decodeFromString(ChatArchive.serializer(), whole.readText()) }.getOrNull() ?: return@Move emptyList()
+            val archive = runCatching {
+                (JsonStore.json.parseToJsonElement(whole.readText()) as? JsonObject)?.let { Migration.upgrade(it, ChatArchive().version, MIGRATIONS) }
+                    ?.let { JsonStore.json.decodeFromJsonElement(ChatArchive.serializer(), it) }
+            }.getOrNull() ?: return@Move emptyList()
             runBlocking { ChatArchiveStore(dir).add(archive.messages) }
             whole.delete()
             emptyList()
