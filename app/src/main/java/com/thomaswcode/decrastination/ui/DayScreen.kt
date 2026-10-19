@@ -86,7 +86,7 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
     val log by graph.log.state.collectAsStateWithLifecycle()
     val school by graph.school.state.collectAsStateWithLifecycle()
     val instructions by graph.instructions.state.collectAsStateWithLifecycle()
-    val calendar by graph.calendarState.collectAsStateWithLifecycle()
+    val calendar by graph.sync.calendarState.collectAsStateWithLifecycle()
     // The day moves with the clock as well as the data: slots begin and end, the evening runs out.
     val now by produceState(graph.clock.now()) {
         while (true) {

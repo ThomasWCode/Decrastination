@@ -89,9 +89,6 @@ object CalendarTime {
         return events
     }
 
-    // [com.thomaswcode.decrastination.sync.Sync]'s, till its callers call it there.
-    suspend fun refresh(context: Context): Unit = AppGraph.get(context).sync.refreshCalendar()
-
     private val DAY = DateTimeFormatter.ofPattern("EEEE d MMMM", Locale.UK)
 
     /** Of the events the rules can't judge, those to ask about now: not over, within the week, not asked before. */
