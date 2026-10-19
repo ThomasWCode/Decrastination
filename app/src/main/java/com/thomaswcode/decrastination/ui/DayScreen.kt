@@ -310,11 +310,12 @@ private fun clock(at: Long, zone: ZoneId) = java.time.Instant.ofEpochMilli(at).a
 
 private fun eventKey(event: CalendarEvent) = "${event.id}@${event.start}"
 
-private fun rowKey(row: DayModel.Row): String = when (row) {
+/** Each row's key in the list, its own however alike two rows are: a slot kept twice is two records, told apart by when. */
+internal fun rowKey(row: DayModel.Row): String = when (row) {
     is DayModel.Row.Window -> "window-${row.start}"
     is DayModel.Row.Event -> "event-${eventKey(row.event)}"
     is DayModel.Row.Planned -> "slot-${row.slot.key}-${row.slot.start}"
-    is DayModel.Row.Recorded -> "record-${row.record.key}-${row.record.start}-${row.record.outcome}"
+    is DayModel.Row.Recorded -> "record-${row.record.key}-${row.record.start}-${row.record.outcome}-${row.record.at}"
     is DayModel.Row.Gap -> "gap-${row.start}"
     is DayModel.Row.Now -> "now"
     is DayModel.Row.Unslotted -> "unslotted"
