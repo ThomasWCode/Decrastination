@@ -336,7 +336,7 @@ object ChatPrompts {
 
     private fun aboutLine(about: About): String = when {
         about.taskId != null -> "(About the task ${about.taskId}, “${about.taskTitle.orEmpty().take(MAX_TITLE)}”) "
-        about.eventKey != null -> "(About the calendar event “${(about.eventTitle ?: about.eventKey).take(MAX_TITLE)}”, eventKey ${about.eventKey}) "
+        about.eventKey != null -> "(About the calendar event “${(about.eventTitle ?: about.eventKey!!).take(MAX_TITLE)}”, eventKey ${about.eventKey}) "
         about.day != null -> "(About ${runCatching { LocalDate.parse(about.day).format(DAY) }.getOrNull() ?: about.day}) "
         else -> ""
     }

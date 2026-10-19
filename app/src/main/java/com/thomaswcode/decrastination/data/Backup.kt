@@ -327,7 +327,7 @@ object Backups {
                 ChangeType.DayLimit -> change.freeMin in 0..DAY_MIN && day(change)
                 ChangeType.BusyTime -> change.startMin in 0 until DAY_MIN && (change.endMin ?: -1) in ((change.startMin ?: DAY_MIN) + 1)..DAY_MIN && day(change)
                 // Kept in the school calendar once applied, never in an instruction in use; well formed all the same.
-                ChangeType.NoSchool -> isDate(change.date) && (change.endDate == null || isDate(change.endDate) && change.endDate >= change.date!!)
+                ChangeType.NoSchool -> isDate(change.date) && change.endDate.let { end -> end == null || isDate(end) && end >= change.date!! }
                 ChangeType.HalfDay -> isDate(change.date) && change.endMin in 0..DAY_MIN
                 // A day or a time for a task (PL-04).
                 ChangeType.OnDay -> named(change.taskId) && isDate(change.date)

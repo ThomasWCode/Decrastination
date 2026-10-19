@@ -162,7 +162,7 @@ object InstructionPrompts {
                 task.detail.trim().takeIf { it.isNotEmpty() }?.let { appendLine("  Details: " + it.take(MAX_DETAIL).replace("\n", "\n    ")) }
             }
             about.eventKey != null -> appendLine(
-                "About the calendar event \"${(about.eventTitle ?: about.eventKey).take(MAX_TITLE)}\" (eventKey: ${about.eventKey})" +
+                "About the calendar event \"${(about.eventTitle ?: about.eventKey!!).take(MAX_TITLE)}\" (eventKey: ${about.eventKey})" +
                     (about.eventStart?.let { ", on ${at(it)}" } ?: ""),
             )
             about.day != null -> appendLine("About the day: " + (runCatching { LocalDate.parse(about.day).format(DAY) }.getOrNull() ?: about.day))
