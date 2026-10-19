@@ -62,7 +62,7 @@ At 3.2.0, when this was written ([01](01-current-state.md)): the planner, the sl
 
 ## The order
 
-Why it's this order, in short ([03](03-stages.md) §Why this order has it in full): the chat work is the largest feature and lives in the most tangled code, so the notifier, the gateway, the stores with migrations and Felix's own service come before it (Stages 1–4), and the chat is then written inside a tested service rather than moved into one afterwards. The other services and the data model don't touch the chat, so they wait until it's in (6, 7), but they do touch reminders, the gaps and the email's finish, so they come before those. Names are settled (9) before the prompts are rewritten (10); the write outside the phone comes last (11); the sweep leaves the code as [11](11-conventions-and-docs.md) wants it (12).
+Why it's this order, in short ([03](03-stages.md) §Why this order has it in full): the chat work is the largest feature and lives in the most tangled code, so the notifier, the gateway, the stores with migrations and Felix's own service come before it (Stages 1–4), and the chat is then written inside a tested service rather than moved into one afterwards. The other services and the data model don't touch the chat, so they wait until it's in (6, 7), but they do touch reminders, the gaps and the email's finish, so they come before those. Names are settled (9) as soon as the services are in, so the data release, the features and the prompts' rewrite (7 to 10) are written on them, not renamed after; the write outside the phone comes last (11); the sweep leaves the code as [11](11-conventions-and-docs.md) wants it (12).
 
 Every PR is a release ([development.md](../development.md)): cleanup-only releases before the chat are 3.3.x; from the chat on, every release is 4.x in the order it lands, cleanup or feature. The number says when, not what.
 
@@ -88,10 +88,10 @@ Every PR is a release ([development.md](../development.md)): cleanup-only releas
 | 6e | `Learning` | 4.0.9, done (#80) | cleanup | 3, 5a | ½ |
 | — | The chat's box answers his newest nudge; his messages waiting for your answer shown so, with *Mark answered* and *Mark all answered* (your calls, 19 Oct) | 4.0.10 | fix, feature | 5b | — |
 | 6f | The `:core` module, its dependencies on the app turned round first | 4.0.11 | cleanup | 6a–6e | 1 |
-| 7 | Who set what (`Mine`, `By`, steps with ids) and the stores split, trimmed: one data release | 4.0.12 | cleanup, data | 0, 3, 6 | 2½ |
+| 9 | Names: the readings' prompts renamed, core's rules apart from the services, files and tests split | 4.0.12 | cleanup | 6 | ½ |
+| 7 | Who set what (`Mine`, `By`, steps with ids) and the stores split, trimmed: one data release | 4.0.13 | cleanup, data | 0, 3, 6, 9 | 2½ |
 | 8a | Notes, standing notes and reminders | 4.1.0 | feature, data | 2, 3, 4, 5, 7 | 3 |
 | 8b | The gaps: keep a piece, check a source, open where it lives, free time in his context | 4.1.1 | feature | 5, 6d, 8a | 1 |
-| 9 | Names: the readings' prompts renamed, files and tests split | 4.1.2 | cleanup | 6 | ½ |
 | 10a | Memory that expires | 4.2.0 | feature, data | 3, 4, 7, 9 | 1 |
 | 10b | His voice; just talk; the summary email in the third person | 4.2.1 | feature | 5, 6e, 9 | ½ |
 | 11 | Emails done | 4.3.0 | feature, data | 1, 3, 6d, 7 | 1½ |
