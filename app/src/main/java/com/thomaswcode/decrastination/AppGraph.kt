@@ -10,8 +10,8 @@ import android.util.Log
 import com.thomaswcode.decrastination.block.Focus
 import com.thomaswcode.decrastination.block.SlotAlarms
 import com.thomaswcode.decrastination.block.Slots
+import com.thomaswcode.decrastination.calendar.CalendarWriter
 import com.thomaswcode.decrastination.calendar.SlotCalendar
-import com.thomaswcode.decrastination.calendar.SlotCalendarDiff
 import com.thomaswcode.decrastination.core.About
 import com.thomaswcode.decrastination.core.Change
 import com.thomaswcode.decrastination.core.ChangeType
@@ -23,7 +23,6 @@ import com.thomaswcode.decrastination.core.NoSchool
 import com.thomaswcode.decrastination.core.Instructions
 import com.thomaswcode.decrastination.core.OwnTask
 import com.thomaswcode.decrastination.core.OwnTasks
-import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.ProposalState
 import com.thomaswcode.decrastination.core.Planner
 import com.thomaswcode.decrastination.core.Source
@@ -148,9 +147,6 @@ class AppGraph private constructor(context: Context) {
     /** What Felix remembers (AI-21): facts, and standing instructions. */
     val memory = stores.memory
 
-    /** The versions of its events the app has written to calendars, so a copy of one is known ([SlotCalendarDiff.isCopy]). */
-    val calendarVersions = stores.calendarVersions
-
     init {
         // Files that couldn't be read whole at this start: kept for Setup to say, till you've seen them.
         // On record before anything else runs, and only then is a bad file replaced by what was kept
@@ -225,8 +221,8 @@ class AppGraph private constructor(context: Context) {
         sweep = { slots.sweep() },
         hooks = listOf(
             { made -> SlotAlarms.arm(app, made, clock.now()) },
-            // The calendar once plans have been quiet a while ([toWrite]).
-            { made -> toWrite.tryEmit(made); Unit },
+            // The calendar once plans have been quiet a while ([CalendarWriter.planned]).
+            { made -> calendarWriter.planned(made) },
             { _ -> WidgetUpdater.update(app) },
         ),
         profile = { conversation.profile(it) },
@@ -243,11 +239,21 @@ class AppGraph private constructor(context: Context) {
     ) { state, s, now -> planning.plan(state, s, now) }
 
     /**
-     * The plan to write to the calendar, once plans have been quiet [CALENDAR_WRITE_QUIET_MS] (17 Oct):
-     * a burst of changes (a chat answer's, one after another) is one write, not an event inserted and
-     * changed again while the calendar's sync still has it in hand, which brought copies of it back.
+     * The plan written to the calendar you picked ([CalendarWriter]): once plans have been quiet a
+     * while, a slot you've moved there taken as your time; a calendar no longer written to cleared; the
+     * calendar watched for changes; and your answers about its events.
      */
-    private val toWrite = MutableSharedFlow<Plan>(extraBufferCapacity = 1, onBufferOverflow = kotlinx.coroutines.channels.BufferOverflow.DROP_OLDEST)
+    val calendarWriter = CalendarWriter(
+        tasks, settings, runtime, stores.calendarVersions, clock, scope, SlotCalendar(app),
+        sayRefused = { move, zone, why -> SlotCalendar.sayRefused(app, move, zone, why) },
+        addOwnChange = { id, text, about, change -> addOwnChange(id, text, about, change) },
+        replan = { planning.watcher.poke() },
+        settleEvent = { conversation.settleEvent(it) },
+        reread = {
+            CalendarTime.refresh(app)
+            Briefing.replanToday(app)
+        },
+    )
 
     /** Today's slots as they pass: begun, or missed (PL-13). */
     val slots = Slots(this)
@@ -287,78 +293,12 @@ class AppGraph private constructor(context: Context) {
             override suspend fun layTaskOverrides() { this@AppGraph.layTaskOverrides() }
             override suspend fun changeSettings(change: (Settings) -> Settings) { this@AppGraph.changeSettings(change) }
             override suspend fun answerEvent(key: String, answer: String) {
-                CalendarTime.answer(app, key, answer)
+                calendarWriter.answer(key, answer)
             }
         },
         calendarTime = { calendarTime },
         answered = { record, words -> looks.answered(record, words) },
     )
-
-    /**
-     * [made]'s next seven days written to the calendar you picked (NF-07). A slot you've moved there
-     * is taken as your time for its task's next piece, where its deadline allows; else it's put back,
-     * and you're told.
-     */
-    private suspend fun writeSlots(made: Plan) {
-        clearOldCalendars()
-        val calendarId = settings.value.calendarWriteId ?: return
-        if (!SlotCalendar.allowed(app)) return
-        val zone = clock.zone()
-        // The same slots as last written, and nothing changed in the calendar since (AR-08): it isn't read again.
-        val desired = com.thomaswcode.decrastination.calendar.SlotCalendarDiff.desired(made, zone, runtime.value.microPlans)
-        if (!calendarTouched && lastWritten == (calendarId to desired)) return
-        calendarTouched = false
-        val byId = tasks.value.tasks.associateBy { it.id }
-        val before = runtime.value.calendarWritten
-        // A copy is one of the versions earlier writes made ([SlotCalendarDiff.isCopy]), never one of
-        // this write's: an event of yours under a slot's title at its times isn't the app's.
-        val known = calendarVersions.value.written.toSet()
-        val written = try {
-            withContext(Dispatchers.IO) {
-                SlotCalendar.write(app, calendarId, made, zone, before, known, runtime.value.microPlans) { move ->
-                    val task = move.desired.taskId?.let(byId::get)
-                    when {
-                        task == null -> "its task is no longer there"
-                        Instructions.latePin(SlotCalendar.change(move, zone), task, zone, clock.now()) -> "it's due before then"
-                        else -> null
-                    }
-                }
-            }
-        } catch (e: Throwable) {
-            // Not written: the calendar's read again at the next plan, the change seen before it with it.
-            calendarTouched = true
-            throw e
-        }
-        // Each event's version remembered once it's written (not a move of yours taken: its event is
-        // at your time), so a copy the calendar's sync makes of it is known at the next write. Not
-        // one an event of yours already had (#48's third review): remembered, the next write would
-        // take yours for a copy.
-        val moved = written.taken.map { it.desired.uri }.toSet()
-        runCatching {
-            val versions = desired.filter { d -> d.uri !in moved }.map { d -> SlotCalendarDiff.version(calendarId, d.title, d.start, d.end) }.filterNot { it in written.yours }
-            calendarVersions.update { it.copy(written = SlotCalendarDiff.remembered(it.written, versions)) }
-        }.onFailure { Log.w(TAG, "Remembering what was written to the calendar failed", it) }
-        // A move taken counts as written only once its instruction is in: stopped before, the next
-        // write finds it a move again, rather than putting it back.
-        val held = SlotCalendarDiff.pending(written.starts, before, written.taken)
-        if (held != before) runtime.update { it.copy(calendarWritten = held) }
-        written.refused.forEach { (move, why) -> SlotCalendar.sayRefused(app, move, zone, why) }
-        lastWritten = calendarId to desired
-        for (move in written.taken) {
-            val taskId = move.desired.taskId ?: continue
-            addOwnChange(java.util.UUID.randomUUID().toString(), "Moved in the calendar", About(taskId = taskId, taskTitle = byId[taskId]?.title), SlotCalendar.change(move, zone))
-            runtime.update { it.copy(calendarWritten = it.calendarWritten + (move.desired.uri to move.existing.start)) }
-        }
-    }
-
-    /** The app's events taken out of calendars no longer written to, each kept on the list till that's done. */
-    private suspend fun clearOldCalendars() {
-        val waiting = runtime.value.calendarsToClear
-        if (waiting.isEmpty()) return
-        val versions = calendarVersions.value.written.toSet()
-        val cleared = withContext(Dispatchers.IO) { waiting.filter { SlotCalendar.clear(app, it, versions) } }
-        if (cleared.isNotEmpty()) runtime.update { it.copy(calendarsToClear = it.calendarsToClear - cleared.toSet()) }
-    }
 
     /** Applies a settings change: at once, or, once armed, pending if it loosens blocking. */
     /**
@@ -506,44 +446,6 @@ class AppGraph private constructor(context: Context) {
      */
     private val teamsChanged = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
 
-    /** The calendar announces each change; it's read again once they stop. */
-    private val calendarChanged = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
-
-    private var calendarWatched = false
-
-    /**
-     * Whether the calendar has changed since the app last read the one it writes to (AR-08): till it
-     * has, a plan that would write what was written last ([lastWritten]) doesn't read it again. A
-     * change there (a slot moved or deleted by hand, or the app's own write) has it read again.
-     */
-    @Volatile
-    private var calendarTouched = true
-
-    /** The calendar last written to and the slots written there (AR-08). */
-    @Volatile
-    private var lastWritten: Pair<Long, List<com.thomaswcode.decrastination.calendar.SlotCalendarDiff.Desired>>? = null
-
-    /**
-     * Watches the calendar for changes, once it may be read: at start, and at each read of it
-     * after (so allowing it later, in Setup or Android's settings, starts the watching too).
-     */
-    @Synchronized
-    fun watchCalendar() {
-        if (calendarWatched || !CalendarTime.allowed(app)) return
-        runCatching {
-            app.contentResolver.registerContentObserver(
-                android.provider.CalendarContract.Events.CONTENT_URI,
-                true,
-                object : ContentObserver(Handler(Looper.getMainLooper())) {
-                    override fun onChange(selfChange: Boolean) {
-                        calendarTouched = true
-                        calendarChanged.tryEmit(Unit)
-                    }
-                },
-            )
-        }.onSuccess { calendarWatched = true }.onFailure { Log.w(TAG, "Can't watch the calendar", it) }
-    }
-
     init {
         // Disarmed (once the wait is over, or at once by a parent's code): the device admin goes
         // too, so uninstalling is allowed again, as the protection screen says. Checked at start as
@@ -603,26 +505,14 @@ class AppGraph private constructor(context: Context) {
         // deleted in the calendar written to (which isn't read) is seen (NF-07). The app's own write
         // brings one replan more, which writes nothing.
         scope.launch {
-            calendarChanged.debounce(CALENDAR_QUIET_MS).collect {
+            calendarWriter.calendarChanged.debounce(CALENDAR_QUIET_MS).collect {
                 CalendarTime.refresh(app)
                 planning.watcher.poke()
             }
         }
-        // The calendar written to, or those not read, changed (NF-07, DX-13): what was written to
-        // one no longer is goes from it, and the calendar's read again.
-        scope.launch {
-            settings.state.map { it.calendarWriteId }.distinctUntilChanged().collect { id ->
-                val was = runtime.value.calendarWrittenTo
-                if (was == id) return@collect
-                // The old one kept on the list to clear till it is: without the permission now, or
-                // should the provider fail, it's tried again at the next replan.
-                runtime.update { state ->
-                    state.copy(calendarWrittenTo = id, calendarWritten = emptyMap(), calendarsToClear = (state.calendarsToClear + listOfNotNull(was)).distinct() - listOfNotNull(id).toSet())
-                }
-                clearOldCalendars()
-                planning.watcher.poke()
-            }
-        }
+        // The calendar picked, and each plan once plans have been quiet a while, written ([CalendarWriter.start]).
+        calendarWriter.start()
+        // The calendar written to, or those not read, changed (NF-07, DX-13): the calendar's read again.
         scope.launch {
             settings.state.map { it.calendarWriteId to it.calendarsExcluded }.distinctUntilChanged().drop(1).collect { CalendarTime.refresh(app) }
         }
@@ -671,10 +561,6 @@ class AppGraph private constructor(context: Context) {
         }.onFailure { Log.w(TAG, "Can't watch the Teams widget", it) }
         scope.launch {
             teamsChanged.debounce(TEAMS_QUIET_MS).collect { syncer.sync(setOf(Source.Teams, Source.Anki)) }
-        }
-        // The calendar written once plans have been quiet a while.
-        scope.launch {
-            toWrite.debounce(CALENDAR_WRITE_QUIET_MS).collect { made -> runCatching { writeSlots(made) }.onFailure { Log.w(TAG, "Writing the calendar failed", it) } }
         }
         // A key problem standing from before, whose alert couldn't be shown then.
         gateway.reconcileAlerts()
@@ -1430,9 +1316,6 @@ class AppGraph private constructor(context: Context) {
         private const val WIDGET_DEBOUNCE_MS = 1_000L
 
         private const val CALENDAR_QUIET_MS = 5_000L
-
-        /** How long plans are quiet before the calendar's written ([toWrite]). */
-        private const val CALENDAR_WRITE_QUIET_MS = 5_000L
 
         /** After a failed call, the model is left alone this long. */
 

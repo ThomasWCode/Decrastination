@@ -211,7 +211,7 @@ class FelixHarness(start: String = "2026-10-19T16:30") : AutoCloseable {
             stores.settings.update(change)
         }
 
-        /** The calendar's answers kept (the event, the answer as it's kept), as `CalendarTime.answer` would keep them. */
+        /** The calendar's answers kept (the event, the answer as it's kept), as `CalendarWriter.answer` would keep them. */
         val events: MutableList<Pair<String, String>> = Collections.synchronizedList(mutableListOf())
 
         override suspend fun answerEvent(key: String, answer: String) {
