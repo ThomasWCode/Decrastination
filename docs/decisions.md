@@ -27,12 +27,12 @@ How the app works in detail is in [spec/](spec/); how the work is done is in [de
 
 - **D-14. Claude is opt-in; the rules stand in when it's off.** Applies: `RuleEnricher` (`enrich/Enricher.kt`).
 - **D-15. One model for every job**, thinking hard on the readings the plan is made from and less where someone waits (AC-02).
-- **D-16. A task is read once, and again only when its content changes** (`Enrichments.inputHash`). A change to the prompts (`Prompts.VERSION`) reads open tasks again once, except those with a step of their reading done (AC-06).
+- **D-16. A task is read once, and again only when its content changes** (`Enrichments.inputHash`). A change to the prompts (`ReadingPrompts.VERSION`) reads open tasks again once, except those with a step of their reading done (AC-06).
 - **D-17. A reading that fails a check is put back once, then salvaged, then dropped** (AI-01).
 - **D-18. Only a real deadline can be missed:** a source's, one you gave, or an email's own words as Claude quotes them. Every date the app or Claude sets is a plan, never overdue (PL-14, AI-12).
 - **D-19. A reading the text can't settle asks one question, through Felix** (AI-10).
 - **D-20. Steps are as few as the work has** (3.1.1, 17 Oct): one step unless the instructions list separate pieces of work; dated blocks only for separately dated pieces; a few minutes' admin goes in the title of the step it belongs to, never a step of its own.
-- **D-21. Nothing is split unless it's over an hour, then by time, never by content** (3.1.2, 17 Oct). Even sittings of an hour at most: the first the work, then "Continue: …", the last "Continue and finish: …"; at reading and again at planning, where the plan's minutes are longer. The app's own steps only (D-34). Applies: `core/Sittings.kt`, `Answers.fitParts`, `Planner.sittings`.
+- **D-21. Nothing is split unless it's over an hour, then by time, never by content** (3.1.2, 17 Oct). Even sittings of an hour at most: the first the work, then "Continue: …", the last "Continue and finish: …"; at reading and again at planning, where the plan's minutes are longer. The app's own steps only (D-34). Applies: `core/Sittings.kt`, `ReadingAnswers.fitParts`, `Planner.sittings`.
 - **D-22. Micro-plans for every slot; photo checks take several pages, with no partial credit; a photo can make a task or re-estimate one.**
 - **D-23. The profile tells Claude everything useful about you** (your year, subjects, week, Felix's memories) without crowding the context.
 - **D-24. The API's model fallback stays on**, and a reading is credited to the model that answered.
@@ -44,7 +44,7 @@ How the app works in detail is in [spec/](spec/); how the work is done is in [de
 - **D-27. A day's capacity is its free time times the share of it you really use**, learned per kind of day (between 0.5 and 1.0; 1.0 until seven such days) (PL-06). A weekday off school is a weekend's day, planned with the weekend's share and teaching it (17 Oct). Applies: `Planner.capacityOf`, `learn/Days.record`.
 - **D-28. A weekend keeps one long window**; two weekend windows aren't built.
 - **D-29. Revision goes a day apart**; there's no evening-start preference.
-- **D-30. Work can be moved as often as you like, never past its due date**; overdue work can go to any day or time from now, and is planned there, still marked overdue (17 Oct). Applies: `Instructions.latePin`, `Planner.keptDay`, `pinnedTime`, `pinProblem`.
+- **D-30. Work can be moved as often as you like, never past its due date**; overdue work can go to any day or time from now, and is planned there, still marked overdue (17 Oct). Applies: `InstructionRules.latePin`, `Planner.keptDay`, `pinnedTime`, `pinProblem`.
 - **D-31. A deadline later the same day can use that day's school windows before it** (Q-52).
 - **D-32. The planner stays pure**: everything it uses comes in through `Planner.Input`.
 - **D-33. A piece's length (`boxMin`) is yours** (17 Oct): 60 minutes on your phone; the weekly review never changes it.
@@ -132,7 +132,7 @@ How the app works in detail is in [spec/](spec/); how the work is done is in [de
 - **D-84. Merged with a merge commit** (`Merge #N: <title>`), the branch deleted, a release tagged `vX.Y.Z`.
 - **D-85. No attribution, co-author or session lines** in commits or PR descriptions.
 - **D-86. Every change of behaviour has unit tests**; CI runs the tests, lint and assemble; no test is switched off.
-- **D-87. A prompt or schema change updates the golden copies; one to what a reading is made by raises `Prompts.VERSION`.** A changed schema is compiled by the API before it's released (`SchemaCompileTest`, 17 Oct), and a list's fields are never nullable.
+- **D-87. A prompt or schema change updates the golden copies; one to what a reading is made by raises `ReadingPrompts.VERSION`.** A changed schema is compiled by the API before it's released (`SchemaCompileTest`, 17 Oct), and a list's fields are never nullable.
 - **D-88. A new setting needs a default, a range, a label and a field on its screen**, and its place in protection's list if it can loosen blocking.
 - **D-89. The docs change with the code**, in the same PR: the spec for behaviour, this file for decisions. Comments say what and why, and cite requirement ids and decisions.
 - **D-90. Not built:** focus sessions, streaks, an exams page, recurring work, rules by sender, two weekend windows, task search, a free-time ledger, reviews that only propose. A rewrite of the app isn't wanted; its restructuring is planned instead ([plan_v4/](plan_v4/README.md)).

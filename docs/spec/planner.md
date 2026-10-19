@@ -7,7 +7,7 @@ It's pure Kotlin: everything comes in through `Planner.Input`, so the same input
 
 `Planning.plan` (`plan/Planning.kt`) builds `Planner.Input` and calls `Planner.plan`; its `PlanWatcher` makes the plan again whenever an input changes ([slots-and-calendar.md](slots-and-calendar.md)).
 
-- **Tasks**, each with your instructions laid on it (`Instructions.taskOverrides`), and the minutes of work it's the same as credited to it (`Duplicates.credited`, DX-15).
+- **Tasks**, each with your instructions laid on it (`InstructionRules.taskOverrides`), and the minutes of work it's the same as credited to it (`Duplicates.credited`, DX-15).
 - **Windows** (PL-15): each day's planning time, from `core/SchoolDays.kt` and the school calendar (PL-16).
 - **Busy time**: the phone's calendar (`busy`, and `dayLoads` for time taken at no set time) and the times you said you can't work (`hardBusy`), which nothing overfills, not even overdue work.
 - **Day limits** you gave (`dayCaps`), and the minutes kept today (`workedTodayMin`), which come off today's limit.
@@ -15,7 +15,7 @@ It's pure Kotlin: everything comes in through `Planner.Input`, so the same input
 - **Calibration**: the pace, margins and day yields learned ([learning.md](learning.md)).
 - **Today's slots** in the last plan: their starts (`previousSlots`) and those missed (`missedSlots`, PL-13).
 
-A task is planned when it's open, available (`TaskItem.isAvailable`), not hidden (`TaskItem.hidden`: not a task, or the same as another) and not waiting for another open task (`Instructions.waiting`).
+A task is planned when it's open, available (`TaskItem.isAvailable`), not hidden (`TaskItem.hidden`: not a task, or the same as another) and not waiting for another open task (`InstructionRules.waiting`).
 Events (`Kind.Event`) are reminders in `Plan.events`, not work.
 
 ## A day's time (PL-15)
@@ -70,7 +70,7 @@ A task's pieces are its steps still to do, or, with no steps, boxes of its remai
 ## Sittings
 
 One of the app's steps still over an hour as planned is cut into even sittings as the plan is made (`Planner.sittings`, `core/Sittings.kt`).
-Claude's reading cuts a long step when it's read (`Answers.fitParts`), but a step can still be over an hour as planned: the pace stretches it, your total is shared over it, or its reading left it whole.
+Claude's reading cuts a long step when it's read (`ReadingAnswers.fitParts`), but a step can still be over an hour as planned: the pace stretches it, your total is shared over it, or its reading left it whole.
 
 - Each is at most `Sittings.MAX_MIN` (60), and they're even (`Sittings.even`: 125 minutes is 42, 42 and 41).
 - They're named by their place in the whole step: the first has the step's title, then "Continue: …", and the last "Continue and finish: …" (`Sittings.titles`), unless the next step carries the work on (`Sittings.finishes`).
@@ -155,7 +155,7 @@ Runs stay in order: none starts before the one before it, each is planned to be 
 Told to Felix or as an instruction, or made by moving a piece on Day or in the calendar, they're changes on the task (`userOnDay`, `userAtTime`):
 - **A day** (`OnDay`): all of the task on that day, placed before everything else; that day is its last usable day whatever the margin, and a deadline only where the task's own is that day.
 - **A time** (`AtTime`): its next piece a run of its own from that time, which the slotter keeps to the minute; the rest follow it.
-- Not kept: one whose day has gone, one before the task can start, and, while the task's real deadline is still to come, a day after its day or a time at or after it. Those last two are refused as they're given ("It's due before then", `Instructions.latePin`; on Day, `Planner.pinProblem`).
+- Not kept: one whose day has gone, one before the task can start, and, while the task's real deadline is still to come, a day after its day or a time at or after it. Those last two are refused as they're given ("It's due before then", `InstructionRules.latePin`; on Day, `Planner.pinProblem`).
 - Work already overdue takes any day or time from now (D-30): all of it on the day you gave, or its next piece at your time and the rest after it, none of it before. It's still overdue there, and says so.
 - A time past a plan's date makes the date moot: the work is undated from that time. A later day for all of it drops a time on another day, and keeps one on that day.
 

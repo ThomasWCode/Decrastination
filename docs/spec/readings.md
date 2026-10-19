@@ -9,7 +9,7 @@ The rules give every task a reading too, and stand in whenever Claude can't. Cla
 - Three jobs run on tasks (`Enrichments.jobFor`): **Email** for a Gmail conversation, **Assignment** for a Teams assignment, **Effort** for a Power Planner task.
 - Not read: a task of your own, Anki's derived tasks, feedback to read (NF-06), a Power Planner event, a task you've said isn't one, a closed task, and an email whose text isn't yet read as far as reads go (`GmailThreads.textRead`).
 - Claude reads only while it's on: the switch in Settings, a key in use (`aiKeyActive`) and the key in the encrypted secrets file (`ModelGateway.claudeKey`). These change at once, armed or not. Off, the rules read everything.
-- `RuleEnricher` (`enrich/Enricher.kt`) and `ClaudeEnricher` (`enrich/ClaudeEnricher.kt`) both implement `Enricher`. The prompts and the checks are `Prompts` and `Answers` (`enrich/Prompts.kt`).
+- `RuleEnricher` (`enrich/Enricher.kt`) and `ClaudeEnricher` (`enrich/ClaudeEnricher.kt`) both implement `Enricher`. The prompts and the checks are `ReadingPrompts` and `ReadingAnswers` (`enrich/ReadingPrompts.kt`, `enrich/ReadingAnswers.kt`).
 
 ## The three jobs
 
@@ -74,7 +74,7 @@ Emails' and planner items' blocks follow the same rule: only separately dated pi
 
 ## Sittings
 
-A step over an hour is cut into even sittings by time, never by content (`core/Sittings.kt`, `Answers.fitParts`).
+A step over an hour is cut into even sittings by time, never by content (`core/Sittings.kt`, `ReadingAnswers.fitParts`).
 - `Sittings.count`: a sitting an hour, or part of one (`Sittings.MAX_MIN`, 60). `Sittings.even`: even minutes, the odd ones first (100 is 50 and 50; 125 is 42, 42 and 41).
 - Titles: the first is the step's own, then "Continue: …", and the last "Continue and finish: …". Each sitting keeps its step's dates.
 - `Answers.sittings` cuts after folding, so a folded step is cut too; the rules' steps are cut the same way.
@@ -119,14 +119,14 @@ It runs again once Claude can be asked again (its rest over, `EnrichWorker.retry
 
 ## The prompts' version (AC-06)
 
-`Prompts.VERSION` is 7 (7: a long text's summary, D-93). Each reading keeps the version of the prompts that made it (`Enrichment.promptVersion`; 1 where none is stored).
+`ReadingPrompts.VERSION` is 7 (7: a long text's summary, D-93). Each reading keeps the version of the prompts that made it (`Enrichment.promptVersion`; 1 where none is stored).
 - With Claude on, an open task Claude read under an older version is read again once, within the run's 20 calls, the oldest first.
 - **Not a task with a step of its reading done** (`partDone`, `core/Enrichment.kt`): newer prompts could give its work as other steps, and a tick goes only to a step of its name, so work done would be planned again. It's read again only when its content changes or you ask.
 - Read for such a reason, Claude is told which steps are done: each listed "(N min, done)", to be kept exactly as it is (title and minutes, still in `effortMin`), with only the work left given in the others (AI-08, `Prompts.describe`).
 - A re-read for the version alone that gets no answer keeps its reading, marked as these prompts'; one past the run's calls waits for the next run.
 - **The version is raised** with any change to a reading's prompt, schema or examples, or to the profile's shape.
 - `GoldenPromptsTest` (AR-01) keeps a golden copy of every prompt and schema in `app/src/test/resources/prompts/` and fails on any difference, with its diff; `-PupdateGolden=true` writes them again.
-- Where an `enrich-*` copy or `profile.txt` differs from HEAD's, the same test fails unless `Prompts.VERSION` differs from HEAD's too.
+- Where an `enrich-*` copy or `profile.txt` differs from HEAD's, the same test fails unless `ReadingPrompts.VERSION` differs from HEAD's too.
 - **Every schema compiles.** The API turns a schema into a grammar that holds the answer to it as it's written, and refuses one whose grammar is too large. A nullable field is a union in it, and unions inside a list's items weigh most: the chat's and the instructions reader's lists have none, an unused field being empty (a number -1). `SchemaLimitsTest` holds every schema to 16 unions and two inside a list; `SchemaCompileTest`, asked for with `-PcheckSchemas=true`, has the API compile each one ([development.md](../development.md#building-and-testing)).
 
 ## Questions (AI-10)
@@ -162,7 +162,7 @@ Each reading is one Messages API call through the Anthropic Java SDK (`ClaudeEnr
 
 ## Web research
 
-Felix's look-ups are a call of their own (`enrich/WebResearch.kt`), never part of the chat's: the search tool beside the chat's answer schema makes a grammar the API refuses as too large.
+Felix's look-ups are a call of their own (`enrich/WebResearcher.kt`), never part of the chat's: the search tool beside the chat's answer schema makes a grammar the API refuses as too large.
 - When his answer asks to look something up (`research`), `WebResearcher.look` asks Claude with its web search tool (`web_search_20250305`): at most 3 searches, located in the UK and your zone, no profile sent, at medium effort.
 - Its answer is in words, at most 15 short lines (3 000 characters), with up to 4 pages kept. One that searches past its turn isn't carried on. Felix is then asked again with what it found (felix.md).
 - Settings → Felix has its switch (`felixSearches`), on to start with.
@@ -207,7 +207,7 @@ Every call goes through `ModelGateway.call`, so the cap and rests above apply; e
 
 A small set of your real emails and assignments, each with its right answer, kept in `private/eval/` (git-ignored, never committed). It checks the readings whenever a prompt, a schema or the checks change (IMP-P1-004).
 - `EvalSetTest.dump` writes each case's request as the app makes it to `private/eval/prompts/`, addresses redacted. Opus answers them through Claude Code, at no API cost.
-- `EvalSetTest.score` puts every answer through `Answers.parse` and the planner, as the app would, against your labels, into `private/eval/report.md`.
+- `EvalSetTest.score` puts every answer through `ReadingAnswers.parse` and the planner, as the app would, against your labels, into `private/eval/report.md`.
 - `EvalRunTest` (AR-02) asks each case of Claude through the real `ClaudeEnricher` instead, a paid call a case, then scores them. It runs only with `-PrunEval=true` and the API key (never printed).
 - It stops ahead of a call whose dearest case could pass its budget (`EVAL_BUDGET_USD`, $2 unless set); `-Peffort=` sets the effort for the run.
 - Both are skipped where `private/eval/` isn't, so CI never runs them. A case labelled "only to read" is retired, as a starred email never is. The labels are yours to change.
