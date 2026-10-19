@@ -14,7 +14,7 @@ import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-class InstructionsTest {
+class InstructionRulesTest {
     private val now = Fixtures.at("2026-10-09T21:00")
 
     private fun task(id: String, due: String?, effort: Int = 60, source: Source = Source.Teams) = TaskItem(
@@ -40,8 +40,8 @@ class InstructionsTest {
                 at,
                 LONDON,
                 Settings(),
-                hardBusy = Instructions.busy(applied, LONDON, today, today.plusDays(90)),
-                dayCaps = Instructions.dayCaps(applied, today, today.plusDays(90)),
+                hardBusy = InstructionRules.busy(applied, LONDON, today, today.plusDays(90)),
+                dayCaps = InstructionRules.dayCaps(applied, today, today.plusDays(90)),
             ),
         )
     }
@@ -52,7 +52,7 @@ class InstructionsTest {
     fun `a due date of yours is laid over the source's, kept through a sync, and taken back`() {
         val essay = task("essay", "2026-10-12T09:00")
         val due = Fixtures.at("2026-10-16T23:59")
-        val overrides = Instructions.taskOverrides(listOf(applied(Change(ChangeType.DueBy, taskId = essay.id, time = due))))
+        val overrides = InstructionRules.taskOverrides(listOf(applied(Change(ChangeType.DueBy, taskId = essay.id, time = due))))
         val moved = essay.withOverrides(overrides.getValue(essay.id))
         assertEquals(due, moved.dueAt)
         // A sync reads the source's date again: yours still stands.
@@ -66,9 +66,9 @@ class InstructionsTest {
     fun `a total Felix works out at your pace is kept as paced through a sync, and a later one of yours isn't`() {
         val essay = task("essay", "2026-10-12T09:00")
         val paced = applied(Change(ChangeType.Minutes, taskId = essay.id, minutes = 90, pacedFrom = 60, pacedHash = Enrichments.inputHash(essay)))
-        val laid = essay.withOverrides(Instructions.taskOverrides(listOf(paced)).getValue(essay.id))
+        val laid = essay.withOverrides(InstructionRules.taskOverrides(listOf(paced)).getValue(essay.id))
         assertEquals(Triple(90, true, true), Triple(laid.effortMin, laid.pacedMinutes, laid.pacedTeaches))
-        assertTrue("“essay”: takes 1 h 30 min in all at your pace" in Instructions.describe(paced.changes.single(), mapOf(essay.id to essay), LONDON))
+        assertTrue("“essay”: takes 1 h 30 min in all at your pace" in InstructionRules.describe(paced.changes.single(), mapOf(essay.id to essay), LONDON))
         // A sync keeps it, as it keeps your other changes.
         fun synced(estimate: Int, detail: String = "") =
             Merge.apply(listOf(laid), Source.Teams, listOf(Fetched("essay", "essay", Kind.Homework, detail = detail, dueAt = Fixtures.at("2026-10-12T09:00"), sourceEffortMin = estimate)), now).tasks.single()
@@ -79,7 +79,7 @@ class InstructionsTest {
         assertEquals(Triple(90, true, false), synced(60, detail = "Also questions 9 to 12.").let { Triple(it.effortMin, it.pacedMinutes, it.pacedTeaches) })
         // Your own reckoning after it: yours, not paced; and taken back, neither.
         val yours = applied(Change(ChangeType.Minutes, taskId = essay.id, minutes = 120), at = now + 1)
-        val mine = essay.withOverrides(Instructions.taskOverrides(listOf(paced, yours)).getValue(essay.id))
+        val mine = essay.withOverrides(InstructionRules.taskOverrides(listOf(paced, yours)).getValue(essay.id))
         assertEquals(120 to false, mine.effortMin to mine.pacedMinutes)
         assertFalse(laid.withOverrides(TaskOverrides.NONE).pacedMinutes)
         // Never on a task of your own, whose estimate is yours.
@@ -91,7 +91,7 @@ class InstructionsTest {
         val first = applied(Change(ChangeType.StartFrom, taskId = "teams:a", time = 1L), at = now)
         val second = applied(Change(ChangeType.StartFrom, taskId = "teams:a", time = 2L), Change(ChangeType.NotATask, taskId = "teams:a"), at = now + 1)
         val state = InstructionState(listOf(second, first))
-        val o = Instructions.taskOverrides(state.applied).getValue("teams:a")
+        val o = InstructionRules.taskOverrides(state.applied).getValue("teams:a")
         assertEquals(2L, o.from)
         assertTrue(o.notATask)
     }
@@ -175,7 +175,7 @@ class InstructionsTest {
     fun `a task you said isn't one holds nothing back`() {
         val info = task("info", null).withOverrides(TaskOverrides(notATask = true))
         val essay = task("essay", "2026-10-12T09:00").withOverrides(TaskOverrides(after = info.id))
-        assertFalse(Instructions.waiting(essay, listOf(info, essay).associateBy { it.id }))
+        assertFalse(InstructionRules.waiting(essay, listOf(info, essay).associateBy { it.id }))
         assertTrue(essay.id in plan(listOf(info, essay)).ordered.map { it.taskId })
     }
 
@@ -197,7 +197,7 @@ class InstructionsTest {
         val limit = applied(Change(ChangeType.DayLimit, date = "2026-10-09", freeMin = 60))
         val at = Fixtures.at("2026-10-09T18:00")
         val today = LocalDate.parse("2026-10-09")
-        val input = Planner.Input(listOf(essay), at, LONDON, Settings(), dayCaps = Instructions.dayCaps(listOf(limit), today, today.plusDays(30)))
+        val input = Planner.Input(listOf(essay), at, LONDON, Settings(), dayCaps = InstructionRules.dayCaps(listOf(limit), today, today.plusDays(30)))
         assertEquals(60, Planner.capacity(today, input))
         // An hour's session done: nothing more today.
         assertEquals(0, Planner.capacity(today, input.copy(workedTodayMin = 60)))
@@ -268,16 +268,16 @@ class InstructionsTest {
         val a = task("a", "2026-10-12T09:00").copy(userAfter = "teams:b")
         val b = task("b", "2026-10-13T09:00").copy(userAfter = "teams:a")
         val byId = listOf(a, b).associateBy { it.id }
-        assertFalse(Instructions.waiting(a, byId))
-        assertFalse(Instructions.waiting(b, byId))
+        assertFalse(InstructionRules.waiting(a, byId))
+        assertFalse(InstructionRules.waiting(b, byId))
         assertEquals(setOf(a.id, b.id), plan(listOf(a, b)).ordered.map { it.taskId }.toSet())
         // One waiting on a task stuck in a circle still waits for it.
         val c = task("c", "2026-10-14T09:00").copy(userAfter = "teams:a")
-        assertTrue(Instructions.waiting(c, byId + (c.id to c)))
+        assertTrue(InstructionRules.waiting(c, byId + (c.id to c)))
         // A new one closing a circle with one applied is caught.
         val applied = listOf(applied(Change(ChangeType.After, taskId = "teams:a", afterTaskId = "teams:b")))
-        assertTrue(Instructions.makesCircle(listOf(Change(ChangeType.After, taskId = "teams:b", afterTaskId = "teams:a")), applied))
-        assertFalse(Instructions.makesCircle(listOf(Change(ChangeType.After, taskId = "teams:c", afterTaskId = "teams:a")), applied))
+        assertTrue(InstructionRules.makesCircle(listOf(Change(ChangeType.After, taskId = "teams:b", afterTaskId = "teams:a")), applied))
+        assertFalse(InstructionRules.makesCircle(listOf(Change(ChangeType.After, taskId = "teams:c", afterTaskId = "teams:a")), applied))
     }
 
     @Test
@@ -286,7 +286,7 @@ class InstructionsTest {
             applied(Change(ChangeType.DayLimit, weekday = 6, freeMin = 0), at = now),
             applied(Change(ChangeType.DayLimit, date = "2026-10-17", freeMin = 90), at = now + 1),
         )
-        val caps = Instructions.dayCaps(rules, LocalDate.parse("2026-10-09"), LocalDate.parse("2026-10-24"))
+        val caps = InstructionRules.dayCaps(rules, LocalDate.parse("2026-10-09"), LocalDate.parse("2026-10-24"))
         assertEquals(0, caps[LocalDate.parse("2026-10-10")])
         assertEquals(90, caps[LocalDate.parse("2026-10-17")])
         assertEquals(0, caps[LocalDate.parse("2026-10-24")])
@@ -297,7 +297,7 @@ class InstructionsTest {
     fun `busy times of yours come off a day's time`() {
         // Within a school day's hours (from 16:45).
         val rule = applied(Change(ChangeType.BusyTime, weekday = 2, startMin = 18 * 60, endMin = 20 * 60))
-        val busy = Instructions.busy(listOf(rule), LONDON, LocalDate.parse("2026-10-12"), LocalDate.parse("2026-10-14"))
+        val busy = InstructionRules.busy(listOf(rule), LONDON, LocalDate.parse("2026-10-12"), LocalDate.parse("2026-10-14"))
         assertEquals(listOf(Busy(Fixtures.at("2026-10-13T18:00"), Fixtures.at("2026-10-13T20:00"))), busy)
         val tuesday = LocalDate.parse("2026-10-13")
         val input = Planner.Input(emptyList(), Fixtures.at("2026-10-13T08:00"), LONDON, Settings(), busy = busy)
@@ -308,22 +308,22 @@ class InstructionsTest {
     @Test
     fun `an event's answer from an instruction is the calendar's`() {
         val rule = applied(Change(ChangeType.EventTime, eventKey = "drum lesson", eventAnswer = "free"))
-        assertEquals(mapOf("drum lesson" to "free"), Instructions.eventAnswers(listOf(rule)))
+        assertEquals(mapOf("drum lesson" to "free"), InstructionRules.eventAnswers(listOf(rule)))
     }
 
     @Test
     fun `changes read in words`() {
         val essay = task("Essay", "2026-10-12T09:00")
         val tasks = mapOf(essay.id to essay)
-        assertEquals("“Essay”: due Fri 16 Oct 23:59 (now Mon 12 Oct 09:00)", Instructions.describe(Change(ChangeType.DueBy, taskId = essay.id, time = Fixtures.at("2026-10-16T23:59")), tasks, LONDON))
+        assertEquals("“Essay”: due Fri 16 Oct 23:59 (now Mon 12 Oct 09:00)", InstructionRules.describe(Change(ChangeType.DueBy, taskId = essay.id, time = Fixtures.at("2026-10-16T23:59")), tasks, LONDON))
         // Once it's the date in use, against the source's.
         val moved = essay.withOverrides(TaskOverrides(dueAt = Fixtures.at("2026-10-16T23:59")))
-        assertEquals("“Essay”: due Fri 16 Oct 23:59 (its source says Mon 12 Oct 09:00)", Instructions.describe(Change(ChangeType.DueBy, taskId = essay.id, time = Fixtures.at("2026-10-16T23:59")), mapOf(essay.id to moved), LONDON))
-        assertEquals("“Essay”: can't be started before Wed 14 Oct", Instructions.describe(Change(ChangeType.StartFrom, taskId = essay.id, time = Fixtures.at("2026-10-14T00:00")), tasks, LONDON))
-        assertEquals("Sat 10 Oct: no work", Instructions.describe(Change(ChangeType.DayLimit, date = "2026-10-10", freeMin = 0), tasks, LONDON))
-        assertEquals("Every Friday: at most 1 h 30 min of work", Instructions.describe(Change(ChangeType.DayLimit, weekday = 5, freeMin = 90), tasks, LONDON))
-        assertEquals("Every Tuesday, 16:00–18:00: busy, no work", Instructions.describe(Change(ChangeType.BusyTime, weekday = 2, startMin = 960, endMin = 1080), tasks, LONDON))
-        assertEquals("“Train”: takes 2 h of its day", Instructions.describe(Change(ChangeType.EventTime, eventKey = "train", eventTitle = "Train", eventAnswer = "load:120"), tasks, LONDON))
+        assertEquals("“Essay”: due Fri 16 Oct 23:59 (its source says Mon 12 Oct 09:00)", InstructionRules.describe(Change(ChangeType.DueBy, taskId = essay.id, time = Fixtures.at("2026-10-16T23:59")), mapOf(essay.id to moved), LONDON))
+        assertEquals("“Essay”: can't be started before Wed 14 Oct", InstructionRules.describe(Change(ChangeType.StartFrom, taskId = essay.id, time = Fixtures.at("2026-10-14T00:00")), tasks, LONDON))
+        assertEquals("Sat 10 Oct: no work", InstructionRules.describe(Change(ChangeType.DayLimit, date = "2026-10-10", freeMin = 0), tasks, LONDON))
+        assertEquals("Every Friday: at most 1 h 30 min of work", InstructionRules.describe(Change(ChangeType.DayLimit, weekday = 5, freeMin = 90), tasks, LONDON))
+        assertEquals("Every Tuesday, 16:00–18:00: busy, no work", InstructionRules.describe(Change(ChangeType.BusyTime, weekday = 2, startMin = 960, endMin = 1080), tasks, LONDON))
+        assertEquals("“Train”: takes 2 h of its day", InstructionRules.describe(Change(ChangeType.EventTime, eventKey = "train", eventTitle = "Train", eventAnswer = "load:120"), tasks, LONDON))
     }
 
     // --- Claude's reading, checked ---
@@ -396,11 +396,11 @@ class InstructionsTest {
         assertEquals(Change(ChangeType.NoSchool, date = "2026-11-13", endDate = "2026-11-13"), changes[1])
         assertEquals(Change(ChangeType.HalfDay, date = "2026-10-23", endMin = 750), changes[2])
         val tasks = emptyMap<String, TaskItem>()
-        assertEquals("No school from Mon 26 Oct to Fri 30 Oct", Instructions.describe(changes[0], tasks, LONDON))
-        assertEquals("No school on Fri 13 Nov", Instructions.describe(changes[1], tasks, LONDON))
-        assertEquals("Half-day on Fri 23 Oct, ends 12:30", Instructions.describe(changes[2], tasks, LONDON))
-        assertEquals(NoSchool("2026-10-26", "2026-10-30"), Instructions.schoolEntry(changes[0]))
-        assertEquals(HalfDay("2026-10-23", 750), Instructions.schoolEntry(changes[2]))
+        assertEquals("No school from Mon 26 Oct to Fri 30 Oct", InstructionRules.describe(changes[0], tasks, LONDON))
+        assertEquals("No school on Fri 13 Nov", InstructionRules.describe(changes[1], tasks, LONDON))
+        assertEquals("Half-day on Fri 23 Oct, ends 12:30", InstructionRules.describe(changes[2], tasks, LONDON))
+        assertEquals(NoSchool("2026-10-26", "2026-10-30"), InstructionRules.schoolEntry(changes[0]))
+        assertEquals(HalfDay("2026-10-23", 750), InstructionRules.schoolEntry(changes[2]))
         // An end before the start, or a weekday for a stretch, isn't a reading the app can use.
         fun one(change: String) = parse("""{"understood":true,"question":null,"changes":[$change]}""")
         assertIs<InstructionAnswers.Reading.Unclear>(one("""{"type":"NoSchool","taskId":null,"afterTaskId":null,"eventKey":null,"eventTime":null,"minutes":null,"date":"2026-10-30","endDate":"2026-10-26","weekday":null,"time":null,"endTime":null}"""))
@@ -421,20 +421,20 @@ class InstructionsTest {
         assertEquals(Change(ChangeType.OnDay, taskId = "teams:essay", date = "2026-10-11"), changes[0])
         assertEquals(Change(ChangeType.AtTime, taskId = "teams:prep", date = "2026-10-12", startMin = 19 * 60 + 30, time = Fixtures.at("2026-10-12T19:30")), changes[1])
         val tasks = listOf(essay, prep).associateBy { it.id }
-        assertEquals("All of “essay” on Sun 11 Oct", Instructions.describe(changes[0], tasks, LONDON))
-        assertEquals("“prep” at 19:30 on Mon 12 Oct", Instructions.describe(changes[1], tasks, LONDON))
+        assertEquals("All of “essay” on Sun 11 Oct", InstructionRules.describe(changes[0], tasks, LONDON))
+        assertEquals("“prep” at 19:30 on Mon 12 Oct", InstructionRules.describe(changes[1], tasks, LONDON))
         // Laid on the tasks.
-        val overrides = Instructions.taskOverrides(listOf(applied(*changes.toTypedArray())))
+        val overrides = InstructionRules.taskOverrides(listOf(applied(*changes.toTypedArray())))
         assertEquals("2026-10-11", overrides.getValue(essay.id).onDay)
         assertEquals(Fixtures.at("2026-10-12T19:30"), prep.withOverrides(overrides.getValue(prep.id)).userAtTime)
         assertEquals(overrides.getValue(prep.id), prep.withOverrides(overrides.getValue(prep.id)).overrides())
         // A time on the day all of it is kept to keeps the day; a later day for all of it drops a time on another.
-        val both = Instructions.taskOverrides(listOf(applied(Change(ChangeType.OnDay, taskId = prep.id, date = "2026-10-12"), changes[1])))
+        val both = InstructionRules.taskOverrides(listOf(applied(Change(ChangeType.OnDay, taskId = prep.id, date = "2026-10-12"), changes[1])))
         assertEquals(TaskOverrides(onDay = "2026-10-12", atTime = Fixtures.at("2026-10-12T19:30")), both.getValue(prep.id))
-        val later = Instructions.taskOverrides(listOf(applied(changes[1]), applied(Change(ChangeType.OnDay, taskId = prep.id, date = "2026-10-11"), at = now + 1)))
+        val later = InstructionRules.taskOverrides(listOf(applied(changes[1]), applied(Change(ChangeType.OnDay, taskId = prep.id, date = "2026-10-11"), at = now + 1)))
         assertEquals(TaskOverrides(onDay = "2026-10-11"), later.getValue(prep.id))
         // The day given after the time, for the time's own day: both kept, as in the other order.
-        val same = Instructions.taskOverrides(listOf(applied(changes[1]), applied(Change(ChangeType.OnDay, taskId = prep.id, date = "2026-10-12"), at = now + 1)))
+        val same = InstructionRules.taskOverrides(listOf(applied(changes[1]), applied(Change(ChangeType.OnDay, taskId = prep.id, date = "2026-10-12"), at = now + 1)))
         assertEquals(TaskOverrides(onDay = "2026-10-12", atTime = Fixtures.at("2026-10-12T19:30")), same.getValue(prep.id))
         // A weekday isn't a day for a task, nor a time without one.
         fun one(change: String) = parse("""{"understood":true,"question":null,"changes":[$change]}""")
@@ -445,15 +445,15 @@ class InstructionsTest {
     @Test
     fun `a day or a time after a task's real deadline is late`() {
         // The essay's due Monday 12 Oct, 09:00.
-        assertTrue(Instructions.latePin(Change(ChangeType.OnDay, taskId = essay.id, date = "2026-10-13"), essay, LONDON, Fixtures.at("2026-10-10T17:00")))
-        assertFalse(Instructions.latePin(Change(ChangeType.OnDay, taskId = essay.id, date = "2026-10-12"), essay, LONDON, Fixtures.at("2026-10-10T17:00")))
-        assertTrue(Instructions.latePin(Change(ChangeType.AtTime, taskId = essay.id, date = "2026-10-12", startMin = 600, time = Fixtures.at("2026-10-12T10:00")), essay, LONDON, Fixtures.at("2026-10-10T17:00")))
-        assertFalse(Instructions.latePin(Change(ChangeType.AtTime, taskId = essay.id, date = "2026-10-11", startMin = 1170, time = Fixtures.at("2026-10-11T19:30")), essay, LONDON, Fixtures.at("2026-10-10T17:00")))
+        assertTrue(InstructionRules.latePin(Change(ChangeType.OnDay, taskId = essay.id, date = "2026-10-13"), essay, LONDON, Fixtures.at("2026-10-10T17:00")))
+        assertFalse(InstructionRules.latePin(Change(ChangeType.OnDay, taskId = essay.id, date = "2026-10-12"), essay, LONDON, Fixtures.at("2026-10-10T17:00")))
+        assertTrue(InstructionRules.latePin(Change(ChangeType.AtTime, taskId = essay.id, date = "2026-10-12", startMin = 600, time = Fixtures.at("2026-10-12T10:00")), essay, LONDON, Fixtures.at("2026-10-10T17:00")))
+        assertFalse(InstructionRules.latePin(Change(ChangeType.AtTime, taskId = essay.id, date = "2026-10-11", startMin = 1170, time = Fixtures.at("2026-10-11T19:30")), essay, LONDON, Fixtures.at("2026-10-10T17:00")))
         // Undated, or a plan's date: never late.
-        assertFalse(Instructions.latePin(Change(ChangeType.OnDay, taskId = "teams:x", date = "2027-01-01"), task("x", null), LONDON, Fixtures.at("2026-10-10T17:00")))
+        assertFalse(InstructionRules.latePin(Change(ChangeType.OnDay, taskId = "teams:x", date = "2027-01-01"), task("x", null), LONDON, Fixtures.at("2026-10-10T17:00")))
         // Overdue already: today or later is as soon as it can be, not late.
-        assertFalse(Instructions.latePin(Change(ChangeType.OnDay, taskId = essay.id, date = "2026-10-16"), essay, LONDON, Fixtures.at("2026-10-16T18:30")))
-        assertFalse(Instructions.latePin(Change(ChangeType.AtTime, taskId = essay.id, date = "2026-10-16", startMin = 1080, time = Fixtures.at("2026-10-16T18:00")), essay, LONDON, Fixtures.at("2026-10-16T17:30")))
+        assertFalse(InstructionRules.latePin(Change(ChangeType.OnDay, taskId = essay.id, date = "2026-10-16"), essay, LONDON, Fixtures.at("2026-10-16T18:30")))
+        assertFalse(InstructionRules.latePin(Change(ChangeType.AtTime, taskId = essay.id, date = "2026-10-16", startMin = 1080, time = Fixtures.at("2026-10-16T18:00")), essay, LONDON, Fixtures.at("2026-10-16T17:30")))
     }
 
     @Test
@@ -556,15 +556,15 @@ class InstructionsTest {
         val pieces = (0..2).map(::chunk)
         val slots = pieces.mapIndexed { i, c -> Slot(SlotKind.Work, c, Fixtures.at("2026-10-12T17:00") + i * 35 * 60_000L, Fixtures.at("2026-10-12T17:30") + i * 35 * 60_000L, WindowKind.Evening, pinned = false) }
         val plan = Plan(Fixtures.at("2026-10-12T16:00"), today, listOf(DayBucket(today, 300, pieces, slots)), emptyList())
-        assertEquals(listOf(slots[0]), Instructions.movedSlots(listOf(Change(ChangeType.AtTime, taskId = "teams:t", date = "2026-10-12", time = Fixtures.at("2026-10-12T20:00"))), plan))
-        assertEquals(slots, Instructions.movedSlots(listOf(Change(ChangeType.OnDay, taskId = "teams:t", date = "2026-10-14")), plan))
-        assertEquals(emptyList(), Instructions.movedSlots(listOf(Change(ChangeType.OnDay, taskId = "teams:t", date = "2026-10-12")), plan))
-        assertEquals(slots.take(2), Instructions.movedSlots(listOf(Change(ChangeType.StartFrom, taskId = "teams:t", time = Fixtures.at("2026-10-12T18:00"))), plan))
+        assertEquals(listOf(slots[0]), InstructionRules.movedSlots(listOf(Change(ChangeType.AtTime, taskId = "teams:t", date = "2026-10-12", time = Fixtures.at("2026-10-12T20:00"))), plan))
+        assertEquals(slots, InstructionRules.movedSlots(listOf(Change(ChangeType.OnDay, taskId = "teams:t", date = "2026-10-14")), plan))
+        assertEquals(emptyList(), InstructionRules.movedSlots(listOf(Change(ChangeType.OnDay, taskId = "teams:t", date = "2026-10-12")), plan))
+        assertEquals(slots.take(2), InstructionRules.movedSlots(listOf(Change(ChangeType.StartFrom, taskId = "teams:t", time = Fixtures.at("2026-10-12T18:00"))), plan))
     }
 
     @Test
     fun `steps for a task of your own are read, said and made on it, its ticks kept by name`() {
-        val own = OwnTasks.create(OwnTask(title = "Essay", steps = listOf(OwnStep("Plan", 20), OwnStep("Write", 40))), "e", Fixtures.at("2026-10-12T17:00"))
+        val own = OwnTaskRules.create(OwnTask(title = "Essay", steps = listOf(OwnStep("Plan", 20), OwnStep("Write", 40))), "e", Fixtures.at("2026-10-12T17:00"))
         val ticked = own.copy(subSteps = own.subSteps.map { if (it.title == "Plan") it.copy(done = true) else it })
         val given = com.thomaswcode.decrastination.enrich.InstructionAnswers.Given(
             "Steps", taskId = own.id,
@@ -576,9 +576,9 @@ class InstructionsTest {
         )
         val change = com.thomaswcode.decrastination.enrich.InstructionAnswers.change(given, mapOf(own.id to ticked), emptyMap(), Fixtures.at("2026-10-12T17:00"), Fixtures.LONDON)!!
         assertEquals(listOf("Plan", "Draft", "Polish"), change.steps!!.map { it.title })
-        assertEquals("“Essay” in steps: Plan (20 min), Draft (30 min), Polish (10 min)", Instructions.describe(change, mapOf(own.id to ticked), Fixtures.LONDON))
-        val draft = OwnTasks.draftWith(ticked, change)!!
-        val made = OwnTasks.edited(ticked, draft)
+        assertEquals("“Essay” in steps: Plan (20 min), Draft (30 min), Polish (10 min)", InstructionRules.describe(change, mapOf(own.id to ticked), Fixtures.LONDON))
+        val draft = OwnTaskRules.draftWith(ticked, change)!!
+        val made = OwnTaskRules.edited(ticked, draft)
         assertEquals(listOf("Plan" to true, "Draft" to false, "Polish" to false), made.subSteps.map { it.title to it.done })
         assertEquals(60, made.subSteps.sumOf { it.minutes })
         // A source's task's too (16 Oct), but not one made from Anki's cards.
@@ -609,7 +609,7 @@ class InstructionsTest {
             .let { t -> t.copy(subSteps = t.subSteps.mapIndexed { i, s -> if (i == 0) s.copy(done = true, byHand = true) else s }) }
         assertEquals(3, email.subSteps.size)
         val one = Change(ChangeType.Steps, taskId = email.id, steps = listOf(OwnStep("Find the clip", 10), OwnStep("Put it on the site", 20, where = "home")))
-        val laid = email.withOverrides(Instructions.taskOverrides(listOf(applied(one)))[email.id]!!)
+        val laid = email.withOverrides(InstructionRules.taskOverrides(listOf(applied(one)))[email.id]!!)
         assertEquals(listOf("Find the clip" to true, "Put it on the site" to false), laid.subSteps.map { it.title to it.done })
         assertEquals("home", laid.subSteps[1].where)
         // A sync's merge, and the enrichment read again, keep them.
@@ -630,11 +630,11 @@ class InstructionsTest {
         val vectors = task("Vectors Practice", "2026-10-16T23:59").let { it.copy(sourceValues = it.sourceValues!!.copy(title = it.title)) }
         val hash = Enrichments.inputHash(vectors)
         val rename = Change(ChangeType.Rename, taskId = vectors.id, title = "Vectors practice")
-        assertEquals("“Vectors Practice” renamed “Vectors practice”", Instructions.describe(rename, mapOf(vectors.id to vectors), LONDON))
-        val renamed = vectors.withOverrides(Instructions.taskOverrides(listOf(applied(rename)))[vectors.id]!!)
+        assertEquals("“Vectors Practice” renamed “Vectors practice”", InstructionRules.describe(rename, mapOf(vectors.id to vectors), LONDON))
+        val renamed = vectors.withOverrides(InstructionRules.taskOverrides(listOf(applied(rename)))[vectors.id]!!)
         assertEquals("Vectors practice", renamed.title)
         // In use, it's said against its source's name.
-        assertEquals("“Vectors Practice” renamed “Vectors practice”", Instructions.describe(rename, mapOf(vectors.id to renamed), LONDON))
+        assertEquals("“Vectors Practice” renamed “Vectors practice”", InstructionRules.describe(rename, mapOf(vectors.id to renamed), LONDON))
         assertEquals(hash, Enrichments.inputHash(renamed))
         val synced = Merge.apply(listOf(renamed), Source.Teams, listOf(Fetched(vectors.sourceId, "Vectors Practice", Kind.Homework, dueAt = vectors.dueAt)), at).tasks.single()
         assertEquals("Vectors practice", synced.title)
@@ -651,13 +651,13 @@ class InstructionsTest {
 
     @Test
     fun `a name for a task of your own is made on it, and put back by its card's Undo`() {
-        val own = OwnTasks.create(OwnTask(title = "Essay", minutes = 60), "e", now)
+        val own = OwnTaskRules.create(OwnTask(title = "Essay", minutes = 60), "e", now)
         val rename = Change(ChangeType.Rename, taskId = own.id, title = "Philosophy essay")
-        assertEquals(listOf(rename), OwnTasks.madeOn(listOf(own), listOf(rename)))
-        val renamed = OwnTasks.changed(own, rename)
+        assertEquals(listOf(rename), OwnTaskRules.madeOn(listOf(own), listOf(rename)))
+        val renamed = OwnTaskRules.changed(own, rename)
         assertEquals("Philosophy essay", renamed.title)
         assertEquals("Philosophy essay", renamed.sourceValues?.title)
-        val back = OwnTasks.restored(OwnTasks.draftOf(renamed), OwnTasks.draftOf(own), listOf(rename))
+        val back = OwnTaskRules.restored(OwnTaskRules.draftOf(renamed), OwnTaskRules.draftOf(own), listOf(rename))
         assertEquals("Essay", back.title)
     }
 

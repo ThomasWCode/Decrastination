@@ -33,7 +33,7 @@ import kotlin.test.fail
  * inputs, against `src/test/resources/prompts/`. A change to one fails here with its diff, so no
  * prompt changes unseen; when it's meant, `./gradlew testDebugUnitTest -PupdateGolden=true` writes
  * them again, to commit with it. A change to what a reading is made by (the `enrich-` files and the
- * profile) wants [Prompts.VERSION] raised as well, so the readings made by the old ones are made again.
+ * profile) wants [ReadingPrompts.VERSION] raised as well, so the readings made by the old ones are made again.
  */
 class GoldenPromptsTest {
     private val dir = listOf(File("src/test"), File("app/src/test")).firstOrNull { it.isDirectory }?.let { File(it, "resources/prompts") }
@@ -42,8 +42,8 @@ class GoldenPromptsTest {
     /** Each golden file's name and what it holds now. */
     private fun rendered(): Map<String, String> = buildMap {
         for (job in Enrichments.Job.entries) {
-            put("enrich-${job.name.lowercase()}.txt", Prompts.system(job, YEAR))
-            put("enrich-${job.name.lowercase()}.schema.json", pretty(Prompts.schemaJson(job)))
+            put("enrich-${job.name.lowercase()}.txt", ReadingPrompts.system(job, YEAR))
+            put("enrich-${job.name.lowercase()}.schema.json", pretty(ReadingPrompts.schemaJson(job)))
         }
         put(PROFILE, Profile.block(SETTINGS, listOf(TASK), null, SCHOOL, MEMORY, NOW, Fixtures.LONDON))
         fun prompt(name: String, system: String, schema: Map<String, Any>) {
@@ -81,7 +81,7 @@ class GoldenPromptsTest {
         if (problems.isNotEmpty()) {
             val said = problems.joinToString("\n")
             println(said)
-            fail("The prompts differ from their golden copies; if that's meant, run with -PupdateGolden=true and commit them (raising Prompts.VERSION where a reading's changed):\n$said")
+            fail("The prompts differ from their golden copies; if that's meant, run with -PupdateGolden=true and commit them (raising ReadingPrompts.VERSION where a reading's changed):\n$said")
         }
     }
 
@@ -95,9 +95,9 @@ class GoldenPromptsTest {
             head != null && head.replace("\r\n", "\n") != text + "\n"
         }.keys
         if (changed.isEmpty()) return
-        val prompts = File(root!!, "app/src/main/java/com/thomaswcode/decrastination/enrich/Prompts.kt").canonicalFile.relativeTo(File(root).canonicalFile).invariantSeparatorsPath
+        val prompts = File(root!!, "app/src/main/java/com/thomaswcode/decrastination/enrich/ReadingPrompts.kt").canonicalFile.relativeTo(File(root).canonicalFile).invariantSeparatorsPath
         val before = git(File(root), "show", "HEAD:$prompts")?.let { Regex("""const val VERSION = (\d+)""").find(it)?.groupValues?.get(1)?.toInt() }
-        assertNotEquals(before, Prompts.VERSION, "${changed.sorted().joinToString()} changed since HEAD, where Prompts.VERSION was $before too: raise it, so the readings by the old prompts are made again")
+        assertNotEquals(before, ReadingPrompts.VERSION, "${changed.sorted().joinToString()} changed since HEAD, where ReadingPrompts.VERSION was $before too: raise it, so the readings by the old prompts are made again")
     }
 
     @Test

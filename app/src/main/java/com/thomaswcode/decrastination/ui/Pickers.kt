@@ -25,7 +25,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import com.thomaswcode.decrastination.core.OwnTasks
+import com.thomaswcode.decrastination.core.OwnTaskRules
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
@@ -107,7 +107,7 @@ fun MinutesDialog(title: String, initial: Int, note: String?, least: Int = 1, on
     var hours by rememberSaveable { mutableStateOf((initial / 60).toString()) }
     var minutes by rememberSaveable { mutableStateOf((initial % 60).toString()) }
     val total = (hours.toIntOrNull() ?: 0) * 60 + (minutes.toIntOrNull() ?: 0)
-    val ok = total in least..OwnTasks.MINUTES.last && (minutes.toIntOrNull() ?: 0) < 60
+    val ok = total in least..OwnTaskRules.MINUTES.last && (minutes.toIntOrNull() ?: 0) < 60
     AlertDialog(
         onDismissRequest = onClose,
         title = { Text(title) },
@@ -132,7 +132,7 @@ fun MinutesDialog(title: String, initial: Int, note: String?, least: Int = 1, on
                     )
                 }
                 note?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-                if (!ok) Text("From ${Format.minutes(least)} to ${OwnTasks.MINUTES.last / 60} hours", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                if (!ok) Text("From ${Format.minutes(least)} to ${OwnTaskRules.MINUTES.last / 60} hours", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
             }
         },
         confirmButton = { TextButton(enabled = ok, onClick = { onPick(total) }) { Text("Done") } },

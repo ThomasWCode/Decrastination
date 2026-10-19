@@ -50,7 +50,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.core.About
-import com.thomaswcode.decrastination.core.Instructions
+import com.thomaswcode.decrastination.core.InstructionRules
 import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.SchoolDays
 import com.thomaswcode.decrastination.core.Slot
@@ -126,7 +126,7 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
     // A piece being moved by hand (UI-04), by its key; an instruction about the day being written.
     var moving by rememberSaveable { mutableStateOf<String?>(null) }
     var writingDay by rememberSaveable { mutableStateOf(false) }
-    val answers = runtime.eventAnswers + Instructions.eventAnswers(instructions.applied)
+    val answers = runtime.eventAnswers + InstructionRules.eventAnswers(instructions.applied)
     val model = remember(plan, day, calendar, log, school, settings, tasks) {
         DayModel.from(plan, day, calendar.events, log.slots, SchoolDays.windows(day, settings, tasks.timetable, school), now, zone)
     }
@@ -171,7 +171,7 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
             Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
                 rules.forEach { rule ->
                     Text(
-                        "Your instruction: " + Instructions.describe(rule, emptyMap(), zone),
+                        "Your instruction: " + InstructionRules.describe(rule, emptyMap(), zone),
                         style = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
                     )
@@ -289,7 +289,7 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
     }
     eventFor?.let { key ->
         val event = calendar.events.firstOrNull { eventKey(it) == key }
-        if (event == null) LaunchedEffect(key) { eventFor = null } else EventSheet(graph, activity, event, answers, Instructions.eventAnswers(instructions.applied).keys, now, zone) { eventFor = null }
+        if (event == null) LaunchedEffect(key) { eventFor = null } else EventSheet(graph, activity, event, answers, InstructionRules.eventAnswers(instructions.applied).keys, now, zone) { eventFor = null }
     }
 }
 

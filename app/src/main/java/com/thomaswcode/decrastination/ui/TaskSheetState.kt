@@ -9,7 +9,7 @@ import com.thomaswcode.decrastination.core.About
 import com.thomaswcode.decrastination.core.Change
 import com.thomaswcode.decrastination.core.ChangeType
 import com.thomaswcode.decrastination.core.Chunk
-import com.thomaswcode.decrastination.core.OwnTasks
+import com.thomaswcode.decrastination.core.OwnTaskRules
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.tasks.Instructions
@@ -50,8 +50,8 @@ class TaskSheetState(
      */
     suspend fun make(task: TaskItem, change: Change, text: String) {
         if (task.source == Source.Own) {
-            val draft = OwnTasks.draftWith(task, change) ?: return
-            message = OwnTasks.problem(draft)
+            val draft = OwnTaskRules.draftWith(task, change) ?: return
+            message = OwnTaskRules.problem(draft)
             if (message == null) ownTasks.saveOwnTask(task.sourceId, draft)
         } else {
             instructions.addOwnChange(UUID.randomUUID().toString(), text, About(taskId = task.id, taskTitle = task.title), change)
@@ -89,7 +89,7 @@ class TaskSheetState(
 
     /** Where [task], yours, can be done (PL-15): at home only ([on]), or anywhere, a free period at school too. */
     suspend fun homeOnly(task: TaskItem, on: Boolean) {
-        ownTasks.saveOwnTask(task.sourceId, OwnTasks.draftOf(task).copy(where = if (on) "home" else "anywhere"))
+        ownTasks.saveOwnTask(task.sourceId, OwnTaskRules.draftOf(task).copy(where = if (on) "home" else "anywhere"))
     }
 
     companion object {

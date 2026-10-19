@@ -16,15 +16,15 @@ import com.thomaswcode.decrastination.core.Duplicates
 import com.thomaswcode.decrastination.core.FelixSettings
 import com.thomaswcode.decrastination.core.Given
 import com.thomaswcode.decrastination.core.Instruction
+import com.thomaswcode.decrastination.core.InstructionRules
 import com.thomaswcode.decrastination.core.InstructionState
 import com.thomaswcode.decrastination.core.InstructionStatus
-import com.thomaswcode.decrastination.core.Instructions
 import com.thomaswcode.decrastination.core.Memories
 import com.thomaswcode.decrastination.core.MemoryEdit
 import com.thomaswcode.decrastination.core.MemoryState
 import com.thomaswcode.decrastination.core.MessageKind
 import com.thomaswcode.decrastination.core.OwnTask
-import com.thomaswcode.decrastination.core.OwnTasks
+import com.thomaswcode.decrastination.core.OwnTaskRules
 import com.thomaswcode.decrastination.core.ProposalState
 import com.thomaswcode.decrastination.core.SchoolCalendar
 import com.thomaswcode.decrastination.core.Settings
@@ -914,13 +914,13 @@ class Conversation(
         val task = edited ?: proposal.task
         if (task != null) {
             val id = UUID.randomUUID().toString()
-            if (owners.saveOwnTask(id, task)) made = TaskItem.id(Source.Own, id) else note = OwnTasks.problem(task) ?: "It couldn't be added"
+            if (owners.saveOwnTask(id, task)) made = TaskItem.id(Source.Own, id) else note = OwnTaskRules.problem(task) ?: "It couldn't be added"
         } else if (proposal.changes.isNotEmpty()) {
             val id = UUID.randomUUID().toString()
             // Your own tasks it changes, as they are: made on them, the changes are undone by putting them back.
             val own = tasks.value.tasks.filter { it.source == Source.Own }.associateBy { it.id }
-            before = proposal.changes.filter { it.type in OwnTasks.MADE_ON_IT }.mapNotNull { it.taskId }.distinct()
-                .mapNotNull { tid -> own[tid]?.let { tid to OwnTasks.draftOf(it) } }.toMap()
+            before = proposal.changes.filter { it.type in OwnTaskRules.MADE_ON_IT }.mapNotNull { it.taskId }.distinct()
+                .mapNotNull { tid -> own[tid]?.let { tid to OwnTaskRules.draftOf(it) } }.toMap()
             val instruction = Instruction(id, asked?.text ?: message.text, asked?.about ?: About(), clock.now(), state = InstructionStatus.Understood, changes = proposal.changes)
             instructions.update { it.copy(instructions = it.instructions + instruction) }
             val calendar = school.value
@@ -977,14 +977,14 @@ class Conversation(
             // Every one checked before any is saved: all go back, or none and the card says why.
             val backs = proposal.before.mapNotNull { (id, was) ->
                 val t = tasks.value.tasks.firstOrNull { it.id == id } ?: return@mapNotNull null
-                val back = OwnTasks.restored(OwnTasks.draftOf(t), was, proposal.changes.filter { it.taskId == id })
-                (t to back).takeIf { back != OwnTasks.draftOf(t) }
+                val back = OwnTaskRules.restored(OwnTaskRules.draftOf(t), was, proposal.changes.filter { it.taskId == id })
+                (t to back).takeIf { back != OwnTaskRules.draftOf(t) }
             }
             // Its days off and half-days out of the school calendar, unless one has gone from it since.
             val calendar = proposal.schoolBefore?.let { was -> school.value.undone(was, proposal.schoolAfter ?: return@let null) }
-            val stuck = backs.mapNotNull { (t, back) -> OwnTasks.problem(back)?.let { "“${t.title}” can't go back: ${it.replaceFirstChar(Char::lowercase)}" } } +
+            val stuck = backs.mapNotNull { (t, back) -> OwnTaskRules.problem(back)?.let { "“${t.title}” can't go back: ${it.replaceFirstChar(Char::lowercase)}" } } +
                 // And its instruction, which taking back mustn't leave tasks waiting for each other in a circle.
-                listOfNotNull(made?.takeIf { m -> Instructions.makesCircle(emptyList(), instructions.value.applied.filterNot { it.id == m }) }
+                listOfNotNull(made?.takeIf { m -> InstructionRules.makesCircle(emptyList(), instructions.value.applied.filterNot { it.id == m }) }
                     ?.let { "taking its changes back would bring back an earlier instruction that has tasks waiting for each other in a circle" }) +
                 listOfNotNull("its days off have changed since: they're deleted in Settings → School".takeIf { proposal.schoolBefore != null && calendar == null })
             if (stuck.isNotEmpty()) {
@@ -1006,7 +1006,7 @@ class Conversation(
                             // Undone, its values are gone from the tasks: a card applied after it, which
                             // replaced them, puts back what this one replaced instead, if it's undone too.
                             note == null && p.state == ProposalState.Applied && p.before.keys.any { it in proposal.before } ->
-                                p.copy(before = p.before.mapValues { (id, was) -> proposal.before[id]?.let { OwnTasks.relayered(was, proposal.changes.filter { it.taskId == id }, it) } ?: was })
+                                p.copy(before = p.before.mapValues { (id, was) -> proposal.before[id]?.let { OwnTaskRules.relayered(was, proposal.changes.filter { it.taskId == id }, it) } ?: was })
                             else -> p
                         }
                     })

@@ -131,10 +131,10 @@ Every sync not started from a screen in use runs as a WorkManager job: Android 1
 
 Made in the app, not read from anywhere (Q28): `Source.Own` ("Yours"), keyed `own:<uuid>`, in `tasks.json` and in backups, as nothing else can give them back (`core/OwnTasks.kt`).
 
-- **Made** with *New task* in Work (`ui/OwnTaskForm.kt`), by Felix in the chat (felix.md), or from a photo of homework (NF-01, `enrich/PhotoTasks.kt`), each checked as the form checks one (`OwnTasks.problem`).
+- **Made** with *New task* in Work (`ui/OwnTaskForm.kt`), by Felix in the chat (felix.md), or from a photo of homework (NF-01, `enrich/PhotoTasks.kt`), each checked as the form checks one (`OwnTaskRules.problem`).
 - **What you give**: a name (200 characters), a kind (Homework, Revision, Admin or Event), a subject, a due date and time, a start date, minutes (1 minute to 60 hours), notes, up to 30 steps with their own minutes and dates.
 - And where it can be done: home or anywhere (PL-15). An event needs its date and time and has no minutes.
-- Kept as a source's values are (`sourceValues`), so instructions lay over it as over any task. A due date, start, minutes, steps or name an instruction gives is made on the task itself (`OwnTasks.changed`, `OwnTasks.MADE_ON_IT`), as the form would make it.
+- Kept as a source's values are (`sourceValues`), so instructions lay over it as over any task. A due date, start, minutes, steps or name an instruction gives is made on the task itself (`OwnTaskRules.changed`, `OwnTaskRules.MADE_ON_IT`), as the form would make it.
 - Steps edited in the form are matched to their old steps by place, so a renamed step keeps its tick (UI-15).
 - **Done** when you tap *All of it done*, or once every step is done. It earns no free time of itself; its kept slots earn theirs. *Not done* opens it again; *Delete* removes it. A fortnight after it's done, it goes (`OwnTasks.pruneOwn`).
 - Claude doesn't read it: its minutes and steps are yours, planned as given (readings.md).

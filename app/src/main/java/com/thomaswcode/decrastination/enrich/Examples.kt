@@ -3,9 +3,9 @@ package com.thomaswcode.decrastination.enrich
 import com.thomaswcode.decrastination.core.Enrichments
 
 /**
- * Worked examples for each job (AI-07), made up, each an item as the model reads it ([Prompts.describe])
+ * Worked examples for each job (AI-07), made up, each an item as the model reads it ([ReadingPrompts.describe])
  * and the answer it should give, on one line: appended to the job's system prompt. Every answer is
- * one the checks pass whole (the tests read each through [Answers.read]).
+ * one the checks pass whole (the tests read each through [ReadingAnswers.read]).
  */
 object Examples {
     /** An item as the model reads it, the answer to it, and the item's own due date where it has one (for the tests' check). */

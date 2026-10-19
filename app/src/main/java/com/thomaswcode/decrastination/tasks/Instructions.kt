@@ -10,9 +10,11 @@ import com.thomaswcode.decrastination.core.ChatState
 import com.thomaswcode.decrastination.core.Duplicates
 import com.thomaswcode.decrastination.core.HalfDay
 import com.thomaswcode.decrastination.core.Instruction
+import com.thomaswcode.decrastination.core.InstructionRules
 import com.thomaswcode.decrastination.core.InstructionState
 import com.thomaswcode.decrastination.core.InstructionStatus
 import com.thomaswcode.decrastination.core.NoSchool
+import com.thomaswcode.decrastination.core.OwnTaskRules
 import com.thomaswcode.decrastination.core.Planner
 import com.thomaswcode.decrastination.core.ProposalState
 import com.thomaswcode.decrastination.core.SchoolCalendar
@@ -55,7 +57,7 @@ import kotlinx.coroutines.withContext
  * [layTaskOverrides]). The rest of the app reads `instructions.json` here ([value], [state]); a card of
  * Felix's adds the instruction it makes itself, then has it applied here.
  * Built like [com.thomaswcode.decrastination.block.Focus]: its stores, the clock, the gateway, the focus
- * and the plan, and small callbacks. Their pure rules are [com.thomaswcode.decrastination.core.Instructions]'s,
+ * and the plan, and small callbacks. Their pure rules are [InstructionRules]'s,
  * named in full here, as this class has their name.
  */
 class Instructions(
@@ -132,7 +134,7 @@ class Instructions(
         val task = tasks.value.tasks.firstOrNull { it.id == chunk.taskId } ?: return null
         val own = plan.todaySlots.firstOrNull { it.chunk?.key == key }
         val windows = SchoolDays.windows(plan.today, settings.value, tasks.value.timetable, school.value)
-        val busy = calendarTime().busy + com.thomaswcode.decrastination.core.Instructions.busy(instructions.value.applied, zone, plan.today, plan.today)
+        val busy = calendarTime().busy + InstructionRules.busy(instructions.value.applied, zone, plan.today, plan.today)
         val from = listOfNotNull(now, own?.end, task.notBefore).max()
         val start = Slotter.firstFreeAfter(
             plan.todaySlots.filter { it.chunk?.key != key }, windows, busy, from, chunk.minutes, chunk.where, plan.today, zone, settings.value.slotBreakMin,
@@ -167,7 +169,7 @@ class Instructions(
      * instruction that changes it. One of Claude's applied since wins, and *Undo* would take back
      * nothing you'd see.
      */
-    fun quickInForce(taskId: String, type: ChangeType): Boolean = com.thomaswcode.decrastination.core.Instructions.quickInForce(instructions.value.applied, taskId, type)
+    fun quickInForce(taskId: String, type: ChangeType): Boolean = InstructionRules.quickInForce(instructions.value.applied, taskId, type)
 
     /** Has Claude read [id] again (written again, or after it found it unclear). */
     suspend fun rereadInstruction(id: String, text: String) {
@@ -246,7 +248,7 @@ class Instructions(
      */
     private suspend fun refuseLate(instruction: Instruction): Boolean {
         val byId = tasks.value.tasks.associateBy { it.id }
-        if (instruction.changes.none { c -> c.taskId?.let(byId::get)?.let { com.thomaswcode.decrastination.core.Instructions.latePin(c, it, clock.zone(), clock.now()) } == true }) return false
+        if (instruction.changes.none { c -> c.taskId?.let(byId::get)?.let { InstructionRules.latePin(c, it, clock.zone(), clock.now()) } == true }) return false
         instructions.update { state ->
             state.copy(instructions = state.instructions.map { if (it.id == instruction.id) it.copy(state = InstructionStatus.Unclear, note = "It's due before then") else it })
         }
@@ -258,7 +260,7 @@ class Instructions(
      * due date): it's marked unclear, saying why, rather than applied, as nothing of it would be.
      */
     private suspend fun refuseOnOwnTasks(instruction: Instruction): Boolean {
-        val problem = com.thomaswcode.decrastination.core.OwnTasks.problemWith(tasks.value.tasks, instruction.changes) ?: return false
+        val problem = OwnTaskRules.problemWith(tasks.value.tasks, instruction.changes) ?: return false
         instructions.update { state ->
             state.copy(instructions = state.instructions.map { if (it.id == instruction.id) it.copy(state = InstructionStatus.Unclear, note = problem) else it })
         }
@@ -270,7 +272,7 @@ class Instructions(
      * marked unclear, saying so, rather than applied.
      */
     private suspend fun refuseCircle(instruction: Instruction): Boolean {
-        if (!com.thomaswcode.decrastination.core.Instructions.makesCircle(instruction.changes, instructions.value.applied)) return false
+        if (!InstructionRules.makesCircle(instruction.changes, instructions.value.applied)) return false
         instructions.update { state ->
             state.copy(
                 instructions = state.instructions.map {
@@ -290,7 +292,7 @@ class Instructions(
             .filter { it.type == ChangeType.AtTime || it.type == ChangeType.OnDay || it.type == ChangeType.StartFrom }.mapNotNull { it.taskId }
         if (moved.isNotEmpty()) {
             val changes = instructions.value.instructions.firstOrNull { it.id == id }?.changes.orEmpty()
-            com.thomaswcode.decrastination.core.Instructions.movedSlots(changes, focus.plan()).forEach { slot -> focus.moveSlot(slot.key, Focus.Laid(slot.start, slot.end, slot.window)) }
+            InstructionRules.movedSlots(changes, focus.plan()).forEach { slot -> focus.moveSlot(slot.key, Focus.Laid(slot.start, slot.end, slot.window)) }
             runtime.update { state -> state.copy(slots = moved.fold(state.slots) { s, taskId -> s.moved(taskId) }) }
         }
         instructions.update { state ->
@@ -306,10 +308,10 @@ class Instructions(
      */
     private suspend fun makeOnSchool(id: String) {
         val instruction = instructions.value.instructions.firstOrNull { it.id == id } ?: return
-        val made = instruction.changes.filter { com.thomaswcode.decrastination.core.Instructions.schoolEntry(it) != null }
+        val made = instruction.changes.filter { InstructionRules.schoolEntry(it) != null }
         if (made.isEmpty()) return
         school.update { calendar ->
-            made.mapNotNull(com.thomaswcode.decrastination.core.Instructions::schoolEntry).fold(calendar) { c, entry ->
+            made.mapNotNull(InstructionRules::schoolEntry).fold(calendar) { c, entry ->
                 when (entry) {
                     is NoSchool -> c.with(entry)
                     is HalfDay -> c.with(entry)
@@ -323,7 +325,7 @@ class Instructions(
     }
 
     /**
-     * [id]'s due dates, starts and minutes for your own tasks made on them ([com.thomaswcode.decrastination.core.OwnTasks.changed]), and
+     * [id]'s due dates, starts and minutes for your own tasks made on them ([OwnTaskRules.changed]), and
      * taken out of it: there's no source's value for taking it back to return to, and the form can
      * change them again. One left with nothing else to do is done with, and goes.
      */
@@ -331,10 +333,10 @@ class Instructions(
         val instruction = instructions.value.instructions.firstOrNull { it.id == id } ?: return
         // Each task's together, as one draft: only those the form would take are made (a restored
         // instruction's others stay in it, laid over the task as any instruction is).
-        val made = com.thomaswcode.decrastination.core.OwnTasks.madeOn(tasks.value.tasks, instruction.changes)
+        val made = OwnTaskRules.madeOn(tasks.value.tasks, instruction.changes)
         if (made.isEmpty()) return
         tasks.update { state ->
-            state.copy(tasks = state.tasks.map { t -> made.filter { it.taskId == t.id }.takeIf { it.isNotEmpty() }?.let { com.thomaswcode.decrastination.core.OwnTasks.draftWithAll(t, it) }?.let { com.thomaswcode.decrastination.core.OwnTasks.edited(t, it) } ?: t })
+            state.copy(tasks = state.tasks.map { t -> made.filter { it.taskId == t.id }.takeIf { it.isNotEmpty() }?.let { OwnTaskRules.draftWithAll(t, it) }?.let { OwnTaskRules.edited(t, it) } ?: t })
         }
         instructions.update { state ->
             state.copy(
@@ -358,7 +360,7 @@ class Instructions(
      */
     private suspend fun refuseTakingBack(instruction: Instruction): Boolean {
         val rest = instructions.value.applied.filterNot { it.id == instruction.id }
-        if (!com.thomaswcode.decrastination.core.Instructions.makesCircle(emptyList(), rest)) return false
+        if (!InstructionRules.makesCircle(emptyList(), rest)) return false
         instructions.update { state ->
             state.copy(
                 instructions = state.instructions.map {
@@ -414,7 +416,7 @@ class Instructions(
      * is put right.
      */
     suspend fun layTaskOverrides() {
-        val overrides = com.thomaswcode.decrastination.core.Instructions.taskOverrides(instructions.value.applied)
+        val overrides = InstructionRules.taskOverrides(instructions.value.applied)
         tasks.update { state ->
             state.copy(
                 tasks = state.tasks.map { task ->

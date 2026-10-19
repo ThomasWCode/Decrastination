@@ -12,8 +12,8 @@ import com.thomaswcode.decrastination.core.Enrichment
 import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.core.Fact
 import com.thomaswcode.decrastination.core.Instruction
+import com.thomaswcode.decrastination.core.InstructionRules
 import com.thomaswcode.decrastination.core.InstructionStatus
-import com.thomaswcode.decrastination.core.Instructions
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.MemoryState
 import com.thomaswcode.decrastination.core.MessageKind
@@ -118,7 +118,7 @@ class FelixInputsDocTest {
         return Planner.plan(
             Planner.Input(
                 tasks, now, LONDON, settings, calibration = calibration, busy = time.busy, dayLoads = time.dayLoads,
-                hardBusy = Instructions.busy(applied, LONDON, today, reach), dayCaps = Instructions.dayCaps(applied, today, reach), windows = evening,
+                hardBusy = InstructionRules.busy(applied, LONDON, today, reach), dayCaps = InstructionRules.dayCaps(applied, today, reach), windows = evening,
             ),
         )
     }

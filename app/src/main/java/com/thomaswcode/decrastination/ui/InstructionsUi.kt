@@ -30,8 +30,8 @@ import androidx.compose.ui.unit.dp
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.core.About
 import com.thomaswcode.decrastination.core.Instruction
+import com.thomaswcode.decrastination.core.InstructionRules
 import com.thomaswcode.decrastination.core.InstructionStatus
-import com.thomaswcode.decrastination.core.Instructions
 import com.thomaswcode.decrastination.core.TaskItem
 import java.time.Instant
 import java.time.LocalDate
@@ -108,7 +108,7 @@ fun InstructionContent(graph: AppGraph, instruction: Instruction, tasks: Map<Str
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            instruction.changes.forEach { Text("• " + Instructions.describe(it, tasks, zone), style = MaterialTheme.typography.bodyMedium) }
+            instruction.changes.forEach { Text("• " + InstructionRules.describe(it, tasks, zone), style = MaterialTheme.typography.bodyMedium) }
             // Why taking it back was refused, where it was.
             instruction.note?.takeIf { instruction.state == InstructionStatus.Applied }?.let {
                 Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 4.dp))

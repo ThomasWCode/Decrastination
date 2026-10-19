@@ -3,7 +3,7 @@ package com.thomaswcode.decrastination.enrich
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.OwnStep
 import com.thomaswcode.decrastination.core.OwnTask
-import com.thomaswcode.decrastination.core.OwnTasks
+import com.thomaswcode.decrastination.core.OwnTaskRules
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import java.time.Instant
@@ -76,7 +76,7 @@ object PhotoTasks {
     /** The most tasks one photo makes. */
     const val MAX_TASKS = 6
 
-    /** [text] read at [now]: each task as the form would take it ([OwnTasks.problem]), the rest said. Null if it can't be read. */
+    /** [text] read at [now]: each task as the form would take it ([OwnTaskRules.problem]), the rest said. Null if it can't be read. */
     fun parse(text: String, now: Long, zone: ZoneId): Reading? {
         val answer = runCatching { json.decodeFromString(Answer.serializer(), text) }.getOrNull() ?: return null
         val left = mutableListOf<String>()
@@ -88,7 +88,7 @@ object PhotoTasks {
             }
             val steps = g.steps.filter { it.title.isNotBlank() && it.minutes > 0 }.map { OwnStep(it.title.trim(), it.minutes, where = it.where.takeIf { w -> w == "home" || w == "anywhere" }) }
             val task = OwnTask(
-                title = g.title.trim().take(OwnTasks.MAX_TITLE),
+                title = g.title.trim().take(OwnTaskRules.MAX_TITLE),
                 notes = g.instructions.trim(),
                 kind = Kind.Homework,
                 className = g.subject.trim().takeIf { it.isNotEmpty() },
@@ -97,7 +97,7 @@ object PhotoTasks {
                 steps = steps,
                 where = if (g.where == "home") "home" else "anywhere",
             )
-            val problem = OwnTasks.problem(task)
+            val problem = OwnTaskRules.problem(task)
             if (problem != null) left += "“${g.title.trim().take(60)}” (${problem.replaceFirstChar(Char::lowercase)})"
             task.takeIf { problem == null }
         }
