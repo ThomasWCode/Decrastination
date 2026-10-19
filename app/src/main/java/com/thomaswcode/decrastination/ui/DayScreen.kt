@@ -540,7 +540,7 @@ internal fun EventSheet(graph: AppGraph, activity: Activity, event: CalendarEven
             } else {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     CalendarTime.ANSWERS.forEach { (label, answer) ->
-                        OutlinedButton(onClick = { graph.scope.launch { CalendarTime.answer(activity.applicationContext, key, answer) } }) { Text(label) }
+                        OutlinedButton(onClick = { graph.scope.launch { graph.calendarWriter.answer(key, answer) } }) { Text(label) }
                     }
                 }
                 Text("For every event of that name.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
