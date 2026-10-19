@@ -92,7 +92,7 @@ Every PR is a release ([development.md](../development.md)): cleanup-only releas
 | 7 | Who set what (`Mine`, `By`, steps with ids) and the stores split, trimmed: one data release | 4.0.13 | cleanup, data | 0, 3, 6, 9 | 2½ |
 | 8a | Notes, standing notes and reminders | 4.1.0 | feature, data | 2, 3, 4, 5, 7 | 3 |
 | 8b | The gaps: keep a piece, check a source, open where it lives, free time and the next lessons in his context | 4.1.1 | feature | 5, 6d, 6f, 8a | 1½ |
-| 8c | Less sent, more asked for: the week's numbers, the calendar further out and the tasks' text asked for, measured by the chat's eval before and after | 4.1.2 | feature | 6e, 8b | 1½ |
+| 8c | Less sent, more asked for: the week's numbers and the calendar further out asked for; each task's line saying what its text holds, the text cut shorter if the chat's eval holds | 4.1.2 | feature | 6e, 8b | 1½ |
 | 10a | Memory that expires | 4.2.0 | feature, data | 3, 4, 7, 9 | 1 |
 | 10b | His voice; just talk; the summary email in the third person | 4.2.1 | feature | 5, 6e, 9 | ½ |
 | 11 | Emails done | 4.3.0 | feature, data | 1, 3, 6d, 7 | 1½ |
