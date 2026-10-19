@@ -486,6 +486,18 @@ class CommandActivity : Activity() {
                 ids.forEach { graph.instructions.deleteInstruction(it) }
                 Log.i(TAG, "instruction-discard: ${ids.size} discarded")
             }
+            "instruction-delete" -> {
+                // --es id <id>: one applied taken back, as the instructions' Take back does (or one not applied
+                // discarded); a refusal (a circle it would bring back) leaves it, saying why.
+                val instruction = intent.getStringExtra("id")?.let { id -> graph.instructions.value.instructions.firstOrNull { it.id == id } }
+                if (instruction == null) {
+                    Log.w(TAG, "instruction-delete needs --es id <an instruction's id>: `instructions` lists them")
+                } else {
+                    graph.instructions.deleteInstruction(instruction.id)
+                    val kept = graph.instructions.value.instructions.firstOrNull { it.id == instruction.id }
+                    Log.i(TAG, "instruction-delete ${instruction.id}: " + if (kept != null) "kept: ${kept.note}" else if (instruction.state == InstructionStatus.Applied) "taken back" else "discarded")
+                }
+            }
             "own-add" -> {
                 val title = intent.getStringExtra("title")
                 val zone = graph.clock.zone()
