@@ -304,7 +304,7 @@ class CommandActivity : Activity() {
                 open.filter { it.subSteps.isNotEmpty() && it.enrichment?.subSteps != null }
                     .forEach { Log.i(TAG, "  ${it.title}: ${it.subSteps.joinToString(" | ") { s -> "${s.title} (${s.minutes})" }}") }
             }
-            // One of the settings Felix may change (data/FelixSettings.kt), by name and value, as he sets it.
+            // One of the settings Felix may change (core/FelixSettings.kt), by name and value, as he sets it.
             "setting" -> {
                 val name = intent.getStringExtra("name").orEmpty()
                 val value = intent.getStringExtra("value").orEmpty()

@@ -3,11 +3,14 @@
 // the app's (the app's testDebugUnitTest depends on this module's test); one alone:
 // ./gradlew :core:test --tests '*SlotterTest*'
 // Fixtures, the helpers every test shares, are its test fixtures, which the app's tests use too.
+// Android's lint, the one thing of Android here, lets the app's lintDebug check core's code as its own
+// (checkDependencies): against the app's minSdk, as a JDK call Android lacks would compile and then fail.
 plugins {
     `java-library`
     `java-test-fixtures`
     alias(libs.plugins.kotlin.jvm)
     alias(libs.plugins.kotlin.serialization)
+    alias(libs.plugins.android.lint)
 }
 
 java {

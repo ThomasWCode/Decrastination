@@ -3,6 +3,7 @@
 // from the Kotlin Gradle plugin, as does the JVM one :core is built with.
 plugins {
     alias(libs.plugins.android.application) apply false
+    alias(libs.plugins.android.lint) apply false
     alias(libs.plugins.kotlin.compose) apply false
     alias(libs.plugins.kotlin.jvm) apply false
     alias(libs.plugins.kotlin.serialization) apply false

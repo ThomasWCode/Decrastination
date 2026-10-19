@@ -46,12 +46,14 @@ class ArchitectureTest {
     @Test
     fun `core is a module free of Android and of the app`() {
         // The compiler holds it: :core is plain Kotlin and depends on neither, so nothing in it can
-        // reach them. What's checked here is that it stays so: none of core's files back in the app,
-        // where the compiler wouldn't hold them, and nothing of Android or another module in its build.
-        val strays = sources.keys.filter { it.startsWith("core/") }
+        // reach them. What's checked here is that it stays so: none of core's files, by their folder or
+        // their package, back in the app, where the compiler wouldn't hold them (and core would be split
+        // across two modules); and nothing of Android or another module in its build but Android's lint,
+        // which checks core's code as the app's (lintDebug).
+        val strays = sources.filter { (path, text) -> path.startsWith("core/") || Regex("""(?m)^package com\.thomaswcode\.decrastination\.core\b""").containsMatchIn(text) }.keys
         assertTrue(strays.isEmpty(), "core's files are in the app, not in :core: $strays")
         val build = listOf(File("../core/build.gradle.kts"), File("core/build.gradle.kts")).first { it.isFile }
-        val code = build.readLines().filterNot { it.trimStart().startsWith("//") }.joinToString("\n")
+        val code = build.readLines().filterNot { it.trimStart().startsWith("//") }.joinToString("\n").replace("libs.plugins.android.lint", "")
         val named = Regex("""android|project\(""").findAll(code).map { it.value }.toList()
         assertTrue(named.isEmpty(), "core's build names Android or another module: $named")
     }
