@@ -9,7 +9,7 @@ Stage by stage, what each PR needs from your phone and from you, for what and fo
 - **What I can do with the guarded scripts, slower**: a tap inside Decrastination (`private/tools/tap.sh`, which refuses unless the app is in front), reading the screen from screenshots, when you're not using the phone. Where a check is only that, you're marked **helpful**: five minutes of yours, or a slower quarter-hour of mine.
 - **Replies to his messages from the PC**: Stage 5b gives the `chat-ask` command `--es replyTo <id>`, so a routed reply (a check-in answer, "leave me alone tonight", *Done* on a reminder) can be checked without a tap. The notification's own reply box still needs you, once, in 5a.
 - **Pushing and merging**: a PR is pushed, reviewed and merged with your go-ahead; give it per stage in advance ("push and merge Stages 1–4 as each passes") and nothing waits on you.
-- **Paid calls** are listed per stage; nothing costs over a pound but the chat's eval in 8c (two runs, about $4), the evals in 10b (about $2) and the re-read in 10a (about 60 cents).
+- **Paid calls** are listed per stage; nothing costs over a pound but the chat's eval in 8c (before and after, the cut's cases twice each: about $6), the evals in 10b (about $2) and the re-read in 10a (about 60 cents).
 - **Decisions made in advance**, so none stops the work: the chat's schema refused by the API → the change-type fallback in the same PR (Q13); the one notification misbehaving on One UI → one a message, grouped (C-Q4's B; not needed: when One UI hid the Reply in Stage 5's check, your lines as a speaker of their own fixed it); the voice costing a change or a date in the evals → the register tightened and run again (Q16); something 8c moves scoring lower in the chat's eval → sent always again, in the same PR.
 
 ## Stage by stage
@@ -44,7 +44,7 @@ Stage by stage, what each PR needs from your phone and from you, for what and fo
 ## In sum
 
 - **The phone** is needed for 28 of the 29 PRs, for the install and its check: a plugged-in, unlocked phone on the desk for an evening does several PRs if their reviews are done by then. Two stages want it free of use for an hour (6b, on a weekend) or online for a minute's write (11).
-- **You** are needed for nine moments, about an hour and a half at the phone in all: 5a, 5b, 5c (ten, ten and five minutes; done, in one evening with the three PRs stacked), 4.0.10 (five minutes, 19 Oct), 8a (fifteen minutes spread over an evening), 8b (five minutes: your classes' subjects), 11 (twenty minutes with Gmail), and 10b twice by message (a read before, a read after): with Stage 5's done, 8a's, 11's and 10b's are left. Four more are helpful but not needed (3, 6b, 7, 12): five minutes each, or slower guarded taps.
+- **You** are needed for nine moments, about an hour and a half at the phone in all: 5a, 5b, 5c (ten, ten and five minutes; done, in one evening with the three PRs stacked), 4.0.10 (five minutes, 19 Oct), 8a (fifteen minutes spread over an evening), 8b (five minutes: your classes' subjects), 11 (twenty minutes with Gmail), and 10b twice by message (a read before, a read after): with Stage 5's and 4.0.10's done, 8a's, 8b's, 11's and 10b's are left. Four more are helpful but not needed (3, 6b, 7, 12): five minutes each, or slower guarded taps.
 - **No decision waits on you** during the work: every question is answered, and the three things that could go wrong mid-PR have their fallback chosen.
 
 ## Still to check
