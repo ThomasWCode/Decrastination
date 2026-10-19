@@ -3,6 +3,7 @@ package com.thomaswcode.decrastination.data
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.core.About
 import com.thomaswcode.decrastination.core.ChatState
+import com.thomaswcode.decrastination.core.FelixState
 import com.thomaswcode.decrastination.core.MemoryEdit
 import com.thomaswcode.decrastination.core.MessageKind
 import com.thomaswcode.decrastination.core.Speaker

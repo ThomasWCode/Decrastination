@@ -4,6 +4,7 @@ import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.Fixtures.LONDON
 import com.thomaswcode.decrastination.core.ChatState
 import com.thomaswcode.decrastination.core.DayWindow
+import com.thomaswcode.decrastination.core.FelixAnswer
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.Planner
@@ -12,13 +13,13 @@ import com.thomaswcode.decrastination.core.Slotter
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.WindowKind
-import com.thomaswcode.decrastination.data.AssessLater
+import com.thomaswcode.decrastination.core.AssessLater
 import com.thomaswcode.decrastination.data.ChatMigration
-import com.thomaswcode.decrastination.data.FelixDraft
-import com.thomaswcode.decrastination.data.FelixQuestion
-import com.thomaswcode.decrastination.data.FelixRetry
+import com.thomaswcode.decrastination.core.FelixDraft
+import com.thomaswcode.decrastination.core.FelixQuestion
+import com.thomaswcode.decrastination.core.FelixRetry
 import com.thomaswcode.decrastination.data.JsonStore
-import com.thomaswcode.decrastination.data.FelixState
+import com.thomaswcode.decrastination.core.FelixState
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.data.SlotOutcome
 import com.thomaswcode.decrastination.data.SlotRecord

@@ -2,6 +2,7 @@ package com.thomaswcode.decrastination.felix
 
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.Fixtures.LONDON
+import com.thomaswcode.decrastination.core.CheckInDraft
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.WindowKind
 import com.thomaswcode.decrastination.data.ActivityLog
@@ -23,7 +24,7 @@ class CheckInFlowTest {
 
     @Test
     fun `five questions, each reply its answer, the first a number, then the week's check-in`() {
-        var draft = CheckInFlow.Draft("2026-10-05")
+        var draft = CheckInDraft("2026-10-05")
         assertEquals("How was the week, 1 to 5?", CheckInFlow.question(draft))
         assertEquals(listOf("1", "2", "3", "4", "5"), CheckInFlow.replies(draft, ActivityLog(), LONDON))
         assertNull(CheckInFlow.answered(draft, "pretty good"))
@@ -43,6 +44,6 @@ class CheckInFlowTest {
             slots = listOf(slot("2026-10-06", "Moments Prep: Q1-8", SlotOutcome.Missed), slot("2026-10-07", "Essay: plan", SlotOutcome.Moved), slot("2026-10-08", "Essay: plan", SlotOutcome.Moved)),
             days = listOf(DayRecord("2026-10-09", plannedMin = 60, chunks = emptyList(), full = false)),
         )
-        assertEquals(listOf("Moments Prep, missed", "Essay, moved 2 times", "Friday's plan"), CheckInFlow.replies(CheckInFlow.Draft("2026-10-05", step = 1), log, LONDON))
+        assertEquals(listOf("Moments Prep, missed", "Essay, moved 2 times", "Friday's plan"), CheckInFlow.replies(CheckInDraft("2026-10-05", step = 1), log, LONDON))
     }
 }

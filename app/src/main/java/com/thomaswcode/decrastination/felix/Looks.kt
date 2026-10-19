@@ -7,6 +7,8 @@ import com.thomaswcode.decrastination.block.Focus
 import com.thomaswcode.decrastination.core.About
 import com.thomaswcode.decrastination.core.ChatMessage
 import com.thomaswcode.decrastination.core.ChatState
+import com.thomaswcode.decrastination.core.FelixDraft
+import com.thomaswcode.decrastination.core.FelixRetry
 import com.thomaswcode.decrastination.core.Given
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.MemoryEdit
@@ -18,8 +20,6 @@ import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Speaker
 import com.thomaswcode.decrastination.core.WallClock
 import com.thomaswcode.decrastination.data.ActivityLog
-import com.thomaswcode.decrastination.data.FelixDraft
-import com.thomaswcode.decrastination.data.FelixRetry
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.RuntimeState
 import com.thomaswcode.decrastination.data.SlotRecord

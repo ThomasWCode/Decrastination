@@ -1,9 +1,9 @@
 package com.thomaswcode.decrastination.felix
 
+import com.thomaswcode.decrastination.core.CheckInDraft
 import com.thomaswcode.decrastination.data.ActivityLog
 import com.thomaswcode.decrastination.data.SlotOutcome
 import com.thomaswcode.decrastination.learn.CheckIn
-import kotlinx.serialization.Serializable
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.TextStyle
@@ -14,21 +14,17 @@ import java.util.Locale
  * its answer; the first's replies 1 to 5, the second's what the week shows was put off. Pure.
  */
 object CheckInFlow {
-    /** The week's answers so far, and the question asked last ([step], from 0). */
-    @Serializable
-    data class Draft(val week: String, val step: Int = 0, val feel: Int = 0, val avoided: String = "", val inTheWay: String = "", val change: String = "", val energy: String = "")
-
     /** The most of the week's put-off work offered as replies to the second question. */
     private const val MAX_CHIPS = 3
 
     /** [draft]'s question to ask now. */
-    fun question(draft: Draft): String = FelixWords.CHECK_IN[draft.step]
+    fun question(draft: CheckInDraft): String = FelixWords.CHECK_IN[draft.step]
 
     /**
      * The replies offered to [draft]'s question: 1 to 5 for the first; for the second, what the week
      * shows was put off ([avoided]); none for the rest, said in words.
      */
-    fun replies(draft: Draft, log: ActivityLog, zone: ZoneId): List<String> = when (draft.step) {
+    fun replies(draft: CheckInDraft, log: ActivityLog, zone: ZoneId): List<String> = when (draft.step) {
         0 -> (1..5).map(Int::toString)
         1 -> avoided(log, LocalDate.parse(draft.week), zone)
         else -> emptyList()
@@ -49,7 +45,7 @@ object CheckInFlow {
      * [draft] with [text] as its question's answer, the next one to ask: null where it can't be (the
      * first wants a number from 1 to 5, and nothing else).
      */
-    fun answered(draft: Draft, text: String): Draft? {
+    fun answered(draft: CheckInDraft, text: String): CheckInDraft? {
         val words = text.trim()
         return when (draft.step) {
             0 -> Regex("""[1-5]""").matchEntire(words)?.value?.toInt()?.let { draft.copy(step = 1, feel = it) }
@@ -62,8 +58,8 @@ object CheckInFlow {
     }
 
     /** Whether all five have their answers. */
-    fun done(draft: Draft): Boolean = draft.step >= FelixWords.CHECK_IN.size
+    fun done(draft: CheckInDraft): Boolean = draft.step >= FelixWords.CHECK_IN.size
 
     /** [draft], all answered, as the week's check-in made at [at]. */
-    fun checkIn(draft: Draft, at: Long): CheckIn = CheckIn(draft.week, at, draft.feel, draft.avoided, draft.inTheWay, draft.change, draft.energy)
+    fun checkIn(draft: CheckInDraft, at: Long): CheckIn = CheckIn(draft.week, at, draft.feel, draft.avoided, draft.inTheWay, draft.change, draft.energy)
 }

@@ -1,7 +1,5 @@
 package com.thomaswcode.decrastination.core
 
-import com.thomaswcode.decrastination.data.AssessLater
-import com.thomaswcode.decrastination.data.FelixState
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
