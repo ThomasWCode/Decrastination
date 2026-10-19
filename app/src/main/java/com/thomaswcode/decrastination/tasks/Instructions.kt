@@ -7,6 +7,7 @@ import com.thomaswcode.decrastination.core.About
 import com.thomaswcode.decrastination.core.Change
 import com.thomaswcode.decrastination.core.ChangeType
 import com.thomaswcode.decrastination.core.ChatState
+import com.thomaswcode.decrastination.core.Duplicates
 import com.thomaswcode.decrastination.core.HalfDay
 import com.thomaswcode.decrastination.core.Instruction
 import com.thomaswcode.decrastination.core.InstructionState
@@ -15,6 +16,8 @@ import com.thomaswcode.decrastination.core.NoSchool
 import com.thomaswcode.decrastination.core.Planner
 import com.thomaswcode.decrastination.core.ProposalState
 import com.thomaswcode.decrastination.core.SchoolCalendar
+import com.thomaswcode.decrastination.core.SchoolDays
+import com.thomaswcode.decrastination.core.Slotter
 import com.thomaswcode.decrastination.core.TaskOverrides
 import com.thomaswcode.decrastination.core.WallClock
 import com.thomaswcode.decrastination.core.overrides
@@ -27,11 +30,15 @@ import com.thomaswcode.decrastination.enrich.Called
 import com.thomaswcode.decrastination.enrich.InstructionAnswers
 import com.thomaswcode.decrastination.enrich.InstructionPrompts
 import com.thomaswcode.decrastination.enrich.InstructionReader
+import com.thomaswcode.decrastination.enrich.ModelCalls
+import com.thomaswcode.decrastination.enrich.ModelEffort
 import com.thomaswcode.decrastination.enrich.ModelGateway
 import com.thomaswcode.decrastination.enrich.ModelHold
 import com.thomaswcode.decrastination.enrich.Profile
 import com.thomaswcode.decrastination.learn.EventJudge
 import com.thomaswcode.decrastination.plan.Planning
+import java.time.Instant
+import java.util.UUID
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.StateFlow
@@ -86,7 +93,7 @@ class Instructions(
      * (your call, 16 Oct), and taken back under Your changes.
      */
     suspend fun addInstruction(text: String, about: About, answer: Boolean = false): String {
-        val id = java.util.UUID.randomUUID().toString()
+        val id = UUID.randomUUID().toString()
         instructions.update { it.copy(instructions = it.instructions + Instruction(id, text.trim().take(InstructionPrompts.MAX_TEXT), about, clock.now(), answer = answer)) }
         scope.launch { readInstructions(interactive = true) }
         return id
@@ -123,15 +130,15 @@ class Instructions(
         if (plan.chunksOf(chunk.taskId).firstOrNull()?.key != key) return null
         val task = tasks.value.tasks.firstOrNull { it.id == chunk.taskId } ?: return null
         val own = plan.todaySlots.firstOrNull { it.chunk?.key == key }
-        val windows = com.thomaswcode.decrastination.core.SchoolDays.windows(plan.today, settings.value, tasks.value.timetable, school.value)
+        val windows = SchoolDays.windows(plan.today, settings.value, tasks.value.timetable, school.value)
         val busy = calendarTime().busy + com.thomaswcode.decrastination.core.Instructions.busy(instructions.value.applied, zone, plan.today, plan.today)
         val from = listOfNotNull(now, own?.end, task.notBefore).max()
-        val start = com.thomaswcode.decrastination.core.Slotter.firstFreeAfter(
+        val start = Slotter.firstFreeAfter(
             plan.todaySlots.filter { it.chunk?.key != key }, windows, busy, from, chunk.minutes, chunk.where, plan.today, zone, settings.value.slotBreakMin,
         )?.takeIf { Planner.pinProblem(task, it, now, zone) == null } ?: return null
-        val at = java.time.Instant.ofEpochMilli(start).atZone(zone)
+        val at = Instant.ofEpochMilli(start).atZone(zone)
         addOwnChange(
-            java.util.UUID.randomUUID().toString(),
+            UUID.randomUUID().toString(),
             "Later today",
             About(taskId = chunk.taskId, taskTitle = chunk.title),
             Change(ChangeType.AtTime, taskId = chunk.taskId, date = at.toLocalDate().toString(), startMin = at.hour * 60 + at.minute, time = start),
@@ -177,9 +184,9 @@ class Instructions(
         while (true) {
             val next = instructions.value.instructions.firstOrNull { it.state == InstructionStatus.Reading } ?: return@withLock
             val waiting = run call@{
-                val reader = gateway.client(com.thomaswcode.decrastination.enrich.ModelEffort.Job.Instruction)?.let { InstructionReader(it, clock.zone(), profile = profile()) } ?: return@call gateway.because(ModelHold.Off)
+                val reader = gateway.client(ModelEffort.Job.Instruction)?.let { InstructionReader(it, clock.zone(), profile = profile()) } ?: return@call gateway.because(ModelHold.Off)
                 // Through a rest only for you waiting on it (AC-04): after a sync or an enrichment it waits.
-                val result = when (val called = gateway.call(interactive = interactive, record = com.thomaswcode.decrastination.enrich.ModelCalls.OnRecord(com.thomaswcode.decrastination.enrich.ModelEffort.Job.Instruction, next.text) { r: InstructionReader.Result -> r.usage to com.thomaswcode.decrastination.enrich.ModelCalls.outcome(r.refused, r.reading == null) }, cost = { r: InstructionReader.Result -> r.costUsd to r.refused }) { at -> reader.read(next, tasks.value.tasks, calendarTime().events, at) }) {
+                val result = when (val called = gateway.call(interactive = interactive, record = ModelCalls.OnRecord(ModelEffort.Job.Instruction, next.text) { r: InstructionReader.Result -> r.usage to ModelCalls.outcome(r.refused, r.reading == null) }, cost = { r: InstructionReader.Result -> r.costUsd to r.refused }) { at -> reader.read(next, tasks.value.tasks, calendarTime().events, at) }) {
                     is Called.Held -> return@call gateway.because(called.hold)
                     is Called.Failed -> {
                         Log.w(AppGraph.TAG, "Reading an instruction failed", called.error)
@@ -413,7 +420,7 @@ class Instructions(
                     val o = overrides[task.id] ?: TaskOverrides.NONE
                     val now = task.overrides()
                     if (o == now) task else task.withOverrides(o)
-                }.let(com.thomaswcode.decrastination.core.Duplicates::linksPresent),
+                }.let(Duplicates::linksPresent),
             )
         }
     }
