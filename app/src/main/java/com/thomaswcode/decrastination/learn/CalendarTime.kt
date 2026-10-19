@@ -46,16 +46,8 @@ object CalendarTime {
         "None" to EventJudge.Judgement.Free,
     ).map { (label, judgement) -> label to EventJudge.store(judgement)!! }
 
-    /**
-     * Your [answer] about every event named [key] (null: forgotten, for the rules to judge again):
-     * kept, his question answered, the plan redone, and today's as the briefing recorded it.
-     */
-    suspend fun answer(context: Context, key: String, answer: String?) {
-        AppGraph.get(context).runtime.update { it.copy(eventAnswers = if (answer == null) it.eventAnswers - key else it.eventAnswers + (key to answer)) }
-        cancelQuestion(context, key)
-        refresh(context)
-        Briefing.replanToday(context)
-    }
+    // [com.thomaswcode.decrastination.calendar.CalendarWriter]'s, till its callers call it there.
+    suspend fun answer(context: Context, key: String, answer: String?): Unit = AppGraph.get(context).calendarWriter.answer(key, answer)
 
     /** How much of an event's description is kept (DX-12). */
     private const val DESCRIPTION_CHARS = 500
