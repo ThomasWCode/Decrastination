@@ -39,6 +39,9 @@ class TaskSheetModelTest {
         val done = task("a", 30).copy(workedMin = 30)
         assertTrue(worked(done, 1.0))
         assertFalse(worked(task("a", 30).copy(workedMin = 25), 1.0))
+        // Calibrated: 30 minutes taken as 33.3, 33 worked; the 0.3 left rounds to none, as the planner rounds it.
+        assertTrue(worked(task("a", 30).copy(workedMin = 33), 1.11))
+        assertFalse(worked(task("a", 30).copy(workedMin = 32), 1.11))
         // Planned all the same, a last few minutes, till its source says it's done (planner.md).
         val p = Planner.plan(Planner.Input(listOf(done), Fixtures.at("2026-10-12T16:00"), LONDON, Settings(), windows = evening))
         assertEquals(5, p.ordered.single().minutes)
