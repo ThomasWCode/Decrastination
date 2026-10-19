@@ -13,11 +13,14 @@ import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.RuntimeState
 import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.data.TaskState
+import com.thomaswcode.decrastination.enrich.MicroPlan
 import java.time.Instant
 import java.time.ZoneId
+import java.util.UUID
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.debounce
@@ -62,7 +65,7 @@ class CalendarWriter(
      * a burst of changes (a chat answer's, one after another) is one write, not an event inserted and
      * changed again while the calendar's sync still has it in hand, which brought copies of it back.
      */
-    private val toWrite = MutableSharedFlow<Plan>(extraBufferCapacity = 1, onBufferOverflow = kotlinx.coroutines.channels.BufferOverflow.DROP_OLDEST)
+    private val toWrite = MutableSharedFlow<Plan>(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
 
     /** [made], a new plan, written once plans have been quiet a while ([toWrite]). */
     fun planned(made: Plan) {
@@ -80,7 +83,7 @@ class CalendarWriter(
         if (!provider.allowed()) return
         val zone = clock.zone()
         // The same slots as last written, and nothing changed in the calendar since (AR-08): it isn't read again.
-        val desired = com.thomaswcode.decrastination.calendar.SlotCalendarDiff.desired(made, zone, runtime.value.microPlans)
+        val desired = SlotCalendarDiff.desired(made, zone, runtime.value.microPlans)
         if (!calendarTouched && lastWritten == (calendarId to desired)) return
         calendarTouched = false
         val byId = tasks.value.tasks.associateBy { it.id }
@@ -121,7 +124,7 @@ class CalendarWriter(
         lastWritten = calendarId to desired
         for (move in written.taken) {
             val taskId = move.desired.taskId ?: continue
-            addOwnChange(java.util.UUID.randomUUID().toString(), "Moved in the calendar", About(taskId = taskId, taskTitle = byId[taskId]?.title), change(move, zone))
+            addOwnChange(UUID.randomUUID().toString(), "Moved in the calendar", About(taskId = taskId, taskTitle = byId[taskId]?.title), change(move, zone))
             runtime.update { it.copy(calendarWritten = it.calendarWritten + (move.desired.uri to move.existing.start)) }
         }
     }
@@ -154,7 +157,7 @@ class CalendarWriter(
      * copy of one of its events is known by [versions], those it has written ([SlotCalendarDiff.isCopy]);
      * an event of yours under a slot's title at its times, there before it, is said ([Written.yours]).
      */
-    private fun write(calendarId: Long, plan: Plan, zone: ZoneId, written: Map<String, Long>, versions: Set<Long>, micro: Map<String, com.thomaswcode.decrastination.enrich.MicroPlan> = emptyMap(), refuses: (SlotCalendarDiff.HandMove) -> String?): Written {
+    private fun write(calendarId: Long, plan: Plan, zone: ZoneId, written: Map<String, Long>, versions: Set<Long>, micro: Map<String, MicroPlan> = emptyMap(), refuses: (SlotCalendarDiff.HandMove) -> String?): Written {
         val from = plan.today.atStartOfDay(zone).toInstant().toEpochMilli()
         val to = plan.today.plusDays(SlotCalendarDiff.DAYS).atStartOfDay(zone).toInstant().toEpochMilli()
         val desired = SlotCalendarDiff.desired(plan, zone, micro)
@@ -199,7 +202,7 @@ class CalendarWriter(
 
     /** The calendar last written to and the slots written there (AR-08). */
     @Volatile
-    private var lastWritten: Pair<Long, List<com.thomaswcode.decrastination.calendar.SlotCalendarDiff.Desired>>? = null
+    private var lastWritten: Pair<Long, List<SlotCalendarDiff.Desired>>? = null
 
     /**
      * Watches the calendar for changes, once it may be read: at start, and at each read of it
