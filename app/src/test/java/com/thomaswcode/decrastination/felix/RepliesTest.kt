@@ -3,10 +3,10 @@ package com.thomaswcode.decrastination.felix
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.Fixtures.LONDON
 import com.thomaswcode.decrastination.core.About
+import com.thomaswcode.decrastination.core.AssessLater
 import com.thomaswcode.decrastination.core.ChatMessage
 import com.thomaswcode.decrastination.core.MessageKind
 import com.thomaswcode.decrastination.core.Speaker
-import com.thomaswcode.decrastination.data.AssessLater
 import com.thomaswcode.decrastination.learn.CalendarTime
 import com.thomaswcode.decrastination.learn.Calibrator
 import kotlin.test.Test

@@ -3,7 +3,7 @@ package com.thomaswcode.decrastination.felix
 import com.thomaswcode.decrastination.core.ChatHistory
 import com.thomaswcode.decrastination.core.ChatMessage
 import com.thomaswcode.decrastination.core.EarnsBy
-import com.thomaswcode.decrastination.core.Given
+import com.thomaswcode.decrastination.core.FelixAnswer
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.Settings
@@ -14,7 +14,6 @@ import com.thomaswcode.decrastination.data.SlotOutcome
 import com.thomaswcode.decrastination.data.SlotRecord
 import com.thomaswcode.decrastination.enrich.InstructionPrompts
 import com.thomaswcode.decrastination.enrich.TaskText
-import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import java.time.Instant
 import java.time.ZoneId
@@ -130,13 +129,6 @@ object FelixPrompts {
         "memories" to mapOf("type" to "array", "items" to ChatPrompts.MEMORY),
     )
 }
-
-/**
- * Felix's answer (AI-22): his [message] (empty: he'd rather not write now), up to three [replies]
- * he'd accept, when he'd check again, and what to remember (AI-21).
- */
-@Serializable
-data class FelixAnswer(val message: String = "", val replies: List<String> = emptyList(), val nextCheckMin: Int? = null, val memories: List<Given> = emptyList())
 
 /** His answer read and kept within its bounds. Pure. */
 object FelixAnswers {
