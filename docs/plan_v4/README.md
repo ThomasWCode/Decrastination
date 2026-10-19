@@ -73,19 +73,21 @@ Every PR is a release ([development.md](../development.md)): cleanup-only releas
 | 2 | One model gateway | 3.3.1, done (#59) | cleanup | 0 | ½–1 |
 | 3 | Stores and backups, with versions and migrations | 3.3.2, done (#60) | cleanup | 0 | 1 |
 | 4 | Felix's code in one place: the Conversation and Planning services, moved; his files split | 3.3.3, done (#61) | cleanup | 1, 2, 3 | 1 |
-| — | The secrets' write tried again as the stores' is ([QUESTIONS.md](QUESTIONS.md) I2) | 3.3.4, done (#62) | fix | — | — |
-| — | A piece under way stays today's when the plan is made again ([QUESTIONS.md](QUESTIONS.md) I3) | 3.3.5, done (#67) | fix | — | — |
+| — | The secrets' write tried again as the stores' is (a test that failed now and then on Windows) | 3.3.4, done (#62) | fix | — | — |
+| — | A piece under way stays today's when the plan is made again (found writing Stage 4's tests) | 3.3.5, done (#67) | fix | — | — |
 | — | The open items settled: the chat names the tabs that exist; the briefing's quiet-hours rule and 6c's check written down | 3.3.6, done (#68) | fix | — | — |
 | 5a | The chat as his one voice: every message in it, the outbox, one notification, the archive | 4.0.0, done (#69) | feature, data | 0, 1, 3, 4 | 2 |
 | 5b | WhatsApp-like: read state, dates, earlier messages, swipe to reply, one entrance for replies | 4.0.1, done (#70) | feature | 5a | 1½ |
 | 5c | The extras folded; the label that slides out | 4.0.2, done (#71) | feature | 5b | ½ |
-| 6a | `CalendarWriter` | 4.0.3 | cleanup | 3 | ½ |
-| 6b | `Protection`, and the Settings screen's state holder | 4.0.4 | cleanup | 3 | 1 |
-| 6c | `Instructions` and `OwnTasks`, and the task sheet's state holder | 4.0.5 | cleanup | 3 | 1 |
-| 6d | `Readings`, `Sync` and `Photos` | 4.0.6 | cleanup | 2, 3 | ½ |
-| 6e | `Learning` | 4.0.7 | cleanup | 3, 5a | ½ |
-| 6f | The `:core` module, its dependencies on the app turned round first | 4.0.8 | cleanup | 6a–6e | 1 |
-| 7 | Who set what (`Mine`, `By`, steps with ids) and the stores split, trimmed: one data release | 4.0.9 | cleanup, data | 0, 3, 6 | 2½ |
+| — | The Day screen's crash on a slot kept twice; a Done tapped again keeps nothing more; a Done that leaves only the source's word says so | 4.0.3 (#73) | fix | — | — |
+| — | The chat's archive a file a month, each read only when it's wanted, none at a start (your call, 19 Oct) | 4.0.4 (#74) | fix, data | 5a | — |
+| 6a | `CalendarWriter` | 4.0.5 | cleanup | 3 | ½ |
+| 6b | `Protection`, and the Settings screen's state holder | 4.0.6 | cleanup | 3 | 1 |
+| 6c | `Instructions` and `OwnTasks`, and the task sheet's state holder | 4.0.7 | cleanup | 3 | 1 |
+| 6d | `Readings`, `Sync` and `Photos` | 4.0.8 | cleanup | 2, 3 | ½ |
+| 6e | `Learning` | 4.0.9 | cleanup | 3, 5a | ½ |
+| 6f | The `:core` module, its dependencies on the app turned round first | 4.0.10 | cleanup | 6a–6e | 1 |
+| 7 | Who set what (`Mine`, `By`, steps with ids) and the stores split, trimmed: one data release | 4.0.11 | cleanup, data | 0, 3, 6 | 2½ |
 | 8a | Notes, standing notes and reminders | 4.1.0 | feature, data | 2, 3, 4, 5, 7 | 3 |
 | 8b | The gaps: keep a piece, check a source, open where it lives, free time in his context | 4.1.1 | feature | 5, 6d, 8a | 1 |
 | 9 | Names: the readings' prompts renamed, files and tests split | 4.1.2 | cleanup | 6 | ½ |
@@ -94,7 +96,7 @@ Every PR is a release ([development.md](../development.md)): cleanup-only releas
 | 11 | Emails done | 4.3.0 | feature, data | 1, 3, 6d, 7 | 1½ |
 | 12 | The sweep: imports, comments, the architecture test complete, baselines compared | 4.3.1 | cleanup | all | ½ |
 
-About twenty-three days in 25 PRs (24 releases), 3.3.4 to 3.3.6 among them, evenings and weekends. After it, the conversation digest as 4.4.0 ([13](13-summaries.md)). You've said you won't use the app until the whole of it is in (Q21): each release is still built and checked on the phone, but nothing between releases has to serve a day's use.
+About twenty-three days in 27 PRs (26 releases), 3.3.4 to 3.3.6, 4.0.3 and 4.0.4 among them, evenings and weekends. After it, the conversation digest as 4.4.0 ([13](13-summaries.md)). You've said you won't use the app until the whole of it is in (Q21): each release is still built and checked on the phone, but nothing between releases has to serve a day's use.
 
 ## What changes substantially
 
@@ -154,4 +156,4 @@ Numbered in `docs/decisions.md` by the PRs that apply them (the next free number
 - [13-summaries.md](13-summaries.md): the summaries evaluation; the conversation digest as 4.4.0.
 - [14-your-part.md](14-your-part.md): which stages need your phone and which need you, for what and for how long; how to batch them.
 - [ANSWERS.md](ANSWERS.md): every call either plan needed, with your answers, and the merge's own calls; closed. Questions raised during implementation go in a separate `QUESTIONS.md`.
-- [QUESTIONS.md](QUESTIONS.md): what implementing the stages has needed from you, questions with a recommendation each and actions only you can take.
+- `QUESTIONS.md`, made when implementing a stage needs something from you: questions with a recommendation each, and actions only you can take. Once each is settled it's recorded where it belongs (its PR, [decisions.md](../decisions.md), [14](14-your-part.md)) and the file goes; none is open now.
