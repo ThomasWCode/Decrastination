@@ -753,20 +753,23 @@ class Conversation(
             ChatAction.Type.TickStep -> step?.done == true && focus.untickBlock(task!!.id, a.stepIndex!!, step.title, reopen = true)
             ChatAction.Type.UntickStep -> step?.done == false && task!!.isOpen && tick(task, a.stepIndex!!, step.title)
             ChatAction.Type.Done -> task?.isOpen == false && (task.source == Source.Own || task.tickDone) && run { owners.reopenOwnTask(task.id); open(task.id) == true }
-            ChatAction.Type.Reopen -> task?.isOpen == true && act.was != null && refinish(act.was)
+            ChatAction.Type.Reopen -> task?.isOpen == true && act.was.let { was -> was != null && refinish(was) }
             // Not once a card that had added it is made again: that's the task anew.
-            ChatAction.Type.Delete -> act.was != null && task == null && !ChatActs.redone(act.cards, chat.value.messages) && run {
-                restoreTask(act.was)
-                relink(act.cards, act.was.id)
-                open(act.was.id) != null
+            ChatAction.Type.Delete -> act.was.let { was ->
+                was != null && task == null && !ChatActs.redone(act.cards, chat.value.messages) && run {
+                    restoreTask(was)
+                    relink(act.cards, was.id)
+                    open(was.id) != null
+                }
             }
             ChatAction.Type.Setting -> {
                 val field = FelixSettings.field(a.setting.orEmpty())
                 var back = false
-                if (field != null && act.before != null) {
+                val before = act.before
+                if (field != null && before != null) {
                     owners.changeSettings { s ->
                         if (field.get(s) != act.after) return@changeSettings s
-                        field.set(s, act.before)?.also { back = true } ?: s
+                        field.set(s, before)?.also { back = true } ?: s
                     }
                 }
                 if (back) ports.scheduleReminders()
