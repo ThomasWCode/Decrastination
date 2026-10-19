@@ -18,6 +18,7 @@ import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -74,6 +75,8 @@ class ReadingsTest {
         settings.update { it.copy(aiEnabled = true, aiKeyActive = true) }
         tasks.update { it.copy(tasks = listOf(essay)) }
         runtime.update { it.copy(enrichFailed = mapOf(essay.id to Enrichments.inputHash(essay))) }
+        // Claude could be asked: only the refusal keeps the call from being sent.
+        assertTrue(gateway.claudeKey() != null && gateway.available(), "Claude can be asked")
         readings.enrichNow()
         assertEquals(RuleEnricher.BY, task().enrichment?.by)
         assertEquals(0, server.requestCount)
