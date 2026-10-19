@@ -31,10 +31,10 @@ Stage by stage, what each PR needs from your phone and from you, for what and fo
 | 6e | 4.0.9 | **needed**: install; `review` (paid: the review's call and the summary's, cents); the check-in answered from the PC | no |
 | — | 4.0.10 | **needed**: install; the chat's store read before and after | **needed**, 5 min: the box on his newest nudge, a reply that answers it, *Mark answered*, *Mark all answered* and its Undo |
 | 6f | 4.0.11 | **needed**: install and the script | no |
-| 7 | 4.0.12 | **needed**: the latest backup pulled for the rehearsal; a backup before the install; install; the counts compared; a sync; `backup-now` | **helpful**, 5 min: a look at Work and one task's sheet after the migration (your values, the ticks), a tick on Day |
+| 9 | 4.0.12 | **needed**: install and the script | no |
+| 7 | 4.0.13 | **needed**: the latest backup pulled for the rehearsal; a backup before the install; install; the counts compared; a sync; `backup-now` | **helpful**, 5 min: a look at Work and one task's sheet after the migration (your values, the ticks), a tick on Day |
 | 8a | 4.1.0 | **needed**: install; three `chat-ask`s (paid) and their drafts (paid, cents); a three-minute wait; `dumpsys alarm`; the next day's first slot for a SlotStart reminder | **needed**, 15 min across an evening: Snooze and then *Done* from the reminder's notification; aeroplane mode on through a draft's window (the reminder comes as your words); "Add a note" on a sheet (a tap in the app: guarded if you'd rather); the phone off through a reminder's time, if you like |
 | 8b | 4.1.1 | **needed**: install; four `chat-ask`s (paid); "open it in Teams" brings Teams up (the phone unlocked, no Teams sync in front) | no |
-| 9 | 4.1.2 | **needed**: install and the script | no |
 | 10a | 4.2.0 | **needed**: install; `chat-ask` (paid); `memory` an hour apart; `felix-say` and a reply from the PC; the next morning; the version bump re-reads the open tasks (about 40 calls, 60 cents, online) | no |
 | 10b | 4.2.1 | **needed**: install; four `chat-ask`s and a `felix-say` (paid); the next morning's briefing; `review` for the summary | **needed**, twice, at your own pace: before the PR, read the register paragraph and the examples (taste: 10 min, by message, no phone); after the install, read a day of his messages and say what's off |
 | 11 | 4.3.0 | **needed**, online: install; `sync --es sources gmail`; `state`; a minute's wait for the write; logcat's IMAP lines | **needed**, 20 min with Gmail open: star a note-to-self email in Gmail; tick its piece on Day; Undo within the grace (again, with a second email); aeroplane mode on and off; look in Gmail (unstarred, out of the inbox); the first-time sheet; the switch off in Settings and a tick that leaves Gmail alone |
@@ -64,9 +64,9 @@ So it went on 19 Oct: the phone, disconnected that morning, came back in the eve
 
 1. **Stages 0–4** (six PRs, the ground; done): three phone evenings with no need of you; the five minutes of taps in Stage 3 whenever you're passing.
 2. **Stage 5** (the chat; done, in one evening with you): three short sessions with you, or one evening for all three.
-3. **Stages 6 and 7** (seven PRs, the services and the data release): three or four phone evenings; 6b on a weekend with you nearby; a five-minute look after 7.
+3. **Stages 6, 9 and 7** (eight PRs, the services, the names and the data release; 6a to 6e done): three or four phone evenings; a five-minute look after 7.
 4. **Stage 8** (reminders and the gaps): one evening with you for 8a's fifteen minutes, a glance the next day for the SlotStart reminder; 8b needs only the phone.
-5. **Stages 9 and 10**: the voice's text read by you before 10b starts (no phone), a session after it lands; 9 and 10a need only the phone.
+5. **Stage 10**: the voice's text read by you before 10b starts (no phone), a session after it lands; 10a needs only the phone.
 6. **Stage 11**: one evening with Gmail open, twenty minutes.
 7. **Stage 12**: the phone, and the done-when list read together.
 
