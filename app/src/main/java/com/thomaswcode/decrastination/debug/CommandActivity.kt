@@ -210,7 +210,7 @@ class CommandActivity : Activity() {
                 if (calendar == null) {
                     Log.w(TAG, "No calendar named $name to write to")
                 } else {
-                    graph.changeSettings { it.copy(calendarWriteId = calendar.id) }
+                    graph.protection.changeSettings { it.copy(calendarWriteId = calendar.id) }
                     Log.i(TAG, "Writing the plan to calendar ${calendar.id} ($name)")
                 }
             }
@@ -306,7 +306,7 @@ class CommandActivity : Activity() {
                 val name = intent.getStringExtra("name").orEmpty()
                 val value = intent.getStringExtra("value").orEmpty()
                 var said: String? = null
-                graph.changeSettings { s -> com.thomaswcode.decrastination.data.FelixSettings.set(s, name, value)?.also { said = it.second }?.first ?: s }
+                graph.protection.changeSettings { s -> com.thomaswcode.decrastination.data.FelixSettings.set(s, name, value)?.also { said = it.second }?.first ?: s }
                 Log.i(TAG, "setting: " + (said ?: "$name not set to $value"))
             }
             "briefing" -> Briefing.run(this).also { Log.i(TAG, "Briefing posted") }
