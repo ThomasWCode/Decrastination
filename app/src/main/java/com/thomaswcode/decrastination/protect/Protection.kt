@@ -43,6 +43,15 @@ class Protection(
      */
     private val changing = Mutex()
 
+    /** The changes waiting their hours, once armed, that loosen blocking (layer 4). */
+    val pending: List<PendingChange> get() = runtime.value.pending
+
+    /** What's been asked for: the settings in force, with what's waiting applied. */
+    val asked: Settings get() = SettingsChanges.requested(settings.value, runtime.value.pending)
+
+    /** How long a change that loosens blocking waits, by the settings in force. */
+    val loosenDelayHours: Int get() = settings.value.loosenDelayHours
+
     /**
      * Changes the settings as [change] says, from what's been asked for (the settings with what's
      * waiting applied), so a change to one field leaves the others' waiting changes be.
