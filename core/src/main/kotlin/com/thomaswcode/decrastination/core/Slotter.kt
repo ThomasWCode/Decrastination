@@ -17,6 +17,9 @@ object Slotter {
     /** The outside breaks given up when the work needs their time, by [Settings.outsideTimes]' place: midday's first, then the afternoon's, then the morning's. */
     private val GIVEN_UP = listOf(1, 2, 0)
 
+    /** The latest a break outside starts (D-41): 18:00, whatever its time; one with no room by then isn't laid. */
+    const val OUTSIDE_LATEST_MIN = 18 * 60
+
     /** Free time in one window, epoch millis. */
     data class Interval(val start: Long, val end: Long, val window: DayWindow) {
         val minutes: Int get() = ((end - start) / MINUTE).toInt()
@@ -46,17 +49,19 @@ object Slotter {
     ): Pair<List<Slot>, List<Chunk>> {
         fun around(breaks: List<Slot>) = lay(date, chunks, windows, busy, pins, previous, now, zone, settings, breaks, deadlineMinOf)
         if (!outside || settings.outsideBreaks <= 0) return around(emptyList())
-        // Outside breaks, each at or after its time and over by the next one's (so on a day under way
-        // one whose time has gone isn't laid after now): as many of `outsideBreaks` as the work leaves
-        // room for, the midday one given up first, then the afternoon's, then the morning's.
+        // Outside breaks, each at or after its time, over by the next one's and started by 18:00 (so on
+        // a day under way one whose time has gone isn't laid after now, nor any in the evening): as many
+        // of `outsideBreaks` as the work leaves room for, the midday one given up first, then the
+        // afternoon's, then the morning's.
         val free = intervals(date, windows, busy, now, zone, settings.minSchoolSlotMin)
         val room = free.sumOf { it.minutes }
         val length = settings.outsideBreakMin * MINUTE
+        val latest = at(date, OUTSIDE_LATEST_MIN, zone)
         val found = mutableListOf<Pair<Int, Slot>>()
         for ((i, minute) in settings.outsideTimes.withIndex().sortedBy { it.value }) {
             val from = at(date, minute, zone)
             val by = settings.outsideTimes.filter { it > minute }.minOrNull()?.let { at(date, it, zone) } ?: Long.MAX_VALUE
-            val interval = free.firstOrNull { maxOf(it.start, from) + length <= minOf(it.end, by) } ?: continue
+            val interval = free.firstOrNull { maxOf(it.start, from) <= latest && maxOf(it.start, from) + length <= minOf(it.end, by) } ?: continue
             val start = maxOf(interval.start, from)
             found += i to Slot(SlotKind.Outside, null, start, start + length, interval.window.kind, pinned = false)
             carve(free, start, start + length)
