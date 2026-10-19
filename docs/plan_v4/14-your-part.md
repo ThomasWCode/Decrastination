@@ -45,22 +45,19 @@ Stage by stage, what each PR needs from your phone and from you, for what and fo
 - **You** are needed for seven moments, about an hour and a half at the phone in all: 5a, 5b, 5c (ten, ten and five minutes; done, in one evening with the three PRs stacked), 8a (fifteen minutes spread over an evening), 11 (twenty minutes with Gmail), and 10b twice by message (a read before, a read after): with Stage 5's done, 8a's, 11's and 10b's are left. Four more are helpful but not needed (3, 6b, 7, 12): five minutes each, or slower guarded taps.
 - **No decision waits on you** during the work: every question is answered, and the three things that could go wrong mid-PR have their fallback chosen.
 
-## Still to check from Stage 5
+## Still to check
 
-Everything else in Stage 5 was checked on the phone with you on 18 Oct, or by the scripts after its last install. These four want your taps, whenever they come up; none needs a session of its own:
+Everything else in Stage 5 was checked on the phone with you on 18 Oct, or by the scripts after its last install, and two more of its checks on 19 Oct: the chat left on *Your changes* with a fold open, his next notification tapped, and the *Chat* tab showed at his message, under the *New messages* line, every fold closed. These want your taps, or a day of their own, whenever they come up; none needs a session of its own:
 
 1. With more of his messages unread than a screen holds, open the chat (his button, not his notification): it opens at the *New messages* line, not at its foot.
-2. Leave the chat on *Your changes*, then tap his notification: the *Chat* tab shows, at the message.
-3. Open a message's fold, go to *Your changes* and back: every fold is closed, and what came meanwhile is under the *New messages* line.
-4. Once the chat has messages past its window (a fortnight old and past the newest 200, days away), scroll back past them: the older rows show under *Earlier messages* with no Undo or buttons of their own, read a month at a time (4.0.4).
+2. Once the chat has messages past its window (a fortnight old and past the newest 200, days away), scroll back past them: the older rows show under *Earlier messages* with no Undo or buttons of their own, read a month at a time (4.0.4).
+3. The week's check-in answered on a Sunday (in the chat or on its form): kept once in the log, and the week's review asked for, now through `Learning` (6e). 6e's check couldn't answer one from the PC on 19 Oct, as that week had its check-in already.
 
-## Waiting for the phone
+## When the phone is away
 
-The phone was disconnected on 19 Oct before 4.0.3's and 4.0.4's last fixes reached it, and Stage 6 is built while it's away. When it's connected again, in this order:
+PRs built while the phone is away wait ready and unmerged, each stacked on the one before, with its APK kept in `private/apk/` (as every release is installed and checked before it merges, unless you say otherwise for a PR). When it's back, the build on `main` goes on first if the phone hasn't got it; then each PR in order is installed, given its check from the table above, and merged before the next is installed. A problem one shows is fixed on its branch and merged up the stack, and every branch above it rebuilt, its CI run and its kept APK replaced before it's installed, so what's checked is what merges.
 
-1. **The build on `main` installed and checked**: 4.0.4 as merged (`main` at 7c46fe9, its APK kept as `private/apk/2026-10-19-4.0.4-final-built.apk`), with `keep_before.sh` first and `scripts/phone-check.sh` after. The phone has #74 as it was at 07:44 on 19 Oct (the archive a file a month, the live window a fortnight; the app and the chat opened and scrolled back then), without the review fixes of 4.0.3 (a photo taken within 30 seconds of a Done earns that Done's slot; the "stays planned" line for a task as the plan takes it, your instructions' values over it or work credited from a linked one, what's left rounded as the planner rounds it) or of 4.0.4 (an archive file that can't be read set aside and said; *Clear the chat* lets its months go unread; a reply restored from the archive). None of them needs your taps.
-2. **Stage 6's PRs, in order**: each, built and reviewed while the phone is away, waits ready and unmerged, stacked on the one before, with its APK kept in `private/apk/` (as every release is installed and checked before it merges, unless you say otherwise for a PR). Each is then installed and given its check from the table above, and merged, before the next is installed; a problem one shows is fixed on its branch and merged up the stack, and every branch above it then rebuilt, its CI run and its kept APK replaced before it's installed, so what's checked is what merges. 6b's check wants a weekend and you nearby, as the table says. Built on 19 Oct: #76 (6a, 4.0.5) on `main`, then #77 (6b, 4.0.6), #78 (6c, 4.0.7), #79 (6d, 4.0.8) and #80 (6e, 4.0.9), each on the one before; each PR lists its own steps, and its APK is `private/apk/2026-10-19-<version>-built.apk`, built from the branch's final head.
-3. **Stage 5's four checks** above, whenever they come up.
+So it went on 19 Oct: the phone, disconnected that morning, came back in the evening with you there; `main`'s 4.0.4 went on first, then Stage 6's five PRs (#76 to #80, 6a to 6e), each checked and merged in turn. 6b's check ran on a weekday with you nearby: protection disarmed from the PC and armed again, the device admin given back over adb.
 
 ## How to batch it
 
