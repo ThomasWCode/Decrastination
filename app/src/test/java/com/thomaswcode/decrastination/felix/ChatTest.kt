@@ -25,7 +25,7 @@ import com.thomaswcode.decrastination.core.SourceValues
 import com.thomaswcode.decrastination.core.Speaker
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.OwnTask
-import com.thomaswcode.decrastination.core.OwnTasks
+import com.thomaswcode.decrastination.core.OwnTaskRules
 import com.thomaswcode.decrastination.core.Slot
 import com.thomaswcode.decrastination.core.SlotKind
 import com.thomaswcode.decrastination.core.Status
@@ -700,7 +700,7 @@ class ChatTest {
 
     @Test
     fun `a step said done is ticked, a task shown is a card, and what can't be is said`() {
-        val essay = OwnTasks.create(
+        val essay = OwnTaskRules.create(
             OwnTask(title = "Essay", steps = listOf(OwnStep("Plan", 20), OwnStep("Write", 40))),
             "e", now,
         )
@@ -725,11 +725,11 @@ class ChatTest {
 
     @Test
     fun `a step to do again, a task of yours done, open again or deleted, and a setting are read, each only as it can be`() {
-        val essay = OwnTasks.create(
+        val essay = OwnTaskRules.create(
             OwnTask(title = "Essay", steps = listOf(OwnStep("Plan", 20), OwnStep("Write", 40))),
             "e", now,
         ).let { t -> t.copy(subSteps = t.subSteps.mapIndexed { i, s -> if (i == 0) s.copy(done = true) else s }) }
-        val finished = OwnTasks.create(OwnTask(title = "Letter", minutes = 20), "l", now)
+        val finished = OwnTaskRules.create(OwnTask(title = "Letter", minutes = 20), "l", now)
             .copy(status = Status.Done, doneAt = now - 3_600_000L)
         val settings = Settings()
         fun action(type: String, task: String = "", step: Int = -1, setting: String = "", value: String = "") =

@@ -60,7 +60,7 @@ class Readings(
         var decksChanged = false
         // A task whose call the API wouldn't take as asked (AC-04): the rules' till it changes.
         fun refused(task: TaskItem) = runtime.value.enrichFailed[task.id] == Enrichments.inputHash(task)
-        fun due(task: TaskItem) = (force && task.id == only) || Enrichments.stale(task, enricher != null && !refused(task), RuleEnricher.BY, Prompts.VERSION, modelOff = gateway.claudeKey() == null)
+        fun due(task: TaskItem) = (force && task.id == only) || Enrichments.stale(task, enricher != null && !refused(task), RuleEnricher.BY, ReadingPrompts.VERSION, modelOff = gateway.claudeKey() == null)
         // Whether [only]'s reading laid was the model's (for [force]).
         var readByModel = false
         val candidates = tasks.value.tasks
@@ -78,7 +78,7 @@ class Readings(
             // Whether the model gave this one's reading, not the rules standing in.
             var fromModel = false
             // Stale only by the prompts' version (AC-06): its reading stays unless the model reads it now.
-            val onlyVersion = Enrichments.staleOnlyByVersion(task, RuleEnricher.BY, Prompts.VERSION)
+            val onlyVersion = Enrichments.staleOnlyByVersion(task, RuleEnricher.BY, ReadingPrompts.VERSION)
             val now = clock.now()
             // Switched off (or its key removed) while this runs: nothing more is sent.
             if (gateway.claudeKey() == null) enricher = null
@@ -123,8 +123,8 @@ class Readings(
                             ?: when {
                                 force -> null
                                 // Declined by these prompts: the reading there kept, as theirs now, so it isn't asked for again till they change.
-                                onlyVersion -> task.enrichment?.copy(promptVersion = Prompts.VERSION)
-                                else -> rules.enrich(task, job, now).enrichment?.copy(by = model.by, promptVersion = Prompts.VERSION)
+                                onlyVersion -> task.enrichment?.copy(promptVersion = ReadingPrompts.VERSION)
+                                else -> rules.enrich(task, job, now).enrichment?.copy(by = model.by, promptVersion = ReadingPrompts.VERSION)
                             }
                     }
                 }

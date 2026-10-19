@@ -10,7 +10,7 @@ class ChatActsTest {
     private val now = Fixtures.at("2026-10-16T20:00")
     private val settings = Settings()
 
-    private fun essay() = OwnTasks.create(OwnTask(title = "Essay", steps = listOf(OwnStep("Plan", 20), OwnStep("Write", 40))), "e", now)
+    private fun essay() = OwnTaskRules.create(OwnTask(title = "Essay", steps = listOf(OwnStep("Plan", 20), OwnStep("Write", 40))), "e", now)
 
     private fun finished() = essay().let { t -> t.copy(subSteps = t.subSteps.map { it.copy(done = true) }, status = Status.Done, doneAt = now) }
 
@@ -18,7 +18,7 @@ class ChatActsTest {
     fun `a task opened again is undone only while it's as opening it left it`() {
         val done = finished()
         val act = Act("Open again: Essay", ChatAction(ChatAction.Type.Reopen, done.id), was = done)
-        val reopened = OwnTasks.reopened(done)
+        val reopened = OwnTaskRules.reopened(done)
         assertTrue(ChatActs.canUndo(act, listOf(reopened), settings, emptyList()))
         // Worked on since, or finished another way: it stands.
         assertFalse(ChatActs.canUndo(act, listOf(reopened.copy(workedMin = 10)), settings, emptyList()))
@@ -29,7 +29,7 @@ class ChatActsTest {
     fun `a task deleted is brought back only while no card that had added it is made again`() {
         val task = essay()
         val act = Act("Deleted: Essay", ChatAction(ChatAction.Type.Delete, task.id), was = task, cards = listOf("m|c"))
-        val card = Proposal("c", task = OwnTasks.draftOf(task), instant = true)
+        val card = Proposal("c", task = OwnTaskRules.draftOf(task), instant = true)
         val messages = listOf(ChatMessage("m", Speaker.Felix, "Added it.", now, proposals = listOf(card)))
         assertTrue(ChatActs.canUndo(act, emptyList(), settings, messages))
         // Redo made it anew: bringing the old one back would make two.

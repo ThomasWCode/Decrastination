@@ -40,7 +40,7 @@ import com.thomaswcode.decrastination.R
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.OwnStep
 import com.thomaswcode.decrastination.core.OwnTask
-import com.thomaswcode.decrastination.core.OwnTasks
+import com.thomaswcode.decrastination.core.OwnTaskRules
 import com.thomaswcode.decrastination.core.TaskItem
 import java.time.Instant
 import java.time.LocalTime
@@ -60,7 +60,7 @@ fun OwnTaskForm(graph: AppGraph, editing: TaskItem?, initial: OwnTask? = null, o
     val zone = graph.clock.zone()
     val now = graph.clock.now()
     val today = Instant.ofEpochMilli(now).atZone(zone).toLocalDate()
-    val start = editing?.let(OwnTasks::draftOf) ?: initial ?: OwnTask(title = "")
+    val start = editing?.let(OwnTaskRules::draftOf) ?: initial ?: OwnTask(title = "")
     val id = rememberSaveable { editing?.sourceId ?: UUID.randomUUID().toString() }
     var title by rememberSaveable { mutableStateOf(start.title) }
     var notes by rememberSaveable { mutableStateOf(start.notes) }
@@ -110,7 +110,7 @@ fun OwnTaskForm(graph: AppGraph, editing: TaskItem?, initial: OwnTask? = null, o
                     )
                     TextButton(enabled = !saving, onClick = {
                         val made = draft()
-                        problem = OwnTasks.problem(made)
+                        problem = OwnTaskRules.problem(made)
                         if (problem == null) {
                             saving = true
                             scope.launch {
@@ -125,18 +125,18 @@ fun OwnTaskForm(graph: AppGraph, editing: TaskItem?, initial: OwnTask? = null, o
                 ) {
                     OutlinedTextField(
                         title,
-                        { title = it.take(OwnTasks.MAX_TITLE) },
+                        { title = it.take(OwnTaskRules.MAX_TITLE) },
                         label = { Text("What it is") },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
                         modifier = Modifier.fillMaxWidth(),
                     )
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OwnTasks.KINDS.forEach { k -> FilterChip(selected = chosen == k, onClick = { kind = k.name }, label = { Text(k.label) }) }
+                        OwnTaskRules.KINDS.forEach { k -> FilterChip(selected = chosen == k, onClick = { kind = k.name }, label = { Text(k.label) }) }
                     }
                     OutlinedTextField(
                         subject,
-                        { subject = it.take(OwnTasks.MAX_CLASS) },
+                        { subject = it.take(OwnTaskRules.MAX_CLASS) },
                         label = { Text("Subject (if any)") },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words),
@@ -161,7 +161,7 @@ fun OwnTaskForm(graph: AppGraph, editing: TaskItem?, initial: OwnTask? = null, o
                                 onDelete = { setRows(rows.filterIndexed { j, _ -> j != i }) },
                             )
                         }
-                        if (rows.size < OwnTasks.MAX_STEPS) TextButton(onClick = { setRows(rows + StepRow("", "30")) }) { Text("Add a step") }
+                        if (rows.size < OwnTaskRules.MAX_STEPS) TextButton(onClick = { setRows(rows + StepRow("", "30")) }) { Text("Add a step") }
                         if (rows.isEmpty()) {
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                                 OutlinedTextField(
@@ -197,7 +197,7 @@ fun OwnTaskForm(graph: AppGraph, editing: TaskItem?, initial: OwnTask? = null, o
                     }
                     OutlinedTextField(
                         notes,
-                        { notes = it.take(OwnTasks.MAX_NOTES) },
+                        { notes = it.take(OwnTaskRules.MAX_NOTES) },
                         label = { Text("Notes") },
                         minLines = 3,
                         keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
@@ -253,7 +253,7 @@ private fun StepEditor(row: StepRow, first: Boolean, last: Boolean, onChange: (S
         Column(Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             OutlinedTextField(
                 row.title,
-                { onChange(row.copy(title = it.take(OwnTasks.MAX_TITLE))) },
+                { onChange(row.copy(title = it.take(OwnTaskRules.MAX_TITLE))) },
                 label = { Text("Step") },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),

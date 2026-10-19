@@ -9,10 +9,10 @@ import com.thomaswcode.decrastination.core.Duplicates
 import com.thomaswcode.decrastination.core.FelixSettings
 import com.thomaswcode.decrastination.core.Given
 import com.thomaswcode.decrastination.core.Instruction
-import com.thomaswcode.decrastination.core.Instructions
+import com.thomaswcode.decrastination.core.InstructionRules
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.MessageKind
-import com.thomaswcode.decrastination.core.OwnTasks
+import com.thomaswcode.decrastination.core.OwnTaskRules
 import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.ProposalState
 import com.thomaswcode.decrastination.core.Settings
@@ -141,7 +141,7 @@ object ChatPrompts {
 
     private val TASK = InstructionPrompts.obj(
         "title" to STRING,
-        "kind" to mapOf("type" to "string", "enum" to OwnTasks.KINDS.map { it.name }),
+        "kind" to mapOf("type" to "string", "enum" to OwnTaskRules.KINDS.map { it.name }),
         "subject" to STRING,
         "dueDate" to DATE,
         "dueTime" to TIME,
@@ -278,7 +278,7 @@ object ChatPrompts {
             // In the words it was proposed in, where they're kept: made, a task's estimate is the new one.
             val what = p.task?.let { "add the task “${it.title}”" }
                 ?: p.lines.takeIf { it.size == p.changes.size }?.joinToString("; ")
-                ?: p.changes.joinToString("; ") { Instructions.describe(it, tasks, zone) }
+                ?: p.changes.joinToString("; ") { InstructionRules.describe(it, tasks, zone) }
             val became = when (p.state) {
                 // Made at once since 16 Oct: one not made says why; one the student took back, so.
                 ProposalState.Proposed -> when {
@@ -378,7 +378,7 @@ object ChatPrompts {
             val due = (t.deadlineAt(now) ?: t.dueAt)?.let { at(it) + if (t.hardAt(now)) "" else " (a plan)" } ?: "no date"
             appendLine("- ${t.id} | ${t.title.take(MAX_TITLE)} | ${t.source.label} | ${t.kind.label} | $due | ${minutes(t)} | ${t.workedMin + t.photoMin} | ${start?.let(::at) ?: "-"}")
             // Its steps by their place, for a tick (AI-14).
-            t.subSteps.take(OwnTasks.MAX_STEPS).forEachIndexed { i, step -> appendLine("    step $i: ${step.title.take(MAX_TITLE)} (${step.minutes} min)${if (step.done) ", done" else ""}") }
+            t.subSteps.take(OwnTaskRules.MAX_STEPS).forEachIndexed { i, step -> appendLine("    step $i: ${step.title.take(MAX_TITLE)} (${step.minutes} min)${if (step.done) ", done" else ""}") }
         }
         // Their pace (17 Oct): what the app's own estimates are planned by, never minutes given.
         if (calibration != null) {
@@ -413,7 +413,7 @@ object ChatPrompts {
         if (inUse.isNotEmpty()) {
             appendLine()
             appendLine("Changes already in use:")
-            inUse.take(InstructionPrompts.MAX_TASKS).forEach { appendLine("- " + Instructions.describe(it, byId, zone)) }
+            inUse.take(InstructionPrompts.MAX_TASKS).forEach { appendLine("- " + InstructionRules.describe(it, byId, zone)) }
         }
         // Their own finished lately (16 Oct), to open again if one wasn't.
         val finished = tasks.filter { (it.source == Source.Own || it.tickDone) && it.status == Status.Done && (it.doneAt ?: 0L) > now - FINISHED_MS }

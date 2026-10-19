@@ -17,10 +17,10 @@ import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.core.Fact
 import com.thomaswcode.decrastination.core.Instruction
 import com.thomaswcode.decrastination.core.InstructionStatus
-import com.thomaswcode.decrastination.core.Instructions
+import com.thomaswcode.decrastination.core.InstructionRules
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.OwnTask
-import com.thomaswcode.decrastination.core.OwnTasks
+import com.thomaswcode.decrastination.core.OwnTaskRules
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Speaker
 import com.thomaswcode.decrastination.core.TaskItem
@@ -42,7 +42,7 @@ import com.thomaswcode.decrastination.enrich.ModelEffort
 import com.thomaswcode.decrastination.enrich.ModelGateway
 import com.thomaswcode.decrastination.enrich.PhotoChecker
 import com.thomaswcode.decrastination.enrich.PhotoTaskReader
-import com.thomaswcode.decrastination.enrich.Prompts
+import com.thomaswcode.decrastination.enrich.ReadingPrompts
 import com.thomaswcode.decrastination.enrich.SummaryWriter
 import com.thomaswcode.decrastination.enrich.WebResearcher
 import com.thomaswcode.decrastination.learn.Assessment
@@ -348,9 +348,9 @@ class CommandActivity : Activity() {
                             mapOf(
                                 "id" to JsonPrimitive(task.id),
                                 "job" to JsonPrimitive(job.name),
-                                "system" to JsonPrimitive(Prompts.system(job)),
-                                "user" to JsonPrimitive(Prompts.describe(task, job, now, graph.clock.zone())),
-                                "schema" to Prompts.schemaJson(job),
+                                "system" to JsonPrimitive(ReadingPrompts.system(job)),
+                                "user" to JsonPrimitive(ReadingPrompts.describe(task, job, now, graph.clock.zone())),
+                                "schema" to ReadingPrompts.schemaJson(job),
                             ),
                         )
                     }
@@ -506,7 +506,7 @@ class CommandActivity : Activity() {
                 val due = intent.getStringExtra("due")?.let { runCatching { java.time.LocalDateTime.parse(it).atZone(zone).toInstant().toEpochMilli() }.getOrNull() }
                 val kind = intent.getStringExtra("kind")?.let { k -> Kind.entries.firstOrNull { it.name.equals(k, ignoreCase = true) } } ?: Kind.Homework
                 val task = OwnTask(title = title.orEmpty(), kind = kind, dueAt = due, minutes = intent.getIntExtra("minutes", kind.defaultEffortMin))
-                val problem = OwnTasks.problem(task)
+                val problem = OwnTaskRules.problem(task)
                 if (problem != null) {
                     Log.w(TAG, "own-add: $problem")
                 } else {
@@ -535,18 +535,18 @@ class CommandActivity : Activity() {
                 when {
                     task == null -> Log.w(TAG, "quick-minutes needs --es task <id>")
                     minutes == 0 -> graph.instructions.takeBackQuick(task.id, ChangeType.Minutes).also { Log.i(TAG, "quick-minutes: taken back") }
-                    minutes in OwnTasks.MINUTES -> {
+                    minutes in OwnTaskRules.MINUTES -> {
                         val (change, text) = com.thomaswcode.decrastination.ui.minutesChange(task, minutes)
                         graph.instructions.addOwnChange(java.util.UUID.randomUUID().toString(), text, About(taskId = task.id, taskTitle = task.title), change)
                         Log.i(TAG, "quick-minutes: ${task.title} takes $minutes min")
                     }
-                    else -> Log.w(TAG, "quick-minutes needs --ei minutes 1..${OwnTasks.MINUTES.last} (0 takes it back)")
+                    else -> Log.w(TAG, "quick-minutes needs --ei minutes 1..${OwnTaskRules.MINUTES.last} (0 takes it back)")
                 }
             }
             "instructions" -> {
                 val tasks = graph.tasks.value.tasks.associateBy { it.id }
                 graph.instructions.value.instructions.forEach { i ->
-                    val read = i.changes.joinToString(" | ") { Instructions.describe(it, tasks, graph.clock.zone()) }
+                    val read = i.changes.joinToString(" | ") { InstructionRules.describe(it, tasks, graph.clock.zone()) }
                     Log.i(TAG, "instruction ${i.id} ${i.state}: '${i.text}' -> ${read.ifEmpty { i.note ?: "-" }}")
                 }
             }

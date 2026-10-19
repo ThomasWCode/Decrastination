@@ -7,11 +7,11 @@ import com.thomaswcode.decrastination.core.ChatAction
 import com.thomaswcode.decrastination.core.DayBucket
 import com.thomaswcode.decrastination.core.FelixSettings
 import com.thomaswcode.decrastination.core.Given
-import com.thomaswcode.decrastination.core.Instructions
+import com.thomaswcode.decrastination.core.InstructionRules
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.OwnStep
 import com.thomaswcode.decrastination.core.OwnTask
-import com.thomaswcode.decrastination.core.OwnTasks
+import com.thomaswcode.decrastination.core.OwnTaskRules
 import com.thomaswcode.decrastination.core.Proposal
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.SlotKind
@@ -85,7 +85,7 @@ object ChatAnswers {
      */
     fun cards(reading: Reading, tasks: Map<String, TaskItem>, zone: ZoneId, id: () -> String = { UUID.randomUUID().toString() }): List<Proposal> {
         val changes = reading.changes.takeIf { it.isNotEmpty() }?.let {
-            Proposal(id(), changes = it, lines = it.map { c -> Instructions.describe(c, tasks, zone) }, instant = true)
+            Proposal(id(), changes = it, lines = it.map { c -> InstructionRules.describe(c, tasks, zone) }, instant = true)
         }
         val added = reading.tasks.map { Proposal(id(), task = it, instant = true) }
         val opens = reading.actions.filter { it.type == ChatAction.Type.Open }.map { Proposal(id(), open = it.taskId) }
@@ -140,7 +140,7 @@ object ChatAnswers {
 
     /**
      * [text] as Claude's answer, checked against what there is: each task as the form would take it
-     * ([OwnTasks.problem]) with plausible dates, each change as an instruction's is; what can't be
+     * ([OwnTaskRules.problem]) with plausible dates, each change as an instruction's is; what can't be
      * used is left out and said ([Reading.leftOut]), the rest kept. Null if it can't be read at all.
      */
     /** The most memories one answer gives: a few at most is what's meant. */
@@ -152,7 +152,7 @@ object ChatAnswers {
         val leftOut = mutableListOf<String>()
         val made = answer.newTasks.take(MAX_TASKS).map(NewTask::normalised).mapNotNull { n ->
             val task = task(n, now, zone)
-            val problem = if (task == null) "a date in it doesn't read, or is out of range" else OwnTasks.problem(task)
+            val problem = if (task == null) "a date in it doesn't read, or is out of range" else OwnTaskRules.problem(task)
             if (problem != null) leftOut += "the task “${n.title.trim().take(60)}” (${problem.replaceFirstChar(Char::lowercase)})"
             task.takeIf { problem == null }
         }
@@ -170,7 +170,7 @@ object ChatAnswers {
             leftOut += "a change ($problem)"
             changes = changes - bad
         }
-        if (Instructions.makesCircle(changes, emptyList())) {
+        if (InstructionRules.makesCircle(changes, emptyList())) {
             leftOut += "changes that would have tasks wait for each other in a circle"
             changes = emptyList()
         }
@@ -213,7 +213,7 @@ object ChatAnswers {
     }
 
     private fun task(n: NewTask, now: Long, zone: ZoneId): OwnTask? {
-        val kind = OwnTasks.KINDS.firstOrNull { it.name == n.kind } ?: Kind.Homework
+        val kind = OwnTaskRules.KINDS.firstOrNull { it.name == n.kind } ?: Kind.Homework
         val due = n.dueDate?.let { at(it, n.dueTime, if (kind == Kind.Event) LocalTime.of(9, 0) else LocalTime.of(23, 59), zone) ?: return null }
         val start = n.startDate?.let { at(it, null, LocalTime.MIDNIGHT, zone) ?: return null }
         val steps = n.steps.map { s ->
@@ -227,7 +227,7 @@ object ChatAnswers {
             .let { given ->
                 // The task's minutes as Claude gave them, shared over its steps where theirs don't come to
                 // the same: its total is what it said (and what the reply says), its steps the shape.
-                val total = n.minutes.takeIf { it >= maxOf(1, given.size) && it in OwnTasks.MINUTES }
+                val total = n.minutes.takeIf { it >= maxOf(1, given.size) && it in OwnTaskRules.MINUTES }
                 if (given.isEmpty() || total == null || given.sumOf { it.minutes } == total || given.any { it.minutes <= 0 }) given
                 else shareOut(total, given.map { it.minutes }).let { shares -> given.mapIndexed { i, s -> s.copy(minutes = shares[i]) } }
             }

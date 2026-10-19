@@ -9,9 +9,9 @@ import com.anthropic.models.messages.StopReason
 import com.thomaswcode.decrastination.core.Change
 import com.thomaswcode.decrastination.core.ChangeType
 import com.thomaswcode.decrastination.core.Instruction
-import com.thomaswcode.decrastination.core.Instructions
+import com.thomaswcode.decrastination.core.InstructionRules
 import com.thomaswcode.decrastination.core.OwnStep
-import com.thomaswcode.decrastination.core.OwnTasks
+import com.thomaswcode.decrastination.core.OwnTaskRules
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.learn.CalendarEvent
 import com.thomaswcode.decrastination.learn.EventJudge
@@ -263,7 +263,7 @@ object InstructionAnswers {
         }
         stepsProblem(changes, byId)?.let { return Reading.Unclear("Claude's reading couldn't be used: $it") }
         // Tasks waiting on each other in a circle within this one reading: none would ever be planned.
-        if (Instructions.makesCircle(changes, emptyList())) return Reading.Unclear("Claude's reading would have tasks wait for each other in a circle")
+        if (InstructionRules.makesCircle(changes, emptyList())) return Reading.Unclear("Claude's reading would have tasks wait for each other in a circle")
         return Reading.Changes(changes)
     }
 
@@ -279,7 +279,7 @@ object InstructionAnswers {
             // A paced total keeps the app's estimate it came from, and the task's content, as they are now (#50's review).
             ChangeType.Minutes -> task?.let { id ->
                 val t = tasks.getValue(id)
-                g.minutes?.takeIf { it in OwnTasks.minutesFor(t) }?.let {
+                g.minutes?.takeIf { it in OwnTaskRules.minutesFor(t) }?.let {
                     Change(type, taskId = id, minutes = it, pacedFrom = t.appEffortMin.takeIf { g.paced }, pacedHash = com.thomaswcode.decrastination.core.Enrichments.inputHash(t).takeIf { g.paced })
                 }
             }
@@ -324,21 +324,21 @@ object InstructionAnswers {
             // The same work as another listed task (DX-15), which is kept.
             ChangeType.SameAs -> task?.let { id -> g.afterTaskId?.takeIf { it in tasks && it != id }?.let { Change(type, taskId = id, afterTaskId = it) } }
             // A task's name in the app (16 Oct): not one derived from Anki's counts, whose name is their count.
-            ChangeType.Rename -> task?.takeIf { !tasks.getValue(it).derived }?.let { id -> g.title.trim().takeIf { it.isNotEmpty() }?.let { Change(type, taskId = id, title = it.take(OwnTasks.MAX_TITLE)) } }
+            ChangeType.Rename -> task?.takeIf { !tasks.getValue(it).derived }?.let { id -> g.title.trim().takeIf { it.isNotEmpty() }?.let { Change(type, taskId = id, title = it.take(OwnTaskRules.MAX_TITLE)) } }
             // Any task's steps (16 Oct; your own's only before) but Anki's, which are its cards, each with
             // its minutes and its dates readable (AI-19).
             ChangeType.Steps -> task?.takeIf { !tasks.getValue(it).derived && tasks.getValue(it).source != com.thomaswcode.decrastination.core.Source.Anki }?.let { id ->
                 // A step's dates: readable, in range, its start not after its end, and neither after the task's day.
                 val dueDay = tasks.getValue(id).dueAt?.let { java.time.Instant.ofEpochMilli(it).atZone(zone).toLocalDate() }
                 fun dayOf(time: Long) = java.time.Instant.ofEpochMilli(time).atZone(zone).toLocalDate()
-                val steps = g.steps.takeIf { it.isNotEmpty() && it.size <= OwnTasks.MAX_STEPS }?.map { s ->
+                val steps = g.steps.takeIf { it.isNotEmpty() && it.size <= OwnTaskRules.MAX_STEPS }?.map { s ->
                     if (s.title.isBlank() || s.minutes < 1) return null
                     val from = s.startDate.takeIf { it.isNotBlank() }?.let { at(it, null, LocalTime.MIDNIGHT, zone)?.takeIf { t -> plausible(t, now) } ?: return null }
                     val due = s.dueDate.takeIf { it.isNotBlank() }?.let { at(it, null, LocalTime.of(23, 59), zone)?.takeIf { t -> plausible(t, now) } ?: return null }
                     if (from != null && due != null && from > due) return null
                     if (dueDay != null && listOfNotNull(from, due).any { dayOf(it) > dueDay }) return null
                     OwnStep(
-                        title = s.title.trim().take(OwnTasks.MAX_TITLE),
+                        title = s.title.trim().take(OwnTaskRules.MAX_TITLE),
                         minutes = s.minutes,
                         from = from,
                         dueAt = due,
@@ -360,7 +360,7 @@ object InstructionAnswers {
             val sum = c.steps.orEmpty().sumOf { it.minutes }
             // Your own task's minutes as the form has them; a source's task's, the estimate in force.
             val total = if (task.source == com.thomaswcode.decrastination.core.Source.Own) {
-                OwnTasks.draftOf(task).let { draft -> if (draft.steps.isEmpty()) draft.minutes else draft.steps.sumOf { it.minutes } }
+                OwnTaskRules.draftOf(task).let { draft -> if (draft.steps.isEmpty()) draft.minutes else draft.steps.sumOf { it.minutes } }
             } else {
                 task.effortMin
             }

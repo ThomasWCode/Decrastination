@@ -35,7 +35,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.R
 import com.thomaswcode.decrastination.core.Enrichments
-import com.thomaswcode.decrastination.core.Instructions
+import com.thomaswcode.decrastination.core.InstructionRules
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.data.SourceStatus
@@ -258,7 +258,7 @@ private fun TaskTile(task: TaskItem, index: Int, count: Int, now: Long, zone: ja
     val hiddenUntil = task.availableFrom?.takeIf { it > now }
     // Claude's plan for it not used (out of range, or not adding up): said, so it can be checked.
     val dropped = Enrichments.current(task)?.dropped?.takeIf { task.isOpen }
-    val waits = task.isOpen && task.userAfter != null && Instructions.waiting(task, byId)
+    val waits = task.isOpen && task.userAfter != null && InstructionRules.waiting(task, byId)
     // A start you gave (or one of your own's): planned from then on, not hidden.
     val startsAt = (if (task.source == Source.Own) task.notBefore else task.userFrom)?.takeIf { task.isOpen && it > now }
     val steps = task.subSteps.takeIf { it.isNotEmpty() && task.isOpen }

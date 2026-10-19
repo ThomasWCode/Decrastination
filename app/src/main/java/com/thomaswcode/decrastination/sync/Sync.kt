@@ -6,8 +6,8 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import com.thomaswcode.decrastination.AppGraph
+import com.thomaswcode.decrastination.core.InstructionRules
 import com.thomaswcode.decrastination.core.InstructionState
-import com.thomaswcode.decrastination.core.Instructions
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.WallClock
@@ -188,7 +188,7 @@ class Sync(
         val now = clock.now()
         // Your instructions about events over your answers to its questions; a question one of them
         // has answered since it was asked is withdrawn.
-        val yours = Instructions.eventAnswers(instructions.value.applied)
+        val yours = InstructionRules.eventAnswers(instructions.value.applied)
         val picked = settings.value
         val excluded = (picked.calendarsExcluded + listOfNotNull(picked.calendarWriteId)).toSet()
         val events = runCatching { withContext(Dispatchers.IO) { ports.readCalendar(now - CalendarTime.DAY_MS, CalendarTime.readUntil(now, clock.zone()), excluded) } }

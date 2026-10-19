@@ -23,11 +23,11 @@ import kotlin.test.Test
  * assignments, each with the right answer, in `private/eval/` (never committed). Run only where
  * that folder is, so on this PC; skipped everywhere else, CI included.
  *
- * 1. `dump` writes each case's request as the app makes it ([Prompts.system], [Prompts.describe],
- *    [Prompts.schemaJson]) to `private/eval/prompts/<id>.txt`, email addresses redacted.
+ * 1. `dump` writes each case's request as the app makes it ([ReadingPrompts.system], [ReadingPrompts.describe],
+ *    [ReadingPrompts.schemaJson]) to `private/eval/prompts/<id>.txt`, email addresses redacted.
  * 2. Opus, through Claude Code, answers each into `private/eval/answers/<id>-<run>.json`: no API
  *    spend.
- * 3. `score` puts every answer through the app's own checks ([Answers.parse]) and the planner, as
+ * 3. `score` puts every answer through the app's own checks ([ReadingAnswers.parse]) and the planner, as
  *    the app would, and writes `private/eval/report.md`: each case's kind, deadline, minutes,
  *    must-mention items, blocks and sections against its labels.
  *
@@ -76,11 +76,11 @@ class EvalSetTest {
         val cases = cases()
         val out = File(dir!!, "prompts").apply { mkdirs() }
         for (case in cases) {
-            val user = Prompts.describe(case.task, case.job, nowOf(case), zone).take(Pricing.MAX_INPUT_CHARS)
+            val user = ReadingPrompts.describe(case.task, case.job, nowOf(case), zone).take(Pricing.MAX_INPUT_CHARS)
             File(out, "${case.id}.txt").writeText(
                 buildString {
                     appendLine("=== SYSTEM ===")
-                    appendLine(Prompts.system(case.job))
+                    appendLine(ReadingPrompts.system(case.job))
                     appendLine()
                     // The second system block every call sends (AI-05), here from the settings' defaults.
                     appendLine("=== PROFILE ===")
@@ -90,7 +90,7 @@ class EvalSetTest {
                     appendLine(redact(user))
                     appendLine()
                     appendLine("=== ANSWER: one JSON object matching this schema, nothing else ===")
-                    appendLine(Prompts.schemaJson(case.job).toString())
+                    appendLine(ReadingPrompts.schemaJson(case.job).toString())
                 },
             )
         }
@@ -122,7 +122,7 @@ class EvalSetTest {
                 answered += case.id
                 val now = nowOf(case)
                 val text = file.readText().trim().removePrefix("```json").removePrefix("```").removeSuffix("```").trim()
-                val enrichment = Answers.parse(case.job, text, case.task, "eval", now, zone)
+                val enrichment = ReadingAnswers.parse(case.job, text, case.task, "eval", now, zone)
                 val checks = if (enrichment == null) listOf("unreadable" to false) else check(case, case.task.withEnrichment(enrichment), enrichment, now, text)
                 val ok = checks.all { it.second }
                 if (ok) passed++

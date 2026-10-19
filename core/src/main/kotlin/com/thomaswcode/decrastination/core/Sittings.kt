@@ -4,7 +4,7 @@ package com.thomaswcode.decrastination.core
  * Work over an hour in sittings, by time, never by what's in it (your call, 17 Oct): even, none
  * longer than [MAX_MIN], the first the work itself, then "Continue: …", and the last "Continue and
  * finish: …". Claude's steps are cut so as they're read
- * ([com.thomaswcode.decrastination.enrich.Answers.fitParts]); the planner cuts a step still over an
+ * ([com.thomaswcode.decrastination.enrich.ReadingAnswers.fitParts]); the planner cuts a step still over an
  * hour as it plans it the same way (the calibration's minutes, yours shared out, a step read before
  * sittings: 3.1.2's review). Never steps you gave, typed or Felix's: they're as you gave them,
  * however long ([TaskItem.yourSteps], your call, 17 Oct).

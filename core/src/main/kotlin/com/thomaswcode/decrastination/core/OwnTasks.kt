@@ -45,7 +45,7 @@ data class OwnStep(
  * it. Nothing reads them, so no sync touches them; one is done when you say so, which earns no free
  * time (your call, 12 Oct): its kept slots earn theirs. Pure.
  */
-object OwnTasks {
+object OwnTaskRules {
     const val MAX_TITLE = 200
     const val MAX_NOTES = 4_000
     const val MAX_CLASS = 60

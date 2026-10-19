@@ -918,7 +918,7 @@ class PlannerTest {
         val days = timed.buckets.flatMap { b -> b.chunks.filter { it.taskId == "teams:late" }.map { b.date } }
         assertTrue(days.isNotEmpty() && days.all { it >= tuesday }, "$days")
         assertTrue(timed.chunksOf("teams:late").all { it.overdue })
-        // A move by hand to a time from now is kept as an instruction's is (Instructions.latePin).
+        // A move by hand to a time from now is kept as an instruction's is (InstructionRules.latePin).
         assertNull(Planner.pinProblem(late, Fixtures.at("2026-10-13T19:30"), Fixtures.at("2026-10-12T17:00"), LONDON))
     }
 

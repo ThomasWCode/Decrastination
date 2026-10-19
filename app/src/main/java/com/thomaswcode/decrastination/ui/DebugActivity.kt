@@ -42,7 +42,7 @@ import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.core.ChatHistory
 import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.debug.CommandActivity
-import com.thomaswcode.decrastination.enrich.Prompts
+import com.thomaswcode.decrastination.enrich.ReadingPrompts
 import com.thomaswcode.decrastination.protect.Watchdog
 import com.thomaswcode.decrastination.sources.gmail.GmailThreads
 import java.time.Instant
@@ -99,8 +99,8 @@ private fun DebugPage(graph: AppGraph, activity: Activity) {
                         val job = Enrichments.jobFor(task, GmailThreads::textRead)!!
                         val profile = graph.conversation.profile(now)
                         val previous = task.subSteps.ifEmpty { task.enrichment?.subSteps.orEmpty() }
-                        val item = (if (task.photo != null) Prompts.photo(job) + "\n\n" else "") + Prompts.describe(task, job, now, zone, previous, state.deckTopics)
-                        Block(activity, "${job.name}, version ${Prompts.VERSION}", Prompts.system(job, profile.year) + "\n\n=== PROFILE ===\n" + profile.text + "\n\n=== ITEM ===\n" + item)
+                        val item = (if (task.photo != null) ReadingPrompts.photo(job) + "\n\n" else "") + ReadingPrompts.describe(task, job, now, zone, previous, state.deckTopics)
+                        Block(activity, "${job.name}, version ${ReadingPrompts.VERSION}", ReadingPrompts.system(job, profile.year) + "\n\n=== PROFILE ===\n" + profile.text + "\n\n=== ITEM ===\n" + item)
                     }
                 }
             }
