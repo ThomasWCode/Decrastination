@@ -219,7 +219,7 @@ class FelixHarness(start: String = "2026-10-19T16:30") : AutoCloseable {
             conversation.settleEvent(key)
         }
 
-        /** Your answer to his question, kept to be read, as `AppGraph.addInstruction` keeps one. */
+        /** Your answer to his question, kept to be read, as `Instructions.addInstruction` keeps one. */
         suspend fun instruction(text: String, about: About, answer: Boolean): String {
             val id = UUID.randomUUID().toString()
             stores.instructions.update { it.copy(instructions = it.instructions + Instruction(id, text, about, clock.now(), answer = answer)) }

@@ -32,7 +32,7 @@ class EnrichWorker(context: Context, params: WorkerParameters) : CoroutineWorker
         graph.enrichNow(byModel = inputData.getBoolean(KEY_MODEL, false))
         // Instructions and the chat waiting for Claude, as its rest after a failed call ends.
         if (inputData.getBoolean(KEY_MODEL, false)) {
-            graph.readInstructions()
+            graph.instructions.readInstructions()
             graph.conversation.answerChat()
         }
         return Result.success()

@@ -1,0 +1,100 @@
+package com.thomaswcode.decrastination.tasks
+
+import com.thomaswcode.decrastination.Fixtures
+import com.thomaswcode.decrastination.Fixtures.LONDON
+import com.thomaswcode.decrastination.block.Focus
+import com.thomaswcode.decrastination.core.FixedClock
+import com.thomaswcode.decrastination.core.Kind
+import com.thomaswcode.decrastination.core.Source
+import com.thomaswcode.decrastination.core.TaskItem
+import com.thomaswcode.decrastination.data.SecretCipher
+import com.thomaswcode.decrastination.data.Stores
+import com.thomaswcode.decrastination.enrich.KeyProblem
+import com.thomaswcode.decrastination.enrich.ModelGateway
+import com.thomaswcode.decrastination.enrich.Profile
+import com.thomaswcode.decrastination.learn.EventJudge
+import com.thomaswcode.decrastination.plan.Planning
+import java.nio.file.Files
+import java.util.concurrent.atomic.AtomicInteger
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.emptyFlow
+
+/**
+ * Your instructions' and your own tasks' services on temporary stores (docs/plan_v4, Stage 6c), as
+ * AppGraph makes them, with the real focus and plan; Claude is off (no key), and what Android does
+ * (the calendar read again, the widget, a finish's completions) is counted.
+ */
+class TasksHarness(start: String = "2026-10-19T16:00") : AutoCloseable {
+    private val dir = Files.createTempDirectory("tasks").toFile()
+    val clock = FixedClock(Fixtures.at(start), LONDON)
+    val stores = Stores(dir, Reverse, { clock.now() })
+    private val job = SupervisorJob()
+    val scope = CoroutineScope(job + Dispatchers.Default)
+    private val gateway = ModelGateway(stores.settings, { null }, stores.runtime, stores.tasks, clock, NoAlerts, scope) {}
+    val focus: Focus = Focus(stores.tasks, stores.settings, stores.runtime, stores.log, clock) { state, s, now -> planning.plan(state, s, now) }
+    val planning: Planning = Planning(
+        stores.tasks, stores.settings, stores.runtime, stores.log, stores.instructions, stores.school, clock, scope, gateway,
+        calendarTime = { NO_CALENDAR },
+        calendarChanges = emptyFlow<Unit>(),
+        sweep = {},
+        hooks = emptyList(),
+        profile = { Profile.Block.NONE },
+        draftAhead = { _, _ -> },
+        onFailure = { throw it },
+    )
+
+    /** How often the calendar was read again, the widget drawn, and a finish's completions settled. */
+    val rereads = AtomicInteger()
+    val redraws = AtomicInteger()
+    val settled = AtomicInteger()
+
+    val instructions = Instructions(
+        stores.instructions, stores.tasks, stores.settings, stores.runtime, stores.school, stores.chat, clock, scope, gateway, focus, planning,
+        calendarTime = { NO_CALENDAR },
+        profile = { Profile.Block.NONE },
+        reread = { rereads.incrementAndGet() },
+        redraw = { redraws.incrementAndGet() },
+    )
+    val ownTasks = OwnTasks(stores.tasks, stores.instructions, stores.chat, clock, scope) { settled.incrementAndGet() }
+
+    /** A source's task, made up: Teams homework due on [due], taking [minutes]. */
+    fun teams(id: String, due: Long? = Fixtures.at("2026-10-23T09:00"), minutes: Int = 60) = TaskItem(
+        id = "teams:$id", source = Source.Teams, sourceId = id, title = id, dueAt = due, kind = Kind.Homework,
+        sourceEffortMin = minutes, firstSeenAt = clock.time, lastSeenAt = clock.time,
+    )
+
+    /** [condition], once the background work it waits on has done it (5 s at most). */
+    fun until(what: String, condition: () -> Boolean) {
+        val end = System.currentTimeMillis() + 5_000
+        while (!condition()) {
+            check(System.currentTimeMillis() < end) { "never: $what" }
+            Thread.sleep(10)
+        }
+    }
+
+    override fun close() {
+        job.cancel()
+        dir.deleteRecursively()
+    }
+
+    private object NoAlerts : ModelGateway.Alerts {
+        override fun keyProblem(problem: KeyProblem): Boolean = false
+        override fun keyFixed() = Unit
+        override fun dropped(task: TaskItem, why: String): Boolean = false
+        override fun withdrawExcept(standing: Set<String>) = Unit
+    }
+
+    /** A cipher for the secrets that only reverses the bytes: no keystore on a PC. */
+    private object Reverse : SecretCipher {
+        override fun encrypt(plain: ByteArray) = plain.reversedArray()
+        override fun decrypt(sealed: ByteArray) = sealed.reversedArray()
+    }
+
+    private companion object {
+        /** No calendar: nothing busy, no day's load, no event. */
+        val NO_CALENDAR = EventJudge.Time(emptyList(), emptyMap(), emptyList())
+    }
+}
