@@ -59,7 +59,7 @@ fun MoveSheet(graph: AppGraph, chunk: Chunk, plan: Plan, zone: ZoneId, onDone: (
     val last = task?.realDeadline?.takeIf { it > graph.clock.now() }?.let { Planner.date(it, zone) }
     val first = task?.notBefore?.let { Planner.date(it, zone) }
     fun apply(change: Change, said: String) {
-        graph.scope.launch { graph.addOwnChange(UUID.randomUUID().toString(), said, About(taskId = chunk.taskId, taskTitle = chunk.title), change) }
+        graph.scope.launch { graph.instructions.addOwnChange(UUID.randomUUID().toString(), said, About(taskId = chunk.taskId, taskTitle = chunk.title), change) }
         onDone(said)
     }
     ModalBottomSheet(onDismissRequest = onClose) {
@@ -96,8 +96,8 @@ fun MoveSheet(graph: AppGraph, chunk: Chunk, plan: Plan, zone: ZoneId, onDone: (
                     } else {
                         // Any time: a time you gave it here before goes, as the plan would keep it on its day.
                         graph.scope.launch {
-                            if (quick) graph.takeBackQuick(chunk.taskId, ChangeType.AtTime)
-                            graph.addOwnChange(UUID.randomUUID().toString(), "All of it on ${day.format(CHIP_DAY)}", About(taskId = chunk.taskId, taskTitle = chunk.title), Change(ChangeType.OnDay, taskId = chunk.taskId, date = day.toString()))
+                            if (quick) graph.instructions.takeBackQuick(chunk.taskId, ChangeType.AtTime)
+                            graph.instructions.addOwnChange(UUID.randomUUID().toString(), "All of it on ${day.format(CHIP_DAY)}", About(taskId = chunk.taskId, taskTitle = chunk.title), Change(ChangeType.OnDay, taskId = chunk.taskId, date = day.toString()))
                         }
                         onDone("All of it on ${day.format(CHIP_DAY)}")
                     }

@@ -317,7 +317,7 @@ private fun SameLine(graph: AppGraph, task: TaskItem, other: TaskItem) {
         Text("Looks like the same work as “${other.title}” from ${other.source.label}. Same?", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
         androidx.compose.material3.TextButton(onClick = {
             graph.scope.launch {
-                graph.addOwnChange(
+                graph.instructions.addOwnChange(
                     java.util.UUID.randomUUID().toString(), "Same as “${other.title}”",
                     com.thomaswcode.decrastination.core.About(taskId = task.id, taskTitle = task.title),
                     com.thomaswcode.decrastination.core.Change(com.thomaswcode.decrastination.core.ChangeType.SameAs, taskId = task.id, afterTaskId = other.id),

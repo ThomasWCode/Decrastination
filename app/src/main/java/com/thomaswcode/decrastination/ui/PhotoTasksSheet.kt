@@ -49,7 +49,7 @@ fun PhotoTasksSheet(graph: AppGraph, reading: PhotoTasks.Reading, jpeg: ByteArra
         if (task != null) {
             val id = rememberSaveable(i) { UUID.randomUUID().toString() }
             OwnTaskForm(graph, editing = null, initial = task, onSave = { made ->
-                graph.saveOwnTask(id, made).also { saved ->
+                graph.ownTasks.saveOwnTask(id, made).also { saved ->
                     if (saved) {
                         graph.attachPhoto(TaskItem.id(Source.Own, id), jpeg)
                         added = added + i
