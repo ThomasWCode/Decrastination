@@ -69,9 +69,7 @@ import com.thomaswcode.decrastination.notify.AndroidTray
 import com.thomaswcode.decrastination.notify.NoticeId
 import com.thomaswcode.decrastination.notify.Notifier
 import com.thomaswcode.decrastination.plan.Planning
-import com.thomaswcode.decrastination.protect.CodeLock
-import com.thomaswcode.decrastination.protect.SettingsChanges
-import com.thomaswcode.decrastination.protect.Totp
+import com.thomaswcode.decrastination.protect.Protection
 import com.thomaswcode.decrastination.protect.Watchdog
 import com.thomaswcode.decrastination.sources.anki.AnkiRules
 import com.thomaswcode.decrastination.sources.anki.AnkiSource
@@ -291,7 +289,7 @@ class AppGraph private constructor(context: Context) {
             override suspend fun applyInstruction(id: String) { this@AppGraph.applyInstruction(id) }
             override suspend fun deleteInstruction(id: String) { this@AppGraph.deleteInstruction(id) }
             override suspend fun layTaskOverrides() { this@AppGraph.layTaskOverrides() }
-            override suspend fun changeSettings(change: (Settings) -> Settings) { this@AppGraph.changeSettings(change) }
+            override suspend fun changeSettings(change: (Settings) -> Settings) { protection.changeSettings(change) }
             override suspend fun answerEvent(key: String, answer: String) {
                 calendarWriter.answer(key, answer)
             }
@@ -300,110 +298,9 @@ class AppGraph private constructor(context: Context) {
         answered = { record, words -> looks.answered(record, words) },
     )
 
-    /** Applies a settings change: at once, or, once armed, pending if it loosens blocking. */
-    /**
-     * Held while the settings and their pending changes are changed: two files, written in turn,
-     * so each change finishes before the next reads them.
-     */
-    private val changing = Mutex()
-
-    /**
-     * Changes the settings as [change] says, from what's been asked for (the settings with what's
-     * waiting applied), so a change to one field leaves the others' waiting changes be.
-     */
-    suspend fun changeSettings(change: (Settings) -> Settings) = changing.withLock {
-        // What's waiting is counted up to now first, so a new change's wait starts now.
-        applyDue(force = true)
-        val state = runtime.value
-        val proposed = change(SettingsChanges.requested(settings.value, state.pending))
-        val outcome = SettingsChanges.propose(settings.value, proposed, state.pending, clock.now()) { java.util.UUID.randomUUID().toString() }
-        // Nothing was waiting: the count starts now, whatever an old mark says.
-        val mark = if (state.pending.isEmpty()) clock.uptime() else state.uptimeMark ?: clock.uptime()
-        // The pending list first: stopped between the two, what applies now is lost (and seen to
-        // be), but a waiting change this one replaced can't come back.
-        runtime.update { it.copy(pending = outcome.pending, uptimeMark = if (outcome.pending.isEmpty()) null else mark) }
-        settings.update { outcome.settings }
-    }
-
-    /**
-     * The weekly review's [changes] to the planner's numbers, within their bounds, applied at once,
-     * armed or not: you said they needn't wait (11 Oct, IMP-P2-015). Only the fields
-     * [ReviewInput.apply] sets can change this way; everything else waits as ever.
-     */
-    suspend fun applyReviewChanges(changes: List<com.thomaswcode.decrastination.learn.ReviewInput.Change>) = changing.withLock {
-        applyDue(force = true)
-        val state = runtime.value
-        // The settings it names: one it sets to the value already asked for applies now all the same.
-        val bounds = com.thomaswcode.decrastination.learn.ReviewInput.bounds(settings.value)
-        val fields = changes.map { it.setting }.filter { it in bounds }.map(com.thomaswcode.decrastination.learn.ReviewInput::fieldOf).toSet()
-        val outcome = SettingsChanges.atOnce(settings.value, state.pending, fields) { com.thomaswcode.decrastination.learn.ReviewInput.apply(it, changes) }
-        runtime.update { it.copy(pending = outcome.pending, uptimeMark = if (outcome.pending.isEmpty()) null else it.uptimeMark) }
-        settings.update { outcome.settings }
-    }
-
-    /**
-     * Counts the uptime since the last count towards the pending changes and applies those whose
-     * wait is over. Called every half minute; it writes (and so counts) only every few minutes, or
-     * when a change falls due, unless [force]d.
-     */
-    suspend fun applyDueChanges(force: Boolean = false) {
-        if (runtime.value.pending.isEmpty()) return
-        changing.withLock { applyDue(force) }
-    }
-
-    /** [applyDueChanges], with [changing] held. */
-    private suspend fun applyDue(force: Boolean) {
-        val state = runtime.value
-        if (state.pending.isEmpty()) return
-        val uptime = clock.uptime()
-        val elapsed = SettingsChanges.counting(state.pending, state.uptimeMark, uptime, force, settings.value) ?: return
-        val outcome = SettingsChanges.applyDue(settings.value, state.pending, clock.now(), elapsed)
-        val waiting = outcome.pending.map { it.id }.toSet()
-        val due = state.pending.filter { it.id !in waiting }
-        // The settings first: stopped before the pending list is saved, a change that fell due is
-        // applied again (to the same value), never lost.
-        if (due.isNotEmpty()) settings.update { latest -> due.fold(latest, SettingsChanges::apply) }
-        runtime.update { it.copy(pending = outcome.pending, uptimeMark = if (outcome.pending.isEmpty()) null else uptime) }
-    }
-
-    /**
-     * Checks a parent [code] from your dad's authenticator, using it up if it's right (with an
-     * hour's unblock until [unblockUntil], if that's what it's for). Returns what went wrong, or null.
-     */
-    suspend fun useParentCode(code: String, unblockUntil: Long? = null): String? {
-        val secret = secrets[Secret.TotpSecret]?.let(Totp::fromBase32) ?: return "No parent code is set"
-        val now = clock.now()
-        var outcome: CodeLock.Result = CodeLock.Result.Reused
-        runtime.update { state ->
-            val (result, lock) = state.codeLock.attempt(secret, code, now)
-            outcome = result
-            if (result is CodeLock.Result.Accepted && unblockUntil != null) state.copy(codeLock = lock, overrideUntil = unblockUntil) else state.copy(codeLock = lock)
-        }
-        return when (val result = outcome) {
-            is CodeLock.Result.Accepted -> null
-            is CodeLock.Result.Wrong -> "Wrong code: ${result.triesLeft} ${if (result.triesLeft == 1) "try" else "tries"} left"
-            is CodeLock.Result.Locked -> "Too many wrong codes: try again ${com.thomaswcode.decrastination.ui.Format.at(result.until, now, clock.zone())}"
-            CodeLock.Result.Reused -> "That code has been used: wait for the next one"
-        }
-    }
-
-    /** Drops the pending change [id]: what it would loosen stays as it is. Never waits, since it tightens. */
-    suspend fun cancelChange(id: String) = changing.withLock {
-        runtime.update { state ->
-            val rest = state.pending.filterNot { it.id == id }
-            state.copy(pending = rest, uptimeMark = if (rest.isEmpty()) null else state.uptimeMark)
-        }
-    }
-
-    /** Applies the pending change [id] now (a parent's code allowed it), if it's still waiting. */
-    suspend fun applyNow(id: String) = changing.withLock {
-        val change = runtime.value.pending.firstOrNull { it.id == id } ?: return@withLock
-        // Saved before its pending entry goes, as in [applyDue].
-        settings.update { SettingsChanges.apply(it, change) }
-        runtime.update { state ->
-            val rest = state.pending.filterNot { it.id == id }
-            state.copy(pending = rest, uptimeMark = if (rest.isEmpty()) null else state.uptimeMark)
-        }
+    /** Protection ([Protection]): settings changes, waiting once armed if they loosen blocking; the parent code; the device admin. */
+    val protection = Protection(settings, runtime, secrets, clock, scope, adminActive = { Watchdog.isAdminActive(app) }) {
+        app.getSystemService(DevicePolicyManager::class.java)?.removeActiveAdmin(Watchdog.admin(app))
     }
 
     /**
@@ -447,22 +344,8 @@ class AppGraph private constructor(context: Context) {
     private val teamsChanged = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
 
     init {
-        // Disarmed (once the wait is over, or at once by a parent's code): the device admin goes
-        // too, so uninstalling is allowed again, as the protection screen says. Checked at start as
-        // well as on each change, so a disarm the app stopped before seeing through is finished,
-        // and so is an arming left part-way (the admin given, then the app stopped mid-wizard).
-        scope.launch {
-            var starting = true
-            settings.state.map { it.armed }.distinctUntilChanged().collect { armed ->
-                val wasArmed = runtime.value.adminArmed
-                if (armed && !wasArmed) runtime.update { it.copy(adminArmed = true) }
-                if (!armed && (wasArmed || (starting && Watchdog.isAdminActive(app)))) {
-                    runCatching { app.getSystemService(DevicePolicyManager::class.java)?.removeActiveAdmin(Watchdog.admin(app)) }
-                    runtime.update { it.copy(adminArmed = false) }
-                }
-                starting = false
-            }
-        }
+        // The device admin kept in step with arming ([Protection.start]).
+        protection.start()
         // Work a source confirms done earns free time, is logged and asked about.
         syncer.addListener {
             settleCompletions()
@@ -610,7 +493,7 @@ class AppGraph private constructor(context: Context) {
     val backups: BackupService by lazy {
         BackupService(
             stores, clock, scope, AndroidBackupFolder(app.contentResolver), File(app.filesDir, RESET_COPIES), BuildConfig.VERSION_NAME,
-            changeSettings = { change -> changeSettings(change) },
+            changeSettings = { change -> protection.changeSettings(change) },
             applying = applying,
             layInstructions = { layInstructions() },
             layTaskOverrides = { layTaskOverrides() },
@@ -848,7 +731,7 @@ class AppGraph private constructor(context: Context) {
         if (com.thomaswcode.decrastination.learn.ReviewInput.valueOf(settings.value, change.setting) != change.value) return "It's been changed since: left as it is."
         // One end of a school day's hours back alone can meet the other: then it can't be.
         if (!com.thomaswcode.decrastination.data.SettingsLimits.window(com.thomaswcode.decrastination.learn.ReviewInput.set(settings.value, change.setting, before).weekdayHours, overnight = false)) return "It can't go back on its own: the day's hours would end before they start. Change them in Settings."
-        changeSettings { com.thomaswcode.decrastination.learn.ReviewInput.set(it, change.setting, before) }
+        protection.changeSettings { com.thomaswcode.decrastination.learn.ReviewInput.set(it, change.setting, before) }
         val now = com.thomaswcode.decrastination.learn.ReviewInput.valueOf(settings.value, change.setting)
         val label = com.thomaswcode.decrastination.learn.ReviewInput.label(change.setting)
         return if (now == before) "$label is back to ${com.thomaswcode.decrastination.learn.ReviewInput.valueText(change.setting, before)}." else "$label back to ${com.thomaswcode.decrastination.learn.ReviewInput.valueText(change.setting, before)} waits, as a change that loosens does once armed."

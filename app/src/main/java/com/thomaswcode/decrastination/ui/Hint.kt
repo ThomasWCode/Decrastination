@@ -15,6 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.thomaswcode.decrastination.AppGraph
+import com.thomaswcode.decrastination.data.SettingsLimits
 import kotlinx.coroutines.launch
 
 /** A screen's first-run hint (UI-17), [text], till you put it away: then never again ([com.thomaswcode.decrastination.data.Settings.hintsSeen]). */
@@ -29,7 +30,7 @@ fun Hint(graph: AppGraph, name: String, text: String) {
     ) {
         Column(Modifier.padding(start = 16.dp, end = 8.dp, top = 12.dp, bottom = 4.dp)) {
             Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSecondaryContainer)
-            TextButton(onClick = { graph.scope.launch { graph.changeSettings { it.copy(hintsSeen = (it.hintsSeen + name).distinct().takeLast(com.thomaswcode.decrastination.data.SettingsLimits.MAX_HINTS)) } } }) { Text("Got it") }
+            TextButton(onClick = { graph.scope.launch { graph.protection.changeSettings { it.copy(hintsSeen = (it.hintsSeen + name).distinct().takeLast(SettingsLimits.MAX_HINTS)) } } }) { Text("Got it") }
         }
     }
 }

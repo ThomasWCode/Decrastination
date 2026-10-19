@@ -83,7 +83,7 @@ object Review {
 
     /**
      * The model's review, while Claude is on and under its cap: a note and bounded changes, the
-     * changes applied through [AppGraph.applyReviewChanges]. Otherwise why it couldn't be had.
+     * changes applied through [com.thomaswcode.decrastination.protect.Protection.applyReviewChanges]. Otherwise why it couldn't be had.
      */
     private suspend fun modelReview(graph: AppGraph, now: Long, week: String, generation: Int): Outcome {
         val reviewer = graph.gateway.client(ModelEffort.Job.Review)?.let { ClaudeReviewer(it, profile = graph.conversation.profile()) } ?: return Outcome(why = because(ModelHold.Off))
@@ -106,7 +106,7 @@ object Review {
         if (graph.backups.resets.get() != generation) return Outcome(why = "the record was reset while Claude was asked")
         // At once, armed or not (your call, 11 Oct); laid over what's been asked for, so a change
         // waiting for another setting keeps its wait.
-        if (changes.isNotEmpty()) graph.applyReviewChanges(changes)
+        if (changes.isNotEmpty()) graph.protection.applyReviewChanges(changes)
         val note = answer.note.ifEmpty { listOf("No note this week.") }
         return Outcome(WeeklyReview(now, note + changeLines(changes, graph.settings.value), by = result.model ?: reviewer.model, changes = changes, settingsBefore = before))
     }
