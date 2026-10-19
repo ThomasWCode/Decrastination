@@ -38,7 +38,7 @@ Otherwise it goes at the next free start at or after its time, so a pin moved ne
 
 ## Kept starts (PL-13)
 
-After each plan, today's work slots' starts are saved by key (`SlotState.previous`, in `RuntimeState.slots`). The next plan lays each piece there again where that's still free, one under way or in its grace included, so a replan doesn't shuffle the day. A piece kept today also stays today's when the plan chooses its day, dated or undated, and one under way even with less than its length left, so work with days to spare isn't moved to a day with more room once its slot has begun; it says so (`Why.Kept`) where keeping it changed its day.
+After each plan, today's work slots' starts are saved by key (`SlotState.previous`, in `SessionState.slots`). The next plan lays each piece there again where that's still free, one under way or in its grace included, so a replan doesn't shuffle the day. A piece kept today also stays today's when the plan chooses its day, dated or undated, and one under way even with less than its length left, so work with days to spare isn't moved to a day with more room once its slot has begun; it says so (`Why.Kept`) where keeping it changed its day.
 A piece's key is its task and its step's place (`Chunk.key`: sittings counted from the end, a box by its part), so ticking one piece doesn't renumber the next and move it. A new day starts empty (`SlotState.on`).
 
 ## Grace, and missed slots (PL-13)
@@ -69,7 +69,7 @@ What a kept slot earns, and when, is BL-08 ([blocking-and-protection.md](blockin
 
 ## The Keeping journal
 
-Each keep is saved as a `Keeping` (in `RuntimeState.keeping`) before anything changes. `Focus.finish` carries it through, each part once however often it runs: the task's tick and minutes, then the slot's record, then, in one write, its free time and its start let go.
+Each keep is saved as a `Keeping` (in `SessionState.keeping`) before anything changes. `Focus.finish` carries it through, each part once however often it runs: the task's tick and minutes, then the slot's record, then, in one write, its free time and its start let go.
 A stop part-way is finished at the next start (`Focus.finishKeeps`), before an empty day is judged. A task that has changed meanwhile, or is done, lets it go. Photo checks have the same journal (`PhotoDone`, `Focus.finishPhotos`).
 
 ## Undo
@@ -89,7 +89,7 @@ Held, it goes to a day of the next fortnight, at a time or any time that day (`u
 
 With `WRITE_CALENDAR`, the plan's slots are written to the calendar you pick in Setup or Settings → Calendar (`Settings.calendarWriteId`); none is written to till you pick one.
 Pick one you made at calendar.google.com: a calendar an app makes stays on the phone.
-`CalendarWriter` writes it, built like `Focus`: its stores, the clock, and `CalendarProvider` for the calendar's events (`SlotCalendar` on the phone). It alone writes what the app knows of its writes (`RuntimeState.calendarWritten`, `calendarWrittenTo` and `calendarsToClear`, and `calendar.json`) and your answers about events, but for a backup restored, which merges its answers in (`Stores.replace`, as for every store); `CalendarWriterTest` drives it on temporary stores, against a calendar in memory.
+`CalendarWriter` writes it, built like `Focus`: its stores, the clock, and `CalendarProvider` for the calendar's events (`SlotCalendar` on the phone). It alone writes what the app knows of its writes (`calendar.json`: `CalendarState.calendarWritten`, `calendarWrittenTo`, `calendarsToClear` and its versions) and your answers about events, but for a backup restored, which merges its answers in (`Stores.replace`, as for every store); `CalendarWriterTest` drives it on temporary stores, against a calendar in memory.
 - **What**: the next seven days' slots (today and the six after, `SlotCalendarDiff.DAYS`), pieces of work and outside breaks.
 - **Each event**: the piece's label as its title ("Outside" for a break); its source and why as its description ("Teams. Due tomorrow."), with its first action where one's written (AI-15), or "A break outside.".
 - **Marked**: free, with no reminders, and with the app's package and its URI (`CUSTOM_APP_PACKAGE`, `CUSTOM_APP_URI`: `decrastination://slot/<date>/<key>`).
@@ -104,7 +104,7 @@ Pick one you made at calendar.google.com: a calendar an app makes stays on the p
 
 ## Hand moves
 
-A piece's event whose start is neither where the app last wrote it (`RuntimeState.calendarWritten`) nor where the plan has it now is one you moved.
+A piece's event whose start is neither where the app last wrote it (`CalendarState.calendarWritten`) nor where the plan has it now is one you moved.
 `SlotCalendarDiff.judge` takes moves earliest first, each as your time for its task's next piece (an `AtTime` change, "Moved in the calendar", made at once), unless:
 - its task is no longer there;
 - the time is at or after the task's real deadline, still to come ("it's due before then"; overdue work takes any time);
@@ -120,14 +120,14 @@ A calendar's sync, run while the app is changing an event it's still sending, ca
 - the app's words in its description (`SlotCalendarDiff.looksWritten`: a source's name first, or "A break outside."); and
 - a title and times the app wrote to that calendar in an earlier write, as a fingerprint (`SlotCalendarDiff.version`: the calendar's id, title, start and end, hashed).
 
-The fingerprints of what each write made are remembered once it's in, in `calendar.json` (`data/CalendarVersions.kt`), the last 2,000 (`SlotCalendarDiff.MAX_VERSIONS`).
+The fingerprints of what each write made are remembered once it's in, in `calendar.json` (`data/CalendarState.kt`), the last 2,000 (`SlotCalendarDiff.MAX_VERSIONS`).
 A copy is matched only against earlier writes' fingerprints, never the write at hand's; a move taken isn't remembered, its event being at your time.
 A version an event of yours already has there, before the app has ever written it, is never remembered (`SlotCalendarDiff.yours`), so a lookalike of yours that's there first is never taken for a copy.
 An event of yours is deleted only if it has both the app's words and the very title and times of an earlier write to that calendar.
 
 ## A calendar no longer written to
 
-Picking another calendar, or none, puts the old one on `RuntimeState.calendarsToClear`. `CalendarWriter.clearOldCalendars` deletes the app's events there (by its package) and copies of them (by their fingerprints).
+Picking another calendar, or none, puts the old one on `CalendarState.calendarsToClear`. `CalendarWriter.clearOldCalendars` deletes the app's events there (by its package) and copies of them (by their fingerprints).
 It's tried again at each write till it works (the permission back, the provider well). A backup restored keeps this phone's calendar choices, as their ids are this phone's.
 
 ## Your calendar as busy time
@@ -150,4 +150,4 @@ It's tried again at each write till it works (the permission back, the provider 
 - to ask, starting within the week: asked once, as Felix's message in the chat, its chips *All of it*, *A few hours* and *None* (in quiet hours it waits for the morning to be in his notification); it takes all its time till you answer (all day, all of each of its days), so the plan counts on no time it may not have (D-44);
 - to ask, further off: a few hours of its day (of each, all day) meanwhile, so the spread before it leaves it room.
 
-Your answer holds for every event of that name (`RuntimeState.eventAnswers`, kept by `CalendarWriter.answer`); the plan, and today's record of it, are made again with it.
+Your answer holds for every event of that name (`CalendarState.eventAnswers`, kept by `CalendarWriter.answer`); the plan, and today's record of it, are made again with it.
