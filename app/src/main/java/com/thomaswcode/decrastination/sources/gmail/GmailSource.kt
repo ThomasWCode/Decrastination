@@ -2,6 +2,7 @@ package com.thomaswcode.decrastination.sources.gmail
 
 import android.util.Log
 import com.thomaswcode.decrastination.AppGraph
+import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.core.Fetched
 import com.thomaswcode.decrastination.core.Invite
 import com.thomaswcode.decrastination.core.Kind
@@ -155,7 +156,7 @@ object GmailThreads {
      * which reads back whole whatever a file is called. A Teams assignment's reference materials are
      * kept so too (DX-08), so the sheet and the model see them alike.
      */
-    const val EXTRA_ATTACHMENTS = "attachments"
+    const val EXTRA_ATTACHMENTS = Enrichments.EXTRA_ATTACHMENTS
 
     private val json = Json { ignoreUnknownKeys = true }
     private val ATTACHMENTS = ListSerializer(Mime.Attachment.serializer())

@@ -5,6 +5,7 @@ import com.thomaswcode.decrastination.Fixtures.LONDON
 import com.thomaswcode.decrastination.enrich.InstructionAnswers
 import com.thomaswcode.decrastination.enrich.InstructionPrompts
 import com.thomaswcode.decrastination.learn.CalendarEvent
+import com.thomaswcode.decrastination.sources.gmail.GmailThreads
 import java.time.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -230,7 +231,7 @@ class InstructionsTest {
 
     @Test
     fun `a task said not to be one isn't read by the enrichment`() {
-        assertNull(Enrichments.jobFor(task("a", null, source = Source.Gmail).copy(userNotATask = true)))
+        assertNull(Enrichments.jobFor(task("a", null, source = Source.Gmail).copy(userNotATask = true), GmailThreads::textRead))
     }
 
     // --- Days ---

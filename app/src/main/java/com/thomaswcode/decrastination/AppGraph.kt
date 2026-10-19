@@ -26,6 +26,7 @@ import com.thomaswcode.decrastination.data.Stores
 import com.thomaswcode.decrastination.enrich.AndroidModelAlerts
 import com.thomaswcode.decrastination.enrich.EnrichWorker
 import com.thomaswcode.decrastination.enrich.ModelGateway
+import com.thomaswcode.decrastination.enrich.Prompts
 import com.thomaswcode.decrastination.enrich.Readings
 import com.thomaswcode.decrastination.enrich.RuleEnricher
 import com.thomaswcode.decrastination.felix.AndroidFelixPorts
@@ -48,6 +49,7 @@ import com.thomaswcode.decrastination.protect.Protection
 import com.thomaswcode.decrastination.protect.Watchdog
 import com.thomaswcode.decrastination.sources.anki.AnkiSource
 import com.thomaswcode.decrastination.sources.gmail.GmailSource
+import com.thomaswcode.decrastination.sources.gmail.GmailThreads
 import com.thomaswcode.decrastination.sources.powerplanner.PowerPlannerApi
 import com.thomaswcode.decrastination.sources.powerplanner.PowerPlannerSource
 import com.thomaswcode.decrastination.sources.teams.TeamsSource
@@ -351,7 +353,7 @@ class AppGraph private constructor(context: Context) {
         syncer.addAfterEverySync {
             val modelOn = gateway.available()
             val modelOff = gateway.claudeKey() == null
-            if (tasks.value.tasks.any { Enrichments.jobFor(it) != null && Enrichments.stale(it, modelOn, RuleEnricher.BY, modelOff) }) EnrichWorker.enqueue(app)
+            if (tasks.value.tasks.any { Enrichments.jobFor(it, GmailThreads::textRead) != null && Enrichments.stale(it, modelOn, RuleEnricher.BY, Prompts.VERSION, modelOff) }) EnrichWorker.enqueue(app)
         }
         scope.launch { sync.refreshCalendar() }
         scope.launch(Dispatchers.IO) { runCatching { photos.sweepPhotos() } }

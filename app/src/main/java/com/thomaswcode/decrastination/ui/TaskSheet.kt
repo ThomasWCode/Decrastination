@@ -210,7 +210,7 @@ fun TaskSheet(
                     OutlinedButton(enabled = !photo.checking, onClick = { photo.take(next) }) { Text("Check with a photo") }
                 }
                 // The work itself photographed, so Claude reads its size from it (AI-23).
-                if (task.isOpen && com.thomaswcode.decrastination.core.Enrichments.jobFor(task) != null) {
+                if (task.isOpen && com.thomaswcode.decrastination.core.Enrichments.jobFor(task, GmailThreads::textRead) != null) {
                     OutlinedButton(onClick = { camera.launch(androidx.core.content.FileProvider.getUriForFile(activity, "${activity.packageName}.photos", shot)) }) {
                         Text(if (task.photo == null) "Add a photo of the work" else "Photograph the work again")
                     }
@@ -344,7 +344,7 @@ fun TaskSheet(
                     }
                 }
                 // Claude's reading made again, as the task is now (AC-06).
-                if (task.isOpen && Enrichments.jobFor(task) != null && graph.gateway.claudeKey() != null) {
+                if (task.isOpen && Enrichments.jobFor(task, GmailThreads::textRead) != null && graph.gateway.claudeKey() != null) {
                     OutlinedButton(
                         onClick = {
                             scope.launch {
