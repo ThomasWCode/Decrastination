@@ -12,25 +12,14 @@ import com.thomaswcode.decrastination.block.SlotAlarms
 import com.thomaswcode.decrastination.block.Slots
 import com.thomaswcode.decrastination.calendar.CalendarWriter
 import com.thomaswcode.decrastination.calendar.SlotCalendar
-import com.thomaswcode.decrastination.core.About
 import com.thomaswcode.decrastination.core.Change
-import com.thomaswcode.decrastination.core.ChangeType
 import com.thomaswcode.decrastination.core.Enrichments
-import com.thomaswcode.decrastination.core.HalfDay
-import com.thomaswcode.decrastination.core.Instruction
 import com.thomaswcode.decrastination.core.InstructionStatus
-import com.thomaswcode.decrastination.core.NoSchool
 import com.thomaswcode.decrastination.core.OwnTask
-import com.thomaswcode.decrastination.core.ProposalState
-import com.thomaswcode.decrastination.core.Planner
 import com.thomaswcode.decrastination.core.Source
-import com.thomaswcode.decrastination.core.Status
 import com.thomaswcode.decrastination.core.TaskItem
-import com.thomaswcode.decrastination.core.TaskOverrides
 import com.thomaswcode.decrastination.core.WallClock
-import com.thomaswcode.decrastination.core.overrides
 import com.thomaswcode.decrastination.core.withEnrichment
-import com.thomaswcode.decrastination.core.withOverrides
 import com.thomaswcode.decrastination.data.AndroidBackupFolder
 import com.thomaswcode.decrastination.data.BackupService
 import com.thomaswcode.decrastination.data.DeviceClock
@@ -46,11 +35,7 @@ import com.thomaswcode.decrastination.enrich.Failure
 import com.thomaswcode.decrastination.enrich.ClaudeEnricher
 import com.thomaswcode.decrastination.enrich.EnrichWorker
 import com.thomaswcode.decrastination.enrich.Enricher
-import com.thomaswcode.decrastination.enrich.InstructionAnswers
-import com.thomaswcode.decrastination.enrich.InstructionPrompts
-import com.thomaswcode.decrastination.enrich.InstructionReader
 import com.thomaswcode.decrastination.enrich.ModelGateway
-import com.thomaswcode.decrastination.enrich.ModelHold
 import com.thomaswcode.decrastination.enrich.RuleEnricher
 import com.thomaswcode.decrastination.felix.AndroidFelixPorts
 import com.thomaswcode.decrastination.felix.Conversation
@@ -96,8 +81,6 @@ import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 /**

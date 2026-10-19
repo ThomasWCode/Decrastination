@@ -1,7 +1,9 @@
 package com.thomaswcode.decrastination.tasks
 
 import com.thomaswcode.decrastination.core.ChatState
+import com.thomaswcode.decrastination.core.Duplicates
 import com.thomaswcode.decrastination.core.InstructionState
+import com.thomaswcode.decrastination.core.Merge
 import com.thomaswcode.decrastination.core.OwnTask
 import com.thomaswcode.decrastination.core.ProposalState
 import com.thomaswcode.decrastination.core.Source
@@ -90,7 +92,7 @@ class OwnTasks(
     /** Your own task [taskId] gone, as if it never was. */
     suspend fun deleteOwnTask(taskId: String) {
         // A task linked to it as the same work (DX-15) is back: the work it stood for has gone.
-        tasks.update { state -> state.copy(tasks = com.thomaswcode.decrastination.core.Duplicates.linksPresent(state.tasks.filterNot { it.id == taskId && it.source == Source.Own })) }
+        tasks.update { state -> state.copy(tasks = Duplicates.linksPresent(state.tasks.filterNot { it.id == taskId && it.source == Source.Own })) }
         forgetCards(setOf(taskId))
     }
 
@@ -108,7 +110,7 @@ class OwnTasks(
      */
     suspend fun pruneOwn() {
         val now = clock.now()
-        fun old(t: TaskItem) = t.source == Source.Own && !t.isOpen && now - (t.doneAt ?: t.lastSeenAt) >= com.thomaswcode.decrastination.core.Merge.KEEP_FINISHED_MS
+        fun old(t: TaskItem) = t.source == Source.Own && !t.isOpen && now - (t.doneAt ?: t.lastSeenAt) >= Merge.KEEP_FINISHED_MS
         val gone = tasks.value.tasks.filter(::old).map { it.id }.toSet()
         if (gone.isEmpty()) return
         tasks.update { state -> state.copy(tasks = state.tasks.filterNot(::old)) }
