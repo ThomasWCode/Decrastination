@@ -165,6 +165,16 @@ class AppGraph private constructor(context: Context) {
                     .onFailure { Log.w(TAG, "Couldn't keep what was found unreadable", it) }
             }
         }
+        // The chat's archive is read when it's first wanted, not here: a file found unreadable then is put
+        // on record, and what was kept of it written, as one found at the start is.
+        stores.chatArchive.onProblem = { found ->
+            Log.w(TAG, "${found.file} couldn't be read whole; set aside as ${found.copy}")
+            scope.launch {
+                runCatching { runtime.update { it.withUnreadable(listOf(found)) } }
+                    .onSuccess { stores.keepRecovered() }
+                    .onFailure { Log.w(TAG, "Couldn't keep what was found unreadable", it) }
+            }
+        }
         // A calibration from before 1.8.0, kept by a class's first timed piece: under its rule now
         // (IMP-P2-016), not only from the next weekly review.
         if (Calibrator.upgraded(runtime.value.calibration, log.value.completions) != null) {

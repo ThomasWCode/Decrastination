@@ -231,7 +231,8 @@ class BackupService(
         // To the second: two resets the same day each keep their copy.
         val stamp = Instant.ofEpochMilli(now).atZone(clock.zone()).format(DateTimeFormatter.ofPattern("yyyy-MM-dd-HHmmss", Locale.UK))
         val name = "reset-$stamp.json"
-        val whole = backupOf()
+        // The chat's archive read whole for it: off the main thread a reset's asked from.
+        val whole = withContext(Dispatchers.IO) { backupOf() }
         val (text, leftOut) = Backups.fitted(whole, backupCap)
         val all = what == Reset.Everything
         // Nothing goes till its copy is somewhere it can be restored from.
