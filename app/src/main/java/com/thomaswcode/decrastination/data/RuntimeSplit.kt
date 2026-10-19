@@ -32,8 +32,9 @@ object RuntimeSplit {
      * At start, before any store is read ([Stores]): each owner's fields written to its file first (the
      * calendar's beside what calendar.json holds, its file of before kept as `calendar.json.v1`); runtime.json
      * loses them after, as it loads ([RUNTIME]), keeping its file of before as `.v2`. A runtime in the new
-     * shape is split already, so a second run changes nothing; a stop between writes them again from it.
-     * A calendar.json there that can't be read is set aside as its store would set it aside, and said.
+     * shape is split already. A file a start before wrote is left as it is, as new as the runtime's copy or
+     * newer, so a start after a stop, or after one whose runtime's trim wasn't written, puts nothing older
+     * back. One there that can't be read is set aside as its store would set it aside, and said.
      */
     val MOVE = Move { dir -> move(dir, System.currentTimeMillis()) }
 
@@ -45,21 +46,20 @@ object RuntimeSplit {
             val moved = fields.mapNotNull { field -> runtime[field]?.let { field to it } }.toMap()
             if (moved.isEmpty()) continue
             val file = File(dir, name)
-            val now = if (name == "calendar.json") {
-                val was = read(file)
-                if (was != null) {
-                    File(dir, "$name.v1").takeIf { !it.exists() }?.writeText(was.toString())
-                } else if (file.exists()) {
-                    // Set aside before the runtime's fields go into a fresh one; where it can't be, it isn't
-                    // written over: its store finds it and says it, and the fields stay in the runtime's file
-                    // of before, kept a week.
-                    val copy = JsonStore.alreadyAside(file) ?: JsonStore.setAside(file, at) ?: continue
-                    aside += JsonStore.Unreadable(name, copy.name, kept = false, at = at)
-                }
-                JsonObject((was ?: JsonObject(emptyMap())) + moved + (Migration.VERSION to JsonPrimitive(2)))
-            } else {
-                JsonObject(moved + (Migration.VERSION to JsonPrimitive(1)))
+            // The calendar's file is there before the split, its versions in it (version 1); the others are new.
+            val version = if (name == "calendar.json") 2 else 1
+            val was = read(file)
+            if (was != null && Migration.versionOf(was) >= version) continue
+            if (was != null) {
+                File(dir, "$name.v1").takeIf { !it.exists() }?.writeText(was.toString())
+            } else if (file.exists()) {
+                // Set aside before the runtime's fields go into a fresh one; where it can't be, it isn't
+                // written over: its store finds it and says it, and the fields stay in the runtime's file
+                // of before, kept a week.
+                val copy = JsonStore.alreadyAside(file) ?: JsonStore.setAside(file, at) ?: continue
+                aside += JsonStore.Unreadable(name, copy.name, kept = false, at = at)
             }
+            val now = JsonObject((was ?: JsonObject(emptyMap())) + moved + (Migration.VERSION to JsonPrimitive(version)))
             val tmp = File(dir, "$name.tmp")
             tmp.writeText(now.toString())
             JsonStore.moveOver(tmp, file)
