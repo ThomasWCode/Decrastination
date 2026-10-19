@@ -1,12 +1,5 @@
-package com.thomaswcode.decrastination.sources.anki
+package com.thomaswcode.decrastination.core
 
-import com.thomaswcode.decrastination.core.Enrichments
-import com.thomaswcode.decrastination.core.Fetched
-import com.thomaswcode.decrastination.core.Kind
-import com.thomaswcode.decrastination.core.Source
-import com.thomaswcode.decrastination.core.Status
-import com.thomaswcode.decrastination.core.SubStep
-import com.thomaswcode.decrastination.core.TaskItem
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime

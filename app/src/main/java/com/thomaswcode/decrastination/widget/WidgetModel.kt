@@ -135,7 +135,7 @@ data class WidgetModel(
             chunk.dueToday -> "Due " + Format.at(chunk.deadline, now, zone).removePrefix("today ")
             chunk.behind -> "Behind"
             chunk.dueAt == null -> "No deadline"
-            else -> "Due " + Format.at(chunk.dueAt, now, zone)
+            else -> "Due " + Format.at(chunk.dueAt!!, now, zone)
         }
 
         /** The watchdog's finding, worst first: blocking off matters before anything else on the widget. */

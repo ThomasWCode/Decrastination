@@ -1,11 +1,11 @@
 package com.thomaswcode.decrastination.ui
 
+import com.thomaswcode.decrastination.core.PpClass
+import com.thomaswcode.decrastination.core.PpSchedule
 import com.thomaswcode.decrastination.core.SchoolCalendar
-import com.thomaswcode.decrastination.data.Settings
-import com.thomaswcode.decrastination.data.Window
-import com.thomaswcode.decrastination.sources.powerplanner.PpClass
-import com.thomaswcode.decrastination.sources.powerplanner.PpSchedule
-import com.thomaswcode.decrastination.sources.powerplanner.Timetable
+import com.thomaswcode.decrastination.core.Settings
+import com.thomaswcode.decrastination.core.Timetable
+import com.thomaswcode.decrastination.core.Window
 import java.time.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals

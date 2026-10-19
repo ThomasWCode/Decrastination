@@ -71,7 +71,7 @@ Read through AnkiDroid's own provider, `content://com.ichi2.anki.flashcards` (`s
 - They're asked again only once a deck's counts or options change, or after an hour (`UnseenCache`, AR-08).
 - Section decks are named `Textbook N::x.y`; which textbook a number means is a setting (`ankiTextbook`, Q18).
 
-Its tasks are derived from the counts (`sources/anki/AnkiRules.kt`), never listed by AnkiDroid:
+Its tasks are derived from the counts (`core/AnkiRules.kt`), never listed by AnkiDroid:
 - **The daily quota** (`AnkiRules.quota`), "Anki: N reviews + M new": every due review, plus today's new cards from the lowest-numbered section deck of the current textbook that still has cards never studied (then other textbooks'). Revision, due at 21:30 (`ankiDeadlineMin`).
 - The quota's deck is fixed at the Anki day's first read and kept for the day (`AnkiDay`); the Anki day turns at 04:00 on the clock. The quota is done once nothing is due and its deck has no new cards left today.
 - On a day a deck homework names is due by tomorrow (or overdue) and still has cards to learn, the quota is the reviews alone for the rest of the Anki day (`AnkiDay.reviewsOnly`); with no reviews due, there's no quota that day.

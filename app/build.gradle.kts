@@ -12,8 +12,8 @@ android {
         applicationId = "com.thomaswcode.decrastination"
         minSdk = 26
         targetSdk = 36
-        versionCode = 45
-        versionName = "4.0.10"
+        versionCode = 46
+        versionName = "4.0.11"
     }
 
     signingConfigs {
@@ -58,6 +58,11 @@ android {
     testOptions {
         unitTests.isReturnDefaultValues = true
     }
+
+    // core's code linted with the app's, against its minSdk (:core is plain Kotlin, with Android's lint applied).
+    lint {
+        checkDependencies = true
+    }
 }
 
 // The golden prompts written again (AR-01, GoldenPromptsTest): ./gradlew testDebugUnitTest -PupdateGolden=true
@@ -83,9 +88,14 @@ tasks.withType<Test>().configureEach {
     inputs.file(layout.projectDirectory.file("../docs/spec/felix-inputs.md")).withPropertyName("felixInputsDoc").withPathSensitivity(PathSensitivity.RELATIVE)
     // The stores' shapes and the plan's snapshot (StoresDecodeTest, PlanSnapshotTest): a change to them alone runs the tests again.
     inputs.dir(layout.projectDirectory.dir("../fixtures")).withPropertyName("fixtures").withPathSensitivity(PathSensitivity.RELATIVE)
+    // core's build, which ArchitectureTest holds free of Android and of the app: a change to it alone runs the tests again.
+    inputs.file(layout.projectDirectory.file("../core/build.gradle.kts")).withPropertyName("coreBuild").withPathSensitivity(PathSensitivity.RELATIVE)
+    // core's own tests run with the app's, so one command (CI's) runs every test.
+    if (name == "testDebugUnitTest") dependsOn(":core:test")
 }
 
 dependencies {
+    implementation(project(":core"))
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.exifinterface)
     implementation(libs.androidx.activity.compose)
@@ -105,6 +115,7 @@ dependencies {
     // Every Jackson module the SDK brings at one patched version (gradle/libs.versions.toml).
     implementation(platform(libs.jackson.bom))
 
+    testImplementation(testFixtures(project(":core")))
     testImplementation(libs.junit)
     testImplementation(libs.kotlin.test.junit)
     testImplementation(libs.kotlinx.coroutines.test)

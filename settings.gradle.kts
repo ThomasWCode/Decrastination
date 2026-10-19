@@ -22,3 +22,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "Decrastination"
 include(":app")
+include(":core")

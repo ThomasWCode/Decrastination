@@ -24,6 +24,7 @@ import com.thomaswcode.decrastination.core.Proposal
 import com.thomaswcode.decrastination.core.ProposalState
 import com.thomaswcode.decrastination.core.Rule
 import com.thomaswcode.decrastination.core.SchoolCalendar
+import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Speaker
 import com.thomaswcode.decrastination.core.Status
@@ -31,7 +32,6 @@ import com.thomaswcode.decrastination.core.SubStep
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.WebSource
 import com.thomaswcode.decrastination.core.WindowKind
-import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.data.SlotOutcome
 import com.thomaswcode.decrastination.data.SlotRecord
 import com.thomaswcode.decrastination.felix.ChatPrompts

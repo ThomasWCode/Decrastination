@@ -8,8 +8,8 @@ import android.content.Intent
 import android.os.Build
 import android.util.Log
 import com.thomaswcode.decrastination.AppGraph
+import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.data.DailyRetry
-import com.thomaswcode.decrastination.data.Settings
 import java.time.DayOfWeek
 import java.time.Instant
 import java.time.ZoneId

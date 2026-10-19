@@ -4,7 +4,7 @@ import com.anthropic.models.messages.OutputConfig
 import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.core.MemoryState
 import com.thomaswcode.decrastination.core.SchoolCalendar
-import com.thomaswcode.decrastination.data.Settings
+import com.thomaswcode.decrastination.core.Settings
 import java.io.File
 import java.time.ZoneId
 import java.util.Locale

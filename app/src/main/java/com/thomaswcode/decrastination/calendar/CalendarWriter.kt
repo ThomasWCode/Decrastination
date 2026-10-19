@@ -7,11 +7,11 @@ import com.thomaswcode.decrastination.core.Change
 import com.thomaswcode.decrastination.core.ChangeType
 import com.thomaswcode.decrastination.core.Instructions
 import com.thomaswcode.decrastination.core.Plan
+import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.WallClock
 import com.thomaswcode.decrastination.data.CalendarVersions
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.RuntimeState
-import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.data.TaskState
 import com.thomaswcode.decrastination.enrich.MicroPlan
 import java.time.Instant

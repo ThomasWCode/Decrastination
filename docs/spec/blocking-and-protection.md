@@ -20,7 +20,7 @@ On the same tick it also:
 
 ## What's blocked
 
-`block/Blocklist.kt` holds the defaults; `Settings.blockedApps`, `blockedSites`, `checkedBrowsers` and `blockedBrowsers` hold what's in force, edited in Settings → Blocking and protection (the blocked apps first, then a search over the installed ones).
+`core/Blocklist.kt` holds the defaults; `Settings.blockedApps`, `blockedSites`, `checkedBrowsers` and `blockedBrowsers` hold what's in force, edited in Settings → Blocking and protection (the blocked apps first, then a search over the installed ones).
 - **Apps**: video and social apps (YouTube, TikTok's two builds, Netflix, BBC iPlayer, Twitch, Webtoon, Snapchat, Bluesky, Discord, LinkedIn).
 - **Sites**: the same services' sites. A site matches its subdomains, and an entry with a path matches its sub-paths (`Blocklist.blockedSite`).
 - **Browsers blocked outright**: Firefox (three builds) and Tor, whose address bars aren't read.

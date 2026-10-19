@@ -37,7 +37,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.core.Chunk
-import com.thomaswcode.decrastination.data.Settings
+import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.ui.AppTheme
 import com.thomaswcode.decrastination.ui.FelixFab
 import com.thomaswcode.decrastination.ui.Format

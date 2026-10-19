@@ -1,7 +1,5 @@
 package com.thomaswcode.decrastination.core
 
-import com.thomaswcode.decrastination.data.AssessLater
-import com.thomaswcode.decrastination.data.FelixState
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
@@ -175,7 +173,7 @@ data class Proposal(
  * Something the chat does for you beyond a change (AI-14): a step of a task ticked, or a task shown;
  * since 16 Oct (your call: he changes everything) a step unticked, a task of yours done, open again
  * or deleted, and a setting about the work set, [setting] to [value]
- * ([com.thomaswcode.decrastination.data.FelixSettings]; [taskId] empty).
+ * ([FelixSettings]; [taskId] empty).
  */
 @Serializable
 data class ChatAction(val type: Type, val taskId: String, val stepIndex: Int? = null, val setting: String? = null, val value: String? = null) {
@@ -276,7 +274,7 @@ object ChatActs {
      * still gone, and none of the cards that had added it made again since (Redo makes it anew); a
      * setting still as it was set.
      */
-    fun canUndo(act: Act, tasks: List<TaskItem>, settings: com.thomaswcode.decrastination.data.Settings, messages: List<ChatMessage>): Boolean {
+    fun canUndo(act: Act, tasks: List<TaskItem>, settings: Settings, messages: List<ChatMessage>): Boolean {
         if (act.undone) return false
         val a = act.action ?: return false
         val task = tasks.firstOrNull { it.id == a.taskId }
@@ -288,7 +286,7 @@ object ChatActs {
             ChatAction.Type.Done -> task?.isOpen == false && (task.source == Source.Own || task.tickDone)
             ChatAction.Type.Reopen -> task != null && act.was != null && asReopened(task, act.was)
             ChatAction.Type.Delete -> act.was != null && task == null && !redone(act.cards, messages)
-            ChatAction.Type.Setting -> act.before != null && com.thomaswcode.decrastination.data.FelixSettings.field(a.setting.orEmpty())?.get(settings) == act.after
+            ChatAction.Type.Setting -> act.before != null && FelixSettings.field(a.setting.orEmpty())?.get(settings) == act.after
         }
     }
 

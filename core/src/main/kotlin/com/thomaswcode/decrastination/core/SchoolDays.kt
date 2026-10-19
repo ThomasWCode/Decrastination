@@ -1,9 +1,5 @@
 package com.thomaswcode.decrastination.core
 
-import com.thomaswcode.decrastination.data.Settings
-import com.thomaswcode.decrastination.data.Window
-import com.thomaswcode.decrastination.sources.powerplanner.PowerPlannerItems
-import com.thomaswcode.decrastination.sources.powerplanner.Timetable
 import java.time.LocalDate
 
 /** What a stretch of a day's planning time is (PL-15): at home in the evening, or at school. */

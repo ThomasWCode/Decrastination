@@ -2,10 +2,10 @@ package com.thomaswcode.decrastination.learn
 
 import com.thomaswcode.decrastination.core.Calibration
 import com.thomaswcode.decrastination.core.Kind
+import com.thomaswcode.decrastination.core.Window
 import com.thomaswcode.decrastination.data.ActivityLog
 import com.thomaswcode.decrastination.data.SlotOutcome
 import com.thomaswcode.decrastination.data.WeekRollup
-import com.thomaswcode.decrastination.data.Window
 import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalDate

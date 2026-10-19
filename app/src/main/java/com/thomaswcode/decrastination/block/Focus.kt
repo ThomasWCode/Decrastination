@@ -1,5 +1,6 @@
 package com.thomaswcode.decrastination.block
 
+import com.thomaswcode.decrastination.core.Blocklist
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.Chunk
 import com.thomaswcode.decrastination.core.EarnsBy
@@ -21,11 +22,11 @@ import com.thomaswcode.decrastination.data.Keeping
 import com.thomaswcode.decrastination.data.PhotoDone
 import com.thomaswcode.decrastination.data.Rewarded
 import com.thomaswcode.decrastination.data.RuntimeState
-import com.thomaswcode.decrastination.data.Settings
+import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.data.SlotOutcome
 import com.thomaswcode.decrastination.data.SlotRecord
 import com.thomaswcode.decrastination.data.TaskState
-import com.thomaswcode.decrastination.sources.anki.AnkiRules
+import com.thomaswcode.decrastination.core.AnkiRules
 import java.time.Instant
 import java.time.LocalDate
 import java.util.UUID

@@ -1,7 +1,6 @@
 package com.thomaswcode.decrastination.core
 
 import com.thomaswcode.decrastination.Fixtures
-import com.thomaswcode.decrastination.data.Settings
 import kotlin.test.Test
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue

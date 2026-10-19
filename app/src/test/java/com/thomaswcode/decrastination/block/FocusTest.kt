@@ -28,7 +28,7 @@ import com.thomaswcode.decrastination.data.PhotoDone
 import com.thomaswcode.decrastination.data.SlotRecord
 import com.thomaswcode.decrastination.data.SourceStatus
 import com.thomaswcode.decrastination.data.RuntimeState
-import com.thomaswcode.decrastination.data.Settings
+import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.data.TaskState
 import java.io.File
 import java.nio.file.Files

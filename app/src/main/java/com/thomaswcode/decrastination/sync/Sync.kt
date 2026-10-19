@@ -8,11 +8,11 @@ import android.util.Log
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.core.InstructionState
 import com.thomaswcode.decrastination.core.Instructions
+import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.WallClock
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.RuntimeState
-import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.data.TaskState
 import com.thomaswcode.decrastination.learn.CalendarEvent
 import com.thomaswcode.decrastination.learn.CalendarTime

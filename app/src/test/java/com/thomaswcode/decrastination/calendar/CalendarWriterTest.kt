@@ -21,7 +21,7 @@ import com.thomaswcode.decrastination.data.CalendarVersions
 import com.thomaswcode.decrastination.data.ChatMigration
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.RuntimeState
-import com.thomaswcode.decrastination.data.Settings
+import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.data.TaskState
 import java.io.File
 import java.nio.file.Files

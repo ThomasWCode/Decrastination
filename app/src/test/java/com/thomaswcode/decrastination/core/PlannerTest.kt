@@ -2,14 +2,9 @@ package com.thomaswcode.decrastination.core
 
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.Fixtures.LONDON
-import com.thomaswcode.decrastination.data.Settings
-import com.thomaswcode.decrastination.data.Window
-import com.thomaswcode.decrastination.sources.anki.AnkiRules
 import com.thomaswcode.decrastination.sources.powerplanner.ClassesResponse
 import com.thomaswcode.decrastination.sources.powerplanner.AgendaResponse
-import com.thomaswcode.decrastination.sources.powerplanner.PowerPlannerItems
 import com.thomaswcode.decrastination.sources.powerplanner.SemesterResponse
-import com.thomaswcode.decrastination.sources.powerplanner.Timetable
 import com.thomaswcode.decrastination.sources.teams.TeamsRows
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject

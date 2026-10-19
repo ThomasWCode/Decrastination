@@ -6,11 +6,14 @@ import com.thomaswcode.decrastination.block.BlockPolicy
 import com.thomaswcode.decrastination.block.Focus
 import com.thomaswcode.decrastination.core.About
 import com.thomaswcode.decrastination.core.Act
+import com.thomaswcode.decrastination.core.AssessLater
 import com.thomaswcode.decrastination.core.ChatAction
 import com.thomaswcode.decrastination.core.ChatActs
 import com.thomaswcode.decrastination.core.ChatMessage
 import com.thomaswcode.decrastination.core.ChatState
+import com.thomaswcode.decrastination.core.CheckInDraft
 import com.thomaswcode.decrastination.core.Duplicates
+import com.thomaswcode.decrastination.core.FelixSettings
 import com.thomaswcode.decrastination.core.Given
 import com.thomaswcode.decrastination.core.Instruction
 import com.thomaswcode.decrastination.core.InstructionState
@@ -24,16 +27,14 @@ import com.thomaswcode.decrastination.core.OwnTask
 import com.thomaswcode.decrastination.core.OwnTasks
 import com.thomaswcode.decrastination.core.ProposalState
 import com.thomaswcode.decrastination.core.SchoolCalendar
+import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Speaker
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.WallClock
 import com.thomaswcode.decrastination.data.ActivityLog
-import com.thomaswcode.decrastination.data.AssessLater
-import com.thomaswcode.decrastination.data.FelixSettings
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.RuntimeState
-import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.data.TaskState
 import com.thomaswcode.decrastination.enrich.Called
 import com.thomaswcode.decrastination.enrich.Found
@@ -164,12 +165,12 @@ class Conversation(
         // In quiet hours the form's reminder goes instead, held as the routine ones are till the morning.
         if (BlockPolicy.isQuiet(now, clock.zone(), settings.value)) return false
         chat.update { s -> s.copy(messages = s.messages.map { if (it.from == Speaker.Felix && it.kind == MessageKind.CheckIn && it.answeredAt == null) it.copy(answeredAt = now) else it }) }
-        askNext(CheckInFlow.Draft(week), now)
+        askNext(CheckInDraft(week), now)
         return notices.shown(Channels.FELIX)
     }
 
     /** [draft]'s question as his message, in the app's words, with its replies, the draft kept with it: so its reply comes back here. */
-    private suspend fun askNext(draft: CheckInFlow.Draft, now: Long, again: Boolean = false) {
+    private suspend fun askNext(draft: CheckInDraft, now: Long, again: Boolean = false) {
         val text = (if (again) FelixWords.CHECK_IN_AGAIN else "") + CheckInFlow.question(draft)
         val question = ChatMessage(UUID.randomUUID().toString(), Speaker.Felix, text, now, kind = MessageKind.CheckIn, byApp = true, suggestedReplies = CheckInFlow.replies(draft, log.value, clock.zone()))
         outbox.send(question) { it.copy(checkInDraft = draft) }
@@ -752,20 +753,23 @@ class Conversation(
             ChatAction.Type.TickStep -> step?.done == true && focus.untickBlock(task!!.id, a.stepIndex!!, step.title, reopen = true)
             ChatAction.Type.UntickStep -> step?.done == false && task!!.isOpen && tick(task, a.stepIndex!!, step.title)
             ChatAction.Type.Done -> task?.isOpen == false && (task.source == Source.Own || task.tickDone) && run { owners.reopenOwnTask(task.id); open(task.id) == true }
-            ChatAction.Type.Reopen -> task?.isOpen == true && act.was != null && refinish(act.was)
+            ChatAction.Type.Reopen -> task?.isOpen == true && act.was.let { was -> was != null && refinish(was) }
             // Not once a card that had added it is made again: that's the task anew.
-            ChatAction.Type.Delete -> act.was != null && task == null && !ChatActs.redone(act.cards, chat.value.messages) && run {
-                restoreTask(act.was)
-                relink(act.cards, act.was.id)
-                open(act.was.id) != null
+            ChatAction.Type.Delete -> act.was.let { was ->
+                was != null && task == null && !ChatActs.redone(act.cards, chat.value.messages) && run {
+                    restoreTask(was)
+                    relink(act.cards, was.id)
+                    open(was.id) != null
+                }
             }
             ChatAction.Type.Setting -> {
                 val field = FelixSettings.field(a.setting.orEmpty())
                 var back = false
-                if (field != null && act.before != null) {
+                val before = act.before
+                if (field != null && before != null) {
                     owners.changeSettings { s ->
                         if (field.get(s) != act.after) return@changeSettings s
-                        field.set(s, act.before)?.also { back = true } ?: s
+                        field.set(s, before)?.also { back = true } ?: s
                     }
                 }
                 if (back) ports.scheduleReminders()

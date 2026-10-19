@@ -9,11 +9,11 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.app.NotificationManagerCompat
 import com.thomaswcode.decrastination.block.BlockPolicy
+import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.WallClock
 import com.thomaswcode.decrastination.data.HeldNotification
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.RuntimeState
-import com.thomaswcode.decrastination.data.Settings
 import java.time.Instant
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch

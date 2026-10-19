@@ -1,5 +1,8 @@
 package com.thomaswcode.decrastination.sources.powerplanner
 
+import com.thomaswcode.decrastination.core.PpClass
+import com.thomaswcode.decrastination.core.PpItem
+import com.thomaswcode.decrastination.core.Timetable
 import com.thomaswcode.decrastination.net.Http
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerialName
@@ -130,36 +133,3 @@ data class ClassesResponse(
     @SerialName("Classes") val classes: List<PpClass>? = null,
     @SerialName("Error") override val error: String? = null,
 ) : WithError
-
-/** One agenda item. `ItemType` 5 is a task (Homework in the API), 6 an event (Exam). */
-@Serializable
-data class PpItem(
-    @SerialName("Identifier") val identifier: String,
-    @SerialName("Name") val name: String = "",
-    @SerialName("ShortDetails") val details: String? = null,
-    @SerialName("Date") val date: String? = null,
-    @SerialName("EndTime") val endTime: String? = null,
-    @SerialName("ClassIdentifier") val classIdentifier: String? = null,
-    @SerialName("ItemType") val itemType: Int = 0,
-    @SerialName("PercentComplete") val percentComplete: Double = 0.0,
-)
-
-@Serializable
-data class PpClass(
-    @SerialName("Identifier") val identifier: String,
-    @SerialName("Name") val name: String = "",
-    @SerialName("Schedules") val schedules: List<PpSchedule>? = null,
-)
-
-/** A timetable slot. `DayOfWeek` is .NET's (0 is Sunday); `ScheduleWeek` 1, 2, or 3 for both. */
-@Serializable
-data class PpSchedule(
-    @SerialName("StartTime") val startTime: String,
-    @SerialName("EndTime") val endTime: String,
-    @SerialName("DayOfWeek") val dayOfWeek: Int,
-    @SerialName("ScheduleWeek") val scheduleWeek: Int = 3,
-)
-
-/** The semester's classes and their two-week timetable; kept with the tasks between reads (DX-09). */
-@Serializable
-data class Timetable(val weekOneStartsOn: String?, val classes: List<PpClass>)

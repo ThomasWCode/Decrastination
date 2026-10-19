@@ -2,10 +2,10 @@ package com.thomaswcode.decrastination.learn
 
 import android.content.Context
 import com.thomaswcode.decrastination.AppGraph
+import com.thomaswcode.decrastination.core.AssessLater
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.data.ActivityLog
-import com.thomaswcode.decrastination.data.AssessLater
 
 /**
  * The quick self-assessment after each verified completion (docs/spec/learning.md, item 5): harder,

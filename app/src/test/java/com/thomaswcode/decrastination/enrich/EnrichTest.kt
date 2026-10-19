@@ -2,6 +2,7 @@ package com.thomaswcode.decrastination.enrich
 
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.Fixtures.LONDON
+import com.thomaswcode.decrastination.core.AnkiRules
 import com.thomaswcode.decrastination.core.Enrichment
 import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.core.Kind
@@ -11,7 +12,6 @@ import com.thomaswcode.decrastination.core.Status
 import com.thomaswcode.decrastination.core.SubStep
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.withEnrichment
-import com.thomaswcode.decrastination.sources.anki.AnkiRules
 import com.thomaswcode.decrastination.sources.gmail.GmailThreads
 import kotlin.test.AfterTest
 import kotlin.test.Test
@@ -568,7 +568,7 @@ class AnswersTest {
     @Test
     fun `a piece's first steps are read, asked once for its task as it is, and kept for today and tomorrow`() {
         val task = assignment("1. Read pages 40-44.\n2. Write the essay.").copy(dueAt = Fixtures.at("2026-10-09T23:59"))
-        val chunk = com.thomaswcode.decrastination.core.Planner.plan(com.thomaswcode.decrastination.core.Planner.Input(listOf(task), NOW, LONDON, com.thomaswcode.decrastination.data.Settings(), windows = mapOf(java.time.LocalDate.parse("2026-10-09") to listOf(com.thomaswcode.decrastination.core.DayWindow(17 * 60, 22 * 60, com.thomaswcode.decrastination.core.WindowKind.Evening)))))
+        val chunk = com.thomaswcode.decrastination.core.Planner.plan(com.thomaswcode.decrastination.core.Planner.Input(listOf(task), NOW, LONDON, com.thomaswcode.decrastination.core.Settings(), windows = mapOf(java.time.LocalDate.parse("2026-10-09") to listOf(com.thomaswcode.decrastination.core.DayWindow(17 * 60, 22 * 60, com.thomaswcode.decrastination.core.WindowKind.Evening)))))
         val piece = chunk.todaySlots.first { it.kind == com.thomaswcode.decrastination.core.SlotKind.Work }.chunk!!
         val made = MicroPlans.parse("""{"first":"Open the essay title and read it aloud","next":["List three points","Write the first paragraph","An extra"],"doneWhen":"A paragraph a point"}""", piece, task, NOW)!!
         assertEquals(listOf("List three points", "Write the first paragraph"), made.next)

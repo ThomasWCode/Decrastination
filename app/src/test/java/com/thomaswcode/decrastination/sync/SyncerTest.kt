@@ -1,17 +1,17 @@
 package com.thomaswcode.decrastination.sync
 
+import com.thomaswcode.decrastination.core.AnkiDay
 import com.thomaswcode.decrastination.core.Fetched
 import com.thomaswcode.decrastination.core.FixedClock
 import com.thomaswcode.decrastination.core.Kind
+import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Status
 import com.thomaswcode.decrastination.data.JsonStore
-import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.data.TaskState
 import com.thomaswcode.decrastination.sources.ReadContext
 import com.thomaswcode.decrastination.sources.SourceRead
 import com.thomaswcode.decrastination.sources.TaskSource
-import com.thomaswcode.decrastination.sources.anki.AnkiDay
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
@@ -64,7 +64,7 @@ class SyncerTest {
 
     @Test
     fun `the timetable read is kept, and a failed read leaves it as it was`() = runTest {
-        val timetable = com.thomaswcode.decrastination.sources.powerplanner.Timetable("2026-08-24T00:00:00", emptyList())
+        val timetable = com.thomaswcode.decrastination.core.Timetable("2026-08-24T00:00:00", emptyList())
         val planner = FakeSource(Source.PowerPlanner) { SourceRead(emptyList(), timetable = timetable) }
         val syncer = syncer(listOf(planner))
         syncer.sync()

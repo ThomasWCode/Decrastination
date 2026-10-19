@@ -1,6 +1,5 @@
 package com.thomaswcode.decrastination.core
 
-import com.thomaswcode.decrastination.data.Settings
 import java.time.LocalDate
 import java.time.ZoneId
 

@@ -860,8 +860,9 @@ private fun Yours(graph: AppGraph, message: ChatMessage, quote: ChatMessage?, na
         }
         Time(message, zone)
         // While it's answered, he's typing ([Typing]), under it.
-        if (message.answeredAt == null && message.note != null) {
-            Text(message.note, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 6.dp))
+        val note = message.note
+        if (message.answeredAt == null && note != null) {
+            Text(note, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 6.dp))
             Row {
                 TextButton(onClick = { graph.scope.launch { graph.conversation.answerChat(retry = true) } }) { Text("Try again") }
                 TextButton(onClick = { scope.launch { graph.conversation.withdrawQuestion() } }) { Text("Take back") }

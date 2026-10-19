@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Decrastination is a personal Android app, sideloaded onto one phone. It gathers the owner's school work (Teams assignments, Power Planner, starred Gmail, AnkiDroid decks, tasks of their own), plans it into timed slots, writes them to the calendar, blocks distracting apps while work is due (an accessibility service), and talks through Felix, a persona Claude writes as, in a chat and in notifications. Kotlin, Jetpack Compose (Material 3), Glance for the widget; the app's state is JSON files; Claude's API through the Anthropic Java SDK. `README.md` has more.
+Decrastination is a personal Android app, sideloaded onto one phone. It gathers the owner's school work (Teams assignments, Power Planner, starred Gmail, AnkiDroid decks, tasks of their own), plans it into timed slots, writes them to the calendar, blocks distracting apps while work is due (an accessibility service), and talks through Felix, a persona Claude writes as, in a chat and in notifications. Kotlin, Jetpack Compose (Material 3), Glance for the widget; the pure rules and domain types in `:core`, a plain Kotlin module; the app's state is JSON files; Claude's API through the Anthropic Java SDK. `README.md` has more.
 
 Every Claude session in this repository reads this file: the reviewer GitHub Actions runs on a pull request, and Claude Code working here. The last two sections are each for one of them, *Working in a local session* for Claude Code and *Reviewing a pull request in GitHub Actions* for the reviewer; the rest holds for every session.
 

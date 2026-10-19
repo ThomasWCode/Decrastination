@@ -16,7 +16,7 @@ import com.thomaswcode.decrastination.core.SchoolDays
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.data.ActivityLog
 import com.thomaswcode.decrastination.data.CompletionRecord
-import com.thomaswcode.decrastination.data.Settings
+import com.thomaswcode.decrastination.core.Settings
 import java.time.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
