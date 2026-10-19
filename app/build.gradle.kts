@@ -58,6 +58,11 @@ android {
     testOptions {
         unitTests.isReturnDefaultValues = true
     }
+
+    // core's code linted with the app's, against its minSdk (:core is plain Kotlin, with Android's lint applied).
+    lint {
+        checkDependencies = true
+    }
 }
 
 // The golden prompts written again (AR-01, GoldenPromptsTest): ./gradlew testDebugUnitTest -PupdateGolden=true
