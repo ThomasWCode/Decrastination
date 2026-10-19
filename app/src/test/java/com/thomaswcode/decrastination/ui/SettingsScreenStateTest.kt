@@ -116,9 +116,9 @@ class SettingsScreenStateTest {
     @Test
     fun `the lines, the sites and the subjects as typed`() {
         val screen = SettingsScreenState(Settings())
-        screen.profileTyped("  Year 12, sciences \n\n  Plays the cello  ")
-        assertEquals(listOf("Year 12, sciences", "Plays the cello"), screen.draft.profileLines)
-        assertEquals("  Year 12, sciences \n\n  Plays the cello  ", screen.raw[SettingsScreenState.PROFILE])
+        screen.profileTyped("  Works best before dinner \n\n  Plays the cello  ")
+        assertEquals(listOf("Works best before dinner", "Plays the cello"), screen.draft.profileLines)
+        assertEquals("  Works best before dinner \n\n  Plays the cello  ", screen.raw[SettingsScreenState.PROFILE])
         screen.sitesTyped("Example.com\nexample.com\n\n news.example.org/sport ")
         assertEquals(listOf("example.com", "news.example.org/sport"), screen.draft.blockedSites)
         screen.subject("12Ph", "Physics")
