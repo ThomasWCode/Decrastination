@@ -1,6 +1,5 @@
 package com.thomaswcode.decrastination.core
 
-import com.thomaswcode.decrastination.sources.anki.AnkiRules
 import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalDate

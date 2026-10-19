@@ -1,10 +1,10 @@
 package com.thomaswcode.decrastination.enrich
 
+import com.thomaswcode.decrastination.core.AnkiRules
 import com.thomaswcode.decrastination.core.Enrichment
 import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.core.SubStep
 import com.thomaswcode.decrastination.core.TaskItem
-import com.thomaswcode.decrastination.sources.anki.AnkiRules
 
 /**
  * Says more about a task than its source does (docs/spec/readings.md): the rules always, the

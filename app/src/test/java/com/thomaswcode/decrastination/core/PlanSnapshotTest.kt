@@ -13,9 +13,6 @@ import com.thomaswcode.decrastination.enrich.KeyProblem
 import com.thomaswcode.decrastination.enrich.ModelGateway
 import com.thomaswcode.decrastination.learn.EventJudge
 import com.thomaswcode.decrastination.plan.Planning
-import com.thomaswcode.decrastination.sources.powerplanner.PpClass
-import com.thomaswcode.decrastination.sources.powerplanner.PpSchedule
-import com.thomaswcode.decrastination.sources.powerplanner.Timetable
 import java.io.File
 import java.nio.file.Files
 import java.time.Instant

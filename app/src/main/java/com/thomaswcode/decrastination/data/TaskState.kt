@@ -1,9 +1,9 @@
 package com.thomaswcode.decrastination.data
 
+import com.thomaswcode.decrastination.core.AnkiDay
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
-import com.thomaswcode.decrastination.sources.anki.AnkiDay
-import com.thomaswcode.decrastination.sources.powerplanner.Timetable
+import com.thomaswcode.decrastination.core.Timetable
 import kotlinx.serialization.Serializable
 
 /** Every task, open or recently finished, and how each source's last read went. Kept in `tasks.json`. */

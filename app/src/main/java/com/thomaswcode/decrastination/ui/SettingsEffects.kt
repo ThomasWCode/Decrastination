@@ -4,7 +4,7 @@ import com.thomaswcode.decrastination.core.DayKind
 import com.thomaswcode.decrastination.core.SchoolCalendar
 import com.thomaswcode.decrastination.core.SchoolDays
 import com.thomaswcode.decrastination.core.Settings
-import com.thomaswcode.decrastination.sources.powerplanner.Timetable
+import com.thomaswcode.decrastination.core.Timetable
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.format.TextStyle

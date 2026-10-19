@@ -1,6 +1,5 @@
 package com.thomaswcode.decrastination.core
 
-import com.thomaswcode.decrastination.sources.anki.AnkiRules
 import kotlin.math.floor
 import kotlin.math.roundToInt
 import kotlinx.serialization.Serializable

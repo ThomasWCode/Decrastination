@@ -2,6 +2,7 @@ package com.thomaswcode.decrastination.enrich
 
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.Fixtures.LONDON
+import com.thomaswcode.decrastination.core.AnkiRules
 import com.thomaswcode.decrastination.core.Enrichment
 import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.core.Kind
@@ -11,7 +12,6 @@ import com.thomaswcode.decrastination.core.Status
 import com.thomaswcode.decrastination.core.SubStep
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.withEnrichment
-import com.thomaswcode.decrastination.sources.anki.AnkiRules
 import com.thomaswcode.decrastination.sources.gmail.GmailThreads
 import kotlin.test.AfterTest
 import kotlin.test.Test

@@ -52,7 +52,7 @@ import com.thomaswcode.decrastination.learn.EventJudge
 import com.thomaswcode.decrastination.learn.Review
 import com.thomaswcode.decrastination.protect.Watchdog
 import com.thomaswcode.decrastination.sources.anki.AnkiProvider
-import com.thomaswcode.decrastination.sources.anki.AnkiRules
+import com.thomaswcode.decrastination.core.AnkiRules
 import com.thomaswcode.decrastination.sync.SyncWorker
 import com.thomaswcode.decrastination.ui.OpenTaskActivity
 import java.io.File

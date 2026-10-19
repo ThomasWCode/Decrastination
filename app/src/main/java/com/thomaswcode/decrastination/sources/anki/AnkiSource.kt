@@ -6,6 +6,8 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import androidx.core.net.toUri
+import com.thomaswcode.decrastination.core.AnkiRules
+import com.thomaswcode.decrastination.core.Deck
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.sources.ReadContext
 import com.thomaswcode.decrastination.sources.SourceRead

@@ -2,6 +2,9 @@ package com.thomaswcode.decrastination.sources.anki
 
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.Fixtures.LONDON
+import com.thomaswcode.decrastination.core.AnkiDay
+import com.thomaswcode.decrastination.core.AnkiRules
+import com.thomaswcode.decrastination.core.Deck
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.SourceValues

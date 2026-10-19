@@ -3,6 +3,7 @@ package com.thomaswcode.decrastination.sources.powerplanner
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.Fixtures.LONDON
 import com.thomaswcode.decrastination.core.Settings
+import com.thomaswcode.decrastination.core.Timetable
 import com.thomaswcode.decrastination.data.Secret
 import com.thomaswcode.decrastination.data.SecretCipher
 import com.thomaswcode.decrastination.data.SecretStore
