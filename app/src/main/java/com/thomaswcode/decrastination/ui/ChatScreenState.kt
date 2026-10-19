@@ -111,7 +111,8 @@ class ChatScreenState {
      */
     fun offer(last: ChatMessage?, checkInUnderWay: Boolean) {
         val question = last?.takeIf { Replies.waiting(it, checkInUnderWay) && it.id != declined }
-        if (question != null && (replyingTo == null || offered)) {
+        // A reply still being read back from the archive is one you chose: it isn't taken over ([restoringReply]).
+        if (question != null && restoringReply == null && (replyingTo == null || offered)) {
             replyingTo = question
             offered = true
         } else if (question == null && offered) {

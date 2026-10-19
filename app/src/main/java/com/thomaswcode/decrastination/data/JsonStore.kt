@@ -114,12 +114,12 @@ class JsonStore<T>(
      * Writes what was kept of a file that didn't read whole over it, now that its [problem] is on
      * record: read again at the next start, it would be found unreadable again, and said again,
      * however often you'd seen it. Till then it's left as it was, so a start cut short first finds
-     * it, and says it, again.
+     * it, and says it, again. True where it's written now: the file was read, and its copy made.
      */
-    suspend fun keepRecovered() {
-        mutex.withLock {
-            if (unsaved && withContext(Dispatchers.IO) { runCatching { write(_state.value) } }.isSuccess) unsaved = false
-        }
+    suspend fun keepRecovered(): Boolean = mutex.withLock {
+        val wrote = unsaved && withContext(Dispatchers.IO) { runCatching { write(_state.value) } }.isSuccess
+        if (wrote) unsaved = false
+        wrote
     }
 
     private fun load(): T {
