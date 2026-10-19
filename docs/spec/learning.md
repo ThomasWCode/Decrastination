@@ -122,7 +122,7 @@ It writes a note of at most five lines, opening on how last week's change went, 
 - a school day's start and end (`weekdayHoursStart`, `weekdayHoursEnd`), each within an hour of where it is.
 
 It never changes `boxMin` (a piece's length is yours: your decision), what's blocked, quiet hours, protection, or any hours but a school day's; the free-time rate is the only blocking setting in its reach.
-Its changes apply at once, armed or not (`AppGraph.applyReviewChanges`, IMP-P2-015), in place of any waiting change of yours to the same setting; each is kept with its value before it (`WeeklyReview.changes`, `settingsBefore`).
+Its changes apply at once, armed or not (`Protection.applyReviewChanges`, IMP-P2-015), in place of any waiting change of yours to the same setting; each is kept with its value before it (`WeeklyReview.changes`, `settingsBefore`).
 
 After it, what Felix remembers is tidied once it's past 70 % of its room (AI-21, [felix.md](felix.md)); the week's totals are kept (`Stats.rollup`, PL-10); the week's summary for home is written (NF-02); and Felix's message in the chat says it, with *Open the review* (`Conversation.reviewed`), on his notification.
 The Reviews page (LR-01) lists each review with its note, each change with *Undo* while it's still what the review left (a change of yours, so once armed one that loosens blocking waits).
