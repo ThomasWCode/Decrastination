@@ -8,6 +8,7 @@ import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -15,6 +16,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 
 /**
  * The chat's archive (D-96): the messages moved out of its live window, a month a file
@@ -53,8 +55,11 @@ class ChatArchiveStore(private val dir: File, private val clock: () -> Long = Sy
         JsonStore(File(dir, file), ChatArchive.serializer(), ::ChatArchive, clock = clock, lazily = true).also { store -> store.onProblem = { onProblem?.invoke(it) } }
     }
 
-    /** Whether it holds any message: by its files' sizes, where they aren't read. */
-    val holdsAny: Boolean get() = files().any { month(it).holdsAny }
+    /**
+     * Whether it holds any message: whether it has a month's file, none read. A month emptied has its file
+     * let go ([update], [clear]), so one there holds messages, or did and couldn't be read: shown, and said.
+     */
+    val holdsAny: Boolean get() = files().isNotEmpty()
 
     /** All of it, oldest first: every month read. */
     val value: ChatArchive get() = ChatArchive(files().flatMap { month(it).value.messages })
@@ -97,6 +102,10 @@ class ChatArchiveStore(private val dir: File, private val clock: () -> Long = Sy
      */
     suspend fun add(moved: List<ChatMessage>): Unit = writing.withLock {
         if (moved.isEmpty()) return@withLock
+        withContext(Dispatchers.IO) { addNow(moved) }
+    }
+
+    private suspend fun addNow(moved: List<ChatMessage>) {
         for ((file, messages) in moved.groupBy(::fileOf)) {
             month(file).update { a ->
                 val there = a.messages.mapTo(HashSet()) { it.id }
@@ -109,25 +118,40 @@ class ChatArchiveStore(private val dir: File, private val clock: () -> Long = Sy
 
     /** Message [id] marked answered at [at], where it's there and waiting: the months read back from the newest till it's found. */
     suspend fun answered(id: String, at: Long): Unit = writing.withLock {
-        for (file in files().asReversed()) {
-            val store = month(file)
-            if (store.value.messages.none { it.id == id }) continue
-            if (store.value.messages.any { it.id == id && it.answeredAt == null }) {
-                store.update { a -> a.copy(messages = a.messages.map { if (it.id == id && it.answeredAt == null) it.copy(answeredAt = at) else it }) }
-                _changes.update { it + 1 }
+        withContext(Dispatchers.IO) {
+            for (file in files().asReversed()) {
+                val store = month(file)
+                if (store.value.messages.none { it.id == id }) continue
+                if (store.value.messages.any { it.id == id && it.answeredAt == null }) {
+                    store.update { a -> a.copy(messages = a.messages.map { if (it.id == id && it.answeredAt == null) it.copy(answeredAt = at) else it }) }
+                    _changes.update { it + 1 }
+                }
+                break
             }
-            return@withLock
         }
+    }
+
+    /** All of it let go (*Clear the chat*, a reset): every month's file deleted, none read. */
+    suspend fun clear(): Unit = writing.withLock {
+        withContext(Dispatchers.IO) {
+            for (file in files()) {
+                months.remove(file)
+                File(dir, file).delete()
+            }
+        }
+        _changes.update { it + 1 }
     }
 
     /**
      * All of it made what [transform] makes of it (a restore, a reset, *Clear the chat*): written back a
      * month a file, and a month left with nothing its file let go.
      */
-    suspend fun update(transform: (ChatArchive) -> ChatArchive): ChatArchive = writing.withLock {
+    suspend fun update(transform: (ChatArchive) -> ChatArchive): ChatArchive = writing.withLock { withContext(Dispatchers.IO) { updateNow(transform) } }
+
+    private suspend fun updateNow(transform: (ChatArchive) -> ChatArchive): ChatArchive {
         val was = value
         val next = transform(was)
-        if (next.messages == was.messages) return@withLock next
+        if (next.messages == was.messages) return next
         val byMonth = next.messages.groupBy(::fileOf)
         for (file in (files() + byMonth.keys).toSortedSet()) {
             val messages = byMonth[file].orEmpty()
@@ -138,7 +162,7 @@ class ChatArchiveStore(private val dir: File, private val clock: () -> Long = Sy
             }
         }
         _changes.update { it + 1 }
-        next
+        return next
     }
 
     /** Its months' files that couldn't be read whole, of those read so far. */

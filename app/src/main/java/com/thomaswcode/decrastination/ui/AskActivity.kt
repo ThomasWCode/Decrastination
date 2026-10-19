@@ -190,7 +190,8 @@ class AskActivity : ComponentActivity() {
             val inWindow = replying?.let { id -> graph.chat.value.messages.firstOrNull { it.id == id } }
             screen.restored(savedInstanceState.getInt(STATE_EARLIER), inWindow, savedInstanceState.getBoolean(STATE_OFFERED))
             if (replying != null && inWindow == null) {
-                lifecycleScope.launch { withContext(Dispatchers.IO) { graph.conversation.outbox.find(replying) }?.let(screen::replyTo) }
+                screen.restoringReply(replying)
+                lifecycleScope.launch { withContext(Dispatchers.IO) { graph.conversation.outbox.find(replying) }?.let(screen::restoredReply) }
             }
         }
         setContent { AppTheme { Screen(graph) } }
@@ -301,7 +302,7 @@ class AskActivity : ComponentActivity() {
         val chat by graph.chat.state.collectAsStateWithLifecycle()
         // The archive read a month at a time, only as it's wanted (D-96): its newest pages as you scroll back
         // to them (or had them before the screen was made again), and the messages replies on screen quote
-        // from it; off the main thread. Till then, whether it holds any is said by its files' sizes.
+        // from it; off the main thread. Till then, whether it holds any is said by whether it has a month's file.
         val archiveChanged by graph.chatArchive.changes.collectAsStateWithLifecycle()
         var quoted by remember { mutableStateOf(emptySet<String>()) }
         val archiveRead by produceState(0 to emptyList<ChatMessage>(), screen.earlier, archiveChanged) {

@@ -99,9 +99,6 @@ class JsonStore<T>(
     /** Whether its file has been read: as it was made, unless [lazily]. */
     val isLoaded: Boolean get() = loaded.isInitialized()
 
-    /** Whether it holds anything but its default, without reading a file not read yet: by the file's size till then. */
-    val holdsAny: Boolean get() = if (isLoaded) value != default() else file.length() > json.encodeToString(serializer, default()).length
-
     /** Applies [transform] and saves the result, if it changed anything. Returns the new state. */
     suspend fun update(transform: (T) -> T): T = mutex.withLock {
         val next = transform(_state.value)

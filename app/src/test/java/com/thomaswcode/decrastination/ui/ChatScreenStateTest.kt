@@ -97,6 +97,29 @@ class ChatScreenStateTest {
     }
 
     @Test
+    fun `a reply restored from the archive comes back only if nothing changed the reply meanwhile`() {
+        val old = his("old", "2026-08-01T10:00")
+        val other = his("other", "2026-10-18T17:00")
+        val screen = ChatScreenState()
+        screen.restored(earlier = 0, replyingTo = null, offered = false)
+        screen.restoringReply("old")
+        screen.restoredReply(old)
+        assertEquals(old, screen.replyingTo)
+        // Another chosen while it was read: that one stays.
+        val again = ChatScreenState()
+        again.restoringReply("old")
+        again.replyTo(other)
+        again.restoredReply(old)
+        assertEquals(other, again.replyingTo)
+        // Let go meanwhile (sent, or the strip's ✕): none.
+        val none = ChatScreenState()
+        none.restoringReply("old")
+        none.replyingTo = null
+        none.restoredReply(old)
+        assertNull(none.replyingTo)
+    }
+
+    @Test
     fun `an archive not read yet has its row, asks for one page till it's read, and a quote further back is shown from what's read of it`() {
         val old = his("old", "2026-08-01T10:00")
         val window = listOf(yours("w1", Fixtures.at("2026-10-18T17:00")).copy(replyTo = "old"))
