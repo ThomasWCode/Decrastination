@@ -11,6 +11,7 @@ import com.thomaswcode.decrastination.core.Planner
 import com.thomaswcode.decrastination.core.SchoolCalendar
 import com.thomaswcode.decrastination.core.SchoolDays
 import com.thomaswcode.decrastination.core.SlotKind
+import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.TaskOverrides
 import com.thomaswcode.decrastination.core.WallClock
 import com.thomaswcode.decrastination.core.overrides
@@ -64,6 +65,19 @@ class Planning(
     draftAhead: suspend (Plan, Long) -> Unit,
     onFailure: (Throwable) -> Unit,
 ) {
+    /**
+     * [state]'s tasks as the plan takes them: each as its instructions say, whatever the task file (a stop
+     * between writing the two, not yet put right: the instructions are what's kept), and work on a task
+     * linked as the same credited to it (DX-15).
+     */
+    fun asPlanned(state: TaskState = tasks.value, applied: List<Instruction> = instructions.value.applied): List<TaskItem> {
+        val overrides = Instructions.taskOverrides(applied)
+        return state.tasks.map { task ->
+            val o = overrides[task.id] ?: TaskOverrides.NONE
+            if (o == task.overrides()) task else task.withOverrides(o)
+        }.let(Duplicates::linksPresent).let(Duplicates::credited)
+    }
+
     /** The plan at [now], of [state] with [applied] instructions and the calendar's [time]: as they are, or a snapshot of them taken once ([chatContext]). */
     fun plan(
         state: TaskState = tasks.value,
@@ -76,13 +90,7 @@ class Planning(
         // Your instructions' days and times, over as far as the plan can reach.
         val today = Instant.ofEpochMilli(now).atZone(zone).toLocalDate()
         val reach = today.plusDays(PLAN_REACH_DAYS)
-        // Each task as its instructions say, whatever the task file (a stop between writing the two,
-        // not yet put right): the instructions are what's kept.
-        val overrides = Instructions.taskOverrides(applied)
-        val tasks = state.tasks.map { task ->
-            val o = overrides[task.id] ?: TaskOverrides.NONE
-            if (o == task.overrides()) task else task.withOverrides(o)
-        }.let(Duplicates::linksPresent).let(Duplicates::credited)
+        val tasks = asPlanned(state, applied)
         // Each day's windows, from the timetable's study periods and the school calendar (PL-15).
         val days = generateSequence(today) { it.plusDays(1) }.takeWhile { it <= reach }.toList()
         val calendar = school.value

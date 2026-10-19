@@ -212,7 +212,7 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
                             val since = graph.clock.now()
                             if (!graph.focus.keepSlot(chunk.key, seenAt = now)) {
                                 snackbar.showSnackbar("That piece has changed since (done, or planned again).")
-                            } else if (snackbar.showSnackbar("Done: ${chunk.label}", actionLabel = "Undo", duration = androidx.compose.material3.SnackbarDuration.Short) == androidx.compose.material3.SnackbarResult.ActionPerformed) {
+                            } else if (snackbar.showSnackbar(listOfNotNull("Done: ${chunk.label}", stillPlanned(graph, chunk.taskId)).joinToString(". "), actionLabel = "Undo", duration = androidx.compose.material3.SnackbarDuration.Short) == androidx.compose.material3.SnackbarResult.ActionPerformed) {
                                 if (!graph.focus.unkeepSlot(chunk.key, since)) snackbar.showSnackbar("It can't be taken back now: its task is finished.")
                             }
                         }
@@ -310,11 +310,12 @@ private fun clock(at: Long, zone: ZoneId) = java.time.Instant.ofEpochMilli(at).a
 
 private fun eventKey(event: CalendarEvent) = "${event.id}@${event.start}"
 
-private fun rowKey(row: DayModel.Row): String = when (row) {
+/** Each row's key in the list, its own however alike two rows are: a slot kept twice is two records, told apart by when. */
+internal fun rowKey(row: DayModel.Row): String = when (row) {
     is DayModel.Row.Window -> "window-${row.start}"
     is DayModel.Row.Event -> "event-${eventKey(row.event)}"
     is DayModel.Row.Planned -> "slot-${row.slot.key}-${row.slot.start}"
-    is DayModel.Row.Recorded -> "record-${row.record.key}-${row.record.start}-${row.record.outcome}"
+    is DayModel.Row.Recorded -> "record-${row.record.key}-${row.record.start}-${row.record.outcome}-${row.record.at}"
     is DayModel.Row.Gap -> "gap-${row.start}"
     is DayModel.Row.Now -> "now"
     is DayModel.Row.Unslotted -> "unslotted"

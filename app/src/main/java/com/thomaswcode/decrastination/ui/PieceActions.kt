@@ -28,7 +28,9 @@ import com.thomaswcode.decrastination.block.PhotoChecks
 import com.thomaswcode.decrastination.enrich.PhotoChecker
 import com.thomaswcode.decrastination.core.Chunk
 import com.thomaswcode.decrastination.core.Plan
+import com.thomaswcode.decrastination.core.Planner
 import com.thomaswcode.decrastination.core.Source
+import com.thomaswcode.decrastination.core.TaskItem
 import java.io.File
 import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
@@ -153,14 +155,35 @@ internal suspend fun keepPiece(graph: AppGraph, piece: Chunk, now: Long): String
     val by = graph.focus.earnsBy(piece)
     val kept = graph.focus.keepSlot(piece.key, seenAt = now)
     val free = Format.minutes(Credit.forSlot(piece.minutes, graph.settings.value.workMinPerFreeMin).roundToInt().coerceAtLeast(1))
-    return when {
-        !kept -> "That piece has changed since (done, or planned again)."
+    val said = when {
+        !kept -> return "That piece has changed since (done, or planned again)."
         by == EarnsBy.Tick -> "Done: $free free."
         by == EarnsBy.Photo -> "Done. A photo check of it earns its $free free."
         by == EarnsBy.Source -> "Done. Its $free free comes once ${piece.source.label} says it's done."
         else -> "Done. It earns no free time: a piece this long earns with a photo check, and this isn't written work."
     }
+    return listOfNotNull(said, stillPlanned(graph, piece.taskId)).joinToString(" ")
 }
+
+/**
+ * What's said once a Done leaves all of [taskId]'s work done but its source's word: its last few
+ * minutes stay planned till the source says it's done (planner.md), so the piece shown again isn't
+ * taken for a Done that didn't take. Null for any other.
+ */
+internal fun stillPlanned(graph: AppGraph, taskId: String): String? {
+    // As the plan takes it: your instructions' values over it, and linked work credited to it.
+    val task = graph.planning.asPlanned().firstOrNull { it.id == taskId && it.isOpen } ?: return null
+    if (!worked(task, graph.runtime.value.calibration.multiplierFor(task))) return null
+    val next = graph.planning.plan().ordered.firstOrNull { it.taskId == taskId } ?: return null
+    return "It stays planned, ${Format.minutes(next.minutes)}, until ${task.source.label} says it's done."
+}
+
+/**
+ * Whether all of [task]'s work is done as the planner sees it: every step ticked, or its minutes worked,
+ * what's left rounding to none as the planner rounds it ([Planner.remaining]).
+ */
+internal fun worked(task: TaskItem, multiplier: Double): Boolean =
+    if (task.subSteps.isNotEmpty()) task.subSteps.all { it.done } else Planner.remaining(task, multiplier).roundToInt() <= 0
 
 /**
  * What can be done with [piece], wherever it's shown (the Plan, the block screen): **Open** goes to
