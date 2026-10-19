@@ -165,9 +165,9 @@ fun TaskSheet(
             if (own) {
                 val draft = OwnTasks.draftWith(task, change) ?: return@launch
                 message = OwnTasks.problem(draft)
-                if (message == null) graph.saveOwnTask(task.sourceId, draft)
+                if (message == null) graph.ownTasks.saveOwnTask(task.sourceId, draft)
             } else {
-                graph.addOwnChange(UUID.randomUUID().toString(), text, About(taskId = task.id, taskTitle = task.title), change)
+                graph.instructions.addOwnChange(UUID.randomUUID().toString(), text, About(taskId = task.id, taskTitle = task.title), change)
             }
         }
     }
@@ -222,8 +222,8 @@ fun TaskSheet(
                     }
                 }
                 when {
-                    own && task.isOpen -> Button(onClick = { scope.launch { graph.finishOwnTask(task.id) } }) { Text("All of it done") }
-                    own -> Button(onClick = { scope.launch { graph.reopenOwnTask(task.id) } }) { Text("Not done") }
+                    own && task.isOpen -> Button(onClick = { scope.launch { graph.ownTasks.finishOwnTask(task.id) } }) { Text("All of it done") }
+                    own -> Button(onClick = { scope.launch { graph.ownTasks.reopenOwnTask(task.id) } }) { Text("Not done") }
                 }
             }
             when {
@@ -265,7 +265,7 @@ fun TaskSheet(
                     onChange = if (changeable) ({ picking = OwnChange.DueOn }) else null,
                     undo = when {
                         own && changeable && task.dueAt != null -> "Clear" to { make(Change(ChangeType.DueBy, taskId = task.id, time = null), "") }
-                        !own && changeable && quick(ChangeType.DueBy) -> "Undo" to { scope.launch { graph.takeBackQuick(task.id, ChangeType.DueBy) } }
+                        !own && changeable && quick(ChangeType.DueBy) -> "Undo" to { scope.launch { graph.instructions.takeBackQuick(task.id, ChangeType.DueBy) } }
                         else -> null
                     },
                 )
@@ -293,7 +293,7 @@ fun TaskSheet(
                         },
                     ).joinToString(". ").takeIf { it.isNotEmpty() },
                     onChange = if (changeable) ({ picking = OwnChange.Minutes }) else null,
-                    undo = if (!own && changeable && quick(ChangeType.Minutes)) "Undo" to { scope.launch { graph.takeBackQuick(task.id, ChangeType.Minutes) } } else null,
+                    undo = if (!own && changeable && quick(ChangeType.Minutes)) "Undo" to { scope.launch { graph.instructions.takeBackQuick(task.id, ChangeType.Minutes) } } else null,
                 )
                 val start = if (own) task.notBefore else task.userFrom
                 val hiddenUntil = task.availableFrom?.takeIf { it > now && !own }
@@ -304,7 +304,7 @@ fun TaskSheet(
                     onChange = if (changeable) ({ picking = OwnChange.StartFrom }) else null,
                     undo = when {
                         own && changeable && task.notBefore != null -> "Clear" to { make(Change(ChangeType.StartFrom, taskId = task.id, time = null), "") }
-                        !own && changeable && quick(ChangeType.StartFrom) -> "Undo" to { scope.launch { graph.takeBackQuick(task.id, ChangeType.StartFrom) } }
+                        !own && changeable && quick(ChangeType.StartFrom) -> "Undo" to { scope.launch { graph.instructions.takeBackQuick(task.id, ChangeType.StartFrom) } }
                         else -> null
                     },
                 )
@@ -337,14 +337,14 @@ fun TaskSheet(
                 next?.let { piece ->
                     OutlinedButton(onClick = {
                         scope.launch {
-                            said = graph.laterToday(piece.key)?.let { "Later today, at ${Format.at(it, now, zone)}: undone in the chat's Your changes" } ?: "No time left today for it"
+                            said = graph.instructions.laterToday(piece.key)?.let { "Later today, at ${Format.at(it, now, zone)}: undone in the chat's Your changes" } ?: "No time left today for it"
                         }
                     }) { Text("Later today") }
                     val tomorrow = today.plusDays(1)
                     if (TaskSheetModel.canGo(task, tomorrow, now, zone)) {
                         OutlinedButton(onClick = {
                             scope.launch {
-                                graph.addOwnChange(UUID.randomUUID().toString(), "Tomorrow", About(taskId = task.id, taskTitle = task.title), Change(ChangeType.OnDay, taskId = task.id, date = tomorrow.toString()))
+                                graph.instructions.addOwnChange(UUID.randomUUID().toString(), "Tomorrow", About(taskId = task.id, taskTitle = task.title), Change(ChangeType.OnDay, taskId = task.id, date = tomorrow.toString()))
                                 said = "Tomorrow: undone in the chat's Your changes"
                             }
                         }) { Text("Tomorrow") }
@@ -387,7 +387,7 @@ fun TaskSheet(
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     FilterChip(
                         selected = home,
-                        onClick = { scope.launch { graph.saveOwnTask(task.sourceId, OwnTasks.draftOf(task).copy(where = if (home) "anywhere" else "home")) } },
+                        onClick = { scope.launch { graph.ownTasks.saveOwnTask(task.sourceId, OwnTasks.draftOf(task).copy(where = if (home) "anywhere" else "home")) } },
                         label = { Text("Home only") },
                     )
                     Text(
@@ -445,7 +445,7 @@ fun TaskSheet(
             confirmButton = {
                 TextButton(onClick = {
                     confirming = null
-                    scope.launch { graph.deleteOwnTask(task.id) }
+                    scope.launch { graph.ownTasks.deleteOwnTask(task.id) }
                 }) { Text("Delete") }
             },
             dismissButton = { TextButton(onClick = { confirming = null }) { Text("Cancel") } },
@@ -458,7 +458,7 @@ fun TaskSheet(
                 TextButton(onClick = {
                     confirming = null
                     val (change, text) = ownChange(task, OwnChange.NotATask, today, zone)
-                    scope.launch { graph.addOwnChange(UUID.randomUUID().toString(), text, About(taskId = task.id, taskTitle = task.title), change) }
+                    scope.launch { graph.instructions.addOwnChange(UUID.randomUUID().toString(), text, About(taskId = task.id, taskTitle = task.title), change) }
                 }) { Text("Not a task") }
             },
             dismissButton = { TextButton(onClick = { confirming = null }) { Text("Cancel") } },

@@ -52,7 +52,7 @@ class CalendarWriter(
     private val provider: CalendarProvider,
     /** A move of yours written back, and why, said ([SlotCalendar.sayRefused]). */
     private val sayRefused: (move: SlotCalendarDiff.HandMove, zone: ZoneId, why: String) -> Unit,
-    /** A move of yours taken as your time: a change of yours, kept and applied at once (`AppGraph.addOwnChange`). */
+    /** A move of yours taken as your time: a change of yours, kept and applied at once ([com.thomaswcode.decrastination.tasks.Instructions.addOwnChange]). */
     private val addOwnChange: suspend (id: String, text: String, about: About, change: Change) -> Unit,
     /** The plan made again ([com.thomaswcode.decrastination.plan.PlanWatcher.poke]). */
     private val replan: () -> Unit,

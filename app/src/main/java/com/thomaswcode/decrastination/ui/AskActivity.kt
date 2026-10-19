@@ -259,7 +259,7 @@ class AskActivity : ComponentActivity() {
         graph.scope.launch {
             graph.conversation.answerChat()
             // On the screen they're shown on: you're waiting on them.
-            graph.readInstructions(interactive = true)
+            graph.instructions.readInstructions(interactive = true)
         }
     }
 
