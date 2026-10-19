@@ -115,6 +115,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.lifecycleScope
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.R
 import com.thomaswcode.decrastination.core.About
@@ -184,7 +185,13 @@ class AskActivity : ComponentActivity() {
         } else {
             about.value = aboutFrom(savedInstanceState)
             chatTab = savedInstanceState.getBoolean(STATE_CHAT_TAB, true)
-            screen.restored(savedInstanceState.getInt(STATE_EARLIER), savedInstanceState.getString(STATE_REPLYING)?.let { graph.conversation.outbox.find(it) }, savedInstanceState.getBoolean(STATE_OFFERED))
+            // The message replied to from the window at once; one scrolled back to, from the archive, off the main thread.
+            val replying = savedInstanceState.getString(STATE_REPLYING)
+            val inWindow = replying?.let { id -> graph.chat.value.messages.firstOrNull { it.id == id } }
+            screen.restored(savedInstanceState.getInt(STATE_EARLIER), inWindow, savedInstanceState.getBoolean(STATE_OFFERED))
+            if (replying != null && inWindow == null) {
+                lifecycleScope.launch { withContext(Dispatchers.IO) { graph.conversation.outbox.find(replying) }?.let(screen::replyTo) }
+            }
         }
         setContent { AppTheme { Screen(graph) } }
     }
@@ -297,9 +304,13 @@ class AskActivity : ComponentActivity() {
         // from it; off the main thread. Till then, whether it holds any is said by its files' sizes.
         val archiveChanged by graph.chatArchive.changes.collectAsStateWithLifecycle()
         var quoted by remember { mutableStateOf(emptySet<String>()) }
-        val archive by produceState(emptyList<ChatMessage>(), screen.earlier, archiveChanged) {
-            value = if (screen.earlier == 0) emptyList() else withContext(Dispatchers.IO) { graph.chatArchive.recent(screen.earlier + ChatScreenState.PAGE) }
+        val archiveRead by produceState(0 to emptyList<ChatMessage>(), screen.earlier, archiveChanged) {
+            val earlier = screen.earlier
+            value = earlier to if (earlier == 0) emptyList() else withContext(Dispatchers.IO) { graph.chatArchive.recent(earlier + ChatScreenState.PAGE) }
         }
+        val archive = archiveRead.second
+        // Pages asked for and not read yet: a quote's message further back waits for them.
+        val reading = archiveRead.first != screen.earlier
         val quotes by produceState(emptyList<ChatMessage>(), quoted, archiveChanged) {
             value = if (quoted.isEmpty()) emptyList() else withContext(Dispatchers.IO) { quoted.mapNotNull(graph.chatArchive::find) }
         }
@@ -368,7 +379,7 @@ class AskActivity : ComponentActivity() {
                     })
                 }
                 if (tab == 0) {
-                    Chat(graph, screen, chat.messages, archive, quotes, unread, byId, now, zone, claudeOn, onQuoted = { quoted = quoted + it }, onEdit = { m, p -> editing = "$m|$p" })
+                    Chat(graph, screen, chat.messages, archive, quotes, unread, reading, byId, now, zone, claudeOn, onQuoted = { quoted = quoted + it }, onEdit = { m, p -> editing = "$m|$p" })
                     // His replies to offer (UI-06), under his last message: a tap answers it, as a reply to
                     // it from anywhere does (a check-in's answer, an event's, with no call).
                     // His question still waiting for its answer since your last turn (with several asked together,
@@ -538,6 +549,7 @@ private fun ColumnScope.Chat(
     archive: List<ChatMessage>,
     quotes: List<ChatMessage>,
     unread: Boolean,
+    reading: Boolean,
     tasks: Map<String, TaskItem>,
     now: Long,
     zone: ZoneId,
@@ -558,10 +570,12 @@ private fun ColumnScope.Chat(
     // At the foot once it's been put somewhere: what follows slides into view.
     var settled by remember { mutableStateOf(false) }
     // Where it opens (his notification's message, else the first unread, with the divider over it), or a
-    // quote tapped: that message, once; one no longer there (the chat cleared), the foot.
-    LaunchedEffect(screen.scrollTo, rows.size) {
+    // quote tapped: that message, once, its pages read first ([reading]); one no longer there (the chat
+    // cleared), the foot.
+    LaunchedEffect(screen.scrollTo, rows.size, reading) {
         val target = screen.scrollTo ?: return@LaunchedEffect
         val at = rows.indexOfFirst { it.key == target }
+        if (at < 0 && reading) return@LaunchedEffect
         if (at < 0) list.scrollToItem(rows.size + 1) else list.scrollToItem(1 + if (at > 0 && rows[at - 1] == ChatScreenState.Item.Divider) at - 1 else at)
         settled = true
         screen.scrolled()

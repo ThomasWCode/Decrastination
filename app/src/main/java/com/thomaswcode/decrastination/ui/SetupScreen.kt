@@ -113,8 +113,9 @@ fun SetupScreen(graph: AppGraph, activity: Activity, parts: Set<SetupPart> = Set
         if (uri == null) return@rememberLauncherForActivityResult
         scope.launch {
             backupNote = runCatching {
-                val text = graph.backups.exportBackup()
+                // The chat's archive read whole for it: off the main thread.
                 withContext(Dispatchers.IO) {
+                    val text = graph.backups.exportBackup()
                     val out = requireNotNull(activity.contentResolver.openOutputStream(uri, "wt")) { "no file to write" }
                     out.use { it.write(text.toByteArray()) }
                 }

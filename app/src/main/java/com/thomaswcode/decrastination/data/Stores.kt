@@ -6,6 +6,7 @@ import com.thomaswcode.decrastination.core.InstructionState
 import com.thomaswcode.decrastination.core.MemoryState
 import com.thomaswcode.decrastination.core.SchoolCalendar
 import java.io.File
+import kotlinx.coroutines.runBlocking
 
 /**
  * Every store the app keeps, made in one place (docs/plan_v4/02-target-architecture.md §Stores): each
@@ -51,6 +52,18 @@ class Stores(
      */
     val chatArchive = ChatArchiveStore(dir, clock)
 
+    /**
+     * 4.0.3's one archive file, still here where the split couldn't read it ([ChatArchiveStore.SPLIT]):
+     * read as any store is, so it's set aside as `chat-archive.json.unreadable-<when>` and said at this
+     * start ([problems]), and what could be kept of it goes into its months; let go once its copy is made.
+     */
+    private val unsplit: JsonStore.Unreadable? = File(dir, ChatArchiveStore.NAME).takeIf { it.isFile }?.let { file ->
+        val whole = JsonStore(file, ChatArchive.serializer(), ::ChatArchive, clock = clock)
+        runBlocking { chatArchive.add(whole.value.messages) }
+        if (whole.problem?.copy != null || whole.problem == null) file.delete()
+        whole.problem
+    }
+
     /** Days with no school and half-days (PL-16), told to the chat or added in Settings. */
     val school = store("school.json", SchoolCalendar.serializer(), ::SchoolCalendar)
 
@@ -92,7 +105,7 @@ class Stores(
     val shapes: Map<String, Shape> get() = json.associate { it.name to Shape(it.version, it.migrations) } + (chatArchive.name to Shape(chatArchive.version, emptyList()))
 
     /** Files that couldn't be read whole at this start, and where each was set aside (the archive's months, read later: [ChatArchiveStore.onProblem]). */
-    val problems: List<JsonStore.Unreadable> get() = json.mapNotNull { it.problem } + chatArchive.problems + listOfNotNull(secrets.problem)
+    val problems: List<JsonStore.Unreadable> get() = json.mapNotNull { it.problem } + chatArchive.problems + listOfNotNull(unsplit, secrets.problem)
 
     /** What was kept of each file that didn't read whole written over it, now its problem is on record ([JsonStore.keepRecovered]). */
     suspend fun keepRecovered() {

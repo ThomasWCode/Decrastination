@@ -64,6 +64,33 @@ class ChatArchiveStoreTest {
     }
 
     @Test
+    fun `a move made again after a stop takes the window's copy, answered since, over the archive's`() = runBlocking {
+        val store = ChatArchiveStore(dir)
+        store.add(august)
+        // The window's copy answered there before the move was made again.
+        store.add(listOf(august.first().copy(answeredAt = 7L)))
+        assertEquals(7L, ChatArchiveStore(dir).find("a1")?.answeredAt)
+        assertEquals(2, ChatArchiveStore(dir).value.messages.size)
+    }
+
+    @Test
+    fun `4_0_3's one file that can't be read is set aside and said, as any store's, and none of it left unread`() {
+        File(dir, "chat-archive.json").writeText("{not json")
+        val stores = Stores(dir, Reverse)
+        val problem = stores.problems.single()
+        assertEquals("chat-archive.json", problem.file)
+        assertEquals("{not json", File(dir, problem.copy!!).readText())
+        assertFalse(File(dir, "chat-archive.json").exists())
+        assertFalse(stores.chatArchive.holdsAny)
+    }
+
+    /** A cipher for the secrets that only reverses the bytes. */
+    private object Reverse : SecretCipher {
+        override fun encrypt(plain: ByteArray) = plain.reversedArray()
+        override fun decrypt(sealed: ByteArray) = sealed.reversedArray()
+    }
+
+    @Test
     fun `a question of his answered from the archive is marked in its month`() = runBlocking {
         val store = ChatArchiveStore(dir)
         store.add(august + september)
