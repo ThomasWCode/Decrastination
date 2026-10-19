@@ -388,13 +388,14 @@ class Conversation(
      * Your [text] to Felix about [about] (2.0.0, Q29), answering the message [replyTo] if it does: one
      * entrance for replies (D-98), from the chat, his chips or his notification. A reply to a question of
      * his that's an answer is kept under it with no call ([routed]); anything else is a turn of the
-     * chat, kept as message [id] (about what it replies to, where it's about nothing else) and answered
-     * ([answerChat]). One sent while he answers another of yours lets that answer go, paid for and
-     * unused, and he answers both together (D-98). False only with no words. Kept, it's shown in his
-     * notification under what it answers.
+     * chat, kept as message [id] (about what it replies to, where it's about nothing else, unless not
+     * [takeItsSubject]: the box's words to his nudge just above it, told him as your words alone, D-99)
+     * and answered ([answerChat]). One sent while he answers another of yours lets that answer go, paid
+     * for and unused, and he answers both together (D-98). False only with no words. Kept, it's shown in
+     * his notification under what it answers.
      */
-    suspend fun ask(text: String, about: About = About(), id: String = UUID.randomUUID().toString(), replyTo: String? = null): Boolean =
-        send(text, about, id, replyTo) != Asked.Nothing
+    suspend fun ask(text: String, about: About = About(), id: String = UUID.randomUUID().toString(), replyTo: String? = null, takeItsSubject: Boolean = true): Boolean =
+        send(text, about, id, replyTo, takeItsSubject) != Asked.Nothing
 
     /** What became of words sent ([send]): nothing (there were none), an answer taken with no call, or a turn of the chat waiting for his answer. */
     enum class Asked { Nothing, Answer, Turn }
@@ -404,7 +405,7 @@ class Conversation(
      * where it's a turn of the chat ([replyFromNotification]), and the `chat-ask` command waits for an
      * answer only then. The message replied to may be in the archive, scrolled back to.
      */
-    suspend fun send(text: String, about: About = About(), id: String = UUID.randomUUID().toString(), replyTo: String? = null): Asked {
+    suspend fun send(text: String, about: About = About(), id: String = UUID.randomUUID().toString(), replyTo: String? = null, takeItsSubject: Boolean = true): Asked {
         val words = text.trim().take(ChatPrompts.MAX_TEXT)
         if (words.isEmpty()) return Asked.Nothing
         val repliedTo = replyTo?.let { outbox.find(it) }
@@ -414,7 +415,7 @@ class Conversation(
         chat.update { state ->
             state.copy(
                 messages = state.messages.map { if (it.from == Speaker.You && it.answeredAt == null) it.copy(note = null) else it } +
-                    ChatMessage(id, Speaker.You, words, clock.now(), about.takeIf { it != About() } ?: repliedTo?.about ?: About(), replyTo = replyTo),
+                    ChatMessage(id, Speaker.You, words, clock.now(), about.takeIf { it != About() } ?: repliedTo?.about?.takeIf { takeItsSubject } ?: About(), replyTo = replyTo),
             )
         }
         outbox.delivered()
