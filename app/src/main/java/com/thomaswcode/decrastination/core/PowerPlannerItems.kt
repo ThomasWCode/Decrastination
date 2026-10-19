@@ -1,7 +1,7 @@
-package com.thomaswcode.decrastination.sources.powerplanner
+package com.thomaswcode.decrastination.core
 
-import com.thomaswcode.decrastination.core.Fetched
-import com.thomaswcode.decrastination.core.Kind
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -130,3 +130,16 @@ object PowerPlannerItems {
     /** Power Planner's local times, with or without fractions of a second: "2026-09-23T09:46:46.98". */
     fun parse(text: String): LocalDateTime = LocalDateTime.parse(text.removeSuffix("Z"))
 }
+
+/** One agenda item. `ItemType` 5 is a task (Homework in the API), 6 an event (Exam). */
+@Serializable
+data class PpItem(
+    @SerialName("Identifier") val identifier: String,
+    @SerialName("Name") val name: String = "",
+    @SerialName("ShortDetails") val details: String? = null,
+    @SerialName("Date") val date: String? = null,
+    @SerialName("EndTime") val endTime: String? = null,
+    @SerialName("ClassIdentifier") val classIdentifier: String? = null,
+    @SerialName("ItemType") val itemType: Int = 0,
+    @SerialName("PercentComplete") val percentComplete: Double = 0.0,
+)

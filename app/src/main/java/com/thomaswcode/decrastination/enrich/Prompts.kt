@@ -1,6 +1,7 @@
 package com.thomaswcode.decrastination.enrich
 
 import com.thomaswcode.decrastination.block.Focus
+import com.thomaswcode.decrastination.core.AnkiRules
 import com.thomaswcode.decrastination.core.Enrichment
 import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.core.Kind
@@ -8,7 +9,6 @@ import com.thomaswcode.decrastination.core.Sittings
 import com.thomaswcode.decrastination.core.SubStep
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.Where
-import com.thomaswcode.decrastination.sources.anki.AnkiRules
 import com.thomaswcode.decrastination.sources.gmail.GmailThreads
 import java.time.Instant
 import java.time.LocalDate

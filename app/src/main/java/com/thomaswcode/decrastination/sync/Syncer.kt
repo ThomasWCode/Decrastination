@@ -1,6 +1,6 @@
 package com.thomaswcode.decrastination.sync
 
-import com.thomaswcode.decrastination.sources.anki.AnkiRules
+import com.thomaswcode.decrastination.core.AnkiRules
 import com.thomaswcode.decrastination.core.Merge
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem

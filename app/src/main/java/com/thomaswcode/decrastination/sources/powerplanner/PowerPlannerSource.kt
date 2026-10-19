@@ -1,7 +1,9 @@
 package com.thomaswcode.decrastination.sources.powerplanner
 
 import com.thomaswcode.decrastination.core.Fetched
+import com.thomaswcode.decrastination.core.PowerPlannerItems
 import com.thomaswcode.decrastination.core.Source
+import com.thomaswcode.decrastination.core.Timetable
 import com.thomaswcode.decrastination.data.Secret
 import com.thomaswcode.decrastination.data.SecretStore
 import com.thomaswcode.decrastination.sources.ReadContext

@@ -1,8 +1,5 @@
 package com.thomaswcode.decrastination.core
 
-import com.thomaswcode.decrastination.sources.powerplanner.PpClass
-import com.thomaswcode.decrastination.sources.powerplanner.PpSchedule
-import com.thomaswcode.decrastination.sources.powerplanner.Timetable
 import java.time.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals

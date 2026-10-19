@@ -137,7 +137,7 @@ class InstructionsTest {
         val deck = TaskItem(
             id = "anki:deck:1", source = Source.Anki, sourceId = "deck:1", title = "Learn Anki deck 1.2", kind = Kind.Homework,
             dueAt = Fixtures.at("2026-10-13T09:00"), sourceEffortMin = 20, derived = true, firstSeenAt = now, lastSeenAt = now,
-            extra = mapOf(com.thomaswcode.decrastination.sources.anki.AnkiRules.EXTRA_FOR to homework.id),
+            extra = mapOf(com.thomaswcode.decrastination.core.AnkiRules.EXTRA_FOR to homework.id),
         )
         // Not a task: its deck goes with it.
         val hidden = plan(listOf(homework.withOverrides(TaskOverrides(notATask = true)), deck)).ordered.map { it.taskId }
@@ -184,7 +184,7 @@ class InstructionsTest {
         val deck = TaskItem(
             id = "anki:deck:1", source = Source.Anki, sourceId = "deck:1", title = "Learn Anki deck 1.2", kind = Kind.Homework,
             dueAt = Fixtures.at("2026-10-20T09:00"), sourceEffortMin = 20, derived = true, firstSeenAt = now, lastSeenAt = now,
-            extra = mapOf(com.thomaswcode.decrastination.sources.anki.AnkiRules.EXTRA_FOR to homework.id),
+            extra = mapOf(com.thomaswcode.decrastination.core.AnkiRules.EXTRA_FOR to homework.id),
         )
         val chunk = plan(listOf(homework, deck)).ordered.first { it.taskId == deck.id }
         assertEquals(Fixtures.at("2026-10-12T09:00"), chunk.dueAt)

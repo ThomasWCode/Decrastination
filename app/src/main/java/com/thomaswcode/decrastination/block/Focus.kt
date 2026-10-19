@@ -26,7 +26,7 @@ import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.data.SlotOutcome
 import com.thomaswcode.decrastination.data.SlotRecord
 import com.thomaswcode.decrastination.data.TaskState
-import com.thomaswcode.decrastination.sources.anki.AnkiRules
+import com.thomaswcode.decrastination.core.AnkiRules
 import java.time.Instant
 import java.time.LocalDate
 import java.util.UUID
