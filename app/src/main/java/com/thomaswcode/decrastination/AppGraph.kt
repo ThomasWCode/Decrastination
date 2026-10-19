@@ -69,10 +69,7 @@ import com.thomaswcode.decrastination.notify.AndroidTray
 import com.thomaswcode.decrastination.notify.NoticeId
 import com.thomaswcode.decrastination.notify.Notifier
 import com.thomaswcode.decrastination.plan.Planning
-import com.thomaswcode.decrastination.protect.CodeLock
 import com.thomaswcode.decrastination.protect.Protection
-import com.thomaswcode.decrastination.protect.SettingsChanges
-import com.thomaswcode.decrastination.protect.Totp
 import com.thomaswcode.decrastination.protect.Watchdog
 import com.thomaswcode.decrastination.sources.anki.AnkiRules
 import com.thomaswcode.decrastination.sources.anki.AnkiSource
