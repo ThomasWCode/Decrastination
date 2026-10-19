@@ -280,6 +280,26 @@ class ConversationTest {
     }
 
     @Test
+    fun `marked answered, his messages wait no more, but a check-in's question under way, and their Undo puts them back`() = runBlocking {
+        felix.outbox.send(ChatMessage("n1", Speaker.Felix, "Starting now?", now - 60_000L, kind = MessageKind.SlotStart, suggestedReplies = listOf("Starting")))
+        conversation.askAboutEvent("open day", "Open day", "Saturday 24 October", now + 86_400_000L, CalendarTime.ANSWERS.map { it.first })
+        val event = his().single { it.kind == MessageKind.EventQuestion }.id
+        val marked = conversation.markAnswered(listOf("n1", event, "nobody's"))
+        assertEquals(setOf("n1", event), marked.ids)
+        assertTrue(his().all { it.answeredAt == now })
+        // Out of his notification, too.
+        assertNull(felix.ports.showing)
+        conversation.unmarkAnswered(marked)
+        assertTrue(his().all { it.answeredAt == null })
+        // The check-in's question waits on it while it's under way.
+        conversation.remindCheckIn()
+        val question = his().last()
+        assertEquals(MessageKind.CheckIn, question.kind)
+        assertEquals(emptySet(), conversation.markAnswered(listOf(question.id)).ids)
+        assertNull(his().last().answeredAt)
+    }
+
+    @Test
     fun `his button counts his messages since you last left the chat, but a question you've answered`() = runBlocking {
         felix.outbox.send(ChatMessage("n1", Speaker.Felix, "Up at 17:00.", now - 60_000L, kind = MessageKind.SlotStart))
         conversation.askAboutEvent("open day", "Open day", "Saturday 24 October", now + 86_400_000L, CalendarTime.ANSWERS.map { it.first })

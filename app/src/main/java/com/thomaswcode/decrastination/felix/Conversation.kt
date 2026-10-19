@@ -234,6 +234,35 @@ class Conversation(
         outbox.answeredInArchive(message.id, now)
     }
 
+    /** Messages of his marked answered at [at] ([markAnswered]): what its Undo puts back. */
+    data class Marked(val ids: Set<String>, val at: Long)
+
+    /**
+     * [ids], messages of his, marked answered by you (D-99): no longer waiting for your answer, nor on his
+     * notification. A check-in's question while the check-in is under way isn't: the check-in waits on it.
+     */
+    suspend fun markAnswered(ids: Collection<String>): Marked = withContext(NonCancellable) {
+        val now = clock.now()
+        val wanted = ids.toSet()
+        val marked = HashSet<String>()
+        chat.update { s ->
+            val underWay = s.felix.checkInDraft != null
+            s.copy(
+                messages = s.messages.map {
+                    if (it.id in wanted && it.from == Speaker.Felix && it.answeredAt == null && !(underWay && it.kind == MessageKind.CheckIn)) it.copy(answeredAt = now).also { m -> marked += m.id } else it
+                },
+            )
+        }
+        outbox.delivered()
+        Marked(marked, now)
+    }
+
+    /** [marked]'s Undo: those still answered as they were marked wait for your answer again. */
+    suspend fun unmarkAnswered(marked: Marked): Unit = withContext(NonCancellable) {
+        chat.update { s -> s.copy(messages = s.messages.map { if (it.id in marked.ids && it.answeredAt == marked.at) it.copy(answeredAt = null) else it }) }
+        outbox.delivered()
+    }
+
     /** The morning's list (LR-04) as his message, in the app's words, where he has none of his own ([Looks.morning]): the day's [title], then its [lines]. */
     suspend fun morningList(title: String, lines: List<String>) =
         outbox.send(ChatMessage(UUID.randomUUID().toString(), Speaker.Felix, FelixWords.morningList(title, lines), clock.now(), kind = MessageKind.Morning, byApp = true))
