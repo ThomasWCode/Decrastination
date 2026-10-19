@@ -83,6 +83,8 @@ tasks.withType<Test>().configureEach {
     inputs.file(layout.projectDirectory.file("../docs/spec/felix-inputs.md")).withPropertyName("felixInputsDoc").withPathSensitivity(PathSensitivity.RELATIVE)
     // The stores' shapes and the plan's snapshot (StoresDecodeTest, PlanSnapshotTest): a change to them alone runs the tests again.
     inputs.dir(layout.projectDirectory.dir("../fixtures")).withPropertyName("fixtures").withPathSensitivity(PathSensitivity.RELATIVE)
+    // core's build, which ArchitectureTest holds free of Android and of the app: a change to it alone runs the tests again.
+    inputs.file(layout.projectDirectory.file("../core/build.gradle.kts")).withPropertyName("coreBuild").withPathSensitivity(PathSensitivity.RELATIVE)
     // core's own tests run with the app's, so one command (CI's) runs every test.
     if (name == "testDebugUnitTest") dependsOn(":core:test")
 }

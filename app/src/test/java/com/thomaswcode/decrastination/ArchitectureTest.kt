@@ -7,8 +7,9 @@ import kotlin.test.assertTrue
 /**
  * The rules of the app's structure that can be checked by reading its code
  * (docs/plan_v4/02-target-architecture.md §The rules), a rule added as each becomes true: only the
- * notifier posts (Stage 1); only the gateway builds a Claude client (Stage 2); and the one exception to
- * "only a store's owner updates it", which holds in full at Stage 12: [com.thomaswcode.decrastination.data.Stores.replace],
+ * notifier posts (Stage 1); only the gateway builds a Claude client (Stage 2); `core` free of Android
+ * and of the app, a module of its own (Stage 6f); and the one exception to "only a store's owner
+ * updates it", which holds in full at Stage 12: [com.thomaswcode.decrastination.data.Stores.replace],
  * for a restore or a reset, called by the backup service alone (Stage 3).
  */
 class ArchitectureTest {
@@ -40,6 +41,19 @@ class ArchitectureTest {
         // ModelGateway.build is the one place: the readers take the client they're given.
         val stray = outside(Regex("""\bAnthropicOkHttpClient\b"""), setOf("enrich/ModelGateway.kt"))
         assertTrue(stray.isEmpty(), "A Claude client is built outside enrich/ModelGateway.kt: $stray")
+    }
+
+    @Test
+    fun `core is a module free of Android and of the app`() {
+        // The compiler holds it: :core is plain Kotlin and depends on neither, so nothing in it can
+        // reach them. What's checked here is that it stays so: none of core's files back in the app,
+        // where the compiler wouldn't hold them, and nothing of Android or another module in its build.
+        val strays = sources.keys.filter { it.startsWith("core/") }
+        assertTrue(strays.isEmpty(), "core's files are in the app, not in :core: $strays")
+        val build = listOf(File("../core/build.gradle.kts"), File("core/build.gradle.kts")).first { it.isFile }
+        val code = build.readLines().filterNot { it.trimStart().startsWith("//") }.joinToString("\n")
+        val named = Regex("""android|project\(""").findAll(code).map { it.value }.toList()
+        assertTrue(named.isEmpty(), "core's build names Android or another module: $named")
     }
 
     @Test
