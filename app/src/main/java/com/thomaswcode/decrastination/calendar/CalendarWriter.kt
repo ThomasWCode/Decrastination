@@ -23,6 +23,7 @@ import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
@@ -59,11 +60,13 @@ class CalendarWriter(
     private val settleEvent: suspend (String) -> Unit,
     /** The calendar read again, and today's record made again with it ([com.thomaswcode.decrastination.learn.CalendarTime.refresh], [com.thomaswcode.decrastination.learn.Briefing.replanToday]). */
     private val reread: suspend () -> Unit,
+    /** How long plans are quiet before the calendar's written: [CALENDAR_WRITE_QUIET_MS], but in a test. */
+    private val quietMs: Long = CALENDAR_WRITE_QUIET_MS,
 ) {
     /**
-     * The plan to write to the calendar, once plans have been quiet [CALENDAR_WRITE_QUIET_MS] (17 Oct):
-     * a burst of changes (a chat answer's, one after another) is one write, not an event inserted and
-     * changed again while the calendar's sync still has it in hand, which brought copies of it back.
+     * The plan to write to the calendar, once plans have been quiet [quietMs] (17 Oct): a burst of
+     * changes (a chat answer's, one after another) is one write, not an event inserted and changed
+     * again while the calendar's sync still has it in hand, which brought copies of it back.
      */
     private val toWrite = MutableSharedFlow<Plan>(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
 
@@ -72,12 +75,16 @@ class CalendarWriter(
         toWrite.tryEmit(made)
     }
 
+    /** How many listen for [planned]'s plans: one once [start]'s write does (a plan before then is let go). Its tests wait for it. */
+    internal val listening: StateFlow<Int> get() = toWrite.subscriptionCount
+
     /**
      * [made]'s next seven days written to the calendar you picked (NF-07). A slot you've moved there
      * is taken as your time for its task's next piece, where its deadline allows; else it's put back,
-     * and you're told.
+     * and you're told. Only [start]'s write, once plans are quiet, calls it (and its tests): two at
+     * once could insert a slot twice.
      */
-    suspend fun writeSlots(made: Plan) {
+    internal suspend fun writeSlots(made: Plan) {
         clearOldCalendars()
         val calendarId = settings.value.calendarWriteId ?: return
         if (!provider.allowed()) return
@@ -130,7 +137,7 @@ class CalendarWriter(
     }
 
     /** The app's events taken out of calendars no longer written to, each kept on the list till that's done. */
-    suspend fun clearOldCalendars() {
+    private suspend fun clearOldCalendars() {
         val waiting = runtime.value.calendarsToClear
         if (waiting.isEmpty()) return
         val versions = calendarVersions.value.written.toSet()
@@ -241,7 +248,7 @@ class CalendarWriter(
         }
         // The calendar written once plans have been quiet a while.
         scope.launch {
-            toWrite.debounce(CALENDAR_WRITE_QUIET_MS).collect { made -> runCatching { writeSlots(made) }.onFailure { Log.w(AppGraph.TAG, "Writing the calendar failed", it) } }
+            toWrite.debounce(quietMs).collect { made -> runCatching { writeSlots(made) }.onFailure { Log.w(AppGraph.TAG, "Writing the calendar failed", it) } }
         }
     }
 

@@ -69,8 +69,8 @@ class CalendarWriterTest {
     private val settled: MutableList<String> = Collections.synchronizedList(mutableListOf())
     private val rereads = AtomicInteger()
 
-    /** A writer as AppGraph makes one at a start, on these stores and this calendar. */
-    private fun writer() = CalendarWriter(
+    /** A writer as AppGraph makes one at a start, on these stores and this calendar, plans quiet after [quietMs]. */
+    private fun writer(quietMs: Long = 100) = CalendarWriter(
         tasks, settings, runtime, versions, clock, scope, calendar,
         sayRefused = { move, _, why -> refused += move.desired.uri to why },
         addOwnChange = { _, text, _, change ->
@@ -80,6 +80,7 @@ class CalendarWriterTest {
         replan = { replans.incrementAndGet() },
         settleEvent = { settled += it },
         reread = { rereads.incrementAndGet() },
+        quietMs = quietMs,
     )
 
     private val writer = writer()
@@ -136,6 +137,18 @@ class CalendarWriterTest {
         calendar.changed()
         writer.writeSlots(plan(work(chunk("teams:essay", "Essay"), "18:00")))
         assertEquals(4 to 1, calendar.reads to calendar.batches)
+    }
+
+    @Test
+    fun `a burst of plans is one write, of the last, once plans have been quiet`() = runBlocking {
+        pickCalendar(7)
+        writer.start()
+        until("the write is listening") { writer.listening.value > 0 }
+        writer.planned(plan(work(chunk("teams:essay", "Essay"), "17:00")))
+        writer.planned(plan(work(chunk("teams:essay", "Essay"), "18:00")))
+        until("the write") { calendar.batches > 0 }
+        assertEquals(1, calendar.batches)
+        assertEquals(listOf(at("18:00")), calendar.events.map { it.start })
     }
 
     @Test
