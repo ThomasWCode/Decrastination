@@ -90,13 +90,18 @@ class ChatArchiveStore(private val dir: File, private val clock: () -> Long = Sy
         return null
     }
 
-    /** [moved] added, each to its month's file; any there already (a move cut short, D-96) not again. Only their months are read. */
+    /**
+     * [moved] added, each to its month's file; any there already (a move cut short, D-96) not again, but
+     * as it's moved now, the window's copy being the newer (a question of his answered there since). Only
+     * their months are read.
+     */
     suspend fun add(moved: List<ChatMessage>): Unit = writing.withLock {
         if (moved.isEmpty()) return@withLock
         for ((file, messages) in moved.groupBy(::fileOf)) {
             month(file).update { a ->
                 val there = a.messages.mapTo(HashSet()) { it.id }
-                a.copy(messages = a.messages + messages.filter { it.id !in there })
+                val byId = messages.associateBy { it.id }
+                a.copy(messages = a.messages.map { byId[it.id] ?: it } + messages.filter { it.id !in there })
             }
         }
         _changes.update { it + 1 }
@@ -156,7 +161,8 @@ class ChatArchiveStore(private val dir: File, private val clock: () -> Long = Sy
         /**
          * The one file 4.0.0 to 4.0.3 kept the archive in split into its months (4.0.4): each month
          * written, and only then the file let go, so a stop between splits it again, each message once.
-         * One that can't be read is left as it is: none of it is lost.
+         * One that can't be read is left for [Stores] to read as any store's file: set aside and said, what
+         * can be kept of it split.
          */
         val SPLIT = Move { dir ->
             val whole = File(dir, NAME)
