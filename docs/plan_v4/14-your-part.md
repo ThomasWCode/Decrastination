@@ -54,6 +54,14 @@ Everything else in Stage 5 was checked on the phone with you on 18 Oct, or by th
 3. Open a message's fold, go to *Your changes* and back: every fold is closed, and what came meanwhile is under the *New messages* line.
 4. Once the chat has messages past its window (a fortnight old and past the newest 200, days away), scroll back past them: the older rows show under *Earlier messages* with no Undo or buttons of their own, read a month at a time (4.0.4).
 
+## Waiting for the phone
+
+The phone was disconnected on 19 Oct before 4.0.3's and 4.0.4's last fixes reached it, and Stage 6 is built while it's away. When it's connected again, in this order:
+
+1. **The build on `main` installed and checked**: 4.0.4 as merged (`main` at 7c46fe9, its APK kept as `private/apk/2026-10-19-4.0.4-final-built.apk`), with `keep_before.sh` first and `scripts/phone-check.sh` after. The phone has #74 as it was at 07:44 on 19 Oct (the archive a file a month, the live window a fortnight; the app and the chat opened and scrolled back then), without the review fixes of 4.0.3 (a photo taken within 30 seconds of a Done earns that Done's slot; the "stays planned" line for a task as the plan takes it, your instructions' values over it or work credited from a linked one, what's left rounded as the planner rounds it) or of 4.0.4 (an archive file that can't be read set aside and said; *Clear the chat* lets its months go unread; a reply restored from the archive). None of them needs your taps.
+2. **Stage 6's PRs, in order**: each, built and reviewed while the phone is away, waits ready and unmerged, stacked on the one before, with its APK kept in `private/apk/` (as every release is installed and checked before it merges, unless you say otherwise for a PR). Each is then installed and given its check from the table above, and merged, before the next is installed; a problem one shows is fixed on its branch and merged up the stack, and every branch above it then rebuilt, its CI run and its kept APK replaced before it's installed, so what's checked is what merges. 6b's check wants a weekend and you nearby, as the table says.
+3. **Stage 5's four checks** above, whenever they come up.
+
 ## How to batch it
 
 1. **Stages 0–4** (six PRs, the ground; done): three phone evenings with no need of you; the five minutes of taps in Stage 3 whenever you're passing.
