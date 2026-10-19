@@ -57,7 +57,7 @@ fun WorkScreen(graph: AppGraph, activity: Activity, opening: String? = null, onO
     val settings by graph.settings.state.collectAsStateWithLifecycle()
     val runtime by graph.runtime.state.collectAsStateWithLifecycle()
     val instructions by graph.instructions.state.collectAsStateWithLifecycle()
-    val calendar by graph.calendarState.collectAsStateWithLifecycle()
+    val calendar by graph.sync.calendarState.collectAsStateWithLifecycle()
     // The sections move with the clock as well as the data: deadlines pass, and midnight.
     val now by produceState(graph.clock.now()) {
         while (true) {
@@ -83,12 +83,12 @@ fun WorkScreen(graph: AppGraph, activity: Activity, opening: String? = null, onO
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     var said by rememberSaveable { mutableStateOf<String?>(null) }
     // A photo of homework read into tasks (NF-01): the app's, so a turn of the phone or leaving Work loses nothing.
-    val photoReading by graph.photoReading.collectAsStateWithLifecycle()
+    val photoReading by graph.photos.photoReading.collectAsStateWithLifecycle()
     val reading = photoReading?.busy == true
     LaunchedEffect(photoReading) { photoReading?.let { p -> said = if (p.busy) "Reading the photo…" else p.why } }
     val homework = androidx.compose.runtime.remember { java.io.File(activity.cacheDir, "photos/homework.jpg").also { it.parentFile?.mkdirs() } }
     val camera = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.TakePicture()) { taken ->
-        if (taken) graph.readPhotoOf(homework) else homework.delete()
+        if (taken) graph.photos.readPhotoOf(homework) else homework.delete()
     }
     // The screen's camera, for a photo of the work from a task's sheet (UI-09); what it said, about which task.
     var saidAbout by rememberSaveable { mutableStateOf<String?>(null) }
@@ -116,7 +116,7 @@ fun WorkScreen(graph: AppGraph, activity: Activity, opening: String? = null, onO
                         trouble,
                         onSetup = { activity.startActivity(android.content.Intent(activity, SetupActivity::class.java)) },
                         onProtection = { activity.startActivity(android.content.Intent(activity, com.thomaswcode.decrastination.protect.ProtectionActivity::class.java)) },
-                        onTeams = { scope.launch { said = graph.requestTeamsSync() ?: "The Teams widget is syncing Teams" } },
+                        onTeams = { scope.launch { said = graph.sync.requestTeamsSync() ?: "The Teams widget is syncing Teams" } },
                     )
                 }
             }
@@ -224,7 +224,7 @@ fun WorkScreen(graph: AppGraph, activity: Activity, opening: String? = null, onO
     }
     sheetFor?.let { id -> TaskSheetHost(graph, activity, id, plan, photo, said.takeIf { saidAbout == id }) { sheetFor = null } }
     if (making) OwnTaskForm(graph, editing = null) { making = false }
-    photoReading?.takeIf { !it.busy }?.let { p -> p.reading?.let { got -> p.jpeg?.let { jpeg -> PhotoTasksSheet(graph, got, jpeg) { graph.photoReading.value = null } } } }
+    photoReading?.takeIf { !it.busy }?.let { p -> p.reading?.let { got -> p.jpeg?.let { jpeg -> PhotoTasksSheet(graph, got, jpeg) { graph.photos.photoReading.value = null } } } }
 }
 
 private const val FINISHED = "finished"

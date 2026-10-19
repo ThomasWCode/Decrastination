@@ -163,7 +163,7 @@ class AppGraph private constructor(context: Context) {
     /** Takes [seen] off Setup's list of files found unreadable. */
     suspend fun forgetUnreadable(seen: JsonStore.Unreadable) = runtime.update { it.seenUnreadable(seen) }
 
-    val syncer = Syncer(
+    private val syncer = Syncer(
         tasks = tasks,
         settings = settings,
         sources = listOf(
@@ -315,17 +315,6 @@ class AppGraph private constructor(context: Context) {
         read = { taskId -> readings.enrichNow(only = taskId) },
     )
 
-    // [Readings]', [Photos]' and [Sync]'s functions, till their callers call them there.
-    suspend fun enrichNow(byModel: Boolean = true, only: String? = null, force: Boolean = false): Boolean = readings.enrichNow(byModel, only, force)
-    suspend fun readAgain(taskId: String): Readings.ReadAgain = readings.readAgain(taskId)
-    suspend fun attachPhoto(taskId: String, jpeg: ByteArray) = photos.attachPhoto(taskId, jpeg)
-    fun readPhotoOf(file: java.io.File) = photos.readPhotoOf(file)
-    val photoReading: kotlinx.coroutines.flow.MutableStateFlow<Photos.PhotoReading?> get() = photos.photoReading
-    fun refreshAll(teams: Boolean) = sync.refreshAll(teams)
-    suspend fun requestTeamsSync(): String? = sync.requestTeamsSync()
-    val calendarTime: com.thomaswcode.decrastination.learn.EventJudge.Time get() = sync.calendarTime
-    val calendarState: kotlinx.coroutines.flow.MutableStateFlow<com.thomaswcode.decrastination.learn.EventJudge.Time> get() = sync.calendarState
-
     /** Protection ([Protection]): settings changes, waiting once armed if they loosen blocking; the parent code; the device admin. */
     val protection = Protection(settings, runtime, secrets, clock, scope, adminActive = { Watchdog.isAdminActive(app) }) {
         app.getSystemService(DevicePolicyManager::class.java)?.removeActiveAdmin(Watchdog.admin(app))
@@ -446,7 +435,7 @@ class AppGraph private constructor(context: Context) {
             layTaskOverrides = { instructions.layTaskOverrides() },
             schedule = { Daily.schedule(app) },
             reread = {
-                CalendarTime.refresh(app)
+                sync.refreshCalendar()
                 Briefing.replanToday(app)
             },
             cancelFelix = { FelixNotifications.cancel(app) },
@@ -514,9 +503,6 @@ class AppGraph private constructor(context: Context) {
 
     companion object {
         const val TAG = "Decrastination"
-
-        /** [Sync.requestTeamsSync]'s answer when the widget is syncing already: as good as one started. */
-        const val TEAMS_BUSY = Sync.TEAMS_BUSY
 
         private const val WIDGET_DEBOUNCE_MS = 1_000L
 

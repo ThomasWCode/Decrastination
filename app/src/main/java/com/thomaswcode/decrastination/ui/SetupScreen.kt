@@ -91,7 +91,7 @@ fun SetupScreen(graph: AppGraph, activity: Activity, parts: Set<SetupPart> = Set
         refresh++
         if (granted[CalendarTime.PERMISSION] == true) {
             hadCalendar = true
-            scope.launch { CalendarTime.refresh(activity) }
+            scope.launch { graph.sync.refreshCalendar() }
         }
     }
     val calendarAllowed = remember(refresh) { CalendarTime.allowed(activity) }
@@ -103,7 +103,7 @@ fun SetupScreen(graph: AppGraph, activity: Activity, parts: Set<SetupPart> = Set
     // Given there: what needs it reads once this screen sees it.
     LaunchedEffect(ankiAllowed, calendarAllowed) {
         if (ankiAllowed && !hadAnki) SyncWorker.syncNow(activity, setOf(Source.Anki))
-        if (calendarAllowed && !hadCalendar) CalendarTime.refresh(activity)
+        if (calendarAllowed && !hadCalendar) graph.sync.refreshCalendar()
         hadAnki = ankiAllowed
         hadCalendar = calendarAllowed
     }

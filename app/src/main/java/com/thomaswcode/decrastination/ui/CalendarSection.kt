@@ -51,7 +51,7 @@ fun CalendarSection(graph: AppGraph, activity: Activity, choosing: Boolean = tru
     val calendars = remember(refresh, canRead) { runCatching { SlotCalendar.calendars(activity) }.getOrDefault(emptyList()) }
     val ask = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
         refresh++
-        scope.launch { CalendarTime.refresh(activity) }
+        scope.launch { graph.sync.refreshCalendar() }
     }
     // Looked at again on coming back: a calendar made at calendar.google.com meanwhile shows.
     LifecycleResumeEffect(Unit) {
