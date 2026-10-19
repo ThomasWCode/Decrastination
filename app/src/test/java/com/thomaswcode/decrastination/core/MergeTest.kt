@@ -47,7 +47,7 @@ class MergeTest {
     @Test
     fun `an update keeps the app's own bookkeeping`() {
         val stored = first(fetched("a", dueAt = 5)).map {
-            it.copy(workedMin = 25, userEffortMin = 60, subSteps = listOf(SubStep("Q1-8", 25, done = true)))
+            it.copy(workedMin = 25, subSteps = listOf(SubStep("Q1-8", 25, done = true))).yours(minutes = 60)
         }
         val result = Merge.apply(stored, Source.Teams, listOf(fetched("a", title = "Renamed", dueAt = 9)), later)
         val task = result.tasks.single()
@@ -251,7 +251,7 @@ class MergeTest {
     @Test
     fun `a finished task linked to one still open is kept past the fortnight, its minutes counting for it`() {
         val kept = first(fetched("keep")).single()
-        val gone = first(fetched("dup")).single().copy(status = Status.Done, doneAt = t0, userSameAs = kept.id, workedMin = 30)
+        val gone = first(fetched("dup")).single().copy(status = Status.Done, doneAt = t0, workedMin = 30).yours(sameAs = kept.id)
         val later = t0 + Merge.KEEP_FINISHED_MS + 1
         val after = Merge.apply(listOf(kept, gone), Source.Teams, listOf(fetched("keep")), later).tasks
         assertEquals(listOf(kept.id, gone.id), after.map { it.id })

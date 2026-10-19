@@ -7,6 +7,7 @@ import com.thomaswcode.decrastination.block.Focus
 import com.thomaswcode.decrastination.core.About
 import com.thomaswcode.decrastination.core.Act
 import com.thomaswcode.decrastination.core.AssessLater
+import com.thomaswcode.decrastination.core.By
 import com.thomaswcode.decrastination.core.ChatAction
 import com.thomaswcode.decrastination.core.ChatActs
 import com.thomaswcode.decrastination.core.ChatMessage
@@ -921,7 +922,7 @@ class Conversation(
             val own = tasks.value.tasks.filter { it.source == Source.Own }.associateBy { it.id }
             before = proposal.changes.filter { it.type in OwnTaskRules.MADE_ON_IT }.mapNotNull { it.taskId }.distinct()
                 .mapNotNull { tid -> own[tid]?.let { tid to OwnTaskRules.draftOf(it) } }.toMap()
-            val instruction = Instruction(id, asked?.text ?: message.text, asked?.about ?: About(), clock.now(), state = InstructionStatus.Understood, changes = proposal.changes)
+            val instruction = Instruction(id, asked?.text ?: message.text, asked?.about ?: About(), clock.now(), state = InstructionStatus.Understood, changes = proposal.changes, by = By.Felix)
             instructions.update { it.copy(instructions = it.instructions + instruction) }
             val calendar = school.value
             owners.applyInstruction(id)

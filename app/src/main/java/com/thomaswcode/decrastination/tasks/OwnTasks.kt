@@ -5,16 +5,15 @@ import com.thomaswcode.decrastination.core.Duplicates
 import com.thomaswcode.decrastination.core.InstructionRules
 import com.thomaswcode.decrastination.core.InstructionState
 import com.thomaswcode.decrastination.core.Merge
+import com.thomaswcode.decrastination.core.Mine
 import com.thomaswcode.decrastination.core.OwnTask
 import com.thomaswcode.decrastination.core.OwnTaskRules
 import com.thomaswcode.decrastination.core.ProposalState
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Status
 import com.thomaswcode.decrastination.core.TaskItem
-import com.thomaswcode.decrastination.core.TaskOverrides
 import com.thomaswcode.decrastination.core.WallClock
-import com.thomaswcode.decrastination.core.overrides
-import com.thomaswcode.decrastination.core.withOverrides
+import com.thomaswcode.decrastination.core.withMine
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.TaskState
 import kotlinx.coroutines.CoroutineScope
@@ -51,12 +50,12 @@ class OwnTasks(
     suspend fun saveOwnTask(sourceId: String, task: OwnTask): Boolean = withContext(NonCancellable) {
         if (OwnTaskRules.problem(task) != null) return@withContext false
         val id = TaskItem.id(Source.Own, sourceId)
-        val overrides = InstructionRules.taskOverrides(instructions.value.applied)[id] ?: TaskOverrides.NONE
+        val overrides = InstructionRules.taskOverrides(instructions.value.applied)[id] ?: Mine.NONE
         val now = clock.now()
         tasks.update { state ->
             val old = state.tasks.firstOrNull { it.id == id }
             val made = (if (old == null) OwnTaskRules.create(task, sourceId, now) else OwnTaskRules.edited(old, task))
-                .let { if (it.overrides() == overrides) it else it.withOverrides(overrides) }
+                .let { if (it.mine == overrides) it else it.withMine(overrides) }
             state.copy(tasks = if (old == null) state.tasks + made else state.tasks.map { if (it.id == id) made else it })
         }
         true

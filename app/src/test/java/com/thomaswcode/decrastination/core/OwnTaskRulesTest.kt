@@ -228,10 +228,10 @@ class OwnTaskRulesTest {
     fun `your minutes for a task are laid over the estimate, and taken back`() {
         val essay = teams("essay", "2026-10-16T09:00", effort = 60)
         val overrides = InstructionRules.taskOverrides(listOf(applied(Change(ChangeType.Minutes, taskId = essay.id, minutes = 150))))
-        val longer = essay.withOverrides(overrides.getValue(essay.id))
+        val longer = essay.withMine(overrides.getValue(essay.id))
         assertEquals(150, longer.effortMin)
         assertEquals(60, longer.appEffortMin)
-        assertEquals(60, longer.withOverrides(TaskOverrides.NONE).effortMin)
+        assertEquals(60, longer.withMine(Mine.NONE).effortMin)
     }
 
     @Test
@@ -239,14 +239,14 @@ class OwnTaskRulesTest {
         val slow = Calibration(multipliers = mapOf("Homework|" to 2.0))
         val essay = teams("essay", "2026-10-16T09:00", effort = 60)
         assertEquals(120, plan(listOf(essay), slow).chunksOf(essay.id).sumOf { it.minutes })
-        val mine = essay.copy(userEffortMin = 60)
+        val mine = essay.yours(minutes = 60)
         assertEquals(60, plan(listOf(mine), slow).chunksOf(mine.id).sumOf { it.minutes })
     }
 
     @Test
     fun `your minutes for a task with steps scale its steps to add up to them`() {
         val steps = listOf(SubStep("Q1-8", 30), SubStep("Q9-16", 30))
-        val mine = teams("prep", "2026-10-16T09:00", steps = steps).copy(userEffortMin = 120)
+        val mine = teams("prep", "2026-10-16T09:00", steps = steps).yours(minutes = 120)
         val pieces = plan(listOf(mine)).chunksOf(mine.id)
         assertEquals(listOf("Q1-8", "Q9-16"), pieces.map { it.step })
         assertEquals(listOf(60, 60), pieces.map { it.minutes })
@@ -255,7 +255,7 @@ class OwnTaskRulesTest {
     @Test
     fun `your minutes shared over steps add up to exactly yours`() {
         val steps = listOf(SubStep("a", 10), SubStep("b", 10), SubStep("c", 10))
-        val mine = teams("prep", "2026-10-30T09:00", steps = steps).copy(userEffortMin = 100)
+        val mine = teams("prep", "2026-10-30T09:00", steps = steps).yours(minutes = 100)
         assertEquals(listOf(34, 33, 33), mine.plannedStepMinutes(1.0))
         assertEquals(100, plan(listOf(mine)).chunksOf(mine.id).sumOf { it.minutes })
         // Fewer minutes than steps can't be given: they couldn't add up to it.
@@ -279,7 +279,7 @@ class OwnTaskRulesTest {
         val essay = teams("essay", "2026-10-16T09:00", effort = 60)
         val change = Change(ChangeType.Minutes, taskId = essay.id, minutes = 90)
         assertEquals("“essay”: takes 1 h 30 min in all (now 1 h)", InstructionRules.describe(change, mapOf(essay.id to essay), LONDON))
-        val inUse = essay.copy(userEffortMin = 90)
+        val inUse = essay.yours(minutes = 90)
         assertEquals("“essay”: takes 1 h 30 min in all (the app's estimate: 1 h)", InstructionRules.describe(change, mapOf(essay.id to inUse), LONDON))
     }
 

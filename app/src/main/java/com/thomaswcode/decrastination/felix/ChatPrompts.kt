@@ -358,8 +358,8 @@ object ChatPrompts {
                 abs(pace - 1.0) < 0.005 -> "${t.effortMin}"
                 // Felix's paced total (#50's review): with the app's estimate now, where it's another, and
                 // whether the task has changed since, so he can set it again.
-                t.pacedMinutes -> "${t.effortMin}, as given: the app's ${t.userEffortPacedFrom} at their pace" +
-                    (if (t.appEffortMin != t.userEffortPacedFrom) ", which it now puts at ${t.appEffortMin}" else "") +
+                t.pacedMinutes -> "${t.effortMin}, as given: the app's ${t.mine.minutes?.paced?.from} at their pace" +
+                    (if (t.appEffortMin != t.mine.minutes?.paced?.from) ", which it now puts at ${t.appEffortMin}" else "") +
                     (if (t.pacedTeaches) "" else ", the task changed since")
                 t.yourMinutes || t.yourSteps -> "${t.effortMin}, as given"
                 else -> "${t.effortMin}, planned as ${(t.effortMin * pace).roundToInt()} at their pace"
@@ -373,7 +373,7 @@ object ChatPrompts {
         val open = tasks.filter { it.isOpen && !it.hidden }.sortedBy { it.deadlineAt(now) ?: it.dueAt ?: Long.MAX_VALUE }
         if (open.isEmpty()) appendLine("(none)")
         open.take(InstructionPrompts.MAX_TASKS).forEach { t ->
-            val start = listOfNotNull(t.availableFrom, t.userFrom, t.notBefore).maxOrNull()?.takeIf { it > now }
+            val start = listOfNotNull(t.availableFrom, t.mine.from?.value, t.notBefore).maxOrNull()?.takeIf { it > now }
             // A date the app or Claude set is a plan, not a deadline (PL-14): said, so it's not called overdue.
             val due = (t.deadlineAt(now) ?: t.dueAt)?.let { at(it) + if (t.hardAt(now)) "" else " (a plan)" } ?: "no date"
             appendLine("- ${t.id} | ${t.title.take(MAX_TITLE)} | ${t.source.label} | ${t.kind.label} | $due | ${minutes(t)} | ${t.workedMin + t.photoMin} | ${start?.let(::at) ?: "-"}")

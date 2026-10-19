@@ -29,10 +29,10 @@ class Stores(
         moves.forEach { it.run(dir) }
     }
 
-    private fun <T> store(name: String, serializer: kotlinx.serialization.KSerializer<T>, default: () -> T, unreadable: () -> T = default, migrations: List<Migration> = emptyList()) =
-        JsonStore(File(dir, name), serializer, default, unreadable = unreadable, clock = clock, migrations = migrations)
+    private fun <T> store(name: String, serializer: kotlinx.serialization.KSerializer<T>, default: () -> T, unreadable: () -> T = default, migrations: List<Migration> = emptyList(), onWrite: (T) -> T = { it }) =
+        JsonStore(File(dir, name), serializer, default, unreadable = unreadable, clock = clock, migrations = migrations, onWrite = onWrite)
 
-    val tasks = store("tasks.json", TaskState.serializer(), ::TaskState)
+    val tasks = store("tasks.json", TaskState.serializer(), ::TaskState, migrations = listOf(TasksMigration.TASKS), onWrite = TaskState::withStepIds)
 
     // A file that can't be read at all starts armed while the device admin is on, as only arming
     // turns it on: a bad file never disarms protection (IMP-P1-003).
@@ -42,10 +42,10 @@ class Stores(
     val log = store("log.json", ActivityLog.serializer(), ::ActivityLog, migrations = listOf(ChatMigration.LOG))
 
     /** Your instructions about tasks, events and days, and what Claude read them as. */
-    val instructions = store("instructions.json", InstructionState.serializer(), ::InstructionState)
+    val instructions = store("instructions.json", InstructionState.serializer(), ::InstructionState, migrations = listOf(TasksMigration.INSTRUCTIONS), onWrite = InstructionState::withStepIds)
 
     /** Your chat with Felix, the live window of it: every message of his and yours, what became of his cards, and his state. */
-    val chat = store("chat.json", ChatState.serializer(), ::ChatState, migrations = listOf(ChatMigration.CHAT))
+    val chat = store("chat.json", ChatState.serializer(), ::ChatState, migrations = listOf(ChatMigration.CHAT, TasksMigration.CHAT))
 
     /**
      * The chat's messages past its window, oldest first, a month a file: each read only when it's wanted
@@ -59,7 +59,7 @@ class Stores(
      * start ([problems]), and what could be kept of it goes into its months; let go once its copy is made.
      */
     private val unsplit: JsonStore.Unreadable? = File(dir, ChatArchiveStore.NAME).takeIf { it.isFile }?.let { file ->
-        val whole = JsonStore(file, ChatArchive.serializer(), ::ChatArchive, clock = clock)
+        val whole = JsonStore(file, ChatArchive.serializer(), ::ChatArchive, clock = clock, migrations = ChatArchiveStore.MIGRATIONS)
         runBlocking {
             chatArchive.add(whole.value.messages)
             // Let go only where it was read whole, or read and set aside with what was kept written: not where
@@ -107,7 +107,7 @@ class Stores(
     )
 
     /** Each JSON store's shape now, by file: what a backup's parts from it are brought to ([Backups.decode]). */
-    val shapes: Map<String, Shape> get() = json.associate { it.name to Shape(it.version, it.migrations) } + (chatArchive.name to Shape(chatArchive.version, emptyList()))
+    val shapes: Map<String, Shape> get() = json.associate { it.name to Shape(it.version, it.migrations) } + (chatArchive.name to Shape(chatArchive.version, ChatArchiveStore.MIGRATIONS))
 
     /** Files that couldn't be read whole at this start, and where each was set aside (the archive's months, read later: [ChatArchiveStore.onProblem]). */
     val problems: List<JsonStore.Unreadable> get() = json.mapNotNull { it.problem } + chatArchive.problems + listOfNotNull(unsplit, secrets.problem)
@@ -146,8 +146,12 @@ class Stores(
     }
 
     companion object {
-        /** The moves between stores this build makes at start: Felix's records and state into the chat (4.0.0); the chat's archive into its months (4.0.4). */
-        val MOVES: List<Move> = listOf(ChatMigration.MOVE, ChatArchiveStore.SPLIT)
+        /**
+         * The moves between stores this build makes at start: Felix's records and state into the chat (4.0.0); the
+         * chat's archive into its months (4.0.4); your instructions' step ids onto the tasks they're laid on, and
+         * Felix's instructions marked from the chat (4.0.13).
+         */
+        val MOVES: List<Move> = listOf(ChatMigration.MOVE, ChatArchiveStore.SPLIT, TasksMigration.MOVE)
 
         /** How long the file an older shape came from is kept after its migration. */
         const val OLD_SHAPE_KEPT_MS = 7 * 24 * 3_600_000L

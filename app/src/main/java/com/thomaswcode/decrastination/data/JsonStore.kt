@@ -45,6 +45,8 @@ class JsonStore<T>(
     private val default: () -> T,
     /** Tidies a state as loaded: drops what has expired, fixes what a crash left half done. */
     private val onLoad: (T) -> T = { it },
+    /** What every state written keeps true, whoever changes it: each task step given its id ([TaskState.withStepIds]). */
+    private val onWrite: (T) -> T = { it },
     /** What a file that can't be read starts from, under what can be kept of it: [default], unless it's safer otherwise. */
     private val unreadable: () -> T = default,
     private val clock: () -> Long = System::currentTimeMillis,
@@ -101,7 +103,7 @@ class JsonStore<T>(
 
     /** Applies [transform] and saves the result, if it changed anything. Returns the new state. */
     suspend fun update(transform: (T) -> T): T = mutex.withLock {
-        val next = transform(_state.value)
+        val next = onWrite(transform(_state.value))
         if (next != _state.value) {
             withContext(Dispatchers.IO) { write(next) }
             _state.value = next

@@ -263,12 +263,12 @@ object Planner {
             unplanned += Unplanned(
                 task.id, task.source, task.title, left.sumOf { it.minutes }, left.size, reason,
                 at = task.availableFrom.takeIf { reason == Unplanned.Reason.NotOpen },
-                after = task.userAfter?.takeIf { reason == Unplanned.Reason.Waits }?.let { byId[it]?.title ?: it },
+                after = task.mine.after?.value?.takeIf { reason == Unplanned.Reason.Waits }?.let { byId[it]?.title ?: it },
             )
         }
         // A start you gave (an instruction) places the work from then on, as a deck's next cards do;
         // a deck task's, from the earliest its assignments can start, where they all have one.
-        fun startOf(task: TaskItem): Long? = task.userFrom ?: linked(task).takeIf { a -> a.isNotEmpty() && a.all { it.userFrom != null } }?.minOf { it.userFrom!! }
+        fun startOf(task: TaskItem): Long? = task.mine.from?.value ?: linked(task).takeIf { a -> a.isNotEmpty() && a.all { it.mine.from?.value != null } }?.minOf { it.mine.from?.value!! }
         // A deck task's deadline: the earliest of its assignments' in force now (a due date you gave
         // included; a plan's gone by, the real one behind it, PL-14).
         fun dueOf(task: TaskItem): Long? = linked(task).filterNot(::heldBack).mapNotNull { it.deadlineAt(input.now) }.minOrNull() ?: task.dueAt
@@ -1110,7 +1110,7 @@ object Planner {
      * go to any day from today (D-30), as [InstructionRules.latePin] lets it.
      */
     private fun keptDay(task: TaskItem, real: Long?, input: Input): LocalDate? {
-        val day = task.userOnDay?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: return null
+        val day = task.mine.onDay?.value?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: return null
         val start = task.notBefore?.let { date(it, input.zone) }
         return day.takeIf { it >= date(input.now, input.zone) && (start == null || it >= start) && (real == null || real <= input.now || it <= date(real, input.zone)) }
     }
@@ -1140,7 +1140,7 @@ object Planner {
      * come: overdue work takes any time from now (D-30), as [InstructionRules.latePin] lets it.
      */
     private fun pinnedTime(task: TaskItem, real: Long?, input: Input): Long? {
-        val at = task.userAtTime ?: return null
+        val at = task.mine.atTime?.value ?: return null
         val end = date(at, input.zone).plusDays(1).atStartOfDay(input.zone).toInstant().toEpochMilli() - 1
         return at.takeIf { end >= input.now && (task.notBefore == null || it >= task.notBefore) && (real == null || real <= input.now || it < real) }
     }

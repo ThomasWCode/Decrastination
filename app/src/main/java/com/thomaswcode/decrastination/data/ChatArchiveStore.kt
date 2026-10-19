@@ -56,7 +56,7 @@ class ChatArchiveStore(private val dir: File, private val clock: () -> Long = Sy
     private fun yearOf(file: String): Long = file.removePrefix("chat-archive-").substringBeforeLast('-').removePrefix("+").toLong()
 
     private fun month(file: String): JsonStore<ChatArchive> = months.computeIfAbsent(file) {
-        JsonStore(File(dir, file), ChatArchive.serializer(), ::ChatArchive, clock = clock, lazily = true).also { store -> store.onProblem = { onProblem?.invoke(it) } }
+        JsonStore(File(dir, file), ChatArchive.serializer(), ::ChatArchive, clock = clock, migrations = MIGRATIONS, lazily = true).also { store -> store.onProblem = { onProblem?.invoke(it) } }
     }
 
     /**
@@ -198,6 +198,9 @@ class ChatArchiveStore(private val dir: File, private val clock: () -> Long = Sy
     companion object {
         /** The archive as a whole: in a backup, and the one file 4.0.0 to 4.0.3 kept it in. */
         const val NAME = "chat-archive.json"
+
+        /** What brings a month of an older shape to this one: the tasks its acts keep, in their second shape (4.0.13). */
+        val MIGRATIONS: List<Migration> = listOf(TasksMigration.ARCHIVE)
 
         /** A month's file, as [fileOf] names it: a year past 9999 written with its sign and more digits. */
         private val MONTH_FILE = Regex("""chat-archive-\+?\d{4,}-\d{2}\.json""")

@@ -177,7 +177,7 @@ fun WorkScreen(graph: AppGraph, activity: Activity, opening: String? = null, onO
             }
             // Tasks you've said aren't, or are the same work as another (DX-15): kept, off the plan, and
             // here to check (taken back in Ask Claude).
-            val notTasks = state.tasks.filter { it.isOpen && (it.userNotATask || it.userSameAs != null) && (only == null || it.source.name == only) }.sortedWith(compareBy(nullsLast()) { it.dueAt })
+            val notTasks = state.tasks.filter { it.isOpen && (it.mine.notATask != null || it.mine.sameAs?.value != null) && (only == null || it.source.name == only) }.sortedWith(compareBy(nullsLast()) { it.dueAt })
             if (notTasks.isNotEmpty()) {
                 val expanded = NOT_TASKS !in folded
                 item(key = NOT_TASKS) { FoldingHeading("Hidden, as you said", expanded, { toggle(NOT_TASKS) }, summary = "${notTasks.size}") }
@@ -258,12 +258,12 @@ private fun TaskTile(task: TaskItem, index: Int, count: Int, now: Long, zone: ja
     val hiddenUntil = task.availableFrom?.takeIf { it > now }
     // Claude's plan for it not used (out of range, or not adding up): said, so it can be checked.
     val dropped = Enrichments.current(task)?.dropped?.takeIf { task.isOpen }
-    val waits = task.isOpen && task.userAfter != null && InstructionRules.waiting(task, byId)
+    val waits = task.isOpen && task.mine.after?.value != null && InstructionRules.waiting(task, byId)
     // A start you gave (or one of your own's): planned from then on, not hidden.
-    val startsAt = (if (task.source == Source.Own) task.notBefore else task.userFrom)?.takeIf { task.isOpen && it > now }
+    val startsAt = (if (task.source == Source.Own) task.notBefore else task.mine.from?.value)?.takeIf { task.isOpen && it > now }
     val steps = task.subSteps.takeIf { it.isNotEmpty() && task.isOpen }
     // The same work as another, which is planned (DX-15).
-    val sameAs = task.userSameAs?.let { byId[it] }
+    val sameAs = task.mine.sameAs?.value?.let { byId[it] }
     ListTile(index, count, onClick = onClick) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(
@@ -290,16 +290,16 @@ private fun TaskTile(task: TaskItem, index: Int, count: Int, now: Long, zone: ja
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
-        val tags = dropped != null || hiddenUntil != null || waits || task.userDueAt != null || task.userEffortMin != null || startsAt != null || steps != null || task.userNotATask || sameAs != null
+        val tags = dropped != null || hiddenUntil != null || waits || task.mine.dueAt?.value != null || task.mine.minutes?.minutes != null || startsAt != null || steps != null || task.mine.notATask != null || sameAs != null
         if (task.isOpen && tags) {
             FlowRow(Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                if (task.userNotATask) Pill("Not a task")
+                if (task.mine.notATask != null) Pill("Not a task")
                 sameAs?.let { Pill("Same as “${it.title}”") }
                 if (dropped != null) WarningPill("Claude's plan dropped")
                 if (hiddenUntil != null) Pill("Hidden till ${Format.at(hiddenUntil, now, zone)}")
                 if (waits) Pill("Waits for another task")
-                if (task.userDueAt != null) Pill("Due date yours")
-                if (task.userEffortMin != null) Pill(if (task.pacedMinutes) "Minutes at your pace" else "Minutes yours")
+                if (task.mine.dueAt?.value != null) Pill("Due date yours")
+                if (task.mine.minutes?.minutes != null) Pill(if (task.pacedMinutes) "Minutes at your pace" else "Minutes yours")
                 if (startsAt != null) Pill("Starts ${Format.at(startsAt, now, zone)}")
                 steps?.let { s -> Pill("${s.count { it.done }}/${s.size} steps") }
             }

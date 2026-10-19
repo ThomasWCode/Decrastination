@@ -5,11 +5,10 @@ import com.thomaswcode.decrastination.core.ChatState
 import com.thomaswcode.decrastination.core.InstructionRules
 import com.thomaswcode.decrastination.core.InstructionState
 import com.thomaswcode.decrastination.core.MemoryState
+import com.thomaswcode.decrastination.core.Mine
 import com.thomaswcode.decrastination.core.SchoolCalendar
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.Status
-import com.thomaswcode.decrastination.core.TaskOverrides
-import com.thomaswcode.decrastination.core.overrides
 import java.io.File
 import java.nio.file.Files
 import kotlin.test.Test
@@ -268,7 +267,7 @@ class RehearsalTest {
             val open = all.filter { it.status == Status.Open }
             appendLine("Tasks: ${all.size}; open ${open.size}, done ${all.count { it.status == Status.Done }}, missed ${all.count { it.status == Status.Missed }}; by source ${all.groupingBy { it.source.name }.eachCount().toSortedMap()}")
             appendLine("  steps ${all.sumOf { it.subSteps.size }}, ticked ${all.sumOf { t -> t.subSteps.count { it.done } }}; on open tasks ${open.sumOf { it.subSteps.size }}, ticked ${open.sumOf { t -> t.subSteps.count { it.done } }}")
-            appendLine("  with values of yours ${all.count { it.overrides() != TaskOverrides.NONE }}; your steps ${all.count { it.userSteps != null }}; your minutes ${all.count { it.userEffortMin != null }} (paced ${all.count { it.userEffortPacedFrom != null }}); pins ${all.count { it.userAtTime != null }}")
+            appendLine("  with values of yours ${all.count { it.mine != Mine.NONE }}; your steps ${all.count { it.mine.steps?.steps != null }}; your minutes ${all.count { it.mine.minutes?.minutes != null }} (paced ${all.count { it.mine.minutes?.paced?.from != null }}); pins ${all.count { it.mine.atTime?.value != null }}")
             appendLine("  read by Claude ${all.count { it.enrichment.let { e -> e != null && e.by != "rules" } }}, by the rules ${all.count { it.enrichment?.by == "rules" }}; with a photo ${all.count { it.photo != null }}; waiting to be rewarded ${tasks.unrewarded.size}")
             appendLine("  ids unique: ${all.map { it.id }.toSet().size == all.size}")
         }
@@ -279,7 +278,7 @@ class RehearsalTest {
                 val ids = tasks.tasks.map { it.id }.toSet()
                 val named = applied.flatMap { i -> i.changes.mapNotNull { it.taskId } }.toSet()
                 val laid = InstructionRules.taskOverrides(applied)
-                appendLine("  tasks they name: ${named.size}, not among the tasks ${named.count { it !in ids }}; tasks whose values aren't their instructions' ${tasks.tasks.count { (laid[it.id] ?: TaskOverrides.NONE) != it.overrides() }}")
+                appendLine("  tasks they name: ${named.size}, not among the tasks ${named.count { it !in ids }}; tasks whose values aren't their instructions' ${tasks.tasks.count { (laid[it.id] ?: Mine.NONE) != it.mine }}")
             }
         }
         of<ChatState>("chat.json")?.let { chat ->

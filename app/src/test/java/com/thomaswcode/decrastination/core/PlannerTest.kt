@@ -119,7 +119,7 @@ class PlannerTest {
     fun `every starred email is planned, but not one you've said isn't a task`() {
         fun email(id: String, kind: Kind) = task(id, null, effort = 10, kind = kind).copy(id = "gmail:$id", source = Source.Gmail)
         val call = task("call", Fixtures.at("2026-10-09T17:00"), kind = Kind.Event).copy(id = "powerplanner:call", source = Source.PowerPlanner)
-        val plan = plan(listOf(email("note", Kind.Admin), email("linkedin", Kind.Info), email("spam", Kind.Admin).copy(userNotATask = true), call), "2026-10-08T17:00")
+        val plan = plan(listOf(email("note", Kind.Admin), email("linkedin", Kind.Info), email("spam", Kind.Admin).yours(notATask = true), call), "2026-10-08T17:00")
         assertEquals(setOf("gmail:note", "gmail:linkedin"), plan.ordered.map { it.taskId }.toSet())
         // A planner item that's an event is still a reminder.
         assertEquals(listOf("powerplanner:call"), plan.events.map { it.id })
@@ -846,20 +846,20 @@ class PlannerTest {
     @Test
     fun `a day you give for a task keeps all of it on that day`() {
         // Ninety minutes due in ten days, put on Saturday: both pieces Saturday, where you put them.
-        val essay = task("essay", Fixtures.at("2026-10-18T23:59"), effort = 90).copy(userOnDay = "2026-10-10")
+        val essay = task("essay", Fixtures.at("2026-10-18T23:59"), effort = 90).yours(onDay = "2026-10-10")
         val plan = plan(listOf(essay), "2026-10-08T17:00")
         assertEquals(listOf(LocalDate.parse("2026-10-10")), plan.dayOf("essay"))
         assertTrue(plan.chunksOf("teams:essay").all { it.why == Why.Pinned && !it.behind }, "${plan.chunksOf("teams:essay").map { it.why }}")
         assertEquals("Where you put it", plan.chunksOf("teams:essay").first().whyLine(LocalDate.parse("2026-10-08"), LONDON))
         // A day gone by, or after its deadline, isn't kept to.
-        assertTrue(plan(listOf(essay.copy(userOnDay = "2026-10-07")), "2026-10-08T17:00").chunksOf("teams:essay").none { it.why == Why.Pinned })
-        assertTrue(plan(listOf(essay.copy(userOnDay = "2026-10-20")), "2026-10-08T17:00").chunksOf("teams:essay").none { it.why == Why.Pinned })
+        assertTrue(plan(listOf(essay.yours(onDay = "2026-10-07")), "2026-10-08T17:00").chunksOf("teams:essay").none { it.why == Why.Pinned })
+        assertTrue(plan(listOf(essay.yours(onDay = "2026-10-20")), "2026-10-08T17:00").chunksOf("teams:essay").none { it.why == Why.Pinned })
     }
 
     @Test
     fun `a time you give for a task's next piece holds it then, the rest after it`() {
         // Monday 17:00; the essay's next piece at 19:30 on Tuesday (a school day with windows), due Friday.
-        val essay = task("essay", Fixtures.at("2026-10-16T23:59"), effort = 90).copy(userAtTime = Fixtures.at("2026-10-13T19:30"))
+        val essay = task("essay", Fixtures.at("2026-10-16T23:59"), effort = 90).yours(atTime = Fixtures.at("2026-10-13T19:30"))
         val plan = Planner.plan(windowed(listOf(essay), "2026-10-12T17:00"))
         val pinned = plan.chunksOf("teams:essay").single { it.why == Why.Pinned }
         assertEquals(1, pinned.part)
@@ -870,7 +870,7 @@ class PlannerTest {
         val days = plan.buckets.flatMap { b -> b.chunks.filter { it.taskId == "teams:essay" }.map { b.date } }
         assertTrue(days.all { it >= tuesday }, "$days")
         // A time at or past its deadline is left alone.
-        val late = essay.copy(userAtTime = Fixtures.at("2026-10-17T10:00"))
+        val late = essay.yours(atTime = Fixtures.at("2026-10-17T10:00"))
         assertTrue(Planner.plan(windowed(listOf(late), "2026-10-12T17:00")).chunksOf("teams:essay").none { it.why == Why.Pinned })
     }
 
@@ -878,14 +878,14 @@ class PlannerTest {
     fun `a time you give for a task in steps holds its next step then, and a missed step says it moved`() {
         // A step's piece is known by its task and step (PL-12), and so are its pin and its missed slot.
         val essay = task("essay", Fixtures.at("2026-10-16T23:59"), effort = 60, steps = listOf(SubStep("Read", 30), SubStep("Write", 30)))
-        val plan = Planner.plan(windowed(listOf(essay.copy(userAtTime = Fixtures.at("2026-10-13T19:30"))), "2026-10-12T17:00"))
+        val plan = Planner.plan(windowed(listOf(essay.yours(atTime = Fixtures.at("2026-10-13T19:30"))), "2026-10-12T17:00"))
         val pinned = plan.chunksOf("teams:essay").single { it.why == Why.Pinned }
         assertEquals(0, pinned.stepIndex)
         val slot = plan.bucket(tuesday)!!.slotOf(pinned)!!
         assertEquals(Fixtures.at("2026-10-13T19:30"), slot.start)
         assertTrue(slot.pinned)
         // A time off the five minutes ("give me 15" at 19:17) is kept to the minute.
-        val offFive = Planner.plan(windowed(listOf(essay.copy(userAtTime = Fixtures.at("2026-10-13T19:32"))), "2026-10-12T17:00"))
+        val offFive = Planner.plan(windowed(listOf(essay.yours(atTime = Fixtures.at("2026-10-13T19:32"))), "2026-10-12T17:00"))
         val atMinute = offFive.bucket(tuesday)!!.slotOf(offFive.chunksOf("teams:essay").single { it.why == Why.Pinned })!!
         assertEquals(Fixtures.at("2026-10-13T19:32"), atMinute.start)
         assertTrue(atMinute.pinned)
@@ -898,19 +898,19 @@ class PlannerTest {
     @Test
     fun `overdue work goes to a day or a time you give it, any from now, and stays overdue`() {
         // D-30. Due Wednesday noon, Thursday 17:00 now, put on Saturday: all of it Saturday, overdue there.
-        val essay = task("essay", Fixtures.at("2026-10-07T12:00"), effort = 90).copy(userOnDay = "2026-10-10")
+        val essay = task("essay", Fixtures.at("2026-10-07T12:00"), effort = 90).yours(onDay = "2026-10-10")
         val onDay = plan(listOf(essay), "2026-10-08T17:00")
         assertEquals(listOf(LocalDate.parse("2026-10-10")), onDay.dayOf("essay"))
         assertTrue(onDay.chunksOf("teams:essay").all { it.overdue }, "${onDay.chunksOf("teams:essay").map { it.overdue }}")
         // Three weeks on, past the fortnight the plan reaches without it: that day still, a time likewise.
-        val far = plan(listOf(essay.copy(userOnDay = "2026-10-29")), "2026-10-08T17:00")
+        val far = plan(listOf(essay.yours(onDay = "2026-10-29")), "2026-10-08T17:00")
         assertEquals(listOf(LocalDate.parse("2026-10-29")), far.dayOf("essay"))
         assertTrue(far.unplanned.none { it.taskId == "teams:essay" }, "${far.unplanned}")
-        val farTime = plan(listOf(essay.copy(userOnDay = null, userAtTime = Fixtures.at("2026-10-29T19:00"))), "2026-10-08T17:00")
+        val farTime = plan(listOf(essay.yours(onDay = null, atTime = Fixtures.at("2026-10-29T19:00"))), "2026-10-08T17:00")
         assertEquals(LocalDate.parse("2026-10-29"), farTime.dayOf("essay").firstOrNull())
         assertTrue(farTime.unplanned.none { it.taskId == "teams:essay" }, "${farTime.unplanned}")
         // Due last Friday, Monday 17:00 now, its next piece at 19:30 on Tuesday: then, the rest no earlier.
-        val late = task("late", Fixtures.at("2026-10-09T23:59"), effort = 90).copy(userAtTime = Fixtures.at("2026-10-13T19:30"))
+        val late = task("late", Fixtures.at("2026-10-09T23:59"), effort = 90).yours(atTime = Fixtures.at("2026-10-13T19:30"))
         val timed = Planner.plan(windowed(listOf(late), "2026-10-12T17:00"))
         val slot = timed.bucket(tuesday)!!.slotOf(timed.chunksOf("teams:late").first())!!
         assertEquals(Fixtures.at("2026-10-13T19:30"), slot.start)
@@ -926,7 +926,7 @@ class PlannerTest {
     fun `work you put on a day has its time before work due that day`() {
         // Thursday 17:00, 300 minutes left: five hours due tonight, and an hour you put on today.
         val tonight = task("tonight", Fixtures.at("2026-10-08T23:59"), effort = 300)
-        val essay = task("essay", Fixtures.at("2026-10-18T23:59"), effort = 60).copy(userOnDay = "2026-10-08")
+        val essay = task("essay", Fixtures.at("2026-10-18T23:59"), effort = 60).yours(onDay = "2026-10-08")
         val plan = plan(listOf(tonight, essay), "2026-10-08T17:00")
         assertEquals(listOf(LocalDate.parse("2026-10-08")), plan.dayOf("essay"))
         assertTrue(plan.chunksOf("teams:essay").none { it.behind })
@@ -937,10 +937,10 @@ class PlannerTest {
     @Test
     fun `a day or a time before a task can start isn't kept to`() {
         val essay = task("essay", Fixtures.at("2026-10-18T23:59"), effort = 60).copy(notBefore = Fixtures.at("2026-10-12T00:00"))
-        assertTrue(plan(listOf(essay.copy(userOnDay = "2026-10-10")), "2026-10-08T17:00").chunksOf("teams:essay").none { it.why == Why.Pinned })
-        assertTrue(plan(listOf(essay.copy(userAtTime = Fixtures.at("2026-10-10T19:00"))), "2026-10-08T17:00").chunksOf("teams:essay").none { it.why == Why.Pinned })
+        assertTrue(plan(listOf(essay.yours(onDay = "2026-10-10")), "2026-10-08T17:00").chunksOf("teams:essay").none { it.why == Why.Pinned })
+        assertTrue(plan(listOf(essay.yours(atTime = Fixtures.at("2026-10-10T19:00"))), "2026-10-08T17:00").chunksOf("teams:essay").none { it.why == Why.Pinned })
         // From the day it can start, it is.
-        assertTrue(plan(listOf(essay.copy(userOnDay = "2026-10-13")), "2026-10-08T17:00").chunksOf("teams:essay").all { it.why == Why.Pinned })
+        assertTrue(plan(listOf(essay.yours(onDay = "2026-10-13")), "2026-10-08T17:00").chunksOf("teams:essay").all { it.why == Why.Pinned })
     }
 
     @Test
@@ -948,7 +948,7 @@ class PlannerTest {
         // An email's date Claude read but didn't quote, Saturday; its next piece put on Monday at 19:00:
         // Monday it is, and nothing of it late for Saturday.
         val email = task("form", Fixtures.at("2026-10-10T23:59"), effort = 60, kind = Kind.Admin)
-            .copy(id = "gmail:form", source = Source.Gmail, sourceValues = SourceValues(Kind.Admin, Fixtures.at("2026-10-10T23:59"), null), userAtTime = Fixtures.at("2026-10-12T19:00"))
+            .copy(id = "gmail:form", source = Source.Gmail, sourceValues = SourceValues(Kind.Admin, Fixtures.at("2026-10-10T23:59"), null)).yours(atTime = Fixtures.at("2026-10-12T19:00"))
         assertFalse(email.hardDeadline)
         val plan = plan(listOf(email), "2026-10-08T17:00")
         val days = plan.buckets.filter { b -> b.chunks.any { it.taskId == "gmail:form" } }.map { it.date }
@@ -1100,7 +1100,7 @@ class PlannerTest {
     @Test
     fun `your minutes shared out over Claude's steps are in sittings too`() {
         // Claude's two half-hour steps, the task said to take four hours: two hours each as planned, two sittings each.
-        val t = task("t", Fixtures.at("2026-10-20T09:00"), effort = 60, steps = listOf(SubStep("Read", 30), SubStep("Write", 30))).copy(userEffortMin = 240)
+        val t = task("t", Fixtures.at("2026-10-20T09:00"), effort = 60, steps = listOf(SubStep("Read", 30), SubStep("Write", 30))).yours(minutes = 240)
         val pieces = plan(listOf(t), "2026-10-08T17:00").chunksOf("teams:t")
         assertEquals(listOf("Read" to 60, "Continue and finish: Read" to 60, "Write" to 60, "Continue and finish: Write" to 60), pieces.map { it.shown to it.minutes })
     }
@@ -1110,7 +1110,7 @@ class PlannerTest {
         // Your call (17 Oct): a task of your own's hour and a half, and two hours given a Teams task as
         // one step (by you, or Felix): each one piece, never cut back into sittings.
         val own = task("mine", Fixtures.at("2026-10-20T09:00"), effort = 90, steps = listOf(SubStep("Revise chapter 3", 90))).copy(id = "own:mine", source = Source.Own, sourceId = "mine")
-        val given = task("t", Fixtures.at("2026-10-20T09:00"), effort = 60, steps = listOf(SubStep("Write the essay", 120))).copy(userSteps = listOf(OwnStep("Write the essay", 120)))
+        val given = task("t", Fixtures.at("2026-10-20T09:00"), effort = 60, steps = listOf(SubStep("Write the essay", 120))).yours(steps = listOf(OwnStep("Write the essay", 120)))
         val plan = plan(listOf(own, given), "2026-10-08T17:00")
         assertEquals(listOf("Revise chapter 3" to 90), plan.chunksOf("own:mine").map { it.shown to it.minutes })
         assertEquals(listOf("Write the essay" to 120), plan.chunksOf("teams:t").map { it.shown to it.minutes })
@@ -1123,7 +1123,7 @@ class PlannerTest {
         // minutes; two hours you or Felix gave a Teams task stay two hours.
         val pace = Calibration(multipliers = mapOf(Calibration.key(Kind.Homework, null) to 1.5))
         val claude = task("c", Fixtures.at("2026-10-20T09:00"), effort = 60, steps = listOf(SubStep("Read", 60)))
-        val given = task("g", Fixtures.at("2026-10-20T09:00"), effort = 120, steps = listOf(SubStep("Past paper", 120))).copy(userSteps = listOf(OwnStep("Past paper", 120)))
+        val given = task("g", Fixtures.at("2026-10-20T09:00"), effort = 120, steps = listOf(SubStep("Past paper", 120))).yours(steps = listOf(OwnStep("Past paper", 120)))
         val plan = Planner.plan(Planner.Input(listOf(claude, given), Fixtures.at("2026-10-08T17:00"), LONDON, settings, calibration = pace))
         assertEquals(90, plan.chunksOf("teams:c").sumOf { it.minutes })
         assertEquals(listOf(120), plan.chunksOf("teams:g").map { it.minutes })
@@ -1523,7 +1523,7 @@ class PlannerTest {
         // Not open till the 15th at its source; and one you said waits for another, still open.
         val later = task("later", Fixtures.at("2026-10-20T09:00"), available = Fixtures.at("2026-10-15T00:00"))
         val first = task("first", Fixtures.at("2026-10-12T09:00"))
-        val second = task("second", Fixtures.at("2026-10-13T09:00")).copy(userAfter = "teams:first")
+        val second = task("second", Fixtures.at("2026-10-13T09:00")).yours(after = "teams:first")
         val plan = plan(listOf(later, first, second), "2026-10-08T17:00")
         assertEquals(listOf(Unplanned.Reason.NotOpen to "later", Unplanned.Reason.Waits to "second"), plan.unplanned.map { it.reason to it.title })
         assertEquals(Fixtures.at("2026-10-15T00:00"), plan.unplanned[0].at)
@@ -1570,7 +1570,7 @@ class PlannerTest {
         // and handing it in (5), not 5 minutes alone.
         val steps = listOf(SubStep("Learn vocabulary 1.2", 40, ankiSections = listOf("1.2")))
         val first = task("first", Fixtures.at("2026-10-12T09:00"))
-        val vocab = task("vocab", Fixtures.at("2026-10-13T09:00"), steps = steps).copy(userAfter = "teams:first")
+        val vocab = task("vocab", Fixtures.at("2026-10-13T09:00"), steps = steps).yours(after = "teams:first")
         val deck = TaskItem(
             id = "anki:deck", source = Source.Anki, sourceId = AnkiRules.DECK_PREFIX + "1", title = "Anki: Textbook 1::1.2", dueAt = Fixtures.at("2026-10-13T09:00"),
             kind = Kind.Revision, sourceEffortMin = 40, derived = true, subSteps = listOf(SubStep("20 new cards", 9)),
@@ -1595,7 +1595,7 @@ class PlannerTest {
         )
         val steps = listOf(SubStep("Learn vocabulary 1.2 and 1.3", 60, ankiSections = listOf("1.2", "1.3")), SubStep("Write it up", 30))
         val first = task("first", Fixtures.at("2026-10-12T09:00"))
-        val vocab = task("vocab", Fixtures.at("2026-10-13T09:00"), steps = steps).copy(userAfter = "teams:first")
+        val vocab = task("vocab", Fixtures.at("2026-10-13T09:00"), steps = steps).yours(after = "teams:first")
         val other = task("other", Fixtures.at("2026-10-14T09:00"), steps = listOf(SubStep("Learn vocabulary 1.2", 40, ankiSections = listOf("1.2"))))
         val plan = plan(listOf(first, vocab, other, deck("1.2", "teams:vocab,teams:other"), deck("1.3", "teams:vocab")), "2026-10-08T17:00")
         assertTrue(plan.chunksOf("anki:1.2").isNotEmpty())
@@ -1608,7 +1608,7 @@ class PlannerTest {
         // The deck is for both: the open one keeps it on the plan, so the waiting one's gap is the rest.
         val steps = listOf(SubStep("Learn vocabulary 1.2", 40, ankiSections = listOf("1.2")), SubStep("Write it up", 30))
         val first = task("first", Fixtures.at("2026-10-12T09:00"))
-        val vocab = task("vocab", Fixtures.at("2026-10-13T09:00"), steps = steps).copy(userAfter = "teams:first")
+        val vocab = task("vocab", Fixtures.at("2026-10-13T09:00"), steps = steps).yours(after = "teams:first")
         val other = task("other", Fixtures.at("2026-10-14T09:00"), steps = listOf(SubStep("Learn vocabulary 1.2", 40, ankiSections = listOf("1.2"))))
         val deck = TaskItem(
             id = "anki:deck", source = Source.Anki, sourceId = AnkiRules.DECK_PREFIX + "1", title = "Anki: Textbook 1::1.2", dueAt = Fixtures.at("2026-10-13T09:00"),
@@ -1623,7 +1623,7 @@ class PlannerTest {
 
     @Test
     fun `a task you said isn't one, an email only to read, and an event aren't listed as left out`() {
-        val notATask = task("not", Fixtures.at("2026-10-20T09:00"), available = Fixtures.at("2026-10-15T00:00")).copy(userNotATask = true)
+        val notATask = task("not", Fixtures.at("2026-10-20T09:00"), available = Fixtures.at("2026-10-15T00:00")).yours(notATask = true)
         val event = task("event", Fixtures.at("2026-10-20T09:00"), kind = Kind.Event, available = Fixtures.at("2026-10-15T00:00"))
         assertTrue(plan(listOf(notATask, event), "2026-10-08T17:00").unplanned.isEmpty())
     }

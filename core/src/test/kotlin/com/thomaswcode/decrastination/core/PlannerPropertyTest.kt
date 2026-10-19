@@ -57,11 +57,10 @@ class PlannerPropertyTest {
                 stepsPerDay = if (chance(20)) 1 + random.nextInt(3) else null,
                 notBefore = if (chance(20)) now + random.nextLong(6) * DAY else null,
                 // A day for all of it, or a time for its next piece, as you'd give them (PL-04): some gone by, some after its deadline.
-                userOnDay = if (chance(5)) today.plusDays(random.nextLong(-1, 14)).toString() else null,
-                userAtTime = if (chance(5)) at(today.plusDays(random.nextLong(14)), LocalTime.of(8 + random.nextInt(15), 5 * random.nextInt(12))) else null,
+                mine = Mine(onDay = (if (chance(5)) today.plusDays(random.nextLong(-1, 14)).toString() else null)?.let { SetBy(it, By.You) }),
                 firstSeenAt = now - random.nextLong(11) * DAY,
                 lastSeenAt = now,
-            )
+            ).yours(atTime = if (chance(5)) at(today.plusDays(random.nextLong(14)), LocalTime.of(8 + random.nextInt(15), 5 * random.nextInt(12))) else null)
             return quoted?.let { task.copy(enrichment = Enrichment(inputHash = Enrichments.inputHash(task), by = "test", at = now, deadline = dueAt, deadlineQuoted = it)) } ?: task
         }
 
@@ -243,7 +242,7 @@ class PlannerPropertyTest {
         val leftOut = plan.unplanned.map { it.taskId }.toSet()
         return input.tasks.mapNotNull { task ->
             // Put on a day or at a time (PL-04): where you put it, not spread.
-            if (task.userOnDay != null || task.userAtTime != null) return@mapNotNull null
+            if (task.mine.onDay?.value != null || task.mine.atTime?.value != null) return@mapNotNull null
             val due = task.dueAt?.takeIf { task.id !in leftOut } ?: return@mapNotNull null
             val pieces = placed[task.id].orEmpty()
             if (pieces.isEmpty() || pieces.any { (_, c) -> c.soft || c.behind || c.overdue || c.dueToday || c.dueSoon }) return@mapNotNull null
@@ -309,7 +308,7 @@ class PlannerPropertyTest {
             // Where you put it (PL-04): only a task you put on a day or at a time, and never overdue work.
             if (chunk.why == Why.Pinned) {
                 val task = byId.getValue(chunk.taskId)
-                assertTrue((task.userOnDay != null || task.userAtTime != null) && !chunk.overdue, "seed=$seed: ${chunk.taskId} part ${chunk.part} says Pinned")
+                assertTrue((task.mine.onDay?.value != null || task.mine.atTime?.value != null) && !chunk.overdue, "seed=$seed: ${chunk.taskId} part ${chunk.part} says Pinned")
                 continue
             }
             val allowed = when {
@@ -324,7 +323,7 @@ class PlannerPropertyTest {
             // A day apart is revision's alone (no test dates are drawn here).
             assertTrue(chunk.why != Why.RevisionGap || chunk.kind == Kind.Revision, "seed=$seed: ${chunk.taskId} part ${chunk.part}, ${chunk.kind}, says RevisionGap")
             // A piece alone in its run: a task in one piece, or the rest of one after a piece at a time you gave (PL-04).
-            assertTrue(chunk.why != Why.MostRoom || chunk.parts == 1 || byId.getValue(chunk.taskId).userAtTime != null, "seed=$seed: ${chunk.taskId} part ${chunk.part} of ${chunk.parts} says MostRoom")
+            assertTrue(chunk.why != Why.MostRoom || chunk.parts == 1 || byId.getValue(chunk.taskId).mine.atTime?.value != null, "seed=$seed: ${chunk.taskId} part ${chunk.part} of ${chunk.parts} says MostRoom")
             // Placed after its deadline's own last day: there was no room before it.
             val lastDay = Planner.lastDayBefore(chunk.deadline, input)
             if (chunk.behind && !chunk.soft && bucket.date > lastDay) assertTrue(chunk.why == Why.NoRoom, "seed=$seed: ${chunk.taskId} part ${chunk.part} on ${bucket.date}, after its deadline's day, says ${chunk.why}")
@@ -379,7 +378,7 @@ class PlannerPropertyTest {
     private fun drawPins(seed: Long, plan: Plan, input: Planner.Input): Map<String, Long> {
         val random = Random(seed xor 0x5107L)
         // Not a task with a time of its own (PL-04), whose own pin holds its piece.
-        val timed = input.tasks.filter { it.userAtTime != null }.map { it.id }.toSet()
+        val timed = input.tasks.filter { it.mine.atTime?.value != null }.map { it.id }.toSet()
         val choices = plan.buckets.filter { input.windows[it.date] != null }.flatMap { b -> b.chunks.filter { it.taskId !in timed }.map { b.date to it } }
         val pins = HashMap<String, Long>()
         val taken = mutableListOf<Pair<Long, Long>>()

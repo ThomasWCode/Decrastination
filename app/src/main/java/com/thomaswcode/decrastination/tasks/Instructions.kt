@@ -13,6 +13,7 @@ import com.thomaswcode.decrastination.core.Instruction
 import com.thomaswcode.decrastination.core.InstructionRules
 import com.thomaswcode.decrastination.core.InstructionState
 import com.thomaswcode.decrastination.core.InstructionStatus
+import com.thomaswcode.decrastination.core.Mine
 import com.thomaswcode.decrastination.core.NoSchool
 import com.thomaswcode.decrastination.core.OwnTaskRules
 import com.thomaswcode.decrastination.core.Planner
@@ -21,10 +22,8 @@ import com.thomaswcode.decrastination.core.SchoolCalendar
 import com.thomaswcode.decrastination.core.SchoolDays
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.Slotter
-import com.thomaswcode.decrastination.core.TaskOverrides
 import com.thomaswcode.decrastination.core.WallClock
-import com.thomaswcode.decrastination.core.overrides
-import com.thomaswcode.decrastination.core.withOverrides
+import com.thomaswcode.decrastination.core.withMine
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.RuntimeState
 import com.thomaswcode.decrastination.data.TaskState
@@ -420,9 +419,9 @@ class Instructions(
         tasks.update { state ->
             state.copy(
                 tasks = state.tasks.map { task ->
-                    val o = overrides[task.id] ?: TaskOverrides.NONE
-                    val now = task.overrides()
-                    if (o == now) task else task.withOverrides(o)
+                    val o = overrides[task.id] ?: Mine.NONE
+                    val now = task.mine
+                    if (o == now) task else task.withMine(o)
                 }.let(Duplicates::linksPresent),
             )
         }

@@ -9,6 +9,7 @@ import com.thomaswcode.decrastination.data.RuntimeState
 import com.thomaswcode.decrastination.data.SlotOutcome
 import com.thomaswcode.decrastination.data.SlotRecord
 import com.thomaswcode.decrastination.data.TaskState
+import com.thomaswcode.decrastination.data.TasksMigration
 import com.thomaswcode.decrastination.enrich.KeyProblem
 import com.thomaswcode.decrastination.enrich.ModelGateway
 import com.thomaswcode.decrastination.learn.EventJudge
@@ -124,7 +125,10 @@ class PlanSnapshotTest {
     private val slots = SlotState("2026-10-19", previous = mapOf("teams:sheet#0" to at("2026-10-19T17:10")), missed = listOf(MissedSlot("teams:late#-1#1", "teams:late", at("2026-10-19T11:30"))))
 
     /** The stores' migrations, as [com.thomaswcode.decrastination.data.Stores] gives them: those of a shape past the first. */
-    private val MIGRATIONS = mapOf("runtime.json" to listOf(ChatMigration.RUNTIME), "log.json" to listOf(ChatMigration.LOG))
+    private val MIGRATIONS = mapOf(
+        "runtime.json" to listOf(ChatMigration.RUNTIME), "log.json" to listOf(ChatMigration.LOG),
+        "tasks.json" to listOf(TasksMigration.TASKS), "instructions.json" to listOf(TasksMigration.INSTRUCTIONS),
+    )
 
     /** The plan as the app makes it ([Planning.plan]), from temporary stores holding the fixed state, and the calendar as last read. */
     private fun plan(): Plan {

@@ -742,7 +742,7 @@ class Focus(
                 // task's minutes plans more time for it, but can't make finishing it earn more. The app's
                 // estimate leaves out your steps as well as your minutes (#49's review): yours are planned
                 // as given, its by the pace learned.
-                val remaining = minOf(owed(counted), owed(counted.copy(userEffortMin = null, userSteps = null)))
+                val remaining = minOf(owed(counted), owed(counted.copy(mine = counted.mine.copy(minutes = null, steps = null))))
                 Credit.forCompletion(remaining.roundToInt().coerceAtLeast(0), ratio)
             }
             // Its slots kept without earning: given with it, once, within today's plan.
@@ -768,7 +768,7 @@ class Focus(
                         // What was left of it when first seen: progress it already had isn't work done here,
                         // nor is vocabulary its decks hold (their own records learn from it). A total Felix
                         // worked out at your pace, against the app's estimate it came from (17 Oct; #50's review).
-                        estimateMin = ((if (task.pacedTeaches) task.userEffortPacedFrom ?: task.appEffortMin else task.effortMin) * (1 - task.sourceProgress.coerceIn(0.0, 1.0)) - deckMinutes(task)).roundToInt().coerceAtLeast(1),
+                        estimateMin = ((if (task.pacedTeaches) task.mine.minutes?.paced?.from ?: task.appEffortMin else task.effortMin) * (1 - task.sourceProgress.coerceIn(0.0, 1.0)) - deckMinutes(task)).roundToInt().coerceAtLeast(1),
                         workedMin = worked(task),
                         // The deadline in force when it was done (a plan's gone by gives way to the real one
                         // behind it); one split into dated blocks with none of its own, its last block's.

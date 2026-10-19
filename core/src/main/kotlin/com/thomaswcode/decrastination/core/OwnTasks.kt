@@ -36,8 +36,18 @@ data class OwnStep(
     val from: Long? = null,
     val dueAt: Long? = null,
     val where: String? = null,
+    /** Its id, made when it's first stored (an instruction's, [InstructionState.withStepIds]) and kept: the task step it's laid as keeps it ([asSubStep]). */
+    val id: String = "",
     @kotlinx.serialization.Transient val wasIndex: Int? = null,
 )
+
+/** [this] with each step that has no id, or one a step before it has, given a new one ([newStepId]). */
+fun List<OwnStep>.withIds(): List<OwnStep> {
+    val seen = HashSet<String>()
+    if (all { it.id.isNotEmpty() && seen.add(it.id) }) return this
+    seen.clear()
+    return map { if (it.id.isEmpty() || !seen.add(it.id)) it.copy(id = newStepId()).also { s -> seen += s.id } else it }
+}
 
 /**
  * Your own tasks (2.0.0, Q28). You're their source: what you give is kept as a source's values are
@@ -109,7 +119,7 @@ object OwnTaskRules {
         dueAt = task.sourceValues?.dueAt ?: task.dueAt,
         startFrom = task.notBefore,
         minutes = task.sourceEffortMin ?: task.kind.defaultEffortMin,
-        steps = task.subSteps.mapIndexed { i, s -> OwnStep(s.title, s.minutes, s.from, s.dueAt, s.where, wasIndex = i) },
+        steps = task.subSteps.mapIndexed { i, s -> OwnStep(s.title, s.minutes, s.from, s.dueAt, s.where, id = s.id, wasIndex = i) },
         where = task.extra[EXTRA_WHERE] ?: "anywhere",
     )
 
@@ -265,7 +275,7 @@ object OwnTaskRules {
             val was = index?.let { old.subSteps[it] }
             SubStep(
                 s.title.trim().take(MAX_TITLE), s.minutes, done = was?.done == true, byHand = was?.byHand == true, timedMin = was?.timedMin ?: 0,
-                from = s.from, dueAt = s.dueAt, where = Where.of(s.where)?.name?.lowercase(),
+                from = s.from, dueAt = s.dueAt, where = Where.of(s.where)?.name?.lowercase(), id = s.id.ifEmpty { was?.id.orEmpty() }, origin = StepOrigin.OwnTask,
             )
         }
         val minutes = when {
