@@ -257,9 +257,6 @@ class AppGraph private constructor(context: Context) {
         },
     )
 
-    // [CalendarWriter]'s functions, till their callers call them there.
-    fun watchCalendar(): Unit = calendarWriter.watchCalendar()
-
     /** Today's slots as they pass: begun, or missed (PL-13). */
     val slots = Slots(this)
 
@@ -298,7 +295,7 @@ class AppGraph private constructor(context: Context) {
             override suspend fun layTaskOverrides() { this@AppGraph.layTaskOverrides() }
             override suspend fun changeSettings(change: (Settings) -> Settings) { this@AppGraph.changeSettings(change) }
             override suspend fun answerEvent(key: String, answer: String) {
-                CalendarTime.answer(app, key, answer)
+                calendarWriter.answer(key, answer)
             }
         },
         calendarTime = { calendarTime },
