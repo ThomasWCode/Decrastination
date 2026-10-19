@@ -136,7 +136,7 @@ class ChatArchiveStore(private val dir: File, private val clock: () -> Long = Sy
         withContext(Dispatchers.IO) {
             for (file in files()) {
                 months.remove(file)
-                File(dir, file).delete()
+                letGo(file)
             }
         }
         _changes.update { it + 1 }
@@ -158,7 +158,7 @@ class ChatArchiveStore(private val dir: File, private val clock: () -> Long = Sy
             month(file).update { it.copy(messages = messages) }
             if (messages.isEmpty()) {
                 months.remove(file)
-                File(dir, file).delete()
+                letGo(file)
             }
         }
         _changes.update { it + 1 }
@@ -169,13 +169,32 @@ class ChatArchiveStore(private val dir: File, private val clock: () -> Long = Sy
     val problems: List<JsonStore.Unreadable> get() = months.values.mapNotNull { it.problem }
 
     /** What was kept of each month's file that didn't read whole written over it, now its problem's on record. */
-    suspend fun keepRecovered() = months.values.forEach { it.keepRecovered() }
+    suspend fun keepRecovered(): Unit = writing.withLock {
+        for ((file, store) in months.entries.toList()) {
+            store.keepRecovered()
+            // Nothing of it could be kept: let go, as an emptied month is, so no empty month offers *Earlier messages*.
+            if (store.isLoaded && store.value.messages.isEmpty()) {
+                months.remove(file)
+                withContext(Dispatchers.IO) { letGo(file) }
+            }
+        }
+    }
+
+    /**
+     * Month [file] let go: deleted, or, where that fails, written empty, so what was cleared can't come
+     * back (it then shows nothing, and goes at the next clear).
+     */
+    private fun letGo(file: String) {
+        val f = File(dir, file)
+        if (!f.delete() && f.exists()) runCatching { f.writeText(JsonStore.json.encodeToString(ChatArchive.serializer(), ChatArchive())) }
+    }
 
     companion object {
         /** The archive as a whole: in a backup, and the one file 4.0.0 to 4.0.3 kept it in. */
         const val NAME = "chat-archive.json"
 
-        private val MONTH_FILE = Regex("""chat-archive-\d{4}-\d{2}\.json""")
+        /** A month's file, as [fileOf] names it: a year past 9999 written with its sign and more digits. */
+        private val MONTH_FILE = Regex("""chat-archive-\+?\d{4,}-\d{2}\.json""")
 
         private val MONTH = DateTimeFormatter.ofPattern("yyyy-MM", Locale.UK)
 
