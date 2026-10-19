@@ -72,6 +72,7 @@ class SettingsActivity : ComponentActivity() {
         val runtime by graph.runtime.state.collectAsStateWithLifecycle()
         val model by graph.stores.model.state.collectAsStateWithLifecycle()
         val protection by graph.stores.protection.state.collectAsStateWithLifecycle()
+        val learning by graph.stores.learning.state.collectAsStateWithLifecycle()
         // What's been asked for, waiting changes included: setting one back cancels it.
         val asked = SettingsChanges.requested(saved, protection.pending)
         // Your edits over what the screen showed as you began, each field as typed, which don't parse,
@@ -280,7 +281,7 @@ class SettingsActivity : ComponentActivity() {
                         item {
                             TimeField("Daily cards due by", draft.ankiDeadlineMin, "ankiDeadlineMin", form) { draft = draft.copy(ankiDeadlineMin = it) }
                             // What a card takes in each deck, as learned from time in AnkiDroid (DX-11).
-                            com.thomaswcode.decrastination.learn.AnkiProgress.lines(graph.stores.learning.value.calibration, graph.tasks.value.tasks).forEach {
+                            com.thomaswcode.decrastination.learn.AnkiProgress.lines(learning.calibration, graph.tasks.value.tasks).forEach {
                                 Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp))
                             }
                         }

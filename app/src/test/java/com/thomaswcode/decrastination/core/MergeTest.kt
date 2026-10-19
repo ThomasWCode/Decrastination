@@ -209,11 +209,11 @@ class MergeTest {
         assertTrue(Merge.apply(done, Source.Teams, emptyList(), later + Merge.KEEP_FINISHED_MS).tasks.isEmpty())
     }
 
-    /** An assignment read (90 minutes in two steps, the first ticked), with your 75 minutes, an answer and a photo, handed in at [t0]. */
+    /** An assignment read (90 minutes in two steps, the first ticked; a test in five days its due date), with your 75 minutes, an answer and a photo, handed in at [t0]. */
     private fun handedIn(): TaskItem {
         val task = first(fetched("a").copy(detail = "Write up the practical")).single()
             .copy(answers = listOf("Half a page"), photo = TaskPhoto("photos/a.jpg", "ab12", t0)).yours(minutes = 75)
-        val read = task.withEnrichment(Enrichment(inputHash = Enrichments.inputHash(task), by = "model", at = t0, effortMin = 90, subSteps = listOf(SubStep("Plan", 30), SubStep("Write", 60))))
+        val read = task.withEnrichment(Enrichment(inputHash = Enrichments.inputHash(task), by = "model", at = t0, effortMin = 90, testDate = t0 + 5 * DAY, subSteps = listOf(SubStep("Plan", 30), SubStep("Write", 60))))
         return read.copy(
             status = Status.Done,
             doneAt = t0,
@@ -248,17 +248,17 @@ class MergeTest {
     @Test
     fun `kept as its record, a task its source still lists as finished keeps what its reading laid`() {
         val now = t0 + Merge.KEEP_FINISHED_MS
-        val kept = Merge.trimmed(listOf(handedIn()), now, GmailThreads.TEXT_EXTRAS)
-        val merged = Merge.apply(kept, Source.Teams, listOf(fetched("a", done = true).copy(detail = "Write up the practical")), now + 1).tasks.single()
-        assertEquals(Status.Done, merged.status)
+        val kept = Merge.trimmed(listOf(handedIn()), now, GmailThreads.TEXT_EXTRAS).single()
+        val merged = Merge.apply(listOf(kept), Source.Teams, listOf(fetched("a", done = true).copy(detail = "Write up the practical")), now + 1).tasks.single()
+        // As it was kept, only seen again: its estimate, steps and the test's date as its due date, not the source's.
+        assertEquals(kept.copy(lastSeenAt = now + 1), merged)
         assertEquals(90, merged.aiEffortMin)
-        assertEquals(kept.single().subSteps, merged.subSteps)
-        // The text it gave again goes again.
-        assertEquals("", Merge.trimmed(listOf(merged), now + 1, GmailThreads.TEXT_EXTRAS).single().detail)
+        assertEquals(t0 + 5 * DAY, merged.dueAt)
         // Your values changed on it: what the reading laid stays too.
-        val relaid = kept.single().withMine(Mine.NONE)
+        val relaid = kept.withMine(Mine.NONE)
         assertEquals(90, relaid.aiEffortMin)
-        assertEquals(kept.single().subSteps, relaid.subSteps)
+        assertEquals(kept.subSteps, relaid.subSteps)
+        assertEquals(t0 + 5 * DAY, relaid.dueAt)
     }
 
     @Test
@@ -268,6 +268,7 @@ class MergeTest {
         val again = Merge.apply(kept, Source.Teams, listOf(fetched("a").copy(detail = "Write up the practical")), now + 1).reopened.single()
         assertEquals("Write up the practical", again.detail)
         assertEquals(null, again.aiEffortMin)
+        assertEquals(null, again.dueAt)
         assertTrue(again.subSteps.isEmpty())
         // Yours stay yours.
         assertEquals(75, again.effortMin)

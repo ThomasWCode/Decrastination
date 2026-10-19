@@ -110,6 +110,21 @@ class RuntimeSplitTest {
     }
 
     @Test
+    fun `a calendar file that can't be read is set aside and said, the runtime's fields in a fresh one`() {
+        val dir = phone(before.last())
+        val bad = "{\"written\":[1,2"
+        File(dir, "calendar.json").writeText(bad)
+        val runtime = json(File(dir, "runtime.json"))
+        val stores = Stores(dir, Reverse)
+        val problem = stores.problems.single { it.file == "calendar.json" }
+        assertEquals(bad, File(dir, assertNotNull(problem.copy)).readText())
+        val calendar = written(stores).getValue("calendar.json").jsonObject
+        for (field in RuntimeSplit.FIELDS.getValue("calendar.json")) runtime[field]?.let { assertEquals(normal("calendar.json", field, it), calendar.getValue(field), field) }
+        // Said once: the next start finds the calendar whole.
+        assertTrue(Stores(dir, Reverse).problems.isEmpty())
+    }
+
+    @Test
     fun `a backup from before restores its calibration, answers, spend and slots into the stores they're in now`() {
         val shape = before.last()
         val runtime = JsonStore.json.parseToJsonElement(Fixtures.text("stores/$shape/runtime.json")).jsonObject

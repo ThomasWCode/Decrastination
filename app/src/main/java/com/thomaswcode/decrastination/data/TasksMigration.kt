@@ -48,18 +48,22 @@ object TasksMigration {
      * Felix's whose card the chat still holds, every step of a change given its id; then tasks.json, the
      * steps each task has laid from an instruction given that step's id. The files they came from kept
      * as `.v1`. Tasks in the new shape are moved already, so a second run changes nothing; instructions
-     * already in theirs (a stop between the two) keep their ids, which the tasks then take.
+     * already in theirs (a stop between the two) keep their ids, which the tasks then take. The
+     * instructions move with no tasks there yet too (a day's limit set before any sync).
      */
-    val MOVE = Move { dir -> move(dir) }
+    val MOVE = Move { dir ->
+        move(dir)
+        emptyList()
+    }
 
     private fun move(dir: File) {
-        val tasksFile = File(dir, "tasks.json")
-        val tasks = read(tasksFile) ?: return
-        if (Migration.versionOf(tasks) >= 2) return
         val instructionsFile = File(dir, "instructions.json")
         val before = read(instructionsFile)
         val instructions = before?.let { if (Migration.versionOf(it) >= 2) it else JsonObject(instructions(it, felixIn(dir)) + (Migration.VERSION to JsonPrimitive(2))) }
         if (before != null && instructions !== before) write(instructionsFile, before, instructions!!)
+        val tasksFile = File(dir, "tasks.json")
+        val tasks = read(tasksFile) ?: return
+        if (Migration.versionOf(tasks) >= 2) return
         write(tasksFile, tasks, JsonObject(state(tasks, laid(instructions)) + (Migration.VERSION to JsonPrimitive(2))))
     }
 

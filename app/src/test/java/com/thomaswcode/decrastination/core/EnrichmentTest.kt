@@ -187,6 +187,17 @@ class EnrichmentTest {
     }
 
     @Test
+    fun `read again, a step of the same name keeps its id, done or not, and a new one has none till it's stored`() {
+        val task = assignment()
+        val first = task.withEnrichment(enrichment(task).copy(subSteps = listOf(SubStep("Pages 7-9", 30), SubStep("Pages 10-11", 20)))).let { it.copy(subSteps = it.subSteps.withIds()) }
+        val worked = first.copy(subSteps = first.subSteps.mapIndexed { i, s -> if (i == 0) s.copy(done = true) else s })
+        // Read again, in another order, with a step more.
+        val second = worked.withEnrichment(enrichment(task).copy(subSteps = listOf(SubStep("Pages 10-11", 25), SubStep("Pages 7-9", 25), SubStep("Check and hand in", 5))))
+        assertEquals(listOf(first.subSteps[1].id, first.subSteps[0].id, ""), second.subSteps.map { it.id })
+        assertEquals(listOf(false, true, false), second.subSteps.map { it.done })
+    }
+
+    @Test
     fun `a task changed since it was enriched is stale, and so is one only the rules saw once the model is on`() {
         val task = email()
         val done = task.copy(enrichment = enrichment(task, by = "rules"))

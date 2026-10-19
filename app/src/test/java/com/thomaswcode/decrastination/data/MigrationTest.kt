@@ -128,9 +128,10 @@ class MigrationTest {
         // A made-up move: the facts of old.json into memory.json, the new file written first, the old trimmed after.
         val move = Move { folder ->
             val from = File(folder, "old.json")
-            val facts = from.takeIf { it.exists() }?.let { JsonStore.json.parseToJsonElement(it.readText()).jsonObject["facts"] } ?: return@Move
+            val facts = from.takeIf { it.exists() }?.let { JsonStore.json.parseToJsonElement(it.readText()).jsonObject["facts"] } ?: return@Move emptyList()
             File(folder, "memory.json").writeText(JsonObject(mapOf("facts" to facts)).toString())
             from.writeText("{}")
+            emptyList()
         }
         val stores = Stores(dir, Reverse, clock = { now }, moves = listOf(move))
         assertEquals(listOf(Fact("bus", "Takes the bus", 1)), stores.memory.value.facts)
