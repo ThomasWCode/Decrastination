@@ -28,7 +28,7 @@ Each call's text is cut to 40 000 characters, the profile to 16 000. What else e
 | The week's summary (NF-02) | The week's numbers, finished and missed work, the review's note, Felix's counts, the changes you asked for |
 | The memory tidy | The facts Felix remembers, with the day of each, beside a profile without them |
 
-**The web search** (`enrich/WebResearch.kt`): what to look up, your message's words and today's date go to Claude, with no profile. Claude's web search tool then searches the web (at most three searches, located in the UK) and reads the pages it finds.
+**The web search** (`enrich/WebResearcher.kt`): what to look up, your message's words and today's date go to Claude, with no profile. Claude's web search tool then searches the web (at most three searches, located in the UK) and reads the pages it finds.
 It runs only while Felix may search (`felixSearches`), and only when a message needs facts neither you nor the app have given ([felix.md](felix.md)).
 
 **The sources** ([sources.md](sources.md)):
