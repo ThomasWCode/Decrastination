@@ -56,7 +56,7 @@ data class Enrichment(
     /** Read by the model with a photo of the work (AI-23): only then is its estimate "From your photo". The rules' standing in for it never is. */
     val fromPhoto: Boolean = false,
     /**
-     * The prompts it was read by ([com.thomaswcode.decrastination.enrich.Prompts.VERSION], AC-06):
+     * The prompts it was read by ([com.thomaswcode.decrastination.enrich.ReadingPrompts.VERSION], AC-06):
      * the model's reading is made again once they've changed. 1 for one stored before there was one.
      */
     val promptVersion: Int = 1,
@@ -95,7 +95,7 @@ fun carryMarks(steps: List<SubStep>, before: List<SubStep>): List<SubStep> {
 }
 
 /** A step you gave as the task keeps it: where it's done as the planner reads it (PL-15). */
-fun OwnStep.asSubStep(): SubStep = SubStep(title.trim().take(OwnTasks.MAX_TITLE), minutes, from = from, dueAt = dueAt, where = Where.of(where)?.name?.lowercase())
+fun OwnStep.asSubStep(): SubStep = SubStep(title.trim().take(OwnTaskRules.MAX_TITLE), minutes, from = from, dueAt = dueAt, where = Where.of(where)?.name?.lowercase())
 
 private fun TaskItem.enrichedOnly(): TaskItem {
     // Always from what the source said, so a changed enrichment doesn't leave the last one's dates.
@@ -156,7 +156,7 @@ private fun TaskItem.stepsFromEnrichment(): Boolean = subSteps.isNotEmpty() && e
  * Whether some of the steps its enrichment gave are done: newer prompts could give its work as other
  * steps (fewer, longer, since 3.1.1), and a mark goes only to a step of its name ([carryMarks]), so
  * work done would be planned again (#47's review). Not read again for newer prompts alone, then:
- * only when its text changes or you ask, when the steps done are said to be ([com.thomaswcode.decrastination.enrich.Prompts.describe]).
+ * only when its text changes or you ask, when the steps done are said to be ([com.thomaswcode.decrastination.enrich.ReadingPrompts.describe]).
  */
 private fun TaskItem.partDone(): Boolean = stepsFromEnrichment() && subSteps.any { it.done }
 
@@ -229,7 +229,7 @@ object Enrichments {
      * model is now on, or done by the model when it's now switched off ([modelOff]: what it read goes
      * with it, and the rules' reading stands instead); or an email read, before starred-only reading,
      * as only to read (AI-02), which a starred one never is; or, the model on, an open task the model
-     * read by prompts older than [version] (AC-06: the prompts' now, Prompts.VERSION), unless some of
+     * read by prompts older than [version] (AC-06: the prompts' now, ReadingPrompts.VERSION), unless some of
      * the steps it gave are done ([partDone]). Resting or refused, the model's older reading stands.
      */
     fun stale(task: TaskItem, modelOn: Boolean, rules: String, version: Int, modelOff: Boolean = false): Boolean {

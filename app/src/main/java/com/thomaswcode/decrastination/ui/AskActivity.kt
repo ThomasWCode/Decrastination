@@ -127,12 +127,13 @@ import com.thomaswcode.decrastination.core.ChatArchive
 import com.thomaswcode.decrastination.core.ChatMessage
 import com.thomaswcode.decrastination.core.ChatSummary
 import com.thomaswcode.decrastination.core.Instruction
+import com.thomaswcode.decrastination.core.InstructionRules
 import com.thomaswcode.decrastination.core.InstructionStatus
-import com.thomaswcode.decrastination.core.Instructions
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.Memories
 import com.thomaswcode.decrastination.core.MessageKind
 import com.thomaswcode.decrastination.core.OwnTask
+import com.thomaswcode.decrastination.core.OwnTaskRules
 import com.thomaswcode.decrastination.core.Proposal
 import com.thomaswcode.decrastination.core.ProposalState
 import com.thomaswcode.decrastination.core.Speaker
@@ -1203,7 +1204,7 @@ private fun ProposalCard(graph: AppGraph, messageId: String, proposal: Proposal,
                 return@Column
             }
             // Added, the task as it is now (changed since with Change, or on its page); else as he gave it.
-            val task = proposal.made?.takeIf { applied }?.let { tasks[it] }?.takeIf { it.source == com.thomaswcode.decrastination.core.Source.Own }?.let(com.thomaswcode.decrastination.core.OwnTasks::draftOf) ?: proposal.task
+            val task = proposal.made?.takeIf { applied }?.let { tasks[it] }?.takeIf { it.source == com.thomaswcode.decrastination.core.Source.Own }?.let(OwnTaskRules::draftOf) ?: proposal.task
             if (task != null) {
                 Text(if (task.kind == Kind.Event) "New event of yours" else "New task of yours", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
                 Text(task.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
@@ -1218,7 +1219,7 @@ private fun ProposalCard(graph: AppGraph, messageId: String, proposal: Proposal,
             } else {
                 Text("Changes", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
                 // In the words it was proposed in: made, the task's estimate is the new one.
-                val lines = proposal.lines.takeIf { it.size == proposal.changes.size } ?: proposal.changes.map { Instructions.describe(it, tasks, zone) }
+                val lines = proposal.lines.takeIf { it.size == proposal.changes.size } ?: proposal.changes.map { InstructionRules.describe(it, tasks, zone) }
                 lines.forEach { Text("• $it", style = MaterialTheme.typography.bodyMedium) }
             }
             proposal.note?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }

@@ -115,7 +115,7 @@ class RuleEnricherTest {
 class PromptsTest {
     @Test
     fun `the schema is written out as the JSON it's sent as`() {
-        val schema = Prompts.schemaJson(Enrichments.Job.Email).jsonObject
+        val schema = ReadingPrompts.schemaJson(Enrichments.Job.Email).jsonObject
         assertEquals("object", schema["type"]!!.jsonPrimitive.content)
         assertEquals(JsonPrimitive(false), schema["additionalProperties"])
         assertEquals(Json.parseToJsonElement(schema.toString()), schema)
@@ -127,7 +127,7 @@ class PromptsTest {
             dueAt = Fixtures.at("2026-10-12T08:30"),
             sourceValues = SourceValues(Kind.Homework, Fixtures.at("2026-10-14T08:30"), null),
         )
-        val text = Prompts.describe(task, Enrichments.Job.Assignment, NOW, Fixtures.LONDON)
+        val text = ReadingPrompts.describe(task, Enrichments.Job.Assignment, NOW, Fixtures.LONDON)
         assertTrue("Due: Wednesday 14 October 2026 08:30" in text, text)
     }
 
@@ -145,25 +145,25 @@ class PromptsTest {
                 }
             }
         }
-        Enrichments.Job.entries.forEach { check(Prompts.schema(it)) }
+        Enrichments.Job.entries.forEach { check(ReadingPrompts.schema(it)) }
     }
 
     @Test
     fun `an email is described with when it came, who from, and its text`() {
-        val text = Prompts.describe(email(), Enrichments.Job.Email, NOW, LONDON)
+        val text = ReadingPrompts.describe(email(), Enrichments.Job.Email, NOW, LONDON)
         assertTrue(text.startsWith("Today: Friday 9 October 2026, 17:00"), text)
         assertTrue("Received: Thursday 8 October 2026 16:30" in text, text)
         assertTrue("From: Mr Hughes <hughes@school.example>" in text, text)
         assertTrue("Subject: Berlin trip form" in text, text)
         assertTrue(text.endsWith("Please sign and return the trip form by Monday 12 October."), text)
         // A note to self says so, rather than giving your own address.
-        val note = Prompts.describe(email().copy(extra = mapOf("sent" to "true", "from" to "Thomas <t@example.com>")), Enrichments.Job.Email, NOW, LONDON)
+        val note = ReadingPrompts.describe(email().copy(extra = mapOf("sent" to "true", "from" to "Thomas <t@example.com>")), Enrichments.Job.Email, NOW, LONDON)
         assertTrue("From: the student (a note to self)" in note, note)
     }
 
     @Test
     fun `the email job is told it sees the whole conversation, quotes cut and attachments by name`() {
-        val system = Prompts.system(Enrichments.Job.Email)
+        val system = ReadingPrompts.system(Enrichments.Job.Email)
         // Starred, it's always something to do (AI-02).
         assertTrue("Every email you see was starred by the student: it is something to do." in system, system)
         assertTrue("Info" !in system, system)
@@ -178,17 +178,17 @@ class PromptsTest {
     @Test
     fun `a conversation says it's all shown, and its attachments are named`() {
         val files = """[{"name":"consent-form.pdf","type":"application/pdf","size":112639},{"name":"itinerary.docx","type":"application/msword"}]"""
-        val text = Prompts.describe(email().copy(extra = email().extra + mapOf(GmailThreads.EXTRA_MESSAGES to "3", GmailThreads.EXTRA_ATTACHMENTS to files)), Enrichments.Job.Email, NOW, LONDON)
+        val text = ReadingPrompts.describe(email().copy(extra = email().extra + mapOf(GmailThreads.EXTRA_MESSAGES to "3", GmailThreads.EXTRA_ATTACHMENTS to files)), Enrichments.Job.Email, NOW, LONDON)
         assertTrue("Messages in this conversation: 3, oldest first" in text, text)
         assertTrue("Attachments: consent-form.pdf (110 KB), itinerary.docx" in text, text)
         // One message, nothing attached: neither line.
-        val single = Prompts.describe(email(), Enrichments.Job.Email, NOW, LONDON)
+        val single = ReadingPrompts.describe(email(), Enrichments.Job.Email, NOW, LONDON)
         assertTrue("Messages in this conversation" !in single && "Attachments" !in single, single)
     }
 
     @Test
     fun `an assignment gives its class and due time, no multiplier, and a long text says it's cut`() {
-        val text = Prompts.describe(assignment("x".repeat(Prompts.MAX_TEXT + 10)), Enrichments.Job.Assignment, NOW, LONDON)
+        val text = ReadingPrompts.describe(assignment("x".repeat(ReadingPrompts.MAX_TEXT + 10)), Enrichments.Job.Assignment, NOW, LONDON)
         assertTrue("Class: 12.8 German 2026-27" in text, text)
         assertTrue("Due: Wednesday 14 October 2026 08:30" in text, text)
         // The planner applies the learned multiplier itself; the model gives typical times.
@@ -198,10 +198,10 @@ class PromptsTest {
 }
 
 class AnswersTest {
-    private fun parse(job: Enrichments.Job, text: String, task: TaskItem = email()) = Answers.parse(job, text, task, "claude-opus-5-5", NOW, LONDON)
+    private fun parse(job: Enrichments.Job, text: String, task: TaskItem = email()) = ReadingAnswers.parse(job, text, task, "claude-opus-5-5", NOW, LONDON)
 
     /** The first time of asking (AI-01): nothing left out, the check failed its complaint. */
-    private fun strict(job: Enrichments.Job, text: String, task: TaskItem = email()) = Answers.read(job, text, task, "claude-opus-5-5", NOW, LONDON, salvage = false)
+    private fun strict(job: Enrichments.Job, text: String, task: TaskItem = email()) = ReadingAnswers.read(job, text, task, "claude-opus-5-5", NOW, LONDON, salvage = false)
 
     @Test
     fun `a date that can't be read, one too far ahead, a kind that isn't one and an answer that isn't JSON are said, to be put right`() {
@@ -250,10 +250,10 @@ class AnswersTest {
         assertFalse(parse(Enrichments.Job.Email, """{"kind":"Admin","actionableFrom":null,"deadline":"2026-10-16","effortMin":10,"nextStep":"x"}""")!!.deadlineQuoted)
         assertFalse(parse(Enrichments.Job.Email, """{"kind":"Admin","actionableFrom":null,"deadline":"2031-01-01","deadlineQuoted":true,"effortMin":10,"nextStep":"x"}""")!!.deadlineQuoted)
         // Asked for, and told when it's true; the quick action's two weeks are gone.
-        val system = Prompts.system(Enrichments.Job.Email)
+        val system = ReadingPrompts.system(Enrichments.Job.Email)
         assertTrue("deadlineQuoted: true when deadline is a date the email itself gives" in system, system)
         assertFalse("within the next two weeks" in system, system)
-        assertEquals("boolean", Prompts.schemaJson(Enrichments.Job.Email).jsonObject["properties"]!!.jsonObject["deadlineQuoted"]!!.jsonObject["type"]!!.jsonPrimitive.content)
+        assertEquals("boolean", ReadingPrompts.schemaJson(Enrichments.Job.Email).jsonObject["properties"]!!.jsonObject["deadlineQuoted"]!!.jsonObject["type"]!!.jsonPrimitive.content)
     }
 
     @Test
@@ -264,7 +264,7 @@ class AnswersTest {
             assignment("Read pages 40-44, then write the essay."),
         )!!
         assertEquals(listOf("anywhere", "home"), e.subSteps!!.map { it.where })
-        assertTrue("\"home\" for a step that needs the laptop" in Prompts.system(Enrichments.Job.Assignment))
+        assertTrue("\"home\" for a step that needs the laptop" in ReadingPrompts.system(Enrichments.Job.Assignment))
     }
 
     @Test
@@ -284,7 +284,7 @@ class AnswersTest {
         assertNull(parse(Enrichments.Job.Email, """{"kind":"Info","actionableFrom":null,"deadline":null,"effortMin":2,"nextStep":"Read and archive","blocks":[]}"""))
         assertNull(parse(Enrichments.Job.Email, """{"kind":"Homework","actionableFrom":null,"deadline":null,"effortMin":20,"nextStep":"Do it","blocks":[]}"""))
         assertEquals(Kind.Admin, parse(Enrichments.Job.Email, """{"kind":"Event","actionableFrom":null,"deadline":"2026-10-17T10:00","effortMin":5,"nextStep":"Go to the open day","blocks":[]}""")!!.kind)
-        assertEquals(listOf("Admin"), Prompts.schemaJson(Enrichments.Job.Email).jsonObject["properties"]!!.jsonObject["kind"]!!.jsonObject["enum"]!!.jsonArray.map { it.jsonPrimitive.content })
+        assertEquals(listOf("Admin"), ReadingPrompts.schemaJson(Enrichments.Job.Email).jsonObject["properties"]!!.jsonObject["kind"]!!.jsonObject["enum"]!!.jsonArray.map { it.jsonPrimitive.content })
     }
 
     @Test
@@ -368,7 +368,7 @@ class AnswersTest {
         assertEquals(listOf("Write up" to 60, "Continue and finish: Write up" to 60), twelve.subSteps!!.takeLast(2).map { it.title to it.minutes })
         // Fourteen: the last three folded into one, and that cut too, no sitting over an hour.
         val fourteen = parse(Enrichments.Job.Assignment, """{"subSteps":[$short,{"title":"Plan","minutes":10,"ankiSections":[],"from":null,"due":null},{"title":"Draft","minutes":100,"ankiSections":[],"from":null,"due":null},{"title":"Check","minutes":10,"ankiSections":[],"from":null,"due":null}],"effortMin":230,"ankiSections":[],"testDate":null}""", assignment("Do it."))!!
-        assertTrue(fourteen.subSteps!!.all { it.minutes <= Answers.MAX_PART_MIN }, fourteen.subSteps.toString())
+        assertTrue(fourteen.subSteps!!.all { it.minutes <= ReadingAnswers.MAX_PART_MIN }, fourteen.subSteps.toString())
         assertEquals(230, fourteen.subSteps!!.sumOf { it.minutes })
         assertTrue(fourteen.subSteps!![11].title.startsWith("The rest: Plan"))
     }
@@ -463,11 +463,11 @@ class AnswersTest {
     @Test
     fun `blocks are counted as given, before a long one is cut into parts`() {
         fun given(count: Int) = (listOf("""{"title":"Long","minutes":61,"from":null,"due":null}""") + (2..count).map { """{"title":"B$it","minutes":10,"from":null,"due":null}""" }).joinToString(",")
-        val total = 61 + (Prompts.MAX_BLOCKS - 1) * 10
-        val e = parse(Enrichments.Job.Effort, """{"effortMin":$total,"blocks":[${given(Prompts.MAX_BLOCKS)}]}""")!!
-        assertEquals(Prompts.MAX_BLOCKS + 1, e.subSteps!!.size)
+        val total = 61 + (ReadingPrompts.MAX_BLOCKS - 1) * 10
+        val e = parse(Enrichments.Job.Effort, """{"effortMin":$total,"blocks":[${given(ReadingPrompts.MAX_BLOCKS)}]}""")!!
+        assertEquals(ReadingPrompts.MAX_BLOCKS + 1, e.subSteps!!.size)
         // One more than that isn't trusted.
-        val over = parse(Enrichments.Job.Effort, """{"effortMin":${total + 10},"blocks":[${given(Prompts.MAX_BLOCKS + 1)}]}""")!!
+        val over = parse(Enrichments.Job.Effort, """{"effortMin":${total + 10},"blocks":[${given(ReadingPrompts.MAX_BLOCKS + 1)}]}""")!!
         assertNull(over.subSteps)
         assertEquals("there are 31 blocks, over the 30 allowed", over.dropped)
     }
@@ -498,7 +498,7 @@ class AnswersTest {
         // An unreadable date, or one out of range, isn't left out: it fails the reading still.
         assertEquals("block 1 ('Apply') has a date that can't be read: 'soon'", effort(block(due = "soon")))
         assertEquals("block 1 ('Apply') has a date out of range: 2030-01-01T23:59", effort(block(due = "2030-01-01")))
-        assertEquals("block 2 ('Apply') starts on 2026-10-20, after its own due time 2026-10-15T23:59", Answers.read(Enrichments.Job.Effort, """{"effortMin":60,"blocks":[${block()},${block(from = "2026-10-20", due = "2026-10-15")}]}""", email(), "m", NOW, LONDON, salvage = false).enrichment!!.dropped)
+        assertEquals("block 2 ('Apply') starts on 2026-10-20, after its own due time 2026-10-15T23:59", ReadingAnswers.read(Enrichments.Job.Effort, """{"effortMin":60,"blocks":[${block()},${block(from = "2026-10-20", due = "2026-10-15")}]}""", email(), "m", NOW, LONDON, salvage = false).enrichment!!.dropped)
         // An assignment's steps say the same of a step, and of a total past one task's.
         val split = { steps: String, total: Int -> parse(Enrichments.Job.Assignment, """{"subSteps":[$steps],"effortMin":$total,"ankiSections":[],"testDate":null}""", assignment("Do it"))!!.dropped }
         assertEquals("step 1 ('Essay') is 700 minutes, over the 600 allowed", split("""{"title":"Essay","minutes":700,"ankiSections":[],"from":null,"due":null}""", 700))
@@ -541,14 +541,14 @@ class AnswersTest {
         )!!
         assertEquals("return the trip form by Monday 12 October", e.reason)
         assertNull(parse(Enrichments.Job.Email, """{"kind":"Admin","actionableFrom":null,"deadline":null,"effortMin":10,"nextStep":"Sign","reason":" ","blocks":[]}""")!!.reason)
-        val asked = Prompts.describe(assignment("Essay"), Enrichments.Job.Assignment, NOW, LONDON, listOf(SubStep("Plan", 20), SubStep("Write", 60)))
+        val asked = ReadingPrompts.describe(assignment("Essay"), Enrichments.Job.Assignment, NOW, LONDON, listOf(SubStep("Plan", 20), SubStep("Write", 60)))
         assertTrue("Steps as planned before (keep the exact title of any step whose work is unchanged; mark none as done):\n1. Plan (20 min)\n2. Write (60 min)" in asked, asked)
-        assertFalse("planned before" in Prompts.describe(assignment("Essay"), Enrichments.Job.Assignment, NOW, LONDON))
+        assertFalse("planned before" in ReadingPrompts.describe(assignment("Essay"), Enrichments.Job.Assignment, NOW, LONDON))
         // One done is said to be, to be kept as it is: its tick goes only to a step of its name.
-        val done = Prompts.describe(assignment("Essay"), Enrichments.Job.Assignment, NOW, LONDON, listOf(SubStep("Plan", 20, done = true), SubStep("Write", 60)))
+        val done = ReadingPrompts.describe(assignment("Essay"), Enrichments.Job.Assignment, NOW, LONDON, listOf(SubStep("Plan", 20, done = true), SubStep("Write", 60)))
         assertTrue("Steps as planned before (keep the exact title of any step whose work is unchanged; a step marked done is done: keep it as it is, its exact title and minutes (still counted in effortMin), and give only the work left in the others):\n1. Plan (20 min, done)\n2. Write (60 min)" in done, done)
         // The decks by topic, for an assignment (DX-10).
-        assertTrue("Decks: 1.3 Holidays and travel; 1.4 School" in Prompts.describe(assignment("Vocab"), Enrichments.Job.Assignment, NOW, LONDON, decks = mapOf("1.4" to "School", "1.3" to "Holidays and travel")))
+        assertTrue("Decks: 1.3 Holidays and travel; 1.4 School" in ReadingPrompts.describe(assignment("Vocab"), Enrichments.Job.Assignment, NOW, LONDON, decks = mapOf("1.4" to "School", "1.3" to "Holidays and travel")))
     }
 
     @Test
@@ -556,13 +556,13 @@ class AnswersTest {
         for (job in Enrichments.Job.entries) {
             for (example in Examples.of(job)) {
                 val item = (if (job == Enrichments.Job.Email) email() else assignment("Example")).copy(dueAt = example.due?.let(Fixtures::at), sourceValues = null)
-                val read = Answers.read(job, example.answer, item, "claude-opus-5-5", NOW, LONDON, salvage = false)
+                val read = ReadingAnswers.read(job, example.answer, item, "claude-opus-5-5", NOW, LONDON, salvage = false)
                 assertNotNull(read.enrichment, "$job: ${example.answer.take(60)}")
                 assertNull(read.complaint, "$job: ${read.complaint}")
-                assertTrue("Answer: ${example.answer}" in Prompts.system(job), "$job")
+                assertTrue("Answer: ${example.answer}" in ReadingPrompts.system(job), "$job")
             }
         }
-        assertTrue(Prompts.system(Enrichments.Job.Assignment).contains("    Title: Vocabulary and reading"))
+        assertTrue(ReadingPrompts.system(Enrichments.Job.Assignment).contains("    Title: Vocabulary and reading"))
     }
 
     @Test
@@ -601,7 +601,7 @@ class AnswersTest {
         val photographed = task.copy(photo = com.thomaswcode.decrastination.core.TaskPhoto("/x.jpg", "ab12cd34ef56ab12", NOW))
         // A task photographed is read again (AI-23).
         assertNotEquals(Enrichments.inputHash(task), Enrichments.inputHash(photographed))
-        assertTrue("say in reason what you saw" in Prompts.photo(Enrichments.Job.Assignment))
+        assertTrue("say in reason what you saw" in ReadingPrompts.photo(Enrichments.Job.Assignment))
         val read = PhotoTasks.parse(
             """{"tasks":[{"title":"Worksheet 5","subject":"Physics","dueDate":"2026-10-14","dueTime":"08:30","instructions":"Questions 1-6","minutes":45,"where":"anywhere","steps":[]},{"title":"","subject":"","dueDate":"","dueTime":"","instructions":"","minutes":0,"where":"home","steps":[]}],"question":"Is it due Wednesday or Thursday?"}""",
             NOW, LONDON,
@@ -617,11 +617,11 @@ class AnswersTest {
     fun `the limits the answers are checked against are said in the prompts and the schemas`() {
         assertEquals(
             "Limits the app enforces: at most 12 steps; a total of at most 10 hours; the steps must add up to effortMin exactly.",
-            Prompts.limits(Enrichments.Job.Assignment),
+            ReadingPrompts.limits(Enrichments.Job.Assignment),
         )
-        assertTrue(Prompts.limits(Enrichments.Job.Assignment) in Prompts.system(Enrichments.Job.Assignment))
-        assertTrue("at most 30 blocks, none longer than 600 minutes, 20 hours in all" in Prompts.system(Enrichments.Job.Email))
-        val step = Prompts.schemaJson(Enrichments.Job.Assignment).jsonObject["properties"]!!.jsonObject["subSteps"]!!.jsonObject["items"]!!.jsonObject["properties"]!!.jsonObject
+        assertTrue(ReadingPrompts.limits(Enrichments.Job.Assignment) in ReadingPrompts.system(Enrichments.Job.Assignment))
+        assertTrue("at most 30 blocks, none longer than 600 minutes, 20 hours in all" in ReadingPrompts.system(Enrichments.Job.Email))
+        val step = ReadingPrompts.schemaJson(Enrichments.Job.Assignment).jsonObject["properties"]!!.jsonObject["subSteps"]!!.jsonObject["items"]!!.jsonObject["properties"]!!.jsonObject
         assertEquals("All its work, however long (the app cuts one over 60 minutes into sittings itself); never over 600", step["minutes"]!!.jsonObject["description"]!!.jsonPrimitive.content)
         assertTrue("never after the task's due date" in step["from"]!!.jsonObject["description"]!!.jsonPrimitive.content)
     }
@@ -634,8 +634,8 @@ class AnswersTest {
         val e = parse(Enrichments.Job.Assignment, text, assignment("Revise for the test"))!!
         assertEquals(listOf("Revise" to null), e.subSteps!!.map { it.title to it.from })
         assertEquals(listOf("'Revise': its start was after the hand-in, so it's planned by the task's date"), e.adjusted)
-        assertTrue("No step may start after the assignment's due time" in Prompts.system(Enrichments.Job.Assignment))
-        assertTrue("No block may start after the item's date" in Prompts.system(Enrichments.Job.Effort))
+        assertTrue("No step may start after the assignment's due time" in ReadingPrompts.system(Enrichments.Job.Assignment))
+        assertTrue("No block may start after the item's date" in ReadingPrompts.system(Enrichments.Job.Effort))
     }
 
     @Test
@@ -690,7 +690,7 @@ class AiUsageTest {
         val longest = Pricing.costUsd("claude-opus-4-8", input = 3L * (Pricing.MAX_INPUT_CHARS + Profile.MAX_BLOCK_CHARS) + 3 * 3_300 + 1_000, output = ClaudeEnricher.MAX_TOKENS)
         assertTrue(longest <= Pricing.WORST_CALL_USD, "$longest > ${Pricing.WORST_CALL_USD}")
         assertEquals(1.295, Pricing.WORST_CALL_USD, 1e-9)
-        assertTrue(Prompts.MAX_TEXT + 1_000 < Pricing.MAX_INPUT_CHARS)
+        assertTrue(ReadingPrompts.MAX_TEXT + 1_000 < Pricing.MAX_INPUT_CHARS)
     }
 
     @Test
@@ -763,14 +763,14 @@ class AiUsageTest {
     @Test
     fun `work over an hour is cut into even sittings by time, never by what's in it`() {
         val step = com.thomaswcode.decrastination.core.SubStep("Write the essay", 100)
-        assertEquals(listOf("Write the essay" to 50, "Continue and finish: Write the essay" to 50), Answers.fitParts(step).map { it.title to it.minutes })
+        assertEquals(listOf("Write the essay" to 50, "Continue and finish: Write the essay" to 50), ReadingAnswers.fitParts(step).map { it.title to it.minutes })
         assertEquals(
             listOf("Write the essay" to 50, "Continue: Write the essay" to 50, "Continue and finish: Write the essay" to 50),
-            Answers.fitParts(step.copy(minutes = 150)).map { it.title to it.minutes },
+            ReadingAnswers.fitParts(step.copy(minutes = 150)).map { it.title to it.minutes },
         )
         // An hour or less is one sitting.
-        assertEquals(listOf(step.copy(minutes = 60)), Answers.fitParts(step.copy(minutes = 60)))
-        assertEquals(listOf(31, 30), Answers.fitParts(step.copy(minutes = 61)).map { it.minutes })
+        assertEquals(listOf(step.copy(minutes = 60)), ReadingAnswers.fitParts(step.copy(minutes = 60)))
+        assertEquals(listOf(31, 30), ReadingAnswers.fitParts(step.copy(minutes = 61)).map { it.minutes })
     }
 
     @Test
@@ -1036,8 +1036,8 @@ class QuestionTest {
     @Test
     fun `a question it can't settle is read, and only one worth asking`() {
         val text = """{"kind":"Admin","actionableFrom":null,"deadline":"2026-10-16","deadlineQuoted":true,"effortMin":10,"nextStep":"Sign the form","question":" Is it this Friday or next? ","blocks":[]}"""
-        assertEquals("Is it this Friday or next?", Answers.parse(Enrichments.Job.Email, text, email(), "claude-opus-5-5", NOW, LONDON)!!.question)
-        assertNull(Answers.parse(Enrichments.Job.Email, text.replace("\" Is it this Friday or next? \"", "null"), email(), "claude-opus-5-5", NOW, LONDON)!!.question)
+        assertEquals("Is it this Friday or next?", ReadingAnswers.parse(Enrichments.Job.Email, text, email(), "claude-opus-5-5", NOW, LONDON)!!.question)
+        assertNull(ReadingAnswers.parse(Enrichments.Job.Email, text.replace("\" Is it this Friday or next? \"", "null"), email(), "claude-opus-5-5", NOW, LONDON)!!.question)
     }
 
     @Test
@@ -1046,6 +1046,6 @@ class QuestionTest {
         assertEquals(Enrichments.inputHash(task), Enrichments.inputHash(task.copy(answers = emptyList())))
         val answered = task.copy(answers = listOf("Next Friday, the 23rd"))
         kotlin.test.assertNotEquals(Enrichments.inputHash(task), Enrichments.inputHash(answered))
-        assertTrue("The student says: Next Friday, the 23rd" in Prompts.describe(answered, Enrichments.Job.Email, NOW, LONDON))
+        assertTrue("The student says: Next Friday, the 23rd" in ReadingPrompts.describe(answered, Enrichments.Job.Email, NOW, LONDON))
     }
 }

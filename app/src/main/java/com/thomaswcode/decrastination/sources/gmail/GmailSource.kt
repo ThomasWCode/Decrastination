@@ -119,14 +119,14 @@ object GmailThreads {
     const val EXTRA_TEXT_READ_TO = "textReadTo"
 
     /**
-     * A message's text is cut to this: past what the model is shown (`Prompts.MAX_TEXT`), so it's
+     * A message's text is cut to this: past what the model is shown (`ReadingPrompts.MAX_TEXT`), so it's
      * told when there's more, and the rules see as far as a long email's footer.
      */
     const val MAX_BODY_CHARS = 20_000
 
     /**
      * A conversation of several messages is kept within this, what the model is shown
-     * (`Prompts.MAX_TEXT`), so its newest message is never what's cut: the newest messages go in
+     * (`ReadingPrompts.MAX_TEXT`), so its newest message is never what's cut: the newest messages go in
      * whole first, back to the oldest.
      */
     const val MAX_CONVERSATION_CHARS = 16_000

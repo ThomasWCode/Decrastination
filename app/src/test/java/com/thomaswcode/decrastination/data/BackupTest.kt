@@ -15,7 +15,7 @@ import com.thomaswcode.decrastination.core.InstructionStatus
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.NoSchool
 import com.thomaswcode.decrastination.core.OwnTask
-import com.thomaswcode.decrastination.core.OwnTasks
+import com.thomaswcode.decrastination.core.OwnTaskRules
 import com.thomaswcode.decrastination.core.SchoolCalendar
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.SlotState
@@ -220,7 +220,7 @@ class BackupTest {
 
     @Test
     fun `a backup keeps your own tasks, and a restore adds those not here`() {
-        val mine = OwnTasks.create(OwnTask(title = "UCAS statement", dueAt = now + 86_400_000L, minutes = 120), "u1", now)
+        val mine = OwnTaskRules.create(OwnTask(title = "UCAS statement", dueAt = now + 86_400_000L, minutes = 120), "u1", now)
         val read = Backups.decode(Backups.encode(backup().copy(ownTasks = listOf(mine))), emptyMap())!!
         assertEquals(listOf(mine), read.ownTasks)
         assertNull(Backups.problem(read))

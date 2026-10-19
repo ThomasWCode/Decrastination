@@ -16,7 +16,7 @@ import java.time.ZoneId
 
 /**
  * The model's enrichment (docs/spec/readings.md): Claude Opus 5.5 at high effort, its answer held
- * to a JSON schema ([Prompts]), with the API's server-side fallback on for a request the model's
+ * to a JSON schema ([ReadingPrompts]), with the API's server-side fallback on for a request the model's
  * safety classifiers decline. Off until switched on in Settings; [AiUsage] keeps it under the
  * monthly cap, from each call's token counts ([Pricing]). It sends through the [client] it's given
  * ([ModelGateway.client]): the tests' points at their fake server, the phone's plumbing check's at a stand-in.
@@ -34,7 +34,7 @@ class ClaudeEnricher(
 
     override suspend fun enrich(task: TaskItem, job: Enrichments.Job, now: Long): Enricher.Result {
         val photo = photoOf(task)
-        val message = send(job) { item(task, job, photo, Prompts.describe(task, job, now, zone, previous(task), decks()).take(Pricing.MAX_INPUT_CHARS)) }
+        val message = send(job) { item(task, job, photo, ReadingPrompts.describe(task, job, now, zone, previous(task), decks()).take(Pricing.MAX_INPUT_CHARS)) }
         val cost = Pricing.costUsd(message)
         val usage = ModelCalls.usage(message)
         when (message.stopReason().orElse(null)) {
@@ -46,13 +46,13 @@ class ClaudeEnricher(
         val text = textOf(message)
         // By the model that answered: a fallback's answer isn't the asked-for model's (BUG-P3-001).
         val answeredBy = message.model().asString().ifBlank { by }
-        val strict = Answers.read(job, text, task, answeredBy, now, zone, salvage = false)
+        val strict = ReadingAnswers.read(job, text, task, answeredBy, now, zone, salvage = false)
         // A reading the photo was in says so (AI-23).
         fun seen(e: com.thomaswcode.decrastination.core.Enrichment?) = if (photo != null) e?.copy(fromPhoto = true) else e
         val complaint = strict.complaint ?: return Enricher.Result(seen(strict.enrichment), cost, usage = usage, answer = text)
         // A check it failed (AI-01): read with the dates that can't be left out meanwhile, and the
         // answer and its problem kept to put back once ([repair]).
-        return Enricher.Result(seen(Answers.parse(job, text, task, answeredBy, now, zone)), cost, repair = Enricher.Repair(text, complaint), usage = usage, answer = text)
+        return Enricher.Result(seen(ReadingAnswers.parse(job, text, task, answeredBy, now, zone)), cost, repair = Enricher.Repair(text, complaint), usage = usage, answer = text)
     }
 
     /**
@@ -62,12 +62,12 @@ class ClaudeEnricher(
      * with too little, it isn't sent.
      */
     override suspend fun repair(task: TaskItem, job: Enrichments.Job, now: Long, repair: Enricher.Repair): Enricher.Result {
-        val asked = Prompts.repair(repair.complaint)
+        val asked = ReadingPrompts.repair(repair.complaint)
         val room = Pricing.MAX_INPUT_CHARS - repair.answer.length - asked.length
         if (room < MIN_REPAIR_ROOM) return Enricher.Result(null)
         val photo = photoOf(task)
         val message = send(job) {
-            item(task, job, photo, Prompts.describe(task, job, now, zone, previous(task), decks()).take(room))
+            item(task, job, photo, ReadingPrompts.describe(task, job, now, zone, previous(task), decks()).take(room))
             addAssistantMessage(repair.answer)
             addUserMessage(asked)
         }
@@ -80,7 +80,7 @@ class ClaudeEnricher(
         }
         val answeredBy = message.model().asString().ifBlank { by }
         val text = textOf(message)
-        val read = Answers.parse(job, text, task, answeredBy, now, zone)
+        val read = ReadingAnswers.parse(job, text, task, answeredBy, now, zone)
         return Enricher.Result(if (photo != null) read?.copy(fromPhoto = true) else read, cost, repaired = true, usage = usage, answer = text)
     }
 
@@ -99,7 +99,7 @@ class ClaudeEnricher(
         addUserMessageOfBlockParams(
             listOf(
                 com.anthropic.models.messages.ContentBlockParam.ofImage(image),
-                com.anthropic.models.messages.ContentBlockParam.ofText(com.anthropic.models.messages.TextBlockParam.builder().text(Prompts.photo(job) + "\n\n" + text).build()),
+                com.anthropic.models.messages.ContentBlockParam.ofText(com.anthropic.models.messages.TextBlockParam.builder().text(ReadingPrompts.photo(job) + "\n\n" + text).build()),
             ),
         )
     }
@@ -115,12 +115,12 @@ class ClaudeEnricher(
         val params = MessageCreateParams.builder()
             .model(model)
             .maxTokens(MAX_TOKENS)
-            .systemOfTextBlockParams(ModelCalls.systemBlocks(Prompts.system(job, student.year), student.text))
+            .systemOfTextBlockParams(ModelCalls.systemBlocks(ReadingPrompts.system(job, student.year), student.text))
             .apply(turns)
             .outputConfig(
                 OutputConfig.builder()
                     .effort(ModelEffort.of(job))
-                    .format(JsonOutputFormat.builder().schema(schema(Prompts.schema(job))).build())
+                    .format(JsonOutputFormat.builder().schema(schema(ReadingPrompts.schema(job))).build())
                     .build(),
             )
             // A request declined by the model's safety classifiers is run again on the model the API chooses.
@@ -159,7 +159,7 @@ object Pricing {
     private const val PROMPT_TOKENS = 11_000
 
     /**
-     * The most text any call sends, every call's cut to it: room for an email's [Prompts.MAX_TEXT]
+     * The most text any call sends, every call's cut to it: room for an email's [ReadingPrompts.MAX_TEXT]
      * characters and its lines, an instruction's open tasks and fortnight of events, a week's record.
      */
     const val MAX_INPUT_CHARS = 40_000

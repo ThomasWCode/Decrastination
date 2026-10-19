@@ -2,8 +2,8 @@ package com.thomaswcode.decrastination.data
 
 import com.thomaswcode.decrastination.core.ChatArchive
 import com.thomaswcode.decrastination.core.ChatState
+import com.thomaswcode.decrastination.core.InstructionRules
 import com.thomaswcode.decrastination.core.InstructionState
-import com.thomaswcode.decrastination.core.Instructions
 import com.thomaswcode.decrastination.core.MemoryState
 import com.thomaswcode.decrastination.core.SchoolCalendar
 import com.thomaswcode.decrastination.core.Settings
@@ -278,7 +278,7 @@ class RehearsalTest {
             if (tasks != null) {
                 val ids = tasks.tasks.map { it.id }.toSet()
                 val named = applied.flatMap { i -> i.changes.mapNotNull { it.taskId } }.toSet()
-                val laid = Instructions.taskOverrides(applied)
+                val laid = InstructionRules.taskOverrides(applied)
                 appendLine("  tasks they name: ${named.size}, not among the tasks ${named.count { it !in ids }}; tasks whose values aren't their instructions' ${tasks.tasks.count { (laid[it.id] ?: TaskOverrides.NONE) != it.overrides() }}")
             }
         }

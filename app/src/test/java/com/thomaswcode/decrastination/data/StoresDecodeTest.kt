@@ -6,7 +6,7 @@ import com.thomaswcode.decrastination.core.ChatState
 import com.thomaswcode.decrastination.core.ChangeType
 import com.thomaswcode.decrastination.core.InstructionState
 import com.thomaswcode.decrastination.core.InstructionStatus
-import com.thomaswcode.decrastination.core.Instructions
+import com.thomaswcode.decrastination.core.InstructionRules
 import com.thomaswcode.decrastination.core.MemoryState
 import com.thomaswcode.decrastination.core.MessageKind
 import com.thomaswcode.decrastination.core.SchoolCalendar
@@ -217,7 +217,7 @@ class StoresDecodeTest {
         assertEquals(InstructionStatus.entries.toSet(), state.instructions.map { it.state }.toSet())
         // What's in use is what the tasks carry: laid again, nothing on them would change.
         val tasks = (read(store("tasks.json"), now).first as TaskState).tasks
-        val laid = Instructions.taskOverrides(state.applied)
+        val laid = InstructionRules.taskOverrides(state.applied)
         for (task in tasks) assertEquals(laid[task.id] ?: TaskOverrides.NONE, task.overrides(), "${task.id}'s values aren't its instructions'")
     }
 

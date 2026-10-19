@@ -63,6 +63,6 @@ class SchemaLimitsTest {
             "Felix" to FelixPrompts.SCHEMA,
             "micro-plan" to MicroPlans.SCHEMA,
             "photo to tasks" to PhotoTasks.SCHEMA,
-        ) + Enrichments.Job.entries.associate { "enrichment ${it.name}" to Prompts.schema(it) }
+        ) + Enrichments.Job.entries.associate { "enrichment ${it.name}" to ReadingPrompts.schema(it) }
     }
 }

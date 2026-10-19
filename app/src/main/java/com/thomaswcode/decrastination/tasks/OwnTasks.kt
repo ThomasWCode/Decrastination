@@ -2,9 +2,11 @@ package com.thomaswcode.decrastination.tasks
 
 import com.thomaswcode.decrastination.core.ChatState
 import com.thomaswcode.decrastination.core.Duplicates
+import com.thomaswcode.decrastination.core.InstructionRules
 import com.thomaswcode.decrastination.core.InstructionState
 import com.thomaswcode.decrastination.core.Merge
 import com.thomaswcode.decrastination.core.OwnTask
+import com.thomaswcode.decrastination.core.OwnTaskRules
 import com.thomaswcode.decrastination.core.ProposalState
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Status
@@ -27,7 +29,7 @@ import kotlinx.coroutines.withContext
  * finished as you say or once their steps are done ([finishOwnTask], [start]), opened again
  * ([reopenOwnTask]), deleted ([deleteOwnTask]), and let go a fortnight after they're done
  * ([pruneOwn]). Built like [com.thomaswcode.decrastination.block.Focus]: its stores, the clock and a
- * callback for what follows a finish. Their pure rules are [com.thomaswcode.decrastination.core.OwnTasks]'s,
+ * callback for what follows a finish. Their pure rules are [OwnTaskRules]'s,
  * named in full here, as this class has their name.
  */
 class OwnTasks(
@@ -43,17 +45,17 @@ class OwnTasks(
 ) {
     /**
      * Keeps [task] as one of your own (2.0.0, Q28) under [sourceId]: made, or changed if it's there
-     * already (changed in the form, or a second tap). False if it can't be kept ([com.thomaswcode.decrastination.core.OwnTasks.problem]).
+     * already (changed in the form, or a second tap). False if it can't be kept ([OwnTaskRules.problem]).
      * Saved whole, whatever the screen that asked does meanwhile.
      */
     suspend fun saveOwnTask(sourceId: String, task: OwnTask): Boolean = withContext(NonCancellable) {
-        if (com.thomaswcode.decrastination.core.OwnTasks.problem(task) != null) return@withContext false
+        if (OwnTaskRules.problem(task) != null) return@withContext false
         val id = TaskItem.id(Source.Own, sourceId)
-        val overrides = com.thomaswcode.decrastination.core.Instructions.taskOverrides(instructions.value.applied)[id] ?: TaskOverrides.NONE
+        val overrides = InstructionRules.taskOverrides(instructions.value.applied)[id] ?: TaskOverrides.NONE
         val now = clock.now()
         tasks.update { state ->
             val old = state.tasks.firstOrNull { it.id == id }
-            val made = (if (old == null) com.thomaswcode.decrastination.core.OwnTasks.create(task, sourceId, now) else com.thomaswcode.decrastination.core.OwnTasks.edited(old, task))
+            val made = (if (old == null) OwnTaskRules.create(task, sourceId, now) else OwnTaskRules.edited(old, task))
                 .let { if (it.overrides() == overrides) it else it.withOverrides(overrides) }
             state.copy(tasks = if (old == null) state.tasks + made else state.tasks.map { if (it.id == id) made else it })
         }
@@ -85,7 +87,7 @@ class OwnTasks(
     suspend fun reopenOwnTask(taskId: String) {
         tasks.update { state ->
             // Or one done by its tick (NF-06), which only you say is done: a sync leaves it open again.
-            state.copy(tasks = state.tasks.map { t -> if (t.id == taskId && (t.source == Source.Own || t.tickDone) && !t.isOpen) com.thomaswcode.decrastination.core.OwnTasks.reopened(t) else t })
+            state.copy(tasks = state.tasks.map { t -> if (t.id == taskId && (t.source == Source.Own || t.tickDone) && !t.isOpen) OwnTaskRules.reopened(t) else t })
         }
     }
 

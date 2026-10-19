@@ -291,11 +291,11 @@ object ChatActs {
     }
 
     /**
-     * Whether [task] is as opening [was] again left it ([OwnTasks.reopened]): open, its steps' marks
+     * Whether [task] is as opening [was] again left it ([OwnTaskRules.reopened]): open, its steps' marks
      * and its minutes worked unchanged. Anything done on it since stands, and the Undo is gone.
      */
     fun asReopened(task: TaskItem, was: TaskItem): Boolean {
-        val left = OwnTasks.reopened(was)
+        val left = OwnTaskRules.reopened(was)
         return task.isOpen && task.subSteps == left.subSteps && task.workedMin == left.workedMin && task.photoMin == left.photoMin
     }
 

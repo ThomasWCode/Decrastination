@@ -9,7 +9,7 @@ import com.thomaswcode.decrastination.core.Chunk
 import com.thomaswcode.decrastination.core.InstructionStatus
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.OwnTask
-import com.thomaswcode.decrastination.core.OwnTasks
+import com.thomaswcode.decrastination.core.OwnTaskRules
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Why
 import com.thomaswcode.decrastination.tasks.TasksHarness
@@ -99,9 +99,9 @@ class TaskSheetStateTest {
     fun `yours done, not done, kept for home and deleted`() = runBlocking {
         h.ownTasks.saveOwnTask("mine", OwnTask(title = "Revise"))
         sheet.homeOnly(task("own:mine"), true)
-        assertEquals("home", OwnTasks.draftOf(task("own:mine")).where)
+        assertEquals("home", OwnTaskRules.draftOf(task("own:mine")).where)
         sheet.homeOnly(task("own:mine"), false)
-        assertEquals("anywhere", OwnTasks.draftOf(task("own:mine")).where)
+        assertEquals("anywhere", OwnTaskRules.draftOf(task("own:mine")).where)
         sheet.finish(task("own:mine"))
         assertFalse(task("own:mine").isOpen)
         sheet.reopen(task("own:mine"))

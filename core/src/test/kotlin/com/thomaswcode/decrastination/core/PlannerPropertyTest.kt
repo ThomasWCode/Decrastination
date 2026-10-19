@@ -196,7 +196,7 @@ class PlannerPropertyTest {
         val byId = input.tasks.associateBy { it.id }
         val accounted = plan.ordered.map { it.taskId }.toSet() + plan.unplanned.map { it.taskId }
         for (task in input.tasks) {
-            if (!task.isOpen || task.kind == Kind.Event || task.hidden || Instructions.waiting(task, byId)) continue
+            if (!task.isOpen || task.kind == Kind.Event || task.hidden || InstructionRules.waiting(task, byId)) continue
             assertTrue(task.id in accounted, "seed=$seed: ${task.id} is neither planned nor said to be left out")
         }
     }

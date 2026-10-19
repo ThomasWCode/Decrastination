@@ -5,7 +5,7 @@ import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.core.About
 import com.thomaswcode.decrastination.core.Change
 import com.thomaswcode.decrastination.core.ChangeType
-import com.thomaswcode.decrastination.core.Instructions
+import com.thomaswcode.decrastination.core.InstructionRules
 import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.WallClock
@@ -104,7 +104,7 @@ class CalendarWriter(
                     val task = move.desired.taskId?.let(byId::get)
                     when {
                         task == null -> "its task is no longer there"
-                        Instructions.latePin(change(move, zone), task, zone, clock.now()) -> "it's due before then"
+                        InstructionRules.latePin(change(move, zone), task, zone, clock.now()) -> "it's due before then"
                         else -> null
                     }
                 }

@@ -9,7 +9,7 @@ import com.thomaswcode.decrastination.core.FixedClock
 import com.thomaswcode.decrastination.core.Instruction
 import com.thomaswcode.decrastination.core.InstructionStatus
 import com.thomaswcode.decrastination.core.OwnTask
-import com.thomaswcode.decrastination.core.OwnTasks
+import com.thomaswcode.decrastination.core.OwnTaskRules
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
@@ -183,8 +183,8 @@ class FelixHarness(start: String = "2026-10-19T16:30") : AutoCloseable {
     /** Your own tasks and your instructions, as AppGraph keeps them: made, applied and taken back on the stores, the checks left out. */
     inner class Owners : Conversation.Owners {
         override suspend fun saveOwnTask(sourceId: String, task: OwnTask): Boolean {
-            if (OwnTasks.problem(task) != null) return false
-            val made = OwnTasks.create(task, sourceId, clock.now())
+            if (OwnTaskRules.problem(task) != null) return false
+            val made = OwnTaskRules.create(task, sourceId, clock.now())
             stores.tasks.update { s -> s.copy(tasks = s.tasks.filterNot { it.id == made.id } + made) }
             return true
         }
