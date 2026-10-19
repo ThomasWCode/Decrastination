@@ -38,6 +38,7 @@ import com.thomaswcode.decrastination.felix.Outbox
 import com.thomaswcode.decrastination.learn.Assessment
 import com.thomaswcode.decrastination.learn.Briefing
 import com.thomaswcode.decrastination.learn.Calibrator
+import com.thomaswcode.decrastination.learn.CheckIn
 import com.thomaswcode.decrastination.learn.Daily
 import com.thomaswcode.decrastination.learn.Learning
 import com.thomaswcode.decrastination.net.UrlConnectionHttp
@@ -263,6 +264,7 @@ class AppGraph private constructor(context: Context) {
             override suspend fun answerEvent(key: String, answer: String) {
                 calendarWriter.answer(key, answer)
             }
+            override suspend fun recordCheckIn(checkIn: CheckIn, now: Long): Boolean = learning.recordCheckIn(checkIn, now)
         },
         calendarTime = { sync.calendarTime },
         answered = { record, words -> looks.answered(record, words) },

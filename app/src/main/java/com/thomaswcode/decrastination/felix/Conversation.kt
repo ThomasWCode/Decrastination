@@ -44,6 +44,7 @@ import com.thomaswcode.decrastination.enrich.ModelHold
 import com.thomaswcode.decrastination.enrich.Profile
 import com.thomaswcode.decrastination.enrich.WebResearcher
 import com.thomaswcode.decrastination.learn.Assessment
+import com.thomaswcode.decrastination.learn.CheckIn
 import com.thomaswcode.decrastination.learn.Daily
 import com.thomaswcode.decrastination.learn.EventJudge
 import com.thomaswcode.decrastination.notify.Channels
@@ -115,6 +116,9 @@ class Conversation(
 
         /** [answer], one of a calendar question's answers as it's kept (`CalendarTime.ANSWERS`), for every event named [key] (Q7). */
         suspend fun answerEvent(key: String, answer: String)
+
+        /** The week's [checkIn] on record, once a week ([com.thomaswcode.decrastination.learn.Learning.recordCheckIn]): whether it was kept. */
+        suspend fun recordCheckIn(checkIn: CheckIn, now: Long): Boolean
     }
 
     /**
@@ -195,8 +199,7 @@ class Conversation(
             askNext(next, now)
             return true
         }
-        var added = false
-        log.update { l -> if (l.checkIns.any { it.weekOf == next.week }) l else l.copy(checkIns = l.checkIns + flow.checkIn(next, now)).trimmed(now).also { added = true } }
+        val added = owners.recordCheckIn(flow.checkIn(next, now), now)
         outbox.send(ChatMessage(UUID.randomUUID().toString(), Speaker.Felix, FelixWords.CHECK_IN_THANKS, now, kind = MessageKind.CheckIn, byApp = true)) { it.copy(checkInDraft = null) }
         // Its review, unless the week has had it (the evening's ran first).
         if (added) ports.review()
