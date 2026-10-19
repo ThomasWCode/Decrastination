@@ -19,6 +19,7 @@ import com.thomaswcode.decrastination.enrich.KeyProblem
 import com.thomaswcode.decrastination.enrich.ModelGateway
 import com.thomaswcode.decrastination.learn.CheckIn
 import com.thomaswcode.decrastination.learn.EventJudge
+import com.thomaswcode.decrastination.learn.Learning
 import com.thomaswcode.decrastination.notify.NoticeId
 import com.thomaswcode.decrastination.notify.Notices
 import com.thomaswcode.decrastination.plan.Planning
@@ -220,10 +221,10 @@ class FelixHarness(start: String = "2026-10-19T16:30") : AutoCloseable {
             conversation.settleEvent(key)
         }
 
-        /** The week's check-in on record once a week, as `Learning.recordCheckIn` keeps one. */
+        /** The week's check-in on record once a week, by the rule `Learning.recordCheckIn` keeps it by. */
         override suspend fun recordCheckIn(checkIn: CheckIn, now: Long): Boolean {
             var added = false
-            stores.log.update { l -> if (l.checkIns.any { it.weekOf == checkIn.weekOf }) l else l.copy(checkIns = l.checkIns + checkIn).trimmed(now).also { added = true } }
+            stores.log.update { l -> Learning.withCheckIn(l, checkIn, now)?.also { added = true } ?: l }
             return added
         }
 
