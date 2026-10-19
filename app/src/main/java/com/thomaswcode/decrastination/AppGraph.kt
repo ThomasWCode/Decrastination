@@ -23,7 +23,6 @@ import com.thomaswcode.decrastination.core.NoSchool
 import com.thomaswcode.decrastination.core.Instructions
 import com.thomaswcode.decrastination.core.OwnTask
 import com.thomaswcode.decrastination.core.OwnTasks
-import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.ProposalState
 import com.thomaswcode.decrastination.core.Planner
 import com.thomaswcode.decrastination.core.Source
