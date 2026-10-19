@@ -86,7 +86,7 @@ Every PR is a release ([development.md](../development.md)): cleanup-only releas
 | 6c | `Instructions` and `OwnTasks`, and the task sheet's state holder | 4.0.7, done (#78) | cleanup | 3 | 1 |
 | 6d | `Readings`, `Sync` and `Photos` | 4.0.8, done (#79) | cleanup | 2, 3 | ½ |
 | 6e | `Learning` | 4.0.9, done (#80) | cleanup | 3, 5a | ½ |
-| — | The chat's box answers his newest nudge; his messages waiting for your answer shown so, with *Mark answered* and *Mark all answered* (your calls, 19 Oct) | 4.0.10 | fix, feature | 5b | — |
+| — | The chat's box answers his newest nudge; his messages waiting for your answer shown so, with *Mark answered* and *Mark all answered* (your calls, 19 Oct) | 4.0.10, done (#82) | fix, feature | 5b | — |
 | 6f | The `:core` module, its dependencies on the app turned round first | 4.0.11 | cleanup | 6a–6e | 1 |
 | 9 | Names: the readings' prompts renamed, core's rules apart from the services, files and tests split | 4.0.12 | cleanup | 6 | ½ |
 | 7 | Who set what (`Mine`, `By`, steps with ids) and the stores split, trimmed: one data release | 4.0.13 | cleanup, data | 0, 3, 6, 9 | 2½ |
