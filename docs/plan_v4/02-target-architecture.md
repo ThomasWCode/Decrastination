@@ -61,7 +61,7 @@ Each service is a class in the package that already holds its concern. Felix's i
 
 ### `Stores` (Stage 3)
 
-Every `JsonStore` is made in one place, `data/Stores.kt`, with its file name, its schema version and its migrations ([04](04-data-and-migrations.md) §Versions and migrations). It reports the files that couldn't be read whole (`Stores.problems`), says of each store what a backup keeps of it and which resets change it (`Stores.all`), and has the one way round a store's owner, `Stores.replace`, which the backup service alone calls; `AppGraph` hands each service its stores from it. The reset copies are the backup service's (`data/BackupService.kt`). So a new store (the archive, `felix.json`, the journal) can't be left out of a backup or a reset.
+Every `JsonStore` is made in one place, `data/Stores.kt`, with its file name, its schema version and its migrations ([04](04-data-and-migrations.md) §Versions and migrations). It reports the files that couldn't be read whole (`Stores.problems`), says of each store what a backup keeps of it and which resets change it (`Stores.all`), and has the one way round a store's owner, `Stores.replace`, which the backup service alone calls; `AppGraph` hands each service its stores from it. The reset copies are the backup service's (`data/BackupService.kt`). So a new store (the archive, `felix.json`, the journal) can't be left out of a backup or a reset. The chat's archive is the one store that isn't a single file: `ChatArchiveStore` (4.0.4), a `JsonStore` a month (`chat-archive-<yyyy-MM>.json`), each read only when it's wanted, and one `chat-archive.json` part in a backup.
 
 ### `ModelGateway` (Stage 2)
 
