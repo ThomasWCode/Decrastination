@@ -89,7 +89,7 @@ Held, it goes to a day of the next fortnight, at a time or any time that day (`u
 
 With `WRITE_CALENDAR`, the plan's slots are written to the calendar you pick in Setup or Settings → Calendar (`Settings.calendarWriteId`); none is written to till you pick one.
 Pick one you made at calendar.google.com: a calendar an app makes stays on the phone.
-`CalendarWriter` writes it, built like `Focus`: its stores, the clock, and `CalendarProvider` for the calendar's events (`SlotCalendar` on the phone). It owns what the app knows of its writes (`RuntimeState.calendarWritten`, `calendarWrittenTo` and `calendarsToClear`, and `calendar.json`) and your answers about events; `CalendarWriterTest` drives it on temporary stores, against a calendar in memory.
+`CalendarWriter` writes it, built like `Focus`: its stores, the clock, and `CalendarProvider` for the calendar's events (`SlotCalendar` on the phone). It alone writes what the app knows of its writes (`RuntimeState.calendarWritten`, `calendarWrittenTo` and `calendarsToClear`, and `calendar.json`) and your answers about events, but for a backup restored, which merges its answers in (`Stores.replace`, as for every store); `CalendarWriterTest` drives it on temporary stores, against a calendar in memory.
 - **What**: the next seven days' slots (today and the six after, `SlotCalendarDiff.DAYS`), pieces of work and outside breaks.
 - **Each event**: the piece's label as its title ("Outside" for a break); its source and why as its description ("Teams. Due tomorrow."), with its first action where one's written (AI-15), or "A break outside.".
 - **Marked**: free, with no reminders, and with the app's package and its URI (`CUSTOM_APP_PACKAGE`, `CUSTOM_APP_URI`: `decrastination://slot/<date>/<key>`).

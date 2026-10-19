@@ -145,9 +145,6 @@ class AppGraph private constructor(context: Context) {
     /** What Felix remembers (AI-21): facts, and standing instructions. */
     val memory = stores.memory
 
-    /** The versions of its events the app has written to calendars, so a copy of one is known ([com.thomaswcode.decrastination.calendar.SlotCalendarDiff.isCopy]). */
-    val calendarVersions = stores.calendarVersions
-
     init {
         // Files that couldn't be read whole at this start: kept for Setup to say, till you've seen them.
         // On record before anything else runs, and only then is a bad file replaced by what was kept
@@ -245,7 +242,7 @@ class AppGraph private constructor(context: Context) {
      * calendar watched for changes; and your answers about its events.
      */
     val calendarWriter = CalendarWriter(
-        tasks, settings, runtime, calendarVersions, clock, scope, SlotCalendar(app),
+        tasks, settings, runtime, stores.calendarVersions, clock, scope, SlotCalendar(app),
         sayRefused = { move, zone, why -> SlotCalendar.sayRefused(app, move, zone, why) },
         addOwnChange = { id, text, about, change -> addOwnChange(id, text, about, change) },
         replan = { planning.watcher.poke() },
