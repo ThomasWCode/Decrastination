@@ -70,7 +70,7 @@ class Outbox(
     suspend fun clear() {
         moving.withLock {
             chat.update { it.copy(messages = emptyList()) }
-            archive.update { ChatArchive() }
+            archive.clear()
         }
         notify(clock.now())
     }

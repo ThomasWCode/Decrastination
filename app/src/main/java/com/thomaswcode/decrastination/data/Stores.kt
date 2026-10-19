@@ -123,7 +123,8 @@ class Stores(
     suspend fun <T> replace(store: JsonStore<T>, transform: (T) -> T): T = store.update(transform)
 
     /** The chat's archive made [value] whole, as [replace]. */
-    suspend fun replace(store: ChatArchiveStore, value: ChatArchive): ChatArchive = store.update { value }
+    suspend fun replace(store: ChatArchiveStore, value: ChatArchive): ChatArchive =
+        if (value.messages.isEmpty()) value.also { store.clear() } else store.update { value }
 
     /** The chat's archive made what [transform] makes of it, as [replace]. */
     suspend fun replace(store: ChatArchiveStore, transform: (ChatArchive) -> ChatArchive): ChatArchive = store.update(transform)

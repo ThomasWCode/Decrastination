@@ -91,6 +91,19 @@ class ChatArchiveStoreTest {
     }
 
     @Test
+    fun `a month's file holds messages for the chat, however short, and clearing lets every month go unread`() = runBlocking {
+        // Cut short to less than an empty archive written: still a month to show, and to say can't be read.
+        File(dir, "chat-archive-2026-08.json").writeText("{")
+        val store = ChatArchiveStore(dir)
+        assertTrue(store.holdsAny)
+        store.add(september)
+        store.clear()
+        assertTrue(files().isEmpty())
+        assertFalse(store.holdsAny)
+        assertTrue(store.problems.isEmpty())
+    }
+
+    @Test
     fun `a question of his answered from the archive is marked in its month`() = runBlocking {
         val store = ChatArchiveStore(dir)
         store.add(august + september)
@@ -137,10 +150,8 @@ class ChatArchiveStoreTest {
         val store = JsonStore(file, ChatArchive.serializer(), ::ChatArchive, lazily = true).also { s -> s.onProblem = { found += it } }
         assertFalse(store.isLoaded)
         assertNull(store.problem)
-        assertTrue(store.holdsAny)
         assertEquals(ChatArchive(), store.value)
         assertTrue(store.isLoaded)
         assertEquals(store.problem, found.single())
-        assertFalse(store.holdsAny)
     }
 }

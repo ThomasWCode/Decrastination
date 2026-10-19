@@ -66,8 +66,29 @@ class ChatScreenState {
     var earlier: Int by mutableIntStateOf(0)
         private set
 
+    private var replying: ChatMessage? by mutableStateOf(null)
+
     /** The message your next one replies to (a swipe, Reply on a long press, or his question offered: [offer]), shown over the box. */
-    var replyingTo: ChatMessage? by mutableStateOf(null)
+    var replyingTo: ChatMessage?
+        get() = replying
+        set(value) {
+            replying = value
+            // Chosen, sent or let go meanwhile: one still being read back from the archive gives way ([restoredReply]).
+            restoringReply = null
+        }
+
+    /** The message replied to before the screen was made again, still being read from the archive. */
+    private var restoringReply: String? = null
+
+    /** [id], replied to before the screen was made again, to be read from the archive: put back by [restoredReply] unless the reply changes meanwhile. */
+    fun restoringReply(id: String) {
+        restoringReply = id
+    }
+
+    /** [message], read back from the archive, what the box replies to again, where nothing has changed that since [restoringReply]. */
+    fun restoredReply(message: ChatMessage) {
+        if (restoringReply == message.id) replyTo(message)
+    }
 
     /** Whether [replyingTo] is the chat's own offer ([offer]), not a message you chose: a newer question takes its place. */
     var offered = false
