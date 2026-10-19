@@ -1,6 +1,7 @@
 package com.thomaswcode.decrastination.data
 
 import com.thomaswcode.decrastination.Fixtures
+import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.KSerializer
 import java.io.File
 import java.nio.file.Files
@@ -100,13 +101,29 @@ class RuntimeSplitTest {
     }
 
     @Test
-    fun `a stop between the new files and the runtime's trim writes them again from it`() {
+    fun `a stop between the new files and the runtime's trim leaves the new files as they were written`() {
         val dir = phone(before.last())
         val runtime = File(dir, "runtime.json").readText()
         val first = written(Stores(dir, Reverse))
         // The runtime as it was, as though the start had stopped before reading it.
         File(dir, "runtime.json").writeText(runtime)
         assertEquals(first.mapValues { it.value.toString() }, written(Stores(dir, Reverse)).mapValues { it.value.toString() })
+    }
+
+    @Test
+    fun `a start after one whose runtime's trim wasn't written puts nothing older back`() {
+        val dir = phone(before.last())
+        val runtime = File(dir, "runtime.json").readText()
+        val stores = Stores(dir, Reverse)
+        // Changed since the split: a reading the API refused, an unblock till a time.
+        runBlocking {
+            stores.model.update { it.copy(enrichFailed = it.enrichFailed + ("teams:new" to "h")) }
+            stores.protection.update { it.copy(overrideUntil = 12_345L) }
+        }
+        val newer = written(stores)
+        // The runtime as it was before its trim, as though writing the trim had failed.
+        File(dir, "runtime.json").writeText(runtime)
+        assertEquals(newer.mapValues { it.value.toString() }, written(Stores(dir, Reverse)).mapValues { it.value.toString() })
     }
 
     @Test
