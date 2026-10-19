@@ -104,6 +104,10 @@ fun OwnStep.asSubStep(by: By = By.You): SubStep =
     SubStep(title.trim().take(OwnTaskRules.MAX_TITLE), minutes, from = from, dueAt = dueAt, where = Where.of(where)?.name?.lowercase(), id = id, origin = if (by == By.Felix) StepOrigin.Felix else StepOrigin.Yours)
 
 private fun TaskItem.enrichedOnly(): TaskItem {
+    // Finished, its reading let go a fortnight on ([trimmed], C-Q3): what the reading laid stays on its
+    // record (its estimate, its steps and their ticks), as nothing plans it. Listed again as open, the
+    // merge lays it as one seen for the first time.
+    if (enrichment == null && !isOpen) return this
     // Always from what the source said, so a changed enrichment doesn't leave the last one's dates.
     val base = sourceValues ?: SourceValues(kind, dueAt, availableFrom)
     // None, or one of content that has since changed (new instructions, a new email in the thread):

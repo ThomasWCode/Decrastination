@@ -320,6 +320,19 @@ data class TaskItem(
     }
 }
 
+/** Whether it was finished more than [Merge.KEEP_FINISHED_MS] ago: kept then as its record alone ([trimmed]). */
+fun TaskItem.longFinished(now: Long): Boolean = !isOpen && now - (doneAt ?: lastSeenAt) >= Merge.KEEP_FINISHED_MS
+
+/**
+ * [this], long finished, as it's kept (C-Q3): its record (who it is, its title, class, kind, dates and
+ * status, its estimates and minutes worked, its steps with their ticks, your values and its source's)
+ * without its text, its reading, your answers, its photo or its source's [bulky] extras (an email's
+ * text, messages and ids). What the reading laid stays laid ([enriched]). A source listing it again
+ * brings its text back, and it's read again; a task of your own is kept so too, and only a delete
+ * removes one.
+ */
+fun TaskItem.trimmed(bulky: Set<String>): TaskItem = copy(detail = "", enrichment = null, answers = emptyList(), photo = null, extra = extra - bulky)
+
 /**
  * [total] minutes shared over [parts] in proportion, in whole minutes that add up to exactly
  * [total]: the odd minutes go to the parts with most left over. Each gets at least one, so a total
