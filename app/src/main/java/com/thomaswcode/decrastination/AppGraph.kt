@@ -11,6 +11,7 @@ import com.thomaswcode.decrastination.block.Focus
 import com.thomaswcode.decrastination.block.SlotAlarms
 import com.thomaswcode.decrastination.block.Slots
 import com.thomaswcode.decrastination.calendar.CalendarWriter
+import com.thomaswcode.decrastination.calendar.SlotCalendar
 import com.thomaswcode.decrastination.core.About
 import com.thomaswcode.decrastination.core.Change
 import com.thomaswcode.decrastination.core.ChangeType
@@ -247,7 +248,8 @@ class AppGraph private constructor(context: Context) {
      * calendar watched for changes; and your answers about its events.
      */
     val calendarWriter = CalendarWriter(
-        app, tasks, settings, runtime, calendarVersions, clock, scope,
+        tasks, settings, runtime, calendarVersions, clock, scope, SlotCalendar(app),
+        sayRefused = { move, zone, why -> SlotCalendar.sayRefused(app, move, zone, why) },
         addOwnChange = { id, text, about, change -> addOwnChange(id, text, about, change) },
         replan = { planning.watcher.poke() },
         settleEvent = { conversation.settleEvent(it) },

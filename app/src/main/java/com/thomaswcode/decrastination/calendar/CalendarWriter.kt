@@ -1,13 +1,10 @@
 package com.thomaswcode.decrastination.calendar
 
-import android.content.Context
-import android.database.ContentObserver
-import android.os.Handler
-import android.os.Looper
 import android.util.Log
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.core.About
 import com.thomaswcode.decrastination.core.Change
+import com.thomaswcode.decrastination.core.ChangeType
 import com.thomaswcode.decrastination.core.Instructions
 import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.WallClock
@@ -16,7 +13,8 @@ import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.RuntimeState
 import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.data.TaskState
-import com.thomaswcode.decrastination.learn.CalendarTime
+import java.time.Instant
+import java.time.ZoneId
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
@@ -34,11 +32,11 @@ import kotlinx.coroutines.withContext
  * you've moved there taken as your time; the app's events taken out of a calendar no longer written to
  * ([clearOldCalendars]); the calendar watched for changes ([watchCalendar], [calendarChanged]); and your
  * answers about its events ([answer]). Built like [com.thomaswcode.decrastination.block.Focus]: its
- * stores, the clock and small callbacks in its constructor.
+ * stores, the clock and small callbacks in its constructor, the calendar provider behind a port
+ * ([CalendarProvider]: [SlotCalendar] on the phone).
  */
 @OptIn(FlowPreview::class)
 class CalendarWriter(
-    private val app: Context,
     private val tasks: JsonStore<TaskState>,
     private val settings: JsonStore<Settings>,
     private val runtime: JsonStore<RuntimeState>,
@@ -46,13 +44,17 @@ class CalendarWriter(
     private val calendarVersions: JsonStore<CalendarVersions>,
     private val clock: WallClock,
     private val scope: CoroutineScope,
+    /** The calendar's events, read and written. */
+    private val provider: CalendarProvider,
+    /** A move of yours written back, and why, said ([SlotCalendar.sayRefused]). */
+    private val sayRefused: (move: SlotCalendarDiff.HandMove, zone: ZoneId, why: String) -> Unit,
     /** A move of yours taken as your time: a change of yours, kept and applied at once (`AppGraph.addOwnChange`). */
     private val addOwnChange: suspend (id: String, text: String, about: About, change: Change) -> Unit,
     /** The plan made again ([com.thomaswcode.decrastination.plan.PlanWatcher.poke]). */
     private val replan: () -> Unit,
     /** His questions about the events named a key settled ([com.thomaswcode.decrastination.felix.Conversation.settleEvent]). */
     private val settleEvent: suspend (String) -> Unit,
-    /** The calendar read again, and today's record made again with it ([CalendarTime.refresh], [com.thomaswcode.decrastination.learn.Briefing.replanToday]). */
+    /** The calendar read again, and today's record made again with it ([com.thomaswcode.decrastination.learn.CalendarTime.refresh], [com.thomaswcode.decrastination.learn.Briefing.replanToday]). */
     private val reread: suspend () -> Unit,
 ) {
     /**
@@ -75,7 +77,7 @@ class CalendarWriter(
     suspend fun writeSlots(made: Plan) {
         clearOldCalendars()
         val calendarId = settings.value.calendarWriteId ?: return
-        if (!SlotCalendar.allowed(app)) return
+        if (!provider.allowed()) return
         val zone = clock.zone()
         // The same slots as last written, and nothing changed in the calendar since (AR-08): it isn't read again.
         val desired = com.thomaswcode.decrastination.calendar.SlotCalendarDiff.desired(made, zone, runtime.value.microPlans)
@@ -88,11 +90,11 @@ class CalendarWriter(
         val known = calendarVersions.value.written.toSet()
         val written = try {
             withContext(Dispatchers.IO) {
-                SlotCalendar.write(app, calendarId, made, zone, before, known, runtime.value.microPlans) { move ->
+                write(calendarId, made, zone, before, known, runtime.value.microPlans) { move ->
                     val task = move.desired.taskId?.let(byId::get)
                     when {
                         task == null -> "its task is no longer there"
-                        Instructions.latePin(SlotCalendar.change(move, zone), task, zone, clock.now()) -> "it's due before then"
+                        Instructions.latePin(change(move, zone), task, zone, clock.now()) -> "it's due before then"
                         else -> null
                     }
                 }
@@ -115,11 +117,11 @@ class CalendarWriter(
         // write finds it a move again, rather than putting it back.
         val held = SlotCalendarDiff.pending(written.starts, before, written.taken)
         if (held != before) runtime.update { it.copy(calendarWritten = held) }
-        written.refused.forEach { (move, why) -> SlotCalendar.sayRefused(app, move, zone, why) }
+        written.refused.forEach { (move, why) -> sayRefused(move, zone, why) }
         lastWritten = calendarId to desired
         for (move in written.taken) {
             val taskId = move.desired.taskId ?: continue
-            addOwnChange(java.util.UUID.randomUUID().toString(), "Moved in the calendar", About(taskId = taskId, taskTitle = byId[taskId]?.title), SlotCalendar.change(move, zone))
+            addOwnChange(java.util.UUID.randomUUID().toString(), "Moved in the calendar", About(taskId = taskId, taskTitle = byId[taskId]?.title), change(move, zone))
             runtime.update { it.copy(calendarWritten = it.calendarWritten + (move.desired.uri to move.existing.start)) }
         }
     }
@@ -129,8 +131,54 @@ class CalendarWriter(
         val waiting = runtime.value.calendarsToClear
         if (waiting.isEmpty()) return
         val versions = calendarVersions.value.written.toSet()
-        val cleared = withContext(Dispatchers.IO) { waiting.filter { SlotCalendar.clear(app, it, versions) } }
+        val cleared = withContext(Dispatchers.IO) { waiting.filter { clear(it, versions) } }
         if (cleared.isNotEmpty()) runtime.update { it.copy(calendarsToClear = it.calendarsToClear - cleared.toSet()) }
+    }
+
+    /**
+     * What a write left: each URI's start as it now stands, and the moves you made, taken or written
+     * back (with why); and the versions it wrote that an event of yours already has, not to be
+     * remembered ([SlotCalendarDiff.yours]).
+     */
+    data class Written(val starts: Map<String, Long>, val taken: List<SlotCalendarDiff.HandMove>, val refused: List<Pair<SlotCalendarDiff.HandMove, String>>, val yours: Set<Long> = emptySet())
+
+    /** [move] as your time for its task's next piece: an [ChangeType.AtTime] at its event's start. */
+    private fun change(move: SlotCalendarDiff.HandMove, zone: ZoneId): Change {
+        val at = Instant.ofEpochMilli(move.existing.start).atZone(zone)
+        return Change(ChangeType.AtTime, taskId = move.desired.taskId, date = at.toLocalDate().toString(), startMin = at.hour * 60 + at.minute, time = move.existing.start)
+    }
+
+    /**
+     * [plan]'s slots written to [calendarId] against what's there and [written] (each URI's start as
+     * last written); a hand move taken as [SlotCalendarDiff.judge] judges it, else written back. A
+     * copy of one of its events is known by [versions], those it has written ([SlotCalendarDiff.isCopy]);
+     * an event of yours under a slot's title at its times, there before it, is said ([Written.yours]).
+     */
+    private fun write(calendarId: Long, plan: Plan, zone: ZoneId, written: Map<String, Long>, versions: Set<Long>, micro: Map<String, com.thomaswcode.decrastination.enrich.MicroPlan> = emptyMap(), refuses: (SlotCalendarDiff.HandMove) -> String?): Written {
+        val from = plan.today.atStartOfDay(zone).toInstant().toEpochMilli()
+        val to = plan.today.plusDays(SlotCalendarDiff.DAYS).atStartOfDay(zone).toInstant().toEpochMilli()
+        val desired = SlotCalendarDiff.desired(plan, zone, micro)
+        // Those with none of its marks in its words: copies of its own, to delete, and events of yours.
+        val unmarked = provider.unmarked(calendarId)
+        val copies = unmarked.filter { SlotCalendarDiff.isCopy(calendarId, it.title, it.description, it.start, it.end, versions) }
+        val diff = SlotCalendarDiff.diff(desired, provider.existing(calendarId, from, to, desired.map { it.uri }) + copies, written)
+        val (taken, refused) = SlotCalendarDiff.judge(diff.handMoves, refuses)
+        provider.apply(calendarId, zone, diff.inserts, diff.updates.map { it.existing.id to it.desired } + refused.map { it.first.existing.id to it.first.desired }, diff.deletes.map { it.id })
+        return Written(desired.associate { it.uri to it.start } + taken.associate { it.desired.uri to it.existing.start }, taken, refused, SlotCalendarDiff.yours(calendarId, desired, unmarked, versions))
+    }
+
+    /**
+     * The app's events in [calendarId], all of them: a calendar no longer written to is left as it
+     * was before. False when they can't be (no permission, or the provider failed), to be tried again.
+     */
+    private fun clear(calendarId: Long, versions: Set<Long>): Boolean {
+        if (!provider.allowed()) return false
+        return runCatching {
+            provider.deleteOwn(calendarId)
+            // And copies of its events that lost the app's marks (17 Oct), by their words and [versions].
+            val copies = provider.unmarked(calendarId).filter { SlotCalendarDiff.isCopy(calendarId, it.title, it.description, it.start, it.end, versions) }.map { it.id }
+            if (copies.isNotEmpty()) provider.apply(calendarId, clock.zone(), emptyList(), emptyList(), copies)
+        }.isSuccess
     }
 
     /** The calendar announces each change; it's read again once they stop. */
@@ -159,19 +207,13 @@ class CalendarWriter(
      */
     @Synchronized
     fun watchCalendar() {
-        if (calendarWatched || !CalendarTime.allowed(app)) return
+        if (calendarWatched) return
         runCatching {
-            app.contentResolver.registerContentObserver(
-                android.provider.CalendarContract.Events.CONTENT_URI,
-                true,
-                object : ContentObserver(Handler(Looper.getMainLooper())) {
-                    override fun onChange(selfChange: Boolean) {
-                        calendarTouched = true
-                        changes.tryEmit(Unit)
-                    }
-                },
-            )
-        }.onSuccess { calendarWatched = true }.onFailure { Log.w(AppGraph.TAG, "Can't watch the calendar", it) }
+            provider.watch {
+                calendarTouched = true
+                changes.tryEmit(Unit)
+            }
+        }.onSuccess { calendarWatched = it }.onFailure { Log.w(AppGraph.TAG, "Can't watch the calendar", it) }
     }
 
     /**
