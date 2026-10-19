@@ -316,7 +316,7 @@ class CommandActivity : Activity() {
             // The nightly backup's work, once (AR-07).
             "backup-now" -> Log.i(TAG, "Backup: ${if (graph.backups.backupNow()) "written" else "not written"}; last ${graph.runtime.value.lastBackupAt}")
             "review" -> {
-                Review.run(this, ifDue = false)
+                graph.learning.review(ifDue = false)
                 Log.i(TAG, "Review: ${graph.log.value.reviews.lastOrNull()?.lines}; calibration ${graph.runtime.value.calibration}")
             }
             "calendar" -> {
@@ -410,7 +410,7 @@ class CommandActivity : Activity() {
             }
             // The weekly tidy now, due or not (a paid call), applied as Sunday's would be.
             "memory-tidy" -> {
-                val tidy = com.thomaswcode.decrastination.learn.Review.tidyMemory(graph, graph.clock.now(), force = true)
+                val tidy = graph.learning.tidyMemory(graph.clock.now(), force = true)
                 Log.i(TAG, tidy?.let { "memory-tidy: ${com.thomaswcode.decrastination.learn.Review.tidyLine(it)}" } ?: "memory-tidy: nothing tidied (no facts, Claude held or failed, or no room made)")
             }
             // --es do apply|undo: the last reply's first card applied, or taken back, as its buttons do.

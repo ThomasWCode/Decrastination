@@ -2,6 +2,7 @@
 
 What the app learns from how the work goes: your pace for each kind and class of work, a safety margin for each kind, how much of each kind of day gets used, and AnkiDroid's seconds a card.
 Every figure is bounded, shown in Stats, and worked out afresh from the record, so the same record always teaches the same values.
+`learn/Learning.kt` does what's done with the record: the week's review, a figure forgotten, a review's change or tidy put back, the week's summary, and the check-in and a completion's answer kept (the chat's and the form's go through it). It's built like `Focus`, its pure parts `Review`'s, `Calibrator`'s, `Stats`' and `Summary`'s; `LearningTest` drives it on temporary stores.
 
 ## The record
 
@@ -91,7 +92,7 @@ It only advises: the hours are yours to change.
 
 ## Forget and Reset
 
-**Forget** (LR-06): Stats lists what's been learned, each class's figure (and one still coming) with *Forget*. Asked first, the figure goes at once (`AppGraph.forgetCalibration`) and its kind's stands in.
+**Forget** (LR-06): Stats lists what's been learned, each class's figure (and one still coming) with *Forget*. Asked first, the figure goes at once (`Learning.forgetCalibration`) and its kind's stands in.
 That class's work from before then teaches nothing at the reviews after, its kind's figure included (`Calibration.forgotten`, `Calibrator.remembered`).
 
 **Reset** (LR-08, Settings → Reset): Stats (the record, and what's learned from it), what the app has learned (learned afresh from now: `Calibration.learnFrom`), what Felix remembers, the chat and Felix's history, your changes, or everything learned.
@@ -106,7 +107,7 @@ In quiet hours a reminder opens the form instead (`Conversation.remindCheckIn`),
 
 ## The weekly review
 
-`Review.run` runs 90 minutes after the check-in's time (21:00), answered or not, or as soon as the last answer is in; once a week (`Review.reviewed`).
+`Learning.review` runs 90 minutes after the check-in's time (21:00), answered or not, or as soon as the last answer is in; once a week (`Review.reviewed`).
 It runs as a job (`ReviewWorker`), which waits for a connection while Claude is on.
 
 The rules' part always runs:
