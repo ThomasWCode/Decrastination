@@ -4,6 +4,7 @@ import com.thomaswcode.decrastination.core.AnkiDay
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.Timetable
+import com.thomaswcode.decrastination.core.withIds
 import kotlinx.serialization.Serializable
 
 /** Every task, open or recently finished, and how each source's last read went. Kept in `tasks.json`. */
@@ -27,9 +28,17 @@ data class TaskState(
      */
     val timetable: Timetable? = null,
     /** The shape this is in ([Migration]): raised with each change of it, a migration bringing older files to it. */
-    val version: Int = 1,
+    val version: Int = 2,
 ) {
     val open: List<TaskItem> get() = tasks.filter { it.isOpen }
+
+    /** Every step of every task, and of every completion waiting, with an id ([withIds]): given as it's first stored. */
+    fun withStepIds(): TaskState {
+        fun TaskItem.ided(): TaskItem = subSteps.withIds().let { if (it === subSteps) this else copy(subSteps = it) }
+        val all = tasks.map { it.ided() }
+        val waiting = unrewarded.map { it.ided() }
+        return if (all.indices.all { all[it] === tasks[it] } && waiting.indices.all { waiting[it] === unrewarded[it] }) this else copy(tasks = all, unrewarded = waiting)
+    }
 
     fun status(source: Source): SourceStatus = sources[source] ?: SourceStatus()
 }

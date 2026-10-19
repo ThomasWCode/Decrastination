@@ -97,7 +97,7 @@ class OwnTasksTest {
         val notATask = Instruction("not", "Not a task", About(taskId = "own:mine"), h.clock.now(), state = InstructionStatus.Applied, changes = listOf(Change(ChangeType.NotATask, taskId = "own:mine")), appliedAt = h.clock.now())
         h.stores.instructions.update { it.copy(instructions = listOf(notATask)) }
         h.ownTasks.saveOwnTask("mine", OwnTask(title = "Revise"))
-        assertTrue(own().userNotATask)
+        assertTrue(own().mine.notATask != null)
         assertNull(own().doneAt)
     }
 

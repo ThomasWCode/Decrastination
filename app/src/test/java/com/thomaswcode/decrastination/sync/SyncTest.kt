@@ -12,6 +12,7 @@ import com.thomaswcode.decrastination.data.ChatMigration
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.RuntimeState
 import com.thomaswcode.decrastination.data.TaskState
+import com.thomaswcode.decrastination.data.TasksMigration
 import com.thomaswcode.decrastination.learn.CalendarEvent
 import com.thomaswcode.decrastination.learn.EventJudge
 import com.thomaswcode.decrastination.sources.ReadContext
@@ -45,10 +46,10 @@ import kotlinx.coroutines.runBlocking
 class SyncTest {
     private val dir: File = Files.createTempDirectory("sync-service").toFile()
     private val clock = FixedClock(Fixtures.at("2026-10-19T16:00"), LONDON)
-    private val tasks = JsonStore(File(dir, "tasks.json"), TaskState.serializer(), ::TaskState)
+    private val tasks = JsonStore(File(dir, "tasks.json"), TaskState.serializer(), ::TaskState, migrations = listOf(TasksMigration.TASKS))
     private val settings = JsonStore(File(dir, "settings.json"), Settings.serializer(), ::Settings)
     private val runtime = JsonStore(File(dir, "runtime.json"), RuntimeState.serializer(), ::RuntimeState, migrations = listOf(ChatMigration.RUNTIME))
-    private val instructions = JsonStore(File(dir, "instructions.json"), InstructionState.serializer(), ::InstructionState)
+    private val instructions = JsonStore(File(dir, "instructions.json"), InstructionState.serializer(), ::InstructionState, migrations = listOf(TasksMigration.INSTRUCTIONS))
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val ports = Ports()
 

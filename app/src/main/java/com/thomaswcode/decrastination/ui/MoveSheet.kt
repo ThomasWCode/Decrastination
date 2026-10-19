@@ -89,7 +89,7 @@ fun MoveSheet(graph: AppGraph, chunk: Chunk, plan: Plan, zone: ZoneId, onDone: (
                 OutlinedButton(onClick = {
                     val applied = graph.instructions.value.applied
                     val quick = InstructionRules.quickInForce(applied, chunk.taskId, ChangeType.AtTime)
-                    val pinned = task?.userAtTime?.takeIf { Planner.date(it, zone) == day }
+                    val pinned = task?.mine?.atTime?.value?.takeIf { Planner.date(it, zone) == day }
                     if (pinned != null && !quick) {
                         // A time from the chat holds it that day, over a day given after it: it's taken back where it was made.
                         problem = "A time you gave in the chat holds it at ${Format.at(pinned, graph.clock.now(), zone)}: take that back in the chat's Your changes first."

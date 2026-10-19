@@ -37,7 +37,7 @@ object Duplicates {
      */
     fun linksPresent(tasks: List<TaskItem>): List<TaskItem> {
         val ids = tasks.mapTo(HashSet()) { it.id }
-        return if (tasks.none { it.userSameAs != null && it.userSameAs !in ids }) tasks else tasks.map { if (it.userSameAs != null && it.userSameAs !in ids) it.copy(userSameAs = null) else it }
+        return if (tasks.none { it.mine.sameAs?.value != null && it.mine.sameAs?.value !in ids }) tasks else tasks.map { if (it.mine.sameAs?.value != null && it.mine.sameAs?.value !in ids) it.copy(mine = it.mine.copy(sameAs = null)) else it }
     }
 
     /**
@@ -46,7 +46,7 @@ object Duplicates {
      * stored tasks keep their own: taking the change back takes the credit with it.
      */
     fun credited(tasks: List<TaskItem>): List<TaskItem> {
-        val credit = tasks.mapNotNull { t -> t.userSameAs?.let { it to t.workedMin + t.photoMin } }.groupBy({ it.first }, { it.second }).mapValues { it.value.sum() }.filterValues { it > 0 }
+        val credit = tasks.mapNotNull { t -> t.mine.sameAs?.value?.let { it to t.workedMin + t.photoMin } }.groupBy({ it.first }, { it.second }).mapValues { it.value.sum() }.filterValues { it > 0 }
         if (credit.isEmpty()) return tasks
         return tasks.map { t -> credit[t.id]?.let { t.copy(workedMin = t.workedMin + it) } ?: t }
     }

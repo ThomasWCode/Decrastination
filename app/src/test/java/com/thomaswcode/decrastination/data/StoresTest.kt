@@ -31,27 +31,27 @@ class StoresTest {
     fun `the tasks keep the timetable they were last read with`() = runTest {
         val file = File(dir, "tasks.json")
         val timetable = Timetable("2026-08-24T00:00:00", listOf(PpClass("c", "Study Period", listOf(PpSchedule("2026-09-05T08:50:00", "2026-09-05T09:45:00", dayOfWeek = 2)))))
-        JsonStore(file, TaskState.serializer(), ::TaskState).update { it.copy(timetable = timetable) }
-        assertEquals(timetable, JsonStore(file, TaskState.serializer(), ::TaskState).value.timetable)
+        JsonStore(file, TaskState.serializer(), ::TaskState, migrations = listOf(TasksMigration.TASKS)).update { it.copy(timetable = timetable) }
+        assertEquals(timetable, JsonStore(file, TaskState.serializer(), ::TaskState, migrations = listOf(TasksMigration.TASKS)).value.timetable)
     }
 
     @Test
     fun `an unreadable file is set aside and the state starts afresh`() = runTest {
         val file = File(dir, "tasks.json").apply { writeText("{not json") }
-        val store = JsonStore(file, TaskState.serializer(), ::TaskState, clock = { AT })
+        val store = JsonStore(file, TaskState.serializer(), ::TaskState, clock = { AT }, migrations = listOf(TasksMigration.TASKS))
         assertEquals(TaskState(), store.value)
         val problem = store.problem!!
         assertEquals("tasks.json.unreadable-20261011-083000", problem.copy)
         assertEquals("{not json", File(dir, problem.copy!!).readText())
         assertFalse(problem.kept)
         // Not replaced till it's on record: a start cut short before then finds it again, with the same copy.
-        assertEquals(problem.copy, JsonStore(file, TaskState.serializer(), ::TaskState, clock = { AT + 1000 }).problem?.copy)
+        assertEquals(problem.copy, JsonStore(file, TaskState.serializer(), ::TaskState, clock = { AT + 1000 }, migrations = listOf(TasksMigration.TASKS)).problem?.copy)
         // On record: what it started from is the file now, and the next start reads it, with nothing to say.
         store.keepRecovered()
-        assertNull(JsonStore(file, TaskState.serializer(), ::TaskState, clock = { AT + 2000 }).problem)
+        assertNull(JsonStore(file, TaskState.serializer(), ::TaskState, clock = { AT + 2000 }, migrations = listOf(TasksMigration.TASKS)).problem)
         assertEquals(1, dir.listFiles { f -> f.name.startsWith("tasks.json.unreadable-") }!!.size)
         // A file that reads is no problem.
-        assertNull(JsonStore(File(dir, "other.json").apply { writeText("{}") }, TaskState.serializer(), ::TaskState).problem)
+        assertNull(JsonStore(File(dir, "other.json").apply { writeText("{}") }, TaskState.serializer(), ::TaskState, migrations = listOf(TasksMigration.TASKS)).problem)
     }
 
     @Test
@@ -150,7 +150,7 @@ class StoresTest {
         assertEquals(stores.all.size, stores.all.map { it.file }.toSet().size)
         // Every JSON store's shape is known to a backup, at the version its state says, each with a migration from every one before.
         assertEquals(made - "secrets.bin", stores.shapes.keys)
-        assertEquals(mapOf("chat.json" to 2, "log.json" to 2, "runtime.json" to 2), stores.shapes.filterValues { it.version > 1 }.mapValues { it.value.version })
+        assertEquals(mapOf("chat.json" to 3, "chat-archive.json" to 2, "instructions.json" to 2, "log.json" to 2, "runtime.json" to 2, "tasks.json" to 2), stores.shapes.filterValues { it.version > 1 }.mapValues { it.value.version })
         assertTrue(stores.shapes.values.all { Migration.complete(it.version, it.migrations) })
     }
 
@@ -182,12 +182,14 @@ class StoresTest {
     }
 
     @Test
-    fun `the one move between stores is the chat's, and a backup's parts are moved too`() {
+    fun `the moves between stores are the chat's and the tasks', and a backup's parts are moved too`() {
         // A move runs on the stores' files at start; a backup from before it holds the fields where they were.
         // Backups.upgraded makes the chat's move on a backup's parts (ChatMigrationTest restores one from
-        // before it); a second move must be taught to it as well, and this test changed with it (D-94). The
-        // archive's split into months (4.0.4) moves no field: a backup holds the archive whole, as before.
-        assertEquals(listOf(ChatMigration.MOVE, ChatArchiveStore.SPLIT), Stores.MOVES, "A new move between stores: apply it to a backup's parts in Backups.upgraded too")
+        // before it), and the tasks' (its instructions marked Felix's from the chat it carries: the steps it
+        // ties together are a source's task's, which a backup doesn't hold; TasksMigrationTest); another move
+        // must be taught to it as well, and this test changed with it (D-94). The archive's split into months
+        // (4.0.4) moves no field: a backup holds the archive whole, as before.
+        assertEquals(listOf(ChatMigration.MOVE, ChatArchiveStore.SPLIT, TasksMigration.MOVE), Stores.MOVES, "A new move between stores: apply it to a backup's parts in Backups.upgraded too")
     }
 
     @Test

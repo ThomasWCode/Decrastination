@@ -57,18 +57,18 @@ class InstructionsTest {
         val kept = state("q1")!!
         assertEquals(InstructionStatus.Applied, kept.state)
         assertTrue(kept.quick)
-        assertEquals(120, task("teams:essay").userEffortMin)
+        assertEquals(120, task("teams:essay").mine.minutes?.minutes)
         assertTrue(h.instructions.quickInForce("teams:essay", ChangeType.Minutes))
         // Laid over everything it changes: the calendar read again, the widget drawn.
         assertTrue(h.rereads.get() > 0 && h.redraws.get() > 0)
         // A second of the same kind takes the first's place.
         h.instructions.addOwnChange("q2", "Takes 1 h 30 in all (set in Tasks)", about, Change(ChangeType.Minutes, taskId = "teams:essay", minutes = 90))
         assertEquals(listOf("q2"), h.instructions.value.instructions.map { it.id })
-        assertEquals(90, task("teams:essay").userEffortMin)
+        assertEquals(90, task("teams:essay").mine.minutes?.minutes)
         // Taken back: what its source says stands again.
         h.instructions.takeBackQuick("teams:essay", ChangeType.Minutes)
         assertEquals(emptyList(), h.instructions.value.instructions)
-        assertNull(task("teams:essay").userEffortMin)
+        assertNull(task("teams:essay").mine.minutes?.minutes)
         assertFalse(h.instructions.quickInForce("teams:essay", ChangeType.Minutes))
     }
 
@@ -118,10 +118,10 @@ class InstructionsTest {
         write(understood("read", Change(ChangeType.Minutes, taskId = "teams:essay", minutes = 30)))
         h.stores.chat.update { it.copy(messages = listOf(ChatMessage("m1", Speaker.Felix, "Shall I?", h.clock.now(), proposals = listOf(Proposal("p1", state = ProposalState.Applied, made = "read"))))) }
         h.instructions.applyInstruction("read")
-        assertEquals(30, task("teams:essay").userEffortMin)
+        assertEquals(30, task("teams:essay").mine.minutes?.minutes)
         h.instructions.deleteInstruction("read")
         assertNull(state("read"))
-        assertNull(task("teams:essay").userEffortMin)
+        assertNull(task("teams:essay").mine.minutes?.minutes)
         val card = h.stores.chat.value.messages.single().proposals.single()
         assertEquals(ProposalState.Proposed, card.state)
         assertNull(card.made)

@@ -2,6 +2,7 @@ package com.thomaswcode.decrastination.core
 
 import kotlin.math.floor
 import kotlin.math.roundToInt
+import kotlin.random.Random
 import kotlinx.serialization.Serializable
 
 /**
@@ -71,7 +72,33 @@ data class SubStep(
     val timedMin: Int = 0,
     /** Where it can be done (PL-15): "home" or "anywhere", as Claude read it; null, as its task's. */
     val where: String? = null,
+    /**
+     * Its id, made when it's first stored ([withIds]: the tasks' store gives one to each that hasn't)
+     * and kept from then on, so a tick follows it through a re-lay or a reading that reorders
+     * ([carryMarks]); empty till then. Slots still name it by its place.
+     */
+    val id: String = "",
+    /** Where it came from: what tells the reading's steps from the rest. */
+    val origin: StepOrigin = StepOrigin.Source,
 )
+
+/**
+ * Where a step came from: its task's source (Anki's cards), a reading by Claude or by the rules, your
+ * instruction or Felix's card, or a task of your own.
+ */
+@Serializable
+enum class StepOrigin { Source, Reading, Rules, Yours, Felix, OwnTask }
+
+/** A step's new id: eight random hex characters. */
+fun newStepId(): String = "%08x".format(Random.nextInt())
+
+/** [this] with each step that has no id, or one a step before it has, given a new one. */
+fun List<SubStep>.withIds(): List<SubStep> {
+    val seen = HashSet<String>()
+    if (all { it.id.isNotEmpty() && seen.add(it.id) }) return this
+    seen.clear()
+    return map { if (it.id.isEmpty() || !seen.add(it.id)) it.copy(id = newStepId()).also { s -> seen += s.id } else it }
+}
 
 /**
  * One obligation from one source, in the shape every other part of the app works with
@@ -100,12 +127,6 @@ data class TaskItem(
     val sourceEffortMin: Int? = null,
     /** The enrichment's estimate (Phase 4). */
     val aiEffortMin: Int? = null,
-    /** Your estimate of the whole task, from an instruction ([ChangeType.Minutes]), which beats every other. */
-    val userEffortMin: Int? = null,
-    /** [userEffortMin] is the app's estimate at your pace, as Felix worked it out from this estimate of the app's ([Change.pacedFrom], [pacedMinutes]). */
-    val userEffortPacedFrom: Int? = null,
-    /** The task's content when it was paced ([Change.pacedHash], [pacedTeaches]). */
-    val userEffortPacedHash: String? = null,
     /** How far the source says it is (Power Planner's percent complete), 0 to 1. */
     val sourceProgress: Double = 0.0,
     /**
@@ -164,25 +185,12 @@ data class TaskItem(
     /** The source's own kind, deadline and start, before the enrichment's overlay; null before Phase 4. */
     val sourceValues: SourceValues? = null,
     /**
-     * Your instructions' say about it ([InstructionRules]), laid over the source's and the enrichment's
-     * at every merge: not a task; not before then; not until another task is done; due by then; all
-     * of it on one day (YYYY-MM-DD); its next piece at a time (PL-04).
+     * Your instructions' say about it, each value with who set it ([Mine], [InstructionRules]), laid
+     * over the source's and the enrichment's at every merge: its minutes beat every other estimate;
+     * its steps (any task's but Anki's, 16 Oct) the source's and the reading's ([enriched]), their
+     * ticks kept by name; its name its source's, which is kept ([SourceValues.title]).
      */
-    val userNotATask: Boolean = false,
-    val userFrom: Long? = null,
-    val userAfter: String? = null,
-    val userDueAt: Long? = null,
-    val userOnDay: String? = null,
-    val userAtTime: Long? = null,
-    /** The task listed it's the same work as, which is kept (DX-15): this one's off the plan and the list. */
-    val userSameAs: String? = null,
-    /**
-     * Its steps as you gave them (your call, 16 Oct: any task's, not only your own's), laid over the
-     * source's and the enrichment's at every merge ([enriched]), their ticks kept by name.
-     */
-    val userSteps: List<OwnStep>? = null,
-    /** Its name as you gave it (16 Oct), over its source's, which is kept ([SourceValues.title]). */
-    val userTitle: String? = null,
+    val mine: Mine = Mine(),
 ) {
     val isOpen: Boolean get() = status == Status.Open
 
@@ -197,7 +205,7 @@ data class TaskItem(
      * is a task (your call, 16 Oct, in place of 9 Oct's events and emails only to read), what to do
      * about an event among them; where that isn't clear, Claude's reading asks (AI-10).
      */
-    val hidden: Boolean get() = userNotATask || userSameAs != null
+    val hidden: Boolean get() = mine.notATask != null || mine.sameAs != null
 
     /**
      * Its real deadline, where it has one (PL-14): yours; an email's own words as Claude quoted them
@@ -205,7 +213,7 @@ data class TaskItem(
      * test date Claude read before its source's deadline) isn't one.
      */
     val realDeadline: Long?
-        get() = userDueAt ?: when (source) {
+        get() = mine.dueAt?.value ?: when (source) {
             // The rules' date is a guess from its words, and Claude's is only a quote where it says so:
             // a reading of the email as it is now, not one its new content has made out of date.
             Source.Gmail -> Enrichments.current(this)?.takeIf { it.deadlineQuoted && it.deadline == dueAt }?.deadline
@@ -244,7 +252,7 @@ data class TaskItem(
     val handMin: Int get() = subSteps.filter { it.done && it.byHand }.sumOf { it.minutes }
 
     /** Your estimate, else the enrichment's, else the source's or rules', else the kind's default. */
-    val effortMin: Int get() = userEffortMin ?: aiEffortMin ?: sourceEffortMin ?: kind.defaultEffortMin
+    val effortMin: Int get() = mine.minutes?.minutes ?: aiEffortMin ?: sourceEffortMin ?: kind.defaultEffortMin
 
     /** The estimate as the app has it, without yours: what free time for finishing it goes by, at most. */
     val appEffortMin: Int get() = aiEffortMin ?: sourceEffortMin ?: kind.defaultEffortMin
@@ -253,30 +261,30 @@ data class TaskItem(
      * Its minutes are yours (an instruction's, or a task of your own): planned as you gave them,
      * not scaled by what the app has learned of its own estimates.
      */
-    val yourMinutes: Boolean get() = userEffortMin != null || source == Source.Own
+    val yourMinutes: Boolean get() = mine.minutes != null || source == Source.Own
 
     /**
      * Your minutes are the app's own estimate at your pace, as Felix worked them out to size its
      * steps (your call, 17 Oct), not your own reckoning: planned as given, like any of yours. Only
      * where the app made the estimate: never a task of your own.
      */
-    val pacedMinutes: Boolean get() = userEffortPacedFrom != null && userEffortMin != null && source != Source.Own
+    val pacedMinutes: Boolean get() = mine.minutes?.paced != null && source != Source.Own
 
     /**
      * What's finished teaches the pace, as the app's own tasks do, measured against the estimate
-     * Felix worked from ([userEffortPacedFrom]): your minutes [pacedMinutes], of the task as it was
-     * then (#50's review). Read again for newer prompts alone (or *Read again*), its content's the
-     * same and the estimate he worked from stands, whatever the new one; once its content has
-     * changed (new instructions, a new email), the work may have too, and it's as your own.
+     * Felix worked from ([Paced.from]): your minutes [pacedMinutes], of the task as it was then
+     * (#50's review). Read again for newer prompts alone (or *Read again*), its content's the same
+     * and the estimate he worked from stands, whatever the new one; once its content has changed
+     * (new instructions, a new email), the work may have too, and it's as your own.
      */
-    val pacedTeaches: Boolean get() = pacedMinutes && userEffortPacedFrom != null && userEffortPacedHash != null && userEffortPacedHash == Enrichments.inputHash(this)
+    val pacedTeaches: Boolean get() = pacedMinutes && mine.minutes?.paced?.contentHash.let { it != null && it == Enrichments.inputHash(this) }
 
     /**
      * Its steps are yours: typed into a task of your own, or given any task by you or Felix (an
      * instruction): planned as you gave them, at their own minutes (not stretched by the pace learned
      * of the app's estimates) and however long, never cut into sittings (your call, 17 Oct).
      */
-    val yourSteps: Boolean get() = userSteps != null || source == Source.Own
+    val yourSteps: Boolean get() = mine.steps != null || source == Source.Own
 
     /**
      * What each of its steps' minutes counts as: where you gave the whole task's minutes, its steps
@@ -284,9 +292,9 @@ data class TaskItem(
      */
     val stepScale: Double
         get() {
-            val mine = userEffortMin ?: return 1.0
+            val yours = mine.minutes?.minutes ?: return 1.0
             val steps = subSteps.sumOf { it.minutes }
-            return if (steps > 0) mine.toDouble() / steps else 1.0
+            return if (steps > 0) yours.toDouble() / steps else 1.0
         }
 
     /**
@@ -297,9 +305,9 @@ data class TaskItem(
      */
     fun plannedStepMinutes(multiplier: Double): List<Int> {
         val steps = subSteps.map { it.minutes }
-        val mine = userEffortMin
-        if (mine == null || steps.sum() <= 0) return steps.map { (it * multiplier).roundToInt().coerceAtLeast(1) }
-        return shareOut(mine, steps)
+        val yours = mine.minutes?.minutes
+        if (yours == null || steps.sum() <= 0) return steps.map { (it * multiplier).roundToInt().coerceAtLeast(1) }
+        return shareOut(yours, steps)
     }
 
     fun isAvailable(now: Long): Boolean = availableFrom == null || availableFrom <= now

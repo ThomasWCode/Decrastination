@@ -6,6 +6,7 @@ import com.thomaswcode.decrastination.core.Duplicates
 import com.thomaswcode.decrastination.core.Instruction
 import com.thomaswcode.decrastination.core.InstructionRules
 import com.thomaswcode.decrastination.core.InstructionState
+import com.thomaswcode.decrastination.core.Mine
 import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.Planner
 import com.thomaswcode.decrastination.core.SchoolCalendar
@@ -13,10 +14,8 @@ import com.thomaswcode.decrastination.core.SchoolDays
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.SlotKind
 import com.thomaswcode.decrastination.core.TaskItem
-import com.thomaswcode.decrastination.core.TaskOverrides
 import com.thomaswcode.decrastination.core.WallClock
-import com.thomaswcode.decrastination.core.overrides
-import com.thomaswcode.decrastination.core.withOverrides
+import com.thomaswcode.decrastination.core.withMine
 import com.thomaswcode.decrastination.data.ActivityLog
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.RuntimeState
@@ -73,8 +72,8 @@ class Planning(
     fun asPlanned(state: TaskState = tasks.value, applied: List<Instruction> = instructions.value.applied): List<TaskItem> {
         val overrides = InstructionRules.taskOverrides(applied)
         return state.tasks.map { task ->
-            val o = overrides[task.id] ?: TaskOverrides.NONE
-            if (o == task.overrides()) task else task.withOverrides(o)
+            val o = overrides[task.id] ?: Mine.NONE
+            if (o == task.mine) task else task.withMine(o)
         }.let(Duplicates::linksPresent).let(Duplicates::credited)
     }
 

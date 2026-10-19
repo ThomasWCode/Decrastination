@@ -22,6 +22,7 @@ import com.thomaswcode.decrastination.core.SlotState
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Speaker
 import com.thomaswcode.decrastination.core.Window
+import com.thomaswcode.decrastination.core.yours
 import com.thomaswcode.decrastination.enrich.AiUsage
 import java.io.ByteArrayInputStream
 import kotlin.test.Test
@@ -232,7 +233,7 @@ class BackupTest {
         assertNotNull(Backups.problem(backup().copy(ownTasks = listOf(mine.copy(title = " ")))))
         assertNotNull(Backups.problem(backup().copy(ownTasks = listOf(mine.copy(source = Source.Teams)))))
         // Bookkeeping the app never writes: refused. What instructions laid over one isn't restored.
-        assertNotNull(Backups.problem(backup().copy(ownTasks = listOf(mine.copy(userEffortMin = -1)))))
+        assertNotNull(Backups.problem(backup().copy(ownTasks = listOf(mine.yours(minutes = -1)))))
         assertNotNull(Backups.problem(backup().copy(ownTasks = listOf(mine.copy(workedMin = -5)))))
         assertNotNull(Backups.problem(backup().copy(ownTasks = listOf(mine.copy(sourceProgress = 1.0)))))
         assertNotNull(Backups.problem(backup().copy(ownTasks = listOf(mine.copy(sourceValues = mine.sourceValues!!.copy(availableFrom = now + 86_400_000L))))))
@@ -242,11 +243,11 @@ class BackupTest {
         assertNotNull(Backups.problem(backup().copy(ownTasks = listOf(mine.copy(extra = mapOf("from" to "x"))))))
         // A backup of this version is one an older version refuses whole, not one it restores without them.
         assertTrue(Backup.FORMAT > 1)
-        val laid = mine.copy(userDueAt = now + 3 * 86_400_000L, userNotATask = true).let { it.copy(dueAt = it.userDueAt) }
+        val laid = mine.yours(dueAt = now + 3 * 86_400_000L, notATask = true).let { it.copy(dueAt = it.mine.dueAt?.value) }
         val restored = Backups.restoredOwnTasks(listOf(laid), emptyList()).single()
-        assertNull(restored.userDueAt)
+        assertNull(restored.mine.dueAt?.value)
         assertEquals(mine.dueAt, restored.dueAt)
-        assertEquals(false, restored.userNotATask)
+        assertEquals(false, restored.mine.notATask != null)
         // A backup from before 2.0.0 has none.
         assertEquals(emptyList(), Backups.decode(Backups.encode(backup()).replace("\"ownTasks\"", "\"ignored\""), emptyMap())!!.ownTasks)
     }

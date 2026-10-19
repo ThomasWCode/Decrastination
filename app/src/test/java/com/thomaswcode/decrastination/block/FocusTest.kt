@@ -4,6 +4,7 @@ import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.Fixtures.LONDON
 import com.thomaswcode.decrastination.core.Calibration
 import java.time.LocalDate
+import com.thomaswcode.decrastination.core.yours
 import com.thomaswcode.decrastination.data.SlotOutcome
 import com.thomaswcode.decrastination.core.WindowKind
 import com.thomaswcode.decrastination.core.Slotter
@@ -30,6 +31,7 @@ import com.thomaswcode.decrastination.data.SourceStatus
 import com.thomaswcode.decrastination.data.RuntimeState
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.data.TaskState
+import com.thomaswcode.decrastination.data.TasksMigration
 import java.io.File
 import java.nio.file.Files
 import java.util.concurrent.CountDownLatch
@@ -50,7 +52,7 @@ import kotlinx.coroutines.test.runTest
 class FocusTest {
     private val dir: File = Files.createTempDirectory("focus").toFile()
     private val clock = FixedClock(Fixtures.at("2026-10-10T12:00"), LONDON)
-    private val tasks = JsonStore(File(dir, "tasks.json"), TaskState.serializer(), ::TaskState)
+    private val tasks = JsonStore(File(dir, "tasks.json"), TaskState.serializer(), ::TaskState, migrations = listOf(TasksMigration.TASKS))
     private val settings = JsonStore(File(dir, "settings.json"), Settings.serializer(), ::Settings)
     private val runtime = JsonStore(File(dir, "runtime.json"), RuntimeState.serializer(), ::RuntimeState, migrations = listOf(ChatMigration.RUNTIME))
     private val log = JsonStore(File(dir, "log.json"), ActivityLog.serializer(), ::ActivityLog, migrations = listOf(ChatMigration.LOG))
@@ -83,12 +85,12 @@ class FocusTest {
 
     @Test
     fun `minutes you raise plan more time, but finishing earns no more than the app's estimate`() = runTest {
-        val raised = task("hw", effort = 30).copy(userEffortMin = 300, status = Status.Done, doneAt = clock.time)
+        val raised = task("hw", effort = 30).copy( status = Status.Done, doneAt = clock.time).yours(minutes = 300)
         focus.onCompleted(listOf(raised))
         // 30 minutes of the app's estimate, a third of it: not 30 minutes of credit for 300.
         assertEquals(10 * 60_000L, focus.creditLeftMs())
         // Lowered, it earns by yours.
-        val lowered = task("other", effort = 30).copy(userEffortMin = 15, status = Status.Done, doneAt = clock.time)
+        val lowered = task("other", effort = 30).copy( status = Status.Done, doneAt = clock.time).yours(minutes = 15)
         focus.onCompleted(listOf(lowered))
         assertEquals(15 * 60_000L, focus.creditLeftMs())
     }
@@ -97,11 +99,9 @@ class FocusTest {
     fun `a total Felix works out at your pace still teaches the pace, measured against the app's estimate`() = runTest {
         // 17 Oct: 40 minutes of the app's, Felix's steps and total of 60 at a pace of 1.5; and two hours of your own reckoning.
         val base = task("paced", effort = 40, steps = listOf(SubStep("Past paper", 60)))
-        val paced = base.copy(
-            userSteps = listOf(com.thomaswcode.decrastination.core.OwnStep("Past paper", 60)), userEffortMin = 60, userEffortPacedFrom = 40,
-            userEffortPacedHash = com.thomaswcode.decrastination.core.Enrichments.inputHash(base), status = Status.Done, doneAt = clock.time,
-        )
-        val yours = task("yours", effort = 40).copy(userEffortMin = 120, status = Status.Done, doneAt = clock.time)
+        val paced = base.copy( status = Status.Done, doneAt = clock.time,
+        ).yours(steps = listOf(com.thomaswcode.decrastination.core.OwnStep("Past paper", 60)), minutes = 60, pacedFrom = 40, pacedHash = com.thomaswcode.decrastination.core.Enrichments.inputHash(base))
+        val yours = task("yours", effort = 40).copy( status = Status.Done, doneAt = clock.time).yours(minutes = 120)
         // #50's review: estimated anew at 80 since, its content the same (read again for newer prompts):
         // still measured against the 40 Felix worked from. Its content changed: as a total of yours.
         val anew = paced.copy(id = "teams:anew", sourceId = "anew", sourceEffortMin = 80)
@@ -119,7 +119,7 @@ class FocusTest {
         // #49's review: 40 minutes of the app's at a pace of 1.5 is an hour; your steps and minutes say 80.
         runtime.update { it.copy(calibration = Calibration(multipliers = mapOf(Calibration.key(Kind.Homework, null) to 1.5))) }
         val steps = listOf(SubStep("Past paper", 80))
-        val given = task("hw", effort = 40, steps = steps).copy(userSteps = listOf(com.thomaswcode.decrastination.core.OwnStep("Past paper", 80)), userEffortMin = 80, status = Status.Done, doneAt = clock.time)
+        val given = task("hw", effort = 40, steps = steps).copy( status = Status.Done, doneAt = clock.time).yours(steps = listOf(com.thomaswcode.decrastination.core.OwnStep("Past paper", 80)), minutes = 80)
         focus.onCompleted(listOf(given))
         // The less of the two, each in its own scale: the app's hour, a third of it.
         assertEquals(20 * 60_000L, focus.creditLeftMs())
@@ -129,7 +129,7 @@ class FocusTest {
     fun `with your minutes raised and a step ticked, each estimate takes off its own share`() = runTest {
         // Two 30-minute steps, raised to two hours, one ticked off by hand.
         val steps = listOf(SubStep("Q1-8", 30, done = true, byHand = true), SubStep("Q9-16", 30))
-        val raised = task("hw", effort = 60, steps = steps).copy(userEffortMin = 120, status = Status.Done, doneAt = clock.time)
+        val raised = task("hw", effort = 60, steps = steps).copy( status = Status.Done, doneAt = clock.time).yours(minutes = 120)
         focus.onCompleted(listOf(raised))
         // By the app's estimate, 30 of its 60 minutes were left: a third of them.
         assertEquals(10 * 60_000L, focus.creditLeftMs())
