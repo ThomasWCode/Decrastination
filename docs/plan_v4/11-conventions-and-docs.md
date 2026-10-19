@@ -5,7 +5,7 @@ How code is named, laid out and commented once the plan is done, and how the doc
 ## Names
 
 - **Claude is the model; Felix is who you talk to.** Code about calling the model says Claude (`ModelGateway`, `ClaudeEnricher`); code about the persona and his messages says Felix (`Speaker.Felix`, `felix/Outbox`). The screens keep saying "Claude" where it's the setting or the service (*Claude on*, *Read again with Claude*).
-- **A service is named for its concern**: `Conversation`, `Planning`, `Sync`, `Instructions`, `OwnTasks`, `CalendarWriter`, `Protection`, `Readings`, `Learning`.
+- **A service is named for its concern**: `Conversation`, `Planning`, `Sync`, `Instructions`, `OwnTasks`, `CalendarWriter`, `Protection`, `Readings`, `Learning`. A pure object in `core/` doesn't share a service's name: `core`'s `Instructions` and `OwnTasks` become `InstructionRules` and `OwnTaskRules` in Stage 9.
 - **Prompts and their answers by job**: `ReadingPrompts`/`ReadingAnswers` (now `Prompts`/`Answers`, renamed in Stage 9), beside `ChatPrompts`, `InstructionPrompts`, `FelixPrompts`, `SummaryPrompts` and `ResearchPrompts`.
 - **Your values are `mine`**, each with `By.You` or `By.Felix`; derived questions read as questions (`yourSteps`, `pacedTeaches`).
 

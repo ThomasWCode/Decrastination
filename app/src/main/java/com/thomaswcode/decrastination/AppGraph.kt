@@ -10,7 +10,6 @@ import com.thomaswcode.decrastination.block.SlotAlarms
 import com.thomaswcode.decrastination.block.Slots
 import com.thomaswcode.decrastination.calendar.CalendarWriter
 import com.thomaswcode.decrastination.calendar.SlotCalendar
-import com.thomaswcode.decrastination.core.Change
 import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.core.InstructionStatus
 import com.thomaswcode.decrastination.core.OwnTask
@@ -25,7 +24,6 @@ import com.thomaswcode.decrastination.data.Secret
 import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.data.Stores
 import com.thomaswcode.decrastination.enrich.AndroidModelAlerts
-import com.thomaswcode.decrastination.enrich.Called
 import com.thomaswcode.decrastination.enrich.EnrichWorker
 import com.thomaswcode.decrastination.enrich.ModelGateway
 import com.thomaswcode.decrastination.enrich.Readings
@@ -38,7 +36,9 @@ import com.thomaswcode.decrastination.felix.Outbox
 import com.thomaswcode.decrastination.learn.Assessment
 import com.thomaswcode.decrastination.learn.Briefing
 import com.thomaswcode.decrastination.learn.Calibrator
+import com.thomaswcode.decrastination.learn.CheckIn
 import com.thomaswcode.decrastination.learn.Daily
+import com.thomaswcode.decrastination.learn.Learning
 import com.thomaswcode.decrastination.net.UrlConnectionHttp
 import com.thomaswcode.decrastination.notify.AndroidTray
 import com.thomaswcode.decrastination.notify.NoticeId
@@ -241,7 +241,7 @@ class AppGraph private constructor(context: Context) {
         profile = { conversation.profile(it) },
         remember = { conversation.remember(it) },
         addInstruction = { text, about, answer -> instructions.addInstruction(text, about, answer) },
-        assess = { taskId, doneAt, answer -> Assessment.record(app, taskId, doneAt, answer) },
+        assess = { taskId, doneAt, answer -> learning.recordAssessment(taskId, doneAt, answer) },
     )
 
     /**
@@ -262,6 +262,7 @@ class AppGraph private constructor(context: Context) {
             override suspend fun answerEvent(key: String, answer: String) {
                 calendarWriter.answer(key, answer)
             }
+            override suspend fun recordCheckIn(checkIn: CheckIn, now: Long): Boolean = learning.recordCheckIn(checkIn, now)
         },
         calendarTime = { sync.calendarTime },
         answered = { record, words -> looks.answered(record, words) },
@@ -304,6 +305,18 @@ class AppGraph private constructor(context: Context) {
     val protection = Protection(settings, runtime, secrets, clock, scope, adminActive = { Watchdog.isAdminActive(app) }) {
         app.getSystemService(DevicePolicyManager::class.java)?.removeActiveAdmin(Watchdog.admin(app))
     }
+
+    /**
+     * What's learned from the log ([Learning]): the week's review, a figure forgotten, a review's change
+     * or tidy put back, the week's summary; and the check-ins and completions' answers recorded.
+     */
+    val learning: Learning = Learning(
+        log, runtime, settings, memory, chat, stores.instructions, clock, gateway, focus, protection,
+        resets = { backups.resets.get() },
+        profile = { now, remembered -> conversation.profile(now, remembered) },
+        reviewed = { line -> conversation.reviewed(line) },
+        summaryReady = { week -> conversation.summaryReady(week) },
+    )
 
     init {
         // The device admin kept in step with arming ([Protection.start]).
@@ -427,64 +440,8 @@ class AppGraph private constructor(context: Context) {
         )
     }
 
-    /**
-     * What's been learned about [key] (`Kind|class`) forgotten (LR-06): its figure goes now, the
-     * kind's standing for it, and its work so far teaches nothing at the reviews after.
-     */
-    suspend fun forgetCalibration(key: String) {
-        val now = clock.now()
-        runtime.update { s -> s.calibration.let { c -> s.copy(calibration = c.copy(multipliers = c.multipliers - key, timed = c.timed - key, forgotten = c.forgotten + (key to now))) } }
-    }
-
-    /**
-     * [change], one of [review]'s, put back (LR-01): its setting to its value before, as a change of
-     * yours (once armed, one that loosens waits as yours do), while it's still what the review left.
-     * What happened, in words.
-     */
-    suspend fun undoReviewChange(review: com.thomaswcode.decrastination.data.WeeklyReview, change: com.thomaswcode.decrastination.learn.ReviewInput.Change): String {
-        val before = review.settingsBefore[change.setting] ?: return "What it was before isn't known."
-        if (com.thomaswcode.decrastination.learn.ReviewInput.valueOf(settings.value, change.setting) != change.value) return "It's been changed since: left as it is."
-        // One end of a school day's hours back alone can meet the other: then it can't be.
-        if (!com.thomaswcode.decrastination.data.SettingsLimits.window(com.thomaswcode.decrastination.learn.ReviewInput.set(settings.value, change.setting, before).weekdayHours, overnight = false)) return "It can't go back on its own: the day's hours would end before they start. Change them in Settings."
-        protection.changeSettings { com.thomaswcode.decrastination.learn.ReviewInput.set(it, change.setting, before) }
-        val now = com.thomaswcode.decrastination.learn.ReviewInput.valueOf(settings.value, change.setting)
-        val label = com.thomaswcode.decrastination.learn.ReviewInput.label(change.setting)
-        return if (now == before) "$label is back to ${com.thomaswcode.decrastination.learn.ReviewInput.valueText(change.setting, before)}." else "$label back to ${com.thomaswcode.decrastination.learn.ReviewInput.valueText(change.setting, before)} waits, as a change that loosens does once armed."
-    }
-
-    /** [review]'s tidy of what's remembered undone (LR-01): its facts as they were, while they're still as it left them. What happened, in words. */
-    suspend fun undoTidy(review: com.thomaswcode.decrastination.data.WeeklyReview): String {
-        val tidy = review.memoryTidy ?: return "That review tidied nothing."
-        var done = false
-        memory.update { state -> if (state.facts == tidy.after) state.copy(facts = tidy.before).also { done = true } else state }
-        return if (done) "What's remembered is back as it was before the tidy." else "What's remembered has changed since: left as it is."
-    }
-
     /** Where a reset's copy goes when Documents can't take it. */
     private val RESET_COPIES = "backups"
-
-    /**
-     * The [week]'s summary for home (NF-02), written by the model after its review and kept with it;
-     * then Felix's offer to send it, in the chat with the button that opens it in an email. Nothing
-     * while Claude can't be asked, or the week has no review. The summary, or null.
-     */
-    suspend fun writeSummary(week: String): String? {
-        val client = gateway.client(com.thomaswcode.decrastination.enrich.ModelEffort.Job.Summary) ?: return null
-        if (log.value.reviews.none { it.week == week }) return null
-        val zone = clock.zone()
-        val input = com.thomaswcode.decrastination.learn.Summary.input(log.value, instructions.value.applied, week, zone, chat.value.messages)
-        val writer = com.thomaswcode.decrastination.enrich.SummaryWriter(client)
-        val called = gateway.call(
-            interactive = false,
-            record = com.thomaswcode.decrastination.enrich.ModelCalls.OnRecord(com.thomaswcode.decrastination.enrich.ModelEffort.Job.Summary, "the week's summary") { r: com.thomaswcode.decrastination.enrich.SummaryWriter.Result -> r.usage to com.thomaswcode.decrastination.enrich.ModelCalls.outcome(r.refused, r.text == null) },
-            cost = { r: com.thomaswcode.decrastination.enrich.SummaryWriter.Result -> r.costUsd to r.refused },
-        ) { at -> writer.write(conversation.profile(at).text, input) }
-        val text = (called as? Called.Answered)?.value?.text ?: return null
-        log.update { l -> l.copy(reviews = l.reviews.map { if (it.week == week) it.copy(summary = text) else it }) }
-        // His offer in the chat, held from his notification in quiet hours till the morning (LR-07).
-        conversation.summaryReady(week)
-        return text
-    }
 
     companion object {
         const val TAG = "Decrastination"
