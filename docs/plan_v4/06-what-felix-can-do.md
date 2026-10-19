@@ -1,6 +1,6 @@
 # What Felix can do, and what he should
 
-Your question: to what extent can he act as someone you're texting would, with the control he has? Can you tell him to remind you of something at a time, or to put a notification up at the start of a task in a few days? This document answers it from the code as it is, names what's missing, and says which of the gaps this plan closes and how. The aim you gave: it should seem that he can manage it all, and that nothing but the chat needs touching to change things. The gaps are built in Stage 8b ([03](03-stages.md)); the rest of this plan's features in the stages their documents name.
+Your question: to what extent can he act as someone you're texting would, with the control he has? Can you tell him to remind you of something at a time, or to put a notification up at the start of a task in a few days? This document answers it from the code as it is, names what's missing, and says which of the gaps this plan closes and how. The aim you gave: it should seem that he can manage it all, and that nothing but the chat needs touching to change things. The gaps are built in Stages 8b and 8c ([03](03-stages.md)); the rest of this plan's features in the stages their documents name.
 
 ## 1. What he can do today
 
@@ -63,8 +63,10 @@ Each row: what you'd text; what happens today; what this plan makes of it, and w
 |---|---|---|
 | "What's due this week / what's on Tuesday / why isn't X planned / what does the email say / who's it from" | ✓ | ✓ |
 | "How much free time have I got?" / "Why am I blocked?" | ✗: the chat's context has no free time and no blocking state (his own messages get free time for SlotKept and DayDone only) | one line in the context: free time now, whether blocking applies and why (`Focus.rewardLine`'s facts) (G5) |
-| "How did this week go?" | ✗: no stats in his context | not now (G6, not taken in Q17): the week's numbers would come through a `details`-like round, a later release |
-| "What's on next month?" | the fortnight's events only | not now (G7, not taken in Q17) |
+| "How did this week go?" | ✗: no stats in his context | the week's numbers, asked for: he asks as he asks to read a task, and answers after the round (G6, 8c) |
+| "What's on next month?" | the fortnight's events only | the events to the plan's reach, asked for (G7, 8c) |
+| "It's due next lesson" / "When's my next chemistry?" | ✗: the profile's one line gives the school day's span and study periods, not which class is when; Power Planner's class names aren't Teams' codes | each class's next lessons in his context, a Power Planner class tied to its Teams code by the subject you give both (G8, 8b; [15](15-sent-or-asked-for.md)) |
+| "What's my margin days?" / "Give me a day more to spare" | ✓ (the settings in his context) | ✓, after a round: the settings are asked for (8c) |
 | "When will I be done tonight?" | ✓ (today's slots) | ✓ |
 | "You said Thursday for the essay, didn't you?" (from last week) | ✗: the last 12 messages | not now: the conversation digest, 4.4.0 ([13](13-summaries.md)) |
 
@@ -80,14 +82,15 @@ Each row: what you'd text; what happens today; what this plan makes of it, and w
 
 ## 3. Closing the gaps
 
-Each is small, and most are one new action in the chat's schema plus a line of context. Taken (Q17): G1, G2 as the stop, G3 and G5; G6 and G7 wait for a later release. Built in Stage 8b, after 8a settles the schema's shape, so one compile by the API covers both.
+Each is small, and most are one new action in the chat's schema plus a line of context. Taken (Q17): G1, G2 as the stop, G3 and G5; G6 and G7, left then, and G8, taken on 19 Oct (your call), with the settings and the tasks' text asked for rather than always sent ([15](15-sent-or-asked-for.md)). G1 to G5 and G8 are built in Stage 8b, after 8a settles the schema's shape, so one compile by the API covers both; G6 and G7 in 8c, as things he asks for.
 
 - **G1. Keep and unkeep a piece.** `keepPiece` (taskId, and the piece's key as the plan lists it) → `Focus.keepSlot`; `unkeepPiece` → `Focus.unkeepSlot`. The context's plan already names each piece; the task list gains each open task's next piece key where it has no steps, and a line "Kept today: …" with the keys of today's kept pieces, which the plan no longer shows once kept, so an unkeep is checked against today's kept records, not the plan. Undo as a tick's.
 - **G2. Check a source.** `sync` (source) → a `requestSync(sources)` callback the Conversation takes in its constructor, wired in `AppGraph` to the Sync service's `syncNow` (Stage 6d), as `Focus` takes its callbacks: Sync already calls the Conversation (the calendar's questions), so the Conversation mustn't call Sync back; his reply says it's reading, and a `Syncer` listener in the Conversation posts a `Note` message when the read changes the task he was asked about ("teams says the worksheet's handed in"). The stop, not the round: a second call would be dearer and the note says what the round would.
 - **G3. Open where it lives.** `open` gains `where`: "app" (the sheet, as now) or "source" (`TaskOpener.open`, which already tells him it was opened).
 - **G5. Free time and blocking in his context.** A line after the plan's "Now:": "Blocking: on until today's work's done (2 pieces, 1 h); free time 12 min" from `Focus`'s state, which `ChatPrompts.plan` is given.
-- **G6. The week's numbers** (not now). When your message is about the week (he asks for them as he asks to read a task: `details` with "stats"), a second round with `Stats`' period summary (kept minutes, completions, deadlines met, slots kept and missed, by subject) in 20 lines. Or two lines always, cheaper in rounds and dearer in tokens.
-- **G7. The calendar further out** (not now). Events to the plan's reach (90 days) when the message names a month.
+- **G6. The week's numbers** (8c). When your message is about the week he asks for them as he asks to read a task (`details` with `stats`), and the round brings `Learning`'s period summary from `Stats` (kept minutes, completions, deadlines met, slots kept and missed, by subject, this week and last) in 20 lines. Asked for, not two lines always: most messages aren't about the week ([15](15-sent-or-asked-for.md) §The rule).
+- **G7. The calendar further out** (8c). `details` with `calendar`: the events from the fortnight's end to the plan's reach (90 days), up to 60, with their keys.
+- **G8. The next lessons** (8b). Each class's next three lessons in the fortnight, in his context after the calendar's events, by `lessonsOn`'s rule for an unknown week, none on a day of no school or from a half day's end; a Power Planner class and a Teams code with the same subject in Settings → About you's classes are one class, the subjects yours to give once. "Next lesson" is then a `DueBy` at that lesson's start ([15](15-sent-or-asked-for.md) §G8).
 
 Not closed, by design: anything D-61 forbids; anything needing the camera or a file picker; the calendar's choice; Setup.
 
@@ -106,15 +109,16 @@ Ideas in the same direction, not planned, noted so they aren't lost: a photo sen
 
 ## Built in
 
-[03](03-stages.md) §Stage 8b: the commits, one a gap, each with its test, prompt line and golden; the schema compiled by the API before the merge.
+[03](03-stages.md) §Stage 8b: the commits, one a gap, each with its test, prompt line and golden; the schema compiled by the API before the merge. §Stage 8c: G6 and G7, with what else moves to being asked for ([15](15-sent-or-asked-for.md)).
 
 ## Tests
 
 - Each action's parse (`ChatAnswers.action`: a key the plan doesn't list refused; a source named wrong refused), its act and its Undo (`ChatActs.canUndo` false once the slot's record changed).
 - The `Syncer` listener: a `Note` message only when the asked-about task changed; none for an unrelated read.
 - The context's blocking line (`FelixInputsDocTest` regenerated with it).
+- G8's rule and the lessons' line; G6's and G7's rounds ([15](15-sent-or-asked-for.md) §Tests).
 - `SchemaLimitsTest`; `SchemaCompileTest -PcheckSchemas=true` before the merge.
 
 ## Phone check
 
-- `chat-ask` for each (paid): "I've done today's bit of the essay" (the slot kept on Day, Undo takes it back), "check Teams" (a sync runs; a note from him if the task changed), "how much free time have I got" (the line's facts in his answer), "open it in Teams" (Teams opens; `felix` shows the activity noted).
+- `chat-ask` for each (paid): "I've done today's bit of the essay" (the slot kept on Day, Undo takes it back), "check Teams" (a sync runs; a note from him if the task changed), "how much free time have I got" (the line's facts in his answer), "open it in Teams" (Teams opens; `felix` shows the activity noted), "the worksheet's due next lesson" (a `DueBy` at that class's next lesson); G6 and G7 as [15](15-sent-or-asked-for.md) §Phone check says.
