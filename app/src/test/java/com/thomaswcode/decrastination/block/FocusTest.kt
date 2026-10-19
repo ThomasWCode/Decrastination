@@ -594,6 +594,19 @@ class FocusTest {
     }
 
     @Test
+    fun `a photo taken moments after its Done earns that Done's slot`() = runTest {
+        val long = laid(task("long", due = "2026-10-12T23:59", effort = 30)).single()
+        clock.time = long.end
+        assertTrue(slotted.keepSlot(long.chunk!!.key, seenAt = long.start))
+        val tick = clock.time
+        // The photo five seconds after, its check back twenty seconds after that.
+        clock.time = tick + 25_000L
+        assertTrue(slotted.photoChecked("teams:long", null, 30, key = long.chunk!!.key, takenAt = tick + 5_000L))
+        assertTrue(log.value.slots.single().let { it.earned && it.photo })
+        assertEquals(30, tasks.value.tasks.single().workedMin)
+    }
+
+    @Test
     fun `a photo before the tick keeps the slot and earns`() = runTest {
         val long = laid(task("long", due = "2026-10-12T23:59", effort = 30)).single()
         clock.time = long.start + 10 * 60_000L
