@@ -22,54 +22,11 @@ import com.thomaswcode.decrastination.enrich.ModelHold
  * Then what's remembered is tidied, once it's past 70 % of its room (AI-21).
  */
 object Review {
-    suspend fun run(context: Context, ifDue: Boolean) {
-        val graph = AppGraph.get(context)
-        val now = graph.clock.now()
-        // Once a week: the check-in runs it at once, and the evening's alarm finds it done since
-        // Sunday's check-in time (a review at any other time doesn't count). The latest Sunday at or
-        // before now, so an alarm after midnight still finds Sunday's.
-        val zone = graph.clock.zone()
-        val week = Daily.checkInWeek(now, zone, graph.settings.value.checkInMin)
-        if (ifDue && reviewed(graph.log.value.reviews, week, Daily.lastCheckIn(now, zone, graph.settings.value.checkInMin))) return
-        // A reset of the record while this is out (LR-08) lets what it makes go.
-        val generation = graph.backups.resets.get()
-        val learned = Calibrator.learn(
-            graph.log.value,
-            graph.runtime.value.calibration,
-            today = graph.focus.today(now),
-            zone = zone,
-            defaultMargin = graph.settings.value.marginDays,
-        )
-        graph.runtime.update { it.copy(calibration = learned.calibration) }
-        val findings = learned.changes + listOfNotNull(Days.capacityAdvice(graph.log.value.days, graph.focus.today(now)))
-        val model = runCatching { modelReview(graph, now, week, generation) }
-            .onFailure { Log.w(AppGraph.TAG, "The model's weekly review failed; the rules' stands", it) }
-            .getOrElse { Outcome(why = "Claude's call failed") }
-        val tidy = runCatching { tidyMemory(graph, now) }
-            .onFailure { Log.w(AppGraph.TAG, "Tidying what's remembered failed; it's left as it was", it) }
-            .getOrNull()
-        // The rules' findings always stand: the model's note comes first, and they follow; then the tidy's line.
-        val review = (
-            model.review?.let { it.copy(lines = it.lines + findings) }
-                ?: WeeklyReview(now, findings.ifEmpty { listOf("Nothing to change this week: the estimates held.") }, by = "rules", why = model.why)
-            ).let { it.copy(week = week, lines = it.lines + listOfNotNull(tidy?.let(::tidyLine)), memoryTidy = tidy) }
-        // The week's totals (PL-10), kept past its days; those of the weeks before it the log still
-        // holds whole made again with them, so what came in after their reviews is in them.
-        val rollup = Stats.rollup(graph.log.value, LocalDate.parse(week), zone)
-        var kept = false
-        graph.log.update { l ->
-            if (graph.backups.resets.get() != generation) l
-            else l.copy(reviews = l.reviews + review, weeks = Stats.refreshedWeeks(l, now, zone).filterNot { w -> w.week == week } + rollup).trimmed(now).also { kept = true }
-        }
-        if (!kept) {
-            Log.i(AppGraph.TAG, "The record was reset while the week's review was out: it isn't kept")
-            return
-        }
-        // Its note's first line in the chat, in Felix's name, with the button that opens the review.
-        graph.conversation.reviewed(review.lines.first())
-        // The week's summary for home (NF-02), after its review: its own call, its failure the review's no matter.
-        runCatching { graph.writeSummary(week) }.onFailure { Log.w(AppGraph.TAG, "The week's summary failed", it) }
-    }
+    // [Learning]'s, till its callers call it there.
+    suspend fun run(context: Context, ifDue: Boolean): Unit = AppGraph.get(context).learning.review(ifDue)
+
+    // [Learning]'s, till its callers call it there.
+    suspend fun tidyMemory(graph: AppGraph, now: Long, force: Boolean = false): MemoryTidyRecord? = graph.learning.tidyMemory(now, force)
 
     /**
      * Whether [week] has had its review: one marked with it, or (before reviews were marked) one
@@ -78,67 +35,8 @@ object Review {
     fun reviewed(reviews: List<WeeklyReview>, week: String, lastCheckIn: Long): Boolean =
         reviews.any { it.week == week || (it.week == null && it.at >= lastCheckIn) }
 
-    /** The model's review, or why there's none (the rules' stands then, saying so). */
-    private class Outcome(val review: WeeklyReview? = null, val why: String? = null)
-
-    /**
-     * The model's review, while Claude is on and under its cap: a note and bounded changes, the
-     * changes applied through [com.thomaswcode.decrastination.protect.Protection.applyReviewChanges]. Otherwise why it couldn't be had.
-     */
-    private suspend fun modelReview(graph: AppGraph, now: Long, week: String, generation: Int): Outcome {
-        val reviewer = graph.gateway.client(ModelEffort.Job.Review)?.let { ClaudeReviewer(it, profile = graph.conversation.profile()) } ?: return Outcome(why = because(ModelHold.Off))
-        val zone = graph.clock.zone()
-        val input = ReviewInput.describe(graph.log.value, graph.runtime.value.calibration, graph.settings.value, now, zone, week, graph.chat.value.messages)
-        // Its room taken with every other model call's, then sent (AC-05). A failure is recorded
-        // (Setup shows it; the model rests), then the rules' review stands.
-        val current = graph.gateway.client(ModelEffort.Job.Review)?.let { ClaudeReviewer(it, profile = graph.conversation.profile()) } ?: return Outcome(why = because(ModelHold.Off))
-        val result = when (val called = graph.gateway.call(interactive = false, record = com.thomaswcode.decrastination.enrich.ModelCalls.OnRecord(com.thomaswcode.decrastination.enrich.ModelEffort.Job.Review, "the week") { r: ClaudeReviewer.Result -> r.usage to com.thomaswcode.decrastination.enrich.ModelCalls.outcome(r.refused, r.answer == null) }, cost = { r: ClaudeReviewer.Result -> r.costUsd to r.refused }) { current.review(input) }) {
-            is Called.Held -> return Outcome(why = because(called.hold))
-            is Called.Failed -> throw called.error
-            is Called.Answered -> called.value
-        }
-        val answer = result.answer ?: return Outcome(why = if (result.refused) "Claude declined to review it" else "Claude's answer couldn't be used")
-        val settings = graph.settings.value
-        val changes = answer.changes.filter { ReviewInput.allowed(it, settings) }
-        // What each was, kept with the review (AI-18, LR-01): next week's reads it, and its page undoes it.
-        val before = changes.mapNotNull { c -> ReviewInput.valueOf(settings, c.setting)?.let { c.setting to it } }.toMap()
-        // Not after a reset of the record that came while Claude was asked (LR-08): the review's let go.
-        if (graph.backups.resets.get() != generation) return Outcome(why = "the record was reset while Claude was asked")
-        // At once, armed or not (your call, 11 Oct); laid over what's been asked for, so a change
-        // waiting for another setting keeps its wait.
-        if (changes.isNotEmpty()) graph.protection.applyReviewChanges(changes)
-        val note = answer.note.ifEmpty { listOf("No note this week.") }
-        return Outcome(WeeklyReview(now, note + changeLines(changes, graph.settings.value), by = result.model ?: reviewer.model, changes = changes, settingsBefore = before))
-    }
-
-    /**
-     * What's remembered, tidied by the model once its facts are past [MemoryTidy.DUE_SHARE] of their
-     * room (AI-21), or when [force]d (a PC's `memory-tidy`): its own call, after the review's. The
-     * before and after, or null: not due, the model held or failed (recorded as any call is), an
-     * answer that isn't a tidy, or the facts changed while it was out.
-     */
-    suspend fun tidyMemory(graph: AppGraph, now: Long, force: Boolean = false): MemoryTidyRecord? {
-        val before = graph.memory.value.facts
-        if (before.isEmpty() || !(force || MemoryTidy.due(before))) return null
-        // The profile without the facts, which it's given to tidy.
-        val tidier = graph.gateway.client(ModelEffort.Job.Tidy)?.let { MemoryTidier(it, profile = graph.conversation.profile(remembered = graph.memory.value.copy(facts = emptyList()))) } ?: return null
-        val called = graph.gateway.call(interactive = false, record = com.thomaswcode.decrastination.enrich.ModelCalls.OnRecord(com.thomaswcode.decrastination.enrich.ModelEffort.Job.Tidy, "what's remembered") { r: MemoryTidier.Result -> r.usage to com.thomaswcode.decrastination.enrich.ModelCalls.outcome(r.refused, r.answer == null) }, cost = { r: MemoryTidier.Result -> r.costUsd to r.refused }) { at -> tidier.tidy(before, at, graph.clock.zone()) }
-        val answer = (called as? Called.Answered)?.value?.answer ?: return null
-        val after = MemoryTidy.after(answer, before, now) ?: return null
-        var applied = false
-        graph.memory.update { state -> MemoryTidy.applied(state, before, after)?.also { applied = true } ?: state }
-        return if (applied) MemoryTidyRecord(before, after) else null
-    }
-
     /** The tidy in the review's words. */
     fun tidyLine(tidy: MemoryTidyRecord): String = "Felix tidied what he remembers: ${tidy.before.size} facts into ${tidy.after.size}."
-
-    /** Why the model didn't review the week, in words. */
-    private fun because(hold: ModelHold): String = when (hold) {
-        ModelHold.Off -> "Claude was off"
-        ModelHold.Resting -> "Claude was resting after a failed call"
-        ModelHold.Capped -> "Claude's monthly cap was reached"
-    }
 
     /**
      * The model's changes in words, as they stand after [after]: in place, or waiting (once armed,
