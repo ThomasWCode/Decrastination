@@ -3,6 +3,12 @@ package com.thomaswcode.decrastination.sources.powerplanner
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.Fixtures.LONDON
 import com.thomaswcode.decrastination.core.Kind
+import com.thomaswcode.decrastination.core.Lesson
+import com.thomaswcode.decrastination.core.PowerPlannerItems
+import com.thomaswcode.decrastination.core.PpClass
+import com.thomaswcode.decrastination.core.PpItem
+import com.thomaswcode.decrastination.core.PpSchedule
+import com.thomaswcode.decrastination.core.Timetable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject

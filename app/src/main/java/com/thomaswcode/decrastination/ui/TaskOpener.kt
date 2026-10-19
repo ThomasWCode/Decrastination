@@ -2,10 +2,10 @@ package com.thomaswcode.decrastination.ui
 
 import android.content.Context
 import android.content.Intent
+import com.thomaswcode.decrastination.core.AnkiRules
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.sources.anki.AnkiProvider
-import com.thomaswcode.decrastination.sources.anki.AnkiRules
 import com.thomaswcode.decrastination.sources.gmail.GmailThreads
 import com.thomaswcode.decrastination.sources.teams.TeamsProvider
 import kotlinx.coroutines.Dispatchers

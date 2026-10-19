@@ -2,10 +2,10 @@ package com.thomaswcode.decrastination.core
 
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.Fixtures.LONDON
-import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.enrich.InstructionAnswers
 import com.thomaswcode.decrastination.enrich.InstructionPrompts
 import com.thomaswcode.decrastination.learn.CalendarEvent
+import com.thomaswcode.decrastination.sources.gmail.GmailThreads
 import java.time.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -138,7 +138,7 @@ class InstructionsTest {
         val deck = TaskItem(
             id = "anki:deck:1", source = Source.Anki, sourceId = "deck:1", title = "Learn Anki deck 1.2", kind = Kind.Homework,
             dueAt = Fixtures.at("2026-10-13T09:00"), sourceEffortMin = 20, derived = true, firstSeenAt = now, lastSeenAt = now,
-            extra = mapOf(com.thomaswcode.decrastination.sources.anki.AnkiRules.EXTRA_FOR to homework.id),
+            extra = mapOf(com.thomaswcode.decrastination.core.AnkiRules.EXTRA_FOR to homework.id),
         )
         // Not a task: its deck goes with it.
         val hidden = plan(listOf(homework.withOverrides(TaskOverrides(notATask = true)), deck)).ordered.map { it.taskId }
@@ -185,7 +185,7 @@ class InstructionsTest {
         val deck = TaskItem(
             id = "anki:deck:1", source = Source.Anki, sourceId = "deck:1", title = "Learn Anki deck 1.2", kind = Kind.Homework,
             dueAt = Fixtures.at("2026-10-20T09:00"), sourceEffortMin = 20, derived = true, firstSeenAt = now, lastSeenAt = now,
-            extra = mapOf(com.thomaswcode.decrastination.sources.anki.AnkiRules.EXTRA_FOR to homework.id),
+            extra = mapOf(com.thomaswcode.decrastination.core.AnkiRules.EXTRA_FOR to homework.id),
         )
         val chunk = plan(listOf(homework, deck)).ordered.first { it.taskId == deck.id }
         assertEquals(Fixtures.at("2026-10-12T09:00"), chunk.dueAt)
@@ -231,7 +231,7 @@ class InstructionsTest {
 
     @Test
     fun `a task said not to be one isn't read by the enrichment`() {
-        assertNull(Enrichments.jobFor(task("a", null, source = Source.Gmail).copy(userNotATask = true)))
+        assertNull(Enrichments.jobFor(task("a", null, source = Source.Gmail).copy(userNotATask = true), GmailThreads::textRead))
     }
 
     // --- Days ---

@@ -1,7 +1,7 @@
 package com.thomaswcode.decrastination.block
 
+import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.Uptime
-import com.thomaswcode.decrastination.data.Settings
 import java.time.DayOfWeek
 import java.time.Instant
 import java.time.ZoneId

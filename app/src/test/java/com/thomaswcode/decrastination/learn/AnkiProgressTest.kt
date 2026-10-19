@@ -2,11 +2,11 @@ package com.thomaswcode.decrastination.learn
 
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.Fixtures.LONDON
+import com.thomaswcode.decrastination.core.AnkiRules
 import com.thomaswcode.decrastination.core.Calibration
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
-import com.thomaswcode.decrastination.sources.anki.AnkiRules
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -113,9 +113,9 @@ class AnkiProgressTest {
     @Test
     fun `the quota's reviews go by each deck's own speed, its new cards by their deck's`() {
         val decks = listOf(
-            com.thomaswcode.decrastination.sources.anki.Deck(1, "Textbook 1", 0, 30, 20),
-            com.thomaswcode.decrastination.sources.anki.Deck(11, "Textbook 1::1.1", 0, 0, 20),
-            com.thomaswcode.decrastination.sources.anki.Deck(2, "GCSE Vocab", 0, 30, 0),
+            com.thomaswcode.decrastination.core.Deck(1, "Textbook 1", 0, 30, 20),
+            com.thomaswcode.decrastination.core.Deck(11, "Textbook 1::1.1", 0, 0, 20),
+            com.thomaswcode.decrastination.core.Deck(2, "GCSE Vocab", 0, 30, 0),
         )
         // 30 reviews at 4 s and 30 at Anki's 8, and 20 new at 1.1's 12 s: 2, 4 and 4 minutes, 10.
         assertEquals(10, AnkiRules.quotaMin(decks, 20, 11, mapOf(1L to 4.0, 11L to 12.0)))

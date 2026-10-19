@@ -6,7 +6,6 @@ import com.thomaswcode.decrastination.data.ActivityLog
 import com.thomaswcode.decrastination.data.ChatMigration
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.RuntimeState
-import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.data.SlotOutcome
 import com.thomaswcode.decrastination.data.SlotRecord
 import com.thomaswcode.decrastination.data.TaskState
@@ -14,9 +13,6 @@ import com.thomaswcode.decrastination.enrich.KeyProblem
 import com.thomaswcode.decrastination.enrich.ModelGateway
 import com.thomaswcode.decrastination.learn.EventJudge
 import com.thomaswcode.decrastination.plan.Planning
-import com.thomaswcode.decrastination.sources.powerplanner.PpClass
-import com.thomaswcode.decrastination.sources.powerplanner.PpSchedule
-import com.thomaswcode.decrastination.sources.powerplanner.Timetable
 import java.io.File
 import java.nio.file.Files
 import java.time.Instant

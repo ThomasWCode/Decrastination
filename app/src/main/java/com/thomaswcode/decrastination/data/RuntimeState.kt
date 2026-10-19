@@ -8,8 +8,6 @@ import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Uptime
 import com.thomaswcode.decrastination.core.WindowKind
 import com.thomaswcode.decrastination.enrich.AiUsage
-import com.thomaswcode.decrastination.felix.CheckInFlow
-import com.thomaswcode.decrastination.felix.FelixAnswer
 import com.thomaswcode.decrastination.learn.CheckIn
 import com.thomaswcode.decrastination.learn.DayRecord
 import com.thomaswcode.decrastination.protect.CodeLock
@@ -341,50 +339,6 @@ data class AnkiWorked(val date: String = "", val minutes: Map<String, Int> = emp
     fun without(taskId: String): AnkiWorked = copy(minutes = minutes - taskId)
 }
 
-/**
- * Felix between looks (LR-03): when he said he'd check again, when he last wrote, a message he wrote
- * ahead (AC-10), and when something was last seen done on each task (opened, studied in AnkiDroid).
- * The conversation's ([com.thomaswcode.decrastination.core.ChatState.felix]), in `chat.json`.
- */
-@Serializable
-data class FelixState(
-    val nextCheckAt: Long? = null,
-    val lastSentAt: Long? = null,
-    val draft: FelixDraft? = null,
-    val activity: Map<String, Long> = emptyMap(),
-    /** The model's questions about tasks waiting to be put (AI-10). */
-    val questions: List<FelixQuestion> = emptyList(),
-    /** A message whose call didn't come back, to try again (LR-03). */
-    val retry: FelixRetry? = null,
-    /** Completions waiting to be asked how they went, in his evening question (LR-05). */
-    val assessLater: List<AssessLater> = emptyList(),
-    /** The week's check-in as he asks it (LR-02), its answers so far: null when none is being asked. */
-    val checkInDraft: CheckInFlow.Draft? = null,
-) {
-    /** [taskIds] seen done on [at]: the last day's kept. */
-    fun withActivity(taskIds: Collection<String>, at: Long): FelixState =
-        copy(activity = (activity + taskIds.associateWith { at }).filterValues { it > at - 24 * 3_600_000L })
-
-    /** [question] waiting about [taskId] (AI-10) in place of the one there was, where it stood (as it was, if the same); null, none. */
-    fun withQuestion(taskId: String, question: String?, at: Long): FelixState {
-        val was = questions.firstOrNull { it.taskId == taskId }
-        val next = question?.let { q -> was?.takeIf { it.question == q } ?: FelixQuestion(taskId, q, at) }
-        return copy(questions = if (was == null) questions + listOfNotNull(next) else questions.flatMap { if (it.taskId == taskId) listOfNotNull(next) else listOf(it) }.distinct())
-    }
-}
-
-/** A message whose call didn't come back (held, failed): its reason and piece, tried again from [notBefore] (LR-03). */
-@Serializable
-data class FelixRetry(val reason: String, val key: String?, val notBefore: Long)
-
-/** A question of the model's about [taskId]'s reading (AI-10), from [at]. */
-@Serializable
-data class FelixQuestion(val taskId: String, val question: String, val at: Long)
-
-/** A message of Felix's written ahead (AC-10): sent if it still fits its reason and piece when the time comes. */
-@Serializable
-data class FelixDraft(val reason: String, val key: String?, val answer: FelixAnswer, val at: Long)
-
 /** A notification held back (LR-07): where it was to go, what it said, and its tap and buttons ([taps]), to be made again with. */
 @Serializable
 data class HeldNotification(val channel: String, val id: Int, val tag: String? = null, val at: Long, val title: String, val text: String, val taps: List<HeldTap> = emptyList())
@@ -403,10 +357,6 @@ data class HeldReply(val key: String, val label: String, val choices: List<Strin
 /** A daily alarm's run that failed: tried again [at], this being try [tries] (`Daily.failed`). */
 @Serializable
 data class DailyRetry(val at: Long, val tries: Int)
-
-/** A finished task's "how was it?" (LR-05): what he asks about, and when it was finished. */
-@Serializable
-data class AssessLater(val taskId: String, val title: String, val doneAt: Long? = null)
 
 /**
  * One model call as it went (AC-07): when, its job and what it was about, how hard it thought, its

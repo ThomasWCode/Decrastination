@@ -10,6 +10,7 @@ import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.Planner
 import com.thomaswcode.decrastination.core.SchoolCalendar
 import com.thomaswcode.decrastination.core.SchoolDays
+import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.SlotKind
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.TaskOverrides
@@ -19,7 +20,6 @@ import com.thomaswcode.decrastination.core.withOverrides
 import com.thomaswcode.decrastination.data.ActivityLog
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.RuntimeState
-import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.data.TaskState
 import com.thomaswcode.decrastination.enrich.ModelGateway
 import com.thomaswcode.decrastination.enrich.Profile

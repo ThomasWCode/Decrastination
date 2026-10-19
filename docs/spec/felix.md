@@ -64,7 +64,7 @@ Everything he gives is made as his answer comes, each with its Undo (next sectio
 - **Steps** for any task but Anki's, whose steps are its cards (AI-19): laid over the source's and the reading's (`TaskItem.userSteps`), ticks kept by name. They must add up to the task's minutes, or come with a Minutes change for the new total, or they're left out.
 - **Memories** (`memories`): facts and standing instructions (below).
 - **Actions** (`actions`, AI-14): tick or untick a step (its slot kept where the plan has one, earning as a tick does); finish, reopen or delete one of your own tasks (or feedback done by its tick, NF-06); open a task on a card; set a setting.
-- **Settings**, only those in `data/FelixSettings.kt`: his name and line, when he asks and checks, the briefings and the check-in, working hours, the morning break, the shortest school time used, pieces and their breaks, breaks outside, margins, undated work, the Anki deadline and textbook.
+- **Settings**, only those in `core/FelixSettings.kt`: his name and line, when he asks and checks, the briefings and the check-in, working hours, the morning break, the shortest school time used, pieces and their breaks, breaks outside, margins, undated work, the Anki deadline and textbook.
 
 Never the blocker's settings, protection's or Claude's, the calendars, your classes, your profile, the Teams syncs, his web search or where the summary goes; a value the Settings screen wouldn't take is refused (`FelixSettings.set`).
 A task from Teams, Power Planner, Gmail or AnkiDroid is done when its source says so: he can't mark one done or delete it, only say it isn't a task.

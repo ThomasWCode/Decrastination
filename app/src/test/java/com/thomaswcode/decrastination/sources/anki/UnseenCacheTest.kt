@@ -1,5 +1,6 @@
 package com.thomaswcode.decrastination.sources.anki
 
+import com.thomaswcode.decrastination.core.Deck
 import kotlin.test.Test
 import kotlin.test.assertEquals
 

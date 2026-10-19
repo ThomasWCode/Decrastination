@@ -17,7 +17,7 @@ import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.data.ActivityLog
 import com.thomaswcode.decrastination.data.CompletionRecord
 import com.thomaswcode.decrastination.data.DailyRetry
-import com.thomaswcode.decrastination.data.Settings
+import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.data.WeeklyReview
 import com.thomaswcode.decrastination.enrich.ClaudeReviewer
 import kotlin.test.Test
@@ -235,9 +235,9 @@ class ReviewInputTest {
         val hours = ReviewInput.apply(Settings(), listOf(ReviewInput.Change("weekdayHoursStart", Settings().weekdayHours.startMin - 45, "earlier starts went well"), ReviewInput.Change("weekdayHoursEnd", Settings().weekdayHours.endMin + 90, "too far")))
         assertEquals(Settings().weekdayHours.copy(startMin = Settings().weekdayHours.startMin - 45), hours.weekdayHours)
         // Two ends each within reach that would meet or cross: neither moves.
-        val short = Settings().copy(weekdayHours = com.thomaswcode.decrastination.data.Window(17 * 60, 18 * 60))
+        val short = Settings().copy(weekdayHours = com.thomaswcode.decrastination.core.Window(17 * 60, 18 * 60))
         assertEquals(short.weekdayHours, ReviewInput.apply(short, listOf(ReviewInput.Change("weekdayHoursStart", 17 * 60 + 50, "later"), ReviewInput.Change("weekdayHoursEnd", 17 * 60 + 10, "earlier"))).weekdayHours)
-        assertEquals(com.thomaswcode.decrastination.data.Window(17 * 60 + 30, 18 * 60), ReviewInput.apply(short, listOf(ReviewInput.Change("weekdayHoursStart", 17 * 60 + 30, "later"))).weekdayHours)
+        assertEquals(com.thomaswcode.decrastination.core.Window(17 * 60 + 30, 18 * 60), ReviewInput.apply(short, listOf(ReviewInput.Change("weekdayHoursStart", 17 * 60 + 30, "later"))).weekdayHours)
         assertEquals(false, ReviewInput.allowed(ReviewInput.Change("weekdayHoursEnd", Settings().weekdayHours.endMin + 90, "x"), Settings()))
         assertEquals("weekdayHours", ReviewInput.fieldOf("weekdayHoursEnd"))
         // Put back as it was, whatever the bounds (LR-01), and said in words.

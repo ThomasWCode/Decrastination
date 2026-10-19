@@ -2,10 +2,10 @@ package com.thomaswcode.decrastination.enrich
 
 import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.core.Planner
+import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.withEnrichment
 import com.thomaswcode.decrastination.data.JsonStore
-import com.thomaswcode.decrastination.data.Settings
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.jsonArray
@@ -84,7 +84,7 @@ class EvalSetTest {
                     appendLine()
                     // The second system block every call sends (AI-05), here from the settings' defaults.
                     appendLine("=== PROFILE ===")
-                    appendLine(Profile.block(com.thomaswcode.decrastination.data.Settings(), listOf(case.task), null, com.thomaswcode.decrastination.core.SchoolCalendar(), com.thomaswcode.decrastination.core.MemoryState(), nowOf(case), zone))
+                    appendLine(Profile.block(com.thomaswcode.decrastination.core.Settings(), listOf(case.task), null, com.thomaswcode.decrastination.core.SchoolCalendar(), com.thomaswcode.decrastination.core.MemoryState(), nowOf(case), zone))
                     appendLine()
                     appendLine("=== USER ===")
                     appendLine(redact(user))

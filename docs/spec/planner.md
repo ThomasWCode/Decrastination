@@ -135,7 +135,7 @@ A day's first undated piece may be longer than that, never longer than the day's
 
 ## Anki decks
 
-AnkiDroid's work comes as tasks the app derives from its counts (`sources/anki/AnkiRules.kt`), done when the counts say so:
+AnkiDroid's work comes as tasks the app derives from its counts (`core/AnkiRules.kt`), done when the counts say so:
 - **The daily quota** (`AnkiRules.quota`): every due review, and today's new cards from the current textbook's first section deck with cards never seen, due at `Settings.ankiDeadlineMin` (21:30) each Anki day (it turns at 04:00).
 - The quota takes no new cards while homework's vocabulary is due by tomorrow.
 - **A deck homework names** (`AnkiRules.homeworkDecks`): "Learn Anki deck 1.2", due with the earliest of its assignments' deadlines in force. Each step is a day's new cards (the first what AnkiDroid will still show today), one step a day (`TaskItem.stepsPerDay`).

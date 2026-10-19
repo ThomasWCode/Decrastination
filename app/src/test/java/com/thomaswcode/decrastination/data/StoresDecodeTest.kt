@@ -10,6 +10,7 @@ import com.thomaswcode.decrastination.core.Instructions
 import com.thomaswcode.decrastination.core.MemoryState
 import com.thomaswcode.decrastination.core.MessageKind
 import com.thomaswcode.decrastination.core.SchoolCalendar
+import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Speaker
 import com.thomaswcode.decrastination.core.Status
@@ -259,7 +260,7 @@ class StoresDecodeTest {
          */
         val LEFT_AT_DEFAULT: Map<String, Set<String>> = mapOf(
             // A check-in's last answer is never in its draft: given, the check-in is kept and the draft goes.
-            "com.thomaswcode.decrastination.felix.CheckInFlow.Draft" to setOf("energy"),
+            "com.thomaswcode.decrastination.core.CheckInDraft" to setOf("energy"),
         )
     }
 }

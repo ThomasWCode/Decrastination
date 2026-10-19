@@ -32,7 +32,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.learn.CheckIn
-import com.thomaswcode.decrastination.data.Settings
+import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.data.WeeklyReview
 import com.thomaswcode.decrastination.learn.ReviewInput
 import java.time.Instant

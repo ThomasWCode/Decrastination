@@ -8,9 +8,9 @@ import com.anthropic.models.messages.OutputConfig
 import com.anthropic.models.messages.StopReason
 import com.thomaswcode.decrastination.core.About
 import com.thomaswcode.decrastination.core.ChatMessage
+import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.Speaker
 import com.thomaswcode.decrastination.core.TaskItem
-import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.enrich.ClaudeEnricher
 import com.thomaswcode.decrastination.enrich.Found
 import com.thomaswcode.decrastination.enrich.ModelCalls

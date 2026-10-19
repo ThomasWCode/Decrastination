@@ -19,6 +19,7 @@ import android.view.accessibility.AccessibilityWindowInfo
 import androidx.core.content.ContextCompat
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.R
+import com.thomaswcode.decrastination.core.Blocklist
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.protect.GuardRules
 import com.thomaswcode.decrastination.protect.Watchdog

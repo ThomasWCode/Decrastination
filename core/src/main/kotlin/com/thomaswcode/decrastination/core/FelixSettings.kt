@@ -1,4 +1,4 @@
-package com.thomaswcode.decrastination.data
+package com.thomaswcode.decrastination.core
 
 import java.util.Locale
 

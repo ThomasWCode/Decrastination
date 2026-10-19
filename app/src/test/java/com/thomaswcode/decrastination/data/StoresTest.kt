@@ -1,8 +1,9 @@
 package com.thomaswcode.decrastination.data
 
-import com.thomaswcode.decrastination.sources.powerplanner.PpClass
-import com.thomaswcode.decrastination.sources.powerplanner.PpSchedule
-import com.thomaswcode.decrastination.sources.powerplanner.Timetable
+import com.thomaswcode.decrastination.core.PpClass
+import com.thomaswcode.decrastination.core.PpSchedule
+import com.thomaswcode.decrastination.core.Settings
+import com.thomaswcode.decrastination.core.Timetable
 import kotlinx.coroutines.test.runTest
 import java.io.File
 import java.nio.file.AccessDeniedException

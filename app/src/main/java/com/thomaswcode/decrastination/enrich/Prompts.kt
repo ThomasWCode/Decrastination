@@ -1,6 +1,7 @@
 package com.thomaswcode.decrastination.enrich
 
 import com.thomaswcode.decrastination.block.Focus
+import com.thomaswcode.decrastination.core.AnkiRules
 import com.thomaswcode.decrastination.core.Enrichment
 import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.core.Kind
@@ -8,7 +9,6 @@ import com.thomaswcode.decrastination.core.Sittings
 import com.thomaswcode.decrastination.core.SubStep
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.Where
-import com.thomaswcode.decrastination.sources.anki.AnkiRules
 import com.thomaswcode.decrastination.sources.gmail.GmailThreads
 import java.time.Instant
 import java.time.LocalDate
@@ -232,7 +232,7 @@ object Prompts {
                 appendLine("Title: ${task.title}")
                 task.className?.let { appendLine("Class: $it") }
                 // What the source says, not what an older enrichment laid over it.
-                val due = if (task.sourceValues != null) task.sourceValues.dueAt else task.dueAt
+                val due = task.sourceValues.let { if (it != null) it.dueAt else task.dueAt }
                 appendLine("Due: " + (due?.let { at(it).format(DAY_TIME) } ?: "no date"))
                 // The vocabulary decks by topic (DX-10), so a section can be named by what it's about.
                 if (job == Enrichments.Job.Assignment && decks.isNotEmpty()) appendLine("Decks: " + decks.entries.sortedBy { it.key }.joinToString("; ") { "${it.key} ${it.value}" })
@@ -592,7 +592,7 @@ object Answers {
     }
 
     /** What [task]'s source says it's due by, not what an older enrichment laid over it. */
-    private fun sourceDue(task: TaskItem): Long? = if (task.sourceValues != null) task.sourceValues.dueAt else task.dueAt
+    private fun sourceDue(task: TaskItem): Long? = task.sourceValues.let { if (it != null) it.dueAt else task.dueAt }
 
     private fun effort(minutes: Int): Int? = minutes.takeIf { it in 1..MAX_EFFORT }
 

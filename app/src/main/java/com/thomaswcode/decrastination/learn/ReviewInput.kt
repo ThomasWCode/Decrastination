@@ -6,7 +6,7 @@ import com.thomaswcode.decrastination.core.ChatMessage
 import com.thomaswcode.decrastination.data.ActivityLog
 import com.thomaswcode.decrastination.data.SlotOutcome
 import com.thomaswcode.decrastination.data.SlotRecord
-import com.thomaswcode.decrastination.data.Settings
+import com.thomaswcode.decrastination.core.Settings
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -213,7 +213,7 @@ object ReviewInput {
             val range = bounds[change.setting] ?: return@fold s
             if (change.value !in range) s else set(s, change.setting, change.value)
         }
-        return if (com.thomaswcode.decrastination.data.SettingsLimits.window(applied.weekdayHours, overnight = false)) applied else applied.copy(weekdayHours = settings.weekdayHours)
+        return if (com.thomaswcode.decrastination.core.SettingsLimits.window(applied.weekdayHours, overnight = false)) applied else applied.copy(weekdayHours = settings.weekdayHours)
     }
 
     /** [settings] with [setting], one the review may change, at [value], whatever its bounds: as it was before a review, put back (LR-01). */

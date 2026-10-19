@@ -1,9 +1,9 @@
 package com.thomaswcode.decrastination.learn
 
+import com.thomaswcode.decrastination.core.AnkiRules
 import com.thomaswcode.decrastination.core.Calibration
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
-import com.thomaswcode.decrastination.sources.anki.AnkiRules
 import kotlinx.serialization.Serializable
 import java.time.ZoneId
 import kotlin.math.roundToInt

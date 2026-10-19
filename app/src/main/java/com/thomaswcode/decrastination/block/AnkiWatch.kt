@@ -2,12 +2,12 @@ package com.thomaswcode.decrastination.block
 
 import android.util.Log
 import com.thomaswcode.decrastination.AppGraph
+import com.thomaswcode.decrastination.core.Deck
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.learn.AnkiProgress
 import com.thomaswcode.decrastination.learn.AnkiReading
 import com.thomaswcode.decrastination.learn.DeckCount
 import com.thomaswcode.decrastination.sources.anki.AnkiProvider
-import com.thomaswcode.decrastination.sources.anki.Deck
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch

@@ -2,8 +2,9 @@ package com.thomaswcode.decrastination.block
 
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.Fixtures.LONDON
+import com.thomaswcode.decrastination.core.Blocklist
+import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.Uptime
-import com.thomaswcode.decrastination.data.Settings
 import java.time.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals

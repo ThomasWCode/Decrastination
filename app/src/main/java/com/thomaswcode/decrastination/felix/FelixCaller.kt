@@ -6,6 +6,7 @@ import com.anthropic.models.messages.JsonOutputFormat
 import com.anthropic.models.messages.MessageCreateParams
 import com.anthropic.models.messages.OutputConfig
 import com.anthropic.models.messages.StopReason
+import com.thomaswcode.decrastination.core.FelixAnswer
 import com.thomaswcode.decrastination.enrich.ClaudeEnricher
 import com.thomaswcode.decrastination.enrich.ModelCalls
 import com.thomaswcode.decrastination.enrich.ModelEffort
