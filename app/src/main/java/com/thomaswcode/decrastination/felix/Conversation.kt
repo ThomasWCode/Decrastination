@@ -234,6 +234,35 @@ class Conversation(
         outbox.answeredInArchive(message.id, now)
     }
 
+    /** Messages of his marked answered at [at] ([markAnswered]): what its Undo puts back. */
+    data class Marked(val ids: Set<String>, val at: Long)
+
+    /**
+     * [ids], messages of his, marked answered by you (D-99): no longer waiting for your answer, nor on his
+     * notification. A check-in's question while the check-in is under way isn't: the check-in waits on it.
+     */
+    suspend fun markAnswered(ids: Collection<String>): Marked = withContext(NonCancellable) {
+        val now = clock.now()
+        val wanted = ids.toSet()
+        val marked = HashSet<String>()
+        chat.update { s ->
+            val underWay = s.felix.checkInDraft != null
+            s.copy(
+                messages = s.messages.map {
+                    if (it.id in wanted && it.from == Speaker.Felix && it.answeredAt == null && !(underWay && it.kind == MessageKind.CheckIn)) it.copy(answeredAt = now).also { m -> marked += m.id } else it
+                },
+            )
+        }
+        outbox.delivered()
+        Marked(marked, now)
+    }
+
+    /** [marked]'s Undo: those still answered as they were marked wait for your answer again. */
+    suspend fun unmarkAnswered(marked: Marked): Unit = withContext(NonCancellable) {
+        chat.update { s -> s.copy(messages = s.messages.map { if (it.id in marked.ids && it.answeredAt == marked.at) it.copy(answeredAt = null) else it }) }
+        outbox.delivered()
+    }
+
     /** The morning's list (LR-04) as his message, in the app's words, where he has none of his own ([Looks.morning]): the day's [title], then its [lines]. */
     suspend fun morningList(title: String, lines: List<String>) =
         outbox.send(ChatMessage(UUID.randomUUID().toString(), Speaker.Felix, FelixWords.morningList(title, lines), clock.now(), kind = MessageKind.Morning, byApp = true))
@@ -359,13 +388,14 @@ class Conversation(
      * Your [text] to Felix about [about] (2.0.0, Q29), answering the message [replyTo] if it does: one
      * entrance for replies (D-98), from the chat, his chips or his notification. A reply to a question of
      * his that's an answer is kept under it with no call ([routed]); anything else is a turn of the
-     * chat, kept as message [id] (about what it replies to, where it's about nothing else) and answered
-     * ([answerChat]). One sent while he answers another of yours lets that answer go, paid for and
-     * unused, and he answers both together (D-98). False only with no words. Kept, it's shown in his
-     * notification under what it answers.
+     * chat, kept as message [id] (about what it replies to, where it's about nothing else, unless not
+     * [takeItsSubject]: the box's words to his nudge just above it, told him as your words alone, D-99)
+     * and answered ([answerChat]). One sent while he answers another of yours lets that answer go, paid
+     * for and unused, and he answers both together (D-98). False only with no words. Kept, it's shown in
+     * his notification under what it answers.
      */
-    suspend fun ask(text: String, about: About = About(), id: String = UUID.randomUUID().toString(), replyTo: String? = null): Boolean =
-        send(text, about, id, replyTo) != Asked.Nothing
+    suspend fun ask(text: String, about: About = About(), id: String = UUID.randomUUID().toString(), replyTo: String? = null, takeItsSubject: Boolean = true): Boolean =
+        send(text, about, id, replyTo, takeItsSubject) != Asked.Nothing
 
     /** What became of words sent ([send]): nothing (there were none), an answer taken with no call, or a turn of the chat waiting for his answer. */
     enum class Asked { Nothing, Answer, Turn }
@@ -375,7 +405,7 @@ class Conversation(
      * where it's a turn of the chat ([replyFromNotification]), and the `chat-ask` command waits for an
      * answer only then. The message replied to may be in the archive, scrolled back to.
      */
-    suspend fun send(text: String, about: About = About(), id: String = UUID.randomUUID().toString(), replyTo: String? = null): Asked {
+    suspend fun send(text: String, about: About = About(), id: String = UUID.randomUUID().toString(), replyTo: String? = null, takeItsSubject: Boolean = true): Asked {
         val words = text.trim().take(ChatPrompts.MAX_TEXT)
         if (words.isEmpty()) return Asked.Nothing
         val repliedTo = replyTo?.let { outbox.find(it) }
@@ -385,7 +415,7 @@ class Conversation(
         chat.update { state ->
             state.copy(
                 messages = state.messages.map { if (it.from == Speaker.You && it.answeredAt == null) it.copy(note = null) else it } +
-                    ChatMessage(id, Speaker.You, words, clock.now(), about.takeIf { it != About() } ?: repliedTo?.about ?: About(), replyTo = replyTo),
+                    ChatMessage(id, Speaker.You, words, clock.now(), about.takeIf { it != About() } ?: repliedTo?.about?.takeIf { takeItsSubject } ?: About(), replyTo = replyTo),
             )
         }
         outbox.delivered()
