@@ -83,9 +83,12 @@ tasks.withType<Test>().configureEach {
     inputs.file(layout.projectDirectory.file("../docs/spec/felix-inputs.md")).withPropertyName("felixInputsDoc").withPathSensitivity(PathSensitivity.RELATIVE)
     // The stores' shapes and the plan's snapshot (StoresDecodeTest, PlanSnapshotTest): a change to them alone runs the tests again.
     inputs.dir(layout.projectDirectory.dir("../fixtures")).withPropertyName("fixtures").withPathSensitivity(PathSensitivity.RELATIVE)
+    // core's own tests run with the app's, so one command (CI's) runs every test.
+    if (name == "testDebugUnitTest") dependsOn(":core:test")
 }
 
 dependencies {
+    implementation(project(":core"))
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.exifinterface)
     implementation(libs.androidx.activity.compose)
@@ -105,6 +108,7 @@ dependencies {
     // Every Jackson module the SDK brings at one patched version (gradle/libs.versions.toml).
     implementation(platform(libs.jackson.bom))
 
+    testImplementation(testFixtures(project(":core")))
     testImplementation(libs.junit)
     testImplementation(libs.kotlin.test.junit)
     testImplementation(libs.kotlinx.coroutines.test)
