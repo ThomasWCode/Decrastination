@@ -65,6 +65,16 @@ class RehearsalTest {
         return Read(store.name, store.value, store.problem, roundTrip = JsonStore.json.decodeFromString(serializer, written) == store.value, dropped = dropped, lists = lists(writtenJson), json = writtenJson as? JsonObject)
     }
 
+    /** The chat's archive as the app reads it, as [after] says: its months, all of them read, as one. */
+    private fun after(store: ChatArchiveStore, there: Boolean, migrated: JsonElement?): Read {
+        if (!there) return Read(store.name, null, null, roundTrip = true)
+        val whole = store.value
+        val written = JsonStore.json.encodeToString(ChatArchive.serializer(), whole)
+        val writtenJson = JsonStore.json.parseToJsonElement(written)
+        val dropped = migrated?.let { dropped(it, writtenJson) }.orEmpty()
+        return Read(store.name, whole, store.problems.firstOrNull(), roundTrip = JsonStore.json.decodeFromString(ChatArchive.serializer(), written) == whole, dropped = dropped, lists = lists(writtenJson), json = writtenJson as? JsonObject)
+    }
+
     private fun <T> again(serializer: KSerializer<T>, value: T): T = JsonStore.json.decodeFromString(serializer, JsonStore.json.encodeToString(serializer, value))
 
     /**
@@ -150,7 +160,7 @@ class RehearsalTest {
             after(stores.tasks, TaskState.serializer(), "tasks.json"), after(stores.settings, Settings.serializer(), "settings.json"),
             after(stores.runtime, RuntimeState.serializer(), "runtime.json"), after(stores.log, ActivityLog.serializer(), "log.json"),
             after(stores.instructions, InstructionState.serializer(), "instructions.json"), after(stores.chat, ChatState.serializer(), "chat.json"),
-            after(stores.chatArchive, ChatArchive.serializer(), "chat-archive.json"),
+            after(stores.chatArchive, there("chat-archive.json"), migrated("chat-archive.json")),
             after(stores.school, SchoolCalendar.serializer(), "school.json"), after(stores.memory, MemoryState.serializer(), "memory.json"),
             after(stores.calendarVersions, CalendarVersions.serializer(), "calendar.json"),
         )

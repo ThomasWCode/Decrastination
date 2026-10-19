@@ -36,6 +36,8 @@ import kotlinx.serialization.json.jsonObject
  * written again in the new shape, the file it came from kept beside it as `<name>.v<from>` for
  * [Stores.letGoOfOldShapes]. A file of a newer version, which this build can't read, is set aside as one
  * that can't be.
+ *
+ * Read as it's made, unless [lazily]: then when it's first wanted.
  */
 class JsonStore<T>(
     private val file: File,
@@ -48,6 +50,11 @@ class JsonStore<T>(
     private val clock: () -> Long = System::currentTimeMillis,
     /** What brings a file of each older version to [version], one version a step. */
     val migrations: List<Migration> = emptyList(),
+    /**
+     * Read when it's first wanted ([state], [value], [update]), not as it's made: for a file that can grow
+     * large and is seldom looked at (a month of the chat's archive, D-96). A problem found then goes to [onProblem].
+     */
+    private val lazily: Boolean = false,
 ) {
     /** Its file's name: `tasks.json`. */
     val name: String get() = file.name
@@ -71,10 +78,26 @@ class JsonStore<T>(
      */
     private var unsaved = false
 
-    private val _state = MutableStateFlow(load())
-    val state: StateFlow<T> = _state.asStateFlow()
+    /**
+     * Where it's read [lazily], what to do with a problem found reading it, past the start's that
+     * [Stores.problems] puts on record: the same.
+     */
+    @Volatile
+    var onProblem: ((Unreadable) -> Unit)? = null
+
+    private val loaded = lazy { MutableStateFlow(load()) }
+    private val _state: MutableStateFlow<T> get() = loaded.value
+
+    init {
+        if (!lazily) loaded.value
+    }
+
+    val state: StateFlow<T> by lazy { _state.asStateFlow() }
 
     val value: T get() = _state.value
+
+    /** Whether its file has been read: as it was made, unless [lazily]. */
+    val isLoaded: Boolean get() = loaded.isInitialized()
 
     /** Applies [transform] and saves the result, if it changed anything. Returns the new state. */
     suspend fun update(transform: (T) -> T): T = mutex.withLock {
@@ -91,12 +114,12 @@ class JsonStore<T>(
      * Writes what was kept of a file that didn't read whole over it, now that its [problem] is on
      * record: read again at the next start, it would be found unreadable again, and said again,
      * however often you'd seen it. Till then it's left as it was, so a start cut short first finds
-     * it, and says it, again.
+     * it, and says it, again. True where it's written now: the file was read, and its copy made.
      */
-    suspend fun keepRecovered() {
-        mutex.withLock {
-            if (unsaved && withContext(Dispatchers.IO) { runCatching { write(_state.value) } }.isSuccess) unsaved = false
-        }
+    suspend fun keepRecovered(): Boolean = mutex.withLock {
+        val wrote = unsaved && withContext(Dispatchers.IO) { runCatching { write(_state.value) } }.isSuccess
+        if (wrote) unsaved = false
+        wrote
     }
 
     private fun load(): T {
@@ -123,6 +146,7 @@ class JsonStore<T>(
         // (that can pass, and the file is then still good), nor where the copy failed (then the bad
         // file is all there is of it).
         unsaved = text != null && aside != null
+        if (lazily) problem?.let { found -> onProblem?.invoke(found) }
         return onLoad(salvaged ?: unreadable())
     }
 
@@ -185,7 +209,7 @@ class JsonStore<T>(
                     "school.json" -> "Your school calendar (days off and half-days)"
                     "memory.json" -> "What Felix remembers"
                     "calendar.json" -> "The record of what the app wrote to your calendar"
-                    else -> file
+                    else -> if (file.startsWith("chat-archive-")) "The chat's earlier messages from ${file.removePrefix("chat-archive-").removeSuffix(".json")}" else file
                 }
                 val how = if (kept) "couldn't be read whole: what could be was kept, the rest is back to its defaults" else "couldn't be read: it started afresh"
                 // Settings unreadable stay armed while the device admin is on (only arming turns it on).

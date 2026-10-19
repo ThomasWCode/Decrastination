@@ -24,13 +24,13 @@ Stage by stage, what each PR needs from your phone and from you, for what and fo
 | 5a | 4.0.0 | **needed**: the latest backup pulled for the migration's rehearsal first; install; `felix-say` twice (paid); `briefing`, `check-in`, `assess` | **needed**, 10 min: tap his notification (the chat opens at the message), reply from its box with a chip, see the old records in the chat at their times; the check-in's chips |
 | 5b | 4.0.1 | **needed**: install | **needed**, 10 min: a swipe-reply, a long-press, scroll up past the top for earlier messages, the badge on his button |
 | 5c | 4.0.2 | **needed**: install; one `chat-ask` that makes a change (paid) | **needed**, 5 min: the chevron, the label sliding out and back, Undo inside the fold, leave and return |
-| 6a | 4.0.3 | **needed**: install; `calendar-written`, `calendar-sync` | no |
-| 6b | 4.0.4 | **needed**: install on a weekend, the phone not in use for an hour; `test-arm`, `test-disarm`, `force-block` | **helpful**: nearby, in case blocking misfires (undone from the PC with `test-disarm`) |
-| 6c | 4.0.5 | **needed**: install; `instruction`, `instructions`, `instruction-discard`, `instruction-delete` (new in 6c: deletes one applied, as the screen's Delete does), `quick-minutes` (0 takes it back), `own-add`, `own-done`, `own-reopen`, `own-delete` | no |
-| 6d | 4.0.6 | **needed**: install; `sync`, `enrich-task` (paid, cents) | no |
-| 6e | 4.0.7 | **needed**: install; `review` (paid: the review's call and the summary's, cents); the check-in answered from the PC | no |
-| 6f | 4.0.8 | **needed**: install and the script | no |
-| 7 | 4.0.9 | **needed**: the latest backup pulled for the rehearsal; a backup before the install; install; the counts compared; a sync; `backup-now` | **helpful**, 5 min: a look at Work and one task's sheet after the migration (your values, the ticks), a tick on Day |
+| 6a | 4.0.5 | **needed**: install; `calendar-written`, `calendar-sync` | no |
+| 6b | 4.0.6 | **needed**: install on a weekend, the phone not in use for an hour; `test-arm`, `test-disarm`, `force-block` | **helpful**: nearby, in case blocking misfires (undone from the PC with `test-disarm`) |
+| 6c | 4.0.7 | **needed**: install; `instruction`, `instructions`, `instruction-discard`, `instruction-delete` (new in 6c: deletes one applied, as the screen's Delete does), `quick-minutes` (0 takes it back), `own-add`, `own-done`, `own-reopen`, `own-delete` | no |
+| 6d | 4.0.8 | **needed**: install; `sync`, `enrich-task` (paid, cents) | no |
+| 6e | 4.0.9 | **needed**: install; `review` (paid: the review's call and the summary's, cents); the check-in answered from the PC | no |
+| 6f | 4.0.10 | **needed**: install and the script | no |
+| 7 | 4.0.11 | **needed**: the latest backup pulled for the rehearsal; a backup before the install; install; the counts compared; a sync; `backup-now` | **helpful**, 5 min: a look at Work and one task's sheet after the migration (your values, the ticks), a tick on Day |
 | 8a | 4.1.0 | **needed**: install; three `chat-ask`s (paid) and their drafts (paid, cents); a three-minute wait; `dumpsys alarm`; the next day's first slot for a SlotStart reminder | **needed**, 15 min across an evening: Snooze and then *Done* from the reminder's notification; aeroplane mode on through a draft's window (the reminder comes as your words); "Add a note" on a sheet (a tap in the app: guarded if you'd rather); the phone off through a reminder's time, if you like |
 | 8b | 4.1.1 | **needed**: install; four `chat-ask`s (paid); "open it in Teams" brings Teams up (the phone unlocked, no Teams sync in front) | no |
 | 9 | 4.1.2 | **needed**: install and the script | no |
@@ -41,9 +41,18 @@ Stage by stage, what each PR needs from your phone and from you, for what and fo
 
 ## In sum
 
-- **The phone** is needed for 24 of the 25 PRs, for the install and its check: a plugged-in, unlocked phone on the desk for an evening does several PRs if their reviews are done by then. Two stages want it free of use for an hour (6b, on a weekend) or online for a minute's write (11).
+- **The phone** is needed for 26 of the 27 PRs, for the install and its check: a plugged-in, unlocked phone on the desk for an evening does several PRs if their reviews are done by then. Two stages want it free of use for an hour (6b, on a weekend) or online for a minute's write (11).
 - **You** are needed for seven moments, about an hour and a half at the phone in all: 5a, 5b, 5c (ten, ten and five minutes; done, in one evening with the three PRs stacked), 8a (fifteen minutes spread over an evening), 11 (twenty minutes with Gmail), and 10b twice by message (a read before, a read after): with Stage 5's done, 8a's, 11's and 10b's are left. Four more are helpful but not needed (3, 6b, 7, 12): five minutes each, or slower guarded taps.
 - **No decision waits on you** during the work: every question is answered, and the three things that could go wrong mid-PR have their fallback chosen.
+
+## Still to check from Stage 5
+
+Everything else in Stage 5 was checked on the phone with you on 18 Oct, or by the scripts after its last install. These four want your taps, whenever they come up; none needs a session of its own:
+
+1. With more of his messages unread than a screen holds, open the chat (his button, not his notification): it opens at the *New messages* line, not at its foot.
+2. Leave the chat on *Your changes*, then tap his notification: the *Chat* tab shows, at the message.
+3. Open a message's fold, go to *Your changes* and back: every fold is closed, and what came meanwhile is under the *New messages* line.
+4. Once the chat has messages past its window (a fortnight old and past the newest 200, days away), scroll back past them: the older rows show under *Earlier messages* with no Undo or buttons of their own, read a month at a time (4.0.4).
 
 ## How to batch it
 

@@ -8,6 +8,7 @@ import com.thomaswcode.decrastination.core.ChatState
 import com.thomaswcode.decrastination.core.FixedClock
 import com.thomaswcode.decrastination.core.MessageKind
 import com.thomaswcode.decrastination.core.Speaker
+import com.thomaswcode.decrastination.data.ChatArchiveStore
 import com.thomaswcode.decrastination.data.ChatMigration
 import com.thomaswcode.decrastination.data.FelixState
 import com.thomaswcode.decrastination.data.JsonStore
@@ -34,7 +35,7 @@ class OutboxTest {
     private val dir: File = Files.createTempDirectory("outbox").toFile()
     private val clock = FixedClock(Fixtures.at("2026-10-19T18:00"), Fixtures.LONDON)
     private val chat = JsonStore(File(dir, "chat.json"), ChatState.serializer(), ::ChatState, migrations = listOf(ChatMigration.CHAT))
-    private val archive = JsonStore(File(dir, "chat-archive.json"), ChatArchive.serializer(), ::ChatArchive)
+    private val archive = ChatArchiveStore(dir)
     private val settings = JsonStore(File(dir, "settings.json"), Settings.serializer(), ::Settings)
     private var onScreen = false
     private var shown = true
@@ -156,7 +157,7 @@ class OutboxTest {
     }
 
     @Test
-    fun `the window keeps the newest two hundred and all of sixty days, moving the rest to the archive, never an unread one`() = runBlocking {
+    fun `the window keeps the newest two hundred and all of a fortnight, moving the rest to the archive, never an unread one`() = runBlocking {
         val now = clock.now()
         val old = now - Outbox.WINDOW_MS - 3_600_000L
         // His, the oldest of all and still unread; 210 old ones of yours; then 5 recent.
@@ -165,7 +166,7 @@ class OutboxTest {
         val recent = (0 until 5).map { ChatMessage("r$it", Speaker.You, "recent $it", now - 1_000L + it, answeredAt = now) }
         chat.update { ChatState(listOf(unread) + olds + recent, readAt = old - 2) }
         outbox.moveWindow(now)
-        // Past the newest 200 and older than sixty days, and read: the oldest 15 of yours; his unread stays.
+        // Past the newest 200 and older than a fortnight, and read: the oldest 15 of yours; his unread stays.
         assertEquals((0 until 15).map { "o$it" }, archive.value.messages.map { it.id })
         assertEquals(listOf("u") + (15 until 210).map { "o$it" } + recent.map { it.id }, chat.value.messages.map { it.id })
         // Moved again: nothing doubled, nothing lost.

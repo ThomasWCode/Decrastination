@@ -141,6 +141,7 @@ class StoresTest {
             when (val store = field.get(stores)) {
                 is JsonStore<*> -> store.name
                 is SecretStore -> "secrets.bin"
+                is ChatArchiveStore -> store.name
                 else -> null
             }
         }.toSet()
@@ -183,8 +184,9 @@ class StoresTest {
     fun `the one move between stores is the chat's, and a backup's parts are moved too`() {
         // A move runs on the stores' files at start; a backup from before it holds the fields where they were.
         // Backups.upgraded makes the chat's move on a backup's parts (ChatMigrationTest restores one from
-        // before it); a second move must be taught to it as well, and this test changed with it (D-94).
-        assertEquals(listOf(ChatMigration.MOVE), Stores.MOVES, "A new move between stores: apply it to a backup's parts in Backups.upgraded too")
+        // before it); a second move must be taught to it as well, and this test changed with it (D-94). The
+        // archive's split into months (4.0.4) moves no field: a backup holds the archive whole, as before.
+        assertEquals(listOf(ChatMigration.MOVE, ChatArchiveStore.SPLIT), Stores.MOVES, "A new move between stores: apply it to a backup's parts in Backups.upgraded too")
     }
 
     @Test

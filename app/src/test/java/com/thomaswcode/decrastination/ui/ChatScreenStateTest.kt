@@ -2,6 +2,7 @@ package com.thomaswcode.decrastination.ui
 
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.Fixtures.LONDON
+import com.thomaswcode.decrastination.core.About
 import com.thomaswcode.decrastination.core.Act
 import com.thomaswcode.decrastination.core.ChatAction
 import com.thomaswcode.decrastination.core.ChatMessage
@@ -94,6 +95,55 @@ class ChatScreenStateTest {
         // Cleared with the chat: nothing to reply to, no pages.
         offered.cleared()
         assertEquals(null to 0, offered.replyingTo to offered.earlier)
+    }
+
+    @Test
+    fun `a reply restored from the archive comes back only if nothing changed the reply meanwhile`() {
+        val old = his("old", "2026-08-01T10:00")
+        val other = his("other", "2026-10-18T17:00")
+        val screen = ChatScreenState()
+        screen.restored(earlier = 0, replyingTo = null, offered = false)
+        screen.restoringReply("old")
+        screen.restoredReply(old)
+        assertEquals(old, screen.replyingTo)
+        // Another chosen while it was read: that one stays.
+        val again = ChatScreenState()
+        again.restoringReply("old")
+        again.replyTo(other)
+        again.restoredReply(old)
+        assertEquals(other, again.replyingTo)
+        // His question waiting, offered at the first drawing while it's read: the restored one still wins.
+        val asked = ChatScreenState()
+        val question = his("q", "2026-10-18T17:30").copy(kind = MessageKind.Question, about = About(taskId = "teams:essay"))
+        // (With nothing being restored, it's offered.)
+        assertEquals(question, ChatScreenState().apply { offer(question, checkInUnderWay = false) }.replyingTo)
+        asked.restoringReply("old")
+        asked.offer(question, checkInUnderWay = false)
+        asked.restoredReply(old)
+        assertEquals(old to false, asked.replyingTo to asked.offered)
+        // Let go meanwhile (sent, or the strip's ✕): none.
+        val none = ChatScreenState()
+        none.restoringReply("old")
+        none.replyingTo = null
+        none.restoredReply(old)
+        assertNull(none.replyingTo)
+    }
+
+    @Test
+    fun `an archive not read yet has its row, asks for one page till it's read, and a quote further back is shown from what's read of it`() {
+        val old = his("old", "2026-08-01T10:00")
+        val window = listOf(yours("w1", Fixtures.at("2026-10-18T17:00")).copy(replyTo = "old"))
+        val screen = ChatScreenState()
+        assertEquals(ChatScreenState.Item.Earlier, screen.items(window, emptyList(), LONDON, unread = true).first())
+        assertTrue(screen.loadEarlier(null))
+        assertEquals(ChatScreenState.PAGE, screen.earlier)
+        assertFalse(screen.loadEarlier(null))
+        // The quote, read on its own from the archive.
+        val reply = screen.items(window, emptyList(), LONDON, quotes = listOf(old)).filterIsInstance<ChatScreenState.Item.Message>().single()
+        assertEquals(old, reply.quote)
+        // Tapped, further back than the pages read: as far back as it is, and scrolled to.
+        screen.revealBack("old", 340)
+        assertEquals(340 to "old", screen.earlier to screen.scrollTo)
     }
 
     @Test

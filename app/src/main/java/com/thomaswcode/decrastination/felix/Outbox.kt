@@ -9,6 +9,7 @@ import com.thomaswcode.decrastination.core.ProposalState
 import com.thomaswcode.decrastination.core.Speaker
 import com.thomaswcode.decrastination.core.WallClock
 import com.thomaswcode.decrastination.data.FelixState
+import com.thomaswcode.decrastination.data.ChatArchiveStore
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.notify.Channels
@@ -26,7 +27,7 @@ import kotlinx.coroutines.sync.withLock
  */
 class Outbox(
     private val chat: JsonStore<ChatState>,
-    private val archive: JsonStore<ChatArchive>,
+    private val archive: ChatArchiveStore,
     private val settings: JsonStore<Settings>,
     private val notices: Notices,
     private val ports: FelixPorts,
@@ -60,10 +61,7 @@ class Outbox(
     suspend fun moveWindow(now: Long): Unit = moving.withLock {
         val past = past(chat.value, now)
         if (past.isEmpty()) return@withLock
-        archive.update { a ->
-            val there = a.messages.mapTo(HashSet()) { it.id }
-            a.copy(messages = a.messages + past.filter { it.id !in there })
-        }
+        archive.add(past)
         val moved = past.mapTo(HashSet()) { it.id }
         chat.update { s -> s.copy(messages = s.messages.filterNot { it.id in moved }) }
     }
@@ -72,19 +70,22 @@ class Outbox(
     suspend fun clear() {
         moving.withLock {
             chat.update { it.copy(messages = emptyList()) }
-            archive.update { ChatArchive() }
+            archive.clear()
         }
         notify(clock.now())
     }
 
-    /** Message [id] in the archive marked answered at [at] (a question of his answered from there), where it's there and waiting. */
+    /**
+     * Message [id] in the archive marked answered at [at] (a question of his answered from there), where it's
+     * there and waiting. One in the live window is answered there: the archive isn't read for it.
+     */
     suspend fun answeredInArchive(id: String, at: Long) {
-        if (archive.value.messages.none { it.id == id && it.answeredAt == null }) return
-        archive.update { a -> a.copy(messages = a.messages.map { if (it.id == id && it.answeredAt == null) it.copy(answeredAt = at) else it }) }
+        if (chat.value.messages.any { it.id == id }) return
+        archive.answered(id, at)
     }
 
     /** Message [id], from the live window or, past it, the archive (a reply to one scrolled back to). */
-    fun find(id: String): ChatMessage? = chat.value.messages.firstOrNull { it.id == id } ?: archive.value.messages.firstOrNull { it.id == id }
+    fun find(id: String): ChatMessage? = chat.value.messages.firstOrNull { it.id == id } ?: archive.find(id)
 
     /** Held while his notification is made from the chat and posted, so the last posted is made from the newest. */
     private val posting = Any()
@@ -110,9 +111,12 @@ class Outbox(
     }
 
     companion object {
-        /** The live window keeps the newest so many messages, and all of those within [WINDOW_MS], whichever keeps more. */
+        /**
+         * The live window keeps the newest so many messages, and all of those within [WINDOW_MS], whichever
+         * keeps more (D-96): a fortnight covers the week his review reads, and the chat's Undo reaches as far.
+         */
         const val WINDOW = 200
-        const val WINDOW_MS = 60 * 24 * 3_600_000L
+        const val WINDOW_MS = 14 * 24 * 3_600_000L
 
         /** Whether [message] is his, with words, and unread at [readAt]: shown nowhere yet, so never moved. */
         fun unread(message: ChatMessage, readAt: Long): Boolean = message.from == Speaker.Felix && message.at > readAt && message.text.isNotBlank()

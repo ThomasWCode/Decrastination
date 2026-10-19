@@ -80,6 +80,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
@@ -114,9 +115,11 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.lifecycleScope
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.R
 import com.thomaswcode.decrastination.core.About
+import com.thomaswcode.decrastination.core.ChatArchive
 import com.thomaswcode.decrastination.core.ChatMessage
 import com.thomaswcode.decrastination.core.ChatSummary
 import com.thomaswcode.decrastination.core.Instruction
@@ -136,8 +139,11 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import kotlin.math.roundToInt
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Asking Claude (2.0.0, Q29), in place of the Instructions page: **Chat**, where you tell it about
@@ -180,7 +186,14 @@ class AskActivity : ComponentActivity() {
         } else {
             about.value = aboutFrom(savedInstanceState)
             chatTab = savedInstanceState.getBoolean(STATE_CHAT_TAB, true)
-            screen.restored(savedInstanceState.getInt(STATE_EARLIER), savedInstanceState.getString(STATE_REPLYING)?.let { graph.conversation.outbox.find(it) }, savedInstanceState.getBoolean(STATE_OFFERED))
+            // The message replied to from the window at once; one scrolled back to, from the archive, off the main thread.
+            val replying = savedInstanceState.getString(STATE_REPLYING)
+            val inWindow = replying?.let { id -> graph.chat.value.messages.firstOrNull { it.id == id } }
+            screen.restored(savedInstanceState.getInt(STATE_EARLIER), inWindow, savedInstanceState.getBoolean(STATE_OFFERED))
+            if (replying != null && inWindow == null) {
+                screen.restoringReply(replying)
+                lifecycleScope.launch { withContext(Dispatchers.IO) { graph.conversation.outbox.find(replying) }?.let(screen::restoredReply) }
+            }
         }
         setContent { AppTheme { Screen(graph) } }
     }
@@ -288,7 +301,23 @@ class AskActivity : ComponentActivity() {
     @Composable
     private fun Screen(graph: AppGraph) {
         val chat by graph.chat.state.collectAsStateWithLifecycle()
-        val archive by graph.chatArchive.state.collectAsStateWithLifecycle()
+        // The archive read a month at a time, only as it's wanted (D-96): its newest pages as you scroll back
+        // to them (or had them before the screen was made again), and the messages replies on screen quote
+        // from it; off the main thread. Till then, whether it holds any is said by whether it has a month's file.
+        val archiveChanged by graph.chatArchive.changes.collectAsStateWithLifecycle()
+        var quoted by remember { mutableStateOf(emptySet<String>()) }
+        val archiveRead by produceState(0 to emptyList<ChatMessage>(), screen.earlier, archiveChanged) {
+            val earlier = screen.earlier
+            value = earlier to if (earlier == 0) emptyList() else withContext(Dispatchers.IO) { graph.chatArchive.recent(earlier + ChatScreenState.PAGE) }
+        }
+        val archive = archiveRead.second
+        // Pages asked for and not read yet: a quote's message further back waits for them.
+        val reading = archiveRead.first != screen.earlier
+        val quotes by produceState(emptyList<ChatMessage>(), quoted, archiveChanged) {
+            value = if (quoted.isEmpty()) emptyList() else withContext(Dispatchers.IO) { quoted.mapNotNull(graph.chatArchive::find) }
+        }
+        val holds = remember(chat.messages, archiveChanged) { graph.chatArchive.holdsAny }
+        val unread = screen.earlier == 0 && holds
         val instructions by graph.instructions.state.collectAsStateWithLifecycle()
         val tasks by graph.tasks.state.collectAsStateWithLifecycle()
         val settings by graph.settings.state.collectAsStateWithLifecycle()
@@ -352,7 +381,7 @@ class AskActivity : ComponentActivity() {
                     })
                 }
                 if (tab == 0) {
-                    Chat(graph, screen, chat.messages, archive.messages, byId, now, zone, claudeOn, onEdit = { m, p -> editing = "$m|$p" })
+                    Chat(graph, screen, chat.messages, archive, quotes, unread, reading, byId, now, zone, claudeOn, onQuoted = { quoted = quoted + it }, onEdit = { m, p -> editing = "$m|$p" })
                     // His replies to offer (UI-06), under his last message: a tap answers it, as a reply to
                     // it from anywhere does (a check-in's answer, an event's, with no call).
                     // His question still waiting for its answer since your last turn (with several asked together,
@@ -510,8 +539,9 @@ private val EXAMPLES = listOf(
  * The conversation, newest at the foot, kept in view as it grows; each day's date over its first
  * message, and the divider over the first unread, for this visit (docs/plan_v4/05-the-chat.md §4, §5).
  * Opened at his notification's message, else at the first unread, else at the foot; scrolled back to
- * the top, the archive's earlier messages, a page at a time. A message swiped right, or held for Reply,
- * is the one the next replies to. His silences (he chose not to write) aren't shown.
+ * the top, the archive's earlier messages, a page at a time ([unread]: it holds some, none read yet), and
+ * what replies on screen quote from it ([quotes], asked for by [onQuoted]). A message swiped right, or held
+ * for Reply, is the one the next replies to. His silences (he chose not to write) aren't shown.
  */
 @Composable
 private fun ColumnScope.Chat(
@@ -519,15 +549,21 @@ private fun ColumnScope.Chat(
     screen: ChatScreenState,
     all: List<ChatMessage>,
     archive: List<ChatMessage>,
+    quotes: List<ChatMessage>,
+    unread: Boolean,
+    reading: Boolean,
     tasks: Map<String, TaskItem>,
     now: Long,
     zone: ZoneId,
     claudeOn: Boolean,
+    onQuoted: (Set<String>) -> Unit,
     onEdit: (messageId: String, proposalId: String) -> Unit,
 ) {
     val list = rememberLazyListState()
     val name = graph.settings.value.felixName
-    val rows = remember(all, archive, screen.earlier, screen.firstUnread, zone) { screen.items(all, archive, zone) }
+    val scope = rememberCoroutineScope()
+    var lookup by remember { mutableStateOf<Job?>(null) }
+    val rows = remember(all, archive, quotes, unread, screen.earlier, screen.firstUnread, zone) { screen.items(all, archive, zone, unread, quotes) }
     val shown = all.filter { it.from == Speaker.You || it.text.isNotBlank() }
     // Yours waiting for his answer, with nothing to say why (Claude off, resting, a failed call): he's
     // typing, whatever he's written unasked since.
@@ -537,10 +573,12 @@ private fun ColumnScope.Chat(
     // At the foot once it's been put somewhere: what follows slides into view.
     var settled by remember { mutableStateOf(false) }
     // Where it opens (his notification's message, else the first unread, with the divider over it), or a
-    // quote tapped: that message, once; one no longer there (the chat cleared), the foot.
-    LaunchedEffect(screen.scrollTo, rows.size) {
+    // quote tapped: that message, once, its pages read first ([reading]); one no longer there (the chat
+    // cleared), the foot.
+    LaunchedEffect(screen.scrollTo, rows.size, reading) {
         val target = screen.scrollTo ?: return@LaunchedEffect
         val at = rows.indexOfFirst { it.key == target }
+        if (at < 0 && reading) return@LaunchedEffect
         if (at < 0) list.scrollToItem(rows.size + 1) else list.scrollToItem(1 + if (at > 0 && rows[at - 1] == ChatScreenState.Item.Divider) at - 1 else at)
         settled = true
         screen.scrolled()
@@ -554,9 +592,17 @@ private fun ColumnScope.Chat(
         if (settled) list.animateScrollToItem(foot) else list.scrollToItem(foot)
         settled = true
     }
+    // Replies on screen quoting what isn't read of the archive: those messages read, for their quotes.
+    val known = remember(all, archive, quotes) { (all + archive + quotes).mapTo(HashSet()) { it.id } }
+    LaunchedEffect(list, rows, known) {
+        snapshotFlow { list.layoutInfo.visibleItemsInfo.mapTo(HashSet()) { it.key } }.collect { keys ->
+            val past = rows.mapNotNullTo(HashSet()) { r -> (r as? ChatScreenState.Item.Message)?.takeIf { it.key in keys }?.message?.replyTo?.takeIf { it !in known } }
+            if (past.isNotEmpty()) onQuoted(past)
+        }
+    }
     // Scrolled back near the top by you: the archive's next page, as a messaging app loads its history;
     // a few rows before the top, so the list keeps your place by the message you're at as it grows over it.
-    val archived by rememberUpdatedState(archive.size)
+    val archived by rememberUpdatedState(archive.size.takeUnless { unread })
     LaunchedEffect(list) {
         var dragged = false
         launch { list.interactionSource.interactions.collect { if (it is DragInteraction.Start) dragged = true } }
@@ -585,7 +631,7 @@ private fun ColumnScope.Chat(
         items(rows, key = { it.key }) { row ->
             when (row) {
                 ChatScreenState.Item.Earlier -> Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    TextButton(onClick = { screen.loadEarlier(archive.size) }) { Text("Earlier messages") }
+                    TextButton(onClick = { screen.loadEarlier(archive.size.takeUnless { unread }) }) { Text("Earlier messages") }
                 }
                 is ChatScreenState.Item.Day -> DayLine(row.date, today)
                 ChatScreenState.Item.Divider -> NewMessages()
@@ -600,7 +646,12 @@ private fun ColumnScope.Chat(
                     }
                     SwipeToReply(onReply = { screen.replyTo(message) }) {
                         if (message.from == Speaker.You) {
-                            Yours(graph, message, row.quote, name, flash, now, zone, onQuote = { screen.reveal(it, all, archive) }) { screen.replyTo(message) }
+                            Yours(graph, message, row.quote, name, flash, now, zone, onQuote = { id ->
+                                // One further back than the pages read: the archive read back as far as it. Only the
+                                // last quote tapped is followed: one still being looked for gives way.
+                                lookup?.cancel()
+                                if (!screen.reveal(id, all, archive)) lookup = scope.launch { withContext(Dispatchers.IO) { graph.chatArchive.back(id) }?.let { screen.revealBack(id, it) } }
+                            }) { screen.replyTo(message) }
                         } else {
                             Claudes(graph, screen, message, tasks, flash, now, zone, onEdit, live = !row.archived) { screen.replyTo(message) }
                         }

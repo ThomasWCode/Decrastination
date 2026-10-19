@@ -66,8 +66,29 @@ class ChatScreenState {
     var earlier: Int by mutableIntStateOf(0)
         private set
 
+    private var replying: ChatMessage? by mutableStateOf(null)
+
     /** The message your next one replies to (a swipe, Reply on a long press, or his question offered: [offer]), shown over the box. */
-    var replyingTo: ChatMessage? by mutableStateOf(null)
+    var replyingTo: ChatMessage?
+        get() = replying
+        set(value) {
+            replying = value
+            // Chosen, sent or let go meanwhile: one still being read back from the archive gives way ([restoredReply]).
+            restoringReply = null
+        }
+
+    /** The message replied to before the screen was made again, still being read from the archive. */
+    private var restoringReply: String? = null
+
+    /** [id], replied to before the screen was made again, to be read from the archive: put back by [restoredReply] unless the reply changes meanwhile. */
+    fun restoringReply(id: String) {
+        restoringReply = id
+    }
+
+    /** [message], read back from the archive, what the box replies to again, where nothing has changed that since [restoringReply]. */
+    fun restoredReply(message: ChatMessage) {
+        if (restoringReply == message.id) replyTo(message)
+    }
 
     /** Whether [replyingTo] is the chat's own offer ([offer]), not a message you chose: a newer question takes its place. */
     var offered = false
@@ -90,7 +111,8 @@ class ChatScreenState {
      */
     fun offer(last: ChatMessage?, checkInUnderWay: Boolean) {
         val question = last?.takeIf { Replies.waiting(it, checkInUnderWay) && it.id != declined }
-        if (question != null && (replyingTo == null || offered)) {
+        // A reply still being read back from the archive is one you chose: it isn't taken over ([restoringReply]).
+        if (question != null && restoringReply == null && (replyingTo == null || offered)) {
             replyingTo = question
             offered = true
         } else if (question == null && offered) {
@@ -208,8 +230,16 @@ class ChatScreenState {
         firstUnread = null
     }
 
-    /** The archive's next [PAGE] shown over what's there, of the [archived] it holds: false when it has no more. */
-    fun loadEarlier(archived: Int): Boolean {
+    /**
+     * The archive's next [PAGE] shown over what's there, of the [archived] it holds: false when it has no
+     * more. Null where it isn't read yet: its first page, shown once it is, and nothing more meanwhile.
+     */
+    fun loadEarlier(archived: Int?): Boolean {
+        if (archived == null) {
+            if (earlier > 0) return false
+            earlier = PAGE
+            return true
+        }
         if (earlier >= archived) return false
         earlier = minOf(archived, earlier + PAGE)
         return true
@@ -229,15 +259,22 @@ class ChatScreenState {
         return true
     }
 
+    /** Message [id], [back] messages from the archive's newest, shown and scrolled to (a quote tapped, further back than the pages read). */
+    fun revealBack(id: String, back: Int) {
+        earlier = maxOf(earlier, back)
+        scrollTo = id
+    }
+
     /**
      * The list as it's drawn: the [archive]'s [earlier] newest messages, then the [window]'s, each day's
      * date over its first, the divider over the first unread, and over a reply what it replies to where
-     * that isn't the message above it; the row that loads the next page at the top while the archive has
-     * more. His silences (nothing to say) aren't drawn.
+     * that isn't the message above it (from the [quotes] read of the archive, past its pages); the row that
+     * loads the next page at the top while the archive has more, or holds some not read yet ([unread]). His
+     * silences (nothing to say) aren't drawn.
      */
-    fun items(window: List<ChatMessage>, archive: List<ChatMessage>, zone: ZoneId): List<Item> = buildList {
-        if (earlier < archive.size) add(Item.Earlier)
-        val byId = (archive + window).associateBy { it.id }
+    fun items(window: List<ChatMessage>, archive: List<ChatMessage>, zone: ZoneId, unread: Boolean = false, quotes: List<ChatMessage> = emptyList()): List<Item> = buildList {
+        if (earlier < archive.size || unread) add(Item.Earlier)
+        val byId = (quotes + archive + window).associateBy { it.id }
         val live = window.mapTo(HashSet()) { it.id }
         var day: LocalDate? = null
         var above: ChatMessage? = null
