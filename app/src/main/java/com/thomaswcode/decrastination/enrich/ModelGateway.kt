@@ -4,12 +4,12 @@ import android.util.Log
 import com.anthropic.client.AnthropicClient
 import com.anthropic.client.okhttp.AnthropicOkHttpClient
 import com.thomaswcode.decrastination.core.Enrichments
+import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.WallClock
 import com.thomaswcode.decrastination.data.CallRecord
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.RuntimeState
-import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.data.TaskState
 import com.thomaswcode.decrastination.data.plusCall
 import java.util.concurrent.atomic.AtomicInteger

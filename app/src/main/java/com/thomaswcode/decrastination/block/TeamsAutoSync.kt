@@ -1,6 +1,6 @@
 package com.thomaswcode.decrastination.block
 
-import com.thomaswcode.decrastination.data.Settings
+import com.thomaswcode.decrastination.core.Settings
 import kotlinx.serialization.Serializable
 import java.time.DayOfWeek
 import java.time.Instant

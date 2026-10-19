@@ -11,6 +11,8 @@ import com.thomaswcode.decrastination.core.Instructions
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.OwnTasks
 import com.thomaswcode.decrastination.core.SchoolCalendar
+import com.thomaswcode.decrastination.core.Settings
+import com.thomaswcode.decrastination.core.SettingsLimits
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.enriched

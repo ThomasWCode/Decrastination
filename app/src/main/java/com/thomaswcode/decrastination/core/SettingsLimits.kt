@@ -1,4 +1,4 @@
-package com.thomaswcode.decrastination.data
+package com.thomaswcode.decrastination.core
 
 /**
  * What each setting may be: the Settings screen takes nothing else, and a backup with anything

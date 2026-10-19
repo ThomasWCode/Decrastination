@@ -1,7 +1,7 @@
 package com.thomaswcode.decrastination.learn
 
+import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.data.MemoryTidyRecord
-import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.data.WeeklyReview
 
 /**

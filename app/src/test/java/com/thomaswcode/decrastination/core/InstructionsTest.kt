@@ -2,7 +2,6 @@ package com.thomaswcode.decrastination.core
 
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.Fixtures.LONDON
-import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.enrich.InstructionAnswers
 import com.thomaswcode.decrastination.enrich.InstructionPrompts
 import com.thomaswcode.decrastination.learn.CalendarEvent

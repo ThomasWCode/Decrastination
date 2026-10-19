@@ -1,6 +1,5 @@
-package com.thomaswcode.decrastination.data
+package com.thomaswcode.decrastination.core
 
-import com.thomaswcode.decrastination.block.Blocklist
 import kotlinx.serialization.Serializable
 
 /**

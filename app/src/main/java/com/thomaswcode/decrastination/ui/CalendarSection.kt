@@ -58,7 +58,7 @@ fun CalendarSection(graph: AppGraph, activity: Activity, choosing: Boolean = tru
         refresh++
         onPauseOrDispose { }
     }
-    fun change(change: (com.thomaswcode.decrastination.data.Settings) -> com.thomaswcode.decrastination.data.Settings) {
+    fun change(change: (com.thomaswcode.decrastination.core.Settings) -> com.thomaswcode.decrastination.core.Settings) {
         scope.launch { graph.protection.changeSettings(change) }
     }
 

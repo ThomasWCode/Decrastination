@@ -15,10 +15,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.thomaswcode.decrastination.AppGraph
-import com.thomaswcode.decrastination.data.SettingsLimits
+import com.thomaswcode.decrastination.core.SettingsLimits
 import kotlinx.coroutines.launch
 
-/** A screen's first-run hint (UI-17), [text], till you put it away: then never again ([com.thomaswcode.decrastination.data.Settings.hintsSeen]). */
+/** A screen's first-run hint (UI-17), [text], till you put it away: then never again ([com.thomaswcode.decrastination.core.Settings.hintsSeen]). */
 @Composable
 fun Hint(graph: AppGraph, name: String, text: String) {
     val settings by graph.settings.state.collectAsStateWithLifecycle()

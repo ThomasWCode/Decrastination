@@ -1,5 +1,8 @@
 package com.thomaswcode.decrastination.data
 
+import com.thomaswcode.decrastination.core.FelixSettings
+import com.thomaswcode.decrastination.core.Settings
+import com.thomaswcode.decrastination.core.Window
 import com.thomaswcode.decrastination.protect.SettingsChanges
 import kotlin.test.Test
 import kotlin.test.assertEquals

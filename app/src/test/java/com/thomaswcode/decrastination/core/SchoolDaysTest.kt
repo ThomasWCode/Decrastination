@@ -1,6 +1,5 @@
 package com.thomaswcode.decrastination.core
 
-import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.sources.powerplanner.PpClass
 import com.thomaswcode.decrastination.sources.powerplanner.PpSchedule
 import com.thomaswcode.decrastination.sources.powerplanner.Timetable

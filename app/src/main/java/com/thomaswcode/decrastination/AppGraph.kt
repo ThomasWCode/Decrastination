@@ -21,7 +21,7 @@ import com.thomaswcode.decrastination.data.DeviceClock
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.KeystoreCipher
 import com.thomaswcode.decrastination.data.Secret
-import com.thomaswcode.decrastination.data.Settings
+import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.data.Stores
 import com.thomaswcode.decrastination.enrich.AndroidModelAlerts
 import com.thomaswcode.decrastination.enrich.EnrichWorker

@@ -16,9 +16,11 @@ import com.thomaswcode.decrastination.core.NoSchool
 import com.thomaswcode.decrastination.core.OwnTask
 import com.thomaswcode.decrastination.core.OwnTasks
 import com.thomaswcode.decrastination.core.SchoolCalendar
+import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.SlotState
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Speaker
+import com.thomaswcode.decrastination.core.Window
 import com.thomaswcode.decrastination.enrich.AiUsage
 import java.io.ByteArrayInputStream
 import kotlin.test.Test

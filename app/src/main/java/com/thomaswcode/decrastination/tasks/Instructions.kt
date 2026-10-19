@@ -17,6 +17,7 @@ import com.thomaswcode.decrastination.core.Planner
 import com.thomaswcode.decrastination.core.ProposalState
 import com.thomaswcode.decrastination.core.SchoolCalendar
 import com.thomaswcode.decrastination.core.SchoolDays
+import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.Slotter
 import com.thomaswcode.decrastination.core.TaskOverrides
 import com.thomaswcode.decrastination.core.WallClock
@@ -24,7 +25,6 @@ import com.thomaswcode.decrastination.core.overrides
 import com.thomaswcode.decrastination.core.withOverrides
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.RuntimeState
-import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.data.TaskState
 import com.thomaswcode.decrastination.enrich.Called
 import com.thomaswcode.decrastination.enrich.InstructionAnswers

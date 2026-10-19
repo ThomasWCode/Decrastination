@@ -8,9 +8,9 @@ import com.thomaswcode.decrastination.core.MemoryState
 import com.thomaswcode.decrastination.core.NoSchool
 import com.thomaswcode.decrastination.core.Rule
 import com.thomaswcode.decrastination.core.SchoolCalendar
+import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
-import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.sources.powerplanner.PpClass
 import com.thomaswcode.decrastination.sources.powerplanner.PpSchedule
 import com.thomaswcode.decrastination.sources.powerplanner.Timetable

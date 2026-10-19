@@ -6,7 +6,7 @@ import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.WallClock
 import com.thomaswcode.decrastination.data.JsonStore
-import com.thomaswcode.decrastination.data.Settings
+import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.data.SourceStatus
 import com.thomaswcode.decrastination.data.TaskState
 import com.thomaswcode.decrastination.sources.ReadContext

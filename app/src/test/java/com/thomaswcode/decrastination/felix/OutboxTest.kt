@@ -7,12 +7,12 @@ import com.thomaswcode.decrastination.core.ChatMessage
 import com.thomaswcode.decrastination.core.ChatState
 import com.thomaswcode.decrastination.core.FixedClock
 import com.thomaswcode.decrastination.core.MessageKind
+import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.Speaker
 import com.thomaswcode.decrastination.data.ChatArchiveStore
 import com.thomaswcode.decrastination.data.ChatMigration
 import com.thomaswcode.decrastination.data.FelixState
 import com.thomaswcode.decrastination.data.JsonStore
-import com.thomaswcode.decrastination.data.Settings
 import com.thomaswcode.decrastination.notify.NoticeId
 import com.thomaswcode.decrastination.notify.Notices
 import java.io.File

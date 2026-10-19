@@ -1,9 +1,9 @@
 package com.thomaswcode.decrastination.protect
 
+import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.Uptime
+import com.thomaswcode.decrastination.core.Window
 import com.thomaswcode.decrastination.data.JsonStore
-import com.thomaswcode.decrastination.data.Settings
-import com.thomaswcode.decrastination.data.Window
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
