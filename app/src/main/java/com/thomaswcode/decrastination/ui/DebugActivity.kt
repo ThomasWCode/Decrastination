@@ -66,6 +66,8 @@ class DebugActivity : ComponentActivity() {
 @Composable
 private fun DebugPage(graph: AppGraph, activity: Activity) {
     val runtime by graph.runtime.state.collectAsStateWithLifecycle()
+    val model by graph.stores.model.state.collectAsStateWithLifecycle()
+    val protection by graph.stores.protection.state.collectAsStateWithLifecycle()
     val state by graph.tasks.state.collectAsStateWithLifecycle()
     val log by graph.log.state.collectAsStateWithLifecycle()
     val chat by graph.chat.state.collectAsStateWithLifecycle()
@@ -87,7 +89,7 @@ private fun DebugPage(graph: AppGraph, activity: Activity) {
                     Text("Each logs what it did: adb logcat -s Decrastination", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
-            item(key = "calls") { Block(activity, "Recent calls (${runtime.calls.size})", runtime.calls.asReversed().joinToString("\n\n") { it.details(zone) }.ifEmpty { "None yet." }) }
+            item(key = "calls") { Block(activity, "Recent calls (${model.calls.size})", model.calls.asReversed().joinToString("\n\n") { it.details(zone) }.ifEmpty { "None yet." }) }
             item(key = "prompt") {
                 val open = state.tasks.filter { Enrichments.jobFor(it, GmailThreads::textRead) != null }
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -129,7 +131,7 @@ private fun DebugPage(graph: AppGraph, activity: Activity) {
             }
             item(key = "watchdog") {
                 val report = remember(round) { runCatching { Watchdog.report(activity).toString() }.getOrElse { "couldn't be made: ${it.message}" } }
-                Block(activity, "The watchdog", "Problems: ${runtime.protection.problems.ifEmpty { listOf("none") }.joinToString("; ")}\nChecked ${at(runtime.protection.checkedAt)}\n\n$report")
+                Block(activity, "The watchdog", "Problems: ${protection.protection.problems.ifEmpty { listOf("none") }.joinToString("; ")}\nChecked ${at(protection.protection.checkedAt)}\n\n$report")
             }
         }
     }

@@ -15,7 +15,6 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -56,6 +55,8 @@ fun WorkScreen(graph: AppGraph, activity: Activity, opening: String? = null, onO
     val state by graph.tasks.state.collectAsStateWithLifecycle()
     val settings by graph.settings.state.collectAsStateWithLifecycle()
     val runtime by graph.runtime.state.collectAsStateWithLifecycle()
+    val model by graph.stores.model.state.collectAsStateWithLifecycle()
+    val protection by graph.stores.protection.state.collectAsStateWithLifecycle()
     val instructions by graph.instructions.state.collectAsStateWithLifecycle()
     val calendar by graph.sync.calendarState.collectAsStateWithLifecycle()
     // The sections move with the clock as well as the data: deadlines pass, and midnight.
@@ -79,7 +80,7 @@ fun WorkScreen(graph: AppGraph, activity: Activity, opening: String? = null, onO
     val byId = state.tasks.associateBy { it.id }
     // What the plan leaves out, as the plan has it now.
     val plan = androidx.compose.runtime.remember(state, settings, now, instructions, calendar) { graph.planning.plan(state, settings, now) }
-    val trouble = trouble(state, runtime, now)
+    val trouble = trouble(state, runtime, protection, now)
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     var said by rememberSaveable { mutableStateOf<String?>(null) }
     // A photo of homework read into tasks (NF-01): the app's, so a turn of the phone or leaving Work loses nothing.
@@ -107,7 +108,7 @@ fun WorkScreen(graph: AppGraph, activity: Activity, opening: String? = null, onO
         LazyColumn(Modifier.fillMaxWidth(), contentPadding = PaddingValues(bottom = 200.dp)) {
             item(key = "hint") { Hint(graph, "work", "Work is what: every task, by when it's due or by subject. Day is when: today's slots, on the first tab.") }
             // Claude's key stopped working while it's on, and what else makes the plan less than all there is (IMP-P1-007).
-            runtime.aiUsage.keyProblem?.takeIf { settings.aiEnabled && settings.aiKeyActive }?.let { problem ->
+            model.aiUsage.keyProblem?.takeIf { settings.aiEnabled && settings.aiKeyActive }?.let { problem ->
                 item(key = "key") { KeyProblemCard(problem) { activity.startActivity(android.content.Intent(activity, SetupActivity::class.java)) } }
             }
             if (trouble.isNotEmpty()) {

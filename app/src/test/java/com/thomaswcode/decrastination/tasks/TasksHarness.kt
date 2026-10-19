@@ -33,10 +33,10 @@ class TasksHarness(start: String = "2026-10-19T16:00") : AutoCloseable {
     val stores = Stores(dir, Reverse, { clock.now() })
     private val job = SupervisorJob()
     val scope = CoroutineScope(job + Dispatchers.Default)
-    private val gateway = ModelGateway(stores.settings, { null }, stores.runtime, stores.tasks, clock, NoAlerts, scope) {}
-    val focus: Focus = Focus(stores.tasks, stores.settings, stores.runtime, stores.log, clock) { state, s, now -> planning.plan(state, s, now) }
+    private val gateway = ModelGateway(stores.settings, { null }, stores.model, stores.tasks, clock, NoAlerts, scope) {}
+    val focus: Focus = Focus(stores.tasks, stores.settings, stores.session, stores.learning, stores.protection, stores.log, clock) { state, s, now -> planning.plan(state, s, now) }
     val planning: Planning = Planning(
-        stores.tasks, stores.settings, stores.runtime, stores.log, stores.instructions, stores.school, clock, scope, gateway,
+        stores.tasks, stores.settings, stores.session, stores.learning, stores.model, stores.log, stores.instructions, stores.school, clock, scope, gateway,
         calendarTime = { NO_CALENDAR },
         calendarChanges = emptyFlow<Unit>(),
         sweep = {},
@@ -52,7 +52,7 @@ class TasksHarness(start: String = "2026-10-19T16:00") : AutoCloseable {
     val settled = AtomicInteger()
 
     val instructions = Instructions(
-        stores.instructions, stores.tasks, stores.settings, stores.runtime, stores.school, stores.chat, clock, scope, gateway, focus, planning,
+        stores.instructions, stores.tasks, stores.settings, stores.session, stores.school, stores.chat, clock, scope, gateway, focus, planning,
         calendarTime = { NO_CALENDAR },
         profile = { Profile.Block.NONE },
         reread = { rereads.incrementAndGet() },

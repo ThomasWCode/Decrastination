@@ -51,7 +51,9 @@ import java.util.Locale
 @Composable
 fun StatsScreen(graph: AppGraph) {
     val log by graph.log.state.collectAsStateWithLifecycle()
-    val runtime by graph.runtime.state.collectAsStateWithLifecycle()
+    val learning by graph.stores.learning.state.collectAsStateWithLifecycle()
+    val model by graph.stores.model.state.collectAsStateWithLifecycle()
+    val session by graph.stores.session.state.collectAsStateWithLifecycle()
     val settings by graph.settings.state.collectAsStateWithLifecycle()
     val now by produceState(graph.clock.now()) {
         while (true) {
@@ -73,13 +75,13 @@ fun StatsScreen(graph: AppGraph) {
     var proposing by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
-    val learned = remember(runtime.calibration) { Stats.calibrationRows(runtime.calibration) }
+    val learned = remember(learning.calibration) { Stats.calibrationRows(learning.calibration) }
     // A class's figure to forget (LR-06), asked first.
     var forgetting by remember { mutableStateOf<Stats.CalibrationRow?>(null) }
     val most = stats.days.maxOf { it.slotMin }.coerceAtLeast(1)
-    val credit = runtime.credit.on(graph.focus.today(now))
+    val credit = session.credit.on(graph.focus.today(now))
     val leftMin = (graph.focus.creditLeftMs(now) / 60_000).toInt()
-    val usage = runtime.aiUsage.forMonth(AiUsage.monthOf(now, zone))
+    val usage = model.aiUsage.forMonth(AiUsage.monthOf(now, zone))
     val claudeOff = graph.gateway.claudeKey() == null && usage.calls == 0
     val top = stats.topBlocked.joinToString { (target, times) -> "${Blocklist.NAMES[target] ?: target} $times" }
     var allDays by rememberSaveable { mutableStateOf(false) }
@@ -197,7 +199,7 @@ fun StatsScreen(graph: AppGraph) {
             androidx.compose.material3.TextButton(modifier = Modifier.padding(horizontal = 8.dp), onClick = {
                 scope.launch {
                     val file = java.io.File(context.cacheDir, "exports/decrastination-$today.zip")
-                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { com.thomaswcode.decrastination.learn.Export.zip(com.thomaswcode.decrastination.learn.Export.csv(log, runtime.calibration, zone, graph.stores.chatArchive.value.messages + graph.chat.value.messages), file) }
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { com.thomaswcode.decrastination.learn.Export.zip(com.thomaswcode.decrastination.learn.Export.csv(log, learning.calibration, zone, graph.stores.chatArchive.value.messages + graph.chat.value.messages), file) }
                     val uri = androidx.core.content.FileProvider.getUriForFile(context, "${context.packageName}.photos", file)
                     val send = android.content.Intent(android.content.Intent.ACTION_SEND).setType("application/zip").putExtra(android.content.Intent.EXTRA_STREAM, uri).addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
                     context.startActivity(android.content.Intent.createChooser(send, "Export the record"))

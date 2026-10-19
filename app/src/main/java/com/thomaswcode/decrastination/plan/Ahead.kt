@@ -5,7 +5,7 @@ import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.data.JsonStore
-import com.thomaswcode.decrastination.data.RuntimeState
+import com.thomaswcode.decrastination.data.ModelState
 import com.thomaswcode.decrastination.data.TaskState
 import com.thomaswcode.decrastination.enrich.Called
 import com.thomaswcode.decrastination.enrich.MicroPlanner
@@ -25,7 +25,7 @@ import kotlinx.coroutines.sync.Mutex
 class Ahead(
     private val tasks: JsonStore<TaskState>,
     private val settings: JsonStore<Settings>,
-    private val runtime: JsonStore<RuntimeState>,
+    private val model: JsonStore<ModelState>,
     private val gateway: ModelGateway,
     /** Who the student is, as each call sends it (AI-05). */
     private val profile: (Long) -> Profile.Block,
@@ -62,9 +62,9 @@ class Ahead(
         var written = false
         try {
             val tasks = this.tasks.value.tasks.associateBy { it.id }
-            runtime.update { it.copy(microPlans = MicroPlans.kept(plan, it.microPlans, tasks)) }
+            model.update { it.copy(microPlans = MicroPlans.kept(plan, it.microPlans, tasks)) }
             val caller = gateway.client(ModelEffort.Job.MicroPlan)?.let { MicroPlanner(it) } ?: return
-            for ((chunk, task) in MicroPlans.due(plan, tasks, runtime.value.microPlans).filter { only == null || it.first.key == only }.take(MicroPlans.MAX_A_RUN)) {
+            for ((chunk, task) in MicroPlans.due(plan, tasks, model.value.microPlans).filter { only == null || it.first.key == only }.take(MicroPlans.MAX_A_RUN)) {
                 if (!gateway.available()) return
                 val profile = profile(now).text
                 val called = gateway.call(interactive = false, task = task, record = ModelCalls.OnRecord(ModelEffort.Job.MicroPlan, task.title) { r: MicroPlanner.Result -> r.usage to ModelCalls.outcome(r.refused, r.text == null) }, cost = { r: MicroPlanner.Result -> r.costUsd to r.refused }) { caller.plan(profile, MicroPlans.describe(chunk, task)) }
@@ -76,7 +76,7 @@ class Ahead(
                     }
                     is Called.Held -> return
                 }
-                runtime.update { it.copy(microPlans = it.microPlans + (chunk.key to made)) }
+                model.update { it.copy(microPlans = it.microPlans + (chunk.key to made)) }
                 if (made.first.isNotEmpty()) written = true
             }
         } finally {

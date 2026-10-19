@@ -23,14 +23,14 @@ import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.block.Credit
-import com.thomaswcode.decrastination.core.EarnsBy
 import com.thomaswcode.decrastination.block.PhotoChecks
-import com.thomaswcode.decrastination.enrich.PhotoChecker
 import com.thomaswcode.decrastination.core.Chunk
+import com.thomaswcode.decrastination.core.EarnsBy
 import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.Planner
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
+import com.thomaswcode.decrastination.enrich.PhotoChecker
 import java.io.File
 import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
@@ -173,7 +173,7 @@ internal suspend fun keepPiece(graph: AppGraph, piece: Chunk, now: Long): String
 internal fun stillPlanned(graph: AppGraph, taskId: String): String? {
     // As the plan takes it: your instructions' values over it, and linked work credited to it.
     val task = graph.planning.asPlanned().firstOrNull { it.id == taskId && it.isOpen } ?: return null
-    if (!worked(task, graph.runtime.value.calibration.multiplierFor(task))) return null
+    if (!worked(task, graph.stores.learning.value.calibration.multiplierFor(task))) return null
     val next = graph.planning.plan().ordered.firstOrNull { it.taskId == taskId } ?: return null
     return "It stays planned, ${Format.minutes(next.minutes)}, until ${task.source.label} says it's done."
 }

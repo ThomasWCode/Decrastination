@@ -25,7 +25,7 @@ import com.thomaswcode.decrastination.core.Slotter
 import com.thomaswcode.decrastination.core.WallClock
 import com.thomaswcode.decrastination.core.withMine
 import com.thomaswcode.decrastination.data.JsonStore
-import com.thomaswcode.decrastination.data.RuntimeState
+import com.thomaswcode.decrastination.data.SessionState
 import com.thomaswcode.decrastination.data.TaskState
 import com.thomaswcode.decrastination.enrich.Called
 import com.thomaswcode.decrastination.enrich.InstructionAnswers
@@ -63,7 +63,7 @@ class Instructions(
     private val instructions: JsonStore<InstructionState>,
     private val tasks: JsonStore<TaskState>,
     private val settings: JsonStore<Settings>,
-    private val runtime: JsonStore<RuntimeState>,
+    private val session: JsonStore<SessionState>,
     private val school: JsonStore<SchoolCalendar>,
     /** The chat, whose card that made an instruction is told when it's taken back. */
     private val chat: JsonStore<ChatState>,
@@ -292,7 +292,7 @@ class Instructions(
         if (moved.isNotEmpty()) {
             val changes = instructions.value.instructions.firstOrNull { it.id == id }?.changes.orEmpty()
             InstructionRules.movedSlots(changes, focus.plan()).forEach { slot -> focus.moveSlot(slot.key, Focus.Laid(slot.start, slot.end, slot.window)) }
-            runtime.update { state -> state.copy(slots = moved.fold(state.slots) { s, taskId -> s.moved(taskId) }) }
+            session.update { state -> state.copy(slots = moved.fold(state.slots) { s, taskId -> s.moved(taskId) }) }
         }
         instructions.update { state ->
             state.copy(instructions = state.instructions.map { if (it.id == id && it.state == InstructionStatus.Understood) it.copy(state = InstructionStatus.Applied, appliedAt = clock.now()) else it })

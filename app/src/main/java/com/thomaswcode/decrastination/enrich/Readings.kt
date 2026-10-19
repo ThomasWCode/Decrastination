@@ -8,7 +8,7 @@ import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.WallClock
 import com.thomaswcode.decrastination.core.withEnrichment
 import com.thomaswcode.decrastination.data.JsonStore
-import com.thomaswcode.decrastination.data.RuntimeState
+import com.thomaswcode.decrastination.data.ModelState
 import com.thomaswcode.decrastination.data.TaskState
 import com.thomaswcode.decrastination.sources.gmail.GmailThreads
 import kotlinx.coroutines.CoroutineScope
@@ -28,7 +28,7 @@ import kotlinx.coroutines.withContext
 @OptIn(FlowPreview::class)
 class Readings(
     private val tasks: JsonStore<TaskState>,
-    private val runtime: JsonStore<RuntimeState>,
+    private val model: JsonStore<ModelState>,
     private val clock: WallClock,
     private val scope: CoroutineScope,
     private val gateway: ModelGateway,
@@ -59,7 +59,7 @@ class Readings(
         var calls = 0
         var decksChanged = false
         // A task whose call the API wouldn't take as asked (AC-04): the rules' till it changes.
-        fun refused(task: TaskItem) = runtime.value.enrichFailed[task.id] == Enrichments.inputHash(task)
+        fun refused(task: TaskItem) = model.value.enrichFailed[task.id] == Enrichments.inputHash(task)
         fun due(task: TaskItem) = (force && task.id == only) || Enrichments.stale(task, enricher != null && !refused(task), RuleEnricher.BY, ReadingPrompts.VERSION, modelOff = gateway.claudeKey() == null)
         // Whether [only]'s reading laid was the model's (for [force]).
         var readByModel = false

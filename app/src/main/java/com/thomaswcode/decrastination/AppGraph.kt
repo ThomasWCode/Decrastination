@@ -13,6 +13,7 @@ import com.thomaswcode.decrastination.calendar.SlotCalendar
 import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.core.InstructionStatus
 import com.thomaswcode.decrastination.core.OwnTask
+import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.WallClock
 import com.thomaswcode.decrastination.data.AndroidBackupFolder
@@ -21,7 +22,6 @@ import com.thomaswcode.decrastination.data.DeviceClock
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.KeystoreCipher
 import com.thomaswcode.decrastination.data.Secret
-import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.data.Stores
 import com.thomaswcode.decrastination.enrich.AndroidModelAlerts
 import com.thomaswcode.decrastination.enrich.EnrichWorker
@@ -53,9 +53,9 @@ import com.thomaswcode.decrastination.sources.gmail.GmailThreads
 import com.thomaswcode.decrastination.sources.powerplanner.PowerPlannerApi
 import com.thomaswcode.decrastination.sources.powerplanner.PowerPlannerSource
 import com.thomaswcode.decrastination.sources.teams.TeamsSource
-import com.thomaswcode.decrastination.sync.SyncWorker
 import com.thomaswcode.decrastination.sync.AndroidSyncPorts
 import com.thomaswcode.decrastination.sync.Sync
+import com.thomaswcode.decrastination.sync.SyncWorker
 import com.thomaswcode.decrastination.sync.Syncer
 import com.thomaswcode.decrastination.tasks.Instructions
 import com.thomaswcode.decrastination.tasks.OwnTasks
@@ -102,7 +102,7 @@ class AppGraph private constructor(context: Context) {
     val notifier = Notifier(AndroidTray(app), runtime, settings, clock, scope)
 
     /** Every call to Claude, its holds and its record, and its alerts ([ModelGateway]). */
-    val gateway = ModelGateway(settings, { secrets[Secret.AnthropicApiKey] }, runtime, tasks, clock, AndroidModelAlerts(app), scope) { EnrichWorker.retryAfter(app, it) }
+    val gateway = ModelGateway(settings, { secrets[Secret.AnthropicApiKey] }, stores.model, tasks, clock, AndroidModelAlerts(app), scope) { EnrichWorker.retryAfter(app, it) }
 
     /** Your chat with Felix: what you said, his answers, and what became of his cards. */
     val chat = stores.chat
@@ -142,8 +142,8 @@ class AppGraph private constructor(context: Context) {
         }
         // A calibration from before 1.8.0, kept by a class's first timed piece: under its rule now
         // (IMP-P2-016), not only from the next weekly review.
-        if (Calibrator.upgraded(runtime.value.calibration, log.value.completions) != null) {
-            scope.launch { runtime.update { state -> Calibrator.upgraded(state.calibration, log.value.completions)?.let { state.copy(calibration = it) } ?: state } }
+        if (Calibrator.upgraded(stores.learning.value.calibration, log.value.completions) != null) {
+            scope.launch { stores.learning.update { state -> Calibrator.upgraded(state.calibration, log.value.completions)?.let { state.copy(calibration = it) } ?: state } }
         }
     }
 
@@ -162,7 +162,7 @@ class AppGraph private constructor(context: Context) {
         clock = clock,
         onFailure = { source, error -> Log.w(TAG, "Reading ${source.label} failed", error) },
         // What a card takes, per deck, as learned (DX-11).
-        ankiRates = { runtime.value.calibration.ankiSecondsPerCard },
+        ankiRates = { stores.learning.value.calibration.ankiSecondsPerCard },
     )
 
     /**
@@ -170,7 +170,7 @@ class AppGraph private constructor(context: Context) {
      * and the calendar as busy time. Made before the plan, which is made again as the calendar's read.
      */
     val sync: Sync = Sync(
-        tasks, settings, runtime, stores.instructions, clock, scope, syncer, AndroidSyncPorts(app),
+        tasks, settings, stores.calendar, stores.instructions, clock, scope, syncer, AndroidSyncPorts(app),
         forgetPlan = { focus.forgetPlan() },
         watchCalendar = { calendarWriter.watchCalendar() },
         askAboutEvent = { key, title, day, start, answers -> conversation.askAboutEvent(key, title, day, start, answers) },
@@ -184,7 +184,7 @@ class AppGraph private constructor(context: Context) {
      * alarms, the calendar, the widget.
      */
     val planning: Planning = Planning(
-        tasks, settings, runtime, log, stores.instructions, school, clock, scope, gateway,
+        tasks, settings, stores.session, stores.learning, stores.model, log, stores.instructions, school, clock, scope, gateway,
         calendarTime = { sync.calendarTime },
         calendarChanges = sync.calendarState,
         sweep = { slots.sweep() },
@@ -201,7 +201,7 @@ class AppGraph private constructor(context: Context) {
 
     /** The blocker's state and decisions (block/Focus.kt). */
     val focus = Focus(
-        tasks, settings, runtime, log, clock,
+        tasks, settings, stores.session, stores.learning, stores.protection, log, clock,
         onOwnTaskDone = { ownTasks.finishOwnTask(it) },
         // A school day by the school calendar (BL-02): a day off blocks from the weekend's time.
         schoolDay = { com.thomaswcode.decrastination.core.SchoolDays.kindOf(it, school.value) == com.thomaswcode.decrastination.core.DayKind.Weekday },
@@ -213,7 +213,7 @@ class AppGraph private constructor(context: Context) {
      * calendar watched for changes; and your answers about its events.
      */
     val calendarWriter = CalendarWriter(
-        tasks, settings, runtime, stores.calendarVersions, clock, scope, SlotCalendar(app),
+        tasks, settings, stores.model, stores.calendar, clock, scope, SlotCalendar(app),
         sayRefused = { move, zone, why -> SlotCalendar.sayRefused(app, move, zone, why) },
         addOwnChange = { id, text, about, change -> instructions.addOwnChange(id, text, about, change) },
         replan = { planning.watcher.poke() },
@@ -238,7 +238,7 @@ class AppGraph private constructor(context: Context) {
 
     /** The voice of the app's messages (LR-03). */
     val looks: Looks = Looks(
-        tasks, settings, runtime, log, chat, clock, scope, gateway, focus, planning, felixPorts, outbox,
+        tasks, settings, stores.model, log, chat, clock, scope, gateway, focus, planning, felixPorts, outbox,
         calendarTime = { sync.calendarTime },
         profile = { conversation.profile(it) },
         remember = { conversation.remember(it) },
@@ -251,7 +251,7 @@ class AppGraph private constructor(context: Context) {
      * remembers, the replies from his notification, the week's check-in, and what the app says in his name.
      */
     val conversation: Conversation = Conversation(
-        tasks, settings, runtime, log, stores.instructions, chat, school, memory, clock, scope, gateway, notifier, focus, planning, felixPorts, outbox,
+        tasks, settings, runtime, stores.learning, log, stores.instructions, chat, school, memory, clock, scope, gateway, notifier, focus, planning, felixPorts, outbox,
         owners = object : Conversation.Owners {
             override suspend fun saveOwnTask(sourceId: String, task: OwnTask): Boolean = ownTasks.saveOwnTask(sourceId, task)
             override suspend fun finishOwnTask(taskId: String) { ownTasks.finishOwnTask(taskId) }
@@ -275,7 +275,7 @@ class AppGraph private constructor(context: Context) {
      * refused, taken back, and laid over everything they change. Made after the plan and the focus, which it uses.
      */
     val instructions: Instructions = Instructions(
-        stores.instructions, tasks, settings, runtime, school, chat, clock, scope, gateway, focus, planning,
+        stores.instructions, tasks, settings, stores.session, school, chat, clock, scope, gateway, focus, planning,
         calendarTime = { sync.calendarTime },
         profile = { conversation.profile() },
         reread = {
@@ -290,7 +290,7 @@ class AppGraph private constructor(context: Context) {
 
     /** The tasks' readings ([Readings]): by Claude while it can be asked, by the rules otherwise; one read again on asking. */
     val readings: Readings = Readings(
-        tasks, runtime, clock, scope, gateway,
+        tasks, stores.model, clock, scope, gateway,
         profile = { conversation.profile() },
         queueQuestion = { taskId, question, now -> looks.queueQuestion(taskId, question, now) },
         readDecks = { SyncWorker.syncNow(app, setOf(Source.Anki)) },
@@ -304,7 +304,7 @@ class AppGraph private constructor(context: Context) {
     )
 
     /** Protection ([Protection]): settings changes, waiting once armed if they loosen blocking; the parent code; the device admin. */
-    val protection = Protection(settings, runtime, secrets, clock, scope, adminActive = { Watchdog.isAdminActive(app) }) {
+    val protection = Protection(settings, stores.protection, secrets, clock, scope, adminActive = { Watchdog.isAdminActive(app) }) {
         app.getSystemService(DevicePolicyManager::class.java)?.removeActiveAdmin(Watchdog.admin(app))
     }
 
@@ -313,7 +313,7 @@ class AppGraph private constructor(context: Context) {
      * or tidy put back, the week's summary; and the check-ins and completions' answers recorded.
      */
     val learning: Learning = Learning(
-        log, runtime, settings, memory, chat, stores.instructions, clock, gateway, focus, protection,
+        log, stores.learning, settings, memory, chat, stores.instructions, clock, gateway, focus, protection,
         resets = { backups.resets.get() },
         profile = { now, remembered -> conversation.profile(now, remembered) },
         reviewed = { line -> conversation.reviewed(line) },
@@ -368,7 +368,7 @@ class AppGraph private constructor(context: Context) {
         // Able to be asked again (switched on, its key put to use, a higher cap or another exchange
         // rate saved, its rest after a failure over), the model goes over what only the rules have seen.
         scope.launch {
-            combine(settings.state, runtime.state) { _, _ -> gateway.available() }.distinctUntilChanged().drop(1).collect { on ->
+            combine(settings.state, stores.model.state) { _, _ -> gateway.available() }.distinctUntilChanged().drop(1).collect { on ->
                 if (on) {
                     EnrichWorker.enqueue(app)
                     instructions.readInstructions()
@@ -408,7 +408,7 @@ class AppGraph private constructor(context: Context) {
         }
         // Redraw the widget whenever what it shows may have changed.
         scope.launch {
-            combine(tasks.state, settings.state, runtime.state) { _, _, _ -> }.drop(1).debounce(WIDGET_DEBOUNCE_MS).collect {
+            combine(tasks.state, settings.state, stores.session.state, stores.protection.state, stores.model.state) { _, _, _, _, _ -> }.drop(1).debounce(WIDGET_DEBOUNCE_MS).collect {
                 runCatching { WidgetUpdater.update(app) }.onFailure { Log.w(TAG, "Widget update failed", it) }
             }
         }

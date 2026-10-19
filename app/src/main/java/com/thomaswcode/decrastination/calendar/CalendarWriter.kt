@@ -9,9 +9,9 @@ import com.thomaswcode.decrastination.core.InstructionRules
 import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.WallClock
-import com.thomaswcode.decrastination.data.CalendarVersions
+import com.thomaswcode.decrastination.data.CalendarState
 import com.thomaswcode.decrastination.data.JsonStore
-import com.thomaswcode.decrastination.data.RuntimeState
+import com.thomaswcode.decrastination.data.ModelState
 import com.thomaswcode.decrastination.data.TaskState
 import com.thomaswcode.decrastination.enrich.MicroPlan
 import java.time.Instant
@@ -43,9 +43,9 @@ import kotlinx.coroutines.withContext
 class CalendarWriter(
     private val tasks: JsonStore<TaskState>,
     private val settings: JsonStore<Settings>,
-    private val runtime: JsonStore<RuntimeState>,
+    private val model: JsonStore<ModelState>,
     /** The versions of its events the app has written to calendars, so a copy of one is known ([SlotCalendarDiff.isCopy]). */
-    private val calendarVersions: JsonStore<CalendarVersions>,
+    private val calendar: JsonStore<CalendarState>,
     private val clock: WallClock,
     private val scope: CoroutineScope,
     /** The calendar's events, read and written. */
@@ -90,17 +90,17 @@ class CalendarWriter(
         if (!provider.allowed()) return
         val zone = clock.zone()
         // The same slots as last written, and nothing changed in the calendar since (AR-08): it isn't read again.
-        val desired = SlotCalendarDiff.desired(made, zone, runtime.value.microPlans)
+        val desired = SlotCalendarDiff.desired(made, zone, model.value.microPlans)
         if (!calendarTouched && lastWritten == (calendarId to desired)) return
         calendarTouched = false
         val byId = tasks.value.tasks.associateBy { it.id }
-        val before = runtime.value.calendarWritten
+        val before = calendar.value.calendarWritten
         // A copy is one of the versions earlier writes made ([SlotCalendarDiff.isCopy]), never one of
         // this write's: an event of yours under a slot's title at its times isn't the app's.
-        val known = calendarVersions.value.written.toSet()
+        val known = calendar.value.written.toSet()
         val written = try {
             withContext(Dispatchers.IO) {
-                write(calendarId, made, zone, before, known, runtime.value.microPlans) { move ->
+                write(calendarId, made, zone, before, known, model.value.microPlans) { move ->
                     val task = move.desired.taskId?.let(byId::get)
                     when {
                         task == null -> "its task is no longer there"
@@ -121,28 +121,28 @@ class CalendarWriter(
         val moved = written.taken.map { it.desired.uri }.toSet()
         runCatching {
             val versions = desired.filter { d -> d.uri !in moved }.map { d -> SlotCalendarDiff.version(calendarId, d.title, d.start, d.end) }.filterNot { it in written.yours }
-            calendarVersions.update { it.copy(written = SlotCalendarDiff.remembered(it.written, versions)) }
+            calendar.update { it.copy(written = SlotCalendarDiff.remembered(it.written, versions)) }
         }.onFailure { Log.w(AppGraph.TAG, "Remembering what was written to the calendar failed", it) }
         // A move taken counts as written only once its instruction is in: stopped before, the next
         // write finds it a move again, rather than putting it back.
         val held = SlotCalendarDiff.pending(written.starts, before, written.taken)
-        if (held != before) runtime.update { it.copy(calendarWritten = held) }
+        if (held != before) calendar.update { it.copy(calendarWritten = held) }
         written.refused.forEach { (move, why) -> sayRefused(move, zone, why) }
         lastWritten = calendarId to desired
         for (move in written.taken) {
             val taskId = move.desired.taskId ?: continue
             addOwnChange(UUID.randomUUID().toString(), "Moved in the calendar", About(taskId = taskId, taskTitle = byId[taskId]?.title), change(move, zone))
-            runtime.update { it.copy(calendarWritten = it.calendarWritten + (move.desired.uri to move.existing.start)) }
+            calendar.update { it.copy(calendarWritten = it.calendarWritten + (move.desired.uri to move.existing.start)) }
         }
     }
 
     /** The app's events taken out of calendars no longer written to, each kept on the list till that's done. */
     private suspend fun clearOldCalendars() {
-        val waiting = runtime.value.calendarsToClear
+        val waiting = calendar.value.calendarsToClear
         if (waiting.isEmpty()) return
-        val versions = calendarVersions.value.written.toSet()
+        val versions = calendar.value.written.toSet()
         val cleared = withContext(Dispatchers.IO) { waiting.filter { clear(it, versions) } }
-        if (cleared.isNotEmpty()) runtime.update { it.copy(calendarsToClear = it.calendarsToClear - cleared.toSet()) }
+        if (cleared.isNotEmpty()) calendar.update { it.copy(calendarsToClear = it.calendarsToClear - cleared.toSet()) }
     }
 
     /**
@@ -235,11 +235,11 @@ class CalendarWriter(
         // is goes from it, and the plan's made again for the new one.
         scope.launch {
             settings.state.map { it.calendarWriteId }.distinctUntilChanged().collect { id ->
-                val was = runtime.value.calendarWrittenTo
+                val was = calendar.value.calendarWrittenTo
                 if (was == id) return@collect
                 // The old one kept on the list to clear till it is: without the permission now, or
                 // should the provider fail, it's tried again at the next replan.
-                runtime.update { state ->
+                calendar.update { state ->
                     state.copy(calendarWrittenTo = id, calendarWritten = emptyMap(), calendarsToClear = (state.calendarsToClear + listOfNotNull(was)).distinct() - listOfNotNull(id).toSet())
                 }
                 clearOldCalendars()
@@ -257,7 +257,7 @@ class CalendarWriter(
      * kept, his question answered, the plan redone, and today's as the briefing recorded it.
      */
     suspend fun answer(key: String, answer: String?) {
-        runtime.update { it.copy(eventAnswers = if (answer == null) it.eventAnswers - key else it.eventAnswers + (key to answer)) }
+        calendar.update { it.copy(eventAnswers = if (answer == null) it.eventAnswers - key else it.eventAnswers + (key to answer)) }
         settleEvent(key)
         reread()
     }

@@ -35,6 +35,7 @@ import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.WallClock
 import com.thomaswcode.decrastination.data.ActivityLog
 import com.thomaswcode.decrastination.data.JsonStore
+import com.thomaswcode.decrastination.data.LearningState
 import com.thomaswcode.decrastination.data.RuntimeState
 import com.thomaswcode.decrastination.data.TaskState
 import com.thomaswcode.decrastination.enrich.Called
@@ -82,6 +83,7 @@ class Conversation(
     private val tasks: JsonStore<TaskState>,
     private val settings: JsonStore<Settings>,
     private val runtime: JsonStore<RuntimeState>,
+    private val learning: JsonStore<LearningState>,
     private val log: JsonStore<ActivityLog>,
     private val instructions: JsonStore<InstructionState>,
     private val chat: JsonStore<ChatState>,
@@ -464,7 +466,7 @@ class Conversation(
         applied: List<Instruction> = instructions.value.applied,
     ): ChatPrompts.Context {
         return ChatPrompts.Context(
-            known = ChatPrompts.context(state.tasks, time.events, applied, now, clock.zone(), settings.value.classMap, runtime.value.notSame, settings.value, runtime.value.calibration),
+            known = ChatPrompts.context(state.tasks, time.events, applied, now, clock.zone(), settings.value.classMap, runtime.value.notSame, settings.value, learning.value.calibration),
             plan = ChatPrompts.plan(planning.plan(state, now = now, applied = applied, time = time), clock.zone()),
         )
     }

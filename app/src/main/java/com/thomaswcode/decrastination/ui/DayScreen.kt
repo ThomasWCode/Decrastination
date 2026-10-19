@@ -82,7 +82,9 @@ private const val SWIPE_AGAIN_MS = 3_000L
 fun DayScreen(graph: AppGraph, activity: Activity) {
     val tasks by graph.tasks.state.collectAsStateWithLifecycle()
     val settings by graph.settings.state.collectAsStateWithLifecycle()
-    val runtime by graph.runtime.state.collectAsStateWithLifecycle()
+    val asked by graph.stores.calendar.state.collectAsStateWithLifecycle()
+    val written by graph.stores.model.state.collectAsStateWithLifecycle()
+    val session by graph.stores.session.state.collectAsStateWithLifecycle()
     val log by graph.log.state.collectAsStateWithLifecycle()
     val school by graph.school.state.collectAsStateWithLifecycle()
     val instructions by graph.instructions.state.collectAsStateWithLifecycle()
@@ -95,7 +97,7 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
         }
     }
     // Today's starts kept and missed (PL-13) are the plan's too: an Undo putting a slot back redraws it.
-    val plan = remember(tasks, settings, now, instructions, calendar, runtime.slots) { graph.planning.plan(tasks, settings, now) }
+    val plan = remember(tasks, settings, now, instructions, calendar, session.slots) { graph.planning.plan(tasks, settings, now) }
     val zone = graph.clock.zone()
     val scope = rememberCoroutineScope()
     // How the last action went, and the task it's about, as the old Plan had it.
@@ -126,7 +128,7 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
     // A piece being moved by hand (UI-04), by its key; an instruction about the day being written.
     var moving by rememberSaveable { mutableStateOf<String?>(null) }
     var writingDay by rememberSaveable { mutableStateOf(false) }
-    val answers = runtime.eventAnswers + InstructionRules.eventAnswers(instructions.applied)
+    val answers = asked.eventAnswers + InstructionRules.eventAnswers(instructions.applied)
     val model = remember(plan, day, calendar, log, school, settings, tasks) {
         DayModel.from(plan, day, calendar.events, log.slots, SchoolDays.windows(day, settings, tasks.timetable, school), now, zone)
     }
@@ -196,9 +198,9 @@ fun DayScreen(graph: AppGraph, activity: Activity) {
         items(model.rows, key = { rowKey(it) }) { row ->
             when (row) {
                 is DayModel.Row.Window -> WindowRow(row, zone)
-                is DayModel.Row.Event -> EventRow(row.event, EventJudge.judge(row.event, answers), runtime.eventsAsked, now, zone) { eventFor = eventKey(row.event) }
+                is DayModel.Row.Event -> EventRow(row.event, EventJudge.judge(row.event, answers), asked.eventsAsked, now, zone) { eventFor = eventKey(row.event) }
                 is DayModel.Row.Planned -> PlannedRow(
-                    row, plan, zone, messageOf(row.slot.chunk?.taskId.orEmpty()), today, row.slot.chunk?.key?.let { runtime.microPlans[it] },
+                    row, plan, zone, messageOf(row.slot.chunk?.taskId.orEmpty()), today, row.slot.chunk?.key?.let { written.microPlans[it] },
                     onOpen = { row.slot.chunk?.let { sheetFor = it.key } },
                     onMove = { row.slot.chunk?.let { moving = it.key } },
                     // Done, with an Undo while it's said (UI-03).

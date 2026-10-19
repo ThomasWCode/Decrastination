@@ -62,8 +62,10 @@ class BackupServiceTest {
         /** Every JSON store's state, by file. */
         fun states(): Map<String, Any?> = mapOf(
             "tasks.json" to stores.tasks.value, "settings.json" to stores.settings.value, "runtime.json" to stores.runtime.value, "log.json" to stores.log.value,
+            "session.json" to stores.session.value, "protection.json" to stores.protection.value, "model.json" to stores.model.value,
+            "anki.json" to stores.anki.value, "learning.json" to stores.learning.value,
             "instructions.json" to stores.instructions.value, "chat.json" to stores.chat.value, "chat-archive.json" to stores.chatArchive.value, "school.json" to stores.school.value,
-            "memory.json" to stores.memory.value, "calendar.json" to stores.calendarVersions.value,
+            "memory.json" to stores.memory.value, "calendar.json" to stores.calendar.value,
         )
     }
 
@@ -87,10 +89,10 @@ class BackupServiceTest {
         assertEquals(was.chat.value.messages.dropLast(1), now.chat.value.messages)
         assertEquals(was.chat.value.felix, now.chat.value.felix)
         assertEquals(was.chatArchive.value, now.chatArchive.value)
-        assertEquals(was.runtime.value.calibration, now.runtime.value.calibration)
-        assertEquals(was.runtime.value.eventAnswers, now.runtime.value.eventAnswers)
-        assertEquals(was.runtime.value.slots, now.runtime.value.slots)
-        assertEquals(was.runtime.value.aiUsage.spentUsd, now.runtime.value.aiUsage.spentUsd, 1e-9)
+        assertEquals(was.learning.value.calibration, now.learning.value.calibration)
+        assertEquals(was.calendar.value.eventAnswers, now.calendar.value.eventAnswers)
+        assertEquals(was.session.value.slots, now.session.value.slots)
+        assertEquals(was.model.value.aiUsage.spentUsd, now.model.value.aiUsage.spentUsd, 1e-9)
         // Every record, in the order a merge keeps them: each list by its time.
         assertEquals(Backups.mergeLog(ActivityLog(), was.log.value, clock.time), now.log.value)
         // The settings, but this phone's protection, key and calendars.
@@ -110,24 +112,24 @@ class BackupServiceTest {
         val full = Phone(full = true)
         val backup = Backups.decode(full.service.exportBackup(), full.stores.shapes)!!
         assertEquals(full.stores.shapes.mapValues { it.value.version }, backup.versions)
-        assertEquals(setOf("chat.json", "chat-archive.json", "instructions.json", "log.json", "runtime.json", "tasks.json"), backup.versions.filterValues { it > 1 }.keys)
+        assertEquals(setOf("calendar.json", "chat.json", "chat-archive.json", "instructions.json", "log.json", "runtime.json", "tasks.json"), backup.versions.filterValues { it > 1 }.keys)
     }
 
     @Test
     fun `a reset keeps a copy first, takes what it says, and its copy brings it back`() = runTest {
         val phone = Phone(full = true)
         val log = phone.stores.log.value
-        val calibration = phone.stores.runtime.value.calibration
+        val calibration = phone.stores.learning.value.calibration
         val said = phone.service.reset(Reset.Stats)
         val copy = phone.folder.files.keys.single { it.startsWith("reset-2026-10-18-") }
         assertTrue(said.endsWith("Documents/Decrastination/$copy."), said)
         assertEquals(ActivityLog(), phone.stores.log.value)
-        assertEquals(Calibration(), phone.stores.runtime.value.calibration)
+        assertEquals(Calibration(), phone.stores.learning.value.calibration)
         assertEquals(1, phone.service.resets.get())
         phone.service.importBackup(phone.folder.files.getValue(copy))
         settle()
         assertEquals(Backups.mergeLog(ActivityLog(), log, clock.time), phone.stores.log.value)
-        assertEquals(calibration, phone.stores.runtime.value.calibration)
+        assertEquals(calibration, phone.stores.learning.value.calibration)
     }
 
     @Test

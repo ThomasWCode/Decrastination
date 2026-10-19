@@ -139,26 +139,26 @@ class MigrationTest {
 
     @Test
     fun `a backup of a store's shape before is brought to the shape now as it's read`() {
-        // As if memory.json's version 2 wrote its topics in capitals, and runtime.json's doubled the month's spend.
+        // As if memory.json's version 2 wrote its topics in capitals, and model.json's doubled the month's spend.
         val shapes = mapOf(
             "memory.json" to Shape(2, listOf(Migration(1) { json -> JsonObject(json + ("facts" to JsonArray(json.getValue("facts").let { it as JsonArray }.map { f -> JsonObject(f.jsonObject + ("topic" to JsonPrimitive(f.jsonObject.getValue("topic").jsonPrimitive.content.uppercase()))) }))) })),
-            "runtime.json" to Shape(2, listOf(Migration(1) { json -> JsonObject(json + ("aiUsage" to JsonObject(json.getValue("aiUsage").jsonObject + ("spentUsd" to JsonPrimitive(json.getValue("aiUsage").jsonObject.getValue("spentUsd").jsonPrimitive.content.toDouble() * 2))))) })),
+            "model.json" to Shape(2, listOf(Migration(1) { json -> JsonObject(json + ("aiUsage" to JsonObject(json.getValue("aiUsage").jsonObject + ("spentUsd" to JsonPrimitive(json.getValue("aiUsage").jsonObject.getValue("spentUsd").jsonPrimitive.content.toDouble() * 2))))) })),
         )
         val backup = Backup(exportedAt = now, settings = Settings(), log = ActivityLog(), memory = MemoryState(listOf(Fact("bus", "Takes the bus", 1))), aiUsage = com.thomaswcode.decrastination.enrich.AiUsage(month = "2027-01", spentUsd = 1.5))
         val read = assertNotNull(Backups.decode(Backups.encode(backup), shapes))
         assertEquals("BUS", read.memory.facts.single().topic)
         assertEquals(3.0, read.aiUsage.spentUsd, 1e-9)
-        assertEquals(mapOf("memory.json" to 2, "runtime.json" to 2), read.versions.filterKeys { it in shapes })
+        assertEquals(mapOf("memory.json" to 2, "model.json" to 2), read.versions.filterKeys { it in shapes })
         // One that says its parts are of the shape now isn't brought again; one newer than the build isn't read.
-        val current = Backups.encode(backup.copy(versions = mapOf("memory.json" to 2, "runtime.json" to 2)))
+        val current = Backups.encode(backup.copy(versions = mapOf("memory.json" to 2, "model.json" to 2)))
         assertEquals("bus", Backups.decode(current, shapes)!!.memory.facts.single().topic)
         assertNull(Backups.decode(Backups.encode(backup.copy(versions = mapOf("memory.json" to 3))), shapes))
         // Nor is it read with its part under a name this build doesn't know: restored, the part would be lost.
         val renamed = JsonStore.json.parseToJsonElement(Backups.encode(backup.copy(versions = mapOf("memory.json" to 3)))).jsonObject.let { b -> JsonObject(b - "memory" + ("memories" to b.getValue("memory"))) }
         assertNull(Backups.decode(renamed.toString(), shapes))
-        // A store it doesn't carry (the calendar's record) can be newer: none of its data is in it, so it's read.
-        val calendarNewer = Backups.encode(backup.copy(versions = mapOf("memory.json" to 2, "runtime.json" to 2, "calendar.json" to 5)))
-        assertNotNull(Backups.decode(calendarNewer, shapes + ("calendar.json" to Shape(1, emptyList()))))
+        // A store it doesn't carry (Anki's readings) can be newer: none of its data is in it, so it's read.
+        val ankiNewer = Backups.encode(backup.copy(versions = mapOf("memory.json" to 2, "model.json" to 2, "anki.json" to 5)))
+        assertNotNull(Backups.decode(ankiNewer, shapes + ("anki.json" to Shape(1, emptyList()))))
         // A migration that fails on a part makes the backup one this build can't read, not an exception.
         val failing = mapOf("memory.json" to Shape(2, listOf(Migration(1) { error("fails on what it's given") })))
         assertNull(Backups.decode(Backups.encode(backup), failing))

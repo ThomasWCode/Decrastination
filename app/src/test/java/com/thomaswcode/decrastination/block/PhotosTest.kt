@@ -14,7 +14,12 @@ import com.thomaswcode.decrastination.core.Why
 import com.thomaswcode.decrastination.data.ActivityLog
 import com.thomaswcode.decrastination.data.ChatMigration
 import com.thomaswcode.decrastination.data.JsonStore
+import com.thomaswcode.decrastination.data.LearningState
+import com.thomaswcode.decrastination.data.ModelState
+import com.thomaswcode.decrastination.data.ProtectionState
+import com.thomaswcode.decrastination.data.RuntimeSplit
 import com.thomaswcode.decrastination.data.RuntimeState
+import com.thomaswcode.decrastination.data.SessionState
 import com.thomaswcode.decrastination.data.TaskState
 import com.thomaswcode.decrastination.data.TasksMigration
 import com.thomaswcode.decrastination.enrich.KeyProblem
@@ -45,12 +50,16 @@ class PhotosTest {
     private val clock = FixedClock(Fixtures.at("2026-10-19T16:00"), LONDON)
     private val tasks = JsonStore(File(dir, "tasks.json"), TaskState.serializer(), ::TaskState, migrations = listOf(TasksMigration.TASKS))
     private val settings = JsonStore(File(dir, "settings.json"), Settings.serializer(), ::Settings)
-    private val runtime = JsonStore(File(dir, "runtime.json"), RuntimeState.serializer(), ::RuntimeState, migrations = listOf(ChatMigration.RUNTIME))
+    private val runtime = JsonStore(File(dir, "runtime.json"), RuntimeState.serializer(), ::RuntimeState, migrations = listOf(ChatMigration.RUNTIME, RuntimeSplit.RUNTIME))
+    private val learning = JsonStore(File(dir, "learning.json"), LearningState.serializer(), ::LearningState)
+    private val model = JsonStore(File(dir, "model.json"), ModelState.serializer(), ::ModelState)
+    private val protection = JsonStore(File(dir, "protection.json"), ProtectionState.serializer(), ::ProtectionState)
+    private val session = JsonStore(File(dir, "session.json"), SessionState.serializer(), ::SessionState)
     private val log = JsonStore(File(dir, "log.json"), ActivityLog.serializer(), ::ActivityLog, migrations = listOf(ChatMigration.LOG))
     private val chat = JsonStore(File(dir, "chat.json"), ChatState.serializer(), ::ChatState, migrations = listOf(ChatMigration.CHAT, TasksMigration.CHAT))
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-    private val gateway = ModelGateway(settings, { null }, runtime, tasks, clock, NoAlerts, scope) {}
-    private val focus = Focus(tasks, settings, runtime, log, clock) { state, s, now -> Planner.plan(Planner.Input(state.tasks, now, LONDON, s)) }
+    private val gateway = ModelGateway(settings, { null }, model, tasks, clock, NoAlerts, scope) {}
+    private val focus = Focus(tasks, settings, session, learning, protection, log, clock) { state, s, now -> Planner.plan(Planner.Input(state.tasks, now, LONDON, s)) }
     private val folder = File(dir, "photos")
 
     /** The tasks read again with their photos. */

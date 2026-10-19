@@ -35,7 +35,6 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -108,7 +107,7 @@ private enum class Step { None, Explain, ParentCode, Confirm }
 @Composable
 fun ProtectionPanel(graph: AppGraph, activity: ComponentActivity) {
     val settings by graph.settings.state.collectAsStateWithLifecycle()
-    val runtime by graph.runtime.state.collectAsStateWithLifecycle()
+    val protection by graph.stores.protection.state.collectAsStateWithLifecycle()
     val secrets by graph.secrets.present.collectAsStateWithLifecycle()
     val connected by FocusService.connected.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
@@ -116,7 +115,7 @@ fun ProtectionPanel(graph: AppGraph, activity: ComponentActivity) {
     // Kept through the screen being recreated (turned): the wizard isn't left half-done unseen.
     var step by rememberSaveable { mutableStateOf(Step.None) }
     var codeFor by remember { mutableStateOf<CodeTarget?>(null) }
-    val report = remember(refresh, runtime.protection) { Watchdog.report(activity) }
+    val report = remember(refresh, protection.protection) { Watchdog.report(activity) }
     val adminLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
         refresh++
         if (step == Step.Explain && Watchdog.isAdminActive(activity)) step = Step.ParentCode
@@ -143,7 +142,7 @@ fun ProtectionPanel(graph: AppGraph, activity: ComponentActivity) {
         Card(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
             colors = CardDefaults.cardColors(
-                containerColor = if (runtime.protection.problems.isEmpty()) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.errorContainer,
+                containerColor = if (protection.protection.problems.isEmpty()) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.errorContainer,
             ),
         ) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -158,7 +157,7 @@ fun ProtectionPanel(graph: AppGraph, activity: ComponentActivity) {
                     },
                     style = MaterialTheme.typography.bodyMedium,
                 )
-                runtime.protection.problems.forEach { Text("• $it", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error) }
+                protection.protection.problems.forEach { Text("• $it", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error) }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (settings.armed) {
                         OutlinedButton(onClick = { scope.launch { graph.protection.changeSettings { it.copy(armed = false) } } }) { Text("Disarm") }
@@ -172,13 +171,13 @@ fun ProtectionPanel(graph: AppGraph, activity: ComponentActivity) {
             }
         }
 
-        if (runtime.overrideUntil?.let { it > now } == true) {
-            Text("Unblocked by a parent code until ${Format.at(runtime.overrideUntil!!, now, graph.clock.zone())}", modifier = Modifier.padding(16.dp))
+        if (protection.overrideUntil?.let { it > now } == true) {
+            Text("Unblocked by a parent code until ${Format.at(protection.overrideUntil!!, now, graph.clock.zone())}", modifier = Modifier.padding(16.dp))
         }
 
-        if (runtime.pending.isNotEmpty()) {
+        if (protection.pending.isNotEmpty()) {
             SectionHeading("Waiting")
-            runtime.pending.forEach { change ->
+            protection.pending.forEach { change ->
                 Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text(change.description, style = MaterialTheme.typography.bodyLarge)

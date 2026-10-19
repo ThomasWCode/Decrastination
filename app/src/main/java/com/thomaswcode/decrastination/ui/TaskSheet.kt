@@ -41,12 +41,12 @@ import com.thomaswcode.decrastination.core.Change
 import com.thomaswcode.decrastination.core.ChangeType
 import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.core.InstructionRules
+import com.thomaswcode.decrastination.core.Invite
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.OwnTaskRules
 import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Status
-import com.thomaswcode.decrastination.core.Invite
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.invite
 import com.thomaswcode.decrastination.enrich.Readings
@@ -113,7 +113,8 @@ fun TaskSheet(
     val state by graph.tasks.state.collectAsStateWithLifecycle()
     // Read so a change taken back redraws what's yours.
     val instructions by graph.instructions.state.collectAsStateWithLifecycle()
-    val runtime by graph.runtime.state.collectAsStateWithLifecycle()
+    val learning by graph.stores.learning.state.collectAsStateWithLifecycle()
+    val model by graph.stores.model.state.collectAsStateWithLifecycle()
     // His messages unread, worn by Ask Felix about it as by his button elsewhere (UI-16).
     val unread by graph.conversation.unread.collectAsStateWithLifecycle(0)
     val task = state.tasks.firstOrNull { it.id == taskId }
@@ -282,7 +283,7 @@ fun TaskSheet(
                         // Read from its photo (AI-23), with what Claude saw in it.
                         if (fromPhoto(task)) "From your photo" + (Enrichments.current(task)?.reason?.takeIf { it.isNotBlank() }?.let { ": “$it”" } ?: "") else null,
                         // The app's estimate as the plan takes it: by how long such work has taken you.
-                        runtime.calibration.multiplierFor(task).takeIf { kotlin.math.abs(it - 1.0) >= 0.05 }?.let { m ->
+                        learning.calibration.multiplierFor(task).takeIf { kotlin.math.abs(it - 1.0) >= 0.05 }?.let { m ->
                             "Planned as ${Format.minutes((task.effortMin * m).roundToInt())}: such work has taken you ${if (m > 1) "longer" else "less time"}"
                         },
                     ).joinToString(". ").takeIf { it.isNotEmpty() },
@@ -306,7 +307,7 @@ fun TaskSheet(
             Notes(task, now, zone, byId, onOpen = { scope.launch { TaskOpener.open(activity, task)?.let { message = it } } }, onLink = { message = openLink(activity, it) })
             if (!ticksHere) Steps(graph, task, now, zone)
             // Its next piece's first steps (AI-15), as written ahead.
-            next?.let { runtime.microPlans[it.key] }?.let(com.thomaswcode.decrastination.enrich.MicroPlans::lines)?.takeIf { it.isNotEmpty() }?.let { lines ->
+            next?.let { model.microPlans[it.key] }?.let(com.thomaswcode.decrastination.enrich.MicroPlans::lines)?.takeIf { it.isNotEmpty() }?.let { lines ->
                 Text("Its next piece", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 lines.forEach { Text(it, style = MaterialTheme.typography.bodyMedium) }
             }
