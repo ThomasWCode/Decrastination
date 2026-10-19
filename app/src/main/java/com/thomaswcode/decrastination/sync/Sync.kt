@@ -120,9 +120,11 @@ class Sync(
     /** Every source read now, or only [only], one sync at a time ([Syncer.sync]). */
     suspend fun sync(only: Set<Source>? = null): SyncReport = syncer.sync(only)
 
-    /** The calendar's busy time and per-day loads (Phase 5), as last read and judged. */
+    /**
+     * The calendar's busy time and per-day loads (Phase 5), as last read and judged: the calendar as the
+     * planner counts it, from its last read. A plan made before that read is dropped with it.
+     */
     @Volatile
-    /** The calendar as the planner counts it, from its last read: a plan made before that read is dropped with it. */
     var calendarTime: EventJudge.Time = EventJudge.Time(emptyList(), emptyMap(), emptyList())
         private set(value) {
             field = value
