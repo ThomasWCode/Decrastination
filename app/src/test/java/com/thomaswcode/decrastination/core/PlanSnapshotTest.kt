@@ -77,9 +77,9 @@ class PlanSnapshotTest {
             kind = Kind.Homework, sourceEffortMin = 60, firstSeenAt = seen, lastSeenAt = seen)
         val done = TaskItem(id = "teams:done", source = Source.Teams, sourceId = "done", title = "Lab report", kind = Kind.Homework, sourceEffortMin = 50, status = Status.Done,
             firstSeenAt = seen, lastSeenAt = seen, doneAt = at("2026-10-15T20:00"))
-        val revise = OwnTasks.create(OwnTask("Revise for the maths test", kind = Kind.Revision, dueAt = at("2026-10-22T09:00"), minutes = 60, steps = listOf(OwnStep("Chapter 3", 30, where = "home"), OwnStep("Chapter 4", 30, where = "home"))), "revise", seen)
-        val undated = OwnTasks.create(OwnTask("Sort the folder", kind = Kind.Admin, minutes = 15), "folder", seen)
-        val event = OwnTasks.create(OwnTask("Open evening", kind = Kind.Event, dueAt = at("2026-10-21T18:00"), minutes = 0), "open-evening", seen)
+        val revise = OwnTaskRules.create(OwnTask("Revise for the maths test", kind = Kind.Revision, dueAt = at("2026-10-22T09:00"), minutes = 60, steps = listOf(OwnStep("Chapter 3", 30, where = "home"), OwnStep("Chapter 4", 30, where = "home"))), "revise", seen)
+        val undated = OwnTaskRules.create(OwnTask("Sort the folder", kind = Kind.Admin, minutes = 15), "folder", seen)
+        val event = OwnTaskRules.create(OwnTask("Open evening", kind = Kind.Event, dueAt = at("2026-10-21T18:00"), minutes = 0), "open-evening", seen)
         val timetable = Timetable(
             "2026-09-07T00:00:00",
             listOf(PpClass("study", "Study Period", listOf(PpSchedule("2026-09-05T11:15:00", "2026-09-05T12:15:00", 2, 3), PpSchedule("2026-09-05T09:00:00", "2026-09-05T10:00:00", 3, 3))), PpClass("bio", "Biology", listOf(PpSchedule("2026-09-05T13:55:00", "2026-09-05T14:55:00", 1, 3)))),

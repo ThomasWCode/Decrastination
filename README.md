@@ -25,7 +25,7 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 
 Install over the app with `-r`, never uninstalling it, and keep a backup first ([development.md](docs/development.md#the-phone)).
 
-Every prompt and schema Claude is sent has a golden copy in `app/src/test/resources/prompts/`; the tests fail on any difference, with its diff. When a change is meant, write them again and commit them with it; where a reading's prompt or the profile changed, raise `Prompts.VERSION` too (a test asks for it), so the readings made by the old ones are made again:
+Every prompt and schema Claude is sent has a golden copy in `app/src/test/resources/prompts/`; the tests fail on any difference, with its diff. When a change is meant, write them again and commit them with it; where a reading's prompt or the profile changed, raise `ReadingPrompts.VERSION` too (a test asks for it), so the readings made by the old ones are made again:
 
 ```bash
 ./gradlew testDebugUnitTest -PupdateGolden=true --tests '*GoldenPromptsTest*'

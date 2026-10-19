@@ -46,7 +46,7 @@ With your newest message, from one snapshot of the tasks, the calendar and your 
 - tasks that look like the same work (DX-15), the fortnight's calendar events, the changes in use, your own tasks finished in the last week, and the settings he may change, with their values;
 - **your pace**: the multipliers the calibration has learned, by kind and class, with how many timed tasks each rests on, or that nothing's learned yet;
 - what each task's minutes come to in the plan: "planned as 54 at their pace" for the app's estimates, "as given" for your minutes and for steps you or he gave, and a paced total as below;
-- **each open task's own text** (D-93, `enrich/TaskText.kt`): an assignment's instructions, an email's conversation, a planner item's details, your notes, each at most 600 characters (`ChatPrompts.BRIEF_TEXT`, 12 000 in all), with what's attached, its links and an email's sender; last in the context, so it's what a long one loses first. A longer text is its reading's summary of all of it (`Enrichment.summary`, [readings.md](readings.md)); past the 16 000 characters a reading sees (`Prompts.MAX_TEXT`), of its start, with its end after it; with none (Claude off when it was read, or read before summaries), its start and its end, saying how much of the middle was left out: a conversation is kept oldest first, so its end holds the newest replies;
+- **each open task's own text** (D-93, `enrich/TaskText.kt`): an assignment's instructions, an email's conversation, a planner item's details, your notes, each at most 600 characters (`ChatPrompts.BRIEF_TEXT`, 12 000 in all), with what's attached, its links and an email's sender; last in the context, so it's what a long one loses first. A longer text is its reading's summary of all of it (`Enrichment.summary`, [readings.md](readings.md)); past the 16 000 characters a reading sees (`ReadingPrompts.MAX_TEXT`), of its start, with its end after it; with none (Claude off when it was read, or read before summaries), its start and its end, saying how much of the middle was left out: a conversation is kept oldest first, so its end holds the newest replies;
 - `ChatPrompts.plan`: the plan as Day shows it: the slot under way or the next thing to do, today's slots each past, now or ahead (AI-13), what isn't planned and why, other events, and what's planned past the fortnight;
 - then each of the plan's next 14 days, with its minutes against its working time and each piece's reason;
 - the profile every call carries (AI-05, AI-06; [privacy.md](privacy.md)).
@@ -58,7 +58,7 @@ What your message is about comes with it in full, before your words (D-93): a ta
 ## What he can do
 
 Everything he gives is made as his answer comes, each with its Undo (next section).
-- **New tasks of your own** (`newTasks`, at most ten): title, kind (Homework, Revision, Admin or Event), subject, due date and time (with no time, an event's is 09:00, anything else's the end of the day), start, minutes, notes, and steps for a big one. Each is checked as the form checks one (`OwnTasks.problem`), its dates from a month back to just over a year ahead.
+- **New tasks of your own** (`newTasks`, at most ten): title, kind (Homework, Revision, Admin or Event), subject, due date and time (with no time, an event's is 09:00, anything else's the end of the day), start, minutes, notes, and steps for a big one. Each is checked as the form checks one (`OwnTaskRules.problem`), its dates from a month back to just over a year ahead.
 - **Changes** (`changes`, at most 40), of an instruction's types (`InstructionPrompts.CHANGE_TYPES`): a task isn't one, can't start until a date, waits for another, is due by a date, takes N minutes, goes on one day, has its next piece at a time, is another's work, has these steps or this name;
 - and for days and events: how long an event takes, a day's limit, busy times, days off and half-days (into the school calendar, PL-16).
 - **Steps** for any task but Anki's, whose steps are its cards (AI-19): laid over the source's and the reading's (`TaskItem.userSteps`), ticks kept by name. They must add up to the task's minutes, or come with a Minutes change for the new total, or they're left out.
@@ -92,7 +92,7 @@ Minutes he sets (a new task's, a Minutes change, each step's) are planned exactl
 ## Web research
 
 When a message needs facts neither you nor the app have given him (a competition's rules, a specification), and `felixSearches` is on, his answer asks to look something up (`research`, a few words) and says only that he's looking (AI-24).
-- A call of its own then searches (`enrich/WebResearch.kt`, `WebResearcher.look`): Claude's web search tool, at most three searches, located in the UK, with no profile, never about you, answering in at most 15 lines.
+- A call of its own then searches (`enrich/WebResearcher.kt`, `WebResearcher.look`; its prompt `enrich/ResearchPrompts.kt`): Claude's web search tool, at most three searches, located in the UK, with no profile, never about you, answering in at most 15 lines.
 - He's asked again with what it found added to your newest turn (`ResearchPrompts.told`); that answer is the one kept and acted on, unless what it found shows a need to read a task in full (above): then he's asked once more with that too.
 - Under it: what he searched for, and the first four pages found as links (`ChatMessage.searched`, `sources`).
 - A look that can't be made says why ("Not looked up: …"), and his first answer stands.
@@ -154,7 +154,7 @@ A reply, from his notification (`felix/FelixReplyReceiver.kt`), one of his chips
 - Settings → Felix and the chat's menu list them all, each with its delete, and take a standing instruction in your own words (`ui/MemorySection.kt`).
 - All of it goes in every call's profile: every standing instruction, and the facts newest first.
 
-**The tidy** (`enrich/MemoryTidy.kt`): past 70 % of the room, Sunday's review sends the facts to Claude in a call of its own, which gives back at most two thirds as many lines.
+**The tidy** (`enrich/MemoryTidy.kt`, its call `enrich/MemoryTidier.kt`): past 70 % of the room, Sunday's review sends the facts to Claude in a call of its own, which gives back at most two thirds as many lines.
 They're kept only if they make room and the facts are unchanged meanwhile (`MemoryTidy.after`, `applied`). The facts ahead of the tidy and after it go with the week's review, whose page can undo it. Standing instructions are never tidied.
 
 ## The instructions screen

@@ -63,17 +63,17 @@ object TaskText {
      * Its text as the chat's list and his own messages give it: whole where it fits in [max]; past
      * it, what its reading made of it ([com.thomaswcode.decrastination.core.Enrichment.summary])
      * where there's one, else its start and end ([body]). A text too long for its reading to see
-     * whole ([Prompts.MAX_TEXT]) has its summary said to be of its start, and its end after it.
+     * whole ([ReadingPrompts.MAX_TEXT]) has its summary said to be of its start, and its end after it.
      */
     fun brief(task: TaskItem, max: Int, indent: String = "  "): String? {
         val text = task.detail.trim()
         val summary = summary(task)?.takeIf { text.length > max } ?: return body(task, max, indent)
-        val unseen = text.length - Prompts.MAX_TEXT
+        val unseen = text.length - ReadingPrompts.MAX_TEXT
         if (unseen <= 0) return indented("Its reading's summary of all ${text.length} characters: $summary", indent)
         // The end its reading never saw, in the room the summary leaves (a third of it at least).
         val tail = end(text, minOf(unseen, maxOf(max - summary.length, max / 3)))
         val gap = (unseen - tail.length).takeIf { it > 0 }?.let { "[… $it characters left out …]\n" }.orEmpty()
-        return indented("Its reading's summary of its first ${Prompts.MAX_TEXT} of ${text.length} characters: $summary\n" + gap + tail.trimStart(), indent)
+        return indented("Its reading's summary of its first ${ReadingPrompts.MAX_TEXT} of ${text.length} characters: $summary\n" + gap + tail.trimStart(), indent)
     }
 
     /**
@@ -85,7 +85,7 @@ object TaskText {
         val shown = body(task, max, indent) ?: return null
         val length = task.detail.trim().length
         val summary = summary(task)?.takeIf { length > max } ?: return shown
-        val of = if (length <= Prompts.MAX_TEXT) "all of it" else "its first ${Prompts.MAX_TEXT} of $length characters"
+        val of = if (length <= ReadingPrompts.MAX_TEXT) "all of it" else "its first ${ReadingPrompts.MAX_TEXT} of $length characters"
         return indented("Its reading's summary of $of: $summary", indent) + "\n" + shown
     }
 

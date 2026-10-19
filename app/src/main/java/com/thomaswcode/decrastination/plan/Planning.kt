@@ -4,8 +4,8 @@ import android.util.Log
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.core.Duplicates
 import com.thomaswcode.decrastination.core.Instruction
+import com.thomaswcode.decrastination.core.InstructionRules
 import com.thomaswcode.decrastination.core.InstructionState
-import com.thomaswcode.decrastination.core.Instructions
 import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.Planner
 import com.thomaswcode.decrastination.core.SchoolCalendar
@@ -71,7 +71,7 @@ class Planning(
      * linked as the same credited to it (DX-15).
      */
     fun asPlanned(state: TaskState = tasks.value, applied: List<Instruction> = instructions.value.applied): List<TaskItem> {
-        val overrides = Instructions.taskOverrides(applied)
+        val overrides = InstructionRules.taskOverrides(applied)
         return state.tasks.map { task ->
             val o = overrides[task.id] ?: TaskOverrides.NONE
             if (o == task.overrides()) task else task.withOverrides(o)
@@ -104,9 +104,9 @@ class Planning(
                 settings = settings,
                 calibration = runtime.value.calibration,
                 busy = time.busy,
-                hardBusy = Instructions.busy(applied, zone, today, reach),
+                hardBusy = InstructionRules.busy(applied, zone, today, reach),
                 dayLoads = time.dayLoads,
-                dayCaps = Instructions.dayCaps(applied, today, reach),
+                dayCaps = InstructionRules.dayCaps(applied, today, reach),
                 workedTodayMin = workedToday(now, zone),
                 windows = windows,
                 dayKinds = dayKinds,

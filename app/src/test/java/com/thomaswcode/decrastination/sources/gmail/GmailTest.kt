@@ -11,7 +11,7 @@ import com.thomaswcode.decrastination.core.enriched
 import com.thomaswcode.decrastination.core.invite
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
-import com.thomaswcode.decrastination.enrich.Prompts
+import com.thomaswcode.decrastination.enrich.ReadingPrompts
 import java.io.ByteArrayInputStream
 import java.time.LocalDate
 import kotlin.test.Test
@@ -214,7 +214,7 @@ class GmailTest {
         // The one too long for what's left is cut, those before it said to be left out.
         assertTrue(text.startsWith("[2 earlier messages left out.]"), text.take(80))
         assertTrue("[…]" in text)
-        assertTrue(GmailThreads.MAX_CONVERSATION_CHARS <= Prompts.MAX_TEXT)
+        assertTrue(GmailThreads.MAX_CONVERSATION_CHARS <= ReadingPrompts.MAX_TEXT)
     }
 
     @Test
@@ -318,7 +318,7 @@ class GmailTest {
 
     @Test
     fun `a message's text is kept past what the model is shown, so it's told when there's more`() {
-        assertTrue(GmailThreads.MAX_BODY_CHARS > Prompts.MAX_TEXT)
+        assertTrue(GmailThreads.MAX_BODY_CHARS > ReadingPrompts.MAX_TEXT)
     }
 
     @Test

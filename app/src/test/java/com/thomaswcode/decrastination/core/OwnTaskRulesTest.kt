@@ -14,12 +14,12 @@ import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
-class OwnTasksTest {
+class OwnTaskRulesTest {
     // Monday 12 Oct 2026, 17:00.
     private val now = Fixtures.at("2026-10-12T17:00")
 
     private fun own(title: String = "UCAS statement", due: String? = "2026-10-16T17:00", minutes: Int = 90, steps: List<OwnStep> = emptyList(), from: String? = null) =
-        OwnTasks.create(OwnTask(title = title, dueAt = due?.let(Fixtures::at), startFrom = from?.let(Fixtures::at), minutes = minutes, steps = steps), "u1", now)
+        OwnTaskRules.create(OwnTask(title = title, dueAt = due?.let(Fixtures::at), startFrom = from?.let(Fixtures::at), minutes = minutes, steps = steps), "u1", now)
 
     private fun teams(id: String, due: String?, effort: Int = 60, steps: List<SubStep> = emptyList()) = TaskItem(
         id = "teams:$id", source = Source.Teams, sourceId = id, title = id, dueAt = due?.let(Fixtures::at), kind = Kind.Homework,
@@ -52,24 +52,24 @@ class OwnTasksTest {
         val stepped = own(steps = listOf(OwnStep("Draft", 60), OwnStep("Redraft", 45)))
         assertEquals(105, stepped.effortMin)
         assertEquals(listOf("Draft", "Redraft"), stepped.subSteps.map { it.title })
-        val event = OwnTasks.create(OwnTask(title = "Dentist", kind = Kind.Event, dueAt = Fixtures.at("2026-10-14T16:00"), minutes = 30), "e1", now)
+        val event = OwnTaskRules.create(OwnTask(title = "Dentist", kind = Kind.Event, dueAt = Fixtures.at("2026-10-14T16:00"), minutes = 30), "e1", now)
         assertEquals(0, event.effortMin)
     }
 
     @Test
     fun `what the form won't take is said`() {
-        assertEquals("It needs a name", OwnTasks.problem(OwnTask(title = " ")))
-        assertEquals("An event needs its date and time", OwnTasks.problem(OwnTask(title = "Party", kind = Kind.Event)))
-        assertTrue(OwnTasks.problem(OwnTask(title = "x", minutes = 0))!!.startsWith("Its minutes"))
-        assertEquals("It can't start after it's due", OwnTasks.problem(OwnTask(title = "x", dueAt = now, startFrom = now + 1)))
-        assertNull(OwnTasks.problem(OwnTask(title = "x", minutes = 45)))
+        assertEquals("It needs a name", OwnTaskRules.problem(OwnTask(title = " ")))
+        assertEquals("An event needs its date and time", OwnTaskRules.problem(OwnTask(title = "Party", kind = Kind.Event)))
+        assertTrue(OwnTaskRules.problem(OwnTask(title = "x", minutes = 0))!!.startsWith("Its minutes"))
+        assertEquals("It can't start after it's due", OwnTaskRules.problem(OwnTask(title = "x", dueAt = now, startFrom = now + 1)))
+        assertNull(OwnTaskRules.problem(OwnTask(title = "x", minutes = 45)))
     }
 
     @Test
     fun `changed in the form, it keeps the work done on it and its steps done`() {
         val stepped = own(steps = listOf(OwnStep("Draft", 60), OwnStep("Redraft", 45)))
         val worked = stepped.copy(workedMin = 60, subSteps = stepped.subSteps.mapIndexed { i, s -> if (i == 0) s.copy(done = true) else s })
-        val edited = OwnTasks.edited(worked, OwnTasks.draftOf(worked).copy(title = "Personal statement", dueAt = Fixtures.at("2026-10-20T17:00")))
+        val edited = OwnTaskRules.edited(worked, OwnTaskRules.draftOf(worked).copy(title = "Personal statement", dueAt = Fixtures.at("2026-10-20T17:00")))
         assertEquals("Personal statement", edited.title)
         assertEquals(Fixtures.at("2026-10-20T17:00"), edited.dueAt)
         assertEquals(60, edited.workedMin)
@@ -80,19 +80,19 @@ class OwnTasksTest {
     @Test
     fun `an instruction's date, start or minutes is made on one of your own, minutes scaling its steps`() {
         val stepped = own(steps = listOf(OwnStep("Draft", 60), OwnStep("Redraft", 30)))
-        val due = OwnTasks.changed(stepped, Change(ChangeType.DueBy, taskId = stepped.id, time = Fixtures.at("2026-10-18T12:00")))
+        val due = OwnTaskRules.changed(stepped, Change(ChangeType.DueBy, taskId = stepped.id, time = Fixtures.at("2026-10-18T12:00")))
         assertEquals(Fixtures.at("2026-10-18T12:00"), due.dueAt)
         assertEquals(Fixtures.at("2026-10-18T12:00"), due.sourceValues?.dueAt)
-        val longer = OwnTasks.changed(stepped, Change(ChangeType.Minutes, taskId = stepped.id, minutes = 180))
+        val longer = OwnTaskRules.changed(stepped, Change(ChangeType.Minutes, taskId = stepped.id, minutes = 180))
         assertEquals(listOf(120, 60), longer.subSteps.map { it.minutes })
         assertEquals(180, longer.effortMin)
         // Minutes that don't divide evenly still come to exactly yours.
         val three = own(steps = listOf(OwnStep("a", 10), OwnStep("b", 10), OwnStep("c", 10)))
-        assertEquals(100, OwnTasks.changed(three, Change(ChangeType.Minutes, taskId = three.id, minutes = 100)).effortMin)
-        val started = OwnTasks.changed(stepped, Change(ChangeType.StartFrom, taskId = stepped.id, time = Fixtures.at("2026-10-14T00:00")))
+        assertEquals(100, OwnTaskRules.changed(three, Change(ChangeType.Minutes, taskId = three.id, minutes = 100)).effortMin)
+        val started = OwnTaskRules.changed(stepped, Change(ChangeType.StartFrom, taskId = stepped.id, time = Fixtures.at("2026-10-14T00:00")))
         assertEquals(Fixtures.at("2026-10-14T00:00"), started.notBefore)
         // Starting after it's due isn't made: the task is as it was.
-        assertSame(stepped, OwnTasks.changed(stepped, Change(ChangeType.StartFrom, taskId = stepped.id, time = Fixtures.at("2026-10-30T00:00"))))
+        assertSame(stepped, OwnTaskRules.changed(stepped, Change(ChangeType.StartFrom, taskId = stepped.id, time = Fixtures.at("2026-10-30T00:00"))))
     }
 
     @Test
@@ -117,12 +117,12 @@ class OwnTasksTest {
         // Since the card moved the due date, another changed the minutes.
         val moved = Change(ChangeType.DueBy, taskId = "own:u1", time = Fixtures.at("2026-10-20T17:00"))
         val now = was.copy(dueAt = Fixtures.at("2026-10-20T17:00"), minutes = 90)
-        val back = OwnTasks.restored(now, was, listOf(moved))
+        val back = OwnTaskRules.restored(now, was, listOf(moved))
         assertEquals(Fixtures.at("2026-10-16T17:00"), back.dueAt)
         assertEquals(90, back.minutes)
         // Moved again since, by you: your date stands.
         val again = now.copy(dueAt = Fixtures.at("2026-10-21T17:00"))
-        assertEquals(Fixtures.at("2026-10-21T17:00"), OwnTasks.restored(again, was, listOf(moved)).dueAt)
+        assertEquals(Fixtures.at("2026-10-21T17:00"), OwnTaskRules.restored(again, was, listOf(moved)).dueAt)
     }
 
     @Test
@@ -130,11 +130,11 @@ class OwnTasksTest {
         val was = OwnTask(title = "Essay", minutes = 90, steps = listOf(OwnStep("Write it", 90)))
         val split = Change(ChangeType.Steps, taskId = "own:u1", steps = listOf(OwnStep("Plan", 15), OwnStep("Draft", 60), OwnStep("Check", 15)))
         val now = was.copy(minutes = 90, steps = split.steps!!)
-        assertEquals(was.steps, OwnTasks.restored(now, was, listOf(split)).steps)
+        assertEquals(was.steps, OwnTaskRules.restored(now, was, listOf(split)).steps)
         val since = now.copy(steps = listOf(OwnStep("Plan", 20), OwnStep("Draft", 70)), minutes = 90)
-        assertEquals(since.steps, OwnTasks.restored(since, was, listOf(split)).steps)
+        assertEquals(since.steps, OwnTaskRules.restored(since, was, listOf(split)).steps)
         // A later card that replaced the split: undoing the split first leaves it what the split replaced.
-        assertEquals(was.steps, OwnTasks.relayered(now, listOf(split), was).steps)
+        assertEquals(was.steps, OwnTaskRules.relayered(now, listOf(split), was).steps)
     }
 
     @Test
@@ -145,20 +145,20 @@ class OwnTasksTest {
         val sunday = friday.copy(dueAt = toSunday.time)
         val monday = friday.copy(dueAt = toMonday.time)
         // Card A (Friday to Sunday) undone first: Monday stands, and B now replaced Friday.
-        assertEquals(monday, OwnTasks.restored(monday, friday, listOf(toSunday)))
-        val bWas = OwnTasks.relayered(sunday, listOf(toSunday), friday)
+        assertEquals(monday, OwnTaskRules.restored(monday, friday, listOf(toSunday)))
+        val bWas = OwnTaskRules.relayered(sunday, listOf(toSunday), friday)
         assertEquals(friday.dueAt, bWas.dueAt)
         // Then card B: back to Friday, not A's Sunday.
-        assertEquals(friday.dueAt, OwnTasks.restored(monday, bWas, listOf(toMonday)).dueAt)
+        assertEquals(friday.dueAt, OwnTaskRules.restored(monday, bWas, listOf(toMonday)).dueAt)
     }
 
     @Test
     fun `fewer minutes than one of yours has steps is refused, saying why`() {
         val three = own(steps = listOf(OwnStep("a", 10), OwnStep("b", 10), OwnStep("c", 10)))
         val two = listOf(Change(ChangeType.Minutes, taskId = three.id, minutes = 2))
-        assertEquals("It would leave “UCAS statement” as it can't be: its 3 steps need at least a minute each", OwnTasks.problemWith(listOf(three), two))
-        assertEquals(emptyList(), OwnTasks.madeOn(listOf(three), two))
-        assertSame(three, OwnTasks.changed(three, two.single()))
+        assertEquals("It would leave “UCAS statement” as it can't be: its 3 steps need at least a minute each", OwnTaskRules.problemWith(listOf(three), two))
+        assertEquals(emptyList(), OwnTaskRules.madeOn(listOf(three), two))
+        assertSame(three, OwnTaskRules.changed(three, two.single()))
     }
 
     @Test
@@ -166,8 +166,8 @@ class OwnTasksTest {
         val task = own(steps = listOf(OwnStep("Draft", 60), OwnStep("Redraft", 45)))
         val firstDone = task.copy(subSteps = task.subSteps.mapIndexed { i, s -> if (i == 0) s.copy(done = true) else s })
         // The first renamed, the second needing home, and a new "Draft" after them.
-        val draft = OwnTasks.draftOf(firstDone).let { d -> d.copy(steps = listOf(d.steps[0].copy(title = "First draft"), d.steps[1].copy(where = "home"), OwnStep("Draft", 20))) }
-        val edited = OwnTasks.edited(firstDone, draft)
+        val draft = OwnTaskRules.draftOf(firstDone).let { d -> d.copy(steps = listOf(d.steps[0].copy(title = "First draft"), d.steps[1].copy(where = "home"), OwnStep("Draft", 20))) }
+        val edited = OwnTaskRules.edited(firstDone, draft)
         assertEquals(listOf("First draft" to true, "Redraft" to false, "Draft" to false), edited.subSteps.map { it.title to it.done })
         assertEquals(listOf(null, "home", null), edited.subSteps.map { it.where })
         assertEquals(125, edited.sourceEffortMin)
@@ -177,7 +177,7 @@ class OwnTasksTest {
     fun `steps of the same name keep their own ticks through an edit`() {
         val task = own(steps = listOf(OwnStep("Review", 20), OwnStep("Write", 30), OwnStep("Review", 20)))
         val firstDone = task.copy(subSteps = task.subSteps.mapIndexed { i, s -> if (i == 0) s.copy(done = true) else s })
-        val edited = OwnTasks.edited(firstDone, OwnTasks.draftOf(firstDone).copy(title = "Essay"))
+        val edited = OwnTaskRules.edited(firstDone, OwnTaskRules.draftOf(firstDone).copy(title = "Essay"))
         assertEquals(listOf(true, false, false), edited.subSteps.map { it.done })
     }
 
@@ -185,12 +185,12 @@ class OwnTasksTest {
     fun `one of yours with every step ticked opens again with its last step to do`() {
         val stepped = own(steps = listOf(OwnStep("Draft", 60), OwnStep("Redraft", 30)))
         val done = stepped.copy(status = Status.Done, doneAt = now, workedMin = 70, subSteps = stepped.subSteps.map { it.copy(done = true, byHand = true) })
-        val again = OwnTasks.reopened(done)
+        val again = OwnTaskRules.reopened(done)
         assertTrue(again.isOpen)
         assertEquals(listOf(true, false), again.subSteps.map { it.done })
         assertEquals(70, again.workedMin)
         // One without steps is just open again.
-        assertEquals(Status.Open, OwnTasks.reopened(own().copy(status = Status.Done, doneAt = now)).status)
+        assertEquals(Status.Open, OwnTaskRules.reopened(own().copy(status = Status.Done, doneAt = now)).status)
     }
 
     @Test
@@ -201,25 +201,25 @@ class OwnTasksTest {
             Change(ChangeType.StartFrom, taskId = task.id, time = Fixtures.at("2026-10-20T00:00")),
             Change(ChangeType.DueBy, taskId = task.id, time = Fixtures.at("2026-10-25T17:00")),
         )
-        assertNull(OwnTasks.problemWith(listOf(task), later))
-        assertEquals(later, OwnTasks.madeOn(listOf(task), later))
-        val made = OwnTasks.edited(task, OwnTasks.draftWithAll(task, later)!!)
+        assertNull(OwnTaskRules.problemWith(listOf(task), later))
+        assertEquals(later, OwnTaskRules.madeOn(listOf(task), later))
+        val made = OwnTaskRules.edited(task, OwnTaskRules.draftWithAll(task, later)!!)
         assertEquals(Fixtures.at("2026-10-20T00:00"), made.notBefore)
         assertEquals(Fixtures.at("2026-10-25T17:00"), made.dueAt)
         // A start after its due date isn't, and says why; another task's changes aren't touched.
         val after = listOf(Change(ChangeType.StartFrom, taskId = task.id, time = Fixtures.at("2026-10-20T00:00")))
-        assertEquals("It would leave “UCAS statement” as it can't be: it can't start after it's due", OwnTasks.problemWith(listOf(task), after))
-        assertEquals(emptyList(), OwnTasks.madeOn(listOf(task), after))
-        assertNull(OwnTasks.problemWith(listOf(task), listOf(Change(ChangeType.DueBy, taskId = "teams:essay", time = now))))
+        assertEquals("It would leave “UCAS statement” as it can't be: it can't start after it's due", OwnTaskRules.problemWith(listOf(task), after))
+        assertEquals(emptyList(), OwnTaskRules.madeOn(listOf(task), after))
+        assertNull(OwnTaskRules.problemWith(listOf(task), listOf(Change(ChangeType.DueBy, taskId = "teams:essay", time = now))))
     }
 
     @Test
     fun `undo is offered only where your quick change is what's in force`() {
         val quick = Instruction("q", "Takes 1 h in all (set in Tasks)", at = now, state = InstructionStatus.Applied, changes = listOf(Change(ChangeType.Minutes, taskId = "teams:essay", minutes = 60)), appliedAt = now, quick = true)
         val claudes = Instruction("c", "it takes 2 hours", at = now, state = InstructionStatus.Applied, changes = listOf(Change(ChangeType.Minutes, taskId = "teams:essay", minutes = 120)), appliedAt = now + 1)
-        assertTrue(Instructions.quickInForce(listOf(quick), "teams:essay", ChangeType.Minutes))
-        assertFalse(Instructions.quickInForce(listOf(quick, claudes), "teams:essay", ChangeType.Minutes))
-        assertFalse(Instructions.quickInForce(listOf(quick), "teams:essay", ChangeType.DueBy))
+        assertTrue(InstructionRules.quickInForce(listOf(quick), "teams:essay", ChangeType.Minutes))
+        assertFalse(InstructionRules.quickInForce(listOf(quick, claudes), "teams:essay", ChangeType.Minutes))
+        assertFalse(InstructionRules.quickInForce(listOf(quick), "teams:essay", ChangeType.DueBy))
     }
 
     // --- Your minutes for any task ---
@@ -227,7 +227,7 @@ class OwnTasksTest {
     @Test
     fun `your minutes for a task are laid over the estimate, and taken back`() {
         val essay = teams("essay", "2026-10-16T09:00", effort = 60)
-        val overrides = Instructions.taskOverrides(listOf(applied(Change(ChangeType.Minutes, taskId = essay.id, minutes = 150))))
+        val overrides = InstructionRules.taskOverrides(listOf(applied(Change(ChangeType.Minutes, taskId = essay.id, minutes = 150))))
         val longer = essay.withOverrides(overrides.getValue(essay.id))
         assertEquals(150, longer.effortMin)
         assertEquals(60, longer.appEffortMin)
@@ -259,7 +259,7 @@ class OwnTasksTest {
         assertEquals(listOf(34, 33, 33), mine.plannedStepMinutes(1.0))
         assertEquals(100, plan(listOf(mine)).chunksOf(mine.id).sumOf { it.minutes })
         // Fewer minutes than steps can't be given: they couldn't add up to it.
-        assertEquals(3..OwnTasks.MINUTES.last, OwnTasks.minutesFor(mine))
+        assertEquals(3..OwnTaskRules.MINUTES.last, OwnTaskRules.minutesFor(mine))
     }
 
     @Test
@@ -278,9 +278,9 @@ class OwnTasksTest {
     fun `your minutes read in words`() {
         val essay = teams("essay", "2026-10-16T09:00", effort = 60)
         val change = Change(ChangeType.Minutes, taskId = essay.id, minutes = 90)
-        assertEquals("“essay”: takes 1 h 30 min in all (now 1 h)", Instructions.describe(change, mapOf(essay.id to essay), LONDON))
+        assertEquals("“essay”: takes 1 h 30 min in all (now 1 h)", InstructionRules.describe(change, mapOf(essay.id to essay), LONDON))
         val inUse = essay.copy(userEffortMin = 90)
-        assertEquals("“essay”: takes 1 h 30 min in all (the app's estimate: 1 h)", Instructions.describe(change, mapOf(essay.id to inUse), LONDON))
+        assertEquals("“essay”: takes 1 h 30 min in all (the app's estimate: 1 h)", InstructionRules.describe(change, mapOf(essay.id to inUse), LONDON))
     }
 
     // --- How Tasks and the Plan group them ---
@@ -338,18 +338,18 @@ class OwnTasksTest {
 
     @Test
     fun `a step made anew in the form after every old one went has no tick, even with an old one's name`() {
-        val made = OwnTasks.create(OwnTask(title = "Essay", steps = listOf(OwnStep("Plan", 20), OwnStep("Write", 40))), "s", now)
+        val made = OwnTaskRules.create(OwnTask(title = "Essay", steps = listOf(OwnStep("Plan", 20), OwnStep("Write", 40))), "s", now)
         val ticked = made.copy(subSteps = made.subSteps.map { if (it.title == "Plan") it.copy(done = true) else it })
-        val anew = OwnTasks.edited(ticked, OwnTask(title = "Essay", steps = listOf(OwnStep("Plan", 30)), fromForm = true))
+        val anew = OwnTaskRules.edited(ticked, OwnTask(title = "Essay", steps = listOf(OwnStep("Plan", 30)), fromForm = true))
         assertEquals(listOf("Plan" to false), anew.subSteps.map { it.title to it.done })
     }
 
     @Test
     fun `a done step deleted takes its worked minutes with it`() {
-        val made = OwnTasks.create(OwnTask(title = "Essay", steps = listOf(OwnStep("Plan", 20), OwnStep("Write", 30))), "w", now)
+        val made = OwnTaskRules.create(OwnTask(title = "Essay", steps = listOf(OwnStep("Plan", 20), OwnStep("Write", 30))), "w", now)
         val ticked = made.copy(subSteps = made.subSteps.map { if (it.title == "Plan") it.copy(done = true) else it }, workedMin = 20)
-        val draft = OwnTasks.draftOf(ticked)
-        val left = OwnTasks.edited(ticked, draft.copy(steps = draft.steps.drop(1), fromForm = true))
+        val draft = OwnTaskRules.draftOf(ticked)
+        val left = OwnTaskRules.edited(ticked, draft.copy(steps = draft.steps.drop(1), fromForm = true))
         assertEquals(listOf("Write" to false), left.subSteps.map { it.title to it.done })
         assertEquals(0, left.workedMin)
     }

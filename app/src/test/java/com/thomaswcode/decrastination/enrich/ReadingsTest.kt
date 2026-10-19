@@ -30,7 +30,7 @@ import okhttp3.mockwebserver.MockWebServer
  * The readings' service on temporary stores (docs/plan_v4, Stage 6d), Claude's API a stand-in that
  * counts what it's sent: a reading due while Claude can't be asked is the rules', one read again
  * isn't sent then, and a task whose call the API refused as asked is read by the rules without
- * asking Claude again. The rules and the prompts themselves are `EnrichTest`'s.
+ * asking Claude again. The rules and the prompts themselves are `RuleEnricherTest`'s, `ReadingPromptsTest`'s and `ReadingAnswersTest`'s.
  */
 class ReadingsTest {
     private val dir: File = Files.createTempDirectory("readings").toFile()

@@ -2,6 +2,7 @@ package com.thomaswcode.decrastination.sources.teams
 
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.core.Kind
+import com.thomaswcode.decrastination.enrich.ReadingPrompts
 import com.thomaswcode.decrastination.sources.gmail.GmailThreads
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
@@ -48,7 +49,7 @@ class TeamsRowsTest {
         val task = com.thomaswcode.decrastination.core.Merge.apply(emptyList(), com.thomaswcode.decrastination.core.Source.Teams, listOfNotNull(TeamsRows.fetched(row)), 0).tasks.single()
         assertEquals(listOf("Statics booklet.pdf", "Mark scheme.pdf"), com.thomaswcode.decrastination.sources.gmail.GmailThreads.attachmentsOf(task).map { it.name })
         assertEquals(listOf("https://example.com/notes"), TeamsRows.linksOf(task))
-        val described = com.thomaswcode.decrastination.enrich.Prompts.describe(task, com.thomaswcode.decrastination.core.Enrichments.Job.Assignment, 0, Fixtures.LONDON)
+        val described = ReadingPrompts.describe(task, com.thomaswcode.decrastination.core.Enrichments.Job.Assignment, 0, Fixtures.LONDON)
         assertEquals(true, "Attachments: Statics booklet.pdf, Mark scheme.pdf" in described, described)
         assertEquals(true, "Links: https://example.com/notes" in described, described)
         // Its links are what it's read from too: changed, it's read again.

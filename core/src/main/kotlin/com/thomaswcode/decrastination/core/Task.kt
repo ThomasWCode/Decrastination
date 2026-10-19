@@ -6,7 +6,7 @@ import kotlinx.serialization.Serializable
 
 /**
  * Where a task comes from. Each source is the only judge of whether its tasks are done; [Own] is
- * you ([OwnTasks]), with nothing to read: [synced] says which are read.
+ * you ([OwnTaskRules]), with nothing to read: [synced] says which are read.
  */
 @Serializable
 enum class Source(val label: String, val synced: Boolean = true) {
@@ -164,7 +164,7 @@ data class TaskItem(
     /** The source's own kind, deadline and start, before the enrichment's overlay; null before Phase 4. */
     val sourceValues: SourceValues? = null,
     /**
-     * Your instructions' say about it ([Instructions]), laid over the source's and the enrichment's
+     * Your instructions' say about it ([InstructionRules]), laid over the source's and the enrichment's
      * at every merge: not a task; not before then; not until another task is done; due by then; all
      * of it on one day (YYYY-MM-DD); its next piece at a time (PL-04).
      */
@@ -316,7 +316,7 @@ data class TaskItem(
  * [total] minutes shared over [parts] in proportion, in whole minutes that add up to exactly
  * [total]: the odd minutes go to the parts with most left over. Each gets at least one, so a total
  * smaller than the parts' number would come to more than it: it's refused where it's given
- * ([OwnTasks.minutesFor]). Your minutes over a task's steps.
+ * ([OwnTaskRules.minutesFor]). Your minutes over a task's steps.
  */
 fun shareOut(total: Int, parts: List<Int>): List<Int> {
     val sum = parts.sum()

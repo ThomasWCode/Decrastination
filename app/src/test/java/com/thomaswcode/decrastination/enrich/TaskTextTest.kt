@@ -42,9 +42,9 @@ class TaskTextTest {
 
     @Test
     fun `a summary of a text too long to be read whole says it's of its start, its end after it`() {
-        val long = task.copy(detail = "Start. " + "m".repeat(Prompts.MAX_TEXT) + " The deadline has moved to Friday.")
+        val long = task.copy(detail = "Start. " + "m".repeat(ReadingPrompts.MAX_TEXT) + " The deadline has moved to Friday.")
         val read = long.copy(enrichment = Enrichment(inputHash = Enrichments.inputHash(long), by = "test", at = now, summary = "A long brief."))
-        val of = "Its reading's summary of its first ${Prompts.MAX_TEXT} of ${long.detail.length} characters: A long brief."
+        val of = "Its reading's summary of its first ${ReadingPrompts.MAX_TEXT} of ${long.detail.length} characters: A long brief."
         assertEquals("  $of\n  [… 8 characters left out …]\n  The deadline has moved to Friday.", TaskText.brief(read, 600))
         val whole = TaskText.whole(read, 8_000)!!
         assertTrue(whole.startsWith("  $of\n  Start. mmm"), whole.take(200))

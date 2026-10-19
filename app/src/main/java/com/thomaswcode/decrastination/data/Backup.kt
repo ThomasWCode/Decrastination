@@ -7,9 +7,9 @@ import com.thomaswcode.decrastination.core.ChangeType
 import com.thomaswcode.decrastination.core.Instruction
 import com.thomaswcode.decrastination.core.InstructionState
 import com.thomaswcode.decrastination.core.InstructionStatus
-import com.thomaswcode.decrastination.core.Instructions
+import com.thomaswcode.decrastination.core.InstructionRules
 import com.thomaswcode.decrastination.core.Kind
-import com.thomaswcode.decrastination.core.OwnTasks
+import com.thomaswcode.decrastination.core.OwnTaskRules
 import com.thomaswcode.decrastination.core.SchoolCalendar
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.SettingsLimits
@@ -272,10 +272,10 @@ object Backups {
      * restored, but laid again from those here ([restoredOwnTasks]).
      */
     private fun wellFormed(task: TaskItem): Boolean {
-        val minutes = 0..OwnTasks.MINUTES.last
+        val minutes = 0..OwnTaskRules.MINUTES.last
         return task.source == Source.Own && task.id == TaskItem.id(Source.Own, task.sourceId) &&
             task.workedMin in minutes && task.photoMin in minutes && task.stepsWorkedMin in minutes &&
-            (task.userEffortMin == null || task.userEffortMin in OwnTasks.MINUTES) &&
+            (task.userEffortMin == null || task.userEffortMin in OwnTaskRules.MINUTES) &&
             (task.peakEffortMin == null || task.peakEffortMin in minutes) &&
             // No source to say how far it is: yours are done or not, never part way. Nor to hide it
             // till a day: a start of yours is when its work is planned from (notBefore).
@@ -285,11 +285,11 @@ object Backups {
             // estimate, a source's extras), nor a miss, which only a source's counts can make.
             task.stepsPerDay == null && !task.derived && task.aiEffortMin == null &&
             // Its one extra of yours: where it's done, when that's at home (PL-15).
-            task.extra.keys.all { it == OwnTasks.EXTRA_WHERE } && task.extra[OwnTasks.EXTRA_WHERE].let { it == null || it == "home" } &&
+            task.extra.keys.all { it == OwnTaskRules.EXTRA_WHERE } && task.extra[OwnTaskRules.EXTRA_WHERE].let { it == null || it == "home" } &&
             task.status != com.thomaswcode.decrastination.core.Status.Missed && task.photosCounted.values.all { it in minutes } &&
             task.subSteps.all { it.timedMin in minutes } &&
             task.enrichment == null &&
-            OwnTasks.problem(OwnTasks.draftOf(task)) == null
+            OwnTaskRules.problem(OwnTaskRules.draftOf(task)) == null
     }
 
     /**
@@ -321,7 +321,7 @@ object Backups {
             when (change.type) {
                 ChangeType.NotATask -> named(change.taskId)
                 ChangeType.StartFrom, ChangeType.DueBy -> named(change.taskId) && time(change.time)
-                ChangeType.Minutes -> named(change.taskId) && change.minutes in OwnTasks.MINUTES
+                ChangeType.Minutes -> named(change.taskId) && change.minutes in OwnTaskRules.MINUTES
                 ChangeType.After -> named(change.taskId) && named(change.afterTaskId) && change.afterTaskId != change.taskId
                 ChangeType.EventTime -> named(change.eventKey) && change.eventAnswer?.let(::answer) == true
                 ChangeType.DayLimit -> change.freeMin in 0..DAY_MIN && day(change)
@@ -334,9 +334,9 @@ object Backups {
                 ChangeType.AtTime -> named(change.taskId) && isDate(change.date) && change.startMin in 0 until DAY_MIN && time(change.time)
                 ChangeType.SameAs -> named(change.taskId) && named(change.afterTaskId) && change.afterTaskId != change.taskId
                 // A task's steps (AI-19): some, each named, with its minutes.
-                ChangeType.Steps -> named(change.taskId) && change.steps.orEmpty().let { steps -> steps.size in 1..OwnTasks.MAX_STEPS && steps.all { it.title.isNotBlank() && it.minutes in OwnTasks.MINUTES } }
+                ChangeType.Steps -> named(change.taskId) && change.steps.orEmpty().let { steps -> steps.size in 1..OwnTaskRules.MAX_STEPS && steps.all { it.title.isNotBlank() && it.minutes in OwnTaskRules.MINUTES } }
                 // A task's name (16 Oct): one, within a name's length.
-                ChangeType.Rename -> named(change.taskId) && change.title?.let { it.isNotBlank() && it.length <= OwnTasks.MAX_TITLE } == true
+                ChangeType.Rename -> named(change.taskId) && change.title?.let { it.isNotBlank() && it.length <= OwnTaskRules.MAX_TITLE } == true
             }
         }
     }
@@ -362,7 +362,7 @@ object Backups {
         for (instruction in backed.filter { it.state == InstructionStatus.Applied }.sortedBy { it.appliedAt ?: it.at }) {
             if ((here + added).any { it.id == instruction.id }) continue
             val inUse = InstructionState(here + added).applied
-            added += if (Instructions.makesCircle(instruction.changes, inUse)) {
+            added += if (InstructionRules.makesCircle(instruction.changes, inUse)) {
                 instruction.copy(state = InstructionStatus.Unclear, appliedAt = null, note = "It would have tasks wait for each other in a circle with those here, so it wasn't applied")
             } else {
                 instruction

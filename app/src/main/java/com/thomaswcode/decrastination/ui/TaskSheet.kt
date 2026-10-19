@@ -40,9 +40,9 @@ import com.thomaswcode.decrastination.core.About
 import com.thomaswcode.decrastination.core.Change
 import com.thomaswcode.decrastination.core.ChangeType
 import com.thomaswcode.decrastination.core.Enrichments
-import com.thomaswcode.decrastination.core.Instructions
+import com.thomaswcode.decrastination.core.InstructionRules
 import com.thomaswcode.decrastination.core.Kind
-import com.thomaswcode.decrastination.core.OwnTasks
+import com.thomaswcode.decrastination.core.OwnTaskRules
 import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Status
@@ -159,7 +159,7 @@ fun TaskSheet(
         }
     }
     // Undo only where a quick change of yours is what's in force: one of Claude's since wins.
-    fun quick(type: ChangeType) = Instructions.quickInForce(instructions.applied, task.id, type)
+    fun quick(type: ChangeType) = InstructionRules.quickInForce(instructions.applied, task.id, type)
 
     /** Your own task changed as [change] says, or a source's given it as a quick change ([TaskSheetState.make]). */
     fun make(change: Change, text: String) {
@@ -368,7 +368,7 @@ fun TaskSheet(
             }
             // Where yours can be done (PL-15): anywhere, a free period at school too, or at home.
             if (own && changeable) {
-                val home = OwnTasks.draftOf(task).where == "home"
+                val home = OwnTaskRules.draftOf(task).where == "home"
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     FilterChip(
                         selected = home,
@@ -412,7 +412,7 @@ fun TaskSheet(
             title = "How long it takes in all",
             initial = task.effortMin,
             note = "The whole task, worked or not" + if (task.subSteps.isNotEmpty()) ": its steps are scaled to match, a minute each at least." else ".",
-            least = OwnTasks.minutesFor(task).first,
+            least = OwnTaskRules.minutesFor(task).first,
             onClose = { picking = null },
         ) { minutes ->
             picking = null
@@ -468,7 +468,7 @@ private fun Field(label: String, value: String, note: String? = null, urgent: Bo
 @Composable
 private fun Notes(task: TaskItem, now: Long, zone: java.time.ZoneId, byId: Map<String, TaskItem>, onOpen: () -> Unit, onLink: (String) -> Unit) {
     val lines = buildList {
-        task.userAfter?.takeIf { task.isOpen && Instructions.waiting(task, byId) }?.let { add("Waits, as you said, until “${byId[it]?.title ?: it}” is done" to false) }
+        task.userAfter?.takeIf { task.isOpen && InstructionRules.waiting(task, byId) }?.let { add("Waits, as you said, until “${byId[it]?.title ?: it}” is done" to false) }
         if (task.userNotATask) add("You said it isn't a task: take that back in Felix's chat, under Your changes" to false)
         Enrichments.current(task)?.dropped?.takeIf { task.isOpen }?.let { add("Claude's plan was dropped ($it): planned as one piece" to true) }
         // Steps kept with their dates left out (AI-01).

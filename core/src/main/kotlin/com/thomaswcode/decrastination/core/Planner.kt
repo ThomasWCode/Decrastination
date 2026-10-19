@@ -39,7 +39,7 @@ import kotlin.math.roundToInt
  * 6. A task that can only go so far a day ([TaskItem.stepsPerDay]: an Anki deck, which releases
  *    20 new cards a day) never has more steps than that on one day, overdue or not.
  * 7. A task you've said isn't one, or the same as another ([TaskItem.hidden]), isn't planned, nor
- *    reminded of; nor is one you've said waits for another still open ([Instructions]).
+ *    reminded of; nor is one you've said waits for another still open ([InstructionRules]).
  * 8. A day you've limited ([Input.dayCaps]) holds no more work than that, and a box is never longer
  *    than the most any day its task can go on holds, so a task isn't left off for want of a day
  *    big enough for one box.
@@ -233,7 +233,7 @@ object Planner {
             task.extra[AnkiRules.EXTRA_FOR]?.takeIf { task.source == Source.Anki }?.split(',')?.mapNotNull { byId[it]?.takeIf { a -> a.isOpen } }.orEmpty()
         // Off the plan as you said: a task you said isn't one, or waits for another; and a deck task
         // whose every assignment is, as its vocabulary is theirs.
-        fun heldBack(task: TaskItem) = task.hidden || Instructions.waiting(task, byId)
+        fun heldBack(task: TaskItem) = task.hidden || InstructionRules.waiting(task, byId)
         /** A deck task stays on the plan while any of its assignments does. */
         fun keptOn(task: TaskItem) = linked(task).let { a -> a.isEmpty() || !a.all(::heldBack) }
         val (events, work) = input.tasks
@@ -248,7 +248,7 @@ object Planner {
         for (task in input.tasks) {
             if (!task.isOpen || task.kind == Kind.Event || task.hidden || task.derived) continue
             val reason = when {
-                Instructions.waiting(task, byId) -> Unplanned.Reason.Waits
+                InstructionRules.waiting(task, byId) -> Unplanned.Reason.Waits
                 !task.isAvailable(input.now) -> Unplanned.Reason.NotOpen
                 else -> continue
             }
@@ -258,7 +258,7 @@ object Planner {
             // the first of their assignments that waits. A deck another assignment keeps on the plan
             // is counted there, not again here.
             val waitingDecks = if (reason != Unplanned.Reason.Waits) emptyList() else decks[task.id].orEmpty().values.distinctBy { it.id }
-                .filter { deck -> deck.isOpen && !keptOn(deck) && linked(deck).firstOrNull { !it.hidden && Instructions.waiting(it, byId) }?.id == task.id }
+                .filter { deck -> deck.isOpen && !keptOn(deck) && linked(deck).firstOrNull { !it.hidden && InstructionRules.waiting(it, byId) }?.id == task.id }
             val left = (pieces(task, input, held[task.id].orEmpty()) + waitingDecks.flatMap { pieces(it, input, emptySet()) }).takeIf { it.isNotEmpty() } ?: continue
             unplanned += Unplanned(
                 task.id, task.source, task.title, left.sumOf { it.minutes }, left.size, reason,
@@ -1062,7 +1062,7 @@ object Planner {
      * an Anki deck's anywhere; Teams homework at home (the laptop, the books); the rest anywhere.
      */
     private fun whereOf(task: TaskItem): Where = when (task.source) {
-        Source.Own -> Where.of(task.extra[OwnTasks.EXTRA_WHERE]) ?: Where.Anywhere
+        Source.Own -> Where.of(task.extra[OwnTaskRules.EXTRA_WHERE]) ?: Where.Anywhere
         Source.Teams -> if (task.kind == Kind.Homework) Where.Home else Where.Anywhere
         else -> Where.Anywhere
     }
@@ -1107,7 +1107,7 @@ object Planner {
     /**
      * The day you gave for all of [task] (PL-04), where it's still to come, not before the day it can
      * start, and not after its real deadline's ([real]) while that's still to come: overdue work can
-     * go to any day from today (D-30), as [Instructions.latePin] lets it.
+     * go to any day from today (D-30), as [InstructionRules.latePin] lets it.
      */
     private fun keptDay(task: TaskItem, real: Long?, input: Input): LocalDate? {
         val day = task.userOnDay?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: return null
@@ -1137,7 +1137,7 @@ object Planner {
     /**
      * The time you gave for [task]'s next piece (PL-04), where its day hasn't gone, it's no earlier
      * than the task can start, and it's before its real deadline ([real]) while that's still to
-     * come: overdue work takes any time from now (D-30), as [Instructions.latePin] lets it.
+     * come: overdue work takes any time from now (D-30), as [InstructionRules.latePin] lets it.
      */
     private fun pinnedTime(task: TaskItem, real: Long?, input: Input): Long? {
         val at = task.userAtTime ?: return null

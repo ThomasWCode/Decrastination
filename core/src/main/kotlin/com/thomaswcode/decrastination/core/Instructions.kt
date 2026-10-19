@@ -200,7 +200,7 @@ data class TaskOverrides(
  * sync keeps them, and every screen sees them), an event's with the calendar's answers, and a day's
  * with the planner's capacity. Pure.
  */
-object Instructions {
+object InstructionRules {
 
     /**
      * Whether what's in force for [taskId]'s [type] comes from a quick change ([Instruction.quick]):
@@ -463,7 +463,7 @@ fun TaskItem.overrides(): TaskOverrides = TaskOverrides(userNotATask, userFrom, 
  * enrichment say at every merge ([enriched]). The source's own values are kept first, if they
  * weren't yet, so taking an instruction back restores them. Steps and a name are laid over a
  * source's task, never one derived from Anki's counts (its steps are its cards, its name their
- * count); one of your own has them made on it ([OwnTasks.MADE_ON_IT]).
+ * count); one of your own has them made on it ([OwnTaskRules.MADE_ON_IT]).
  */
 fun TaskItem.withOverrides(o: TaskOverrides): TaskItem {
     val laidOver = source != Source.Own && !derived
