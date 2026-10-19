@@ -1,7 +1,7 @@
 # Slots and the calendar
 
 How each day's pieces get their times (`core/Slotter.kt`), how a slot is kept, missed or moved (`block/Focus.kt`, `block/SlotAlarms.kt`), and how the plan is written to your calendar (`calendar/CalendarWriter.kt`, through `CalendarProvider`: `calendar/SlotCalendar.kt` on the phone).
-Also how your calendar's events become busy time for the planner (`learn/CalendarTime.kt`, `learn/EventJudge.kt`).
+Also how your calendar's events become busy time for the planner (`sync/Sync.kt`'s `refreshCalendar`, `learn/CalendarTime.kt`, `learn/EventJudge.kt`).
 
 ## When the plan is made
 
@@ -132,7 +132,7 @@ It's tried again at each write till it works (the permission back, the provider 
 
 ## Your calendar as busy time
 
-`CalendarTime.refresh` reads the phone's calendar (`READ_CALENDAR`) from a day back to the end of the plan's last day, 90 days on (`CalendarTime.readUntil`, DX-14).
+`Sync.refreshCalendar` reads the phone's calendar (`READ_CALENDAR`) from a day back to the end of the plan's last day, 90 days on (`CalendarTime.readUntil`, DX-14).
 - Only the calendars ticked in Settings → Calendar (`Settings.calendarsExcluded`, DX-13), never the one written to; events you've declined are left out.
 - Each event's location and description (its first 500 characters) are read too (DX-12).
 - It's read again when the calendar changes (once quiet 5 seconds), after each sync, and at the morning briefing; a failed read judges the last events read again.
