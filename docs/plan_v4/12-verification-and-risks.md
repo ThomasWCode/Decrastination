@@ -28,14 +28,15 @@ A feature PR, and a cleanup PR that changes behaviour on purpose (5a's message r
 | 6 | each service's flows: the calendar's copy and move rules through its port; armed and unarmed protection; an instruction applied, refused, deleted and a quick change taken back; own tasks; a sync with one source failing; a reading due and refused; a review from a fixed log; the third rule by the module |
 | 7 | every flag of 3.1.2 to 3.1.4 over `mine`; ticks following an id through a re-read that reorders; origins; each migration from every fixture shape, twice; a backup from before restored after; the rehearsal's invariants |
 | 8a | `Reminders.next/due`; `Notes.forTask` (a standing note by subject, class, source and title); the parse's checks; the acts and their Undo; delivery with and without a draft; drafting through a fake caller; the sheet's model; the context; the store in a backup and Reset; `SchemaLimitsTest`; `SchemaCompileTest -PcheckSchemas=true` |
-| 8b | each gap's parse, act and Undo; the context line; the schemas compiled again |
+| 8b | each gap's parse, act and Undo; the context lines; G8's lessons (an unknown week, a day of no school, a half day, a lesson past a holiday, a class tied to no code, a stale timetable); a `DueBy` naming a lesson, set by the app; each task's line with its class; the schemas compiled again |
+| 8c | `ChatAnswers.read` keeping the kinds apart from the ids; `ChatRounds.next` with each kind; the text block cut to 250 a task, each task's line with what its text holds within its room, every task kept; each round's block; the chat's eval before and after, twice for the cut's cases (paid, by hand) |
 | 9 | all as before, under new names |
 | 10a | `Memories.expired`; `edit` and `undo` with the until; the tidy skipping; `Profile.block`; both parsers; both schemas compiled; `profile.txt` and `ReadingPrompts.VERSION` |
 | 10b | the goldens; `FelixWords` and the chips' two forms; `summary.txt`; the private evals re-run (paid, by hand) |
 | 11 | `GmailFinish.due`; the grace and undo rules; `ImapWriter` over a fake stream and the reader's command list; the worker's outcomes through a fake writer; the merge after an unstar; the switch off |
 | 12 | the architecture test complete: only the notifier posts, only the gateway builds a client, `core` pure, one writer a store (with `Stores.replace` its one named exception, for restores and resets) |
 
-The paid checks: `SchemaCompileTest` by the API (a cent a schema) in 8a, 8b, 10a; the private evals ($2) in 10b; `felix-say` and `chat-ask` on the phone (a few cents each) in 4, 5, 8, 10. Everything else is free.
+The paid checks: `SchemaCompileTest` by the API (a cent a schema) in 8a, 8b, 10a; the chat's private eval in 8c (before and after, the cut's cases twice each, $2 a run); the private evals ($2) in 10b; `felix-say` and `chat-ask` on the phone (a few cents each) in 4, 5, 8, 10. Everything else is free.
 
 ## The phone check
 
@@ -70,6 +71,9 @@ Then the stage's own checks ([03](03-stages.md)), through the debug commands whe
 | A reminder never fires (the alarm dropped, Doze) | 8a | low | medium | an exact alarm with `USE_EXACT_ALARM`; the sweep at start and at his looks; late marked, never silent |
 | A reminder's draft isn't there at the time (offline, resting, the cap) | 8a | medium | low | your words go verbatim, marked as the app's: the reminder is never lost, only plainer |
 | The archive grows past the backup's cap | 5a | low (years of use) | low | the oldest messages left out of the backup first, said in Settings → Backup; the file itself is never trimmed |
+| He answers worse with less sent: a text cut short, or the week, not asked for, guessed instead | 8c | medium | medium | each thing he can ask for named in his prompt; each task's line says what its text holds; the chat's eval before and after, twice for the cut, which is undone where it scores lower, before the merge; the text asked for instead of sent left to real use; a revert undoes it, nothing stored changes |
+| Rounds cost more than they save | 8c | medium | low | rounds bounded at two; no cache mark until the record of calls shows one message in four or more taking a round ([15](15-sent-or-asked-for.md) §After the plan) |
+| A next lesson that isn't on: the week unknown, a day off, a half day, a class tied to the wrong code | 8b | low | medium | `lessonsOn`'s rule for an unknown week; the school calendar's days off and half days; a class tied only by the subject you give it, one with none named as such; tests of each |
 | The voice costs a change or a date | 10b | medium | medium | the evals re-run before the merge; the "still exact" lines; the examples yours to read first |
 | The profile's shape re-reads every task | 10a | certain | low (about 60 cents) | accepted once (Q15) |
 | A write touches the wrong conversation | 11 | low | high | only a thread the app made a task from, by its stored thread id and UIDs; only unstar and archive; the writer's command list tested; the first write shown to you; the switch |
