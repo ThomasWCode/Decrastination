@@ -58,7 +58,7 @@ class CalendarWriter(
     private val replan: () -> Unit,
     /** His questions about the events named a key settled ([com.thomaswcode.decrastination.felix.Conversation.settleEvent]). */
     private val settleEvent: suspend (String) -> Unit,
-    /** The calendar read again, and today's record made again with it ([com.thomaswcode.decrastination.learn.CalendarTime.refresh], [com.thomaswcode.decrastination.learn.Briefing.replanToday]). */
+    /** The calendar read again, and today's record made again with it ([com.thomaswcode.decrastination.sync.Sync.refreshCalendar], [com.thomaswcode.decrastination.learn.Briefing.replanToday]). */
     private val reread: suspend () -> Unit,
     /** How long plans are quiet before the calendar's written: [CALENDAR_WRITE_QUIET_MS], but in a test. */
     private val quietMs: Long = CALENDAR_WRITE_QUIET_MS,

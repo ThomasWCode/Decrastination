@@ -84,7 +84,7 @@ A keep, a photo's earning and a completion are each saved first (`RuntimeState.k
 
 ## Photo checks
 
-`block/PhotoChecks.kt` sends photos of written work to Claude (`enrich/PhotoChecker.kt`): only homework that isn't Anki's (`Chunk.photoCheckable`), and only while Claude is on.
+`Photos.check` (`block/Photos.kt`) sends photos of written work to Claude (`enrich/PhotoChecker.kt`), shrunk and turned by `block/PhotoChecks.kt`: only homework that isn't Anki's (`Chunk.photoCheckable`), and only while Claude is on.
 - Up to three pages make one check (AI-17), with *Add another page?* after each. Each is shrunk to 1 568 pixels on its long side and turned upright by its EXIF note; if any page can't be read, no check is made.
 - Claude is given the piece and its minutes, the task's title, subject, steps done and instructions (AI-16, `PhotoChecker.context`), and told that blank or crossed-out pages, a photo of a screen, printed answers or another task's work aren't done. It answers `{done, confidence, reason, seen}`.
 - Done with a confidence of 0.7 or more (`PhotoChecker.ACCEPT`) keeps the piece's slot, earning, or makes a slot kept without earning earn now (`Focus.photoChecked`). A photo counts only for a keep of its piece made after the photo.

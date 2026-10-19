@@ -49,6 +49,7 @@ import com.thomaswcode.decrastination.core.Status
 import com.thomaswcode.decrastination.core.Invite
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.invite
+import com.thomaswcode.decrastination.enrich.Readings
 import com.thomaswcode.decrastination.enrich.RuleEnricher
 import com.thomaswcode.decrastination.sources.gmail.GmailThreads
 import java.time.Instant
@@ -152,7 +153,7 @@ fun TaskSheet(
             if (jpeg == null) {
                 message = "Couldn't read the photo."
             } else {
-                graph.attachPhoto(task.id, jpeg)
+                graph.photos.attachPhoto(task.id, jpeg)
                 said = if (graph.gateway.claudeKey() != null) "Photo kept: Claude reads the task again with it." else "Photo kept: it's read with the task once Claude is on."
             }
         }
@@ -347,10 +348,10 @@ fun TaskSheet(
                     OutlinedButton(
                         onClick = {
                             scope.launch {
-                                said = when (graph.readAgain(task.id)) {
-                                    AppGraph.ReadAgain.Read -> "Read again by Claude"
-                                    AppGraph.ReadAgain.NotNow -> "Claude can't be asked now: try again later"
-                                    AppGraph.ReadAgain.NoReading -> "No new reading came back: the one there stands"
+                                said = when (graph.readings.readAgain(task.id)) {
+                                    Readings.ReadAgain.Read -> "Read again by Claude"
+                                    Readings.ReadAgain.NotNow -> "Claude can't be asked now: try again later"
+                                    Readings.ReadAgain.NoReading -> "No new reading came back: the one there stands"
                                 }
                             }
                         },

@@ -297,7 +297,7 @@ class CommandActivity : Activity() {
                 Log.i(TAG, "Protection: ${Watchdog.report(this)}; problems ${graph.runtime.value.protection.problems}")
             }
             "enrich" -> {
-                graph.enrichNow()
+                graph.readings.enrichNow()
                 val open = graph.tasks.value.tasks.filter { Enrichments.jobFor(it) != null }
                 Log.i(TAG, "Enriched: " + open.groupingBy { it.enrichment?.by ?: "nothing" }.eachCount())
                 open.filter { it.subSteps.isNotEmpty() && it.enrichment?.subSteps != null }
@@ -323,13 +323,13 @@ class CommandActivity : Activity() {
                 // --ez again true: the questions still unanswered are asked again (their notifications
                 // gone): what's to ask about is read first, then no longer counted as asked.
                 if (intent.getBooleanExtra("again", false)) {
-                    CalendarTime.refresh(this)
-                    val keys = graph.calendarTime.toAsk.map(EventJudge::key).toSet()
+                    graph.sync.refreshCalendar()
+                    val keys = graph.sync.calendarTime.toAsk.map(EventJudge::key).toSet()
                     graph.runtime.update { it.copy(eventsAsked = it.eventsAsked - keys) }
                     Log.i(TAG, "Asking again about ${keys.size}: ${keys.joinToString()}")
                 }
-                CalendarTime.refresh(this)
-                val time = graph.calendarTime
+                graph.sync.refreshCalendar()
+                val time = graph.sync.calendarTime
                 // How far it was read (DX-14: as far as the plan reaches).
                 val last = time.events.maxOfOrNull { it.start }?.let { java.time.Instant.ofEpochMilli(it).atZone(graph.clock.zone()).toLocalDate() }
                 Log.i(TAG, "Calendar: ${time.events.size} events, the last on $last; ${time.busy.size} busy, loads ${time.dayLoads}, ${time.toAsk.size} to ask about; allowed ${CalendarTime.allowed(this)}")
@@ -453,7 +453,7 @@ class CommandActivity : Activity() {
                     // Its enrichment forgotten, and the steps it gave: out of date, so this run asks for it
                     // again now, and its answer's steps aren't taken for the source's.
                     graph.tasks.update { state -> state.copy(tasks = state.tasks.map { if (it.id == id) it.withoutEnrichment() else it }) }
-                    graph.enrichNow(only = id)
+                    graph.readings.enrichNow(only = id)
                     val task = graph.tasks.value.tasks.first { it.id == id }
                     val e = task.enrichment
                     Log.i(TAG, "enrich-task $id: by ${e?.by}, dropped ${e?.dropped}, ${task.subSteps.size} steps: ${task.subSteps.joinToString(" | ") { "${it.title} (${it.minutes})" }}")
@@ -467,7 +467,7 @@ class CommandActivity : Activity() {
                     Log.w(TAG, "instruction needs --es text <words>")
                 } else {
                     val task = intent.getStringExtra("task")?.let { id -> graph.tasks.value.tasks.firstOrNull { it.id == id } }
-                    val event = intent.getStringExtra("event")?.let { key -> graph.calendarTime.events.firstOrNull { EventJudge.key(it) == key } }
+                    val event = intent.getStringExtra("event")?.let { key -> graph.sync.calendarTime.events.firstOrNull { EventJudge.key(it) == key } }
                     val about = About(
                         taskId = task?.id,
                         taskTitle = task?.title,

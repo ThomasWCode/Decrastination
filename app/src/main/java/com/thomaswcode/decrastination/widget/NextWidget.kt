@@ -434,6 +434,6 @@ class TickAction : ActionCallback {
 /** ↻: reads every source now, and asks the Teams widget to sync Teams (Q21: a sync on a tap). */
 class RefreshAction : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
-        AppGraph.get(context).refreshAll(teams = true)
+        AppGraph.get(context).sync.refreshAll(teams = true)
     }
 }

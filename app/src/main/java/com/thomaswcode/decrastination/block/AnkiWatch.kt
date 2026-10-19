@@ -117,7 +117,7 @@ class AnkiWatch(private val graph: AppGraph) {
                 )
             }
         }
-        graph.syncer.sync(setOf(Source.Anki))
+        graph.sync.sync(setOf(Source.Anki))
     }
 
     private suspend fun read(now: Long, entering: Boolean): AnkiReading? = withContext(Dispatchers.IO) {

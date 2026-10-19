@@ -33,13 +33,13 @@ Decrastination has no Teams reader of its own. A separate app, the Teams Assignm
 - **Done.** An assignment gone from `/assignments` is handed in. Listed again, the same task opens again.
 
 Freshness:
-- A Teams sync takes over the screen, so the widget syncs only when asked. Decrastination asks (`AppGraph.requestTeamsSync`) when you tap **Refresh Teams**.
+- A Teams sync takes over the screen, so the widget syncs only when asked. Decrastination asks (`Sync.requestTeamsSync`) when you tap **Refresh Teams**.
 - It also asks on its own (Q21, `block/TeamsAutoSync.kt`): at the first unlock after 16:45 (`teamsFirstUnlockMin`), every three hours (`teamsSyncEveryMin`), and at an unlock soon after the morning briefing.
 - Automatic syncs come only while the phone is unlocked and in use, never in quiet hours, and not within 30 minutes of a Teams sync.
 - On weekdays the first-unlock and three-hourly ones wait for the school-day blocking time (`weekdayBlockFromMin`); the morning's comes at an unlock within an hour and a half of the briefing.
 - Each is announced by a banner counting down 10 s, with **Cancel** and **Delay 5 min** (`block/CountdownBanner.kt`).
 - One the widget didn't start is offered again 15 minutes later, twice at most; then the next comes at its usual time.
-- The widget announces each change to its list. Once the changes have stopped for 5 s, Teams and Anki are read (`AppGraph.teamsChanged`). An announcement to an app in the background can come late, so it's a prompt to read, not a clock.
+- The widget announces each change to its list. Once the changes have stopped for 5 s, Teams and Anki are read (`Sync.teamsChanged`). An announcement to an app in the background can come late, so it's a prompt to read, not a clock.
 
 **Open** asks the widget to open the assignment in Teams (`call("open", key)`); feedback opens its assignment. When the widget can't, Teams opens on its own and you're told why (`ui/TaskOpener.kt`).
 
@@ -144,10 +144,11 @@ Made in the app, not read from anywhere (Q28): `Source.Own` ("Yours"), keyed `ow
 - **When.** `sync/SyncWorker.kt` reads every source every 15 minutes (WorkManager's shortest period), with no network constraint, and at once when asked (`SyncWorker.syncNow`, all sources or some).
 - A sync of all or some sources also runs on a refresh (Work, the widget, Settings), when the Teams widget's list changes, when AnkiDroid leaves the screen, when Anki's settings change, when a reading finds new deck sections, and from Setup.
 - *Check it's done* on a piece reads just its task's source and says whether it agrees (`ui/PieceActions.kt`).
-- **How** (`sync/Syncer.kt`): one sync at a time; the sources in turn, Anki last, as its deck tasks come from the others' homework; each read on its own, waited for at most 90 s.
+- **How** (`sync/Syncer.kt`, which the app reaches through `sync/Sync.kt`): one sync at a time; the sources in turn, Anki last, as its deck tasks come from the others' homework; each read on its own, waited for at most 90 s.
 - **A failed source fails only itself.** Its error is kept in its `SourceStatus` with the time of the attempt; its tasks stay as they are, and the other sources carry on.
 - A read that overruns is cancelled and left to wind down, and no other read of that source starts beside it (BUG-P2-020).
 - A good read records its time, the source's own "as of" time and note, and Anki's day, the decks' topics and Power Planner's timetable (`TaskState`).
+- `Sync` is built like `Focus`: its stores, the clock, the syncer, and `SyncPorts` for what Android does (a sync as a job, the Teams widget asked and watched, the calendar read, the widget drawn); `SyncTest` drives it on temporary stores with made-up sources, `SyncerTest` the syncer itself.
 - **After each sync**: completions are settled (free time and the log, learning.md); your instructions' overrides are laid on new and returning tasks (`Instructions.layTaskOverrides`); your own tasks long done go; and readings are queued where any task's is out of date (`EnrichWorker`, readings.md).
 
 ## The merge
