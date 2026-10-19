@@ -51,7 +51,7 @@ fun CalendarSection(graph: AppGraph, activity: Activity, choosing: Boolean = tru
     val calendars = remember(refresh, canRead) { runCatching { SlotCalendar.calendars(activity) }.getOrDefault(emptyList()) }
     val ask = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
         refresh++
-        scope.launch { CalendarTime.refresh(activity) }
+        scope.launch { graph.sync.refreshCalendar() }
     }
     // Looked at again on coming back: a calendar made at calendar.google.com meanwhile shows.
     LifecycleResumeEffect(Unit) {
@@ -59,7 +59,7 @@ fun CalendarSection(graph: AppGraph, activity: Activity, choosing: Boolean = tru
         onPauseOrDispose { }
     }
     fun change(change: (com.thomaswcode.decrastination.data.Settings) -> com.thomaswcode.decrastination.data.Settings) {
-        scope.launch { graph.changeSettings(change) }
+        scope.launch { graph.protection.changeSettings(change) }
     }
 
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {

@@ -1,6 +1,6 @@
 # Decrastination 4.x: the cleanup and Felix as the app's one voice, in one order
 
-One plan for the next run of work, merged on 18 Oct 2026 from two: the targeted cleanup (written 17 Oct: the code and its stores restructured without changing what the app does) and the Felix plan (written 18 Oct: everything he says in one WhatsApp-like chat, notes and reminders, memory that expires, a teenager's voice, a starred email finished in Gmail). Written against `main` at e6cd54b (3.2.0) and measured on 18 Oct ([01](01-current-state.md)); every question either plan asked is answered and applied ([ANSWERS.md](ANSWERS.md) is the record; the "Q3: A" marks through the documents point into it); Stages 0 to 5 are in (#57 to #61: Stage 0, then 3.3.0 to 3.3.3; #69 to #71: 4.0.0 to 4.0.2), with 3.3.4 to 3.3.6 beside them (#62, the secrets' write tried again as the stores' is; #67, a piece under way kept today; #68, the open items settled) and 4.0.3 and 4.0.4 after them (#73, the Day screen's crash on a slot kept twice; #74, the chat's archive a file a month and its live window a fortnight). Stage 6 (4.0.5 to 4.0.10) is next, built while the phone is away: its PRs wait, ready, for their installs ([14](14-your-part.md) §Waiting for the phone). [14](14-your-part.md) says which stages need your phone and which need you.
+One plan for the next run of work, merged on 18 Oct 2026 from two: the targeted cleanup (written 17 Oct: the code and its stores restructured without changing what the app does) and the Felix plan (written 18 Oct: everything he says in one WhatsApp-like chat, notes and reminders, memory that expires, a teenager's voice, a starred email finished in Gmail). Written against `main` at e6cd54b (3.2.0) and measured on 18 Oct ([01](01-current-state.md)); every question either plan asked is answered and applied ([ANSWERS.md](ANSWERS.md) is the record; the "Q3: A" marks through the documents point into it); Stages 0 to 5 are in (#57 to #61: Stage 0, then 3.3.0 to 3.3.3; #69 to #71: 4.0.0 to 4.0.2), with 3.3.4 to 3.3.6 beside them (#62, the secrets' write tried again as the stores' is; #67, a piece under way kept today; #68, the open items settled) and 4.0.3 and 4.0.4 after them (#73, the Day screen's crash on a slot kept twice; #74, the chat's archive a file a month and its live window a fortnight). Stage 6's first five (4.0.5 to 4.0.9, 6a to 6e) were built and reviewed while the phone was away, on 19 Oct, then installed, checked and merged in order that evening (#76 to #80); 4.0.10 after them puts his newest message in the chat's box and shows what waits for your answer (your calls on the phone, 19 Oct); 6f (4.0.11) is next. [14](14-your-part.md) says which stages need your phone and which need you.
 
 The order is the merge's one real decision: the cleanup comes first where a feature would otherwise be built on the mess, and between features where it only has to be done at all. [03](03-stages.md) lays out every stage and PR in order, with what each needs from the ones before it and what it leaves for the ones after; nothing in it relies on anything later.
 
@@ -10,7 +10,7 @@ At 3.2.0, when this was written ([01](01-current-state.md)): the planner, the sl
 
 **The structure, where this fortnight's changes met** ([01](01-current-state.md) has the evidence):
 
-- `AppGraph.kt` did everything else: 2,628 lines, 117 functions, ten stores, thirteen concerns, no tests of its own; 51 other files reached into it, most straight into its stores. (Since 3.3.3: 1,446 lines, 64 functions; at 4.0.2, 1,443 and 65.)
+- `AppGraph.kt` did everything else: 2,628 lines, 117 functions, ten stores, thirteen concerns, no tests of its own; 51 other files reached into it, most straight into its stores. (Since 3.3.3: 1,446 lines, 64 functions; at 4.0.2, 1,443 and 65; at 4.0.9, 464, its members the services.)
 - Felix had two homes: what he said unprompted was a record in the log and a notification; the chat had only his answers. Seven places produced messages in his name, each building its own notification, and most shared one id, so each new one replaced the last. (One since 4.0.0: every message of his is in the chat first, and his one notification is made from it.)
 - "Who set this?" was spread over twelve `user…` fields, mirrored by position; a step's origin was told from its title.
 - Eleven classes built their own Claude client; 18 notification ids lived in 17 files. (One gateway, `enrich/ModelGateway.kt`, since 3.3.1; one id registry, `notify/NoticeId.kt`, since 3.3.0.)
@@ -62,7 +62,7 @@ At 3.2.0, when this was written ([01](01-current-state.md)): the planner, the sl
 
 ## The order
 
-Why it's this order, in short ([03](03-stages.md) §Why this order has it in full): the chat work is the largest feature and lives in the most tangled code, so the notifier, the gateway, the stores with migrations and Felix's own service come before it (Stages 1–4), and the chat is then written inside a tested service rather than moved into one afterwards. The other services and the data model don't touch the chat, so they wait until it's in (6, 7), but they do touch reminders, the gaps and the email's finish, so they come before those. Names are settled (9) before the prompts are rewritten (10); the write outside the phone comes last (11); the sweep leaves the code as [11](11-conventions-and-docs.md) wants it (12).
+Why it's this order, in short ([03](03-stages.md) §Why this order has it in full): the chat work is the largest feature and lives in the most tangled code, so the notifier, the gateway, the stores with migrations and Felix's own service come before it (Stages 1–4), and the chat is then written inside a tested service rather than moved into one afterwards. The other services and the data model don't touch the chat, so they wait until it's in (6, 7), but they do touch reminders, the gaps and the email's finish, so they come before those. Names are settled (9) as soon as the services are in, so the data release, the features and the prompts' rewrite (7 to 10) are written on them, not renamed after; the write outside the phone comes last (11); the sweep leaves the code as [11](11-conventions-and-docs.md) wants it (12).
 
 Every PR is a release ([development.md](../development.md)): cleanup-only releases before the chat are 3.3.x; from the chat on, every release is 4.x in the order it lands, cleanup or feature. The number says when, not what.
 
@@ -81,23 +81,24 @@ Every PR is a release ([development.md](../development.md)): cleanup-only releas
 | 5c | The extras folded; the label that slides out | 4.0.2, done (#71) | feature | 5b | ½ |
 | — | The Day screen's crash on a slot kept twice; a Done tapped again keeps nothing more; a Done that leaves only the source's word says so | 4.0.3, done (#73) | fix | — | — |
 | — | The chat's archive a file a month, each read only when it's wanted, none at a start (your call, 19 Oct) | 4.0.4, done (#74) | fix, data | 5a | — |
-| 6a | `CalendarWriter` | 4.0.5 | cleanup | 3 | ½ |
-| 6b | `Protection`, and the Settings screen's state holder | 4.0.6 | cleanup | 3 | 1 |
-| 6c | `Instructions` and `OwnTasks`, and the task sheet's state holder | 4.0.7 | cleanup | 3 | 1 |
-| 6d | `Readings`, `Sync` and `Photos` | 4.0.8 | cleanup | 2, 3 | ½ |
-| 6e | `Learning` | 4.0.9 | cleanup | 3, 5a | ½ |
-| 6f | The `:core` module, its dependencies on the app turned round first | 4.0.10 | cleanup | 6a–6e | 1 |
-| 7 | Who set what (`Mine`, `By`, steps with ids) and the stores split, trimmed: one data release | 4.0.11 | cleanup, data | 0, 3, 6 | 2½ |
+| 6a | `CalendarWriter` | 4.0.5, done (#76) | cleanup | 3 | ½ |
+| 6b | `Protection`, and the Settings screen's state holder | 4.0.6, done (#77) | cleanup | 3 | 1 |
+| 6c | `Instructions` and `OwnTasks`, and the task sheet's state holder | 4.0.7, done (#78) | cleanup | 3 | 1 |
+| 6d | `Readings`, `Sync` and `Photos` | 4.0.8, done (#79) | cleanup | 2, 3 | ½ |
+| 6e | `Learning` | 4.0.9, done (#80) | cleanup | 3, 5a | ½ |
+| — | The chat's box answers his newest nudge; his messages waiting for your answer shown so, with *Mark answered* and *Mark all answered* (your calls, 19 Oct) | 4.0.10 | fix, feature | 5b | — |
+| 6f | The `:core` module, its dependencies on the app turned round first | 4.0.11 | cleanup | 6a–6e | 1 |
+| 9 | Names: the readings' prompts renamed, core's rules apart from the services, files and tests split | 4.0.12 | cleanup | 6 | ½ |
+| 7 | Who set what (`Mine`, `By`, steps with ids) and the stores split, trimmed: one data release | 4.0.13 | cleanup, data | 0, 3, 6, 9 | 2½ |
 | 8a | Notes, standing notes and reminders | 4.1.0 | feature, data | 2, 3, 4, 5, 7 | 3 |
 | 8b | The gaps: keep a piece, check a source, open where it lives, free time and the next lessons in his context | 4.1.1 | feature | 5, 6d, 6f, 8a | 1½ |
 | 8c | Less sent, more asked for: the week's numbers, the calendar further out and the tasks' text asked for, measured by the chat's eval before and after | 4.1.2 | feature | 6e, 8b | 1½ |
-| 9 | Names: the readings' prompts renamed, files and tests split | 4.1.3 | cleanup | 6 | ½ |
 | 10a | Memory that expires | 4.2.0 | feature, data | 3, 4, 7, 9 | 1 |
 | 10b | His voice; just talk; the summary email in the third person | 4.2.1 | feature | 5, 6e, 9 | ½ |
 | 11 | Emails done | 4.3.0 | feature, data | 1, 3, 6d, 7 | 1½ |
 | 12 | The sweep: imports, comments, the architecture test complete, baselines compared | 4.3.1 | cleanup | all | ½ |
 
-About twenty-five days in 28 PRs (27 releases), 3.3.4 to 3.3.6, 4.0.3 and 4.0.4 among them, evenings and weekends. After it, the conversation digest as 4.4.0 ([13](13-summaries.md)). You've said you won't use the app until the whole of it is in (Q21): each release is still built and checked on the phone, but nothing between releases has to serve a day's use.
+About twenty-five days in 29 PRs (28 releases), 3.3.4 to 3.3.6, 4.0.3, 4.0.4 and 4.0.10 among them, evenings and weekends. After it, the conversation digest as 4.4.0 ([13](13-summaries.md)). You've said you won't use the app until the whole of it is in (Q21): each release is still built and checked on the phone, but nothing between releases has to serve a day's use.
 
 ## What changes substantially
 
@@ -116,7 +117,7 @@ About twenty-five days in 28 PRs (27 releases), 3.3.4 to 3.3.6, 4.0.3 and 4.0.4 
 
 ## Decisions it adds
 
-Numbered in `docs/decisions.md` by the PRs that apply them (the next free number is D-99; D-94 is 3.3.2's, D-95 to D-97 4.0.0's, D-98 4.0.1's):
+Numbered in `docs/decisions.md` by the PRs that apply them (the next free number is D-100; D-94 is 3.3.2's, D-95 to D-97 4.0.0's, D-98 4.0.1's, amended by 4.0.10, and D-99 4.0.10's):
 
 - The chat is Felix's one visible voice; a notification is made from it and never beside it (5a). A reply from a notification and one in the chat are the same turn, routed by the message it answers (5b).
 - The chat keeps every message for you; what he's sent of it is the recent window (5a).

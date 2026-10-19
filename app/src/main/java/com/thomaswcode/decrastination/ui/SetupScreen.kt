@@ -91,7 +91,7 @@ fun SetupScreen(graph: AppGraph, activity: Activity, parts: Set<SetupPart> = Set
         refresh++
         if (granted[CalendarTime.PERMISSION] == true) {
             hadCalendar = true
-            scope.launch { CalendarTime.refresh(activity) }
+            scope.launch { graph.sync.refreshCalendar() }
         }
     }
     val calendarAllowed = remember(refresh) { CalendarTime.allowed(activity) }
@@ -103,7 +103,7 @@ fun SetupScreen(graph: AppGraph, activity: Activity, parts: Set<SetupPart> = Set
     // Given there: what needs it reads once this screen sees it.
     LaunchedEffect(ankiAllowed, calendarAllowed) {
         if (ankiAllowed && !hadAnki) SyncWorker.syncNow(activity, setOf(Source.Anki))
-        if (calendarAllowed && !hadCalendar) CalendarTime.refresh(activity)
+        if (calendarAllowed && !hadCalendar) graph.sync.refreshCalendar()
         hadAnki = ankiAllowed
         hadCalendar = calendarAllowed
     }
@@ -237,7 +237,7 @@ fun SetupScreen(graph: AppGraph, activity: Activity, parts: Set<SetupPart> = Set
                 graph.runtime.update { it.copy(aiUsage = it.aiUsage.newKey()) }
                 ModelAlerts.keyFixed(activity)
                 // Put to use at once, armed or not: Claude works on the plan, not the blocker (12 Oct).
-                graph.changeSettings { it.copy(aiKeyActive = true) }
+                graph.protection.changeSettings { it.copy(aiKeyActive = true) }
                 // A new key for one already in use: straight to work.
                 if (graph.gateway.claudeKey() != null) EnrichWorker.enqueue(activity)
             }

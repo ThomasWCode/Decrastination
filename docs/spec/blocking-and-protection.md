@@ -14,7 +14,7 @@ Protection never locks you out of your phone: it guards only the app's own pages
 - One block a burst (`BLOCK_GAP_MS`), each logged as a `BlockRecord` (when, what, why) for Stats.
 
 On the same tick it also:
-- applies setting changes whose wait is over (`AppGraph.applyDueChanges`), and gives an empty day its free time (BL-07);
+- applies setting changes whose wait is over (`Protection.applyDueChanges`), and gives an empty day its free time (BL-07);
 - records slots gone by (`Slots.sweep`), runs Felix's look ([felix.md](felix.md)), and runs the watchdog every five minutes;
 - offers the automatic Teams syncs, with their 10-second banner (`block/TeamsAutoSync.kt`, `block/CountdownBanner.kt`; [sources.md](sources.md)).
 
@@ -84,7 +84,7 @@ A keep, a photo's earning and a completion are each saved first (`RuntimeState.k
 
 ## Photo checks
 
-`block/PhotoChecks.kt` sends photos of written work to Claude (`enrich/PhotoChecker.kt`): only homework that isn't Anki's (`Chunk.photoCheckable`), and only while Claude is on.
+`Photos.check` (`block/Photos.kt`) sends photos of written work to Claude (`enrich/PhotoChecker.kt`), shrunk and turned by `block/PhotoChecks.kt`: only homework that isn't Anki's (`Chunk.photoCheckable`), and only while Claude is on.
 - Up to three pages make one check (AI-17), with *Add another page?* after each. Each is shrunk to 1 568 pixels on its long side and turned upright by its EXIF note; if any page can't be read, no check is made.
 - Claude is given the piece and its minutes, the task's title, subject, steps done and instructions (AI-16, `PhotoChecker.context`), and told that blank or crossed-out pages, a photo of a screen, printed answers or another task's work aren't done. It answers `{done, confidence, reason, seen}`.
 - Done with a confidence of 0.7 or more (`PhotoChecker.ACCEPT`) keeps the piece's slot, earning, or makes a slot kept without earning earn now (`Focus.photoChecked`). A photo counts only for a keep of its piece made after the photo.
@@ -104,6 +104,8 @@ Nothing on an unrooted phone is unbypassable: the layers make every impulsive ro
 | 6. Parent code | `protect/Totp.kt`: an authenticator app's codes, held by a parent | Being stuck when a change is really needed |
 
 **Unarmed** (`Settings.armed` false), blocking works, but the guard is off, every change applies at once, and the watchdog warns without repairing (a crashed service it still restarts). **Armed**, all six layers act.
+
+`protect/Protection.kt` makes every settings change (`changeSettings`: at once, or waiting), counts the waits and applies what's due, uses a parent code, and keeps the device admin in step with arming. It's built like `Focus`: the settings, the runtime, the secrets, the clock, and callbacks for the device admin; `ProtectionTest` drives it on temporary stores, armed and unarmed. Settings saves through it from its state holder (`ui/SettingsScreenState.kt`: your edits over what the screen showed, only what you changed saved, BUG-P2-014), tested without Compose (`SettingsScreenStateTest`).
 
 **Arming** (`protect/ProtectionActivity.kt`: its own page, and Settings → Blocking and protection) asks for the device admin, then sets up the parent code:
 - a QR code for the parent's authenticator, checked with a code from it; or, with one set already, kept once a code from it is typed (IMP-P2-012); or skipped;
@@ -125,18 +127,18 @@ Everything else applies at once, armed or not:
 - instructions, quick changes and Felix's changes, due dates and minutes included; your own tasks;
 - a restored backup's instructions, log, calibration and calendar answers; and every reset.
 
-The weekly review's bounded changes apply at once too, armed or not (IMP-P2-015, `AppGraph.applyReviewChanges`): margins, undated work a day, a school day's hours within an hour, and the minutes of work for a minute of free time between 2 and 5 (`ReviewInput.BOUNDS`).
+The weekly review's bounded changes apply at once too, armed or not (IMP-P2-015, `Protection.applyReviewChanges`): margins, undated work a day, a school day's hours within an hour, and the minutes of work for a minute of free time between 2 and 5 (`ReviewInput.BOUNDS`).
 Undone on the Reviews page, one that loosens the blocker waits as yours do.
 
 A waiting change is a `PendingChange` in `runtime.json`, listed under *Waiting* with when it applies.
 - Its wait is counted on the uptime clock (`DeviceClock.uptime`, `SettingsChanges.applyDue`), which setting the date can't move; hours the phone is off don't count.
-- *Cancel*, or setting it back, drops it at once; a parent code applies it at once (`AppGraph.applyNow`).
+- *Cancel*, or setting it back, drops it at once; a parent code applies it at once (`Protection.applyNow`).
 - One that no longer loosens (a setting that no longer waits, a removal added back) applies at the next count.
 
 ## The parent code
 
 An authenticator app's time-based codes (RFC 6238, Q17). The secret is made at arming, shown once as a QR code, and kept only in the encrypted secrets file ([storage-and-backups.md](storage-and-backups.md)).
-- A code applies one waiting change, or, armed, **Unblock for an hour** (`AppGraph.useParentCode`).
+- A code applies one waiting change, or, armed, **Unblock for an hour** (`Protection.useParentCode`).
 - Each code works once; three wrong ones lock entry for an hour, across restarts (`CodeLock`).
 - A code can't say what it's for, so the dialog says in full what it will do, and that the code's holder types it in, seeing that.
 - Nothing is ever emailed: protection's alerts stay on the phone.

@@ -82,13 +82,8 @@ class CheckInActivity : ComponentActivity() {
                             saving = true
                             scope.launch {
                                 val now = graph.clock.now()
-                                var added = false
-                                graph.log.update { log ->
-                                    // Once a week: a second tap (or another screen) finds it there already.
-                                    if (log.checkIns.any { it.weekOf == week }) return@update log
-                                    added = true
-                                    log.copy(checkIns = log.checkIns + CheckIn(week, now, feel, avoided.trim(), inTheWay.trim(), change.trim(), energy.trim())).trimmed(now)
-                                }
+                                // Once a week: a second tap (or another screen) finds it there already.
+                                val added = graph.learning.recordCheckIn(CheckIn(week, now, feel, avoided.trim(), inTheWay.trim(), change.trim(), energy.trim()), now)
                                 AppGraph.get(this@CheckInActivity).notifier.cancel(NoticeId.CheckIn)
                                 // Felix's questions, should he have begun them: the form has the answers.
                                 if (added) graph.conversation.endCheckInFlow()

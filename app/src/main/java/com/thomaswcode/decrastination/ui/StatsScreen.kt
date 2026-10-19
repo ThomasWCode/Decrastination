@@ -94,7 +94,7 @@ fun StatsScreen(graph: AppGraph) {
             confirmButton = {
                 androidx.compose.material3.TextButton(onClick = {
                     forgetting = null
-                    row.forget?.let { key -> scope.launch { graph.forgetCalibration(key) } }
+                    row.forget?.let { key -> scope.launch { graph.learning.forgetCalibration(key) } }
                 }) { Text("Forget") }
             },
             dismissButton = { androidx.compose.material3.TextButton(onClick = { forgetting = null }) { Text("Keep") } },
@@ -108,7 +108,7 @@ fun StatsScreen(graph: AppGraph) {
             confirmButton = {
                 androidx.compose.material3.TextButton(onClick = {
                     proposing = false
-                    scope.launch { graph.changeSettings { it.copy(weekdayHours = suggested) } }
+                    scope.launch { graph.protection.changeSettings { it.copy(weekdayHours = suggested) } }
                 }) { Text("Set them") }
             },
             dismissButton = { androidx.compose.material3.TextButton(onClick = { proposing = false }) { Text("Keep mine") } },

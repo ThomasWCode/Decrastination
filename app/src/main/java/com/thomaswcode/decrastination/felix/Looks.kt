@@ -68,9 +68,9 @@ class Looks(
     private val profile: (Long) -> Profile.Block,
     /** What he remembered, kept ([Conversation.remember]). */
     private val remember: suspend (List<Given>) -> List<MemoryEdit>,
-    /** Your answer to his question about a task, as an instruction on it, read by Claude (`AppGraph.addInstruction`). */
+    /** Your answer to his question about a task, as an instruction on it, read by Claude ([com.thomaswcode.decrastination.tasks.Instructions.addInstruction]). */
     private val addInstruction: suspend (text: String, about: About, answer: Boolean) -> String,
-    /** How a completion went, on record ([com.thomaswcode.decrastination.learn.Assessment.record]). */
+    /** How a completion went, on record ([com.thomaswcode.decrastination.learn.Learning.recordAssessment]). */
     private val assess: suspend (taskId: String, doneAt: Long, answer: String) -> Unit,
 ) {
     /** One look at a time: a check while one writes is covered by it. */

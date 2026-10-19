@@ -36,7 +36,7 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
     override suspend fun doWork(): Result {
         val graph = AppGraph.get(applicationContext)
         val only = inputData.getString(KEY_SOURCES)?.split(",")?.mapNotNull { name -> Source.entries.firstOrNull { it.name == name } }?.toSet()
-        val report = graph.syncer.sync(only)
+        val report = graph.sync.sync(only)
         Log.i(
             AppGraph.TAG,
             "Sync${only?.let { " of ${it.joinToString()}" }.orEmpty()}: ${report.added.size} added, ${report.completed.size} completed, " +
