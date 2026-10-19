@@ -68,6 +68,10 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
@@ -127,6 +131,7 @@ import com.thomaswcode.decrastination.core.InstructionStatus
 import com.thomaswcode.decrastination.core.Instructions
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.Memories
+import com.thomaswcode.decrastination.core.MessageKind
 import com.thomaswcode.decrastination.core.OwnTask
 import com.thomaswcode.decrastination.core.Proposal
 import com.thomaswcode.decrastination.core.ProposalState
@@ -144,6 +149,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * Asking Claude (2.0.0, Q29), in place of the Instructions page: **Chat**, where you tell it about
@@ -336,6 +342,21 @@ class AskActivity : ComponentActivity() {
         val claudeOn = settings.aiEnabled && settings.aiKeyActive
         val toCheck = instructions.instructions.filter { it.state != InstructionStatus.Applied }.sortedByDescending { it.at }
         val inUse = instructions.applied.reversed()
+        // His messages waiting for your answer (D-99), shown so: all but a check-in's under way can be
+        // marked answered, each or all at once, with an Undo for a moment.
+        val checkIn = chat.felix.checkInDraft != null
+        val awaiting = Replies.awaitingIds(chat.messages, checkIn, now, zone)
+        val markable = chat.messages.filter { it.id in awaiting && !(checkIn && it.kind == MessageKind.CheckIn) }.mapTo(HashSet()) { it.id }
+        val snackbar = remember { SnackbarHostState() }
+        fun mark(ids: Collection<String>) {
+            scope.launch {
+                val marked = graph.conversation.markAnswered(ids)
+                if (marked.ids.isEmpty()) return@launch
+                val said = if (marked.ids.size == 1) "Marked answered" else "${marked.ids.size} marked answered"
+                val undo = withTimeoutOrNull(UNDO_BAR_MS) { snackbar.showSnackbar(said, actionLabel = "Undo", duration = SnackbarDuration.Indefinite) }
+                if (undo == SnackbarResult.ActionPerformed) graph.conversation.unmarkAnswered(marked)
+            }
+        }
 
         // Words handed in: sent, or, when only to be put there, put in the box.
         val words = handed.value
@@ -350,6 +371,7 @@ class AskActivity : ComponentActivity() {
         }
 
         Scaffold(
+            snackbarHost = { SnackbarHost(snackbar) },
             topBar = {
                 TopAppBar(
                     title = { Text(settings.felixName) },
@@ -358,6 +380,10 @@ class AskActivity : ComponentActivity() {
                         Box {
                             IconButton(onClick = { menu = true }) { Icon(painterResource(R.drawable.ic_more_vert), contentDescription = "Menu") }
                             DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                                DropdownMenuItem(text = { Text("Mark all answered") }, enabled = markable.isNotEmpty(), onClick = {
+                                    menu = false
+                                    mark(markable)
+                                })
                                 DropdownMenuItem(text = { Text("What ${settings.felixName} remembers") }, onClick = {
                                     menu = false
                                     remembering = true
@@ -381,20 +407,28 @@ class AskActivity : ComponentActivity() {
                     })
                 }
                 if (tab == 0) {
-                    Chat(graph, screen, chat.messages, archive, quotes, unread, reading, byId, now, zone, claudeOn, onQuoted = { quoted = quoted + it }, onEdit = { m, p -> editing = "$m|$p" })
+                    Chat(graph, screen, chat.messages, archive, quotes, unread, reading, byId, now, zone, claudeOn, awaiting, markable, onMark = ::mark, onQuoted = { quoted = quoted + it }, onEdit = { m, p -> editing = "$m|$p" })
                     // His replies to offer (UI-06), under his last message: a tap answers it, as a reply to
                     // it from anywhere does (a check-in's answer, an event's, with no call).
-                    // His question still waiting for its answer since your last turn (with several asked together,
-                    // the one before it once that's answered): the box and the chips answer it (D-98); else his last
-                    // message's replies, where it's his.
-                    val checkIn = chat.felix.checkInDraft != null
-                    val pending = Replies.pending(chat.messages, checkIn)
-                    val last = pending ?: chat.messages.lastOrNull { it.from == Speaker.You || it.text.isNotBlank() }?.takeIf { it.from == Speaker.Felix && it.answeredAt == null }
-                    LaunchedEffect(pending?.id, checkIn) { screen.offer(pending, checkIn) }
+                    // His newest message still waiting for your answer since your last turn, a question or a nudge (with
+                    // several asked together, the one before it once that's answered): the box and the chips answer it
+                    // (D-98); else his last message's replies, where it's his. One of his you chose to reply to (a swipe,
+                    // its waiting line tapped) shows its own. A nudge just above the box takes it with no strip, your
+                    // words its reply ([quiet]); one further up has its strip, as a question has.
+                    val pending = Replies.pending(chat.messages, checkIn, now, zone)
+                    val nudge = pending != null && !Replies.waiting(pending, checkIn)
+                    val quiet = pending?.takeIf { nudge && it.id == Replies.newest(chat.messages)?.id }
+                    val chosen = screen.replyingTo?.takeIf { it.from == Speaker.Felix && it.answeredAt == null && it.suggestedReplies.isNotEmpty() }
+                    val last = chosen ?: pending ?: Replies.newest(chat.messages)?.takeIf { it.from == Speaker.Felix && it.answeredAt == null }
+                    LaunchedEffect(pending?.id, checkIn, quiet?.id) { screen.offer(pending?.takeIf { quiet == null }, checkIn, nudge) }
                     if (last != null && last.suggestedReplies.isNotEmpty()) {
                         FlowRow(Modifier.fillMaxWidth().padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             last.suggestedReplies.forEach { reply ->
-                                androidx.compose.material3.SuggestionChip(onClick = { graph.scope.launch { graph.conversation.ask(reply, replyTo = last.id) } }, label = { Text(reply) })
+                                androidx.compose.material3.SuggestionChip(onClick = {
+                                    // Answered by it: the box replies to nothing, till his next question's offered.
+                                    if (screen.replyingTo?.id == last.id) screen.sent()
+                                    graph.scope.launch { graph.conversation.ask(reply, replyTo = last.id) }
+                                }, label = { Text(reply) })
                             }
                         }
                     }
@@ -418,7 +452,8 @@ class AskActivity : ComponentActivity() {
                         about.value = About()
                         screen.sent()
                         graph.scope.launch {
-                            if (!graph.conversation.ask(text, subject, replyTo = replying?.id)) {
+                            // The box's own reply to his nudge takes none of its subject: your words go to him as they are.
+                            if (!graph.conversation.ask(text, subject, replyTo = (replying ?: quiet)?.id, takeItsSubject = replying != null)) {
                                 draft = text
                                 about.value = subject
                                 screen.replyingTo = replying
@@ -556,6 +591,9 @@ private fun ColumnScope.Chat(
     now: Long,
     zone: ZoneId,
     claudeOn: Boolean,
+    awaiting: Set<String>,
+    markable: Set<String>,
+    onMark: (Collection<String>) -> Unit,
     onQuoted: (Set<String>) -> Unit,
     onEdit: (messageId: String, proposalId: String) -> Unit,
 ) {
@@ -653,7 +691,8 @@ private fun ColumnScope.Chat(
                                 if (!screen.reveal(id, all, archive)) lookup = scope.launch { withContext(Dispatchers.IO) { graph.chatArchive.back(id) }?.let { screen.revealBack(id, it) } }
                             }) { screen.replyTo(message) }
                         } else {
-                            Claudes(graph, screen, message, tasks, flash, now, zone, onEdit, live = !row.archived) { screen.replyTo(message) }
+                            val markIt = if (!row.archived && message.id in markable) { { onMark(listOf(message.id)) } } else null
+                            Claudes(graph, screen, message, tasks, flash, now, zone, onEdit, live = !row.archived, waiting = !row.archived && message.id in awaiting, onMarkAnswered = markIt) { screen.replyTo(message) }
                         }
                     }
                 }
@@ -666,6 +705,9 @@ private fun ColumnScope.Chat(
 
 /** How long the message his notification opened the chat at stays tinted. */
 private const val FLASH_MS = 1_000L
+
+/** How long Mark answered's Undo stays at the foot (D-99): six seconds, your call. */
+private const val UNDO_BAR_MS = 6_000L
 
 /** How near the top of the list (in rows) scrolling back loads the archive's next page. */
 private const val EARLIER_WITHIN = 5
@@ -734,11 +776,12 @@ private fun SwipeToReply(onReply: () -> Unit, content: @Composable () -> Unit) {
 }
 
 /**
- * A message's bubble, [colour] in [shape]: held, Reply and Copy (5b); the one his notification opened
- * the chat at ([flash]) tinted for a moment.
+ * A message's bubble, [colour] in [shape]: held, Reply and Copy (5b), and Mark answered where it waits
+ * for your answer ([onMarkAnswered], D-99); the one his notification opened the chat at ([flash]) tinted
+ * for a moment.
  */
 @Composable
-private fun Bubble(message: ChatMessage, colour: Color, shape: Shape, flash: Boolean, onReply: () -> Unit, onTap: () -> Unit = {}, content: @Composable ColumnScope.() -> Unit) {
+private fun Bubble(message: ChatMessage, colour: Color, shape: Shape, flash: Boolean, onReply: () -> Unit, onTap: () -> Unit = {}, onMarkAnswered: (() -> Unit)? = null, content: @Composable ColumnScope.() -> Unit) {
     val context = LocalContext.current
     var menu by remember { mutableStateOf(false) }
     val tint by animateColorAsState(if (flash) MaterialTheme.colorScheme.tertiaryContainer else colour, label = "flash")
@@ -756,6 +799,12 @@ private fun Bubble(message: ChatMessage, colour: Color, shape: Shape, flash: Boo
                 menu = false
                 onReply()
             })
+            onMarkAnswered?.let { mark ->
+                DropdownMenuItem(text = { Text("Mark answered") }, onClick = {
+                    menu = false
+                    mark()
+                })
+            }
             DropdownMenuItem(text = { Text("Copy") }, onClick = {
                 menu = false
                 context.getSystemService(ClipboardManager::class.java)?.setPrimaryClip(ClipData.newPlainText("Message", message.text))
@@ -764,10 +813,20 @@ private fun Bubble(message: ChatMessage, colour: Color, shape: Shape, flash: Boo
     }
 }
 
-/** When [message] was sent, in small type under its bubble (5b). */
+/**
+ * When [message] was sent, in small type under its bubble (5b); and, while it waits for your answer
+ * ([waiting], D-99), saying so, a tap on it the message's Reply ([onAnswer]).
+ */
 @Composable
-private fun Time(message: ChatMessage, zone: ZoneId) {
-    Text(Format.time(message.at, zone), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+private fun Time(message: ChatMessage, zone: ZoneId, waiting: Boolean = false, onAnswer: () -> Unit = {}) {
+    if (!waiting) {
+        Text(Format.time(message.at, zone), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+        return
+    }
+    Row(Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClickLabel = "Reply", onClick = onAnswer).padding(horizontal = 6.dp, vertical = 2.dp)) {
+        Text(Format.time(message.at, zone), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(" · waiting for your answer", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+    }
 }
 
 /** The message a reply answers, over its words (5b): who wrote it and its first line, in a tinted block; tapped, [onOpen] goes to it. */
@@ -873,22 +932,23 @@ private const val DOT_STEP_MS = 200
  * A message of Felix's, on the left: his words and their time; what he did under them folded behind a
  * chevron at the bubble's corner, red where something went wrong, and unfolded as it always was, with
  * every Undo (docs/plan_v4/05-the-chat.md §6); the label that says it in a line ([Labelled]); and
- * outside the fold, a task he shows you and a button in the app's words. Held, [onReply] is Reply.
+ * outside the fold, a task he shows you and a button in the app's words. Held, [onReply] is Reply, and
+ * Mark answered ([onMarkAnswered]) while it's [waiting] for your answer, which its time line says (D-99).
  */
 @Composable
-private fun Claudes(graph: AppGraph, screen: ChatScreenState, message: ChatMessage, tasks: Map<String, TaskItem>, flash: Boolean, now: Long, zone: ZoneId, onEdit: (String, String) -> Unit, live: Boolean, onReply: () -> Unit) {
+private fun Claudes(graph: AppGraph, screen: ChatScreenState, message: ChatMessage, tasks: Map<String, TaskItem>, flash: Boolean, now: Long, zone: ZoneId, onEdit: (String, String) -> Unit, live: Boolean, waiting: Boolean = false, onMarkAnswered: (() -> Unit)? = null, onReply: () -> Unit) {
     val folds = ChatSummary.folds(message)
     val open = message.id in screen.open
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Column {
             Labelled(screen, message) {
                 // A tap on the bubble opens or closes what's folded, as its chevron does: a bigger place to tap.
-                Bubble(message, MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(18.dp, 18.dp, 18.dp, 4.dp), flash, onReply, onTap = { if (folds) screen.toggle(message.id) }) {
+                Bubble(message, MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(18.dp, 18.dp, 18.dp, 4.dp), flash, onReply, onTap = { if (folds) screen.toggle(message.id) }, onMarkAnswered = onMarkAnswered) {
                     Text(message.text, style = MaterialTheme.typography.bodyLarge)
                     if (folds) Chevron(open, ChatSummary.problems(message) > 0, Modifier.align(Alignment.End)) { screen.toggle(message.id) }
                 }
             }
-            Time(message, zone)
+            Time(message, zone, waiting, onAnswer = onReply)
         }
         // A message in the app's words carries its own button: the week's review to open, its summary to send.
         Opens(message)

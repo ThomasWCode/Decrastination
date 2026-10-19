@@ -5,6 +5,8 @@ import com.thomaswcode.decrastination.core.MessageKind
 import com.thomaswcode.decrastination.core.Speaker
 import com.thomaswcode.decrastination.learn.Assessment
 import com.thomaswcode.decrastination.learn.CalendarTime
+import java.time.Instant
+import java.time.ZoneId
 
 /**
  * One entrance for replies (docs/plan_v4/05-the-chat.md §5): where your reply to a message goes, by the
@@ -33,7 +35,8 @@ object Replies {
     /**
      * Whether [message] is a question of his still waiting for its answer: a check-in's while the
      * check-in is under way ([checkInUnderWay]; its thanks, after it, isn't one), a reading's about a
-     * task, how work went, a calendar event's. The chat's box answers one that's his last message (D-98).
+     * task, how work went, a calendar event's. The chat's box answers one that's his last message (D-98),
+     * unless a nudge of his with replies of its own is newer ([pending]).
      */
     fun waiting(message: ChatMessage?, checkInUnderWay: Boolean): Boolean =
         message != null && message.from == Speaker.Felix && message.answeredAt == null && when (message.kind) {
@@ -45,14 +48,44 @@ object Replies {
         }
 
     /**
-     * The newest question of his in [messages] still waiting for its answer ([waiting]) since your last turn
-     * of the chat: what the box and his chips answer (D-98). An answer to one taken with no call isn't a
-     * turn, so with several asked together (how work went, a calendar's questions), the one before it is
-     * next: they're answered one by one.
+     * The ids of his [messages] waiting for your answer, shown so under their time (D-99), none answered
+     * (with no call, or marked so) nor replied to by a message of yours: his questions still waiting
+     * ([waiting]), a calendar event's only till its event begins; and his nudges with replies of their own
+     * (his answers in the chat aren't asks of his), each till a newer message of his is about the same
+     * task (or, about none, of the same kind) or its day is over at [now] in [zone]: by then it's had its moment.
      */
-    fun pending(messages: List<ChatMessage>, checkInUnderWay: Boolean): ChatMessage? {
+    fun awaitingIds(messages: List<ChatMessage>, checkInUnderWay: Boolean, now: Long, zone: ZoneId): Set<String> {
+        val replied = messages.mapNotNullTo(HashSet()) { m -> m.replyTo?.takeIf { m.from == Speaker.You } }
+        val today = Instant.ofEpochMilli(now).atZone(zone).toLocalDate()
+        fun about(m: ChatMessage): String = m.about.taskId ?: m.about.eventKey ?: m.kind.name
+        // His newest message with words about each thing: the last of his about it wins.
+        val newestAbout = HashMap<String, String>()
+        messages.forEach { m -> if (m.from == Speaker.Felix && m.text.isNotBlank()) newestAbout[about(m)] = m.id }
+        return messages.filter { m ->
+            m.from == Speaker.Felix && m.answeredAt == null && m.id !in replied && if (waiting(m, checkInUnderWay)) {
+                m.kind != MessageKind.EventQuestion || (m.about.eventStart ?: Long.MAX_VALUE) > now
+            } else {
+                m.kind != MessageKind.Chat && m.suggestedReplies.isNotEmpty() && newestAbout[about(m)] == m.id &&
+                    Instant.ofEpochMilli(m.at).atZone(zone).toLocalDate() == today
+            }
+        }.mapTo(HashSet()) { it.id }
+    }
+
+    /** The chat's newest message as it's shown: yours, or his with words (one with none says nothing). */
+    fun newest(messages: List<ChatMessage>): ChatMessage? = messages.lastOrNull { it.from == Speaker.You || it.text.isNotBlank() }
+
+    /**
+     * The message of his the box and his chips answer (D-98): his newest still waiting for your answer
+     * ([awaitingIds]) since your last turn of the chat, a question or a nudge, so a nudge newer than his
+     * question takes them, its replies yours to tap and your words its reply. An answer to one taken with
+     * no call isn't a turn, so with several asked together (how work went, a calendar's questions), the
+     * one before it is next: they're answered one by one. Once you've talked to him, one from before that
+     * doesn't take your words: it waits, shown so, for its line or a swipe.
+     */
+    fun pending(messages: List<ChatMessage>, checkInUnderWay: Boolean, now: Long, zone: ZoneId): ChatMessage? {
+        val awaiting = awaitingIds(messages, checkInUnderWay, now, zone)
         val turn = messages.indexOfLast { it.from == Speaker.You && it.kind == MessageKind.Chat }
-        return messages.drop(turn + 1).lastOrNull { waiting(it, checkInUnderWay) }
+        return messages.drop(turn + 1).lastOrNull { it.id in awaiting }
     }
 
     /**
