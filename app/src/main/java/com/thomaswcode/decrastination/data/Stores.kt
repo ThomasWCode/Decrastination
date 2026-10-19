@@ -59,8 +59,12 @@ class Stores(
      */
     private val unsplit: JsonStore.Unreadable? = File(dir, ChatArchiveStore.NAME).takeIf { it.isFile }?.let { file ->
         val whole = JsonStore(file, ChatArchive.serializer(), ::ChatArchive, clock = clock)
-        runBlocking { chatArchive.add(whole.value.messages) }
-        if (whole.problem?.copy != null || whole.problem == null) file.delete()
+        runBlocking {
+            chatArchive.add(whole.value.messages)
+            // Let go only where it was read whole, or read and set aside with what was kept written: not where
+            // its read failed (it may be good) or its copy did (it's all there is of it).
+            if (whole.problem == null || whole.keepRecovered()) file.delete()
+        }
         whole.problem
     }
 

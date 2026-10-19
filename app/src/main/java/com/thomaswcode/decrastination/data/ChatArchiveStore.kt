@@ -49,7 +49,11 @@ class ChatArchiveStore(private val dir: File, private val clock: () -> Long = Sy
     var onProblem: ((JsonStore.Unreadable) -> Unit)? = null
 
     /** Its months' files, oldest first, by their names: none read. */
-    private fun files(): List<String> = dir.listFiles { f -> f.isFile && MONTH_FILE.matches(f.name) }.orEmpty().map { it.name }.sorted()
+    private fun files(): List<String> = dir.listFiles { f -> f.isFile && MONTH_FILE.matches(f.name) }.orEmpty().map { it.name }
+        .sortedWith(compareBy({ yearOf(it) }, { it.substringAfterLast('-') }))
+
+    /** The year in month [file]'s name: by number, so a year past 9999 (written with its sign) comes after the rest. */
+    private fun yearOf(file: String): Long = file.removePrefix("chat-archive-").substringBeforeLast('-').removePrefix("+").toLong()
 
     private fun month(file: String): JsonStore<ChatArchive> = months.computeIfAbsent(file) {
         JsonStore(File(dir, file), ChatArchive.serializer(), ::ChatArchive, clock = clock, lazily = true).also { store -> store.onProblem = { onProblem?.invoke(it) } }
@@ -171,9 +175,11 @@ class ChatArchiveStore(private val dir: File, private val clock: () -> Long = Sy
     /** What was kept of each month's file that didn't read whole written over it, now its problem's on record. */
     suspend fun keepRecovered(): Unit = writing.withLock {
         for ((file, store) in months.entries.toList()) {
-            store.keepRecovered()
-            // Nothing of it could be kept: let go, as an emptied month is, so no empty month offers *Earlier messages*.
-            if (store.isLoaded && store.value.messages.isEmpty()) {
+            // Nothing of it could be kept, its copy made and the nothing written: let go, as an emptied month
+            // is, so no empty month offers *Earlier messages*. Not where its read failed (the file may be
+            // good) or its copy did (it's all there is of it): there nothing's written, and it stays.
+            val wrote = store.keepRecovered()
+            if (wrote && store.problem?.copy != null && store.value.messages.isEmpty()) {
                 months.remove(file)
                 withContext(Dispatchers.IO) { letGo(file) }
             }

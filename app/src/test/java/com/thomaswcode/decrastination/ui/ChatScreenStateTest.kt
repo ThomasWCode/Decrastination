@@ -2,6 +2,7 @@ package com.thomaswcode.decrastination.ui
 
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.Fixtures.LONDON
+import com.thomaswcode.decrastination.core.About
 import com.thomaswcode.decrastination.core.Act
 import com.thomaswcode.decrastination.core.ChatAction
 import com.thomaswcode.decrastination.core.ChatMessage
@@ -111,6 +112,15 @@ class ChatScreenStateTest {
         again.replyTo(other)
         again.restoredReply(old)
         assertEquals(other, again.replyingTo)
+        // His question waiting, offered at the first drawing while it's read: the restored one still wins.
+        val asked = ChatScreenState()
+        val question = his("q", "2026-10-18T17:30").copy(kind = MessageKind.Question, about = About(taskId = "teams:essay"))
+        // (With nothing being restored, it's offered.)
+        assertEquals(question, ChatScreenState().apply { offer(question, checkInUnderWay = false) }.replyingTo)
+        asked.restoringReply("old")
+        asked.offer(question, checkInUnderWay = false)
+        asked.restoredReply(old)
+        assertEquals(old to false, asked.replyingTo to asked.offered)
         // Let go meanwhile (sent, or the strip's ✕): none.
         val none = ChatScreenState()
         none.restoringReply("old")

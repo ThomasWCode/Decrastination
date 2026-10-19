@@ -114,10 +114,22 @@ class ChatArchiveStoreTest {
         assertFalse(store.holdsAny)
         // A message dated past 9999 (a restore's), in a file named with the year's sign: read back, and cleared.
         val far = ChatMessage("far", Speaker.Felix, "far", 300_000_000_000_000L)
-        store.add(listOf(far))
-        assertEquals(listOf(far), ChatArchiveStore(dir).value.messages)
+        store.add(listOf(far) + september)
+        // After every four-digit year's month: the newest.
+        assertEquals(september + far, ChatArchiveStore(dir).value.messages)
+        assertEquals(listOf(far), ChatArchiveStore(dir).recent(1))
         store.clear()
         assertTrue(files().isEmpty())
+    }
+
+    @Test
+    fun `the recovery lets go only of a month it wrote back with nothing kept, not one that read whole`() = runBlocking {
+        // Read whole, empty: nothing set aside, nothing written back (as where a read or a copy failed): it stays.
+        File(dir, "chat-archive-2026-08.json").writeText(JsonStore.json.encodeToString(ChatArchive.serializer(), ChatArchive()))
+        val store = ChatArchiveStore(dir)
+        assertTrue(store.value.messages.isEmpty() && store.problems.isEmpty())
+        store.keepRecovered()
+        assertTrue(File(dir, "chat-archive-2026-08.json").exists())
     }
 
     @Test
