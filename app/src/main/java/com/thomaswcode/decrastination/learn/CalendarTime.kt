@@ -46,17 +46,6 @@ object CalendarTime {
         "None" to EventJudge.Judgement.Free,
     ).map { (label, judgement) -> label to EventJudge.store(judgement)!! }
 
-    /**
-     * Your [answer] about every event named [key] (null: forgotten, for the rules to judge again):
-     * kept, his question answered, the plan redone, and today's as the briefing recorded it.
-     */
-    suspend fun answer(context: Context, key: String, answer: String?) {
-        AppGraph.get(context).runtime.update { it.copy(eventAnswers = if (answer == null) it.eventAnswers - key else it.eventAnswers + (key to answer)) }
-        cancelQuestion(context, key)
-        refresh(context)
-        Briefing.replanToday(context)
-    }
-
     /** How much of an event's description is kept (DX-12). */
     private const val DESCRIPTION_CHARS = 500
 
@@ -110,7 +99,7 @@ object CalendarTime {
             graph.calendarTime = EventJudge.Time(emptyList(), emptyMap(), emptyList())
             return@withLock
         }
-        graph.watchCalendar()
+        graph.calendarWriter.watchCalendar()
         val now = graph.clock.now()
         // Your instructions about events over your answers to its questions; a question one of them
         // has answered since it was asked is withdrawn.
