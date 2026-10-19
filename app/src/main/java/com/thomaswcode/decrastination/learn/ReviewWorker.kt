@@ -25,7 +25,7 @@ import com.thomaswcode.decrastination.notify.Notify
 class ReviewWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
 
     override suspend fun doWork(): Result {
-        Review.run(applicationContext, ifDue = inputData.getBoolean(KEY_IF_DUE, true))
+        AppGraph.get(applicationContext).learning.review(ifDue = inputData.getBoolean(KEY_IF_DUE, true))
         return Result.success()
     }
 
