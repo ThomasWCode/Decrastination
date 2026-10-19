@@ -8,6 +8,7 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import com.thomaswcode.decrastination.block.Focus
+import com.thomaswcode.decrastination.block.Photos
 import com.thomaswcode.decrastination.block.SlotAlarms
 import com.thomaswcode.decrastination.block.Slots
 import com.thomaswcode.decrastination.calendar.CalendarWriter
@@ -36,6 +37,7 @@ import com.thomaswcode.decrastination.enrich.ClaudeEnricher
 import com.thomaswcode.decrastination.enrich.EnrichWorker
 import com.thomaswcode.decrastination.enrich.Enricher
 import com.thomaswcode.decrastination.enrich.ModelGateway
+import com.thomaswcode.decrastination.enrich.Readings
 import com.thomaswcode.decrastination.enrich.RuleEnricher
 import com.thomaswcode.decrastination.felix.AndroidFelixPorts
 import com.thomaswcode.decrastination.felix.Conversation
@@ -62,6 +64,8 @@ import com.thomaswcode.decrastination.sources.powerplanner.PowerPlannerSource
 import com.thomaswcode.decrastination.sources.teams.TeamsProvider
 import com.thomaswcode.decrastination.sources.teams.TeamsSource
 import com.thomaswcode.decrastination.sync.SyncWorker
+import com.thomaswcode.decrastination.sync.AndroidSyncPorts
+import com.thomaswcode.decrastination.sync.Sync
 import com.thomaswcode.decrastination.sync.Syncer
 import com.thomaswcode.decrastination.tasks.Instructions
 import com.thomaswcode.decrastination.tasks.OwnTasks
@@ -174,18 +178,18 @@ class AppGraph private constructor(context: Context) {
         ankiRates = { runtime.value.calibration.ankiSecondsPerCard },
     )
 
-    /** The calendar's busy time and per-day loads (Phase 5), as last read and judged. */
-    @Volatile
-    /** The calendar as the planner counts it, from its last read: a plan made before that read is dropped with it. */
-    var calendarTime: com.thomaswcode.decrastination.learn.EventJudge.Time = com.thomaswcode.decrastination.learn.EventJudge.Time(emptyList(), emptyMap(), emptyList())
-        set(value) {
-            field = value
-            focus.forgetPlan()
-            calendarState.value = value
-        }
-
-    /** [calendarTime] as it changes, for a screen open while the calendar is read again. */
-    val calendarState = kotlinx.coroutines.flow.MutableStateFlow(calendarTime)
+    /**
+     * What the app reads ([Sync]): the sources through the syncer, the Teams widget asked and watched,
+     * and the calendar as busy time. Made before the plan, which is made again as the calendar's read.
+     */
+    val sync: Sync = Sync(
+        tasks, settings, runtime, stores.instructions, clock, scope, syncer, AndroidSyncPorts(app),
+        forgetPlan = { focus.forgetPlan() },
+        watchCalendar = { calendarWriter.watchCalendar() },
+        askAboutEvent = { key, title, day, start, answers -> conversation.askAboutEvent(key, title, day, start, answers) },
+        settleEvent = { conversation.settleEvent(it) },
+        replan = { planning.watcher.poke() },
+    )
 
     /**
      * The plan ([Planning]): made from the stores as they are, made again as they change, today's slot
@@ -194,8 +198,8 @@ class AppGraph private constructor(context: Context) {
      */
     val planning: Planning = Planning(
         tasks, settings, runtime, log, stores.instructions, school, clock, scope, gateway,
-        calendarTime = { calendarTime },
-        calendarChanges = calendarState,
+        calendarTime = { sync.calendarTime },
+        calendarChanges = sync.calendarState,
         sweep = { slots.sweep() },
         hooks = listOf(
             { made -> SlotAlarms.arm(app, made, clock.now()) },
@@ -228,7 +232,7 @@ class AppGraph private constructor(context: Context) {
         replan = { planning.watcher.poke() },
         settleEvent = { conversation.settleEvent(it) },
         reread = {
-            CalendarTime.refresh(app)
+            sync.refreshCalendar()
             Briefing.replanToday(app)
         },
     )
@@ -248,7 +252,7 @@ class AppGraph private constructor(context: Context) {
     /** The voice of the app's messages (LR-03). */
     val looks: Looks = Looks(
         tasks, settings, runtime, log, chat, clock, scope, gateway, focus, planning, felixPorts, outbox,
-        calendarTime = { calendarTime },
+        calendarTime = { sync.calendarTime },
         profile = { conversation.profile(it) },
         remember = { conversation.remember(it) },
         addInstruction = { text, about, answer -> instructions.addInstruction(text, about, answer) },
@@ -274,7 +278,7 @@ class AppGraph private constructor(context: Context) {
                 calendarWriter.answer(key, answer)
             }
         },
-        calendarTime = { calendarTime },
+        calendarTime = { sync.calendarTime },
         answered = { record, words -> looks.answered(record, words) },
     )
 
@@ -284,10 +288,10 @@ class AppGraph private constructor(context: Context) {
      */
     val instructions: Instructions = Instructions(
         stores.instructions, tasks, settings, runtime, school, chat, clock, scope, gateway, focus, planning,
-        calendarTime = { calendarTime },
+        calendarTime = { sync.calendarTime },
         profile = { conversation.profile() },
         reread = {
-            CalendarTime.refresh(app)
+            sync.refreshCalendar()
             Briefing.replanToday(app)
         },
         redraw = { WidgetUpdater.update(app) },
@@ -296,50 +300,36 @@ class AppGraph private constructor(context: Context) {
     /** Your own tasks ([OwnTasks]): kept, finished, opened again, deleted, and let go once long done. */
     val ownTasks: OwnTasks = OwnTasks(tasks, stores.instructions, chat, clock, scope) { settleCompletions() }
 
+    /** The tasks' readings ([Readings]): by Claude while it can be asked, by the rules otherwise; one read again on asking. */
+    val readings: Readings = Readings(
+        tasks, runtime, clock, scope, gateway,
+        profile = { conversation.profile() },
+        queueQuestion = { taskId, question, now -> looks.queueQuestion(taskId, question, now) },
+        readDecks = { SyncWorker.syncNow(app, setOf(Source.Anki)) },
+    )
+
+    /** Photos ([Photos]): of a task's work, of homework to make tasks from, and of written work checked. */
+    val photos: Photos = Photos(
+        tasks, settings, chat, clock, scope, gateway, focus, File(app.filesDir, "photos"),
+        profile = { conversation.profile() },
+        read = { taskId -> readings.enrichNow(only = taskId) },
+    )
+
+    // [Readings]', [Photos]' and [Sync]'s functions, till their callers call them there.
+    suspend fun enrichNow(byModel: Boolean = true, only: String? = null, force: Boolean = false): Boolean = readings.enrichNow(byModel, only, force)
+    suspend fun readAgain(taskId: String): Readings.ReadAgain = readings.readAgain(taskId)
+    suspend fun attachPhoto(taskId: String, jpeg: ByteArray) = photos.attachPhoto(taskId, jpeg)
+    fun readPhotoOf(file: java.io.File) = photos.readPhotoOf(file)
+    val photoReading: kotlinx.coroutines.flow.MutableStateFlow<Photos.PhotoReading?> get() = photos.photoReading
+    fun refreshAll(teams: Boolean) = sync.refreshAll(teams)
+    suspend fun requestTeamsSync(): String? = sync.requestTeamsSync()
+    val calendarTime: com.thomaswcode.decrastination.learn.EventJudge.Time get() = sync.calendarTime
+    val calendarState: kotlinx.coroutines.flow.MutableStateFlow<com.thomaswcode.decrastination.learn.EventJudge.Time> get() = sync.calendarState
+
     /** Protection ([Protection]): settings changes, waiting once armed if they loosen blocking; the parent code; the device admin. */
     val protection = Protection(settings, runtime, secrets, clock, scope, adminActive = { Watchdog.isAdminActive(app) }) {
         app.getSystemService(DevicePolicyManager::class.java)?.removeActiveAdmin(Watchdog.admin(app))
     }
-
-    /**
-     * Reads every source now, as a job (it keeps its network after the screen that asked has
-     * gone). With [teams], it first asks the Teams widget to sync Teams itself, which takes over
-     * the screen for a minute, so only on a tap (Q21); what that finds comes back through the
-     * widget's change notifications.
-     */
-    fun refreshAll(teams: Boolean) {
-        if (teams) {
-            scope.launch {
-                // Refused (its service off, already syncing): say so where the widget shows it.
-                // The next read of Teams replaces the note with the widget's own state.
-                requestTeamsSync()?.let { reason ->
-                    tasks.update { state -> state.copy(sources = state.sources + (Source.Teams to state.status(Source.Teams).copy(note = reason))) }
-                }
-            }
-        }
-        SyncWorker.syncNow(app)
-    }
-
-    /** Asks the Teams widget to sync Teams. Returns why it didn't start, or null if it did. */
-    suspend fun requestTeamsSync(): String? = withContext(Dispatchers.IO) {
-        val result = runCatching { TeamsProvider.call(app.contentResolver, TeamsProvider.METHOD_REQUEST_SYNC) }.getOrNull()
-        when {
-            result?.getBoolean(TeamsProvider.RESULT_STARTED) == true -> null
-            result == null -> "The Teams widget didn't answer"
-            else -> when (result.getString(TeamsProvider.RESULT_REASON)) {
-                "service_off" -> "The Teams widget's sync service is off"
-                "busy" -> TEAMS_BUSY
-                else -> "The Teams widget didn't start a sync"
-            }
-        }
-    }
-
-    /**
-     * The Teams widget announces every change to its list: a sync, or a hand-in it saw while
-     * Teams was open. Reading it needs no network, so it's read here, once the changes stop, and
-     * Anki with it: its homework decks come from Teams' assignments (Anki is read after Teams).
-     */
-    private val teamsChanged = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
 
     init {
         // The device admin kept in step with arming ([Protection.start]).
@@ -347,7 +337,7 @@ class AppGraph private constructor(context: Context) {
         // Work a source confirms done earns free time, is logged and asked about.
         syncer.addListener {
             settleCompletions()
-            CalendarTime.refresh(app)
+            sync.refreshCalendar()
         }
         // Any a stop left ungiven: slots being kept, photo checks and completions; and a day with nothing to do's free time (BL-07).
         scope.launch {
@@ -376,28 +366,12 @@ class AppGraph private constructor(context: Context) {
             val modelOff = gateway.claudeKey() == null
             if (tasks.value.tasks.any { Enrichments.jobFor(it) != null && Enrichments.stale(it, modelOn, RuleEnricher.BY, modelOff) }) EnrichWorker.enqueue(app)
         }
-        scope.launch { CalendarTime.refresh(app) }
-        scope.launch(Dispatchers.IO) { runCatching { sweepPhotos() } }
-        // A change in the calendar: read again, and the plan made again, so a slot you've moved or
-        // deleted in the calendar written to (which isn't read) is seen (NF-07). The app's own write
-        // brings one replan more, which writes nothing.
-        scope.launch {
-            calendarWriter.calendarChanged.debounce(CALENDAR_QUIET_MS).collect {
-                CalendarTime.refresh(app)
-                planning.watcher.poke()
-            }
-        }
+        scope.launch { sync.refreshCalendar() }
+        scope.launch(Dispatchers.IO) { runCatching { photos.sweepPhotos() } }
+        // What's read again as it changes: the calendar, the calendars picked, Anki's settings, the Teams widget's list ([Sync.start]).
+        sync.start(calendarWriter.calendarChanged)
         // The calendar picked, and each plan once plans have been quiet a while, written ([CalendarWriter.start]).
         calendarWriter.start()
-        // The calendar written to, or those not read, changed (NF-07, DX-13): the calendar's read again.
-        scope.launch {
-            settings.state.map { it.calendarWriteId to it.calendarsExcluded }.distinctUntilChanged().drop(1).collect { CalendarTime.refresh(app) }
-        }
-        // Anki's deadline or textbook changed (saved, or a waiting change fallen due): its tasks are
-        // made with them, so it's read again now.
-        scope.launch {
-            settings.state.map { it.ankiDeadlineMin to it.ankiTextbook }.distinctUntilChanged().drop(1).collect { SyncWorker.syncNow(app, setOf(Source.Anki)) }
-        }
         // Switched off: the rules go over what the model read, as its reading goes with it.
         scope.launch {
             settings.state.map { it.aiEnabled && it.aiKeyActive }.distinctUntilChanged().drop(1).collect { on -> if (!on) EnrichWorker.enqueue(app) }
@@ -421,32 +395,14 @@ class AppGraph private constructor(context: Context) {
             // A question of yours the app stopped before answering, once the calendar's read, as it's
             // told the fortnight's events.
             if (chat.value.unanswered != null) {
-                runCatching { CalendarTime.refresh(app) }.onFailure { Log.w(TAG, "Reading the calendar failed", it) }
+                runCatching { sync.refreshCalendar() }.onFailure { Log.w(TAG, "Reading the calendar failed", it) }
                 conversation.answerChat()
             }
         }
-        runCatching {
-            app.contentResolver.registerContentObserver(
-                TeamsProvider.root,
-                true,
-                object : ContentObserver(Handler(Looper.getMainLooper())) {
-                    override fun onChange(selfChange: Boolean) {
-                        teamsChanged.tryEmit(Unit)
-                    }
-                },
-            )
-        }.onFailure { Log.w(TAG, "Can't watch the Teams widget", it) }
-        scope.launch {
-            teamsChanged.debounce(TEAMS_QUIET_MS).collect { syncer.sync(setOf(Source.Teams, Source.Anki)) }
-        }
         // A key problem standing from before, whose alert couldn't be shown then.
         gateway.reconcileAlerts()
-        // Dropped plans' warnings kept in step with the tasks, from the start.
-        scope.launch {
-            tasks.state.debounce(WIDGET_DEBOUNCE_MS).collect { state ->
-                runCatching { gateway.droppedAlerts(state.tasks) }.onFailure { Log.w(TAG, "Dropped-plan warnings failed", it) }
-            }
-        }
+        // Dropped plans' warnings kept in step with the tasks ([Readings.start]).
+        readings.start()
         // Slots whose end went by with the phone off, as if their alarms had rung; then the plan, made
         // again as it changes, from now on (PL-13).
         scope.launch {
@@ -480,9 +436,6 @@ class AppGraph private constructor(context: Context) {
         }
     }
 
-    /** The rules' enrichment: always there, and the fallback for the model. */
-    private val rules = RuleEnricher()
-
     /** Backups and resets ([BackupService]): made when first asked for, as it takes the instructions' lock. */
     val backups: BackupService by lazy {
         BackupService(
@@ -498,212 +451,6 @@ class AppGraph private constructor(context: Context) {
             },
             cancelFelix = { FelixNotifications.cancel(app) },
         )
-    }
-
-    /** Where tasks' photos are kept (AI-23): the app's own files, one a task. */
-    private val photos: File get() = File(app.filesDir, "photos")
-
-    /**
-     * [jpeg], a photo of [taskId]'s work (AI-23), kept with it (in place of one before) and read
-     * with it: its reading redone now, where it's one the model reads.
-     */
-    suspend fun attachPhoto(taskId: String, jpeg: ByteArray) {
-        val file = File(photos, taskId.replace(Regex("[^A-Za-z0-9._-]"), "_") + ".jpg")
-        withContext(Dispatchers.IO) {
-            photos.mkdirs()
-            file.writeBytes(jpeg)
-        }
-        val hash = java.security.MessageDigest.getInstance("SHA-256").digest(jpeg).take(8).joinToString("") { "%02x".format(it) }
-        tasks.update { s -> s.copy(tasks = s.tasks.map { if (it.id == taskId) it.copy(photo = com.thomaswcode.decrastination.core.TaskPhoto(file.path, hash, clock.now())) else it }) }
-        scope.launch { runCatching { enrichNow(only = taskId) }.onFailure { Log.w(TAG, "Reading a task with its photo failed", it) } }
-    }
-
-    /** [jpeg] read into tasks of your own to check (NF-01): the reading, or why there's none. */
-    suspend fun readPhotoTasks(jpeg: ByteArray): Pair<com.thomaswcode.decrastination.enrich.PhotoTasks.Reading?, String?> {
-        val reader = gateway.client(com.thomaswcode.decrastination.enrich.ModelEffort.Job.PhotoToTask)?.let { com.thomaswcode.decrastination.enrich.PhotoTaskReader(it, profile = conversation.profile()) } ?: return null to "Claude is off: add it with New task."
-        val now = clock.now()
-        return when (val called = gateway.call(interactive = true, record = com.thomaswcode.decrastination.enrich.ModelCalls.OnRecord(com.thomaswcode.decrastination.enrich.ModelEffort.Job.PhotoToTask, "a photo of homework") { r: com.thomaswcode.decrastination.enrich.PhotoTaskReader.Result -> r.usage to com.thomaswcode.decrastination.enrich.ModelCalls.outcome(r.refused, r.reading == null) }, cost = { r: com.thomaswcode.decrastination.enrich.PhotoTaskReader.Result -> r.costUsd to r.refused }) { reader.read(jpeg, now, clock.zone()) }) {
-            is Called.Held -> null to "Claude can't be asked now: add it with New task."
-            is Called.Failed -> null to "The photo couldn't be read (${called.error.message ?: "no connection"})."
-            is Called.Answered -> called.value.reading?.let { it to null } ?: (null to if (called.value.refused) "Claude declined to read it." else "Claude couldn't read the photo: try a clearer one.")
-        }
-    }
-
-    /**
-     * A photo of homework read into tasks (NF-01): held here, not by a screen, so turning the phone or
-     * leaving Work while the paid call runs loses nothing. [busy] while it's read; then what it read,
-     * with the photo for the tasks made from it, or why not.
-     */
-    class PhotoReading(val busy: Boolean, val reading: com.thomaswcode.decrastination.enrich.PhotoTasks.Reading? = null, val jpeg: ByteArray? = null, val why: String? = null)
-
-    /** The photo of homework being read, or read and not yet seen through (NF-01). */
-    val photoReading = kotlinx.coroutines.flow.MutableStateFlow<PhotoReading?>(null)
-
-    /** [file], a photo of homework just taken, read into tasks in the app's scope (NF-01), [photoReading] saying how it goes; the file let go. */
-    fun readPhotoOf(file: java.io.File) {
-        if (photoReading.value?.busy == true) return
-        photoReading.value = PhotoReading(busy = true)
-        scope.launch {
-            val done = runCatching {
-                val jpeg = withContext(Dispatchers.IO) { com.thomaswcode.decrastination.block.PhotoChecks.shrink(file) }
-                if (jpeg == null) {
-                    PhotoReading(busy = false, why = "Couldn't read the photo.")
-                } else {
-                    val (got, why) = readPhotoTasks(jpeg)
-                    PhotoReading(busy = false, reading = got, jpeg = jpeg.takeIf { got != null }, why = why)
-                }
-            }.getOrElse { PhotoReading(busy = false, why = "The photo couldn't be read (${it.message ?: "no connection"}).") }
-            withContext(NonCancellable + Dispatchers.IO) { file.delete() }
-            photoReading.value = done
-        }
-    }
-
-    /** The photos no task holds any more let go (AI-23): a task done and gone takes its photo with it. */
-    private fun sweepPhotos() {
-        // A task the chat deleted keeps its photo while its Undo can bring it back: no other act's, nor one made again since.
-        val messages = chat.value.messages
-        val undoable = messages.flatMap { m ->
-            m.acts.filter { it.action?.type == com.thomaswcode.decrastination.core.ChatAction.Type.Delete && com.thomaswcode.decrastination.core.ChatActs.canUndo(it, tasks.value.tasks, settings.value, messages) }
-                .mapNotNull { it.was?.photo?.path }
-        }
-        val held = tasks.value.tasks.mapNotNull { it.photo?.path }.toSet() + undoable
-        photos.listFiles()?.filter { it.path !in held }?.forEach { it.delete() }
-    }
-
-    /**
-     * Enriches every task that's new or changed since it was last enriched, and, while the model is
-     * on, those only the rules have seen; soonest due first. The model does it while it's on and
-     * the month's spend leaves room under the cap, at most [MAX_MODEL_CALLS] a run; the rules do
-     * the rest, and stand in for a call that fails (the model is then left alone for the run) or
-     * that the model declines (recorded as the model's, so it isn't asked again). With [force], [only]
-     * is read again by the model whatever it was read by (AC-06), its reading kept unless the model
-     * gives one; whether it did. [byModel] false, the rules alone, whatever's on.
-     */
-    suspend fun enrichNow(byModel: Boolean = true, only: String? = null, force: Boolean = false): Boolean {
-        // Not while it rests after a failed call (no network, a bad key), nor with no room under the
-        // cap: then what only the rules have seen isn't due for it.
-        var enricher: Enricher? = gateway.client(com.thomaswcode.decrastination.enrich.ModelEffort.Job.Email).takeIf { byModel }
-            ?.let { ClaudeEnricher(it, clock.zone(), profile = { conversation.profile() }, decks = { tasks.value.deckTopics }) }?.takeIf { gateway.available() }
-        var calls = 0
-        var decksChanged = false
-        // A task whose call the API wouldn't take as asked (AC-04): the rules' till it changes.
-        fun refused(task: TaskItem) = runtime.value.enrichFailed[task.id] == Enrichments.inputHash(task)
-        fun due(task: TaskItem) = (force && task.id == only) || Enrichments.stale(task, enricher != null && !refused(task), RuleEnricher.BY, modelOff = gateway.claudeKey() == null)
-        // Whether [only]'s reading laid was the model's (for [force]).
-        var readByModel = false
-        val candidates = tasks.value.tasks
-            // [only]: that task alone (the debug `enrich-task`), so nothing else is sent anywhere.
-            .filter { only == null || it.id == only }
-            .mapNotNull { task -> Enrichments.jobFor(task)?.let { task to it } }
-            .filter { (task, _) -> due(task) }
-            // Never read first, then the oldest prompts' readings (AC-06), soonest due first.
-            .sortedWith(compareBy(Enrichments.NEED) { it.first })
-        for ((snapshot, _) in candidates) {
-            // Read afresh: a sync since the run began may have closed or changed it.
-            val task = tasks.value.tasks.firstOrNull { it.id == snapshot.id } ?: continue
-            val job = Enrichments.jobFor(task) ?: continue
-            if (!due(task)) continue
-            // Whether the model gave this one's reading, not the rules standing in.
-            var fromModel = false
-            // Stale only by the prompts' version (AC-06): its reading stays unless the model reads it now.
-            val onlyVersion = Enrichments.staleOnlyByVersion(task, RuleEnricher.BY)
-            val now = clock.now()
-            // Switched off (or its key removed) while this runs: nothing more is sent.
-            if (gateway.claudeKey() == null) enricher = null
-            val model = enricher?.takeIf { calls < MAX_MODEL_CALLS && !refused(task) }
-            var enrichment = if (model != null) {
-                // Held now (switched off, resting after a failed call, no room under the cap): the
-                // rules do the rest of the run.
-                when (val called = gateway.call(interactive = false, task = task, record = com.thomaswcode.decrastination.enrich.ModelCalls.OnRecord(com.thomaswcode.decrastination.enrich.ModelEffort.jobOf(job), task.title) { r: Enricher.Result -> r.usage to com.thomaswcode.decrastination.enrich.ModelCalls.outcome(r) }, cost = { r: Enricher.Result -> r.costUsd to r.refused }) { model.enrich(task, job, now) }) {
-                    is Called.Held -> {
-                        enricher = null
-                        null
-                    }
-                    is Called.Failed -> {
-                        calls++
-                        Log.w(TAG, "The model's enrichment failed; the rules stand in", called.error)
-                        // Only a request it won't take leaves the others to be asked.
-                        if (Failures.classify(called.error) != Failure.BadRequest) enricher = null
-                        null
-                    }
-                    // Declined, or no answer it could read: the rules' say, under the model's name.
-                    is Called.Answered -> {
-                        calls++
-                        val first = called.value
-                        // A check its answer failed (AI-01): put back once, as a call of its own (counted
-                        // under the cap, held by a rest); the first's reading stands if that doesn't come back.
-                        val again = first.repair?.takeIf { calls < MAX_MODEL_CALLS }?.let { repair ->
-                            when (val second = gateway.call(interactive = false, task = task, record = com.thomaswcode.decrastination.enrich.ModelCalls.OnRecord(com.thomaswcode.decrastination.enrich.ModelEffort.jobOf(job), task.title) { r: Enricher.Result -> r.usage to com.thomaswcode.decrastination.enrich.ModelCalls.outcome(r) }, cost = { r: Enricher.Result -> r.costUsd to r.refused }) { model.repair(task, job, now, repair) }) {
-                                is Called.Answered -> second.value.also { calls++ }
-                                is Called.Failed -> {
-                                    calls++
-                                    if (Failures.classify(second.error) != Failure.BadRequest) enricher = null
-                                    null
-                                }
-                                is Called.Held -> {
-                                    enricher = null
-                                    null
-                                }
-                            }
-                        }
-                        // The rules' under the model's name is the model's answer by these prompts (AC-06), not asked for again till they change.
-                        (again?.enrichment ?: first.enrichment)?.also { fromModel = true }
-                            ?: when {
-                                force -> null
-                                // Declined by these prompts: the reading there kept, as theirs now, so it isn't asked for again till they change.
-                                onlyVersion -> task.enrichment?.copy(promptVersion = com.thomaswcode.decrastination.enrich.Prompts.VERSION)
-                                else -> rules.enrich(task, job, now).enrichment?.copy(by = model.by, promptVersion = com.thomaswcode.decrastination.enrich.Prompts.VERSION)
-                            }
-                    }
-                }
-            } else {
-                null
-            }
-            // Read again on asking, or past this run's calls with a reading only older prompts made: the
-            // reading there stands unless the model gave one.
-            if (enrichment == null && (force || onlyVersion)) continue
-            if (enrichment == null) enrichment = rules.enrich(task, job, now).enrichment
-            val made = enrichment ?: continue
-            // Laid only over the task as it was read (changed during the call, the next run does it).
-            var laid = false
-            tasks.update { state ->
-                state.copy(
-                    tasks = state.tasks.map {
-                        if (it.id == task.id && Enrichments.inputHash(it) == made.inputHash) it.withEnrichment(made).also { laid = true } else it
-                    },
-                )
-            }
-            if (!laid) continue
-            if (fromModel && task.id == only) readByModel = true
-            // A question it couldn't settle from the text (AI-10): Felix puts it. One waiting from an
-            // older reading goes, asked again as this one has it, or settled by it.
-            looks.queueQuestion(task.id, made.question, now)
-            // A plan of the model's dropped (out of range, not adding up) is said once it's laid,
-            // by droppedAlerts, as the tasks change.
-            // Its deck tasks take their sections and due date from it.
-            val after = task.withEnrichment(made)
-            val topics = tasks.value.deckTopics
-            val sections = AnkiRules.sectionsOf(after, topics)
-            if (sections != AnkiRules.sectionsOf(task, topics) || (sections.isNotEmpty() && after.dueAt != task.dueAt)) decksChanged = true
-        }
-        // Sections the deck pattern missed, or a deadline moved: their deck tasks come from reading Anki again, now.
-        if (decksChanged) SyncWorker.syncNow(app, setOf(Source.Anki))
-        return readByModel
-    }
-
-    /** How a read again on asking went (AC-06). */
-    enum class ReadAgain { Read, NotNow, NoReading }
-
-    /**
-     * [taskId] read again by Claude as it is now (AC-06, the sheet's *Read again with Claude*), by
-     * these prompts whatever it was read by, its steps shown it to keep by name (AI-08). The reading
-     * there stands till the new one comes: [ReadAgain.NoReading] where none did (the call failed or
-     * was held, Claude declined, the task changed meanwhile); [ReadAgain.NotNow], with nothing sent,
-     * while Claude can't be asked (off, resting, at the cap).
-     */
-    suspend fun readAgain(taskId: String): ReadAgain = withContext(NonCancellable) {
-        if (gateway.claudeKey() == null || !gateway.available()) return@withContext ReadAgain.NotNow
-        if (enrichNow(only = taskId, force = true)) ReadAgain.Read else ReadAgain.NoReading
     }
 
     /**
@@ -768,21 +515,14 @@ class AppGraph private constructor(context: Context) {
     companion object {
         const val TAG = "Decrastination"
 
-        /** [requestTeamsSync]'s answer when the widget is syncing already: as good as one started. */
-        const val TEAMS_BUSY = "The Teams widget is already syncing"
+        /** [Sync.requestTeamsSync]'s answer when the widget is syncing already: as good as one started. */
+        const val TEAMS_BUSY = Sync.TEAMS_BUSY
 
-        /** The widget sends a change for each step of a sync; read once they've stopped. */
-        private const val TEAMS_QUIET_MS = 5_000L
         private const val WIDGET_DEBOUNCE_MS = 1_000L
-
-        private const val CALENDAR_QUIET_MS = 5_000L
 
         /** After a failed call, the model is left alone this long. */
 
         /** Unreadable files Setup lists at most: the latest. */
-
-        /** The most model calls one enrichment run makes: the rest wait for the next. */
-        const val MAX_MODEL_CALLS = 20
 
         // It holds only the application context, which lives as long as the process anyway.
         @SuppressLint("StaticFieldLeak")

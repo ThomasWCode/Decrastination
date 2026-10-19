@@ -95,7 +95,7 @@ fun rememberPhotoCheck(graph: AppGraph, activity: Activity, plan: Plan, say: (ta
         PhotoChecks.running.value = piece.taskId
         graph.scope.launch {
             try {
-                PhotoChecks.unseen.value = piece.taskId to PhotoChecks.check(activity.applicationContext, graph, pages, piece, takenAt = wanted.takenAt ?: graph.clock.now())
+                PhotoChecks.unseen.value = piece.taskId to graph.photos.check(pages, piece, takenAt = wanted.takenAt ?: graph.clock.now())
             } finally {
                 PhotoChecks.running.value = null
             }

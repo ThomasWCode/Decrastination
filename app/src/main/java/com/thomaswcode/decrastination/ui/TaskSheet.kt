@@ -49,6 +49,7 @@ import com.thomaswcode.decrastination.core.Status
 import com.thomaswcode.decrastination.core.Invite
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.invite
+import com.thomaswcode.decrastination.enrich.Readings
 import com.thomaswcode.decrastination.enrich.RuleEnricher
 import com.thomaswcode.decrastination.sources.gmail.GmailThreads
 import java.time.Instant
@@ -348,9 +349,9 @@ fun TaskSheet(
                         onClick = {
                             scope.launch {
                                 said = when (graph.readAgain(task.id)) {
-                                    AppGraph.ReadAgain.Read -> "Read again by Claude"
-                                    AppGraph.ReadAgain.NotNow -> "Claude can't be asked now: try again later"
-                                    AppGraph.ReadAgain.NoReading -> "No new reading came back: the one there stands"
+                                    Readings.ReadAgain.Read -> "Read again by Claude"
+                                    Readings.ReadAgain.NotNow -> "Claude can't be asked now: try again later"
+                                    Readings.ReadAgain.NoReading -> "No new reading came back: the one there stands"
                                 }
                             }
                         },
