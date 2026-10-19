@@ -57,7 +57,7 @@ At 3.2.0, when this was written ([01](01-current-state.md)): the planner, the sl
 - **The chat is the record.** Every word in his name is a message in `chat.json` first; a notification is made from the chat, never beside it; nothing he says exists only as a notification or only in the log.
 - **One entrance for replies.** A reply from a notification and one in the chat are the same turn, routed the same way.
 - **He acts at once, with an Undo** (D-60), for the new things too: a reminder set, a note kept, an email finished.
-- **Free where it can be.** Notes, the email's finish and a reminder's chips make no model call; a reminder's message is one small call, drafted ahead and sent as you set it when he can't write; no other new paid call.
+- **Free where it can be.** Notes, the email's finish and a reminder's chips make no model call; a reminder's message is one small call, drafted ahead and sent as you set it when he can't write; what he asks for in 8c comes in a round of the chat's own call, two at most, as a task read in full does today; no other new paid call.
 - **The public repository stays clean** (D-79): examples are made up; the private evaluation sets and your backups stay in `private/`.
 
 ## The order
@@ -89,14 +89,15 @@ Every PR is a release ([development.md](../development.md)): cleanup-only releas
 | 6f | The `:core` module, its dependencies on the app turned round first | 4.0.10 | cleanup | 6a–6e | 1 |
 | 7 | Who set what (`Mine`, `By`, steps with ids) and the stores split, trimmed: one data release | 4.0.11 | cleanup, data | 0, 3, 6 | 2½ |
 | 8a | Notes, standing notes and reminders | 4.1.0 | feature, data | 2, 3, 4, 5, 7 | 3 |
-| 8b | The gaps: keep a piece, check a source, open where it lives, free time in his context | 4.1.1 | feature | 5, 6d, 8a | 1 |
-| 9 | Names: the readings' prompts renamed, files and tests split | 4.1.2 | cleanup | 6 | ½ |
+| 8b | The gaps: keep a piece, check a source, open where it lives, free time and the next lessons in his context | 4.1.1 | feature | 5, 6d, 6f, 8a | 1½ |
+| 8c | Less sent, more asked for: the settings, the week's numbers, the calendar further out and the tasks' text asked for, measured by the chat's eval before and after | 4.1.2 | feature | 6e, 8b | 1½ |
+| 9 | Names: the readings' prompts renamed, files and tests split | 4.1.3 | cleanup | 6 | ½ |
 | 10a | Memory that expires | 4.2.0 | feature, data | 3, 4, 7, 9 | 1 |
 | 10b | His voice; just talk; the summary email in the third person | 4.2.1 | feature | 5, 6e, 9 | ½ |
 | 11 | Emails done | 4.3.0 | feature, data | 1, 3, 6d, 7 | 1½ |
 | 12 | The sweep: imports, comments, the architecture test complete, baselines compared | 4.3.1 | cleanup | all | ½ |
 
-About twenty-three days in 27 PRs (26 releases), 3.3.4 to 3.3.6, 4.0.3 and 4.0.4 among them, evenings and weekends. After it, the conversation digest as 4.4.0 ([13](13-summaries.md)). You've said you won't use the app until the whole of it is in (Q21): each release is still built and checked on the phone, but nothing between releases has to serve a day's use.
+About twenty-five days in 28 PRs (27 releases), 3.3.4 to 3.3.6, 4.0.3 and 4.0.4 among them, evenings and weekends. After it, the conversation digest as 4.4.0 ([13](13-summaries.md)). You've said you won't use the app until the whole of it is in (Q21): each release is still built and checked on the phone, but nothing between releases has to serve a day's use.
 
 ## What changes substantially
 
@@ -107,6 +108,7 @@ About twenty-three days in 27 PRs (26 releases), 3.3.4 to 3.3.6, 4.0.3 and 4.0.4
 - **Two new things he keeps**: notes on tasks (or on every task of a class, subject or source) and reminders, in a store of their own, each set from the chat with an Undo, shown on the task's sheet and in his context; a reminder delivered in his words for the moment, written ahead. [07](07-notes-and-reminders.md).
 - **Memory with a shelf life**: a fact or a rule can carry an until, or belong to a task, and goes when that passes. [08](08-memory-that-expires.md).
 - **His prompts say how he talks**, with the register pinned by examples; the fixed lines in his name follow; a message that's just talk gets a reply and nothing else; the week's summary email is about you in the third person. [09](09-his-voice.md).
+- **He's sent less, and asks for the rest**: the settings, the week's numbers, the calendar past the fortnight and the tasks' own text come when he asks for them, in a round, as a task read in full does today; what he needs for most messages stays in, the next lessons by class added. The chat's eval decides, before and after. [15](15-sent-or-asked-for.md).
 - **Gmail gets one write**: finishing a starred email's work unstars and archives its conversation, journaled and retried, undone within a grace. D-7's "only ever read" is amended. [10](10-emails-done.md).
 - **Tasks keep your values in one place** (`TaskItem.mine`), each with who set it; steps carry an id and an origin, and ticks follow the id.
 - **The stores split**: `runtime.json` into files by how often they change; a finished task's text dropped a fortnight after it's finished, its record kept; every store versioned, its migrations tested. [04](04-data-and-migrations.md).
@@ -122,6 +124,7 @@ Numbered in `docs/decisions.md` by the PRs that apply them (the next free number
 - What he remembers can expire: by a date, or with a task; nothing of it is yours to prune (10a).
 - His voice is a sixth-former's, set by his prompts and pinned by examples; his name and line stay the knobs (D-57). A message that's just talk gets a reply and nothing else. The week's summary email is about you in the third person, never in his voice (10b).
 - Finishing a starred email's work in the app unstars and archives it in Gmail (amending D-7, D-10 and D-54), behind a switch; a write that can't be made is the app's own notification, not his (11).
+- What he's sent always and what he asks for: small and needed by most messages always, the rest asked for and named in his prompt; the tasks' own text asked for, amending D-93, where the chat's eval shows no loss; the week's numbers and the calendar further out taken as things he asks for (G6, G7: your call, 19 Oct, in place of Q17's "not now"); each class's next lessons in his context, a Power Planner class tied to its Teams code by the subject you give both (G8) (8b, 8c).
 - A finished task's text is kept a fortnight, its record for good (7). Every store has a version and a migration (3: D-94).
 - One `@claude review` on every PR that gets up to three Codex rounds, answered point by point and closed with "Resolved" (already in [development.md](../development.md), C-Q2).
 
@@ -135,6 +138,7 @@ Numbered in `docs/decisions.md` by the PRs that apply them (the next free number
 - "Tell me to do her assignments on sheets" lands on every task of that class: on each sheet, under each in his context, in his slot message for each.
 - "Don't message me tonight" is gone by morning without your deleting it.
 - The private chat and Felix evals pass at the rate they pass today after the voice change.
+- "It's due next lesson" dates a task to that class's next lesson; "what's my margin days?", "how did last week go?" and "what's on in December?" are answered after a round; the chat's eval scores at least what it did before 8c.
 - Ticking the last piece of a starred email unstars and archives it within a minute online, and after reconnecting offline; Undo within the grace leaves Gmail untouched.
 - A new override of yours is a field in one place, not six; no store is rewritten for a change that isn't its own: the half-minute state has a file of its own, under 10 KB.
 - All tests pass, more of them than the 874 the plan began with; every release checked on the phone; the baselines of Stage 0 compared and bettered.
@@ -155,5 +159,6 @@ Numbered in `docs/decisions.md` by the PRs that apply them (the next free number
 - [12-verification-and-risks.md](12-verification-and-risks.md): how each PR is shown to work; tests, phone checks, reviews, risks, rolling back.
 - [13-summaries.md](13-summaries.md): the summaries evaluation; the conversation digest as 4.4.0.
 - [14-your-part.md](14-your-part.md): which stages need your phone and which need you, for what and for how long; how to batch them.
+- [15-sent-or-asked-for.md](15-sent-or-asked-for.md): everything he's sent, call by call, always or asked for, now and after; the next lessons; the eval; the cache mark after the plan.
 - [ANSWERS.md](ANSWERS.md): every call either plan needed, with your answers, and the merge's own calls; closed. Questions raised during implementation go in a separate `QUESTIONS.md`.
 - `QUESTIONS.md`, made when implementing a stage needs something from you: questions with a recommendation each, and actions only you can take. Once each is settled it's recorded where it belongs (its PR, [decisions.md](../decisions.md), [14](14-your-part.md)) and the file goes; none is open now.
