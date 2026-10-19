@@ -37,6 +37,7 @@ import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.core.InstructionRules
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.TaskItem
+import com.thomaswcode.decrastination.core.longFinished
 import com.thomaswcode.decrastination.data.SourceStatus
 import com.thomaswcode.decrastination.sources.gmail.GmailThreads
 import kotlinx.coroutines.delay
@@ -184,7 +185,8 @@ fun WorkScreen(graph: AppGraph, activity: Activity, opening: String? = null, onO
                 item(key = NOT_TASKS) { FoldingHeading("Hidden, as you said", expanded, { toggle(NOT_TASKS) }, summary = "${notTasks.size}") }
                 if (expanded) itemsIndexed(notTasks, key = { _, it -> "not-" + it.id }) { index, task -> TaskTile(task, index, notTasks.size, now, zone, byId) { sheetFor = task.id } }
             }
-            val finished = state.tasks.filter { !it.isOpen && !it.hidden && (only == null || it.source.name == only) }.sortedByDescending { it.doneAt ?: it.lastSeenAt }
+            // Lately: a fortnight's, as before your own were kept for good; older ones are records alone (C-Q3).
+            val finished = state.tasks.filter { !it.isOpen && !it.hidden && !it.longFinished(now) && (only == null || it.source.name == only) }.sortedByDescending { it.doneAt ?: it.lastSeenAt }
             if (finished.isNotEmpty()) {
                 val expanded = FINISHED !in folded
                 item(key = FINISHED) { FoldingHeading("Finished or missed lately", expanded, { toggle(FINISHED) }, summary = "${finished.size}") }

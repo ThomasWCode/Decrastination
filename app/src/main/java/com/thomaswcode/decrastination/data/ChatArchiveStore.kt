@@ -218,10 +218,11 @@ class ChatArchiveStore(private val dir: File, private val clock: () -> Long = Sy
          */
         val SPLIT = Move { dir ->
             val whole = File(dir, NAME)
-            if (!whole.isFile) return@Move
-            val archive = runCatching { JsonStore.json.decodeFromString(ChatArchive.serializer(), whole.readText()) }.getOrNull() ?: return@Move
+            if (!whole.isFile) return@Move emptyList()
+            val archive = runCatching { JsonStore.json.decodeFromString(ChatArchive.serializer(), whole.readText()) }.getOrNull() ?: return@Move emptyList()
             runBlocking { ChatArchiveStore(dir).add(archive.messages) }
             whole.delete()
+            emptyList()
         }
     }
 }

@@ -50,7 +50,10 @@ object ChatMigration {
      * runtime lose them after, as each loads ([LOG], [RUNTIME]), keeping theirs as `.v1` too. A chat in the
      * new shape is moved already, so a second run changes nothing.
      */
-    val MOVE = Move { dir -> move(dir) }
+    val MOVE = Move { dir ->
+        move(dir)
+        emptyList()
+    }
 
     private fun move(dir: File) {
         val file = File(dir, "chat.json")

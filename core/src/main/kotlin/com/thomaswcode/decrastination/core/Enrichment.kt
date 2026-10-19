@@ -83,7 +83,8 @@ fun TaskItem.enriched(): TaskItem = enrichedOnly().let { t ->
  * [steps], each with the marks (done, and ticked by hand) of the one of [before] with its id; one
  * whose id isn't there (a reading made again, a step new to the list) takes those of the one at the
  * same place among its name's, of those no id matched (the second "Apply" the second's): two steps
- * of one name aren't both ticked by one, and a mark stays on the step it was made on.
+ * of one name aren't both ticked by one, and a mark stays on the step it was made on. Matched so, one
+ * with no id of its own (a reading's steps come without) takes that one's: the same step, read again.
  */
 fun carryMarks(steps: List<SubStep>, before: List<SubStep>): List<SubStep> {
     val byId = before.filter { it.id.isNotEmpty() }.associateBy { it.id }
@@ -95,7 +96,8 @@ fun carryMarks(steps: List<SubStep>, before: List<SubStep>): List<SubStep> {
             val place = seen.merge(step.title, 1, Int::plus)!! - 1
             was[step.title]?.getOrNull(place)
         }
-        if (old?.done == true) step.copy(done = true, byHand = old.byHand, timedMin = old.timedMin) else step
+        val same = if (step.id.isEmpty() && old != null) step.copy(id = old.id) else step
+        if (old?.done == true) same.copy(done = true, byHand = old.byHand, timedMin = old.timedMin) else same
     }
 }
 

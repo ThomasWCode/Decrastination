@@ -85,7 +85,7 @@ A step over an hour is cut into even sittings by time, never by content (`core/S
 ## Your steps, and Felix's
 
 - Steps you give a task, or Felix gives it with a `Steps` change (`TaskItem.mine.steps`, with who gave them), are laid over the reading's at every merge (`TaskItem.enriched`), their ticks carried by id (`carryMarks`). Taken back, the reading's steps return, ticks kept by name.
-- Every step has an id, given as it's stored, and where it came from (`SubStep.origin`: the source, a reading, the rules, you, Felix, your own task's form): a reading's steps are told from yours by it, not by their names.
+- Every step has an id, given as it's stored, and where it came from (`SubStep.origin`: the source, a reading, the rules, you, Felix, your own task's form): a reading's steps are told from yours by it, not by their names. Read again, a step of the same name, at the same place among its name's, keeps its id as well as its tick (`carryMarks`).
 - They never pass through a reading: no reading's check, fold or sitting touches them, and a reading never replaces them. The planner neither cuts them nor scales them by your pace (`TaskItem.yourSteps`, `Calibration.multiplierFor`).
 - Felix's steps must add up to the task's minutes, or come with a `Minutes` change for their new total (AI-19, `InstructionAnswers.stepsProblem`); otherwise they're left out, and said. An Anki task's steps are its cards, and can't be given.
 - A task with your steps is still read, its reading kept in its `Enrichment`, and your steps stay the plan. Claude is sent them as the task's steps as last planned (`ClaudeEnricher.previous`).

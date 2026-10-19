@@ -111,6 +111,17 @@ class TasksMigrationTest {
     }
 
     @Test
+    fun `with no tasks yet, the instructions still move, those Felix's cards made his`() {
+        for (shape in before) {
+            val dir = phone(shape)
+            File(dir, "tasks.json").delete()
+            val instructions = Stores(dir, Reverse).instructions.value.instructions.associateBy { it.id }
+            assertEquals(By.Felix, instructions.getValue("i-felix-steps").by, shape)
+            assertTrue(File(dir, "instructions.json.v1").isFile, shape)
+        }
+    }
+
+    @Test
     fun `run twice, the move and the migrations leave what they made, and keep what they came from`() {
         for (shape in before) {
             val dir = phone(shape)

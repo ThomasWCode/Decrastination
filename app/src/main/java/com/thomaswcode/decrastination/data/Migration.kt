@@ -56,5 +56,6 @@ class Shape(val version: Int, val migrations: List<Migration>)
  * second run changes nothing.
  */
 fun interface Move {
-    fun run(dir: File)
+    /** Moves the fields in [dir]'s files: a file it found it couldn't read, set aside before it wrote over it, returned to be said as a store's is ([Stores.problems]). */
+    fun run(dir: File): List<JsonStore.Unreadable>
 }

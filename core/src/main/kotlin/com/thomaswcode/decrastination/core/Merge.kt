@@ -5,7 +5,8 @@ package com.thomaswcode.decrastination.core
  *
  * - A task the source lists is updated from it, keeping this app's own bookkeeping (first seen,
  *   minutes worked, sub-steps, estimates, the enrichment, laid over the fresh values again). One the
- *   source lists as finished becomes [Status.Done].
+ *   source lists as finished becomes [Status.Done]. One finished a fortnight ago and finished still is
+ *   left as it was kept ([trimmed]), only seen again.
  * - An open task the source no longer lists is done: handed in, ticked, or an email unstarred
  *   (docs/spec/sources.md; DX-03: the star is the state, so an email's blocks or its reading still to come
  *   don't keep it). A [TaskItem.derived] one (the Anki quota) was missed instead: only its counts
@@ -84,6 +85,12 @@ object Merge {
                 }
                 added += task
                 fresh[id] = task
+                continue
+            }
+            // Finished a fortnight ago and finished still: kept as its record ([trimmed], C-Q3), what its
+            // reading laid as it was laid, only seen again.
+            if (old.longFinished(now) && (f.done || ((old.derived || old.tickDone) && old.status == Status.Done))) {
+                fresh[id] = old.copy(status = Status.Done, lastSeenAt = now)
                 continue
             }
             // The source's steps, unless they're the same as before: then the ones kept here, with

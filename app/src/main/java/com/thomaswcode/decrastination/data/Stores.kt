@@ -25,9 +25,8 @@ class Stores(
     /** Fields moved between stores, run before any is read ([Move]). */
     moves: List<Move> = MOVES,
 ) {
-    init {
-        moves.forEach { it.run(dir) }
-    }
+    /** What the moves found they couldn't read, set aside before they wrote over it: said at this start as a store's file is ([problems]). */
+    private val movedAside: List<JsonStore.Unreadable> = moves.flatMap { it.run(dir) }
 
     private fun <T> store(name: String, serializer: kotlinx.serialization.KSerializer<T>, default: () -> T, unreadable: () -> T = default, migrations: List<Migration> = emptyList(), onWrite: (T) -> T = { it }) =
         JsonStore(File(dir, name), serializer, default, unreadable = unreadable, clock = clock, migrations = migrations, onWrite = onWrite)
@@ -130,7 +129,7 @@ class Stores(
     val shapes: Map<String, Shape> get() = json.associate { it.name to Shape(it.version, it.migrations) } + (chatArchive.name to Shape(chatArchive.version, ChatArchiveStore.MIGRATIONS))
 
     /** Files that couldn't be read whole at this start, and where each was set aside (the archive's months, read later: [ChatArchiveStore.onProblem]). */
-    val problems: List<JsonStore.Unreadable> get() = json.mapNotNull { it.problem } + chatArchive.problems + listOfNotNull(unsplit, secrets.problem)
+    val problems: List<JsonStore.Unreadable> get() = json.mapNotNull { it.problem } + movedAside + chatArchive.problems + listOfNotNull(unsplit, secrets.problem)
 
     /** What was kept of each file that didn't read whole written over it, now its problem is on record ([JsonStore.keepRecovered]). */
     suspend fun keepRecovered() {
