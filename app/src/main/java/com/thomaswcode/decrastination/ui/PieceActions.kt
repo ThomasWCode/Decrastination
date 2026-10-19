@@ -171,15 +171,19 @@ internal suspend fun keepPiece(graph: AppGraph, piece: Chunk, now: Long): String
  * taken for a Done that didn't take. Null for any other.
  */
 internal fun stillPlanned(graph: AppGraph, taskId: String): String? {
-    val task = graph.tasks.value.tasks.firstOrNull { it.id == taskId && it.isOpen } ?: return null
+    // As the plan takes it: your instructions' values over it, and linked work credited to it.
+    val task = graph.planning.asPlanned().firstOrNull { it.id == taskId && it.isOpen } ?: return null
     if (!worked(task, graph.runtime.value.calibration.multiplierFor(task))) return null
     val next = graph.planning.plan().ordered.firstOrNull { it.taskId == taskId } ?: return null
     return "It stays planned, ${Format.minutes(next.minutes)}, until ${task.source.label} says it's done."
 }
 
-/** Whether all of [task]'s work is done as the planner sees it: every step ticked, or its minutes worked ([Planner.remaining]). */
+/**
+ * Whether all of [task]'s work is done as the planner sees it: every step ticked, or its minutes worked,
+ * what's left rounding to none as the planner rounds it ([Planner.remaining]).
+ */
 internal fun worked(task: TaskItem, multiplier: Double): Boolean =
-    if (task.subSteps.isNotEmpty()) task.subSteps.all { it.done } else Planner.remaining(task, multiplier) <= 0.0
+    if (task.subSteps.isNotEmpty()) task.subSteps.all { it.done } else Planner.remaining(task, multiplier).roundToInt() <= 0
 
 /**
  * What can be done with [piece], wherever it's shown (the Plan, the block screen): **Open** goes to

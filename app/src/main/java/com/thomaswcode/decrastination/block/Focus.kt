@@ -612,11 +612,12 @@ class Focus(
     private suspend fun photoEarns(done: PhotoDone, key: String): Boolean {
         val at = done.at
         val today = today(at).toString()
-        // Taken of a piece still to do: a slot of it kept since (ticked while the check ran) is the one
-        // it shows; one kept before it was taken is another (an earlier box under the same key, a
-        // round before the task reopened), and the piece in the plan now is the one.
+        // Taken of a piece still to do: a slot of it kept since (ticked while the check ran), or moments
+        // before (Done, then the photo at once: [AGAIN_MS]), is the one it shows; one kept before that is
+        // another (an earlier box under the same key, a round before the task reopened), and the piece in
+        // the plan now is the one.
         val taken = done.takenAt ?: at
-        val unearned = log.value.slots.lastOrNull { it.key == key && it.outcome.kept && it.date == today && !it.earned && it.at >= taken }
+        val unearned = log.value.slots.lastOrNull { it.key == key && it.outcome.kept && it.date == today && !it.earned && it.at >= taken - AGAIN_MS }
         if (unearned == null) {
             val kept = keeping.withLock { keep(key, 0, photo = true, verified = false, seenAt = taken, now = maxOf(at, clock.now()), photoDone = done) } ?: return false
             kept.ownDone?.let { onOwnTaskDone(it) }
