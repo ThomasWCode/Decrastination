@@ -29,8 +29,8 @@ import java.time.LocalDate
  * `Review`, `AppGraph` and `Assessment`: the week's review ([review]: the calibration learned afresh,
  * the capacity checked, Claude's note and bounded changes, what's remembered tidied); a figure
  * forgotten ([forgetCalibration]); a review's change or tidy put back ([undoReviewChange],
- * [undoTidy]); the week's summary for home ([writeSummary]); and a completion's answer on record
- * ([recordAssessment]). Built like [Focus]: its stores, the clock, the gateway, the focus, protection
+ * [undoTidy]); the week's summary for home ([writeSummary]); and the week's check-in and a
+ * completion's answer on record ([recordCheckIn], [recordAssessment]), whoever asked them. Built like [Focus]: its stores, the clock, the gateway, the focus, protection
  * and small callbacks; the pure parts are [Review]'s, [Calibrator]'s, [Stats]' and [Summary]'s.
  */
 class Learning(
@@ -227,6 +227,17 @@ class Learning(
     }
 
     /** Records [answer] (and [note]) on the completion of [taskId] done at [doneAt] (0: its latest, for older questions). */
+    /**
+     * [checkIn], the week's (from Felix's five questions in the chat, or the check-in's form), kept once a
+     * week: one for a week that has its check-in already (a second tap, another screen) is let go. Whether
+     * it was kept.
+     */
+    suspend fun recordCheckIn(checkIn: CheckIn, now: Long = clock.now()): Boolean {
+        var added = false
+        log.update { l -> if (l.checkIns.any { it.weekOf == checkIn.weekOf }) l else l.copy(checkIns = l.checkIns + checkIn).trimmed(now).also { added = true } }
+        return added
+    }
+
     suspend fun recordAssessment(taskId: String, doneAt: Long, answer: String, note: String? = null) {
         log.update { Assessment.answered(it, taskId, doneAt, answer, note) }
     }
