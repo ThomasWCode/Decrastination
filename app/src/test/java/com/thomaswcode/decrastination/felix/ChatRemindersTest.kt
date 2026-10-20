@@ -132,6 +132,10 @@ class ChatRemindersTest {
         val replaced = parse(answer(listOf(reminder(text = "instead", time = "18:00")), actions = cancel), fifty)
         assertEquals(listOf("instead"), replaced.reminders.map { it.text })
         assertTrue(replaced.leftOut.isEmpty(), replaced.leftOut.toString())
+        // A deadline the same answer sets is the one a reminder before it goes by.
+        val dueBy = """{"type":"DueBy","taskId":"${essay.id}","afterTaskId":"","eventKey":"","eventTime":"","minutes":-1,"date":"2026-10-23","endDate":"","weekday":"","time":"09:00","endTime":"","title":"","steps":[],"paced":false}"""
+        val before = parse(answer(listOf(dueBy, reminder(text = "a day before", taskId = essay.id, whenIs = "beforeDue", minutesBefore = 24 * 60))))
+        assertEquals(listOf("a day before"), before.reminders.map { it.text }, before.leftOut.toString())
     }
 
     @Test
@@ -179,6 +183,10 @@ class ChatRemindersTest {
         val reading = parse(answer(actions = actions), felix)
         assertEquals(listOf(ChatAction(ChatAction.Type.CancelReminder, "", value = "r1"), ChatAction(ChatAction.Type.DeleteNote, essay.id, value = "n1")), reading.actions)
         assertEquals(2, reading.leftOut.size)
+        // A note the same answer deletes makes room for its replacement, at ten on the task.
+        val ten = FelixStore(notes = (1..Notes.PER_TASK).map { Note("t$it", "n", now, By.Felix, taskId = essay.id) })
+        val delete = """[{"type":"deleteNote","taskId":"","stepIndex":-1,"setting":"","value":"t1"}]"""
+        assertEquals(1, parse(answer(notes = listOf(note(essay.id, "instead")), actions = delete), ten).notes.size)
     }
 
     @Test
