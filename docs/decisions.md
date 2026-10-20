@@ -111,7 +111,7 @@ How the app works in detail is in [spec/](spec/); how the work is done is in [de
 ## Notifications
 
 - **D-73. Channels by purpose; routine notifications at most four a day, none in quiet hours** (edited 18 Oct, 4.0.0): the app's own (a calendar move put back, the check-in's reminder, Claude's). Felix's one notification is outside that count: of his messages, the week's review and summary and a calendar event's question wait for the morning in quiet hours, the briefing (his message, at its own time, D-74) making it again; his looks are silent in quiet hours and busy events.
-- **D-74. The briefing at 07:00 on school days and 08:30 at weekends.**
+- **D-74. The briefing at 07:00 on a school day, by the school calendar, and 08:30 on any other day, a weekday off included, as a weekend's** (4.1.3, 20 Oct; the plan's Q34: B). A day off is a lie-in. Applies: `Daily.nextBriefing`, `SchoolDays.kindOf`.
 - **D-75. While free time is spent, a silent countdown, and a heads-up a minute before the end.**
 
 ## Storage and backups

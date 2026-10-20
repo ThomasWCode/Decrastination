@@ -8,6 +8,9 @@ import android.content.Intent
 import android.os.Build
 import android.util.Log
 import com.thomaswcode.decrastination.AppGraph
+import com.thomaswcode.decrastination.core.DayKind
+import com.thomaswcode.decrastination.core.SchoolCalendar
+import com.thomaswcode.decrastination.core.SchoolDays
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.data.DailyRetry
 import java.time.DayOfWeek
@@ -19,20 +22,23 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 /**
- * The app's own times of day (Phase 5): the morning briefing (Q13: 07:00 Monday to Friday, 08:30 at
- * weekends), the Sunday check-in's reminder, and the weekly review after it.
+ * The app's own times of day (Phase 5): the morning briefing (07:00 on a school day, 08:30 on any
+ * other, D-74), the Sunday check-in's reminder, and the weekly review after it.
  */
 object Daily {
     const val ACTION_BRIEFING = "com.thomaswcode.decrastination.action.BRIEFING"
     const val ACTION_CHECK_IN = "com.thomaswcode.decrastination.action.CHECK_IN"
     const val ACTION_REVIEW = "com.thomaswcode.decrastination.action.REVIEW"
 
-    /** The next morning briefing after [now]. */
-    fun nextBriefing(now: Long, zone: ZoneId, settings: Settings): Long {
+    /**
+     * The next morning briefing after [now]: at the school days' time on a school day by [school]'s
+     * calendar, as blocking reads it (BL-02), and at the weekends' on any other, a weekday off
+     * included (D-74).
+     */
+    fun nextBriefing(now: Long, zone: ZoneId, settings: Settings, school: SchoolCalendar): Long {
         var day = Instant.ofEpochMilli(now).atZone(zone).toLocalDate()
         while (true) {
-            val weekend = day.dayOfWeek == DayOfWeek.SATURDAY || day.dayOfWeek == DayOfWeek.SUNDAY
-            val minute = if (weekend) settings.briefingWeekendMin else settings.briefingWeekdayMin
+            val minute = if (SchoolDays.kindOf(day, school) == DayKind.Weekday) settings.briefingWeekdayMin else settings.briefingWeekendMin
             val at = day.atStartOfDay().plusMinutes(minute.toLong()).atZone(zone).toInstant().toEpochMilli()
             if (at > now) return at
             day = day.plusDays(1)
@@ -79,7 +85,7 @@ object Daily {
         val settings = graph.settings.value
         val ran = graph.runtime.value.dailyRanAt
         fun from(action: String) = from(ran[action], now, zone)
-        set(context, ACTION_BRIEFING, nextBriefing(from(ACTION_BRIEFING), zone, settings))
+        set(context, ACTION_BRIEFING, nextBriefing(from(ACTION_BRIEFING), zone, settings, graph.school.value))
         set(context, ACTION_CHECK_IN, nextSunday(from(ACTION_CHECK_IN), zone, settings.checkInMin))
         set(context, ACTION_REVIEW, nextSunday(from(ACTION_REVIEW), zone, settings.checkInMin + REVIEW_AFTER_MIN))
         // One whose run failed: tried again at its time too, on an alarm of its own, so its next
