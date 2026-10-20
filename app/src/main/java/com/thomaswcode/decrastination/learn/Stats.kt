@@ -119,13 +119,14 @@ object Stats {
      * This week so far and last week in figures, as Felix is told them when he asks (G6, 8c): each week's time
      * worked in kept slots, its slots kept and missed, its work finished and the real deadlines among it met
      * (PL-14), then its subjects, busiest first, as [bySubject] names them; [MAX_WEEK_LINES] lines at most,
-     * the subjects sharing what the two weeks' own lines leave.
+     * each week an even share of them: past its share, its last line says how many more subjects there are.
      */
     fun weekLines(log: ActivityLog, classMap: Map<String, String>, now: Long, zone: ZoneId): List<String> {
         val today = Instant.ofEpochMilli(now).atZone(zone).toLocalDate()
         val monday = today.minusDays((today.dayOfWeek.value - 1).toLong())
         val weeks = listOf(Triple("This week so far", monday, today), Triple("Last week", monday.minusDays(7), monday.minusDays(1)))
-        val each = (MAX_WEEK_LINES - weeks.size) / weeks.size
+        // A week's own line, then its subjects in what's left of its share.
+        val each = MAX_WEEK_LINES / weeks.size - 1
         return weeks.flatMap { (label, first, last) ->
             fun inWeek(date: LocalDate) = !date.isBefore(first) && !date.isAfter(last)
             val slots = log.slots.filter { inWeek(LocalDate.parse(it.date)) && it.outcome != SlotOutcome.Moved }
@@ -139,9 +140,11 @@ object Stats {
                 val theirs = kept.filter { subject(it.className) == s }
                 Triple(s, theirs.sumOf { it.workedMin }, theirs.size) to done.count { subject(it.className) == s }
             }.sortedWith(compareByDescending<Pair<Triple<String, Int, Int>, Int>> { it.first.second }.thenBy { it.first.first })
-            listOf(head) + subjects.take(each).map { (s, finished) -> "  - ${s.first}: ${Format.minutes(s.second)} in ${s.third} slots; $finished finished" } +
-                listOfNotNull((subjects.size - each).takeIf { it > 0 }?.let { "  - and $it more subjects" })
-        }.take(MAX_WEEK_LINES)
+            // Past its share, one line fewer of them, so the count of the rest fits too.
+            val shown = if (subjects.size <= each) subjects else subjects.take(each - 1)
+            listOf(head) + shown.map { (s, finished) -> "  - ${s.first}: ${Format.minutes(s.second)} in ${s.third} slots; $finished finished" } +
+                listOfNotNull((subjects.size - shown.size).takeIf { it > 0 }?.let { "  - and $it more subjects" })
+        }
     }
 
     /** The most lines [weekLines] gives. */

@@ -113,14 +113,17 @@ object ChatPrompts {
 
     /**
      * [word] as a request for the calendar (G7, 8c): `calendar`, the four weeks after the fortnight (empty), or
-     * `calendar:yyyy-MM`, that month (yyyy-MM). Null for any other word, and for a month that doesn't read.
+     * `calendar:yyyy-MM`, that month (yyyy-MM). Null for any other word, and for a month that isn't four digits of
+     * a year and two of a month, as one far off (a signed year) couldn't be made a time.
      */
     fun calendarAsk(word: String): String? {
         val w = word.trim()
         if (w.equals(ASK_CALENDAR, ignoreCase = true)) return ""
         if (!w.startsWith("$ASK_CALENDAR:", ignoreCase = true)) return null
-        return runCatching { YearMonth.parse(w.substringAfter(':').trim()) }.getOrNull()?.toString()
+        return w.substringAfter(':').trim().takeIf { MONTH_ASKED.matches(it) }?.let { runCatching { YearMonth.parse(it) }.getOrNull() }?.toString()
     }
+
+    private val MONTH_ASKED = Regex("""\d{4}-\d{2}""")
 
     /** With looking things up off: the field it has is always empty. */
     private const val NO_RESEARCH = "6. research is always an empty string: you can't look things up."
@@ -250,7 +253,8 @@ object ChatPrompts {
      * so a long list of tasks can't push it out: the list loses its end, and the plan its far days.
      * Your newest words come after what they're about, in full ([aboutText], D-93), and before what
      * a web search [found], the tasks he asked to [read] whole ([readText]), and what else he asked for
-     * [brought] (8c: the week's numbers, the calendar further out), each under its own heading. A message of yours that
+     * [brought] (8c: the week's numbers, the calendar further out), each under its own heading; at the last round a
+     * message has ([lastRound]), said to be the last, so he answers from what he has ([ChatRounds.MAX_ROUNDS]). A message of yours that
      * replies to one that isn't just before it starts with that one, quoted (5b), as the window may not
      * hold it.
      */
@@ -266,6 +270,7 @@ object ChatPrompts {
         events: List<CalendarEvent> = emptyList(),
         quoted: List<ChatMessage> = emptyList(),
         brought: List<String> = emptyList(),
+        lastRound: Boolean = false,
     ): List<Pair<Speaker, String>> {
         val last = history(messages)
         // Before any of yours: an answer cut off from its question by the window goes; a message of
@@ -296,7 +301,7 @@ object ChatPrompts {
         // to the room they leave, however much it says.
         val words = texts.last().second
         val about = aboutText(recent.last { it.from == Speaker.You }.about, tasks, events)?.take((budget - words.length - 2).coerceAtLeast(0))?.takeIf { it.isNotEmpty() }
-        val newest = (listOfNotNull(about, words, found?.let(ResearchPrompts::told), read.takeIf { it.isNotEmpty() }?.let(::readText)) + brought).joinToString("\n\n").take(budget)
+        val newest = (listOfNotNull(about, words, found?.let(ResearchPrompts::told), read.takeIf { it.isNotEmpty() }?.let(::readText)) + brought + listOfNotNull(LAST.takeIf { lastRound })).joinToString("\n\n").take(budget)
         // The turns before it, newest first, while they fit their share, starting again with one of yours.
         var left = (budget - newest.length) / 4
         val earlier = texts.dropLast(1).reversed().takeWhile { (_, t) -> (t.length <= left).also { if (it) left -= t.length } }.reversed()
@@ -315,6 +320,9 @@ object ChatPrompts {
     }
 
     private const val PLAN_GAP = "\n\n"
+
+    /** Said at the last round a message has ([turns]): nothing more can be brought for it. */
+    private const val LAST = "That's the last that can be brought for this message: answer it now from what you have, and leave details and research empty."
 
     /**
      * What the app knows, as the chat sends it: [known] ([context]), then the [plan] ([plan]), each with its share of the room ([turns]);
