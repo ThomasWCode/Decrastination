@@ -154,15 +154,15 @@ Reminders set, still to come (id | when | their words | its task):
 - r2 | at the start of “Rates of reaction worksheet”'s next slot, Tue 13 Oct 17:20 | Ask about question 7 | teams:t1
 - r1 | Wed 14 Oct 08:00 | Bring the signed consent form | gmail:m1
 
-Open tasks (id | title | from | its class, and its subject | kind | due, a real deadline unless marked a plan, which is never overdue and moves on once it passes | minutes in all, with what the plan makes of them at their pace where it's learned | minutes worked so far | can't start before):
-- teams:t1 | Rates of reaction worksheet | Teams | 12X/Ch1, Chemistry | Homework | Thu 15 Oct 2026 08:30 | 45, planned as 59 at their pace | 0 | -
+Open tasks (id | title | from | its class, and its subject | kind | due, a real deadline unless marked a plan, which is never overdue and moves on once it passes | minutes in all, with what the plan makes of them at their pace where it's learned | minutes worked so far | can't start before | what its text holds: who an email's from, what's attached and linked, how long its text is):
+- teams:t1 | Rates of reaction worksheet | Teams | 12X/Ch1, Chemistry | Homework | Thu 15 Oct 2026 08:30 | 45, planned as 59 at their pace | 0 | - | links: https://example.org/rates-sheet; text 140 characters
     note n1 (yours): Use Monday's results table for question 5
-- powerplanner:p1 | Vectors exercise 4B | Power Planner | 12X/Ma1, Maths | Homework | Fri 16 Oct 2026 23:59 | 60, planned as 69 at their pace | 0 | -
+- powerplanner:p1 | Vectors exercise 4B | Power Planner | 12X/Ma1, Maths | Homework | Fri 16 Oct 2026 23:59 | 60, planned as 69 at their pace | 0 | - | text 72 characters
     step 0: Questions 1 to 6 (30 min)
     step 1: Questions 7 to 12 (30 min)
     standing notes for it: n2
-- gmail:m1 | Trip consent form | Gmail | - | Admin | Fri 16 Oct 2026 23:59 (a plan) | 10 | 0 | -
-- own:o1 | Personal statement first draft | Yours | - | Admin | no date | 120 | 0 | -
+- gmail:m1 | Trip consent form | Gmail | - | Admin | Fri 16 Oct 2026 23:59 (a plan) | 10 | 0 | - | from Ms Example; attachments: consent-form.pdf (109 KB); text 722 characters
+- own:o1 | Personal statement first draft | Yours | - | Admin | no date | 120 | 0 | - | text 53 characters
 
 Standing notes, for every task they match (id | whose | the tasks they're for | their words):
 - n2 | theirs | every Maths task | Do these on paper, not in the textbook
@@ -209,15 +209,15 @@ Settings you can change (setting | what it is | its value now):
 - ankiDeadlineMin | Anki deadline | 21:30
 - ankiTextbook | Current German textbook | 1
 
-The tasks' own text (id | from, and what comes with it; then its text: an assignment's instructions, an email's conversation, a planner item's details, their notes), each at most 600 characters: a longer one as its reading's summary (each says of how much), or else its start and end (an email's newest replies are at its end):
-- teams:t1 | Teams; links: https://example.org/rates-sheet
+The tasks' own text (id; then its text: an assignment's instructions, an email's conversation, a planner item's details, their notes), each at most 250 characters: a longer one as its reading's summary (each says of how much), or else its start and end (an email's newest replies are at its end); its line above says how long the whole is, and details reads it:
+- teams:t1
     Answer questions 1 to 8 on the sheet. For question 5, use the results table from Monday's practical.
     Show your working for the calculations.
-- powerplanner:p1 | Power Planner
+- powerplanner:p1
     Textbook exercise 4B, questions 1 to 12. Check your answers at the back.
-- gmail:m1 | Gmail, from Ms Example; attachments: consent-form.pdf (109 KB)
+- gmail:m1
     Its reading's summary of all 722 characters: Return the signed consent form to the school office by Friday 16 October. The trip is on Friday 30 October: the coach now leaves at 08:00 (be there by 07:50) and is back by 16:30. Bring a packed lunch, a notebook and a pen; tell the department of any access or dietary needs by Wednesday. A worksheet from the visit is due the Monday after.
-- own:o1 | Yours
+- own:o1
     About 4,000 characters; the first draft by half term.
 
 The plan: the work the app has them do each day so every deadline is met, as its Day and Work tabs show it. Its minutes are the app's, from what it's learned of how long things take them, so they can differ from the task list's. While anything's planned for today, blocked apps stay blocked in blocking hours; otherwise they cost free time earned by working. Each piece's [why: …] says why it's on its day: duesoon (due today or tomorrow), overdue, spread (its share of the free time to its deadline), minimumtouch (kept within a week of its piece before), revisiongap (a day after its revision piece before), mostroom (a task in one piece, on the roomiest day before its deadline), soft (no due date: spare time this week), packed (its days are too tight to spread it, so as late as they allow), kept (where its slot today already was, under way or still to come), noroom (no room before its deadline).

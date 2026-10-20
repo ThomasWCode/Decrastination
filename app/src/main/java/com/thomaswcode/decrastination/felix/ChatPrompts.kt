@@ -452,18 +452,22 @@ object ChatPrompts {
             appendLine("- ${r.id} | ${Reminders.whenLine(r, moments[r.id], title, zone)} | ${r.text.take(Reminders.MAX_TEXT)} | ${r.taskId ?: "-"}")
         }
         appendLine()
-        appendLine("Open tasks (id | title | from | its class, and its subject | kind | due, a real deadline unless marked a plan, which is never overdue and moves on once it passes | minutes in all, with what the plan makes of them at their pace where it's learned | minutes worked so far | can't start before):")
+        appendLine("Open tasks (id | title | from | its class, and its subject | kind | due, a real deadline unless marked a plan, which is never overdue and moves on once it passes | minutes in all, with what the plan makes of them at their pace where it's learned | minutes worked so far | can't start before | what its text holds: who an email's from, what's attached and linked, how long its text is):")
         // By the date shown (the deadline in force, PL-14), so a plan's date gone by doesn't crowd nearer ones out of the list.
         val open = tasks.filter { it.isOpen && !it.hidden }.sortedBy { it.deadlineAt(now) ?: it.dueAt ?: Long.MAX_VALUE }
         // The notes' room (8a), so many can't crowd out what comes after them; the standing ones, each once.
         var noteRoom = MAX_NOTES_TEXT
+        // What each task's text holds (8c), in a room of its own, spent by the deadline in force as the list is, so no
+        // task is crowded out of it: past the room, its length alone. A task the app made (an Anki quota) has none of its own.
+        var holdsRoom = MAX_HOLDS
         val standing = Notes.live(notes).filter { it.scope != null }.sortedBy { it.at }
         if (open.isEmpty()) appendLine("(none)")
         open.take(InstructionPrompts.MAX_TASKS).forEach { t ->
             val start = listOfNotNull(t.availableFrom, t.mine.from?.value, t.notBefore).maxOrNull()?.takeIf { it > now }
             // A date the app or Claude set is a plan, not a deadline (PL-14): said, so it's not called overdue.
             val due = (t.deadlineAt(now) ?: t.dueAt)?.let { at(it) + if (t.hardAt(now)) "" else " (a plan)" } ?: "no date"
-            appendLine("- ${t.id} | ${t.title.take(MAX_TITLE)} | ${t.source.label} | ${classOf(t, classMap)} | ${t.kind.label} | $due | ${minutes(t)} | ${t.workedMin + t.photoMin} | ${start?.let(::at) ?: "-"}")
+            val holds = if (t.derived) "-" else TaskText.holds(t, if (holdsRoom >= HOLDS_LINE) HOLDS_LINE else 0).also { holdsRoom -= it.length }
+            appendLine("- ${t.id} | ${t.title.take(MAX_TITLE)} | ${t.source.label} | ${classOf(t, classMap)} | ${t.kind.label} | $due | ${minutes(t)} | ${t.workedMin + t.photoMin} | ${start?.let(::at) ?: "-"} | $holds")
             // Its steps by their place, for a tick (AI-14).
             t.subSteps.take(OwnTaskRules.MAX_STEPS).forEachIndexed { i, step -> appendLine("    step $i: ${step.title.take(MAX_TITLE)} (${step.minutes} min)${if (step.done) ", done" else ""}") }
             // Its own notes (8a), by id for a delete, whose each is, within their room; the standing ones it matches
@@ -558,16 +562,16 @@ object ChatPrompts {
             appendLine("Settings you can change (setting | what it is | its value now):")
             FelixSettings.describe(settings).forEach { appendLine("- $it") }
         }
-        // Each open task's own text, cut short (D-93): what it asks of them, and what comes with it.
+        // Each open task's own text, cut short (D-93): what it asks of them; what comes with it is on its line (8c).
         // Last, so it's what a context too long for its room loses first ([turns]).
-        val withText = open.take(InstructionPrompts.MAX_TASKS).filter { !it.derived && TaskText.has(it) }
+        val withText = open.take(InstructionPrompts.MAX_TASKS).filter { !it.derived && it.detail.isNotBlank() }
         if (withText.isNotEmpty()) {
             appendLine()
-            appendLine("The tasks' own text (id | from, and what comes with it; then its text: an assignment's instructions, an email's conversation, a planner item's details, their notes), each at most $BRIEF_TEXT characters: a longer one as its reading's summary (each says of how much), or else its start and end (an email's newest replies are at its end):")
+            appendLine("The tasks' own text (id; then its text: an assignment's instructions, an email's conversation, a planner item's details, their notes), each at most $BRIEF_TEXT characters: a longer one as its reading's summary (each says of how much), or else its start and end (an email's newest replies are at its end); its line above says how long the whole is, and details reads it:")
             var room = MAX_TEXTS
             var shown = 0
             for (t in withText) {
-                val entry = "- ${t.id} | ${TaskText.about(t)}" + (TaskText.brief(t, BRIEF_TEXT, "    ")?.let { "\n$it" } ?: "")
+                val entry = "- ${t.id}" + (TaskText.brief(t, BRIEF_TEXT, "    ")?.let { "\n$it" } ?: "")
                 if (entry.length > room) break
                 appendLine(entry)
                 room -= entry.length
@@ -646,11 +650,15 @@ object ChatPrompts {
     /** A lesson's day and start, as the lessons' line says them. */
     private val LESSON_DAY = DateTimeFormatter.ofPattern("EEE d MMM HH:mm", Locale.UK)
 
-    /** Each open task's own text as the context gives it, at most (D-93). */
-    const val BRIEF_TEXT = 600
+    /** Each open task's own text as the context gives it, at most (D-93; 600 till 8c, its line now saying what the text holds). */
+    const val BRIEF_TEXT = 250
 
     /** All of their texts in the context, at most. */
-    private const val MAX_TEXTS = 12_000
+    private const val MAX_TEXTS = 5_000
+
+    /** What a task's text holds, on its line (8c): at most this much a line, and all the lines' together. */
+    private const val HOLDS_LINE = 160
+    private const val MAX_HOLDS = 6_000
 
     /** The tasks' own notes under them in the context, at most (8a): the rest are on their sheets. */
     private const val MAX_NOTES_TEXT = 6_000
