@@ -73,7 +73,12 @@ class ChatAskedTest {
         val many = ActivityLog(slots = (1..30).map { slot("2026-10-19", SlotOutcome.Kept, 10 + it, "class $it") })
         val crowded = Stats.weekLines(many, emptyMap(), now, LONDON)
         assertTrue(crowded.size <= Stats.MAX_WEEK_LINES, crowded.joinToString("\n"))
-        assertTrue("  - and 21 more subjects" in crowded, crowded.joinToString("\n"))
+        assertTrue("  - and 22 more subjects" in crowded, crowded.joinToString("\n"))
+        // Both weeks crowded: each its share, the count of the rest in it, nothing of either cut.
+        val both = ActivityLog(slots = (1..30).flatMap { listOf(slot("2026-10-19", SlotOutcome.Kept, 10 + it, "class $it"), slot("2026-10-13", SlotOutcome.Kept, 10 + it, "class $it")) })
+        val full = Stats.weekLines(both, emptyMap(), now, LONDON)
+        assertEquals(Stats.MAX_WEEK_LINES, full.size)
+        assertEquals(2, full.count { it == "  - and 22 more subjects" })
         assertEquals(listOf("This week so far", "Last week"), crowded.filter { !it.startsWith(" ") }.map { it.substringBefore(" (") })
     }
 
@@ -140,6 +145,27 @@ class ChatAskedTest {
             assertEquals(listOf("Read: the week's numbers.", "Read: the calendar for December 2026."), reply.acts.map { it.line })
             // Two calls: his first answer and the round's.
             assertEquals(2, felix.stores.model.value.calls.size)
+        }
+    }
+
+    @Test
+    fun `the last round a message has is said to be so, and more asked for after it is said under his answer`() = runBlocking {
+        val felix = FelixHarness(start = "2026-10-20T19:00")
+        felix.use {
+            felix.stores.log.update { log }
+            fun asking(details: String, research: String = "") = """{"reply":"Looking.","newTasks":[],"changes":[],"memories":[],"suggestedReplies":[],"actions":[],"research":"$research","details":[$details]}"""
+            felix.answers(asking(""""stats""""))
+            felix.answers(asking(""""calendar:2026-12""""))
+            // Past the two rounds: a search asked for still.
+            felix.answers(asking("", research = "the concert's dates"))
+            assertTrue(felix.conversation.ask("how's my term looking?"))
+            felix.settle()
+            val sent = (1..3).map { felix.server.takeRequest().body.readUtf8() }
+            assertFalse(sent.take(2).any { "That's the last that can be brought" in it })
+            assertTrue("That's the last that can be brought for this message" in sent[2], sent[2])
+            val reply = felix.stores.chat.value.messages.last { it.from == Speaker.Felix }
+            assertTrue(reply.acts.any { it.problem && it.line.startsWith(com.thomaswcode.decrastination.core.Act.NOT_BROUGHT) }, reply.acts.toString())
+            assertEquals(3, felix.stores.model.value.calls.size)
         }
     }
 }

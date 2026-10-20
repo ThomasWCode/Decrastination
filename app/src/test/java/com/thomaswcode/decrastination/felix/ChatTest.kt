@@ -290,6 +290,9 @@ class ChatTest {
         assertEquals("", asked(""""calendar"""").calendar)
         assertNull(asked(""""calendar:December"""").calendar)
         assertEquals("2027-01", asked("""" calendar:2027-01 """").calendar)
+        // A month as four digits of a year and two of a month, or none: a signed year far off can't be made a time.
+        assertNull(asked(""""calendar:+999999999-12"""").calendar)
+        assertNull(asked(""""calendar:26-12"""").calendar)
         assertFalse(asked("").stats)
         assertNull(asked("").calendar)
     }
