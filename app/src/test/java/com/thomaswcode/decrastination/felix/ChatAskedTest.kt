@@ -104,11 +104,14 @@ class ChatAskedTest {
             event(2, "Three weeks on", "2026-11-10T10:00"),
             event(3, "Five weeks on", "2026-11-26T10:00"),
             event(4, "Seven weeks on", "2026-12-08T10:00"),
+            // Across the fortnight's end (18:00 on 3 Nov, GMT by then), and all day on its last day: the fortnight lists both.
+            event(5, "Across the end", "2026-11-03T17:00", hours = 2),
+            CalendarEvent(6, "On the last day", java.time.LocalDate.parse("2026-11-03").atStartOfDay(java.time.ZoneOffset.UTC).toInstant().toEpochMilli(), java.time.LocalDate.parse("2026-11-04").atStartOfDay(java.time.ZoneOffset.UTC).toInstant().toEpochMilli(), allDay = true),
         )
         val block = ChatPrompts.calendarBlock(events, "", now, LONDON, read())
         assertTrue(block.startsWith("The calendar you asked for, the four weeks after the fortnight, Tuesday 3 November 2026 to Tuesday 1 December 2026"), block)
         assertTrue("| Three weeks on |" in block && "| Five weeks on |" in block, block)
-        assertFalse("In the fortnight" in block || "Seven weeks on" in block, block)
+        assertFalse("In the fortnight" in block || "Seven weeks on" in block || "Across the end" in block || "On the last day" in block, block)
     }
 
     @Test

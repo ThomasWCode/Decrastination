@@ -665,7 +665,8 @@ object ChatPrompts {
         // An all-day event by its dates, as the calendar keeps it (midnight to midnight, UTC): by its times it would
         // run into the day before a month in summer time.
         val days = Instant.ofEpochMilli(from).atZone(zone).toLocalDate() to Instant.ofEpochMilli(to - 1).atZone(zone).toLocalDate()
-        fun within(e: CalendarEvent) = if (e.allDay) EventJudge.days(e, zone).any { it >= days.first && it <= days.second } else e.start < to && e.end > from
+        // The four weeks after the fortnight leave out what began before them, as the fortnight's list has it.
+        fun within(e: CalendarEvent) = (if (e.allDay) EventJudge.days(e, zone).any { it >= days.first && it <= days.second } else e.start < to && e.end > from) && (month.isNotEmpty() || e.start >= from)
         val within = events.filter(::within).sortedBy { it.start }
         when {
             to <= readFrom -> append("\n(none known: the calendar is read from ${day(readFrom)} on)")

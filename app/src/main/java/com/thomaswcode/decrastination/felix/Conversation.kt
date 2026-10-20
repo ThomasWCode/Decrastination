@@ -795,7 +795,7 @@ class Conversation(
                     // What else he read to answer (8c), said under it as the texts are.
                     Act("Read: the week's numbers.").takeIf { stats },
                     *calendar.map { Act("Read: the calendar for " + ChatPrompts.calendarWhat(it, shownAt, clock.zone()) + ".") }.toTypedArray(),
-                    Act(Act.NOT_BROUGHT + "he asked for more than a message's two rounds bring: ask again to go on.", problem = true).takeIf { unserved },
+                    Act(Act.NOT_BROUGHT + "he asked for more than one message brings (two rounds, three texts, two spans of the calendar): ask again to go on.", problem = true).takeIf { unserved },
                 ),
             )
             var kept = false
