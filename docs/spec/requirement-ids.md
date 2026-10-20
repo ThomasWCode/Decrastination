@@ -28,7 +28,7 @@ Grouped by prefix and sorted; where a later decision changed an item, its line g
 - AI-10: When the text can't settle a reading, the model may ask one question; Felix puts it to the student, and the answer is kept with the task, which is read again with it.
 - AI-12: Dates the model sets are soft: only an email's own stated deadline, marked as quoted, can be a real deadline; a date it suggests or guesses is a plan (PL-14).
 - AI-13: The chat is told the time now and whether each of today's slots has gone by, is under way or is to come, so a time later today isn't taken as past.
-- AI-14: The chat's answer carries actions as well as changes (a step ticked or redone, a task shown with Open, renamed, done, reopened or deleted), each made at once and said under the answer with its Undo, folded behind the answer's chevron till it's opened; a source's task is still done only when its source says so.
+- AI-14: The chat's answer carries actions as well as changes (a step ticked or redone, a task shown with Open or opened where it lives, renamed, done, reopened or deleted, a setting set, a piece kept or taken back, a source read now, a reminder cancelled, a note deleted), each made at once and said under the answer with its Undo (a task opened or a source read has none), folded behind the answer's chevron till it's opened; a source's task is still done only when its source says so.
 - AI-15: Each of today's and tomorrow's pieces gets a short micro-plan (the first action, the next ones, what done looks like), written ahead and shown on its card, in Felix's messages and on its sheet.
 - AI-16: The photo check is given the task's title, subject, instructions and the steps already done, says what it sees, and judges only the piece in question.
 - AI-17: One photo check takes up to three pages; there is no partial credit.
@@ -156,7 +156,7 @@ Grouped by prefix and sorted; where a later decision changed an item, its line g
 
 ## Q: decisions from the first build's questions (no hyphen)
 
-These come from the questions answered for v1 and 2.0.0; Q31 here is not Q-31 below.
+These come from the questions answered for v1 and 2.0.0; Q31 here is not Q-31 below. An id written with its answer's letter, as "(Q31: A)" or "(Q13: B)", is the 4.x plan's own question, not one of these: Q1 to Q31 in [plan_v4/ANSWERS.md](../plan_v4/ANSWERS.md), Q33 in D-11.
 
 - Q6: Work is planned in set working hours, a school-day evening window and a longer weekend window (Settings); sleep hours are never blocked.
 - Q6b: On school days blocking starts at a set time after school, leaving school hours alone; sleep hours are unchanged.
