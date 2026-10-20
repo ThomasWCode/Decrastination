@@ -691,7 +691,9 @@ class Conversation(
                 val instant = reply.proposals.filter { it.instant }
                 instant.forEach { applyProposal(reply.id, it.id) }
                 // Its reminders and notes (8a), after its changes, so one before a deadline it sets has it.
-                val noted = keep(reading.reminders, reading.notes, ChatAnswers.deadlines(reading.changes))
+                // By the deadlines of its cards that were made: one refused (a due date before a start of yours) sets none.
+                val made = chat.value.messages.firstOrNull { it.id == reply.id }?.proposals.orEmpty().filter { it.instant && it.state == ProposalState.Applied }
+                val noted = keep(reading.reminders, reading.notes, ChatAnswers.deadlines(made.flatMap { it.changes }))
                 if (noted.isNotEmpty()) chat.update { s -> s.copy(messages = s.messages.map { if (it.id == reply.id) it.copy(acts = it.acts + noted) else it }) }
                 // A reminder set or moved into his window is written for at once, not at the next plan or look.
                 if (noted.any { it.action?.type == ChatAction.Type.SetReminder || it.action?.type == ChatAction.Type.MoveReminder }) scope.launch { draftReminders(clock.now()) }
@@ -910,7 +912,7 @@ class Conversation(
             ChatAction.Type.SetReminder, ChatAction.Type.MoveReminder, ChatAction.Type.CancelReminder, ChatAction.Type.AddNote, ChatAction.Type.DeleteNote -> {
                 var back = false
                 felix.update { st ->
-                    if (!ChatActs.canUndo(act, tasks.value.tasks, settings.value, chat.value.messages, st.notes, st.reminders, messageId = messageId)) return@update st
+                    if (!ChatActs.canUndo(act, tasks.value.tasks, settings.value, chat.value.messages, st.notes, st.reminders, messageId = messageId, now = clock.now())) return@update st
                     back = true
                     when (a.type) {
                         ChatAction.Type.SetReminder -> st.copy(reminders = st.reminders.filterNot { it.id == a.value })

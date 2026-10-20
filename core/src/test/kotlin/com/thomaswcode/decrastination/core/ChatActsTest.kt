@@ -60,6 +60,11 @@ class ChatActsTest {
         val others = (1..Reminders.MAX_PENDING).map { r.copy(id = "p$it", cancelledAt = null) }
         assertTrue(ChatActs.canUndo(cancel, emptyList(), settings, emptyList(), reminders = listOf(r) + others.drop(1)))
         assertFalse(ChatActs.canUndo(cancel, emptyList(), settings, emptyList(), reminders = listOf(r) + others))
+        // Brought back, it'd never come (its slot's task finished since): not offered.
+        val onTask = r.copy(id = "rt", taskId = "own:e", due = Due(DueKind.SlotStart, now))
+        val cancelOn = Act("Cancelled", ChatAction(ChatAction.Type.CancelReminder, "", value = "rt"))
+        assertTrue(ChatActs.canUndo(cancelOn, listOf(essay()), settings, emptyList(), reminders = listOf(onTask), now = now))
+        assertFalse(ChatActs.canUndo(cancelOn, listOf(finished()), settings, emptyList(), reminders = listOf(onTask), now = now))
         val n = Note("n", "words", 1, By.Felix, taskId = "own:e", deletedAt = now)
         val delete = Act("Note deleted", ChatAction(ChatAction.Type.DeleteNote, "own:e", value = "n"))
         val full = (1..Notes.PER_TASK).map { n.copy(id = "n$it", deletedAt = null) }
