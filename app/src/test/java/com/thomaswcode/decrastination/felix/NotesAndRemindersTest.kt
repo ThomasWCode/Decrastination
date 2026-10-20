@@ -1,0 +1,122 @@
+package com.thomaswcode.decrastination.felix
+
+import com.thomaswcode.decrastination.Fixtures
+import com.thomaswcode.decrastination.core.ChatAction
+import com.thomaswcode.decrastination.core.ChatActs
+import com.thomaswcode.decrastination.core.ChatMessage
+import com.thomaswcode.decrastination.core.Due
+import com.thomaswcode.decrastination.core.DueKind
+import com.thomaswcode.decrastination.core.Kind
+import com.thomaswcode.decrastination.core.Source
+import com.thomaswcode.decrastination.core.Speaker
+import com.thomaswcode.decrastination.core.TaskItem
+import kotlin.test.AfterTest
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
+import kotlinx.coroutines.runBlocking
+
+/**
+ * Notes and reminders through the Conversation (docs/plan_v4/07-notes-and-reminders.md, Stage 8a), on
+ * temporary stores, his answers from a stand-in for Claude's API ([FelixHarness]): made at once from his
+ * answer, each with its Undo, undone only while it's as he left it.
+ */
+class NotesAndRemindersTest {
+    private val felix = FelixHarness("2026-10-20T17:00")
+    private val conversation = felix.conversation
+    private val stores = felix.stores
+    private val now = felix.clock.now()
+
+    @AfterTest
+    fun close() = felix.close()
+
+    /** A Teams worksheet, due Thursday. */
+    private val sheet = TaskItem(
+        id = "teams:sheet", source = Source.Teams, sourceId = "sheet", title = "Forces worksheet", dueAt = Fixtures.at("2026-10-22T09:00"),
+        kind = Kind.Homework, sourceEffortMin = 30, firstSeenAt = now, lastSeenAt = now,
+    )
+
+    private fun reminder(id: String = "", text: String = "call gran", time: String = "", taskId: String = "", whenIs: String = "at") =
+        """{"id":"$id","text":"$text","date":"","time":"$time","taskId":"$taskId","when":"$whenIs","minutesBefore":-1}"""
+
+    private fun answer(reply: String, reminders: List<String> = emptyList(), notes: List<String> = emptyList(), actions: List<String> = emptyList()) =
+        """{"reply":"$reply","newTasks":[],"changes":[],"memories":[],"suggestedReplies":[],"actions":[${actions.joinToString(",")}],"research":"","details":[],"reminders":[${reminders.joinToString(",")}],"notes":[${notes.joinToString(",")}]}"""
+
+    private fun action(type: String, value: String) = """{"type":"$type","taskId":"","stepIndex":-1,"setting":"","value":"$value"}"""
+
+    /** His answer to [words], made, and the message it is. */
+    private fun asked(words: String, answer: String): ChatMessage = runBlocking {
+        felix.answers(answer)
+        assertTrue(conversation.ask(words))
+        felix.settle()
+        stores.chat.value.messages.last { it.from == Speaker.Felix }
+    }
+
+    private fun canUndo(message: ChatMessage, i: Int): Boolean {
+        val m = stores.chat.value.messages.first { it.id == message.id }
+        return ChatActs.canUndo(m.acts[i], stores.tasks.value.tasks, stores.settings.value, stores.chat.value.messages, stores.felix.value.notes, stores.felix.value.reminders)
+    }
+
+    @Test
+    fun `a reminder and a note from his answer are made at once, each said with its Undo, which takes it back`() = runBlocking {
+        stores.tasks.update { it.copy(tasks = listOf(sheet)) }
+        val his = asked(
+            "remind me at 7 to call gran, and note on the sheet to show the working",
+            answer("I'll remind you at 7, and it's noted.", reminders = listOf(reminder(time = "19:00")), notes = listOf("""{"taskId":"${sheet.id}","text":"show the working"}""")),
+        )
+        val reminder = stores.felix.value.reminders.single()
+        assertEquals(Due(DueKind.At, Fixtures.at("2026-10-20T19:00")) to "call gran", reminder.due to reminder.text)
+        val note = stores.felix.value.notes.single()
+        assertEquals(sheet.id to "show the working", note.taskId to note.text)
+        assertEquals(listOf("Reminder set: Tue 20 Oct 19:00, “call gran”", "Noted on “Forces worksheet”: show the working"), his.acts.map { it.line })
+        assertEquals(listOf(ChatAction.Type.SetReminder, ChatAction.Type.AddNote), his.acts.map { it.action?.type })
+        assertTrue(canUndo(his, 0) && canUndo(his, 1))
+        // Undone: both gone, and their Undo with them.
+        assertNull(conversation.undoAct(his.id, 0))
+        assertNull(conversation.undoAct(his.id, 1))
+        assertTrue(stores.felix.value.reminders.isEmpty() && stores.felix.value.notes.isEmpty())
+        assertFalse(canUndo(his, 0) || canUndo(his, 1))
+    }
+
+    @Test
+    fun `a reminder's Undo is gone once it's sent, snoozed or moved again, and a move's puts its old time and words back`() = runBlocking {
+        val set = asked("remind me at 7 to call gran", answer("At 7.", reminders = listOf(reminder(time = "19:00"))))
+        val id = stores.felix.value.reminders.single().id
+        val moved = asked("push it to 8 and say ring gran", answer("Moved to 20:00.", reminders = listOf(reminder(id = id, text = "ring gran", time = "20:00"))))
+        assertEquals("Moved: “ring gran” to Tue 20 Oct 20:00", moved.acts.single().line)
+        assertEquals("call gran", moved.acts.single().reminder?.text)
+        // The set can't be taken back from under the move; the move can.
+        assertFalse(canUndo(set, 0))
+        assertTrue(canUndo(moved, 0))
+        assertNull(conversation.undoAct(moved.id, 0))
+        val back = stores.felix.value.reminders.single()
+        assertEquals(Due(DueKind.At, Fixtures.at("2026-10-20T19:00")) to "call gran", back.due to back.text)
+        // With the move taken back, the set can be.
+        assertTrue(canUndo(set, 0))
+        // Sent, it can't.
+        stores.felix.update { s -> s.copy(reminders = s.reminders.map { it.copy(sentAt = now) }) }
+        assertFalse(canUndo(set, 0))
+        assertEquals("It's changed since, so it can't be undone here", conversation.undoAct(set.id, 0))
+        assertEquals(1, stores.felix.value.reminders.size)
+    }
+
+    @Test
+    fun `a cancel and a note's delete mark what they name, kept whole for their Undo, which brings it back`() = runBlocking {
+        stores.tasks.update { it.copy(tasks = listOf(sheet)) }
+        asked("remind me at 7 to call gran, and note the sheet", answer("Done.", reminders = listOf(reminder(time = "19:00")), notes = listOf("""{"taskId":"${sheet.id}","text":"show the working"}""")))
+        val r = stores.felix.value.reminders.single()
+        val n = stores.felix.value.notes.single()
+        val gone = asked("cancel that and delete the note", answer("Cancelled, and deleted.", actions = listOf(action("cancelReminder", r.id), action("deleteNote", n.id))))
+        assertEquals(listOf("Cancelled: the reminder “call gran”", "Note deleted: “show the working”"), gone.acts.map { it.line })
+        assertNotNull(stores.felix.value.reminders.single().cancelledAt)
+        assertNotNull(stores.felix.value.notes.single().deletedAt)
+        assertTrue(canUndo(gone, 0) && canUndo(gone, 1))
+        assertNull(conversation.undoAct(gone.id, 0))
+        assertNull(conversation.undoAct(gone.id, 1))
+        assertNull(stores.felix.value.reminders.single().cancelledAt)
+        assertNull(stores.felix.value.notes.single().deletedAt)
+    }
+}
