@@ -167,6 +167,19 @@ class NotesAndRemindersTest {
     }
 
     @Test
+    fun `a reminder's chips act only on one that came, not one moved while its message went`() = runBlocking {
+        stores.felix.update { it.copy(reminders = listOf(at("call gran", now + 60 * MIN))) }
+        // Its message stands from the moment it was moved away from; it never came.
+        val sent = ChatMessage("reminder-r-call gran-1", Speaker.Felix, FelixWords.reminder("call gran"), now, kind = MessageKind.Reminder, byApp = true, reminderId = "r-call gran", suggestedReplies = FelixWords.REMINDER_REPLIES)
+        stores.chat.update { it.copy(messages = it.messages + sent) }
+        assertTrue(conversation.ask(FelixWords.REMINDER_DONE, replyTo = sent.id))
+        felix.settle()
+        val r = stores.felix.value.reminders.single()
+        assertTrue(r.doneAt == null && Reminders.unsent(r), r.toString())
+        assertEquals(0, felix.server.requestCount)
+    }
+
+    @Test
     fun `a draft past his bounds, as a restored backup's could be, goes held to them`() = runBlocking {
         val moment = now + 5 * MIN
         val long = FelixAnswer("call gran now. " + "on and on ".repeat(100), replies = (1..9).map { "reply $it" })

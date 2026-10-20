@@ -468,7 +468,8 @@ class Conversation(
     /**
      * Your reply to one of your reminders (8a): *Done* marks it done; a snooze has it come again then,
      * its words for before let go, written again near the time (its alarm set again by the store's
-     * change). One done or cancelled since stays so. False where it's gone.
+     * change). One done or cancelled since stays so, as does one moved while its message went, which
+     * never came. False where it's gone.
      */
     private suspend fun replyToReminder(route: Replies.Route.Reminder, now: Long): Boolean {
         var found = false
@@ -479,6 +480,8 @@ class Conversation(
                     found = true
                     when {
                         r.doneAt != null || r.cancelledAt != null -> r
+                        // Moved while its message went, it never came: the message's chips aren't its.
+                        r.sentAt == null -> r
                         route.snoozeMin == null -> r.copy(doneAt = now).undrafted()
                         else -> Reminders.snoozed(r, now, route.snoozeMin)
                     }
@@ -912,7 +915,7 @@ class Conversation(
             ChatAction.Type.SetReminder, ChatAction.Type.MoveReminder, ChatAction.Type.CancelReminder, ChatAction.Type.AddNote, ChatAction.Type.DeleteNote -> {
                 var back = false
                 felix.update { st ->
-                    if (!ChatActs.canUndo(act, tasks.value.tasks, settings.value, chat.value.messages, st.notes, st.reminders, messageId = messageId, now = clock.now())) return@update st
+                    if (!ChatActs.canUndo(act, tasks.value.tasks, settings.value, chat.value.messages, st.notes, st.reminders, messageId = messageId, now = clock.now()) { s -> tasks.value.status(s).lastSuccessAt }) return@update st
                     back = true
                     when (a.type) {
                         ChatAction.Type.SetReminder -> st.copy(reminders = st.reminders.filterNot { it.id == a.value })
