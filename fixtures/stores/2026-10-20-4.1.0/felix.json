@@ -49,6 +49,7 @@
             "snoozedTo": null,
             "doneAt": null,
             "cancelledAt": null,
+            "letGoAt": null,
             "draft": {
                 "message": "You said to remind you: call gran. Good moment, between slots.",
                 "replies": [
@@ -81,6 +82,7 @@
             "snoozedTo": 1792264500000,
             "doneAt": null,
             "cancelledAt": null,
+            "letGoAt": null,
             "draft": null,
             "draftedAt": null,
             "draftFor": null
@@ -100,6 +102,7 @@
             "snoozedTo": null,
             "doneAt": 1792264260000,
             "cancelledAt": null,
+            "letGoAt": null,
             "draft": null,
             "draftedAt": null,
             "draftFor": null
@@ -119,6 +122,27 @@
             "snoozedTo": null,
             "doneAt": null,
             "cancelledAt": 1792262040000,
+            "letGoAt": null,
+            "draft": null,
+            "draftedAt": null,
+            "draftFor": null
+        },
+        {
+            "id": "rem-pen",
+            "text": "bring a pen",
+            "at": 1792261980000,
+            "by": "Felix",
+            "taskId": "teams:as-sheet",
+            "due": {
+                "kind": "SlotStart",
+                "at": 1792261980000,
+                "minutesBefore": null
+            },
+            "sentAt": null,
+            "snoozedTo": null,
+            "doneAt": null,
+            "cancelledAt": null,
+            "letGoAt": 1792263000000,
             "draft": null,
             "draftedAt": null,
             "draftFor": null
