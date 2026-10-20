@@ -108,6 +108,17 @@ class OutboxTest {
     }
 
     @Test
+    fun `a tap opens the chat past a message you've replied to from his notification`() = runBlocking {
+        outbox.send(his("a", clock.now() - 120_000L))
+        chat.update { it.copy(messages = it.messages + ChatMessage("y", Speaker.You, "on it", clock.now() - 60_000L, replyTo = "a")) }
+        outbox.notify(clock.now())
+        // Still shown, with your reply under it, while he answers; nothing else of his: the tap opens at it.
+        assertEquals(listOf("a", "y") to "a", ports.showing!!.lines.map { it.id } to ports.showing!!.openAt)
+        outbox.send(his("b"))
+        assertEquals("b", ports.showing!!.openAt)
+    }
+
+    @Test
     fun `nothing's posted while the chat's on screen, nor with his channel off, and his silences never`() = runBlocking {
         onScreen = true
         outbox.send(his("a"))
