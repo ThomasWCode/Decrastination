@@ -106,6 +106,9 @@ object Memories {
     /** What a line of [edit]'s adds of how long it holds: ", until Sun 25 Oct", ", with “Trip form”". */
     private fun shelf(until: Long?, task: String?, zone: ZoneId): String = held(until, task, { it }, zone)?.let { ", $it" } ?: ""
 
+    /** [words] with [after] them, a full stop they end with let go of first, so none comes before its comma. */
+    private fun shelved(words: String, after: String): String = if (after.isEmpty()) words else words.removeSuffix(".") + after
+
     /**
      * [state] without what's run out at [now] (10a): a fact or a rule past its until; a fact with a task a
      * fortnight after its task finished ([TASK_KEEP_MS]: a finished task keeps its record past it, so it's there
@@ -158,7 +161,7 @@ object Memories {
             // How long it holds (10a): gone by refused, past a year cut to one.
             val until = untilOf(g.until, zone)?.coerceAtMost(now + MAX_UNTIL_MS)
             if (until != null && until <= now && text.isNotEmpty()) {
-                edits += MemoryEdit("Not remembered: ${if (g.kind == Given.RULE) text else "$topic: $text"}, as ${untilLine(until, zone)} has gone by")
+                edits += MemoryEdit("Not remembered: " + shelved(if (g.kind == Given.RULE) text else "$topic: $text", ", as ${untilLine(until, zone)} has gone by"))
                 continue
             }
             if (g.kind == Given.RULE) {
@@ -176,13 +179,13 @@ object Memories {
                         had != null -> {
                             val rule = Rule(text, now, until)
                             rules = rules - had + rule
-                            edits += MemoryEdit("Felix will: $text" + shelf(until, null, zone), ruleBefore = had, ruleAfter = rule)
+                            edits += MemoryEdit("Felix will: " + shelved(text, shelf(until, null, zone)), ruleBefore = had, ruleAfter = rule)
                         }
                         rules.size >= RULE_MAX -> edits += MemoryEdit("Too many standing instructions to add “$text”: drop one first")
                         else -> {
                             val rule = Rule(text, now, until)
                             rules = rules + rule
-                            edits += MemoryEdit("Felix will: $text" + shelf(until, null, zone), ruleAfter = rule)
+                            edits += MemoryEdit("Felix will: " + shelved(text, shelf(until, null, zone)), ruleAfter = rule)
                         }
                     }
                 }
@@ -203,7 +206,7 @@ object Memories {
                 val held = facts
                 while (facts.size > 1 && chars(facts) > FACT_BUDGET_CHARS) facts = facts.sortedBy { it.at }.drop(1)
                 val unlisted = if (asked != null && task == null) " (its task isn't listed, so it's kept without one)" else ""
-                edits += MemoryEdit("Remembered: $topic: $text" + shelf(until, task?.let(listed::get), zone) + unlisted, factBefore = had, factAfter = fact, evicted = held - facts.toSet())
+                edits += MemoryEdit("Remembered: $topic: " + shelved(text, shelf(until, task?.let(listed::get), zone)) + unlisted, factBefore = had, factAfter = fact, evicted = held - facts.toSet())
             }
         }
         while (facts.size > 1 && chars(facts) > FACT_BUDGET_CHARS) facts = facts.sortedBy { it.at }.drop(1)

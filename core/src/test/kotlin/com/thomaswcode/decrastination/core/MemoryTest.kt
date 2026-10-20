@@ -143,6 +143,17 @@ class MemoryTest {
             listOf("Remembered: cold: feeling rough, until Sun 25 Oct", "Felix will: don't message me tonight, until Wed 21 Oct 07:00", "Remembered: football: on Tuesdays"),
             edits.map { it.line },
         )
+        // Words that end with a full stop keep it, and their line has none before its comma; one with no until keeps it there too.
+        val (stopped, said) = Memories.edit(
+            MemoryState(),
+            listOf(Given("test", "testing an update tonight.", until = "2026-10-21T02:15"), Given(text = "no messages tonight.", kind = Given.RULE, until = "2026-10-21T07:00"), Given("bus", "takes the 7:40.")),
+            now, LONDON,
+        )
+        assertEquals("testing an update tonight.", stopped.facts.first { it.topic == "test" }.text)
+        assertEquals(
+            listOf("Remembered: test: testing an update tonight, until Wed 21 Oct 02:15", "Felix will: no messages tonight, until Wed 21 Oct 07:00", "Remembered: bus: takes the 7:40."),
+            said.map { it.line },
+        )
     }
 
     @Test
@@ -150,6 +161,8 @@ class MemoryTest {
         val (state, edits) = Memories.edit(MemoryState(), listOf(Given("cold", "feeling rough", until = "2026-10-19")), now, LONDON)
         assertEquals(MemoryState(), state)
         assertEquals(listOf("Not remembered: cold: feeling rough, as Mon 19 Oct has gone by"), edits.map { it.line })
+        // Words given with a full stop: none before the comma.
+        assertEquals(listOf("Not remembered: cold: feeling rough, as Mon 19 Oct has gone by"), Memories.edit(MemoryState(), listOf(Given("cold", "feeling rough.", until = "2026-10-19")), now, LONDON).second.map { it.line })
         val (far, _) = Memories.edit(MemoryState(), listOf(Given("exam year", "it's a big one", until = "2028-06-30")), now, LONDON)
         assertEquals(now + Memories.MAX_UNTIL_MS, far.facts.single().until)
         // Forgetting by topic needs no until: one given with a past until still forgets.
