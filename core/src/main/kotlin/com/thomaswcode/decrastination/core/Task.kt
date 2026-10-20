@@ -315,6 +315,19 @@ data class TaskItem(
     companion object {
         fun id(source: Source, sourceId: String): String = "${source.name.lowercase()}:$sourceId"
 
+        /** The source task [id] is from, by its prefix ([id]); null for one that names none. */
+        fun sourceOf(id: String): Source? = Source.entries.firstOrNull { id.startsWith(it.name.lowercase() + ":") }
+
+        /**
+         * Whether task [id], not in the list, is gone, for what was kept on it since [since] (8a): one of your own
+         * at once (deleted); a source's once that source has been read since ([readAt], its last good read), so one
+         * not listed only because its source hasn't been read yet (a backup restored before the first sync) is waited for.
+         */
+        fun goneSince(id: String, since: Long, readAt: (Source) -> Long?): Boolean = when (val source = sourceOf(id)) {
+            null, Source.Own -> true
+            else -> readAt(source)?.let { it > since } == true
+        }
+
         /** Marks a task done by its tick ([tickDone]). */
         const val EXTRA_TICK_DONE = "tickDone"
     }

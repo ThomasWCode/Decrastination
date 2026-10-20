@@ -109,11 +109,19 @@ object Reminders {
 
     /**
      * Those of [reminders] to let go, never sent, as what they wait on is gone: a SlotStart's or a
-     * BeforeDue's task closed or no longer listed, or a BeforeDue's with no deadline. An At comes at its
-     * time whatever becomes of its task, as an alarm would.
+     * BeforeDue's task closed, or not listed and gone ([TaskItem.goneSince], by its source's last read,
+     * [readAt]: one not listed before its source is read again is waited for), or a BeforeDue's with no
+     * deadline. An At comes at its time whatever becomes of its task, as an alarm would.
      */
-    fun letGo(reminders: List<Reminder>, tasks: Map<String, TaskItem>, now: Long): List<Reminder> = reminders.filter { r ->
-        unsent(r) && r.due.kind != DueKind.At && r.taskId?.let(tasks::get).let { task -> task == null || !task.isOpen || (r.due.kind == DueKind.BeforeDue && task.deadlineAt(now) == null) }
+    fun letGo(reminders: List<Reminder>, tasks: Map<String, TaskItem>, now: Long, readAt: (Source) -> Long? = { null }): List<Reminder> = reminders.filter { r ->
+        unsent(r) && r.due.kind != DueKind.At && r.taskId.let { id ->
+            val task = id?.let(tasks::get)
+            when {
+                id == null -> true
+                task == null -> TaskItem.goneSince(id, r.at, readAt)
+                else -> !task.isOpen || (r.due.kind == DueKind.BeforeDue && task.deadlineAt(now) == null)
+            }
+        }
     }
 
     /** [r] snoozed [minutes] from [now]: it comes again then, its draft for before let go. */

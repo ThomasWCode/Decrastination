@@ -128,17 +128,17 @@ class Looks(
     suspend fun sweepReminders(now: Long = clock.now()): Unit = sweeping.withLock {
         if (felix.value.reminders.none(Reminders::pending)) return@withLock
         val tasks = this.tasks.value.tasks.associateBy { it.id }
-        for (r in Reminders.letGo(felix.value.reminders, tasks, now)) {
-            var let = false
-            felix.update { s -> s.copy(reminders = s.reminders.map { if (it.id == r.id && Reminders.unsent(it)) it.copy(cancelledAt = now).undrafted().also { let = true } else it }) }
-            if (!let) continue
+        for (r in Reminders.letGo(felix.value.reminders, tasks, now) { s -> this.tasks.value.status(s).lastSuccessAt }) {
             val task = r.taskId?.let(tasks::get)
             val why = when {
                 task == null -> "is no longer listed"
                 !task.isOpen -> "is done"
                 else -> "has no due date now"
             }
-            outbox.send(ChatMessage(UUID.randomUUID().toString(), Speaker.Felix, FelixWords.letGo(r.text, task?.title ?: "its task", why), now, About(taskId = r.taskId, taskTitle = task?.title), kind = MessageKind.Note, byApp = true))
+            // Said first, under an id of its own, then marked: a failure between leaves it to be let go again, its
+            // message replacing itself, rather than gone with nothing said.
+            outbox.send(ChatMessage("letgo-${r.id}", Speaker.Felix, FelixWords.letGo(r.text, task?.title ?: "its task", why), now, About(taskId = r.taskId, taskTitle = task?.title), kind = MessageKind.Note, byApp = true))
+            felix.update { s -> s.copy(reminders = s.reminders.map { if (it.id == r.id && Reminders.unsent(it)) it.copy(cancelledAt = now).undrafted() else it }) }
         }
         for ((r, moment) in Reminders.due(felix.value.reminders, focus.plan(now), tasks, now)) deliver(r, moment, now, tasks)
     }
@@ -161,7 +161,8 @@ class Looks(
             kind = MessageKind.Reminder, byApp = draft == null, reminderId = r.id, suggestedReplies = FelixWords.REMINDER_REPLIES,
         )
         outbox.send(message)
-        felix.update { s -> s.copy(reminders = s.reminders.map { if (it.id == r.id) it.copy(sentAt = now).undrafted() else it }) }
+        // Marked sent only as it was sent: moved, snoozed or cancelled while it went, it's another moment's, to come then.
+        felix.update { s -> s.copy(reminders = s.reminders.map { if (it.id == r.id && it.undrafted() == r.undrafted()) it.copy(sentAt = now).undrafted() else it }) }
         draft?.memories?.takeIf { it.isNotEmpty() }?.let { remember(it) }
         Log.i(AppGraph.TAG, "A reminder came${if (late) ", late" else ""}, in ${if (draft != null) "his words" else "yours"}")
     }

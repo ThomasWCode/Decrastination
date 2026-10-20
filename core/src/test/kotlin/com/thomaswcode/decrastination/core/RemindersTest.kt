@@ -97,8 +97,11 @@ class RemindersTest {
     fun `one whose task closes before it comes is let go, an At never`() {
         val tasks = mapOf("teams:sheet" to task("teams:sheet", status = Status.Done), "teams:essay" to task("teams:essay"))
         val reminders = listOf(slotStart("teams:sheet"), beforeDue("teams:essay", 30), at("2026-10-20T19:00").copy(taskId = "teams:sheet"), beforeDue("teams:gone", 30).copy(id = "g"))
-        // The sheet's done, the essay has no deadline, the last's task is gone; the At comes all the same.
-        assertEquals(listOf("s", "b", "g"), Reminders.letGo(reminders, tasks, now).map { it.id })
+        // The sheet's done, the essay has no deadline, the last's task is gone, Teams read since; the At comes all the same.
+        assertEquals(listOf("s", "b", "g"), Reminders.letGo(reminders, tasks, now) { now }.map { it.id })
+        // Not listed only as Teams hasn't been read since it was set (a backup restored before the first sync): waited for.
+        assertEquals(listOf("s", "b"), Reminders.letGo(reminders, tasks, now).map { it.id })
+        assertEquals(listOf("s", "b"), Reminders.letGo(reminders, tasks, now) { now - 7 * 24 * 60 * min }.map { it.id })
         // Once sent, a snoozed one comes back at its snooze, whatever its task.
         assertTrue(Reminders.letGo(listOf(slotStart("teams:sheet").copy(sentAt = now - min, snoozedTo = now + 10 * min)), tasks, now).isEmpty())
     }
