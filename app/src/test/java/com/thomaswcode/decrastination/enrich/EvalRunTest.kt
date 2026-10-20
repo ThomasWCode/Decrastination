@@ -134,77 +134,81 @@ class EvalRunTest {
         var spent = 0.0
         var dearest = 0.0
         val results = mutableListOf<JsonObject>()
-        cases@ for (case in set.getValue("cases").jsonArray.map { it.jsonObject }) {
-            val id = case.getValue("id").jsonPrimitive.content
-            if (only != null && id !in only) continue
-            val twice = case["twice"]?.jsonPrimitive?.booleanOrNull == true
-            for (attempt in 1..(if (twice) 2 else 1)) {
-                if (spent + maxOf(0.5, dearest * 2) > budget) {
-                    println("Stopped at ${dollars(spent)}, before $id: what's left of ${dollars(budget)} may not cover another case")
-                    break@cases
-                }
-                // A copy of the phone's stores, but the chat and the record of calls: a chat of its own, its calls alone on record.
-                val seed = { into: File -> state.listFiles().orEmpty().filter { f -> f.isFile && f.name.endsWith(".json") && !f.name.startsWith("chat") && f.name != "model.json" }.forEach { it.copyTo(File(into, it.name)) } }
-                FelixHarness(start = now, seed = seed, key = key, calendar = { stores ->
-                    val answers = stores.calendar.value.eventAnswers + InstructionRules.eventAnswers(stores.instructions.value.applied)
-                    EventJudge.time(events, answers, zone, askUntil = Fixtures.at(now) + CalendarTime.ASK_AHEAD_MS).copy(read = (Fixtures.at(now) - CalendarTime.DAY_MS) to CalendarTime.readUntil(Fixtures.at(now), zone))
-                }).use { h ->
-                    val about = case["about"]?.jsonPrimitive?.contentOrNull?.let { taskId -> About(taskId = taskId, taskTitle = h.stores.tasks.value.tasks.firstOrNull { it.id == taskId }?.title) } ?: About()
-                    val began = System.nanoTime()
-                    h.conversation.ask(case.getValue("text").jsonPrimitive.content, about)
-                    h.settle()
-                    val seconds = (System.nanoTime() - began) / 1e9
-                    val calls = h.stores.model.value.calls
-                    val cost = calls.sumOf { it.costUsd }
-                    spent += cost
-                    dearest = maxOf(dearest, cost)
-                    val reply = h.stores.chat.value.messages.lastOrNull { it.from == Speaker.Felix }
-                    val words = reply?.text.orEmpty()
-                    val acts = reply?.acts.orEmpty().map { it.line }
-                    val made = reply?.proposals.orEmpty().filter { it.state == ProposalState.Applied }.flatMap { p -> p.changes.map { it.type.name } + listOfNotNull(p.task?.let { "task:" + it.kind.name }) }
-                    val titles = h.stores.tasks.value.tasks.associate { it.id to it.title }
-                    val checks = mutableListOf<Pair<String, Boolean>>()
-                    case["reads"]?.jsonArray?.forEach { r ->
-                        val what = r.jsonPrimitive.content
-                        val read = when {
-                            what == "stats" -> acts.any { "week's numbers" in it }
-                            // The very span: the month and its year, or the four weeks after the fortnight.
-                            what == "calendar" || what.startsWith("calendar:") -> "Read: the calendar for " + ChatPrompts.calendarWhat(what.substringAfter(':', ""), Fixtures.at(now), zone) + "." in acts
-                            // The very task, by its whole title as the act lists them.
-                            else -> acts.any { it.startsWith("Read in full: ") && titles[what]?.let { t -> "“$t”" in it.removePrefix("Read in full: ").removeSuffix(".").split("; ") } == true }
+        try {
+            cases@ for (case in set.getValue("cases").jsonArray.map { it.jsonObject }) {
+                val id = case.getValue("id").jsonPrimitive.content
+                if (only != null && id !in only) continue
+                val twice = case["twice"]?.jsonPrimitive?.booleanOrNull == true
+                for (attempt in 1..(if (twice) 2 else 1)) {
+                    if (spent + maxOf(0.5, dearest * 2) > budget) {
+                        println("Stopped at ${dollars(spent)}, before $id: what's left of ${dollars(budget)} may not cover another case")
+                        break@cases
+                    }
+                    // A copy of the phone's stores, but the chat and the record of calls: a chat of its own, its calls alone on record.
+                    val seed = { into: File -> state.listFiles().orEmpty().filter { f -> f.isFile && f.name.endsWith(".json") && !f.name.startsWith("chat") && f.name != "model.json" }.forEach { it.copyTo(File(into, it.name)) } }
+                    FelixHarness(start = now, seed = seed, key = key, calendar = { stores ->
+                        val answers = stores.calendar.value.eventAnswers + InstructionRules.eventAnswers(stores.instructions.value.applied)
+                        EventJudge.time(events, answers, zone, askUntil = Fixtures.at(now) + CalendarTime.ASK_AHEAD_MS).copy(read = (Fixtures.at(now) - CalendarTime.DAY_MS) to CalendarTime.readUntil(Fixtures.at(now), zone))
+                    }).use { h ->
+                        val about = case["about"]?.jsonPrimitive?.contentOrNull?.let { taskId -> About(taskId = taskId, taskTitle = h.stores.tasks.value.tasks.firstOrNull { it.id == taskId }?.title) } ?: About()
+                        val began = System.nanoTime()
+                        h.conversation.ask(case.getValue("text").jsonPrimitive.content, about)
+                        h.settle()
+                        val seconds = (System.nanoTime() - began) / 1e9
+                        val calls = h.stores.model.value.calls
+                        val cost = calls.sumOf { it.costUsd }
+                        spent += cost
+                        dearest = maxOf(dearest, cost)
+                        val reply = h.stores.chat.value.messages.lastOrNull { it.from == Speaker.Felix }
+                        val words = reply?.text.orEmpty()
+                        val acts = reply?.acts.orEmpty().map { it.line }
+                        val made = reply?.proposals.orEmpty().filter { it.state == ProposalState.Applied }.flatMap { p -> p.changes.map { it.type.name } + listOfNotNull(p.task?.let { "task:" + it.kind.name }) }
+                        val titles = h.stores.tasks.value.tasks.associate { it.id to it.title }
+                        val checks = mutableListOf<Pair<String, Boolean>>()
+                        case["reads"]?.jsonArray?.forEach { r ->
+                            val what = r.jsonPrimitive.content
+                            val read = when {
+                                what == "stats" -> acts.any { "week's numbers" in it }
+                                // The very span: the month and its year, or the four weeks after the fortnight.
+                                what == "calendar" || what.startsWith("calendar:") -> "Read: the calendar for " + ChatPrompts.calendarWhat(what.substringAfter(':', ""), Fixtures.at(now), zone) + "." in acts
+                                // The very task, by its whole title as the act lists them.
+                                else -> acts.any { it.startsWith("Read in full: ") && titles[what]?.let { t -> "“$t”" in it.removePrefix("Read in full: ").removeSuffix(".").split("; ") } == true }
+                            }
+                            checks += "reads $what" to read
                         }
-                        checks += "reads $what" to read
+                        case["says"]?.jsonArray?.forEach { group ->
+                            val any = group.jsonArray.map { it.jsonPrimitive.content }
+                            checks += "says ${any.joinToString("|")}" to any.any { words.contains(it, ignoreCase = true) }
+                        }
+                        case["makes"]?.jsonArray?.forEach { t ->
+                            val any = (t as? JsonArray)?.map { it.jsonPrimitive.content } ?: listOf(t.jsonPrimitive.content)
+                            checks += "makes ${any.joinToString("|")}" to any.any { it in made }
+                        }
+                        val chatCalls = calls.count { it.job == ModelEffort.Job.Chat.name }
+                        if (case["noRound"]?.jsonPrimitive?.booleanOrNull == true) checks += "no round" to (chatCalls == 1)
+                        val score = checks.count { it.second }.toDouble() / checks.size.coerceAtLeast(1)
+                        println(
+                            "$id#$attempt: score ${"%.2f".format(Locale.UK, score)} (${checks.joinToString { (c, ok) -> (if (ok) "+" else "-") + c }}), rounds ${chatCalls - 1}, " +
+                                "in ${calls.sumOf { it.inTokens }} (cache ${calls.sumOf { it.cacheRead }}), out ${calls.sumOf { it.outTokens }}, ${dollars(cost)}, ${"%.1f".format(Locale.UK, seconds)} s",
+                        )
+                        results += JsonObject(
+                            mapOf(
+                                "id" to JsonPrimitive(id), "attempt" to JsonPrimitive(attempt), "cut" to JsonPrimitive(twice), "score" to JsonPrimitive(score),
+                                "checks" to JsonObject(checks.associate { (c, ok) -> c to JsonPrimitive(ok) }),
+                                "rounds" to JsonPrimitive(chatCalls - 1), "calls" to JsonPrimitive(calls.size),
+                                "inTokens" to JsonPrimitive(calls.sumOf { it.inTokens }), "cacheRead" to JsonPrimitive(calls.sumOf { it.cacheRead }), "outTokens" to JsonPrimitive(calls.sumOf { it.outTokens }),
+                                "costUsd" to JsonPrimitive(cost), "seconds" to JsonPrimitive(seconds),
+                                "reply" to JsonPrimitive(words), "acts" to JsonArray(acts.map(::JsonPrimitive)), "made" to JsonArray(made.map(::JsonPrimitive)),
+                                "note" to JsonPrimitive(reply?.note.orEmpty()),
+                            ),
+                        )
                     }
-                    case["says"]?.jsonArray?.forEach { group ->
-                        val any = group.jsonArray.map { it.jsonPrimitive.content }
-                        checks += "says ${any.joinToString("|")}" to any.any { words.contains(it, ignoreCase = true) }
-                    }
-                    case["makes"]?.jsonArray?.forEach { t ->
-                        val any = (t as? JsonArray)?.map { it.jsonPrimitive.content } ?: listOf(t.jsonPrimitive.content)
-                        checks += "makes ${any.joinToString("|")}" to any.any { it in made }
-                    }
-                    val chatCalls = calls.count { it.job == ModelEffort.Job.Chat.name }
-                    if (case["noRound"]?.jsonPrimitive?.booleanOrNull == true) checks += "no round" to (chatCalls == 1)
-                    val score = checks.count { it.second }.toDouble() / checks.size.coerceAtLeast(1)
-                    println(
-                        "$id#$attempt: score ${"%.2f".format(Locale.UK, score)} (${checks.joinToString { (c, ok) -> (if (ok) "+" else "-") + c }}), rounds ${chatCalls - 1}, " +
-                            "in ${calls.sumOf { it.inTokens }} (cache ${calls.sumOf { it.cacheRead }}), out ${calls.sumOf { it.outTokens }}, ${dollars(cost)}, ${"%.1f".format(Locale.UK, seconds)} s",
-                    )
-                    results += JsonObject(
-                        mapOf(
-                            "id" to JsonPrimitive(id), "attempt" to JsonPrimitive(attempt), "cut" to JsonPrimitive(twice), "score" to JsonPrimitive(score),
-                            "checks" to JsonObject(checks.associate { (c, ok) -> c to JsonPrimitive(ok) }),
-                            "rounds" to JsonPrimitive(chatCalls - 1), "calls" to JsonPrimitive(calls.size),
-                            "inTokens" to JsonPrimitive(calls.sumOf { it.inTokens }), "cacheRead" to JsonPrimitive(calls.sumOf { it.cacheRead }), "outTokens" to JsonPrimitive(calls.sumOf { it.outTokens }),
-                            "costUsd" to JsonPrimitive(cost), "seconds" to JsonPrimitive(seconds),
-                            "reply" to JsonPrimitive(words), "acts" to JsonArray(acts.map(::JsonPrimitive)), "made" to JsonArray(made.map(::JsonPrimitive)),
-                            "note" to JsonPrimitive(reply?.note.orEmpty()),
-                        ),
-                    )
                 }
             }
+        } finally {
+            // Let go whatever happened to a case, so no later call in this process runs at the run's effort.
+            if (effort != null) jobs.forEach { ModelEffort.overrides.remove(it) }
         }
-        if (effort != null) jobs.forEach { ModelEffort.overrides.remove(it) }
         File(runs, "$run.json").writeText(JsonArray(results).toString())
         println("Run $run: ${results.size} answers, ${dollars(spent)} in all; mean score ${"%.3f".format(Locale.UK, results.map { it.getValue("score").jsonPrimitive.content.toDouble() }.average())}: ${File(runs, "$run.json").path}")
     }
