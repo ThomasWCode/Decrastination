@@ -236,7 +236,9 @@ object ChatAnswers {
         // Tasks to read in full (D-93): listed and open, not the one the message is about (it came whole).
         val details = answer.details.map(String::trim).filter { id -> id != about.taskId && byId[id]?.let { it.isOpen && !it.hidden } == true }.distinct().take(ChatPrompts.MAX_READ)
         // Reminders and notes (Stage 8a): each as the app can keep it, the rest said.
-        val reminders = reminders(kept.filter { it.type == ChatPrompts.REMIND_TYPE }.map(::reminderOf), byId, felix, now, zone, leftOut)
+        // Those the answer cancels make room, as they're cancelled before its reminders are made.
+        val cancelled = actions.filter { it.type == ChatAction.Type.CancelReminder }.mapNotNull { it.value }.toSet()
+        val reminders = reminders(kept.filter { it.type == ChatPrompts.REMIND_TYPE }.map(::reminderOf), byId, felix, now, zone, leftOut, cancelled)
         val notes = notes(kept.filter { it.type == ChatPrompts.NOTE_TYPE }.map(::noteOf), byId, felix, now, leftOut)
         return Reading(reply.take(ChatPrompts.MAX_TEXT), made, changes, leftOut, answer.memories.take(MAX_MEMORIES), replies, actions, answer.research.trim().take(ResearchPrompts.MAX_QUESTION).takeIf { it.isNotEmpty() }, details, reminders, notes)
     }
@@ -247,11 +249,12 @@ object ChatAnswers {
      * ahead (one gone by refused), at its task's next slot (a listed open task), or minutes before a
      * listed open task's deadline, within a week; one with a listed reminder's id, still to come and never
      * sent, moved or reworded in place (its words, or its time where none is given, kept), its draft let
-     * go; no more still to come than [Reminders.MAX_PENDING]. What can't be is said in [leftOut].
+     * go; no more still to come than [Reminders.MAX_PENDING], those the same answer cancels ([cancelled]) not
+     * counted. What can't be is said in [leftOut].
      */
-    private fun reminders(given: List<GivenReminder>, byId: Map<String, TaskItem>, felix: FelixStore, now: Long, zone: ZoneId, leftOut: MutableList<String>): List<Reminder> {
+    private fun reminders(given: List<GivenReminder>, byId: Map<String, TaskItem>, felix: FelixStore, now: Long, zone: ZoneId, leftOut: MutableList<String>, cancelled: Set<String> = emptySet()): List<Reminder> {
         if (given.size > MAX_REMINDERS) leftOut += "${given.size - MAX_REMINDERS} more reminders than the app takes at once"
-        var room = Reminders.MAX_PENDING - felix.reminders.count(Reminders::pending)
+        var room = Reminders.MAX_PENDING - felix.reminders.count { Reminders.pending(it) && it.id !in cancelled }
         val seen = HashSet<String>()
         return given.take(MAX_REMINDERS).mapNotNull { g ->
             fun no(why: String) = null.also { leftOut += "a reminder ($why)" }

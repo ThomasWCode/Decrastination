@@ -126,6 +126,12 @@ class ChatRemindersTest {
         val past = parse(answer(listOf(reminder(text = "one", time = "18:00"), reminder(text = "two", time = "18:00"))), full)
         assertEquals(listOf("one"), past.reminders.map { it.text })
         assertTrue(past.leftOut.single().contains("still to come already"))
+        // One the same answer cancels makes room for its replacement.
+        val fifty = FelixStore(reminders = (1..Reminders.MAX_PENDING).map { listed.copy(id = "p$it") })
+        val cancel = """[{"type":"cancelReminder","taskId":"","stepIndex":-1,"setting":"","value":"p1"}]"""
+        val replaced = parse(answer(listOf(reminder(text = "instead", time = "18:00")), actions = cancel), fifty)
+        assertEquals(listOf("instead"), replaced.reminders.map { it.text })
+        assertTrue(replaced.leftOut.isEmpty(), replaced.leftOut.toString())
     }
 
     @Test
@@ -194,6 +200,7 @@ class ChatRemindersTest {
             Note("n1", "use the second source", now, By.Felix, taskId = sheet.id),
             Note("n2", "on sheets, not in the book", now, By.You, scope = NoteScope(subject = "Physics")),
             Note("n3", "deleted", now, By.Felix, taskId = sheet.id, deletedAt = now),
+            Note("n4", "marked, the write-up's back", now, By.You, taskId = done.id),
         )
         val reminders = listOf(
             listed,
@@ -209,6 +216,10 @@ class ChatRemindersTest {
         assertEquals(1, lines.count { "on sheets, not in the book" in it })
         assertTrue("- n2 | theirs | every Physics task | on sheets, not in the book" in lines)
         assertTrue("deleted" !in context)
+        // A finished task's, by id, in a list of their own.
+        val closed = lines.indexOf("Notes on finished tasks (id | whose | its task | their words):")
+        assertTrue(closed > lines.indexOf("Standing notes, for every task they match (id | whose | the tasks they're for | their words):"))
+        assertEquals("- n4 | theirs | Practical write-up | marked, the write-up's back", lines[closed + 1])
         val header = lines.indexOf("Reminders set, still to come (id | when | their words | its task):")
         assertTrue(header > lines.indexOfFirst { it.startsWith("Calendar events") })
         assertEquals(
