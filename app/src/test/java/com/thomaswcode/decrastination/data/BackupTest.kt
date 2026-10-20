@@ -23,6 +23,7 @@ import com.thomaswcode.decrastination.core.Notes
 import com.thomaswcode.decrastination.core.OwnTask
 import com.thomaswcode.decrastination.core.OwnTaskRules
 import com.thomaswcode.decrastination.core.Reminder
+import com.thomaswcode.decrastination.core.Reminders
 import com.thomaswcode.decrastination.core.SchoolCalendar
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.SlotState
@@ -317,7 +318,21 @@ class BackupTest {
         assertEquals(FelixStore(), Backups.decode("""{"app":"Decrastination","format":7,"exportedAt":0,"settings":{},"log":{}}""", emptyMap())!!.felixStore)
         // This phone's own win; the backup's it hasn't come back.
         val here = FelixStore(listOf(note.copy(text = "Use the first source")), emptyList())
-        assertEquals(FelixStore(listOf(here.notes.single(), standing), listOf(reminder)), Backups.mergedFelix(here, felix))
+        assertEquals(FelixStore(listOf(here.notes.single(), standing), listOf(reminder)) to 0, Backups.mergedFelix(here, felix))
+        // Within what the app keeps: still to come, 50; a task's notes, ten; standing, twenty; the rest left out and counted.
+        val full = FelixStore(
+            notes = (1..Notes.PER_TASK).map { Note("t$it", "n", 3, By.Felix, taskId = "teams:essay") } + (1..Notes.MAX_STANDING).map { Note("s$it", "n", 3, By.Felix, scope = NoteScope(subject = "Maths")) },
+            reminders = (1..Reminders.MAX_PENDING).map { reminder.copy(id = "p$it") },
+        )
+        val (merged, left) = Backups.mergedFelix(full, felix.copy(reminders = felix.reminders + reminder.copy(id = "sent", sentAt = 9)))
+        assertEquals(3, left)
+        assertEquals(Reminders.MAX_PENDING, merged.reminders.count(Reminders::pending))
+        assertTrue(merged.reminders.any { it.id == "sent" })
+        assertNull(Backups.problem(backup.copy(felixStore = merged)))
+        // Past 50 still to come by a snooze, as the app can keep them: not refused, and restored within 50, the rest left out.
+        val over = full.copy(reminders = full.reminders + reminder.copy(id = "snoozed", sentAt = 9, snoozedTo = 2_000))
+        assertNull(Backups.problem(backup.copy(felixStore = over)))
+        assertEquals(1, Backups.mergedFelix(FelixStore(), over).second)
         // A note on a task and a scope, or neither; a reminder's due missing what its kind needs; two of one id; words too long.
         for (bad in listOf(
             felix.copy(notes = listOf(note.copy(scope = NoteScope(subject = "Chemistry")))),

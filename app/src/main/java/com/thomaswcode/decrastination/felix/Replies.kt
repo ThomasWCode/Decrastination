@@ -60,7 +60,8 @@ object Replies {
     fun awaitingIds(messages: List<ChatMessage>, checkInUnderWay: Boolean, now: Long, zone: ZoneId): Set<String> {
         val replied = messages.mapNotNullTo(HashSet()) { m -> m.replyTo?.takeIf { m.from == Speaker.You } }
         val today = Instant.ofEpochMilli(now).atZone(zone).toLocalDate()
-        fun about(m: ChatMessage): String = m.about.taskId ?: m.about.eventKey ?: m.kind.name
+        // A reminder's message is about its reminder (8a): two about one task each wait for their own answer.
+        fun about(m: ChatMessage): String = m.reminderId?.let { "reminder:$it" } ?: m.about.taskId ?: m.about.eventKey ?: m.kind.name
         // His newest message with words about each thing: the last of his about it wins.
         val newestAbout = HashMap<String, String>()
         messages.forEach { m -> if (m.from == Speaker.Felix && m.text.isNotBlank()) newestAbout[about(m)] = m.id }

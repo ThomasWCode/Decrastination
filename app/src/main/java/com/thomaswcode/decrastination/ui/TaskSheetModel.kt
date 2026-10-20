@@ -57,8 +57,11 @@ object TaskSheetModel {
     /** A note's words, at most, as the sheet's box takes them (8a). */
     const val MAX_NOTE = Notes.MAX_TEXT
 
-    /** One of a task's notes as its sheet lists it (8a): its words, who wrote it and when, and the tasks a standing one is for. */
-    data class Noted(val id: String, val line: String)
+    /**
+     * One of a task's notes as its sheet lists it (8a): its words, who wrote it and when, and the tasks a standing one is for,
+     * [every] for that one ("every Physics task"), as its delete takes it from all of them, so asks first.
+     */
+    data class Noted(val id: String, val line: String, val every: String? = null)
 
     /**
      * [task]'s notes (8a), its own then the standing ones it matches ([Notes.forTask]), each a line: "Felix,
@@ -68,7 +71,8 @@ object TaskSheetModel {
         Notes.forTask(task, notes, classMap).map { n ->
             val who = if (n.by == By.Felix) felix else "You"
             val at = Format.at(n.at, now, zone)
-            Noted(n.id, n.scope?.let { "Note for ${Notes.scopeLine(it)}: ${n.text} (${if (n.by == By.Felix) felix else "yours"}, $at)" } ?: "$who, $at: ${n.text}")
+            val every = n.scope?.let(Notes::scopeLine)
+            Noted(n.id, every?.let { "Note for $it: ${n.text} (${if (n.by == By.Felix) felix else "yours"}, $at)" } ?: "$who, $at: ${n.text}", every)
         }
 
     /** The words of the instructions in force on [taskId], about it or changing it: the newest first. */

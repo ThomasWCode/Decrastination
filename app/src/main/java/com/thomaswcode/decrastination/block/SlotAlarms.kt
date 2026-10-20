@@ -63,9 +63,9 @@ object SlotAlarms {
     }
 
     /**
-     * Your reminders' next moment ([com.thomaswcode.decrastination.core.Reminders.next], Stage 8a) at [at], or
-     * none: set again with every plan, as a SlotStart's or a BeforeDue's moment moves with it, and with every
-     * change to them.
+     * Your reminders' next wake ([com.thomaswcode.decrastination.core.Reminders.nextWake], Stage 8a) at [at], or
+     * none: one's moment, or the start of his window to write for one; set again with every plan, as a SlotStart's
+     * or a BeforeDue's moment moves with it, with every change to them, and at each of its own.
      */
     fun armReminder(context: Context, at: Long?) {
         val alarms = context.getSystemService(AlarmManager::class.java) ?: return
@@ -183,8 +183,13 @@ class SlotReceiver : BroadcastReceiver() {
                         val end = intent.getLongExtra(SlotAlarms.EXTRA_END, -1L)
                         graph.slots.onEnd(key!!, if (window != null && start >= 0 && end >= start) Focus.Laid(start, end, window) else null)
                     }
-                    // Your reminder's moment (8a): sent now, with no call, so the receiver's time is enough.
-                    SlotAlarms.ACTION_REMINDER -> graph.looks.sweepReminders()
+                    // Your reminder's moment (8a): sent now, with no call, so the receiver's time is enough; or the start of
+                    // his window to write one, which the look after this writes. Either way the alarm's set for the next.
+                    SlotAlarms.ACTION_REMINDER -> {
+                        // A failure sending them is logged, so the alarm's still set again and the look queued.
+                        runCatching { graph.looks.sweepReminders() }.onFailure { Log.w(AppGraph.TAG, "Sending reminders failed", it) }
+                        graph.armReminder()
+                    }
                 }
                 // Each is a moment Felix may have something to say (LR-03): his look is work of its own,
                 // as the model's answer may take longer than a receiver is given, and the app may go

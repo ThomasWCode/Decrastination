@@ -27,6 +27,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 
 /**
@@ -150,8 +151,8 @@ class NotesAndRemindersTest {
         val moment = now + 5 * MIN
         stores.felix.update { s ->
             s.copy(reminders = listOf(
-                at("call gran", moment).copy(draft = FelixAnswer("oi, you said to call gran. between slots now, so good time"), draftedAt = moment - 8 * MIN),
-                at("stretch", now - 40 * MIN).copy(draft = FelixAnswer("stretch now"), draftedAt = now - 45 * MIN),
+                at("call gran", moment).copy(draft = FelixAnswer("oi, you said to call gran. between slots now, so good time"), draftedAt = moment - 8 * MIN, draftFor = moment),
+                at("stretch", now - 40 * MIN).copy(draft = FelixAnswer("stretch now"), draftedAt = now - 45 * MIN, draftFor = now - 40 * MIN),
             ))
         }
         felix.clock.time = moment
@@ -220,6 +221,20 @@ class NotesAndRemindersTest {
         felix.looks.draftReminders(now + 55 * MIN)
         assertEquals(1, felix.server.requestCount)
         felix.clock.time = now + 60 * MIN
+        felix.looks.sweepReminders(felix.clock.time)
+        assertEquals(FelixWords.reminder("call gran"), stores.chat.value.messages.single { it.kind == MessageKind.Reminder }.text)
+    }
+
+    @Test
+    fun `a reminder's words that came back with none aren't paid for again for its moment, and yours go`() = runBlocking {
+        stores.felix.update { it.copy(reminders = listOf(at("call gran", now + 8 * MIN))) }
+        felix.answers("not an answer")
+        felix.looks.draftReminders(now)
+        felix.looks.draftReminders(now + MIN)
+        assertEquals(1, felix.server.requestCount)
+        val asked = stores.felix.value.reminders.single()
+        assertTrue(asked.draft == null && asked.draftFor == now + 8 * MIN, asked.toString())
+        felix.clock.time = now + 8 * MIN
         felix.looks.sweepReminders(felix.clock.time)
         assertEquals(FelixWords.reminder("call gran"), stores.chat.value.messages.single { it.kind == MessageKind.Reminder }.text)
     }
@@ -307,6 +322,38 @@ class NotesAndRemindersTest {
         stores.chat.update { it.copy(messages = emptyList()) }
         conversation.pruneFelix(now)
         assertTrue(stores.felix.value.notes.isEmpty())
+    }
+
+    @Test
+    fun `what changed while he answered is counted again as it's made, and what no longer can be is said, not dropped`() = runBlocking {
+        stores.tasks.update { it.copy(tasks = listOf(sheet)) }
+        repeat(9) { assertNull(conversation.addNote(sheet.id, "note $it")) }
+        stores.felix.update { it.copy(reminders = listOf(at("call gran", now + 60 * MIN))) }
+        felix.answers(answer("Noted, and cancelled.", notes = listOf(note(sheet.id, "his tenth")), actions = listOf(action("cancelReminder", "r-call gran"))), delayMs = 1_500)
+        assertTrue(conversation.ask("note the sheet, and cancel gran"))
+        // Meanwhile a tenth from the sheet, and the reminder came.
+        delay(500)
+        assertNull(conversation.addNote(sheet.id, "your tenth"))
+        stores.felix.update { s -> s.copy(reminders = s.reminders.map { it.copy(sentAt = now) }) }
+        felix.settle()
+        val his = stores.chat.value.messages.last { it.from == Speaker.Felix }
+        assertEquals(10, Notes.on(sheet.id, stores.felix.value.notes).size)
+        assertTrue(his.acts.all { it.problem && it.action == null }, his.acts.toString())
+        assertEquals(2, his.acts.size)
+        assertNull(stores.felix.value.reminders.single().cancelledAt)
+    }
+
+    @Test
+    fun `a slot's reminder whose task is finished while he answers isn't made, and says so`() = runBlocking {
+        stores.tasks.update { it.copy(tasks = listOf(sheet)) }
+        felix.answers(answer("I'll remind you when you next sit down to it.", reminders = listOf(reminder(text = "bring the form", taskId = sheet.id, whenIs = "slotStart"))), delayMs = 1_500)
+        assertTrue(conversation.ask("remind me to bring the form when I next do the worksheet"))
+        delay(500)
+        stores.tasks.update { s -> s.copy(tasks = s.tasks.map { it.copy(status = Status.Done, doneAt = now) }) }
+        felix.settle()
+        val his = stores.chat.value.messages.last { it.from == Speaker.Felix }
+        assertTrue(stores.felix.value.reminders.isEmpty())
+        assertTrue(his.acts.single().let { it.problem && it.line.contains("bring the form") }, his.acts.toString())
     }
 
     @Test

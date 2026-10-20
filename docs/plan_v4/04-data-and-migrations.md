@@ -165,8 +165,8 @@ data class Reminder(
     val sentAt: Long? = null, val snoozedTo: Long? = null, val doneAt: Long? = null,
     /** Cancelled from the chat: kept, never delivered, until its act's Undo window closes; Undo clears it. */
     val cancelledAt: Long? = null,
-    /** His words for it, written ahead. */
-    val draft: FelixAnswer? = null, val draftedAt: Long? = null,
+    /** His words for it, written ahead, when, and for which moment (4.1.0: one whose slot or deadline moved is written for again). */
+    val draft: FelixAnswer? = null, val draftedAt: Long? = null, val draftFor: Long? = null,
 )
 @Serializable data class Due(val kind: DueKind, val at: Long? = null, val minutesBefore: Int? = null)
 @Serializable enum class DueKind { At, SlotStart, BeforeDue }

@@ -286,10 +286,14 @@ object ChatAnswers {
                     if (kind == ChatPrompts.WHEN_SLOT) {
                         // From the day it's asked for, or now.
                         val from = g.date.trim().takeIf { it.isNotEmpty() }?.let { at(it, null, LocalTime.MIDNIGHT, zone) ?: return@mapNotNull no("“${words.take(60)}” from a day that doesn't read") }
+                        if (from != null && from > now + YEAR_MS) return@mapNotNull no("“${words.take(60)}” more than a year ahead")
                         Due(DueKind.SlotStart, maxOf(from ?: now, now))
                     } else {
                         if (on.deadlineAt(now) == null) return@mapNotNull no("“${words.take(60)}” before “${on.title.take(60)}” is due, which has no due date")
                         val before = g.minutesBefore.takeIf { it in 0..Reminders.MAX_BEFORE_MIN } ?: return@mapNotNull no("“${words.take(60)}” before a task's due by more than a week, or by no time")
+                        // Its moment from the deadline in force now: one gone by is refused, as an At's is.
+                        val at = on.deadlineAt(now)!! - before * 60_000L
+                        if (at < now - GONE_BY_MS) return@mapNotNull no("“${words.take(60)}” ${before} min before “${on.title.take(60)}” is due, which has gone by")
                         Due(DueKind.BeforeDue, minutesBefore = before)
                     }
                 }
@@ -298,7 +302,7 @@ object ChatAnswers {
             // An At keeps a task only as what it's about; a slot's or a deadline's is the task it waits on.
             val dueTask = taskId ?: was?.taskId
             if (was != null) {
-                was.copy(text = words.ifEmpty { was.text }, due = due, taskId = dueTask, draft = null, draftedAt = null)
+                was.copy(text = words.ifEmpty { was.text }, due = due, taskId = dueTask).undrafted()
             } else {
                 if (room <= 0) return@mapNotNull no("“${words.take(60)}”: ${Reminders.MAX_PENDING} are still to come already")
                 room--

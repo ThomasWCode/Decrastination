@@ -130,7 +130,7 @@ class Looks(
         val tasks = this.tasks.value.tasks.associateBy { it.id }
         for (r in Reminders.letGo(felix.value.reminders, tasks, now)) {
             var let = false
-            felix.update { s -> s.copy(reminders = s.reminders.map { if (it.id == r.id && Reminders.unsent(it)) it.copy(cancelledAt = now, draft = null, draftedAt = null).also { let = true } else it }) }
+            felix.update { s -> s.copy(reminders = s.reminders.map { if (it.id == r.id && Reminders.unsent(it)) it.copy(cancelledAt = now).undrafted().also { let = true } else it }) }
             if (!let) continue
             val task = r.taskId?.let(tasks::get)
             val why = when {
@@ -150,7 +150,7 @@ class Looks(
     private suspend fun deliver(r: Reminder, moment: Long, now: Long, tasks: Map<String, TaskItem>) {
         val late = now - moment > Reminders.LATE_MS
         // Written for this moment, it's sent on time; late, the moment it was written for has gone.
-        val draft = r.draft?.takeIf { !late && it.message.isNotBlank() && Reminders.drafted(r, moment, FelixRules.AHEAD_MS) }
+        val draft = r.draft?.takeIf { !late && it.message.isNotBlank() && Reminders.drafted(r, moment) }
         val words = draft?.message ?: FelixWords.reminder(r.text)
         val zone = clock.zone()
         val at = Instant.ofEpochMilli(moment).atZone(zone)
@@ -161,7 +161,7 @@ class Looks(
             kind = MessageKind.Reminder, byApp = draft == null, reminderId = r.id, suggestedReplies = FelixWords.REMINDER_REPLIES,
         )
         outbox.send(message)
-        felix.update { s -> s.copy(reminders = s.reminders.map { if (it.id == r.id) it.copy(sentAt = now, draft = null, draftedAt = null) else it }) }
+        felix.update { s -> s.copy(reminders = s.reminders.map { if (it.id == r.id) it.copy(sentAt = now).undrafted() else it }) }
         draft?.memories?.takeIf { it.isNotEmpty() }?.let { remember(it) }
         Log.i(AppGraph.TAG, "A reminder came${if (late) ", late" else ""}, in ${if (draft != null) "his words" else "yours"}")
     }
@@ -421,14 +421,14 @@ class Looks(
 
     /**
      * His words for each reminder of yours due within [FelixRules.AHEAD_MS] of [now] by [plan] and not
-     * written for its moment yet ([Reminders.drafted]): one call each (Q9: B; Q24), written as of its
-     * moment, kept on it unless it changed meanwhile. None with Claude off, resting or over the cap: the
-     * sweep sends your words then.
+     * asked for its moment yet ([Reminders.asked]): one call each (Q9: B; Q24), written as of its
+     * moment, kept on it unless it changed meanwhile; one that came back with none isn't asked again for
+     * that moment. None with Claude off, resting or over the cap: the sweep sends your words then.
      */
     private suspend fun writeReminders(plan: Plan, now: Long): Unit = drafting.withLock {
         val tasks = this.tasks.value.tasks.associateBy { it.id }
         val due = felix.value.reminders.filter(Reminders::pending).mapNotNull { r ->
-            Reminders.moment(r, plan, tasks, now)?.takeIf { it > now && it - now <= FelixRules.AHEAD_MS && !Reminders.drafted(r, it, FelixRules.AHEAD_MS) }?.let { r to it }
+            Reminders.moment(r, plan, tasks, now)?.takeIf { it > now && it - now <= FelixRules.AHEAD_MS && !Reminders.asked(r, it) }?.let { r to it }
         }
         if (due.isEmpty() || !gateway.available()) return@withLock
         val caller = gateway.client(ModelEffort.Job.Felix)?.let { FelixCaller(it) } ?: return@withLock
@@ -436,10 +436,13 @@ class Looks(
             val task = r.taskId?.let(tasks::get)
             val notes = task?.let { Notes.forTask(it, felix.value.notes, settings.value.classMap).map { n -> n.text } }.orEmpty()
             val trigger = FelixRules.Trigger(FelixPrompts.Reason.Reminder, slot = plan.slotAt(moment) ?: plan.nextSlot(moment))
-            val answer = (ask(caller, trigger, moment, interactive = false, task = task, reminder = r.text, notes = notes) as? Called.Answered)?.value?.answer ?: continue
+            val called = ask(caller, trigger, moment, interactive = false, task = task, reminder = r.text, notes = notes) as? Called.Answered ?: continue
+            // Refused, or none that could be read, it's paid for all the same: its moment's kept as asked for, so the next look doesn't ask again.
+            val answer = called.value.answer
             // Kept only on the reminder as it was asked for: moved, snoozed, sent or cancelled meanwhile, it's another moment's.
-            felix.update { s -> s.copy(reminders = s.reminders.map { if (it.id == r.id && it.copy(draft = null, draftedAt = null) == r.copy(draft = null, draftedAt = null)) it.copy(draft = answer, draftedAt = now) else it }) }
-            Log.i(AppGraph.TAG, "Felix wrote ahead for a reminder, due at ${Instant.ofEpochMilli(moment).atZone(clock.zone()).toLocalTime()}")
+            felix.update { s -> s.copy(reminders = s.reminders.map { if (it.id == r.id && it.undrafted() == r.undrafted()) it.copy(draft = answer, draftedAt = now, draftFor = moment) else it }) }
+            if (answer == null) Log.w(AppGraph.TAG, "Felix's words for a reminder came back with none: yours go")
+            else Log.i(AppGraph.TAG, "Felix wrote ahead for a reminder, due at ${Instant.ofEpochMilli(moment).atZone(clock.zone()).toLocalTime()}")
         }
     }
 
