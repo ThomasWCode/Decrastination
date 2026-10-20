@@ -153,7 +153,7 @@ The design is [05](05-the-chat.md); the stores' change is [04](04-data-and-migra
 
 **Tests**: every flag of 4a against the cases that made it (the 3.1.2 to 3.1.4 tests, kept); ticks following a step through a re-read that reorders; origins across a sync, a reading and an instruction; each migration from every fixture shape, twice; a backup from before restored after; the rehearsal's invariants. **Phone check**: the rehearsal first; after the install the open tasks, their ticks and your values as they were (counts compared with the rehearsal's); the stores' sizes; a slot kept, a sync, a backup written. **Leaves**: `By` for 8a's notes and reminders; `model.json` and the split stores; the records 8a's notes and 10a's task-bound facts outlive a trimmed task on.
 
-## Stage 8: notes, reminders, the gaps, and what he's sent (4.1.0, 4.1.1, 4.1.3)
+## Stage 8: notes, reminders, the gaps, and what he's sent (4.1.0, 4.1.1, 4.1.4)
 
 ### 8a. Notes and reminders (4.1.0)
 
@@ -186,7 +186,7 @@ The design is [05](05-the-chat.md); the stores' change is [04](04-data-and-migra
 
 **Tests**: each action's parse, act and Undo; the context lines in the doc page; G8's rule ([15](15-sent-or-asked-for.md) §Tests). **Phone check**: your classes' subjects entered first ([14](14-your-part.md)); `chat-ask` for each (paid): "I've done today's bit of…", "check Teams", "how much free time have I got", "open it in Teams", "when's my next chemistry?", "the worksheet's due next lesson".
 
-### 8c. Less sent, more asked for (4.1.3)
+### 8c. Less sent, more asked for (4.1.4)
 
 **Needs** 6e (`Learning`'s `Stats` for G6), 8b (the context's last new lines in, so what moves is measured once). **Does**: [15](15-sent-or-asked-for.md): the week's numbers (G6) and the calendar further out (G7) become things he asks for; each task's line says what its text holds, and the text sent is cut from 600 to 250 characters if the chat's eval before and after holds; the settings stay always, as a change needs their names (your call, 19 Oct). The text asked for instead of sent waits for real use (§After). Before 10b, so its eval runs on the shape that stays. One PR, staged:
 
