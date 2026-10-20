@@ -12,8 +12,8 @@ android {
         applicationId = "com.thomaswcode.decrastination"
         minSdk = 26
         targetSdk = 36
-        versionCode = 52
-        versionName = "4.1.3"
+        versionCode = 53
+        versionName = "4.1.4"
     }
 
     signingConfigs {
@@ -67,7 +67,7 @@ android {
 
 // The golden prompts written again (AR-01, GoldenPromptsTest): ./gradlew testDebugUnitTest -PupdateGolden=true
 // The scored eval run through the API (AR-02, EvalRunTest, docs/development.md), only when asked:
-// ./gradlew testDebugUnitTest --tests '*EvalRunTest*' -PrunEval=true [-Peffort=high]
+// ./gradlew testDebugUnitTest --tests '*EvalRunTest*' -PrunEval=true [-Peffort=high]  (the chat's set: -PrunEval=chat --rerun)
 // Every schema compiled by the API, after a schema changes (SchemaCompileTest), only when asked:
 // ./gradlew testDebugUnitTest --tests '*SchemaCompileTest*' -PcheckSchemas=true
 // docs/spec/felix-inputs.md written again from what the app sends (FelixInputsDocTest):
