@@ -5,6 +5,7 @@ import android.content.Intent
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.R
 import com.thomaswcode.decrastination.block.SlotAlarms
+import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.enrich.EnrichWorker
 import com.thomaswcode.decrastination.learn.Daily
 import com.thomaswcode.decrastination.learn.ReviewWorker
@@ -12,6 +13,7 @@ import com.thomaswcode.decrastination.notify.Channels
 import com.thomaswcode.decrastination.notify.NoticeId
 import com.thomaswcode.decrastination.notify.Notify
 import com.thomaswcode.decrastination.ui.CheckInActivity
+import com.thomaswcode.decrastination.ui.TaskOpener
 
 /**
  * What Felix's service asks of Android (docs/plan_v4/02 §Ports), so it's tested without it: his one
@@ -42,6 +44,9 @@ interface FelixPorts {
 
     /** The reminder to open the week's check-in form, where he can't ask it himself. */
     fun remindForm()
+
+    /** [task] opened where it lives, as its sheet's Open does ([TaskOpener.opened], G3): whether it was, and what to say. */
+    suspend fun openSource(task: TaskItem): Pair<Boolean, String?>
 }
 
 /** [FelixPorts] on the phone. */
@@ -59,6 +64,8 @@ class AndroidFelixPorts(private val context: Context) : FelixPorts {
     override fun review() = ReviewWorker.enqueue(context, ifDue = true)
 
     override fun answerLater() = FelixReplyWorker.enqueue(context)
+
+    override suspend fun openSource(task: TaskItem): Pair<Boolean, String?> = TaskOpener.opened(context, task)
 
     override fun remindForm() {
         val graph = AppGraph.get(context)

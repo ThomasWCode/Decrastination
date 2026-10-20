@@ -186,6 +186,14 @@ class FelixHarness(start: String = "2026-10-19T16:30") : AutoCloseable {
         override fun remindForm() {
             forms++
         }
+
+        /** The tasks opened where they live (G3), in order: each opened. */
+        val opened: MutableList<String> = Collections.synchronizedList(mutableListOf())
+
+        override suspend fun openSource(task: TaskItem): Pair<Boolean, String?> {
+            opened += task.id
+            return true to null
+        }
     }
 
     /** Your own tasks and your instructions, as AppGraph keeps them: made, applied and taken back on the stores, the checks left out. */

@@ -784,7 +784,12 @@ class Conversation(
         return actions.mapNotNull { a ->
             val task = tasks.value.tasks.firstOrNull { it.id == a.taskId }
             when (a.type) {
-                ChatAction.Type.Open -> null
+                // Shown on its card; or opened where it lives at once (G3), as its sheet's Open does, which notes it seen worked on.
+                ChatAction.Type.Open -> task?.takeIf { a.value == ChatAnswers.OPEN_SOURCE }?.let { t ->
+                    val (opened, say) = ports.openSource(t)
+                    if (opened) Act("Opened in ${t.source.label}: ${t.title}" + say?.let { ". $it" }.orEmpty())
+                    else Act("Couldn't open “${t.title}” in ${t.source.label}" + say?.let { ": $it" }.orEmpty(), problem = true)
+                }
                 ChatAction.Type.TickStep -> {
                     val index = a.stepIndex ?: return@mapNotNull null
                     val step = task?.subSteps?.getOrNull(index)?.takeIf { !it.done } ?: return@mapNotNull null
