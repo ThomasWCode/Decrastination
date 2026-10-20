@@ -23,7 +23,8 @@ data class Note(
 /**
  * What a standing note is for (Q31: A): every task of a [subject] (a class code's subject, by the
  * class map), of a class ([className], its code), from a [source], or with a word in its title
- * ([titleContains]). Of those given, a task matches every one.
+ * ([titleContains], from a word's start). Of those given, a task matches every one; each named in at
+ * most [Notes.MAX_SCOPE] characters.
  */
 @Serializable
 data class NoteScope(val subject: String? = null, val className: String? = null, val source: Source? = null, val titleContains: String? = null) {
@@ -41,6 +42,9 @@ object Notes {
 
     /** The most standing notes kept at once: each goes with every task it matches. */
     const val MAX_STANDING = 20
+
+    /** The most characters a standing note's subject, class or word in a title is named in. */
+    const val MAX_SCOPE = 60
 
     /** Whether [note], not kept now (deleted), has room to be again: its task under [PER_TASK] notes, or standing ones under [MAX_STANDING]. */
     fun hasRoom(note: Note, notes: List<Note>): Boolean {
@@ -65,7 +69,8 @@ object Notes {
      * Whether [task] is one [scope] is for: its subject as [Duplicates.subject] gives it (the subject
      * [classMap] gives its class code, else the class's own name, as your own tasks' is their subject: a
      * code no subject is mapped to matches no subject but itself); its class, its code; its source; a
-     * word in its title. Case ignored; each given, all of them; an empty scope matches nothing.
+     * word in its title, from a word's start ("art" in "Pop art" or "Artwork", not "Cartesian" or "start";
+     * "worksheet" in "Worksheets"). Case ignored; each given, all of them; an empty scope matches nothing.
      */
     fun matches(scope: NoteScope, task: TaskItem, classMap: Map<String, String>): Boolean {
         if (scope.isEmpty) return false
@@ -74,7 +79,17 @@ object Notes {
         return (scope.subject.isNullOrBlank() || same(scope.subject, subject)) &&
             (scope.className.isNullOrBlank() || same(scope.className, task.className)) &&
             (scope.source == null || scope.source == task.source) &&
-            (scope.titleContains.isNullOrBlank() || task.title.contains(scope.titleContains.trim(), ignoreCase = true))
+            (scope.titleContains.isNullOrBlank() || fromWordStart(task.title, scope.titleContains.trim()))
+    }
+
+    /** Whether [words] are in [title] from the start of one of its words, case ignored. */
+    private fun fromWordStart(title: String, words: String): Boolean {
+        var i = title.indexOf(words, ignoreCase = true)
+        while (i >= 0) {
+            if (i == 0 || !title[i - 1].isLetterOrDigit()) return true
+            i = title.indexOf(words, i + 1, ignoreCase = true)
+        }
+        return false
     }
 
     /**

@@ -44,6 +44,11 @@ class NotesTest {
         assertTrue(matches(NoteScope(source = Source.PowerPlanner), history) && !matches(NoteScope(source = Source.PowerPlanner), rates))
         assertTrue(matches(NoteScope(titleContains = "WORKSHEET"), rates) && matches(NoteScope(titleContains = "worksheet"), forces) && !matches(NoteScope(titleContains = "worksheet"), history))
         assertTrue(matches(NoteScope(subject = "Chemistry", titleContains = "worksheet"), rates) && !matches(NoteScope(subject = "Chemistry", titleContains = "worksheet"), own))
+        // A title's word from a word's start: a plural is the word, the middle of another word isn't.
+        fun titled(title: String) = rates.copy(title = title)
+        assertTrue(matches(NoteScope(titleContains = "art"), titled("Pop art essay")) && matches(NoteScope(titleContains = "art"), titled("Artwork")))
+        assertTrue(!matches(NoteScope(titleContains = "art"), titled("Cartesian graphs")) && !matches(NoteScope(titleContains = "art"), titled("start revision")))
+        assertTrue(matches(NoteScope(titleContains = "worksheet"), titled("Worksheets 3 and 4")) && matches(NoteScope(titleContains = "past paper"), titled("Physics: past papers")))
         // A subject no class is mapped to matches nothing; nor does an empty scope.
         assertTrue(!matches(NoteScope(subject = "History"), history) && !matches(NoteScope(), rates))
     }

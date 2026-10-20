@@ -240,7 +240,8 @@ object ChatAnswers {
         val cancelled = actions.filter { it.type == ChatAction.Type.CancelReminder }.mapNotNull { it.value }.toSet()
         // A deadline the answer sets is the one a reminder before it's due goes by, as its changes are made first.
         val dueBy = deadlines(changes)
-        val reminders = reminders(kept.filter { it.type == ChatPrompts.REMIND_TYPE }.map(::reminderOf), byId, felix, now, zone, leftOut, cancelled, dueBy)
+        val reopened = actions.filter { it.type == ChatAction.Type.Reopen }.mapTo(HashSet()) { it.taskId }
+        val reminders = reminders(kept.filter { it.type == ChatPrompts.REMIND_TYPE }.map(::reminderOf), byId, felix, now, zone, leftOut, cancelled, dueBy, reopened)
         // Those the answer deletes make room too.
         val deleted = actions.filter { it.type == ChatAction.Type.DeleteNote }.mapNotNull { it.value }.toSet()
         val notes = notes(kept.filter { it.type == ChatPrompts.NOTE_TYPE }.map(::noteOf), byId, felix, now, leftOut, deleted)
@@ -254,10 +255,10 @@ object ChatAnswers {
      * listed open task's deadline, within a week; one with a listed reminder's id, still to come and never
      * sent, moved or reworded in place (its words, or its time where none is given, kept), its draft let
      * go; no more still to come than [Reminders.MAX_PENDING], those the same answer cancels ([cancelled]) not
-     * counted; before a deadline the same answer sets ([dueBy], by task id) by that one. What can't be is said
-     * in [leftOut].
+     * counted; before a deadline the same answer sets ([dueBy], by task id) by that one; on a task it opens
+     * again ([reopened], its actions being made first) as on an open one. What can't be is said in [leftOut].
      */
-    private fun reminders(given: List<GivenReminder>, byId: Map<String, TaskItem>, felix: FelixStore, now: Long, zone: ZoneId, leftOut: MutableList<String>, cancelled: Set<String> = emptySet(), dueBy: Map<String, Long> = emptyMap()): List<Reminder> {
+    private fun reminders(given: List<GivenReminder>, byId: Map<String, TaskItem>, felix: FelixStore, now: Long, zone: ZoneId, leftOut: MutableList<String>, cancelled: Set<String> = emptySet(), dueBy: Map<String, Long> = emptyMap(), reopened: Set<String> = emptySet()): List<Reminder> {
         if (given.size > MAX_REMINDERS) leftOut += "${given.size - MAX_REMINDERS} more reminders than the app takes at once"
         var room = Reminders.MAX_PENDING - felix.reminders.count { Reminders.pending(it) && it.id !in cancelled }
         val seen = HashSet<String>()
@@ -290,7 +291,7 @@ object ChatAnswers {
                     // A move that names no task keeps the one it had.
                     val on = task ?: was?.taskId?.let(byId::get)
                         ?: return@mapNotNull no("“${words.take(60)}” at a task's ${if (kind == ChatPrompts.WHEN_SLOT) "slot" else "deadline"}, with no listed task")
-                    if (!on.isOpen) return@mapNotNull no("“${words.take(60)}” on “${on.title.take(60)}”, which is finished")
+                    if (!on.isOpen && on.id !in reopened) return@mapNotNull no("“${words.take(60)}” on “${on.title.take(60)}”, which is finished")
                     if (kind == ChatPrompts.WHEN_SLOT) {
                         // An event, or one off the plan as you said, never has a slot of work for it to come at.
                         if (Reminders.offPlan(on)) return@mapNotNull no("“${words.take(60)}” at a slot of “${on.title.take(60)}”, which never has one: it's ${if (on.kind == Kind.Event) "an event" else "off the plan"}")
@@ -340,6 +341,7 @@ object ChatAnswers {
                 Source.entries.firstOrNull { it.name.equals(name.replace(" ", ""), ignoreCase = true) || it.label.equals(name, ignoreCase = true) }
                     ?: return@mapNotNull no("“${words.take(60)}” for a source the app doesn't read (${name.take(20)})")
             }
+            if (listOf(g.subject, g.className, g.titleContains).any { it.trim().length > Notes.MAX_SCOPE }) return@mapNotNull no("“${words.take(60)}”, for tasks named in more than ${Notes.MAX_SCOPE} characters")
             val scope = NoteScope(given(g.subject), given(g.className), source, given(g.titleContains)).takeUnless { it.isEmpty }
             if (scope != null) {
                 if (given(g.taskId) != null) return@mapNotNull no("“${words.take(60)}” on a task and for every task of a kind, both")

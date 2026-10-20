@@ -150,6 +150,10 @@ The worksheet's due Thursday morning and the vectors on Friday. I've put the vec
 ```text
 Today: Tuesday 13 October 2026, 17:20 (Europe/London)
 
+Reminders set, still to come (id | when | their words | its task):
+- r2 | at the start of “Rates of reaction worksheet”'s next slot, Tue 13 Oct 17:20 | Ask about question 7 | teams:t1
+- r1 | Wed 14 Oct 08:00 | Bring the signed consent form | gmail:m1
+
 Open tasks (id | title | from | its class, and its subject | kind | due, a real deadline unless marked a plan, which is never overdue and moves on once it passes | minutes in all, with what the plan makes of them at their pace where it's learned | minutes worked so far | can't start before):
 - teams:t1 | Rates of reaction worksheet | Teams | 12X/Ch1, Chemistry | Homework | Thu 15 Oct 2026 08:30 | 45, planned as 59 at their pace | 0 | -
     note n1 (yours): Use Monday's results table for question 5
@@ -204,10 +208,6 @@ Settings you can change (setting | what it is | its value now):
 - softMinPerDay | Undated work a day (minutes) | 60
 - ankiDeadlineMin | Anki deadline | 21:30
 - ankiTextbook | Current German textbook | 1
-
-Reminders set, still to come (id | when | their words | its task):
-- r2 | at the start of “Rates of reaction worksheet”'s next slot, Tue 13 Oct 17:20 | Ask about question 7 | teams:t1
-- r1 | Wed 14 Oct 08:00 | Bring the signed consent form | gmail:m1
 
 The tasks' own text (id | from, and what comes with it; then its text: an assignment's instructions, an email's conversation, a planner item's details, their notes), each at most 600 characters: a longer one as its reading's summary (each says of how much), or else its start and end (an email's newest replies are at its end):
 - teams:t1 | Teams; links: https://example.org/rates-sheet
