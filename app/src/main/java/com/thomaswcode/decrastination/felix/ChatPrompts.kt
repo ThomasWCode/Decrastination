@@ -253,7 +253,8 @@ object ChatPrompts {
      * so a long list of tasks can't push it out: the list loses its end, and the plan its far days.
      * Your newest words come after what they're about, in full ([aboutText], D-93), and before what
      * a web search [found], the tasks he asked to [read] whole ([readText]), and what else he asked for
-     * [brought] (8c: the week's numbers, the calendar further out), each under its own heading; at the last round a
+     * [brought] (8c: the week's numbers, the calendar further out), each under its own heading, in a room of their own
+     * ([BROUGHT_ROOM], [fitted]); a search that couldn't be made said so ([notLooked]), so he doesn't ask again; at the last round a
      * message has ([lastRound]), said to be the last, so he answers from what he has ([ChatRounds.MAX_ROUNDS]). A message of yours that
      * replies to one that isn't just before it starts with that one, quoted (5b), as the window may not
      * hold it.
@@ -271,6 +272,7 @@ object ChatPrompts {
         quoted: List<ChatMessage> = emptyList(),
         brought: List<String> = emptyList(),
         lastRound: Boolean = false,
+        notLooked: String? = null,
     ): List<Pair<Speaker, String>> {
         val last = history(messages)
         // Before any of yours: an answer cut off from its question by the window goes; a message of
@@ -301,7 +303,12 @@ object ChatPrompts {
         // to the room they leave, however much it says.
         val words = texts.last().second
         val about = aboutText(recent.last { it.from == Speaker.You }.about, tasks, events)?.take((budget - words.length - 2).coerceAtLeast(0))?.takeIf { it.isNotEmpty() }
-        val newest = (listOfNotNull(about, words, found?.let(ResearchPrompts::told), read.takeIf { it.isNotEmpty() }?.let(::readText)) + brought + listOfNotNull(LAST.takeIf { lastRound })).joinToString("\n\n").take(budget)
+        val head = listOfNotNull(about, words, found?.let(ResearchPrompts::told), notLooked?.let { "Your web search couldn't be made ($it): answer without it, and leave research empty." }, read.takeIf { it.isNotEmpty() }?.let(::readText))
+        val tail = listOfNotNull(LAST.takeIf { lastRound })
+        // What else he asked for (8c) in a room of its own, so it can't crowd out the context the rest of the turn is
+        // cut to, nor be cut off its end unseen.
+        val broughtRoom = minOf(BROUGHT_ROOM, budget - (head + tail).sumOf { it.length + 2 } - 2 * brought.size).coerceAtLeast(0)
+        val newest = (head + fitted(brought, broughtRoom) + tail).joinToString("\n\n").take(budget)
         // The turns before it, newest first, while they fit their share, starting again with one of yours.
         var left = (budget - newest.length) / 4
         val earlier = texts.dropLast(1).reversed().takeWhile { (_, t) -> (t.length <= left).also { if (it) left -= t.length } }.reversed()
@@ -320,6 +327,39 @@ object ChatPrompts {
     }
 
     private const val PLAN_GAP = "\n\n"
+
+    /** The most of your newest turn what a round brings beside the texts takes (8c): the week's numbers, and sixty events of the calendar with room to spare. */
+    private const val BROUGHT_ROOM = 12_000
+
+    /**
+     * [blocks] within [room] in all: each an even share of what the shorter leave, a longer one cut short at a whole
+     * line, saying how many lines were left out, so what's cut is said rather than lost unseen.
+     */
+    private fun fitted(blocks: List<String>, room: Int): List<String> {
+        var left = room
+        val shares = blocks.withIndex().sortedBy { it.value.length }.mapIndexed { i, (index, block) ->
+            val share = minOf(block.length, left / (blocks.size - i))
+            left -= share
+            index to share
+        }.toMap()
+        return blocks.mapIndexed { i, block -> if (block.length <= shares.getValue(i)) block else cutAtLine(block, shares.getValue(i)) }
+    }
+
+    /** [block] cut to [max] characters at a whole line, its last line saying how many lines were left out for room. */
+    private fun cutAtLine(block: String, max: Int): String {
+        val lines = block.lines()
+        val kept = mutableListOf<String>()
+        var size = 0
+        for (line in lines) {
+            if (size + line.length + 1 + CUT_NOTE_ROOM > max) break
+            kept += line
+            size += line.length + 1
+        }
+        return (kept + "(… ${lines.size - kept.size} more lines left out for room)").joinToString("\n")
+    }
+
+    /** The room [cutAtLine]'s note takes. */
+    private const val CUT_NOTE_ROOM = 48
 
     /** Said at the last round a message has ([turns]): nothing more can be brought for it. */
     private const val LAST = "That's the last that can be brought for this message: answer it now from what you have, and leave details and research empty."

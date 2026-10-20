@@ -15,6 +15,7 @@ import com.thomaswcode.decrastination.learn.CalendarTime
 import com.thomaswcode.decrastination.learn.EventJudge
 import com.thomaswcode.decrastination.learn.Stats
 import kotlinx.coroutines.runBlocking
+import okhttp3.mockwebserver.MockResponse
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -167,5 +168,42 @@ class ChatAskedTest {
             assertTrue(reply.acts.any { it.problem && it.line.startsWith(com.thomaswcode.decrastination.core.Act.NOT_BROUGHT) }, reply.acts.toString())
             assertEquals(3, felix.stores.model.value.calls.size)
         }
+    }
+
+    @Test
+    fun `a search that couldn't be made is said in the round after it, so it isn't asked for again unknowing`() = runBlocking {
+        val felix = FelixHarness(start = "2026-10-20T19:00")
+        felix.use {
+            felix.stores.log.update { log }
+            felix.answers("""{"reply":"Looking.","newTasks":[],"changes":[],"memories":[],"suggestedReplies":[],"actions":[],"research":"the term's dates","details":["stats"]}""")
+            // The search refused by the API: a request it won't take, not tried again.
+            felix.server.enqueue(MockResponse().setResponseCode(400).setHeader("Content-Type", "application/json").setBody("""{"type":"error","error":{"type":"invalid_request_error","message":"no"}}"""))
+            felix.answers(felix.chatAnswer("A steady week."))
+            assertTrue(felix.conversation.ask("how's the week been, and when does term end?"))
+            felix.settle()
+            val sent = (1..3).map { felix.server.takeRequest().body.readUtf8() }
+            assertTrue("Your web search couldn't be made (the search failed)" in sent[2] && "The week's numbers you asked for" in sent[2], sent[2])
+            val reply = felix.stores.chat.value.messages.last { it.from == Speaker.Felix }
+            assertEquals("A steady week.", reply.text)
+            assertTrue(reply.acts.any { it.problem && it.line.startsWith(com.thomaswcode.decrastination.core.Act.NOT_LOOKED_UP) }, reply.acts.toString())
+        }
+    }
+
+    @Test
+    fun `what a round brings has a room of its own, a block too long cut at a whole line saying so, and the context keeps its room`() {
+        // Sixty events with long titles and three long texts: more than the turn's room.
+        val events = (1..60).map { i -> event(i.toLong(), "A long-titled rehearsal of the winter concert, part $i of many, in the main hall".repeat(2), "2026-12-%02dT10:00".format(1 + (i - 1) / 3)) }
+        val block = ChatPrompts.calendarBlock(events, "2026-12", now, LONDON)
+        assertTrue(block.length > 12_000, "${block.length}")
+        val long = (1..3).map { i -> com.thomaswcode.decrastination.core.TaskItem(id = "teams:l$i", source = Source.Teams, sourceId = "l$i", title = "Long $i", kind = Kind.Homework, detail = "w ".repeat(6_000), firstSeenAt = now, lastSeenAt = now) }
+        val asked = com.thomaswcode.decrastination.core.ChatMessage("y1", Speaker.You, "What's on, and what do these say?", now)
+        val newest = ChatPrompts.turns(listOf(asked), "CONTEXT ".repeat(2_000), long.associateBy { it.id }, LONDON, read = long, brought = listOf(block)).single().second
+        val calendar = newest.substringAfter("The calendar you asked for")
+        assertTrue(calendar.contains("more lines left out for room)"), calendar.takeLast(300))
+        // Cut at a whole line: the last event line kept ends as an event's does.
+        assertTrue(calendar.substringBefore("\n(…").trimEnd().endsWith("10:00 to Thu 10 Dec 2026 11:00") || calendar.substringBefore("\n(…").lines().last().contains(" | "), calendar.substringBefore("\n(…").takeLast(200))
+        // The context keeps room beside it.
+        assertTrue("CONTEXT CONTEXT" in newest, newest.take(200))
+        assertTrue(newest.length <= com.thomaswcode.decrastination.enrich.Pricing.MAX_INPUT_CHARS)
     }
 }
