@@ -90,6 +90,10 @@ object ChatAnswers {
         val reminders: List<Reminder> = emptyList(),
         /** Notes to keep on tasks (Stage 8a), each checked. */
         val notes: List<Note> = emptyList(),
+        /** Whether it asks for the week's numbers first (G6, 8c): its answer is then only that it's looking. */
+        val stats: Boolean = false,
+        /** The calendar it asks for first (G7, 8c), as [ChatPrompts.calendarAsk] reads it: empty for the four weeks after the fortnight, else a month (yyyy-MM). */
+        val calendar: String? = null,
     )
 
     /**
@@ -233,8 +237,13 @@ object ChatAnswers {
         // A step ticked or unticked, a listed task shown (AI-14); a task of yours done, open again or
         // deleted, a setting set (16 Oct): each only as the task, or the setting, can be.
         val actions = answer.actions.take(MAX_ACTIONS).mapNotNull { a -> action(a, byId, settings, felix, context, leftOut) }.distinct()
-        // Tasks to read in full (D-93): listed and open, not the one the message is about (it came whole).
-        val details = answer.details.map(String::trim).filter { id -> id != about.taskId && byId[id]?.let { it.isOpen && !it.hidden } == true }.distinct().take(ChatPrompts.MAX_READ)
+        // Tasks to read in full (D-93): listed and open, not the one the message is about (it came whole); and beside
+        // them what else it asks for (8c), each once: the week's numbers, and the calendar past the fortnight or a
+        // month of it, the first asked for. Any other word is dropped.
+        val asked = answer.details.map(String::trim)
+        val details = asked.filter { id -> id != about.taskId && byId[id]?.let { it.isOpen && !it.hidden } == true }.distinct().take(ChatPrompts.MAX_READ)
+        val stats = asked.any { it.equals(ChatPrompts.ASK_STATS, ignoreCase = true) }
+        val calendar = asked.firstNotNullOfOrNull(ChatPrompts::calendarAsk)
         // Reminders and notes (Stage 8a): each as the app can keep it, the rest said.
         // Those the answer cancels make room, as they're cancelled before its reminders are made.
         val cancelled = actions.filter { it.type == ChatAction.Type.CancelReminder }.mapNotNull { it.value }.toSet()
@@ -245,7 +254,7 @@ object ChatAnswers {
         // Those the answer deletes make room too.
         val deleted = actions.filter { it.type == ChatAction.Type.DeleteNote }.mapNotNull { it.value }.toSet()
         val notes = notes(kept.filter { it.type == ChatPrompts.NOTE_TYPE }.map(::noteOf), byId, felix, now, leftOut, deleted)
-        return Reading(reply.take(ChatPrompts.MAX_TEXT), made, changes, leftOut, answer.memories.take(MAX_MEMORIES), replies, actions, answer.research.trim().take(ResearchPrompts.MAX_QUESTION).takeIf { it.isNotEmpty() }, details, reminders, notes)
+        return Reading(reply.take(ChatPrompts.MAX_TEXT), made, changes, leftOut, answer.memories.take(MAX_MEMORIES), replies, actions, answer.research.trim().take(ResearchPrompts.MAX_QUESTION).takeIf { it.isNotEmpty() }, details, reminders, notes, stats, calendar)
     }
 
     /**

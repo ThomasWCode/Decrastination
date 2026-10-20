@@ -39,6 +39,7 @@ import com.thomaswcode.decrastination.learn.CalendarEvent
 import com.thomaswcode.decrastination.learn.EventJudge
 import java.time.Instant
 import java.time.LocalDate
+import java.time.YearMonth
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -104,6 +105,21 @@ object ChatPrompts {
     private val RESEARCH = """
         6. Look things up (research): when their message needs facts that neither they nor the app have given you (a competition's rules and dates, an exam board's specification, what an event involves), give what to search the web for in a few words, reply only that you're looking it up, and change nothing: you'll be asked again with what's found, to answer and act on (its steps, dates and minutes). Never for what the lists here tell you, nor for anything about the student themselves; most messages need none, and research is then an empty string.
     """.trimIndent()
+
+    /** What [READ]'s `details` asks for beside tasks' ids (8c): the week's numbers (G6), and the calendar past the fortnight (G7). */
+    const val ASK_STATS = "stats"
+    const val ASK_CALENDAR = "calendar"
+
+    /**
+     * [word] as a request for the calendar (G7, 8c): `calendar`, the four weeks after the fortnight (empty), or
+     * `calendar:yyyy-MM`, that month (yyyy-MM). Null for any other word, and for a month that doesn't read.
+     */
+    fun calendarAsk(word: String): String? {
+        val w = word.trim()
+        if (w.equals(ASK_CALENDAR, ignoreCase = true)) return ""
+        if (!w.startsWith("$ASK_CALENDAR:", ignoreCase = true)) return null
+        return runCatching { YearMonth.parse(w.substringAfter(':').trim()) }.getOrNull()?.toString()
+    }
 
     /** With looking things up off: the field it has is always empty. */
     private const val NO_RESEARCH = "6. research is always an empty string: you can't look things up."

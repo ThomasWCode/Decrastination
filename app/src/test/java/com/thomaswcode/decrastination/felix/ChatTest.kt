@@ -241,6 +241,41 @@ class ChatTest {
     }
 
     @Test
+    fun `beside three tasks' texts he asks for the week's numbers and the calendar, each once, any other word dropped`() {
+        val others = (1..4).map { i -> sheet.copy(id = "teams:s$i", sourceId = "s$i") }
+        fun asked(details: String) = ChatAnswers.parse(
+            """{"reply":"Looking.","newTasks":[],"changes":[],"memories":[],"suggestedReplies":[],"actions":[],"research":"","details":[$details]}""",
+            listOf(sheet) + others, emptyList(), About(), now, LONDON,
+        )!!
+        val reading = asked(""""stats","teams:s1","calendar:2026-12","teams:s2","STATS","calendar","teams:s3","teams:s4","calendar:December","weather"""")
+        assertEquals(listOf("teams:s1", "teams:s2", "teams:s3"), reading.details)
+        assertTrue(reading.stats)
+        // The calendar first asked for: December's.
+        assertEquals("2026-12", reading.calendar)
+        // Alone, the four weeks after the fortnight; a month that doesn't read asks for nothing, as does nothing.
+        assertEquals("", asked(""""calendar"""").calendar)
+        assertNull(asked(""""calendar:December"""").calendar)
+        assertEquals("2027-01", asked("""" calendar:2027-01 """").calendar)
+        assertFalse(asked("").stats)
+        assertNull(asked("").calendar)
+    }
+
+    @Test
+    fun `the week's numbers and the calendar take a round the first time each is asked for, never again`() {
+        val reading = parse("""{"reply":"Looking.","newTasks":[],$none,"memories":[],"suggestedReplies":[],"actions":[],"research":"","details":[]}""")!!
+        assertEquals(ChatRounds.Next(null, emptyList(), stats = true), ChatRounds.next(reading.copy(stats = true), searched = false, searches = true, read = emptyList()))
+        assertEquals(ChatRounds.Next(null, emptyList(), calendar = "2026-12"), ChatRounds.next(reading.copy(calendar = "2026-12"), searched = false, searches = true, read = emptyList()))
+        // Brought already: nothing new, and the calendar first asked for is the one that comes.
+        assertNull(ChatRounds.next(reading.copy(stats = true), searched = false, searches = true, read = emptyList(), stats = true))
+        assertNull(ChatRounds.next(reading.copy(calendar = "2027-01"), searched = false, searches = true, read = emptyList(), calendar = "2026-12"))
+        // With a text to read and what came before kept: one round for all of it.
+        assertEquals(
+            ChatRounds.Next(null, listOf("teams:s1"), stats = true, calendar = ""),
+            ChatRounds.next(reading.copy(details = listOf("teams:s1"), calendar = ""), searched = false, searches = true, read = emptyList(), stats = true),
+        )
+    }
+
+    @Test
     fun `a search the texts show a need for, or texts a search does, take another round, but nothing twice`() {
         val reading = parse("""{"reply":"Reading it.","newTasks":[],$none,"memories":[],"suggestedReplies":[],"actions":[],"research":"","details":[]}""")!!
         // Texts first; then, having read them, the search they showed a need for.
