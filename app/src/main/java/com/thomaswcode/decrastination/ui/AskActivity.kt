@@ -1144,6 +1144,9 @@ private fun Remembered(graph: AppGraph, message: ChatMessage, live: Boolean) {
  * deleted, a setting set; 4.1.0, a reminder set, moved or cancelled, a note added or deleted), a line each in small type, each with its Undo while it can be taken back;
  * and the lines with nothing to undo (a change not made, where a time went, a text read in full).
  */
+/** The longest the chat's Undo buttons wait before reading the day again (a delay doesn't count deep sleep). */
+private const val DAY_CHECK_MS = 5 * 60_000L
+
 @Composable
 private fun Acts(graph: AppGraph, message: ChatMessage, live: Boolean) {
     if (message.acts.isEmpty()) return
@@ -1156,7 +1159,9 @@ private fun Acts(graph: AppGraph, message: ChatMessage, live: Boolean) {
     val log by graph.log.state.collectAsStateWithLifecycle()
     val today by produceState(graph.focus.today()) {
         while (true) {
-            delay((value.plusDays(1).atStartOfDay(graph.clock.zone()).toInstant().toEpochMilli() - graph.clock.now()).coerceAtLeast(1_000L))
+            // Till midnight, but a few minutes at most: a delay doesn't count the phone's deep sleep, so the chat left open
+            // overnight reads the new day within minutes of waking.
+            delay((value.plusDays(1).atStartOfDay(graph.clock.zone()).toInstant().toEpochMilli() - graph.clock.now()).coerceIn(1_000L, DAY_CHECK_MS))
             value = graph.focus.today()
         }
     }

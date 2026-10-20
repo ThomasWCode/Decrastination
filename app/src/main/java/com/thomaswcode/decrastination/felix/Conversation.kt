@@ -927,12 +927,15 @@ class Conversation(
                 }
                 ChatAction.Type.UnkeepPiece -> {
                     // The record he was shown, its key's newest then: kept again since (taken back and kept from Day while he
-                    // answered), the newest is yours, not his to take back.
-                    val at = keptAt()[a.value]?.takeIf { it <= shownAt } ?: return@mapNotNull null
+                    // answered), the newest is yours, not his to take back, and his answer says so.
+                    val at = keptAt()[a.value] ?: return@mapNotNull null
                     val record = log.value.slots.lastOrNull { it.key == a.value && it.outcome.kept && it.at == at } ?: return@mapNotNull null
+                    if (at > shownAt) return@mapNotNull Act(Act.NOT_MADE + "“${record.label}” isn't taken back: it was kept again while he answered.", problem = true)
                     // One of yours, or one done by its tick, that this record finished is open again with it, as a keep's Undo
-                    // opens one; finished another way since, it stays so, and nothing's taken back.
-                    if (!focus.unkeepSlot(record.key, at, reopen = task != null && ChatActs.finishedBy(task, at))) return@mapNotNull null
+                    // opens one; finished another way since, it stays so, nothing's taken back, and his answer says so.
+                    val reopen = task != null && ChatActs.finishedBy(task, at)
+                    if (task != null && !task.isOpen && !reopen) return@mapNotNull Act(Act.NOT_MADE + "“${record.label}” isn't taken back: “${task.title}” was finished since, another way.", problem = true)
+                    if (!focus.unkeepSlot(record.key, at, reopen = reopen)) return@mapNotNull null
                     // What it was kept with, so its Undo keeps it so again: its extra minutes past its piece as the plan lays it
                     // again (its own and, a step's last sitting, its step's other sittings, to do again now, which a keep counts
                     // again), its photo, its source's word; and that piece's minutes, so one laid otherwise since isn't kept for it.
