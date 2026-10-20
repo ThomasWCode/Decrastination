@@ -1,6 +1,7 @@
 package com.thomaswcode.decrastination.data
 
 import com.thomaswcode.decrastination.core.Calibration
+import com.thomaswcode.decrastination.core.ChatActs
 import com.thomaswcode.decrastination.core.ChatArchive
 import com.thomaswcode.decrastination.core.ChatHistory
 import com.thomaswcode.decrastination.core.ChatState
@@ -8,6 +9,7 @@ import com.thomaswcode.decrastination.core.FelixState
 import com.thomaswcode.decrastination.core.Instruction
 import com.thomaswcode.decrastination.core.InstructionState
 import com.thomaswcode.decrastination.core.InstructionStatus
+import com.thomaswcode.decrastination.core.Memories
 import com.thomaswcode.decrastination.core.MemoryState
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.Source
@@ -144,9 +146,14 @@ class BackupService(
         val ownAdded = Backups.restoredOwnTasks(backup.ownTasks, stores.tasks.value.tasks).map { it.id }.toSet()
         stores.replace(stores.tasks) { state -> state.copy(tasks = state.tasks + Backups.restoredOwnTasks(backup.ownTasks, state.tasks)) }
         if (ownAdded.isNotEmpty()) layTaskOverrides()
-        // The backup's days off and half-days beside those here (PL-16); and what it remembered (AI-21).
+        // The backup's days off and half-days beside those here (PL-16); and what it remembered (AI-21), what's run
+        // out on either side let go of first (10a), so one here can't take the place of the backup's that holds.
         stores.replace(stores.school) { it.withAll(backup.school) }
-        stores.replace(stores.memory) { Backups.mergedMemory(it, backup.memory) }
+        val now = clock.now()
+        val tasks = stores.tasks.value
+        val held = ChatActs.held(stores.chat.value.messages)
+        fun live(memory: MemoryState) = Memories.expired(memory, tasks.tasks.associateBy { it.id }, now, held) { source -> tasks.status(source).lastSuccessAt }
+        stores.replace(stores.memory) { Backups.mergedMemory(live(it), live(backup.memory)) }
         // The chat where this phone's is empty (a reset's copy brings it back, LR-08), with its earlier
         // messages: not a message of yours still waiting for its answer, which would be sent, words
         // from then, as it opens. Felix's state with it, or where this phone has none of its own. Into a
