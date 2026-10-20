@@ -24,9 +24,11 @@ import com.thomaswcode.decrastination.core.Memories
 import com.thomaswcode.decrastination.core.MemoryEdit
 import com.thomaswcode.decrastination.core.MemoryState
 import com.thomaswcode.decrastination.core.MessageKind
+import com.thomaswcode.decrastination.core.Note
 import com.thomaswcode.decrastination.core.OwnTask
 import com.thomaswcode.decrastination.core.OwnTaskRules
 import com.thomaswcode.decrastination.core.ProposalState
+import com.thomaswcode.decrastination.core.Reminder
 import com.thomaswcode.decrastination.core.Reminders
 import com.thomaswcode.decrastination.core.SchoolCalendar
 import com.thomaswcode.decrastination.core.Settings
@@ -107,6 +109,8 @@ class Conversation(
     private val calendarTime: () -> EventJudge.Time,
     /** Your reply to one of his messages that's an answer and not for the chat ([Looks.answered]). */
     private val answered: suspend (ChatMessage, String) -> Boolean,
+    /** His words for the reminders due within his window, written now ([Looks.draftReminders]): after one's set, moved or brought back. */
+    private val draftReminders: suspend (Long) -> Unit = {},
 ) {
     /**
      * What the chat changes through those who own it (`AppGraph`'s functions, till Stage 6 makes
@@ -652,8 +656,10 @@ class Conversation(
             if (edits.isNotEmpty()) chat.update { s -> s.copy(messages = s.messages.map { if (it.id == reply.id) it.copy(memoryEdits = edits) else it }) }
             // Its actions (AI-14; 16 Oct, everything he does), said under it with their Undo: before its
             // changes, as its steps are the ones it was shown.
-            val acts = if (kept) act(reading.actions) else emptyList()
+            val acts = if (kept) act(reading.actions) + keep(reading.reminders, reading.notes) else emptyList()
             if (acts.isNotEmpty()) chat.update { s -> s.copy(messages = s.messages.map { if (it.id == reply.id) it.copy(acts = acts + it.acts) else it }) }
+            // A reminder set or moved into his window is written for at once, not at the next plan or look (8a).
+            if (acts.any { it.action?.type == ChatAction.Type.SetReminder || it.action?.type == ChatAction.Type.MoveReminder }) scope.launch { draftReminders(clock.now()) }
             // Its cards, made now, as if Apply were tapped: Undo takes them back.
             if (kept) {
                 val instant = reply.proposals.filter { it.instant }
@@ -732,10 +738,54 @@ class Conversation(
                     if (made != null) ports.scheduleReminders()
                     made
                 }
-                // Nothing makes these yet.
-                ChatAction.Type.SetReminder, ChatAction.Type.MoveReminder, ChatAction.Type.CancelReminder, ChatAction.Type.AddNote, ChatAction.Type.DeleteNote -> null
+                // A reminder cancelled, a note deleted (8a): marked, kept whole for the Undo, never removed here.
+                ChatAction.Type.CancelReminder -> {
+                    var was: Reminder? = null
+                    felix.update { st -> st.copy(reminders = st.reminders.map { r -> if (r.id == a.value && Reminders.pending(r)) r.copy(cancelledAt = clock.now(), draft = null, draftedAt = null).also { was = r } else r }) }
+                    was?.let { Act("Cancelled: the reminder “${it.text}”", a) }
+                }
+                ChatAction.Type.DeleteNote -> {
+                    var was: Note? = null
+                    felix.update { st -> st.copy(notes = st.notes.map { n -> if (n.id == a.value && n.deletedAt == null) n.copy(deletedAt = clock.now()).also { was = n } else n }) }
+                    was?.let { Act("Note deleted: “${it.text}”", a) }
+                }
+                // Made from the answer's reminders and notes ([keep]), not its actions.
+                ChatAction.Type.SetReminder, ChatAction.Type.MoveReminder, ChatAction.Type.AddNote -> null
             }
         }
+    }
+
+    /**
+     * [reminders] set, or moved and reworded in place where one has a listed reminder's id, and [notes] kept
+     * (8a): made at once, each said under his answer with its Undo ([undoAct]), when it'll come said as the
+     * plan has it now. A move of one sent since he was asked isn't made.
+     */
+    private suspend fun keep(reminders: List<Reminder>, notes: List<Note>): List<Act> {
+        if (reminders.isEmpty() && notes.isEmpty()) return emptyList()
+        val now = clock.now()
+        val zone = clock.zone()
+        val byId = tasks.value.tasks.associateBy { it.id }
+        val plan = planning.plan(now = now)
+        fun title(id: String?) = id?.let(byId::get)?.title
+        val acts = mutableListOf<Act>()
+        felix.update { st ->
+            acts.clear()
+            var kept = st.reminders
+            for (r in reminders) {
+                val was = kept.firstOrNull { it.id == r.id }
+                val at = Reminders.whenLine(r, Reminders.moment(r, plan, byId, now), title(r.taskId), zone)
+                if (was == null) {
+                    kept = kept + r
+                    acts += Act("Reminder set: $at, “${r.text}”", ChatAction(ChatAction.Type.SetReminder, r.taskId.orEmpty(), value = r.id))
+                } else if (Reminders.unsent(was)) {
+                    kept = kept.map { if (it.id == r.id) r else it }
+                    acts += Act("Moved: “${r.text}” to $at", ChatAction(ChatAction.Type.MoveReminder, r.taskId.orEmpty(), value = r.id), reminder = was)
+                }
+            }
+            notes.forEach { n -> acts += Act("Noted on “${title(n.taskId) ?: "it"}”: ${n.text}", ChatAction(ChatAction.Type.AddNote, n.taskId.orEmpty(), value = n.id)) }
+            st.copy(reminders = kept, notes = st.notes + notes)
+        }
+        return acts
     }
 
     /**
@@ -753,8 +803,9 @@ class Conversation(
      * The [index]th of message [messageId]'s actions taken back ([act], its Undo): a step ticked to
      * do again (one of yours it finished open again with it), or one unticked ticked again as the
      * chat ticks one; a task done open again, or one opened back as it was, finished; one deleted
-     * back as it was, with the cards that added it; a setting back to its value before. Not once
-     * it's changed since (ticked, finished or deleted another way, set again): why, then.
+     * back as it was, with the cards that added it; a setting back to its value before; a reminder or a
+     * note set, moved, cancelled or deleted taken back (8a). Not once it's changed since (ticked, finished
+     * or deleted another way, set again, a reminder come or snoozed): why, then.
      */
     suspend fun undoAct(messageId: String, index: Int): String? {
         val act = chat.value.messages.firstOrNull { it.id == messageId }?.acts?.getOrNull(index)?.takeIf { !it.undone } ?: return null
@@ -790,7 +841,25 @@ class Conversation(
                 if (back) ports.scheduleReminders()
                 back
             }
-            ChatAction.Type.SetReminder, ChatAction.Type.MoveReminder, ChatAction.Type.CancelReminder, ChatAction.Type.AddNote, ChatAction.Type.DeleteNote -> false
+            // A reminder or a note (8a), while it's as the act left it: a reminder set goes, one moved has its time and
+            // words back, one cancelled comes again; a note added goes, one deleted is back.
+            ChatAction.Type.SetReminder, ChatAction.Type.MoveReminder, ChatAction.Type.CancelReminder, ChatAction.Type.AddNote, ChatAction.Type.DeleteNote -> {
+                var back = false
+                felix.update { st ->
+                    if (!ChatActs.canUndo(act, tasks.value.tasks, settings.value, chat.value.messages, st.notes, st.reminders)) return@update st
+                    back = true
+                    when (a.type) {
+                        ChatAction.Type.SetReminder -> st.copy(reminders = st.reminders.filterNot { it.id == a.value })
+                        ChatAction.Type.MoveReminder -> act.reminder!!.let { was -> st.copy(reminders = st.reminders.map { r -> if (r.id == a.value) r.copy(text = was.text, due = was.due, taskId = was.taskId, draft = null, draftedAt = null) else r }) }
+                        ChatAction.Type.CancelReminder -> st.copy(reminders = st.reminders.map { r -> if (r.id == a.value) r.copy(cancelledAt = null) else r })
+                        ChatAction.Type.AddNote -> st.copy(notes = st.notes.filterNot { it.id == a.value })
+                        else -> st.copy(notes = st.notes.map { n -> if (n.id == a.value) n.copy(deletedAt = null) else n })
+                    }
+                }
+                // One back with a time to come is written for, if it's within his window.
+                if (back && a.type in setOf(ChatAction.Type.MoveReminder, ChatAction.Type.CancelReminder)) scope.launch { draftReminders(clock.now()) }
+                back
+            }
         }
         if (!undone) return "It's changed since, so it can't be undone here"
         chat.update { s -> s.copy(messages = s.messages.map { m -> if (m.id != messageId) m else m.copy(acts = m.acts.mapIndexed { i, x -> if (i == index) x.copy(undone = true) else x }) }) }
