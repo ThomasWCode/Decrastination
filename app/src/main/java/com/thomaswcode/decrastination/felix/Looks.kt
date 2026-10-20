@@ -14,12 +14,16 @@ import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.MemoryEdit
 import com.thomaswcode.decrastination.core.MessageKind
 import com.thomaswcode.decrastination.core.Plan
+import com.thomaswcode.decrastination.core.Reminder
+import com.thomaswcode.decrastination.core.Reminders
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.SlotKind
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Speaker
+import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.WallClock
 import com.thomaswcode.decrastination.data.ActivityLog
+import com.thomaswcode.decrastination.data.FelixStore
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.ModelState
 import com.thomaswcode.decrastination.data.SlotRecord
@@ -33,6 +37,8 @@ import com.thomaswcode.decrastination.learn.Assessment
 import com.thomaswcode.decrastination.learn.EventJudge
 import com.thomaswcode.decrastination.plan.Planning
 import java.time.Instant
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 import kotlinx.coroutines.async
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -55,6 +61,8 @@ class Looks(
     private val log: JsonStore<ActivityLog>,
     /** The chat: his messages, and his state between looks ([ChatState.felix]). */
     private val chat: JsonStore<ChatState>,
+    /** His notes and reminders (Stage 8a): the reminders delivered as they come, and written for just before. */
+    private val felix: JsonStore<FelixStore>,
     private val clock: WallClock,
     private val scope: CoroutineScope,
     private val gateway: ModelGateway,
@@ -92,12 +100,67 @@ class Looks(
             return
         }
         try {
+            // Reminders gone by first (8a), Claude on or off: they're yours, and never nothing.
+            sweepReminders(now)
             val trigger = due(now)
             if (trigger != null) write(trigger, now) else draft(focus.plan(now), now)
             arm(now)
         } finally {
             writing.unlock()
         }
+    }
+
+    /** Held while reminders are delivered, so each is sent once: its alarm, his looks and a start can come together. */
+    private val sweeping = Mutex()
+
+    /**
+     * Your reminders as they come (Stage 8a, docs/plan_v4/07-notes-and-reminders.md §Delivery): each one
+     * whose moment has come by [now] delivered as his message, kind Reminder, about its task, with its
+     * replies (*Done* and two snoozes), through his outbox, so it's in the chat and on his notification,
+     * whatever the hour (Q10: A); one gone by more than [Reminders.LATE_MS] (the phone off) marked late.
+     * His words written for it ahead where they're there and it's on time; else yours as you set them,
+     * the app's ([FelixWords.reminder]). One whose task closed before it came is let go first, said in
+     * a note of his in the app's words. At its alarm, at each of his looks, and at a start.
+     */
+    suspend fun sweepReminders(now: Long = clock.now()): Unit = sweeping.withLock {
+        if (felix.value.reminders.none(Reminders::pending)) return@withLock
+        val tasks = this.tasks.value.tasks.associateBy { it.id }
+        for (r in Reminders.letGo(felix.value.reminders, tasks, now)) {
+            var let = false
+            felix.update { s -> s.copy(reminders = s.reminders.map { if (it.id == r.id && Reminders.unsent(it)) it.copy(cancelledAt = now, draft = null, draftedAt = null).also { let = true } else it }) }
+            if (!let) continue
+            val task = r.taskId?.let(tasks::get)
+            val why = when {
+                task == null -> "is no longer listed"
+                !task.isOpen -> "is done"
+                else -> "has no due date now"
+            }
+            outbox.send(ChatMessage(UUID.randomUUID().toString(), Speaker.Felix, FelixWords.letGo(r.text, task?.title ?: "its task", why), now, About(taskId = r.taskId, taskTitle = task?.title), kind = MessageKind.Note, byApp = true))
+        }
+        for ((r, moment) in Reminders.due(felix.value.reminders, focus.plan(now), tasks, now)) deliver(r, moment, now, tasks)
+    }
+
+    /**
+     * [r], due at [moment], sent as his message at [now]: in the chat first, under an id of its moment's,
+     * so one sent again after a stop between the chat's write and its own replaces itself; then marked sent.
+     */
+    private suspend fun deliver(r: Reminder, moment: Long, now: Long, tasks: Map<String, TaskItem>) {
+        val late = now - moment > Reminders.LATE_MS
+        // Written for this moment, it's sent on time; late, the moment it was written for has gone.
+        val draft = r.draft?.takeIf { !late && it.message.isNotBlank() && Reminders.drafted(r, moment, FelixRules.AHEAD_MS) }
+        val words = draft?.message ?: FelixWords.reminder(r.text)
+        val zone = clock.zone()
+        val at = Instant.ofEpochMilli(moment).atZone(zone)
+        val time = at.format(if (at.toLocalDate() == Instant.ofEpochMilli(now).atZone(zone).toLocalDate()) CLOCK else WHEN)
+        val task = r.taskId?.let(tasks::get)
+        val message = ChatMessage(
+            "reminder-${r.id}-$moment", Speaker.Felix, if (late) "$words ${FelixWords.late(time)}" else words, now, About(taskId = r.taskId, taskTitle = task?.title),
+            kind = MessageKind.Reminder, byApp = draft == null, reminderId = r.id, suggestedReplies = FelixWords.REMINDER_REPLIES,
+        )
+        outbox.send(message)
+        felix.update { s -> s.copy(reminders = s.reminders.map { if (it.id == r.id) it.copy(sentAt = now, draft = null, draftedAt = null) else it }) }
+        draft?.memories?.takeIf { it.isNotEmpty() }?.let { remember(it) }
+        Log.i(AppGraph.TAG, "A reminder came${if (late) ", late" else ""}, in ${if (draft != null) "his words" else "yours"}")
     }
 
     /**
@@ -232,6 +295,10 @@ class Looks(
     private fun lastSent(): Long? = chat.value.messages.filter { it.from == Speaker.Felix && it.text.isNotBlank() }.maxOfOrNull { it.at }
 
     private companion object {
+        /** A late reminder's time, as it says it: the day's, or another day's. */
+        val CLOCK: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm", Locale.UK)
+        val WHEN: DateTimeFormatter = DateTimeFormatter.ofPattern("EEE d MMM HH:mm", Locale.UK)
+
         /** How long the morning's briefing waits for his sentence. */
         const val MORNING_MS = 20_000L
 

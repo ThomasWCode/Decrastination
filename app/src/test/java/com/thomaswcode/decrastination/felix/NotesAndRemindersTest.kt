@@ -1,14 +1,19 @@
 package com.thomaswcode.decrastination.felix
 
 import com.thomaswcode.decrastination.Fixtures
+import com.thomaswcode.decrastination.core.By
 import com.thomaswcode.decrastination.core.ChatAction
 import com.thomaswcode.decrastination.core.ChatActs
 import com.thomaswcode.decrastination.core.ChatMessage
 import com.thomaswcode.decrastination.core.Due
 import com.thomaswcode.decrastination.core.DueKind
+import com.thomaswcode.decrastination.core.FelixAnswer
 import com.thomaswcode.decrastination.core.Kind
+import com.thomaswcode.decrastination.core.MessageKind
+import com.thomaswcode.decrastination.core.Reminder
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Speaker
+import com.thomaswcode.decrastination.core.Status
 import com.thomaswcode.decrastination.core.TaskItem
 import kotlin.test.AfterTest
 import kotlin.test.Test
@@ -32,6 +37,10 @@ class NotesAndRemindersTest {
 
     @AfterTest
     fun close() = felix.close()
+
+    private companion object {
+        const val MIN = 60_000L
+    }
 
     /** A Teams worksheet, due Thursday. */
     private val sheet = TaskItem(
@@ -101,6 +110,64 @@ class NotesAndRemindersTest {
         assertFalse(canUndo(set, 0))
         assertEquals("It's changed since, so it can't be undone here", conversation.undoAct(set.id, 0))
         assertEquals(1, stores.felix.value.reminders.size)
+    }
+
+    /** A reminder of [text] at [at], set from the chat ten minutes before now. */
+    private fun at(text: String, at: Long, taskId: String? = null) = Reminder("r-$text", text, now - 10 * MIN, By.Felix, taskId, Due(DueKind.At, at))
+
+    @Test
+    fun `a reminder whose moment has come is his message in your words, the app's, with its replies, and then it's done with`() = runBlocking {
+        stores.felix.update { it.copy(reminders = listOf(at("call gran", now + 5 * MIN))) }
+        felix.looks.sweepReminders(now)
+        assertTrue(stores.chat.value.messages.none { it.kind == MessageKind.Reminder })
+        felix.clock.time = now + 5 * MIN
+        felix.looks.sweepReminders(felix.clock.time)
+        val sent = stores.chat.value.messages.single { it.kind == MessageKind.Reminder }
+        assertEquals(FelixWords.reminder("call gran"), sent.text)
+        assertTrue(sent.byApp && sent.from == Speaker.Felix && sent.reminderId == "r-call gran")
+        assertEquals(FelixWords.REMINDER_REPLIES, sent.suggestedReplies)
+        // On his notification, sounding for it.
+        assertEquals(sent.id, felix.ports.showing?.replyTo)
+        assertTrue(felix.ports.showing!!.alert)
+        assertEquals(now + 5 * MIN, stores.felix.value.reminders.single().sentAt)
+        // Swept again, nothing more.
+        felix.looks.sweepReminders(felix.clock.time + MIN)
+        assertEquals(1, stores.chat.value.messages.count { it.kind == MessageKind.Reminder })
+    }
+
+    @Test
+    fun `with his words written for its moment they go as his, and late yours go, marked so`() = runBlocking {
+        val moment = now + 5 * MIN
+        stores.felix.update { s ->
+            s.copy(reminders = listOf(
+                at("call gran", moment).copy(draft = FelixAnswer("oi, you said to call gran. between slots now, so good time"), draftedAt = moment - 8 * MIN),
+                at("stretch", now - 40 * MIN).copy(draft = FelixAnswer("stretch now"), draftedAt = now - 45 * MIN),
+            ))
+        }
+        felix.clock.time = moment
+        felix.looks.sweepReminders(moment)
+        val (late, his) = stores.chat.value.messages.filter { it.kind == MessageKind.Reminder }
+        assertEquals("oi, you said to call gran. between slots now, so good time", his.text)
+        assertFalse(his.byApp)
+        // Forty-five minutes late: the moment his words were for has gone, so yours, with when it was for.
+        assertEquals(FelixWords.reminder("stretch") + " " + FelixWords.late("16:20"), late.text)
+        assertTrue(late.byApp)
+        assertTrue(stores.felix.value.reminders.all { it.draft == null && it.sentAt == moment })
+    }
+
+    @Test
+    fun `one whose task closes before it comes is let go, said in a note of his, and never sent`() = runBlocking {
+        stores.tasks.update { it.copy(tasks = listOf(sheet.copy(status = Status.Done, doneAt = now))) }
+        stores.felix.update { it.copy(reminders = listOf(Reminder("r-form", "bring the form", now - 10 * MIN, By.Felix, sheet.id, Due(DueKind.SlotStart, now - 10 * MIN)))) }
+        felix.looks.sweepReminders(now)
+        val note = stores.chat.value.messages.single { it.kind == MessageKind.Note }
+        assertEquals(FelixWords.letGo("bring the form", "Forces worksheet", "is done"), note.text)
+        assertTrue(note.byApp && note.about.taskId == sheet.id)
+        assertNotNull(stores.felix.value.reminders.single().cancelledAt)
+        assertTrue(stores.chat.value.messages.none { it.kind == MessageKind.Reminder })
+        // Let go once.
+        felix.looks.sweepReminders(now + MIN)
+        assertEquals(1, stores.chat.value.messages.count { it.kind == MessageKind.Note })
     }
 
     @Test
