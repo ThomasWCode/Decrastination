@@ -131,10 +131,12 @@ object Reminders {
     /**
      * Those of [reminders] let go ([letGo]) that what they waited on has come back to while they're kept: their task
      * open and listed again, on the plan, with a deadline (a tick undone, a source's read that took it away a while), so
-     * a let-go doesn't lose what you set. Each comes as it was set.
+     * a let-go doesn't lose what you set. Each comes as it was set; as many as there's room for among those still to come
+     * ([MAX_PENDING]), the first let go first, the rest staying let go till there's room (a restore's among them).
      */
     fun back(reminders: List<Reminder>, tasks: Map<String, TaskItem>, now: Long, readAt: (Source) -> Long? = { null }): List<Reminder> =
         reminders.filter { r -> r.letGoAt != null && r.copy(letGoAt = null).let { was -> unsent(was) && letGo(listOf(was), tasks, now, readAt).isEmpty() } }
+            .sortedBy { it.letGoAt }.take((MAX_PENDING - reminders.count(::pending)).coerceAtLeast(0))
 
     /**
      * Whether [task] never has a work slot, so a SlotStart on it never comes: an event, or one you said isn't a
