@@ -4,13 +4,16 @@ import com.thomaswcode.decrastination.core.Calibration
 import com.thomaswcode.decrastination.core.Change
 import com.thomaswcode.decrastination.core.ChangeType
 import com.thomaswcode.decrastination.core.ChatArchive
+import com.thomaswcode.decrastination.core.DueKind
 import com.thomaswcode.decrastination.core.Instruction
 import com.thomaswcode.decrastination.core.InstructionRules
 import com.thomaswcode.decrastination.core.InstructionState
 import com.thomaswcode.decrastination.core.InstructionStatus
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.Mine
+import com.thomaswcode.decrastination.core.Notes
 import com.thomaswcode.decrastination.core.OwnTaskRules
+import com.thomaswcode.decrastination.core.Reminders
 import com.thomaswcode.decrastination.core.SchoolCalendar
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.SettingsLimits
@@ -66,6 +69,8 @@ data class Backup(
     val chat: com.thomaswcode.decrastination.core.ChatState = com.thomaswcode.decrastination.core.ChatState(),
     /** The chat's earlier messages, while the backup has room for them, the oldest left out first ([Backups.fitted]). */
     val archive: ChatArchive = ChatArchive(),
+    /** Felix's notes and reminders (4.1.0): none in a backup from before. */
+    val felixStore: FelixStore = FelixStore(),
     /**
      * The version of each store its parts come from, by file (docs/plan_v4/04-data-and-migrations.md): an
      * older one's parts are brought to this build's shapes as it's read ([Backups.decode]). None in a
@@ -83,9 +88,10 @@ data class Backup(
         /**
          * 4 since slots replaced sessions in the log (LR-09, AR-09), 5 with what's remembered
          * (AI-21), 6 with Felix's state, today's slots and the chat (AR-07), 7 with the chat's earlier
-         * messages (4.0.0): an older app refuses it rather than losing them.
+         * messages (4.0.0), 8 with Felix's notes and reminders (4.1.0): an older app refuses it rather
+         * than losing them.
          */
-        const val FORMAT = 7
+        const val FORMAT = 8
     }
 }
 
@@ -143,7 +149,7 @@ object Backups {
      */
     private val PARTS: Map<String, Pair<String, String?>> = mapOf(
         "settings" to ("settings.json" to null), "log" to ("log.json" to null), "school" to ("school.json" to null),
-        "memory" to ("memory.json" to null), "chat" to ("chat.json" to null), "archive" to ("chat-archive.json" to null),
+        "memory" to ("memory.json" to null), "chat" to ("chat.json" to null), "archive" to ("chat-archive.json" to null), "felixStore" to ("felix.json" to null),
         "instructions" to ("instructions.json" to "instructions"), "ownTasks" to ("tasks.json" to "tasks"),
         "calibration" to ("learning.json" to "calibration"), "eventAnswers" to ("calendar.json" to "eventAnswers"),
         "aiUsage" to ("model.json" to "aiUsage"), "slots" to ("session.json" to "slots"),
@@ -254,6 +260,7 @@ object Backups {
             if (backup.instructions.any { !wellFormed(it, backup.exportedAt) }) add("an instruction")
             if (backup.ownTasks.any { !wellFormed(it) } || backup.ownTasks.map { it.id }.toSet().size != backup.ownTasks.size) add("a task of your own")
             if (!wellFormed(backup.school)) add("the school calendar")
+            if (!wellFormed(backup.felixStore)) add("Felix's notes and reminders")
         }
         return bad.takeIf { it.isNotEmpty() }?.let { "it holds what this app never writes (${it.joinToString(", ")})" }
     }
@@ -349,6 +356,32 @@ object Backups {
     }
 
     private fun isDate(text: String?): Boolean = text != null && runCatching { java.time.LocalDate.parse(text) }.isSuccess
+
+    /**
+     * Whether [felix] is what the app keeps (4.1.0): each note and reminder under an id of its own, with
+     * words within their length; a note on a task or standing, never both nor neither; a reminder due as
+     * its kind needs (a time, its task's slot from a time, minutes before its task's deadline); no more
+     * still to come than the app keeps.
+     */
+    fun wellFormed(felix: FelixStore): Boolean {
+        fun words(text: String, max: Int) = text.isNotBlank() && text.length <= max
+        val notes = felix.notes.all { n -> n.id.isNotBlank() && words(n.text, Notes.MAX_TEXT) && (n.taskId != null) != (n.scope != null) && n.scope?.isEmpty != true }
+        val reminders = felix.reminders.all { r ->
+            r.id.isNotBlank() && words(r.text, Reminders.MAX_TEXT) && when (r.due.kind) {
+                DueKind.At -> r.due.at != null
+                DueKind.SlotStart -> r.taskId != null && r.due.at != null
+                DueKind.BeforeDue -> r.taskId != null && (r.due.minutesBefore ?: -1) in 0..Reminders.MAX_BEFORE_MIN
+            }
+        }
+        return notes && reminders && felix.notes.map { it.id }.toSet().size == felix.notes.size && felix.reminders.map { it.id }.toSet().size == felix.reminders.size &&
+            felix.reminders.count(Reminders::pending) <= Reminders.MAX_PENDING
+    }
+
+    /** Felix's notes and reminders [here], with those of a backup's ([backed]) not here, by id, added: this phone's own win. */
+    fun mergedFelix(here: FelixStore, backed: FelixStore): FelixStore = here.copy(
+        notes = here.notes + backed.notes.filter { b -> here.notes.none { it.id == b.id } },
+        reminders = here.reminders + backed.reminders.filter { b -> here.reminders.none { it.id == b.id } },
+    )
 
     /** Whether [school] is one this app could have kept: dates that read, stretches in order, an end within the day. */
     fun wellFormed(school: SchoolCalendar): Boolean =

@@ -65,7 +65,7 @@ class BackupServiceTest {
             "session.json" to stores.session.value, "protection.json" to stores.protection.value, "model.json" to stores.model.value,
             "anki.json" to stores.anki.value, "learning.json" to stores.learning.value,
             "instructions.json" to stores.instructions.value, "chat.json" to stores.chat.value, "chat-archive.json" to stores.chatArchive.value, "school.json" to stores.school.value,
-            "memory.json" to stores.memory.value, "calendar.json" to stores.calendar.value,
+            "memory.json" to stores.memory.value, "felix.json" to stores.felix.value, "calendar.json" to stores.calendar.value,
         )
     }
 
@@ -89,6 +89,7 @@ class BackupServiceTest {
         assertEquals(was.chat.value.messages.dropLast(1), now.chat.value.messages)
         assertEquals(was.chat.value.felix, now.chat.value.felix)
         assertEquals(was.chatArchive.value, now.chatArchive.value)
+        assertEquals(was.felix.value, now.felix.value)
         assertEquals(was.learning.value.calibration, now.learning.value.calibration)
         assertEquals(was.calendar.value.eventAnswers, now.calendar.value.eventAnswers)
         assertEquals(was.session.value.slots, now.session.value.slots)

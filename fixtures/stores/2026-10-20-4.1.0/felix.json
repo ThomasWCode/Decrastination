@@ -1,0 +1,124 @@
+{
+    "notes": [
+        {
+            "id": "note-source",
+            "text": "Use the second source for the essay",
+            "at": 1792261920000,
+            "by": "Felix",
+            "taskId": "teams:as-essay",
+            "scope": null,
+            "deletedAt": null
+        },
+        {
+            "id": "note-sheets",
+            "text": "Do these on sheets, not in the book",
+            "at": 1792261980000,
+            "by": "You",
+            "taskId": null,
+            "scope": {
+                "subject": "Physics",
+                "className": "12X/Ph1",
+                "source": "Teams",
+                "titleContains": "worksheet"
+            },
+            "deletedAt": null
+        },
+        {
+            "id": "note-old",
+            "text": "Ask about the deadline",
+            "at": 1792261980000,
+            "by": "Felix",
+            "taskId": "teams:as-sheet",
+            "scope": null,
+            "deletedAt": 1792262040000
+        }
+    ],
+    "reminders": [
+        {
+            "id": "rem-gran",
+            "text": "call gran",
+            "at": 1792261920000,
+            "by": "Felix",
+            "taskId": null,
+            "due": {
+                "kind": "At",
+                "at": 1792279800000,
+                "minutesBefore": null
+            },
+            "sentAt": null,
+            "snoozedTo": null,
+            "doneAt": null,
+            "cancelledAt": null,
+            "draft": {
+                "message": "You said to remind you: call gran. Good moment, between slots.",
+                "replies": [
+                    "On it"
+                ],
+                "nextCheckMin": 20,
+                "memories": [
+                    {
+                        "topic": "evenings",
+                        "text": "Calls family on Fridays",
+                        "kind": "fact"
+                    }
+                ]
+            },
+            "draftedAt": 1792279500000
+        },
+        {
+            "id": "rem-form",
+            "text": "bring the consent form",
+            "at": 1792261920000,
+            "by": "Felix",
+            "taskId": "teams:as-sheet",
+            "due": {
+                "kind": "SlotStart",
+                "at": 1792261920000,
+                "minutesBefore": null
+            },
+            "sentAt": 1792263600000,
+            "snoozedTo": 1792264500000,
+            "doneAt": null,
+            "cancelledAt": null,
+            "draft": null,
+            "draftedAt": null
+        },
+        {
+            "id": "rem-print",
+            "text": "print the essay",
+            "at": 1792261980000,
+            "by": "Felix",
+            "taskId": "teams:as-essay",
+            "due": {
+                "kind": "BeforeDue",
+                "at": null,
+                "minutesBefore": 60
+            },
+            "sentAt": 1792264200000,
+            "snoozedTo": null,
+            "doneAt": 1792264260000,
+            "cancelledAt": null,
+            "draft": null,
+            "draftedAt": null
+        },
+        {
+            "id": "rem-bus",
+            "text": "check the bus times",
+            "at": 1792261980000,
+            "by": "You",
+            "taskId": null,
+            "due": {
+                "kind": "At",
+                "at": 1792297800000,
+                "minutesBefore": null
+            },
+            "sentAt": null,
+            "snoozedTo": null,
+            "doneAt": null,
+            "cancelledAt": 1792262040000,
+            "draft": null,
+            "draftedAt": null
+        }
+    ],
+    "version": 1
+}

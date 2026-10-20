@@ -1,0 +1,93 @@
+{
+    "ankiTextbook": 2,
+    "yearGroupStart": 2025,
+    "profileLines": [
+        "Takes the bus home"
+    ],
+    "summaryEmail": "parent@example.org",
+    "classMap": {
+        "12X/Ph1": "Physics",
+        "12X/Hi1": "History",
+        "12X/Ch1": "Chemistry"
+    },
+    "felixName": "Fe",
+    "felixLine": "a friend who wants the work done",
+    "felixGraceMin": 12,
+    "felixDefaultCheckMin": 25,
+    "felixSearches": false,
+    "hintsSeen": [
+        "day-swipe"
+    ],
+    "ankiDeadlineMin": 1260,
+    "weekdayHours": {
+        "startMin": 1020,
+        "endMin": 1320
+    },
+    "weekendHours": {
+        "startMin": 540,
+        "endMin": 1320
+    },
+    "studyPeriodName": "Study",
+    "breakWindow": {
+        "startMin": 640,
+        "endMin": 670
+    },
+    "lunchWindows": [
+        {
+            "startMin": 790,
+            "endMin": 820
+        }
+    ],
+    "minSchoolSlotMin": 20,
+    "boxMin": 45,
+    "slotBreakMin": 10,
+    "slotLongBreakMin": 20,
+    "slotLongBreakAfterMin": 100,
+    "outsideBreaks": 2,
+    "outsideBreakMin": 25,
+    "outsideTimes": [
+        600,
+        900,
+        1080
+    ],
+    "photoFromMin": 25,
+    "freeAllowanceMin": 45,
+    "calendarWriteId": 12,
+    "calendarsExcluded": [
+        3
+    ],
+    "marginDays": 2,
+    "softDeadlineDays": 5,
+    "softMinPerDay": 45,
+    "blockedApps": [
+        "com.example.video"
+    ],
+    "blockedSites": [
+        "video.example.org"
+    ],
+    "checkedBrowsers": [
+        "com.android.chrome"
+    ],
+    "blockedBrowsers": [
+        "org.mozilla.firefox"
+    ],
+    "quietHours": {
+        "startMin": 1320,
+        "endMin": 450
+    },
+    "weekdayBlockFromMin": 1020,
+    "weekendBlockFromMin": 630,
+    "workMinPerFreeMin": 4,
+    "teamsAutoSync": false,
+    "teamsFirstUnlockMin": 1020,
+    "teamsSyncEveryMin": 240,
+    "aiEnabled": true,
+    "aiKeyActive": true,
+    "aiMonthlyCapUsd": 20,
+    "briefingWeekdayMin": 435,
+    "briefingWeekendMin": 540,
+    "checkInMin": 1140,
+    "armed": true,
+    "loosenDelayHours": 48,
+    "version": 1
+}

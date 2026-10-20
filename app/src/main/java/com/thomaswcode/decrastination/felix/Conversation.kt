@@ -722,6 +722,8 @@ class Conversation(
                     if (made != null) ports.scheduleReminders()
                     made
                 }
+                // Nothing makes these yet.
+                ChatAction.Type.SetReminder, ChatAction.Type.MoveReminder, ChatAction.Type.CancelReminder, ChatAction.Type.AddNote, ChatAction.Type.DeleteNote -> null
             }
         }
     }
@@ -778,6 +780,7 @@ class Conversation(
                 if (back) ports.scheduleReminders()
                 back
             }
+            ChatAction.Type.SetReminder, ChatAction.Type.MoveReminder, ChatAction.Type.CancelReminder, ChatAction.Type.AddNote, ChatAction.Type.DeleteNote -> false
         }
         if (!undone) return "It's changed since, so it can't be undone here"
         chat.update { s -> s.copy(messages = s.messages.map { m -> if (m.id != messageId) m else m.copy(acts = m.acts.mapIndexed { i, x -> if (i == index) x.copy(undone = true) else x }) }) }
