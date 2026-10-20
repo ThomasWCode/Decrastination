@@ -99,6 +99,7 @@ What the app knows when you send (`ChatPrompts.context`):
 - **Your pace**: each multiplier learned (by kind, and by class where it has its own), with the timed pieces it's from; or that none is learned yet.
 - **Tasks that look like the same work** (DX-15), where there are any.
 - **The calendar's events in the next fortnight**, up to 60, each with its eventKey.
+- **The next lessons** (G8, 4.1.1): each class's next three, by subject, with its names (Power Planner's and Teams'), dated where the timetable's over a week old; none with no timetable read.
 - **The changes in use**, in words.
 - **Your own tasks finished in the last week**, up to 15, to open again.
 - **The settings he may change**, with their values now (`FelixSettings`).
@@ -112,7 +113,9 @@ Not sent: a task's reading, but as its minutes and steps; a finished task's text
 `ChatPrompts.plan`:
 - a paragraph on what the plan is, and what each `[why: …]` code means;
 - the slot under way, or the next thing to do, and the one after;
-- today's slots, each past, now or ahead;
+- whether blocking applies now and why, the free time, and what finishing today earns (G5, 4.1.1);
+- today's slots, each past, now or ahead, with its key (G1, 4.1.1);
+- the next piece of each task with no steps, by key, and the pieces kept today, which the plan no longer shows, by key (G1);
 - what isn't planned, and why;
 - events not under a day below;
 - what's planned after the fortnight, by task;
@@ -307,10 +310,10 @@ The whole text of the tasks you asked to read (answer and act on it, and leave d
 |---|---|---|
 | `reply` | one to three short sentences, or a short list | |
 | `newTasks` | tasks of your own to add: title, kind, subject, due date and time, start date, minutes, notes, steps | 10 |
-| `changes` | of the instructions' types (`NotATask` to `Rename`), each with its fields, and `paced` on a Minutes total worked out at your pace (D-69); and the chat's own two (4.1.0, Q13: B): `Remind`, a reminder set or one listed moved (words in `title`, when in `eventKey`, a listed one's id in `afterTaskId`), and `Note`, on a task or, its scope in `eventKey`, standing | 40, reminders and notes 10 each |
+| `changes` | of the instructions' types (`NotATask` to `Rename`), each with its fields, and `paced` on a Minutes total worked out at your pace (D-69); and the chat's own two (4.1.0, Q13: B): `Remind`, a reminder set or one listed moved (words in `title`, when in `eventKey`, a listed one's id in `afterTaskId`), and `Note`, on a task or, its scope in `eventKey`, standing; and `lesson` on a DueBy (4.1.1, G8): the class whose next lesson it's due at, its date and time the app's to set | 40, reminders and notes 10 each |
 | `memories` | a fact or a standing instruction, by topic | 5 |
 | `suggestedReplies` | replies you might give, in your words | 3, of 40 characters each |
-| `actions` | tick or untick a step, finish, reopen or delete one of your own, open a task, set a setting, cancel a reminder, delete a note | 10 |
+| `actions` | tick or untick a step, finish, reopen or delete one of your own, open a task (on a card, or where it lives: value `source`), set a setting, cancel a reminder, delete a note; and (4.1.1) keep a piece or take it back (`keepPiece`, `unkeepPiece`, by its key), and ask a source to read (`sync`, the source in `setting`) | 10 |
 | `research` | what to look up on the web, or empty | |
 | `details` | the tasks whose whole text to read before answering | 3 |
 
