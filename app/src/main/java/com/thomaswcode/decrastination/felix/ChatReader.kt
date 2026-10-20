@@ -63,6 +63,6 @@ class ChatReader(
         }
         val text = message.content().mapNotNull { it.text().orElse(null)?.text() }.joinToString("")
         val about = messages.lastOrNull { it.from == Speaker.You }?.about ?: About()
-        return Result(ChatAnswers.parse(text, tasks, events, about, now, zone, settings, felix), cost, usage = usage)
+        return Result(ChatAnswers.parse(text, tasks, events, about, now, zone, settings, felix, context), cost, usage = usage)
     }
 }

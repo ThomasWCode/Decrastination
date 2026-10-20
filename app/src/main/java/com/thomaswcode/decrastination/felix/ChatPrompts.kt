@@ -135,7 +135,7 @@ object ChatPrompts {
         Minutes you set (a new task's, a Minutes change, each step's) are planned exactly as you set them, never stretched by the student's pace: that's only for the app's own estimates (the context gives their pace, and what each task's minutes come to in the plan by it). So where you estimate, allow for their pace: steps for a task the app estimated, at their pace, come with a Minutes change for the new total with paced true, as it's the app's estimate at their pace, so their pace is still learned from it. Where they say how long something takes, use theirs, paced false, as for every other change.
         3. Answer questions about their work from what you're given, briefly: what's due when from the task list; what a task asks of them from its own text (each open task's is listed after the settings, cut short, and a message about a task comes with all of it); what's on a day, how full it is, what to do next and why something isn't planned from the plan. The plan is what the app has them do and shows them, so say what it says rather than planning the work again yourself. The context gives the time now: a deadline later today is still ahead ("due at 16:00 today"), not past, and a slot marked past has gone by; say "overdue" only where the plan marks it so.
         4. Remember (memories): a fact about the student worth keeping for later (a preference, a pattern, something about their week: "football is on Tuesdays"), with a short topic, so a newer fact on the same topic replaces it; or, kind "rule", a standing instruction about how you should behave ("don't message before 8", "be blunter"). To forget one, give its topic (a rule's own words) and an empty text. Busy times, limits and days off are changes, not memories; most messages need none.
-        5. Act (actions): tickStep when the student says a step is done, untickStep when one ticked isn't (taskId, and stepIndex from the list's steps); done when they've finished a task of their own (from Yours), or one whose tick finishes it; reopen for one of theirs finished by mistake (from the finished list); delete for a task of their own they no longer want (another source's they can only say isn't a task: NotATask); open to show them a task; setting to change one of the settings listed with their values (taskId empty, setting its name, value as the list writes it: a number, a time as HH:MM, hours as HH:MM-HH:MM); cancelReminder to cancel a reminder set (taskId empty, value its id from the reminders' list); deleteNote to delete a note (taskId empty, value its id from the task's notes). stepIndex is -1 but for steps, setting empty but for settings, and value empty but for settings, cancelReminder and deleteNote. A task from Teams, Power Planner, Gmail or Anki is done when its source says so (handed in, completed in Power Planner, unstarred, studied), so it can't be marked done. Most messages need none.
+        5. Act (actions): tickStep when the student says a step is done, untickStep when one ticked isn't (taskId, and stepIndex from the list's steps); done when they've finished a task of their own (from Yours), or one whose tick finishes it; reopen for one of theirs finished by mistake (from the finished list); delete for a task of their own they no longer want (another source's they can only say isn't a task: NotATask); open to show them a task; setting to change one of the settings listed with their values (taskId empty, setting its name, value as the list writes it: a number, a time as HH:MM, hours as HH:MM-HH:MM); cancelReminder to cancel a reminder set (taskId empty, value its id from the reminders' list); deleteNote to delete a note (taskId empty, value its id from the task's notes); keepPiece when they say a piece is done that has no step to tick (a task in boxes, or a slot of today's), as Day's Done keeps it (taskId, value its key from the plan); unkeepPiece when one kept today isn't (taskId, value its key from Kept today). stepIndex is -1 but for steps, setting empty but for settings, and value empty but for settings, cancelReminder, deleteNote, keepPiece and unkeepPiece. A task from Teams, Power Planner, Gmail or Anki is done when its source says so (handed in, completed in Power Planner, unstarred, studied), so it can't be marked done. Most messages need none.
 """ + (if (settings.felixSearches) RESEARCH else NO_RESEARCH).prependIndent("        ") + "\n" + READ.prependIndent("        ") + "\n" + REMIND.prependIndent("        ") + "\n" + NOTE.prependIndent("        ") + "\n" + """
         Reply in one to three short sentences of plain UK English (asked what's on, a short list instead, a line a task). Everything you give is made as soon as you give it (a new task or event, a change, days off, a step ticked, a setting, a reminder, a note), so say what you've done ("Moved it to 19:30", "Added it, due Tuesday"), never what you'd do: the student has an Undo for each. To undo something yourself, give what puts it back. When a reply from them is likely, offer up to three short ones in their words (suggestedReplies). If what you need is missing or unclear (which task they mean, or when), ask one short question and change nothing. Don't add a task that's already listed: change it instead. When their message is about a given task, event or day, it's about that unless they clearly name another. When it starts with a message it replies to, quoted, it's answering that one. Do only what they asked for, and leave every field you don't use empty: an empty string, -1 for a number.
     """
@@ -174,9 +174,9 @@ object ChatPrompts {
         "kind" to mapOf("type" to "string", "enum" to listOf(Given.FACT, Given.RULE)),
     )
 
-    /** Something to do for the student (AI-14; 16 Oct, more of it; 4.1.0, a reminder cancelled, a note deleted), plain fields so no union is added: stepIndex -1, setting and value empty for none. */
+    /** Something to do for the student (AI-14; 16 Oct, more of it; 4.1.0, a reminder cancelled, a note deleted; 4.1.1, a piece kept or not), plain fields so no union is added: stepIndex -1, setting and value empty for none. */
     private val ACTION = InstructionPrompts.obj(
-        "type" to mapOf("type" to "string", "enum" to listOf("tickStep", "untickStep", "done", "reopen", "delete", "open", "setting", "cancelReminder", "deleteNote")),
+        "type" to mapOf("type" to "string", "enum" to listOf("tickStep", "untickStep", "done", "reopen", "delete", "open", "setting", "cancelReminder", "deleteNote", "keepPiece", "unkeepPiece")),
         "taskId" to STRING,
         "stepIndex" to INTEGER,
         "setting" to STRING,
@@ -293,8 +293,12 @@ object ChatPrompts {
 
     private const val PLAN_GAP = "\n\n"
 
-    /** What the app knows, as the chat sends it: [known] ([context]), then the [plan] ([plan]), each with its share of the room ([turns]). */
-    data class Context(val known: String, val plan: String) {
+    /**
+     * What the app knows, as the chat sends it: [known] ([context]), then the [plan] ([plan]), each with its share of the room ([turns]);
+     * and what its answer is checked against that isn't in words: the pieces it lists to keep ([keepable]) and those
+     * kept today ([kept]), each key with its task's id (G1).
+     */
+    data class Context(val known: String, val plan: String, val keepable: Map<String, String> = emptyMap(), val kept: Map<String, String> = emptyMap()) {
         /** All of it, as it's sent when there's room. */
         val whole: String get() = if (plan.isEmpty()) known else known + PLAN_GAP + plan
     }
@@ -538,9 +542,11 @@ object ChatPrompts {
      * the fortnight, in a line naming its tasks; then each of the next [PLAN_DAYS] days, its minutes
      * against its working time, its work a task a line with the pieces that day, and its events from
      * *Coming up*. The days go last, the nearest first, so a plan cut to fit ([turns]) loses only its
-     * far days; each summary is at most [PLAN_LIST] lines.
+     * far days; each summary is at most [PLAN_LIST] lines. Since 4.1.1 (G1) today's slots and the next
+     * piece of each task with no steps say their keys, so he can keep one done, and the pieces [kept]
+     * today (their keys and labels), which the plan no longer shows, so he can take one back.
      */
-    fun plan(plan: Plan, zone: ZoneId): String = buildString {
+    fun plan(plan: Plan, zone: ZoneId, kept: List<Pair<String, String>> = emptyList()): String = buildString {
         fun at(time: Long) = Instant.ofEpochMilli(time).atZone(zone).format(WHEN)
         fun piece(chunk: Chunk) = "${chunk.label.take(MAX_TITLE)} (${chunk.minutes} min)"
         fun event(task: TaskItem) = "${task.id} | ${task.title.take(MAX_TITLE)} | ${task.source.label}"
@@ -572,7 +578,7 @@ object ChatPrompts {
                     s.start <= plan.now -> "now"
                     else -> "ahead"
                 }
-                appendLine("- ${clock(s.start)}–${clock(s.end)} ${piece(s.chunk!!)} [$state]")
+                appendLine("- ${clock(s.start)}–${clock(s.end)} ${piece(s.chunk!!)} [$state] key ${s.chunk!!.key}")
             }
         }
         val last = plan.today.plusDays(PLAN_DAYS - 1L)
@@ -581,6 +587,17 @@ object ChatPrompts {
         fun list(lines: List<String>) {
             lines.take(PLAN_LIST).forEach { appendLine("- $it") }
             if (lines.size > PLAN_LIST) appendLine("- …and ${lines.size - PLAN_LIST} more")
+        }
+        // A task with no steps to tick is planned in boxes (G1): its next piece's key, to keep it done.
+        val boxes = plan.ordered.filter { it.stepIndex == null }.distinctBy { it.taskId }
+        if (boxes.isNotEmpty()) {
+            appendLine("The next piece of each task with no steps (task | the piece | its key, for keepPiece):")
+            list(boxes.map { "${it.taskId} | ${piece(it)} | ${it.key}" })
+        }
+        // Kept today (G1): gone from the plan, so their keys are here, for unkeepPiece.
+        if (kept.isNotEmpty()) {
+            appendLine("Kept today (its key | the piece):")
+            list(kept.map { (key, label) -> "$key | ${label.take(MAX_TITLE)}" })
         }
         // The summaries before the days: a plan cut to fit loses its far days, never why something isn't planned.
         if (plan.unplanned.isNotEmpty()) {

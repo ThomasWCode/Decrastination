@@ -23,5 +23,11 @@ data class FelixStore(
 
         /** A month of the chat's archive from version 2, as [CHAT]. */
         val ARCHIVE = Migration(2) { it }
+
+        /** chat.json from version 4: 4.1.1's acts on a piece kept or kept no more (G1), read as they are. */
+        val CHAT_PIECES = Migration(4) { it }
+
+        /** A month of the chat's archive from version 3, as [CHAT_PIECES]. */
+        val ARCHIVE_PIECES = Migration(3) { it }
     }
 }

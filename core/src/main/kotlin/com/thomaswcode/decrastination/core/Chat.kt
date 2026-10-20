@@ -19,7 +19,7 @@ data class ChatState(
     /** His state between looks (LR-03): his next check, what he wrote ahead, what waits to be asked, the check-in's answers so far. */
     val felix: FelixState = FelixState(),
     /** The shape this is in ([com.thomaswcode.decrastination.data.Migration]): raised with each change of it. */
-    val version: Int = 4,
+    val version: Int = 5,
 ) {
     /**
      * Your newest message still waiting for his answer: a message of his written since, unasked, doesn't
@@ -112,7 +112,7 @@ data class WebSource(val title: String, val url: String)
 data class ChatArchive(
     val messages: List<ChatMessage> = emptyList(),
     /** The shape this is in ([com.thomaswcode.decrastination.data.Migration]): raised with each change of it. */
-    val version: Int = 3,
+    val version: Int = 4,
 )
 
 /** The conversation read as a thread. Pure. */
@@ -176,11 +176,12 @@ data class Proposal(
  * since 16 Oct (your call: he changes everything) a step unticked, a task of yours done, open again
  * or deleted, and a setting about the work set, [setting] to [value]
  * ([FelixSettings]; [taskId] empty); since 4.1.0 a reminder set, moved or cancelled, and a note
- * added or deleted, the reminder's or the note's id its [value] ([taskId] its task's, or empty).
+ * added or deleted, the reminder's or the note's id its [value] ([taskId] its task's, or empty); since
+ * 4.1.1 a piece kept as Day's Done keeps it, or kept no more, its key its [value] (G1).
  */
 @Serializable
 data class ChatAction(val type: Type, val taskId: String, val stepIndex: Int? = null, val setting: String? = null, val value: String? = null) {
-    enum class Type { TickStep, Open, UntickStep, Done, Reopen, Delete, Setting, SetReminder, MoveReminder, CancelReminder, AddNote, DeleteNote }
+    enum class Type { TickStep, Open, UntickStep, Done, Reopen, Delete, Setting, SetReminder, MoveReminder, CancelReminder, AddNote, DeleteNote, KeepPiece, UnkeepPiece }
 }
 
 /**
@@ -280,9 +281,10 @@ object ChatActs {
      * still gone, and none of the cards that had added it made again since (Redo makes it anew); a
      * setting still as it was set; a reminder set or moved still unsent, not snoozed nor cancelled, and
      * not moved again since; one cancelled still cancelled; a note added still there; one deleted still
-     * deleted, and kept.
+     * deleted, and kept; a piece kept still among today's [kept] (their keys), one kept no more still not,
+     * its task open.
      */
-    fun canUndo(act: Act, tasks: List<TaskItem>, settings: Settings, messages: List<ChatMessage>, notes: List<Note> = emptyList(), reminders: List<Reminder> = emptyList()): Boolean {
+    fun canUndo(act: Act, tasks: List<TaskItem>, settings: Settings, messages: List<ChatMessage>, notes: List<Note> = emptyList(), reminders: List<Reminder> = emptyList(), kept: Set<String> = emptySet()): Boolean {
         if (act.undone) return false
         val a = act.action ?: return false
         val task = tasks.firstOrNull { it.id == a.taskId }
@@ -302,6 +304,8 @@ object ChatActs {
             ChatAction.Type.CancelReminder -> reminder?.cancelledAt != null
             ChatAction.Type.AddNote -> note != null && note.deletedAt == null
             ChatAction.Type.DeleteNote -> note?.deletedAt != null
+            ChatAction.Type.KeepPiece -> a.value in kept && task?.isOpen == true
+            ChatAction.Type.UnkeepPiece -> a.value !in kept && task?.isOpen == true
         }
     }
 
