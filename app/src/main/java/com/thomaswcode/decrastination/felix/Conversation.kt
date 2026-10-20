@@ -13,6 +13,7 @@ import com.thomaswcode.decrastination.core.ChatActs
 import com.thomaswcode.decrastination.core.ChatMessage
 import com.thomaswcode.decrastination.core.ChatState
 import com.thomaswcode.decrastination.core.CheckInDraft
+import com.thomaswcode.decrastination.core.DueKind
 import com.thomaswcode.decrastination.core.Duplicates
 import com.thomaswcode.decrastination.core.FelixSettings
 import com.thomaswcode.decrastination.core.Given
@@ -24,9 +25,13 @@ import com.thomaswcode.decrastination.core.Memories
 import com.thomaswcode.decrastination.core.MemoryEdit
 import com.thomaswcode.decrastination.core.MemoryState
 import com.thomaswcode.decrastination.core.MessageKind
+import com.thomaswcode.decrastination.core.Note
+import com.thomaswcode.decrastination.core.Notes
 import com.thomaswcode.decrastination.core.OwnTask
 import com.thomaswcode.decrastination.core.OwnTaskRules
 import com.thomaswcode.decrastination.core.ProposalState
+import com.thomaswcode.decrastination.core.Reminder
+import com.thomaswcode.decrastination.core.Reminders
 import com.thomaswcode.decrastination.core.SchoolCalendar
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.Source
@@ -34,6 +39,7 @@ import com.thomaswcode.decrastination.core.Speaker
 import com.thomaswcode.decrastination.core.TaskItem
 import com.thomaswcode.decrastination.core.WallClock
 import com.thomaswcode.decrastination.data.ActivityLog
+import com.thomaswcode.decrastination.data.FelixStore
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.LearningState
 import com.thomaswcode.decrastination.data.RuntimeState
@@ -89,6 +95,8 @@ class Conversation(
     private val chat: JsonStore<ChatState>,
     private val school: JsonStore<SchoolCalendar>,
     private val memory: JsonStore<MemoryState>,
+    /** What he keeps at your asking (Stage 8a): notes on tasks, and reminders. */
+    private val felix: JsonStore<FelixStore>,
     private val clock: WallClock,
     private val scope: CoroutineScope,
     private val gateway: ModelGateway,
@@ -103,6 +111,8 @@ class Conversation(
     private val calendarTime: () -> EventJudge.Time,
     /** Your reply to one of his messages that's an answer and not for the chat ([Looks.answered]). */
     private val answered: suspend (ChatMessage, String) -> Boolean,
+    /** His words for the reminders due within his window, written now ([Looks.draftReminders]): after one's set, moved or brought back. */
+    private val draftReminders: suspend (Long) -> Unit = {},
 ) {
     /**
      * What the chat changes through those who own it (`AppGraph`'s functions, till Stage 6 makes
@@ -431,7 +441,8 @@ class Conversation(
      * [words], your reply to [message], answered with no call where it's the answer to a question of his
      * ([Replies.route]): a check-in's question, its next asked ([checkInReply]); a reading's question, or
      * how work went with one of its three ([answered]); a calendar event's question, one of its three
-     * kept ([Owners.answerEvent]); each kept under it. False for a turn of the chat.
+     * kept ([Owners.answerEvent]); a reminder's Done or snooze ([replyToReminder]); each kept under it.
+     * False for a turn of the chat.
      */
     private suspend fun routed(message: ChatMessage, words: String): Boolean {
         val now = clock.now()
@@ -445,6 +456,8 @@ class Conversation(
             Replies.Route.Question, is Replies.Route.Completions -> if (!answered(message, words)) return false
             // One of a calendar question's three answers (Q7), for every event of its name.
             is Replies.Route.Event -> owners.answerEvent(route.key, route.answer)
+            // A reminder's Done or snooze (8a): on it; gone (pruned), a turn of the chat.
+            is Replies.Route.Reminder -> if (!replyToReminder(route, now)) return false
             Replies.Route.Chat -> return false
         }
         keepReply(message, words, now)
@@ -453,21 +466,52 @@ class Conversation(
     }
 
     /**
+     * Your reply to one of your reminders (8a): *Done* marks it done; a snooze has it come again then,
+     * its words for before let go, written again near the time (its alarm set again by the store's
+     * change). One done or cancelled since stays so, as does one moved while its message went, which
+     * never came. False where it's gone.
+     */
+    private suspend fun replyToReminder(route: Replies.Route.Reminder, now: Long): Boolean {
+        var found = false
+        felix.update { s ->
+            s.copy(
+                reminders = s.reminders.map { r ->
+                    if (r.id != route.id) return@map r
+                    found = true
+                    when {
+                        r.doneAt != null || r.cancelledAt != null -> r
+                        // Moved while its message went, it never came: the message's chips aren't its.
+                        r.sentAt == null -> r
+                        route.snoozeMin == null -> r.copy(doneAt = now).undrafted()
+                        else -> Reminders.snoozed(r, now, route.snoozeMin)
+                    }
+                },
+            )
+        }
+        return found
+    }
+
+    /**
      * What the chat tells Claude the app knows at [now] ([ChatPrompts.context]): the open tasks, the
      * calendar and the changes in use; and beside them the plan as the Day and Work tabs show it then, the
-     * slot under way included ([ChatPrompts.plan]). All of one [state], calendar [time] and
-     * [applied] instructions, so the list and the plan agree, and with the answer's checks where the
-     * caller passes it the same ones.
+     * slot under way included ([ChatPrompts.plan]). All of one [state], calendar [time],
+     * [applied] instructions and [kept] notes and reminders, so the list and the plan agree, and with
+     * the answer's checks where the caller passes it the same ones.
      */
     fun chatContext(
         now: Long = clock.now(),
         state: TaskState = tasks.value,
         time: EventJudge.Time = calendarTime(),
         applied: List<Instruction> = instructions.value.applied,
+        kept: FelixStore = felix.value,
     ): ChatPrompts.Context {
+        val plan = planning.plan(state, now = now, applied = applied, time = time)
+        // His notes and reminders (8a), each reminder with when it comes by this plan.
+        val byId = state.tasks.associateBy { it.id }
+        val moments = kept.reminders.mapNotNull { r -> Reminders.moment(r, plan, byId, now)?.let { r.id to it } }.toMap()
         return ChatPrompts.Context(
-            known = ChatPrompts.context(state.tasks, time.events, applied, now, clock.zone(), settings.value.classMap, runtime.value.notSame, settings.value, learning.value.calibration),
-            plan = ChatPrompts.plan(planning.plan(state, now = now, applied = applied, time = time), clock.zone()),
+            known = ChatPrompts.context(state.tasks, time.events, applied, now, clock.zone(), settings.value.classMap, runtime.value.notSame, settings.value, learning.value.calibration, kept.notes, kept.reminders, moments),
+            plan = ChatPrompts.plan(plan, clock.zone()),
         )
     }
 
@@ -486,9 +530,10 @@ class Conversation(
             if (chat.value.unanswered?.id != waiting.id) return@withLock
             val chatClient = gateway.client(ModelEffort.Job.Chat) ?: return@call gateway.because(ModelHold.Off)
             val researchClient = gateway.client(ModelEffort.Job.Research) ?: return@call gateway.because(ModelHold.Off)
-            // One snapshot of the tasks, the calendar and your changes: what Claude's shown is what its answer's checked against.
+            // One snapshot of the tasks, the calendar and your changes, and his notes and reminders: what Claude's shown is what its answer's checked against.
             val state = tasks.value
             val time = calendarTime()
+            val noted = felix.value
             // The conversation up to your message: what he wrote unasked after it isn't what it answers.
             fun upTo(messages: List<ChatMessage>) = messages.take(messages.indexOfFirst { it.id == waiting.id } + 1)
             // His answer, with what a web search he asked for found ([found], 16 Oct), and the tasks whose
@@ -501,7 +546,7 @@ class Conversation(
                     val sent = upTo(chat.value.messages)
                     // What a message of yours quotes from the archive, past the window: told to him all the same.
                     val quoted = sent.mapNotNull { m -> m.replyTo?.takeIf { r -> sent.none { it.id == r } }?.let { outbox.find(it) } }
-                    ChatReader(chatClient, clock.zone(), profile = profile(at), settings = settings.value).answer(sent, state.tasks, time.events, chatContext(at, state, time, instructions.value.applied), at, found, read, quoted)
+                    ChatReader(chatClient, clock.zone(), profile = profile(at), settings = settings.value).answer(sent, state.tasks, time.events, chatContext(at, state, time, instructions.value.applied, noted), at, found, read, quoted, noted)
                 } finally {
                     sentAt.value = null
                 }
@@ -648,6 +693,13 @@ class Conversation(
             if (kept) {
                 val instant = reply.proposals.filter { it.instant }
                 instant.forEach { applyProposal(reply.id, it.id) }
+                // Its reminders and notes (8a), after its changes, so one before a deadline it sets has it.
+                // By the deadlines of its cards that were made: one refused (a due date before a start of yours) sets none.
+                val made = chat.value.messages.firstOrNull { it.id == reply.id }?.proposals.orEmpty().filter { it.instant && it.state == ProposalState.Applied }
+                val noted = keep(reading.reminders, reading.notes, ChatAnswers.deadlines(made.flatMap { it.changes }))
+                if (noted.isNotEmpty()) chat.update { s -> s.copy(messages = s.messages.map { if (it.id == reply.id) it.copy(acts = it.acts + noted) else it }) }
+                // A reminder set or moved into his window is written for at once, not at the next plan or look.
+                if (noted.any { it.action?.type == ChatAction.Type.SetReminder || it.action?.type == ChatAction.Type.MoveReminder }) scope.launch { draftReminders(clock.now()) }
                 // A time the plan couldn't keep (PL-04): where the piece went, said under the answer,
                 // which names the time asked for.
                 val moved = ChatAnswers.movedPins(instant.flatMap { it.changes }, planning.plan().buckets, clock.zone())
@@ -722,8 +774,87 @@ class Conversation(
                     if (made != null) ports.scheduleReminders()
                     made
                 }
+                // A reminder cancelled, a note deleted (8a): marked, kept whole for the Undo, never removed here.
+                // One come, or gone, while he answered: not made, and said so under his reply.
+                ChatAction.Type.CancelReminder -> {
+                    var was: Reminder? = null
+                    felix.update { st -> st.copy(reminders = st.reminders.map { r -> if (r.id == a.value && Reminders.pending(r)) r.copy(cancelledAt = clock.now()).undrafted().also { was = r } else r }) }
+                    was?.let { Act("Cancelled: the reminder “${it.text}”", a) }
+                        ?: Act(Act.NOT_MADE + "the reminder “${felix.value.reminders.firstOrNull { it.id == a.value }?.text ?: "it"}” isn't cancelled: it came, or went, while he answered.", problem = true)
+                }
+                ChatAction.Type.DeleteNote -> {
+                    var was: Note? = null
+                    felix.update { st -> st.copy(notes = st.notes.map { n -> if (n.id == a.value && n.deletedAt == null) n.copy(deletedAt = clock.now()).also { was = n } else n }) }
+                    was?.let { Act("Note deleted: “${it.text}”", a) } ?: Act(Act.NOT_MADE + "the note wasn't deleted: it went while he answered.", problem = true)
+                }
+                // Made from the answer's reminders and notes ([keep]), not its actions.
+                ChatAction.Type.SetReminder, ChatAction.Type.MoveReminder, ChatAction.Type.AddNote -> null
             }
         }
+    }
+
+    /**
+     * [reminders] set, or moved and reworded in place where one has a listed reminder's id, and [notes] kept
+     * (8a): made at once, each said under his answer with its Undo ([undoAct]), when it'll come said as the
+     * plan has it now. A move of one sent since he was asked isn't made. One before a deadline the answer
+     * sets goes by that one ([deadlines], by task id), its lay onto the task coming after.
+     */
+    private suspend fun keep(reminders: List<Reminder>, notes: List<Note>, deadlines: Map<String, Long> = emptyMap()): List<Act> {
+        if (reminders.isEmpty() && notes.isEmpty()) return emptyList()
+        val now = clock.now()
+        val zone = clock.zone()
+        val byId = tasks.value.tasks.associateBy { it.id }.mapValues { (id, t) -> deadlines[id]?.let { t.copy(dueAt = it) } ?: t }
+        val plan = planning.plan(now = now)
+        fun title(id: String?) = id?.let(byId::get)?.title
+        val acts = mutableListOf<Act>()
+        felix.update { st ->
+            acts.clear()
+            // Counted again as they're made: a note added on its sheet, or a reminder set, while he answered counts too.
+            var kept = st.reminders
+            var room = Reminders.MAX_PENDING - kept.count(Reminders::pending)
+            for (r in reminders) {
+                val was = kept.firstOrNull { it.id == r.id }
+                val at = Reminders.whenLine(r, Reminders.moment(r, plan, byId, now), title(r.taskId), zone)
+                when {
+                    // Its slot's or its deadline's task finished, gone or dateless while he answered: it would never come.
+                    r.due.kind != DueKind.At && Reminders.letGo(listOf(r), byId, now) { s -> tasks.value.status(s).lastSuccessAt }.isNotEmpty() ->
+                        acts += Act(Act.NOT_MADE + "the reminder “${r.text}”: “${title(r.taskId) ?: "its task"}” is finished, gone or without a due date now.", problem = true)
+                    was == null && room <= 0 -> acts += Act(Act.NOT_MADE + "the reminder “${r.text}”: ${Reminders.MAX_PENDING} are still to come.", problem = true)
+                    was == null -> {
+                        kept = kept + r
+                        room--
+                        acts += Act("Reminder set: $at, “${r.text}”", ChatAction(ChatAction.Type.SetReminder, r.taskId.orEmpty(), value = r.id))
+                    }
+                    Reminders.unsent(was) -> {
+                        kept = kept.map { if (it.id == r.id) r else it }
+                        acts += Act("Moved: “${r.text}” to $at", ChatAction(ChatAction.Type.MoveReminder, r.taskId.orEmpty(), value = r.id), reminder = was)
+                    }
+                    else -> acts += Act(Act.NOT_MADE + "the reminder “${was.text}” isn't moved: it came while he answered.", problem = true)
+                }
+            }
+            val live = Notes.live(st.notes)
+            val onTask = live.filter { it.taskId != null }.groupingBy { it.taskId!! }.eachCount().toMutableMap()
+            var standing = live.count { it.scope != null }
+            val added = notes.filter { n ->
+                val on = n.scope?.let { "for ${Notes.scopeLine(it)}" } ?: "on “${title(n.taskId) ?: "it"}”"
+                val task = n.taskId
+                // Its task gone while he answered: not made, as it'd be kept on nothing.
+                if (task != null && task !in byId) {
+                    acts += Act(Act.NOT_MADE + "the note “${n.text.take(60)}”: its task went while he answered.", problem = true)
+                    return@filter false
+                }
+                val fits = if (task != null) (onTask[task] ?: 0) < Notes.PER_TASK else standing < Notes.MAX_STANDING
+                if (fits) {
+                    if (task != null) onTask[task] = (onTask[task] ?: 0) + 1 else standing++
+                    acts += Act("Noted $on: ${n.text}", ChatAction(ChatAction.Type.AddNote, n.taskId.orEmpty(), value = n.id))
+                } else {
+                    acts += Act(Act.NOT_MADE + "the note $on: it has as many as are kept already.", problem = true)
+                }
+                fits
+            }
+            st.copy(reminders = kept, notes = st.notes + added)
+        }
+        return acts
     }
 
     /**
@@ -741,8 +872,9 @@ class Conversation(
      * The [index]th of message [messageId]'s actions taken back ([act], its Undo): a step ticked to
      * do again (one of yours it finished open again with it), or one unticked ticked again as the
      * chat ticks one; a task done open again, or one opened back as it was, finished; one deleted
-     * back as it was, with the cards that added it; a setting back to its value before. Not once
-     * it's changed since (ticked, finished or deleted another way, set again): why, then.
+     * back as it was, with the cards that added it; a setting back to its value before; a reminder or a
+     * note set, moved, cancelled or deleted taken back (8a). Not once it's changed since (ticked, finished
+     * or deleted another way, set again, a reminder come or snoozed): why, then.
      */
     suspend fun undoAct(messageId: String, index: Int): String? {
         val act = chat.value.messages.firstOrNull { it.id == messageId }?.acts?.getOrNull(index)?.takeIf { !it.undone } ?: return null
@@ -776,6 +908,25 @@ class Conversation(
                     }
                 }
                 if (back) ports.scheduleReminders()
+                back
+            }
+            // A reminder or a note (8a), while it's as the act left it: a reminder set goes, one moved has its time and
+            // words back, one cancelled comes again; a note added goes, one deleted is back.
+            ChatAction.Type.SetReminder, ChatAction.Type.MoveReminder, ChatAction.Type.CancelReminder, ChatAction.Type.AddNote, ChatAction.Type.DeleteNote -> {
+                var back = false
+                felix.update { st ->
+                    if (!ChatActs.canUndo(act, tasks.value.tasks, settings.value, chat.value.messages, st.notes, st.reminders, messageId = messageId, now = clock.now()) { s -> tasks.value.status(s).lastSuccessAt }) return@update st
+                    back = true
+                    when (a.type) {
+                        ChatAction.Type.SetReminder -> st.copy(reminders = st.reminders.filterNot { it.id == a.value })
+                        ChatAction.Type.MoveReminder -> act.reminder!!.let { was -> st.copy(reminders = st.reminders.map { r -> if (r.id == a.value) r.copy(text = was.text, due = was.due, taskId = was.taskId).undrafted() else r }) }
+                        ChatAction.Type.CancelReminder -> st.copy(reminders = st.reminders.map { r -> if (r.id == a.value) r.copy(cancelledAt = null) else r })
+                        ChatAction.Type.AddNote -> st.copy(notes = st.notes.filterNot { it.id == a.value })
+                        else -> st.copy(notes = st.notes.map { n -> if (n.id == a.value) n.copy(deletedAt = null) else n })
+                    }
+                }
+                // One back with a time to come is written for, if it's within his window.
+                if (back && a.type in setOf(ChatAction.Type.MoveReminder, ChatAction.Type.CancelReminder)) scope.launch { draftReminders(clock.now()) }
                 back
             }
         }
@@ -816,6 +967,60 @@ class Conversation(
     private suspend fun restoreTask(task: TaskItem) {
         tasks.update { state -> if (state.tasks.any { it.id == task.id }) state else state.copy(tasks = Duplicates.linksPresent(state.tasks + task)) }
         owners.layTaskOverrides()
+    }
+
+    /**
+     * Your note [text] on [taskId] from its sheet (8a, Q14: A), kept as yours; or why it can't be: no words,
+     * a task not there, or [com.thomaswcode.decrastination.core.Notes.PER_TASK] on it already.
+     */
+    suspend fun addNote(taskId: String, text: String): String? {
+        val words = text.trim().take(Notes.MAX_TEXT)
+        if (words.isEmpty()) return "A note needs some words"
+        if (tasks.value.tasks.none { it.id == taskId }) return "That task isn't there now"
+        var full = false
+        felix.update { s ->
+            full = Notes.on(taskId, s.notes).size >= Notes.PER_TASK
+            if (full) s else s.copy(notes = s.notes + Note(UUID.randomUUID().toString(), words, clock.now(), By.You, taskId = taskId))
+        }
+        return if (full) "It has ${Notes.PER_TASK} notes already: delete one first" else null
+    }
+
+    /**
+     * His notes and reminders kept as long as they're wanted (8a, the morning's prune): a reminder sent or
+     * done a month ago goes, a cancelled one and a deleted note once their act's Undo is gone with its
+     * message from the chat's window, and a note on a task gone from the list once its delete can't be
+     * undone ([Notes.prune], [Reminders.prune]).
+     */
+    suspend fun pruneFelix(now: Long = clock.now()) {
+        val messages = chat.value.messages
+        val ids = tasks.value.tasks.mapTo(HashSet()) { it.id }
+        felix.update { s -> s.copy(notes = Notes.prune(s.notes, ids, messages) { source -> tasks.value.status(source).lastSuccessAt }, reminders = Reminders.prune(s.reminders, now, messages)) }
+    }
+
+    /** His notes and reminders as the debug page and the `felix` command show them (8a): a line each, a reminder's with when it comes now. */
+    fun notesAndReminders(now: Long = clock.now()): List<String> {
+        val kept = felix.value
+        val plan = planning.plan(now = now)
+        val byId = tasks.value.tasks.associateBy { it.id }
+        val reminders = kept.reminders.map { r ->
+            val state = when {
+                r.cancelledAt != null -> "cancelled"
+                r.letGoAt != null -> "let go"
+                r.doneAt != null -> "done"
+                !Reminders.pending(r) -> "sent"
+                r.sentAt != null -> "snoozed"
+                else -> "to come"
+            }
+            "reminder ${r.id} ($state, ${r.by}): ${Reminders.whenLine(r, Reminders.moment(r, plan, byId, now), r.taskId?.let(byId::get)?.title, clock.zone())}, “${r.text}”" +
+                (r.draft?.let { " · written ahead: “${it.message}”" }.orEmpty())
+        }
+        val notes = kept.notes.map { n -> "note ${n.id} (${n.by}${if (n.deletedAt != null) ", deleted" else ""}) on ${n.taskId ?: n.scope?.let(Notes::scopeLine)}: ${n.text}" }
+        return reminders + notes
+    }
+
+    /** Note [id] deleted from a sheet (8a): marked, shown nowhere, and let go at the next prune, as no act holds it. */
+    suspend fun deleteNote(id: String) {
+        felix.update { s -> s.copy(notes = s.notes.map { if (it.id == id && it.deletedAt == null) it.copy(deletedAt = clock.now()) else it }) }
     }
 
     /** [given] kept in what's remembered (AI-21), and what each thing did ([com.thomaswcode.decrastination.core.MemoryEdit.line] says it). */

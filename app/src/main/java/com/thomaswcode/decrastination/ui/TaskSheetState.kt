@@ -22,12 +22,16 @@ import java.util.UUID
  * the picker or the question open over it ([picking], [confirming]), its last words ([message], what
  * went wrong; [said], what an action did), and whether the instructions on it are shown; and its
  * changes, through your instructions and your own tasks ([make], [undo], [later], [tomorrow],
- * [notATask], [finish], [reopen], [delete], [homeOnly]). A plain class, tested without Compose: the
+ * [notATask], [finish], [reopen], [delete], [homeOnly]); since 4.1.0 your notes on it ([note], [unnote]). A plain class, tested without Compose: the
  * sheet keeps one through a turn of the phone ([saver]) and draws from it.
  */
 class TaskSheetState(
     private val instructions: Instructions,
     private val ownTasks: com.thomaswcode.decrastination.tasks.OwnTasks,
+    /** Your note on a task kept, or why it can't be ([com.thomaswcode.decrastination.felix.Conversation.addNote], 8a). */
+    private val addNote: suspend (taskId: String, text: String) -> String? = { _, _ -> null },
+    /** A note deleted ([com.thomaswcode.decrastination.felix.Conversation.deleteNote]). */
+    private val deleteNote: suspend (id: String) -> Unit = {},
 ) {
     /** The value being picked in a dialog over the sheet, or none. */
     var picking: OwnChange? by mutableStateOf(null)
@@ -43,6 +47,18 @@ class TaskSheetState(
 
     /** Whether the instructions on the task are shown, unfolded. */
     var showInstructions: Boolean by mutableStateOf(false)
+
+    /** Whether the box for a note of yours is open over the sheet (8a). */
+    var noting: Boolean by mutableStateOf(false)
+
+    /** Your note [text] on [task] (8a, Q14: A): kept, the box shut; or what's wrong, said. */
+    suspend fun note(task: TaskItem, text: String) {
+        message = addNote(task.id, text)
+        if (message == null) noting = false
+    }
+
+    /** Note [id] off the sheet, and out of what Felix is told. */
+    suspend fun unnote(id: String) = deleteNote(id)
 
     /**
      * [task], one of your own, changed as [change] says, where the form would take the result (else
@@ -93,16 +109,22 @@ class TaskSheetState(
     }
 
     companion object {
-        /** The sheet's state through its being made again, [instructions] and [ownTasks] given to it again. */
-        fun saver(instructions: Instructions, ownTasks: com.thomaswcode.decrastination.tasks.OwnTasks): Saver<TaskSheetState, Any> = listSaver(
-            save = { listOf(it.picking?.name.orEmpty(), it.confirming.orEmpty(), it.message.orEmpty(), it.said.orEmpty(), it.showInstructions) },
+        /** The sheet's state through its being made again, [instructions], [ownTasks] and the notes' owner's [addNote] and [deleteNote] given to it again. */
+        fun saver(
+            instructions: Instructions,
+            ownTasks: com.thomaswcode.decrastination.tasks.OwnTasks,
+            addNote: suspend (String, String) -> String? = { _, _ -> null },
+            deleteNote: suspend (String) -> Unit = {},
+        ): Saver<TaskSheetState, Any> = listSaver(
+            save = { listOf(it.picking?.name.orEmpty(), it.confirming.orEmpty(), it.message.orEmpty(), it.said.orEmpty(), it.showInstructions, it.noting) },
             restore = { saved ->
-                TaskSheetState(instructions, ownTasks).apply {
+                TaskSheetState(instructions, ownTasks, addNote, deleteNote).apply {
                     picking = (saved[0] as String).takeIf { it.isNotEmpty() }?.let(OwnChange::valueOf)
                     confirming = (saved[1] as String).ifEmpty { null }
                     message = (saved[2] as String).ifEmpty { null }
                     said = (saved[3] as String).ifEmpty { null }
                     showInstructions = saved[4] as Boolean
+                    noting = saved.getOrNull(5) as? Boolean ?: false
                 }
             },
         )

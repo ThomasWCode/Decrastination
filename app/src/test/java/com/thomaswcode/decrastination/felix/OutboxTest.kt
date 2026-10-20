@@ -12,6 +12,7 @@ import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.Speaker
 import com.thomaswcode.decrastination.data.ChatArchiveStore
 import com.thomaswcode.decrastination.data.ChatMigration
+import com.thomaswcode.decrastination.data.FelixStore
 import com.thomaswcode.decrastination.data.JsonStore
 import com.thomaswcode.decrastination.data.TasksMigration
 import com.thomaswcode.decrastination.notify.NoticeId
@@ -35,7 +36,7 @@ import kotlinx.coroutines.runBlocking
 class OutboxTest {
     private val dir: File = Files.createTempDirectory("outbox").toFile()
     private val clock = FixedClock(Fixtures.at("2026-10-19T18:00"), Fixtures.LONDON)
-    private val chat = JsonStore(File(dir, "chat.json"), ChatState.serializer(), ::ChatState, migrations = listOf(ChatMigration.CHAT, TasksMigration.CHAT))
+    private val chat = JsonStore(File(dir, "chat.json"), ChatState.serializer(), ::ChatState, migrations = listOf(ChatMigration.CHAT, TasksMigration.CHAT, FelixStore.CHAT))
     private val archive = ChatArchiveStore(dir)
     private val settings = JsonStore(File(dir, "settings.json"), Settings.serializer(), ::Settings)
     private var onScreen = false
@@ -91,6 +92,19 @@ class OutboxTest {
         chat.update { it.copy(readAt = clock.now()) }
         outbox.notify(clock.now())
         assertNull(ports.showing)
+    }
+
+    @Test
+    fun `his notification keeps to a room that fits above its Reply, the newest first, each cut at a sentence`() = runBlocking {
+        val long = "This sentence runs to about sixty characters, give or take. ".repeat(4).trim()
+        for (i in 1..4) outbox.send(his("m$i", clock.now() - (5 - i) * 60_000L, text = "$long Number $i."))
+        val notice = ports.showing!!
+        // The newest whole, as it fits; the one before it ended at a whole sentence; the oldest left to the chat.
+        assertEquals(listOf("m3", "m4"), notice.lines.map { it.id })
+        assertEquals("$long Number 4.", notice.lines.last().text)
+        assertTrue(notice.lines.first().text.endsWith("take.") && notice.lines.sumOf { it.text.length } <= Outbox.NOTICE_ROOM)
+        // A reply still answers the newest, and a tap opens the chat at the first unread, kept out or not.
+        assertEquals("m4" to "m1", notice.replyTo to notice.openAt)
     }
 
     @Test

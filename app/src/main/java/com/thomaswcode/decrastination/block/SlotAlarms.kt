@@ -29,6 +29,11 @@ object SlotAlarms {
     const val ACTION_SLOT_END = "com.thomaswcode.decrastination.SLOT_END"
     /** Felix's next look (LR-03). */
     const val ACTION_FELIX_CHECK = "com.thomaswcode.decrastination.FELIX_CHECK"
+    /** Your reminders' next moment (Stage 8a). */
+    const val ACTION_REMINDER = "com.thomaswcode.decrastination.REMINDER"
+
+    /** How long after a failed sweep the reminders' alarm rings again: its moment's gone by, so it would ring at once, and a failure that lasts mustn't wake the phone over and over. */
+    const val REMINDER_RETRY_MS = 5 * 60_000L
     const val EXTRA_KEY = "key"
     const val EXTRA_START = "start"
     const val EXTRA_END = "end"
@@ -54,6 +59,23 @@ object SlotAlarms {
             context,
             3,
             Intent(context, SlotReceiver::class.java).setAction(ACTION_FELIX_CHECK),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+        alarms.cancel(intent)
+        at?.let { set(alarms, it, intent) }
+    }
+
+    /**
+     * Your reminders' next wake ([com.thomaswcode.decrastination.core.Reminders.nextWake], Stage 8a) at [at], or
+     * none: one's moment, or the start of his window to write for one; set again with every plan, as a SlotStart's
+     * or a BeforeDue's moment moves with it, with every change to them, and at each of its own.
+     */
+    fun armReminder(context: Context, at: Long?) {
+        val alarms = context.getSystemService(AlarmManager::class.java) ?: return
+        val intent = PendingIntent.getBroadcast(
+            context,
+            4,
+            Intent(context, SlotReceiver::class.java).setAction(ACTION_REMINDER),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
         alarms.cancel(intent)
@@ -146,11 +168,11 @@ class Slots(private val graph: AppGraph) {
     }
 }
 
-/** A slot's alarm: its start or its end ([SlotAlarms]). */
+/** A slot's alarm: its start or its end; Felix's look; your reminder's moment ([SlotAlarms]). */
 class SlotReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val key = intent.getStringExtra(SlotAlarms.EXTRA_KEY)
-        if (key == null && intent.action != SlotAlarms.ACTION_FELIX_CHECK) return
+        if (key == null && intent.action != SlotAlarms.ACTION_FELIX_CHECK && intent.action != SlotAlarms.ACTION_REMINDER) return
         val pending = goAsync()
         CoroutineScope(Dispatchers.Default).launch {
             try {
@@ -163,6 +185,13 @@ class SlotReceiver : BroadcastReceiver() {
                         val start = intent.getLongExtra(SlotAlarms.EXTRA_START, -1L)
                         val end = intent.getLongExtra(SlotAlarms.EXTRA_END, -1L)
                         graph.slots.onEnd(key!!, if (window != null && start >= 0 && end >= start) Focus.Laid(start, end, window) else null)
+                    }
+                    // Your reminder's moment (8a): sent now, with no call, so the receiver's time is enough; or the start of
+                    // his window to write one, which the look after this writes. Either way the alarm's set for the next.
+                    SlotAlarms.ACTION_REMINDER -> {
+                        // A failure sending them is logged, so the alarm's still set again, a while on, and the look queued.
+                        val sent = runCatching { graph.looks.sweepReminders() }.onFailure { Log.w(AppGraph.TAG, "Sending reminders failed", it) }.isSuccess
+                        graph.armReminder(after = if (sent) null else graph.clock.now() + SlotAlarms.REMINDER_RETRY_MS)
                     }
                 }
                 // Each is a moment Felix may have something to say (LR-03): his look is work of its own,

@@ -78,13 +78,14 @@ class FelixHarness(start: String = "2026-10-19T16:30") : AutoCloseable {
     private val notices = Shown()
     val outbox = Outbox(stores.chat, stores.chatArchive, stores.settings, notices, ports, { chatOnScreen }, clock)
     val conversation: Conversation = Conversation(
-        stores.tasks, stores.settings, stores.runtime, stores.learning, stores.log, stores.instructions, stores.chat, stores.school, stores.memory,
+        stores.tasks, stores.settings, stores.runtime, stores.learning, stores.log, stores.instructions, stores.chat, stores.school, stores.memory, stores.felix,
         clock, scope, gateway, notices, focus, planning, ports, outbox, owners,
         calendarTime = { NO_CALENDAR },
         answered = { message, words -> looks.answered(message, words) },
+        draftReminders = { now -> looks.draftReminders(now) },
     )
     val looks: Looks = Looks(
-        stores.tasks, stores.settings, stores.model, stores.log, stores.chat, clock, scope, gateway, focus, planning, ports, outbox,
+        stores.tasks, stores.settings, stores.model, stores.log, stores.chat, stores.felix, clock, scope, gateway, focus, planning, ports, outbox,
         calendarTime = { NO_CALENDAR },
         profile = { conversation.profile(it) },
         remember = { conversation.remember(it) },

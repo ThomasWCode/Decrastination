@@ -8,6 +8,8 @@ import com.thomaswcode.decrastination.core.InstructionRules
 import com.thomaswcode.decrastination.core.InstructionState
 import com.thomaswcode.decrastination.core.MemoryState
 import com.thomaswcode.decrastination.core.Mine
+import com.thomaswcode.decrastination.core.Notes
+import com.thomaswcode.decrastination.core.Reminders
 import com.thomaswcode.decrastination.core.SchoolCalendar
 import com.thomaswcode.decrastination.core.Settings
 import com.thomaswcode.decrastination.core.SlotState
@@ -137,6 +139,7 @@ class RehearsalTest {
             before(files, "chat-archive.json", ChatArchive.serializer()),
             before(files, "school.json", SchoolCalendar.serializer()),
             before(files, "memory.json", MemoryState.serializer()),
+            before(files, "felix.json", FelixStore.serializer()),
             before(files, "calendar.json", CalendarState.serializer()),
         )
         // As the app will read them, on a copy of the stores alone (the secrets can't be read off the phone),
@@ -174,7 +177,7 @@ class RehearsalTest {
             after(stores.instructions, InstructionState.serializer(), "instructions.json"), after(stores.chat, ChatState.serializer(), "chat.json"),
             after(stores.chatArchive, there("chat-archive.json"), migrated("chat-archive.json")),
             after(stores.school, SchoolCalendar.serializer(), "school.json"), after(stores.memory, MemoryState.serializer(), "memory.json"),
-            after(stores.calendar, CalendarState.serializer(), "calendar.json"),
+            after(stores.felix, FelixStore.serializer(), "felix.json"), after(stores.calendar, CalendarState.serializer(), "calendar.json"),
         )
         val ran = stores.shapes.filter { (name, shape) -> (versions[name] ?: shape.version) < shape.version }.map { (name, shape) -> "$name ${versions[name]} to ${shape.version}" }
         val was = describe(reads)
@@ -338,6 +341,7 @@ class RehearsalTest {
             appendLine("  your event answers ${size("eventAnswers")}, asked ${size("eventsAsked")}; calendar events written ${size("calendarWritten")}; calibration ${calibration.multipliers.size} multipliers, ${calibration.timed.size} timed")
         }
         of<MemoryState>("memory.json")?.let { appendLine("Memory: facts ${it.facts.size}, rules ${it.rules.size}") }
+        of<FelixStore>("felix.json")?.let { appendLine("Felix's notes ${it.notes.size}, not deleted ${Notes.live(it.notes).size}; reminders ${it.reminders.size}, still to come ${it.reminders.count(Reminders::pending)}") }
         of<SchoolCalendar>("school.json")?.let { appendLine("School: days off ${it.noSchool.size}, half-days ${it.halfDays.size}") }
         of<CalendarState>("calendar.json")?.let { appendLine("Calendar: versions written ${it.written.size}") }
         of<Settings>("settings.json")?.let { appendLine("Settings: armed ${it.armed}, Claude ${it.aiEnabled && it.aiKeyActive}, classes ${it.classMap.size}") }
@@ -364,7 +368,7 @@ class RehearsalTest {
         val REQUIRED = listOf("tasks.json", "settings.json", "runtime.json", "log.json")
 
         /** Every store's file, the secrets aside (they can't be read off the phone). */
-        val STORES = REQUIRED + listOf("instructions.json", "chat.json", "chat-archive.json", "school.json", "memory.json", "calendar.json") + listOf("session.json", "protection.json", "model.json", "anki.json", "learning.json")
+        val STORES = REQUIRED + listOf("instructions.json", "chat.json", "chat-archive.json", "school.json", "memory.json", "calendar.json") + listOf("session.json", "protection.json", "model.json", "anki.json", "learning.json") + listOf("felix.json")
 
         /** The files runtime.json's split made (4.0.13): there, through it, wherever the runtime was. */
         val SPLIT = setOf("session.json", "protection.json", "model.json", "anki.json", "learning.json")

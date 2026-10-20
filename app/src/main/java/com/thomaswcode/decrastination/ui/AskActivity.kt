@@ -123,6 +123,7 @@ import androidx.lifecycle.lifecycleScope
 import com.thomaswcode.decrastination.AppGraph
 import com.thomaswcode.decrastination.R
 import com.thomaswcode.decrastination.core.About
+import com.thomaswcode.decrastination.core.ChatActs
 import com.thomaswcode.decrastination.core.ChatArchive
 import com.thomaswcode.decrastination.core.ChatMessage
 import com.thomaswcode.decrastination.core.ChatSummary
@@ -568,7 +569,8 @@ private val EXAMPLES = listOf(
     "The physics prep will take 90 minutes",
     "Move the German vocab to Thursday",
     "I'm out on Saturday evening from 7",
-    "Remind me to buy mum a present before Sunday",
+    "Remind me at 7 to call gran",
+    "Note on the essay: use the second source",
 )
 
 /**
@@ -1139,7 +1141,7 @@ private fun Remembered(graph: AppGraph, message: ChatMessage, live: Boolean) {
 
 /**
  * What [message]'s actions did (16 Oct: a step ticked or to do again, a task done, open again or
- * deleted, a setting set), a line each in small type, each with its Undo while it can be taken back;
+ * deleted, a setting set; 4.1.0, a reminder set, moved or cancelled, a note added or deleted), a line each in small type, each with its Undo while it can be taken back;
  * and the lines with nothing to undo (a change not made, where a time went, a text read in full).
  */
 @Composable
@@ -1149,6 +1151,7 @@ private fun Acts(graph: AppGraph, message: ChatMessage, live: Boolean) {
     val tasks by graph.tasks.state.collectAsStateWithLifecycle()
     val settings by graph.settings.state.collectAsStateWithLifecycle()
     val chat by graph.chat.state.collectAsStateWithLifecycle()
+    val felix by graph.stores.felix.state.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     var said by remember(message.id) { mutableStateOf<String?>(null) }
     val quiet = MaterialTheme.colorScheme.onSurfaceVariant
@@ -1163,7 +1166,7 @@ private fun Acts(graph: AppGraph, message: ChatMessage, live: Boolean) {
             )
             when {
                 act.undone -> Text("Undone", style = MaterialTheme.typography.labelMedium, color = quiet, modifier = Modifier.padding(horizontal = 12.dp))
-                live && com.thomaswcode.decrastination.core.ChatActs.canUndo(act, tasks.tasks, settings, chat.messages) -> TextButton(onClick = { scope.launch { said = graph.conversation.undoAct(message.id, i) } }) { Text("Undo") }
+                live && ChatActs.canUndo(act, tasks.tasks, settings, chat.messages, felix.notes, felix.reminders, messageId = message.id, now = graph.clock.now(), readAt = { s -> tasks.status(s).lastSuccessAt }) -> TextButton(onClick = { scope.launch { said = graph.conversation.undoAct(message.id, i) } }) { Text("Undo") }
             }
         }
     }

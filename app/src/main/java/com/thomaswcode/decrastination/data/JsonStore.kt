@@ -215,6 +215,7 @@ class JsonStore<T>(
                     "chat-archive.json" -> "The chat's earlier messages"
                     "school.json" -> "Your school calendar (days off and half-days)"
                     "memory.json" -> "What Felix remembers"
+                    "felix.json" -> "Felix's notes and reminders"
                     "calendar.json" -> "The record of what the app wrote to your calendar, and your answers about its events"
                     else -> if (file.startsWith("chat-archive-")) "The chat's earlier messages from ${file.removePrefix("chat-archive-").removeSuffix(".json")}" else file
                 }

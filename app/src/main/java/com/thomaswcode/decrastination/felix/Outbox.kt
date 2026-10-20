@@ -134,7 +134,8 @@ class Outbox(
         /**
          * His notification from [state] (pure): his unread messages with words, but those answered already
          * (a question settled here or elsewhere) and those of a kind that waits for the morning in quiet
-         * hours ([NotifyRules.waitsForMorning]); your replies to those under them. None, and it's null.
+         * hours ([NotifyRules.waitsForMorning]); your replies to those under them; as many as fit its room,
+         * the newest first ([roomed]). None, and it's null.
          * What waits for the morning waits for its briefing: one written before the morning's message is
          * shown from then on, every time it's made again, quiet hours that outlast the briefing or not.
          */
@@ -147,7 +148,33 @@ class Outbox(
             // In the chat's order, which is the order they were said in.
             val lines = after.filter { it.id in shown || (it.from == Speaker.You && it.replyTo in shown) }.map { Notice.Line(it.id, line(it), it.at, it.from == Speaker.You) }
             val newest = his.last()
-            return Notice(name, lines, newest.id, newest.suggestedReplies, his.first().id, alert = alertFor != null && alertFor in shown)
+            return Notice(name, roomed(lines), newest.id, newest.suggestedReplies, his.first().id, alert = alertFor != null && alertFor in shown)
+        }
+
+        /**
+         * His notification's room, its lines' characters together: about what One UI shows of an expanded
+         * notification above its Reply and chips. Its height is held, and what runs past it is cut off, the
+         * buttons with it (20 Oct, on the phone: three long answers left no Reply).
+         */
+        const val NOTICE_ROOM = 360
+
+        /** Less room than this left, an older line isn't begun: it would be a word or two. */
+        private const val LINE_MIN = 60
+
+        /**
+         * [lines] within [NOTICE_ROOM], the newest first: each that runs past what's left ended at its last whole
+         * sentence ([FelixAnswers.message]); the older ones that don't fit left to the chat, which a tap opens.
+         */
+        private fun roomed(lines: List<Notice.Line>): List<Notice.Line> {
+            var left = NOTICE_ROOM
+            val kept = ArrayList<Notice.Line>()
+            for (l in lines.asReversed()) {
+                if (left < LINE_MIN && kept.isNotEmpty()) break
+                val text = FelixAnswers.message(l.text, maxOf(left, LINE_MIN))
+                kept += l.copy(text = text)
+                left -= text.length
+            }
+            return kept.asReversed()
         }
 
         /**

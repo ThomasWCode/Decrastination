@@ -40,6 +40,39 @@ class ChatActsTest {
     }
 
     @Test
+    fun `a move's Undo looks for moves after its own message, though an earlier one reads the same`() {
+        val r = Reminder("r", "call gran", 1, By.Felix, due = Due(DueKind.At, now + 7_200_000))
+        val there = Act("Moved: “call gran” to 19:00", ChatAction(ChatAction.Type.MoveReminder, "", value = "r"), reminder = r.copy(due = Due(DueKind.At, now + 3_600_000)))
+        val back = there.copy(line = "Moved: “call gran” to 18:00", reminder = r)
+        val messages = listOf(
+            ChatMessage("m1", Speaker.Felix, "Moved.", 1, acts = listOf(there)),
+            ChatMessage("m2", Speaker.Felix, "Back.", 2, acts = listOf(back)),
+            ChatMessage("m3", Speaker.Felix, "Moved again.", 3, acts = listOf(there)),
+        )
+        assertTrue(ChatActs.canUndo(there, emptyList(), settings, messages, reminders = listOf(r), messageId = "m3"))
+        assertFalse(ChatActs.canUndo(there, emptyList(), settings, messages, reminders = listOf(r), messageId = "m1"))
+    }
+
+    @Test
+    fun `a cancel or a note's delete is undone only while there's room for what it brings back`() {
+        val r = Reminder("r", "call gran", 1, By.Felix, due = Due(DueKind.At, now + 3_600_000), cancelledAt = now)
+        val cancel = Act("Cancelled", ChatAction(ChatAction.Type.CancelReminder, "", value = "r"))
+        val others = (1..Reminders.MAX_PENDING).map { r.copy(id = "p$it", cancelledAt = null) }
+        assertTrue(ChatActs.canUndo(cancel, emptyList(), settings, emptyList(), reminders = listOf(r) + others.drop(1)))
+        assertFalse(ChatActs.canUndo(cancel, emptyList(), settings, emptyList(), reminders = listOf(r) + others))
+        // Brought back, it'd never come (its slot's task finished since): not offered.
+        val onTask = r.copy(id = "rt", taskId = "own:e", due = Due(DueKind.SlotStart, now))
+        val cancelOn = Act("Cancelled", ChatAction(ChatAction.Type.CancelReminder, "", value = "rt"))
+        assertTrue(ChatActs.canUndo(cancelOn, listOf(essay()), settings, emptyList(), reminders = listOf(onTask), now = now))
+        assertFalse(ChatActs.canUndo(cancelOn, listOf(finished()), settings, emptyList(), reminders = listOf(onTask), now = now))
+        val n = Note("n", "words", 1, By.Felix, taskId = "own:e", deletedAt = now)
+        val delete = Act("Note deleted", ChatAction(ChatAction.Type.DeleteNote, "own:e", value = "n"))
+        val full = (1..Notes.PER_TASK).map { n.copy(id = "n$it", deletedAt = null) }
+        assertTrue(ChatActs.canUndo(delete, emptyList(), settings, emptyList(), notes = listOf(n) + full.drop(1)))
+        assertFalse(ChatActs.canUndo(delete, emptyList(), settings, emptyList(), notes = listOf(n) + full))
+    }
+
+    @Test
     fun `a tick that finished one of yours can be undone, and a setting while it's as it was set`() {
         val tick = Act("Ticked: Write, of Essay", ChatAction(ChatAction.Type.TickStep, "own:e", 1))
         assertTrue(ChatActs.canUndo(tick, listOf(finished()), settings, emptyList()))

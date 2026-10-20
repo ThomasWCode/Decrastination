@@ -20,6 +20,11 @@ object FelixAnswers {
     /** [text] as his answer, within bounds; null when it isn't one. */
     fun parse(text: String, maxMessage: Int = MAX_MESSAGE): FelixAnswer? {
         val answer = runCatching { json.decodeFromString(FelixAnswer.serializer(), text) }.getOrNull() ?: return null
+        return bounded(answer, maxMessage)
+    }
+
+    /** [answer] within the bounds his are kept to ([parse]'s): one kept from elsewhere, a restored backup's draft, held to them as it's used. */
+    fun bounded(answer: FelixAnswer, maxMessage: Int = MAX_MESSAGE): FelixAnswer {
         return FelixAnswer(
             message = message(answer.message.trim(), maxMessage),
             replies = answer.replies.map { cut(it.trim(), MAX_REPLY) }.filter { it.isNotEmpty() }.distinct().take(MAX_REPLIES),

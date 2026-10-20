@@ -415,6 +415,13 @@ class ReadingAnswersTest {
         // The piece itself changed (its step renamed, its minutes): written for again.
         assertTrue(MicroPlans.hashOf(task, piece) != MicroPlans.hashOf(task, piece.copy(step = "Read pages 40-46")))
         assertTrue(MicroPlans.hashOf(task, piece) != MicroPlans.hashOf(task, piece.copy(minutes = piece.minutes + 10)))
+        // The notes kept with its task (8a): told it, and a note added has it written for again; with none, as before.
+        val noted = listOf("use the second source")
+        assertTrue("Notes kept with it: use the second source" in MicroPlans.describe(piece, task, noted))
+        assertTrue(MicroPlans.hashOf(task, piece) != MicroPlans.hashOf(task, piece, noted))
+        assertEquals(MicroPlans.hashOf(task, piece), MicroPlans.hashOf(task, piece, emptyList()))
+        assertEquals(keys, MicroPlans.due(chunk, tasks, mapOf(piece.key to made), mapOf(task.id to noted)).map { it.first.key })
+        assertEquals(keys - piece.key, MicroPlans.due(chunk, tasks, mapOf(piece.key to MicroPlans.parse("""{"first":"Open it","next":[],"doneWhen":""}""", piece, task, NOW, noted)!!), mapOf(task.id to noted)).map { it.first.key })
     }
 
     @Test

@@ -3,11 +3,14 @@ package com.thomaswcode.decrastination.enrich
 import com.thomaswcode.decrastination.Fixtures
 import com.thomaswcode.decrastination.Fixtures.LONDON
 import com.thomaswcode.decrastination.core.About
+import com.thomaswcode.decrastination.core.By
 import com.thomaswcode.decrastination.core.Calibration
 import com.thomaswcode.decrastination.core.Change
 import com.thomaswcode.decrastination.core.ChangeType
 import com.thomaswcode.decrastination.core.ChatMessage
 import com.thomaswcode.decrastination.core.DayWindow
+import com.thomaswcode.decrastination.core.Due
+import com.thomaswcode.decrastination.core.DueKind
 import com.thomaswcode.decrastination.core.Enrichment
 import com.thomaswcode.decrastination.core.Enrichments
 import com.thomaswcode.decrastination.core.Fact
@@ -18,10 +21,14 @@ import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.MemoryState
 import com.thomaswcode.decrastination.core.MessageKind
 import com.thomaswcode.decrastination.core.NoSchool
+import com.thomaswcode.decrastination.core.Note
+import com.thomaswcode.decrastination.core.NoteScope
 import com.thomaswcode.decrastination.core.Plan
 import com.thomaswcode.decrastination.core.Planner
 import com.thomaswcode.decrastination.core.Proposal
 import com.thomaswcode.decrastination.core.ProposalState
+import com.thomaswcode.decrastination.core.Reminder
+import com.thomaswcode.decrastination.core.Reminders
 import com.thomaswcode.decrastination.core.Rule
 import com.thomaswcode.decrastination.core.SchoolCalendar
 import com.thomaswcode.decrastination.core.Settings
@@ -104,6 +111,13 @@ class FelixInputsDocTest {
         CalendarEvent(1, "Drum lesson", Fixtures.at("2026-10-14T18:00"), Fixtures.at("2026-10-14T18:45"), allDay = false),
         CalendarEvent(2, "Open day", LocalDate.parse("2026-10-17").atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli(), LocalDate.parse("2026-10-18").atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli(), allDay = true, location = "The university's main hall", description = "Talks every hour from 10:30; subject stands all day."),
     )
+    // What Felix keeps at your asking (8a): a note of his on the worksheet, a standing one of yours for maths, a reminder about the form and one for the worksheet's slot.
+    private val noteOnSheet = Note("n1", "Use Monday's results table for question 5", Fixtures.at("2026-10-12T19:04"), By.Felix, taskId = "teams:t1")
+    private val notes = listOf(noteOnSheet, Note("n2", "Do these on paper, not in the textbook", Fixtures.at("2026-10-11T18:30"), By.You, scope = NoteScope(subject = "Maths")))
+    private val reminders = listOf(
+        Reminder("r1", "Bring the signed consent form", Fixtures.at("2026-10-12T19:04"), By.Felix, "gmail:m1", Due(DueKind.At, Fixtures.at("2026-10-14T08:00"))),
+        Reminder("r2", "Ask about question 7", Fixtures.at("2026-10-12T19:04"), By.Felix, "teams:t1", Due(DueKind.SlotStart, Fixtures.at("2026-10-12T19:04"))),
+    )
     private val applied = listOf(
         Instruction("i1", "Not much on Friday please", at = Fixtures.at("2026-10-12T19:05"), state = InstructionStatus.Applied, changes = listOf(Change(ChangeType.DayLimit, date = "2026-10-16", freeMin = 60)), appliedAt = Fixtures.at("2026-10-12T19:05")),
     )
@@ -136,9 +150,11 @@ class FelixInputsDocTest {
             proposals = listOf(Proposal("p1", changes = listOf(Change(ChangeType.AtTime, taskId = vectors.id, date = "2026-10-14", startMin = 18 * 60, time = Fixtures.at("2026-10-14T18:00"))), lines = listOf("“Vectors exercise 4B” at 18:00 on Wed 14 Oct"), state = ProposalState.Applied, instant = true)),
         )
         val asked = ChatMessage("m3", Speaker.You, "Can I do these tomorrow instead?", now, about = About(taskId = vectors.id, taskTitle = vectors.title))
+        val planned = plan("2026-10-13T17:20")
+        val moments = reminders.mapNotNull { r -> Reminders.moment(r, planned, byId, now)?.let { r.id to it } }.toMap()
         val context = ChatPrompts.Context(
-            known = ChatPrompts.context(tasks, events, applied, now, LONDON, settings.classMap, emptyList(), settings, calibration),
-            plan = ChatPrompts.plan(plan("2026-10-13T17:20"), LONDON),
+            known = ChatPrompts.context(tasks, events, applied, now, LONDON, settings.classMap, emptyList(), settings, calibration, notes, reminders, moments),
+            plan = ChatPrompts.plan(planned, LONDON),
         )
         ChatPrompts.turns(listOf(earlier, reply, asked), context.known, byId, LONDON, plan = context.plan, events = events).forEachIndexed { i, (from, text) -> out["chat turn $i: $from"] = text }
         // A reply from Felix's notification: his message leads your first turn.
@@ -169,7 +185,7 @@ class FelixInputsDocTest {
             start = slot.start, end = slot.end, window = WindowKind.Evening, outcome = outcome, workedMin = if (outcome.kept) chunk.minutes else 0, earned = earned, at = slot.end,
         )
         val at = slot.start + 10 * 60_000L
-        out["felix SlotStart"] = FelixPrompts.describe(FelixPrompts.Reason.SlotStart, p, slot, worksheet, emptyList(), recent, null, settings, at, LONDON, firstAction = "Read question 1 and underline what it asks")
+        out["felix SlotStart"] = FelixPrompts.describe(FelixPrompts.Reason.SlotStart, p, slot, worksheet, emptyList(), recent, null, settings, at, LONDON, firstAction = "Read question 1 and underline what it asks", reminder = "Ask about question 7", notes = listOf(noteOnSheet.text))
         val missed = record(SlotOutcome.Missed, false)
         out["felix SlotEnd (missed)"] = FelixPrompts.describe(FelixPrompts.Reason.SlotEnd, p, null, worksheet, listOf(missed), recent, null, settings, slot.end + 6 * 60_000L, LONDON, record = missed)
         val noPhoto = record(SlotOutcome.Kept, false)
@@ -177,9 +193,13 @@ class FelixInputsDocTest {
         val kept = record(SlotOutcome.Kept, true)
         out["felix SlotKept"] = FelixPrompts.describe(FelixPrompts.Reason.SlotKept, p, null, worksheet, listOf(kept), recent, null, settings, slot.end + 60_000L, LONDON, freeMin = 15, record = kept)
         out["felix DayDone"] = FelixPrompts.describe(FelixPrompts.Reason.DayDone, p, null, worksheet, listOf(kept), recent, null, settings, Fixtures.at("2026-10-13T21:40"), LONDON, freeMin = 25, record = kept)
-        out["felix Morning"] = FelixPrompts.describe(FelixPrompts.Reason.Morning, plan("2026-10-13T07:00"), null, null, emptyList(), recent, null, settings, Fixtures.at("2026-10-13T07:00"), LONDON)
+        out["felix Morning"] = FelixPrompts.describe(FelixPrompts.Reason.Morning, plan("2026-10-13T07:00"), null, null, emptyList(), recent, null, settings, Fixtures.at("2026-10-13T07:00"), LONDON, reminders = listOf("17:00 Ask about question 7"))
         out["felix Question"] = FelixPrompts.describe(FelixPrompts.Reason.Question, p, null, worksheet, emptyList(), recent, "Does question 5 need Monday's results, or can it be done from the textbook?", settings, at, LONDON)
         out["felix Completions"] = FelixPrompts.describe(FelixPrompts.Reason.Completions, p, null, null, emptyList(), recent, null, settings, Fixtures.at("2026-10-13T19:10"), LONDON, done = listOf(worksheet.title, vectors.title))
+        // A reminder (8a), written ten minutes before its moment, as of it: the slot then and its task, your words.
+        val form8 = Fixtures.at("2026-10-14T08:00")
+        val morning = plan("2026-10-14T07:50")
+        out["felix Reminder"] = FelixPrompts.describe(FelixPrompts.Reason.Reminder, morning, morning.slotAt(form8) ?: morning.nextSlot(form8), form, emptyList(), recent, null, settings, form8, LONDON, reminder = "Bring the signed consent form")
         return out
     }
 

@@ -20,6 +20,26 @@ class RepliesTest {
         ChatMessage("h", Speaker.Felix, "A question", 1, about, kind = kind, byApp = true, asks = asks, answeredAt = answeredAt)
 
     @Test
+    fun `a reminder's Done and snoozes, whatever their case, are on it with no call, and any other words a turn of the chat`() {
+        val reminder = ChatMessage("m", Speaker.Felix, "reminder: call gran", 1, kind = MessageKind.Reminder, byApp = true, reminderId = "r1", suggestedReplies = FelixWords.REMINDER_REPLIES)
+        assertEquals(Replies.Route.Reminder("r1", null), Replies.route(reminder, "done", checkInUnderWay = false))
+        assertEquals(Replies.Route.Reminder("r1", 15), Replies.route(reminder, FelixWords.REMINDER_SNOOZE, checkInUnderWay = false))
+        assertEquals(Replies.Route.Reminder("r1", 60), Replies.route(reminder, " Snooze 1 h ", checkInUnderWay = false))
+        assertEquals(Replies.Route.Chat, Replies.route(reminder, "done it already, and the essay", checkInUnderWay = false))
+        // Answered already, or with no reminder: the chat's.
+        assertEquals(Replies.Route.Chat, Replies.route(reminder.copy(answeredAt = 2), "Done", checkInUnderWay = false))
+        assertEquals(Replies.Route.Chat, Replies.route(reminder.copy(reminderId = null), "Done", checkInUnderWay = false))
+        // A nudge, not a question: it waits for your answer as nudges do, its day out (D-99).
+        assertFalse(Replies.waiting(reminder, checkInUnderWay = false))
+        assertEquals(setOf("m"), Replies.awaitingIds(listOf(reminder), checkInUnderWay = false, now = 2, zone = LONDON))
+        // Two about one task each wait for their own answer, the older still once the newer's answered.
+        val other = reminder.copy(id = "m2", reminderId = "r2", at = 2, about = About(taskId = "teams:t"))
+        val first = reminder.copy(about = About(taskId = "teams:t"))
+        assertEquals(setOf("m", "m2"), Replies.awaitingIds(listOf(first, other), checkInUnderWay = false, now = 3, zone = LONDON))
+        assertEquals(setOf("m"), Replies.awaitingIds(listOf(first, other.copy(answeredAt = 3)), checkInUnderWay = false, now = 4, zone = LONDON))
+    }
+
+    @Test
     fun `a check-in's question is one only while the check-in is under way, so its thanks after it is the chat's`() {
         val thanks = his(MessageKind.CheckIn)
         assertTrue(Replies.waiting(thanks, checkInUnderWay = true))
