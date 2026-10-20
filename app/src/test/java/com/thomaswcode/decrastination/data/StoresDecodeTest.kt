@@ -237,7 +237,8 @@ class StoresDecodeTest {
         val messages = json("chat.json").getValue("messages").jsonArray.map { it.jsonObject }
         assertTrue(listOf("remembered", "done").all { field -> messages.any { it[field]?.jsonArray?.isNotEmpty() == true } } && messages.any { it["reason"] !is JsonNull })
         val records = json("log.json").getValue("felix").jsonArray.map { it.jsonObject }
-        assertEquals(FelixPrompts.Reason.entries.map { it.name }.toSet(), records.map { it.getValue("reason").jsonPrimitive.content }.toSet())
+        // Every reason there was then: a reminder's (4.1.0) came after his records were the chat's.
+        assertEquals(FelixPrompts.Reason.entries.filter { it != FelixPrompts.Reason.Reminder }.map { it.name }.toSet(), records.map { it.getValue("reason").jsonPrimitive.content }.toSet())
         assertTrue(records.count { it["replyText"] !is JsonNull } >= 3)
         // A record in the chat by its id (copied when you replied to it), and an answer's under its chat id.
         val ids = messages.map { it.getValue("id").jsonPrimitive.content }

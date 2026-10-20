@@ -25,7 +25,7 @@ import java.util.Locale
  */
 object FelixPrompts {
     /** Why a message is written. */
-    enum class Reason { SlotStart, SlotEnd, SlotKept, DayDone, Morning, Question, Completions, Summary, Reply, CheckIn }
+    enum class Reason { SlotStart, SlotEnd, SlotKept, DayDone, Morning, Question, Completions, Summary, Reply, CheckIn, Reminder }
 
     /** His messages, and the replies to them, that he's shown: the last few. */
     const val RECENT = 6
@@ -41,7 +41,7 @@ object FelixPrompts {
     fun system(settings: Settings, year: Int): String = """
         You are ${settings.felixName}: ${settings.felixLine}. You write the short messages the planner app sends a UK sixth-form student (Year $year) about their work. You get the reason for the message, the piece of work it's about with its first action and its task's own text (an assignment's instructions, an email; cut short), today's plan and what's been kept or missed, your recent messages and the student's replies, and the time.
 
-        Be concrete: name the piece and its first action, and what its text asks of them where that helps. Two sentences at most, under 240 characters (the morning's under 480). No guilt, no sarcasm, no emojis, no praise for nothing, no promise the app can't keep. Don't repeat what you said last time. When you want a reply, offer up to three short replies you'd accept, in the student's words. Say when you'll check again as nextCheckMin, and mean it: sooner for a piece just started, later in a long slot, never under 5. Reasons: SlotStart (the slot began and nothing's happened: ask if they're starting); SlotEnd (the slot ended with no tick: ask what happened, or for the photo if the piece needs one); SlotKept (a slot was kept: one line, and only sometimes); DayDone (today's last slot kept: say what's earned, briefly); Morning (the day's shape in a sentence or two: it's the whole briefing, with no list of the day beside it); Question (put the question given, in your words); Completions (a source says work is done: ask harder, as expected or easier); Summary (Sunday: say the week's summary is ready to send); Reply (you're answering what they said).
+        Be concrete: name the piece and its first action, and what its text asks of them where that helps. Two sentences at most, under 240 characters (the morning's under 480). No guilt, no sarcasm, no emojis, no praise for nothing, no promise the app can't keep. Don't repeat what you said last time. When you want a reply, offer up to three short replies you'd accept, in the student's words. Say when you'll check again as nextCheckMin, and mean it: sooner for a piece just started, later in a long slot, never under 5. Reasons: SlotStart (the slot began and nothing's happened: ask if they're starting); SlotEnd (the slot ended with no tick: ask what happened, or for the photo if the piece needs one); SlotKept (a slot was kept: one line, and only sometimes); DayDone (today's last slot kept: say what's earned, briefly); Morning (the day's shape in a sentence or two: it's the whole briefing, with no list of the day beside it); Question (put the question given, in your words); Completions (a source says work is done: ask harder, as expected or easier); Summary (Sunday: say the week's summary is ready to send); Reply (you're answering what they said); Reminder (a reminder they asked you for comes at this moment: say it, their words in yours, with what's going on then where it helps).
 
         The student's standing instructions on how you behave (with what you're told about them) come before all of this: where one means you shouldn't write now, give an empty message. Remember (memories) a fact about them or a standing instruction only when their replies give one that isn't remembered yet; most messages need none.
     """.trimIndent()
@@ -52,6 +52,10 @@ object FelixPrompts {
      * or kept), or the [task] it's about, with the task's own text cut at [TEXT] (D-93); today's
      * slots kept, missed and to come, and the free time there is ([freeMin]); his last messages of his
      * own from the chat, [recent], with your replies to them; and, for a Question, the [question] to put.
+     * Since 4.1.0: the task's [notes] (its own, and the standing ones it matches); for a Reminder, its
+     * words as you set them ([reminder]), the slot then under way or next its piece, and [now] the moment
+     * it's for; for a SlotStart, your reminder that came at the slot's start ([reminder]), so it isn't said
+     * twice; for the Morning, today's [reminders].
      */
     fun describe(
         reason: Reason,
@@ -68,12 +72,19 @@ object FelixPrompts {
         record: SlotRecord? = null,
         done: List<String> = emptyList(),
         firstAction: String? = null,
+        reminder: String? = null,
+        notes: List<String> = emptyList(),
+        reminders: List<String> = emptyList(),
     ): String = buildString {
         fun clock(at: Long) = Instant.ofEpochMilli(at).atZone(zone).format(CLOCK)
         appendLine("Reason: $reason")
         appendLine("Now: ${Instant.ofEpochMilli(now).atZone(zone).format(NOW)}")
         val piece = slot?.chunk
-        if (slot != null && piece != null) {
+        if (reason == Reason.Reminder) {
+            // What's going on at its moment (8a): the slot under way or next, and the task it's about.
+            if (slot != null && piece != null) appendLine("Slot then: ${piece.label}, ${clock(slot.start)}–${clock(slot.end)}, ${if (slot.start <= now) "under way" else "next"}")
+            task?.let { appendLine("Task: ${it.title}") }
+        } else if (slot != null && piece != null) {
             val earns = when (piece.earnsBy(settings.photoFromMin)) {
                 EarnsBy.Tick -> "on its tick"
                 EarnsBy.Photo -> "with a photo of it, which it needs to earn"
@@ -100,11 +111,15 @@ object FelixPrompts {
             appendLine("Its task's own text (${TaskText.about(task)}):")
             appendLine(TaskText.brief(task, TEXT) ?: "  (no text of its own)")
         }
+        // What's kept with it (8a), and their reminder: the one to say, or one said already at this slot's start.
+        if (notes.isNotEmpty()) appendLine("Notes on it: " + notes.joinToString("; "))
+        reminder?.let { appendLine(if (reason == Reason.Reminder) "Their reminder, in their words: “$it”" else "Their reminder for this slot, sent at its start, so not to say again: “$it”") }
         val kept = today.count { it.outcome.kept }
         val missed = today.count { it.outcome == SlotOutcome.Missed }
         val toCome = plan.todaySlots.filter { it.kind == SlotKind.Work && it.end > now && it.chunk != null }
         val next = toCome.firstOrNull { it.start > now }?.let { "; next: ${it.chunk?.label} at ${clock(it.start)}" }.orEmpty()
         appendLine("Today: $kept kept, $missed missed, ${toCome.size} to come$next")
+        if (reminders.isNotEmpty()) appendLine("Reminders today: " + reminders.joinToString("; "))
         if (toCome.isNotEmpty()) appendLine("Left today: " + toCome.joinToString("; ") { "${it.chunk?.label} ${clock(it.start)}–${clock(it.end)}" })
         freeMin?.let { appendLine("Free time now: $it min") }
         if (done.isNotEmpty()) appendLine("Done, as their sources say, with none of it timed in a slot: " + done.joinToString("; "))

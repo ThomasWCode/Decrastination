@@ -11,6 +11,7 @@ import com.thomaswcode.decrastination.core.FelixAnswer
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.MessageKind
 import com.thomaswcode.decrastination.core.Reminder
+import com.thomaswcode.decrastination.core.Reminders
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Speaker
 import com.thomaswcode.decrastination.core.Status
@@ -168,6 +169,50 @@ class NotesAndRemindersTest {
         // Let go once.
         felix.looks.sweepReminders(now + MIN)
         assertEquals(1, stores.chat.value.messages.count { it.kind == MessageKind.Note })
+    }
+
+    /** His answer for a reminder, as his calls give it. */
+    private fun his(message: String) = """{"message":"$message","replies":[],"nextCheckMin":null,"memories":[]}"""
+
+    @Test
+    fun `a reminder set three minutes ahead is written for at once, with no plan or look between`() = runBlocking {
+        felix.answers(answer("I'll remind you at 17:03.", reminders = listOf(reminder(text = "stretch", time = "17:03"))))
+        felix.answers(his("stretch time: you said so"))
+        assertTrue(conversation.ask("remind me in 3 minutes to stretch"))
+        felix.settle()
+        val drafted = stores.felix.value.reminders.single()
+        assertEquals("stretch time: you said so", drafted.draft?.message)
+        assertEquals(now, drafted.draftedAt)
+        // His call was told it's a reminder, in their words, for its moment.
+        felix.server.takeRequest()
+        val asked = felix.server.takeRequest().body.readUtf8()
+        assertTrue("Reason: Reminder" in asked && "Their reminder, in their words: “stretch”" in asked && "17:03" in asked, asked)
+        // At its time, his words go.
+        felix.clock.time = Fixtures.at("2026-10-20T17:03")
+        felix.looks.sweepReminders(felix.clock.time)
+        assertEquals("stretch time: you said so", stores.chat.value.messages.single { it.kind == MessageKind.Reminder }.text)
+    }
+
+    @Test
+    fun `a reminder in his window is written for once while that fits, again after a snooze, and not with Claude off, when yours go`() = runBlocking {
+        stores.felix.update { it.copy(reminders = listOf(at("call gran", now + 8 * MIN))) }
+        felix.answers(his("call gran now, before the next slot"))
+        felix.looks.draftReminders(now)
+        felix.looks.draftReminders(now + MIN)
+        assertEquals(1, felix.server.requestCount)
+        assertEquals("call gran now, before the next slot", stores.felix.value.reminders.single().draft?.message)
+        // Out of the window: not yet.
+        stores.felix.update { s -> s.copy(reminders = s.reminders.map { Reminders.snoozed(it.copy(sentAt = now), now, 60) }) }
+        felix.looks.draftReminders(now + MIN)
+        assertEquals(1, felix.server.requestCount)
+        assertNull(stores.felix.value.reminders.single().draft)
+        // Claude off: no call, and at its time your words go.
+        stores.settings.update { it.copy(aiEnabled = false) }
+        felix.looks.draftReminders(now + 55 * MIN)
+        assertEquals(1, felix.server.requestCount)
+        felix.clock.time = now + 60 * MIN
+        felix.looks.sweepReminders(felix.clock.time)
+        assertEquals(FelixWords.reminder("call gran"), stores.chat.value.messages.single { it.kind == MessageKind.Reminder }.text)
     }
 
     @Test

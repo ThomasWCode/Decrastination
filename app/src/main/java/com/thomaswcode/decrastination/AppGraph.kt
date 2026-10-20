@@ -272,6 +272,7 @@ class AppGraph private constructor(context: Context) {
         },
         calendarTime = { sync.calendarTime },
         answered = { record, words -> looks.answered(record, words) },
+        draftReminders = { now -> looks.draftReminders(now) },
     )
 
     /**

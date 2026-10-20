@@ -82,6 +82,7 @@ class FelixHarness(start: String = "2026-10-19T16:30") : AutoCloseable {
         clock, scope, gateway, notices, focus, planning, ports, outbox, owners,
         calendarTime = { NO_CALENDAR },
         answered = { message, words -> looks.answered(message, words) },
+        draftReminders = { now -> looks.draftReminders(now) },
     )
     val looks: Looks = Looks(
         stores.tasks, stores.settings, stores.model, stores.log, stores.chat, stores.felix, clock, scope, gateway, focus, planning, ports, outbox,
