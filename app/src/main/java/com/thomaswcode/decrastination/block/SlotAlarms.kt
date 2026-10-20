@@ -31,6 +31,9 @@ object SlotAlarms {
     const val ACTION_FELIX_CHECK = "com.thomaswcode.decrastination.FELIX_CHECK"
     /** Your reminders' next moment (Stage 8a). */
     const val ACTION_REMINDER = "com.thomaswcode.decrastination.REMINDER"
+
+    /** How long after a failed sweep the reminders' alarm rings again: its moment's gone by, so it would ring at once, and a failure that lasts mustn't wake the phone over and over. */
+    const val REMINDER_RETRY_MS = 5 * 60_000L
     const val EXTRA_KEY = "key"
     const val EXTRA_START = "start"
     const val EXTRA_END = "end"
@@ -186,9 +189,9 @@ class SlotReceiver : BroadcastReceiver() {
                     // Your reminder's moment (8a): sent now, with no call, so the receiver's time is enough; or the start of
                     // his window to write one, which the look after this writes. Either way the alarm's set for the next.
                     SlotAlarms.ACTION_REMINDER -> {
-                        // A failure sending them is logged, so the alarm's still set again and the look queued.
-                        runCatching { graph.looks.sweepReminders() }.onFailure { Log.w(AppGraph.TAG, "Sending reminders failed", it) }
-                        graph.armReminder()
+                        // A failure sending them is logged, so the alarm's still set again, a while on, and the look queued.
+                        val sent = runCatching { graph.looks.sweepReminders() }.onFailure { Log.w(AppGraph.TAG, "Sending reminders failed", it) }.isSuccess
+                        graph.armReminder(after = if (sent) null else graph.clock.now() + SlotAlarms.REMINDER_RETRY_MS)
                     }
                 }
                 // Each is a moment Felix may have something to say (LR-03): his look is work of its own,
