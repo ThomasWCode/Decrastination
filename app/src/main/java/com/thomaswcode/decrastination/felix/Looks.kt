@@ -123,9 +123,10 @@ class Looks(
      * whatever the hour (Q10: A); one gone by more than [Reminders.LATE_MS] (the phone off) marked late.
      * His words written for it ahead where they're there and it's on time; else yours as you set them,
      * the app's ([FelixWords.reminder]). One whose task closed before it came is let go first, said in
-     * a note of his in the app's words. At its alarm, at each of his looks, and at a start.
+     * a note of his in the app's words. At its alarm, at each of his looks, and at a start; and with each
+     * plan, [plan] the one just made, so a slot's reminder goes by where it laid the slot.
      */
-    suspend fun sweepReminders(now: Long = clock.now()): Unit = sweeping.withLock {
+    suspend fun sweepReminders(now: Long = clock.now(), plan: Plan? = null): Unit = sweeping.withLock {
         if (felix.value.reminders.none(Reminders::pending)) return@withLock
         val tasks = this.tasks.value.tasks.associateBy { it.id }
         for (r in Reminders.letGo(felix.value.reminders, tasks, now) { s -> this.tasks.value.status(s).lastSuccessAt }) {
@@ -133,6 +134,7 @@ class Looks(
             val why = when {
                 task == null -> "is no longer listed"
                 !task.isOpen -> "is done"
+                r.due.kind == DueKind.SlotStart -> if (task.kind == Kind.Event) "is an event, with no slots of work" else "is off the plan"
                 else -> "has no due date now"
             }
             // Said first, under an id of its own, then marked: a failure between leaves it to be let go again, its
@@ -141,7 +143,7 @@ class Looks(
             // Only as it was let go: one moved meanwhile is another moment's, to come then.
             felix.update { s -> s.copy(reminders = s.reminders.map { if (it.id == r.id && it.undrafted() == r.undrafted() && Reminders.unsent(it)) it.copy(cancelledAt = now).undrafted() else it }) }
         }
-        for ((r, moment) in Reminders.due(felix.value.reminders, focus.plan(now), tasks, now)) deliver(r, moment, now, tasks)
+        for ((r, moment) in Reminders.due(felix.value.reminders, plan ?: focus.plan(now), tasks, now)) deliver(r, moment, now, tasks)
     }
 
     /**
