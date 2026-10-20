@@ -152,6 +152,7 @@ class GapsTest {
         felix.settle()
         val his = stores.chat.value.messages.last { it.from == Speaker.Felix }
         assertTrue(his.acts.none { it.action?.type == ChatAction.Type.UnkeepPiece }, his.acts.toString())
+        assertTrue(his.acts.single().let { it.problem && it.line.endsWith("it was kept again while he answered.") }, his.acts.toString())
         assertEquals(listOf(key), conversation.keptToday().map { it.key })
     }
 
@@ -185,9 +186,11 @@ class GapsTest {
         // Kept again, then finished another way a while after: his unkeep leaves it finished, and the record kept.
         assertTrue(felix.focusKeep(key))
         stores.tasks.update { s -> s.copy(tasks = s.tasks.map { it.copy(status = Status.Done, doneAt = now + 10 * 60_000L) }) }
-        asked("no, I haven't", answer("Taken back.", listOf(action("unkeepPiece", own.id, key))))
+        val refused = asked("no, I haven't", answer("Taken back.", listOf(action("unkeepPiece", own.id, key))))
         assertFalse(stores.tasks.value.tasks.single().isOpen)
         assertTrue(stores.log.value.slots.any { it.key == key && it.outcome.kept })
+        // Said under his answer, not dropped without a word.
+        assertTrue(refused.acts.single().let { it.problem && it.line.endsWith("was finished since, another way.") }, refused.acts.toString())
     }
 
     @Test
