@@ -196,7 +196,7 @@ class ChatTest {
     }
 
     @Test
-    fun `what each task's text holds has a room of its own, so every task stays listed and the text block is 250 characters a task`() {
+    fun `what each task's text holds has a room of its own, so every task stays listed beside the text block's own room`() {
         // Eighty tasks, each with a long name of a file and a long text: every one listed, each line's part within
         // 160 characters, the length always said, and the lot within 6 000, the later ones their length alone.
         val file = "a-very-long-name-for-an-attached-worksheet-".repeat(4) + ".pdf"
@@ -214,11 +214,11 @@ class ChatTest {
         assertTrue(holds.sumOf { it.length } <= 6_000 + holds.size * "text 1,200 characters".length, "${holds.sumOf { it.length }}")
         assertTrue(holds.first().startsWith("from Ms Example; attachments: a-very-long"), holds.first())
         assertEquals("text 1,200 characters", holds.last())
-        // The text block: each text at most 250 characters (its start and end, with the cut said), 5 000 in all.
+        // The text block: each text at most its 600 characters (its start and end, with the cut said), 12 000 in all.
         val section = text.substringAfter("The tasks' own text")
         val entries = section.split("\n- gmail:").drop(1)
         assertTrue(entries.all { it.length <= ChatPrompts.BRIEF_TEXT + 200 }, entries.first())
-        assertTrue(section.length <= 5_000 + 600, "${section.length}")
+        assertTrue(section.length <= 12_000 + 600, "${section.length}")
         assertTrue("left out for room" in section, section.takeLast(200))
     }
 
