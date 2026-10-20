@@ -13,6 +13,7 @@ import com.thomaswcode.decrastination.core.Given
 import com.thomaswcode.decrastination.core.InstructionRules
 import com.thomaswcode.decrastination.core.Kind
 import com.thomaswcode.decrastination.core.Note
+import com.thomaswcode.decrastination.core.NoteScope
 import com.thomaswcode.decrastination.core.Notes
 import com.thomaswcode.decrastination.core.OwnStep
 import com.thomaswcode.decrastination.core.OwnTask
@@ -130,9 +131,9 @@ object ChatAnswers {
         val minutesBefore: Int = -1,
     )
 
-    /** A note as the schema has it (Stage 8a). */
+    /** A note as the schema has it (Stage 8a): on a task, or for every task its scope matches (Q31: A). */
     @Serializable
-    private data class GivenNote(val taskId: String = "", val text: String = "")
+    private data class GivenNote(val taskId: String = "", val text: String = "", val subject: String = "", val className: String = "", val source: String = "", val titleContains: String = "")
 
     /** The most reminders, and the most notes, one answer gives: a few at most is what's meant. */
     private const val MAX_REMINDERS = 10
@@ -288,15 +289,30 @@ object ChatAnswers {
 
     /**
      * [given] as notes the app keeps, at most [MAX_NOTES]: each with its words, on a listed task (open or
-     * finished), no more on one than [Notes.PER_TASK] with [felix]'s; what can't be is said in [leftOut].
+     * finished), no more on one than [Notes.PER_TASK] with [felix]'s; or standing (Q31: A), for every task
+     * of a subject, a class, a source the app reads or with a word in its title, never on a task too, no more
+     * than [Notes.MAX_STANDING]; what can't be is said in [leftOut].
      */
     private fun notes(given: List<GivenNote>, byId: Map<String, TaskItem>, felix: FelixStore, now: Long, leftOut: MutableList<String>): List<Note> {
         if (given.size > MAX_NOTES) leftOut += "${given.size - MAX_NOTES} more notes than the app takes at once"
         val added = HashMap<String, Int>()
+        var standing = Notes.live(felix.notes).count { it.scope != null }
         return given.take(MAX_NOTES).mapNotNull { g ->
             fun no(why: String) = null.also { leftOut += "a note ($why)" }
             val words = g.text.trim().take(Notes.MAX_TEXT)
             if (words.isEmpty()) return@mapNotNull no("one with no words")
+            fun given(text: String) = text.trim().takeIf { it.isNotEmpty() }
+            val source = given(g.source)?.let { name ->
+                Source.entries.firstOrNull { it.name.equals(name.replace(" ", ""), ignoreCase = true) || it.label.equals(name, ignoreCase = true) }
+                    ?: return@mapNotNull no("“${words.take(60)}” for a source the app doesn't read (${name.take(20)})")
+            }
+            val scope = NoteScope(given(g.subject), given(g.className), source, given(g.titleContains)).takeUnless { it.isEmpty }
+            if (scope != null) {
+                if (given(g.taskId) != null) return@mapNotNull no("“${words.take(60)}” on a task and for every task of a kind, both")
+                if (standing >= Notes.MAX_STANDING) return@mapNotNull no("“${words.take(60)}”: ${Notes.MAX_STANDING} notes for every task of a kind are kept already")
+                standing++
+                return@mapNotNull Note(UUID.randomUUID().toString(), words, now, By.Felix, scope = scope)
+            }
             val task = byId[g.taskId.trim()] ?: return@mapNotNull no("“${words.take(60)}” on a task that isn't listed")
             val count = Notes.on(task.id, felix.notes).size + (added[task.id] ?: 0)
             if (count >= Notes.PER_TASK) return@mapNotNull no("“${words.take(60)}”: “${task.title.take(60)}” has ${Notes.PER_TASK} already")

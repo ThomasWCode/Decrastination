@@ -39,6 +39,9 @@ object Notes {
     /** The most notes one task keeps, standing ones aside. */
     const val PER_TASK = 10
 
+    /** The most standing notes kept at once: each goes with every task it matches. */
+    const val MAX_STANDING = 20
+
     /** Those of [notes] not deleted. */
     fun live(notes: List<Note>): List<Note> = notes.filter { it.deletedAt == null }
 

@@ -62,13 +62,13 @@ object TaskSheetModel {
 
     /**
      * [task]'s notes (8a), its own then the standing ones it matches ([Notes.forTask]), each a line: "Felix,
-     * today 17:00: use the second source"; "For every Chemistry task: on sheets (yours, Mon)". [felix] his name.
+     * today 17:00: use the second source"; "Note for every Chemistry task: on sheets (yours, Mon)". [felix] his name.
      */
     fun notes(task: TaskItem, notes: List<Note>, classMap: Map<String, String>, felix: String, now: Long, zone: ZoneId): List<Noted> =
         Notes.forTask(task, notes, classMap).map { n ->
             val who = if (n.by == By.Felix) felix else "You"
             val at = Format.at(n.at, now, zone)
-            Noted(n.id, n.scope?.let { "For ${Notes.scopeLine(it)}: ${n.text} (${if (n.by == By.Felix) felix else "yours"}, $at)" } ?: "$who, $at: ${n.text}")
+            Noted(n.id, n.scope?.let { "Note for ${Notes.scopeLine(it)}: ${n.text} (${if (n.by == By.Felix) felix else "yours"}, $at)" } ?: "$who, $at: ${n.text}")
         }
 
     /** The words of the instructions in force on [taskId], about it or changing it: the newest first. */

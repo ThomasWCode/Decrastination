@@ -809,7 +809,10 @@ class Conversation(
                     acts += Act("Moved: “${r.text}” to $at", ChatAction(ChatAction.Type.MoveReminder, r.taskId.orEmpty(), value = r.id), reminder = was)
                 }
             }
-            notes.forEach { n -> acts += Act("Noted on “${title(n.taskId) ?: "it"}”: ${n.text}", ChatAction(ChatAction.Type.AddNote, n.taskId.orEmpty(), value = n.id)) }
+            notes.forEach { n ->
+                val on = n.scope?.let { "for ${Notes.scopeLine(it)}" } ?: "on “${title(n.taskId) ?: "it"}”"
+                acts += Act("Noted $on: ${n.text}", ChatAction(ChatAction.Type.AddNote, n.taskId.orEmpty(), value = n.id))
+            }
             st.copy(reminders = kept, notes = st.notes + notes)
         }
         return acts
