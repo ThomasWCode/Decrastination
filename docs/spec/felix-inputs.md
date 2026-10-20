@@ -95,13 +95,14 @@ Before those words comes what they're about, in full (D-93): the task's whole te
 
 What the app knows when you send (`ChatPrompts.context`):
 - **Today**: the date, the time and the time zone.
-- **Open tasks**, up to 80, by the deadline in force: each with its id, title, source, kind, due date (marked "(a plan)" where the app or Claude set it), its minutes and what the plan makes of them at your pace, the minutes worked, and when it can start; under it, its steps, numbered for a tick.
+- **Open tasks**, up to 80, by the deadline in force: each with its id, title, source, kind, due date (marked "(a plan)" where the app or Claude set it), its minutes and what the plan makes of them at your pace, the minutes worked, and when it can start; under it, its steps, numbered for a tick, then its notes (4.1.0), its own and the standing ones it matches, each by its id and whose it is.
 - **Your pace**: each multiplier learned (by kind, and by class where it has its own), with the timed pieces it's from; or that none is learned yet.
 - **Tasks that look like the same work** (DX-15), where there are any.
 - **The calendar's events in the next fortnight**, up to 60, each with its eventKey.
 - **The changes in use**, in words.
 - **Your own tasks finished in the last week**, up to 15, to open again.
 - **The settings he may change**, with their values now (`FelixSettings`).
+- **The reminders still to come** (4.1.0), each by its id, with when it comes as the plan has it now, your words and its task; "(none)" with none, so "what have I asked you to remind me of?" has its answer.
 - **The tasks' own text** (D-93, `TaskText`): each open task's (but Anki's counts) that has any, by the deadline in force: its source, an email's sender, its attachments' names and its links, then its text (an assignment's instructions, an email's conversation, a planner item's details, your notes), at most 600 characters; 12,000 characters in all. A longer text is its reading's summary of all of it: the reading writes one for a text over about 600 characters, at no extra call ([readings.md](readings.md#the-three-jobs)). A text past the 16,000 characters a reading sees has its summary said to be of its start, with its end after it. With none (Claude off when it was read, or read before summaries), its start and its end, saying how much of the middle was left out: a conversation is kept oldest first, so its end holds the newest replies, where a changed date or a new ask turns up. The task in full and the tasks he reads are whole up to 8,000 characters; past that, the summary first, then the start and end. It comes last, so a context too long for its room loses it first.
 
 Not sent: a task's reading, but as its minutes and steps; a finished task's text.
@@ -146,9 +147,11 @@ Today: Tuesday 13 October 2026, 17:20 (Europe/London)
 
 Open tasks (id | title | from | kind | due, a real deadline unless marked a plan, which is never overdue and moves on once it passes | minutes in all, with what the plan makes of them at their pace where it's learned | minutes worked so far | can't start before):
 - teams:t1 | Rates of reaction worksheet | Teams | Homework | Thu 15 Oct 2026 08:30 | 45, planned as 59 at their pace | 0 | -
+    note n1 (yours): Use Monday's results table for question 5
 - powerplanner:p1 | Vectors exercise 4B | Power Planner | Homework | Fri 16 Oct 2026 23:59 | 60, planned as 69 at their pace | 0 | -
     step 0: Questions 1 to 6 (30 min)
     step 1: Questions 7 to 12 (30 min)
+    note n2 (theirs, for every Maths task): Do these on paper, not in the textbook
 - gmail:m1 | Trip consent form | Gmail | Admin | Fri 16 Oct 2026 23:59 (a plan) | 10 | 0 | -
 - own:o1 | Personal statement first draft | Yours | Admin | no date | 120 | 0 | -
 
@@ -191,7 +194,8 @@ Settings you can change (setting | what it is | its value now):
 - ankiTextbook | Current German textbook | 1
 
 Reminders set, still to come (id | when | their words | its task):
-(none)
+- r2 | at the start of “Rates of reaction worksheet”'s next slot, Tue 13 Oct 17:20 | Ask about question 7 | teams:t1
+- r1 | Wed 14 Oct 08:00 | Bring the signed consent form | gmail:m1
 
 The tasks' own text (id | from, and what comes with it; then its text: an assignment's instructions, an email's conversation, a planner item's details, their notes), each at most 600 characters: a longer one as its reading's summary (each says of how much), or else its start and end (an email's newest replies are at its end):
 - teams:t1 | Teams; links: https://example.org/rates-sheet
@@ -411,7 +415,9 @@ Also:
    - `Reason:` and `Now:`;
    - the piece: for a slot under way, its label, minutes, times and what earns its free time, and its first action where one's written (AI-15); for a slot on record, whether it was missed, kept, or ticked without its photo; for a question, the task;
    - `Its task's own text`: up to 1,500 characters of it (a longer one as its reading's summary, else its start and end), with its attachments, links and an email's sender (D-93);
-   - `Today:` the slots kept, missed and to come, and the next; `Left today:` those to come;
+   - `Notes on it:` the notes kept with its task (4.1.0), its own and the standing ones it matches;
+   - `Their reminder…`: for a Reminder, your words; for a SlotStart, your reminder that came at the slot's start, so he doesn't say it twice;
+   - `Today:` the slots kept, missed and to come, and the next; `Reminders today:` for the Morning, your reminders that come today; `Left today:` those to come;
    - `Free time now:` for SlotKept and DayDone;
    - `Done, as their sources say…`: for Completions, the tasks;
    - `Recent, oldest first:` his last 6 messages of his own in the chat that said something, each with your reply to it (the message of yours answering it, or the next of yours within ten minutes);
@@ -434,6 +440,8 @@ First action: Read question 1 and underline what it asks
 Its task's own text (Teams; links: https://example.org/rates-sheet):
   Answer questions 1 to 8 on the sheet. For question 5, use the results table from Monday's practical.
   Show your working for the calculations.
+Notes on it: Use Monday's results table for question 5
+Their reminder for this slot, sent at its start, so not to say again: “Ask about question 7”
 Today: 0 kept, 0 missed, 2 to come; next: Vectors exercise 4B: Questions 1 to 6 at 17:25
 Left today: Rates of reaction worksheet: part 1 of 2 16:50–17:20; Vectors exercise 4B: Questions 1 to 6 17:25–18:00
 Recent, oldest first:
@@ -517,6 +525,7 @@ Recent, oldest first:
 Reason: Morning
 Now: Tuesday 13 October 2026, 07:00
 Today: 0 kept, 0 missed, 2 to come; next: Rates of reaction worksheet: part 1 of 2 at 16:45
+Reminders today: 17:00 Ask about question 7
 Left today: Rates of reaction worksheet: part 1 of 2 16:45–17:15; Vectors exercise 4B: Questions 1 to 6 17:20–17:55
 Recent, oldest first:
 - Mon 17:00, you (SlotStart): Starting the vectors? First: copy out question 1's diagram.
@@ -549,6 +558,33 @@ Reason: Completions
 Now: Tuesday 13 October 2026, 19:10
 Today: 0 kept, 0 missed, 0 to come
 Done, as their sources say, with none of it timed in a slot: Rates of reaction worksheet; Vectors exercise 4B
+Recent, oldest first:
+- Mon 17:00, you (SlotStart): Starting the vectors? First: copy out question 1's diagram.
+- Mon 17:02, they replied: Starting now
+```
+
+**Reminder** (4.1.0), written at 07:50 the next morning for the form's reminder at 08:00, as of then, with the slot then under way or next and the task it's about:
+
+<!-- generated: felix Reminder -->
+```text
+Reason: Reminder
+Now: Wednesday 14 October 2026, 08:00
+Slot then: Rates of reaction worksheet: part 1 of 2, 16:45–17:15, next
+Task: Trip consent form
+Its task's own text (Gmail, from Ms Example; attachments: consent-form.pdf (109 KB)):
+  Dear Year 12,
+  Please return the signed consent form for the museum trip by Friday 16 October; forms go back to the school office, not to your form tutor.
+  The trip is on Friday 30 October. The coach leaves at 08:15 from the front of the school and is back by 16:30.
+  Bring a packed lunch, a notebook and a pen: the museum's cafe is closed that day for a private event.
+  The department covers the cost, but tell us by Wednesday of any access or dietary needs we should pass on to the museum.
+  You'll fill in a short worksheet during the visit, due the following Monday.
+  Kind regards,
+  Ms Example
+  On Wednesday 14 October, Ms Example wrote:
+  Change of plan: the coach now leaves at 08:00, so be at the front of the school by 07:50.
+Their reminder, in their words: “Bring the signed consent form”
+Today: 0 kept, 0 missed, 4 to come; next: Rates of reaction worksheet: part 1 of 2 at 16:45
+Left today: Rates of reaction worksheet: part 1 of 2 16:45–17:15; Rates of reaction worksheet: part 2 of 2 17:20–17:49; Vectors exercise 4B: Questions 1 to 6 18:45–19:20; Personal statement first draft: part 1 of 4 19:25–19:55
 Recent, oldest first:
 - Mon 17:00, you (SlotStart): Starting the vectors? First: copy out question 1's diagram.
 - Mon 17:02, they replied: Starting now

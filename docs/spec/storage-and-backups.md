@@ -35,6 +35,7 @@ Under the app's `files/` folder:
 | `log.json` | `ActivityLog`: slots kept, missed and moved; completions; blocks; protection lapses; each day's plan; check-ins; weekly reviews; each week's totals ([privacy.md](privacy.md)) |
 | `instructions.json` | `InstructionState`: your changes, each with its words, what it's about, its reading and its state |
 | `memory.json` | `MemoryState`: what Felix remembers ([felix.md](felix.md)) |
+| `felix.json` | `FelixStore`, the Conversation's (4.1.0): Felix's notes, on a task or standing for every task a scope matches, and your reminders, each with what's become of it (sent, snoozed, done, cancelled) and his words written ahead for it; a deleted note and a cancelled reminder kept while their act's Undo can bring them back, the rest a month once done, pruned each morning ([felix.md](felix.md)) |
 | `chat.json` | `ChatState`: the chat's live window (every message of yours and Felix's, the newest 200 or those of the last 14 days, whichever keeps more, and every one of his unread), where you'd read up to, and Felix's state (his next check, what he wrote ahead, what waits to be asked, the check-in's answers so far) |
 | `chat-archive-<yyyy-MM>.json` | `ChatArchive`, a month's each (`ChatArchiveStore`, by each message's time in UTC): the chat's messages past its window, oldest first, kept for you and never sent to him. Each month's file is read only when it's wanted, never at start: the window's move into it, scrolling back (the newest months, as far as the pages go), a reply to one of its messages, a backup, a restore, a reset and the export. As a whole it's `chat-archive.json` still, one part of a backup. 4.0.0 to 4.0.3 kept it in that one file, split into its months at 4.0.4's first start, in the shape its months have then (`ChatArchiveStore.SPLIT`; one that can't be read is set aside and said as any store's file, what can be kept of it split); a move made again after a stop keeps the window's copy, the newer ([felix.md](felix.md)) |
 | `school.json` | `SchoolCalendar`: days with no school, and half-days |
@@ -67,9 +68,9 @@ Secrets that can't be decrypted are told apart from none saved (`SecretStore`): 
 
 ## Backups
 
-`data/Backup.kt` (`Backup`, format 7, `Backups.encode`) holds what the sources can't give back, with the version of each store its parts come from (`Backup.versions`):
+`data/Backup.kt` (`Backup`, format 8, `Backups.encode`) holds what the sources can't give back, with the version of each store its parts come from (`Backup.versions`):
 - the settings as asked for (waiting changes applied), the activity log, the calibration, your calendar answers, and Claude's month;
-- your changes in use, your own tasks, the school calendar, what Felix remembers, today's slots, and the chat with Felix's state;
+- your changes in use, your own tasks, the school calendar, what Felix remembers, today's slots, the chat with Felix's state, and his notes and reminders (format 8, 4.1.0);
 - the chat's earlier messages, while the backup fits what Import reads (8 MB): past that, the oldest are left out first, as many as it takes, and Settings → Backup says how many (`Backups.fitted`).
 
 Never the passwords or keys, nor the sources' tasks, which the next sync reads again.
@@ -87,7 +88,7 @@ A copy off the phone is yours to make: a sync app mirroring the folder, or Expor
 - the settings go through `changeSettings`, keeping this phone's protection, Claude's key in use and its calendars: once armed, one that loosens the blocker waits;
 - your changes come back as applying each here would (one that would make tasks wait for each other in a circle stays unclear, saying so); your own tasks not here are added, with your changes laid over them again;
 - the school calendar is merged; what's remembered is merged by topic and words, this phone's winning; the chat comes back whole only where this phone's is empty, its earlier messages and Felix's state with it; into a chat that isn't, his own messages it hasn't come back by id, with your replies to them, as the log's records of them were merged before 4.0.0, those read there read here as far as that goes without passing one of his unread here;
-- Felix's state otherwise comes back where this phone has none, and today's slots on the same day;
+- Felix's state otherwise comes back where this phone has none, and today's slots on the same day; his notes and reminders it hasn't come back by id, this phone's winning, one still to come whose time has gone by coming at once, late (`Backups.mergedFelix`);
 - a backup from before the chat held Felix's messages (format 6) has his records and state moved into its chat as it's read, as the phone's files were;
 - the log is merged with nothing doubled, this phone's winning; the calibration is the backup's; calendar answers merge, this phone's winning; Claude's month takes the higher of each count;
 - the reminders' alarms are set again, the calendar read again, and today's record made again.
@@ -104,7 +105,7 @@ Nothing goes until its copy is saved. None needs the parent code, and none touch
 | Stats | The record (slots, completions, days, blocks, reviews, check-ins), and what's learned from it; Felix's messages stay |
 | What the app has learned | The calibration, learned afresh from now |
 | What Felix remembers | His facts and standing instructions, and your profile lines |
-| The chat and Felix's history | The chat and its earlier messages, Felix's among them, and what he's waiting to say |
+| The chat and Felix's history | The chat and its earlier messages, Felix's among them, what he's waiting to say, and his notes and reminders (Q12: A) |
 | Your changes | Every change in use |
 | Everything learned | All of these |
 

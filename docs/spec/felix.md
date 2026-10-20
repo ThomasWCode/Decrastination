@@ -65,6 +65,8 @@ Everything he gives is made as his answer comes, each with its Undo (next sectio
 - **Memories** (`memories`): facts and standing instructions (below).
 - **Actions** (`actions`, AI-14): tick or untick a step (its slot kept where the plan has one, earning as a tick does); finish, reopen or delete one of your own tasks (or feedback done by its tick, NF-06); open a task on a card; set a setting.
 - **Settings**, only those in `core/FelixSettings.kt`: his name and line, when he asks and checks, the briefings and the check-in, working hours, the morning break, the shortest school time used, pieces and their breaks, breaks outside, margins, undated work, the Anki deadline and textbook.
+- **Reminders** (`reminders`, at most ten; 4.1.0, D-100): your words, up to 300 characters, at a time (today's with no date, from now to a year ahead), at the start of a task's next work slot, or a while before a task's deadline in force (a week before at most), following it as it moves (`core/Reminders.kt`). One already set, by its id from his context's list, is moved or reworded in place while it's never come; `cancelReminder` cancels one. At most 50 still to come. When one comes is in [His messages](#his-messages).
+- **Notes** (`notes`, at most ten; 4.1.0, D-100): on a listed task, open or finished, ten a task at most; or standing (Q31: A), for every task of a subject (by the class map), a class, a source or with a word in its title, twenty at most (`core/Notes.kt`, `Notes.forTask`); `deleteNote` deletes one. Each is told to him under its tasks' steps in the chat, in his messages about them and to the micro-planner, and shown on their sheets, where you add your own (Q14: A). Kept in `felix.json`, by task id, so a sync can't drop one.
 
 Never the blocker's settings, protection's or Claude's, the calendars, your classes, your profile, the Teams syncs, his web search or where the summary goes; a value the Settings screen wouldn't take is refused (`FelixSettings.set`).
 A task from Teams, Power Planner, Gmail or AnkiDroid is done when its source says so: he can't mark one done or delete it, only say it isn't a task.
@@ -76,6 +78,7 @@ A task from Teams, Power Planner, Gmail or AnkiDroid is done when its source say
 - Each card says *Done* or *Added*, with *Undo* (`Conversation.undoProposal`); a task he added has *Change* (the form); one undone has *Redo*.
 - One that couldn't be made says "Not made: …" under his answer; a time the plan couldn't keep says where it went: "06:35 had no free time: it's at 10:45." (`ChatAnswers.movedPins`, PL-04).
 - His actions are listed under his answer (`ChatMessage.acts`, `Act` in `core/Chat.kt`), each with its *Undo* while `ChatActs.canUndo` finds it as he left it (`Conversation.undoAct`).
+- Reminders and notes are acts too (`Conversation.keep`): "Reminder set: Tue 20 Oct 19:00, “call gran”", "Moved: “call gran” to …" (its old time and words kept on the act), "Cancelled: the reminder …", "Noted on “…”: …", "Note deleted: …". A cancel and a delete only mark what they name, kept whole for the Undo. A reminder set or moved can be taken back while it's never come nor been snoozed, and not moved again since; Undo of a set takes it away, of a move puts its time and words back, of a cancel brings it back.
 - Undo takes back a tick (one of yours it finished opens again), ticks an untick again, opens a finished task again or finishes a reopened one as it stood, restores a deleted task with the cards that added it, and puts a setting back.
 - Once something else has changed it, its Undo says it can't be undone any more.
 
@@ -112,6 +115,7 @@ When a message needs facts neither you nor the app have given him (a competition
 Each is written by `FelixCaller.say` (AI-22, medium effort) from `felix/FelixPrompts.kt` (`FelixPrompts.describe`), told:
 - the reason and the time; the piece with its minutes, slot and what earns its free time, and its first action (AI-15);
 - its task's own text, up to 1 500 characters (`FelixPrompts.TEXT`): a longer one as its reading's summary, else its start and end; with what's attached (D-93);
+- its task's notes, its own and the standing ones it matches (4.1.0); at a slot's start, your reminder that came then, so he doesn't say it twice; in the morning, your reminders that come today;
 - today's slots kept, missed and to come; the free time; his last six messages of his own from the chat and your reply to each (`ChatHistory.replyOf`: the message of yours answering it, or the next of yours within ten minutes); and the question.
 
 What comes back, and what's done with it:
@@ -120,6 +124,14 @@ What comes back, and what's done with it:
 - His next check is when he said, else `felixDefaultCheckMin`; a call held or failed is tried again after five minutes.
 - His next SlotStart is written up to ten minutes ahead after each plan (AC-10, `Looks.draftAhead`), and sent if it still fits.
 - Every message is sent through his outbox (`felix/Outbox.kt`): into the chat first, with why he wrote it (`ChatMessage.kind`), its piece and its next check, then his notification made from it. A silent one (his choice not to write) is kept with no words, shown nowhere, so his rules count it as said (`FelixRules.sent`).
+
+**Your reminders** (4.1.0, D-100, `Looks.sweepReminders`): each comes as his message (kind Reminder, about its task) at its moment: an At's time, a SlotStart's task's next work slot's start (moving with the slot), a BeforeDue's deadline less its minutes, or its snooze's. One alarm is set to the earliest (`SlotAlarms.armReminder`, request code 4), again with every plan and every change to them; the sweep also runs at each of his looks and at a start.
+- In his words when he's written for it: a reminder due within ten minutes is written for as his slot messages are (`Looks.draftReminders`, `FelixPrompts.Reason.Reminder`: your words, the slot then and the task's text and notes, as of its moment), after each plan, at each look, and at once when one's set, moved or brought back. Else in yours, as the app's: "reminder: call gran" (`FelixWords.reminder`). Never nothing.
+- An At comes whatever the hour, as an alarm would (Q10: A); a SlotStart or a BeforeDue follows its slot or its deadline.
+- One more than five minutes late (the phone off through it) comes in your words, marked "(late: it was for 19:00)".
+- One whose task closes, goes from the list, or (a BeforeDue's) loses its deadline before it comes is let go, said in a note of his in the app's words (kind Note).
+- His replies are *Done*, *Snooze 15 min* and *Snooze 1 h* (Q11: A), each taken with no call: a snooze has it come again then, written for again near the time. Any other words are a turn of the chat with it quoted.
+- Each morning after the briefing (`Conversation.pruneFelix`), a reminder sent or done a month ago goes, as do a cancelled one and a deleted note once their act's Undo has left the chat's window with its message, and a deleted task's notes once its delete can't be undone.
 
 Three more come at set times:
 - **The morning** (LR-04, `learn/Briefing.kt`, `Looks.morning`): the briefing is his message whole, up to 480 characters. With no slot today, Claude unavailable, or no answer within 20 seconds, it's the day's title and list instead, in his name in the app's words (`Conversation.morningList`), so every morning is in the chat. His notification is then made again, with what waited overnight (below).
@@ -142,7 +154,7 @@ He has no daily ceiling. The app's routine channels (a calendar move put back, t
 Every notification of the app's is named once, with request codes of its own for its tap and buttons (`notify/NoticeId.kt`), and posted through `notify/Notifier.kt`, which applies those rules and alone posts and cancels them (`notify/Channels.kt` makes the channels; WorkManager shows the work-under-way ones from each worker's `ForegroundInfo`). The notifications his messages took the place of (`NoticeId.RETIRED`) are taken away at start, where one's left.
 
 A reply, from his notification (`felix/FelixReplyReceiver.kt`), one of his chips, or a swipe or *Reply* in the chat, comes in one way (D-98: `Conversation.ask` with `replyTo`): it's kept in the chat under the message it answers (`ChatMessage.replyTo`) and routed by what that message is (`felix/Replies.kt`):
-- a check-in's question: its next asked; a reading's question: an instruction on its task, as above; how work went: the answer on each completion; a calendar event's question: its answer kept. Each with no call.
+- a check-in's question: its next asked; a reading's question: an instruction on its task, as above; how work went: the answer on each completion; a calendar event's question: its answer kept; a reminder's *Done* or snooze: on it (4.1.0). Each with no call.
 - anything else: a chat turn, about what the message it answers was; from his notification, your words under his there while he answers, and his answer his next message, made as work of its own (`Conversation.replyFromNotification`, `FelixReplyWorker`). One sent while he answers another of yours goes with it, as one in the chat does (above).
 
 ## What he remembers

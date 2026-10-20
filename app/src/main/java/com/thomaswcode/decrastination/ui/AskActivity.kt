@@ -569,7 +569,8 @@ private val EXAMPLES = listOf(
     "The physics prep will take 90 minutes",
     "Move the German vocab to Thursday",
     "I'm out on Saturday evening from 7",
-    "Remind me to buy mum a present before Sunday",
+    "Remind me at 7 to call gran",
+    "Note on the essay: use the second source",
 )
 
 /**
