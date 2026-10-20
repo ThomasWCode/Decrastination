@@ -277,7 +277,8 @@ object ChatActs {
 
     /**
      * Whether [act] can still be taken back, with [tasks], [settings], the chat's [messages] and Felix's
-     * [notes] and [reminders] as they are: a step ticked still done (one of yours, or one done by its tick, it finished, too); one unticked still to do;
+     * [notes] and [reminders] as they are, [messageId] the message holding it (where known: an act can read
+     * the same as an earlier one): a step ticked still done (one of yours, or one done by its tick, it finished, too); one unticked still to do;
      * a task done still done; one opened again still as that left it ([asReopened]); one deleted
      * still gone, and none of the cards that had added it made again since (Redo makes it anew); a
      * setting still as it was set; a reminder set or moved still unsent, not snoozed nor cancelled, and
@@ -286,7 +287,7 @@ object ChatActs {
      * kept still kept by the record it made, its key's newest among today's [kept] (each key's newest
      * record's time), one kept no more still not, its task open.
      */
-    fun canUndo(act: Act, tasks: List<TaskItem>, settings: Settings, messages: List<ChatMessage>, notes: List<Note> = emptyList(), reminders: List<Reminder> = emptyList(), kept: Map<String, Long> = emptyMap()): Boolean {
+    fun canUndo(act: Act, tasks: List<TaskItem>, settings: Settings, messages: List<ChatMessage>, notes: List<Note> = emptyList(), reminders: List<Reminder> = emptyList(), kept: Map<String, Long> = emptyMap(), messageId: String? = null): Boolean {
         if (act.undone) return false
         val a = act.action ?: return false
         val task = tasks.firstOrNull { it.id == a.taskId }
@@ -301,8 +302,8 @@ object ChatActs {
             ChatAction.Type.Reopen -> task != null && act.was != null && asReopened(task, act.was)
             ChatAction.Type.Delete -> act.was != null && task == null && !redone(act.cards, messages)
             ChatAction.Type.Setting -> act.before != null && FelixSettings.field(a.setting.orEmpty())?.get(settings) == act.after
-            ChatAction.Type.SetReminder -> reminder != null && Reminders.unsent(reminder) && !movedSince(act, messages)
-            ChatAction.Type.MoveReminder -> reminder != null && act.reminder != null && Reminders.unsent(reminder) && !movedSince(act, messages)
+            ChatAction.Type.SetReminder -> reminder != null && Reminders.unsent(reminder) && !movedSince(act, messages, messageId)
+            ChatAction.Type.MoveReminder -> reminder != null && act.reminder != null && Reminders.unsent(reminder) && !movedSince(act, messages, messageId)
             // Brought back only where there's room for it: not past the reminders still to come, nor a task's notes, kept.
             ChatAction.Type.CancelReminder -> reminder?.cancelledAt != null && reminders.count(Reminders::pending) < Reminders.MAX_PENDING
             ChatAction.Type.AddNote -> note != null && note.deletedAt == null
@@ -314,12 +315,13 @@ object ChatActs {
     }
 
     /**
-     * Whether a message after the one holding [act] in [messages] moves its reminder again, by an act not
-     * undone: taking [act] back then would put back a time or words since changed.
+     * Whether a message after the one holding [act] in [messages] ([messageId], else the first holding one
+     * like it) moves its reminder again, by an act not undone: taking [act] back then would put back a time or
+     * words since changed.
      */
-    private fun movedSince(act: Act, messages: List<ChatMessage>): Boolean {
+    private fun movedSince(act: Act, messages: List<ChatMessage>, messageId: String? = null): Boolean {
         val id = act.action?.value ?: return false
-        val at = messages.indexOfFirst { act in it.acts }
+        val at = messageId?.let { m -> messages.indexOfFirst { it.id == m } } ?: messages.indexOfFirst { act in it.acts }
         if (at < 0) return false
         return messages.drop(at + 1).any { m -> m.acts.any { it.action?.type == ChatAction.Type.MoveReminder && it.action.value == id && !it.undone } }
     }

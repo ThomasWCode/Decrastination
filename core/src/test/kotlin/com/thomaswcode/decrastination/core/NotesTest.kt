@@ -65,5 +65,9 @@ class NotesTest {
         assertEquals(listOf("deleted", "onGone", "kept"), Notes.prune(all, tasks, listOf(acts)).map { it.id })
         assertEquals(listOf("kept"), Notes.prune(all, tasks, listOf(acts.copy(acts = acts.acts.map { it.copy(undone = true) }))).map { it.id })
         assertEquals(listOf("kept"), Notes.prune(all, tasks, emptyList()).map { it.id })
+        // On a source's task not listed: kept till that source has been read since the note (a backup restored before the first sync).
+        val onTeams = note("onTeams", taskId = "teams:later")
+        assertEquals(listOf("onTeams", "kept"), Notes.prune(listOf(onTeams, kept), tasks, emptyList()).map { it.id })
+        assertEquals(listOf("kept"), Notes.prune(listOf(onTeams, kept), tasks, emptyList()) { onTeams.at + 1 }.map { it.id })
     }
 }
