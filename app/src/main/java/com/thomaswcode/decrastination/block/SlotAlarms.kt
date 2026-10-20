@@ -178,13 +178,15 @@ class SlotReceiver : BroadcastReceiver() {
             try {
                 val graph = AppGraph.get(context)
                 when (intent.action) {
-                    SlotAlarms.ACTION_SLOT_START -> graph.slots.onStart(key!!)
+                    // A failure is logged, not a crash (it would take the focus service's connection with it), and his look's still queued.
+                    SlotAlarms.ACTION_SLOT_START -> runCatching { graph.slots.onStart(key!!) }.onFailure { Log.w(AppGraph.TAG, "A slot's start failed", it) }
                     SlotAlarms.ACTION_SLOT_END -> {
                         // As the alarm had it laid, for its record.
                         val window = intent.getStringExtra(SlotAlarms.EXTRA_WINDOW)?.let { name -> WindowKind.entries.firstOrNull { it.name == name } }
                         val start = intent.getLongExtra(SlotAlarms.EXTRA_START, -1L)
                         val end = intent.getLongExtra(SlotAlarms.EXTRA_END, -1L)
-                        graph.slots.onEnd(key!!, if (window != null && start >= 0 && end >= start) Focus.Laid(start, end, window) else null)
+                        runCatching { graph.slots.onEnd(key!!, if (window != null && start >= 0 && end >= start) Focus.Laid(start, end, window) else null) }
+                            .onFailure { Log.w(AppGraph.TAG, "A slot's end failed", it) }
                     }
                     // Your reminder's moment (8a): sent now, with no call, so the receiver's time is enough; or the start of
                     // his window to write one, which the look after this writes. Either way the alarm's set for the next.

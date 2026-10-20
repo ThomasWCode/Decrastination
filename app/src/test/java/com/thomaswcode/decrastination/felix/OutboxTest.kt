@@ -108,6 +108,29 @@ class OutboxTest {
     }
 
     @Test
+    fun `a reply of yours to one of his still unread stays in the window with it, so it stays seen`() {
+        val old = clock.now() - Outbox.WINDOW_MS - 60_000L
+        val his = his("a", old)
+        val reply = ChatMessage("y", Speaker.You, "on it", old + 1, replyTo = "a")
+        val newer = (1..Outbox.WINDOW).map { his("n$it", clock.now() - it) }
+        val state = ChatState(listOf(his, reply) + newer, readAt = old - 1)
+        // His still unread, so it stays; your reply to it stays with it.
+        assertTrue(Outbox.past(state, clock.now()).none { it.id == "a" || it.id == "y" })
+        assertEquals(setOf("a"), Outbox.repliedTo(state))
+    }
+
+    @Test
+    fun `a tap opens the chat past a message you've replied to from his notification`() = runBlocking {
+        outbox.send(his("a", clock.now() - 120_000L))
+        chat.update { it.copy(messages = it.messages + ChatMessage("y", Speaker.You, "on it", clock.now() - 60_000L, replyTo = "a")) }
+        outbox.notify(clock.now())
+        // Still shown, with your reply under it, while he answers; nothing else of his: the tap opens at it.
+        assertEquals(listOf("a", "y") to "a", ports.showing!!.lines.map { it.id } to ports.showing!!.openAt)
+        outbox.send(his("b"))
+        assertEquals("b", ports.showing!!.openAt)
+    }
+
+    @Test
     fun `nothing's posted while the chat's on screen, nor with his channel off, and his silences never`() = runBlocking {
         onScreen = true
         outbox.send(his("a"))

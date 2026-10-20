@@ -74,6 +74,22 @@ class LooksTest {
     }
 
     @Test
+    fun `his words for the next slot are asked for once, one that came back with none not paid for again at each look`() = runBlocking {
+        underWay()
+        // Five minutes before its message's moment (its start and his grace, the slot kept where it was laid): his words
+        // for it asked for ahead.
+        val slot = felix.planning.plan().todaySlots.first { it.kind == SlotKind.Work }
+        felix.clock.time = slot.start + (stores.settings.value.felixGraceMin - 5) * 60_000L
+        felix.answers("not an answer")
+        felix.looks.check()
+        val asked = felix.server.requestCount
+        assertTrue(asked >= 1, "asked once")
+        felix.clock.time += 30_000L
+        felix.looks.check()
+        assertEquals(asked, felix.server.requestCount)
+    }
+
+    @Test
     fun `his notifications off silence only them, and he still writes in the chat`() = runBlocking {
         underWay()
         felix.shown = false

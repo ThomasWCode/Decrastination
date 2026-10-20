@@ -458,14 +458,25 @@ class Looks(
         }
     }
 
-    /** [draftAhead]'s writing, under [writing]: the cheap checks first, as his looks come every half minute. */
+    /** The trigger and moment his words were last asked for ahead and none came back ([draft]): not asked again. */
+    private var draftAsked: Pair<String?, Long>? = null
+
+    /**
+     * [draftAhead]'s writing, under [writing]: the cheap checks first, as his looks come every half minute. Asked
+     * once a trigger's moment: an answer that came back with none (refused, unreadable) was paid for, and isn't
+     * asked again at each look; the message is written at its time as without one.
+     */
     private suspend fun draft(plan: Plan, now: Long) {
         val (trigger, at) = FelixRules.upcoming(plan, this.settings.value, now) ?: return
         if (at - now > FelixRules.AHEAD_MS) return
         if (FelixRules.fits(chat.value.felix.draft, trigger, now, lastSent())) return
+        if (draftAsked == trigger.key to at) return
         if (!gateway.available()) return
         val caller = gateway.client(ModelEffort.Job.Felix)?.let { FelixCaller(it) } ?: return
-        val answer = (ask(caller, trigger, at, interactive = false) as? Called.Answered)?.value?.answer ?: return
+        val called = ask(caller, trigger, at, interactive = false) as? Called.Answered ?: return
+        // Only where none came back: a draft that came, made stale since by a message of his, is written again ahead.
+        draftAsked = (trigger.key to at).takeIf { called.value.answer == null }
+        val answer = called.value.answer ?: return
         chat.update { it.copy(felix = it.felix.copy(draft = FelixDraft(trigger.reason.name, trigger.key, answer, now))) }
         Log.i(AppGraph.TAG, "Felix wrote ahead for ${trigger.key}, due at ${Instant.ofEpochMilli(at).atZone(clock.zone()).toLocalTime()}")
     }

@@ -78,6 +78,20 @@ class ChatScreenStateTest {
     }
 
     @Test
+    fun `a message you've replied to from his notification isn't new, and one it left out still is`() {
+        // His older message, left out of the notification's room; the one you replied to from it; read before both.
+        val older = his("old", "2026-10-18T17:05")
+        val replied = his("r", "2026-10-18T17:10")
+        val reply = yours("y", "2026-10-18T17:11", replyTo = "r").copy(answeredAt = null)
+        val screen = ChatScreenState()
+        screen.opened(ChatState(listOf(older, replied, reply), readAt = Fixtures.at("2026-10-18T17:00")), opening)
+        assertEquals("old", screen.firstUnread)
+        // Nothing of his but the one replied to: nothing new.
+        val alone = ChatScreenState().apply { opened(ChatState(listOf(replied, reply), readAt = Fixtures.at("2026-10-18T17:00")), opening) }
+        assertNull(alone.firstUnread)
+    }
+
+    @Test
     fun `a newer nudge of his just above the box lets go the question offered before, with no strip of its own`() {
         val screen = ChatScreenState()
         screen.offer(ChatMessage("q", Speaker.Felix, "What did you avoid?", 2, kind = MessageKind.CheckIn), checkInUnderWay = true)

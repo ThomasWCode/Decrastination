@@ -321,6 +321,16 @@ class ConversationTest {
     }
 
     @Test
+    fun `his button doesn't count a message you've replied to from his notification, and counts what he says after`() = runBlocking {
+        felix.outbox.send(ChatMessage("n1", Speaker.Felix, "Up at 17:00.", now - 60_000L, kind = MessageKind.SlotStart))
+        assertEquals(1, conversation.unread.first())
+        stores.chat.update { it.copy(messages = it.messages + ChatMessage("y1", Speaker.You, "on it", now - 30_000L, replyTo = "n1")) }
+        assertEquals(0, conversation.unread.first())
+        felix.outbox.send(ChatMessage("n2", Speaker.Felix, "Good, keep going.", now, kind = MessageKind.SlotStart))
+        assertEquals(1, conversation.unread.first())
+    }
+
+    @Test
     fun `his button counts his messages since you last left the chat, but a question you've answered`() = runBlocking {
         felix.outbox.send(ChatMessage("n1", Speaker.Felix, "Up at 17:00.", now - 60_000L, kind = MessageKind.SlotStart))
         conversation.askAboutEvent("open day", "Open day", "Saturday 24 October", now + 86_400_000L, CalendarTime.ANSWERS.map { it.first })
