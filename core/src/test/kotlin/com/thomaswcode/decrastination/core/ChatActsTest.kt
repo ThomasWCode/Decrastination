@@ -40,6 +40,20 @@ class ChatActsTest {
     }
 
     @Test
+    fun `a move's Undo looks for moves after its own message, though an earlier one reads the same`() {
+        val r = Reminder("r", "call gran", 1, By.Felix, due = Due(DueKind.At, now + 7_200_000))
+        val there = Act("Moved: “call gran” to 19:00", ChatAction(ChatAction.Type.MoveReminder, "", value = "r"), reminder = r.copy(due = Due(DueKind.At, now + 3_600_000)))
+        val back = there.copy(line = "Moved: “call gran” to 18:00", reminder = r)
+        val messages = listOf(
+            ChatMessage("m1", Speaker.Felix, "Moved.", 1, acts = listOf(there)),
+            ChatMessage("m2", Speaker.Felix, "Back.", 2, acts = listOf(back)),
+            ChatMessage("m3", Speaker.Felix, "Moved again.", 3, acts = listOf(there)),
+        )
+        assertTrue(ChatActs.canUndo(there, emptyList(), settings, messages, reminders = listOf(r), messageId = "m3"))
+        assertFalse(ChatActs.canUndo(there, emptyList(), settings, messages, reminders = listOf(r), messageId = "m1"))
+    }
+
+    @Test
     fun `a cancel or a note's delete is undone only while there's room for what it brings back`() {
         val r = Reminder("r", "call gran", 1, By.Felix, due = Due(DueKind.At, now + 3_600_000), cancelledAt = now)
         val cancel = Act("Cancelled", ChatAction(ChatAction.Type.CancelReminder, "", value = "r"))

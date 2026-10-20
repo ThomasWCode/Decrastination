@@ -94,10 +94,15 @@ object Notes {
      * [notes] kept (the nightly prune): a deleted one only while a message in the chat's window, [messages],
      * holds its delete's act not undone, as that Undo brings it back; one on a task gone from the task list
      * ([tasks], their ids) only while its task's delete can be undone, as that Undo brings the task back
-     * whole (a deleted own task's act keeps the task). A note on a finished task stays with its record.
+     * whole (a deleted own task's act keeps the task); one on a source's task not listed till that source
+     * has been read since it was made ([TaskItem.goneSince], [readAt]), so a backup restored before the first
+     * sync keeps its notes. A note on a finished task stays with its record.
      */
-    fun prune(notes: List<Note>, tasks: Set<String>, messages: List<ChatMessage>): List<Note> {
+    fun prune(notes: List<Note>, tasks: Set<String>, messages: List<ChatMessage>, readAt: (Source) -> Long? = { null }): List<Note> {
         val held = ChatActs.held(messages)
-        return notes.filter { n -> (n.deletedAt == null || n.id in held) && (n.taskId == null || n.taskId in tasks || n.taskId in held) }
+        return notes.filter { n ->
+            val task = n.taskId
+            (n.deletedAt == null || n.id in held) && (task == null || task in tasks || task in held || !TaskItem.goneSince(task, n.at, readAt))
+        }
     }
 }

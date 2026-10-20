@@ -684,14 +684,17 @@ class Conversation(
             if (edits.isNotEmpty()) chat.update { s -> s.copy(messages = s.messages.map { if (it.id == reply.id) it.copy(memoryEdits = edits) else it }) }
             // Its actions (AI-14; 16 Oct, everything he does), said under it with their Undo: before its
             // changes, as its steps are the ones it was shown.
-            val acts = if (kept) act(reading.actions) + keep(reading.reminders, reading.notes) else emptyList()
+            val acts = if (kept) act(reading.actions) else emptyList()
             if (acts.isNotEmpty()) chat.update { s -> s.copy(messages = s.messages.map { if (it.id == reply.id) it.copy(acts = acts + it.acts) else it }) }
-            // A reminder set or moved into his window is written for at once, not at the next plan or look (8a).
-            if (acts.any { it.action?.type == ChatAction.Type.SetReminder || it.action?.type == ChatAction.Type.MoveReminder }) scope.launch { draftReminders(clock.now()) }
             // Its cards, made now, as if Apply were tapped: Undo takes them back.
             if (kept) {
                 val instant = reply.proposals.filter { it.instant }
                 instant.forEach { applyProposal(reply.id, it.id) }
+                // Its reminders and notes (8a), after its changes, so one before a deadline it sets has it.
+                val noted = keep(reading.reminders, reading.notes, ChatAnswers.deadlines(reading.changes))
+                if (noted.isNotEmpty()) chat.update { s -> s.copy(messages = s.messages.map { if (it.id == reply.id) it.copy(acts = it.acts + noted) else it }) }
+                // A reminder set or moved into his window is written for at once, not at the next plan or look.
+                if (noted.any { it.action?.type == ChatAction.Type.SetReminder || it.action?.type == ChatAction.Type.MoveReminder }) scope.launch { draftReminders(clock.now()) }
                 // A time the plan couldn't keep (PL-04): where the piece went, said under the answer,
                 // which names the time asked for.
                 val moved = ChatAnswers.movedPins(instant.flatMap { it.changes }, planning.plan().buckets, clock.zone())
@@ -788,13 +791,14 @@ class Conversation(
     /**
      * [reminders] set, or moved and reworded in place where one has a listed reminder's id, and [notes] kept
      * (8a): made at once, each said under his answer with its Undo ([undoAct]), when it'll come said as the
-     * plan has it now. A move of one sent since he was asked isn't made.
+     * plan has it now. A move of one sent since he was asked isn't made. One before a deadline the answer
+     * sets goes by that one ([deadlines], by task id), its lay onto the task coming after.
      */
-    private suspend fun keep(reminders: List<Reminder>, notes: List<Note>): List<Act> {
+    private suspend fun keep(reminders: List<Reminder>, notes: List<Note>, deadlines: Map<String, Long> = emptyMap()): List<Act> {
         if (reminders.isEmpty() && notes.isEmpty()) return emptyList()
         val now = clock.now()
         val zone = clock.zone()
-        val byId = tasks.value.tasks.associateBy { it.id }
+        val byId = tasks.value.tasks.associateBy { it.id }.mapValues { (id, t) -> deadlines[id]?.let { t.copy(dueAt = it) } ?: t }
         val plan = planning.plan(now = now)
         fun title(id: String?) = id?.let(byId::get)?.title
         val acts = mutableListOf<Act>()
@@ -808,7 +812,7 @@ class Conversation(
                 val at = Reminders.whenLine(r, Reminders.moment(r, plan, byId, now), title(r.taskId), zone)
                 when {
                     // Its slot's or its deadline's task finished, gone or dateless while he answered: it would never come.
-                    r.due.kind != DueKind.At && Reminders.letGo(listOf(r), byId, now).isNotEmpty() ->
+                    r.due.kind != DueKind.At && Reminders.letGo(listOf(r), byId, now) { s -> tasks.value.status(s).lastSuccessAt }.isNotEmpty() ->
                         acts += Act(Act.NOT_MADE + "the reminder “${r.text}”: “${title(r.taskId) ?: "its task"}” is finished, gone or without a due date now.", problem = true)
                     was == null && room <= 0 -> acts += Act(Act.NOT_MADE + "the reminder “${r.text}”: ${Reminders.MAX_PENDING} are still to come.", problem = true)
                     was == null -> {
@@ -829,6 +833,11 @@ class Conversation(
             val added = notes.filter { n ->
                 val on = n.scope?.let { "for ${Notes.scopeLine(it)}" } ?: "on “${title(n.taskId) ?: "it"}”"
                 val task = n.taskId
+                // Its task gone while he answered: not made, as it'd be kept on nothing.
+                if (task != null && task !in byId) {
+                    acts += Act(Act.NOT_MADE + "the note “${n.text.take(60)}”: its task went while he answered.", problem = true)
+                    return@filter false
+                }
                 val fits = if (task != null) (onTask[task] ?: 0) < Notes.PER_TASK else standing < Notes.MAX_STANDING
                 if (fits) {
                     if (task != null) onTask[task] = (onTask[task] ?: 0) + 1 else standing++
@@ -901,7 +910,7 @@ class Conversation(
             ChatAction.Type.SetReminder, ChatAction.Type.MoveReminder, ChatAction.Type.CancelReminder, ChatAction.Type.AddNote, ChatAction.Type.DeleteNote -> {
                 var back = false
                 felix.update { st ->
-                    if (!ChatActs.canUndo(act, tasks.value.tasks, settings.value, chat.value.messages, st.notes, st.reminders)) return@update st
+                    if (!ChatActs.canUndo(act, tasks.value.tasks, settings.value, chat.value.messages, st.notes, st.reminders, messageId = messageId)) return@update st
                     back = true
                     when (a.type) {
                         ChatAction.Type.SetReminder -> st.copy(reminders = st.reminders.filterNot { it.id == a.value })
@@ -980,7 +989,7 @@ class Conversation(
     suspend fun pruneFelix(now: Long = clock.now()) {
         val messages = chat.value.messages
         val ids = tasks.value.tasks.mapTo(HashSet()) { it.id }
-        felix.update { s -> s.copy(notes = Notes.prune(s.notes, ids, messages), reminders = Reminders.prune(s.reminders, now, messages)) }
+        felix.update { s -> s.copy(notes = Notes.prune(s.notes, ids, messages) { source -> tasks.value.status(source).lastSuccessAt }, reminders = Reminders.prune(s.reminders, now, messages)) }
     }
 
     /** His notes and reminders as the debug page and the `felix` command show them (8a): a line each, a reminder's with when it comes now. */

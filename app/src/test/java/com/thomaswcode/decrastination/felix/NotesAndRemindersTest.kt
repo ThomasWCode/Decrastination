@@ -167,12 +167,38 @@ class NotesAndRemindersTest {
     }
 
     @Test
+    fun `a reminder before a deadline the same answer sets is made, its changes being made first`() = runBlocking {
+        stores.tasks.update { it.copy(tasks = listOf(sheet.copy(dueAt = null))) }
+        val due = """{"type":"DueBy","taskId":"${sheet.id}","afterTaskId":"","eventKey":"","eventTime":"","minutes":-1,"date":"2026-10-23","endDate":"","weekday":"","time":"09:00","endTime":"","title":"","steps":[],"paced":false}"""
+        val before = """{"type":"Remind","taskId":"${sheet.id}","afterTaskId":"","eventKey":"beforeDue","eventTime":"","minutes":1440,"date":"","endDate":"","weekday":"","time":"","endTime":"","title":"start the worksheet","steps":[],"paced":false}"""
+        val his = asked("it's due Friday at 9, remind me the day before", answer("Due Friday, and I'll remind you the day before.", notes = listOf(due, before)))
+        assertTrue(his.acts.any { it.action?.type == ChatAction.Type.SetReminder }, his.acts.toString() + his.note)
+        assertEquals(DueKind.BeforeDue, stores.felix.value.reminders.single().due.kind)
+    }
+
+    @Test
+    fun `a note whose task went while he answered isn't made, and says so`() = runBlocking {
+        val other = sheet.copy(id = "teams:other", sourceId = "other", title = "Optics sheet")
+        stores.tasks.update { it.copy(tasks = listOf(sheet, other)) }
+        felix.answers(answer("Noted.", notes = listOf(note(other.id, "use the ray box"))), delayMs = 1_500)
+        assertTrue(conversation.ask("note on the optics sheet: use the ray box"))
+        delay(500)
+        stores.tasks.update { s -> s.copy(tasks = s.tasks.filter { it.id != other.id }) }
+        felix.settle()
+        val his = stores.chat.value.messages.last { it.from == Speaker.Felix }
+        assertTrue(stores.felix.value.notes.isEmpty())
+        assertTrue(his.acts.single().let { it.problem && "its task went" in it.line }, his.acts.toString())
+    }
+
+    @Test
     fun `one whose task closes before it comes is let go, said in a note of his, and never sent`() = runBlocking {
         stores.tasks.update { it.copy(tasks = listOf(sheet.copy(status = Status.Done, doneAt = now))) }
         stores.felix.update { it.copy(reminders = listOf(Reminder("r-form", "bring the form", now - 10 * MIN, By.Felix, sheet.id, Due(DueKind.SlotStart, now - 10 * MIN)))) }
         felix.looks.sweepReminders(now)
         val note = stores.chat.value.messages.single { it.kind == MessageKind.Note }
         assertEquals(FelixWords.letGo("bring the form", "Forces worksheet", "is done"), note.text)
+        // Said under an id of its own, before it's marked, so a failure between says it once, again.
+        assertEquals("letgo-r-form", note.id)
         assertTrue(note.byApp && note.about.taskId == sheet.id)
         assertNotNull(stores.felix.value.reminders.single().cancelledAt)
         assertTrue(stores.chat.value.messages.none { it.kind == MessageKind.Reminder })
