@@ -489,7 +489,7 @@ object ChatPrompts {
         // Each class's next lessons (G8), from Power Planner's timetable: none read, none said.
         if (lessons != null) {
             appendLine()
-            val read = lessons.readAt?.takeIf { lessons.stale }?.let { ", from the timetable read on ${Instant.ofEpochMilli(it).atZone(zone).format(DAY)}, over a week ago" }.orEmpty()
+            val read = if (!lessons.stale) "" else lessons.readAt?.let { ", from the timetable read on ${Instant.ofEpochMilli(it).atZone(zone).format(DAY)}, over a week ago" } ?: ", from a timetable of no known age"
             appendLine("Next lessons$read (class: its subject, and its names | its next three):")
             if (lessons.groups.isEmpty()) appendLine("(none ahead)")
             lessons.groups.forEach { g ->

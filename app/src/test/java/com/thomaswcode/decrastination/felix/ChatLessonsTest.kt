@@ -38,7 +38,7 @@ class ChatLessonsTest {
         ),
     )
 
-    private fun timetabled(readAt: Long = now - 60_000L) = Lessons.Timetabled(Lessons.groups(Lessons.next(timetable, now, LONDON, SchoolCalendar()), classMap), readAt, now - readAt > Lessons.STALE_MS)
+    private fun timetabled(readAt: Long? = now - 60_000L) = Lessons.Timetabled(Lessons.groups(Lessons.next(timetable, now, LONDON, SchoolCalendar()), classMap), readAt, Lessons.stale(readAt, now))
 
     private fun context(lessons: Lessons.Timetabled?) = ChatPrompts.context(tasks, emptyList(), emptyList(), now, LONDON, classMap, lessons = lessons)
 
@@ -59,6 +59,8 @@ class ChatLessonsTest {
         assertEquals("- Chemistry (Chem, 12X/Ch1) | Wed 21 Oct 10:00–11:00; Fri 23 Oct 14:00–15:00; Wed 28 Oct 10:00–11:00", lines[header + 1])
         assertEquals("- Hist (no subject given, so tied to no class code) | Thu 22 Oct 09:00–10:00; Thu 29 Oct 09:00–10:00; Thu 5 Nov 09:00–10:00", lines[header + 2])
         assertTrue("Next lessons, from the timetable read on Saturday 10 October 2026, over a week ago (class" in context(timetabled(readAt = Fixtures.at("2026-10-10T12:00"))))
+        // Read at no known time (its source's last read lost): of no known age, so stale.
+        assertTrue("Next lessons, from a timetable of no known age (class" in context(timetabled(readAt = null)))
         assertTrue("Next lessons" !in context(null))
     }
 
@@ -85,6 +87,8 @@ class ChatLessonsTest {
         assertTrue(unknown.changes.isEmpty() && unknown.leftOut.single().contains("the next lesson of “Physics”"))
         val stale = parse(dueBy("Chemistry"), timetabled(readAt = Fixtures.at("2026-10-10T12:00")))
         assertTrue(stale.changes.isEmpty() && stale.leftOut.single().contains("read on Sat 10 Oct, over a week ago"), stale.leftOut.toString())
+        val undated = parse(dueBy("Chemistry"), timetabled(readAt = null))
+        assertTrue(undated.changes.isEmpty() && undated.leftOut.single().contains("from a timetable of no known age"), undated.leftOut.toString())
         val none = parse(dueBy("Chemistry"), null)
         assertTrue(none.changes.isEmpty() && none.leftOut.single().contains("no timetable read"))
         // A date given as any date is, with no lesson, is set as given.

@@ -357,12 +357,12 @@ object ChatAnswers {
         return g.copy(date = start.toLocalDate().toString(), time = start.toLocalTime().format(CLOCK), lesson = "")
     }
 
-    /** Why a due date at [lesson]'s next lesson can't be set (G8): no timetable read, one over a week old, or no such class with a lesson ahead. */
+    /** Why a due date at [lesson]'s next lesson can't be set (G8): no timetable read, one over a week old or of no known age, or no such class with a lesson ahead. */
     private fun lessonProblem(lesson: String, context: ChatPrompts.Context?, zone: ZoneId): String {
         val lessons = context?.lessons ?: return "a due date at the next lesson, with no timetable read: ask them the date"
         if (lessons.stale) {
-            val read = lessons.readAt?.let { " on " + Instant.ofEpochMilli(it).atZone(zone).toLocalDate().format(DateTimeFormatter.ofPattern("EEE d MMM", Locale.UK)) }.orEmpty()
-            return "a due date at the next lesson, from a timetable read$read, over a week ago: ask them the date"
+            val read = lessons.readAt?.let { "read on " + Instant.ofEpochMilli(it).atZone(zone).toLocalDate().format(DateTimeFormatter.ofPattern("EEE d MMM", Locale.UK)) + ", over a week ago" } ?: "of no known age"
+            return "a due date at the next lesson, from a timetable $read: ask them the date"
         }
         return "a due date at the next lesson of “${lesson.trim().take(40)}”, a class the lessons' list doesn't have, or with none ahead: ask them"
     }
@@ -384,8 +384,10 @@ object ChatAnswers {
             val name = a.setting.trim()
             val source = Source.SYNCED.firstOrNull { it.name.equals(name.replace(" ", ""), ignoreCase = true) || it.label.equals(name, ignoreCase = true) }
                 ?: return no("a source to read that the app doesn't (${name.take(20)})")
-            val about = a.taskId.trim().takeIf { it.isNotEmpty() }?.let { id -> byId[id]?.id ?: return no("a read about a task that isn't listed") }
-            return ChatAction(ChatAction.Type.Sync, about.orEmpty(), setting = source.name)
+            val about = a.taskId.trim().takeIf { it.isNotEmpty() }?.let { id -> byId[id] ?: return no("a read about a task that isn't listed") }
+            // Watched by a read of its own source only: another's can't say how it changed. The read's made all the same.
+            if (about != null && about.source != source) leftOut += "watching “${about.title.take(40)}” with a read of ${source.label}: it's from ${about.source.label}"
+            return ChatAction(ChatAction.Type.Sync, about?.takeIf { it.source == source }?.id.orEmpty(), setting = source.name)
         }
         // A piece kept as Day's Done keeps it, or taken back (G1): by its key, one the plan shown lists, or one kept today.
         if (a.type == "keepPiece" || a.type == "unkeepPiece") {

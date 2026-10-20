@@ -69,4 +69,10 @@ class LessonsTest {
         assertNull(Lessons.nextOf("12X/Ch1", groups, classMap))
         assertNull(Lessons.nextOf("History", groups, classMap))
     }
+
+    @Test
+    fun `a timetable read over a week ago, or at no known time, is stale`() {
+        assertTrue(!Lessons.stale(now - 60_000L, now) && !Lessons.stale(now - Lessons.STALE_MS, now))
+        assertTrue(Lessons.stale(now - Lessons.STALE_MS - 1, now) && Lessons.stale(null, now))
+    }
 }

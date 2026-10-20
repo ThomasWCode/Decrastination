@@ -25,8 +25,14 @@ object Lessons {
     /** A subject's classes: the [subject] the class map gives them (none: one class, tied to no code), every name it has, and its next [lessons]. */
     data class Group(val subject: String?, val names: List<String>, val lessons: List<LessonAt>)
 
-    /** The next lessons as the chat's told them: by subject ([groups]), from the timetable read at [readAt], [stale] past [STALE_MS]. */
+    /** The next lessons as the chat's told them: by subject ([groups]), from the timetable read at [readAt], [stale] past [STALE_MS] or read at no known time. */
     data class Timetabled(val groups: List<Group>, val readAt: Long?, val stale: Boolean)
+
+    /**
+     * Whether a timetable read at [readAt] is too old to date a lesson by at [now]: past [STALE_MS], or read at no
+     * known time (its source's last read lost, the rest of the tasks' file recovered), as its age can't be told.
+     */
+    fun stale(readAt: Long?, now: Long): Boolean = readAt == null || now - readAt > STALE_MS
 
     /**
      * Each class's next [PER_CLASS] lessons after [now], one already begun passed over, looked for day by day
