@@ -9,11 +9,13 @@ import com.thomaswcode.decrastination.core.Due
 import com.thomaswcode.decrastination.core.DueKind
 import com.thomaswcode.decrastination.core.FelixAnswer
 import com.thomaswcode.decrastination.core.Kind
+import com.thomaswcode.decrastination.core.Mine
 import com.thomaswcode.decrastination.core.Note
 import com.thomaswcode.decrastination.core.NoteScope
 import com.thomaswcode.decrastination.core.Notes
 import com.thomaswcode.decrastination.core.Reminder
 import com.thomaswcode.decrastination.core.Reminders
+import com.thomaswcode.decrastination.core.SetBy
 import com.thomaswcode.decrastination.core.Source
 import com.thomaswcode.decrastination.core.Status
 import com.thomaswcode.decrastination.core.SubStep
@@ -98,6 +100,20 @@ class ChatRemindersTest {
         assertTrue(reading.leftOut.first().contains("16:00, which has gone by"))
         // A minute behind, as his reading of now may be, is now.
         assertEquals(1, parse(answer(listOf(reminder(time = "16:59")))).reminders.size)
+    }
+
+    @Test
+    fun `a slot's reminder on an event or a task off the plan is refused, as it never has a slot, and one before an event's due isn't`() {
+        val test = task("teams:test", "End of topic test", "2026-10-22T09:00").copy(kind = Kind.Event)
+        val list = task("teams:list", "Reading list").copy(mine = Mine(notATask = SetBy(true, By.You)))
+        val reading = ChatAnswers.parse(answer(listOf(
+            reminder(text = "revise first", taskId = test.id, whenIs = "slotStart"),
+            reminder(text = "pick one", taskId = list.id, whenIs = "slotStart"),
+            reminder(text = "bring a pen", taskId = test.id, whenIs = "beforeDue", minutesBefore = 60),
+        )), tasks + test + list, emptyList(), About(), now, LONDON, felix = FelixStore())!!
+        assertEquals(listOf("bring a pen"), reading.reminders.map { it.text })
+        assertEquals(2, reading.leftOut.size, reading.leftOut.joinToString("\n"))
+        assertTrue(reading.leftOut[0].contains("it's an event") && reading.leftOut[1].contains("it's off the plan"))
     }
 
     @Test

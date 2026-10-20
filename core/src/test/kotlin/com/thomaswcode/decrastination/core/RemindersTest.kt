@@ -107,6 +107,17 @@ class RemindersTest {
     }
 
     @Test
+    fun `a slot's reminder on a task with no slots of work for good is let go, a deadline's on it not`() {
+        val event = task("teams:test", due = "2026-10-22T09:00").copy(kind = Kind.Event)
+        val hidden = task("teams:sheet").copy(mine = Mine(notATask = SetBy(true, By.You)))
+        val tasks = listOf(event, hidden).associateBy { it.id }
+        val reminders = listOf(slotStart(event.id), slotStart(hidden.id).copy(id = "h"), beforeDue(event.id, 30))
+        // The planner lays no work for an event, nor for one you said isn't a task: their slots never come.
+        assertEquals(listOf("s", "h"), Reminders.letGo(reminders, tasks, now).map { it.id })
+        assertTrue(Reminders.offPlan(event) && Reminders.offPlan(hidden) && !Reminders.offPlan(task("teams:essay")))
+    }
+
+    @Test
     fun `a draft is the moment's it was written for, and no other's, even within the window`() {
         val moment = Fixtures.at("2026-10-20T19:00")
         val r = at("2026-10-20T19:00").copy(draft = FelixAnswer("oi, call gran"), draftedAt = moment - 8 * min, draftFor = moment)

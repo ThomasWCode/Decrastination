@@ -87,7 +87,7 @@ class Focus(
         }
     }
 
-    /** Drops the plan kept for the minute: what it was made from beside the tasks and settings (the calendar) has changed. */
+    /** Drops the plan kept for the minute: what it was made from beside the tasks and settings (the calendar) has changed, or a plan's been made of it. */
     fun forgetPlan() {
         cachedPlan = null
     }
